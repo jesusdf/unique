@@ -1,0 +1,37 @@
+# ---------------------------------------------------------------------------
+# Unique SQL Transpiler — Docker Compose
+# ---------------------------------------------------------------------------
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: unique-api
+    ports:
+      - "8000:8000"
+    environment:
+      - LOG_LEVEL=info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Development service with hot-reload and test dependencies
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: unique-dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+    environment:
+      - LOG_LEVEL=debug
+    profiles:
+      - dev
+    command: ["uvicorn", "unique.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
