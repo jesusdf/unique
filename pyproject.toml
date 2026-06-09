@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "unique"
+version = "0.1.0"
+description = "A SQL transpiler that translates SQL scripts between SQL Server, Oracle, PostgreSQL, and MySQL."
+readme = "README.md"
+license = {text = "AGPL-3.0"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Unique Contributors"},
+]
+dependencies = [
+    "sqlglot>=25.0.0",
+    "click>=8.1.0",
+    "fastapi>=0.110.0",
+    "uvicorn>=0.29.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
+    "black>=24.0.0",
+    "isort>=5.13.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+    "hypothesis>=6.100.0",
+]
+
+[project.scripts]
+unique = "unique.cli.main:cli"
+
+[project.entry-points."unique.dialects"]
+tsql = "unique.dialects.tsql:TSQLDialect"
+oracle = "unique.dialects.oracle:OracleDialect"
+postgresql = "unique.dialects.postgresql:PostgreSQLDialect"
+mysql = "unique.dialects.mysql:MySQLDialect"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
