@@ -21,7 +21,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from unique.core.errors import ParseError, UnknownDialectError
-from unique.core.transpiler import Transpiler
+from unique.core.transpiler import TranspileOptions, Transpiler
 
 app = FastAPI(
     title="Unique SQL Transpiler",
@@ -43,6 +43,14 @@ class TranspileRequest(BaseModel):
     sql: str = Field(..., description="Source SQL text to transpile.")
     source: str = Field(..., description="Source dialect name.")
     target: str = Field(..., description="Target dialect name.")
+    db_url: str | None = Field(
+        default=None,
+        description=(
+            "Optional database connection URL for resolving "
+            "metadata-dependent constructs such as Oracle %TYPE/%ROWTYPE "
+            "references."
+        ),
+    )
 
 
 class TranspileWarning(BaseModel):
@@ -94,6 +102,7 @@ async def transpile_sql(request: TranspileRequest) -> TranspileResponse:
             sql=request.sql,
             source=request.source,
             target=request.target,
+            options=TranspileOptions(db_url=request.db_url),
         )
     except UnknownDialectError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
