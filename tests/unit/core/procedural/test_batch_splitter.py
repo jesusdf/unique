@@ -17,11 +17,7 @@
 
 from __future__ import annotations
 
-from unique.core.batch_splitter import (
-    BatchSplitter,
-    BatchType,
-    classify_batch,
-)
+from unique.core.batch_splitter import BatchSplitter, BatchType, classify_batch
 
 
 class TestTSQLSplitting:
