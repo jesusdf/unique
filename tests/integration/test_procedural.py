@@ -239,6 +239,39 @@ class TestMySQLAsSource:
         assert "SET v_n = p_id;" in out or "SET @v_n = @p_id;" in out
 
 
+class TestDynamicSQL:
+    SRC = (
+        "CREATE OR REPLACE PROCEDURE p(p_id IN NUMBER, p_name IN VARCHAR2)\n"
+        "IS\n"
+        "    v_stmt VARCHAR2(200);\n"
+        "BEGIN\n"
+        "    v_stmt := 'UPDATE t SET name = :1 WHERE id = :2';\n"
+        "    EXECUTE IMMEDIATE v_stmt USING p_name, p_id;\n"
+        "END;"
+    )
+
+    def test_oracle_to_postgresql_keeps_using(self) -> None:
+        out = _transpile(self.SRC, "oracle", "postgresql")
+        assert "USING" in out
+        assert "EXECUTE v_stmt USING" in out
+
+    def test_oracle_to_tsql_uses_sp_executesql(self) -> None:
+        out = _transpile(self.SRC, "oracle", "tsql")
+        assert "sp_executesql" in out
+        assert "@p1" in out and "@p2" in out
+
+    def test_oracle_to_mysql_prepare_workflow(self) -> None:
+        out = _transpile(self.SRC, "oracle", "mysql")
+        assert "PREPARE" in out
+        assert "DEALLOCATE PREPARE" in out
+        assert "USING" in out
+
+    def test_oracle_round_trip_keeps_using(self) -> None:
+        out = _transpile(self.SRC, "oracle", "oracle")
+        assert "EXECUTE IMMEDIATE" in out
+        assert "USING" in out
+
+
 class TestRoundTripStability:
     def test_tsql_to_oracle_to_tsql_preserves_structure(self) -> None:
         sql = (

@@ -1291,12 +1291,30 @@ class ProceduralParser:
         return RaiseErrorStatement(message=expr)
 
     def _parse_plsql_execute_immediate(self) -> ASTNode:
-        """Parse EXECUTE IMMEDIATE expr."""
+        """Parse EXECUTE IMMEDIATE expr [USING bind1, bind2, ...].
+
+        The optional USING clause supplies bind variables for the dynamic
+        statement (Oracle). They are captured separately so each target can
+        emit the appropriate form (PG keeps USING; T-SQL uses sp_executesql).
+        """
         self._expect_keyword("EXECUTE")
         self._expect_keyword("IMMEDIATE")
-        expr = self._parse_expression_until_semicolon()
+        expr = self._parse_expression_until_keyword("USING")
+
+        params: list[ASTNode] = []
+        if self._match_keyword("USING"):
+            while not self._at_end():
+                # Oracle allows IN/OUT markers on bind args; skip them.
+                self._match_keyword("IN")
+                self._match_keyword("OUT")
+                param = self._parse_expression_until_comma_or_semicolon()
+                if isinstance(param, RawSQL) and param.sql:
+                    params.append(param)
+                if not self._match_type(TokenType.COMMA):
+                    break
+
         self._match_type(TokenType.SEMICOLON)
-        return ExecuteStatement(sql_expression=expr)
+        return ExecuteStatement(sql_expression=expr, params=tuple(params))
 
     def _parse_plsql_exception(self) -> ASTNode:
         """Parse EXCEPTION block."""
@@ -1512,12 +1530,16 @@ class ProceduralParser:
         return self._capture_raw_until(TokenType.SEMICOLON)
 
     def _parse_expression_until_keyword(self, *keywords: str) -> ASTNode:
-        """Capture tokens as raw SQL until we hit one of the keywords."""
+        """Capture tokens as raw SQL until a keyword, semicolon, or END."""
         parts: list[str] = []
         paren_depth = 0
         while not self._at_end():
             tok = self._current()
             if paren_depth == 0 and tok.is_keyword(*keywords):
+                break
+            if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
+                break
+            if paren_depth == 0 and tok.is_keyword("END"):
                 break
             if tok.type == TokenType.LPAREN:
                 paren_depth += 1
@@ -1526,6 +1548,27 @@ class ProceduralParser:
             parts.append(tok.value)
             self._advance()
         return RawSQL(sql=" ".join(parts).strip(), reason="expression")
+
+    def _parse_expression_until_comma_or_semicolon(self) -> ASTNode:
+        """Capture a single comma-separated argument (e.g. a bind variable)."""
+        parts: list[str] = []
+        paren_depth = 0
+        while not self._at_end():
+            tok = self._current()
+            if paren_depth == 0 and tok.type in (
+                TokenType.COMMA,
+                TokenType.SEMICOLON,
+            ):
+                break
+            if paren_depth == 0 and tok.is_keyword("END"):
+                break
+            if tok.type == TokenType.LPAREN:
+                paren_depth += 1
+            elif tok.type == TokenType.RPAREN:
+                paren_depth -= 1
+            parts.append(tok.value)
+            self._advance()
+        return RawSQL(sql=" ".join(parts).strip(), reason="bind argument")
 
     def _parse_expression_simple(self) -> ASTNode:
         """Parse a simple expression (for default values, etc.)."""

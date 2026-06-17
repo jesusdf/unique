@@ -654,13 +654,46 @@ class ProceduralEmitter:
 
     def _emit_execute(self, node: ExecuteStatement) -> str:
         expr = self._emit_node(node.sql_expression)
+        params = [self._emit_node(p) for p in node.params]
+
         if self._dialect == "tsql":
-            return f"EXEC({expr});"
+            if params:
+                # Map Oracle USING binds to sp_executesql positional params.
+                # The dynamic SQL placeholders (:1, :2 / ?) should be replaced
+                # by @p1, @p2 manually; we emit a parameterized sp_executesql
+                # call and flag it for review.
+                names = [f"@p{i + 1}" for i in range(len(params))]
+                decl = ", ".join(f"{n} SQL_VARIANT" for n in names)
+                assigns = ", ".join(
+                    f"{n} = {val}" for n, val in zip(names, params, strict=False)
+                )
+                return (
+                    f"EXEC sp_executesql {expr}, N'{decl}', {assigns}; "
+                    f"-- UNIQUE: verify dynamic SQL placeholders match "
+                    f"{', '.join(names)}"
+                )
+            return f"EXEC sp_executesql {expr};"
         elif self._dialect == "oracle":
+            if params:
+                using = ", ".join(params)
+                return f"EXECUTE IMMEDIATE {expr} USING {using};"
             return f"EXECUTE IMMEDIATE {expr};"
         elif self._dialect == "postgresql":
+            if params:
+                using = ", ".join(params)
+                return f"EXECUTE {expr} USING {using};"
             return f"EXECUTE {expr};"
-        return f"EXECUTE {expr};"
+        # MySQL: prepared statement workflow
+        if params:
+            using = ", ".join(params)
+            return (
+                f"SET @_stmt = {expr}; PREPARE _dyn FROM @_stmt; "
+                f"EXECUTE _dyn USING {using}; DEALLOCATE PREPARE _dyn;"
+            )
+        return (
+            f"SET @_stmt = {expr}; PREPARE _dyn FROM @_stmt; "
+            f"EXECUTE _dyn; DEALLOCATE PREPARE _dyn;"
+        )
 
     def _emit_print(self, node: PrintStatement) -> str:
         expr = self._emit_node(node.expression)
