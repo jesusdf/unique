@@ -513,14 +513,41 @@ class ProceduralParser:
         type_name = self._parse_identifier()
         params: list[int] = []
 
+        # Table variables: DECLARE @t TABLE (col type, ...). The column
+        # definition list has no portable equivalent; capture it verbatim so
+        # the body is preserved and a warning can be raised downstream.
+        if type_name.upper() == "TABLE" and self._current().type == TokenType.LPAREN:
+            depth = 0
+            cols: list[str] = []
+            while not self._at_end():
+                tok = self._current()
+                if tok.type == TokenType.LPAREN:
+                    depth += 1
+                elif tok.type == TokenType.RPAREN:
+                    depth -= 1
+                    if depth == 0:
+                        cols.append(tok.value)
+                        self._advance()
+                        break
+                cols.append(tok.value)
+                self._advance()
+            return DataType(name="TABLE " + " ".join(cols))
+
         if self._match_type(TokenType.LPAREN):
+            guard = 0
             while not self._at_end() and self._current().type != TokenType.RPAREN:
+                guard += 1
+                if guard > 1000:
+                    break
                 if self._current().type == TokenType.NUMBER:
                     params.append(int(self._advance().value))
                 elif self._current().is_keyword("MAX"):
                     params.append(-1)
                     self._advance()
-                self._match_type(TokenType.COMMA)
+                elif not self._match_type(TokenType.COMMA):
+                    # Unrecognized token inside type params; consume it so the
+                    # loop always makes progress (avoids infinite loops).
+                    self._advance()
             self._match_type(TokenType.RPAREN)
 
         return DataType(name=type_name, params=tuple(params))
@@ -550,13 +577,18 @@ class ProceduralParser:
         type_name = ".".join(name_parts)
         params: list[int] = []
         if self._match_type(TokenType.LPAREN):
+            guard = 0
             while not self._at_end() and self._current().type != TokenType.RPAREN:
+                guard += 1
+                if guard > 1000:
+                    break
                 if self._current().type == TokenType.NUMBER:
                     params.append(int(self._advance().value))
                 elif self._current().is_keyword("MAX"):
                     params.append(-1)
                     self._advance()
-                self._match_type(TokenType.COMMA)
+                elif not self._match_type(TokenType.COMMA):
+                    self._advance()
             self._match_type(TokenType.RPAREN)
 
         return DataType(name=type_name, params=tuple(params))
@@ -1414,14 +1446,23 @@ class ProceduralParser:
         return RawSQL(sql=raw, reason="expression")
 
     def _capture_raw_until(self, *stop_types: TokenType) -> ASTNode:
-        """Capture tokens as raw SQL until a stop token type or END."""
+        """Capture tokens as raw SQL until a stop token type or END.
+
+        For T-SQL (where the trailing semicolon is often omitted), also
+        stops at the next statement boundary so a single expression does
+        not absorb the statements that follow it. The first token is always
+        consumed to guarantee progress.
+        """
         parts: list[str] = []
         paren_depth = 0
+        first = True
         while not self._at_end():
             tok = self._current()
             if paren_depth == 0 and tok.type in stop_types:
                 break
             if paren_depth == 0 and tok.is_keyword("END"):
+                break
+            if not first and paren_depth == 0 and self._at_tsql_stmt_boundary():
                 break
             if tok.type == TokenType.LPAREN:
                 paren_depth += 1
@@ -1429,23 +1470,79 @@ class ProceduralParser:
                 paren_depth -= 1
             parts.append(tok.value)
             self._advance()
+            first = False
         return RawSQL(sql=" ".join(parts).strip(), reason="captured expression")
+
+    # Control-flow keywords that unambiguously begin a new T-SQL statement
+    # at depth 0. DML keywords (SELECT/INSERT/UPDATE/DELETE/MERGE) are
+    # excluded because they chain (e.g. INSERT ... SELECT). SET is handled
+    # separately: "SET @var" is an assignment, "SET col" is an UPDATE clause.
+    _TSQL_STMT_BOUNDARY_KEYWORDS = frozenset(
+        {
+            "IF",
+            "WHILE",
+            "DECLARE",
+            "PRINT",
+            "RETURN",
+            "RAISERROR",
+            "THROW",
+            "ELSE",
+            "EXEC",
+            "EXECUTE",
+        }
+    )
+
+    def _at_tsql_stmt_boundary(self) -> bool:
+        """Whether the current token begins a new T-SQL statement.
+
+        Used to delimit statements that omit the trailing semicolon. Only
+        active for the T-SQL dialect; Oracle/PG/MySQL rely on semicolons.
+        """
+        if self._dialect != "tsql":
+            return False
+        tok = self._current()
+        if tok.type != TokenType.KEYWORD:
+            return False
+        upper = tok.upper_value
+        if upper in self._TSQL_STMT_BOUNDARY_KEYWORDS:
+            return True
+        # Standalone "SET @var = ..." assignment (distinct from the SET
+        # clause of an UPDATE, where the target is a column identifier).
+        if upper == "SET" and self._peek(1).type == TokenType.VARIABLE:
+            return True
+        return False
 
     # ---------------------------------------------------------------
     # Embedded DML (delegated to sqlglot later)
     # ---------------------------------------------------------------
 
     def _parse_embedded_dml(self) -> ASTNode:
-        """Capture a DML statement for later sqlglot transpilation."""
+        """Capture a DML statement for later sqlglot transpilation.
+
+        Stops at a semicolon or an unmatched END. For T-SQL, also stops at
+        the next statement boundary (control-flow keyword or standalone SET
+        assignment) so semicolon-less statements are bounded. The leading
+        keyword is always consumed first to guarantee progress and to keep
+        chained DML such as INSERT ... SELECT together.
+        """
         parts: list[str] = []
         paren_depth = 0
         begin_depth = 0
+        first = True
 
         while not self._at_end():
             tok = self._current()
 
             if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
                 self._advance()
+                break
+
+            if (
+                not first
+                and paren_depth == 0
+                and begin_depth == 0
+                and self._at_tsql_stmt_boundary()
+            ):
                 break
 
             if tok.is_keyword("BEGIN"):
@@ -1463,6 +1560,7 @@ class ProceduralParser:
 
             parts.append(tok.value)
             self._advance()
+            first = False
 
         sql = " ".join(parts).strip()
         return EmbeddedDML(sql=sql, dialect=self._dialect)
