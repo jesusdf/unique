@@ -408,25 +408,58 @@ class ProceduralParser:
     # ---------------------------------------------------------------
 
     def _parse_parameter_list(self) -> list[ParameterDefinition]:
-        """Parse procedure/function parameter list."""
+        """Parse procedure/function parameter list.
+
+        Handles both parenthesized lists (Oracle/PG/MySQL and optional
+        T-SQL) and paren-less T-SQL lists terminated by AS/IS.
+        """
         params: list[ParameterDefinition] = []
 
         has_parens = bool(self._match_type(TokenType.LPAREN))
-        if not has_parens:
+
+        if has_parens:
+            guard = 0
+            while not self._at_end() and self._current().type != TokenType.RPAREN:
+                guard += 1
+                if guard > 1000:
+                    break
+                self._skip_comments()
+                if self._current().type == TokenType.RPAREN:
+                    break
+
+                before = self._pos
+                param = self._parse_parameter()
+                if param:
+                    params.append(param)
+                self._match_type(TokenType.COMMA)
+                if self._pos == before:
+                    self._advance()  # prevent stall
+
+            self._match_type(TokenType.RPAREN)
             return params
 
-        while not self._at_end() and self._current().type != TokenType.RPAREN:
-            self._skip_comments()
-            if self._current().type == TokenType.RPAREN:
-                break
+        # Paren-less T-SQL: @p1 type, @p2 type AS ...
+        if self._dialect == "tsql" and self._current().type == TokenType.VARIABLE:
+            guard = 0
+            while not self._at_end():
+                guard += 1
+                if guard > 1000:
+                    break
+                self._skip_comments()
+                if self._current().is_keyword("AS"):
+                    break
+                if self._current().type != TokenType.VARIABLE:
+                    break
 
-            param = self._parse_parameter()
-            if param:
-                params.append(param)
+                before = self._pos
+                param = self._parse_parameter()
+                if param:
+                    params.append(param)
+                if not self._match_type(TokenType.COMMA):
+                    break
+                if self._pos == before:
+                    self._advance()
 
-            self._match_type(TokenType.COMMA)
-
-        self._match_type(TokenType.RPAREN)
         return params
 
     def _parse_parameter(self) -> ParameterDefinition | None:
@@ -547,25 +580,55 @@ class ProceduralParser:
     # Body parsing — T-SQL
     # ---------------------------------------------------------------
 
-    def _parse_tsql_body(self) -> list[ASTNode]:
-        """Parse a T-SQL procedure/function body."""
+    def _run_body_loop(
+        self,
+        parse_stmt: object,
+        stop_keywords: tuple[str, ...],
+    ) -> list[ASTNode]:
+        """Run a statement-parsing loop with stall protection.
+
+        Args:
+            parse_stmt: A zero-arg callable returning an ASTNode or None.
+            stop_keywords: Keywords that terminate the loop.
+
+        Returns:
+            The list of parsed statements.
+        """
         stmts: list[ASTNode] = []
-
-        if self._match_keyword("BEGIN"):
-            while not self._at_end() and not self._current().is_keyword("END"):
-                stmt = self._parse_tsql_statement()
-                if stmt:
-                    stmts.append(stmt)
-            self._match_keyword("END")
-        else:
-            while not self._at_end():
-                stmt = self._parse_tsql_statement()
-                if stmt:
-                    stmts.append(stmt)
-
+        guard = 0
+        while not self._at_end():
+            guard += 1
+            if guard > 100000:
+                break
+            if stop_keywords and self._current().is_keyword(*stop_keywords):
+                break
+            before = self._pos
+            stmt = parse_stmt()  # type: ignore[operator]
+            if stmt:
+                stmts.append(stmt)
+            if self._pos == before:
+                # No progress — force advance to avoid infinite loop
+                self._advance()
         return stmts
 
+    def _parse_tsql_body(self) -> list[ASTNode]:
+        """Parse a T-SQL procedure/function body."""
+        if self._match_keyword("BEGIN"):
+            stmts = self._run_body_loop(self._parse_tsql_statement, ("END",))
+            self._match_keyword("END")
+            return stmts
+        return self._run_body_loop(self._parse_tsql_statement, ())
+
     def _parse_tsql_statement(self) -> ASTNode | None:
+        """Parse a single T-SQL statement, guaranteeing token progress."""
+        before = self._pos
+        node = self._parse_tsql_statement_inner()
+        if self._pos == before and not self._at_end():
+            # Dispatch consumed nothing; force progress to avoid stalls.
+            self._advance()
+        return node
+
+    def _parse_tsql_statement_inner(self) -> ASTNode | None:
         """Parse a single T-SQL statement inside a body."""
         self._skip_comments()
         if self._at_end():
@@ -781,23 +844,37 @@ class ProceduralParser:
         stmts: list[ASTNode] = []
 
         # Optional DECLARE section (before BEGIN)
+        guard = 0
         while not self._at_end() and not self._current().is_keyword("BEGIN"):
+            guard += 1
+            if guard > 100000:
+                break
             if self._current().is_keyword("DECLARE"):
                 self._advance()
                 continue
+            before = self._pos
             decl = self._parse_plsql_declaration()
             if decl:
                 stmts.append(decl)
+            if self._pos == before:
+                self._advance()
 
         # BEGIN ... END block
         if self._match_keyword("BEGIN"):
+            guard = 0
             while not self._at_end() and not self._current().is_keyword("END"):
+                guard += 1
+                if guard > 100000:
+                    break
                 if self._current().is_keyword("EXCEPTION"):
                     stmts.append(self._parse_plsql_exception())
                     continue
+                before = self._pos
                 stmt = self._parse_plsql_statement()
                 if stmt:
                     stmts.append(stmt)
+                if self._pos == before:
+                    self._advance()
 
             self._match_keyword("END")
             # Optional procedure/function name after END
@@ -842,6 +919,14 @@ class ProceduralParser:
         return DeclareStatement(name=name, data_type=data_type, default=default)
 
     def _parse_plsql_statement(self) -> ASTNode | None:
+        """Parse a single PL/SQL statement, guaranteeing token progress."""
+        before = self._pos
+        node = self._parse_plsql_statement_inner()
+        if self._pos == before and not self._at_end():
+            self._advance()
+        return node
+
+    def _parse_plsql_statement_inner(self) -> ASTNode | None:
         """Parse a single PL/SQL statement."""
         self._skip_comments()
         if self._at_end():

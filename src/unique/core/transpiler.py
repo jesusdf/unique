@@ -39,6 +39,18 @@ from unique.core.transformer import Transformer, TransformWarning
 logger = logging.getLogger(__name__)
 
 
+def _warn(
+    message: str, feature: str, source: str, target: str
+) -> TransformWarning:
+    """Build a TransformWarning with dialect context."""
+    return TransformWarning(
+        message=message,
+        feature=feature,
+        source_dialect=source,
+        target_dialect=target,
+    )
+
+
 @dataclass(frozen=True)
 class TranspileOptions:
     """Options controlling transpilation behavior."""
@@ -193,16 +205,18 @@ class Transpiler:
             if parse_result.errors:
                 for err in parse_result.errors:
                     warnings.append(
-                        TransformWarning(
-                            message=f"Parse error: {err.message}",
-                            feature="procedural_parse",
+                        _warn(
+                            f"Parse error: {err.message}",
+                            "procedural_parse",
+                            source,
+                            target,
                         )
                     )
 
             if parse_result.warnings:
                 for w in parse_result.warnings:
                     warnings.append(
-                        TransformWarning(message=w, feature="procedural_parse")
+                        _warn(w, "procedural_parse", source, target)
                     )
 
             if parse_result.node is None:
@@ -220,9 +234,7 @@ class Transpiler:
                 node = transformer.transform(parse_result.node)
                 for w in transformer.warnings:
                     warnings.append(
-                        TransformWarning(
-                            message=w, feature="procedural_transform"
-                        )
+                        _warn(w, "procedural_transform", source, target)
                     )
             else:
                 node = parse_result.node
@@ -240,9 +252,11 @@ class Transpiler:
         except Exception as e:
             logger.warning("Procedural transpilation failed: %s", e)
             warnings.append(
-                TransformWarning(
-                    message=f"Procedural transpilation failed: {e}",
-                    feature="procedural",
+                _warn(
+                    f"Procedural transpilation failed: {e}",
+                    "procedural",
+                    source,
+                    target,
                 )
             )
             return TranspileResult(
@@ -282,10 +296,7 @@ class Transpiler:
         except Exception as e:
             logger.warning("DML transpilation failed: %s", e)
             warnings.append(
-                TransformWarning(
-                    message=f"DML transpilation failed: {e}",
-                    feature="dml",
-                )
+                _warn(f"DML transpilation failed: {e}", "dml", source, target)
             )
             return TranspileResult(
                 sql=f"/* TRANSPILATION ERROR: {e} */\n{sql}",
@@ -301,9 +312,11 @@ class Transpiler:
             return TranspileResult(
                 sql=f"-- {sql.strip()}",
                 warnings=[
-                    TransformWarning(
-                        message=f"SET option commented out: {sql.strip()[:60]}",
-                        feature="set_option",
+                    _warn(
+                        f"SET option commented out: {sql.strip()[:60]}",
+                        "set_option",
+                        source,
+                        target,
                     )
                 ],
             )
