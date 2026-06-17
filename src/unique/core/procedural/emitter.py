@@ -23,6 +23,7 @@ functions, triggers, and control flow constructs.
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 
 from unique.core.ast_nodes import (
@@ -424,16 +425,27 @@ class ProceduralEmitter:
             return f"{node.name} {dt}{default_str};"
 
     def _emit_cursor_decl(self, node: CursorDeclaration) -> str:
+        query_str = ""
+        if node.query:
+            # The query may be an EmbeddedDML that emits its own trailing
+            # semicolon; strip it to avoid a double ';'.
+            query_str = self._emit_node(node.query).rstrip().rstrip(";")
+
         if self._dialect == "tsql":
-            query_str = ""
-            if node.query:
-                query_str = f" FOR {self._emit_node(node.query)}"
-            return f"DECLARE {node.name} CURSOR{query_str};"
+            body = f" FOR {query_str}" if query_str else ""
+            return f"DECLARE {node.name} CURSOR{body};"
+        elif self._dialect == "postgresql":
+            # PL/pgSQL: name CURSOR FOR <select>;
+            body = f" CURSOR FOR {query_str}" if query_str else " CURSOR"
+            return f"{node.name}{body};"
+        elif self._dialect == "mysql":
+            # MySQL: DECLARE name CURSOR FOR <select>;
+            body = f" FOR {query_str}" if query_str else ""
+            return f"DECLARE {node.name} CURSOR{body};"
         else:
-            query_str = ""
-            if node.query:
-                query_str = f" IS {self._emit_node(node.query)}"
-            return f"CURSOR {node.name}{query_str};"
+            # Oracle PL/SQL: CURSOR name IS <select>;
+            body = f" IS {query_str}" if query_str else ""
+            return f"CURSOR {node.name}{body};"
 
     # ---------------------------------------------------------------
     # Variable operations
@@ -564,24 +576,63 @@ class ProceduralEmitter:
 
     def _emit_for_loop(self, node: ForLoopStatement) -> str:
         cursor_str = self._emit_node(node.cursor) if node.cursor else ""
-        lines = [f"FOR {node.variable} IN {cursor_str} LOOP"]
+        cursor_str = cursor_str.rstrip().rstrip(";")
+
+        body_lines: list[str] = []
         self._indent_level += 1
         for stmt in node.body:
             text = self._emit_node(stmt)
             for line in text.split("\n"):
-                lines.append(f"{self._indent()}{line}" if line.strip() else "")
+                body_lines.append(f"{self._indent()}{line}" if line.strip() else "")
         self._indent_level -= 1
-        lines.append("END LOOP;")
+
+        if self._dialect in ("oracle", "postgresql"):
+            # Native cursor FOR loop.
+            lines = [f"FOR {node.variable} IN {cursor_str} LOOP"]
+            lines.extend(body_lines)
+            lines.append("END LOOP;")
+            return "\n".join(lines)
+
+        # T-SQL and MySQL have no implicit cursor FOR loop. Emit a clearly
+        # flagged scaffold so the developer can wire up an explicit cursor.
+        comment = (
+            "-- UNIQUE: no implicit cursor FOR-loop in "
+            f"{self._dialect}; convert to an explicit cursor over: "
+            f"{cursor_str}"
+        )
+        if self._dialect == "tsql":
+            lines = [comment]
+            lines.append(f"-- FOR {node.variable} IN <cursor> equivalent:")
+            lines.extend(body_lines)
+            return "\n".join(lines)
+        # mysql
+        lines = [comment]
+        lines.extend(body_lines)
         return "\n".join(lines)
 
     def _emit_loop(self, node: LoopStatement) -> str:
-        lines = ["LOOP"]
+        body_lines: list[str] = []
         self._indent_level += 1
         for stmt in node.body:
             text = self._emit_node(stmt)
             for line in text.split("\n"):
-                lines.append(f"{self._indent()}{line}" if line.strip() else "")
+                body_lines.append(f"{self._indent()}{line}" if line.strip() else "")
         self._indent_level -= 1
+
+        if self._dialect == "tsql":
+            # Unconditional loop → WHILE 1 = 1 ... (exit via BREAK).
+            lines = ["WHILE 1 = 1", "BEGIN"]
+            lines.extend(body_lines)
+            lines.append("END")
+            return "\n".join(lines)
+        if self._dialect == "mysql":
+            lines = ["loop_lbl: LOOP"]
+            lines.extend(body_lines)
+            lines.append("END LOOP loop_lbl;")
+            return "\n".join(lines)
+        # Oracle / PostgreSQL
+        lines = ["LOOP"]
+        lines.extend(body_lines)
         lines.append("END LOOP;")
         return "\n".join(lines)
 
@@ -744,11 +795,48 @@ class ProceduralEmitter:
         return f"{op} {node.cursor_name};"
 
     def _emit_exit(self, node: ExitStatement) -> str:
+        cond = self._emit_node(node.condition) if node.condition else ""
+        # Cursor %NOTFOUND / %FOUND have dialect-specific equivalents.
+        cond = self._translate_cursor_attrs(cond)
+
         if self._dialect == "tsql":
+            # T-SQL has no EXIT WHEN; use IF <cond> BREAK.
+            if cond:
+                return f"IF {cond} BREAK;"
             return "BREAK;"
-        if node.condition:
-            cond = self._emit_node(node.condition)
+        if self._dialect == "mysql":
+            # MySQL uses LEAVE with a loop label; emit a guarded LEAVE.
+            if cond:
+                return f"IF {cond} THEN LEAVE loop_lbl; END IF;"
+            return "LEAVE loop_lbl;"
+        # Oracle / PostgreSQL
+        if cond:
             return f"EXIT WHEN {cond};"
+        return "EXIT;"
+
+    def _translate_cursor_attrs(self, expr: str) -> str:
+        """Translate Oracle cursor attributes to the target dialect."""
+        if not expr:
+            return expr
+
+        if self._dialect == "tsql":
+            # cur%NOTFOUND -> @@FETCH_STATUS <> 0 ; cur%FOUND -> = 0
+            expr = re.sub(
+                r"\w+\s*%\s*NOTFOUND", "@@FETCH_STATUS <> 0", expr, flags=re.I
+            )
+            expr = re.sub(r"\w+\s*%\s*FOUND", "@@FETCH_STATUS = 0", expr, flags=re.I)
+        elif self._dialect == "postgresql":
+            expr = re.sub(r"\w+\s*%\s*NOTFOUND", "NOT FOUND", expr, flags=re.I)
+            expr = re.sub(r"\w+\s*%\s*FOUND", "FOUND", expr, flags=re.I)
+        elif self._dialect == "mysql":
+            # MySQL signals end-of-cursor via a NOT FOUND handler; flag it.
+            expr = re.sub(
+                r"\w+\s*%\s*NOTFOUND",
+                "done /* set by CONTINUE HANDLER FOR NOT FOUND */",
+                expr,
+                flags=re.I,
+            )
+        return expr
         return "EXIT;"
 
     def _emit_continue(self, node: ContinueStatement) -> str:
