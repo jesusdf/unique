@@ -259,49 +259,88 @@ class BatchSplitter:
 
     @staticmethod
     def _split_mysql(sql: str) -> list[Batch]:
-        """Split MySQL respecting DELIMITER changes."""
+        """Split MySQL statements.
+
+        Honors explicit DELIMITER changes, and—crucially for scripts that
+        omit them—tracks CREATE PROCEDURE/FUNCTION/TRIGGER bodies so that
+        the semicolons inside a BEGIN ... END block do not split the
+        routine into fragments.
+        """
         delimiter = ";"
         batches: list[Batch] = []
         current: list[str] = []
         batch_start = 0
+        begin_depth = 0
+        in_routine = False
+
+        routine_re = re.compile(
+            r"(?i)\bCREATE\s+(?:DEFINER\s*=\s*\S+\s+)?"
+            r"(?:PROCEDURE|FUNCTION|TRIGGER)\b"
+        )
+        begin_re = re.compile(r"(?i)\bBEGIN\b")
+        end_re = re.compile(r"(?i)\bEND\b")
+
+        def flush(upto_line: int) -> None:
+            nonlocal current, batch_start
+            text = "\n".join(current).strip()
+            if text.endswith(";"):
+                text = text[:-1].rstrip()
+            if text:
+                batches.append(
+                    Batch(
+                        sql=text,
+                        batch_type=classify_batch(text, "mysql"),
+                        line_offset=batch_start,
+                    )
+                )
+            current = []
+            batch_start = upto_line + 1
 
         for i, line in enumerate(sql.split("\n")):
             stripped = line.strip()
 
             delimiter_match = re.match(r"(?i)^DELIMITER\s+(\S+)\s*$", stripped)
             if delimiter_match:
-                remaining = "\n".join(current).strip()
-                if remaining:
-                    batches.append(
-                        Batch(
-                            sql=remaining,
-                            batch_type=classify_batch(remaining, "mysql"),
-                            line_offset=batch_start,
-                        )
-                    )
-                    current = []
+                if current:
+                    flush(i - 1)
                 delimiter = delimiter_match.group(1)
                 batch_start = i + 1
                 continue
 
+            # Track routine bodies (BEGIN/END nesting) when no custom
+            # delimiter is in effect.
+            if routine_re.search(line):
+                in_routine = True
+            if in_routine and delimiter == ";":
+                # Count BEGIN/END on this line, ignoring END IF/END LOOP etc.
+                begin_depth += len(begin_re.findall(line))
+                for m in end_re.finditer(line):
+                    rest = line[m.end() :].lstrip().upper()
+                    if rest.startswith(("IF", "LOOP", "WHILE", "CASE", "REPEAT")):
+                        continue
+                    begin_depth -= 1
+                    if begin_depth <= 0:
+                        begin_depth = 0
+                        in_routine = False
+
             current.append(line)
 
-            if stripped.endswith(delimiter):
-                text = "\n".join(current).strip()
-                if delimiter != ";":
+            if delimiter != ";":
+                if stripped.endswith(delimiter):
+                    text = "\n".join(current).strip()
                     text = text[: -len(delimiter)].rstrip()
-                elif text.endswith(";"):
-                    text = text[:-1].rstrip()
-                if text:
-                    batches.append(
-                        Batch(
-                            sql=text,
-                            batch_type=classify_batch(text, "mysql"),
-                            line_offset=batch_start,
+                    if text:
+                        batches.append(
+                            Batch(
+                                sql=text,
+                                batch_type=classify_batch(text, "mysql"),
+                                line_offset=batch_start,
+                            )
                         )
-                    )
-                current = []
-                batch_start = i + 1
+                    current = []
+                    batch_start = i + 1
+            elif stripped.endswith(";") and not in_routine and begin_depth == 0:
+                flush(i)
 
         remaining = "\n".join(current).strip()
         if remaining:
