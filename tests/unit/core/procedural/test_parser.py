@@ -168,6 +168,14 @@ class TestPLSQLProcedure:
 
 
 class TestErrorHandling:
+    def test_set_option_without_semicolon_keeps_body(self) -> None:
+        # Regression: "SET NOCOUNT ON" without a trailing semicolon must not
+        # consume the rest of the procedure body.
+        sql = "CREATE PROCEDURE p AS BEGIN " "SET NOCOUNT ON " "DECLARE @x INT; " "END"
+        result = _parse(sql, "tsql")
+        declares = [s for s in result.node.body if isinstance(s, DeclareStatement)]
+        assert len(declares) == 1
+
     def test_unparseable_returns_node(self) -> None:
         # Even garbage should not raise; it falls back to RawSQL.
         result = _parse("CREATE PROCEDURE", "tsql")
