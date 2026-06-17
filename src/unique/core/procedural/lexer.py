@@ -123,6 +123,8 @@ KEYWORDS = frozenset(
         "EXEC",
         "EXECUTE",
         "IMMEDIATE",
+        "USING",
+        "PREPARE",
         "PRINT",
         "DBMS_OUTPUT",
         "TRY",

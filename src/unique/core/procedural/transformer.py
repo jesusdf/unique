@@ -619,7 +619,8 @@ class ProceduralTransformer:
 
     def _transform_execute(self, node: ExecuteStatement) -> ASTNode:
         new_expr = self._transform_node(node.sql_expression)
-        return ExecuteStatement(sql_expression=new_expr, params=node.params)
+        new_params = tuple(self._transform_node(p) for p in node.params)
+        return ExecuteStatement(sql_expression=new_expr, params=new_params)
 
     def _transform_print(self, node: PrintStatement) -> PrintStatement:
         return PrintStatement(expression=self._transform_node(node.expression))
