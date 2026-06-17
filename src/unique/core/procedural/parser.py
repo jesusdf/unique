@@ -699,10 +699,8 @@ class ProceduralParser:
             # These options take a short argument (ON/OFF or a value/var).
             # T-SQL statements often omit the trailing semicolon, so we must
             # NOT scan to the next ';' (that would swallow the whole body).
-            # Consume at most one argument token.
-            if self._current().is_keyword("ON", "OFF"):
-                self._advance()
-            elif self._current().type in (
+            # Consume at most one argument token (ON/OFF or a value).
+            if self._current().is_keyword("ON", "OFF") or self._current().type in (
                 TokenType.NUMBER,
                 TokenType.VARIABLE,
                 TokenType.IDENTIFIER,
@@ -1508,9 +1506,7 @@ class ProceduralParser:
             return True
         # Standalone "SET @var = ..." assignment (distinct from the SET
         # clause of an UPDATE, where the target is a column identifier).
-        if upper == "SET" and self._peek(1).type == TokenType.VARIABLE:
-            return True
-        return False
+        return upper == "SET" and self._peek(1).type == TokenType.VARIABLE
 
     # ---------------------------------------------------------------
     # Embedded DML (delegated to sqlglot later)
