@@ -272,6 +272,70 @@ class TestDynamicSQL:
         assert "USING" in out
 
 
+class TestCursorsAndLoops:
+    SRC = (
+        "CREATE OR REPLACE PROCEDURE p(p_c IN NUMBER)\n"
+        "IS\n"
+        "    CURSOR c IS SELECT id FROM orders WHERE cust = p_c;\n"
+        "    v_id NUMBER;\n"
+        "BEGIN\n"
+        "    OPEN c;\n"
+        "    LOOP\n"
+        "        FETCH c INTO v_id;\n"
+        "        EXIT WHEN c%NOTFOUND;\n"
+        "        UPDATE orders SET done = 1 WHERE id = v_id;\n"
+        "    END LOOP;\n"
+        "    CLOSE c;\n"
+        "END;"
+    )
+
+    def test_cursor_decl_tsql_no_double_semicolon(self) -> None:
+        out = _transpile(self.SRC, "oracle", "tsql")
+        assert ";;" not in out
+        assert "DECLARE @c CURSOR FOR" in out
+
+    def test_cursor_decl_postgresql_syntax(self) -> None:
+        out = _transpile(self.SRC, "oracle", "postgresql")
+        assert ";;" not in out
+        assert "c CURSOR FOR" in out
+
+    def test_exit_when_notfound_tsql(self) -> None:
+        out = _transpile(self.SRC, "oracle", "tsql")
+        # EXIT WHEN cur%NOTFOUND must keep its condition, not become a bare
+        # BREAK.
+        assert "@@FETCH_STATUS <> 0" in out
+        assert "BREAK" in out
+
+    def test_exit_when_notfound_postgresql(self) -> None:
+        out = _transpile(self.SRC, "oracle", "postgresql")
+        assert "EXIT WHEN NOT FOUND" in out
+
+    def test_unconditional_loop_tsql_becomes_while(self) -> None:
+        out = _transpile(self.SRC, "oracle", "tsql")
+        assert "WHILE 1=1" in out or "WHILE 1 = 1" in out
+
+    def test_for_cursor_loop_flagged_in_tsql(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p IS BEGIN "
+            "FOR rec IN (SELECT id FROM t) LOOP "
+            "INSERT INTO log VALUES (rec.id); "
+            "END LOOP; END;"
+        )
+        out = _transpile(src, "oracle", "tsql")
+        assert "UNIQUE: no implicit cursor FOR-loop" in out
+
+    def test_for_cursor_loop_native_in_postgresql(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p IS BEGIN "
+            "FOR rec IN (SELECT id FROM t) LOOP "
+            "INSERT INTO log VALUES (rec.id); "
+            "END LOOP; END;"
+        )
+        out = _transpile(src, "oracle", "postgresql")
+        assert "FOR rec IN" in out
+        assert "LOOP" in out
+
+
 class TestRoundTripStability:
     def test_tsql_to_oracle_to_tsql_preserves_structure(self) -> None:
         sql = (

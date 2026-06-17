@@ -676,10 +676,10 @@ class ProceduralTransformer:
         return LoopStatement(body=self._transform_body(node.body))
 
     def _transform_exit(self, node: ExitStatement) -> ASTNode:
-        if self._target == "tsql":
-            return RawSQL(sql="BREAK", reason="EXIT → BREAK")
+        # Keep the ExitStatement (with its condition) so the emitter can
+        # produce the dialect-correct form (e.g. T-SQL: IF <cond> BREAK).
         new_cond = self._transform_node(node.condition) if node.condition else None
-        return ExitStatement(condition=new_cond)
+        return ExitStatement(condition=new_cond, label=node.label)
 
     def _transform_select_into(self, node: SelectIntoStatement) -> ASTNode:
         """Transform SELECT INTO, adjusting variables and the embedded SQL."""
