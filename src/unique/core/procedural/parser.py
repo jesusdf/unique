@@ -243,6 +243,60 @@ class ProceduralParser:
     # Procedure parsing
     # ---------------------------------------------------------------
 
+    def _consume_pg_routine_header(self) -> None:
+        """Consume PostgreSQL routine header clauses before the body.
+
+        Handles: LANGUAGE <lang>, [NOT] {VOLATILE|STABLE|IMMUTABLE},
+        SECURITY {DEFINER|INVOKER}, AS, and the $$ / $tag$ body delimiters.
+        These appear between the signature and the DECLARE/BEGIN body.
+        """
+        guard = 0
+        while not self._at_end():
+            guard += 1
+            if guard > 200:
+                break
+            tok = self._current()
+
+            # $$ or $tag$ dollar-quote delimiters: tokenized as '$' tokens
+            if tok.type == TokenType.UNKNOWN and tok.value == "$":
+                self._advance()
+                # consume an optional tag and the closing '$'
+                while not self._at_end() and not (
+                    self._current().type == TokenType.UNKNOWN
+                    and self._current().value == "$"
+                ):
+                    self._advance()
+                if not self._at_end():
+                    self._advance()  # closing '$'
+                continue
+
+            if tok.is_keyword("LANGUAGE"):
+                self._advance()
+                if not self._at_end():
+                    self._advance()  # language name
+                continue
+
+            if tok.is_keyword("SECURITY"):
+                self._advance()
+                if not self._at_end():
+                    self._advance()  # DEFINER/INVOKER
+                continue
+
+            if tok.is_keyword("VOLATILE", "STABLE", "IMMUTABLE"):
+                self._advance()
+                continue
+
+            if tok.is_keyword("NOT"):
+                self._advance()
+                continue
+
+            if tok.is_keyword("AS"):
+                self._advance()
+                continue
+
+            # Reached DECLARE/BEGIN (or anything else): header is done.
+            break
+
     def _parse_procedure(
         self, or_replace: bool = False, is_alter: bool = False
     ) -> ASTNode:
@@ -254,6 +308,9 @@ class ProceduralParser:
         if self._dialect == "tsql":
             self._match_keyword("AS")
             body = self._parse_tsql_body()
+        elif self._dialect in ("postgresql", "mysql"):
+            self._consume_pg_routine_header()
+            body = self._parse_plsql_body()
         else:
             if self._match_keyword("AS") or self._match_keyword("IS"):
                 pass
@@ -289,6 +346,9 @@ class ProceduralParser:
         if self._dialect == "tsql":
             self._match_keyword("AS")
             body = self._parse_tsql_body()
+        elif self._dialect in ("postgresql", "mysql"):
+            self._consume_pg_routine_header()
+            body = self._parse_plsql_body()
         else:
             if self._match_keyword("AS") or self._match_keyword("IS"):
                 pass
@@ -480,6 +540,20 @@ class ProceduralParser:
 
             if self._match_keyword("OUTPUT", "OUT"):
                 direction = "OUT"
+        elif self._dialect == "mysql":
+            # MySQL: [IN|OUT|INOUT] name type
+            if self._match_keyword("INOUT"):
+                direction = "INOUT"
+            elif self._match_keyword("IN"):
+                direction = "IN"
+            elif self._match_keyword("OUT"):
+                direction = "OUT"
+
+            name = self._parse_identifier()
+            data_type = self._parse_data_type_or_reference()
+
+            if self._match_keyword("DEFAULT") or self._match_type(TokenType.ASSIGN):
+                default = self._parse_expression_simple()
         else:
             # Oracle/PG: name [IN|OUT|INOUT] type [DEFAULT value]
             name = self._parse_identifier()
@@ -973,6 +1047,13 @@ class ProceduralParser:
 
         tok = self._current()
 
+        if tok.is_keyword("DECLARE"):
+            # MySQL places variable declarations inside BEGIN ... END.
+            self._advance()
+            return self._parse_plsql_declaration()
+        if tok.is_keyword("SET"):
+            # MySQL assignment: SET var = expr;
+            return self._parse_mysql_set()
         if tok.is_keyword("IF"):
             return self._parse_plsql_if()
         elif tok.is_keyword("WHILE"):
@@ -1170,13 +1251,41 @@ class ProceduralParser:
         self._match_type(TokenType.SEMICOLON)
         return CursorOperation(operation="CLOSE", cursor_name=cursor_name)
 
+    def _parse_mysql_set(self) -> ASTNode:
+        """Parse a MySQL SET assignment: SET var = expr;"""
+        self._expect_keyword("SET")
+        target = self._parse_identifier()
+        self._match_type(TokenType.OPERATOR)  # =
+        value = self._parse_expression_until_semicolon()
+        self._match_type(TokenType.SEMICOLON)
+        return AssignmentStatement(target=target, value=value)
+
     def _parse_plsql_raise(self) -> ASTNode:
-        """Parse RAISE or RAISE_APPLICATION_ERROR(...)."""
+        """Parse RAISE / RAISE_APPLICATION_ERROR / PostgreSQL RAISE level.
+
+        PostgreSQL: RAISE NOTICE|INFO|LOG|DEBUG 'msg' -> informational
+        (mapped to a PrintStatement); RAISE EXCEPTION|WARNING 'msg' or a
+        bare RAISE -> RaiseErrorStatement.
+        """
         tok = self._advance()
         if tok.upper_value == "RAISE_APPLICATION_ERROR":
             expr = self._parse_expression_until_semicolon()
             self._match_type(TokenType.SEMICOLON)
             return RaiseErrorStatement(message=expr)
+
+        # PostgreSQL RAISE with a level keyword
+        level = self._current()
+        if level.type in (TokenType.KEYWORD, TokenType.IDENTIFIER) and (
+            level.upper_value
+            in ("NOTICE", "INFO", "LOG", "DEBUG", "WARNING", "EXCEPTION")
+        ):
+            self._advance()
+            expr = self._parse_expression_until_semicolon()
+            self._match_type(TokenType.SEMICOLON)
+            if level.upper_value in ("NOTICE", "INFO", "LOG", "DEBUG"):
+                return PrintStatement(expression=expr)
+            return RaiseErrorStatement(message=expr)
+
         expr = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)
         return RaiseErrorStatement(message=expr)
