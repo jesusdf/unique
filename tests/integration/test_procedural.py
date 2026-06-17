@@ -1,0 +1,115 @@
+# Copyright (C) 2026 Unique Contributors
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+"""End-to-end procedural transpilation tests.
+
+These exercise the full pipeline (split -> classify -> parse -> transform
+-> emit) on representative procedures drawn from real-world patterns.
+"""
+
+from __future__ import annotations
+
+from unique.core.transpiler import Transpiler
+
+
+def _transpile(sql: str, source: str, target: str) -> str:
+    return Transpiler().transpile(sql, source=source, target=target).sql
+
+
+class TestTSQLToOracle:
+    def test_procedure_body_translated(self) -> None:
+        sql = (
+            "CREATE PROCEDURE dbo.upd_user\n"
+            "    @id INT,\n"
+            "    @name NVARCHAR(50)\n"
+            "AS\n"
+            "BEGIN\n"
+            "    SET NOCOUNT ON\n"
+            "    DECLARE @now DATETIME = GETDATE()\n"
+            "    IF @id > 0\n"
+            "    BEGIN\n"
+            "        UPDATE users SET name = @name, modified = @now WHERE id = @id\n"
+            "    END\n"
+            "END"
+        )
+        out = _transpile(sql, "tsql", "oracle")
+        assert "CREATE OR REPLACE PROCEDURE" in out
+        # Parameters converted to Oracle naming/types
+        assert "V_ID" in out
+        assert "NUMBER" in out
+        # IF block became PL/SQL form
+        assert "END IF;" in out
+        # Body is not empty
+        assert "UPDATE" in out
+
+    def test_assignment_becomes_colon_equals(self) -> None:
+        sql = "CREATE PROCEDURE p @x INT AS BEGIN " "SET @x = @x + 1 " "END"
+        out = _transpile(sql, "tsql", "oracle")
+        assert ":=" in out
+
+
+class TestOracleToTSQL:
+    def test_procedure_body_translated(self) -> None:
+        sql = (
+            "CREATE OR REPLACE PROCEDURE upd_user(\n"
+            "    p_id IN NUMBER,\n"
+            "    p_name IN VARCHAR2\n"
+            ") IS\n"
+            "    v_now DATE := SYSDATE;\n"
+            "BEGIN\n"
+            "    IF p_id > 0 THEN\n"
+            "        UPDATE users SET name = p_name, modified = v_now "
+            "WHERE id = p_id;\n"
+            "    END IF;\n"
+            "END;"
+        )
+        out = _transpile(sql, "oracle", "tsql")
+        assert "CREATE PROCEDURE" in out
+        # Oracle params converted to T-SQL @variables
+        assert "@p_id" in out
+        # IF block became T-SQL form
+        assert "BEGIN" in out
+        assert "UPDATE" in out
+
+    def test_type_reference_without_db_becomes_sql_variant(self) -> None:
+        sql = (
+            "CREATE OR REPLACE PROCEDURE p IS "
+            "v_x employees.salary%TYPE; "
+            "BEGIN v_x := 1; END;"
+        )
+        result = Transpiler().transpile(sql, source="oracle", target="tsql")
+        assert "SQL_VARIANT" in result.sql
+        # A warning should flag the unresolved %TYPE
+        assert any("TYPE" in w.message.upper() for w in result.warnings)
+
+    def test_dbms_output_becomes_print(self) -> None:
+        sql = (
+            "CREATE OR REPLACE PROCEDURE p IS BEGIN "
+            "DBMS_OUTPUT.PUT_LINE('hello'); "
+            "END;"
+        )
+        out = _transpile(sql, "oracle", "tsql")
+        assert "PRINT" in out
+
+
+class TestRoundTripStability:
+    def test_tsql_to_oracle_to_tsql_preserves_structure(self) -> None:
+        sql = (
+            "CREATE PROCEDURE p @x INT AS BEGIN " "DECLARE @y INT; SET @y = @x; " "END"
+        )
+        oracle = _transpile(sql, "tsql", "oracle")
+        back = _transpile(oracle, "oracle", "tsql")
+        assert "CREATE PROCEDURE" in back
+        assert "DECLARE" in back

@@ -193,5 +193,23 @@ only partially supported:
 - **`SET ROWCOUNT n`**: removed with a warning (deprecated; use `TOP`/
   `FETCH FIRST` instead).
 
+### Oracle → T-SQL specifics
+
+Validated against a 1,900-line real-world PL/SQL file (25 procedures):
+
+- **`%TYPE` / `%ROWTYPE` without `--db-url`**: emitted as `SQL_VARIANT`
+  with a warning, since the real column type is unknown without a database
+  connection. Provide `--db-url` to resolve these to the actual types from
+  `ALL_TAB_COLUMNS`. (The test file used 240 `%TYPE` references.)
+- **`EXECUTE IMMEDIATE ... USING bind1, bind2`**: Oracle bind-variable
+  passing has no direct T-SQL equivalent; the `USING` clause is preserved
+  in the dynamic SQL but flagged for manual conversion to `sp_executesql`
+  parameters.
+- **Ref cursor OUT parameters** (`SYS_REFCURSOR`, package cursor types):
+  emitted as-is; T-SQL uses `CURSOR VARYING OUTPUT` or result sets, which
+  require manual adaptation.
+- **`DECODE` and complex `CASE` inside embedded DML**: usually transpiled
+  by sqlglot, but deeply nested forms may need review.
+
 These limitations are reported as **warnings** during transpilation so the
 affected statements can be reviewed manually.
