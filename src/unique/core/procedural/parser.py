@@ -309,6 +309,13 @@ class ProceduralParser:
         name, schema = self._parse_qualified_name()
 
         # Timing: BEFORE | AFTER | INSTEAD OF | FOR (T-SQL)
+        # T-SQL puts "ON table" before the timing/events; Oracle/PG put it
+        # after. Accept an optional leading ON clause first.
+        table_name = ""
+        if self._match_keyword("ON"):
+            table_name, _ = self._parse_qualified_name()
+
+        # Timing: BEFORE | AFTER | INSTEAD OF | FOR (T-SQL)
         timing = "AFTER"
         if self._match_keyword("BEFORE"):
             timing = "BEFORE"
@@ -331,9 +338,8 @@ class ProceduralParser:
             else:
                 break
 
-        # ON table
-        table_name = ""
-        if self._match_keyword("ON"):
+        # ON table (Oracle/PG ordering, if not already captured)
+        if not table_name and self._match_keyword("ON"):
             table_name, _ = self._parse_qualified_name()
 
         # FOR EACH ROW (Oracle/PG)
