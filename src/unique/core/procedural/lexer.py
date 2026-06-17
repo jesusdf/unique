@@ -21,7 +21,6 @@ string literals, comments, keywords, identifiers, and operators.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -32,21 +31,21 @@ class TokenType(Enum):
     # Structural
     KEYWORD = auto()
     IDENTIFIER = auto()
-    VARIABLE = auto()        # @var (T-SQL) or :var (bind)
+    VARIABLE = auto()  # @var (T-SQL) or :var (bind)
     NUMBER = auto()
     STRING = auto()
     OPERATOR = auto()
     COMPARISON = auto()
-    ASSIGN = auto()          # := (Oracle/PG)
+    ASSIGN = auto()  # := (Oracle/PG)
     DOT = auto()
     COMMA = auto()
     SEMICOLON = auto()
     LPAREN = auto()
     RPAREN = auto()
-    PERCENT = auto()         # for %TYPE, %ROWTYPE
+    PERCENT = auto()  # for %TYPE, %ROWTYPE
     COLON = auto()
-    AT_SIGN = auto()         # @ prefix for T-SQL variables
-    PIPE_PIPE = auto()       # || concatenation
+    AT_SIGN = auto()  # @ prefix for T-SQL variables
+    PIPE_PIPE = auto()  # || concatenation
 
     # Comments
     LINE_COMMENT = auto()
@@ -60,67 +59,236 @@ class TokenType(Enum):
 
 
 # Keywords recognized by the procedural parser
-KEYWORDS = frozenset({
-    "CREATE", "OR", "REPLACE", "ALTER", "DROP",
-    "PROCEDURE", "FUNCTION", "TRIGGER", "PACKAGE", "BODY",
-    "BEGIN", "END", "DECLARE", "AS", "IS",
-    "IF", "THEN", "ELSE", "ELSIF", "ELSEIF", "CASE", "WHEN",
-    "WHILE", "FOR", "LOOP", "IN", "REVERSE",
-    "OPEN", "FETCH", "CLOSE", "DEALLOCATE", "CURSOR", "INTO", "NEXT", "FROM",
-    "RETURN", "RETURNS", "RETURNING",
-    "EXCEPTION", "RAISE", "RAISE_APPLICATION_ERROR", "RAISERROR", "THROW",
-    "SET", "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "WITH",
-    "NULL", "NOT", "AND", "OR", "DEFAULT",
-    "OUT", "OUTPUT", "INOUT", "IN",
-    "TYPE", "ROWTYPE",
-    "EXEC", "EXECUTE", "IMMEDIATE",
-    "PRINT", "DBMS_OUTPUT",
-    "TRY", "CATCH",
-    "NOCOUNT", "ON", "OFF",
-    "TABLE", "OF", "INDEX", "BY",
-    "EXIT", "CONTINUE", "LEAVE", "BREAK",
-    "LANGUAGE", "PLPGSQL", "SQL",
-    "VOLATILE", "STABLE", "IMMUTABLE",
-    "SECURITY", "DEFINER", "INVOKER",
-    "BEFORE", "AFTER", "INSTEAD",
-    "EACH", "ROW", "STATEMENT", "NEW", "OLD",
-    "PRAGMA", "AUTONOMOUS_TRANSACTION", "EXCEPTION_INIT",
-    "VARCHAR", "VARCHAR2", "NVARCHAR", "CHAR", "NCHAR",
-    "INT", "INTEGER", "SMALLINT", "BIGINT", "TINYINT",
-    "NUMBER", "NUMERIC", "DECIMAL", "FLOAT", "REAL", "DOUBLE",
-    "DATE", "DATETIME", "DATETIME2", "TIMESTAMP", "TIME",
-    "BOOLEAN", "BOOL", "BIT",
-    "TEXT", "NTEXT", "CLOB", "NCLOB", "BLOB",
-    "RAW", "BINARY", "VARBINARY", "IMAGE",
-    "UNIQUEIDENTIFIER", "UUID", "GUID",
-    "XML", "JSON", "JSONB",
-    "MAX",
-    "SCOPE_IDENTITY", "IDENTITY",
-    "ROWCOUNT", "FOUND", "NOTFOUND",
-    "LIKE", "BETWEEN", "EXISTS",
-    "WHERE", "GROUP", "ORDER", "HAVING", "LIMIT", "OFFSET",
-    "JOIN", "INNER", "LEFT", "RIGHT", "FULL", "OUTER", "CROSS",
-    "UNION", "ALL", "INTERSECT", "EXCEPT", "MINUS",
-    "DISTINCT", "TOP", "FIRST", "ONLY",
-    "VALUES", "COMMIT", "ROLLBACK", "SAVEPOINT",
-    "GRANT", "REVOKE", "TO",
-    "CONSTRAINT", "PRIMARY", "KEY", "FOREIGN", "REFERENCES",
-    "UNIQUE", "CHECK", "IDENTITY",
-    "ASC", "DESC", "NULLS",
-    "COALESCE", "ISNULL", "NVL", "IFNULL",
-    "CAST", "CONVERT", "GETDATE", "SYSDATE", "NOW",
-    "COUNT", "SUM", "AVG", "MIN",
-    "LOWER", "UPPER", "TRIM", "LTRIM", "RTRIM", "SUBSTRING", "SUBSTR",
-    "LEN", "LENGTH", "REPLACE", "CHARINDEX", "INSTR",
-    "TO_CHAR", "TO_DATE", "TO_NUMBER",
-    "DATEDIFF", "DATEADD", "DATEPART",
-    "OBJECT_ID",
-    "GO",
-    "PUT_LINE",
-    "DUAL",
-    "TRUNC", "ROUND", "ABS", "MOD", "POWER", "SQRT",
-    "SYS_GUID", "NEWID",
-})
+KEYWORDS = frozenset(
+    {
+        "CREATE",
+        "OR",
+        "REPLACE",
+        "ALTER",
+        "DROP",
+        "PROCEDURE",
+        "FUNCTION",
+        "TRIGGER",
+        "PACKAGE",
+        "BODY",
+        "BEGIN",
+        "END",
+        "DECLARE",
+        "AS",
+        "IS",
+        "IF",
+        "THEN",
+        "ELSE",
+        "ELSIF",
+        "ELSEIF",
+        "CASE",
+        "WHEN",
+        "WHILE",
+        "FOR",
+        "LOOP",
+        "IN",
+        "REVERSE",
+        "OPEN",
+        "FETCH",
+        "CLOSE",
+        "DEALLOCATE",
+        "CURSOR",
+        "INTO",
+        "NEXT",
+        "FROM",
+        "RETURN",
+        "RETURNS",
+        "RETURNING",
+        "EXCEPTION",
+        "RAISE",
+        "RAISE_APPLICATION_ERROR",
+        "RAISERROR",
+        "THROW",
+        "SET",
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "MERGE",
+        "WITH",
+        "NULL",
+        "NOT",
+        "AND",
+        "DEFAULT",
+        "OUT",
+        "OUTPUT",
+        "INOUT",
+        "TYPE",
+        "ROWTYPE",
+        "EXEC",
+        "EXECUTE",
+        "IMMEDIATE",
+        "PRINT",
+        "DBMS_OUTPUT",
+        "TRY",
+        "CATCH",
+        "NOCOUNT",
+        "ON",
+        "OFF",
+        "TABLE",
+        "OF",
+        "INDEX",
+        "BY",
+        "EXIT",
+        "CONTINUE",
+        "LEAVE",
+        "BREAK",
+        "LANGUAGE",
+        "PLPGSQL",
+        "SQL",
+        "VOLATILE",
+        "STABLE",
+        "IMMUTABLE",
+        "SECURITY",
+        "DEFINER",
+        "INVOKER",
+        "BEFORE",
+        "AFTER",
+        "INSTEAD",
+        "EACH",
+        "ROW",
+        "STATEMENT",
+        "NEW",
+        "OLD",
+        "PRAGMA",
+        "AUTONOMOUS_TRANSACTION",
+        "EXCEPTION_INIT",
+        "VARCHAR",
+        "VARCHAR2",
+        "NVARCHAR",
+        "CHAR",
+        "NCHAR",
+        "INT",
+        "INTEGER",
+        "SMALLINT",
+        "BIGINT",
+        "TINYINT",
+        "NUMBER",
+        "NUMERIC",
+        "DECIMAL",
+        "FLOAT",
+        "REAL",
+        "DOUBLE",
+        "DATE",
+        "DATETIME",
+        "DATETIME2",
+        "TIMESTAMP",
+        "TIME",
+        "BOOLEAN",
+        "BOOL",
+        "BIT",
+        "TEXT",
+        "NTEXT",
+        "CLOB",
+        "NCLOB",
+        "BLOB",
+        "RAW",
+        "BINARY",
+        "VARBINARY",
+        "IMAGE",
+        "UNIQUEIDENTIFIER",
+        "UUID",
+        "GUID",
+        "XML",
+        "JSON",
+        "JSONB",
+        "MAX",
+        "SCOPE_IDENTITY",
+        "IDENTITY",
+        "ROWCOUNT",
+        "FOUND",
+        "NOTFOUND",
+        "LIKE",
+        "BETWEEN",
+        "EXISTS",
+        "WHERE",
+        "GROUP",
+        "ORDER",
+        "HAVING",
+        "LIMIT",
+        "OFFSET",
+        "JOIN",
+        "INNER",
+        "LEFT",
+        "RIGHT",
+        "FULL",
+        "OUTER",
+        "CROSS",
+        "UNION",
+        "ALL",
+        "INTERSECT",
+        "EXCEPT",
+        "MINUS",
+        "DISTINCT",
+        "TOP",
+        "FIRST",
+        "ONLY",
+        "VALUES",
+        "COMMIT",
+        "ROLLBACK",
+        "SAVEPOINT",
+        "GRANT",
+        "REVOKE",
+        "TO",
+        "CONSTRAINT",
+        "PRIMARY",
+        "KEY",
+        "FOREIGN",
+        "REFERENCES",
+        "UNIQUE",
+        "CHECK",
+        "ASC",
+        "DESC",
+        "NULLS",
+        "COALESCE",
+        "ISNULL",
+        "NVL",
+        "IFNULL",
+        "CAST",
+        "CONVERT",
+        "GETDATE",
+        "SYSDATE",
+        "NOW",
+        "COUNT",
+        "SUM",
+        "AVG",
+        "MIN",
+        "LOWER",
+        "UPPER",
+        "TRIM",
+        "LTRIM",
+        "RTRIM",
+        "SUBSTRING",
+        "SUBSTR",
+        "LEN",
+        "LENGTH",
+        "CHARINDEX",
+        "INSTR",
+        "TO_CHAR",
+        "TO_DATE",
+        "TO_NUMBER",
+        "DATEDIFF",
+        "DATEADD",
+        "DATEPART",
+        "OBJECT_ID",
+        "GO",
+        "PUT_LINE",
+        "DUAL",
+        "TRUNC",
+        "ROUND",
+        "ABS",
+        "MOD",
+        "POWER",
+        "SQRT",
+        "SYS_GUID",
+        "NEWID",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -164,7 +332,8 @@ class Lexer:
     def tokens(self) -> list[Token]:
         """Return all tokens (excluding whitespace/newlines)."""
         return [
-            t for t in self._tokens
+            t
+            for t in self._tokens
             if t.type not in (TokenType.WHITESPACE, TokenType.NEWLINE)
         ]
 
@@ -226,9 +395,7 @@ class Lexer:
             start = self._pos
             while not self._at_end() and self._peek() != "\n":
                 self._advance()
-            self._emit(
-                TokenType.LINE_COMMENT, self._sql[start : self._pos], line, col
-            )
+            self._emit(TokenType.LINE_COMMENT, self._sql[start : self._pos], line, col)
             return
 
         # Block comment
@@ -240,9 +407,7 @@ class Lexer:
                     self._advance(2)
                     break
                 self._advance()
-            self._emit(
-                TokenType.BLOCK_COMMENT, self._sql[start : self._pos], line, col
-            )
+            self._emit(TokenType.BLOCK_COMMENT, self._sql[start : self._pos], line, col)
             return
 
         # String literal (single-quoted)
@@ -264,9 +429,7 @@ class Lexer:
                 self._advance()
             if not self._at_end():
                 self._advance()
-            self._emit(
-                TokenType.IDENTIFIER, self._sql[start : self._pos], line, col
-            )
+            self._emit(TokenType.IDENTIFIER, self._sql[start : self._pos], line, col)
             return
 
         # Quoted identifier "double quotes"
@@ -277,9 +440,7 @@ class Lexer:
                 self._advance()
             if not self._at_end():
                 self._advance()
-            self._emit(
-                TokenType.IDENTIFIER, self._sql[start : self._pos], line, col
-            )
+            self._emit(TokenType.IDENTIFIER, self._sql[start : self._pos], line, col)
             return
 
         # Numbers
@@ -410,9 +571,7 @@ class Lexer:
         self._advance()
         self._emit(TokenType.UNKNOWN, ch, line, col)
 
-    def _tokenize_string(
-        self, line: int, col: int, prefix: str = ""
-    ) -> None:
+    def _tokenize_string(self, line: int, col: int, prefix: str = "") -> None:
         """Tokenize a single-quoted string literal, handling '' escapes."""
         start = self._pos
         self._advance()  # consume opening quote

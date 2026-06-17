@@ -23,11 +23,12 @@ functions, triggers, and control flow constructs.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from unique.core.ast_nodes import (
-    ASTNode,
     AlterProcedureStatement,
     AssignmentStatement,
+    ASTNode,
     BeginEndBlock,
     ContinueStatement,
     CreateFunctionStatement,
@@ -39,7 +40,6 @@ from unique.core.ast_nodes import (
     DeclareStatement,
     EmbeddedDML,
     ExceptionBlock,
-    ExceptionHandler,
     ExecuteStatement,
     ExitStatement,
     ForLoopStatement,
@@ -51,8 +51,8 @@ from unique.core.ast_nodes import (
     PrintStatement,
     RaiseErrorStatement,
     RawSQL,
-    SelectIntoStatement,
     ReturnStatement,
+    SelectIntoStatement,
     SetVariableStatement,
     TryCatchBlock,
     WhileStatement,
@@ -89,7 +89,7 @@ class ProceduralEmitter:
 
     def _emit_node(self, node: ASTNode) -> str:
         """Dispatch emission based on node type."""
-        emitters = {
+        emitters: dict[type, Callable[..., str]] = {
             CreateProcedureStatement: self._emit_procedure,
             AlterProcedureStatement: self._emit_alter_procedure,
             CreateFunctionStatement: self._emit_function,
@@ -124,9 +124,7 @@ class ProceduralEmitter:
             return emitter(node)
         return f"/* UNSUPPORTED: {type(node).__name__} */"
 
-    def _emit_body(
-        self, stmts: tuple[ASTNode, ...], separator: str = "\n"
-    ) -> str:
+    def _emit_body(self, stmts: tuple[ASTNode, ...], separator: str = "\n") -> str:
         """Emit a sequence of body statements."""
         lines: list[str] = []
         for stmt in stmts:
@@ -138,9 +136,7 @@ class ProceduralEmitter:
     def _emit_data_type(self, dt: DataType) -> str:
         """Emit a data type."""
         if dt.params:
-            params = ", ".join(
-                "MAX" if p == -1 else str(p) for p in dt.params
-            )
+            params = ", ".join("MAX" if p == -1 else str(p) for p in dt.params)
             return f"{dt.name}({params})"
         return dt.name
 
@@ -182,10 +178,7 @@ class ProceduralEmitter:
 
         if self._dialect == "tsql":
             header = f"CREATE PROCEDURE {name}"
-        elif self._dialect == "oracle":
-            prefix = "CREATE OR REPLACE " if node.or_replace else "CREATE "
-            header = f"{prefix}PROCEDURE {name}"
-        elif self._dialect == "postgresql":
+        elif self._dialect == "oracle" or self._dialect == "postgresql":
             prefix = "CREATE OR REPLACE " if node.or_replace else "CREATE "
             header = f"{prefix}PROCEDURE {name}"
         else:
@@ -324,7 +317,9 @@ class ProceduralEmitter:
 
     def _emit_function(self, node: CreateFunctionStatement) -> str:
         name = f"{node.schema}.{node.name}" if node.schema else node.name
-        ret_type = self._emit_data_type(node.return_type) if node.return_type else "void"
+        ret_type = (
+            self._emit_data_type(node.return_type) if node.return_type else "void"
+        )
 
         if self._dialect == "tsql":
             header = f"CREATE FUNCTION {name}"
@@ -347,8 +342,14 @@ class ProceduralEmitter:
         elif self._dialect == "oracle":
             header += f"\nRETURN {ret_type}"
 
-        declarations = [s for s in node.body if isinstance(s, (DeclareStatement, CursorDeclaration))]
-        body_stmts = [s for s in node.body if not isinstance(s, (DeclareStatement, CursorDeclaration))]
+        declarations: list[ASTNode] = [
+            s for s in node.body if isinstance(s, (DeclareStatement, CursorDeclaration))
+        ]
+        body_stmts: list[ASTNode] = [
+            s
+            for s in node.body
+            if not isinstance(s, (DeclareStatement, CursorDeclaration))
+        ]
 
         if self._dialect == "tsql":
             return self._emit_tsql_procedure_body(header, declarations, body_stmts)
@@ -410,10 +411,7 @@ class ProceduralEmitter:
         default_str = ""
         if node.default:
             val = self._emit_node(node.default)
-            if self._dialect == "tsql":
-                default_str = f" = {val}"
-            else:
-                default_str = f" := {val}"
+            default_str = f" = {val}" if self._dialect == "tsql" else f" := {val}"
 
         if self._dialect == "tsql":
             return f"DECLARE {node.name} {dt}{default_str};"
@@ -484,9 +482,7 @@ class ProceduralEmitter:
                 for stmt in else_body:
                     text = self._emit_node(stmt)
                     for line in text.split("\n"):
-                        lines.append(
-                            f"{self._indent()}{line}" if line.strip() else ""
-                        )
+                        lines.append(f"{self._indent()}{line}" if line.strip() else "")
                 self._indent_level -= 1
                 lines.append("END")
 
@@ -507,19 +503,14 @@ class ProceduralEmitter:
         self._indent_level -= 1
 
         if else_body:
-            if (
-                len(else_body) == 1
-                and isinstance(else_body[0], IfStatement)
-            ):
+            if len(else_body) == 1 and isinstance(else_body[0], IfStatement):
                 nested_cond = self._emit_node(else_body[0].condition)
                 lines.append(f"ELSIF {nested_cond} THEN")
                 self._indent_level += 1
                 for stmt in else_body[0].then_body:
                     text = self._emit_node(stmt)
                     for line in text.split("\n"):
-                        lines.append(
-                            f"{self._indent()}{line}" if line.strip() else ""
-                        )
+                        lines.append(f"{self._indent()}{line}" if line.strip() else "")
                 self._indent_level -= 1
                 if else_body[0].else_body:
                     lines.append("ELSE")
@@ -528,9 +519,7 @@ class ProceduralEmitter:
                         text = self._emit_node(stmt)
                         for line in text.split("\n"):
                             lines.append(
-                                f"{self._indent()}{line}"
-                                if line.strip()
-                                else ""
+                                f"{self._indent()}{line}" if line.strip() else ""
                             )
                     self._indent_level -= 1
             else:
@@ -539,9 +528,7 @@ class ProceduralEmitter:
                 for stmt in else_body:
                     text = self._emit_node(stmt)
                     for line in text.split("\n"):
-                        lines.append(
-                            f"{self._indent()}{line}" if line.strip() else ""
-                        )
+                        lines.append(f"{self._indent()}{line}" if line.strip() else "")
                 self._indent_level -= 1
 
         lines.append("END IF;")
