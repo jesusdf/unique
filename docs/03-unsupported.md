@@ -177,15 +177,14 @@ into an IR and re-emits them in the target dialect. Some constructs are
 only partially supported:
 
 - **Semicolon-less T-SQL statements**: T-SQL allows statements without a
-  trailing semicolon, separated only by newlines. The current token-based
-  parser does not treat newlines as statement terminators, so consecutive
-  statements without semicolons inside a procedure body may be merged or
-  truncated. **Workaround**: ensure statements are semicolon-terminated.
-  Procedures that follow modern T-SQL style (semicolons after each
-  statement) transpile fully.
-- **`DECLARE @t TABLE (...)`** (table variables): captured as raw SQL;
-  Oracle/PostgreSQL have no direct equivalent (use a collection type or
-  temporary table).
+  trailing semicolon, separated only by newlines. The parser detects
+  statement boundaries (control-flow keywords and standalone `SET @var`
+  assignments) so these bodies parse correctly. Chained DML such as
+  `INSERT ... SELECT` and `UPDATE ... SET` is kept intact. Rare edge cases
+  with unusual formatting may still need review.
+- **`DECLARE @t TABLE (...)`** (table variables): the column list is
+  captured verbatim; Oracle/PostgreSQL have no direct equivalent (use a
+  collection type or temporary table).
 - **`SELECT ... INTO @var`** combined with `OUTPUT ... INTO`: the `OUTPUT`
   clause is engine-specific and emitted as raw SQL.
 - **Variable-assignment `SELECT`** (`SELECT @x = col`): handled for the

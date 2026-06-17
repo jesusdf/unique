@@ -167,6 +167,46 @@ class TestPLSQLProcedure:
         assert len(whiles) == 1
 
 
+class TestSemicolonLessTSQL:
+    def test_table_variable_does_not_hang(self) -> None:
+        # Regression: DECLARE @t TABLE (...) previously caused an infinite
+        # loop in data-type parsing.
+        sql = "CREATE PROCEDURE p AS BEGIN " "DECLARE @r TABLE (id INT); SELECT 1 END"
+        result = _parse(sql, "tsql")
+        assert result.node is not None
+        assert len(result.node.body) >= 1
+
+    def test_multiple_statements_without_semicolons(self) -> None:
+        # T-SQL allows newline-separated statements without semicolons.
+        sql = (
+            "CREATE PROCEDURE p AS BEGIN\n"
+            "DECLARE @x INT\n"
+            "SET @x = 1\n"
+            "IF @x > 0 BEGIN PRINT 'hi' END\n"
+            "RETURN\n"
+            "END"
+        )
+        result = _parse(sql, "tsql")
+        kinds = [type(s).__name__ for s in result.node.body]
+        assert "DeclareStatement" in kinds
+        assert "IfStatement" in kinds
+        assert "ReturnStatement" in kinds
+
+    def test_set_assignment_distinguished_from_update_set(self) -> None:
+        # "SET @v = ..." is an assignment; "UPDATE t SET col = ..." is not.
+        sql = (
+            "CREATE PROCEDURE p AS BEGIN\n"
+            "UPDATE t SET col = 1 WHERE id = 2\n"
+            "SET @v = 3\n"
+            "END"
+        )
+        result = _parse(sql, "tsql")
+        kinds = [type(s).__name__ for s in result.node.body]
+        # The UPDATE and the assignment must be separate statements.
+        assert "EmbeddedDML" in kinds
+        assert "SetVariableStatement" in kinds
+
+
 class TestErrorHandling:
     def test_set_option_without_semicolon_keeps_body(self) -> None:
         # Regression: "SET NOCOUNT ON" without a trailing semicolon must not
