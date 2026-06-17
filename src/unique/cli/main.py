@@ -22,7 +22,7 @@ import sys
 import click
 
 from unique.core.registry import DialectRegistry
-from unique.core.transpiler import Transpiler
+from unique.core.transpiler import TranspileOptions, Transpiler
 
 
 @click.group()
@@ -48,11 +48,23 @@ def cli() -> None:
 @click.option(
     "--output", "-o", type=click.Path(), help="Output file. Defaults to stdout."
 )
+@click.option(
+    "--db-url",
+    "db_url",
+    default=None,
+    help=(
+        "Optional database connection URL for resolving metadata-dependent "
+        "constructs such as Oracle %TYPE/%ROWTYPE references. "
+        "Examples: oracle://user:pass@host:1521/service, "
+        "mssql://user:pass@host:1433/db."
+    ),
+)
 def transpile(
     input_file: str | None,
     source: str,
     target: str,
     output: str | None,
+    db_url: str | None,
 ) -> None:
     """Transpile SQL from one dialect to another.
 
@@ -71,8 +83,11 @@ def transpile(
 
     # Transpile
     transpiler = Transpiler()
+    options = TranspileOptions(db_url=db_url)
     try:
-        result = transpiler.transpile(sql, source=source, target=target)
+        result = transpiler.transpile(
+            sql, source=source, target=target, options=options
+        )
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
