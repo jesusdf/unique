@@ -104,6 +104,63 @@ class TestOracleToTSQL:
         assert "PRINT" in out
 
 
+class TestTSQLToMySQL:
+    def test_variables_and_types_converted(self) -> None:
+        sql = (
+            "CREATE PROCEDURE p\n"
+            "    @id INT,\n"
+            "    @uid UNIQUEIDENTIFIER\n"
+            "AS\n"
+            "BEGIN\n"
+            "    DECLARE @n INT\n"
+            "    SET @n = @id + 1\n"
+            "END"
+        )
+        out = _transpile(sql, "tsql", "mysql")
+        # No T-SQL @ sigils on local variables
+        assert "@id" not in out
+        assert "v_id" in out
+        # UNIQUEIDENTIFIER mapped to CHAR(36)
+        assert "CHAR(36)" in out
+        # MySQL DECLARE keyword present
+        assert "DECLARE v_n" in out
+
+
+class TestOracleToPostgreSQL:
+    def test_types_and_structure(self) -> None:
+        sql = (
+            "CREATE OR REPLACE PROCEDURE p(p_id IN NUMBER) IS\n"
+            "    v_d DATE := SYSDATE;\n"
+            "BEGIN\n"
+            "    IF p_id > 0 THEN\n"
+            "        UPDATE t SET d = v_d WHERE id = p_id;\n"
+            "    END IF;\n"
+            "END;"
+        )
+        out = _transpile(sql, "oracle", "postgresql")
+        assert "LANGUAGE plpgsql" in out
+        assert "NUMERIC" in out
+        assert "TIMESTAMP" in out
+        assert "END IF;" in out
+
+
+class TestOracleToMySQL:
+    def test_types_and_declare(self) -> None:
+        sql = (
+            "CREATE OR REPLACE PROCEDURE p(p_id IN NUMBER) IS\n"
+            "    v_name VARCHAR2(50);\n"
+            "BEGIN\n"
+            "    v_name := 'x';\n"
+            "END;"
+        )
+        out = _transpile(sql, "oracle", "mysql")
+        assert "DECIMAL" in out
+        assert "VARCHAR(50)" in out
+        assert "DECLARE v_name" in out
+        # MySQL assignment uses SET
+        assert "SET v_name =" in out
+
+
 class TestRoundTripStability:
     def test_tsql_to_oracle_to_tsql_preserves_structure(self) -> None:
         sql = (

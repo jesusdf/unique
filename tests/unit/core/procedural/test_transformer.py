@@ -106,6 +106,49 @@ class TestDataTypeMapping:
         result = t._transform_data_type(DataType(name="UNIQUEIDENTIFIER"))
         assert result.name == "UUID"
 
+    def test_uniqueidentifier_to_mysql_char36(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        result = t._transform_data_type(DataType(name="UNIQUEIDENTIFIER"))
+        assert result.name == "CHAR"
+        assert result.params == (36,)
+
+    def test_int_to_mysql(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        assert t._transform_data_type(DataType(name="INT")).name == "INT"
+
+    def test_varchar_max_to_mysql_longtext(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        result = t._transform_data_type(DataType(name="VARCHAR", params=(-1,)))
+        assert result.name == "LONGTEXT"
+
+    def test_oracle_number_to_postgresql(self) -> None:
+        t = ProceduralTransformer("oracle", "postgresql")
+        assert t._transform_data_type(DataType(name="NUMBER")).name == "NUMERIC"
+
+    def test_oracle_date_to_postgresql_timestamp(self) -> None:
+        t = ProceduralTransformer("oracle", "postgresql")
+        assert t._transform_data_type(DataType(name="DATE")).name == "TIMESTAMP"
+
+    def test_oracle_varchar2_to_mysql(self) -> None:
+        t = ProceduralTransformer("oracle", "mysql")
+        result = t._transform_data_type(DataType(name="VARCHAR2", params=(80,)))
+        assert result.name == "VARCHAR"
+        assert result.params == (80,)
+
+    def test_oracle_number_to_mysql_decimal(self) -> None:
+        t = ProceduralTransformer("oracle", "mysql")
+        assert t._transform_data_type(DataType(name="NUMBER")).name == "DECIMAL"
+
+
+class TestMySQLVariableNaming:
+    def test_tsql_to_mysql_strips_at_sign(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        assert t._transform_var_name("@userId") == "v_userid"
+
+    def test_tsql_to_mysql_var_in_sql(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        assert t._transform_var_in_sql("@a + @b") == "v_a + v_b"
+
 
 class TestStatementTransforms:
     def test_set_variable_to_oracle_assignment(self) -> None:

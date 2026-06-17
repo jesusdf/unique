@@ -112,6 +112,44 @@ _ORACLE_TO_TSQL_TYPES: dict[str, str] = {
     "ANYDATA": "SQL_VARIANT",
 }
 
+_ORACLE_TO_PG_TYPES: dict[str, str] = {
+    "NUMBER": "NUMERIC",
+    "VARCHAR2": "VARCHAR",
+    "NVARCHAR2": "VARCHAR",
+    "CLOB": "TEXT",
+    "NCLOB": "TEXT",
+    "BLOB": "BYTEA",
+    "RAW": "BYTEA",
+    "LONG": "TEXT",
+    "DATE": "TIMESTAMP",
+    "TIMESTAMP": "TIMESTAMP",
+    "XMLTYPE": "XML",
+    "BOOLEAN": "BOOLEAN",
+    "PLS_INTEGER": "INTEGER",
+    "BINARY_INTEGER": "INTEGER",
+    "BINARY_FLOAT": "REAL",
+    "BINARY_DOUBLE": "DOUBLE PRECISION",
+}
+
+_ORACLE_TO_MYSQL_TYPES: dict[str, str] = {
+    "NUMBER": "DECIMAL",
+    "VARCHAR2": "VARCHAR",
+    "NVARCHAR2": "VARCHAR",
+    "CLOB": "LONGTEXT",
+    "NCLOB": "LONGTEXT",
+    "BLOB": "LONGBLOB",
+    "RAW": "VARBINARY",
+    "LONG": "LONGTEXT",
+    "DATE": "DATETIME",
+    "TIMESTAMP": "DATETIME",
+    "XMLTYPE": "TEXT",
+    "BOOLEAN": "TINYINT(1)",
+    "PLS_INTEGER": "INT",
+    "BINARY_INTEGER": "INT",
+    "BINARY_FLOAT": "FLOAT",
+    "BINARY_DOUBLE": "DOUBLE",
+}
+
 _TSQL_TO_PG_TYPES: dict[str, str] = {
     "INT": "INTEGER",
     "BIGINT": "BIGINT",
@@ -395,6 +433,12 @@ class ProceduralTransformer:
                     "Manual type resolution required."
                 )
                 return DataType(name="SQL_VARIANT")
+            if self._target in ("postgresql", "mysql"):
+                self._warnings.append(
+                    f"%%TYPE reference '{dt.name}' could not be resolved "
+                    "without a database connection (use --db-url). Emitted "
+                    "as-is for manual review."
+                )
             return dt
 
         # Handle VARCHAR(MAX) → CLOB/TEXT
@@ -431,6 +475,8 @@ class ProceduralTransformer:
         maps = {
             "tsql_oracle": _TSQL_TO_ORACLE_TYPES,
             "oracle_tsql": _ORACLE_TO_TSQL_TYPES,
+            "oracle_postgresql": _ORACLE_TO_PG_TYPES,
+            "oracle_mysql": _ORACLE_TO_MYSQL_TYPES,
             "tsql_postgresql": _TSQL_TO_PG_TYPES,
             "tsql_mysql": _TSQL_TO_MYSQL_TYPES,
         }
