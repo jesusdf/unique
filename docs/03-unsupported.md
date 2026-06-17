@@ -167,3 +167,32 @@ Features currently out of scope may become supportable in future versions:
 - **Materialized Views** → Engine-specific DDL (moderate demand)
 - **XML operations** → Cross-engine XML function mapping
 - **Spatial types** → PostGIS ↔ SQL Server spatial type mapping
+
+---
+
+## 6. Procedural Engine — Known Limitations
+
+The procedural engine parses stored procedures, functions, and triggers
+into an IR and re-emits them in the target dialect. Some constructs are
+only partially supported:
+
+- **Semicolon-less T-SQL statements**: T-SQL allows statements without a
+  trailing semicolon, separated only by newlines. The current token-based
+  parser does not treat newlines as statement terminators, so consecutive
+  statements without semicolons inside a procedure body may be merged or
+  truncated. **Workaround**: ensure statements are semicolon-terminated.
+  Procedures that follow modern T-SQL style (semicolons after each
+  statement) transpile fully.
+- **`DECLARE @t TABLE (...)`** (table variables): captured as raw SQL;
+  Oracle/PostgreSQL have no direct equivalent (use a collection type or
+  temporary table).
+- **`SELECT ... INTO @var`** combined with `OUTPUT ... INTO`: the `OUTPUT`
+  clause is engine-specific and emitted as raw SQL.
+- **Variable-assignment `SELECT`** (`SELECT @x = col`): handled for the
+  `SELECT INTO` form; the assignment form may require manual review when
+  embedded in complex queries.
+- **`SET ROWCOUNT n`**: removed with a warning (deprecated; use `TOP`/
+  `FETCH FIRST` instead).
+
+These limitations are reported as **warnings** during transpilation so the
+affected statements can be reviewed manually.

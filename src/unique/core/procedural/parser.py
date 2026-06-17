@@ -664,7 +664,17 @@ class ProceduralParser:
             "ROWCOUNT",
         ):
             kw = self._advance().value
-            while not self._at_end() and self._current().type != TokenType.SEMICOLON:
+            # These options take a short argument (ON/OFF or a value/var).
+            # T-SQL statements often omit the trailing semicolon, so we must
+            # NOT scan to the next ';' (that would swallow the whole body).
+            # Consume at most one argument token.
+            if self._current().is_keyword("ON", "OFF"):
+                self._advance()
+            elif self._current().type in (
+                TokenType.NUMBER,
+                TokenType.VARIABLE,
+                TokenType.IDENTIFIER,
+            ):
                 self._advance()
             self._match_type(TokenType.SEMICOLON)
             self._warnings.append(f"SET {kw} skipped (no equivalent)")
@@ -1404,7 +1414,7 @@ class ProceduralParser:
         return RawSQL(sql=raw, reason="expression")
 
     def _capture_raw_until(self, *stop_types: TokenType) -> ASTNode:
-        """Capture tokens as raw SQL until a stop token type."""
+        """Capture tokens as raw SQL until a stop token type or END."""
         parts: list[str] = []
         paren_depth = 0
         while not self._at_end():
