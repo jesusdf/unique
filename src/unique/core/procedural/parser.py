@@ -22,14 +22,14 @@ Delegates embedded DML/DQL statements to sqlglot for transpilation.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field
 
 from unique.core.ast_nodes import (
-    ASTNode,
     AlterProcedureStatement,
     AssignmentStatement,
+    ASTNode,
     BeginEndBlock,
+    ContinueStatement,
     CreateFunctionStatement,
     CreateProcedureStatement,
     CreateTriggerStatement,
@@ -55,7 +55,6 @@ from unique.core.ast_nodes import (
     SelectIntoStatement,
     SetVariableStatement,
     TryCatchBlock,
-    TypeReference,
     WhileStatement,
 )
 from unique.core.procedural.lexer import Lexer, Token, TokenType
@@ -373,23 +372,11 @@ class ProceduralParser:
     def _parse_qualified_name(self) -> tuple[str, str | None]:
         """Parse a potentially qualified name (schema.name)."""
         self._skip_comments()
-        parts: list[str] = []
-        tok = self._current()
-
-        if tok.type in (TokenType.IDENTIFIER, TokenType.KEYWORD):
-            parts.append(self._advance().value)
-        elif tok.type == TokenType.VARIABLE:
-            parts.append(self._advance().value)
-        else:
-            parts.append(self._advance().value)
+        parts: list[str] = [self._advance().value]
 
         while self._current().type == TokenType.DOT:
             self._advance()
-            tok = self._current()
-            if tok.type in (TokenType.IDENTIFIER, TokenType.KEYWORD):
-                parts.append(self._advance().value)
-            else:
-                parts.append(self._advance().value)
+            parts.append(self._advance().value)
 
         if len(parts) >= 2:
             return parts[-1], ".".join(parts[:-1])
@@ -492,10 +479,7 @@ class ProceduralParser:
             name = self._parse_identifier()
 
             if self._match_keyword("IN"):
-                if self._match_keyword("OUT"):
-                    direction = "INOUT"
-                else:
-                    direction = "IN"
+                direction = "INOUT" if self._match_keyword("OUT") else "IN"
             elif self._match_keyword("OUT"):
                 direction = "OUT"
             elif self._match_keyword("INOUT"):
@@ -503,9 +487,7 @@ class ProceduralParser:
 
             data_type = self._parse_data_type_or_reference()
 
-            if self._match_keyword("DEFAULT"):
-                default = self._parse_expression_simple()
-            elif self._match_type(TokenType.ASSIGN):
+            if self._match_keyword("DEFAULT") or self._match_type(TokenType.ASSIGN):
                 default = self._parse_expression_simple()
 
         if data_type is None:
@@ -522,7 +504,6 @@ class ProceduralParser:
     def _parse_data_type(self) -> DataType:
         """Parse a SQL data type."""
         self._skip_comments()
-        tok = self._current()
         type_name = self._parse_identifier()
         params: list[int] = []
 
@@ -554,9 +535,7 @@ class ProceduralParser:
             type_suffix = self._parse_identifier().upper()
             if type_suffix == "TYPE":
                 if len(name_parts) >= 2:
-                    return DataType(
-                        name=f"{'.'.join(name_parts)}%TYPE"
-                    )
+                    return DataType(name=f"{'.'.join(name_parts)}%TYPE")
                 return DataType(name=f"{name_parts[0]}%TYPE")
             elif type_suffix == "ROWTYPE":
                 return DataType(name=f"{'.'.join(name_parts)}%ROWTYPE")
@@ -670,8 +649,14 @@ class ProceduralParser:
         tok = self._current()
 
         # SET NOCOUNT ON/OFF — skip these
-        if tok.is_keyword("NOCOUNT", "QUOTED_IDENTIFIER", "ANSI_NULLS",
-                          "XACT_ABORT", "ARITHABORT", "ROWCOUNT"):
+        if tok.is_keyword(
+            "NOCOUNT",
+            "QUOTED_IDENTIFIER",
+            "ANSI_NULLS",
+            "XACT_ABORT",
+            "ARITHABORT",
+            "ROWCOUNT",
+        ):
             kw = self._advance().value
             while not self._at_end() and self._current().type != TokenType.SEMICOLON:
                 self._advance()
@@ -719,10 +704,20 @@ class ProceduralParser:
     def _parse_tsql_if(self) -> ASTNode:
         """Parse T-SQL IF ... BEGIN...END [ELSE BEGIN...END]."""
         self._expect_keyword("IF")
-        condition = self._parse_expression_until_keyword("BEGIN", "SET", "SELECT",
-                                                          "INSERT", "UPDATE", "DELETE",
-                                                          "EXEC", "EXECUTE", "RETURN",
-                                                          "PRINT", "RAISERROR", "THROW")
+        condition = self._parse_expression_until_keyword(
+            "BEGIN",
+            "SET",
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "EXEC",
+            "EXECUTE",
+            "RETURN",
+            "PRINT",
+            "RAISERROR",
+            "THROW",
+        )
 
         then_body: list[ASTNode] = []
         if self._current().is_keyword("BEGIN"):
@@ -824,9 +819,7 @@ class ProceduralParser:
                 if stmt:
                     catch_body.append(stmt)
 
-        return TryCatchBlock(
-            try_body=tuple(try_body), catch_body=tuple(catch_body)
-        )
+        return TryCatchBlock(try_body=tuple(try_body), catch_body=tuple(catch_body))
 
     def _parse_tsql_exec(self) -> ASTNode:
         """Parse EXEC/EXECUTE statement."""
@@ -878,9 +871,11 @@ class ProceduralParser:
 
             self._match_keyword("END")
             # Optional procedure/function name after END
-            if self._current().type in (TokenType.IDENTIFIER, TokenType.KEYWORD):
-                if not self._current().is_keyword("IF", "LOOP", "CASE"):
-                    self._advance()
+            if self._current().type in (
+                TokenType.IDENTIFIER,
+                TokenType.KEYWORD,
+            ) and not self._current().is_keyword("IF", "LOOP", "CASE"):
+                self._advance()
             self._match_type(TokenType.SEMICOLON)
 
         return stmts
@@ -910,9 +905,7 @@ class ProceduralParser:
         data_type = self._parse_data_type_or_reference()
 
         default: ASTNode | None = None
-        if self._match_type(TokenType.ASSIGN):
-            default = self._parse_expression_until_semicolon()
-        elif self._match_keyword("DEFAULT"):
+        if self._match_type(TokenType.ASSIGN) or self._match_keyword("DEFAULT"):
             default = self._parse_expression_until_semicolon()
 
         self._match_type(TokenType.SEMICOLON)
@@ -1081,9 +1074,7 @@ class ProceduralParser:
         self._match_keyword("LOOP")
         self._match_type(TokenType.SEMICOLON)
 
-        return ForLoopStatement(
-            variable=var_name, cursor=cursor, body=tuple(body)
-        )
+        return ForLoopStatement(variable=var_name, cursor=cursor, body=tuple(body))
 
     def _parse_plsql_loop(self) -> ASTNode:
         """Parse PL/SQL LOOP ... END LOOP."""
@@ -1107,9 +1098,7 @@ class ProceduralParser:
             query = self._parse_embedded_dml()
         else:
             self._match_type(TokenType.SEMICOLON)
-        return CursorOperation(
-            operation="OPEN", cursor_name=cursor_name, query=query
-        )
+        return CursorOperation(operation="OPEN", cursor_name=cursor_name, query=query)
 
     def _parse_plsql_fetch(self) -> ASTNode:
         """Parse FETCH cursor INTO vars."""
@@ -1164,17 +1153,12 @@ class ProceduralParser:
             exception_name = self._parse_identifier()
             self._expect_keyword("THEN")
             body: list[ASTNode] = []
-            while (
-                not self._at_end()
-                and not self._current().is_keyword("WHEN", "END")
-            ):
+            while not self._at_end() and not self._current().is_keyword("WHEN", "END"):
                 stmt = self._parse_plsql_statement()
                 if stmt:
                     body.append(stmt)
             handlers.append(
-                ExceptionHandler(
-                    exception_name=exception_name, body=tuple(body)
-                )
+                ExceptionHandler(exception_name=exception_name, body=tuple(body))
             )
 
         return ExceptionBlock(handlers=tuple(handlers))
@@ -1236,8 +1220,11 @@ class ProceduralParser:
             tok = self._current()
             if tok.is_keyword("FROM") or tok.type == TokenType.SEMICOLON:
                 break
-            if tok.type in (TokenType.IDENTIFIER, TokenType.KEYWORD,
-                            TokenType.VARIABLE):
+            if tok.type in (
+                TokenType.IDENTIFIER,
+                TokenType.KEYWORD,
+                TokenType.VARIABLE,
+            ):
                 into_vars.append(tok.value)
                 self._advance()
                 if not self._match_type(TokenType.COMMA):
@@ -1302,7 +1289,9 @@ class ProceduralParser:
         # Procedure call or other statement
         expr = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)
-        return EmbeddedDML(sql=f"{full_name} {expr.sql if isinstance(expr, RawSQL) else ''}")
+        return EmbeddedDML(
+            sql=f"{full_name} {expr.sql if isinstance(expr, RawSQL) else ''}"
+        )
 
     def _parse_dbms_output(self) -> ASTNode:
         """Parse DBMS_OUTPUT.PUT_LINE(expr)."""
@@ -1336,7 +1325,7 @@ class ProceduralParser:
 
     def _parse_raiserror(self) -> ASTNode:
         """Parse RAISERROR or THROW."""
-        tok = self._advance()
+        self._advance()
         expr = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)
         return RaiseErrorStatement(message=expr)
@@ -1390,7 +1379,9 @@ class ProceduralParser:
         while not self._at_end():
             tok = self._current()
             if paren_depth == 0 and tok.type in (
-                TokenType.COMMA, TokenType.RPAREN, TokenType.SEMICOLON
+                TokenType.COMMA,
+                TokenType.RPAREN,
+                TokenType.SEMICOLON,
             ):
                 break
             if tok.type == TokenType.LPAREN:

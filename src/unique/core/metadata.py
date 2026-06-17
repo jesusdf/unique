@@ -28,6 +28,7 @@ Supported connection URL formats:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import re
 from dataclasses import dataclass, field
@@ -137,7 +138,7 @@ class MetadataResolver:
 
     def _connect_tsql(self, parsed: Any) -> None:
         """Connect to SQL Server using pyodbc."""
-        import pyodbc  # type: ignore[import-untyped]
+        import pyodbc
 
         host = parsed.hostname or "localhost"
         port = parsed.port or 1433
@@ -156,7 +157,7 @@ class MetadataResolver:
 
     def _connect_oracle(self, parsed: Any) -> None:
         """Connect to Oracle using oracledb."""
-        import oracledb  # type: ignore[import-untyped]
+        import oracledb
 
         host = parsed.hostname or "localhost"
         port = parsed.port or 1521
@@ -169,7 +170,7 @@ class MetadataResolver:
 
     def _connect_postgresql(self, parsed: Any) -> None:
         """Connect to PostgreSQL using psycopg."""
-        import psycopg  # type: ignore[import-untyped]
+        import psycopg
 
         host = parsed.hostname or "localhost"
         port = parsed.port or 5432
@@ -183,7 +184,7 @@ class MetadataResolver:
 
     def _connect_mysql(self, parsed: Any) -> None:
         """Connect to MySQL using mysql-connector-python."""
-        import mysql.connector  # type: ignore[import-untyped]
+        import mysql.connector
 
         host = parsed.hostname or "localhost"
         port = parsed.port or 3306
@@ -200,9 +201,7 @@ class MetadataResolver:
         """Whether a database connection is active."""
         return self._connected
 
-    def resolve_column_type(
-        self, table: str, column: str
-    ) -> DataType | None:
+    def resolve_column_type(self, table: str, column: str) -> DataType | None:
         """Resolve a column reference to its concrete data type.
 
         This is used to resolve Oracle %TYPE references like
@@ -217,8 +216,8 @@ class MetadataResolver:
         """
         cache_key = f"{table}.{column}".upper()
         if cache_key in self._cache.columns:
-            info = self._cache.columns[cache_key]
-            return self._column_info_to_datatype(info)
+            cached = self._cache.columns[cache_key]
+            return self._column_info_to_datatype(cached)
 
         if not self._connected:
             logger.debug("No database connection for type resolution")
@@ -231,9 +230,7 @@ class MetadataResolver:
 
         return None
 
-    def resolve_table_columns(
-        self, table: str
-    ) -> list[ColumnInfo] | None:
+    def resolve_table_columns(self, table: str) -> list[ColumnInfo] | None:
         """Resolve all columns of a table (for %ROWTYPE).
 
         Args:
@@ -263,25 +260,19 @@ class MetadataResolver:
         Returns:
             A DataType if resolved, None otherwise.
         """
-        match = re.match(
-            r"^(.+?)\.(.+?)%TYPE$", type_ref, re.IGNORECASE
-        )
+        match = re.match(r"^(.+?)\.(.+?)%TYPE$", type_ref, re.IGNORECASE)
         if match:
             table, column = match.group(1), match.group(2)
             return self.resolve_column_type(table, column)
 
         match = re.match(r"^(.+?)%ROWTYPE$", type_ref, re.IGNORECASE)
         if match:
-            logger.debug(
-                "%%ROWTYPE reference cannot be resolved to a single type"
-            )
+            logger.debug("%%ROWTYPE reference cannot be resolved to a single type")
             return None
 
         return None
 
-    def _query_column_type(
-        self, table: str, column: str
-    ) -> ColumnInfo | None:
+    def _query_column_type(self, table: str, column: str) -> ColumnInfo | None:
         """Query the database for a column's type information."""
         if not self._connection:
             return None
@@ -363,7 +354,6 @@ class MetadataResolver:
         try:
             cursor = self._connection.cursor()
             parts = table.split(".")
-            schema_name = parts[0] if len(parts) > 1 else None
             table_name = parts[-1]
 
             if self._dialect == "oracle":
@@ -397,8 +387,7 @@ class MetadataResolver:
                         max_length=row[2] if row[2] else None,
                         precision=row[3] if row[3] else None,
                         scale=row[4] if row[4] else None,
-                        is_nullable=str(row[5]).upper()
-                        in ("Y", "YES", "TRUE", "1"),
+                        is_nullable=str(row[5]).upper() in ("Y", "YES", "TRUE", "1"),
                     )
                     for row in rows
                 ]
@@ -419,8 +408,16 @@ class MetadataResolver:
             if info.scale is not None and info.scale > 0:
                 params.append(info.scale)
         elif info.max_length is not None and info.max_length > 0:
-            if name in ("VARCHAR", "VARCHAR2", "NVARCHAR", "NVARCHAR2",
-                        "CHAR", "NCHAR", "RAW", "VARBINARY"):
+            if name in (
+                "VARCHAR",
+                "VARCHAR2",
+                "NVARCHAR",
+                "NVARCHAR2",
+                "CHAR",
+                "NCHAR",
+                "RAW",
+                "VARBINARY",
+            ):
                 params.append(info.max_length)
 
         return DataType(name=name, params=tuple(params))
@@ -428,10 +425,8 @@ class MetadataResolver:
     def close(self) -> None:
         """Close the database connection."""
         if self._connection:
-            try:
+            with contextlib.suppress(Exception):
                 self._connection.close()
-            except Exception:
-                pass
             self._connected = False
 
     def __enter__(self) -> MetadataResolver:

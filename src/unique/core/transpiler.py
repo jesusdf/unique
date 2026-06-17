@@ -30,6 +30,7 @@ import logging
 from dataclasses import dataclass, field
 
 from unique.core.batch_splitter import BatchSplitter, BatchType
+from unique.core.dialect import Dialect
 from unique.core.procedural.emitter import ProceduralEmitter
 from unique.core.procedural.parser import ProceduralParser
 from unique.core.procedural.transformer import ProceduralTransformer
@@ -39,9 +40,7 @@ from unique.core.transformer import Transformer, TransformWarning
 logger = logging.getLogger(__name__)
 
 
-def _warn(
-    message: str, feature: str, source: str, target: str
-) -> TransformWarning:
+def _warn(message: str, feature: str, source: str, target: str) -> TransformWarning:
     """Build a TransformWarning with dialect context."""
     return TransformWarning(
         message=message,
@@ -161,9 +160,7 @@ class Transpiler:
                         batch.sql, source, target, metadata_resolver
                     )
                 elif batch.batch_type == BatchType.SET_OPTION:
-                    result = self._transpile_set_option(
-                        batch.sql, source, target
-                    )
+                    result = self._transpile_set_option(batch.sql, source, target)
                 else:
                     result = self._transpile_dml(
                         batch.sql, source, target, source_dialect, target_dialect
@@ -215,9 +212,7 @@ class Transpiler:
 
             if parse_result.warnings:
                 for w in parse_result.warnings:
-                    warnings.append(
-                        _warn(w, "procedural_parse", source, target)
-                    )
+                    warnings.append(_warn(w, "procedural_parse", source, target))
 
             if parse_result.node is None:
                 return TranspileResult(
@@ -228,14 +223,10 @@ class Transpiler:
 
             # Transform
             if source != target:
-                transformer = ProceduralTransformer(
-                    source, target, metadata_resolver
-                )
+                transformer = ProceduralTransformer(source, target, metadata_resolver)
                 node = transformer.transform(parse_result.node)
                 for w in transformer.warnings:
-                    warnings.append(
-                        _warn(w, "procedural_transform", source, target)
-                    )
+                    warnings.append(_warn(w, "procedural_transform", source, target))
             else:
                 node = parse_result.node
 
@@ -270,15 +261,15 @@ class Transpiler:
         sql: str,
         source: str,
         target: str,
-        source_dialect: object,
-        target_dialect: object,
+        source_dialect: Dialect,
+        target_dialect: Dialect,
     ) -> TranspileResult:
         """Transpile a DML/DDL batch through the sqlglot pipeline."""
         warnings: list[TransformWarning] = []
         unsupported: list[str] = []
 
         try:
-            ir_nodes = source_dialect.parse(sql)  # type: ignore[union-attr]
+            ir_nodes = source_dialect.parse(sql)
 
             if source != target:
                 transformer = Transformer(source, target)
@@ -286,7 +277,7 @@ class Transpiler:
                 warnings = transformer.warnings
                 unsupported = transformer.unsupported
 
-            output_sql = target_dialect.emit(ir_nodes)  # type: ignore[union-attr]
+            output_sql = target_dialect.emit(ir_nodes)
 
             return TranspileResult(
                 sql=output_sql,

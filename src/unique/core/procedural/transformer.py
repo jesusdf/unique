@@ -24,13 +24,14 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 
 import sqlglot
 
 from unique.core.ast_nodes import (
-    ASTNode,
     AlterProcedureStatement,
     AssignmentStatement,
+    ASTNode,
     BeginEndBlock,
     CreateFunctionStatement,
     CreateProcedureStatement,
@@ -46,7 +47,6 @@ from unique.core.ast_nodes import (
     ExitStatement,
     ForLoopStatement,
     IfStatement,
-    Literal,
     LoopStatement,
     NullStatement,
     ParameterDefinition,
@@ -54,11 +54,9 @@ from unique.core.ast_nodes import (
     RaiseErrorStatement,
     RawSQL,
     ReturnStatement,
-    Script,
     SelectIntoStatement,
     SetVariableStatement,
     TryCatchBlock,
-    TypeReference,
     WhileStatement,
 )
 
@@ -201,7 +199,7 @@ class ProceduralTransformer:
 
     def _transform_node(self, node: ASTNode) -> ASTNode:
         """Dispatch transformation based on node type."""
-        handlers = {
+        handlers: dict[type, Callable[..., ASTNode]] = {
             CreateProcedureStatement: self._transform_procedure,
             AlterProcedureStatement: self._transform_alter_procedure,
             CreateFunctionStatement: self._transform_function,
@@ -253,9 +251,7 @@ class ProceduralTransformer:
         for p in params:
             new_name = self._transform_var_name(p.name)
             new_type = self._transform_data_type(p.data_type)
-            new_default = (
-                self._transform_node(p.default) if p.default else None
-            )
+            new_default = self._transform_node(p.default) if p.default else None
             self._var_map[p.name] = new_name
             result.append(
                 ParameterDefinition(
@@ -290,6 +286,7 @@ class ProceduralTransformer:
     def _transform_var_in_sql(self, sql: str) -> str:
         """Transform variable references within raw SQL text."""
         if self._source == "tsql" and self._target in ("oracle", "postgresql"):
+
             def replace_var(m: re.Match[str]) -> str:
                 var = m.group(0)
                 if var.startswith("@@"):
@@ -298,12 +295,11 @@ class ProceduralTransformer:
                 if self._target == "oracle":
                     return f"V_{clean.upper()}"
                 return f"v_{clean.lower()}"
+
             sql = re.sub(r"@@?\w+", replace_var, sql)
         elif self._source in ("oracle", "postgresql") and self._target == "tsql":
             for old_name, new_name in self._var_map.items():
-                sql = re.sub(
-                    rf"\b{re.escape(old_name)}\b", new_name, sql
-                )
+                sql = re.sub(rf"\b{re.escape(old_name)}\b", new_name, sql)
         return sql
 
     def _transform_system_var(self, var: str) -> str:
@@ -421,9 +417,7 @@ class ProceduralTransformer:
         new_params = self._transform_params(node.parameters)
         new_body = self._transform_body(node.body)
         new_return = (
-            self._transform_data_type(node.return_type)
-            if node.return_type
-            else None
+            self._transform_data_type(node.return_type) if node.return_type else None
         )
         return CreateFunctionStatement(
             name=node.name,
@@ -453,13 +447,9 @@ class ProceduralTransformer:
     def _transform_declare(self, node: DeclareStatement) -> DeclareStatement:
         new_name = self._transform_var_name(node.name)
         new_type = self._transform_data_type(node.data_type)
-        new_default = (
-            self._transform_node(node.default) if node.default else None
-        )
+        new_default = self._transform_node(node.default) if node.default else None
         self._var_map[node.name] = new_name
-        return DeclareStatement(
-            name=new_name, data_type=new_type, default=new_default
-        )
+        return DeclareStatement(name=new_name, data_type=new_type, default=new_default)
 
     def _transform_set_variable(self, node: SetVariableStatement) -> ASTNode:
         new_name = self._transform_var_name(node.name)
@@ -479,9 +469,7 @@ class ProceduralTransformer:
         new_cond = self._transform_node(node.condition)
         new_then = self._transform_body(node.then_body)
         new_else = self._transform_body(node.else_body)
-        return IfStatement(
-            condition=new_cond, then_body=new_then, else_body=new_else
-        )
+        return IfStatement(condition=new_cond, then_body=new_then, else_body=new_else)
 
     def _transform_while(self, node: WhileStatement) -> WhileStatement:
         new_cond = self._transform_node(node.condition)
@@ -636,9 +624,7 @@ class ProceduralTransformer:
         func_map = self._get_func_map()
         for old, new in func_map.items():
             if not new.startswith("--"):
-                sql = re.sub(
-                    rf"\b{re.escape(old)}\b", new, sql, flags=re.IGNORECASE
-                )
+                sql = re.sub(rf"\b{re.escape(old)}\b", new, sql, flags=re.IGNORECASE)
         return sql
 
     def _get_func_map(self) -> dict[str, str]:

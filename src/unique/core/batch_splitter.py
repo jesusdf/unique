@@ -99,7 +99,9 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
         return BatchType.EMPTY
 
     lines = [
-        line for line in stripped.split("\n") if line.strip() and not line.strip().startswith("--")
+        line
+        for line in stripped.split("\n")
+        if line.strip() and not line.strip().startswith("--")
     ]
     if not lines:
         return BatchType.COMMENT
@@ -209,7 +211,6 @@ class BatchSplitter:
         current: list[str] = []
         in_dollar_quote = False
         dollar_tag = ""
-        line_offset = 0
         batch_start = 0
 
         for i, line in enumerate(sql.split("\n")):
@@ -262,15 +263,12 @@ class BatchSplitter:
         delimiter = ";"
         batches: list[Batch] = []
         current: list[str] = []
-        line_offset = 0
         batch_start = 0
 
         for i, line in enumerate(sql.split("\n")):
             stripped = line.strip()
 
-            delimiter_match = re.match(
-                r"(?i)^DELIMITER\s+(\S+)\s*$", stripped
-            )
+            delimiter_match = re.match(r"(?i)^DELIMITER\s+(\S+)\s*$", stripped)
             if delimiter_match:
                 remaining = "\n".join(current).strip()
                 if remaining:
