@@ -56,6 +56,26 @@ class TestMySQLSplitting:
         # The procedure body should be in one batch
         assert any("CREATE PROCEDURE" in b.sql for b in batches)
 
+    def test_routine_without_delimiter_stays_one_batch(self) -> None:
+        # Without a DELIMITER change, inner semicolons must not split the
+        # routine into fragments.
+        sql = (
+            "CREATE PROCEDURE p(IN x INT)\n"
+            "BEGIN\n"
+            "  DECLARE v INT DEFAULT 0;\n"
+            "  SET v = x;\n"
+            "  UPDATE t SET c = v WHERE id = x;\n"
+            "END\n"
+        )
+        batches = [b for b in BatchSplitter.split(sql, "mysql") if not b.is_empty]
+        assert len(batches) == 1
+        assert batches[0].batch_type == BatchType.PROCEDURAL
+
+    def test_plain_statements_still_split(self) -> None:
+        sql = "INSERT INTO t VALUES (1);\nINSERT INTO t VALUES (2);"
+        batches = [b for b in BatchSplitter.split(sql, "mysql") if not b.is_empty]
+        assert len(batches) == 2
+
 
 class TestClassification:
     def test_procedural_tsql(self) -> None:
