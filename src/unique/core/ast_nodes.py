@@ -559,6 +559,148 @@ class TransactionStatement(ASTNode):
     name: str | None = None
 
 
+@dataclass(frozen=True)
+class TypeReference(ASTNode):
+    """Oracle %TYPE or %ROWTYPE reference."""
+
+    table: str
+    column: str | None = None
+    is_rowtype: bool = False
+
+
+@dataclass(frozen=True)
+class CursorDeclaration(ASTNode):
+    """DECLARE CURSOR ... FOR SELECT."""
+
+    name: str
+    query: ASTNode | None = None
+    parameters: tuple[ParameterDefinition, ...] = ()
+
+
+@dataclass(frozen=True)
+class CursorOperation(ASTNode):
+    """OPEN, FETCH, CLOSE, DEALLOCATE cursor."""
+
+    operation: str
+    cursor_name: str
+    into_vars: tuple[str, ...] = ()
+    query: ASTNode | None = None
+
+
+@dataclass(frozen=True)
+class ForLoopStatement(ASTNode):
+    """FOR ... IN ... LOOP ... END LOOP (Oracle) or FOR ... DO (MySQL)."""
+
+    variable: str
+    range_start: ASTNode | None = None
+    range_end: ASTNode | None = None
+    cursor: ASTNode | None = None
+    body: tuple[ASTNode, ...] = ()
+
+
+@dataclass(frozen=True)
+class LoopStatement(ASTNode):
+    """LOOP ... END LOOP (Oracle) or generic loop."""
+
+    body: tuple[ASTNode, ...] = ()
+    label: str | None = None
+
+
+@dataclass(frozen=True)
+class ExitStatement(ASTNode):
+    """EXIT [WHEN condition] (Oracle) or LEAVE/BREAK."""
+
+    condition: ASTNode | None = None
+    label: str | None = None
+
+
+@dataclass(frozen=True)
+class ContinueStatement(ASTNode):
+    """CONTINUE [WHEN condition]."""
+
+    condition: ASTNode | None = None
+    label: str | None = None
+
+
+@dataclass(frozen=True)
+class AssignmentStatement(ASTNode):
+    """Variable assignment: var := expr (Oracle/PG) or SET @var = expr."""
+
+    target: str
+    value: ASTNode
+
+
+@dataclass(frozen=True)
+class NullStatement(ASTNode):
+    """NULL; (Oracle PL/SQL no-op)."""
+
+
+@dataclass(frozen=True)
+class PrintStatement(ASTNode):
+    """PRINT (T-SQL) / DBMS_OUTPUT.PUT_LINE (Oracle) / RAISE NOTICE (PG)."""
+
+    expression: ASTNode
+
+
+@dataclass(frozen=True)
+class ExceptionHandler(ASTNode):
+    """Single WHEN ... THEN handler in an EXCEPTION block."""
+
+    exception_name: str
+    body: tuple[ASTNode, ...] = ()
+
+
+@dataclass(frozen=True)
+class ExceptionBlock(ASTNode):
+    """Oracle EXCEPTION block or PG EXCEPTION WHEN."""
+
+    handlers: tuple[ExceptionHandler, ...] = ()
+
+
+@dataclass(frozen=True)
+class CreateTriggerStatement(ASTNode):
+    """CREATE TRIGGER statement."""
+
+    name: str
+    table: str
+    timing: str = "BEFORE"
+    events: tuple[str, ...] = ()
+    for_each: str = "STATEMENT"
+    body: tuple[ASTNode, ...] = ()
+    or_replace: bool = False
+    schema: str | None = None
+    condition: ASTNode | None = None
+
+
+@dataclass(frozen=True)
+class AlterProcedureStatement(ASTNode):
+    """ALTER PROCEDURE (T-SQL pattern for CREATE OR REPLACE)."""
+
+    name: str
+    parameters: tuple[ParameterDefinition, ...] = ()
+    body: tuple[ASTNode, ...] = ()
+    schema: str | None = None
+
+
+@dataclass(frozen=True)
+class SelectIntoStatement(ASTNode):
+    """SELECT ... INTO variable (PL/SQL, PG)."""
+
+    columns: tuple[ASTNode, ...] = ()
+    into_vars: tuple[str, ...] = ()
+    from_clause: ASTNode | None = None
+    where: ASTNode | None = None
+    rest_sql: str = ""
+
+
+@dataclass(frozen=True)
+class EmbeddedDML(ASTNode):
+    """Embedded DML statement to be transpiled by sqlglot."""
+
+    sql: str
+    dialect: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Passthrough node
 # ---------------------------------------------------------------------------
