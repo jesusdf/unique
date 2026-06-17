@@ -1195,8 +1195,82 @@ class ProceduralParser:
         return BeginEndBlock(statements=tuple(stmts))
 
     def _parse_plsql_select_or_dml(self) -> ASTNode:
-        """Parse SELECT that might have INTO (PL/SQL SELECT INTO)."""
-        return self._parse_embedded_dml()
+        """Parse SELECT that might have INTO (PL/SQL SELECT INTO).
+
+        PL/SQL: SELECT col1, col2 INTO var1, var2 FROM ...
+        We capture the select-list, the INTO targets, and the remainder
+        (FROM onward) so the emitter can produce the right target syntax.
+        """
+        start = self._pos
+        self._expect_keyword("SELECT")
+
+        # Capture select list up to INTO or FROM
+        select_parts: list[str] = []
+        paren_depth = 0
+        has_into = False
+        while not self._at_end():
+            tok = self._current()
+            if paren_depth == 0 and tok.is_keyword("INTO"):
+                has_into = True
+                break
+            if paren_depth == 0 and tok.is_keyword("FROM"):
+                break
+            if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
+                break
+            if tok.type == TokenType.LPAREN:
+                paren_depth += 1
+            elif tok.type == TokenType.RPAREN:
+                paren_depth -= 1
+            select_parts.append(tok.value)
+            self._advance()
+
+        if not has_into:
+            # Not a SELECT INTO — reparse as embedded DML
+            self._pos = start
+            return self._parse_embedded_dml()
+
+        # Consume INTO and capture target variables
+        self._expect_keyword("INTO")
+        into_vars: list[str] = []
+        while not self._at_end():
+            tok = self._current()
+            if tok.is_keyword("FROM") or tok.type == TokenType.SEMICOLON:
+                break
+            if tok.type in (TokenType.IDENTIFIER, TokenType.KEYWORD,
+                            TokenType.VARIABLE):
+                into_vars.append(tok.value)
+                self._advance()
+                if not self._match_type(TokenType.COMMA):
+                    break
+            else:
+                self._advance()
+
+        # Capture remainder (FROM onward) as raw SQL
+        rest_parts: list[str] = []
+        paren_depth = 0
+        while not self._at_end():
+            tok = self._current()
+            if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
+                self._advance()
+                break
+            if paren_depth == 0 and tok.is_keyword("END"):
+                break
+            if tok.type == TokenType.LPAREN:
+                paren_depth += 1
+            elif tok.type == TokenType.RPAREN:
+                paren_depth -= 1
+            rest_parts.append(tok.value)
+            self._advance()
+
+        from unique.core.ast_nodes import RawSQL as _RawSQL
+
+        select_list = " ".join(select_parts).strip()
+        rest_sql = " ".join(rest_parts).strip()
+        return SelectIntoStatement(
+            columns=(_RawSQL(sql=select_list, reason="select list"),),
+            into_vars=tuple(into_vars),
+            rest_sql=rest_sql,
+        )
 
     def _parse_plsql_assignment_or_call(self) -> ASTNode:
         """Parse name := expr; or procedure_call(args);"""

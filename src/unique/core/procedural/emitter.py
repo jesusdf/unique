@@ -51,6 +51,7 @@ from unique.core.ast_nodes import (
     PrintStatement,
     RaiseErrorStatement,
     RawSQL,
+    SelectIntoStatement,
     ReturnStatement,
     SetVariableStatement,
     TryCatchBlock,
@@ -113,6 +114,7 @@ class ProceduralEmitter:
             ContinueStatement: self._emit_continue,
             NullStatement: self._emit_null,
             EmbeddedDML: self._emit_embedded_dml,
+            SelectIntoStatement: self._emit_select_into,
             RawSQL: self._emit_raw_sql,
             Literal: self._emit_literal,
         }
@@ -740,6 +742,31 @@ class ProceduralEmitter:
     def _emit_embedded_dml(self, node: EmbeddedDML) -> str:
         sql = node.sql.rstrip(";").strip()
         return f"{sql};"
+
+    def _emit_select_into(self, node: SelectIntoStatement) -> str:
+        """Emit SELECT INTO in the target dialect's syntax.
+
+        T-SQL:    SELECT @v1 = col1, @v2 = col2 FROM ...
+        Oracle/PG: SELECT col1, col2 INTO v1, v2 FROM ...
+        """
+        select_list = ""
+        if node.columns:
+            first = node.columns[0]
+            select_list = first.sql if isinstance(first, RawSQL) else ""
+        rest = node.rest_sql.rstrip(";").strip()
+
+        if self._dialect == "tsql":
+            cols = [c.strip() for c in select_list.split(",")]
+            targets = list(node.into_vars)
+            pairs = []
+            for i, var in enumerate(targets):
+                col = cols[i] if i < len(cols) else (cols[-1] if cols else "")
+                pairs.append(f"{var} = {col}")
+            assignments = ", ".join(pairs)
+            return f"SELECT {assignments} {rest};"
+        else:
+            into_clause = ", ".join(node.into_vars)
+            return f"SELECT {select_list} INTO {into_clause} {rest};"
 
     def _emit_raw_sql(self, node: RawSQL) -> str:
         return node.sql

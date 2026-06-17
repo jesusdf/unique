@@ -224,6 +224,7 @@ class ProceduralTransformer:
             LoopStatement: self._transform_loop,
             ExitStatement: self._transform_exit,
             EmbeddedDML: self._transform_embedded_dml,
+            SelectIntoStatement: self._transform_select_into,
             NullStatement: self._transform_null,
             RawSQL: self._transform_raw_sql,
         }
@@ -584,6 +585,21 @@ class ProceduralTransformer:
             return RawSQL(sql="BREAK", reason="EXIT → BREAK")
         new_cond = self._transform_node(node.condition) if node.condition else None
         return ExitStatement(condition=new_cond)
+
+    def _transform_select_into(self, node: SelectIntoStatement) -> ASTNode:
+        """Transform SELECT INTO, adjusting variables and the embedded SQL."""
+        new_into = tuple(self._transform_var_name(v) for v in node.into_vars)
+        # Transform the select list and rest via variable + function mapping
+        new_cols = tuple(self._transform_node(c) for c in node.columns)
+        rest = self._transform_var_in_sql(node.rest_sql)
+        rest = self._transform_functions_in_sql(rest)
+        return SelectIntoStatement(
+            columns=new_cols,
+            into_vars=new_into,
+            from_clause=node.from_clause,
+            where=node.where,
+            rest_sql=rest,
+        )
 
     def _transform_embedded_dml(self, node: EmbeddedDML) -> EmbeddedDML:
         """Transform embedded DML using sqlglot."""
