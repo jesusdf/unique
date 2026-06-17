@@ -411,9 +411,14 @@ class ProceduralEmitter:
         default_str = ""
         if node.default:
             val = self._emit_node(node.default)
-            default_str = f" = {val}" if self._dialect == "tsql" else f" := {val}"
+            if self._dialect == "tsql":
+                default_str = f" = {val}"
+            elif self._dialect == "mysql":
+                default_str = f" DEFAULT {val}"
+            else:
+                default_str = f" := {val}"
 
-        if self._dialect == "tsql":
+        if self._dialect in ("tsql", "mysql"):
             return f"DECLARE {node.name} {dt}{default_str};"
         else:
             return f"{node.name} {dt}{default_str};"
@@ -440,7 +445,7 @@ class ProceduralEmitter:
 
     def _emit_assignment(self, node: AssignmentStatement) -> str:
         val = self._emit_node(node.value)
-        if self._dialect == "tsql":
+        if self._dialect in ("tsql", "mysql"):
             return f"SET {node.target} = {val};"
         return f"{node.target} := {val};"
 

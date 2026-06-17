@@ -135,6 +135,37 @@ _TSQL_TO_PG_TYPES: dict[str, str] = {
     "XML": "XML",
 }
 
+_TSQL_TO_MYSQL_TYPES: dict[str, str] = {
+    "INT": "INT",
+    "INTEGER": "INT",
+    "BIGINT": "BIGINT",
+    "SMALLINT": "SMALLINT",
+    "TINYINT": "TINYINT",
+    "BIT": "TINYINT(1)",
+    "FLOAT": "DOUBLE",
+    "REAL": "FLOAT",
+    "DECIMAL": "DECIMAL",
+    "NUMERIC": "DECIMAL",
+    "MONEY": "DECIMAL(19,4)",
+    "SMALLMONEY": "DECIMAL(10,4)",
+    "DATETIME": "DATETIME",
+    "DATETIME2": "DATETIME",
+    "SMALLDATETIME": "DATETIME",
+    "DATE": "DATE",
+    "TIME": "TIME",
+    "UNIQUEIDENTIFIER": "CHAR(36)",
+    "VARCHAR": "VARCHAR",
+    "NVARCHAR": "VARCHAR",
+    "CHAR": "CHAR",
+    "NCHAR": "CHAR",
+    "TEXT": "TEXT",
+    "NTEXT": "LONGTEXT",
+    "IMAGE": "LONGBLOB",
+    "BINARY": "BINARY",
+    "VARBINARY": "VARBINARY",
+    "XML": "TEXT",
+}
+
 # Function mapping tables
 _TSQL_TO_ORACLE_FUNCS: dict[str, str] = {
     "GETDATE": "SYSDATE",
@@ -275,6 +306,11 @@ class ProceduralTransformer:
             if self._target == "oracle":
                 return f"V_{clean.upper()}"
             return f"v_{clean.lower()}"
+        elif self._source == "tsql" and self._target == "mysql":
+            # MySQL local variables have no sigil (a leading @ denotes a
+            # session variable, which is different). Use a plain name.
+            clean = name.lstrip("@")
+            return f"v_{clean.lower()}"
         elif self._source in ("oracle", "postgresql") and self._target == "tsql":
             # V_VARNAME or v_varname → @VarName
             clean = name
@@ -297,6 +333,16 @@ class ProceduralTransformer:
                 return f"v_{clean.lower()}"
 
             sql = re.sub(r"@@?\w+", replace_var, sql)
+        elif self._source == "tsql" and self._target == "mysql":
+
+            def replace_var_mysql(m: re.Match[str]) -> str:
+                var = m.group(0)
+                if var.startswith("@@"):
+                    return self._transform_system_var(var)
+                clean = var.lstrip("@")
+                return f"v_{clean.lower()}"
+
+            sql = re.sub(r"@@?\w+", replace_var_mysql, sql)
         elif self._source in ("oracle", "postgresql") and self._target == "tsql":
             for old_name, new_name in self._var_map.items():
                 sql = re.sub(rf"\b{re.escape(old_name)}\b", new_name, sql)
@@ -332,6 +378,17 @@ class ProceduralTransformer:
 
         # Handle %TYPE references
         if "%TYPE" in type_name or "%ROWTYPE" in type_name:
+            # If a metadata connection is available, try to resolve to a real
+            # column type first.
+            if self._metadata is not None and "%TYPE" in type_name:
+                try:
+                    resolved = self._metadata.resolve_type_reference(  # type: ignore[attr-defined]
+                        dt.name
+                    )
+                    if resolved is not None:
+                        return self._transform_data_type(resolved)
+                except Exception:  # pragma: no cover - defensive
+                    pass
             if self._target == "tsql":
                 self._warnings.append(
                     f"%%TYPE reference '{dt.name}' has no T-SQL equivalent. "
@@ -346,6 +403,8 @@ class ProceduralTransformer:
                 return DataType(name="CLOB" if type_name == "VARCHAR" else "NCLOB")
             elif self._target == "postgresql":
                 return DataType(name="TEXT")
+            elif self._target == "mysql":
+                return DataType(name="LONGTEXT")
 
         # Lookup in mapping table
         type_map = self._get_type_map()
@@ -373,6 +432,7 @@ class ProceduralTransformer:
             "tsql_oracle": _TSQL_TO_ORACLE_TYPES,
             "oracle_tsql": _ORACLE_TO_TSQL_TYPES,
             "tsql_postgresql": _TSQL_TO_PG_TYPES,
+            "tsql_mysql": _TSQL_TO_MYSQL_TYPES,
         }
         return maps.get(key, {})
 
