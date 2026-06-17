@@ -72,6 +72,61 @@ jobs:
           name: coverage-report
           path: coverage.xml
 
+  metadata-live:
+    name: Live Metadata Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: unique
+          POSTGRES_PASSWORD: unique
+          POSTGRES_DB: unique
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U unique"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_USER: unique
+          MYSQL_PASSWORD: unique
+          MYSQL_DATABASE: unique
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -uunique -punique"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies and DB drivers
+        run: pip install -e ".[dev]" "psycopg[binary]>=3.1.0" "mysql-connector-python>=8.3.0"
+
+      - name: Seed schemas
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql-client default-mysql-client
+          PGPASSWORD=unique psql -h localhost -p 5433 -U unique -d unique \
+            -f tests/fixtures/sql/pg_schema.sql
+          mysql -h 127.0.0.1 -P 3307 -uunique -punique unique \
+            < tests/fixtures/sql/mysql_schema.sql
+
+      - name: Run live metadata tests
+        env:
+          UNIQUE_TEST_PG_URL: postgresql://unique:unique@localhost:5433/unique
+          UNIQUE_TEST_MYSQL_URL: mysql://unique:unique@localhost:3307/unique
+        run: pytest tests/integration/test_metadata_live.py -v
+
   docker:
     name: Docker Build & Push
     runs-on: ubuntu-latest
