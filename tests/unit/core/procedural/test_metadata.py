@@ -163,6 +163,68 @@ class TestResolveWithFakeConnection:
         assert r.resolve_column_type("EMPLOYEES", "NOPE") is None
 
 
+class TestUrlSchemeAliases:
+    def test_sqlserver_alias_maps_to_tsql(self) -> None:
+        with pytest.raises((ImportError, Exception)):
+            MetadataResolver.from_url("sqlserver://u:p@h:1433/db")
+
+    def test_postgres_alias_accepted(self) -> None:
+        with pytest.raises((ImportError, Exception)):
+            MetadataResolver.from_url("postgres://u:p@h:5432/db")
+
+    def test_mssql_scheme_accepted(self) -> None:
+        with pytest.raises((ImportError, Exception)):
+            MetadataResolver.from_url("mssql://u:p@h:1433/db")
+
+
+class TestQueryBranchesPerDialect:
+    @pytest.mark.parametrize(
+        "dialect,rows,expected",
+        [
+            ("tsql", [("decimal", None, 10, 2, "NO")], "DECIMAL"),
+            ("postgresql", [("numeric", None, 10, 2, "NO")], "NUMERIC"),
+            ("mysql", [("decimal", None, 10, 2, "NO")], "DECIMAL"),
+        ],
+    )
+    def test_information_schema_path(
+        self, dialect: str, rows: list[tuple], expected: str
+    ) -> None:
+        r = _connected_resolver(dialect, rows)
+        dt = r.resolve_column_type("t", "c")
+        assert dt is not None
+        assert dt.name.upper() == expected
+
+    def test_schema_qualified_table(self) -> None:
+        r = _connected_resolver("tsql", [("int", None, 10, 0, "NO")])
+        dt = r.resolve_column_type("dbo.employees", "id")
+        assert dt is not None
+
+
+class TestResolveTableColumnsFake:
+    def test_returns_all_columns(self) -> None:
+        rows = [
+            ("emp_id", "int", None, 10, 0, "NO"),
+            ("name", "varchar", 100, None, None, "YES"),
+        ]
+        r = _connected_resolver("postgresql", rows)
+        cols = r.resolve_table_columns("employees")
+        assert cols is not None
+        assert len(cols) == 2
+        assert cols[0].column_name == "emp_id"
+
+    def test_caches_table_columns(self) -> None:
+        rows = [("a", "int", None, 10, 0, "NO")]
+        r = _connected_resolver("oracle", rows)
+        first = r.resolve_table_columns("t")
+        r._connection = FakeConnection([])
+        second = r.resolve_table_columns("t")
+        assert first == second
+
+    def test_not_connected_returns_none(self) -> None:
+        r = MetadataResolver(dialect="oracle")
+        assert r.resolve_table_columns("t") is None
+
+
 class TestContextManager:
     def test_close_sets_disconnected(self) -> None:
         r = _connected_resolver("oracle", [])
