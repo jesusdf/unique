@@ -68,7 +68,9 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 - [x] **String aggregation** — `STRING_AGG` ↔ `LISTAGG` ↔ `GROUP_CONCAT`
       (handles MySQL `SEPARATOR` syntax). Quote-aware argument splitting so
       commas inside string literals are not mis-split.
-- [ ] **`NVL2`→`CASE`**, `TO_CHAR`/`TO_DATE`/`CONVERT` with format strings.
+- [x] **`NVL2`→`CASE`** — `NVL2(e, a, b)` → `CASE WHEN e IS NOT NULL THEN a
+      ELSE b END` (Oracle source).
+- [ ] `TO_CHAR`/`TO_DATE`/`CONVERT` with format strings.
 - [ ] **Date-format strings** — map Oracle `'YYYY-MM-DD'` ↔ MySQL `'%Y-%m-%d'`
       ↔ T-SQL style codes.
 

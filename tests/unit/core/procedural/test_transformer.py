@@ -354,6 +354,16 @@ class TestDecode:
         # Not an Oracle source: leave DECODE alone.
         assert "DECODE" in out.sql
 
+    def test_nvl2_to_case(self) -> None:
+        t = ProceduralTransformer("oracle", "tsql")
+        out = t._transform_node(RawSQL(sql="NVL2(p, p, 'x')", reason="x"))
+        assert out.sql == "CASE WHEN p IS NOT NULL THEN p ELSE 'x' END"
+
+    def test_nvl2_not_touched_to_oracle(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(RawSQL(sql="NVL2(p, a, b)", reason="x"))
+        assert "NVL2" in out.sql
+
 
 class TestSubstringPosition:
     def test_charindex_to_oracle_reorders(self) -> None:

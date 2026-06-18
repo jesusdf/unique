@@ -233,7 +233,6 @@ _ORACLE_TO_TSQL_FUNCS: dict[str, str] = {
     "TO_DATE": "CONVERT",
     "TO_NUMBER": "CAST",
     "TRUNC": "-- TRUNC requires manual conversion",
-    "NVL2": "-- NVL2 requires CASE conversion",
 }
 
 _TSQL_TO_PG_FUNCS: dict[str, str] = {
@@ -867,7 +866,28 @@ class ProceduralTransformer:
         sql = self._transform_decode(sql)
         sql = self._transform_string_agg(sql)
         sql = self._transform_scope_identity(sql)
+        sql = self._transform_nvl2(sql)
         return sql
+
+    def _transform_nvl2(self, sql: str) -> str:
+        """Translate Oracle NVL2(expr, if_not_null, if_null) to CASE.
+
+        NVL2(e, a, b) == CASE WHEN e IS NOT NULL THEN a ELSE b END.
+        Applies when translating away from Oracle.
+        """
+        if self._source != "oracle" or self._target == "oracle":
+            return sql
+
+        def build(args: list[str]) -> str | None:
+            if len(args) != 3:
+                return None
+            expr, if_not_null, if_null = args
+            return (
+                f"CASE WHEN {expr} IS NOT NULL "
+                f"THEN {if_not_null} ELSE {if_null} END"
+            )
+
+        return self._rewrite_calls(sql, "NVL2", build)
 
     def _transform_scope_identity(self, sql: str) -> str:
         """Translate T-SQL SCOPE_IDENTITY()/IDENT_CURRENT(...) last-id calls.
