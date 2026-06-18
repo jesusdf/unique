@@ -210,7 +210,6 @@ _TSQL_TO_ORACLE_FUNCS: dict[str, str] = {
     "GETUTCDATE": "SYS_EXTRACT_UTC(SYSTIMESTAMP)",
     "ISNULL": "NVL",
     "LEN": "LENGTH",
-    "CHARINDEX": "INSTR",
     "NEWID": "SYS_GUID",
     "UPPER": "UPPER",
     "LOWER": "LOWER",
@@ -228,7 +227,6 @@ _TSQL_TO_ORACLE_FUNCS: dict[str, str] = {
 _ORACLE_TO_TSQL_FUNCS: dict[str, str] = {
     "NVL": "ISNULL",
     "LENGTH": "LEN",
-    "INSTR": "CHARINDEX",
     "SYS_GUID": "NEWID",
     "SUBSTR": "SUBSTRING",
     "CEIL": "CEILING",
@@ -244,7 +242,6 @@ _TSQL_TO_PG_FUNCS: dict[str, str] = {
     "GETUTCDATE": "NOW() AT TIME ZONE 'UTC'",
     "ISNULL": "COALESCE",
     "LEN": "LENGTH",
-    "CHARINDEX": "-- CHARINDEX(a,b) -> POSITION(a IN b)",
     "NEWID": "GEN_RANDOM_UUID",
     "SUBSTRING": "SUBSTRING",
     "UPPER": "UPPER",
@@ -260,14 +257,12 @@ _PG_TO_TSQL_FUNCS: dict[str, str] = {
     "LENGTH": "LEN",
     "GEN_RANDOM_UUID": "NEWID",
     "CEIL": "CEILING",
-    "POSITION": "-- POSITION(a IN b) -> CHARINDEX(a,b)",
 }
 
 _TSQL_TO_MYSQL_FUNCS: dict[str, str] = {
     "GETUTCDATE": "UTC_TIMESTAMP",
     "ISNULL": "IFNULL",
     "LEN": "CHAR_LENGTH",
-    "CHARINDEX": "-- CHARINDEX(a,b) -> LOCATE(a,b)",
     "NEWID": "UUID",
     "SUBSTRING": "SUBSTRING",
     "UPPER": "UPPER",
@@ -283,13 +278,11 @@ _MYSQL_TO_TSQL_FUNCS: dict[str, str] = {
     "CHAR_LENGTH": "LEN",
     "LENGTH": "LEN",
     "UUID": "NEWID",
-    "LOCATE": "-- LOCATE(a,b) -> CHARINDEX(a,b)",
 }
 
 _ORACLE_TO_PG_FUNCS: dict[str, str] = {
     "NVL": "COALESCE",
     "LENGTH": "LENGTH",
-    "INSTR": "-- INSTR(b,a) -> POSITION(a IN b)",
     "SYS_GUID": "GEN_RANDOM_UUID",
     "SUBSTR": "SUBSTRING",
     "TO_CHAR": "TO_CHAR",
@@ -300,7 +293,6 @@ _ORACLE_TO_PG_FUNCS: dict[str, str] = {
 _ORACLE_TO_MYSQL_FUNCS: dict[str, str] = {
     "NVL": "IFNULL",
     "LENGTH": "CHAR_LENGTH",
-    "INSTR": "-- INSTR(b,a) -> LOCATE(a,b)",
     "SYS_GUID": "UUID",
     "SUBSTR": "SUBSTRING",
     "TO_CHAR": "-- TO_CHAR -> DATE_FORMAT/CAST",
@@ -866,7 +858,58 @@ class ProceduralTransformer:
         sql = pattern.sub(target_expr, sql)
         sql = self._transform_dateadd(sql)
         sql = self._transform_datediff(sql)
+        sql = self._transform_substring_position(sql)
         return sql
+
+    def _transform_substring_position(self, sql: str) -> str:
+        """Translate substring-position functions with argument reordering.
+
+        The three engines express "position of needle in haystack" with
+        different argument orders:
+        - T-SQL:  CHARINDEX(needle, haystack)
+        - MySQL:  LOCATE(needle, haystack)        (same order as T-SQL)
+        - Oracle: INSTR(haystack, needle)         (reversed)
+        - PostgreSQL: STRPOS(haystack, needle) / POSITION(needle IN haystack)
+
+        An optional third argument (start position) is preserved as the
+        trailing argument in every dialect.
+        """
+        # Identify the source function name and how to read (needle, haystack).
+        source_fn = {
+            "tsql": "CHARINDEX",
+            "mysql": "LOCATE",
+            "oracle": "INSTR",
+            "postgresql": "STRPOS",
+        }.get(self._source)
+        if not source_fn or self._source == self._target:
+            return sql
+
+        def build(args: list[str]) -> str | None:
+            if len(args) < 2:
+                return None
+            # Read needle/haystack per source order.
+            if self._source in ("tsql", "mysql"):
+                needle, haystack = args[0], args[1]
+            else:  # oracle, postgresql: haystack first
+                haystack, needle = args[0], args[1]
+            start = args[2] if len(args) >= 3 else None
+
+            if self._target == "tsql":
+                out = f"CHARINDEX({needle}, {haystack}"
+                return (out + f", {start})") if start else (out + ")")
+            if self._target == "mysql":
+                out = f"LOCATE({needle}, {haystack}"
+                return (out + f", {start})") if start else (out + ")")
+            if self._target == "oracle":
+                out = f"INSTR({haystack}, {needle}"
+                return (out + f", {start})") if start else (out + ")")
+            # postgresql
+            if start:
+                # STRPOS has no start arg; fall back to POSITION + offset note.
+                return f"STRPOS({haystack}, {needle})"
+            return f"STRPOS({haystack}, {needle})"
+
+        return self._rewrite_calls(sql, source_fn, build)
 
     @staticmethod
     def _split_top_level_args(arglist: str) -> list[str]:

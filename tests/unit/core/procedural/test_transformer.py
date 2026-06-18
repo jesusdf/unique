@@ -265,6 +265,38 @@ class TestNiladicDatetime:
         assert "GETDATE()" in result.sql
 
 
+class TestSubstringPosition:
+    def test_charindex_to_oracle_reorders(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(RawSQL(sql="CHARINDEX(n, h)", reason="x"))
+        assert out.sql == "INSTR(h, n)"
+
+    def test_charindex_to_mysql_same_order(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        out = t._transform_node(RawSQL(sql="CHARINDEX(n, h)", reason="x"))
+        assert out.sql == "LOCATE(n, h)"
+
+    def test_charindex_to_postgresql(self) -> None:
+        t = ProceduralTransformer("tsql", "postgresql")
+        out = t._transform_node(RawSQL(sql="CHARINDEX(n, h)", reason="x"))
+        assert out.sql == "STRPOS(h, n)"
+
+    def test_instr_to_tsql_reorders(self) -> None:
+        t = ProceduralTransformer("oracle", "tsql")
+        out = t._transform_node(RawSQL(sql="INSTR(h, n)", reason="x"))
+        assert out.sql == "CHARINDEX(n, h)"
+
+    def test_locate_to_oracle_reorders(self) -> None:
+        t = ProceduralTransformer("mysql", "oracle")
+        out = t._transform_node(RawSQL(sql="LOCATE(n, h)", reason="x"))
+        assert out.sql == "INSTR(h, n)"
+
+    def test_start_position_preserved(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(RawSQL(sql="CHARINDEX(n, h, 5)", reason="x"))
+        assert out.sql == "INSTR(h, n, 5)"
+
+
 class TestDateAdd:
     def test_dateadd_day_to_oracle(self) -> None:
         t = ProceduralTransformer("tsql", "oracle")
