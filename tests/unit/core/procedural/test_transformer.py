@@ -263,3 +263,36 @@ class TestNiladicDatetime:
         t = ProceduralTransformer("postgresql", "tsql")
         result = t._transform_node(RawSQL(sql="x := NOW()", reason="x"))
         assert "GETDATE()" in result.sql
+
+
+class TestDateAdd:
+    def test_dateadd_day_to_oracle(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(RawSQL(sql="DATEADD(day, 5, d)", reason="x"))
+        assert out.sql == "(d + 5)"
+
+    def test_dateadd_month_to_oracle(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(RawSQL(sql="DATEADD(month, 3, d)", reason="x"))
+        assert "ADD_MONTHS(d, 3)" in out.sql
+
+    def test_dateadd_to_postgresql_interval(self) -> None:
+        t = ProceduralTransformer("tsql", "postgresql")
+        out = t._transform_node(RawSQL(sql="DATEADD(day, 5, d)", reason="x"))
+        assert "INTERVAL '5 DAY'" in out.sql
+
+    def test_dateadd_to_mysql_date_add(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        out = t._transform_node(RawSQL(sql="DATEADD(hour, 2, d)", reason="x"))
+        assert "DATE_ADD(d, INTERVAL 2 HOUR)" in out.sql
+
+    def test_dateadd_negative_value(self) -> None:
+        t = ProceduralTransformer("tsql", "postgresql")
+        out = t._transform_node(RawSQL(sql="DATEADD(week, -1, d)", reason="x"))
+        assert "-1 WEEK" in out.sql
+
+    def test_dateadd_unknown_part_left_alone(self) -> None:
+        t = ProceduralTransformer("tsql", "postgresql")
+        out = t._transform_node(RawSQL(sql="DATEADD(microsecond, 1, d)", reason="x"))
+        # Unrecognized part: leave the original call for manual handling.
+        assert "DATEADD" in out.sql
