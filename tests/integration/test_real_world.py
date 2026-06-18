@@ -170,3 +170,12 @@ class TestRealWorldSpecific:
         sql = _load("northwind_postgresql.sql")
         result = transpile(sql, "postgresql", "tsql")
         assert _count_create_table(result.sql) >= 10
+
+    def test_adventureworks_system_procs_become_comments(self) -> None:
+        # EXEC sp_addextendedproperty (and other sp_* system procedures) have
+        # no cross-dialect equivalent and must be emitted as comments rather
+        # than raising sqlglot errors.
+        sql = _load("adventureworks_lt_sqlserver.sql")
+        result = transpile(sql, "tsql", "oracle")
+        assert "TRANSPILATION ERROR" not in result.sql
+        assert any("System procedure" in u for u in result.unsupported)

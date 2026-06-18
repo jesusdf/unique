@@ -17,6 +17,26 @@ class TestTranspiler:
         assert "SELECT" in result.sql
         assert "users" in result.sql
 
+    def test_system_procedure_becomes_comment(self, transpiler: Transpiler) -> None:
+        result = transpiler.transpile(
+            "EXEC sys.sp_addextendedproperty @name=N'x', @value=N'y'",
+            source="tsql",
+            target="oracle",
+        )
+        assert result.sql.lstrip().startswith("--")
+        assert "sp_addextendedproperty" in result.sql
+        assert any("System procedure" in u for u in result.unsupported)
+
+    def test_system_procedure_passthrough_same_dialect(
+        self, transpiler: Transpiler
+    ) -> None:
+        # tsql -> tsql should not apply the cross-dialect system-procedure
+        # rewrite (no "no oracle/... equivalent" note).
+        result = transpiler.transpile(
+            "EXEC sp_rename 'a', 'b'", source="tsql", target="tsql"
+        )
+        assert not any("System procedure" in u for u in result.unsupported)
+
     def test_same_dialect_skips_transform(self, transpiler: Transpiler) -> None:
         result = transpiler.transpile(
             "SELECT * FROM t WHERE id = 1",

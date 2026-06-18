@@ -27,6 +27,7 @@ pipeline based on content classification.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 
 from unique.core.batch_splitter import BatchSplitter, BatchType
@@ -274,6 +275,34 @@ class Transpiler:
         """Transpile a DML/DDL batch through the sqlglot pipeline."""
         warnings: list[TransformWarning] = []
         unsupported: list[str] = []
+
+        # System stored-procedure calls (e.g. EXEC sp_addextendedproperty,
+        # sp_rename) are SQL Server metadata operations with no portable
+        # equivalent. Emit them as an informational comment instead of
+        # letting sqlglot fail on the proprietary syntax.
+        if source == "tsql" and target != "tsql":
+            stripped = sql.lstrip()
+            m = re.match(r"(?i)^EXEC(?:UTE)?\s+(?:\[?\w+\]?\.)*\[?(sp_\w+)", stripped)
+            if m:
+                proc = m.group(1)
+                unsupported.append(f"System procedure {proc} has no equivalent")
+                return TranspileResult(
+                    sql=(
+                        f"-- UNIQUE: {proc} is a SQL Server system procedure "
+                        f"with no {target} equivalent; original call omitted:\n"
+                        + "\n".join(f"-- {ln}" for ln in sql.strip().splitlines())
+                    ),
+                    warnings=[
+                        _warn(
+                            f"System procedure {proc} skipped (no {target} "
+                            "equivalent)",
+                            "system_proc",
+                            source,
+                            target,
+                        )
+                    ],
+                    unsupported=unsupported,
+                )
 
         try:
             ir_nodes = source_dialect.parse(sql)
