@@ -847,19 +847,63 @@ class ProceduralTransformer:
         GETDATE() (T-SQL), SYSDATE (Oracle), NOW() (PG/MySQL).
         """
         target_expr = self._NOW_EXPR.get(self._target)
-        if not target_expr:
-            return sql
-        # Match GETDATE(), SYSDATE, NOW() (optional parens/spaces).
-        pattern = re.compile(
-            r"\b(GETDATE\s*\(\s*\)|SYSDATE\b(?!\s*\()|NOW\s*\(\s*\))",
-            flags=re.IGNORECASE,
-        )
-        sql = pattern.sub(target_expr, sql)
+        if target_expr:
+            # Match GETDATE(), SYSDATE, NOW() (optional parens/spaces).
+            pattern = re.compile(
+                r"\b(GETDATE\s*\(\s*\)|SYSDATE\b(?!\s*\()|NOW\s*\(\s*\))",
+                flags=re.IGNORECASE,
+            )
+            sql = pattern.sub(target_expr, sql)
+        # Argument-aware function rewrites run regardless of the niladic
+        # datetime mapping above.
         sql = self._transform_dateadd(sql)
         sql = self._transform_datediff(sql)
         sql = self._transform_substring_position(sql)
         sql = self._transform_decode(sql)
+        sql = self._transform_string_agg(sql)
         return sql
+
+    def _transform_string_agg(self, sql: str) -> str:
+        """Translate string-aggregation functions across dialects.
+
+        - T-SQL / PostgreSQL: STRING_AGG(col, sep)
+        - Oracle:             LISTAGG(col, sep)
+        - MySQL:              GROUP_CONCAT(col SEPARATOR sep)
+
+        Only the basic ``(col, sep)`` form is handled; an Oracle/T-SQL
+        ``WITHIN GROUP (ORDER BY ...)`` suffix or MySQL ``ORDER BY`` inside
+        the call is left for manual review.
+        """
+        source_fn = {
+            "tsql": "STRING_AGG",
+            "postgresql": "STRING_AGG",
+            "oracle": "LISTAGG",
+            "mysql": "GROUP_CONCAT",
+        }.get(self._source)
+        if not source_fn or self._source == self._target:
+            return sql
+
+        def build(args: list[str]) -> str | None:
+            # MySQL uses "col SEPARATOR sep" as a single arg; normalize.
+            col: str
+            sep: str | None
+            if self._source == "mysql":
+                if len(args) != 1 or "SEPARATOR" not in args[0].upper():
+                    return None
+                m = re.split(r"(?i)\bSEPARATOR\b", args[0], maxsplit=1)
+                col, sep = m[0].strip(), m[1].strip()
+            else:
+                if len(args) != 2:
+                    return None
+                col, sep = args[0], args[1]
+
+            if self._target in ("tsql", "postgresql"):
+                return f"STRING_AGG({col}, {sep})"
+            if self._target == "oracle":
+                return f"LISTAGG({col}, {sep})"
+            return f"GROUP_CONCAT({col} SEPARATOR {sep})"
+
+        return self._rewrite_calls(sql, source_fn, build)
 
     def _transform_decode(self, sql: str) -> str:
         """Translate Oracle DECODE(expr, s1, r1, [s2, r2, ...], [default]).
@@ -941,12 +985,25 @@ class ProceduralTransformer:
 
     @staticmethod
     def _split_top_level_args(arglist: str) -> list[str]:
-        """Split a comma-separated argument list at top-level commas only."""
+        """Split a comma-separated argument list at top-level commas only.
+
+        Commas inside parentheses or string literals (single or double
+        quotes) are not split points.
+        """
         parts: list[str] = []
         depth = 0
         cur: list[str] = []
+        quote: str | None = None
         for ch in arglist:
-            if ch == "(":
+            if quote is not None:
+                cur.append(ch)
+                if ch == quote:
+                    quote = None
+                continue
+            if ch in ("'", '"'):
+                quote = ch
+                cur.append(ch)
+            elif ch == "(":
                 depth += 1
                 cur.append(ch)
             elif ch == ")":

@@ -62,12 +62,15 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 
 ## 4. Function mapping gaps (P2)
 
-- [ ] **Argument-reordering functions** currently emitted as review comments:
-      `CHARINDEX`↔`INSTR`↔`LOCATE`, `DECODE`→`CASE`, `NVL2`→`CASE`,
-      `TO_CHAR`/`TO_DATE`/`CONVERT` with format strings.
+- [x] **Substring-position functions** — `CHARINDEX`↔`INSTR`↔`LOCATE`↔`STRPOS`
+      now translated with correct argument reordering (start position kept).
+- [x] **`DECODE`→`CASE`** — Oracle DECODE translated to a searched CASE.
+- [x] **String aggregation** — `STRING_AGG` ↔ `LISTAGG` ↔ `GROUP_CONCAT`
+      (handles MySQL `SEPARATOR` syntax). Quote-aware argument splitting so
+      commas inside string literals are not mis-split.
+- [ ] **`NVL2`→`CASE`**, `TO_CHAR`/`TO_DATE`/`CONVERT` with format strings.
 - [ ] **Date-format strings** — map Oracle `'YYYY-MM-DD'` ↔ MySQL `'%Y-%m-%d'`
       ↔ T-SQL style codes.
-- [ ] **String aggregation** — `STRING_AGG` ↔ `LISTAGG` ↔ `GROUP_CONCAT`.
 
 ## 5. Tooling / infrastructure (P3)
 

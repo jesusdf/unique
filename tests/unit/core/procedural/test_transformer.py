@@ -265,6 +265,37 @@ class TestNiladicDatetime:
         assert "GETDATE()" in result.sql
 
 
+class TestStringAggregation:
+    def test_string_agg_to_oracle(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(RawSQL(sql="STRING_AGG(name, ',')", reason="x"))
+        assert out.sql == "LISTAGG(name, ',')"
+
+    def test_string_agg_to_mysql(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        out = t._transform_node(RawSQL(sql="STRING_AGG(name, ',')", reason="x"))
+        assert out.sql == "GROUP_CONCAT(name SEPARATOR ',')"
+
+    def test_listagg_to_tsql(self) -> None:
+        t = ProceduralTransformer("oracle", "tsql")
+        out = t._transform_node(RawSQL(sql="LISTAGG(name, ',')", reason="x"))
+        assert out.sql == "STRING_AGG(name, ',')"
+
+    def test_group_concat_to_oracle(self) -> None:
+        t = ProceduralTransformer("mysql", "oracle")
+        out = t._transform_node(
+            RawSQL(sql="GROUP_CONCAT(name SEPARATOR ',')", reason="x")
+        )
+        assert out.sql == "LISTAGG(name, ',')"
+
+    def test_comma_inside_string_literal_not_split(self) -> None:
+        # Regression: a comma inside a quoted separator must not be treated
+        # as an argument separator.
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(RawSQL(sql="CHARINDEX(',', haystack)", reason="x"))
+        assert out.sql == "INSTR(haystack, ',')"
+
+
 class TestDecode:
     def test_decode_with_default(self) -> None:
         t = ProceduralTransformer("oracle", "tsql")
