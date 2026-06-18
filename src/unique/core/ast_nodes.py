@@ -729,6 +729,21 @@ class RawSQL(ASTNode):
     reason: str = "Could not parse this construct"
 
 
+@dataclass(frozen=True)
+class PassthroughSQL(ASTNode):
+    """SQL that sqlglot can transpile directly but we don't model in IR.
+
+    Carries the original statement plus its source dialect so the emitter
+    can re-transpile it to the target dialect with sqlglot (e.g. ALTER
+    TABLE, CREATE INDEX, CREATE SEQUENCE). If re-transpilation fails, the
+    emitter falls back to a commented passthrough.
+    """
+
+    sql: str
+    source_dialect: str
+    kind: str = "statement"
+
+
 # ---------------------------------------------------------------------------
 # Script node (top-level container)
 # ---------------------------------------------------------------------------

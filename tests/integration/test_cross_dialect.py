@@ -245,6 +245,57 @@ class TestCrossDialectDDL:
         assert "CREATE TABLE" in result.sql.upper()
 
 
+class TestDDLPassthrough:
+    """ALTER TABLE / CREATE INDEX / CREATE SEQUENCE round-trip via sqlglot."""
+
+    @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
+    def test_alter_add_foreign_key(self, transpiler: Transpiler, target: str) -> None:
+        sql = (
+            "ALTER TABLE orders ADD CONSTRAINT fk FOREIGN KEY (cust_id) "
+            "REFERENCES customers (id)"
+        )
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "ALTER TABLE" in result.sql.upper()
+        assert "FOREIGN KEY" in result.sql.upper()
+        assert "-- UNIQUE: Unhandled" not in result.sql
+
+    @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
+    def test_alter_add_primary_key(self, transpiler: Transpiler, target: str) -> None:
+        sql = "ALTER TABLE products ADD CONSTRAINT pk PRIMARY KEY (id)"
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "PRIMARY KEY" in result.sql.upper()
+        assert "-- UNIQUE: Unhandled" not in result.sql
+
+    @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
+    def test_alter_add_column(self, transpiler: Transpiler, target: str) -> None:
+        sql = "ALTER TABLE t ADD COLUMN extra INT"
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "ALTER TABLE" in result.sql.upper()
+        assert "EXTRA" in result.sql.upper()
+        assert "-- UNIQUE: Unhandled" not in result.sql
+
+    @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
+    def test_create_index(self, transpiler: Transpiler, target: str) -> None:
+        sql = "CREATE INDEX idx ON customers (last_name, first_name)"
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "CREATE INDEX" in result.sql.upper()
+        assert "-- UNIQUE: Unhandled" not in result.sql
+
+    @pytest.mark.parametrize("target", ["oracle", "postgresql"])
+    def test_create_sequence(self, transpiler: Transpiler, target: str) -> None:
+        sql = "CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1"
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "CREATE SEQUENCE" in result.sql.upper()
+        assert "-- UNIQUE: Unhandled" not in result.sql
+
+    def test_create_sequence_mysql_documented(self, transpiler: Transpiler) -> None:
+        # MySQL has no sequences; emit a documented comment, not invalid SQL.
+        sql = "CREATE SEQUENCE seq START WITH 1"
+        result = transpiler.transpile(sql, "tsql", "mysql")
+        assert "AUTO_INCREMENT" in result.sql
+        assert result.sql.lstrip().startswith("--")
+
+
 class TestCrossDialectExpressions:
     """Complex expressions across dialects."""
 

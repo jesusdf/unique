@@ -20,16 +20,18 @@ Last reviewed: 2026-06-18 (after column-constraint preservation work).
 IR nodes exist for these but no converter/emitter connects them, so
 sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 
-- [ ] **ALTER TABLE** (180) — `ADD CONSTRAINT` (foreign keys, primary keys,
-      defaults, checks), `ADD/DROP COLUMN`, `ALTER COLUMN`. `AlterTableStatement`
-      node exists; needs `_convert_alter_table` + `_emit_alter_table`.
-- [ ] **CREATE INDEX** (69 incl. NONCLUSTERED/CLUSTERED) — map T-SQL
-      CLUSTERED/NONCLUSTERED (drop the keyword for other engines),
-      `INCLUDE (...)` columns, filtered indexes. `CreateIndexStatement` exists.
-- [ ] **CREATE SEQUENCE** (9) — `CreateSequenceStatement` exists; wire
-      converter/emitter; MySQL has no sequences (emit a documented comment).
-- [ ] **CREATE SCHEMA** (6) — pass through / map `AUTHORIZATION`.
+- [x] **ALTER TABLE** (180) — `ADD CONSTRAINT` (FK/PK/default/check),
+      `ADD/DROP/ALTER COLUMN`. Now round-tripped through sqlglot via
+      `PassthroughSQL` (sqlglot transpiles ALTER faithfully across engines).
+- [x] **CREATE INDEX** (69 incl. NONCLUSTERED/CLUSTERED) — round-tripped via
+      `PassthroughSQL`. sqlglot drops the CLUSTERED/NONCLUSTERED keyword for
+      engines that lack it.
+- [x] **CREATE SEQUENCE** (9) — round-tripped via `PassthroughSQL`; MySQL has
+      no sequences, so it emits a documented `AUTO_INCREMENT` comment instead.
+- [x] **CREATE SCHEMA** (6) — round-tripped via `PassthroughSQL`.
 - [ ] **USE <db>** (6) — comment out or map to `\\c` (PG) / schema switch.
+- [ ] **Filtered / INCLUDE indexes** — verify T-SQL `INCLUDE (...)` and
+      `WHERE` predicate handling in the passthrough output.
 
 ## 2. Column / type features in CREATE TABLE (P1)
 

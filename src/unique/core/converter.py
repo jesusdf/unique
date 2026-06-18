@@ -50,6 +50,7 @@ from unique.core.ast_nodes import (
     Literal,
     OrderByItem,
     OrderDirection,
+    PassthroughSQL,
     RawSQL,
     Script,
     SelectStatement,
@@ -114,13 +115,55 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
     for expression in parsed:
         if expression is None:
             continue
-        node = convert_expression(expression)  # type: ignore[arg-type]
+        node = convert_expression(expression, dialect)  # type: ignore[arg-type]
         nodes.append(node)
 
     return nodes
 
 
-def convert_expression(expr: exp.Expression) -> ASTNode:
+def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> ASTNode:
+    """Convert a single sqlglot expression to an IR node.
+
+    Dispatches based on the sqlglot expression type. ``source_dialect`` is
+    used to re-transpile passthrough statements (ALTER, CREATE INDEX, ...)
+    that sqlglot handles directly but we do not model structurally.
+    """
+    # Statements sqlglot transpiles well but we don't model in IR: keep them
+    # as PassthroughSQL so the emitter can re-transpile to the target.
+    if isinstance(expr, (exp.Alter, exp.Create)) and _is_passthrough_create(expr):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind=_passthrough_kind(expr),
+        )
+    if isinstance(expr, exp.Alter):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="ALTER",
+        )
+    return _convert_expression_impl(expr)
+
+
+def _is_passthrough_create(expr: exp.Expression) -> bool:
+    """Whether a CREATE should be passed through to sqlglot unchanged.
+
+    Tables and views are modeled in IR; indexes, sequences, and schemas are
+    not, so they round-trip through sqlglot.
+    """
+    if not isinstance(expr, exp.Create):
+        return False
+    kind = (expr.args.get("kind") or "").upper()
+    return kind in ("INDEX", "SEQUENCE", "SCHEMA")
+
+
+def _passthrough_kind(expr: exp.Expression) -> str:
+    if isinstance(expr, exp.Create):
+        return "CREATE " + (expr.args.get("kind") or "").upper()
+    return type(expr).__name__.upper()
+
+
+def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     """Convert a single sqlglot expression to an IR node.
 
     Dispatches based on the sqlglot expression type.
@@ -774,11 +817,39 @@ def emit_node(node: ASTNode, dialect: str) -> str:
         return _emit_drop(node, dialect)
     if isinstance(node, RawSQL):
         return f"-- UNIQUE: {node.reason}\n-- {node.sql}"
+    if isinstance(node, PassthroughSQL):
+        return _emit_passthrough(node, dialect)
     if isinstance(node, Script):
         return ";\n\n".join(emit_node(s, dialect) for s in node.statements)
 
     # Expression-level emission
     return _emit_expression(node, dialect)
+
+
+def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
+    """Re-transpile a passthrough statement to the target dialect.
+
+    Uses sqlglot directly (it handles ALTER, CREATE INDEX, CREATE SEQUENCE,
+    etc. well). On failure, fall back to a commented passthrough so nothing
+    is silently lost.
+    """
+    read = sqlglot_dialect_name(node.source_dialect)
+    write = sqlglot_dialect_name(dialect)
+
+    # MySQL has no CREATE SEQUENCE; sqlglot would emit invalid SQL.
+    if dialect == "mysql" and node.kind == "CREATE SEQUENCE":
+        return (
+            "-- UNIQUE: MySQL has no sequences; use an AUTO_INCREMENT column "
+            "instead. Original:\n-- " + node.sql
+        )
+
+    try:
+        out = sqlglot.transpile(node.sql, read=read, write=write)
+        if out and out[0].strip():
+            return out[0]
+    except Exception as e:  # noqa: BLE001 - report and fall back
+        logger.warning("passthrough transpile error (%s): %s", node.kind, e)
+    return f"-- UNIQUE: Unhandled {node.kind}\n-- {node.sql}"
 
 
 def _emit_select(node: SelectStatement, dialect: str) -> str:
