@@ -252,6 +252,34 @@ class TestCrossDialectDDL:
         assert "USER-DEFINED" not in result.sql.upper()
         assert "Name" in result.sql
 
+    @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
+    def test_table_level_primary_key(self, transpiler: Transpiler, target: str) -> None:
+        sql = "CREATE TABLE t (id INT, CONSTRAINT pk PRIMARY KEY (id))"
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "PRIMARY KEY" in result.sql.upper()
+
+    @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
+    def test_table_level_foreign_key(self, transpiler: Transpiler, target: str) -> None:
+        sql = (
+            "CREATE TABLE t (cust_id INT, "
+            "CONSTRAINT fk FOREIGN KEY (cust_id) REFERENCES customers (id))"
+        )
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "FOREIGN KEY" in result.sql.upper()
+        assert "REFERENCES" in result.sql.upper()
+
+    @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
+    def test_table_level_unique_and_check(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        sql = (
+            "CREATE TABLE t (id INT, age INT, "
+            "CONSTRAINT uq UNIQUE (id), CONSTRAINT chk CHECK (age > 0))"
+        )
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "UNIQUE" in result.sql.upper()
+        assert "CHECK" in result.sql.upper()
+
 
 class TestDDLPassthrough:
     """ALTER TABLE / CREATE INDEX / CREATE SEQUENCE round-trip via sqlglot."""

@@ -386,6 +386,10 @@ class CreateTableStatement(ASTNode):
     if_not_exists: bool = False
     temporary: bool = False
     as_select: SelectStatement | None = None
+    # Table-level constraints (PRIMARY KEY/FOREIGN KEY/UNIQUE/CHECK declared
+    # outside a single column), kept as raw SQL fragments and re-transpiled
+    # per dialect via sqlglot.
+    table_constraints: tuple[PassthroughSQL, ...] = ()
 
 
 @dataclass(frozen=True)
