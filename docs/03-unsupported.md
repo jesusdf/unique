@@ -83,6 +83,29 @@ Format specifiers differ between engines (e.g., `'YYYY-MM-DD'` in Oracle vs
 `'%Y-%m-%d'` in MySQL). The transpiler maps common format patterns but cannot
 guarantee equivalence for all custom format strings.
 
+#### Supported function translations
+
+Within procedural bodies, the engine translates these built-in functions
+across dialects (name mapping for same-arity equivalents, plus dedicated
+handling for the forms below):
+
+- **Current timestamp**: `GETDATE()` ↔ `SYSDATE` ↔ `NOW()`, with the correct
+  parenthesization per engine.
+- **`DATEADD(part, n, date)`**: → Oracle (`date + n` for days, `ADD_MONTHS`,
+  `NUMTODSINTERVAL`), PostgreSQL (`date + INTERVAL 'n unit'`), MySQL
+  (`DATE_ADD(date, INTERVAL n unit)`).
+- **`DATEDIFF(part, start, end)`**: → Oracle (`end - start`,
+  `MONTHS_BETWEEN`), PostgreSQL (`end::date - start::date`), MySQL
+  (`DATEDIFF` for days, `TIMESTAMPDIFF` otherwise).
+- **String/null functions**: `LEN`/`LENGTH`/`CHAR_LENGTH`,
+  `SUBSTRING`/`SUBSTR`, `ISNULL`/`NVL`/`COALESCE`/`IFNULL`, `UPPER`,
+  `LOWER`, `REPLACE`, `CEILING`/`CEIL`, and others.
+
+Functions that require argument reordering (e.g. `CHARINDEX`↔`INSTR`↔
+`LOCATE`, `DECODE`→`CASE`) are emitted with an inline review comment rather
+than a guessed conversion. Unknown date parts or non-standard call shapes are
+left intact for manual handling.
+
 ### 3.2 Collation & Character Sets
 
 Collation names and behaviors are engine-specific. The transpiler strips
