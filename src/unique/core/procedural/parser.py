@@ -291,6 +291,29 @@ class ProceduralParser:
                 self._advance()
                 continue
 
+            # MySQL routine characteristics between the signature and body:
+            # DETERMINISTIC, READS/MODIFIES/NO/CONTAINS SQL [DATA],
+            # LANGUAGE SQL, COMMENT '...'. Match by token value so they are
+            # consumed even when tokenized as identifiers.
+            upper = tok.value.upper()
+            if upper == "DETERMINISTIC":
+                self._advance()
+                continue
+            if upper in ("READS", "MODIFIES", "CONTAINS", "NO"):
+                self._advance()
+                # consume the following SQL [DATA] words
+                while not self._at_end() and self._current().value.upper() in (
+                    "SQL",
+                    "DATA",
+                ):
+                    self._advance()
+                continue
+            if upper == "COMMENT":
+                self._advance()
+                if not self._at_end():
+                    self._advance()  # the comment string literal
+                continue
+
             if tok.is_keyword("AS"):
                 self._advance()
                 continue
