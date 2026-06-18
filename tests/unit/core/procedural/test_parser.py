@@ -246,6 +246,40 @@ class TestTriggerPredicates:
         assert "EmbeddedDML" in body_kinds
 
 
+class TestMultiVariableDeclare:
+    def test_single_declare_multiple_vars(self) -> None:
+        sql = (
+            "CREATE PROCEDURE p AS BEGIN "
+            "DECLARE @a INT, @b VARCHAR(10), @c DATETIME; "
+            "SELECT 1 END"
+        )
+        result = _parse(sql, "tsql")
+        decls = [s for s in result.node.body if type(s).__name__ == "StatementList"]
+        # The multi-variable DECLARE expands to a StatementList of 3.
+        assert len(decls) == 1
+        assert len(decls[0].statements) == 3
+        names = [d.name for d in decls[0].statements]
+        assert names == ["@a", "@b", "@c"]
+
+    def test_multi_declare_with_default(self) -> None:
+        sql = (
+            "CREATE PROCEDURE p AS BEGIN "
+            "DECLARE @a INT = 0, @b INT = 5; "
+            "SELECT 1 END"
+        )
+        result = _parse(sql, "tsql")
+        sl = [s for s in result.node.body if type(s).__name__ == "StatementList"]
+        assert len(sl) == 1
+        assert len(sl[0].statements) == 2
+        assert sl[0].statements[0].default is not None
+
+    def test_single_var_declare_unchanged(self) -> None:
+        sql = "CREATE PROCEDURE p AS BEGIN DECLARE @a INT; SELECT 1 END"
+        result = _parse(sql, "tsql")
+        decls = [s for s in result.node.body if type(s).__name__ == "DeclareStatement"]
+        assert len(decls) == 1
+
+
 class TestConsecutiveDML:
     def test_consecutive_deletes_split(self) -> None:
         sql = (

@@ -486,6 +486,18 @@ class BeginEndBlock(ASTNode):
 
 
 @dataclass(frozen=True)
+class StatementList(ASTNode):
+    """A transparent sequence of statements (no BEGIN/END wrapper).
+
+    Used when one syntactic construct expands to several statements, e.g.
+    a T-SQL ``DECLARE @a INT, @b INT`` that becomes two declarations. The
+    emitter renders the members in order with no surrounding tokens.
+    """
+
+    statements: tuple[ASTNode, ...] = ()
+
+
+@dataclass(frozen=True)
 class TryCatchBlock(ASTNode):
     """TRY ... CATCH / EXCEPTION block."""
 
