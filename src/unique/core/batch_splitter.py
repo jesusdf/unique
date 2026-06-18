@@ -222,6 +222,13 @@ class BatchSplitter:
         for i, line in enumerate(sql.split("\n")):
             stripped = line.strip()
 
+            # Skip SQL*Plus comment/echo directives that are not SQL:
+            # 'rem ...' (remark) and 'prompt ...' (echo). These appear
+            # between statements and would otherwise corrupt the batch that
+            # follows them.
+            if not in_plsql and re.match(r"(?i)^(rem|prompt)\b", stripped):
+                continue
+
             # A lone slash terminates the current (PL/SQL) batch.
             if stripped == "/":
                 flush(i)

@@ -78,6 +78,20 @@ class TestOracleSplitting:
         batches = [b for b in BatchSplitter.split(sql, "oracle") if not b.is_empty]
         assert len(batches) == 3
 
+    def test_rem_and_prompt_lines_skipped(self) -> None:
+        # SQL*Plus 'rem' / 'prompt' lines must not corrupt the following
+        # statement's batch (regression: they were prepended to CREATE TABLE).
+        sql = (
+            "rem Copyright notice\n"
+            "rem ***********\n"
+            "prompt Creating table...\n"
+            "CREATE TABLE t (id NUMBER);"
+        )
+        batches = [b for b in BatchSplitter.split(sql, "oracle") if not b.is_empty]
+        assert len(batches) == 1
+        assert batches[0].batch_type == BatchType.DDL
+        assert batches[0].sql.upper().startswith("CREATE TABLE")
+
 
 class TestMySQLSplitting:
     def test_delimiter_change(self) -> None:
