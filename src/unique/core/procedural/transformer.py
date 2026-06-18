@@ -219,7 +219,6 @@ _TSQL_TO_ORACLE_FUNCS: dict[str, str] = {
     "SUBSTRING": "SUBSTR",
     "CEILING": "CEIL",
     "SQUARE": "-- SQUARE(x) -> x*x",
-    "SCOPE_IDENTITY": "SEQUENCE_NAME.CURRVAL",
     "DATEDIFF": "-- DATEDIFF requires manual conversion",
     "DATEADD": "-- DATEADD requires manual conversion",
 }
@@ -457,12 +456,12 @@ class ProceduralTransformer:
         return sql
 
     def _transform_system_var(self, var: str) -> str:
-        """Transform system variables like @@ROWCOUNT."""
+        """Transform system variables like @@ROWCOUNT, @@IDENTITY."""
         upper = var.upper()
         if self._target == "oracle":
             mapping = {
                 "@@ROWCOUNT": "SQL%ROWCOUNT",
-                "@@IDENTITY": "SEQUENCE_NAME.CURRVAL",
+                "@@IDENTITY": "/* @@IDENTITY: use <sequence>.CURRVAL */",
                 "@@ERROR": "SQLCODE",
                 "@@TRANCOUNT": "-- @@TRANCOUNT has no Oracle equivalent",
             }
@@ -472,6 +471,12 @@ class ProceduralTransformer:
                 "@@ROWCOUNT": "ROW_COUNT",
                 "@@IDENTITY": "LASTVAL()",
                 "@@ERROR": "SQLSTATE",
+            }
+            return mapping.get(upper, f"/* {var} */")
+        elif self._target == "mysql":
+            mapping = {
+                "@@ROWCOUNT": "ROW_COUNT()",
+                "@@IDENTITY": "LAST_INSERT_ID()",
             }
             return mapping.get(upper, f"/* {var} */")
         return var
@@ -861,6 +866,33 @@ class ProceduralTransformer:
         sql = self._transform_substring_position(sql)
         sql = self._transform_decode(sql)
         sql = self._transform_string_agg(sql)
+        sql = self._transform_scope_identity(sql)
+        return sql
+
+    def _transform_scope_identity(self, sql: str) -> str:
+        """Translate T-SQL SCOPE_IDENTITY()/IDENT_CURRENT(...) last-id calls.
+
+        SCOPE_IDENTITY() returns the most recent identity value. Targets:
+        - PostgreSQL: LASTVAL()
+        - MySQL:      LAST_INSERT_ID()
+        - Oracle:     no portable form; emit a documented comment (the value
+          comes from <sequence>.CURRVAL, which needs the sequence name).
+        """
+        if self._source != "tsql" or self._target == "tsql":
+            return sql
+
+        replacement = {
+            "postgresql": "LASTVAL()",
+            "mysql": "LAST_INSERT_ID()",
+            "oracle": "/* SCOPE_IDENTITY: use <sequence>.CURRVAL */",
+        }.get(self._target)
+        if replacement is None:
+            return sql
+
+        # SCOPE_IDENTITY() takes no arguments.
+        sql = re.sub(
+            r"\bSCOPE_IDENTITY\s*\(\s*\)", replacement, sql, flags=re.IGNORECASE
+        )
         return sql
 
     def _transform_string_agg(self, sql: str) -> str:
