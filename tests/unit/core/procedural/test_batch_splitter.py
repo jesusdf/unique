@@ -43,6 +43,41 @@ class TestOracleSplitting:
         batches = BatchSplitter.split(sql, "oracle")
         assert len(batches) == 2
 
+    def test_split_plain_statements_on_semicolon(self) -> None:
+        # A script with no slash separators must still split on semicolons.
+        sql = (
+            "CREATE TABLE a (id NUMBER);\n"
+            "CREATE TABLE b (id NUMBER);\n"
+            "CREATE INDEX i ON a (id);"
+        )
+        batches = [b for b in BatchSplitter.split(sql, "oracle") if not b.is_empty]
+        assert len(batches) == 3
+        assert all(b.batch_type == BatchType.DDL for b in batches)
+
+    def test_plsql_block_not_split_by_inner_semicolons(self) -> None:
+        sql = (
+            "CREATE TABLE t (id NUMBER);\n"
+            "CREATE OR REPLACE PROCEDURE p IS\n"
+            "BEGIN\n"
+            "  UPDATE t SET id = 1;\n"
+            "  IF id > 0 THEN NULL; END IF;\n"
+            "END;\n"
+            "/\n"
+            "INSERT INTO t VALUES (1);"
+        )
+        batches = [b for b in BatchSplitter.split(sql, "oracle") if not b.is_empty]
+        kinds = [b.batch_type.name for b in batches]
+        assert "PROCEDURAL" in kinds
+        # The procedure stays in one batch despite its inner semicolons.
+        proc = [b for b in batches if b.batch_type == BatchType.PROCEDURAL]
+        assert len(proc) == 1
+        assert "END IF" in proc[0].sql
+
+    def test_sqlplus_directives_kept_separate(self) -> None:
+        sql = "SET FEEDBACK 1;\nSET PAGESIZE 100;\nCREATE TABLE t (id NUMBER);"
+        batches = [b for b in BatchSplitter.split(sql, "oracle") if not b.is_empty]
+        assert len(batches) == 3
+
 
 class TestMySQLSplitting:
     def test_delimiter_change(self) -> None:
