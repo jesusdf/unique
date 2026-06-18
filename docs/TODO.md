@@ -41,8 +41,9 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       and re-transpiled per dialect (preserved instead of dropped).
 - [x] **User-defined / domain types** — T-SQL `[dbo].[Name]` now keeps its
       type name instead of collapsing to the literal USER-DEFINED.
-- [ ] **MySQL `... BINARY` column attribute** and `ON UPDATE CURRENT_TIMESTAMP`
-      — sqlglot fails the column; needs preprocessing similar to ROWGUIDCOL.
+- [x] **MySQL `... BINARY` column attribute** — stripped before parsing
+      (the BINARY(n) data type and BINARY(expr) function are preserved).
+      `ON UPDATE CURRENT_TIMESTAMP` is handled by sqlglot directly.
 - [ ] **Computed/persisted columns** (`AS (expr) PERSISTED`).
 
 ## 3. Procedural engine refinements (P2)

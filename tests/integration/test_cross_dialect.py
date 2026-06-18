@@ -280,6 +280,23 @@ class TestCrossDialectDDL:
         assert "UNIQUE" in result.sql.upper()
         assert "CHECK" in result.sql.upper()
 
+    def test_mysql_binary_column_attribute_stripped(
+        self, transpiler: Transpiler
+    ) -> None:
+        # MySQL "<char type> BINARY" column attribute is not portable and
+        # breaks sqlglot; it must be stripped so the table parses.
+        sql = "CREATE TABLE t (pwd VARCHAR(40) BINARY DEFAULT NULL)"
+        result = transpiler.transpile(sql, "mysql", "postgresql")
+        assert "CREATE TABLE" in result.sql.upper()
+        assert "VARCHAR(40)" in result.sql.upper()
+        assert "-- UNIQUE: Unhandled" not in result.sql
+
+    def test_mysql_binary_type_preserved(self, transpiler: Transpiler) -> None:
+        # The BINARY(n) data type must NOT be stripped.
+        sql = "CREATE TABLE t (data BINARY(16))"
+        result = transpiler.transpile(sql, "mysql", "postgresql")
+        assert "BINARY(16)" in result.sql.upper()
+
 
 class TestDDLPassthrough:
     """ALTER TABLE / CREATE INDEX / CREATE SEQUENCE round-trip via sqlglot."""
