@@ -265,6 +265,40 @@ class TestNiladicDatetime:
         assert "GETDATE()" in result.sql
 
 
+class TestLastInsertedId:
+    def test_scope_identity_to_postgresql(self) -> None:
+        t = ProceduralTransformer("tsql", "postgresql")
+        out = t._transform_node(RawSQL(sql="SET @x = SCOPE_IDENTITY()", reason="x"))
+        assert "LASTVAL()" in out.sql
+
+    def test_scope_identity_to_mysql(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        out = t._transform_node(RawSQL(sql="SET @x = SCOPE_IDENTITY()", reason="x"))
+        assert "LAST_INSERT_ID()" in out.sql
+
+    def test_scope_identity_to_oracle_documented(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(RawSQL(sql="SET @x = SCOPE_IDENTITY()", reason="x"))
+        assert "SCOPE_IDENTITY" not in out.sql.replace("/* SCOPE_IDENTITY", "").replace(
+            "SCOPE_IDENTITY()", ""
+        )
+        assert "CURRVAL" in out.sql
+
+    def test_identity_sysvar_to_mysql(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        out = t._transform_system_var("@@IDENTITY")
+        assert out == "LAST_INSERT_ID()"
+
+    def test_identity_sysvar_to_postgresql(self) -> None:
+        t = ProceduralTransformer("tsql", "postgresql")
+        out = t._transform_system_var("@@IDENTITY")
+        assert out == "LASTVAL()"
+
+    def test_rowcount_sysvar_to_mysql(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        assert t._transform_system_var("@@ROWCOUNT") == "ROW_COUNT()"
+
+
 class TestStringAggregation:
     def test_string_agg_to_oracle(self) -> None:
         t = ProceduralTransformer("tsql", "oracle")
