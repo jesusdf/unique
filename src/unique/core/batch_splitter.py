@@ -222,11 +222,30 @@ class BatchSplitter:
         for i, line in enumerate(sql.split("\n")):
             stripped = line.strip()
 
-            # Skip SQL*Plus comment/echo directives that are not SQL:
-            # 'rem ...' (remark) and 'prompt ...' (echo). These appear
-            # between statements and would otherwise corrupt the batch that
-            # follows them.
-            if not in_plsql and re.match(r"(?i)^(rem|prompt)\b", stripped):
+            # SQL*Plus 'rem' (remark) and 'prompt' (echo) directives are not
+            # SQL, but they carry useful information (copyright notices,
+            # progress messages). Preserve them as SQL line comments in their
+            # own batch rather than dropping them or letting them corrupt the
+            # following statement's batch.
+            rem_match = re.match(r"(?i)^(rem|prompt)\b[ \t]?(.*)$", stripped)
+            if not in_plsql and rem_match:
+                # Flush any statement accumulated so far so the comment keeps
+                # its position relative to surrounding statements.
+                if current:
+                    flush(i - 1)
+                directive = rem_match.group(1).lower()
+                text = rem_match.group(2).rstrip()
+                comment = f"-- {text}" if text else "--"
+                if directive == "prompt" and text:
+                    comment = f"-- PROMPT: {text}"
+                batches.append(
+                    Batch(
+                        sql=comment,
+                        batch_type=BatchType.COMMENT,
+                        line_offset=i,
+                    )
+                )
+                batch_start = i + 1
                 continue
 
             # A lone slash terminates the current (PL/SQL) batch.

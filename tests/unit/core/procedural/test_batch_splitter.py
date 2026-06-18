@@ -78,19 +78,31 @@ class TestOracleSplitting:
         batches = [b for b in BatchSplitter.split(sql, "oracle") if not b.is_empty]
         assert len(batches) == 3
 
-    def test_rem_and_prompt_lines_skipped(self) -> None:
+    def test_rem_and_prompt_lines_preserved_as_comments(self) -> None:
         # SQL*Plus 'rem' / 'prompt' lines must not corrupt the following
-        # statement's batch (regression: they were prepended to CREATE TABLE).
+        # statement's batch, and must be preserved as SQL comments rather
+        # than dropped (they carry copyright notices, progress messages).
         sql = (
             "rem Copyright notice\n"
-            "rem ***********\n"
             "prompt Creating table...\n"
             "CREATE TABLE t (id NUMBER);"
         )
-        batches = [b for b in BatchSplitter.split(sql, "oracle") if not b.is_empty]
-        assert len(batches) == 1
-        assert batches[0].batch_type == BatchType.DDL
-        assert batches[0].sql.upper().startswith("CREATE TABLE")
+        batches = BatchSplitter.split(sql, "oracle")
+        comments = [b for b in batches if b.batch_type == BatchType.COMMENT]
+        assert len(comments) == 2
+        assert comments[0].sql == "-- Copyright notice"
+        assert comments[1].sql == "-- PROMPT: Creating table..."
+        # The CREATE TABLE is its own clean DDL batch.
+        ddl = [b for b in batches if b.batch_type == BatchType.DDL]
+        assert len(ddl) == 1
+        assert ddl[0].sql.upper().startswith("CREATE TABLE")
+
+    def test_bare_rem_becomes_empty_comment(self) -> None:
+        sql = "rem\nCREATE TABLE t (id NUMBER);"
+        batches = BatchSplitter.split(sql, "oracle")
+        comments = [b for b in batches if b.batch_type == BatchType.COMMENT]
+        assert len(comments) == 1
+        assert comments[0].sql == "--"
 
 
 class TestMySQLSplitting:
