@@ -15,6 +15,8 @@
 
 """T-SQL (SQL Server) dialect plugin for Unique."""
 
+import re
+
 from unique.core.ast_nodes import ASTNode
 from unique.core.converter import emit_sql, parse_sql
 from unique.core.dialect import Dialect
@@ -23,12 +25,20 @@ from unique.core.dialect import Dialect
 class TSQLDialect(Dialect):
     """SQL Server (T-SQL) dialect implementation."""
 
+    # Proprietary T-SQL column attributes that sqlglot cannot parse and that
+    # have no equivalent in other engines. Stripping them lets the rest of
+    # the CREATE TABLE parse cleanly. (ROWGUIDCOL marks a GUID column for
+    # merge replication; NOT FOR REPLICATION suppresses identity/constraint
+    # behavior during replication.)
+    _STRIP_ATTRS = re.compile(r"(?i)\s+(ROWGUIDCOL|NOT\s+FOR\s+REPLICATION)\b")
+
     @property
     def name(self) -> str:
         return "tsql"
 
     def parse(self, sql: str) -> list[ASTNode]:
         """Parse T-SQL text into IR nodes."""
+        sql = self._STRIP_ATTRS.sub("", sql)
         return parse_sql(sql, "tsql")
 
     def emit(self, nodes: list[ASTNode]) -> str:
