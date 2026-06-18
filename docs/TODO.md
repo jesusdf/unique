@@ -35,13 +35,12 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 
 ## 2. Column / type features in CREATE TABLE (P1)
 
-- [ ] **Table-level constraints** — `CONSTRAINT ... PRIMARY KEY (cols)`,
+- [x] **Table-level constraints** — `CONSTRAINT ... PRIMARY KEY (cols)`,
       `FOREIGN KEY ... REFERENCES`, `UNIQUE (cols)`, `CHECK (...)` declared
-      outside a single column are currently dropped (only per-column
-      constraints are captured).
-- [ ] **User-defined / domain types** — T-SQL `[dbo].[Name]` and Oracle/PG
-      domains make sqlglot fail the whole CREATE TABLE. Strip schema-qualified
-      UDTs to their base type or emit a documented warning.
+      outside a single column are now captured as PassthroughSQL fragments
+      and re-transpiled per dialect (preserved instead of dropped).
+- [x] **User-defined / domain types** — T-SQL `[dbo].[Name]` now keeps its
+      type name instead of collapsing to the literal USER-DEFINED.
 - [ ] **MySQL `... BINARY` column attribute** and `ON UPDATE CURRENT_TIMESTAMP`
       — sqlglot fails the column; needs preprocessing similar to ROWGUIDCOL.
 - [ ] **Computed/persisted columns** (`AS (expr) PERSISTED`).

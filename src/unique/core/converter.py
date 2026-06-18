@@ -142,6 +142,14 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="ALTER",
         )
+    # CREATE TABLE is modeled in IR but its table-level constraints are kept
+    # as passthrough fragments, which need the source dialect.
+    if (
+        isinstance(expr, exp.Create)
+        and (expr.args.get("kind") or "").upper() in ("TABLE", "")
+        and isinstance(expr.this, exp.Schema)
+    ):
+        return _convert_create_table(expr, source_dialect)
     return _convert_expression_impl(expr)
 
 
@@ -424,11 +432,14 @@ def _convert_create(expr: exp.Create) -> ASTNode:
     return RawSQL(sql=expr.sql(), reason=f"Unhandled CREATE {kind}")
 
 
-def _convert_create_table(expr: exp.Create) -> CreateTableStatement:
+def _convert_create_table(
+    expr: exp.Create, source_dialect: str = "tsql"
+) -> CreateTableStatement:
     """Convert CREATE TABLE."""
     table = _convert_table_ref(expr.this)
 
     columns: list[ColumnDefinition] = []
+    constraints: list[PassthroughSQL] = []
     schema_expr = expr.this
     if isinstance(schema_expr, exp.Schema):
         table = _convert_table_ref(schema_expr.this)
@@ -478,6 +489,25 @@ def _convert_create_table(expr: exp.Create) -> CreateTableStatement:
                         unique=unique,
                     )
                 )
+            elif isinstance(
+                col_def,
+                (
+                    exp.Constraint,
+                    exp.PrimaryKey,
+                    exp.ForeignKey,
+                    exp.UniqueColumnConstraint,
+                    exp.CheckColumnConstraint,
+                ),
+            ):
+                # Table-level constraint: keep as a passthrough fragment so
+                # the emitter can re-transpile it per dialect via sqlglot.
+                constraints.append(
+                    PassthroughSQL(
+                        sql=col_def.sql(dialect=sqlglot_dialect_name(source_dialect)),
+                        source_dialect=source_dialect,
+                        kind="CONSTRAINT",
+                    )
+                )
 
     if_not_exists = expr.args.get("exists") is not None
 
@@ -485,6 +515,7 @@ def _convert_create_table(expr: exp.Create) -> CreateTableStatement:
         table=table,
         columns=tuple(columns),
         if_not_exists=if_not_exists,
+        table_constraints=tuple(constraints),
     )
 
 
@@ -1007,10 +1038,34 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             col_defs.append(
                 f"  {col.name} {dtype}{identity}{nullable}{default}{pk}{unique}"
             )
+        # Table-level constraints (PK/FK/UNIQUE/CHECK), re-transpiled.
+        for constraint in node.table_constraints:
+            col_defs.append(f"  {_emit_passthrough_inline(constraint, dialect)}")
         cols = ",\n".join(col_defs)
         return f"CREATE {temp}TABLE {exists}{table} (\n{cols}\n)"
 
     return f"CREATE {temp}TABLE {exists}{table}"
+
+
+def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
+    """Re-transpile a constraint fragment for inclusion inside CREATE TABLE.
+
+    Wraps the fragment in a throwaway table so sqlglot will transpile the
+    constraint, then extracts it back out. Falls back to the raw fragment.
+    """
+    read = sqlglot_dialect_name(node.source_dialect)
+    write = sqlglot_dialect_name(dialect)
+    try:
+        wrapped = f"CREATE TABLE __c__ (x INT, {node.sql})"
+        out = sqlglot.transpile(wrapped, read=read, write=write)[0]
+        inner = out[out.index("(") + 1 : out.rindex(")")]
+        # Drop the placeholder "x INT," prefix.
+        parts = inner.split(",", 1)
+        if len(parts) == 2:
+            return parts[1].strip()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("constraint transpile error: %s", e)
+    return node.sql
 
 
 def _emit_create_view(node: CreateViewStatement, dialect: str) -> str:
