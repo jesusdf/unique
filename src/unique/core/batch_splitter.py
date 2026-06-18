@@ -179,24 +179,87 @@ class BatchSplitter:
 
     @staticmethod
     def _split_oracle(sql: str) -> list[Batch]:
-        """Split Oracle on / (slash) batch separators.
+        """Split Oracle SQL into batches.
 
-        For procedural blocks (CREATE OR REPLACE PROCEDURE/FUNCTION/TRIGGER/PACKAGE),
-        the slash is the terminator. For plain DML/DDL, semicolons are used.
+        Oracle terminates simple statements with ``;`` and PL/SQL blocks
+        (CREATE PROCEDURE/FUNCTION/TRIGGER/PACKAGE, anonymous DECLARE/BEGIN
+        blocks) with a line containing only ``/``. This splitter honors
+        both: a lone ``/`` always ends the current batch, and otherwise a
+        ``;`` ends a statement unless we are inside a PL/SQL block, where we
+        wait for the slash. SQL*Plus directives (SET, PROMPT, etc.) are kept
+        as their own single-line batches.
         """
-        parts = re.split(r"(?m)^/\s*$", sql)
-        batches = []
-        line_offset = 0
-        for part in parts:
-            stripped = part.strip()
-            if stripped:
-                batch = Batch(
-                    sql=stripped,
-                    batch_type=classify_batch(stripped, "oracle"),
-                    line_offset=line_offset,
+        batches: list[Batch] = []
+        current: list[str] = []
+        batch_start = 0
+        in_plsql = False
+        begin_depth = 0
+
+        plsql_start = re.compile(
+            r"(?i)\bCREATE\s+(OR\s+REPLACE\s+)?"
+            r"(PROCEDURE|FUNCTION|TRIGGER|PACKAGE|TYPE)\b"
+        )
+        anon_start = re.compile(r"(?i)^\s*(DECLARE|BEGIN)\b")
+        begin_re = re.compile(r"(?i)\bBEGIN\b")
+        end_re = re.compile(r"(?i)\bEND\b")
+
+        def flush(end_line: int) -> None:
+            nonlocal current, batch_start
+            text = "\n".join(current).strip()
+            if text.endswith(";"):
+                text = text[:-1].rstrip()
+            if text:
+                batches.append(
+                    Batch(
+                        sql=text,
+                        batch_type=classify_batch(text, "oracle"),
+                        line_offset=batch_start,
+                    )
                 )
-                batches.append(batch)
-            line_offset += part.count("\n") + 1
+            current = []
+            batch_start = end_line + 1
+
+        for i, line in enumerate(sql.split("\n")):
+            stripped = line.strip()
+
+            # A lone slash terminates the current (PL/SQL) batch.
+            if stripped == "/":
+                flush(i)
+                in_plsql = False
+                begin_depth = 0
+                continue
+
+            current.append(line)
+
+            if not in_plsql and (plsql_start.search(line) or anon_start.match(line)):
+                in_plsql = True
+                begin_depth = 0
+
+            if in_plsql:
+                begin_depth += len(begin_re.findall(line))
+                for m in end_re.finditer(line):
+                    rest = line[m.end() :].lstrip().upper()
+                    if rest.startswith(("IF", "LOOP", "WHILE", "CASE")):
+                        continue
+                    begin_depth -= 1
+                # Inside a PL/SQL block we wait for the terminating slash,
+                # so do not split on semicolons here.
+                continue
+
+            if stripped.endswith(";"):
+                flush(i)
+
+        remaining = "\n".join(current).strip()
+        if remaining:
+            if remaining.endswith(";"):
+                remaining = remaining[:-1].rstrip()
+            batches.append(
+                Batch(
+                    sql=remaining,
+                    batch_type=classify_batch(remaining, "oracle"),
+                    line_offset=batch_start,
+                )
+            )
         return batches
 
     @staticmethod
