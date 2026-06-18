@@ -209,6 +209,41 @@ class TestCrossDialectDDL:
         assert "CREATE TABLE" in result.sql.upper()
         assert "users" in result.sql
 
+    def test_identity_column_to_postgresql(self, transpiler: Transpiler) -> None:
+        sql = "CREATE TABLE t (id INT IDENTITY(1,1) NOT NULL)"
+        result = transpiler.transpile(sql, "tsql", "postgresql")
+        assert "SERIAL" in result.sql.upper()
+
+    def test_identity_column_to_mysql(self, transpiler: Transpiler) -> None:
+        sql = "CREATE TABLE t (id INT IDENTITY(1,1) NOT NULL)"
+        result = transpiler.transpile(sql, "tsql", "mysql")
+        assert "AUTO_INCREMENT" in result.sql.upper()
+
+    def test_identity_column_to_oracle(self, transpiler: Transpiler) -> None:
+        sql = "CREATE TABLE t (id INT IDENTITY(1,1) NOT NULL)"
+        result = transpiler.transpile(sql, "tsql", "oracle")
+        assert "GENERATED" in result.sql.upper()
+        assert "IDENTITY" in result.sql.upper()
+
+    def test_explicit_null_not_forced_not_null(self, transpiler: Transpiler) -> None:
+        sql = "CREATE TABLE t (name VARCHAR(50) NULL)"
+        result = transpiler.transpile(sql, "tsql", "postgresql")
+        # An explicit NULL must not become NOT NULL.
+        assert "NOT NULL" not in result.sql.upper()
+
+    def test_column_default_preserved(self, transpiler: Transpiler) -> None:
+        sql = "CREATE TABLE t (status INT DEFAULT 0)"
+        result = transpiler.transpile(sql, "tsql", "postgresql")
+        assert "DEFAULT 0" in result.sql
+        # No stray UNIQUE comment wrapper around the default value.
+        assert "/* UNIQUE" not in result.sql
+
+    def test_rowguidcol_stripped(self, transpiler: Transpiler) -> None:
+        sql = "CREATE TABLE t (rowguid UNIQUEIDENTIFIER ROWGUIDCOL NOT NULL)"
+        result = transpiler.transpile(sql, "tsql", "postgresql")
+        assert "ROWGUIDCOL" not in result.sql.upper()
+        assert "CREATE TABLE" in result.sql.upper()
+
 
 class TestCrossDialectExpressions:
     """Complex expressions across dialects."""
