@@ -858,7 +858,113 @@ class ProceduralTransformer:
             r"\b(GETDATE\s*\(\s*\)|SYSDATE\b(?!\s*\()|NOW\s*\(\s*\))",
             flags=re.IGNORECASE,
         )
-        return pattern.sub(target_expr, sql)
+        sql = pattern.sub(target_expr, sql)
+        sql = self._transform_dateadd(sql)
+        return sql
+
+    # T-SQL date parts → canonical interval unit name.
+    _DATEPART_UNITS = {
+        "year": "YEAR",
+        "yy": "YEAR",
+        "yyyy": "YEAR",
+        "quarter": "QUARTER",
+        "qq": "QUARTER",
+        "q": "QUARTER",
+        "month": "MONTH",
+        "mm": "MONTH",
+        "m": "MONTH",
+        "day": "DAY",
+        "dd": "DAY",
+        "d": "DAY",
+        "week": "WEEK",
+        "wk": "WEEK",
+        "ww": "WEEK",
+        "hour": "HOUR",
+        "hh": "HOUR",
+        "minute": "MINUTE",
+        "mi": "MINUTE",
+        "n": "MINUTE",
+        "second": "SECOND",
+        "ss": "SECOND",
+        "s": "SECOND",
+    }
+
+    def _transform_dateadd(self, sql: str) -> str:
+        """Translate simple T-SQL DATEADD(part, n, date) calls.
+
+        Only the common, unambiguous form with a recognized date part and a
+        single top-level argument list is converted; anything else is left
+        untouched (sqlglot or a reviewer can handle it). Source must be
+        T-SQL; targets Oracle/PostgreSQL/MySQL.
+        """
+        if self._source != "tsql" or self._target not in (
+            "oracle",
+            "postgresql",
+            "mysql",
+        ):
+            return sql
+
+        def split_top_level(arglist: str) -> list[str]:
+            parts: list[str] = []
+            depth = 0
+            cur: list[str] = []
+            for ch in arglist:
+                if ch == "(":
+                    depth += 1
+                    cur.append(ch)
+                elif ch == ")":
+                    depth -= 1
+                    cur.append(ch)
+                elif ch == "," and depth == 0:
+                    parts.append("".join(cur).strip())
+                    cur = []
+                else:
+                    cur.append(ch)
+            if cur:
+                parts.append("".join(cur).strip())
+            return parts
+
+        pattern = re.compile(r"\bDATEADD\s*\(", re.IGNORECASE)
+
+        # Replace from the rightmost match to keep indices valid as we go.
+        result = sql
+        matches = list(pattern.finditer(result))
+        for match in reversed(matches):
+            start = match.end()
+            depth = 1
+            i = start
+            while i < len(result) and depth > 0:
+                if result[i] == "(":
+                    depth += 1
+                elif result[i] == ")":
+                    depth -= 1
+                i += 1
+            inner = result[start : i - 1]
+            args = split_top_level(inner)
+            if len(args) != 3:
+                continue
+            part, num, date = args
+            unit = self._DATEPART_UNITS.get(part.strip().lower())
+            if not unit:
+                continue
+            if self._target == "oracle":
+                if unit == "DAY":
+                    replacement = f"({date} + {num})"
+                elif unit in ("MONTH",):
+                    replacement = f"ADD_MONTHS({date}, {num})"
+                elif unit in ("YEAR",):
+                    replacement = f"ADD_MONTHS({date}, ({num}) * 12)"
+                elif unit in ("HOUR", "MINUTE", "SECOND"):
+                    replacement = f"({date} + NUMTODSINTERVAL({num}, '{unit}'))"
+                else:
+                    continue
+            elif self._target == "postgresql":
+                replacement = f"({date} + INTERVAL '{num} {unit}')"
+            else:  # mysql
+                replacement = f"DATE_ADD({date}, INTERVAL {num} {unit})"
+            result = result[: match.start()] + replacement + result[i:]
+
+        return result
 
     def _get_func_map(self) -> dict[str, str]:
         key = f"{self._source}_{self._target}"
