@@ -203,3 +203,63 @@ class TestFunctionMapping:
         node = RawSQL(sql="ISNULL(a, b)", reason="x")
         result = t._transform_node(node)
         assert "NVL" in result.sql
+
+    def test_isnull_to_coalesce_pg(self) -> None:
+        t = ProceduralTransformer("tsql", "postgresql")
+        result = t._transform_node(RawSQL(sql="ISNULL(a, b)", reason="x"))
+        assert "COALESCE" in result.sql
+
+    def test_isnull_to_ifnull_mysql(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        result = t._transform_node(RawSQL(sql="ISNULL(a, b)", reason="x"))
+        assert "IFNULL" in result.sql
+
+    def test_len_to_char_length_mysql(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        result = t._transform_node(RawSQL(sql="LEN(name)", reason="x"))
+        assert "CHAR_LENGTH" in result.sql
+
+    def test_nvl_to_coalesce_oracle_pg(self) -> None:
+        t = ProceduralTransformer("oracle", "postgresql")
+        result = t._transform_node(RawSQL(sql="NVL(x, y)", reason="x"))
+        assert "COALESCE" in result.sql
+
+    def test_substr_to_substring_oracle_mysql(self) -> None:
+        t = ProceduralTransformer("oracle", "mysql")
+        result = t._transform_node(RawSQL(sql="SUBSTR(s, 1, 3)", reason="x"))
+        assert "SUBSTRING" in result.sql
+
+    def test_identity_mapping_not_doubled(self) -> None:
+        # UPPER -> UPPER must not be mangled.
+        t = ProceduralTransformer("tsql", "oracle")
+        result = t._transform_node(RawSQL(sql="UPPER(name)", reason="x"))
+        assert result.sql == "UPPER(name)"
+
+
+class TestNiladicDatetime:
+    def test_sysdate_to_now_pg(self) -> None:
+        t = ProceduralTransformer("oracle", "postgresql")
+        result = t._transform_node(RawSQL(sql="v := SYSDATE", reason="x"))
+        assert "NOW()" in result.sql
+
+    def test_sysdate_to_getdate_tsql(self) -> None:
+        t = ProceduralTransformer("oracle", "tsql")
+        result = t._transform_node(RawSQL(sql="v := SYSDATE", reason="x"))
+        assert "GETDATE()" in result.sql
+
+    def test_getdate_to_sysdate_no_parens(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        result = t._transform_node(RawSQL(sql="x = GETDATE()", reason="x"))
+        # Oracle SYSDATE takes no parentheses.
+        assert "SYSDATE" in result.sql
+        assert "SYSDATE()" not in result.sql
+
+    def test_getdate_to_now_mysql(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        result = t._transform_node(RawSQL(sql="x = GETDATE()", reason="x"))
+        assert "NOW()" in result.sql
+
+    def test_now_to_getdate_pg_tsql(self) -> None:
+        t = ProceduralTransformer("postgresql", "tsql")
+        result = t._transform_node(RawSQL(sql="x := NOW()", reason="x"))
+        assert "GETDATE()" in result.sql
