@@ -348,6 +348,19 @@ class TestDDLPassthrough:
         assert "AUTO_INCREMENT" in result.sql
         assert result.sql.lstrip().startswith("--")
 
+    def test_use_statement_to_mysql(self, transpiler: Transpiler) -> None:
+        result = transpiler.transpile("USE [mydb]", "tsql", "mysql")
+        assert "USE" in result.sql.upper()
+        assert "mydb" in result.sql
+
+    @pytest.mark.parametrize("target", ["postgresql", "oracle"])
+    def test_use_statement_documented_where_unsupported(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        result = transpiler.transpile("USE [mydb]", "tsql", target)
+        assert result.sql.lstrip().startswith("--")
+        assert "mydb" in result.sql
+
 
 class TestCrossDialectExpressions:
     """Complex expressions across dialects."""

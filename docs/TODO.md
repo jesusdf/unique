@@ -29,7 +29,8 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 - [x] **CREATE SEQUENCE** (9) — round-tripped via `PassthroughSQL`; MySQL has
       no sequences, so it emits a documented `AUTO_INCREMENT` comment instead.
 - [x] **CREATE SCHEMA** (6) — round-tripped via `PassthroughSQL`.
-- [ ] **USE <db>** (6) — comment out or map to `\\c` (PG) / schema switch.
+- [x] **USE <db>** (6) — MySQL/T-SQL pass through; PostgreSQL and Oracle
+      (no SQL USE) emit a documented comment to connect to the target DB.
 - [ ] **Filtered / INCLUDE indexes** — verify T-SQL `INCLUDE (...)` and
       `WHERE` predicate handling in the passthrough output.
 

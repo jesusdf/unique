@@ -142,6 +142,12 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="ALTER",
         )
+    if isinstance(expr, exp.Use):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="USE",
+        )
     # CREATE TABLE is modeled in IR but its table-level constraints are kept
     # as passthrough fragments, which need the source dialect.
     if (
@@ -877,6 +883,14 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         return (
             "-- UNIQUE: MySQL has no sequences; use an AUTO_INCREMENT column "
             "instead. Original:\n-- " + node.sql
+        )
+
+    # USE <db> switches the active database. Valid in MySQL and T-SQL only;
+    # PostgreSQL (\\c is a psql meta-command) and Oracle have no SQL form.
+    if node.kind == "USE" and dialect in ("postgresql", "oracle"):
+        return (
+            f"-- UNIQUE: {dialect} has no USE statement; "
+            f"connect to the target database/schema instead.\n-- {node.sql}"
         )
 
     try:
