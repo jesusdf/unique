@@ -860,7 +860,59 @@ class ProceduralTransformer:
         )
         sql = pattern.sub(target_expr, sql)
         sql = self._transform_dateadd(sql)
+        sql = self._transform_datediff(sql)
         return sql
+
+    @staticmethod
+    def _split_top_level_args(arglist: str) -> list[str]:
+        """Split a comma-separated argument list at top-level commas only."""
+        parts: list[str] = []
+        depth = 0
+        cur: list[str] = []
+        for ch in arglist:
+            if ch == "(":
+                depth += 1
+                cur.append(ch)
+            elif ch == ")":
+                depth -= 1
+                cur.append(ch)
+            elif ch == "," and depth == 0:
+                parts.append("".join(cur).strip())
+                cur = []
+            else:
+                cur.append(ch)
+        if cur:
+            parts.append("".join(cur).strip())
+        return parts
+
+    def _rewrite_calls(
+        self, sql: str, func_name: str, builder: Callable[[list[str]], str | None]
+    ) -> str:
+        """Rewrite every top-level call ``func_name(...)`` using ``builder``.
+
+        ``builder`` receives the list of argument strings and returns the
+        replacement text, or None to leave the call unchanged. Calls are
+        rewritten right-to-left so earlier indices stay valid.
+        """
+        pattern = re.compile(rf"\b{re.escape(func_name)}\s*\(", re.IGNORECASE)
+        result = sql
+        for match in reversed(list(pattern.finditer(result))):
+            start = match.end()
+            depth = 1
+            i = start
+            while i < len(result) and depth > 0:
+                if result[i] == "(":
+                    depth += 1
+                elif result[i] == ")":
+                    depth -= 1
+                i += 1
+            inner = result[start : i - 1]
+            args = self._split_top_level_args(inner)
+            replacement = builder(args)
+            if replacement is None:
+                continue
+            result = result[: match.start()] + replacement + result[i:]
+        return result
 
     # T-SQL date parts → canonical interval unit name.
     _DATEPART_UNITS = {
@@ -892,10 +944,9 @@ class ProceduralTransformer:
     def _transform_dateadd(self, sql: str) -> str:
         """Translate simple T-SQL DATEADD(part, n, date) calls.
 
-        Only the common, unambiguous form with a recognized date part and a
-        single top-level argument list is converted; anything else is left
-        untouched (sqlglot or a reviewer can handle it). Source must be
-        T-SQL; targets Oracle/PostgreSQL/MySQL.
+        Only the common, unambiguous form with a recognized date part is
+        converted; anything else is left untouched. Source must be T-SQL;
+        targets Oracle/PostgreSQL/MySQL.
         """
         if self._source != "tsql" or self._target not in (
             "oracle",
@@ -904,67 +955,70 @@ class ProceduralTransformer:
         ):
             return sql
 
-        def split_top_level(arglist: str) -> list[str]:
-            parts: list[str] = []
-            depth = 0
-            cur: list[str] = []
-            for ch in arglist:
-                if ch == "(":
-                    depth += 1
-                    cur.append(ch)
-                elif ch == ")":
-                    depth -= 1
-                    cur.append(ch)
-                elif ch == "," and depth == 0:
-                    parts.append("".join(cur).strip())
-                    cur = []
-                else:
-                    cur.append(ch)
-            if cur:
-                parts.append("".join(cur).strip())
-            return parts
-
-        pattern = re.compile(r"\bDATEADD\s*\(", re.IGNORECASE)
-
-        # Replace from the rightmost match to keep indices valid as we go.
-        result = sql
-        matches = list(pattern.finditer(result))
-        for match in reversed(matches):
-            start = match.end()
-            depth = 1
-            i = start
-            while i < len(result) and depth > 0:
-                if result[i] == "(":
-                    depth += 1
-                elif result[i] == ")":
-                    depth -= 1
-                i += 1
-            inner = result[start : i - 1]
-            args = split_top_level(inner)
+        def build(args: list[str]) -> str | None:
             if len(args) != 3:
-                continue
+                return None
             part, num, date = args
             unit = self._DATEPART_UNITS.get(part.strip().lower())
             if not unit:
-                continue
+                return None
             if self._target == "oracle":
                 if unit == "DAY":
-                    replacement = f"({date} + {num})"
-                elif unit in ("MONTH",):
-                    replacement = f"ADD_MONTHS({date}, {num})"
-                elif unit in ("YEAR",):
-                    replacement = f"ADD_MONTHS({date}, ({num}) * 12)"
-                elif unit in ("HOUR", "MINUTE", "SECOND"):
-                    replacement = f"({date} + NUMTODSINTERVAL({num}, '{unit}'))"
-                else:
-                    continue
-            elif self._target == "postgresql":
-                replacement = f"({date} + INTERVAL '{num} {unit}')"
-            else:  # mysql
-                replacement = f"DATE_ADD({date}, INTERVAL {num} {unit})"
-            result = result[: match.start()] + replacement + result[i:]
+                    return f"({date} + {num})"
+                if unit == "MONTH":
+                    return f"ADD_MONTHS({date}, {num})"
+                if unit == "YEAR":
+                    return f"ADD_MONTHS({date}, ({num}) * 12)"
+                if unit in ("HOUR", "MINUTE", "SECOND"):
+                    return f"({date} + NUMTODSINTERVAL({num}, '{unit}'))"
+                return None
+            if self._target == "postgresql":
+                return f"({date} + INTERVAL '{num} {unit}')"
+            return f"DATE_ADD({date}, INTERVAL {num} {unit})"
 
-        return result
+        return self._rewrite_calls(sql, "DATEADD", build)
+
+    def _transform_datediff(self, sql: str) -> str:
+        """Translate simple T-SQL DATEDIFF(part, start, end) calls.
+
+        T-SQL returns ``end - start`` in the given unit. Conversions:
+        - Oracle: day -> (end - start); month -> MONTHS_BETWEEN(end, start);
+          year -> MONTHS_BETWEEN(end, start)/12
+        - PostgreSQL: day -> (end::date - start::date)
+        - MySQL: day -> DATEDIFF(end, start); else TIMESTAMPDIFF(unit, ...)
+        """
+        if self._source != "tsql" or self._target not in (
+            "oracle",
+            "postgresql",
+            "mysql",
+        ):
+            return sql
+
+        def build(args: list[str]) -> str | None:
+            if len(args) != 3:
+                return None
+            part, start, end = args
+            unit = self._DATEPART_UNITS.get(part.strip().lower())
+            if not unit:
+                return None
+            if self._target == "oracle":
+                if unit == "DAY":
+                    return f"({end} - {start})"
+                if unit == "MONTH":
+                    return f"MONTHS_BETWEEN({end}, {start})"
+                if unit == "YEAR":
+                    return f"(MONTHS_BETWEEN({end}, {start}) / 12)"
+                return None
+            if self._target == "postgresql":
+                if unit == "DAY":
+                    return f"({end}::date - {start}::date)"
+                return None
+            # mysql
+            if unit == "DAY":
+                return f"DATEDIFF({end}, {start})"
+            return f"TIMESTAMPDIFF({unit}, {start}, {end})"
+
+        return self._rewrite_calls(sql, "DATEDIFF", build)
 
     def _get_func_map(self) -> dict[str, str]:
         key = f"{self._source}_{self._target}"

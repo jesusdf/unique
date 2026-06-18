@@ -296,3 +296,37 @@ class TestDateAdd:
         out = t._transform_node(RawSQL(sql="DATEADD(microsecond, 1, d)", reason="x"))
         # Unrecognized part: leave the original call for manual handling.
         assert "DATEADD" in out.sql
+
+
+class TestDateDiff:
+    def test_datediff_day_to_oracle(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(RawSQL(sql="DATEDIFF(day, a, b)", reason="x"))
+        assert out.sql == "(b - a)"
+
+    def test_datediff_month_to_oracle(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(RawSQL(sql="DATEDIFF(month, a, b)", reason="x"))
+        assert "MONTHS_BETWEEN(b, a)" in out.sql
+
+    def test_datediff_day_to_postgresql(self) -> None:
+        t = ProceduralTransformer("tsql", "postgresql")
+        out = t._transform_node(RawSQL(sql="DATEDIFF(day, a, b)", reason="x"))
+        assert "::date" in out.sql
+
+    def test_datediff_day_to_mysql(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        out = t._transform_node(RawSQL(sql="DATEDIFF(day, a, b)", reason="x"))
+        assert out.sql == "DATEDIFF(b, a)"
+
+    def test_datediff_hour_to_mysql_timestampdiff(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        out = t._transform_node(RawSQL(sql="DATEDIFF(hour, a, b)", reason="x"))
+        assert "TIMESTAMPDIFF(HOUR, a, b)" in out.sql
+
+    def test_nested_dateadd_datediff(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(
+            RawSQL(sql="DATEADD(day, 1, DATEDIFF(day, x, y))", reason="x")
+        )
+        assert out.sql == "((y - x) + 1)"
