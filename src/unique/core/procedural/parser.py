@@ -1530,12 +1530,27 @@ class ProceduralParser:
         return self._capture_raw_until(TokenType.SEMICOLON)
 
     def _parse_expression_until_keyword(self, *keywords: str) -> ASTNode:
-        """Capture tokens as raw SQL until a keyword, semicolon, or END."""
+        """Capture tokens as raw SQL until a keyword, semicolon, or END.
+
+        A stop keyword immediately followed by '(' is treated as a function
+        call (e.g. the trigger predicate ``UPDATE(col)``, or ``EXISTS(...)``)
+        rather than a statement boundary, so it is captured into the
+        expression.
+        """
         parts: list[str] = []
         paren_depth = 0
+        first = True
         while not self._at_end():
             tok = self._current()
-            if paren_depth == 0 and tok.is_keyword(*keywords):
+            is_call = (
+                tok.type == TokenType.KEYWORD and self._peek(1).type == TokenType.LPAREN
+            )
+            if (
+                paren_depth == 0
+                and not (first and is_call)
+                and tok.is_keyword(*keywords)
+                and not is_call
+            ):
                 break
             if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
                 break
@@ -1547,6 +1562,7 @@ class ProceduralParser:
                 paren_depth -= 1
             parts.append(tok.value)
             self._advance()
+            first = False
         return RawSQL(sql=" ".join(parts).strip(), reason="expression")
 
     def _parse_expression_until_comma_or_semicolon(self) -> ASTNode:

@@ -226,3 +226,8 @@ __marimo__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Private real-world SQL fixtures (provided out-of-band, never committed)
+procedures.sql
+*.private.sql
+/fixtures-private/
