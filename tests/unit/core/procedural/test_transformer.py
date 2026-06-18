@@ -265,6 +265,31 @@ class TestNiladicDatetime:
         assert "GETDATE()" in result.sql
 
 
+class TestDecode:
+    def test_decode_with_default(self) -> None:
+        t = ProceduralTransformer("oracle", "tsql")
+        out = t._transform_node(
+            RawSQL(sql="DECODE(s, 1, 'a', 2, 'b', 'c')", reason="x")
+        )
+        assert out.sql == ("CASE WHEN s = 1 THEN 'a' WHEN s = 2 THEN 'b' ELSE 'c' END")
+
+    def test_decode_without_default(self) -> None:
+        t = ProceduralTransformer("oracle", "postgresql")
+        out = t._transform_node(RawSQL(sql="DECODE(x, 1, 'a', 2, 'b')", reason="x"))
+        assert out.sql == "CASE WHEN x = 1 THEN 'a' WHEN x = 2 THEN 'b' END"
+
+    def test_decode_single_pair(self) -> None:
+        t = ProceduralTransformer("oracle", "mysql")
+        out = t._transform_node(RawSQL(sql="DECODE(x, 1, 'one')", reason="x"))
+        assert out.sql == "CASE WHEN x = 1 THEN 'one' END"
+
+    def test_decode_not_touched_to_oracle(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(RawSQL(sql="DECODE(x, 1, 'a')", reason="x"))
+        # Not an Oracle source: leave DECODE alone.
+        assert "DECODE" in out.sql
+
+
 class TestSubstringPosition:
     def test_charindex_to_oracle_reorders(self) -> None:
         t = ProceduralTransformer("tsql", "oracle")

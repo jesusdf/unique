@@ -233,7 +233,6 @@ _ORACLE_TO_TSQL_FUNCS: dict[str, str] = {
     "TO_CHAR": "CONVERT",
     "TO_DATE": "CONVERT",
     "TO_NUMBER": "CAST",
-    "DECODE": "-- DECODE requires CASE conversion",
     "TRUNC": "-- TRUNC requires manual conversion",
     "NVL2": "-- NVL2 requires CASE conversion",
 }
@@ -859,7 +858,36 @@ class ProceduralTransformer:
         sql = self._transform_dateadd(sql)
         sql = self._transform_datediff(sql)
         sql = self._transform_substring_position(sql)
+        sql = self._transform_decode(sql)
         return sql
+
+    def _transform_decode(self, sql: str) -> str:
+        """Translate Oracle DECODE(expr, s1, r1, [s2, r2, ...], [default]).
+
+        Equivalent to a searched CASE expression:
+            CASE WHEN expr = s1 THEN r1 [WHEN expr = s2 THEN r2 ...]
+                 [ELSE default] END
+        Only applies when translating away from Oracle.
+        """
+        if self._source != "oracle" or self._target == "oracle":
+            return sql
+
+        def build(args: list[str]) -> str | None:
+            if len(args) < 3:
+                return None
+            expr = args[0]
+            pairs = args[1:]
+            parts = ["CASE"]
+            i = 0
+            while i + 1 < len(pairs):
+                parts.append(f"WHEN {expr} = {pairs[i]} THEN {pairs[i + 1]}")
+                i += 2
+            if i < len(pairs):  # trailing default
+                parts.append(f"ELSE {pairs[i]}")
+            parts.append("END")
+            return " ".join(parts)
+
+        return self._rewrite_calls(sql, "DECODE", build)
 
     def _transform_substring_position(self, sql: str) -> str:
         """Translate substring-position functions with argument reordering.
