@@ -155,6 +155,17 @@ class TestRealWorldSpecific:
         batches = [b for b in BatchSplitter.split(sql, "oracle") if not b.is_empty]
         assert len(batches) >= 20
 
+    def test_oracle_hr_rem_prompt_preserved_as_comments(self) -> None:
+        # 'rem' (copyright) and 'prompt' (progress) directives should survive
+        # transpilation as SQL comments, not be dropped.
+        sql = _load("hr_create_oracle.sql")
+        result = transpile(sql, "oracle", "tsql")
+        comments = [
+            line for line in result.sql.split("\n") if line.strip().startswith("--")
+        ]
+        assert any("Copyright" in c for c in comments)
+        assert any("PROMPT:" in c for c in comments)
+
     def test_northwind_to_tsql_keeps_tables(self) -> None:
         sql = _load("northwind_postgresql.sql")
         result = transpile(sql, "postgresql", "tsql")

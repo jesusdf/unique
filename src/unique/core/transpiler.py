@@ -152,7 +152,10 @@ class Transpiler:
             output_parts: list[str] = []
 
             for batch in batches:
-                if batch.is_empty:
+                # Skip empty batches, but keep explicit COMMENT batches: they
+                # have no executable SQL yet carry information worth preserving
+                # (e.g. Oracle 'rem'/'prompt' notices) in the output.
+                if batch.is_empty and batch.batch_type != BatchType.COMMENT:
                     continue
 
                 if batch.batch_type == BatchType.PROCEDURAL:
@@ -161,6 +164,10 @@ class Transpiler:
                     )
                 elif batch.batch_type == BatchType.SET_OPTION:
                     result = self._transpile_set_option(batch.sql, source, target)
+                elif batch.batch_type == BatchType.COMMENT:
+                    # Comments carry no executable SQL; preserve them verbatim
+                    # (already normalized to '-- ...' line comments).
+                    result = TranspileResult(sql=batch.sql, warnings=[], unsupported=[])
                 else:
                     result = self._transpile_dml(
                         batch.sql, source, target, source_dialect, target_dialect
