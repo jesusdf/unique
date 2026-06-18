@@ -1693,6 +1693,12 @@ class ProceduralParser:
         paren_depth = 0
         begin_depth = 0
         first = True
+        prev_tok: Token | None = None
+        lead_verb = (
+            self._current().upper_value
+            if self._current().type == TokenType.KEYWORD
+            else ""
+        )
 
         while not self._at_end():
             tok = self._current()
@@ -1706,6 +1712,18 @@ class ProceduralParser:
                 and paren_depth == 0
                 and begin_depth == 0
                 and self._at_tsql_stmt_boundary()
+            ):
+                break
+
+            # Boundary between two semicolon-less DML statements: a new DML
+            # verb on a new line whose preceding token does not chain it
+            # (so INSERT ... SELECT, UNION, subqueries, etc. stay together).
+            if (
+                not first
+                and paren_depth == 0
+                and begin_depth == 0
+                and self._dialect == "tsql"
+                and self._starts_new_dml(tok, prev_tok, lead_verb)
             ):
                 break
 
@@ -1723,11 +1741,69 @@ class ProceduralParser:
                 paren_depth -= 1
 
             parts.append(tok.value)
+            prev_tok = tok
             self._advance()
             first = False
 
         sql = " ".join(parts).strip()
         return EmbeddedDML(sql=sql, dialect=self._dialect)
+
+    # DML verbs that can start a standalone statement.
+    _DML_START_KEYWORDS = frozenset({"SELECT", "INSERT", "UPDATE", "DELETE", "MERGE"})
+    # Tokens after which a DML verb is a continuation, not a new statement.
+    _DML_CHAINING_KEYWORDS = frozenset(
+        {
+            "UNION",
+            "EXCEPT",
+            "INTERSECT",
+            "AS",
+            "OUTPUT",
+            "INTO",
+            "VALUES",
+            "FROM",
+            "RETURNING",
+            "WITH",
+            "ALL",
+            "EXISTS",
+            "IN",
+        }
+    )
+
+    def _starts_new_dml(
+        self, tok: Token, prev_tok: Token | None, lead_verb: str = ""
+    ) -> bool:
+        """Whether ``tok`` begins a new DML statement after a previous one.
+
+        True only when ``tok`` is a DML verb on a different source line than
+        the previous token, and the previous token does not syntactically
+        chain into it (which would indicate INSERT ... SELECT, a UNION, a
+        subquery, etc.).
+        """
+        if prev_tok is None:
+            return False
+        if tok.type != TokenType.KEYWORD or tok.upper_value not in (
+            self._DML_START_KEYWORDS
+        ):
+            return False
+        # An INSERT statement is commonly followed by its source SELECT; never
+        # split an INSERT before a SELECT/VALUES.
+        if lead_verb == "INSERT" and tok.upper_value == "SELECT":
+            return False
+        if tok.line == prev_tok.line:
+            return False
+        # Previous token chains into this verb → not a boundary.
+        if prev_tok.type in (
+            TokenType.COMMA,
+            TokenType.LPAREN,
+            TokenType.OPERATOR,
+        ):
+            return False
+        if (
+            prev_tok.type == TokenType.KEYWORD
+            and prev_tok.upper_value in self._DML_CHAINING_KEYWORDS
+        ):
+            return False
+        return True
 
     # ---------------------------------------------------------------
     # Fallback

@@ -246,6 +246,55 @@ class TestTriggerPredicates:
         assert "EmbeddedDML" in body_kinds
 
 
+class TestConsecutiveDML:
+    def test_consecutive_deletes_split(self) -> None:
+        sql = (
+            "CREATE PROCEDURE p AS BEGIN\n"
+            "  DELETE FROM a WHERE x = 1\n"
+            "  DELETE FROM b WHERE y = 2\n"
+            "  SELECT 1\n"
+            "END"
+        )
+        result = _parse(sql, "tsql")
+        dml = [s for s in result.node.body if type(s).__name__ == "EmbeddedDML"]
+        assert len(dml) == 3
+
+    def test_insert_select_stays_together(self) -> None:
+        sql = (
+            "CREATE PROCEDURE p AS BEGIN\n"
+            "  INSERT INTO t (a, b)\n"
+            "  SELECT a, b FROM src\n"
+            "END"
+        )
+        result = _parse(sql, "tsql")
+        dml = [s for s in result.node.body if type(s).__name__ == "EmbeddedDML"]
+        assert len(dml) == 1
+        assert "INSERT" in dml[0].sql and "SELECT" in dml[0].sql
+
+    def test_insert_values_then_update_split(self) -> None:
+        sql = (
+            "CREATE PROCEDURE p AS BEGIN\n"
+            "  INSERT INTO t VALUES (1, 2)\n"
+            "  UPDATE t SET x = 1\n"
+            "END"
+        )
+        result = _parse(sql, "tsql")
+        dml = [s for s in result.node.body if type(s).__name__ == "EmbeddedDML"]
+        assert len(dml) == 2
+
+    def test_update_from_stays_together(self) -> None:
+        # T-SQL UPDATE ... FROM: the FROM continues the UPDATE.
+        sql = (
+            "CREATE PROCEDURE p AS BEGIN\n"
+            "  UPDATE t SET x = s.y\n"
+            "  FROM t JOIN s ON t.id = s.id\n"
+            "END"
+        )
+        result = _parse(sql, "tsql")
+        dml = [s for s in result.node.body if type(s).__name__ == "EmbeddedDML"]
+        assert len(dml) == 1
+
+
 class TestErrorHandling:
     def test_set_option_without_semicolon_keeps_body(self) -> None:
         # Regression: "SET NOCOUNT ON" without a trailing semicolon must not
