@@ -1,6 +1,12 @@
 # Unique — Project Status
 
-## Current Phase: Procedural Engine Complete
+## Current Phase: Real-World Hardening
+
+The DML/DDL pipeline and the autonomous procedural engine are complete for
+all 12 dialect pairs. Current focus is hardening against real production
+schemas (public sample databases + a private procedures file) and closing
+DDL gaps (ALTER TABLE, indexes, sequences, table-level constraints).
+See `docs/TODO.md` for the prioritized backlog.
 
 ### Completed
 
@@ -70,44 +76,66 @@ PREPARE / native USING), cursors and `EXIT WHEN cur%NOTFOUND`, unconditional
 | core/registry | 7 |
 | core/converter | 45 |
 | core/transformer | 14 |
-| core/transpiler | 13 |
+| core/transpiler | 15 |
 | dialects | 16 |
 | procedural/lexer | 24 |
-| procedural/batch_splitter | 21 |
-| procedural/parser | 21 |
-| procedural/transformer | 32 |
+| procedural/batch_splitter | 25 |
+| procedural/parser | 29 |
+| procedural/transformer | 54 |
 | procedural/emitter | 25 |
 | procedural/metadata | 25 |
 | cli | 9 |
 | api | 9 |
-| integration (cross-dialect) | 214 |
-| integration (procedural) | 25 |
+| integration (cross-dialect) | 228 |
+| integration (procedural) | 26 |
+| integration (real-world fixtures) | 50 |
 | integration (metadata live) | 7 (skipped without DB) |
 | property-based (Hypothesis) | 7 |
-| **Total** | **528 (+7 skipped)** |
+| **Total** | **623 (+7 skipped)** |
 
-Overall line coverage: ~79%. Live `--db-url` resolution is exercised in CI
-against real PostgreSQL 16 and MySQL 8 service containers.
+Overall line coverage: ~80%. Live `--db-url` resolution is exercised in CI
+against real PostgreSQL 16 and MySQL 8 service containers. Four public
+sample schemas (AdventureWorksLT, Oracle HR, Sakila, Northwind) are
+transpiled across all 12 dialect pairs as regression guards
+(see `tests/fixtures/real_world/SOURCES.md`).
 
 ### Known Limitations
 
-See `docs/03-unsupported.md` for the full list. Highlights:
+See `docs/03-unsupported.md` for the full list and `docs/TODO.md` for the
+prioritized backlog. Highlights:
 
 - **`%TYPE`/`%ROWTYPE` without `--db-url`** → emitted as `SQL_VARIANT` with a warning
 - **`EXECUTE IMMEDIATE ... USING`** (Oracle bind variables) → flagged for manual conversion
 - **Table variables** (`DECLARE @t TABLE (...)`) → column list captured verbatim
 - **Ref cursors as OUT parameters** → require manual adaptation
+- **ALTER TABLE / CREATE INDEX / CREATE SEQUENCE** → IR nodes exist but are
+  not yet wired through the converter (commented passthrough today)
+- **Table-level constraints and user-defined domain types** in CREATE TABLE
 - Oracle-specific (CONNECT BY, MODEL) and T-SQL-specific (CROSS/OUTER APPLY) constructs
 
 ### Next Steps
 
+See `docs/TODO.md` for the full prioritized backlog. Highest priority:
+
+- [ ] Wire ALTER TABLE, CREATE INDEX, CREATE SEQUENCE, CREATE SCHEMA through the IR
+- [ ] Table-level constraints (PK/FK/UNIQUE/CHECK) and user-defined domain types
+- [ ] `SELECT ... INTO <var>` consistency across source dialects
+- [ ] Argument-reordering function mappings (CHARINDEX/INSTR/LOCATE, DECODE→CASE)
+- [ ] End-to-end tests with the private `procedures.sql` (delivery TBD)
+- [ ] Publish to PyPI — **deferred (do not publish yet)**
+
+#### Completed since last review
+
 - [x] Unit tests for procedural transformer, emitter, and metadata resolver
-- [x] Live `--db-url` integration tests (against containerized databases)
-- [x] Handle `EXECUTE IMMEDIATE ... USING` → `sp_executesql` parameter mapping
+- [x] Live `--db-url` integration tests (containerized databases)
+- [x] `EXECUTE IMMEDIATE ... USING` → `sp_executesql` parameter mapping
 - [x] Property-based testing with Hypothesis
 - [x] PostgreSQL and MySQL as source and target dialects
 - [x] CLI and API test coverage
-- [ ] Publish to PyPI
-- [ ] Convert Oracle CONNECT BY → recursive CTE
-- [ ] Convert cursor FOR-loops to explicit T-SQL/MySQL cursors automatically
-- [ ] Broaden function-mapping tables (date/string functions)
+- [x] DATEADD / DATEDIFF translation; broadened function-mapping tables
+- [x] Real-world fixture transpilation tests (4 schemas × 12 pairs)
+- [x] Oracle splitter: semicolon scripts, `rem`/`prompt` preserved as comments
+- [x] MySQL routine characteristics (DETERMINISTIC, READS SQL DATA, ...)
+- [x] SQL Server system procedures emitted as comments cross-dialect
+- [x] CREATE TABLE column constraints preserved (IDENTITY, NULL, DEFAULT);
+      ROWGUIDCOL / NOT FOR REPLICATION stripped
