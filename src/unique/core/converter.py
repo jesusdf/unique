@@ -688,6 +688,11 @@ def _convert_data_type(expr: exp.Expression) -> DataType:
     """Convert a sqlglot data type expression to our DataType."""
     if isinstance(expr, exp.DataType):
         name = expr.this.value if hasattr(expr.this, "value") else str(expr.this)
+        # User-defined / domain types (e.g. T-SQL [dbo].[Name]) carry their
+        # real name in the 'kind' arg; sqlglot's 'this' is just USER-DEFINED.
+        if name == "USER-DEFINED" and expr.args.get("kind") is not None:
+            kind = expr.args["kind"]
+            name = kind.sql() if hasattr(kind, "sql") else str(kind)
         params: list[int] = []
         for p in expr.expressions:
             if isinstance(p, exp.DataTypeParam):

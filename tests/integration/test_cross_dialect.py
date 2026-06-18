@@ -244,6 +244,14 @@ class TestCrossDialectDDL:
         assert "ROWGUIDCOL" not in result.sql.upper()
         assert "CREATE TABLE" in result.sql.upper()
 
+    def test_user_defined_domain_type_preserved(self, transpiler: Transpiler) -> None:
+        # A T-SQL user-defined type [dbo].[Name] must keep its name, not
+        # collapse to the literal USER-DEFINED.
+        sql = "CREATE TABLE t ([col] [dbo].[Name] NOT NULL)"
+        result = transpiler.transpile(sql, "tsql", "postgresql")
+        assert "USER-DEFINED" not in result.sql.upper()
+        assert "Name" in result.sql
+
 
 class TestDDLPassthrough:
     """ALTER TABLE / CREATE INDEX / CREATE SEQUENCE round-trip via sqlglot."""
