@@ -206,27 +206,104 @@ _TSQL_TO_MYSQL_TYPES: dict[str, str] = {
 
 # Function mapping tables
 _TSQL_TO_ORACLE_FUNCS: dict[str, str] = {
-    "GETDATE": "SYSDATE",
+    "GETUTCDATE": "SYS_EXTRACT_UTC(SYSTIMESTAMP)",
     "ISNULL": "NVL",
     "LEN": "LENGTH",
     "CHARINDEX": "INSTR",
     "NEWID": "SYS_GUID",
+    "UPPER": "UPPER",
+    "LOWER": "LOWER",
+    "LTRIM": "LTRIM",
+    "RTRIM": "RTRIM",
+    "REPLACE": "REPLACE",
+    "SUBSTRING": "SUBSTR",
+    "CEILING": "CEIL",
+    "SQUARE": "-- SQUARE(x) -> x*x",
     "SCOPE_IDENTITY": "SEQUENCE_NAME.CURRVAL",
     "DATEDIFF": "-- DATEDIFF requires manual conversion",
     "DATEADD": "-- DATEADD requires manual conversion",
 }
 
 _ORACLE_TO_TSQL_FUNCS: dict[str, str] = {
-    "SYSDATE": "GETDATE()",
     "NVL": "ISNULL",
     "LENGTH": "LEN",
     "INSTR": "CHARINDEX",
     "SYS_GUID": "NEWID",
+    "SUBSTR": "SUBSTRING",
+    "CEIL": "CEILING",
     "TO_CHAR": "CONVERT",
     "TO_DATE": "CONVERT",
     "TO_NUMBER": "CAST",
     "DECODE": "-- DECODE requires CASE conversion",
     "TRUNC": "-- TRUNC requires manual conversion",
+    "NVL2": "-- NVL2 requires CASE conversion",
+}
+
+_TSQL_TO_PG_FUNCS: dict[str, str] = {
+    "GETUTCDATE": "NOW() AT TIME ZONE 'UTC'",
+    "ISNULL": "COALESCE",
+    "LEN": "LENGTH",
+    "CHARINDEX": "-- CHARINDEX(a,b) -> POSITION(a IN b)",
+    "NEWID": "GEN_RANDOM_UUID",
+    "SUBSTRING": "SUBSTRING",
+    "UPPER": "UPPER",
+    "LOWER": "LOWER",
+    "REPLACE": "REPLACE",
+    "CEILING": "CEIL",
+    "DATEDIFF": "-- DATEDIFF requires manual conversion",
+    "DATEADD": "-- DATEADD requires interval arithmetic",
+}
+
+_PG_TO_TSQL_FUNCS: dict[str, str] = {
+    "COALESCE": "COALESCE",
+    "LENGTH": "LEN",
+    "GEN_RANDOM_UUID": "NEWID",
+    "CEIL": "CEILING",
+    "POSITION": "-- POSITION(a IN b) -> CHARINDEX(a,b)",
+}
+
+_TSQL_TO_MYSQL_FUNCS: dict[str, str] = {
+    "GETUTCDATE": "UTC_TIMESTAMP",
+    "ISNULL": "IFNULL",
+    "LEN": "CHAR_LENGTH",
+    "CHARINDEX": "-- CHARINDEX(a,b) -> LOCATE(a,b)",
+    "NEWID": "UUID",
+    "SUBSTRING": "SUBSTRING",
+    "UPPER": "UPPER",
+    "LOWER": "LOWER",
+    "REPLACE": "REPLACE",
+    "CEILING": "CEILING",
+    "DATEDIFF": "-- DATEDIFF differs (MySQL DATEDIFF returns days)",
+    "DATEADD": "-- DATEADD -> DATE_ADD with INTERVAL",
+}
+
+_MYSQL_TO_TSQL_FUNCS: dict[str, str] = {
+    "IFNULL": "ISNULL",
+    "CHAR_LENGTH": "LEN",
+    "LENGTH": "LEN",
+    "UUID": "NEWID",
+    "LOCATE": "-- LOCATE(a,b) -> CHARINDEX(a,b)",
+}
+
+_ORACLE_TO_PG_FUNCS: dict[str, str] = {
+    "NVL": "COALESCE",
+    "LENGTH": "LENGTH",
+    "INSTR": "-- INSTR(b,a) -> POSITION(a IN b)",
+    "SYS_GUID": "GEN_RANDOM_UUID",
+    "SUBSTR": "SUBSTRING",
+    "TO_CHAR": "TO_CHAR",
+    "TO_DATE": "TO_DATE",
+    "TO_NUMBER": "-- TO_NUMBER -> CAST(... AS NUMERIC)",
+}
+
+_ORACLE_TO_MYSQL_FUNCS: dict[str, str] = {
+    "NVL": "IFNULL",
+    "LENGTH": "CHAR_LENGTH",
+    "INSTR": "-- INSTR(b,a) -> LOCATE(a,b)",
+    "SYS_GUID": "UUID",
+    "SUBSTR": "SUBSTRING",
+    "TO_CHAR": "-- TO_CHAR -> DATE_FORMAT/CAST",
+    "TO_DATE": "STR_TO_DATE",
 }
 
 
@@ -727,18 +804,73 @@ class ProceduralTransformer:
         return RawSQL(sql=sql, reason=node.reason)
 
     def _transform_functions_in_sql(self, sql: str) -> str:
-        """Transform function names in raw SQL text."""
-        func_map = self._get_func_map()
-        for old, new in func_map.items():
-            if not new.startswith("--"):
-                sql = re.sub(rf"\b{re.escape(old)}\b", new, sql, flags=re.IGNORECASE)
-        return sql
+        """Transform function names in raw SQL text.
+
+        Applies all mappings in a single pass (alternation regex) so that a
+        replacement's output cannot be re-matched by a later mapping. Only
+        function-call positions (name followed by '(') are rewritten, and
+        commented placeholder mappings are skipped.
+        """
+        sql = self._transform_niladic_datetime(sql)
+
+        func_map = {
+            old: new
+            for old, new in self._get_func_map().items()
+            if not new.startswith("--") and old.upper() != new.upper()
+        }
+        if not func_map:
+            return sql
+
+        # Longest names first to avoid partial-overlap surprises.
+        names = sorted(func_map, key=len, reverse=True)
+        pattern = re.compile(
+            r"\b(" + "|".join(re.escape(n) for n in names) + r")\b(\s*\()",
+            flags=re.IGNORECASE,
+        )
+
+        lookup = {k.upper(): v for k, v in func_map.items()}
+
+        def repl(m: re.Match[str]) -> str:
+            return lookup[m.group(1).upper()] + m.group(2)
+
+        return pattern.sub(repl, sql)
+
+    # Current-timestamp expressions, by dialect. Oracle/PG use a bare
+    # keyword; T-SQL/MySQL use a function call.
+    _NOW_EXPR = {
+        "tsql": "GETDATE()",
+        "oracle": "SYSDATE",
+        "postgresql": "NOW()",
+        "mysql": "NOW()",
+    }
+
+    def _transform_niladic_datetime(self, sql: str) -> str:
+        """Translate current-timestamp expressions across dialects.
+
+        Handles the forms that differ in whether they take parentheses:
+        GETDATE() (T-SQL), SYSDATE (Oracle), NOW() (PG/MySQL).
+        """
+        target_expr = self._NOW_EXPR.get(self._target)
+        if not target_expr:
+            return sql
+        # Match GETDATE(), SYSDATE, NOW() (optional parens/spaces).
+        pattern = re.compile(
+            r"\b(GETDATE\s*\(\s*\)|SYSDATE\b(?!\s*\()|NOW\s*\(\s*\))",
+            flags=re.IGNORECASE,
+        )
+        return pattern.sub(target_expr, sql)
 
     def _get_func_map(self) -> dict[str, str]:
         key = f"{self._source}_{self._target}"
         maps = {
             "tsql_oracle": _TSQL_TO_ORACLE_FUNCS,
             "oracle_tsql": _ORACLE_TO_TSQL_FUNCS,
+            "tsql_postgresql": _TSQL_TO_PG_FUNCS,
+            "postgresql_tsql": _PG_TO_TSQL_FUNCS,
+            "tsql_mysql": _TSQL_TO_MYSQL_FUNCS,
+            "mysql_tsql": _MYSQL_TO_TSQL_FUNCS,
+            "oracle_postgresql": _ORACLE_TO_PG_FUNCS,
+            "oracle_mysql": _ORACLE_TO_MYSQL_FUNCS,
         }
         return maps.get(key, {})
 
