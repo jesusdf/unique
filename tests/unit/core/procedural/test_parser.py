@@ -207,6 +207,45 @@ class TestSemicolonLessTSQL:
         assert "SetVariableStatement" in kinds
 
 
+class TestTriggerPredicates:
+    def test_if_update_column_predicate(self) -> None:
+        # IF UPDATE(col) is a trigger predicate (a function call), not the
+        # start of an UPDATE statement; its body must not be swallowed.
+        sql = (
+            "CREATE TRIGGER t ON tbl AFTER UPDATE AS BEGIN\n"
+            "  IF UPDATE(isonline)\n"
+            "  BEGIN\n"
+            "    INSERT INTO log VALUES (1);\n"
+            "  END\n"
+            "END"
+        )
+        result = _parse(sql, "tsql")
+
+        # Locate the IF node.
+        from unique.core.ast_nodes import IfStatement
+
+        def find_if(node: object) -> object | None:
+            if isinstance(node, IfStatement):
+                return node
+            for f in getattr(node, "__dataclass_fields__", {}):
+                v = getattr(node, f)
+                items = v if isinstance(v, tuple) else (v,)
+                for x in items:
+                    if hasattr(x, "__dataclass_fields__"):
+                        found = find_if(x)
+                        if found:
+                            return found
+            return None
+
+        iff = find_if(result.node)
+        assert iff is not None
+        assert "UPDATE" in iff.condition.sql
+        assert "isonline" in iff.condition.sql
+        # The INSERT must be in the body, not merged into the condition.
+        body_kinds = [type(s).__name__ for s in iff.then_body]
+        assert "EmbeddedDML" in body_kinds
+
+
 class TestErrorHandling:
     def test_set_option_without_semicolon_keeps_body(self) -> None:
         # Regression: "SET NOCOUNT ON" without a trailing semicolon must not

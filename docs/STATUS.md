@@ -34,8 +34,8 @@
 
 ### Procedural Engine — Real-World Validation
 
-Validated end-to-end against `procedures.sql` (4,322 lines, 25 procedures + 1 trigger),
-both directions:
+Validated end-to-end against a private real-world script (not included in
+this repository — ~4,300 lines, 25 procedures + 1 trigger), both directions:
 
 | Direction | Procedures | Empty bodies | Translated IF blocks | Assignments | Errors |
 |-----------|-----------:|-------------:|---------------------:|------------:|-------:|
