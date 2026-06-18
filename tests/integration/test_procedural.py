@@ -195,6 +195,25 @@ class TestPostgreSQLAsSource:
 
 
 class TestMySQLAsSource:
+    def test_function_characteristics_consumed(self) -> None:
+        # MySQL routine characteristics (DETERMINISTIC, READS SQL DATA, ...)
+        # between the signature and BEGIN must not become junk declarations.
+        sql = (
+            "CREATE FUNCTION f(p INT) RETURNS DECIMAL(5,2)\n"
+            "    DETERMINISTIC\n"
+            "    READS SQL DATA\n"
+            "BEGIN\n"
+            "    DECLARE v DECIMAL(5,2);\n"
+            "    SET v = p * 2;\n"
+            "    RETURN v;\n"
+            "END"
+        )
+        out = _transpile(sql, "mysql", "tsql")
+        assert "DETERMINISTIC" not in out
+        assert "READS SQL DATA" not in out
+        assert "DECLARE v" in out
+        assert "RETURN v" in out
+
     def test_routine_not_fragmented_without_delimiter(self) -> None:
         from unique.core.batch_splitter import BatchSplitter
 
