@@ -1844,12 +1844,11 @@ class ProceduralParser:
             TokenType.OPERATOR,
         ):
             return False
-        if (
+        # A chaining keyword (UNION, FROM, INTO, ...) means continuation.
+        return not (
             prev_tok.type == TokenType.KEYWORD
             and prev_tok.upper_value in self._DML_CHAINING_KEYWORDS
-        ):
-            return False
-        return True
+        )
 
     # ---------------------------------------------------------------
     # Fallback
