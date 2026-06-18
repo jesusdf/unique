@@ -55,6 +55,7 @@ from unique.core.ast_nodes import (
     ReturnStatement,
     SelectIntoStatement,
     SetVariableStatement,
+    StatementList,
     TryCatchBlock,
     WhileStatement,
 )
@@ -103,6 +104,7 @@ class ProceduralEmitter:
             ForLoopStatement: self._emit_for_loop,
             LoopStatement: self._emit_loop,
             BeginEndBlock: self._emit_begin_end,
+            StatementList: self._emit_statement_list,
             TryCatchBlock: self._emit_try_catch,
             ExceptionBlock: self._emit_exception_block,
             ExecuteStatement: self._emit_execute,
@@ -649,6 +651,10 @@ class ProceduralEmitter:
         else:
             lines.append("END;")
         return "\n".join(lines)
+
+    def _emit_statement_list(self, node: StatementList) -> str:
+        """Emit a transparent statement sequence (no wrapper)."""
+        return "\n".join(self._emit_node(stmt) for stmt in node.statements)
 
     def _emit_try_catch(self, node: TryCatchBlock) -> str:
         if self._dialect == "tsql":

@@ -56,6 +56,7 @@ from unique.core.ast_nodes import (
     ReturnStatement,
     SelectIntoStatement,
     SetVariableStatement,
+    StatementList,
     TryCatchBlock,
     WhileStatement,
 )
@@ -356,6 +357,7 @@ class ProceduralTransformer:
             IfStatement: self._transform_if,
             WhileStatement: self._transform_while,
             BeginEndBlock: self._transform_begin_end,
+            StatementList: self._transform_statement_list,
             TryCatchBlock: self._transform_try_catch,
             ExceptionBlock: self._transform_exception_block,
             ExecuteStatement: self._transform_execute,
@@ -661,6 +663,9 @@ class ProceduralTransformer:
 
     def _transform_begin_end(self, node: BeginEndBlock) -> BeginEndBlock:
         return BeginEndBlock(statements=self._transform_body(node.statements))
+
+    def _transform_statement_list(self, node: StatementList) -> StatementList:
+        return StatementList(statements=self._transform_body(node.statements))
 
     def _transform_try_catch(self, node: TryCatchBlock) -> ASTNode:
         if self._target == "oracle":

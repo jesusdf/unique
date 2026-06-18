@@ -54,6 +54,7 @@ from unique.core.ast_nodes import (
     ReturnStatement,
     SelectIntoStatement,
     SetVariableStatement,
+    StatementList,
     TryCatchBlock,
     WhileStatement,
 )
@@ -795,31 +796,46 @@ class ProceduralParser:
         return self._parse_embedded_dml()
 
     def _parse_tsql_declare(self) -> ASTNode:
-        """Parse DECLARE @var type [= value]."""
+        """Parse DECLARE @var type [= value] [, @var2 type [= value] ...].
+
+        T-SQL allows several comma-separated variable declarations in a
+        single DECLARE; they expand to one DeclareStatement each.
+        """
         self._expect_keyword("DECLARE")
-        tok = self._current()
 
-        if tok.type == TokenType.VARIABLE:
-            var_name = self._advance().value
-        else:
-            var_name = self._parse_identifier()
+        declarations: list[ASTNode] = []
+        while True:
+            tok = self._current()
+            if tok.type == TokenType.VARIABLE:
+                var_name = self._advance().value
+            else:
+                var_name = self._parse_identifier()
 
-        # CURSOR declaration
-        if self._current().is_keyword("CURSOR"):
-            self._advance()
-            query: ASTNode | None = None
-            if self._match_keyword("FOR"):
-                query = self._parse_embedded_dml()
-            return CursorDeclaration(name=var_name, query=query)
+            # CURSOR declaration (always single).
+            if self._current().is_keyword("CURSOR"):
+                self._advance()
+                query: ASTNode | None = None
+                if self._match_keyword("FOR"):
+                    query = self._parse_embedded_dml()
+                return CursorDeclaration(name=var_name, query=query)
 
-        data_type = self._parse_data_type()
-        default: ASTNode | None = None
+            data_type = self._parse_data_type()
+            default: ASTNode | None = None
+            if self._match_type(TokenType.OPERATOR):  # =
+                default = self._parse_declare_default()
 
-        if self._match_type(TokenType.OPERATOR):  # =
-            default = self._parse_expression_until_semicolon()
+            declarations.append(
+                DeclareStatement(name=var_name, data_type=data_type, default=default)
+            )
+
+            # Another variable in the same DECLARE?
+            if not self._match_type(TokenType.COMMA):
+                break
 
         self._match_type(TokenType.SEMICOLON)
-        return DeclareStatement(name=var_name, data_type=data_type, default=default)
+        if len(declarations) == 1:
+            return declarations[0]
+        return StatementList(statements=tuple(declarations))
 
     def _parse_tsql_if(self) -> ASTNode:
         """Parse T-SQL IF ... BEGIN...END [ELSE BEGIN...END]."""
@@ -1585,6 +1601,36 @@ class ProceduralParser:
             parts.append(tok.value)
             self._advance()
         return RawSQL(sql=" ".join(parts).strip(), reason="bind argument")
+
+    def _parse_declare_default(self) -> ASTNode:
+        """Capture a DECLARE default value.
+
+        Stops at a comma (next variable in the same DECLARE), a semicolon,
+        END, or a T-SQL statement boundary (so a semicolon-less DECLARE does
+        not absorb the statement that follows it).
+        """
+        parts: list[str] = []
+        paren_depth = 0
+        first = True
+        while not self._at_end():
+            tok = self._current()
+            if paren_depth == 0 and tok.type in (
+                TokenType.COMMA,
+                TokenType.SEMICOLON,
+            ):
+                break
+            if paren_depth == 0 and tok.is_keyword("END"):
+                break
+            if not first and paren_depth == 0 and self._at_tsql_stmt_boundary():
+                break
+            if tok.type == TokenType.LPAREN:
+                paren_depth += 1
+            elif tok.type == TokenType.RPAREN:
+                paren_depth -= 1
+            parts.append(tok.value)
+            self._advance()
+            first = False
+        return RawSQL(sql=" ".join(parts).strip(), reason="default value")
 
     def _parse_expression_simple(self) -> ASTNode:
         """Parse a simple expression (for default values, etc.)."""
