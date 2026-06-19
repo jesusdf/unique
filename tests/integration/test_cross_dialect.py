@@ -506,6 +506,53 @@ class TestDDLPassthrough:
         assert "WHERE" in result.sql.upper()
 
 
+class TestOutputReturning:
+    """T-SQL OUTPUT <-> PostgreSQL/Oracle RETURNING; MySQL has neither."""
+
+    @pytest.mark.parametrize("target", ["postgresql", "oracle"])
+    def test_output_insert_to_returning(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        sql = "INSERT INTO t (a) OUTPUT INSERTED.id VALUES (1)"
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "RETURNING" in result.sql.upper()
+        assert "id" in result.sql
+
+    def test_output_delete_preserves_where(self, transpiler: Transpiler) -> None:
+        # Critical: the OUTPUT clause must not cause the WHERE to be dropped
+        # (which would delete the whole table).
+        sql = "DELETE FROM t OUTPUT DELETED.id WHERE a = 1"
+        result = transpiler.transpile(sql, "tsql", "postgresql")
+        assert "WHERE" in result.sql.upper()
+        assert "a = 1" in result.sql
+        assert "RETURNING" in result.sql.upper()
+
+    def test_output_update_preserves_where(self, transpiler: Transpiler) -> None:
+        sql = "UPDATE t SET a = 1 OUTPUT INSERTED.id WHERE b = 2"
+        result = transpiler.transpile(sql, "tsql", "oracle")
+        assert "WHERE" in result.sql.upper()
+        assert "b = 2" in result.sql
+        assert "RETURNING" in result.sql.upper()
+
+    def test_output_to_mysql_documented(self, transpiler: Transpiler) -> None:
+        sql = "DELETE FROM t OUTPUT DELETED.id WHERE a = 1"
+        result = transpiler.transpile(sql, "tsql", "mysql")
+        # WHERE preserved, OUTPUT documented (MySQL has no OUTPUT/RETURNING).
+        assert "WHERE" in result.sql.upper()
+        assert "a = 1" in result.sql
+        assert "no OUTPUT/RETURNING" in result.sql
+
+    def test_returning_to_tsql_output(self, transpiler: Transpiler) -> None:
+        sql = "INSERT INTO t (a) VALUES (1) RETURNING id"
+        result = transpiler.transpile(sql, "postgresql", "tsql")
+        assert "OUTPUT" in result.sql.upper()
+
+    def test_returning_to_mysql_documented(self, transpiler: Transpiler) -> None:
+        sql = "INSERT INTO t (a) VALUES (1) RETURNING id"
+        result = transpiler.transpile(sql, "postgresql", "mysql")
+        assert "no RETURNING" in result.sql
+
+
 class TestCrossDialectExpressions:
     """Complex expressions across dialects."""
 

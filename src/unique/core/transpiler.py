@@ -51,6 +51,32 @@ def _warn(message: str, feature: str, source: str, target: str) -> TransformWarn
     )
 
 
+def _extract_tsql_output(sql: str) -> tuple[str, str | None]:
+    """Extract a T-SQL OUTPUT clause from a single DML statement.
+
+    Returns ``(base_sql_without_output, output_columns)`` or
+    ``(sql, None)`` if there is no OUTPUT clause. The OUTPUT clause in T-SQL
+    appears after the target/SET list and before WHERE/VALUES/FROM, so it is
+    removed in place, preserving the rest of the statement (crucially the
+    WHERE clause, whose loss would change DELETE/UPDATE semantics).
+
+    Only the simple ``OUTPUT <cols>`` form is handled (not ``OUTPUT ... INTO
+    <table>``); the latter returns ``(sql, None)`` so it is left untouched.
+    """
+    # OUTPUT ... INTO is a different construct (insert into a target table);
+    # do not treat it as a returning clause.
+    if re.search(r"(?i)\bOUTPUT\b.*\bINTO\b", sql):
+        return sql, None
+    m = re.search(r"(?i)\bOUTPUT\b\s+(.*?)(?=\s+\b(?:WHERE|VALUES|FROM)\b|;|$)", sql)
+    if not m:
+        return sql, None
+    output_cols = m.group(1).strip()
+    if not output_cols:
+        return sql, None
+    base = (sql[: m.start()].rstrip() + " " + sql[m.end() :].lstrip()).strip()
+    return base, output_cols
+
+
 @dataclass(frozen=True)
 class TranspileOptions:
     """Options controlling transpilation behavior."""
@@ -304,6 +330,33 @@ class Transpiler:
                         )
                     ],
                     unsupported=unsupported,
+                )
+
+        # T-SQL OUTPUT clause: sqlglot cannot parse it on DELETE/UPDATE (it
+        # sits before WHERE) and would drop the rest of the statement,
+        # including the WHERE — a dangerous data-loss bug. Extract it safely,
+        # transpile the base statement, then re-attach as RETURNING
+        # (PostgreSQL/Oracle) or a documented comment (MySQL, which lacks it).
+        if source == "tsql":
+            base_sql, output_cols = _extract_tsql_output(sql)
+            if output_cols is not None:
+                base_result = self._transpile_dml(
+                    base_sql, source, target, source_dialect, target_dialect
+                )
+                # Map the OUTPUT columns (strip INSERTED./DELETED. prefixes).
+                cols = re.sub(r"(?i)\b(INSERTED|DELETED)\.", "", output_cols).strip()
+                body = base_result.sql.rstrip().rstrip(";")
+                if target in ("postgresql", "oracle"):
+                    new_sql = f"{body} RETURNING {cols}"
+                else:  # mysql: no RETURNING/OUTPUT
+                    new_sql = (
+                        f"{body}\n-- UNIQUE: MySQL has no OUTPUT/RETURNING; "
+                        f"the statement returned: {cols}"
+                    )
+                return TranspileResult(
+                    sql=new_sql,
+                    warnings=base_result.warnings,
+                    unsupported=base_result.unsupported,
                 )
 
         try:

@@ -155,6 +155,17 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="MERGE",
         )
+    # INSERT/UPDATE/DELETE with a RETURNING clause: our DML IR drops it, so
+    # pass through to sqlglot (which maps RETURNING <-> OUTPUT) to preserve
+    # the returned columns.
+    if isinstance(expr, (exp.Insert, exp.Update, exp.Delete)) and expr.args.get(
+        "returning"
+    ):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="RETURNING",
+        )
     # Oracle hierarchical queries (START WITH / CONNECT BY) have no faithful
     # automatic rewrite; emit a documented comment instead of silently
     # dropping the clause (which would change results).
@@ -970,6 +981,16 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             "-- UNIQUE: Oracle CONNECT BY / START WITH hierarchical query has "
             "no automatic equivalent; rewrite as a WITH RECURSIVE CTE. "
             "Original:\n" + commented
+        )
+
+    # MySQL has no RETURNING/OUTPUT; comment it rather than emit invalid SQL.
+    if node.kind == "RETURNING" and dialect == "mysql":
+        m = re.search(r"(?i)\bRETURNING\b\s+(.*?)\s*;?\s*$", node.sql)
+        cols = m.group(1).strip() if m else ""
+        base = re.sub(r"(?i)\s*\bRETURNING\b.*$", "", node.sql).rstrip()
+        return (
+            f"{base};\n-- UNIQUE: MySQL has no RETURNING/OUTPUT; "
+            f"the statement returned: {cols}"
         )
 
     try:
