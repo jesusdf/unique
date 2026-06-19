@@ -45,7 +45,10 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 - [x] **MySQL `... BINARY` column attribute** — stripped before parsing
       (the BINARY(n) data type and BINARY(expr) function are preserved).
       `ON UPDATE CURRENT_TIMESTAMP` is handled by sqlglot directly.
-- [ ] **Computed/persisted columns** (`AS (expr) PERSISTED`).
+- [x] **Computed/persisted columns** (`AS (expr) PERSISTED`) — captured as a
+      passthrough fragment so sqlglot emits `GENERATED ALWAYS AS (expr)
+      STORED`; previously the expression was lost and the column became a
+      bare VARCHAR.
 
 ## 3. Procedural engine refinements (P2)
 
@@ -68,8 +71,8 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       PassthroughSQL); MySQL (no MERGE) gets a documented comment pointing to
       `INSERT ... ON DUPLICATE KEY UPDATE`.
 - [ ] **`OUTPUT` / `RETURNING` clause** full mapping (partial today).
-- [ ] **`@@IDENTITY` / `SCOPE_IDENTITY()`** → `lastval()` / `LAST_INSERT_ID()`
-      / sequence `CURRVAL`.
+- [x] **`@@IDENTITY` / `SCOPE_IDENTITY()`** → `LASTVAL()` (PG) /
+      `LAST_INSERT_ID()` (MySQL) / documented `<sequence>.CURRVAL` (Oracle).
 
 ## 4. Function mapping gaps (P2)
 

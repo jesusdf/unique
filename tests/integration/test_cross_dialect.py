@@ -297,6 +297,18 @@ class TestCrossDialectDDL:
         result = transpiler.transpile(sql, "mysql", "postgresql")
         assert "BINARY(16)" in result.sql.upper()
 
+    @pytest.mark.parametrize("target", ["postgresql", "mysql"])
+    def test_computed_column_preserved(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        # A computed column (AS (expr) PERSISTED) must keep its expression,
+        # not collapse to a plain VARCHAR.
+        sql = "CREATE TABLE t (a INT, b INT, total AS (a + b) PERSISTED)"
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "GENERATED ALWAYS AS" in result.sql.upper()
+        assert "a + b" in result.sql.replace("(", "").replace(")", "")
+        assert "total VARCHAR" not in result.sql.upper()
+
 
 class TestDDLPassthrough:
     """ALTER TABLE / CREATE INDEX / CREATE SEQUENCE round-trip via sqlglot."""
