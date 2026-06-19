@@ -382,6 +382,30 @@ class TestDDLPassthrough:
         assert result.sql.lstrip().startswith("--")
         assert "ON DUPLICATE KEY UPDATE" in result.sql
 
+    def test_connect_by_kept_for_oracle(self, transpiler: Transpiler) -> None:
+        sql = (
+            "SELECT employee_id FROM employees "
+            "START WITH manager_id IS NULL "
+            "CONNECT BY PRIOR employee_id = manager_id"
+        )
+        result = transpiler.transpile(sql, "oracle", "oracle")
+        assert "CONNECT BY" in result.sql.upper()
+
+    @pytest.mark.parametrize("target", ["postgresql", "mysql", "tsql"])
+    def test_connect_by_documented_elsewhere(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        sql = (
+            "SELECT employee_id FROM employees "
+            "START WITH manager_id IS NULL "
+            "CONNECT BY PRIOR employee_id = manager_id"
+        )
+        result = transpiler.transpile(sql, "oracle", target)
+        # The hierarchical clause must not be silently dropped.
+        assert result.sql.lstrip().startswith("--")
+        assert "RECURSIVE" in result.sql.upper()
+        assert "CONNECT BY" in result.sql.upper()
+
 
 class TestCrossDialectExpressions:
     """Complex expressions across dialects."""

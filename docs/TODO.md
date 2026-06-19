@@ -54,7 +54,11 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       SELECT-INTO path consistently for all source dialects.
 - [ ] **Cursor `FOR` loop → explicit cursor** for T-SQL/MySQL (currently
       flagged for manual conversion).
-- [ ] **`CONNECT BY` (Oracle hierarchical) → recursive CTE.**
+- [x] **`CONNECT BY` (Oracle hierarchical)** — kept as-is for Oracle; for
+      other targets emit a documented comment pointing to a WITH RECURSIVE
+      CTE rewrite, instead of silently dropping the clause (an automatic
+      rewrite cannot be done faithfully for arbitrary queries). A full
+      auto-conversion remains possible future work.
 - [x] **`MERGE`** — Oracle and PostgreSQL emit native MERGE (via
       PassthroughSQL); MySQL (no MERGE) gets a documented comment pointing to
       `INSERT ... ON DUPLICATE KEY UPDATE`.
