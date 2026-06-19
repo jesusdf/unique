@@ -55,7 +55,9 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 - [ ] **Cursor `FOR` loop → explicit cursor** for T-SQL/MySQL (currently
       flagged for manual conversion).
 - [ ] **`CONNECT BY` (Oracle hierarchical) → recursive CTE.**
-- [ ] **`MERGE` → MySQL** (`INSERT ... ON DUPLICATE KEY UPDATE`).
+- [x] **`MERGE`** — Oracle and PostgreSQL emit native MERGE (via
+      PassthroughSQL); MySQL (no MERGE) gets a documented comment pointing to
+      `INSERT ... ON DUPLICATE KEY UPDATE`.
 - [ ] **`OUTPUT` / `RETURNING` clause** full mapping (partial today).
 - [ ] **`@@IDENTITY` / `SCOPE_IDENTITY()`** → `lastval()` / `LAST_INSERT_ID()`
       / sequence `CURRVAL`.

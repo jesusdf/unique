@@ -148,6 +148,12 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="USE",
         )
+    if isinstance(expr, exp.Merge):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="MERGE",
+        )
     # CREATE TABLE is modeled in IR but its table-level constraints are kept
     # as passthrough fragments, which need the source dialect.
     if (
@@ -891,6 +897,15 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         return (
             f"-- UNIQUE: {dialect} has no USE statement; "
             f"connect to the target database/schema instead.\n-- {node.sql}"
+        )
+
+    # MySQL has no MERGE; the idiomatic equivalent is INSERT ... ON
+    # DUPLICATE KEY UPDATE, which needs key knowledge we can't infer safely.
+    if node.kind == "MERGE" and dialect == "mysql":
+        commented = "\n".join(f"-- {ln}" for ln in node.sql.splitlines())
+        return (
+            "-- UNIQUE: MySQL has no MERGE; rewrite as "
+            "INSERT ... ON DUPLICATE KEY UPDATE. Original:\n" + commented
         )
 
     try:
