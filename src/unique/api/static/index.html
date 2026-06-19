@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Unique — SQL Transpiler</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --panel: #171a23;
+    --panel-2: #1d2130;
+    --border: #2a2f3e;
+    --text: #e6e8ee;
+    --muted: #9aa3b2;
+    --accent: #5b8cff;
+    --accent-2: #38bdf8;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --err: #f87171;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--sans); line-height: 1.5;
+  }
+  header {
+    padding: 18px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: baseline; gap: 14px;
+  }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
+  header .tag { color: var(--muted); font-size: 13px; }
+  header .spacer { flex: 1; }
+  header a { color: var(--accent-2); text-decoration: none; font-size: 13px; }
+  main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;
+    margin-bottom: 16px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+  select, button, input[type=file]::file-selector-button {
+    font-family: var(--sans); font-size: 14px;
+  }
+  select {
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; min-width: 150px;
+  }
+  .swap-btn {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 9px 12px; cursor: pointer; font-size: 16px;
+  }
+  .swap-btn:hover { border-color: var(--accent); }
+  .primary {
+    background: linear-gradient(180deg, var(--accent), #4072e6);
+    color: white; border: none; border-radius: 8px; padding: 10px 18px;
+    font-weight: 600; cursor: pointer;
+  }
+  .primary:hover { filter: brightness(1.07); }
+  .primary:disabled { opacity: .5; cursor: default; }
+  .ghost {
+    background: transparent; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 14px; cursor: pointer;
+  }
+  .ghost:hover { color: var(--text); border-color: var(--accent); }
+  .editors { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .editors { grid-template-columns: 1fr; } }
+  .editor { display: flex; flex-direction: column; }
+  .editor .head {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    font-size: 13px; color: var(--muted);
+  }
+  .editor .head .badge {
+    margin-left: auto; font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+  }
+  textarea {
+    width: 100%; min-height: 380px; resize: vertical;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; font-family: var(--mono); font-size: 13px;
+    line-height: 1.55; tab-size: 2;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  textarea[readonly] { background: #13161f; }
+  .messages { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+  .msg {
+    font-size: 13px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel);
+  }
+  .msg.warn { border-color: #5b4a14; }
+  .msg.err { border-color: #5b1d1d; color: #fecaca; }
+  .msg .k { color: var(--warn); font-weight: 600; margin-right: 6px; }
+  .copy-btn {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 3px 9px; cursor: pointer; font-size: 12px;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+  .detect-note { font-size: 12px; color: var(--accent-2); min-height: 16px; }
+  section.file {
+    margin-top: 28px; padding: 18px; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px;
+  }
+  section.file h2 { margin: 0 0 4px; font-size: 15px; }
+  section.file p { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+  .file-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+  input[type=file] {
+    color: var(--muted); font-size: 13px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px;
+  }
+  input[type=file]::file-selector-button {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px; margin-right: 10px; cursor: pointer;
+  }
+  .spinner {
+    display: inline-block; width: 14px; height: 14px; border: 2px solid var(--muted);
+    border-top-color: transparent; border-radius: 50%; animation: spin .7s linear infinite;
+    vertical-align: -2px; margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Unique</h1>
+  <span class="tag">SQL transpiler — SQL&nbsp;Server · Oracle · PostgreSQL · MySQL</span>
+  <span class="spacer"></span>
+  <a href="/docs" target="_blank">API docs</a>
+</header>
+
+<main>
+  <div class="toolbar">
+    <div class="field">
+      <label for="source">Source engine</label>
+      <select id="source"></select>
+    </div>
+    <button class="swap-btn" id="swap" title="Swap source and target">⇄</button>
+    <div class="field">
+      <label for="target">Target engine</label>
+      <select id="target"></select>
+    </div>
+    <button class="primary" id="run">Translate</button>
+    <button class="ghost" id="clear">Clear</button>
+    <div class="field" style="flex:1; min-width: 180px;">
+      <label>&nbsp;</label>
+      <div class="detect-note" id="detectNote"></div>
+    </div>
+  </div>
+
+  <div class="editors">
+    <div class="editor">
+      <div class="head">
+        <span>Source script</span>
+        <span class="badge" id="srcBadge">auto-detect on type</span>
+      </div>
+      <textarea id="input" placeholder="Paste your SQL script here…" spellcheck="false"></textarea>
+    </div>
+    <div class="editor">
+      <div class="head">
+        <span>Result</span>
+        <button class="copy-btn" id="copy">Copy</button>
+      </div>
+      <textarea id="output" readonly placeholder="Translation will appear here…" spellcheck="false"></textarea>
+    </div>
+  </div>
+
+  <div class="messages" id="messages"></div>
+
+  <section class="file">
+    <h2>Translate a file</h2>
+    <p>Upload a <code>.sql</code> file and download it translated. Use “Auto-detect” to infer the source engine from the file.</p>
+    <div class="file-row">
+      <div class="field">
+        <label for="fileSource">Source engine</label>
+        <select id="fileSource"></select>
+      </div>
+      <div class="field">
+        <label for="fileTarget">Target engine</label>
+        <select id="fileTarget"></select>
+      </div>
+      <div class="field">
+        <label for="file">File</label>
+        <input type="file" id="file" accept=".sql,.txt,text/plain" />
+      </div>
+      <button class="primary" id="runFile">Translate &amp; download</button>
+    </div>
+    <div class="messages" id="fileMessages" style="margin-top:14px;"></div>
+  </section>
+</main>
+
+<script>
+const API = "";
+const ENGINE_LABELS = { tsql: "SQL Server (T-SQL)", oracle: "Oracle", postgresql: "PostgreSQL", mysql: "MySQL" };
+
+async function loadDialects() {
+  try {
+    const res = await fetch(API + "/api/v1/dialects");
+    const data = await res.json();
+    return data.dialects;
+  } catch (e) {
+    return ["tsql", "oracle", "postgresql", "mysql"];
+  }
+}
+
+function fillSelect(sel, dialects, { includeAuto = false } = {}) {
+  sel.innerHTML = "";
+  if (includeAuto) {
+    const opt = document.createElement("option");
+    opt.value = "auto"; opt.textContent = "Auto-detect";
+    sel.appendChild(opt);
+  }
+  for (const d of dialects) {
+    const opt = document.createElement("option");
+    opt.value = d; opt.textContent = ENGINE_LABELS[d] || d;
+    sel.appendChild(opt);
+  }
+}
+
+function el(id) { return document.getElementById(id); }
+
+function showMessages(container, { warnings = [], unsupported = [], error = null, info = null }) {
+  container.innerHTML = "";
+  const add = (cls, html) => {
+    const div = document.createElement("div");
+    div.className = "msg " + cls; div.innerHTML = html; container.appendChild(div);
+  };
+  if (error) { add("err", `<span class="k" style="color:var(--err)">Error</span>${escapeHtml(error)}`); }
+  if (info) { add("", info); }
+  for (const w of warnings) {
+    add("warn", `<span class="k">${escapeHtml(w.feature || "warning")}</span>${escapeHtml(w.message)}`);
+  }
+  for (const u of unsupported) {
+    add("warn", `<span class="k">unsupported</span>${escapeHtml(u)}`);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+let detectTimer = null;
+let lastDetected = null;
+
+async function autoDetect() {
+  const sql = el("input").value.trim();
+  const note = el("detectNote");
+  const badge = el("srcBadge");
+  if (sql.length < 8) { note.textContent = ""; badge.textContent = "auto-detect on type"; return; }
+  try {
+    const res = await fetch(API + "/api/v1/detect", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sql }),
+    });
+    const data = await res.json();
+    if (data.dialect) {
+      lastDetected = data.dialect;
+      const pct = Math.round((data.confidence || 0) * 100);
+      const label = ENGINE_LABELS[data.dialect] || data.dialect;
+      note.textContent = `Detected: ${label} (${pct}% confidence)`;
+      badge.textContent = `looks like ${label}`;
+      // Only auto-apply when the user hasn't manually overridden recently.
+      if (el("source").dataset.userSet !== "1") {
+        el("source").value = data.dialect;
+      }
+    } else {
+      note.textContent = "Could not detect engine — pick one manually.";
+      badge.textContent = "unknown engine";
+    }
+  } catch (e) { /* detection is best-effort */ }
+}
+
+async function translate() {
+  const sql = el("input").value;
+  const source = el("source").value;
+  const target = el("target").value;
+  const btn = el("run");
+  if (!sql.trim()) { showMessages(el("messages"), { error: "Please enter a source script." }); return; }
+  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>Translating…`;
+  try {
+    const res = await fetch(API + "/api/v1/transpile", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sql, source, target }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      el("output").value = "";
+      showMessages(el("messages"), { error: err.detail || "Request failed" });
+      return;
+    }
+    const data = await res.json();
+    el("output").value = data.sql;
+    const count = (data.warnings?.length || 0) + (data.unsupported?.length || 0);
+    showMessages(el("messages"), {
+      warnings: data.warnings, unsupported: data.unsupported,
+      info: count === 0 ? `<span class="k" style="color:var(--ok)">OK</span>Translated with no warnings.` : null,
+    });
+  } catch (e) {
+    showMessages(el("messages"), { error: String(e) });
+  } finally {
+    btn.disabled = false; btn.textContent = "Translate";
+  }
+}
+
+async function translateFile() {
+  const fileInput = el("file");
+  const source = el("fileSource").value;
+  const target = el("fileTarget").value;
+  const btn = el("runFile");
+  if (!fileInput.files.length) { showMessages(el("fileMessages"), { error: "Choose a file first." }); return; }
+  const form = new FormData();
+  form.append("file", fileInput.files[0]);
+  form.append("source", source);
+  form.append("target", target);
+  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>Working…`;
+  try {
+    const res = await fetch(API + "/api/v1/transpile/file", { method: "POST", body: form });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      showMessages(el("fileMessages"), { error: err.detail || "Request failed" });
+      return;
+    }
+    const blob = await res.blob();
+    const detected = res.headers.get("X-Unique-Source-Dialect");
+    const warnCount = res.headers.get("X-Unique-Warning-Count");
+    const dispo = res.headers.get("Content-Disposition") || "";
+    const m = dispo.match(/filename="([^"]+)"/);
+    const filename = m ? m[1] : "translated.sql";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    let info = `<span class="k" style="color:var(--ok)">Downloaded</span>${escapeHtml(filename)}`;
+    if (source === "auto" && detected) info += ` — detected source: ${ENGINE_LABELS[detected] || detected}`;
+    if (warnCount && warnCount !== "0") info += ` · ${warnCount} warning(s)`;
+    showMessages(el("fileMessages"), { info });
+  } catch (e) {
+    showMessages(el("fileMessages"), { error: String(e) });
+  } finally {
+    btn.disabled = false; btn.textContent = "Translate & download";
+  }
+}
+
+(async function init() {
+  const dialects = await loadDialects();
+  fillSelect(el("source"), dialects);
+  fillSelect(el("target"), dialects);
+  fillSelect(el("fileSource"), dialects, { includeAuto: true });
+  fillSelect(el("fileTarget"), dialects);
+  el("source").value = "tsql";
+  el("target").value = "postgresql";
+  el("fileSource").value = "auto";
+  el("fileTarget").value = "postgresql";
+
+  el("run").addEventListener("click", translate);
+  el("runFile").addEventListener("click", translateFile);
+  el("clear").addEventListener("click", () => {
+    el("input").value = ""; el("output").value = "";
+    el("messages").innerHTML = ""; el("detectNote").textContent = "";
+    el("srcBadge").textContent = "auto-detect on type";
+    el("source").dataset.userSet = "";
+  });
+  el("copy").addEventListener("click", async () => {
+    const out = el("output").value;
+    if (!out) return;
+    await navigator.clipboard.writeText(out);
+    const b = el("copy"); const t = b.textContent; b.textContent = "Copied!";
+    setTimeout(() => (b.textContent = t), 1200);
+  });
+  el("swap").addEventListener("click", () => {
+    const s = el("source").value, t = el("target").value;
+    el("source").value = t; el("target").value = s;
+    // Also swap text if there is a result to iterate on.
+    const inp = el("input").value, outp = el("output").value;
+    if (outp) { el("input").value = outp; el("output").value = inp; }
+  });
+  el("source").addEventListener("change", () => { el("source").dataset.userSet = "1"; });
+  el("input").addEventListener("input", () => {
+    clearTimeout(detectTimer);
+    detectTimer = setTimeout(autoDetect, 500);
+  });
+  // Ctrl/Cmd+Enter to translate.
+  el("input").addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); translate(); }
+  });
+})();
+</script>
+</body>
+</html>

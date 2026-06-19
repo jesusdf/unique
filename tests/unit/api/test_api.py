@@ -110,3 +110,70 @@ class TestValidate:
             json={"sql": "SELECT 1;", "dialect": "nope"},
         )
         assert resp.status_code == 400
+
+
+class TestDetect:
+    def test_detect_tsql(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/detect",
+            json={"sql": "SELECT TOP 5 * FROM t WHERE x = GETDATE()\nGO"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["dialect"] == "tsql"
+        assert 0.0 <= body["confidence"] <= 1.0
+        assert set(body["scores"]) == {"tsql", "oracle", "postgresql", "mysql"}
+
+    def test_detect_none_on_prose(self, client: TestClient) -> None:
+        resp = client.post("/api/v1/detect", json={"sql": "just prose, nothing to see"})
+        assert resp.status_code == 200
+        assert resp.json()["dialect"] is None
+
+
+class TestUI:
+    def test_root_serves_html(self, client: TestClient) -> None:
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
+        assert "<textarea" in resp.text
+
+
+class TestTranspileFile:
+    def test_file_with_explicit_source(self, client: TestClient) -> None:
+        content = b"SELECT TOP 5 * FROM t"
+        resp = client.post(
+            "/api/v1/transpile/file",
+            data={"source": "tsql", "target": "postgresql"},
+            files={"file": ("q.sql", content, "text/plain")},
+        )
+        assert resp.status_code == 200
+        assert "LIMIT 5" in resp.text
+        assert 'filename="q.postgresql.sql"' in resp.headers["content-disposition"]
+
+    def test_file_auto_detect(self, client: TestClient) -> None:
+        content = b"CREATE TABLE t (id INT AUTO_INCREMENT) ENGINE=InnoDB;\nDELIMITER //"
+        resp = client.post(
+            "/api/v1/transpile/file",
+            data={"source": "auto", "target": "postgresql"},
+            files={"file": ("t.sql", content, "text/plain")},
+        )
+        assert resp.status_code == 200
+        assert resp.headers["x-unique-source-dialect"] == "mysql"
+        assert "SERIAL" in resp.text
+
+    def test_file_auto_detect_failure(self, client: TestClient) -> None:
+        content = b"this is not sql just words here"
+        resp = client.post(
+            "/api/v1/transpile/file",
+            data={"source": "auto", "target": "mysql"},
+            files={"file": ("x.sql", content, "text/plain")},
+        )
+        assert resp.status_code == 422
+
+    def test_file_unknown_dialect(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/transpile/file",
+            data={"source": "tsql", "target": "nope"},
+            files={"file": ("q.sql", b"SELECT 1", "text/plain")},
+        )
+        assert resp.status_code == 400
