@@ -154,6 +154,15 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="MERGE",
         )
+    # Oracle hierarchical queries (START WITH / CONNECT BY) have no faithful
+    # automatic rewrite; emit a documented comment instead of silently
+    # dropping the clause (which would change results).
+    if isinstance(expr, exp.Select) and expr.args.get("connect") is not None:
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="CONNECT BY",
+        )
     # CREATE TABLE is modeled in IR but its table-level constraints are kept
     # as passthrough fragments, which need the source dialect.
     if (
@@ -906,6 +915,16 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         return (
             "-- UNIQUE: MySQL has no MERGE; rewrite as "
             "INSERT ... ON DUPLICATE KEY UPDATE. Original:\n" + commented
+        )
+
+    # Oracle hierarchical query: keep as-is for Oracle; for others there is
+    # no faithful automatic rewrite, so emit a documented comment.
+    if node.kind == "CONNECT BY" and dialect != "oracle":
+        commented = "\n".join(f"-- {ln}" for ln in node.sql.splitlines())
+        return (
+            "-- UNIQUE: Oracle CONNECT BY / START WITH hierarchical query has "
+            "no automatic equivalent; rewrite as a WITH RECURSIVE CTE. "
+            "Original:\n" + commented
         )
 
     try:
