@@ -203,3 +203,36 @@ class TestRoundTripPreservation:
         # AdventureWorks index WITH (PAD_INDEX = ...) options) lose some
         # statements to commented passthrough on the intermediate hop.
         assert _count_create_table(back) >= max(1, int(n_tables * 0.5))
+
+
+class TestPerformance:
+    """Lightweight performance-regression guard (generous thresholds).
+
+    The transpiler's cost is dominated by sqlglot parsing and is proportional
+    to the number of statements; these bounds are loose to avoid CI flakiness
+    while still catching gross regressions (e.g. accidental re-parsing).
+    """
+
+    @pytest.mark.parametrize(
+        "filename,source,budget_s",
+        [
+            ("hr_create_oracle.sql", "oracle", 2.0),
+            ("sakila_schema_mysql.sql", "mysql", 2.0),
+            ("adventureworks_lt_sqlserver.sql", "tsql", 4.0),
+            ("northwind_postgresql.sql", "postgresql", 10.0),
+        ],
+    )
+    def test_transpile_within_budget(
+        self, filename: str, source: str, budget_s: float
+    ) -> None:
+        import time
+
+        sql = _load(filename)
+        target = "tsql" if source != "tsql" else "postgresql"
+        start = time.perf_counter()
+        transpile(sql, source, target)
+        elapsed = time.perf_counter() - start
+        assert elapsed < budget_s, (
+            f"{filename} took {elapsed:.2f}s (budget {budget_s}s) — "
+            "possible performance regression"
+        )
