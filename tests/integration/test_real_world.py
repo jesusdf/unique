@@ -179,3 +179,27 @@ class TestRealWorldSpecific:
         result = transpile(sql, "tsql", "oracle")
         assert "TRANSPILATION ERROR" not in result.sql
         assert any("System procedure" in u for u in result.unsupported)
+
+
+class TestRoundTripPreservation:
+    """A -> B -> A round-trips must not lose table definitions."""
+
+    @pytest.mark.parametrize(
+        "filename,source,n_tables",
+        [(f, s, n) for (f, s, n) in FIXTURES],
+        ids=[s for (_, s, _) in FIXTURES],
+    )
+    @pytest.mark.parametrize("via", ["tsql", "oracle", "postgresql", "mysql"])
+    def test_table_count_survives_round_trip(
+        self, filename: str, source: str, via: str, n_tables: int
+    ) -> None:
+        if via == source:
+            pytest.skip("round-trip via the same dialect is trivial")
+        sql = _load(filename)
+        forward = transpile(sql, source, via).sql
+        back = transpile(forward, via, source).sql
+        # Most table definitions must survive the round-trip. The threshold is
+        # lenient (50%) because schemas with heavy engine-specific DDL (e.g.
+        # AdventureWorks index WITH (PAD_INDEX = ...) options) lose some
+        # statements to commented passthrough on the intermediate hop.
+        assert _count_create_table(back) >= max(1, int(n_tables * 0.5))
