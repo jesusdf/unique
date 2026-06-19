@@ -70,7 +70,12 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       commas inside string literals are not mis-split.
 - [x] **`NVL2`→`CASE`** — `NVL2(e, a, b)` → `CASE WHEN e IS NOT NULL THEN a
       ELSE b END` (Oracle source).
-- [ ] `TO_CHAR`/`TO_DATE`/`CONVERT` with format strings.
+- [x] **`TO_CHAR`/`TO_DATE` with date-format strings (Oracle→MySQL)** —
+      mapped to `DATE_FORMAT`/`STR_TO_DATE` with format-pattern translation
+      (`YYYY`→`%Y`, `HH24`→`%H`, etc.). Oracle→PostgreSQL keeps the same
+      patterns. `CONVERT` style-code mapping for T-SQL remains.
+- [ ] **`CONVERT` with style codes (T-SQL)** — map numeric style codes to
+      explicit format strings where possible.
 - [ ] **Date-format strings** — map Oracle `'YYYY-MM-DD'` ↔ MySQL `'%Y-%m-%d'`
       ↔ T-SQL style codes.
 

@@ -365,6 +365,39 @@ class TestDecode:
         assert "NVL2" in out.sql
 
 
+class TestOracleDateFormat:
+    def test_to_char_to_mysql_date_format(self) -> None:
+        t = ProceduralTransformer("oracle", "mysql")
+        out = t._transform_node(RawSQL(sql="TO_CHAR(d, 'YYYY-MM-DD')", reason="x"))
+        assert out.sql == "DATE_FORMAT(d, '%Y-%m-%d')"
+
+    def test_to_char_with_time(self) -> None:
+        t = ProceduralTransformer("oracle", "mysql")
+        out = t._transform_node(
+            RawSQL(sql="TO_CHAR(d, 'YYYY-MM-DD HH24:MI:SS')", reason="x")
+        )
+        assert out.sql == "DATE_FORMAT(d, '%Y-%m-%d %H:%i:%s')"
+
+    def test_to_date_to_mysql_str_to_date(self) -> None:
+        t = ProceduralTransformer("oracle", "mysql")
+        out = t._transform_node(
+            RawSQL(sql="TO_DATE('2020-01-01', 'YYYY-MM-DD')", reason="x")
+        )
+        assert out.sql == "STR_TO_DATE('2020-01-01', '%Y-%m-%d')"
+
+    def test_to_char_numeric_untouched(self) -> None:
+        # Single-arg TO_CHAR (numeric to string) has no format to map.
+        t = ProceduralTransformer("oracle", "mysql")
+        out = t._transform_node(RawSQL(sql="TO_CHAR(salary)", reason="x"))
+        assert out.sql == "TO_CHAR(salary)"
+
+    def test_to_char_to_postgresql_unchanged(self) -> None:
+        # PostgreSQL uses the same format patterns as Oracle.
+        t = ProceduralTransformer("oracle", "postgresql")
+        out = t._transform_node(RawSQL(sql="TO_CHAR(d, 'YYYY-MM-DD')", reason="x"))
+        assert out.sql == "TO_CHAR(d, 'YYYY-MM-DD')"
+
+
 class TestSubstringPosition:
     def test_charindex_to_oracle_reorders(self) -> None:
         t = ProceduralTransformer("tsql", "oracle")

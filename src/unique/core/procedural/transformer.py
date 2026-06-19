@@ -292,8 +292,6 @@ _ORACLE_TO_MYSQL_FUNCS: dict[str, str] = {
     "LENGTH": "CHAR_LENGTH",
     "SYS_GUID": "UUID",
     "SUBSTR": "SUBSTRING",
-    "TO_CHAR": "-- TO_CHAR -> DATE_FORMAT/CAST",
-    "TO_DATE": "STR_TO_DATE",
 }
 
 
@@ -867,6 +865,68 @@ class ProceduralTransformer:
         sql = self._transform_string_agg(sql)
         sql = self._transform_scope_identity(sql)
         sql = self._transform_nvl2(sql)
+        sql = self._transform_oracle_date_funcs(sql)
+        return sql
+
+    # Oracle date-format pattern -> MySQL/strftime specifier.
+    _ORACLE_TO_MYSQL_DATEFMT = [
+        ("YYYY", "%Y"),
+        ("YY", "%y"),
+        ("MONTH", "%M"),
+        ("MON", "%b"),
+        ("MM", "%m"),
+        ("DDD", "%j"),
+        ("DD", "%d"),
+        ("DY", "%a"),
+        ("DAY", "%W"),
+        ("HH24", "%H"),
+        ("HH12", "%h"),
+        ("HH", "%h"),
+        ("MI", "%i"),
+        ("SS", "%s"),
+        ("AM", "%p"),
+        ("PM", "%p"),
+    ]
+
+    def _map_oracle_datefmt_to_mysql(self, fmt: str) -> str:
+        """Map an Oracle date-format string literal to MySQL's specifiers."""
+        out = fmt
+        # Replace longest tokens first to avoid partial overlaps.
+        for ora, mysql in self._ORACLE_TO_MYSQL_DATEFMT:
+            out = re.sub(ora, mysql, out, flags=re.IGNORECASE)
+        return out
+
+    def _transform_oracle_date_funcs(self, sql: str) -> str:
+        """Translate Oracle TO_CHAR/TO_DATE with date-format strings.
+
+        Oracle -> MySQL:
+          TO_CHAR(d, fmt)  -> DATE_FORMAT(d, mapped_fmt)
+          TO_DATE(s, fmt)  -> STR_TO_DATE(s, mapped_fmt)
+        The format-pattern mapping covers the common specifiers; uncommon
+        ones are left as-is for review.
+        """
+        if self._source != "oracle" or self._target != "mysql":
+            return sql
+
+        def map_fmt_arg(arg: str) -> str:
+            s = arg.strip()
+            if len(s) >= 2 and s[0] == "'" and s[-1] == "'":
+                inner = s[1:-1]
+                return "'" + self._map_oracle_datefmt_to_mysql(inner) + "'"
+            return arg
+
+        def build_to_char(args: list[str]) -> str | None:
+            if len(args) != 2:
+                return None
+            return f"DATE_FORMAT({args[0]}, {map_fmt_arg(args[1])})"
+
+        def build_to_date(args: list[str]) -> str | None:
+            if len(args) != 2:
+                return None
+            return f"STR_TO_DATE({args[0]}, {map_fmt_arg(args[1])})"
+
+        sql = self._rewrite_calls(sql, "TO_CHAR", build_to_char)
+        sql = self._rewrite_calls(sql, "TO_DATE", build_to_date)
         return sql
 
     def _transform_nvl2(self, sql: str) -> str:
