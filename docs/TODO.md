@@ -49,9 +49,11 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 
 ## 3. Procedural engine refinements (P2)
 
-- [ ] **`SELECT ... INTO <var>` (MySQL/PG/Oracle)** — `SELECT COUNT(*) INTO x`
-      currently confuses sqlglot in embedded DML; route through the procedural
-      SELECT-INTO path consistently for all source dialects.
+- [x] **`SELECT ... INTO <table>` (table creation)** — T-SQL SELECT INTO is
+      routed through sqlglot: MySQL emits `CREATE TABLE AS SELECT`, PG/Oracle
+      keep `SELECT INTO`. Previously the INTO clause was silently dropped.
+      (Procedural `SELECT col INTO var` is unaffected — it goes through the
+      procedural engine.)
 - [ ] **Cursor `FOR` loop → explicit cursor** for T-SQL/MySQL (currently
       flagged for manual conversion).
 - [x] **`CONNECT BY` (Oracle hierarchical)** — kept as-is for Oracle; for

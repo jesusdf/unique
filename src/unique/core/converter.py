@@ -163,6 +163,15 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="CONNECT BY",
         )
+    # T-SQL "SELECT ... INTO <table>" creates a new table. sqlglot maps it
+    # correctly per dialect (CREATE TABLE AS for MySQL, SELECT INTO for
+    # PG/Oracle); our SELECT converter would drop the INTO, so pass through.
+    if isinstance(expr, exp.Select) and isinstance(expr.args.get("into"), exp.Into):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="SELECT INTO",
+        )
     # CREATE TABLE is modeled in IR but its table-level constraints are kept
     # as passthrough fragments, which need the source dialect.
     if (

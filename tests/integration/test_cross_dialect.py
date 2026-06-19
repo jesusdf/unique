@@ -406,6 +406,23 @@ class TestDDLPassthrough:
         assert "RECURSIVE" in result.sql.upper()
         assert "CONNECT BY" in result.sql.upper()
 
+    def test_select_into_table_to_mysql(self, transpiler: Transpiler) -> None:
+        # T-SQL SELECT ... INTO <table> creates a table; MySQL uses
+        # CREATE TABLE AS SELECT. The INTO must not be dropped.
+        sql = "SELECT a, b INTO new_table FROM src WHERE id > 0"
+        result = transpiler.transpile(sql, "tsql", "mysql")
+        assert "CREATE TABLE" in result.sql.upper()
+        assert "new_table" in result.sql
+
+    @pytest.mark.parametrize("target", ["postgresql", "oracle"])
+    def test_select_into_table_preserved(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        sql = "SELECT a, b INTO new_table FROM src"
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "new_table" in result.sql
+        assert "INTO" in result.sql.upper()
+
 
 class TestCrossDialectExpressions:
     """Complex expressions across dialects."""
