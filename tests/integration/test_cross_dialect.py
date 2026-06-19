@@ -423,6 +423,22 @@ class TestDDLPassthrough:
         assert "new_table" in result.sql
         assert "INTO" in result.sql.upper()
 
+    @pytest.mark.parametrize("target", ["postgresql", "mysql"])
+    def test_for_update_lock_preserved(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        # A row lock must not be silently dropped.
+        result = transpiler.transpile("SELECT a FROM t FOR UPDATE", "oracle", target)
+        assert "FOR UPDATE" in result.sql.upper()
+
+    def test_qualify_translated(self, transpiler: Transpiler) -> None:
+        # QUALIFY has no PostgreSQL equivalent; sqlglot rewrites it as a
+        # subquery + WHERE. It must not be dropped.
+        sql = "SELECT a, ROW_NUMBER() OVER (ORDER BY a) rn FROM t QUALIFY rn = 1"
+        result = transpiler.transpile(sql, "oracle", "postgresql")
+        assert "ROW_NUMBER()" in result.sql.upper()
+        assert "WHERE" in result.sql.upper()
+
 
 class TestCrossDialectExpressions:
     """Complex expressions across dialects."""
