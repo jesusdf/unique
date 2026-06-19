@@ -361,6 +361,27 @@ class TestDDLPassthrough:
         assert result.sql.lstrip().startswith("--")
         assert "mydb" in result.sql
 
+    @pytest.mark.parametrize("target", ["oracle", "postgresql"])
+    def test_merge_native(self, transpiler: Transpiler, target: str) -> None:
+        sql = (
+            "MERGE INTO target t USING source s ON (t.id = s.id) "
+            "WHEN MATCHED THEN UPDATE SET t.val = s.val "
+            "WHEN NOT MATCHED THEN INSERT (id, val) VALUES (s.id, s.val)"
+        )
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "MERGE" in result.sql.upper()
+        assert "-- UNIQUE: Unhandled" not in result.sql
+
+    def test_merge_to_mysql_documented(self, transpiler: Transpiler) -> None:
+        sql = (
+            "MERGE INTO target t USING source s ON (t.id = s.id) "
+            "WHEN MATCHED THEN UPDATE SET t.val = s.val"
+        )
+        result = transpiler.transpile(sql, "tsql", "mysql")
+        # MySQL has no MERGE: documented comment, not invalid SQL.
+        assert result.sql.lstrip().startswith("--")
+        assert "ON DUPLICATE KEY UPDATE" in result.sql
+
 
 class TestCrossDialectExpressions:
     """Complex expressions across dialects."""
