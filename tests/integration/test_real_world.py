@@ -32,6 +32,7 @@ import re
 from pathlib import Path
 
 import pytest
+from helpers.invariants import assert_no_silent_loss, jaccard_similarity
 
 from unique.core.batch_splitter import BatchSplitter, BatchType
 from unique.core.transpiler import transpile
@@ -235,4 +236,66 @@ class TestPerformance:
         assert elapsed < budget_s, (
             f"{filename} took {elapsed:.2f}s (budget {budget_s}s) — "
             "possible performance regression"
+        )
+
+
+class TestGenericInvariants:
+    """Dialect-agnostic sanity checks (see tests/helpers/invariants.py).
+
+    Two content-based validations that catch broad classes of bugs without
+    per-construct assertions: (1) structural elements are not dropped without
+    a documented ``-- UNIQUE:`` note, and (2) an A->B->A round-trip preserves
+    most of the original content (token-set similarity).
+    """
+
+    # Round-trip similarity floors, calibrated per *source* dialect. PostgreSQL
+    # is sqlglot's base dialect and round-trips almost perfectly; Oracle/T-SQL
+    # fixtures carry heavy proprietary DDL (PL/SQL, sp_addextendedproperty,
+    # XML schemas) that is legitimately turned into comments, so their floors
+    # are lower. These guard against *regressions*, not perfection.
+    _RT_FLOOR = {
+        "postgresql": 0.90,
+        "mysql": 0.45,
+        "oracle": 0.35,
+        "tsql": 0.30,
+    }
+
+    @pytest.mark.parametrize(
+        "filename,source,target,_n",
+        PAIRS,
+        ids=[f"{src}->{tgt}" for (_, src, tgt, _) in PAIRS],
+    )
+    def test_no_silent_ddl_loss(
+        self, filename: str, source: str, target: str, _n: int
+    ) -> None:
+        sql = _load(filename)
+        out = transpile(sql, source, target).sql
+        # Tables and key constraints must survive or be explicitly documented.
+        violations = assert_no_silent_loss(
+            sql,
+            out,
+            keywords=("CREATE TABLE", "PRIMARY KEY", "FOREIGN KEY"),
+            tolerance=0.20,
+        )
+        assert not violations, "Silent DDL loss detected:\n" + "\n".join(violations)
+
+    @pytest.mark.parametrize(
+        "filename,source",
+        [(f, s) for (f, s, _) in FIXTURES],
+        ids=[s for (_, s, _) in FIXTURES],
+    )
+    @pytest.mark.parametrize("via", ALL_DIALECTS)
+    def test_round_trip_content_similarity(
+        self, filename: str, source: str, via: str
+    ) -> None:
+        if via == source:
+            pytest.skip("round-trip via same dialect is trivial")
+        sql = _load(filename)
+        forward = transpile(sql, source, via).sql
+        back = transpile(forward, via, source).sql
+        sim = jaccard_similarity(sql, back)
+        floor = self._RT_FLOOR[source]
+        assert sim >= floor, (
+            f"{source} -> {via} -> {source} similarity {sim:.2f} "
+            f"below floor {floor} (possible new information loss)"
         )
