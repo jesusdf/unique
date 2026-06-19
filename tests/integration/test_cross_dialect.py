@@ -353,6 +353,60 @@ class TestDDLPassthrough:
         assert "CREATE SEQUENCE" in result.sql.upper()
         assert "-- UNIQUE: Unhandled" not in result.sql
 
+    @pytest.mark.parametrize("keyword", ["CLUSTERED", "NONCLUSTERED"])
+    @pytest.mark.parametrize("target", ["postgresql", "mysql", "oracle"])
+    def test_clustered_index_keyword_dropped(
+        self, transpiler: Transpiler, keyword: str, target: str
+    ) -> None:
+        sql = f"CREATE {keyword} INDEX idx ON t (a)"
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "CREATE INDEX" in result.sql.upper()
+        assert keyword not in result.sql.upper()
+        assert "-- UNIQUE: Unhandled" not in result.sql
+
+    def test_include_index_kept_for_postgresql(self, transpiler: Transpiler) -> None:
+        sql = "CREATE INDEX idx ON t (a) INCLUDE (b, c)"
+        result = transpiler.transpile(sql, "tsql", "postgresql")
+        assert "INCLUDE" in result.sql.upper()
+
+    @pytest.mark.parametrize("target", ["mysql", "oracle"])
+    def test_include_index_flagged_elsewhere(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        sql = "CREATE INDEX idx ON t (a) INCLUDE (b, c)"
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "CREATE INDEX" in result.sql.upper()
+        assert "INCLUDE" in result.sql  # in the explanatory comment
+        assert "does not support INCLUDE" in result.sql
+
+    def test_filtered_index_kept_for_postgresql(self, transpiler: Transpiler) -> None:
+        sql = "CREATE INDEX idx ON t (a) WHERE a > 0"
+        result = transpiler.transpile(sql, "tsql", "postgresql")
+        assert "WHERE" in result.sql.upper()
+
+    @pytest.mark.parametrize("target", ["mysql", "oracle"])
+    def test_filtered_index_flagged_elsewhere(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        sql = "CREATE INDEX idx ON t (a) WHERE a > 0"
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "does not support filtered indexes" in result.sql
+
+    @pytest.mark.parametrize("target", ["postgresql", "mysql", "oracle"])
+    def test_index_physical_options_stripped(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        # T-SQL physical storage options have no portable equivalent.
+        sql = (
+            "CREATE NONCLUSTERED INDEX ix ON s.customer (email ASC) "
+            "WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF)"
+        )
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "CREATE INDEX" in result.sql.upper()
+        assert "PAD_INDEX" not in result.sql.upper()
+        # The table reference (ON s.customer) must survive.
+        assert "customer" in result.sql.lower()
+
     def test_create_sequence_mysql_documented(self, transpiler: Transpiler) -> None:
         # MySQL has no sequences; emit a documented comment, not invalid SQL.
         sql = "CREATE SEQUENCE seq START WITH 1"
