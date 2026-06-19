@@ -48,16 +48,36 @@ print(result.sql)
 # SELECT * FROM users WHERE active = 1 LIMIT 10
 ```
 
+### Web UI
+
+Once the API server is running, open the browser-based interface at the root
+URL (e.g. <http://localhost:8000/>). It provides:
+
+- two side-by-side panes — paste a source script on the left, see the
+  translation on the right — with engine selectors above;
+- automatic source-engine detection as you type (you can still override it);
+- a file section to upload a `.sql` file and download it translated, with an
+  "Auto-detect" option for the source engine.
+
 ### REST API
 
 ```bash
-# Start the API server
+# Start the API server (also serves the web UI at /)
 uvicorn unique.api.app:app --host 0.0.0.0 --port 8000
 
 # Transpile via HTTP
 curl -X POST http://localhost:8000/api/v1/transpile \
   -H "Content-Type: application/json" \
   -d '{"sql": "SELECT TOP 5 * FROM t", "source": "tsql", "target": "postgresql"}'
+
+# Detect the dialect of a script
+curl -X POST http://localhost:8000/api/v1/detect \
+  -H "Content-Type: application/json" \
+  -d '{"sql": "SELECT TOP 5 * FROM t\nGO"}'
+
+# Translate a file (use source=auto to auto-detect), saving the result
+curl -X POST http://localhost:8000/api/v1/transpile/file \
+  -F source=auto -F target=postgresql -F file=@script.sql -OJ
 ```
 
 ### Docker
