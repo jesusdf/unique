@@ -486,6 +486,25 @@ def _convert_create_table(
         table = _convert_table_ref(schema_expr.this)
         for col_def in schema_expr.expressions:
             if isinstance(col_def, exp.ColumnDef):
+                # Computed/generated columns (AS (expr) [PERSISTED]) have no
+                # plain type; sqlglot translates them to GENERATED ALWAYS AS
+                # (...) STORED. Keep the column as a passthrough fragment so
+                # the expression and type are preserved.
+                if any(
+                    isinstance(getattr(c, "kind", None), exp.ComputedColumnConstraint)
+                    for c in col_def.args.get("constraints", [])
+                ):
+                    constraints.append(
+                        PassthroughSQL(
+                            sql=col_def.sql(
+                                dialect=sqlglot_dialect_name(source_dialect)
+                            ),
+                            source_dialect=source_dialect,
+                            kind="COLUMN",
+                        )
+                    )
+                    continue
+
                 dtype = DataType(name="VARCHAR")
                 if col_def.args.get("kind"):
                     dtype = _convert_data_type(col_def.args["kind"])
