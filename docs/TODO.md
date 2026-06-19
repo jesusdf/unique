@@ -112,6 +112,15 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       these caught a missing statement-terminator bug (emitted statements
       lacked ';', so the output was not re-parseable). Output statements are
       now properly terminated.
+- [x] **Generic transpilation invariants** (`tests/helpers/invariants.py`) —
+      two reusable, dialect-agnostic validations applied across all 12 pairs:
+      (1) *element conservation* — structural keywords (CREATE TABLE, PRIMARY
+      KEY, FOREIGN KEY, ...) are not dropped unless documented with a
+      `-- UNIQUE:` comment, catching silent loss generically; (2) *round-trip
+      content similarity* — A→B→A' compared by normalized token-set Jaccard
+      with per-source floors. Confirmed 0 silent DDL losses; low Oracle/T-SQL
+      round-trip scores trace to legitimately commented proprietary DDL
+      (sp_addextendedproperty, XML schemas), not bugs.
 - [x] **Performance** — analyzed (not a bottleneck of our own code).
       Realistic best-of-3 timings: Northwind (~3,400 statements, mostly data
       INSERTs) 0.84s; AdventureWorks 0.11s; Sakila 0.06s; HR 0.03s. Profiling
@@ -120,7 +129,8 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       on our side (each statement is parsed once). No micro-optimization is
       warranted; if bulk data-INSERT throughput ever matters, batching or
       skipping pure-data INSERTs would be the lever, not parser tuning.
-- [ ] **PyPI publication** — explicitly deferred (do not publish yet).
+- [ ] **PyPI publication** — deferred until the tool has been used in real
+      projects for a few months and proven stable. Not before then.
 
 ## 6. Known limitations to keep documented (not bugs)
 
