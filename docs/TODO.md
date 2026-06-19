@@ -73,7 +73,11 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 - [x] **`MERGE`** — Oracle and PostgreSQL emit native MERGE (via
       PassthroughSQL); MySQL (no MERGE) gets a documented comment pointing to
       `INSERT ... ON DUPLICATE KEY UPDATE`.
-- [ ] **`OUTPUT` / `RETURNING` clause** full mapping (partial today).
+- [x] **`OUTPUT` / `RETURNING` clause** — T-SQL OUTPUT is extracted safely
+      (preserving the WHERE clause, whose loss on DELETE/UPDATE would be a
+      data-loss bug) and mapped to RETURNING for PostgreSQL/Oracle; PG/Oracle
+      RETURNING maps back to T-SQL OUTPUT. MySQL (no OUTPUT/RETURNING) keeps
+      the base statement plus a documented comment.
 - [x] **`@@IDENTITY` / `SCOPE_IDENTITY()`** → `LASTVAL()` (PG) /
       `LAST_INSERT_ID()` (MySQL) / documented `<sequence>.CURRVAL` (Oracle).
 
