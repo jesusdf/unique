@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import re
 
 import sqlglot
 import sqlglot.expressions as exp
@@ -197,18 +198,23 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
 def _is_passthrough_create(expr: exp.Expression) -> bool:
     """Whether a CREATE should be passed through to sqlglot unchanged.
 
-    Tables and views are modeled in IR; indexes, sequences, and schemas are
-    not, so they round-trip through sqlglot.
+    Tables and views are modeled in IR; indexes (including T-SQL
+    CLUSTERED/NONCLUSTERED), sequences, and schemas are not, so they
+    round-trip through sqlglot.
     """
     if not isinstance(expr, exp.Create):
         return False
     kind = (expr.args.get("kind") or "").upper()
-    return kind in ("INDEX", "SEQUENCE", "SCHEMA")
+    return "INDEX" in kind or kind in ("SEQUENCE", "SCHEMA")
 
 
 def _passthrough_kind(expr: exp.Expression) -> str:
     if isinstance(expr, exp.Create):
-        return "CREATE " + (expr.args.get("kind") or "").upper()
+        kind = (expr.args.get("kind") or "").upper()
+        # Normalize CLUSTERED/NONCLUSTERED index variants to a common kind.
+        if "INDEX" in kind:
+            return "CREATE INDEX"
+        return "CREATE " + kind
     return type(expr).__name__.upper()
 
 
@@ -969,10 +975,51 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     try:
         out = sqlglot.transpile(node.sql, read=read, write=write)
         if out and out[0].strip():
-            return out[0]
+            result = out[0]
+            if node.kind == "CREATE INDEX":
+                result = _portable_index(result, dialect)
+            return result
     except Exception as e:  # noqa: BLE001 - report and fall back
         logger.warning("passthrough transpile error (%s): %s", node.kind, e)
     return f"-- UNIQUE: Unhandled {node.kind}\n-- {node.sql}"
+
+
+def _portable_index(sql: str, dialect: str) -> str:
+    """Make a transpiled CREATE INDEX portable for the target dialect.
+
+    - CLUSTERED/NONCLUSTERED are T-SQL-only physical hints; drop them for
+      other engines (the keyword has no meaning and breaks parsing).
+    - INCLUDE (covering columns) is supported by PostgreSQL and T-SQL but not
+      MySQL or Oracle; comment it out there with a note.
+    - A filtered-index WHERE clause is supported by PostgreSQL (partial
+      index) but not MySQL/Oracle; flag it for those.
+    """
+    if dialect != "tsql":
+        sql = re.sub(r"(?i)\b(NON)?CLUSTERED\s+", "", sql)
+        # T-SQL physical index storage options (WITH (PAD_INDEX = ..., ...))
+        # and ON [filegroup] have no portable equivalent; drop them.
+        sql = re.sub(r"(?i)\s+WITH\s*\([^)]*\)", "", sql)
+        sql = re.sub(r"(?i)\s+ON\s+\[[^\]]+\]\s*$", "", sql)
+
+    if dialect in ("mysql", "oracle"):
+        # INCLUDE (...) covering columns: not supported.
+        m = re.search(r"(?i)\bINCLUDE\s*\([^)]*\)", sql)
+        if m:
+            sql = (
+                sql[: m.start()].rstrip()
+                + sql[m.end() :]
+                + f"\n-- UNIQUE: {dialect} does not support INCLUDE covering "
+                f"columns; dropped: {m.group(0)}"
+            )
+        # Filtered index WHERE: not supported (MySQL/Oracle).
+        m = re.search(r"(?i)\sWHERE\s+.+$", sql)
+        if m:
+            sql = (
+                sql[: m.start()].rstrip()
+                + f"\n-- UNIQUE: {dialect} does not support filtered indexes; "
+                f"dropped predicate:{m.group(0)}"
+            )
+    return sql
 
 
 def _emit_select(node: SelectStatement, dialect: str) -> str:

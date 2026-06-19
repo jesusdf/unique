@@ -31,8 +31,11 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 - [x] **CREATE SCHEMA** (6) — round-tripped via `PassthroughSQL`.
 - [x] **USE <db>** (6) — MySQL/T-SQL pass through; PostgreSQL and Oracle
       (no SQL USE) emit a documented comment to connect to the target DB.
-- [ ] **Filtered / INCLUDE indexes** — verify T-SQL `INCLUDE (...)` and
-      `WHERE` predicate handling in the passthrough output.
+- [x] **Filtered / INCLUDE indexes & CLUSTERED/NONCLUSTERED** — CLUSTERED/
+      NONCLUSTERED keywords are dropped for non-T-SQL targets; INCLUDE and
+      filtered `WHERE` are kept for PostgreSQL and flagged with a comment for
+      MySQL/Oracle; T-SQL physical storage options (`WITH (PAD_INDEX = ...)`,
+      `ON [filegroup]`) are stripped for portability.
 
 ## 2. Column / type features in CREATE TABLE (P1)
 
