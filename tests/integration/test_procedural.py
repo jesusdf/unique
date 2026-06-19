@@ -333,7 +333,7 @@ class TestCursorsAndLoops:
         out = _transpile(self.SRC, "oracle", "tsql")
         assert "WHILE 1=1" in out or "WHILE 1 = 1" in out
 
-    def test_for_cursor_loop_flagged_in_tsql(self) -> None:
+    def test_for_cursor_loop_expanded_in_tsql(self) -> None:
         src = (
             "CREATE OR REPLACE PROCEDURE p IS BEGIN "
             "FOR rec IN (SELECT id FROM t) LOOP "
@@ -341,7 +341,25 @@ class TestCursorsAndLoops:
             "END LOOP; END;"
         )
         out = _transpile(src, "oracle", "tsql")
-        assert "UNIQUE: no implicit cursor FOR-loop" in out
+        # Expanded to an explicit T-SQL cursor with full lifecycle.
+        assert "DECLARE rec_cur CURSOR" in out
+        assert "OPEN rec_cur" in out
+        assert "@@FETCH_STATUS = 0" in out
+        assert "CLOSE rec_cur" in out
+        assert "DEALLOCATE rec_cur" in out
+
+    def test_for_cursor_loop_expanded_in_mysql(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p IS BEGIN "
+            "FOR rec IN (SELECT id FROM t) LOOP "
+            "INSERT INTO log VALUES (rec.id); "
+            "END LOOP; END;"
+        )
+        out = _transpile(src, "oracle", "mysql")
+        assert "DECLARE rec_cur CURSOR FOR" in out
+        assert "CONTINUE HANDLER FOR NOT FOUND" in out
+        assert "OPEN rec_cur" in out
+        assert "CLOSE rec_cur" in out
 
     def test_for_cursor_loop_native_in_postgresql(self) -> None:
         src = (

@@ -54,8 +54,11 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       routed through sqlglot instead of being discarded, preserving
       semantics (or emitting a documented comment where no equivalent
       exists).
-- [ ] **Cursor `FOR` loop → explicit cursor** for T-SQL/MySQL (currently
-      flagged for manual conversion).
+- [x] **Cursor `FOR` loop → explicit cursor** — Oracle implicit cursor
+      FOR-loops now expand to a structurally complete explicit cursor for
+      T-SQL (DECLARE/OPEN/FETCH/WHILE @@FETCH_STATUS/CLOSE/DEALLOCATE) and
+      MySQL (DECLARE cursor + NOT FOUND handler + LOOP/FETCH/LEAVE/CLOSE).
+      The developer only fills the per-column FETCH INTO variables.
 - [x] **`CONNECT BY` (Oracle hierarchical)** — kept as-is for Oracle; for
       other targets emit a documented comment pointing to a WITH RECURSIVE
       CTE rewrite, instead of silently dropping the clause (an automatic

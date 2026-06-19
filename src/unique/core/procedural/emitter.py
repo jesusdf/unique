@@ -595,21 +595,53 @@ class ProceduralEmitter:
             lines.append("END LOOP;")
             return "\n".join(lines)
 
-        # T-SQL and MySQL have no implicit cursor FOR loop. Emit a clearly
-        # flagged scaffold so the developer can wire up an explicit cursor.
-        comment = (
-            "-- UNIQUE: no implicit cursor FOR-loop in "
-            f"{self._dialect}; convert to an explicit cursor over: "
-            f"{cursor_str}"
-        )
+        # T-SQL and MySQL have no implicit cursor FOR loop. Emit an explicit
+        # cursor scaffold (structurally complete) so the developer only needs
+        # to fill the per-column fetch variables.
         if self._dialect == "tsql":
-            lines = [comment]
-            lines.append(f"-- FOR {node.variable} IN <cursor> equivalent:")
+            cur = f"{node.variable}_cur"
+            lines = [
+                "-- UNIQUE: Oracle implicit cursor FOR-loop expanded to an "
+                "explicit T-SQL cursor.",
+                "-- Declare one @var per selected column and complete the "
+                "FETCH INTO list.",
+                f"DECLARE {cur} CURSOR LOCAL FAST_FORWARD FOR",
+                f"{cursor_str};",
+                f"OPEN {cur};",
+                f"FETCH NEXT FROM {cur} INTO /* @col1, @col2, ... */;",
+                "WHILE @@FETCH_STATUS = 0",
+                "BEGIN",
+            ]
             lines.extend(body_lines)
+            lines.append(
+                f"{self._indent()}FETCH NEXT FROM {cur} INTO "
+                "/* @col1, @col2, ... */;"
+            )
+            lines.append("END;")
+            lines.append(f"CLOSE {cur};")
+            lines.append(f"DEALLOCATE {cur};")
             return "\n".join(lines)
-        # mysql
-        lines = [comment]
+
+        # mysql: explicit cursor inside a BEGIN ... END with a NOT FOUND
+        # handler driving a loop.
+        cur = f"{node.variable}_cur"
+        done = f"{node.variable}_done"
+        lines = [
+            "-- UNIQUE: Oracle implicit cursor FOR-loop expanded to an "
+            "explicit MySQL cursor.",
+            "-- Declare one variable per selected column and complete the "
+            "FETCH INTO list.",
+            f"DECLARE {done} INT DEFAULT FALSE;",
+            f"DECLARE {cur} CURSOR FOR {cursor_str};",
+            f"DECLARE CONTINUE HANDLER FOR NOT FOUND SET {done} = TRUE;",
+            f"OPEN {cur};",
+            f"{node.variable}_loop: LOOP",
+            f"{self._indent()}FETCH {cur} INTO /* col1, col2, ... */;",
+            f"{self._indent()}IF {done} THEN LEAVE {node.variable}_loop; END IF;",
+        ]
         lines.extend(body_lines)
+        lines.append("END LOOP;")
+        lines.append(f"CLOSE {cur};")
         return "\n".join(lines)
 
     def _emit_loop(self, node: LoopStatement) -> str:
