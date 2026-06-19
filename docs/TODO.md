@@ -95,8 +95,10 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       mapped to `DATE_FORMAT`/`STR_TO_DATE` with format-pattern translation
       (`YYYY`→`%Y`, `HH24`→`%H`, etc.). Oracle→PostgreSQL keeps the same
       patterns. `CONVERT` style-code mapping for T-SQL remains.
-- [ ] **`CONVERT` with style codes (T-SQL)** — map numeric style codes to
-      explicit format strings where possible.
+- [x] **`CONVERT` with style codes (T-SQL)** — `CONVERT(type, value, style)`
+      now routes through sqlglot, which maps the numeric style codes to the
+      right TO_CHAR/DATE_FORMAT patterns (style 120 → ISO datetime, 103 →
+      dd/mm/yyyy, etc.). Previously the value and style were truncated.
 - [ ] **Date-format strings** — map Oracle `'YYYY-MM-DD'` ↔ MySQL `'%Y-%m-%d'`
       ↔ T-SQL style codes.
 

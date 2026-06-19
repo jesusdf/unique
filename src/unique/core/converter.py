@@ -195,6 +195,18 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="SELECT",
         )
+    # T-SQL CONVERT(type, value, style) uses numeric style codes for date
+    # formatting that sqlglot maps to TO_CHAR/DATE_FORMAT patterns. Our
+    # expression converter would drop the value and style, so pass the whole
+    # statement through when a styled CONVERT is present.
+    if isinstance(expr, exp.Select) and any(
+        c.args.get("style") is not None for c in expr.find_all(exp.Convert)
+    ):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="SELECT",
+        )
     # CREATE TABLE is modeled in IR but its table-level constraints are kept
     # as passthrough fragments, which need the source dialect.
     if (

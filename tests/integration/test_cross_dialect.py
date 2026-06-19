@@ -553,6 +553,34 @@ class TestOutputReturning:
         assert "no RETURNING" in result.sql
 
 
+class TestConvertStyle:
+    """T-SQL CONVERT(type, value, style) date-style codes."""
+
+    @pytest.mark.parametrize(
+        "target,fmt_fn",
+        [
+            ("postgresql", "TO_CHAR"),
+            ("mysql", "DATE_FORMAT"),
+            ("oracle", "TO_CHAR"),
+        ],
+    )
+    def test_convert_style_120(
+        self, transpiler: Transpiler, target: str, fmt_fn: str
+    ) -> None:
+        sql = "SELECT CONVERT(VARCHAR, d, 120) FROM t"
+        result = transpiler.transpile(sql, "tsql", target)
+        assert fmt_fn in result.sql.upper()
+        # The value and style must be preserved (not truncated to CONVERT()).
+        assert "CONVERT(VARCHAR)" not in result.sql.upper()
+        assert "d" in result.sql
+
+    def test_convert_style_103_uk_date(self, transpiler: Transpiler) -> None:
+        sql = "SELECT CONVERT(VARCHAR(10), d, 103) FROM t"
+        result = transpiler.transpile(sql, "tsql", "mysql")
+        # Style 103 is dd/mm/yyyy.
+        assert "%d/%m/%Y" in result.sql
+
+
 class TestCrossDialectExpressions:
     """Complex expressions across dialects."""
 
