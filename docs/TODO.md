@@ -95,7 +95,10 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 - [ ] **End-to-end real-world tests using the private `procedures.sql`**
       (SQL Server + Oracle) once a delivery mechanism is agreed. The file is
       out-of-band and never committed; tests must skip when absent.
-- [ ] **Round-trip fidelity tests** (A→B→A) on the public fixtures.
+- [x] **Round-trip fidelity tests** (A→B→A) on the public fixtures — added;
+      these caught a missing statement-terminator bug (emitted statements
+      lacked ';', so the output was not re-parseable). Output statements are
+      now properly terminated.
 - [ ] **Performance**: Northwind (~3,900 lines, 3,300 INSERTs) takes ~0.8s;
       profile the DML path if larger inputs are expected.
 - [ ] **PyPI publication** — explicitly deferred (do not publish yet).

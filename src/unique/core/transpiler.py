@@ -174,7 +174,9 @@ class Transpiler:
                         batch.sql, source, target, source_dialect, target_dialect
                     )
 
-                output_parts.append(result.sql)
+                output_parts.append(
+                    self._ensure_terminated(result.sql, target, batch.batch_type)
+                )
                 all_warnings.extend(result.warnings)
                 all_unsupported.extend(result.unsupported)
 
@@ -348,6 +350,29 @@ class Transpiler:
                 ],
             )
         return TranspileResult(sql=sql)
+
+    @staticmethod
+    def _ensure_terminated(sql: str, target: str, batch_type: BatchType) -> str:
+        """Ensure an emitted statement ends with a ';' terminator.
+
+        Comment-only output and statements that already end with ';' (or a
+        T-SQL/Oracle batch terminator handled by the separator) are left as
+        is. This keeps the output re-parseable (each statement is delimited),
+        which matters for round-trips and downstream tools.
+        """
+        stripped = sql.rstrip()
+        if not stripped:
+            return sql
+        # Pure comment output: do not append a semicolon.
+        if all(
+            not line.strip() or line.lstrip().startswith("--")
+            for line in stripped.splitlines()
+        ):
+            return sql
+        if stripped.endswith(";"):
+            return sql
+        # If the last non-comment line lacks a terminator, add one.
+        return stripped + ";"
 
     @staticmethod
     def _get_batch_separator(target: str) -> str:
