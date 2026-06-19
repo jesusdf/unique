@@ -112,8 +112,14 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       these caught a missing statement-terminator bug (emitted statements
       lacked ';', so the output was not re-parseable). Output statements are
       now properly terminated.
-- [ ] **Performance**: Northwind (~3,900 lines, 3,300 INSERTs) takes ~0.8s;
-      profile the DML path if larger inputs are expected.
+- [x] **Performance** — analyzed (not a bottleneck of our own code).
+      Realistic best-of-3 timings: Northwind (~3,400 statements, mostly data
+      INSERTs) 0.84s; AdventureWorks 0.11s; Sakila 0.06s; HR 0.03s. Profiling
+      shows ~91% of the time is sqlglot parsing, proportional to the number
+      of statements and inherent to the parser — there is no redundant work
+      on our side (each statement is parsed once). No micro-optimization is
+      warranted; if bulk data-INSERT throughput ever matters, batching or
+      skipping pure-data INSERTs would be the lever, not parser tuning.
 - [ ] **PyPI publication** — explicitly deferred (do not publish yet).
 
 ## 6. Known limitations to keep documented (not bugs)
