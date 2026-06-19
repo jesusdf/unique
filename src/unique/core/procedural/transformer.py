@@ -866,6 +866,49 @@ class ProceduralTransformer:
         sql = self._transform_scope_identity(sql)
         sql = self._transform_nvl2(sql)
         sql = self._transform_oracle_date_funcs(sql)
+        sql = self._transform_mysql_date_funcs(sql)
+        return sql
+
+    def _map_mysql_datefmt_to_oracle(self, fmt: str) -> str:
+        """Map a MySQL date-format string to Oracle/PostgreSQL specifiers."""
+        out = fmt
+        # Reverse of the Oracle->MySQL table; longest specifiers first.
+        for ora, mysql in self._ORACLE_TO_MYSQL_DATEFMT:
+            out = out.replace(mysql, ora)
+        # MySQL %T is HH24:MI:SS.
+        out = out.replace("%T", "HH24:MI:SS")
+        return out
+
+    def _transform_mysql_date_funcs(self, sql: str) -> str:
+        """Translate MySQL DATE_FORMAT/STR_TO_DATE to Oracle/PostgreSQL.
+
+        DATE_FORMAT(d, fmt) -> TO_CHAR(d, mapped_fmt)
+        STR_TO_DATE(s, fmt) -> TO_DATE(s, mapped_fmt)
+        Targets Oracle and PostgreSQL (both use TO_CHAR/TO_DATE with the same
+        format patterns); T-SQL has no direct TO_CHAR, so it is left for the
+        CONVERT path / manual review.
+        """
+        if self._source != "mysql" or self._target not in ("oracle", "postgresql"):
+            return sql
+
+        def map_fmt_arg(arg: str) -> str:
+            s = arg.strip()
+            if len(s) >= 2 and s[0] == "'" and s[-1] == "'":
+                return "'" + self._map_mysql_datefmt_to_oracle(s[1:-1]) + "'"
+            return arg
+
+        def build_date_format(args: list[str]) -> str | None:
+            if len(args) != 2:
+                return None
+            return f"TO_CHAR({args[0]}, {map_fmt_arg(args[1])})"
+
+        def build_str_to_date(args: list[str]) -> str | None:
+            if len(args) != 2:
+                return None
+            return f"TO_DATE({args[0]}, {map_fmt_arg(args[1])})"
+
+        sql = self._rewrite_calls(sql, "DATE_FORMAT", build_date_format)
+        sql = self._rewrite_calls(sql, "STR_TO_DATE", build_str_to_date)
         return sql
 
     # Oracle date-format pattern -> MySQL/strftime specifier.

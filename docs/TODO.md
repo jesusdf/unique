@@ -99,8 +99,9 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       now routes through sqlglot, which maps the numeric style codes to the
       right TO_CHAR/DATE_FORMAT patterns (style 120 → ISO datetime, 103 →
       dd/mm/yyyy, etc.). Previously the value and style were truncated.
-- [ ] **Date-format strings** — map Oracle `'YYYY-MM-DD'` ↔ MySQL `'%Y-%m-%d'`
-      ↔ T-SQL style codes.
+- [x] **Date-format strings** — bidirectional Oracle/PostgreSQL `TO_CHAR`/
+      `TO_DATE` ↔ MySQL `DATE_FORMAT`/`STR_TO_DATE` with format-pattern
+      mapping (`YYYY`↔`%Y`, `%T`→`HH24:MI:SS`, etc.).
 
 ## 5. Tooling / infrastructure (P3)
 

@@ -397,6 +397,23 @@ class TestOracleDateFormat:
         out = t._transform_node(RawSQL(sql="TO_CHAR(d, 'YYYY-MM-DD')", reason="x"))
         assert out.sql == "TO_CHAR(d, 'YYYY-MM-DD')"
 
+    def test_mysql_date_format_to_oracle(self) -> None:
+        t = ProceduralTransformer("mysql", "oracle")
+        out = t._transform_node(RawSQL(sql="DATE_FORMAT(d, '%Y-%m-%d')", reason="x"))
+        assert out.sql == "TO_CHAR(d, 'YYYY-MM-DD')"
+
+    def test_mysql_date_format_with_time(self) -> None:
+        t = ProceduralTransformer("mysql", "postgresql")
+        out = t._transform_node(RawSQL(sql="DATE_FORMAT(d, '%Y-%m-%d %T')", reason="x"))
+        assert out.sql == "TO_CHAR(d, 'YYYY-MM-DD HH24:MI:SS')"
+
+    def test_mysql_str_to_date_to_oracle(self) -> None:
+        t = ProceduralTransformer("mysql", "oracle")
+        out = t._transform_node(
+            RawSQL(sql="STR_TO_DATE('2020-01-01', '%Y-%m-%d')", reason="x")
+        )
+        assert out.sql == "TO_DATE('2020-01-01', 'YYYY-MM-DD')"
+
 
 class TestSubstringPosition:
     def test_charindex_to_oracle_reorders(self) -> None:
