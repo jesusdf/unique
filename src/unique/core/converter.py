@@ -172,6 +172,17 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="SELECT INTO",
         )
+    # SELECT clauses our IR does not model (row locks like FOR UPDATE,
+    # QUALIFY) would otherwise be dropped silently; pass them through so
+    # sqlglot can translate them and the semantics are preserved.
+    if isinstance(expr, exp.Select) and (
+        expr.args.get("locks") or expr.args.get("qualify") is not None
+    ):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="SELECT",
+        )
     # CREATE TABLE is modeled in IR but its table-level constraints are kept
     # as passthrough fragments, which need the source dialect.
     if (
