@@ -49,9 +49,19 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       (the BINARY(n) data type and BINARY(expr) function are preserved).
       `ON UPDATE CURRENT_TIMESTAMP` is handled by sqlglot directly.
 - [x] **Computed/persisted columns** (`AS (expr) PERSISTED`) — captured as a
-      passthrough fragment so sqlglot emits `GENERATED ALWAYS AS (expr)
-      STORED`; previously the expression was lost and the column became a
-      bare VARCHAR.
+      passthrough fragment. MySQL keeps a typeless `GENERATED ALWAYS AS (expr)
+      STORED`... but live validation showed PostgreSQL, Oracle **and MySQL**
+      all reject a generated column without an explicit type (which T-SQL
+      computed columns don't declare). So for every target we now emit a
+      documented `-- UNIQUE:` comment **outside** the column list (keeping the
+      CREATE TABLE valid) instead of invalid SQL. The expression is preserved
+      in the comment; previously it was lost and the column became a bare
+      VARCHAR.
+- [x] **Invalid `CASE` in transpiled indexes** — sqlglot emulates
+      PostgreSQL's NULLS ordering by prefixing an index key with
+      `CASE WHEN col IS NULL THEN 1 ELSE 0 END, col`, which is invalid inside
+      an index column list in T-SQL, MySQL and Oracle. Collapsed back to the
+      bare column for every target except PostgreSQL. Found by live validation.
 
 ## 3. Procedural engine refinements (P2)
 
@@ -114,9 +124,33 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 
 ## 5. Tooling / infrastructure (P3)
 
-- [ ] **End-to-end real-world tests using the private `procedures.sql`**
-      (SQL Server + Oracle) once a delivery mechanism is agreed. The file is
-      out-of-band and never committed; tests must skip when absent.
+- [x] **Web UI** served at `/` by the API: two CodeMirror editors with SQL
+      syntax highlighting (embedded, no CDN — works behind an offline reverse
+      proxy), source/target selectors with swap, live dialect auto-detection,
+      copy, Ctrl+Enter, and a file upload/download translate section.
+      Built from `web/src/index.template.html` + `web/vendor/` via
+      `python web/build.py`. New endpoints `POST /api/v1/detect` and
+      `POST /api/v1/transpile/file`; detection in `core/detection.py`.
+- [x] **Live syntax validation against real engines** — `tests/helpers/
+      live_validation.py` + `tests/integration/test_live_syntax.py` validate
+      transpiler output against SQL Server / PostgreSQL / MySQL (executed in a
+      rolled-back transaction; MySQL in a throwaway database). CI job "Live
+      Syntax Validation". This layer found and drove fixes for real bugs
+      (NVARCHAR not mapped to PG, invalid `CASE` in indexes, typeless
+      generated columns).
+- [x] **Anonymized procedural fixtures** — `tests/fixtures/procedures/`
+      (`procedures_sqlserver.sql`, `procedures_oracle.sql`) covering the
+      stored-procedure surface, with `test_procedures_fixtures.py` (parse,
+      split, anonymization guard, cross-dialect transpile-without-crash).
+- [ ] **Make the procedural fixtures executable against real engines** —
+      next steps (do where DB access is available):
+      (1) generate the **DDL** for the tables/columns they reference (tables
+      already identified; column types TBD: generic-by-use / all-VARCHAR /
+      inferred); (2) optionally **simplify JOINs** (one of each kind per query,
+      dropping orphaned columns) — prefer a sqlglot parse/re-emit approach over
+      regex; (3) optional **dedup** of repeated blocks; (4) add a CI job that
+      creates the schema and runs the scripts + their transpilations against
+      real SQL Server and Oracle, then document it.
 - [x] **Round-trip fidelity tests** (A→B→A) on the public fixtures — added;
       these caught a missing statement-terminator bug (emitted statements
       lacked ';', so the output was not re-parseable). Output statements are
