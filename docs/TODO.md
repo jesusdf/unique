@@ -80,6 +80,15 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       the base statement plus a documented comment.
 - [x] **`@@IDENTITY` / `SCOPE_IDENTITY()`** → `LASTVAL()` (PG) /
       `LAST_INSERT_ID()` (MySQL) / documented `<sequence>.CURRVAL` (Oracle).
+- [x] **Data-type name mapping in CREATE TABLE** — non-portable types
+      (NVARCHAR/NCHAR/NTEXT, DATETIME2, MONEY, BIT, UNIQUEIDENTIFIER/UUID,
+      VARBINARY/BYTEA, ...) map to the target dialect both in our own emitter
+      and in passthrough DDL. Found by the live syntax-validation layer
+      (PostgreSQL rejected `NVARCHAR`).
+- [ ] **Data-type names inside procedural bodies (P2)** — variable/parameter
+      declarations in stored routines (e.g. `v_size NVARCHAR(5)`) still carry
+      the source type name. Extend the type mapping into the procedural engine
+      without disturbing string literals or identifiers.
 
 ## 4. Function mapping gaps (P2)
 

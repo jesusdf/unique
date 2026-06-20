@@ -31,6 +31,7 @@ when the URL/driver is unavailable, so the default suite stays green.
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 
 
@@ -147,6 +148,10 @@ class MySQLValidator(SyntaxValidator):
             for stmt in _split_semicolons(sql):
                 if stmt.strip():
                     cur.execute(stmt)
+                    # Drain any result set so the next execute() doesn't fail
+                    # with "Unread result found".
+                    with contextlib.suppress(Exception):
+                        cur.fetchall()
             return ValidationResult(ok=True)
         except Exception as e:  # noqa: BLE001
             return ValidationResult(ok=False, error=f"{e}\n--- sql ---\n{sql}")
