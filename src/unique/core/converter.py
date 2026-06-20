@@ -921,6 +921,10 @@ def emit_sql(nodes: list[ASTNode], dialect: str) -> str:
         sql = emit_node(node, dialect)
         if sql:
             parts.append(sql)
+    # T-SQL separates batches with GO and does not terminate statements with
+    # ';'. Other dialects use ';' as the statement terminator.
+    if dialect == "tsql":
+        return "\nGO\n\n".join(parts)
     return ";\n\n".join(parts)
 
 
@@ -945,7 +949,8 @@ def emit_node(node: ASTNode, dialect: str) -> str:
     if isinstance(node, PassthroughSQL):
         return _emit_passthrough(node, dialect)
     if isinstance(node, Script):
-        return ";\n\n".join(emit_node(s, dialect) for s in node.statements)
+        sep = "\nGO\n\n" if dialect == "tsql" else ";\n\n"
+        return sep.join(emit_node(s, dialect) for s in node.statements)
 
     # Expression-level emission
     return _emit_expression(node, dialect)
@@ -1172,12 +1177,25 @@ def _emit_delete(node: DeleteStatement, dialect: str) -> str:
 def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     """Emit a CREATE TABLE statement."""
     table = _emit_table_ref(node.table)
-    exists = "IF NOT EXISTS " if node.if_not_exists else ""
     temp = "TEMPORARY " if node.temporary else ""
+    # T-SQL has no "CREATE TABLE IF NOT EXISTS"; the idiomatic equivalent is an
+    # existence guard against the catalog. Other engines support the clause
+    # inline. Oracle (< 23c) also lacks it, but sqlglot/most targets accept it;
+    # we keep the inline form there and special-case only T-SQL.
+    inline_exists = ""
+    tsql_guard = ""
+    if node.if_not_exists:
+        if dialect == "tsql":
+            tsql_guard = (
+                f"IF OBJECT_ID(N'{_object_id_name(node.table)}', N'U') " "IS NULL\n"
+            )
+        else:
+            inline_exists = "IF NOT EXISTS "
+    exists = inline_exists
 
     if node.as_select:
         select = _emit_select(node.as_select, dialect)
-        return f"CREATE {temp}TABLE {exists}{table} AS\n{select}"
+        return f"{tsql_guard}CREATE {temp}TABLE {exists}{table} AS\n{select}"
 
     if node.columns:
         col_defs = []
@@ -1209,9 +1227,9 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
         for constraint in node.table_constraints:
             col_defs.append(f"  {_emit_passthrough_inline(constraint, dialect)}")
         cols = ",\n".join(col_defs)
-        return f"CREATE {temp}TABLE {exists}{table} (\n{cols}\n)"
+        return f"{tsql_guard}CREATE {temp}TABLE {exists}{table} (\n{cols}\n)"
 
-    return f"CREATE {temp}TABLE {exists}{table}"
+    return f"{tsql_guard}CREATE {temp}TABLE {exists}{table}"
 
 
 def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
@@ -1467,6 +1485,19 @@ def _emit_table_ref(node: TableRef) -> str:
         result += f" {node.alias}"
 
     return result
+
+
+def _object_id_name(node: TableRef) -> str:
+    """Build a schema-qualified name for a T-SQL OBJECT_ID() guard.
+
+    Excludes any alias and the database part (OBJECT_ID resolves within the
+    current database), keeping just ``[schema.]table``.
+    """
+    parts = []
+    if node.schema:
+        parts.append(node.schema)
+    parts.append(node.name)
+    return ".".join(parts)
 
 
 def _emit_join(join: JoinClause, dialect: str) -> str:
