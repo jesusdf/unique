@@ -180,12 +180,23 @@ jobs:
 
       - name: Install Microsoft ODBC Driver 18
         run: |
+          set -euxo pipefail
+          # Detect the Ubuntu release; Microsoft only publishes repos for some
+          # versions, so fall back to 22.04 if the exact one isn't available.
+          . /etc/os-release
+          VER="${VERSION_ID}"
+          if ! curl -fsSL "https://packages.microsoft.com/config/ubuntu/${VER}/prod.list" -o /tmp/mssql.list; then
+            echo "No Microsoft repo for Ubuntu ${VER}; falling back to 22.04"
+            VER="22.04"
+            curl -fsSL "https://packages.microsoft.com/config/ubuntu/${VER}/prod.list" -o /tmp/mssql.list
+          fi
           curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
             | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
-          curl -fsSL https://packages.microsoft.com/config/ubuntu/22.04/prod.list \
-            | sudo tee /etc/apt/sources.list.d/mssql-release.list
+          # Ensure the source list references the keyring we just wrote.
+          sudo sed -i 's#\[.*\]#[signed-by=/usr/share/keyrings/microsoft-prod.gpg]#' /tmp/mssql.list || true
+          sudo cp /tmp/mssql.list /etc/apt/sources.list.d/mssql-release.list
           sudo apt-get update
-          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev
 
       - name: Wait for SQL Server
         run: |
