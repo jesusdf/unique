@@ -139,3 +139,19 @@ See `docs/TODO.md` for the full prioritized backlog. Highest priority:
 - [x] SQL Server system procedures emitted as comments cross-dialect
 - [x] CREATE TABLE column constraints preserved (IDENTITY, NULL, DEFAULT);
       ROWGUIDCOL / NOT FOR REPLICATION stripped
+- [x] Table-level constraints, domain types, computed columns, portable
+      indexes (CLUSTERED/INCLUDE/filtered), USE/MERGE/CONNECT BY/SELECT INTO,
+      OUTPUT↔RETURNING, FOR UPDATE/QUALIFY — preserved or documented rather
+      than silently dropped
+- [x] Function translation: substring-position reordering, DECODE/NVL2→CASE,
+      STRING_AGG↔LISTAGG↔GROUP_CONCAT, bidirectional date-format mapping,
+      CONVERT style codes, SCOPE_IDENTITY/@@IDENTITY
+- [x] Generic transpilation invariants (element conservation + round-trip
+      token similarity) applied across all 12 pairs
+- [x] Idiomatic T-SQL output: OBJECT_ID guard instead of CREATE TABLE IF NOT
+      EXISTS; GO-based batch separation without spurious `;` or post-comment GO
+- [x] Web UI (two CodeMirror editors with SQL highlighting, embedded — no
+      CDN), dialect auto-detection, and file upload/download translation;
+      new `/api/v1/detect` and `/api/v1/transpile/file` endpoints
+- [x] Live syntax validation against real engines (SQL Server PARSEONLY,
+      Postgres/MySQL rolled-back transactions) as a CI job
