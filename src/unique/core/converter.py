@@ -1132,13 +1132,14 @@ def _portable_index(sql: str, dialect: str) -> str:
         # and ON [filegroup] have no portable equivalent; drop them.
         sql = re.sub(r"(?i)\s+WITH\s*\([^)]*\)", "", sql)
         sql = re.sub(r"(?i)\s+ON\s+\[[^\]]+\]\s*$", "", sql)
-    else:
-        # sqlglot emulates PostgreSQL's NULLS-ordering by prefixing an index
-        # key with "CASE WHEN col IS NULL THEN 1 ELSE 0 END, col". That
-        # expression is invalid inside a T-SQL index column list, so collapse
-        # it back to just the column.
+
+    # sqlglot emulates PostgreSQL's NULLS-ordering by prefixing an index key
+    # with "CASE WHEN col IS NULL THEN 1 ELSE 0 END, col". That expression is
+    # invalid inside an index column list in T-SQL, MySQL and Oracle, so
+    # collapse it back to just the column for every target except PostgreSQL.
+    if dialect != "postgresql":
         sql = re.sub(
-            r"(?i)CASE\s+WHEN\s+(?P<col>[\w.\[\]\"]+)\s+IS\s+NULL\s+THEN\s+"
+            r"(?i)CASE\s+WHEN\s+(?P<col>[\w.\[\]\"`]+)\s+IS\s+NULL\s+THEN\s+"
             r"\d+\s+ELSE\s+\d+\s+END\s*,\s*(?P=col)",
             lambda m: m.group("col"),
             sql,
@@ -1331,10 +1332,21 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 f"  {col.name} {dtype}{identity}{nullable}{default}{pk}{unique}"
             )
         # Table-level constraints (PK/FK/UNIQUE/CHECK), re-transpiled.
+        # A fragment may come back as a documented comment (e.g. a generated
+        # column with no portable type); those can't live inside the
+        # parenthesized column list, so collect them and append afterwards.
+        trailing_comments: list[str] = []
         for constraint in node.table_constraints:
-            col_defs.append(f"  {_emit_passthrough_inline(constraint, dialect)}")
+            emitted = _emit_passthrough_inline(constraint, dialect)
+            if emitted.lstrip().startswith("--"):
+                trailing_comments.append(emitted.strip())
+            else:
+                col_defs.append(f"  {emitted}")
         cols = ",\n".join(col_defs)
-        return f"{tsql_guard}CREATE {temp}TABLE {exists}{table} (\n{cols}\n)"
+        result = f"{tsql_guard}CREATE {temp}TABLE {exists}{table} (\n{cols}\n)"
+        if trailing_comments:
+            result += "\n" + "\n".join(trailing_comments)
+        return result
 
     return f"{tsql_guard}CREATE {temp}TABLE {exists}{table}"
 
@@ -1354,7 +1366,30 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
         # Drop the placeholder "x INT," prefix.
         parts = inner.split(",", 1)
         if len(parts) == 2:
-            return parts[1].strip()
+            fragment = parts[1].strip()
+            # PostgreSQL and Oracle require an explicit type before a generated
+            # column. T-SQL computed columns carry no declared type, so sqlglot
+            # emits a typeless definition -- either "col GENERATED ALWAYS AS
+            # (...) STORED" or "col AS (...) PERSISTED" -- that those engines
+            # reject. Emit a documented comment instead of invalid SQL.
+            is_generated = re.search(
+                r"(?i)\bGENERATED\s+ALWAYS\s+AS\b|\bAS\s*\(", fragment
+            )
+            has_type = re.search(
+                r"(?i)^\s*[\w\[\]\".]+\s+"
+                r"(INT|INTEGER|BIGINT|SMALLINT|TINYINT|NUMERIC|DECIMAL|FLOAT|"
+                r"REAL|DOUBLE|CHAR|VARCHAR|NVARCHAR|TEXT|DATE|TIMESTAMP|"
+                r"BOOLEAN|NUMBER|RAW)",
+                fragment,
+            )
+            if dialect in ("postgresql", "oracle") and is_generated and not has_type:
+                col_name = fragment.split()[0]
+                return (
+                    f"-- UNIQUE: {dialect} requires an explicit type for the "
+                    f"generated column {col_name}; original computed column: "
+                    f"{node.sql}"
+                )
+            return fragment
     except Exception as e:  # noqa: BLE001
         logger.warning("constraint transpile error: %s", e)
     return node.sql

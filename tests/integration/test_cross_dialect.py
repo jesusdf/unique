@@ -304,12 +304,22 @@ class TestCrossDialectDDL:
         self, transpiler: Transpiler, target: str
     ) -> None:
         # A computed column (AS (expr) PERSISTED) must keep its expression,
-        # not collapse to a plain VARCHAR.
+        # not collapse to a plain VARCHAR. MySQL accepts a typeless generated
+        # column; PostgreSQL and Oracle require an explicit type, which T-SQL
+        # computed columns don't declare, so those targets get a documented
+        # comment instead of invalid SQL.
         sql = "CREATE TABLE t (a INT, b INT, total AS (a + b) PERSISTED)"
         result = transpiler.transpile(sql, "tsql", target)
-        assert "GENERATED ALWAYS AS" in result.sql.upper()
-        assert "a + b" in result.sql.replace("(", "").replace(")", "")
         assert "total VARCHAR" not in result.sql.upper()
+        if target == "mysql":
+            assert "GENERATED ALWAYS AS" in result.sql.upper()
+            assert "a + b" in result.sql.replace("(", "").replace(")", "")
+        else:  # postgresql, oracle
+            assert "GENERATED ALWAYS AS" not in result.sql.upper()
+            assert "UNIQUE:" in result.sql
+            assert "total" in result.sql
+            # The CREATE TABLE itself must remain valid (no trailing comma).
+            assert ",\n)" not in result.sql
 
 
 class TestTSQLIdioms:
@@ -410,6 +420,41 @@ class TestPortableIndex:
             "CREATE INDEX ix ON t (a, b)", "postgresql", "tsql"
         ).sql
         assert "CASE" not in out.upper()
+
+    def test_no_case_expression_for_mysql_or_oracle_index(
+        self, transpiler: Transpiler
+    ) -> None:
+        # The CASE emulation is invalid for MySQL and Oracle too.
+        for target in ("mysql", "oracle"):
+            out = transpiler.transpile(
+                "CREATE INDEX ix ON t (a)", "postgresql", target
+            ).sql
+            assert "CASE" not in out.upper(), target
+
+
+class TestComputedColumnPortability:
+    """Generated columns without a declared type (found via live val)."""
+
+    def test_pg_and_oracle_get_documented_comment(self, transpiler: Transpiler) -> None:
+        sql = "CREATE TABLE t (id INT, total AS (id * 2) PERSISTED)"
+        for target in ("postgresql", "oracle"):
+            out = transpiler.transpile(sql, "tsql", target).sql
+            assert ",\n)" not in out  # valid CREATE TABLE, no dangling comma
+            assert "UNIQUE:" in out
+            assert "GENERATED ALWAYS AS" not in out.upper()
+
+    def test_mysql_keeps_generated_column(self, transpiler: Transpiler) -> None:
+        sql = "CREATE TABLE t (id INT, total AS (id * 2) PERSISTED)"
+        out = transpiler.transpile(sql, "tsql", "mysql").sql
+        assert "GENERATED ALWAYS AS" in out.upper()
+
+    def test_terminator_not_swallowed_by_trailing_comment(
+        self, transpiler: Transpiler
+    ) -> None:
+        sql = "CREATE TABLE t (id INT, total AS (id * 2) PERSISTED)"
+        out = transpiler.transpile(sql, "tsql", "postgresql").sql
+        assert ");" in out
+        assert not out.rstrip().endswith(";")  # ends with the comment
 
 
 class TestDDLPassthrough:

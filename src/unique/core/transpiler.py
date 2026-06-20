@@ -463,16 +463,24 @@ class Transpiler:
         stripped = sql.rstrip()
         if not stripped:
             return sql
+        lines = stripped.splitlines()
         # Pure comment output: do not append a semicolon.
-        if all(
-            not line.strip() or line.lstrip().startswith("--")
-            for line in stripped.splitlines()
-        ):
+        if all(not line.strip() or line.lstrip().startswith("--") for line in lines):
             return sql
-        if stripped.endswith(";"):
+        # Trailing explanatory comments may follow the statement (e.g. a
+        # documented unsupported generated column). Find the last line that
+        # isn't a comment and terminate there, leaving the comments after it.
+        last_code_idx = None
+        for i in range(len(lines) - 1, -1, -1):
+            if lines[i].strip() and not lines[i].lstrip().startswith("--"):
+                last_code_idx = i
+                break
+        if last_code_idx is None:
             return sql
-        # If the last non-comment line lacks a terminator, add one.
-        return stripped + ";"
+        if lines[last_code_idx].rstrip().endswith(";"):
+            return sql
+        lines[last_code_idx] = lines[last_code_idx].rstrip() + ";"
+        return "\n".join(lines)
 
     @staticmethod
     def _get_batch_separator(target: str) -> str:

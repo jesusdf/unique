@@ -56,39 +56,36 @@ class SyntaxValidator:
 
 
 class MSSQLValidator(SyntaxValidator):
-    """Validate T-SQL with ``SET PARSEONLY ON`` (syntax check, no execution).
+    """Validate T-SQL by executing inside a rolled-back transaction.
 
-    PARSEONLY parses each statement for syntax without compiling or resolving
-    object names, so it flags dialect/syntax errors (e.g. the invalid
-    ``CREATE TABLE IF NOT EXISTS``) without touching data or needing the
-    referenced objects to exist.
+    Running the statements for real (then rolling back) resolves object names,
+    so dependent DDL works -- e.g. ``CREATE TABLE`` followed by a
+    ``CREATE INDEX`` on it in a later ``GO`` batch. Nothing is committed.
+    ``GO`` is a client-side batch separator, so we split on it and run the
+    batches in order on one connection/transaction.
     """
 
     dialect = "tsql"
 
     def __init__(self, url: str) -> None:
-        import pyodbc  # noqa: F401 - imported for its side effect/availability
+        import pyodbc  # noqa: F401 - imported for its availability
 
         self._conn = _connect_mssql(url)
+        self._conn.autocommit = False
 
     def validate(self, sql: str) -> ValidationResult:
-        # PARSEONLY checks syntax only: the server parses each statement but
-        # does not compile or resolve object names. This avoids false
-        # positives when a batch references a table it just (notionally)
-        # created, and it cannot be "stuck on" the way NOEXEC can (a fresh
-        # connection/cursor per call keeps it isolated). GO is a client-side
-        # batch separator, so validate batch by batch.
-        for batch in _split_go(sql):
-            if not batch.strip():
-                continue
-            cur = self._conn.cursor()
-            try:
-                cur.execute("SET PARSEONLY ON;\n" + batch + "\nSET PARSEONLY OFF;")
-            except Exception as e:  # noqa: BLE001 - report engine complaint
-                return ValidationResult(ok=False, error=f"{e}\n--- batch ---\n{batch}")
-            finally:
-                cur.close()
-        return ValidationResult(ok=True)
+        cur = self._conn.cursor()
+        try:
+            for batch in _split_go(sql):
+                if batch.strip():
+                    cur.execute(batch)
+            return ValidationResult(ok=True)
+        except Exception as e:  # noqa: BLE001 - report engine complaint
+            return ValidationResult(ok=False, error=f"{e}\n--- sql ---\n{sql}")
+        finally:
+            with contextlib.suppress(Exception):
+                self._conn.rollback()
+            cur.close()
 
     def close(self) -> None:
         self._conn.close()
@@ -236,4 +233,4 @@ def _connect_mssql(url: str):  # type: ignore[no-untyped-def]
         f"UID={p.username or 'sa'};PWD={p.password or ''};"
         "TrustServerCertificate=yes;"
     )
-    return pyodbc.connect(conn_str, autocommit=True)
+    return pyodbc.connect(conn_str, autocommit=False)
