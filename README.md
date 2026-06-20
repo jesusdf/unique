@@ -150,6 +150,26 @@ ruff check src/ tests/
 mypy src/unique/ --ignore-missing-imports
 ```
 
+### Validating output against real engines
+
+Beyond the unit/integration suite, the transpiled output can be checked
+against the *actual* target engines (SQL Server, PostgreSQL, MySQL) so that
+dialect violations are caught by the engine's own grammar rather than our
+assumptions. SQL Server uses `SET NOEXEC ON` (parse/compile without executing);
+PostgreSQL and MySQL run inside a rolled-back transaction. These tests are
+skipped unless the connection URLs are provided:
+
+```bash
+docker compose -f docker-compose.test.yaml up -d   # postgres, mysql, mssql
+
+UNIQUE_TEST_MSSQL_URL="mssql://sa:Unique_Strong!Pass1@localhost:1433/master" \
+UNIQUE_TEST_PG_URL="postgresql://unique:unique@localhost:5433/unique" \
+UNIQUE_TEST_MYSQL_URL="mysql://unique:unique@localhost:3307/unique" \
+pytest tests/integration/test_live_syntax.py -v
+```
+
+The CI runs this as the "Live Syntax Validation" job.
+
 ## Documentation
 
 - [Compatibility Matrix](docs/01-compatibility.md) — full feature support analysis
