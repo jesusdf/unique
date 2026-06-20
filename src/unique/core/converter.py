@@ -1382,7 +1382,11 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
                 r"BOOLEAN|NUMBER|RAW)",
                 fragment,
             )
-            if dialect in ("postgresql", "oracle") and is_generated and not has_type:
+            if (
+                dialect in ("postgresql", "oracle", "mysql")
+                and is_generated
+                and not has_type
+            ):
                 col_name = fragment.split()[0]
                 return (
                     f"-- UNIQUE: {dialect} requires an explicit type for the "

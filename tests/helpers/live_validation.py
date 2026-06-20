@@ -125,7 +125,13 @@ class PostgresValidator(SyntaxValidator):
 
 
 class MySQLValidator(SyntaxValidator):
-    """Validate MySQL by executing inside a rolled-back transaction."""
+    """Validate MySQL by executing in a throwaway database.
+
+    MySQL commits DDL implicitly, so a transaction rollback can't undo a
+    CREATE TABLE. To validate dependent DDL (CREATE TABLE then CREATE INDEX on
+    it) without leaking state, each ``validate`` call runs in a fresh,
+    uniquely-named database that is dropped afterwards.
+    """
 
     dialect = "mysql"
 
@@ -138,22 +144,27 @@ class MySQLValidator(SyntaxValidator):
             import mysql.connector  # type: ignore[import-untyped]
 
             self._conn = _connect_mysql_connector(url, mysql.connector)
+        self._conn.autocommit = True
 
     def validate(self, sql: str) -> ValidationResult:
+        import uuid
+
+        dbname = f"unique_val_{uuid.uuid4().hex[:12]}"
         cur = self._conn.cursor()
         try:
+            cur.execute(f"CREATE DATABASE {dbname}")
+            cur.execute(f"USE {dbname}")
             for stmt in _split_semicolons(sql):
                 if stmt.strip():
                     cur.execute(stmt)
-                    # Drain any result set so the next execute() doesn't fail
-                    # with "Unread result found".
                     with contextlib.suppress(Exception):
                         cur.fetchall()
             return ValidationResult(ok=True)
         except Exception as e:  # noqa: BLE001
             return ValidationResult(ok=False, error=f"{e}\n--- sql ---\n{sql}")
         finally:
-            self._conn.rollback()
+            with contextlib.suppress(Exception):
+                cur.execute(f"DROP DATABASE IF EXISTS {dbname}")
             cur.close()
 
     def close(self) -> None:

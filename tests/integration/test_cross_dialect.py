@@ -299,27 +299,23 @@ class TestCrossDialectDDL:
         result = transpiler.transpile(sql, "mysql", "postgresql")
         assert "BINARY(16)" in result.sql.upper()
 
-    @pytest.mark.parametrize("target", ["postgresql", "mysql"])
+    @pytest.mark.parametrize("target", ["postgresql", "mysql", "oracle"])
     def test_computed_column_preserved(
         self, transpiler: Transpiler, target: str
     ) -> None:
-        # A computed column (AS (expr) PERSISTED) must keep its expression,
-        # not collapse to a plain VARCHAR. MySQL accepts a typeless generated
-        # column; PostgreSQL and Oracle require an explicit type, which T-SQL
-        # computed columns don't declare, so those targets get a documented
-        # comment instead of invalid SQL.
+        # A computed column (AS (expr) PERSISTED) must not silently collapse to
+        # a plain VARCHAR. PostgreSQL, MySQL and Oracle all require an explicit
+        # type before a generated column, which T-SQL computed columns don't
+        # declare; real-engine validation confirmed MySQL rejects the typeless
+        # form too. So every target gets a documented comment instead of
+        # invalid SQL, placed outside the (valid) column list.
         sql = "CREATE TABLE t (a INT, b INT, total AS (a + b) PERSISTED)"
         result = transpiler.transpile(sql, "tsql", target)
         assert "total VARCHAR" not in result.sql.upper()
-        if target == "mysql":
-            assert "GENERATED ALWAYS AS" in result.sql.upper()
-            assert "a + b" in result.sql.replace("(", "").replace(")", "")
-        else:  # postgresql, oracle
-            assert "GENERATED ALWAYS AS" not in result.sql.upper()
-            assert "UNIQUE:" in result.sql
-            assert "total" in result.sql
-            # The CREATE TABLE itself must remain valid (no trailing comma).
-            assert ",\n)" not in result.sql
+        assert "GENERATED ALWAYS AS" not in result.sql.upper()
+        assert "UNIQUE:" in result.sql
+        assert "total" in result.sql
+        assert ",\n)" not in result.sql  # CREATE TABLE stays valid
 
 
 class TestTSQLIdioms:
@@ -443,10 +439,13 @@ class TestComputedColumnPortability:
             assert "UNIQUE:" in out
             assert "GENERATED ALWAYS AS" not in out.upper()
 
-    def test_mysql_keeps_generated_column(self, transpiler: Transpiler) -> None:
+    def test_mysql_also_gets_comment(self, transpiler: Transpiler) -> None:
+        # Real-engine validation showed MySQL rejects a typeless generated
+        # column too, so it also gets a documented comment.
         sql = "CREATE TABLE t (id INT, total AS (id * 2) PERSISTED)"
         out = transpiler.transpile(sql, "tsql", "mysql").sql
-        assert "GENERATED ALWAYS AS" in out.upper()
+        assert "UNIQUE:" in out
+        assert "GENERATED ALWAYS AS" not in out.upper()
 
     def test_terminator_not_swallowed_by_trailing_comment(
         self, transpiler: Transpiler
