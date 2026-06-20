@@ -77,7 +77,7 @@ class MSSQLValidator(SyntaxValidator):
         cur = self._conn.cursor()
         try:
             for batch in _split_go(sql):
-                if batch.strip():
+                if _is_executable(batch):
                     cur.execute(batch)
             return ValidationResult(ok=True)
         except Exception as e:  # noqa: BLE001 - report engine complaint
@@ -155,7 +155,7 @@ class MySQLValidator(SyntaxValidator):
             cur.execute(f"CREATE DATABASE {dbname}")
             cur.execute(f"USE {dbname}")
             for stmt in _split_semicolons(sql):
-                if stmt.strip():
+                if _is_executable(stmt):
                     cur.execute(stmt)
                     with contextlib.suppress(Exception):
                         cur.fetchall()
@@ -190,6 +190,19 @@ def _split_go(sql: str) -> list[str]:
     import re
 
     return re.split(r"(?im)^\s*GO\s*$", sql)
+
+
+def _is_executable(stmt: str) -> bool:
+    """Whether a statement has real SQL (not blank/comment-only).
+
+    A fragment that is only blank lines and ``--`` comments must not be sent
+    to the engine, which would reject it as a syntax error.
+    """
+    for line in stmt.strip().splitlines():
+        s = line.strip()
+        if s and not s.startswith("--"):
+            return True
+    return False
 
 
 def _split_semicolons(sql: str) -> list[str]:
