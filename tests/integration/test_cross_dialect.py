@@ -4,6 +4,8 @@ These tests verify end-to-end transpilation between all supported
 dialect pairs, covering DQL, DML, DDL, functions, and edge cases.
 """
 
+import re
+
 import pytest
 
 from unique.core.transpiler import Transpiler
@@ -308,6 +310,61 @@ class TestCrossDialectDDL:
         assert "GENERATED ALWAYS AS" in result.sql.upper()
         assert "a + b" in result.sql.replace("(", "").replace(")", "")
         assert "total VARCHAR" not in result.sql.upper()
+
+
+class TestTSQLIdioms:
+    """Regression tests for T-SQL output idioms (reported issues)."""
+
+    def test_create_table_if_not_exists_uses_object_id_guard(
+        self, transpiler: Transpiler
+    ) -> None:
+        # T-SQL has no CREATE TABLE IF NOT EXISTS; use an OBJECT_ID guard.
+        sql = "CREATE TABLE IF NOT EXISTS t (id INT)"
+        result = transpiler.transpile(sql, "postgresql", "tsql")
+        assert "IF NOT EXISTS" not in result.sql.upper().replace("IS NULL", "")
+        assert "OBJECT_ID" in result.sql
+        assert "CREATE TABLE t" in result.sql
+
+    def test_create_table_if_not_exists_inline_elsewhere(
+        self, transpiler: Transpiler
+    ) -> None:
+        sql = "CREATE TABLE IF NOT EXISTS t (id INT)"
+        for target in ("postgresql", "mysql"):
+            result = transpiler.transpile(sql, "postgresql", target)
+            assert "IF NOT EXISTS" in result.sql.upper()
+            assert "OBJECT_ID" not in result.sql
+
+    def test_tsql_statements_not_terminated_with_semicolon(
+        self, transpiler: Transpiler
+    ) -> None:
+        # Idiomatic T-SQL relies on GO between batches, not ';' terminators,
+        # and must never emit ';' immediately followed by GO.
+        sql = "SELECT 1; SELECT 2;"
+        result = transpiler.transpile(sql, "postgresql", "tsql")
+        assert ";\nGO" not in result.sql
+        assert "; GO" not in result.sql
+        assert "GO" in result.sql  # batches still separated
+
+    def test_no_go_after_comment_batches(self, transpiler: Transpiler) -> None:
+        # Consecutive Oracle 'rem' comments must not each be followed by GO.
+        sql = "rem Comment 1\nrem Comment 2\nrem Comment 3\nSELECT 1 FROM dual;"
+        result = transpiler.transpile(sql, "oracle", "tsql")
+        assert "GO" not in result.sql.split("SELECT")[0]
+        # All three comments preserved.
+        for n in ("Comment 1", "Comment 2", "Comment 3"):
+            assert n in result.sql
+
+    def test_other_dialects_keep_semicolon(self, transpiler: Transpiler) -> None:
+        sql = "SELECT 1; SELECT 2;"
+        result = transpiler.transpile(sql, "tsql", "postgresql")
+        assert result.sql.count(";") >= 2
+
+    def test_no_go_after_comment_only_output(self, transpiler: Transpiler) -> None:
+        # Unsupported statements we turn into '-- UNIQUE:' comments must not be
+        # followed by GO either, even though their batch isn't a COMMENT batch.
+        sql = "SET statement_timeout = 0;\nSET lock_timeout = 0;\nSELECT 1;"
+        result = transpiler.transpile(sql, "postgresql", "tsql")
+        assert not re.search(r"--[^\n]*\nGO", result.sql)
 
 
 class TestDDLPassthrough:

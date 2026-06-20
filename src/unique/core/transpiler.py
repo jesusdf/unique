@@ -51,6 +51,17 @@ def _warn(message: str, feature: str, source: str, target: str) -> TransformWarn
     )
 
 
+def _is_comment_only(sql: str) -> bool:
+    """Whether ``sql`` consists solely of blank lines and ``--`` comments."""
+    stripped = sql.strip()
+    if not stripped:
+        return False
+    return all(
+        not line.strip() or line.lstrip().startswith("--")
+        for line in stripped.splitlines()
+    )
+
+
 def _extract_tsql_output(sql: str) -> tuple[str, str | None]:
     """Extract a T-SQL OUTPUT clause from a single DML statement.
 
@@ -176,7 +187,7 @@ class Transpiler:
 
             all_warnings: list[TransformWarning] = []
             all_unsupported: list[str] = []
-            output_parts: list[str] = []
+            output_parts: list[tuple[str, bool]] = []  # (sql, is_comment)
 
             for batch in batches:
                 # Skip empty batches, but keep explicit COMMENT batches: they
@@ -200,15 +211,21 @@ class Transpiler:
                         batch.sql, source, target, source_dialect, target_dialect
                     )
 
-                output_parts.append(
-                    self._ensure_terminated(result.sql, target, batch.batch_type)
+                terminated = self._ensure_terminated(
+                    result.sql, target, batch.batch_type
                 )
+                # Treat output that is *entirely* comments as a comment part,
+                # even if the batch wasn't classified as COMMENT (e.g. an
+                # unsupported SET we turned into a '-- ...' note). This avoids
+                # emitting a GO/';' separator after a pure comment.
+                is_comment = batch.batch_type == BatchType.COMMENT or _is_comment_only(
+                    terminated
+                )
+                output_parts.append((terminated, is_comment))
                 all_warnings.extend(result.warnings)
                 all_unsupported.extend(result.unsupported)
 
-            # Join with appropriate separator
-            separator = self._get_batch_separator(target)
-            output_sql = separator.join(output_parts)
+            output_sql = self._join_parts(output_parts, target)
 
             return TranspileResult(
                 sql=output_sql,
@@ -218,6 +235,28 @@ class Transpiler:
         finally:
             if metadata_resolver:
                 metadata_resolver.close()
+
+    def _join_parts(self, parts: list[tuple[str, bool]], target: str) -> str:
+        """Join emitted parts, choosing the right delimiter between each pair.
+
+        A comment part is attached to what follows with a plain newline rather
+        than the batch separator, so we don't emit a useless ``GO`` (T-SQL) or
+        ``/`` (Oracle) after a comment. The batch separator is only used
+        between two executable parts.
+        """
+        if not parts:
+            return ""
+        separator = self._get_batch_separator(target)
+        out = parts[0][0]
+        for i in range(1, len(parts)):
+            prev_is_comment = parts[i - 1][1]
+            text, _ = parts[i]
+            if prev_is_comment:
+                # Glue the comment to the following part with a newline.
+                out = out.rstrip("\n") + "\n" + text
+            else:
+                out += separator + text
+        return out
 
     def _transpile_procedural(
         self,
@@ -406,13 +445,21 @@ class Transpiler:
 
     @staticmethod
     def _ensure_terminated(sql: str, target: str, batch_type: BatchType) -> str:
-        """Ensure an emitted statement ends with a ';' terminator.
+        """Ensure an emitted statement is properly delimited for re-parsing.
 
-        Comment-only output and statements that already end with ';' (or a
-        T-SQL/Oracle batch terminator handled by the separator) are left as
-        is. This keeps the output re-parseable (each statement is delimited),
-        which matters for round-trips and downstream tools.
+        For PostgreSQL/MySQL/Oracle the statement terminator is ``;`` and we
+        append one when missing so the output stays re-parseable (round-trips,
+        downstream tools).
+
+        For T-SQL the batch separator ``GO`` does that job, and idiomatic
+        T-SQL does not terminate statements with ``;`` (it is only required in
+        specific cases such as before a CTE's ``WITH``). Appending ``;`` here
+        would produce ``... ;`` followed by ``GO`` -- noisy and non-idiomatic,
+        and harmful after an ``IF`` guard, whose scope is a single statement.
+        So for T-SQL we leave the statement unterminated.
         """
+        if target == "tsql":
+            return sql
         stripped = sql.rstrip()
         if not stripped:
             return sql
