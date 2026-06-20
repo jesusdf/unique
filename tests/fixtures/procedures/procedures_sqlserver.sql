@@ -1,4 +1,226 @@
 -- ============================================================
+-- DDL: tables required by the procedure fixtures below.
+-- Schema: dbo. Idempotent (IF NOT EXISTS guard per table).
+-- ============================================================
+
+IF OBJECT_ID(N'dbo.tbl_15', N'U') IS NULL
+CREATE TABLE dbo.tbl_15 (
+    col_59  VARCHAR(5)   NOT NULL,
+    col_163 VARCHAR(200) NULL,
+    CONSTRAINT pk_tbl_15 PRIMARY KEY (col_59)
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_14', N'U') IS NULL
+CREATE TABLE dbo.tbl_14 (
+    col_153 INT          NOT NULL,
+    col_163 VARCHAR(200) NULL,
+    CONSTRAINT pk_tbl_14 PRIMARY KEY (col_153)
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_13', N'U') IS NULL
+CREATE TABLE dbo.tbl_13 (
+    col_62  VARCHAR(50)  NOT NULL,
+    col_46  VARCHAR(200) NULL,
+    col_77  VARCHAR(200) NULL,
+    CONSTRAINT pk_tbl_13 PRIMARY KEY (col_62)
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_12', N'U') IS NULL
+CREATE TABLE dbo.tbl_12 (
+    col_59  INT          NOT NULL,
+    col_46  VARCHAR(200) NULL,
+    col_153 INT          NULL,
+    col_155 VARCHAR(5)   NULL,
+    CONSTRAINT pk_tbl_12 PRIMARY KEY (col_59)
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_11', N'U') IS NULL
+CREATE TABLE dbo.tbl_11 (
+    col_59  INT          NOT NULL,
+    col_60  INT          NULL,
+    col_163 VARCHAR(200) NULL,
+    CONSTRAINT pk_tbl_11 PRIMARY KEY (col_59)
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_10', N'U') IS NULL
+CREATE TABLE dbo.tbl_10 (
+    col_13  INT          NOT NULL,
+    col_46  VARCHAR(200) NULL,
+    col_48  VARCHAR(200) NULL,
+    col_73  VARCHAR(200) NULL,
+    col_164 VARCHAR(200) NULL,
+    col_165 VARCHAR(200) NULL,
+    col_166 VARCHAR(200) NULL,
+    CONSTRAINT pk_tbl_10 PRIMARY KEY (col_13)
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_1', N'U') IS NULL
+CREATE TABLE dbo.tbl_1 (
+    col_1   INT          NOT NULL,
+    col_13  INT          NULL,
+    col_50  DATETIME     NULL,
+    col_58  INT          NULL,
+    col_162 VARCHAR(50)  NULL,
+    CONSTRAINT pk_tbl_1 PRIMARY KEY (col_1)
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_3', N'U') IS NULL
+CREATE TABLE dbo.tbl_3 (
+    col_6   UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID(),
+    col_7   INT              NULL,
+    col_91  VARCHAR(4000)    NULL,
+    col_19  VARCHAR(10)      NULL,
+    col_20  DATETIME         NULL,
+    col_15  VARCHAR(10)      NULL,
+    col_18  DATETIME         NULL,
+    CONSTRAINT pk_tbl_3 PRIMARY KEY (col_6)
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_2', N'U') IS NULL
+CREATE TABLE dbo.tbl_2 (
+    col_1   INT              NULL,
+    col_4   INT              NULL,
+    col_6   UNIQUEIDENTIFIER NULL,
+    col_15  VARCHAR(10)      NULL,
+    col_18  DATETIME         NULL,
+    col_19  VARCHAR(10)      NULL,
+    col_20  DATETIME         NULL
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_4', N'U') IS NULL
+CREATE TABLE dbo.tbl_4 (
+    col_6   UNIQUEIDENTIFIER NULL,
+    col_9   VARCHAR(200)     NULL,
+    col_10  VARCHAR(200)     NULL,
+    col_12  INT              NULL,
+    col_13  INT              NULL
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_5', N'U') IS NULL
+CREATE TABLE dbo.tbl_5 (
+    col_23  INT          NOT NULL,
+    col_24  INT          NULL,
+    col_26  VARCHAR(200) NULL,
+    col_28  INT          NULL,
+    col_30  INT          NOT NULL DEFAULT 1,
+    CONSTRAINT pk_tbl_5 PRIMARY KEY (col_23)
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_9', N'U') IS NULL
+CREATE TABLE dbo.tbl_9 (
+    col_30  INT          NOT NULL DEFAULT 1,
+    col_43  VARCHAR(MAX) NULL,
+    col_61  VARCHAR(200) NULL,
+    col_65  INT          NULL DEFAULT -1440,
+    col_66  DATETIME     NULL,
+    col_67  INT          NULL DEFAULT 1440,
+    col_79  VARCHAR(MAX) NULL,
+    col_80  VARCHAR(MAX) NULL,
+    col_89  VARCHAR(500) NULL,
+    col_90  VARCHAR(500) NULL,
+    col_96  VARCHAR(MAX) NULL
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_6', N'U') IS NULL
+CREATE TABLE dbo.tbl_6 (
+    col_31  INT              NOT NULL IDENTITY(1,1),
+    col_6   UNIQUEIDENTIFIER NULL,
+    col_12  INT              NULL,
+    col_13  INT              NULL,
+    col_15  VARCHAR(10)      NULL,
+    col_18  DATETIME         NULL,
+    col_19  VARCHAR(10)      NULL,
+    col_20  DATETIME         NULL,
+    col_32  INT              NULL DEFAULT 0,
+    col_33  DATETIME         NULL,
+    col_38  VARCHAR(MAX)     NULL,
+    col_42  INT              NULL DEFAULT 0,
+    col_62  VARCHAR(50)      NULL,
+    col_63  VARCHAR(1000)    NULL,
+    col_72  VARCHAR(200)     NULL,
+    col_73  VARCHAR(200)     NULL,
+    col_74  VARCHAR(MAX)     NULL,
+    col_9   VARCHAR(200)     NULL,
+    col_10  VARCHAR(200)     NULL,
+    col_95  VARCHAR(MAX)     NULL,
+    col_96  VARCHAR(MAX)     NULL,
+    CONSTRAINT pk_tbl_6 PRIMARY KEY (col_31)
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_7', N'U') IS NULL
+CREATE TABLE dbo.tbl_7 (
+    col_97  INT          NOT NULL,
+    col_31  INT          NULL,
+    col_23  INT          NOT NULL,
+    col_15  VARCHAR(10)  NULL,
+    col_18  DATETIME     NULL,
+    col_98  INT          NULL,
+    col_99  VARCHAR(MAX) NULL
+)
+GO
+
+IF OBJECT_ID(N'dbo.tbl_8', N'U') IS NULL
+CREATE TABLE dbo.tbl_8 (
+    col_93  INT      NOT NULL IDENTITY(1,1),
+    col_15  VARCHAR(10)  NULL,
+    col_18  DATETIME     NULL,
+    col_31  INT          NULL,
+    col_39  INT          NULL,
+    col_94  DATETIME     NULL,
+    CONSTRAINT pk_tbl_8 PRIMARY KEY (col_93)
+)
+GO
+
+-- ── Helper stored procedures called by the fixture ────────────────────────────
+
+IF OBJECT_ID(N'dbo.proc_13', N'P') IS NULL
+    EXEC (N'CREATE PROCEDURE dbo.proc_13 AS SELECT 1')
+GO
+ALTER PROCEDURE dbo.proc_13
+    @where  NVARCHAR(MAX) OUTPUT,
+    @col    NVARCHAR(200),
+    @op     NVARCHAR(10),
+    @param  NVARCHAR(200),
+    @val    SQL_VARIANT = NULL
+AS
+BEGIN
+    SET NOCOUNT ON
+    IF @val IS NOT NULL
+        SET @where = COALESCE(@where + N' AND ', N'') + @col + N' ' + @op + N' ' + @param
+END
+GO
+
+IF OBJECT_ID(N'dbo.proc_14', N'P') IS NULL
+    EXEC (N'CREATE PROCEDURE dbo.proc_14 AS SELECT 1')
+GO
+ALTER PROCEDURE dbo.proc_14
+    @query  NVARCHAR(MAX) OUTPUT,
+    @filter NVARCHAR(MAX) = NULL,
+    @page   NVARCHAR(MAX) OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON
+    SET @page = NULL
+    IF @filter IS NOT NULL
+        SET @query = @query + N' ' + @filter
+END
+GO
+
+
+-- ============================================================
 -- Stub definitions for anonymized custom functions (T-SQL).
 -- These make the script self-contained and runnable; bodies are
 -- placeholders that preserve the call signatures and return types.
@@ -474,8 +696,8 @@ BEGIN
         col_3.col_6 = @col_6
 
     -- xxxxxx xx xxxxxx xxx xxxxxx
-    SET @col_69 = DATEADD(col_78, @col_65, @col_68)
-    SET @col_70 = DATEADD(col_78, @col_67, @col_68)
+    SET @col_69 = DATEADD(minute, @col_65, @col_68)
+    SET @col_70 = DATEADD(minute, @col_67, @col_68)
 
     INSERT INTO tbl_6 (col_12, col_62, col_13, col_19, col_20, col_15, col_18, col_6, col_72, col_73, col_63, col_42, col_74, col_32, col_9, col_10)
     VALUES (@col_12, @col_62, @col_13, @col_15, @func1, @col_15, @func1, @col_6, @col_72, @col_73, @col_63, @col_42, '-', @col_32, @col_9, @col_10)
@@ -581,9 +803,9 @@ BEGIN
     SET @col_72 = REPLACE(COALESCE(@col_72, @col_75), '"', '')
     SET @col_73 = REPLACE(COALESCE(@col_73, @col_75 + '@' + @col_61), '"', '')
     SET @col_82 = CONVERT(DATETIME, 'xxxx-xx-xx xx:xx:xx', 120)
-    SET @col_85 = DATEDIFF(COL_22, @col_82, @func1)
-    SET @col_86 = DATEDIFF(COL_22, @col_82, COALESCE(@col_69, @func1))
-    SET @col_87 = DATEDIFF(COL_22, @col_82, COALESCE(@col_70, @func1 + 1))
+    SET @col_85 = DATEDIFF(second, @col_82, @func1)
+    SET @col_86 = DATEDIFF(second, @col_82, COALESCE(@col_69, @func1))
+    SET @col_87 = DATEDIFF(second, @col_82, COALESCE(@col_70, @func1 + 1))
 
     SET @col_74='{
   "xxxxxxx": {
@@ -953,7 +1175,7 @@ BEGIN
 
         exec proc_14 @col_109 output, @col_107, @col_108 output
 
-        exec col_111 @col_109, N'
+        exec sp_executesql @col_109, N'
             @xxxxxxxxxxxxxxxx xxx,
             @xxxxxxxxxxxxx xxx,
             @xxxxxxxxxxxxxxx xxx,
@@ -1153,7 +1375,7 @@ BEGIN
 
         exec proc_14 @col_109 output, @col_107, @col_108 output
 
-        exec col_111 @col_109, N'
+        exec sp_executesql @col_109, N'
             @xxxxxxxxxxxxx xxx,
             @xxxxxxxxxx xxxxxxx(xx),
             @xxxxxxxx xxxxxxxx,
@@ -1455,7 +1677,7 @@ BEGIN
 
         exec proc_14 @col_109 output, @col_107, @col_108 output
 
-        exec col_111 @col_109, N'
+        exec sp_executesql @col_109, N'
             @xxxxxxxxxxxxx xxx,
             @xxxx xxxxxxxxxxxxxxxx,
             @xxxxxxxx xxx,
@@ -1704,7 +1926,7 @@ BEGIN
 
         exec proc_14 @col_109 output, @col_107, @col_108 output
 
-        exec col_111 @col_109, N'
+        exec sp_executesql @col_109, N'
             @xxxx xxxxxxxxxxxxxxxx,
             @xxxxxxx xxx,
             @xxxxxxxxxx xxxxxxx(xxxx),
@@ -1935,10 +2157,10 @@ BEGIN
         AND (@col_1 IS NULL OR col_11.col_1 = @col_1)
         AND (@col_137 IS NULL OR col_57.col_60 = @col_137)
         AND (@col_138 IS NULL OR col_52.col_155 = @col_138)
-        AND (@col_139 IS NULL OR col_11.col_162 IN (SELECT col_169 FROM dbo.func5(@col_139, ',')))
+        AND (@col_139 IS NULL OR col_11.col_162 IN (SELECT item FROM dbo.func5(@col_139, ',')))
     ) col_160
     ORDER BY col_50 ASC
-    OPTION (COL_170)
+    OPTION (RECOMPILE)
 
 END
 GO
@@ -1984,7 +2206,7 @@ BEGIN
             INNER JOIN tbl_1 col_11 ON col_11.col_1=col_56.col_1
             WHERE
                 col_32 = 1 AND
-                @func1 > DATEADD(col_78, @col_67, col_11.col_50)
+                @func1 > DATEADD(minute, @col_67, col_11.col_50)
         )
 
     -- xxxxxx xxx xxxxxx xx xx xxxxx xx xxxxxx
@@ -1993,7 +2215,7 @@ BEGIN
     SET col_32 = 0
     WHERE
         col_32 = 1
-        AND @func1 > DATEADD(col_78, 5, COALESCE(col_33, @func1))
+        AND @func1 > DATEADD(minute, 5, COALESCE(col_33, @func1))
 
     SELECT
         DISTINCT
@@ -2010,7 +2232,7 @@ BEGIN
         (@col_13 IS NULL OR col_37.col_13=@col_13)
     )
     AND (@col_1 IS NULL OR col_56.col_1=@col_1)
-    OPTION (COL_170)
+    OPTION (RECOMPILE)
 
 END
 GO
@@ -2073,7 +2295,7 @@ GO
 
 -- xxxxxx xxxxxx xxxxxx 
 IF NOT OBJECT_ID(N'[col_173]') IS NULL
-    COL_172 TRIGGER [dbo].[col_173];
+    DROP TRIGGER [dbo].[col_173];
 GO
 -- xxx xxxxxx xxxxxx xxxxxx
 

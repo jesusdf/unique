@@ -560,7 +560,9 @@ class ProceduralParser:
             data_type = self._parse_data_type()
 
             if self._match_type(TokenType.OPERATOR):  # = sign for default
-                default = self._parse_expression_simple()
+                default = self._parse_expression_simple(
+                    stop_keywords=self._EXPR_SIMPLE_STOP_KEYWORDS
+                )
 
             if self._match_keyword("OUTPUT", "OUT"):
                 direction = "OUT"
@@ -1625,6 +1627,13 @@ class ProceduralParser:
             self._advance()
         return RawSQL(sql=" ".join(parts).strip(), reason="bind argument")
 
+    # DML verbs that can start a standalone statement after a DECLARE default
+    # (no semicolon separator). These are NOT in _TSQL_STMT_BOUNDARY_KEYWORDS
+    # (which excludes DML) but must terminate a DECLARE = <expr> context.
+    _DECLARE_DML_BOUNDARY = frozenset(
+        {"SELECT", "UPDATE", "DELETE", "INSERT", "MERGE", "WITH"}
+    )
+
     def _parse_declare_default(self) -> ASTNode:
         """Capture a DECLARE default value.
 
@@ -1634,6 +1643,7 @@ class ProceduralParser:
         """
         parts: list[str] = []
         paren_depth = 0
+        case_depth = 0
         first = True
         while not self._at_end():
             tok = self._current()
@@ -1642,9 +1652,30 @@ class ProceduralParser:
                 TokenType.SEMICOLON,
             ):
                 break
-            if paren_depth == 0 and tok.is_keyword("END"):
+            # A trailing inline comment after the expression value (at depth 0)
+            # signals end-of-statement; stop here so the emitter places the
+            # terminator BEFORE the comment and not inside it.
+            if paren_depth == 0 and tok.type == TokenType.LINE_COMMENT and not first:
                 break
-            if not first and paren_depth == 0 and self._at_tsql_stmt_boundary():
+            if paren_depth == 0 and tok.is_keyword("END"):
+                if case_depth > 0:
+                    case_depth -= 1
+                else:
+                    break
+            elif paren_depth == 0 and tok.is_keyword("CASE"):
+                case_depth += 1
+            if not first and paren_depth == 0 and case_depth == 0 and self._at_tsql_stmt_boundary():
+                break
+            # DML verbs on their own (outside any expression) terminate the
+            # DECLARE value even without a semicolon (T-SQL semicolons optional).
+            if (
+                not first
+                and paren_depth == 0
+                and case_depth == 0
+                and self._dialect == "tsql"
+                and tok.type == TokenType.KEYWORD
+                and tok.upper_value in self._DECLARE_DML_BOUNDARY
+            ):
                 break
             if tok.type == TokenType.LPAREN:
                 paren_depth += 1
@@ -1655,8 +1686,18 @@ class ProceduralParser:
             first = False
         return RawSQL(sql=" ".join(parts).strip(), reason="default value")
 
-    def _parse_expression_simple(self) -> ASTNode:
+    # Keywords that cannot appear in a parameter default value expression
+    # (only at paren_depth == 0 — AS inside CAST(x AS INT) is fine).
+    _EXPR_SIMPLE_STOP_KEYWORDS = frozenset(
+        {"AS", "IS", "OUTPUT", "OUT", "READONLY", "VARYING"}
+    )
+
+    def _parse_expression_simple(
+        self,
+        stop_keywords: frozenset[str] | None = None,
+    ) -> ASTNode:
         """Parse a simple expression (for default values, etc.)."""
+        effective_stop = stop_keywords or frozenset()
         parts: list[str] = []
         paren_depth = 0
         while not self._at_end():
@@ -1665,6 +1706,12 @@ class ProceduralParser:
                 TokenType.COMMA,
                 TokenType.RPAREN,
                 TokenType.SEMICOLON,
+            ):
+                break
+            if (
+                paren_depth == 0
+                and tok.type == TokenType.KEYWORD
+                and tok.upper_value in effective_stop
             ):
                 break
             if tok.type == TokenType.LPAREN:
@@ -1690,14 +1737,20 @@ class ProceduralParser:
         """
         parts: list[str] = []
         paren_depth = 0
+        case_depth = 0
         first = True
         while not self._at_end():
             tok = self._current()
             if paren_depth == 0 and tok.type in stop_types:
                 break
             if paren_depth == 0 and tok.is_keyword("END"):
-                break
-            if not first and paren_depth == 0 and self._at_tsql_stmt_boundary():
+                if case_depth > 0:
+                    case_depth -= 1
+                else:
+                    break
+            elif paren_depth == 0 and tok.is_keyword("CASE"):
+                case_depth += 1
+            if not first and paren_depth == 0 and case_depth == 0 and self._at_tsql_stmt_boundary():
                 break
             if tok.type == TokenType.LPAREN:
                 paren_depth += 1
@@ -1761,6 +1814,7 @@ class ProceduralParser:
         parts: list[str] = []
         paren_depth = 0
         begin_depth = 0
+        case_depth = 0
         first = True
         prev_tok: Token | None = None
         lead_verb = (
@@ -1780,6 +1834,7 @@ class ProceduralParser:
                 not first
                 and paren_depth == 0
                 and begin_depth == 0
+                and case_depth == 0
                 and self._at_tsql_stmt_boundary()
             ):
                 break
@@ -1791,15 +1846,20 @@ class ProceduralParser:
                 not first
                 and paren_depth == 0
                 and begin_depth == 0
+                and case_depth == 0
                 and self._dialect == "tsql"
                 and self._starts_new_dml(tok, prev_tok, lead_verb)
             ):
                 break
 
-            if tok.is_keyword("BEGIN"):
+            if tok.is_keyword("CASE"):
+                case_depth += 1
+            elif tok.is_keyword("BEGIN"):
                 begin_depth += 1
             elif tok.is_keyword("END"):
-                if begin_depth > 0:
+                if case_depth > 0:
+                    case_depth -= 1
+                elif begin_depth > 0:
                     begin_depth -= 1
                 else:
                     break
