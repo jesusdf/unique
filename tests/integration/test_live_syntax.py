@@ -66,6 +66,10 @@ def _validator_or_skip(dialect: str):  # type: ignore[no-untyped-def]
         return make_validator(dialect, url)
     except ImportError as e:  # pragma: no cover - driver not installed
         pytest.skip(f"driver for {dialect} not installed: {e}")
+    except Exception as e:  # pragma: no cover - engine not reachable/ready
+        # A connection/setup failure is an environment problem, not a
+        # transpiler bug; skip so it doesn't mask real validation results.
+        pytest.skip(f"could not connect to {dialect} engine: {e}")
 
 
 @pytest.mark.parametrize("target", ["tsql", "postgresql", "mysql"])
