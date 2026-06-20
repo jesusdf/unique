@@ -137,6 +137,15 @@ class TestUI:
         assert "text/html" in resp.headers["content-type"]
         assert "<textarea" in resp.text
 
+    def test_ui_is_self_contained(self, client: TestClient) -> None:
+        # The page must embed CodeMirror and load no external resources, so it
+        # works behind a reverse proxy with no internet access.
+        resp = client.get("/")
+        body = resp.text
+        assert "CodeMirror" in body
+        for cdn in ("cdnjs", "unpkg", "jsdelivr", "googleapis"):
+            assert cdn not in body, f"external resource {cdn} must not be referenced"
+
 
 class TestTranspileFile:
     def test_file_with_explicit_source(self, client: TestClient) -> None:

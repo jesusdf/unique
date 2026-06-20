@@ -53,11 +53,20 @@ print(result.sql)
 Once the API server is running, open the browser-based interface at the root
 URL (e.g. <http://localhost:8000/>). It provides:
 
-- two side-by-side panes — paste a source script on the left, see the
-  translation on the right — with engine selectors above;
-- automatic source-engine detection as you type (you can still override it);
+- two side-by-side editors with SQL syntax highlighting (CodeMirror, embedded
+  in the page — no external CDN, so it works behind an offline reverse proxy);
+- automatic source-engine detection as you type (you can still override it),
+  which also switches the highlighting dialect;
 - a file section to upload a `.sql` file and download it translated, with an
   "Auto-detect" option for the source engine.
+
+The page is built from `web/src/index.template.html` plus the vendored
+CodeMirror assets in `web/vendor/`. After editing either, regenerate the
+self-contained `src/unique/api/static/index.html` with:
+
+```bash
+python web/build.py
+```
 
 ### REST API
 
