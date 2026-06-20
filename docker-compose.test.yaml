@@ -43,3 +43,24 @@ services:
       retries: 10
     volumes:
       - ./tests/fixtures/sql/mysql_schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+
+  # SQL Server is used to syntax-validate transpiled T-SQL output (SET NOEXEC
+  # ON parses without executing), catching dialect violations like
+  # CREATE TABLE IF NOT EXISTS or stray ';' before GO.
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Unique_Strong!Pass1"
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"Unique_Strong!Pass1\" -Q \"SELECT 1\" || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"Unique_Strong!Pass1\" -Q \"SELECT 1\"",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
