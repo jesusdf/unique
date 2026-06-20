@@ -47,17 +47,15 @@ jobs:
         run: mypy src/unique/ --ignore-missing-imports
 
   test:
-    name: Test (Python ${{ matrix.python-version }})
+    name: Test (Python 3.12)
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          # Single version, matching the Docker image (python:3.12-slim).
+          python-version: "3.12"
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
@@ -66,7 +64,6 @@ jobs:
         run: pytest tests/ -v --cov=unique --cov-report=xml --cov-report=term-missing
 
       - name: Upload coverage
-        if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
@@ -235,14 +232,25 @@ jobs:
           UNIQUE_TEST_MYSQL_URL: mysql://unique:unique@localhost:3307/unique
           UNIQUE_TEST_MSSQL_URL: mssql://sa:Unique_Strong!Pass1@localhost:1433/master
         run: |
-          # Tee full output to the job summary so failures are visible via the
-          # API (raw logs live on an allowlist-blocked blob).
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          # Run, capture output, and surface failures as ::error:: annotations
+          # (readable via the annotations API; raw logs sit on a blocked blob).
           set +e
-          pytest tests/integration/test_live_syntax.py -v -rA 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
-          rc=${PIPESTATUS[0]}
+          pytest tests/integration/test_live_syntax.py -v -rA \
+            > /tmp/pytest.out 2>&1
+          rc=$?
           set -e
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/pytest.out
+          {
+            echo '```'
+            cat /tmp/pytest.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ $rc -ne 0 ]; then
+            # Extract the assertion/error lines and emit a compact annotation.
+            DETAIL=$(grep -E "^(FAILED|E |assert|.*Engine error|.*--- sql ---|.*invalid SQL)" /tmp/pytest.out \
+              | head -40 | sed 's/%/%25/g; s/\r//g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Live syntax validation failed::${DETAIL}"
+          fi
           exit $rc
 
   docker:
