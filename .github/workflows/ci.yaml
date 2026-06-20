@@ -129,11 +129,9 @@ jobs:
     # 22.04 ships the Microsoft ODBC Driver 18 (msodbcsql18) preinstalled,
     # avoiding a flaky apt install of the Microsoft repo on newer runners.
     runs-on: ubuntu-22.04
-    # Only SQL Server is validated here for now. PostgreSQL and MySQL are
+    # SQL Server and Oracle are validated here. PostgreSQL and MySQL are
     # disabled until their procedural fixtures are generated (see
-    # tests/integration/test_live_syntax.py::_LIVE_TARGETS). Oracle is in the
-    # live target set but has no container here, so it skips in CI and is
-    # validated locally.
+    # tests/integration/test_live_syntax.py::_LIVE_TARGETS).
     services:
       mssql:
         image: mcr.microsoft.com/mssql/server:2022-latest
@@ -143,6 +141,20 @@ jobs:
           MSSQL_PID: Developer
         ports:
           - 1433:1433
+      oracle:
+        # Lightweight Oracle Database Free image with a fast-start layer.
+        image: gvenzl/oracle-free:slim-faststart
+        env:
+          ORACLE_PASSWORD: "Unique_Strong!Pass1"
+          APP_USER: unique
+          APP_USER_PASSWORD: "Unique_Strong!Pass1"
+        ports:
+          - 1521:1521
+        options: >-
+          --health-cmd healthcheck.sh
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 30
     steps:
       - uses: actions/checkout@v4
 
@@ -153,7 +165,7 @@ jobs:
       - name: Install dependencies and DB drivers
         run: |
           pip install -e ".[dev]" "psycopg[binary]>=3.1.0" \
-            "mysql-connector-python>=8.3.0" "pyodbc>=5.1.0"
+            "mysql-connector-python>=8.3.0" "pyodbc>=5.1.0" "oracledb>=2.0.0"
 
       - name: Ensure Microsoft ODBC Driver 18
         run: |
@@ -204,11 +216,38 @@ jobs:
               print("SQL Server not ready; its checks will skip.")
           PY
 
+      - name: Wait for Oracle
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          import time
+          try:
+              import oracledb
+          except Exception as e:
+              print(f"oracledb unavailable, skipping wait: {e}")
+              raise SystemExit(0)
+          for attempt in range(60):
+              try:
+                  oracledb.connect(
+                      user="unique",
+                      password="Unique_Strong!Pass1",
+                      dsn="localhost:1521/FREEPDB1",
+                  ).close()
+                  print("Oracle ready")
+                  break
+              except Exception as e:
+                  print(f"waiting... ({attempt}) {e}")
+                  time.sleep(5)
+          else:
+              print("Oracle not ready; its checks will skip.")
+          PY
+
       - name: Run live syntax validation
         env:
-          # Only SQL Server here for now (PG/MySQL disabled until their
-          # procedural fixtures exist; Oracle has no CI container and skips).
+          # SQL Server and Oracle here (PG/MySQL disabled until their
+          # procedural fixtures exist). oracle-free's default PDB is FREEPDB1.
           UNIQUE_TEST_MSSQL_URL: mssql://sa:Unique_Strong!Pass1@localhost:1433/master
+          UNIQUE_TEST_ORACLE_URL: oracle://unique:Unique_Strong!Pass1@localhost:1521/FREEPDB1
         run: |
           # Run, capture output, and surface failures as ::error:: annotations
           # (readable via the annotations API; raw logs sit on a blocked blob).
