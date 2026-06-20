@@ -883,9 +883,9 @@ class ProceduralTransformer:
         # to transpile it via sqlglot so TOP → FETCH FIRST, CONVERT → CAST, etc.
         # Guard: multiple DML verbs mean this is a multi-statement block that
         # should not be wrapped in SELECT and sent to sqlglot.
-        _dml_count = len(re.findall(
-            r"\b(?:SELECT|INSERT|UPDATE|DELETE|MERGE)\b", sql, re.IGNORECASE
-        ))
+        _dml_count = len(
+            re.findall(r"\b(?:SELECT|INSERT|UPDATE|DELETE|MERGE)\b", sql, re.IGNORECASE)
+        )
         if (
             self._source == "tsql"
             and self._target in ("oracle", "postgresql")
@@ -902,7 +902,7 @@ class ProceduralTransformer:
                     error_level=sqlglot.ErrorLevel.RAISE,
                 )
                 if results and results[0].upper().startswith("SELECT "):
-                    sql = results[0][len("SELECT "):].rstrip().rstrip(";")
+                    sql = results[0][len("SELECT ") :].rstrip().rstrip(";")
                     if self._target == "oracle":
                         sql = self._fix_oracle_dml(sql)
             except Exception:

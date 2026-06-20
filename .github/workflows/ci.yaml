@@ -129,34 +129,12 @@ jobs:
     # 22.04 ships the Microsoft ODBC Driver 18 (msodbcsql18) preinstalled,
     # avoiding a flaky apt install of the Microsoft repo on newer runners.
     runs-on: ubuntu-22.04
+    # Only SQL Server is validated here for now. PostgreSQL and MySQL are
+    # disabled until their procedural fixtures are generated (see
+    # tests/integration/test_live_syntax.py::_LIVE_TARGETS). Oracle is in the
+    # live target set but has no container here, so it skips in CI and is
+    # validated locally.
     services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: unique
-          POSTGRES_PASSWORD: unique
-          POSTGRES_DB: unique
-        ports:
-          - 5433:5432
-        options: >-
-          --health-cmd "pg_isready -U unique"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-      mysql:
-        image: mysql:8
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_USER: unique
-          MYSQL_PASSWORD: unique
-          MYSQL_DATABASE: unique
-        ports:
-          - 3307:3306
-        options: >-
-          --health-cmd "mysqladmin ping -h localhost -uunique -punique"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
       mssql:
         image: mcr.microsoft.com/mssql/server:2022-latest
         env:
@@ -228,10 +206,8 @@ jobs:
 
       - name: Run live syntax validation
         env:
-          UNIQUE_TEST_PG_URL: postgresql://unique:unique@localhost:5433/unique
-          # root is used so the validator can CREATE/DROP a throwaway database
-          # to isolate dependent DDL.
-          UNIQUE_TEST_MYSQL_URL: mysql://root:root@localhost:3307/mysql
+          # Only SQL Server here for now (PG/MySQL disabled until their
+          # procedural fixtures exist; Oracle has no CI container and skips).
           UNIQUE_TEST_MSSQL_URL: mssql://sa:Unique_Strong!Pass1@localhost:1433/master
         run: |
           # Run, capture output, and surface failures as ::error:: annotations

@@ -221,7 +221,11 @@ class Transpiler:
                     )
                     if ddl_match:
                         result = self._transpile_dml(
-                            ddl_match.group(1), source, target, source_dialect, target_dialect
+                            ddl_match.group(1),
+                            source,
+                            target,
+                            source_dialect,
+                            target_dialect,
                         )
                     else:
                         result = self._transpile_set_option(batch.sql, source, target)
