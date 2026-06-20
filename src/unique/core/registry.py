@@ -80,11 +80,8 @@ class DialectRegistry:
         registry = cls()
         try:
             entry_points = importlib.metadata.entry_points()
-            # Python 3.12+ returns a SelectableGroups; 3.11 returns dict
-            if hasattr(entry_points, "select"):
-                eps = entry_points.select(group=ENTRY_POINT_GROUP)
-            else:
-                eps = entry_points.get(ENTRY_POINT_GROUP, [])  # type: ignore[arg-type]
+            # Python 3.12+ EntryPoints supports .select(); '.get()' was removed.
+            eps = entry_points.select(group=ENTRY_POINT_GROUP)
 
             for ep in eps:
                 try:

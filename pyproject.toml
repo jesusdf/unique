@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A SQL transpiler that translates SQL scripts between SQL Server, Oracle, PostgreSQL, and MySQL."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
     {name = "Unique Contributors"},
 ]
@@ -76,7 +76,7 @@ target-version = "py311"
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
