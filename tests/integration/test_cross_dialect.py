@@ -367,6 +367,51 @@ class TestTSQLIdioms:
         assert not re.search(r"--[^\n]*\nGO", result.sql)
 
 
+class TestPortableTypes:
+    """Data-type names are mapped to the target dialect (found via live val)."""
+
+    def test_nvarchar_to_postgres(self, transpiler: Transpiler) -> None:
+        # PostgreSQL has no NVARCHAR/NCHAR.
+        sql = "CREATE TABLE x (n NVARCHAR(50), m NCHAR(10))"
+        out = transpiler.transpile(sql, "tsql", "postgresql").sql.upper()
+        assert "NVARCHAR" not in out and "NCHAR" not in out
+        assert "VARCHAR(50)" in out and "CHAR(10)" in out
+
+    def test_uniqueidentifier_per_dialect(self, transpiler: Transpiler) -> None:
+        sql = "CREATE TABLE x (u UNIQUEIDENTIFIER)"
+        assert "CHAR(36)" in transpiler.transpile(sql, "tsql", "mysql").sql
+        assert "UUID" in transpiler.transpile(sql, "tsql", "postgresql").sql.upper()
+        assert "RAW(16)" in transpiler.transpile(sql, "tsql", "oracle").sql.upper()
+
+    def test_no_double_parens_on_mapped_length(self, transpiler: Transpiler) -> None:
+        sql = "CREATE TABLE x (u UNIQUEIDENTIFIER)"
+        out = transpiler.transpile(sql, "tsql", "mysql").sql
+        assert "(36)(" not in out
+
+    def test_pg_types_to_tsql(self, transpiler: Transpiler) -> None:
+        sql = "CREATE TABLE x (flag BOOLEAN, data BYTEA)"
+        out = transpiler.transpile(sql, "postgresql", "tsql").sql.upper()
+        assert "BIT" in out and "VARBINARY" in out
+        assert "BOOLEAN" not in out and "BYTEA" not in out
+
+
+class TestPortableIndex:
+    """CREATE INDEX output stays valid in the target (found via live val)."""
+
+    def test_no_case_expression_in_tsql_index(self, transpiler: Transpiler) -> None:
+        # sqlglot emulates PG NULLS ordering with a CASE expression that is
+        # invalid in a T-SQL index column list; it must be collapsed.
+        out = transpiler.transpile("CREATE INDEX ix ON t (a)", "postgresql", "tsql").sql
+        assert "CASE" not in out.upper()
+        assert "ON t(a)" in out.replace(" ", "").replace("ONt", "ON t")
+
+    def test_multi_column_tsql_index(self, transpiler: Transpiler) -> None:
+        out = transpiler.transpile(
+            "CREATE INDEX ix ON t (a, b)", "postgresql", "tsql"
+        ).sql
+        assert "CASE" not in out.upper()
+
+
 class TestDDLPassthrough:
     """ALTER TABLE / CREATE INDEX / CREATE SEQUENCE round-trip via sqlglot."""
 

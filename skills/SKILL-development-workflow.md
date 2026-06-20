@@ -217,6 +217,40 @@ Instead, get actionable detail from endpoints served by `api.github.com`:
 If full logs are genuinely needed, ask the user to read them in the GitHub
 Actions web UI — that is faster than fighting the egress restriction.
 
+**Surfacing test detail through annotations (works around the blocked blob).**
+Because raw logs are unreachable here, the `syntax-live` job captures pytest
+output and re-emits the failing lines as a GitHub `::error::` annotation, which
+*is* readable from `api.github.com`. Pattern to reuse for any job whose detail
+you need:
+
+```yaml
+run: |
+  set +e
+  pytest ... > /tmp/out.txt 2>&1
+  rc=$?
+  set -e
+  cat /tmp/out.txt
+  { echo '```'; cat /tmp/out.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+  if [ $rc -ne 0 ]; then
+    DETAIL=$(grep -E "^(FAILED|E |assert|.*Engine error|.*--- sql ---)" /tmp/out.txt \
+      | head -40 | sed 's/%/%25/g; s/\r//g' | awk '{printf "%s%%0A", $0}')
+    echo "::error title=<job> failed::${DETAIL}"
+  fi
+  exit $rc
+```
+
+Read it back (decode `%0A`→newline, `%25`→`%`):
+
+```bash
+curl -s -H "Authorization: token $PAT" \
+  "https://api.github.com/repos/jesusdf/unique/check-runs/$JOB_ID/annotations" \
+  | python3 -c "import sys,json; [print(a['message'].replace('%0A','\n').replace('%25','%')) for a in json.load(sys.stdin) if a['annotation_level']=='failure']"
+```
+
+The step summary (`\$GITHUB_STEP_SUMMARY`) is visible in the web UI but is
+**not** retrievable via these API endpoints, so the `::error::` annotation is
+the reliable channel from this sandbox.
+
 ### Validating output against real engines
 
 The Live Syntax Validation job (and `tests/integration/test_live_syntax.py`)

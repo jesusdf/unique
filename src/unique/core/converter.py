@@ -804,6 +804,98 @@ def _convert_cast(expr: exp.Cast) -> CastExpression:
     return CastExpression(expression=inner, target_type=target_type)
 
 
+# Non-portable type names mapped to a portable equivalent per target dialect.
+# T-SQL national/unicode types collapse to the regular char types elsewhere
+# (PostgreSQL/Oracle/MySQL store text as unicode by default).
+_TYPE_NAME_MAP: dict[str, dict[str, str]] = {
+    "postgresql": {
+        "NVARCHAR": "VARCHAR",
+        "NCHAR": "CHAR",
+        "NTEXT": "TEXT",
+        "DATETIME": "TIMESTAMP",
+        "DATETIME2": "TIMESTAMP",
+        "SMALLDATETIME": "TIMESTAMP",
+        "TINYINT": "SMALLINT",
+        "MONEY": "NUMERIC(19,4)",
+        "BIT": "BOOLEAN",
+        "UNIQUEIDENTIFIER": "UUID",
+        "VARBINARY": "BYTEA",
+        "IMAGE": "BYTEA",
+    },
+    "mysql": {
+        "NVARCHAR": "VARCHAR",
+        "NCHAR": "CHAR",
+        "NTEXT": "TEXT",
+        "DATETIME2": "DATETIME",
+        "SMALLDATETIME": "DATETIME",
+        "UNIQUEIDENTIFIER": "CHAR(36)",
+        "UUID": "CHAR(36)",
+        "MONEY": "DECIMAL(19,4)",
+        "IMAGE": "LONGBLOB",
+    },
+    "oracle": {
+        "NVARCHAR": "NVARCHAR2",
+        "VARCHAR": "VARCHAR2",
+        "NTEXT": "NCLOB",
+        "TEXT": "CLOB",
+        "DATETIME": "TIMESTAMP",
+        "DATETIME2": "TIMESTAMP",
+        "TINYINT": "NUMBER(3)",
+        "INT": "NUMBER(10)",
+        "BIGINT": "NUMBER(19)",
+        "BIT": "NUMBER(1)",
+        "UNIQUEIDENTIFIER": "RAW(16)",
+        "UUID": "RAW(16)",
+        "MONEY": "NUMBER(19,4)",
+        "IMAGE": "BLOB",
+    },
+    "tsql": {
+        "VARCHAR2": "VARCHAR",
+        "NVARCHAR2": "NVARCHAR",
+        "NUMBER": "NUMERIC",
+        "CLOB": "VARCHAR(MAX)",
+        "NCLOB": "NVARCHAR(MAX)",
+        "BLOB": "VARBINARY(MAX)",
+        "BOOLEAN": "BIT",
+        "BYTEA": "VARBINARY(MAX)",
+        "UUID": "UNIQUEIDENTIFIER",
+        "SERIAL": "INT",
+    },
+}
+
+
+def _portable_type_name(name: str, dialect: str) -> str:
+    """Map a data-type name to the target dialect's equivalent.
+
+    Falls back to the original name when no mapping is needed. Some mappings
+    (e.g. UNIQUEIDENTIFIER -> CHAR(36)) carry their own length, in which case
+    the caller's parameter list should be empty; these are types that don't
+    take a user-supplied length here.
+    """
+    return _TYPE_NAME_MAP.get(dialect, {}).get(name.upper(), name)
+
+
+def _portable_types_in_sql(sql: str, dialect: str) -> str:
+    """Replace non-portable type names in raw emitted SQL for ``dialect``.
+
+    Used for passthrough DDL (e.g. CREATE TABLE handled by sqlglot) where
+    column types aren't routed through our own emitter. Word-boundary,
+    case-insensitive replacement; types that carry their own length in the
+    map (e.g. CHAR(36)) only substitute the bare name, so an existing
+    ``(n)`` after it would be left — acceptable since those source types
+    (UNIQUEIDENTIFIER/UUID) don't take a user length.
+    """
+    mapping = _TYPE_NAME_MAP.get(dialect, {})
+    if not mapping:
+        return sql
+    for src, dst in mapping.items():
+        # Replace the bare type name not already followed by '2' (avoid
+        # turning VARCHAR into VARCHAR2 twice) — handled by word boundary.
+        dst_name = dst.split("(")[0]
+        sql = re.sub(rf"(?i)\b{re.escape(src)}\b", dst_name, sql)
+    return sql
+
+
 def _convert_data_type(expr: exp.Expression) -> DataType:
     """Convert a sqlglot data type expression to our DataType."""
     if isinstance(expr, exp.DataType):
@@ -1016,6 +1108,8 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             result = out[0]
             if node.kind == "CREATE INDEX":
                 result = _portable_index(result, dialect)
+            else:
+                result = _portable_types_in_sql(result, dialect)
             return result
     except Exception as e:  # noqa: BLE001 - report and fall back
         logger.warning("passthrough transpile error (%s): %s", node.kind, e)
@@ -1038,6 +1132,17 @@ def _portable_index(sql: str, dialect: str) -> str:
         # and ON [filegroup] have no portable equivalent; drop them.
         sql = re.sub(r"(?i)\s+WITH\s*\([^)]*\)", "", sql)
         sql = re.sub(r"(?i)\s+ON\s+\[[^\]]+\]\s*$", "", sql)
+    else:
+        # sqlglot emulates PostgreSQL's NULLS-ordering by prefixing an index
+        # key with "CASE WHEN col IS NULL THEN 1 ELSE 0 END, col". That
+        # expression is invalid inside a T-SQL index column list, so collapse
+        # it back to just the column.
+        sql = re.sub(
+            r"(?i)CASE\s+WHEN\s+(?P<col>[\w.\[\]\"]+)\s+IS\s+NULL\s+THEN\s+"
+            r"\d+\s+ELSE\s+\d+\s+END\s*,\s*(?P=col)",
+            lambda m: m.group("col"),
+            sql,
+        )
 
     if dialect in ("mysql", "oracle"):
         # INCLUDE (...) covering columns: not supported.
@@ -1200,8 +1305,10 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     if node.columns:
         col_defs = []
         for col in node.columns:
-            dtype = col.data_type.name
-            if col.data_type.params:
+            dtype = _portable_type_name(col.data_type.name, dialect)
+            # If the mapped name already carries a length (e.g. CHAR(36)),
+            # don't append the caller's params on top of it.
+            if col.data_type.params and "(" not in dtype:
                 dtype += f"({', '.join(str(p) for p in col.data_type.params)})"
             nullable = "" if col.nullable else " NOT NULL"
             pk = " PRIMARY KEY" if col.primary_key else ""
