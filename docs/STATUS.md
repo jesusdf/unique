@@ -101,7 +101,6 @@ See `docs/TODO.md` for the full prioritized backlog. Highest priority:
 - [ ] Map data-type names inside procedural bodies (variable/parameter
       declarations), extending the CREATE TABLE type mapping.
 - [ ] Wire ALTER TABLE, CREATE INDEX, CREATE SEQUENCE, CREATE SCHEMA through the IR
-- [ ] Re-enable the Docker Build & Push CI job (temporarily `if: false`)
 - [ ] Publish to PyPI — **deferred (do not publish yet)**
 
 #### Completed since last review
