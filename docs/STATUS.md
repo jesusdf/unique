@@ -4,9 +4,10 @@
 
 The DML/DDL pipeline and the autonomous procedural engine are complete for
 all 12 dialect pairs. Current focus is hardening against real production
-schemas (public sample databases + a private procedures file) and closing
-DDL gaps (ALTER TABLE, indexes, sequences, table-level constraints).
-See `docs/TODO.md` for the prioritized backlog.
+schemas (public sample databases + anonymized stored-procedure fixtures),
+validating transpiler output against real engines, and closing DDL gaps
+(ALTER TABLE, indexes, sequences). See `docs/TODO.md` for the prioritized
+backlog.
 
 ### Completed
 
@@ -32,10 +33,15 @@ See `docs/TODO.md` for the prioritized backlog.
   - Metadata resolver (`metadata.py`) — optional DB connection for `%TYPE`/`%ROWTYPE`
 - [x] **Dialect plugins** — T-SQL, Oracle, PostgreSQL, MySQL
 - [x] **CLI** — `unique transpile` (with `--db-url`), `unique validate`, `unique dialects`
-- [x] **REST API** — FastAPI with `/api/v1/transpile` (with `db_url`), `/api/v1/validate`, `/api/v1/dialects`, `/health`
-- [x] **Test suite** — 401 tests (unit + integration), all passing
+- [x] **REST API** — FastAPI with `/api/v1/transpile` (with `db_url`),
+      `/api/v1/validate`, `/api/v1/detect`, `/api/v1/transpile/file`,
+      `/api/v1/dialects`, `/health`, plus the web UI at `/`
+- [x] **Web UI** — embedded CodeMirror editors, dialect auto-detection, file
+      translation (`web/build.py` produces a self-contained `static/index.html`)
+- [x] **Test suite** — 858 tests collected (817 passing + 41 skipped without DB)
 - [x] **Docker** — `Dockerfile`, `Dockerfile.dev`, `docker-compose.yaml`
-- [x] **CI/CD** — GitHub Actions (`lint`, `typecheck`, `test`, `docker`); linter versions pinned
+- [x] **CI/CD** — GitHub Actions (`lint`, `typecheck`, `test`, live metadata,
+      live syntax validation, `docker`); linter versions pinned; Python 3.12
 - [x] **README.md**
 
 ### Procedural Engine — Real-World Validation
@@ -67,37 +73,7 @@ Advanced constructs handled: `EXECUTE IMMEDIATE ... USING` (→ sp_executesql /
 PREPARE / native USING), cursors and `EXIT WHEN cur%NOTFOUND`, unconditional
 `LOOP`, and cursor `FOR` loops (native in PG, flagged elsewhere).
 
-### Test Coverage Summary
 
-| Module | Tests |
-|--------|-------|
-| core/errors | 8 |
-| core/ast_nodes | 15 |
-| core/registry | 7 |
-| core/converter | 45 |
-| core/transformer | 14 |
-| core/transpiler | 15 |
-| dialects | 16 |
-| procedural/lexer | 24 |
-| procedural/batch_splitter | 25 |
-| procedural/parser | 29 |
-| procedural/transformer | 54 |
-| procedural/emitter | 25 |
-| procedural/metadata | 25 |
-| cli | 9 |
-| api | 9 |
-| integration (cross-dialect) | 228 |
-| integration (procedural) | 26 |
-| integration (real-world fixtures) | 50 |
-| integration (metadata live) | 7 (skipped without DB) |
-| property-based (Hypothesis) | 7 |
-| **Total** | **623 (+7 skipped)** |
-
-Overall line coverage: ~80%. Live `--db-url` resolution is exercised in CI
-against real PostgreSQL 16 and MySQL 8 service containers. Four public
-sample schemas (AdventureWorksLT, Oracle HR, Sakila, Northwind) are
-transpiled across all 12 dialect pairs as regression guards
-(see `tests/fixtures/real_world/SOURCES.md`).
 
 ### Known Limitations
 
@@ -108,20 +84,24 @@ prioritized backlog. Highlights:
 - **`EXECUTE IMMEDIATE ... USING`** (Oracle bind variables) → flagged for manual conversion
 - **Table variables** (`DECLARE @t TABLE (...)`) → column list captured verbatim
 - **Ref cursors as OUT parameters** → require manual adaptation
-- **ALTER TABLE / CREATE INDEX / CREATE SEQUENCE** → IR nodes exist but are
-  not yet wired through the converter (commented passthrough today)
-- **Table-level constraints and user-defined domain types** in CREATE TABLE
+- **ALTER TABLE / CREATE INDEX / CREATE SEQUENCE** → re-transpiled as passthrough
+  via sqlglot (IR wiring still pending; see TODO §1)
+- **Data-type names inside procedural bodies** → not yet mapped (CREATE TABLE
+  types are; see TODO §2)
 - Oracle-specific (CONNECT BY, MODEL) and T-SQL-specific (CROSS/OUTER APPLY) constructs
 
 ### Next Steps
 
 See `docs/TODO.md` for the full prioritized backlog. Highest priority:
 
+- [ ] Make the anonymized procedural fixtures executable against real engines:
+      generate the referenced DDL, then add a CI job that creates the schema
+      and runs the scripts + their transpilations against real SQL Server and
+      Oracle.
+- [ ] Map data-type names inside procedural bodies (variable/parameter
+      declarations), extending the CREATE TABLE type mapping.
 - [ ] Wire ALTER TABLE, CREATE INDEX, CREATE SEQUENCE, CREATE SCHEMA through the IR
-- [ ] Table-level constraints (PK/FK/UNIQUE/CHECK) and user-defined domain types
-- [ ] `SELECT ... INTO <var>` consistency across source dialects
-- [ ] Argument-reordering function mappings (CHARINDEX/INSTR/LOCATE, DECODE→CASE)
-- [ ] End-to-end tests with the private `procedures.sql` (delivery TBD)
+- [ ] Re-enable the Docker Build & Push CI job (temporarily `if: false`)
 - [ ] Publish to PyPI — **deferred (do not publish yet)**
 
 #### Completed since last review
@@ -153,5 +133,15 @@ See `docs/TODO.md` for the full prioritized backlog. Highest priority:
 - [x] Web UI (two CodeMirror editors with SQL highlighting, embedded — no
       CDN), dialect auto-detection, and file upload/download translation;
       new `/api/v1/detect` and `/api/v1/transpile/file` endpoints
-- [x] Live syntax validation against real engines (SQL Server PARSEONLY,
-      Postgres/MySQL rolled-back transactions) as a CI job
+- [x] Live syntax validation against real engines (SQL Server / PostgreSQL /
+      MySQL), executed in rolled-back transactions — MySQL in a throwaway
+      database — as a CI job. This layer found real bugs (NVARCHAR not mapped
+      to PG, invalid index CASE, typeless generated columns), all since fixed.
+- [x] Non-portable data-type name mapping (CREATE TABLE and passthrough DDL)
+- [x] Index `CASE` (NULLS-ordering emulation) stripped for all targets but PG
+- [x] Generated columns without a type → documented comment for PG/Oracle/MySQL
+- [x] Single Python version (3.12) in CI; fixed a real 3.12 incompatibility
+      (`EntryPoints.get()` removed) surfaced by the change
+- [x] Anonymized procedural fixtures (T-SQL + Oracle) under
+      `tests/fixtures/procedures/`, with parsing / anonymization-guard /
+      transpile-without-crash tests
