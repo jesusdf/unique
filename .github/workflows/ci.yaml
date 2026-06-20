@@ -166,11 +166,6 @@ jobs:
           MSSQL_PID: Developer
         ports:
           - 1433:1433
-        options: >-
-          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P Unique_Strong!Pass1 -Q 'SELECT 1' || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P Unique_Strong!Pass1 -Q 'SELECT 1'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 20
     steps:
       - uses: actions/checkout@v4
 
@@ -182,11 +177,36 @@ jobs:
         run: |
           pip install -e ".[dev]" "psycopg[binary]>=3.1.0" \
             "mysql-connector-python>=8.3.0" "pyodbc>=5.1.0"
-          # Microsoft ODBC Driver 18 for SQL Server.
-          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 || \
-            (curl https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc \
-             && curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list \
-             && sudo apt-get update && sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18)
+
+      - name: Install Microsoft ODBC Driver 18
+        run: |
+          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+          curl -fsSL https://packages.microsoft.com/config/ubuntu/22.04/prod.list \
+            | sudo tee /etc/apt/sources.list.d/mssql-release.list
+          sudo apt-get update
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18
+
+      - name: Wait for SQL Server
+        run: |
+          python - <<'PY'
+          import time, pyodbc
+          dsn = (
+              "DRIVER={ODBC Driver 18 for SQL Server};"
+              "SERVER=localhost,1433;UID=sa;PWD=Unique_Strong!Pass1;"
+              "TrustServerCertificate=yes;"
+          )
+          for attempt in range(40):
+              try:
+                  pyodbc.connect(dsn, timeout=3).close()
+                  print("SQL Server ready")
+                  break
+              except Exception as e:
+                  print(f"waiting... ({attempt}) {e}")
+                  time.sleep(3)
+          else:
+              raise SystemExit("SQL Server did not become ready")
+          PY
 
       - name: Run live syntax validation
         env:
