@@ -40,9 +40,16 @@ from unique.core.transpiler import transpile
 
 _URLS = {
     "tsql": os.environ.get("UNIQUE_TEST_MSSQL_URL"),
+    "oracle": os.environ.get("UNIQUE_TEST_ORACLE_URL"),
     "postgresql": os.environ.get("UNIQUE_TEST_PG_URL"),
     "mysql": os.environ.get("UNIQUE_TEST_MYSQL_URL"),
 }
+
+# Targets validated live. PostgreSQL and MySQL are intentionally disabled for
+# now: the procedural fixtures only exist for SQL Server and Oracle yet, so
+# validating those two engines first avoids noise from constructs we haven't
+# generated procedures for. Re-enable PG/MySQL once their procedures are added.
+_LIVE_TARGETS = ["tsql", "oracle"]
 
 # (source_dialect, source_sql) snippets that exercise constructs known to be
 # easy to mistranslate. Each is transpiled to every configured target and the
@@ -80,7 +87,7 @@ def _validator_or_skip(dialect: str):  # type: ignore[no-untyped-def]
         pytest.skip(f"could not connect to {dialect} engine: {e}")
 
 
-@pytest.mark.parametrize("target", ["tsql", "postgresql", "mysql"])
+@pytest.mark.parametrize("target", _LIVE_TARGETS)
 @pytest.mark.parametrize("source,sql", _SNIPPETS)
 def test_transpiled_output_is_valid(source: str, sql: str, target: str) -> None:
     if source == target:

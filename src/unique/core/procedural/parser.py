@@ -1664,7 +1664,12 @@ class ProceduralParser:
                     break
             elif paren_depth == 0 and tok.is_keyword("CASE"):
                 case_depth += 1
-            if not first and paren_depth == 0 and case_depth == 0 and self._at_tsql_stmt_boundary():
+            if (
+                not first
+                and paren_depth == 0
+                and case_depth == 0
+                and self._at_tsql_stmt_boundary()
+            ):
                 break
             # DML verbs on their own (outside any expression) terminate the
             # DECLARE value even without a semicolon (T-SQL semicolons optional).
@@ -1750,7 +1755,12 @@ class ProceduralParser:
                     break
             elif paren_depth == 0 and tok.is_keyword("CASE"):
                 case_depth += 1
-            if not first and paren_depth == 0 and case_depth == 0 and self._at_tsql_stmt_boundary():
+            if (
+                not first
+                and paren_depth == 0
+                and case_depth == 0
+                and self._at_tsql_stmt_boundary()
+            ):
                 break
             if tok.type == TokenType.LPAREN:
                 paren_depth += 1

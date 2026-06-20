@@ -1336,7 +1336,9 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     default_sql = re.sub(
                         r"(?i)\bNEWSEQUENTIALID\s*\(\s*\)", "SYS_GUID()", default_sql
                     )
-                    default_sql = re.sub(r"(?i)\bNEWID\s*\(\s*\)", "SYS_GUID()", default_sql)
+                    default_sql = re.sub(
+                        r"(?i)\bNEWID\s*\(\s*\)", "SYS_GUID()", default_sql
+                    )
                 default = f" DEFAULT {default_sql}"
             identity = ""
             if col.identity:

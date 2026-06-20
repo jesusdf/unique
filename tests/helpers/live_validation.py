@@ -205,9 +205,26 @@ def _is_executable(stmt: str) -> bool:
     return False
 
 
+def _strip_line_comments(sql: str) -> str:
+    """Remove ``-- ...`` line comments (to end of line) from each line.
+
+    This prevents a ``;`` inside a comment from being treated as a statement
+    separator, and keeps comment text from reaching the engine.
+    """
+    out = []
+    for line in sql.splitlines():
+        idx = line.find("--")
+        out.append(line if idx == -1 else line[:idx])
+    return "\n".join(out)
+
+
 def _split_semicolons(sql: str) -> list[str]:
-    """Naive ';' split for simple validation statements (no PL bodies)."""
-    return sql.split(";")
+    """Split on ';' for simple validation statements (no PL bodies).
+
+    Line comments are stripped first so a ';' inside a comment doesn't split a
+    statement.
+    """
+    return _strip_line_comments(sql).split(";")
 
 
 def _normalize_pg_url(url: str) -> str:
