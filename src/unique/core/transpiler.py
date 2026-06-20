@@ -40,6 +40,17 @@ from unique.core.transformer import Transformer, TransformWarning
 
 logger = logging.getLogger(__name__)
 
+# T-SQL DDL guard: "IF OBJECT_ID(...) IS NULL CREATE TABLE/INDEX ..."
+# The guard is T-SQL-only idiom; for other targets we drop it and emit
+# only the CREATE statement (CREATE TABLE IF NOT EXISTS is used where supported;
+# for Oracle pre-23c we just emit CREATE TABLE since the fixture starts fresh).
+_TSQL_DDL_GUARD_RE = re.compile(
+    r"(?s)^(?:--[^\n]*\n\s*)*"
+    r"IF\s+(?:OBJECT_ID|EXISTS)\s*\([^)]+\)\s*IS\s+NULL\s+"
+    r"(CREATE\s+(?:TABLE|(?:UNIQUE\s+)?INDEX)\b.*)",
+    re.IGNORECASE,
+)
+
 
 def _warn(message: str, feature: str, source: str, target: str) -> TransformWarning:
     """Build a TransformWarning with dialect context."""
@@ -201,7 +212,19 @@ class Transpiler:
                         batch.sql, source, target, metadata_resolver
                     )
                 elif batch.batch_type == BatchType.SET_OPTION:
-                    result = self._transpile_set_option(batch.sql, source, target)
+                    # T-SQL DDL guards (IF OBJECT_ID() IS NULL CREATE TABLE ...)
+                    # are not SET options — extract the DDL and transpile it.
+                    ddl_match = (
+                        _TSQL_DDL_GUARD_RE.match(batch.sql)
+                        if source == "tsql" and target != "tsql"
+                        else None
+                    )
+                    if ddl_match:
+                        result = self._transpile_dml(
+                            ddl_match.group(1), source, target, source_dialect, target_dialect
+                        )
+                    else:
+                        result = self._transpile_set_option(batch.sql, source, target)
                 elif batch.batch_type == BatchType.COMMENT:
                     # Comments carry no executable SQL; preserve them verbatim
                     # (already normalized to '-- ...' line comments).
@@ -430,8 +453,12 @@ class Transpiler:
     ) -> TranspileResult:
         """Handle SET options like SET NOCOUNT ON."""
         if source == "tsql" and target != "tsql":
+            commented = "\n".join(
+                f"-- {line}" if line.strip() else ""
+                for line in sql.strip().splitlines()
+            )
             return TranspileResult(
-                sql=f"-- {sql.strip()}",
+                sql=commented,
                 warnings=[
                     _warn(
                         f"SET option commented out: {sql.strip()[:60]}",

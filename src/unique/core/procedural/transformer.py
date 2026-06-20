@@ -425,6 +425,10 @@ class ProceduralTransformer:
 
     def _transform_var_in_sql(self, sql: str) -> str:
         """Transform variable references within raw SQL text."""
+        if self._source == "tsql" and self._target == "oracle":
+            # Strip SQL Server's default schema prefix — Oracle objects live in
+            # the current user's schema and don't use "dbo." qualification.
+            sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
         if self._source == "tsql" and self._target in ("oracle", "postgresql"):
 
             def replace_var(m: re.Match[str]) -> str:
@@ -558,6 +562,12 @@ class ProceduralTransformer:
     # Node-specific transformations
     # ---------------------------------------------------------------
 
+    def _target_schema(self, schema: str | None) -> str | None:
+        """Return schema for target dialect; strip SQL Server's 'dbo' for Oracle."""
+        if self._target == "oracle" and schema and schema.lower() == "dbo":
+            return None
+        return schema
+
     def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
         new_params = self._transform_params(node.parameters)
         new_body = self._transform_body(node.body)
@@ -569,7 +579,7 @@ class ProceduralTransformer:
             parameters=new_params,
             body=new_body,
             or_replace=or_replace,
-            schema=node.schema,
+            schema=self._target_schema(node.schema),
         )
 
     def _transform_alter_procedure(self, node: AlterProcedureStatement) -> ASTNode:
@@ -582,7 +592,7 @@ class ProceduralTransformer:
                 parameters=new_params,
                 body=new_body,
                 or_replace=True,
-                schema=node.schema,
+                schema=self._target_schema(node.schema),
             )
         return AlterProcedureStatement(
             name=node.name,
@@ -603,7 +613,7 @@ class ProceduralTransformer:
             return_type=new_return,
             body=new_body,
             or_replace=True if self._target != "tsql" else node.or_replace,
-            schema=node.schema,
+            schema=self._target_schema(node.schema),
         )
 
     def _transform_trigger(self, node: CreateTriggerStatement) -> ASTNode:
@@ -619,7 +629,7 @@ class ProceduralTransformer:
             for_each=node.for_each,
             body=new_body,
             or_replace=True if self._target == "oracle" else node.or_replace,
-            schema=node.schema,
+            schema=self._target_schema(node.schema),
         )
 
     def _transform_declare(self, node: DeclareStatement) -> DeclareStatement:
@@ -771,6 +781,74 @@ class ProceduralTransformer:
             rest_sql=rest,
         )
 
+    _DATE_ADD_START_RE = re.compile(r"DATE_ADD\s*\(", re.IGNORECASE)
+
+    @classmethod
+    def _replace_oracle_date_add(cls, sql: str) -> str:
+        """Replace sqlglot's MySQL-style DATE_ADD(d, n, 'UNIT') with Oracle arithmetic.
+
+        Uses paren-depth tracking to correctly split nested arguments.
+        """
+        result: list[str] = []
+        i = 0
+        while True:
+            m = cls._DATE_ADD_START_RE.search(sql, i)
+            if not m:
+                result.append(sql[i:])
+                break
+            result.append(sql[i : m.start()])
+            # Walk forward to find the matching closing paren.
+            j = m.end()
+            depth = 1
+            while j < len(sql) and depth > 0:
+                if sql[j] == "(":
+                    depth += 1
+                elif sql[j] == ")":
+                    depth -= 1
+                j += 1
+            inner = sql[m.end() : j - 1]
+            # Split inner at top-level commas.
+            args: list[str] = []
+            d = 0
+            start = 0
+            for k, ch in enumerate(inner):
+                if ch == "(":
+                    d += 1
+                elif ch == ")":
+                    d -= 1
+                elif ch == "," and d == 0:
+                    args.append(inner[start:k].strip())
+                    start = k + 1
+            args.append(inner[start:].strip())
+            if len(args) == 3:
+                date_expr, amount, unit = args[0], args[1], args[2].strip("'").upper()
+                if unit in ("SECOND", "MINUTE", "HOUR"):
+                    repl = f"({date_expr} + NUMTODSINTERVAL({amount}, '{unit}'))"
+                elif unit == "DAY":
+                    repl = f"({date_expr} + {amount})"
+                elif unit == "WEEK":
+                    repl = f"({date_expr} + ({amount}) * 7)"
+                elif unit == "MONTH":
+                    repl = f"ADD_MONTHS({date_expr}, {amount})"
+                elif unit == "QUARTER":
+                    repl = f"ADD_MONTHS({date_expr}, ({amount}) * 3)"
+                elif unit == "YEAR":
+                    repl = f"ADD_MONTHS({date_expr}, ({amount}) * 12)"
+                else:
+                    repl = f"DATE_ADD({inner})"
+            else:
+                repl = f"DATE_ADD({inner})"
+            result.append(repl)
+            i = j
+        return "".join(result)
+
+    def _fix_oracle_dml(self, sql: str) -> str:
+        """Post-process sqlglot Oracle output to correct unsupported constructs."""
+        sql = self._replace_oracle_date_add(sql)
+        # Strip T-SQL RECOMPILE query hint that sqlglot leaves in Oracle output
+        sql = re.sub(r"\s+RECOMPILE\b", "", sql, flags=re.IGNORECASE)
+        return sql
+
     def _transform_embedded_dml(self, node: EmbeddedDML) -> EmbeddedDML:
         """Transform embedded DML using sqlglot."""
         sql = self._transform_var_in_sql(node.sql)
@@ -788,6 +866,8 @@ class ProceduralTransformer:
         except Exception as e:
             logger.debug("sqlglot transpile failed for DML: %s", e)
             self._warnings.append(f"Could not transpile DML: {e}")
+        if self._target == "oracle":
+            sql = self._fix_oracle_dml(sql)
         return EmbeddedDML(sql=sql, dialect=self._target)
 
     def _transform_null(self, node: NullStatement) -> ASTNode:
@@ -799,6 +879,34 @@ class ProceduralTransformer:
         sql = self._transform_var_in_sql(node.sql)
         # Apply function name transformations
         sql = self._transform_functions_in_sql(sql)
+        # If the expression contains exactly one subquery (no other DML), try
+        # to transpile it via sqlglot so TOP → FETCH FIRST, CONVERT → CAST, etc.
+        # Guard: multiple DML verbs mean this is a multi-statement block that
+        # should not be wrapped in SELECT and sent to sqlglot.
+        _dml_count = len(re.findall(
+            r"\b(?:SELECT|INSERT|UPDATE|DELETE|MERGE)\b", sql, re.IGNORECASE
+        ))
+        if (
+            self._source == "tsql"
+            and self._target in ("oracle", "postgresql")
+            and _dml_count == 1
+            and re.search(r"\bSELECT\b", sql, re.IGNORECASE)
+        ):
+            try:
+                source_dialect = self._get_sqlglot_dialect(self._source)
+                target_dialect = self._get_sqlglot_dialect(self._target)
+                results = sqlglot.transpile(
+                    f"SELECT {sql}",
+                    read=source_dialect,
+                    write=target_dialect,
+                    error_level=sqlglot.ErrorLevel.RAISE,
+                )
+                if results and results[0].upper().startswith("SELECT "):
+                    sql = results[0][len("SELECT "):].rstrip().rstrip(";")
+                    if self._target == "oracle":
+                        sql = self._fix_oracle_dml(sql)
+            except Exception:
+                pass
         return RawSQL(sql=sql, reason=node.reason)
 
     def _transform_functions_in_sql(self, sql: str) -> str:
