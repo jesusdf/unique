@@ -55,20 +55,34 @@ _LIVE_TARGETS = ["tsql", "oracle"]
 # easy to mistranslate. Each is transpiled to every configured target and the
 # output is validated against that engine. Snippets are self-contained (they
 # create any object they use) so syntax validation needs no seeded schema.
+#
+# The optional third element restricts which targets a snippet is validated
+# against. It's used to skip cases that are legitimately invalid on a given
+# engine (not a transpiler bug) — e.g. a bare ``SELECT 1`` has no FROM clause,
+# which Oracle rejects (it needs ``FROM dual``).
+_ALL = {"tsql", "oracle", "postgresql", "mysql"}
+_NO_ORACLE = _ALL - {"oracle"}
+
 _SNIPPETS = [
-    ("postgresql", "CREATE TABLE IF NOT EXISTS t (id INT, name TEXT)"),
-    ("postgresql", "SELECT 1; SELECT 2;"),
-    ("tsql", "CREATE TABLE t (id INT IDENTITY(1,1) PRIMARY KEY, n NVARCHAR(50))"),
-    ("tsql", "SELECT 1 AS a, 2 AS b"),
-    ("oracle", "rem a comment\nrem another\nSELECT 1 AS x FROM dual"),
-    ("mysql", "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY)"),
+    ("postgresql", "CREATE TABLE IF NOT EXISTS t (id INT, name TEXT)", _ALL),
+    ("postgresql", "SELECT 1; SELECT 2;", _NO_ORACLE),
+    (
+        "tsql",
+        "CREATE TABLE t (id INT IDENTITY(1,1) PRIMARY KEY, n NVARCHAR(50))",
+        _ALL,
+    ),
+    ("tsql", "SELECT 1 AS a, 2 AS b", _NO_ORACLE),
+    ("oracle", "rem a comment\nrem another\nSELECT 1 AS x FROM dual", _ALL),
+    ("mysql", "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY)", _ALL),
     (
         "postgresql",
         "CREATE TABLE t (a INT, b INT); CREATE INDEX ix ON t (a)",
+        _ALL,
     ),
     (
         "tsql",
         "CREATE TABLE t (id INT, total AS (id * 2) PERSISTED)",
+        _ALL,
     ),
 ]
 
@@ -88,10 +102,14 @@ def _validator_or_skip(dialect: str):  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.parametrize("target", _LIVE_TARGETS)
-@pytest.mark.parametrize("source,sql", _SNIPPETS)
-def test_transpiled_output_is_valid(source: str, sql: str, target: str) -> None:
+@pytest.mark.parametrize("source,sql,valid_targets", _SNIPPETS)
+def test_transpiled_output_is_valid(
+    source: str, sql: str, valid_targets: set, target: str
+) -> None:
     if source == target:
         pytest.skip("no transpilation needed")
+    if target not in valid_targets:
+        pytest.skip(f"snippet not applicable to {target}")
     validator = _validator_or_skip(target)
     try:
         result = transpile(sql, source, target)

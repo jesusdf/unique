@@ -171,6 +171,53 @@ class MySQLValidator(SyntaxValidator):
         self._conn.close()
 
 
+class OracleValidator(SyntaxValidator):
+    """Validate Oracle by executing statements and dropping what they create.
+
+    Oracle commits DDL implicitly, so a transaction rollback can't undo a
+    CREATE TABLE. The validation snippets create objects with fixed names, so
+    we drop any table/index they create both before (idempotent) and after the
+    run to keep the schema clean and the validation repeatable.
+    """
+
+    dialect = "oracle"
+
+    def __init__(self, url: str) -> None:
+        import oracledb  # type: ignore[import-untyped]
+
+        user, password, dsn = _parse_oracle_url(url)
+        self._conn = oracledb.connect(user=user, password=password, dsn=dsn)
+        self._conn.autocommit = False
+
+    def validate(self, sql: str) -> ValidationResult:
+        # Oracle's driver rejects a trailing ';' / '/' terminator on a single
+        # statement, and only runs one statement per execute().
+        statements = [s for s in _split_semicolons(sql) if _is_executable(s)]
+        created = _objects_created(sql)
+        self._drop_all(created)  # pre-clean in case a prior run left objects
+        cur = self._conn.cursor()
+        try:
+            for stmt in statements:
+                cur.execute(stmt.strip())
+            return ValidationResult(ok=True)
+        except Exception as e:  # noqa: BLE001
+            return ValidationResult(ok=False, error=f"{e}\n--- sql ---\n{sql}")
+        finally:
+            cur.close()
+            self._drop_all(created)
+
+    def _drop_all(self, created: list[tuple[str, str]]) -> None:
+        cur = self._conn.cursor()
+        for kind, name in created:
+            with contextlib.suppress(Exception):
+                cur.execute(f"DROP {kind} {name}")
+                self._conn.commit()
+        cur.close()
+
+    def close(self) -> None:
+        self._conn.close()
+
+
 def make_validator(dialect: str, url: str) -> SyntaxValidator:
     """Construct the validator for ``dialect`` from a connection URL."""
     if dialect == "tsql":
@@ -179,6 +226,8 @@ def make_validator(dialect: str, url: str) -> SyntaxValidator:
         return PostgresValidator(url)
     if dialect == "mysql":
         return MySQLValidator(url)
+    if dialect == "oracle":
+        return OracleValidator(url)
     raise ValueError(f"No live validator for dialect {dialect!r}")
 
 
@@ -275,3 +324,37 @@ def _connect_mssql(url: str):  # type: ignore[no-untyped-def]
         "TrustServerCertificate=yes;"
     )
     return pyodbc.connect(conn_str, autocommit=False)
+
+
+def _parse_oracle_url(url: str) -> tuple[str, str, str]:
+    """Parse ``oracle://user:pass@host:port/service`` into (user, pwd, dsn).
+
+    The DSN is the Easy Connect form ``host:port/service_name`` that
+    python-oracledb accepts in thin mode (no Oracle client needed).
+    """
+    from urllib.parse import urlparse
+
+    p = urlparse(url)
+    host = p.hostname or "localhost"
+    port = p.port or 1521
+    service = (p.path or "/").lstrip("/") or "FREEPDB1"
+    dsn = f"{host}:{port}/{service}"
+    return p.username or "system", p.password or "", dsn
+
+
+def _objects_created(sql: str) -> list[tuple[str, str]]:
+    """Find tables/indexes a snippet creates, so they can be dropped after.
+
+    Returns (kind, name) pairs, indexes first so dependent drops don't fail.
+    """
+    import re
+
+    tables = re.findall(
+        r"(?i)\bCREATE\s+(?:GLOBAL\s+TEMPORARY\s+)?TABLE\s+"
+        r"(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_]\w*)",
+        sql,
+    )
+    indexes = re.findall(r"(?i)\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+([A-Za-z_]\w*)", sql)
+    out: list[tuple[str, str]] = [("INDEX", n) for n in indexes]
+    out += [("TABLE", n) for n in tables]
+    return out
