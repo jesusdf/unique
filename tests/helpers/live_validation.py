@@ -31,7 +31,6 @@ when the URL/driver is unavailable, so the default suite stays green.
 
 from __future__ import annotations
 
-import contextlib
 from dataclasses import dataclass
 
 
@@ -56,7 +55,13 @@ class SyntaxValidator:
 
 
 class MSSQLValidator(SyntaxValidator):
-    """Validate T-SQL with ``SET NOEXEC ON`` (parse/compile, do not execute)."""
+    """Validate T-SQL with ``SET PARSEONLY ON`` (syntax check, no execution).
+
+    PARSEONLY parses each statement for syntax without compiling or resolving
+    object names, so it flags dialect/syntax errors (e.g. the invalid
+    ``CREATE TABLE IF NOT EXISTS``) without touching data or needing the
+    referenced objects to exist.
+    """
 
     dialect = "tsql"
 
@@ -66,21 +71,23 @@ class MSSQLValidator(SyntaxValidator):
         self._conn = _connect_mssql(url)
 
     def validate(self, sql: str) -> ValidationResult:
-        cur = self._conn.cursor()
-        try:
-            # NOEXEC compiles each statement but runs none. GO is a client
-            # batch separator, so split on it and validate batch by batch.
-            for batch in _split_go(sql):
-                if not batch.strip():
-                    continue
-                cur.execute("SET NOEXEC ON;\n" + batch)
-            return ValidationResult(ok=True)
-        except Exception as e:  # noqa: BLE001 - report the engine's complaint
-            return ValidationResult(ok=False, error=str(e))
-        finally:
-            with contextlib.suppress(Exception):
-                cur.execute("SET NOEXEC OFF;")
-            cur.close()
+        # PARSEONLY checks syntax only: the server parses each statement but
+        # does not compile or resolve object names. This avoids false
+        # positives when a batch references a table it just (notionally)
+        # created, and it cannot be "stuck on" the way NOEXEC can (a fresh
+        # connection/cursor per call keeps it isolated). GO is a client-side
+        # batch separator, so validate batch by batch.
+        for batch in _split_go(sql):
+            if not batch.strip():
+                continue
+            cur = self._conn.cursor()
+            try:
+                cur.execute("SET PARSEONLY ON;\n" + batch + "\nSET PARSEONLY OFF;")
+            except Exception as e:  # noqa: BLE001 - report engine complaint
+                return ValidationResult(ok=False, error=f"{e}\n--- batch ---\n{batch}")
+            finally:
+                cur.close()
+        return ValidationResult(ok=True)
 
     def close(self) -> None:
         self._conn.close()
@@ -110,7 +117,7 @@ class PostgresValidator(SyntaxValidator):
             cur.execute(sql)
             return ValidationResult(ok=True)
         except Exception as e:  # noqa: BLE001
-            return ValidationResult(ok=False, error=str(e))
+            return ValidationResult(ok=False, error=f"{e}\n--- sql ---\n{sql}")
         finally:
             self._conn.rollback()
             cur.close()
@@ -142,7 +149,7 @@ class MySQLValidator(SyntaxValidator):
                     cur.execute(stmt)
             return ValidationResult(ok=True)
         except Exception as e:  # noqa: BLE001
-            return ValidationResult(ok=False, error=str(e))
+            return ValidationResult(ok=False, error=f"{e}\n--- sql ---\n{sql}")
         finally:
             self._conn.rollback()
             cur.close()

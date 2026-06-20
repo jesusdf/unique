@@ -46,15 +46,23 @@ _URLS = {
 
 # (source_dialect, source_sql) snippets that exercise constructs known to be
 # easy to mistranslate. Each is transpiled to every configured target and the
-# output is validated against that engine.
+# output is validated against that engine. Snippets are self-contained (they
+# create any object they use) so syntax validation needs no seeded schema.
 _SNIPPETS = [
     ("postgresql", "CREATE TABLE IF NOT EXISTS t (id INT, name TEXT)"),
     ("postgresql", "SELECT 1; SELECT 2;"),
     ("tsql", "CREATE TABLE t (id INT IDENTITY(1,1) PRIMARY KEY, n NVARCHAR(50))"),
-    ("tsql", "SELECT TOP 5 * FROM t WHERE n IS NOT NULL"),
-    ("oracle", "rem a comment\nrem another\nSELECT 1 FROM dual"),
+    ("tsql", "SELECT 1 AS a, 2 AS b"),
+    ("oracle", "rem a comment\nrem another\nSELECT 1 AS x FROM dual"),
     ("mysql", "CREATE TABLE t (id INT AUTO_INCREMENT PRIMARY KEY)"),
-    ("postgresql", "INSERT INTO t (id) VALUES (1) RETURNING id"),
+    (
+        "postgresql",
+        "CREATE TABLE t (a INT, b INT); CREATE INDEX ix ON t (a)",
+    ),
+    (
+        "tsql",
+        "CREATE TABLE t (id INT, total AS (id * 2) PERSISTED)",
+    ),
 ]
 
 
