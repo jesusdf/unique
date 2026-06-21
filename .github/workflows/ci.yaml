@@ -141,29 +141,24 @@ jobs:
           MSSQL_PID: Developer
         ports:
           - 1433:1433
-      oracle:
-        # Lightweight Oracle Database Free image with a fast-start layer.
-        # Pinned tag; faststart trades image size for a much shorter boot.
-        image: gvenzl/oracle-free:23-slim-faststart
-        env:
-          ORACLE_PASSWORD: UniqueStrongPass1
-          APP_USER: unique
-          APP_USER_PASSWORD: UniqueStrongPass1
-        ports:
-          - 1521:1521
-        # Oracle needs a generous startup window before health checks count.
-        options: >-
-          --health-cmd healthcheck.sh
-          --health-interval 10s
-          --health-timeout 10s
-          --health-retries 30
-          --health-start-period 90s
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Start Oracle Free container
+        run: |
+          # Started as a plain container (not a service) so we can give it a
+          # long, observable startup window and read its logs on failure.
+          docker run -d --name oracle \
+            -p 1521:1521 \
+            -e ORACLE_PASSWORD=UniqueStrongPass1 \
+            -e APP_USER=unique \
+            -e APP_USER_PASSWORD=UniqueStrongPass1 \
+            gvenzl/oracle-free:23-slim-faststart
+          echo "Oracle container started; it will initialize while deps install."
 
       - name: Install dependencies and DB drivers
         run: |
@@ -229,7 +224,8 @@ jobs:
           except Exception as e:
               print(f"oracledb unavailable, skipping wait: {e}")
               raise SystemExit(0)
-          for attempt in range(60):
+          ok = False
+          for attempt in range(60):  # up to ~5 min
               try:
                   oracledb.connect(
                       user="unique",
@@ -237,13 +233,24 @@ jobs:
                       dsn="localhost:1521/FREEPDB1",
                   ).close()
                   print("Oracle ready")
+                  ok = True
                   break
               except Exception as e:
                   print(f"waiting... ({attempt}) {e}")
                   time.sleep(5)
-          else:
+          if not ok:
               print("Oracle not ready; its checks will skip.")
           PY
+
+      - name: Oracle container logs (debug)
+        if: always()
+        run: |
+          LOG="$(docker logs oracle 2>&1 | tail -25 || true)"
+          # Surface as an ::error:: so it's readable via the annotations API
+          # (raw logs sit on a blocked blob).
+          ENC="${LOG//'%'/'%25'}"
+          ENC="${ENC//$'\n'/'%0A'}"
+          echo "::error title=oracle-logs::${ENC}"
 
       - name: Run live syntax validation
         env:
