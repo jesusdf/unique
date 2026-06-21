@@ -124,3 +124,62 @@ class TestConvenienceFunction:
         )
         assert isinstance(result, TranspileResult)
         assert "SELECT" in result.sql
+
+
+class TestMySQLDelimiterWrapping:
+    """MySQL compound routines must be wrapped in a DELIMITER block."""
+
+    SRC = (
+        "CREATE PROCEDURE dbo.p\n"
+        "    @a NVARCHAR(MAX) OUTPUT\n"
+        "AS\n"
+        "BEGIN\n"
+        "    SET @a = NULL\n"
+        "    IF @a IS NOT NULL\n"
+        "        SET @a = @a + N'x'\n"
+        "END"
+    )
+
+    def test_procedure_wrapped_in_delimiter(self, transpiler: Transpiler) -> None:
+        out = transpiler.transpile(self.SRC, source="tsql", target="mysql").sql
+        assert "DELIMITER $$" in out
+        assert "DELIMITER ;" in out
+        # The routine body terminates with END$$ (not END; before the wrapper).
+        assert "END$$" in out
+
+    def test_delimiters_are_balanced(self, transpiler: Transpiler) -> None:
+        out = transpiler.transpile(self.SRC, source="tsql", target="mysql").sql
+        assert out.count("DELIMITER $$") == out.count("DELIMITER ;")
+        assert out.count("DELIMITER $$") == out.count("END$$")
+
+    def test_leading_comments_kept_above_delimiter(
+        self, transpiler: Transpiler
+    ) -> None:
+        src = (
+            "IF OBJECT_ID(N'dbo.p', N'P') IS NULL\n"
+            "    EXEC (N'CREATE PROCEDURE dbo.p AS SELECT 1')\n"
+            "GO\n" + self.SRC
+        )
+        out = transpiler.transpile(src, source="tsql", target="mysql").sql
+        # The guard becomes a leading comment; it must precede DELIMITER $$.
+        delim_pos = out.index("DELIMITER $$")
+        assert "--" in out[:delim_pos]
+
+    def test_plain_dml_not_wrapped(self, transpiler: Transpiler) -> None:
+        out = transpiler.transpile(
+            "SELECT * FROM users", source="tsql", target="mysql"
+        ).sql
+        assert "DELIMITER" not in out
+
+    def test_function_wrapped_in_delimiter(self, transpiler: Transpiler) -> None:
+        src = (
+            "CREATE FUNCTION dbo.f(@x INT)\n"
+            "RETURNS INT\n"
+            "AS\n"
+            "BEGIN\n"
+            "    RETURN @x + 1\n"
+            "END"
+        )
+        out = transpiler.transpile(src, source="tsql", target="mysql").sql
+        assert "DELIMITER $$" in out
+        assert "DELIMITER ;" in out
