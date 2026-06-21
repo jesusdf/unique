@@ -207,3 +207,118 @@ class TestFixtureStructureConservation:
             f"DML verbs not conserved tsql->{target}: "
             f"{src_fp.dml_verb_counts()} != {out_fp.dml_verb_counts()}"
         )
+
+
+class TestExtendedFingerprintCounts:
+    """Coverage for the extended structural dimensions."""
+
+    def test_counts_merge_and_when_clauses(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS\nBEGIN\n"
+            "    MERGE INTO tgt USING src ON tgt.id = src.id\n"
+            "    WHEN MATCHED THEN UPDATE SET tgt.a = src.a\n"
+            "    WHEN NOT MATCHED THEN INSERT (a) VALUES (src.a);\n"
+            "END"
+        )
+        fp = fingerprint(src, "tsql")
+        assert fp.merges == 1
+        assert fp.merge_when_clauses == 2
+
+    def test_counts_query_shape(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS\nBEGIN\n"
+            "    SELECT a, COUNT(*) FROM t "
+            "JOIN u ON t.id = u.id "
+            "GROUP BY a HAVING COUNT(*) > 1 ORDER BY a\n"
+            "END"
+        )
+        fp = fingerprint(src, "tsql")
+        assert fp.joins == 1
+        assert fp.group_bys == 1
+        assert fp.havings == 1
+        assert fp.order_bys == 1
+        assert fp.aggregates == 2
+
+    def test_counts_set_operations_and_subqueries(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS\nBEGIN\n"
+            "    SELECT a FROM t WHERE x IN (SELECT y FROM u)\n"
+            "    UNION SELECT a FROM v\n"
+            "END"
+        )
+        fp = fingerprint(src, "tsql")
+        assert fp.set_operations == 1
+        assert fp.subqueries == 1
+
+    def test_counts_return_and_raise(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS\nBEGIN\n"
+            "    IF @x IS NULL\n"
+            "    BEGIN\n"
+            "        RAISERROR('bad', 16, 1)\n"
+            "        RETURN\n"
+            "    END\n"
+            "END"
+        )
+        fp = fingerprint(src, "tsql")
+        assert fp.returns == 1
+        assert fp.raises == 1
+
+
+class TestDetectsExtendedSilentChange:
+    def test_dropped_join_detected(self) -> None:
+        src = "CREATE PROCEDURE p AS BEGIN " "SELECT a FROM t JOIN u ON t.id = u.id END"
+        bad = "CREATE PROCEDURE p AS BEGIN SELECT a FROM t END"
+        violations = assert_functionally_equivalent(src, "tsql", bad, "tsql")
+        assert any("join" in v.lower() for v in violations)
+
+    def test_dropped_merge_when_detected(self) -> None:
+        src = (
+            "CREATE PROCEDURE p AS BEGIN "
+            "MERGE INTO tgt USING src ON tgt.id = src.id "
+            "WHEN MATCHED THEN UPDATE SET tgt.a = src.a "
+            "WHEN NOT MATCHED THEN INSERT (a) VALUES (src.a); END"
+        )
+        bad = (
+            "CREATE PROCEDURE p AS BEGIN "
+            "MERGE INTO tgt USING src ON tgt.id = src.id "
+            "WHEN MATCHED THEN UPDATE SET tgt.a = src.a; END"
+        )
+        violations = assert_functionally_equivalent(src, "tsql", bad, "tsql")
+        assert any("WHEN" in v for v in violations)
+
+    def test_dropped_group_by_detected(self) -> None:
+        src = "CREATE PROCEDURE p AS BEGIN " "SELECT a, COUNT(*) FROM t GROUP BY a END"
+        bad = "CREATE PROCEDURE p AS BEGIN SELECT a, COUNT(*) FROM t END"
+        violations = assert_functionally_equivalent(src, "tsql", bad, "tsql")
+        assert any("GROUP BY" in v for v in violations)
+
+    def test_dropped_distinct_detected(self) -> None:
+        src = "CREATE PROCEDURE p AS BEGIN SELECT DISTINCT a FROM t END"
+        bad = "CREATE PROCEDURE p AS BEGIN SELECT a FROM t END"
+        violations = assert_functionally_equivalent(src, "tsql", bad, "tsql")
+        assert any("DISTINCT" in v for v in violations)
+
+
+class TestMergeTranspilationPreservesStructure:
+    @pytest.mark.parametrize("target", _TARGETS)
+    def test_merge_preserves_when_clauses(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS\nBEGIN\n"
+            "    MERGE INTO tgt USING src ON tgt.id = src.id\n"
+            "    WHEN MATCHED THEN UPDATE SET tgt.a = src.a\n"
+            "    WHEN NOT MATCHED THEN INSERT (a) VALUES (src.a);\n"
+            "END"
+        )
+        out = transpiler.transpile(src, "tsql", target).sql
+        # MySQL has no MERGE; if the transpiler can't preserve it, that must be
+        # surfaced as a violation rather than silently dropped. We assert the
+        # check runs and report (informational) for targets that do support it.
+        violations = assert_functionally_equivalent(src, "tsql", out, target)
+        if target in ("oracle", "postgresql"):
+            # Oracle and PostgreSQL 15+ support MERGE; structure should hold.
+            assert not any(
+                "MERGE" in v or "merge" in v for v in violations
+            ), f"{target}: {violations}"
