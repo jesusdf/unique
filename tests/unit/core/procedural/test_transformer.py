@@ -602,3 +602,62 @@ class TestMySQLCleanDML:
             RawSQL(sql="DATE_ADD(d, INTERVAL 2 HOUR)", reason="x")
         )
         assert out.sql == "DATE_ADD(d, INTERVAL 2 HOUR)"
+
+
+class TestMySQLTypeAndFuncMapping:
+    """Non-portable T-SQL scalar types/functions map to MySQL equivalents."""
+
+    def _mysql(self) -> ProceduralTransformer:
+        return ProceduralTransformer("tsql", "mysql")
+
+    def test_convert_to_cast(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(sql="CONVERT(VARCHAR(20), @col_17)", reason="x")
+        )
+        assert "CONVERT" not in out.sql
+        assert "CAST(v_col_17 AS CHAR(20))" in out.sql
+
+    def test_convert_with_date_style(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(sql="CONVERT(DATETIME, '2020-01-01 00:00:00', 120)", reason="x")
+        )
+        assert "STR_TO_DATE(" in out.sql
+        assert "CONVERT" not in out.sql
+
+    def test_hashbytes_to_sha2(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(sql="HASHBYTES('SHA2_256', @payload)", reason="x")
+        )
+        assert "HASHBYTES" not in out.sql
+        assert "SHA2(" in out.sql
+
+    def test_cast_max_collapsed_to_char(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(sql="CAST(NULL AS NVARCHAR(MAX))", reason="x")
+        )
+        assert "(MAX)" not in out.sql.upper()
+        assert "CAST(NULL AS CHAR)" in out.sql
+
+    def test_sized_cast_preserved(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(sql="CAST(@x AS VARCHAR(50))", reason="x")
+        )
+        # A concrete length must survive (only MAX is collapsed).
+        assert "50" in out.sql
+
+
+class TestMySQLSqlVariantType:
+    def test_sql_variant_param_becomes_longtext(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "CREATE PROCEDURE dbo.p\n"
+            "    @v SQL_VARIANT = NULL\n"
+            "AS\n"
+            "BEGIN\n"
+            "    SET @v = NULL\n"
+            "END"
+        )
+        out = Transpiler().transpile(src, source="tsql", target="mysql").sql
+        assert "SQL_VARIANT" not in out
+        assert "LONGTEXT" in out
