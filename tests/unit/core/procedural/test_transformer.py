@@ -709,3 +709,37 @@ class TestMySQLHashAndStringVarConcat:
         out = Transpiler().transpile(src, source="tsql", target="mysql").sql
         assert "SHA2(CONCAT(v_payload, v_secret), 256)" in out
         assert "DATE_FORMAT" not in out
+
+
+class TestMySQLStringSplit:
+    """T-SQL STRING_SPLIT maps to a MySQL JSON_TABLE expansion."""
+
+    def _mysql(self) -> ProceduralTransformer:
+        return ProceduralTransformer("tsql", "mysql")
+
+    def test_string_split_becomes_json_table(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(sql="SELECT value FROM STRING_SPLIT(v_s, v_delim)", reason="x")
+        )
+        assert "STRING_SPLIT" not in out.sql
+        assert "JSON_TABLE(" in out.sql
+        # The 'value' column must be preserved so callers keep working.
+        assert "value" in out.sql
+
+    def test_string_split_preserves_value_column_usage(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(
+                sql="SELECT LTRIM(RTRIM(value)) AS item "
+                "FROM STRING_SPLIT(v_s, v_delim)",
+                reason="x",
+            )
+        )
+        assert "JSON_TABLE(" in out.sql
+        assert "value" in out.sql
+        assert "STRING_SPLIT" not in out.sql
+
+    def test_no_string_split_left_untouched(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(sql="SELECT a FROM t WHERE b = 1", reason="x")
+        )
+        assert "JSON_TABLE" not in out.sql
