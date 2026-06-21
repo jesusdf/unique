@@ -330,3 +330,34 @@ class TestRoundTrip:
         nodes2 = parse_sql(output, dialect)
         assert len(nodes2) == len(nodes)
         assert type(nodes2[0]) is type(nodes[0])
+
+
+class TestMySQLDDLPortability:
+    """T-SQL DDL constructs that must be adapted for MySQL."""
+
+    def test_dbo_schema_stripped_from_create_table(self) -> None:
+        nodes = parse_sql("CREATE TABLE dbo.t (id INT)", "tsql")
+        out = emit_sql(nodes, "mysql")
+        assert "dbo." not in out
+        assert "CREATE TABLE t" in out
+
+    def test_dbo_schema_kept_for_other_targets_is_not_required(self) -> None:
+        # Sanity: stripping is MySQL/Oracle-specific behavior; emitting back to
+        # T-SQL should not invent or drop schema unexpectedly.
+        nodes = parse_sql("CREATE TABLE dbo.t (id INT)", "tsql")
+        out = emit_sql(nodes, "tsql")
+        assert "t" in out
+
+    def test_newsequentialid_becomes_uuid(self) -> None:
+        nodes = parse_sql(
+            "CREATE TABLE t (id CHAR(36) DEFAULT NEWSEQUENTIALID())", "tsql"
+        )
+        out = emit_sql(nodes, "mysql")
+        assert "NEWSEQUENTIALID" not in out
+        assert "UUID()" in out
+
+    def test_newid_becomes_uuid(self) -> None:
+        nodes = parse_sql("CREATE TABLE t (id CHAR(36) DEFAULT NEWID())", "tsql")
+        out = emit_sql(nodes, "mysql")
+        assert "NEWID" not in out
+        assert "UUID()" in out

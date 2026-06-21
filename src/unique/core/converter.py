@@ -1285,9 +1285,13 @@ def _emit_delete(node: DeleteStatement, dialect: str) -> str:
 def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     """Emit a CREATE TABLE statement."""
     table_node = node.table
-    # For Oracle, the T-SQL default schema "dbo" has no meaning — strip it so
-    # tables are created in the current user's schema.
-    if dialect == "oracle" and getattr(table_node, "schema", None) == "dbo":
+    # The T-SQL default schema "dbo" has no meaning in Oracle or MySQL — strip
+    # it so tables are created in the current user's schema (Oracle) or the
+    # connected database (MySQL, where "dbo" would otherwise name a
+    # non-existent database).
+    if dialect in ("oracle", "mysql") and getattr(table_node, "schema", None) == (
+        "dbo"
+    ):
         table_node = TableRef(name=table_node.name, alias=table_node.alias)
     table = _emit_table_ref(table_node)
     temp = "TEMPORARY " if node.temporary else ""
@@ -1338,6 +1342,15 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     )
                     default_sql = re.sub(
                         r"(?i)\bNEWID\s*\(\s*\)", "SYS_GUID()", default_sql
+                    )
+                elif dialect == "mysql":
+                    # MySQL has no sequential-GUID generator; UUID() is the
+                    # closest equivalent. A function default requires the
+                    # parenthesized "(expr)" form (MySQL 8.0.13+).
+                    default_sql = re.sub(
+                        r"(?i)\b(?:NEWSEQUENTIALID|NEWID)\s*\(\s*\)",
+                        "(UUID())",
+                        default_sql,
                     )
                 default = f" DEFAULT {default_sql}"
             identity = ""

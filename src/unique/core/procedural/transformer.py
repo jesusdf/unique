@@ -871,7 +871,59 @@ class ProceduralTransformer:
             sql = self._fix_oracle_dml(sql)
         if self._target == "mysql":
             sql = self._mysql_string_concat(sql)
+            sql = self._mysql_clean_dml(sql)
         return EmbeddedDML(sql=sql, dialect=self._target)
+
+    def _mysql_clean_dml(self, sql: str) -> str:
+        """Strip T-SQL leftovers sqlglot keeps but MySQL rejects.
+
+        - The ``dbo`` schema/catalog qualifier on tables and table-valued
+          function calls (MySQL has no ``dbo`` schema; it would name a
+          non-existent database).
+        - Table hints such as ``WITH (NOLOCK)``, which have no MySQL form.
+
+        Only re-parses through sqlglot when there is actually something to
+        clean, so fragments that are already valid MySQL are returned
+        untouched (a round-trip would reflow them, e.g. requoting INTERVAL
+        literals).
+        """
+        import sqlglot
+        from sqlglot import exp
+
+        has_dbo = bool(re.search(r"(?i)\bdbo\.", sql))
+        has_hint = bool(re.search(r"(?i)\bWITH\s*\(\s*NOLOCK", sql))
+        if not has_dbo and not has_hint:
+            return sql
+
+        cleaned = sql
+        # The AST pass handles tables and table hints; a bare expression
+        # fragment may not parse as a statement, in which case we fall back to
+        # the original text and let the textual dbo strip below still apply.
+        if has_dbo or has_hint:
+            try:
+                tree = sqlglot.parse_one(sql, read="mysql")
+                if not isinstance(tree, exp.Command):
+                    for table in tree.find_all(exp.Table):
+                        db = table.args.get("db")
+                        if db is not None and db.name.lower() == "dbo":
+                            table.set("db", None)
+                        catalog = table.args.get("catalog")
+                        if catalog is not None and catalog.name.lower() == "dbo":
+                            table.set("catalog", None)
+                    for hint in list(tree.find_all(exp.WithTableHint)):
+                        hint.pop()
+                    cleaned = tree.sql(dialect="mysql")
+            except Exception:
+                cleaned = sql
+        # Scalar/table function calls keep a ``dbo.`` prefix that the AST table
+        # pass above doesn't reach (they parse as Dot/Anonymous, and a bare
+        # ``dbo.func(...)`` fragment may not parse as a statement at all).
+        # The functions are created without a schema in MySQL, so drop any
+        # remaining ``dbo.`` qualifier textually — this also preserves the
+        # original identifier case, which re-emitting through sqlglot would
+        # upper-case.
+        cleaned = re.sub(r"(?i)\bdbo\.", "", cleaned)
+        return cleaned
 
     def _transform_null(self, node: NullStatement) -> ASTNode:
         if self._target == "tsql":
@@ -912,6 +964,7 @@ class ProceduralTransformer:
                 pass
         if self._target == "mysql":
             sql = self._mysql_string_concat(sql)
+            sql = self._mysql_clean_dml(sql)
         return RawSQL(sql=sql, reason=node.reason)
 
     # MySQL has no string ``+`` operator and no ``N'...'`` literal prefix.
