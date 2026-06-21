@@ -319,6 +319,29 @@ class ProceduralTransformer:
         self._metadata = metadata_resolver
         self._warnings: list[str] = []
         self._var_map: dict[str, str] = {}
+        # Names (transformed form) of variables/parameters declared with a
+        # string type. Used to disambiguate T-SQL '+' as concatenation when no
+        # string literal is present (e.g. SHA2(@a + @b) over two text vars).
+        self._string_vars: set[str] = set()
+
+    @staticmethod
+    def _is_string_type(dt: DataType) -> bool:
+        base = dt.name.split("(")[0].strip().upper()
+        return base in {
+            "CHAR",
+            "NCHAR",
+            "VARCHAR",
+            "NVARCHAR",
+            "VARCHAR2",
+            "NVARCHAR2",
+            "TEXT",
+            "NTEXT",
+            "LONGTEXT",
+            "MEDIUMTEXT",
+            "TINYTEXT",
+            "CLOB",
+            "NCLOB",
+        }
 
     @property
     def warnings(self) -> list[str]:
@@ -394,6 +417,8 @@ class ProceduralTransformer:
             new_type = self._transform_data_type(p.data_type)
             new_default = self._transform_node(p.default) if p.default else None
             self._var_map[p.name] = new_name
+            if self._is_string_type(p.data_type):
+                self._string_vars.add(new_name)
             result.append(
                 ParameterDefinition(
                     name=new_name,
@@ -643,6 +668,8 @@ class ProceduralTransformer:
         new_type = self._transform_data_type(node.data_type)
         new_default = self._transform_node(node.default) if node.default else None
         self._var_map[node.name] = new_name
+        if self._is_string_type(node.data_type):
+            self._string_vars.add(new_name)
         return DeclareStatement(name=new_name, data_type=new_type, default=new_default)
 
     def _transform_set_variable(self, node: SetVariableStatement) -> ASTNode:
@@ -896,7 +923,7 @@ class ProceduralTransformer:
         import sqlglot
         from sqlglot import exp
 
-        has_dbo = bool(re.search(r"(?i)\bdbo\.", sql))
+        has_dbo = bool(re.search(r"(?i)\bdbo\s*\.", sql))
         has_hint = bool(re.search(r"(?i)\bWITH\s*\(\s*NOLOCK", sql))
         if not has_dbo and not has_hint:
             return sql
@@ -928,7 +955,7 @@ class ProceduralTransformer:
         # remaining ``dbo.`` qualifier textually — this also preserves the
         # original identifier case, which re-emitting through sqlglot would
         # upper-case.
-        cleaned = re.sub(r"(?i)\bdbo\.", "", cleaned)
+        cleaned = re.sub(r"(?i)\bdbo\s*\.\s*", "", cleaned)
         return cleaned
 
     def _mysql_fix_cast_max(self, sql: str) -> str:
@@ -1021,25 +1048,58 @@ class ProceduralTransformer:
     # arithmetic from concat without type info).
     def _mysql_normalize_funcs(self, sql: str) -> str:
         import sqlglot
+        from sqlglot import exp
 
         # Cheap guard: only worth the round-trip when a known T-SQL-ism is
         # present. Keeps already-valid fragments byte-for-byte identical.
         if not re.search(r"(?i)\b(CONVERT|HASHBYTES|DATEPART|DATENAME)\s*\(", sql):
             return sql
-        for wrap in (sql, f"SELECT {sql}"):
+
+        def normalize(tree: exp.Expression) -> exp.Expression:
+            # T-SQL hashes the binary with HASHBYTES and stringifies it with an
+            # outer CONVERT(<type>, ..., 2) (style 2 = hex, no 0x). sqlglot maps
+            # HASHBYTES('SHA2_256', x) to SHA2(x, 256) — which already returns a
+            # hex string — but mis-handles the wrapping CONVERT's style code,
+            # emitting a spurious DATE_FORMAT. Drop the CONVERT wrapper around a
+            # hash so just SHA2(...) remains.
+            # If the CONVERT is the whole expression (e.g. RETURN CONVERT(...)),
+            # it is the tree root and Node.replace() can't substitute it, so
+            # return the inner expression directly.
+            if isinstance(tree, exp.Convert):
+                expr = tree.args.get("expression")
+                if expr is not None and (
+                    isinstance(expr, exp.SHA2) or expr.find(exp.SHA2)
+                ):
+                    return cast(exp.Expression, expr.copy())
+            wrappers = [
+                conv
+                for conv in tree.find_all(exp.Convert)
+                if (expr := conv.args.get("expression")) is not None
+                and (isinstance(expr, exp.SHA2) or expr.find(exp.SHA2))
+            ]
+            for conv in wrappers:
+                expr = conv.args.get("expression")
+                if expr is not None:
+                    conv.replace(expr.copy())
+            return tree
+
+        for wrap, is_wrapped in ((sql, False), (f"SELECT {sql}", True)):
             try:
-                results = sqlglot.transpile(
-                    wrap,
-                    read="tsql",
-                    write="mysql",
-                    error_level=sqlglot.ErrorLevel.RAISE,
+                tree = sqlglot.parse_one(wrap, read="tsql")
+            except Exception:
+                continue
+            if isinstance(tree, exp.Command):
+                continue
+            try:
+                out = (
+                    normalize(cast(exp.Expression, tree))
+                    .sql(dialect="mysql")
+                    .rstrip()
+                    .rstrip(";")
                 )
             except Exception:
                 continue
-            if not results:
-                continue
-            out = results[0].rstrip().rstrip(";")
-            if wrap.startswith("SELECT ") and not sql.upper().startswith("SELECT"):
+            if is_wrapped and not sql.upper().startswith("SELECT"):
                 if out.upper().startswith("SELECT "):
                     return out[len("SELECT ") :].strip()
                 continue
@@ -1075,9 +1135,19 @@ class ProceduralTransformer:
             else:
                 parts.append(n)
 
+        def is_known_string_var(n: exp.Expression) -> bool:
+            # A bare identifier known (from its DECLARE/parameter type) to be a
+            # string variable signals concatenation even with no string literal
+            # present (e.g. SHA2(@a + @b) over two text columns).
+            if isinstance(n, exp.Column) and not n.table:
+                return n.name in self._string_vars
+            return False
+
         def has_string_operand(parts: list[exp.Expression]) -> bool:
             for p in parts:
                 if is_string_atom(p) or p.find(exp.National):
+                    return True
+                if is_known_string_var(p):
                     return True
                 if any(
                     isinstance(lit, exp.Literal) and lit.args.get("is_string")
@@ -1106,10 +1176,13 @@ class ProceduralTransformer:
                     )
             return node
 
-        # Only attempt the rewrite when both a '+' and a string literal are
-        # present; otherwise there is nothing to convert and we avoid the
-        # parse cost (and any risk of reflowing unrelated SQL).
-        if "+" not in sql or "'" not in sql:
+        # Only attempt the rewrite when a '+' is present at all (the parse cost
+        # is otherwise wasted). A string literal OR a known string variable is
+        # what later marks a chain as concatenation; require '+' plus one of
+        # those signals so already-numeric fragments are skipped cheaply.
+        if "+" not in sql:
+            return sql
+        if "'" not in sql and not self._string_vars:
             return sql
         # The raw SQL may be a complete statement (SELECT ... FROM ...) or a
         # bare expression (the right-hand side of a SET). Try the statement

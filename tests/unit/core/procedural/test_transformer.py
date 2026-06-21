@@ -661,3 +661,51 @@ class TestMySQLSqlVariantType:
         out = Transpiler().transpile(src, source="tsql", target="mysql").sql
         assert "SQL_VARIANT" not in out
         assert "LONGTEXT" in out
+
+
+class TestMySQLHashAndStringVarConcat:
+    """HASHBYTES-in-CONVERT unwrapping and string-variable concatenation."""
+
+    def test_convert_hashbytes_unwraps_to_sha2(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        out = t._transform_node(
+            RawSQL(
+                sql="CONVERT(nvarchar(max), HASHBYTES('SHA2_256', x), 2)",
+                reason="x",
+            )
+        )
+        # The spurious DATE_FORMAT/CONVERT wrapper is dropped; SHA2 already
+        # returns the hex string.
+        assert "DATE_FORMAT" not in out.sql
+        assert out.sql.strip() == "SHA2(x, 256)"
+
+    def test_plus_between_string_vars_becomes_concat(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        # Two declared string variables: '+' must be concatenation even with no
+        # string literal present.
+        t._string_vars = {"v_a", "v_b"}
+        out = t._transform_node(RawSQL(sql="v_a + v_b", reason="x"))
+        assert out.sql == "CONCAT(v_a, v_b)"
+
+    def test_plus_between_non_string_vars_stays_arithmetic(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        # No string vars registered -> '+' is arithmetic, left untouched.
+        out = t._transform_node(RawSQL(sql="v_a + v_b", reason="x"))
+        assert "CONCAT" not in out.sql
+        assert "+" in out.sql
+
+    def test_string_var_registered_from_function_param(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "CREATE FUNCTION dbo.f(@payload nvarchar(max), @secret nvarchar(400))\n"
+            "RETURNS nvarchar(max)\n"
+            "AS\n"
+            "BEGIN\n"
+            "    RETURN CONVERT(nvarchar(max), "
+            "HASHBYTES('SHA2_256', @payload + @secret), 2)\n"
+            "END"
+        )
+        out = Transpiler().transpile(src, source="tsql", target="mysql").sql
+        assert "SHA2(CONCAT(v_payload, v_secret), 256)" in out
+        assert "DATE_FORMAT" not in out
