@@ -6,7 +6,15 @@ SQL, batch separators) that the schema-only fixtures in `../real_world/` don't
 cover.
 
 - `procedures_sqlserver.sql` — T-SQL: ~50 procedures and a handful of functions.
-- `procedures_oracle.sql` — Oracle PL/SQL: ~26 procedures and functions.
+- `procedures_oracle.sql` — Oracle PL/SQL: ~26 procedures and functions,
+  generated from the T-SQL fixture by the transpiler.
+- `procedures_mysql.sql` — MySQL: generated from the T-SQL fixture by the
+  transpiler (T-SQL → MySQL). Routines are wrapped in `DELIMITER $$` blocks,
+  non-portable T-SQL types/functions are mapped to MySQL equivalents
+  (`SQL_VARIANT` → `LONGTEXT`, `CONVERT` → `CAST`/`STR_TO_DATE`, `HASHBYTES`
+  → `SHA2`, `STRING_SPLIT` → `JSON_TABLE`), and any type without a faithful
+  equivalent keeps its original in a `/* UNIQUE: … */` comment. Regenerate via
+  the transpiler rather than editing by hand.
 
 ## Provenance and anonymization
 

@@ -37,6 +37,7 @@ FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "procedures"
 _FIXTURES = [
     ("procedures_sqlserver.sql", "tsql"),
     ("procedures_oracle.sql", "oracle"),
+    ("procedures_mysql.sql", "mysql"),
 ]
 
 # Domain terms that must never appear (anonymization guard).
@@ -92,3 +93,34 @@ def test_fixture_transpiles_without_crashing(
     # Must produce substantial output and never leak domain terms.
     assert len(result.sql) > 500
     assert _FORBIDDEN.search(result.sql) is None
+
+
+# Constructs that must never appear as *executable* MySQL in the committed
+# fixture (they may still appear inside a /* UNIQUE: ... */ comment, which is
+# how a preserved original type is documented).
+_MYSQL_NON_PORTABLE = re.compile(
+    r"(?i)\b(NEWSEQUENTIALID|HASHBYTES|STRING_SPLIT)\b"
+    r"|CHAR\(MAX\)|VARCHAR\(MAX\)|WITH\s*\(\s*NOLOCK"
+)
+
+
+def _strip_comments(sql: str) -> str:
+    no_block = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
+    return re.sub(r"--[^\n]*", "", no_block)
+
+
+def test_mysql_fixture_has_no_executable_non_portable_constructs() -> None:
+    text = (FIXTURE_DIR / "procedures_mysql.sql").read_text(encoding="utf-8")
+    code = _strip_comments(text)
+    leak = _MYSQL_NON_PORTABLE.search(code)
+    assert leak is None, f"non-portable construct in MySQL fixture: {leak!r}"
+    # dbo schema must not survive in executable code either.
+    assert not re.search(r"(?i)\bdbo\s*\.", code), "dbo. left in MySQL fixture"
+
+
+def test_mysql_fixture_wraps_routines_in_delimiter() -> None:
+    text = (FIXTURE_DIR / "procedures_mysql.sql").read_text(encoding="utf-8")
+    # Every routine body is wrapped; openers and closers must balance.
+    assert text.count("DELIMITER $$") == text.count("DELIMITER ;")
+    assert text.count("DELIMITER $$") == text.count("END$$")
+    assert text.count("DELIMITER $$") > 20
