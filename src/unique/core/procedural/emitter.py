@@ -813,17 +813,115 @@ class ProceduralEmitter:
                 using = ", ".join(params)
                 return f"EXECUTE {expr} USING {using};"
             return f"EXECUTE {expr};"
-        # MySQL: prepared statement workflow
-        if params:
-            using = ", ".join(params)
+        # MySQL: distinguish three forms that all arrive as a captured
+        # expression here:
+        #   1. EXEC sp_executesql @sql, N'<decls>', @p1, ...  -> dynamic SQL
+        #   2. EXEC proc_name @a OUTPUT, 'b', ...             -> a routine call
+        #   3. EXEC @sql / EXEC ('...')                       -> dynamic SQL
+        return self._emit_mysql_execute(expr, params)
+
+    def _emit_mysql_execute(self, expr: str, params: list[str]) -> str:
+        stripped = expr.strip()
+
+        # Case 1: sp_executesql. The first comma-separated argument is the SQL
+        # text to run; the second (an N'...' parameter-declaration string) and
+        # the remaining @name = value bindings cannot be mapped to MySQL's
+        # positional PREPARE ... USING reliably from captured text, so emit the
+        # dynamic execution of the SQL argument and flag the bindings for
+        # review rather than emitting invalid SQL.
+        if re.match(r"(?i)^sp_executesql\b", stripped):
+            rest = stripped[len("sp_executesql") :].strip()
+            sql_arg = self._first_arg(rest)
+            note = (
+                " -- UNIQUE: sp_executesql parameter declarations/bindings "
+                "dropped; pass them via PREPARE ... USING manually"
+                if "," in rest
+                else ""
+            )
+            return (
+                f"SET @_stmt = {sql_arg}; PREPARE _dyn FROM @_stmt; "
+                f"EXECUTE _dyn; DEALLOCATE PREPARE _dyn;{note}"
+            )
+
+        # Case 3: a bare variable or string literal is genuine dynamic SQL.
+        if stripped.startswith(("@", "v_", "'", "(", "N'")):
+            if params:
+                using = ", ".join(params)
+                return (
+                    f"SET @_stmt = {expr}; PREPARE _dyn FROM @_stmt; "
+                    f"EXECUTE _dyn USING {using}; DEALLOCATE PREPARE _dyn;"
+                )
             return (
                 f"SET @_stmt = {expr}; PREPARE _dyn FROM @_stmt; "
-                f"EXECUTE _dyn USING {using}; DEALLOCATE PREPARE _dyn;"
+                f"EXECUTE _dyn; DEALLOCATE PREPARE _dyn;"
             )
+
+        # Case 2: a named stored-procedure call. MySQL invokes procedures with
+        # CALL name(args). T-SQL's trailing OUTPUT keyword on an argument has
+        # no inline equivalent and is dropped (the @var is already passed by
+        # reference for an OUT parameter).
+        m = re.match(r"(?i)^([A-Za-z_][\w]*)\s*(.*)$", stripped)
+        if m:
+            proc_name = m.group(1)
+            arg_text = m.group(2).strip()
+            args = self._split_exec_args(arg_text)
+            joined = ", ".join(args)
+            return f"CALL {proc_name}({joined});"
+
+        # Fallback: keep the dynamic workflow rather than dropping the call.
         return (
             f"SET @_stmt = {expr}; PREPARE _dyn FROM @_stmt; "
             f"EXECUTE _dyn; DEALLOCATE PREPARE _dyn;"
         )
+
+    @staticmethod
+    def _first_arg(text: str) -> str:
+        """Return the first top-level comma-separated argument of ``text``."""
+        depth = 0
+        in_str = False
+        for i, ch in enumerate(text):
+            if ch == "'":
+                in_str = not in_str
+            elif not in_str:
+                if ch in "([":
+                    depth += 1
+                elif ch in ")]":
+                    depth -= 1
+                elif ch == "," and depth == 0:
+                    return text[:i].strip()
+        return text.strip()
+
+    @staticmethod
+    def _split_exec_args(text: str) -> list[str]:
+        """Split a procedure-call argument list on top-level commas.
+
+        Drops a trailing ``OUTPUT``/``OUT`` keyword on any argument (MySQL has
+        no inline OUTPUT marker) and skips empty results.
+        """
+        if not text:
+            return []
+        args: list[str] = []
+        depth = 0
+        in_str = False
+        start = 0
+        for i, ch in enumerate(text):
+            if ch == "'":
+                in_str = not in_str
+            elif not in_str:
+                if ch in "([":
+                    depth += 1
+                elif ch in ")]":
+                    depth -= 1
+                elif ch == "," and depth == 0:
+                    args.append(text[start:i])
+                    start = i + 1
+        args.append(text[start:])
+        cleaned: list[str] = []
+        for a in args:
+            a = re.sub(r"(?i)\s+(?:OUTPUT|OUT)\s*$", "", a.strip())
+            if a:
+                cleaned.append(a)
+        return cleaned
 
     def _emit_print(self, node: PrintStatement) -> str:
         expr = self._emit_node(node.expression)

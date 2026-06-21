@@ -291,6 +291,41 @@ class TestDynamicSQL:
         assert "USING" in out
 
 
+class TestTSQLExecToMySQL:
+    """T-SQL EXEC has three shapes that must map to different MySQL forms."""
+
+    def _proc(self, body: str) -> str:
+        return f"CREATE PROCEDURE dbo.p AS\nBEGIN\n    {body}\nEND"
+
+    def test_named_procedure_becomes_call(self) -> None:
+        out = _transpile(self._proc("EXEC proc_13 @a OUTPUT, 'x', @b"), "tsql", "mysql")
+        assert "CALL proc_13(" in out
+        # The OUTPUT keyword has no inline MySQL equivalent and is dropped.
+        assert "OUTPUT" not in out
+        # A named call must not be funneled into the dynamic-SQL workflow.
+        assert "PREPARE" not in out
+
+    def test_sp_executesql_becomes_prepare_workflow(self) -> None:
+        out = _transpile(
+            self._proc("EXEC sp_executesql @sql, N'@p int', @p = @v"),
+            "tsql",
+            "mysql",
+        )
+        assert "PREPARE _dyn FROM @_stmt" in out
+        assert "DEALLOCATE PREPARE _dyn" in out
+        # The literal sp_executesql keyword must not leak into executable
+        # MySQL (it may still be named in the explanatory -- comment).
+        code = out.split("--")[0]
+        assert "sp_executesql" not in code
+        # Dropped parameter bindings are flagged, not silently lost.
+        assert "UNIQUE:" in out
+
+    def test_dynamic_string_uses_prepare(self) -> None:
+        out = _transpile(self._proc("EXEC (@sql)"), "tsql", "mysql")
+        assert "PREPARE _dyn FROM @_stmt" in out
+        assert "sp_executesql" not in out
+
+
 class TestCursorsAndLoops:
     SRC = (
         "CREATE OR REPLACE PROCEDURE p(p_c IN NUMBER)\n"
