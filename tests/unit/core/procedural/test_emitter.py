@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from unique.core.ast_nodes import (
     AssignmentStatement,
+    CreateFunctionStatement,
     CreateProcedureStatement,
     CursorOperation,
     DataType,
@@ -233,3 +234,81 @@ class TestProcedureStructure:
         out = e.emit(self._proc())
         assert "$$" in out
         assert "LANGUAGE plpgsql" in out
+
+
+class TestMySQLProcedureEmission:
+    """MySQL-specific routine emission rules.
+
+    MySQL differs from the other targets in several ways that, if emitted with
+    the generic path, produce invalid SQL: the IN/OUT/INOUT direction comes
+    *before* the parameter name, there is no ``dbo`` schema, functions require
+    ``RETURNS <type>`` plus a characteristic such as ``DETERMINISTIC``, and
+    ``CREATE OR REPLACE FUNCTION`` is not supported.
+    """
+
+    def _proc(self) -> CreateProcedureStatement:
+        return CreateProcedureStatement(
+            name="proc_14",
+            schema="dbo",
+            parameters=(
+                ParameterDefinition(
+                    name="v_query",
+                    data_type=DataType(name="LONGTEXT"),
+                    direction="OUT",
+                ),
+                ParameterDefinition(
+                    name="v_filter",
+                    data_type=DataType(name="LONGTEXT"),
+                    direction="IN",
+                ),
+            ),
+            body=(
+                SetVariableStatement(
+                    name="v_query", value=RawSQL(sql="NULL", reason="x")
+                ),
+            ),
+        )
+
+    def _func(self) -> CreateFunctionStatement:
+        return CreateFunctionStatement(
+            name="func3",
+            schema="dbo",
+            return_type=DataType(name="VARCHAR", params=(400,)),
+            parameters=(
+                ParameterDefinition(
+                    name="v_def",
+                    data_type=DataType(name="VARCHAR", params=(400,)),
+                    direction="IN",
+                ),
+            ),
+            or_replace=True,
+            body=(ReturnStatement(value=RawSQL(sql="v_def", reason="x")),),
+        )
+
+    def test_direction_precedes_parameter_name(self) -> None:
+        out = ProceduralEmitter("mysql").emit(self._proc())
+        assert "OUT v_query LONGTEXT" in out
+        assert "IN v_filter LONGTEXT" in out
+        # The T-SQL style "name DIRECTION type" must not survive.
+        assert "v_query OUT" not in out
+
+    def test_schema_prefix_dropped(self) -> None:
+        out = ProceduralEmitter("mysql").emit(self._proc())
+        assert "CREATE PROCEDURE proc_14" in out
+        assert "dbo." not in out
+
+    def test_function_has_returns_and_characteristic(self) -> None:
+        out = ProceduralEmitter("mysql").emit(self._func())
+        assert "RETURNS VARCHAR(400)" in out
+        assert "DETERMINISTIC" in out
+
+    def test_function_is_not_create_or_replace(self) -> None:
+        out = ProceduralEmitter("mysql").emit(self._func())
+        assert "CREATE OR REPLACE FUNCTION" not in out
+        assert "CREATE FUNCTION func3" in out
+
+    def test_function_params_have_no_direction_keyword(self) -> None:
+        out = ProceduralEmitter("mysql").emit(self._func())
+        # MySQL stored functions forbid IN/OUT/INOUT on parameters.
+        assert "IN v_def" not in out
+        assert "v_def VARCHAR(400)" in out

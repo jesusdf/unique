@@ -143,8 +143,16 @@ class ProceduralEmitter:
             return f"{dt.name}({params})"
         return dt.name
 
-    def _emit_params(self, params: tuple[ParameterDefinition, ...]) -> str:
-        """Emit parameter list."""
+    def _emit_params(
+        self,
+        params: tuple[ParameterDefinition, ...],
+        is_function: bool = False,
+    ) -> str:
+        """Emit parameter list.
+
+        ``is_function`` matters for MySQL, whose stored *functions* forbid the
+        IN/OUT/INOUT direction keywords that procedures require.
+        """
         parts: list[str] = []
         for p in params:
             dt = self._emit_data_type(p.data_type)
@@ -161,6 +169,19 @@ class ProceduralEmitter:
                 parts.append(
                     f"{self._indent()}{p.name} {dt}{default_str}{direction_str}"
                 )
+            elif self._dialect == "mysql":
+                # MySQL puts the direction *before* the parameter name and does
+                # not support per-parameter DEFAULT values; callers must always
+                # pass every argument. The default is dropped (and surfaced as a
+                # warning by the caller) rather than emitted as invalid syntax.
+                # Stored functions forbid direction keywords entirely.
+                direction_str = ""
+                if not is_function:
+                    if p.direction in ("OUT", "INOUT"):
+                        direction_str = f"{p.direction} "
+                    elif p.direction == "IN":
+                        direction_str = "IN "
+                parts.append(f"{self._indent()}{direction_str}{p.name} {dt}")
             else:
                 direction_str = ""
                 if p.direction != "IN":
@@ -176,8 +197,21 @@ class ProceduralEmitter:
     # Procedure / Function / Trigger
     # ---------------------------------------------------------------
 
+    def _qualified_name(self, schema: str | None, name: str) -> str:
+        """Build a schema-qualified object name.
+
+        MySQL has no schema layer comparable to T-SQL's ``dbo`` (a schema is a
+        database there), so a source schema like ``dbo`` would point at a
+        non-existent database. Drop it for MySQL and emit the bare name.
+        """
+        if not schema:
+            return name
+        if self._dialect == "mysql":
+            return name
+        return f"{schema}.{name}"
+
     def _emit_procedure(self, node: CreateProcedureStatement) -> str:
-        name = f"{node.schema}.{node.name}" if node.schema else node.name
+        name = self._qualified_name(node.schema, node.name)
 
         if self._dialect == "tsql":
             header = f"CREATE PROCEDURE {name}"
@@ -319,7 +353,7 @@ class ProceduralEmitter:
         return result.replace("CREATE PROCEDURE", "ALTER PROCEDURE", 1)
 
     def _emit_function(self, node: CreateFunctionStatement) -> str:
-        name = f"{node.schema}.{node.name}" if node.schema else node.name
+        name = self._qualified_name(node.schema, node.name)
         ret_type = (
             self._emit_data_type(node.return_type) if node.return_type else "void"
         )
@@ -329,12 +363,17 @@ class ProceduralEmitter:
         elif self._dialect == "oracle":
             prefix = "CREATE OR REPLACE " if node.or_replace else "CREATE "
             header = f"{prefix}FUNCTION {name}"
+        elif self._dialect == "mysql":
+            # MySQL stored functions do not support CREATE OR REPLACE; the
+            # idempotent DROP is emitted separately by the transpiler when
+            # needed. Always a plain CREATE here.
+            header = f"CREATE FUNCTION {name}"
         else:
             prefix = "CREATE OR REPLACE " if node.or_replace else "CREATE "
             header = f"{prefix}FUNCTION {name}"
 
         self._indent_level += 1
-        params_str = self._emit_params(node.parameters)
+        params_str = self._emit_params(node.parameters, is_function=True)
         self._indent_level -= 1
 
         if params_str:
@@ -342,6 +381,8 @@ class ProceduralEmitter:
 
         if self._dialect in ("tsql", "postgresql"):
             header += f"\nRETURNS {ret_type}"
+        elif self._dialect == "mysql":
+            header += f"\nRETURNS {ret_type}\nDETERMINISTIC"
         elif self._dialect == "oracle":
             header += f"\nRETURN {ret_type}"
 
@@ -364,7 +405,7 @@ class ProceduralEmitter:
             return self._emit_mysql_procedure_body(header, declarations, body_stmts)
 
     def _emit_trigger(self, node: CreateTriggerStatement) -> str:
-        name = f"{node.schema}.{node.name}" if node.schema else node.name
+        name = self._qualified_name(node.schema, node.name)
         events = ", ".join(node.events) if node.events else "UPDATE"
 
         if self._dialect == "tsql":
