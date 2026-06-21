@@ -22,6 +22,7 @@ Delegates embedded DML/DQL statements to sqlglot for transpilation.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 
 from unique.core.ast_nodes import (
@@ -817,7 +818,15 @@ class ProceduralParser:
             return self._parse_raiserror()
         elif tok.is_keyword("TRY"):
             return self._parse_tsql_try_catch()
-        elif tok.is_keyword("SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "WITH"):
+        elif tok.is_keyword("SELECT"):
+            # A T-SQL assignment-select (SELECT @v = expr) must become a
+            # SELECT ... INTO, not embedded DML (where sqlglot would turn the
+            # '=' into a column alias and drop the assignment).
+            assign_stmt = self._try_parse_tsql_assignment_select()
+            if assign_stmt is not None:
+                return assign_stmt
+            return self._parse_embedded_dml()
+        elif tok.is_keyword("INSERT", "UPDATE", "DELETE", "MERGE", "WITH"):
             return self._parse_embedded_dml()
         elif tok.type == TokenType.SEMICOLON:
             self._advance()
@@ -844,15 +853,19 @@ class ProceduralParser:
             # T-SQL statements often omit the trailing semicolon, so we must
             # NOT scan to the next ';' (that would swallow the whole body).
             # Consume at most one argument token (ON/OFF or a value).
+            arg = ""
             if self._current().is_keyword("ON", "OFF") or self._current().type in (
                 TokenType.NUMBER,
                 TokenType.VARIABLE,
                 TokenType.IDENTIFIER,
             ):
-                self._advance()
+                arg = self._advance().value
             self._match_type(TokenType.SEMICOLON)
-            self._warnings.append(f"SET {kw} skipped (no equivalent)")
-            return RawSQL(sql=f"SET {kw}", reason="Dialect-specific SET option")
+            original = f"SET {kw} {arg}".rstrip()
+            self._warnings.append(f"{original} skipped (no equivalent)")
+            # Keep the original text in the sql field so the transformer can
+            # preserve it as a comment (documenting the dropped statement).
+            return RawSQL(sql=original, reason="Dialect-specific SET option")
 
         # SET @variable = expression
         if tok.type == TokenType.VARIABLE:
@@ -1448,6 +1461,107 @@ class ProceduralParser:
             self._advance()
         return BeginEndBlock(statements=tuple(stmts))
 
+    def _try_parse_tsql_assignment_select(self) -> ASTNode | None:
+        """If the upcoming SELECT is ``SELECT @v = expr [, ...] [FROM ...]``,
+        parse it into a SelectIntoStatement and return it; otherwise restore the
+        position and return None so the caller parses it as embedded DML."""
+        start = self._pos
+        self._expect_keyword("SELECT")
+        select_parts: list[str] = []
+        paren_depth = 0
+        while not self._at_end():
+            tok = self._current()
+            if paren_depth == 0 and (
+                tok.is_keyword("FROM") or tok.type == TokenType.SEMICOLON
+            ):
+                break
+            if paren_depth == 0 and tok.is_keyword("END"):
+                break
+            if tok.type == TokenType.LPAREN:
+                paren_depth += 1
+            elif tok.type == TokenType.RPAREN:
+                paren_depth -= 1
+            select_parts.append(tok.value)
+            self._advance()
+
+        assign = self._parse_tsql_assignment_select(select_parts)
+        if assign is None:
+            self._pos = start
+            return None
+
+        into_vars, exprs = assign
+        # Capture the remainder (FROM onward) up to the statement end.
+        rest_parts: list[str] = []
+        paren_depth = 0
+        while not self._at_end():
+            tok = self._current()
+            if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
+                self._advance()
+                break
+            if paren_depth == 0 and tok.is_keyword("END"):
+                break
+            if tok.type == TokenType.LPAREN:
+                paren_depth += 1
+            elif tok.type == TokenType.RPAREN:
+                paren_depth -= 1
+            rest_parts.append(tok.value)
+            self._advance()
+
+        from unique.core.ast_nodes import RawSQL as _RawSQL
+
+        return SelectIntoStatement(
+            columns=(_RawSQL(sql=", ".join(exprs), reason="select list"),),
+            into_vars=tuple(into_vars),
+            rest_sql=" ".join(rest_parts).strip(),
+        )
+
+    def _parse_tsql_assignment_select(
+        self, select_parts: list[str]
+    ) -> tuple[list[str], list[str]] | None:
+        """Detect a T-SQL assignment-select list (``@v = expr, ...``).
+
+        Returns ``(into_vars, exprs)`` when every comma-separated item has the
+        shape ``@var = expression``; otherwise ``None`` (it's an ordinary
+        select list). Splits on top-level commas so expressions containing
+        commas (function calls) are handled.
+        """
+        text = " ".join(select_parts).strip()
+        if "=" not in text or "@" not in text:
+            return None
+        # Split on top-level commas.
+        items: list[str] = []
+        depth = 0
+        buf: list[str] = []
+        for ch in text:
+            if ch in "([":
+                depth += 1
+            elif ch in ")]":
+                depth -= 1
+            if ch == "," and depth == 0:
+                items.append("".join(buf))
+                buf = []
+            else:
+                buf.append(ch)
+        if buf:
+            items.append("".join(buf))
+
+        into_vars: list[str] = []
+        exprs: list[str] = []
+        for item in items:
+            # Each item must be "@var = expr" with a single '=' assignment, not
+            # a comparison (>=, <=, <>) or equality test.
+            m = re.match(r"^\s*(@\w+)\s*=\s*(.+)$", item, re.DOTALL)
+            if not m:
+                return None
+            expr = m.group(2).strip()
+            if not expr or expr[0] in "=<>!":
+                return None
+            into_vars.append(m.group(1))
+            exprs.append(expr)
+        if not into_vars:
+            return None
+        return into_vars, exprs
+
     def _parse_plsql_select_or_dml(self) -> ASTNode:
         """Parse SELECT that might have INTO (PL/SQL SELECT INTO).
 
@@ -1479,7 +1593,38 @@ class ProceduralParser:
             self._advance()
 
         if not has_into:
-            # Not a SELECT INTO — reparse as embedded DML
+            # T-SQL assignment-select: SELECT @v1 = expr1, @v2 = expr2 [FROM ...]
+            # assigns expressions to variables. sqlglot would mistranslate the
+            # '=' as a column alias, silently dropping the assignment, so detect
+            # it here and turn it into a SELECT ... INTO so the emitter produces
+            # the correct target form.
+            assign = self._parse_tsql_assignment_select(select_parts)
+            if assign is not None:
+                into_vars_a, exprs_a = assign
+                rest_parts2: list[str] = []
+                paren_depth2 = 0
+                while not self._at_end():
+                    tok = self._current()
+                    if paren_depth2 == 0 and tok.type == TokenType.SEMICOLON:
+                        self._advance()
+                        break
+                    if paren_depth2 == 0 and tok.is_keyword("END"):
+                        break
+                    if tok.type == TokenType.LPAREN:
+                        paren_depth2 += 1
+                    elif tok.type == TokenType.RPAREN:
+                        paren_depth2 -= 1
+                    rest_parts2.append(tok.value)
+                    self._advance()
+                rest_sql2 = " ".join(rest_parts2).strip()
+                from unique.core.ast_nodes import RawSQL as _RawSQL2
+
+                return SelectIntoStatement(
+                    columns=(_RawSQL2(sql=", ".join(exprs_a), reason="select list"),),
+                    into_vars=tuple(into_vars_a),
+                    rest_sql=rest_sql2,
+                )
+            # Not a SELECT INTO and not an assignment — reparse as embedded DML
             self._pos = start
             return self._parse_embedded_dml()
 

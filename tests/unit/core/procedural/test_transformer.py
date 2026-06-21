@@ -783,3 +783,48 @@ class TestUniqueTypePreservationComment:
         t = ProceduralTransformer("tsql", "mysql")
         dt = t._transform_data_type(DataType(name="INT"))
         assert dt.origin_comment is None
+
+
+class TestDroppedSetOptionPreserved:
+    """A dropped dialect-specific SET option is documented and never leaves an
+    empty block."""
+
+    def _out(self, target: str) -> str:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "CREATE PROCEDURE dbo.p\n"
+            "    @c NVARCHAR(50) = NULL\n"
+            "AS\nBEGIN\n"
+            "    IF (@c IS NOT NULL)\n"
+            "        SET NOCOUNT ON\n"
+            "    SELECT 1\n"
+            "END"
+        )
+        return Transpiler().transpile(src, "tsql", target).sql
+
+    def test_mysql_documents_and_fills_empty_if(self) -> None:
+        out = self._out("mysql")
+        # The original is preserved as a comment...
+        assert "/* UNIQUE: SET NOCOUNT ON" in out
+        # ...and the otherwise-empty IF body gets a MySQL no-op.
+        assert "DO 0;" in out
+        # No empty IF remains.
+        assert "THEN\n    END IF" not in out.replace("        ", "    ")
+
+    def test_oracle_uses_null_noop(self) -> None:
+        out = self._out("oracle")
+        assert "/* UNIQUE: SET NOCOUNT ON" in out
+        assert "NULL;" in out
+
+    def test_non_empty_if_unaffected(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "CREATE PROCEDURE dbo.p AS\nBEGIN\n"
+            "    IF (1 = 1)\n        SELECT 1\n"
+            "END"
+        )
+        out = Transpiler().transpile(src, "tsql", "mysql").sql
+        # A real body must NOT get a spurious no-op.
+        assert "DO 0;" not in out
