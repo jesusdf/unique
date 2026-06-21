@@ -987,6 +987,10 @@ class ProceduralTransformer:
     def _mysql_clean_dml(self, sql: str) -> str:
         """Strip T-SQL leftovers sqlglot keeps but MySQL rejects.
 
+        - A ``RETURNING`` clause (produced from a T-SQL ``OUTPUT`` clause):
+          MySQL has no RETURNING/OUTPUT, so emit the base statement and a
+          documented comment instead of invalid SQL. Any ``inserted.``/
+          ``deleted.`` pseudo-table qualifier is noted too.
         - The ``dbo`` schema/catalog qualifier on tables and table-valued
           function calls (MySQL has no ``dbo`` schema; it would name a
           non-existent database).
@@ -999,6 +1003,18 @@ class ProceduralTransformer:
         """
         import sqlglot
         from sqlglot import exp
+
+        # RETURNING (from OUTPUT) is invalid in MySQL — handle textually so the
+        # base statement stays intact and the dropped clause is documented.
+        if re.search(r"(?i)\bRETURNING\b", sql):
+            m = re.search(r"(?i)\bRETURNING\b\s+(.*?)\s*;?\s*$", sql)
+            cols = m.group(1).strip().rstrip(";").strip() if m else ""
+            base = re.sub(r"(?i)\s*\bRETURNING\b.*$", "", sql).rstrip()
+            sql = (
+                f"{base};\n-- UNIQUE: MySQL has no RETURNING/OUTPUT; "
+                f"the original statement returned: {cols}"
+            )
+            return sql
 
         has_dbo = bool(re.search(r"(?i)\bdbo\s*\.", sql))
         has_hint = bool(re.search(r"(?i)\bWITH\s*\(\s*NOLOCK", sql))

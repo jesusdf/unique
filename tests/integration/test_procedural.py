@@ -471,3 +471,35 @@ class TestTSQLAssignmentSelect:
         out = _transpile(src, "tsql", "mysql")
         assert "INTO v_n" in out
         assert "COUNT" in out.upper()
+
+
+class TestOutputClauseToMySQL:
+    """INSERT ... OUTPUT ... INTO @var must not become invalid RETURNING on
+    MySQL (which has no RETURNING/OUTPUT)."""
+
+    def test_output_into_var_is_documented_not_returning(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "DECLARE @id INT "
+            "INSERT INTO t (a) OUTPUT inserted.id INTO @id VALUES (1) "
+            "END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        # No invalid executable RETURNING clause (it only appears, if at all,
+        # inside the explanatory comment).
+        code_lines = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
+        assert all("RETURNING" not in ln for ln in code_lines)
+        # Base INSERT preserved and the dropped clause documented.
+        assert "INSERT INTO t (a) VALUES (1)" in out
+        assert "-- UNIQUE: MySQL has no RETURNING/OUTPUT" in out
+
+    def test_output_maps_to_returning_on_postgresql(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "DECLARE @id INT "
+            "INSERT INTO t (a) OUTPUT inserted.id INTO @id VALUES (1) "
+            "END"
+        )
+        out = _transpile(src, "tsql", "postgresql")
+        # PostgreSQL supports RETURNING, so it must be kept.
+        assert "RETURNING" in out
