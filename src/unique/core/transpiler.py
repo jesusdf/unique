@@ -51,6 +51,15 @@ _TSQL_DDL_GUARD_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A MySQL routine whose body contains ';' statement terminators must be wrapped
+# in a DELIMITER block so a client doesn't cut the script at the first inner
+# ';'. Matches the leading keyword of a compound routine definition (any
+# leading line comments are allowed before it).
+_MYSQL_ROUTINE_RE = re.compile(
+    r"(?s)^(?:\s*--[^\n]*\n)*\s*" r"CREATE\s+(?:PROCEDURE|FUNCTION|TRIGGER)\b",
+    re.IGNORECASE,
+)
+
 
 def _warn(message: str, feature: str, source: str, target: str) -> TransformWarning:
     """Build a TransformWarning with dialect context."""
@@ -241,6 +250,8 @@ class Transpiler:
                 terminated = self._ensure_terminated(
                     result.sql, target, batch.batch_type
                 )
+                if target == "mysql":
+                    terminated = self._wrap_mysql_routine(terminated)
                 # Treat output that is *entirely* comments as a comment part,
                 # even if the batch wasn't classified as COMMENT (e.g. an
                 # unsupported SET we turned into a '-- ...' note). This avoids
@@ -512,6 +523,48 @@ class Transpiler:
             return sql
         lines[last_code_idx] = lines[last_code_idx].rstrip() + ";"
         return "\n".join(lines)
+
+    @staticmethod
+    def _wrap_mysql_routine(sql: str) -> str:
+        """Wrap a MySQL compound routine in a DELIMITER block.
+
+        MySQL stored routines contain ``;`` statement terminators inside their
+        body. A client that uses ``;`` as the statement delimiter would cut the
+        definition at the first inner ``;``, so the routine must be wrapped::
+
+            DELIMITER $$
+            CREATE PROCEDURE ... BEGIN ... END$$
+            DELIMITER ;
+
+        Any leading line comments are kept above the ``DELIMITER $$`` line so
+        they remain associated with the routine. Non-routine statements are
+        returned unchanged.
+        """
+        if not _MYSQL_ROUTINE_RE.match(sql):
+            return sql
+
+        lines = sql.splitlines()
+        # Separate any leading comment lines from the routine body.
+        head: list[str] = []
+        idx = 0
+        for i, line in enumerate(lines):
+            if line.strip().startswith("--") or not line.strip():
+                head.append(line)
+                idx = i + 1
+            else:
+                break
+        body = "\n".join(lines[idx:]).rstrip()
+        # The body was terminated with ';' by _ensure_terminated; swap that
+        # trailing ';' for the '$$' routine delimiter.
+        if body.endswith(";"):
+            body = body[:-1].rstrip()
+        wrapped = f"DELIMITER $$\n{body}$$\nDELIMITER ;"
+        if head:
+            # Drop a trailing blank line in the comment head for tidiness.
+            while head and not head[-1].strip():
+                head.pop()
+            return "\n".join(head + [wrapped]) if head else wrapped
+        return wrapped
 
     @staticmethod
     def _get_batch_separator(target: str) -> str:
