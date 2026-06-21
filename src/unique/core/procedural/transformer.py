@@ -34,6 +34,7 @@ from unique.core.ast_nodes import (
     AssignmentStatement,
     ASTNode,
     BeginEndBlock,
+    CommentStatement,
     CreateFunctionStatement,
     CreateProcedureStatement,
     CreateTriggerStatement,
@@ -401,11 +402,24 @@ class ProceduralTransformer:
         result: list[ASTNode] = []
         for stmt in stmts:
             transformed = self._transform_node(stmt)
-            # Filter out SET NOCOUNT and similar when going to Oracle/PG
-            if isinstance(transformed, RawSQL) and "SET option" in transformed.reason:
-                continue
-            result.append(transformed)
+            result.append(self._preserve_dropped_set_option(transformed))
         return tuple(result)
+
+    def _preserve_dropped_set_option(self, node: ASTNode) -> ASTNode:
+        """Turn a dropped dialect-specific SET option into a comment.
+
+        Options like ``SET NOCOUNT ON`` have no equivalent in the target, but
+        silently removing them can leave an empty block (e.g. ``IF ... THEN END
+        IF``) that the engine rejects, and erases information. Replace the
+        statement with a ``/* UNIQUE: <original> */`` comment so the original is
+        documented and the block keeps a (no-op) body.
+        """
+        if isinstance(node, RawSQL) and "SET option" in node.reason:
+            return CommentStatement(
+                text=f"/* UNIQUE: {node.sql} -- no {self._target} equivalent */",
+                style="block",
+            )
+        return node
 
     def _transform_params(
         self, params: tuple[ParameterDefinition, ...]
@@ -717,17 +731,48 @@ class ProceduralTransformer:
 
     def _transform_if(self, node: IfStatement) -> IfStatement:
         new_cond = self._transform_node(node.condition)
-        new_then = self._transform_body(node.then_body)
-        new_else = self._transform_body(node.else_body)
+        new_then = self._ensure_non_empty_body(self._transform_body(node.then_body))
+        # An ELSE that becomes empty is dropped entirely (valid everywhere);
+        # only a non-empty else is kept, and if it has only comments it gets a
+        # no-op so the engine accepts it.
+        new_else_raw = self._transform_body(node.else_body)
+        new_else = self._ensure_non_empty_body(new_else_raw) if node.else_body else ()
         return IfStatement(condition=new_cond, then_body=new_then, else_body=new_else)
+
+    def _ensure_non_empty_body(self, body: tuple[ASTNode, ...]) -> tuple[ASTNode, ...]:
+        """Guarantee a block has at least one executable statement.
+
+        A block whose only statement was dropped (e.g. ``SET NOCOUNT ON``)
+        becomes comment-only or empty, which ``IF ... THEN END IF`` rejects on
+        engines like MySQL. Append a dialect-appropriate no-op so the block
+        stays syntactically valid while preserving any documenting comment.
+        """
+        has_executable = any(not isinstance(s, CommentStatement) for s in body)
+        if has_executable:
+            return body
+        return (*body, self._noop_statement())
+
+    def _noop_statement(self) -> ASTNode:
+        """A no-op statement valid in the target dialect."""
+        if self._target == "mysql":
+            # DO evaluates an expression and discards it; the cheapest valid
+            # statement to keep a block non-empty. Terminator included since
+            # the IF/loop emitters don't add one for RawSQL.
+            return RawSQL(sql="DO 0;", reason="no-op")
+        # Oracle PL/SQL and PostgreSQL PL/pgSQL use NULL; as a no-op.
+        return NullStatement()
 
     def _transform_while(self, node: WhileStatement) -> WhileStatement:
         new_cond = self._transform_node(node.condition)
-        new_body = self._transform_body(node.body)
+        new_body = self._ensure_non_empty_body(self._transform_body(node.body))
         return WhileStatement(condition=new_cond, body=new_body)
 
     def _transform_begin_end(self, node: BeginEndBlock) -> BeginEndBlock:
-        return BeginEndBlock(statements=self._transform_body(node.statements))
+        return BeginEndBlock(
+            statements=self._ensure_non_empty_body(
+                self._transform_body(node.statements)
+            )
+        )
 
     def _transform_statement_list(self, node: StatementList) -> StatementList:
         return StatementList(statements=self._transform_body(node.statements))
@@ -804,7 +849,7 @@ class ProceduralTransformer:
                 "FOR loop has no direct T-SQL equivalent. "
                 "Manual conversion to WHILE loop required."
             )
-        new_body = self._transform_body(node.body)
+        new_body = self._ensure_non_empty_body(self._transform_body(node.body))
         new_cursor = self._transform_node(node.cursor) if node.cursor else None
         return ForLoopStatement(
             variable=node.variable,
@@ -818,9 +863,11 @@ class ProceduralTransformer:
         if self._target == "tsql":
             return WhileStatement(
                 condition=RawSQL(sql="1=1", reason="infinite loop"),
-                body=self._transform_body(node.body),
+                body=self._ensure_non_empty_body(self._transform_body(node.body)),
             )
-        return LoopStatement(body=self._transform_body(node.body))
+        return LoopStatement(
+            body=self._ensure_non_empty_body(self._transform_body(node.body))
+        )
 
     def _transform_exit(self, node: ExitStatement) -> ASTNode:
         # Keep the ExitStatement (with its condition) so the emitter can

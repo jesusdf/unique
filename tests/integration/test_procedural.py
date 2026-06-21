@@ -417,3 +417,57 @@ class TestRoundTripStability:
         back = _transpile(oracle, "oracle", "tsql")
         assert "CREATE PROCEDURE" in back
         assert "DECLARE" in back
+
+
+class TestTSQLAssignmentSelect:
+    """SELECT @v = expr (T-SQL variable assignment) must become SELECT ... INTO,
+    not a column alias (which would silently drop the assignment)."""
+
+    def test_single_assignment_to_mysql(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "DECLARE @x INT "
+            "SELECT @x = col FROM t WHERE id = 1 "
+            "END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        assert "INTO v_x" in out
+        assert "col AS v_x" not in out
+
+    def test_multiple_assignment_to_oracle(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "DECLARE @x INT "
+            "SELECT @x = a, @y = b FROM t "
+            "END"
+        )
+        out = _transpile(src, "tsql", "oracle")
+        assert "INTO V_X, V_Y" in out.replace("  ", " ")
+
+    def test_assignment_to_postgresql(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "DECLARE @x INT "
+            "SELECT @x = col FROM t "
+            "END"
+        )
+        out = _transpile(src, "tsql", "postgresql")
+        assert "INTO v_x" in out
+
+    def test_normal_select_not_treated_as_assignment(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN " "SELECT a, b FROM t WHERE x = 1 " "END"
+        out = _transpile(src, "tsql", "mysql")
+        # A WHERE equality must not be mistaken for an assignment.
+        assert "INTO" not in out
+        assert "WHERE x = 1" in out
+
+    def test_aggregate_assignment(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "DECLARE @n INT "
+            "SELECT @n = COUNT(*) FROM t WHERE active = 1 "
+            "END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        assert "INTO v_n" in out
+        assert "COUNT" in out.upper()
