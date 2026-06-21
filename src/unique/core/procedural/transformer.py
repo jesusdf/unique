@@ -204,6 +204,11 @@ _TSQL_TO_MYSQL_TYPES: dict[str, str] = {
     "BINARY": "BINARY",
     "VARBINARY": "VARBINARY",
     "XML": "TEXT",
+    # SQL_VARIANT stores values of various scalar types. MySQL has no variant
+    # type; LONGTEXT is the most permissive carrier that preserves arbitrary
+    # scalar values (callers compare/convert as needed), keeping functionality
+    # rather than dropping the column/parameter.
+    "SQL_VARIANT": "LONGTEXT",
 }
 
 # Function mapping tables
@@ -872,6 +877,7 @@ class ProceduralTransformer:
         if self._target == "mysql":
             sql = self._mysql_string_concat(sql)
             sql = self._mysql_clean_dml(sql)
+            sql = self._mysql_fix_cast_max(sql)
         return EmbeddedDML(sql=sql, dialect=self._target)
 
     def _mysql_clean_dml(self, sql: str) -> str:
@@ -925,6 +931,42 @@ class ProceduralTransformer:
         cleaned = re.sub(r"(?i)\bdbo\.", "", cleaned)
         return cleaned
 
+    def _mysql_fix_cast_max(self, sql: str) -> str:
+        """Rewrite CAST targets MySQL rejects.
+
+        T-SQL ``CAST(x AS NVARCHAR(MAX))`` lands as ``CAST(x AS VARCHAR(MAX))``
+        or ``CHAR(MAX)``; MySQL's CAST does not accept a ``MAX`` length (or any
+        VARCHAR length), so collapse those to a bare ``CHAR``, which MySQL
+        accepts for casting to text. Sized casts like ``CHAR(50)`` are kept.
+        """
+        if "(MAX)" not in sql.upper():
+            return sql
+        import sqlglot
+        from sqlglot import exp
+
+        for wrap, is_wrapped in ((sql, False), (f"SELECT {sql}", True)):
+            try:
+                tree = sqlglot.parse_one(wrap, read="mysql")
+            except Exception:
+                continue
+            if isinstance(tree, exp.Command):
+                continue
+            changed = False
+            for cast_node in tree.find_all(exp.Cast):
+                to_sql = cast_node.to.sql(dialect="mysql").upper()
+                if to_sql.endswith("(MAX)") or to_sql == "MAX":
+                    cast_node.set("to", exp.DataType.build("CHAR", dialect="mysql"))
+                    changed = True
+            if not changed:
+                return sql
+            out = tree.sql(dialect="mysql").rstrip().rstrip(";")
+            if is_wrapped:
+                if out.upper().startswith("SELECT "):
+                    return out[len("SELECT ") :].strip()
+                continue
+            return out
+        return sql
+
     def _transform_null(self, node: NullStatement) -> ASTNode:
         if self._target == "tsql":
             return RawSQL(sql="-- NULL statement (no-op)", reason="no T-SQL equivalent")
@@ -963,9 +1005,46 @@ class ProceduralTransformer:
             except Exception:
                 pass
         if self._target == "mysql":
+            sql = self._mysql_normalize_funcs(sql)
             sql = self._mysql_string_concat(sql)
             sql = self._mysql_clean_dml(sql)
+            sql = self._mysql_fix_cast_max(sql)
         return RawSQL(sql=sql, reason=node.reason)
+
+    # T-SQL scalar constructs (CONVERT/CAST style codes, HASHBYTES, etc.) have
+    # direct MySQL equivalents that sqlglot knows, but the procedural pipeline
+    # captures expressions as text that often parses as an opaque Command. Re-
+    # transpile the fragment from T-SQL to MySQL so CONVERT(t, x) -> CAST(x AS
+    # t), CONVERT(date, s, 120) -> STR_TO_DATE(...), HASHBYTES('SHA2_256', x)
+    # -> SHA2(x, 256), and similar conversions are applied. The '+' string
+    # concatenation is handled separately afterwards (sqlglot can't tell
+    # arithmetic from concat without type info).
+    def _mysql_normalize_funcs(self, sql: str) -> str:
+        import sqlglot
+
+        # Cheap guard: only worth the round-trip when a known T-SQL-ism is
+        # present. Keeps already-valid fragments byte-for-byte identical.
+        if not re.search(r"(?i)\b(CONVERT|HASHBYTES|DATEPART|DATENAME)\s*\(", sql):
+            return sql
+        for wrap in (sql, f"SELECT {sql}"):
+            try:
+                results = sqlglot.transpile(
+                    wrap,
+                    read="tsql",
+                    write="mysql",
+                    error_level=sqlglot.ErrorLevel.RAISE,
+                )
+            except Exception:
+                continue
+            if not results:
+                continue
+            out = results[0].rstrip().rstrip(";")
+            if wrap.startswith("SELECT ") and not sql.upper().startswith("SELECT"):
+                if out.upper().startswith("SELECT "):
+                    return out[len("SELECT ") :].strip()
+                continue
+            return out
+        return sql
 
     # MySQL has no string ``+`` operator and no ``N'...'`` literal prefix.
     # T-SQL uses ``+`` for both arithmetic and string concatenation, so the
