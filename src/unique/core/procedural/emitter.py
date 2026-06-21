@@ -137,11 +137,16 @@ class ProceduralEmitter:
         return separator.join(lines)
 
     def _emit_data_type(self, dt: DataType) -> str:
-        """Emit a data type."""
+        """Emit a data type, appending a /* UNIQUE */ marker when the original
+        source type was preserved for documentation/round-tripping."""
         if dt.params:
             params = ", ".join("MAX" if p == -1 else str(p) for p in dt.params)
-            return f"{dt.name}({params})"
-        return dt.name
+            base = f"{dt.name}({params})"
+        else:
+            base = dt.name
+        if dt.origin_comment:
+            return f"{base} /* UNIQUE: {dt.origin_comment} */"
+        return base
 
     def _emit_params(
         self,

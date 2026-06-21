@@ -659,8 +659,10 @@ class TestMySQLSqlVariantType:
             "END"
         )
         out = Transpiler().transpile(src, source="tsql", target="mysql").sql
-        assert "SQL_VARIANT" not in out
+        # SQL_VARIANT maps to the LONGTEXT carrier, with the original preserved
+        # in a /* UNIQUE */ comment for documentation and round-tripping.
         assert "LONGTEXT" in out
+        assert "/* UNIQUE: SQL_VARIANT */" in out
 
 
 class TestMySQLHashAndStringVarConcat:
@@ -743,3 +745,41 @@ class TestMySQLStringSplit:
             RawSQL(sql="SELECT a FROM t WHERE b = 1", reason="x")
         )
         assert "JSON_TABLE" not in out.sql
+
+
+class TestUniqueTypePreservationComment:
+    """Unknown/non-portable types preserve the original in a /* UNIQUE */ tag."""
+
+    def test_unresolved_pct_type_oracle_to_tsql(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "CREATE PROCEDURE p (\n"
+            "    V_SALA IN H_SALASTELDET.SALA%TYPE DEFAULT NULL\n"
+            ") AS\nBEGIN\n    NULL;\nEND;"
+        )
+        out = Transpiler().transpile(src, source="oracle", target="tsql").sql
+        assert "SQL_VARIANT /* UNIQUE: H_SALASTELDET.SALA%TYPE */" in out
+
+    def test_unresolved_pct_type_oracle_to_mysql(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "CREATE PROCEDURE p (\n"
+            "    V_SALA IN H_SALASTELDET.SALA%TYPE DEFAULT NULL\n"
+            ") AS\nBEGIN\n    NULL;\nEND;"
+        )
+        out = Transpiler().transpile(src, source="oracle", target="mysql").sql
+        assert "LONGTEXT /* UNIQUE: H_SALASTELDET.SALA%TYPE */" in out
+
+    def test_sql_variant_preserves_original(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        dt = t._transform_data_type(DataType(name="SQL_VARIANT"))
+        assert dt.name == "LONGTEXT"
+        assert dt.origin_comment == "SQL_VARIANT"
+
+    def test_common_type_has_no_comment(self) -> None:
+        # A type with a faithful equivalent must NOT get a UNIQUE comment.
+        t = ProceduralTransformer("tsql", "mysql")
+        dt = t._transform_data_type(DataType(name="INT"))
+        assert dt.origin_comment is None

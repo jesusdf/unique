@@ -293,6 +293,12 @@ class DataType(ASTNode):
     name: str
     params: tuple[int, ...] = ()
     unsigned: bool = False
+    # When a source type cannot be translated faithfully (an unresolved
+    # %TYPE/%ROWTYPE reference, or a type with no direct target equivalent),
+    # the original source type text is preserved here so the emitter can append
+    # a "/* UNIQUE: <original> */" marker. This documents the substitution for
+    # the user and lets a reverse transpilation restore the original type.
+    origin_comment: str | None = None
 
 
 @dataclass(frozen=True)
