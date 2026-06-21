@@ -905,6 +905,7 @@ class ProceduralTransformer:
             sql = self._mysql_string_concat(sql)
             sql = self._mysql_clean_dml(sql)
             sql = self._mysql_fix_cast_max(sql)
+            sql = self._mysql_string_split(sql)
         return EmbeddedDML(sql=sql, dialect=self._target)
 
     def _mysql_clean_dml(self, sql: str) -> str:
@@ -994,6 +995,78 @@ class ProceduralTransformer:
             return out
         return sql
 
+    def _mysql_string_split(self, sql: str) -> str:
+        """Map T-SQL STRING_SPLIT(s, delim) to a MySQL JSON_TABLE expansion.
+
+        MySQL has no native table-valued split. The portable equivalent builds
+        a JSON array from the string (replacing the delimiter with ``","`` and
+        wrapping in brackets) and expands it with JSON_TABLE, exposing a
+        ``value`` column so existing references to STRING_SPLIT's ``value``
+        keep working::
+
+            FROM STRING_SPLIT(s, d)
+            -> FROM JSON_TABLE(
+                   CONCAT('["', REPLACE(s, d, '","'), '"]'),
+                   '$[*]' COLUMNS (value VARCHAR(4000) PATH '$')
+               ) AS _ss
+
+        Note: this assumes the split values do not themselves contain JSON
+        metacharacters; that holds for the delimiter-joined keys this targets.
+        Multi-character delimiters are supported via REPLACE.
+        """
+        if "STRING_SPLIT" not in sql.upper():
+            return sql
+        import sqlglot
+        from sqlglot import exp
+
+        for wrap, is_wrapped in ((sql, False), (f"SELECT {sql}", True)):
+            try:
+                tree = sqlglot.parse_one(wrap, read="mysql")
+            except Exception:
+                continue
+            if isinstance(tree, exp.Command):
+                continue
+            changed = False
+            for tbl in list(tree.find_all(exp.Table)):
+                inner = tbl.this
+                if (
+                    isinstance(inner, exp.Anonymous)
+                    and inner.this
+                    and inner.this.upper() == "STRING_SPLIT"
+                    and len(inner.expressions) == 2
+                ):
+                    s_expr = inner.expressions[0].sql(dialect="mysql")
+                    d_expr = inner.expressions[1].sql(dialect="mysql")
+                    alias = tbl.alias or "_ss"
+                    json_arr = (
+                        "CONCAT('[\"', REPLACE("
+                        + s_expr
+                        + ", "
+                        + d_expr
+                        + ", '\",\"'), '\"]')"
+                    )
+                    jt = (
+                        f"JSON_TABLE({json_arr}, '$[*]' "
+                        f"COLUMNS (value VARCHAR(4000) PATH '$')) AS {alias}"
+                    )
+                    try:
+                        probe = sqlglot.parse_one(f"SELECT 1 FROM {jt}", read="mysql")
+                        from_node = probe.find(exp.From)
+                        if from_node is not None:
+                            tbl.replace(from_node.this)
+                            changed = True
+                    except Exception:
+                        continue
+            if not changed:
+                return sql
+            out = tree.sql(dialect="mysql").rstrip().rstrip(";")
+            if is_wrapped:
+                if out.upper().startswith("SELECT "):
+                    return out[len("SELECT ") :].strip()
+                continue
+            return out
+        return sql
+
     def _transform_null(self, node: NullStatement) -> ASTNode:
         if self._target == "tsql":
             return RawSQL(sql="-- NULL statement (no-op)", reason="no T-SQL equivalent")
@@ -1036,6 +1109,7 @@ class ProceduralTransformer:
             sql = self._mysql_string_concat(sql)
             sql = self._mysql_clean_dml(sql)
             sql = self._mysql_fix_cast_max(sql)
+            sql = self._mysql_string_split(sql)
         return RawSQL(sql=sql, reason=node.reason)
 
     # T-SQL scalar constructs (CONVERT/CAST style codes, HASHBYTES, etc.) have
