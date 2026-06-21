@@ -29,6 +29,7 @@ from unique.core.ast_nodes import (
     AssignmentStatement,
     ASTNode,
     BeginEndBlock,
+    CommentStatement,
     ContinueStatement,
     CreateFunctionStatement,
     CreateProcedureStatement,
@@ -153,6 +154,39 @@ class ProceduralParser:
             TokenType.BLOCK_COMMENT,
         ):
             self._advance()
+
+    @staticmethod
+    def _normalize_comment(text: str, token_type: TokenType) -> CommentStatement:
+        """Build a CommentStatement, normalizing only a line comment's spacing.
+
+        The only permitted change to a source comment is ensuring exactly one
+        space after ``--`` (ANSI SQL). Block comments are preserved verbatim.
+        """
+        if token_type == TokenType.LINE_COMMENT:
+            # Preserve everything after the leading dashes, but guarantee a
+            # single space between '--' and the comment text.
+            body = text[2:]
+            stripped = body.lstrip(" \t")
+            normalized = "-- " + stripped if stripped else "--"
+            return CommentStatement(text=normalized.rstrip(), style="line")
+        return CommentStatement(text=text, style="block")
+
+    def _take_comments(self) -> list[ASTNode]:
+        """Consume pending comment tokens, returning them as AST nodes.
+
+        Unlike ``_skip_comments`` (which discards them), this preserves the
+        comments so the emitter can re-emit them in place. Used by body-parsing
+        loops where a comment occupies its own statement position.
+        """
+        nodes: list[ASTNode] = []
+        while self._current().type in (
+            TokenType.LINE_COMMENT,
+            TokenType.BLOCK_COMMENT,
+        ):
+            tok = self._current()
+            nodes.append(self._normalize_comment(tok.value, tok.type))
+            self._advance()
+        return nodes
 
     def _expect_keyword(self, *keywords: str) -> Token:
         """Consume a keyword token, raising if it doesn't match."""
@@ -747,7 +781,17 @@ class ProceduralParser:
 
     def _parse_tsql_statement_inner(self) -> ASTNode | None:
         """Parse a single T-SQL statement inside a body."""
-        self._skip_comments()
+        # Preserve a comment that occupies its own statement position: emit it
+        # as a CommentStatement (one per call; the body loop calls again for
+        # the next token) instead of discarding it.
+        if self._current().type in (
+            TokenType.LINE_COMMENT,
+            TokenType.BLOCK_COMMENT,
+        ):
+            tok = self._current()
+            self._advance()
+            return self._normalize_comment(tok.value, tok.type)
+
         if self._at_end():
             return None
 
@@ -893,7 +937,11 @@ class ProceduralParser:
                 then_body = [stmt]
 
         else_body: list[ASTNode] = []
-        if self._match_keyword("ELSE"):
+        # Do not skip comments when probing for ELSE: a standalone comment
+        # after the THEN block (before END) must be preserved by the body loop,
+        # not silently consumed while looking for an optional ELSE.
+        if self._current().is_keyword("ELSE"):
+            self._advance()
             if self._current().is_keyword("BEGIN"):
                 node = self._parse_tsql_begin_block()
                 if isinstance(node, BeginEndBlock):
@@ -947,7 +995,11 @@ class ProceduralParser:
                 stmts.append(stmt)
 
         self._match_keyword("END")
-        self._match_type(TokenType.SEMICOLON)
+        # Consume a trailing semicolon only if it is the next token; do not
+        # skip comments here, which would discard a comment following the
+        # block (e.g. before the enclosing END).
+        if self._current().type == TokenType.SEMICOLON:
+            self._advance()
         return BeginEndBlock(statements=tuple(stmts))
 
     def _parse_tsql_try_catch(self) -> ASTNode:
@@ -1389,7 +1441,11 @@ class ProceduralParser:
             if stmt:
                 stmts.append(stmt)
         self._match_keyword("END")
-        self._match_type(TokenType.SEMICOLON)
+        # Consume a trailing semicolon only if it is the next token; do not
+        # skip comments here, which would discard a comment following the
+        # block (e.g. before the enclosing END).
+        if self._current().type == TokenType.SEMICOLON:
+            self._advance()
         return BeginEndBlock(statements=tuple(stmts))
 
     def _parse_plsql_select_or_dml(self) -> ASTNode:
@@ -1874,10 +1930,43 @@ class ProceduralParser:
                 else:
                     break
 
+            # A line/block comment that starts its own line AND is followed by
+            # a statement boundary (END, or a new statement keyword) is a
+            # between-statements comment, not part of this DML. Stop so the body
+            # loop preserves it as a standalone CommentStatement. A comment that
+            # continues the same statement (followed by FROM/WHERE/JOIN/...) is
+            # left inside the DML text.
+            if (
+                not first
+                and paren_depth == 0
+                and begin_depth == 0
+                and case_depth == 0
+                and tok.type in (TokenType.LINE_COMMENT, TokenType.BLOCK_COMMENT)
+                and prev_tok is not None
+                and tok.line is not None
+                and prev_tok.line is not None
+                and tok.line != prev_tok.line
+                and self._comment_precedes_boundary()
+            ):
+                break
+
             if tok.type == TokenType.LPAREN:
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
+
+            # The captured tokens are re-joined with spaces, losing newlines.
+            # A line comment (-- ...) relies on a newline to terminate, so
+            # without one it would swallow the rest of the statement. Convert
+            # it to an equivalent block comment so the surrounding SQL stays
+            # intact and the comment is still preserved in place.
+            if tok.type == TokenType.LINE_COMMENT:
+                body = tok.value[2:].strip()
+                parts.append(f"/* {body} */" if body else "/* */")
+                prev_tok = tok
+                self._advance()
+                first = False
+                continue
 
             parts.append(tok.value)
             prev_tok = tok
@@ -1907,6 +1996,44 @@ class ProceduralParser:
             "IN",
         }
     )
+
+    def _comment_precedes_boundary(self) -> bool:
+        """Look past consecutive comments from the current position; return True
+        if the next real token ends the current statement (END / EOF / a new
+        statement keyword). Used to decide whether an own-line comment belongs
+        between statements rather than inside the current DML."""
+        i = self._pos
+        n = len(self._tokens)
+        while i < n and self._tokens[i].type in (
+            TokenType.LINE_COMMENT,
+            TokenType.BLOCK_COMMENT,
+        ):
+            i += 1
+        if i >= n:
+            return True
+        nxt = self._tokens[i]
+        if nxt.type == TokenType.EOF:
+            return True
+        if nxt.type == TokenType.SEMICOLON:
+            return True
+        return nxt.type == TokenType.KEYWORD and nxt.upper_value in {
+            "END",
+            "IF",
+            "WHILE",
+            "SET",
+            "DECLARE",
+            "BEGIN",
+            "RETURN",
+            "EXEC",
+            "EXECUTE",
+            "PRINT",
+            "RAISERROR",
+            "THROW",
+            "FETCH",
+            "OPEN",
+            "CLOSE",
+            "ELSE",
+        }
 
     def _starts_new_dml(
         self, tok: Token, prev_tok: Token | None, lead_verb: str = ""

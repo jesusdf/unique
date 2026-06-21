@@ -658,6 +658,20 @@ class NullStatement(ASTNode):
 
 
 @dataclass(frozen=True)
+class CommentStatement(ASTNode):
+    """A source comment preserved verbatim across transpilation.
+
+    ``text`` is the full comment including its delimiters. ``style`` is "line"
+    for ``--`` comments or "block" for ``/* */`` comments. The transpiler
+    re-emits the comment unchanged, except that a line comment is normalized to
+    have exactly one space after ``--`` per ANSI SQL.
+    """
+
+    text: str
+    style: str = "line"  # "line" | "block"
+
+
+@dataclass(frozen=True)
 class PrintStatement(ASTNode):
     """PRINT (T-SQL) / DBMS_OUTPUT.PUT_LINE (Oracle) / RAISE NOTICE (PG)."""
 

@@ -31,6 +31,7 @@ from unique.core.ast_nodes import (
     AssignmentStatement,
     ASTNode,
     BeginEndBlock,
+    CommentStatement,
     ContinueStatement,
     CreateFunctionStatement,
     CreateProcedureStatement,
@@ -116,6 +117,7 @@ class ProceduralEmitter:
             ExitStatement: self._emit_exit,
             ContinueStatement: self._emit_continue,
             NullStatement: self._emit_null,
+            CommentStatement: self._emit_comment,
             EmbeddedDML: self._emit_embedded_dml,
             SelectIntoStatement: self._emit_select_into,
             RawSQL: self._emit_raw_sql,
@@ -1033,6 +1035,15 @@ class ProceduralEmitter:
         if self._dialect == "tsql":
             return "-- NULL (no-op)"
         return "NULL;"
+
+    def _emit_comment(self, node: CommentStatement) -> str:
+        """Emit a preserved source comment verbatim.
+
+        Line comments were already normalized to one space after ``--`` when
+        captured; block comments are emitted exactly as written. Comments carry
+        no statement terminator.
+        """
+        return node.text
 
     def _emit_embedded_dml(self, node: EmbeddedDML) -> str:
         sql = node.sql.rstrip(";").strip()
