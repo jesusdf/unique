@@ -45,11 +45,10 @@ _URLS = {
     "mysql": os.environ.get("UNIQUE_TEST_MYSQL_URL"),
 }
 
-# Targets validated live. PostgreSQL and MySQL are intentionally disabled for
-# now: the procedural fixtures only exist for SQL Server and Oracle yet, so
-# validating those two engines first avoids noise from constructs we haven't
-# generated procedures for. Re-enable PG/MySQL once their procedures are added.
-_LIVE_TARGETS = ["tsql", "oracle"]
+# Targets validated live. PostgreSQL remains disabled until its procedural
+# fixture is generated; MySQL is enabled now that procedures_mysql.sql exists
+# and the validator understands DELIMITER blocks.
+_LIVE_TARGETS = ["tsql", "oracle", "mysql"]
 
 # (source_dialect, source_sql) snippets that exercise constructs known to be
 # easy to mistranslate. Each is transpiled to every configured target and the
@@ -119,6 +118,34 @@ def test_transpiled_output_is_valid(
         verdict = validator.validate(out)
         assert verdict.ok, (
             f"{source} -> {target} produced invalid SQL:\n{out}\n"
+            f"Engine error: {verdict.error}"
+        )
+    finally:
+        validator.close()
+
+
+# The full procedural fixture, transpiled and validated against the live
+# engine. This is the real test of the stored-procedure surface: the whole
+# script (DDL + ~50 routines wrapped in DELIMITER blocks) must load into the
+# engine without a syntax error.
+_FIXTURE_DIR = (
+    __import__("pathlib").Path(__file__).parent.parent / "fixtures" / "procedures"
+)
+
+
+@pytest.mark.parametrize("target", _LIVE_TARGETS)
+def test_procedures_fixture_is_valid_live(target: str) -> None:
+    if target == "tsql":
+        pytest.skip("T-SQL is the source fixture; nothing to transpile")
+    fixture = _FIXTURE_DIR / "procedures_sqlserver.sql"
+    if not fixture.is_file():
+        pytest.skip("T-SQL procedures fixture not present")
+    validator = _validator_or_skip(target)
+    try:
+        out = transpile(fixture.read_text(encoding="utf-8"), "tsql", target).sql
+        verdict = validator.validate(out)
+        assert verdict.ok, (
+            f"tsql -> {target} procedures fixture is invalid:\n"
             f"Engine error: {verdict.error}"
         )
     finally:
