@@ -154,7 +154,7 @@ class MySQLValidator(SyntaxValidator):
         try:
             cur.execute(f"CREATE DATABASE {dbname}")
             cur.execute(f"USE {dbname}")
-            for stmt in _split_semicolons(sql):
+            for stmt in _split_mysql_statements(sql):
                 if _is_executable(stmt):
                     cur.execute(stmt)
                     with contextlib.suppress(Exception):
@@ -274,6 +274,54 @@ def _split_semicolons(sql: str) -> list[str]:
     statement.
     """
     return _strip_line_comments(sql).split(";")
+
+
+def _split_mysql_statements(sql: str) -> list[str]:
+    """Split a MySQL script into executable statements, honoring DELIMITER.
+
+    A compound routine is wrapped as ``DELIMITER $$ <body>$$ DELIMITER ;`` so a
+    ``;`` inside the body doesn't terminate it. A driver (PyMySQL / mysql-
+    connector) executes one statement per call and does not understand the
+    client-side ``DELIMITER`` command, so we parse the blocks ourselves:
+
+    - Inside a ``DELIMITER $$`` block, the whole body up to the ``$$`` custom
+      delimiter is one statement (the ``DELIMITER`` lines and trailing ``$$``
+      are removed before execution).
+    - Outside a block, statements are split on ``;``.
+    """
+    statements: list[str] = []
+    current_delim = ";"
+    buf: list[str] = []
+    for raw_line in sql.splitlines():
+        stripped = raw_line.strip()
+        # A "DELIMITER X" line switches the active terminator.
+        if stripped.upper().startswith("DELIMITER "):
+            # Flush anything pending under the previous delimiter.
+            pending = "\n".join(buf).strip()
+            if pending:
+                statements.append(pending)
+            buf = []
+            current_delim = stripped.split(None, 1)[1].strip()
+            continue
+        buf.append(raw_line)
+        # When the active delimiter is custom ($$), a line ending with it
+        # closes the current statement.
+        if current_delim != ";" and stripped.endswith(current_delim):
+            joined = "\n".join(buf)
+            # Drop the trailing custom delimiter.
+            joined = joined.rstrip()[: -len(current_delim)]
+            if joined.strip():
+                statements.append(joined.strip())
+            buf = []
+    # Remaining buffer: split on ';' (default delimiter section).
+    tail = "\n".join(buf)
+    if current_delim == ";":
+        for part in _strip_line_comments(tail).split(";"):
+            if part.strip():
+                statements.append(part)
+    elif tail.strip():
+        statements.append(tail.strip())
+    return statements
 
 
 def _normalize_pg_url(url: str) -> str:
