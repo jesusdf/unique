@@ -559,3 +559,46 @@ class TestMySQLStringConcat:
         t = ProceduralTransformer("tsql", "oracle")
         out = t._transform_node(RawSQL(sql="@a + 'x'", reason="x"))
         assert "CONCAT(" not in out.sql
+
+
+class TestMySQLCleanDML:
+    """dbo. qualifiers and T-SQL table hints are removed for MySQL."""
+
+    def _mysql(self) -> ProceduralTransformer:
+        return ProceduralTransformer("tsql", "mysql")
+
+    def test_dbo_stripped_from_table_in_select(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(sql="SELECT x FROM dbo.tbl_5 AS c WHERE c.x = 1", reason="x")
+        )
+        assert "dbo." not in out.sql
+        assert "FROM tbl_5" in out.sql
+
+    def test_dbo_stripped_from_update(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(sql="UPDATE dbo.tbl_6 SET a = 1 WHERE b = 2", reason="x")
+        )
+        assert "dbo." not in out.sql
+
+    def test_nolock_hint_removed(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(sql="SELECT x FROM dbo.t WITH (NOLOCK) WHERE y = 1", reason="x")
+        )
+        assert "NOLOCK" not in out.sql
+        assert "dbo." not in out.sql
+
+    def test_dbo_stripped_from_function_call(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(sql="SELECT dbo.func1()", reason="x")
+        )
+        assert "dbo." not in out.sql
+        # Identifier case is preserved (not upper-cased by a sqlglot round-trip).
+        assert "func1" in out.sql
+
+    def test_clean_dml_is_noop_without_dbo_or_hint(self) -> None:
+        # A fragment with no dbo/hint must be returned untouched (no sqlglot
+        # reflow, e.g. INTERVAL literals must not be requoted).
+        out = self._mysql()._transform_node(
+            RawSQL(sql="DATE_ADD(d, INTERVAL 2 HOUR)", reason="x")
+        )
+        assert out.sql == "DATE_ADD(d, INTERVAL 2 HOUR)"
