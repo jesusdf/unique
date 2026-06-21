@@ -25,6 +25,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
+from typing import cast
 
 import sqlglot
 
@@ -868,6 +869,8 @@ class ProceduralTransformer:
             self._warnings.append(f"Could not transpile DML: {e}")
         if self._target == "oracle":
             sql = self._fix_oracle_dml(sql)
+        if self._target == "mysql":
+            sql = self._mysql_string_concat(sql)
         return EmbeddedDML(sql=sql, dialect=self._target)
 
     def _transform_null(self, node: NullStatement) -> ASTNode:
@@ -907,7 +910,103 @@ class ProceduralTransformer:
                         sql = self._fix_oracle_dml(sql)
             except Exception:
                 pass
+        if self._target == "mysql":
+            sql = self._mysql_string_concat(sql)
         return RawSQL(sql=sql, reason=node.reason)
+
+    # MySQL has no string ``+`` operator and no ``N'...'`` literal prefix.
+    # T-SQL uses ``+`` for both arithmetic and string concatenation, so the
+    # operator alone is ambiguous; we treat a ``+`` chain as concatenation
+    # only when one of its operands is a string literal (the unambiguous
+    # signal), rewriting the whole chain to ``CONCAT(...)`` and dropping any
+    # ``N`` prefixes. Pure arithmetic (``a + b``, ``x + 1``) is left intact.
+    def _mysql_string_concat(self, sql: str) -> str:
+        import sqlglot
+        from sqlglot import exp
+
+        def is_string_atom(n: exp.Expression) -> bool:
+            return isinstance(n, exp.National) or (
+                isinstance(n, exp.Literal) and bool(n.args.get("is_string"))
+            )
+
+        def denationalize(n: exp.Expression) -> exp.Expression:
+            if isinstance(n, exp.National):
+                return exp.Literal.string(n.this)
+            for nat in list(n.find_all(exp.National)):
+                nat.replace(exp.Literal.string(nat.this))
+            return n
+
+        def flatten_add(n: exp.Expression, parts: list[exp.Expression]) -> None:
+            if isinstance(n, exp.Add):
+                flatten_add(cast(exp.Expression, n.left), parts)
+                flatten_add(cast(exp.Expression, n.right), parts)
+            else:
+                parts.append(n)
+
+        def has_string_operand(parts: list[exp.Expression]) -> bool:
+            for p in parts:
+                if is_string_atom(p) or p.find(exp.National):
+                    return True
+                if any(
+                    isinstance(lit, exp.Literal) and lit.args.get("is_string")
+                    for lit in p.find_all(exp.Literal)
+                ):
+                    return True
+            return False
+
+        def convert(node: exp.Expression) -> exp.Expression:
+            if isinstance(node, exp.Add):
+                parts: list[exp.Expression] = []
+                flatten_add(node, parts)
+                if has_string_operand(parts):
+                    new_parts = [convert(denationalize(p.copy())) for p in parts]
+                    return cast(exp.Expression, exp.func("CONCAT", *new_parts))
+            for key, value in list(node.args.items()):
+                if isinstance(value, exp.Expression):
+                    node.set(key, convert(value))
+                elif isinstance(value, list):
+                    node.set(
+                        key,
+                        [
+                            convert(c) if isinstance(c, exp.Expression) else c
+                            for c in value
+                        ],
+                    )
+            return node
+
+        # Only attempt the rewrite when both a '+' and a string literal are
+        # present; otherwise there is nothing to convert and we avoid the
+        # parse cost (and any risk of reflowing unrelated SQL).
+        if "+" not in sql or "'" not in sql:
+            return sql
+        # The raw SQL may be a complete statement (SELECT ... FROM ...) or a
+        # bare expression (the right-hand side of a SET). Try the statement
+        # form first; if it doesn't parse — or parses as an opaque Command,
+        # which sqlglot falls back to for things like ``REPLACE ( ... )`` and
+        # which exposes no Add nodes to rewrite — wrap it in a SELECT so a lone
+        # expression becomes parseable, and unwrap afterwards.
+        wrapped = False
+        tree = None
+        try:
+            parsed = sqlglot.parse_one(sql, read="mysql")
+            if not isinstance(parsed, exp.Command):
+                tree = parsed
+        except Exception:
+            tree = None
+        if tree is None:
+            try:
+                tree = sqlglot.parse_one(f"SELECT {sql}", read="mysql")
+                wrapped = True
+            except Exception:
+                return sql
+        try:
+            tree = convert(cast(exp.Expression, tree))
+            rendered = tree.sql(dialect="mysql")
+        except Exception:
+            return sql
+        if wrapped and rendered.upper().startswith("SELECT "):
+            return rendered[len("SELECT ") :].rstrip().rstrip(";")
+        return rendered
 
     def _transform_functions_in_sql(self, sql: str) -> str:
         """Transform function names in raw SQL text.

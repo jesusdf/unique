@@ -512,3 +512,50 @@ class TestDateDiff:
             RawSQL(sql="DATEADD(day, 1, DATEDIFF(day, x, y))", reason="x")
         )
         assert out.sql == "((y - x) + 1)"
+
+
+class TestMySQLStringConcat:
+    """T-SQL ``+`` string concatenation becomes MySQL ``CONCAT(...)``.
+
+    ``+`` is ambiguous in T-SQL (arithmetic vs. string concat). A ``+`` chain
+    is treated as concatenation only when one operand is a string literal; pure
+    arithmetic is left untouched. ``N'...'`` prefixes are dropped.
+    """
+
+    def _mysql(self) -> ProceduralTransformer:
+        return ProceduralTransformer("tsql", "mysql")
+
+    def test_simple_concat(self) -> None:
+        out = self._mysql()._transform_node(RawSQL(sql="@a + N' ' + @b", reason="x"))
+        assert out.sql == "CONCAT(v_a, ' ', v_b)"
+
+    def test_literal_prefix_dropped(self) -> None:
+        out = self._mysql()._transform_node(RawSQL(sql="@a + N'@'", reason="x"))
+        assert "N'" not in out.sql
+        assert out.sql == "CONCAT(v_a, '@')"
+
+    def test_nested_inside_function(self) -> None:
+        out = self._mysql()._transform_node(
+            RawSQL(
+                sql="REPLACE(COALESCE(@c, @a + '@' + @b), '\"', '')",
+                reason="x",
+            )
+        )
+        assert "CONCAT(v_a, '@', v_b)" in out.sql
+        assert "+ '@' +" not in out.sql
+
+    def test_pure_arithmetic_untouched(self) -> None:
+        out = self._mysql()._transform_node(RawSQL(sql="@a + @b", reason="x"))
+        assert "CONCAT" not in out.sql
+        assert "+" in out.sql
+
+    def test_numeric_literal_untouched(self) -> None:
+        out = self._mysql()._transform_node(RawSQL(sql="@a + 1", reason="x"))
+        assert "CONCAT" not in out.sql
+
+    def test_other_targets_keep_plus(self) -> None:
+        # The conversion is MySQL-only; PostgreSQL keeps its own '||' handling
+        # via sqlglot and must not be routed through CONCAT here.
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._transform_node(RawSQL(sql="@a + 'x'", reason="x"))
+        assert "CONCAT(" not in out.sql
