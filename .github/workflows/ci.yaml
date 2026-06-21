@@ -143,18 +143,21 @@ jobs:
           - 1433:1433
       oracle:
         # Lightweight Oracle Database Free image with a fast-start layer.
-        image: gvenzl/oracle-free:slim-faststart
+        # Pinned tag; faststart trades image size for a much shorter boot.
+        image: gvenzl/oracle-free:23-slim-faststart
         env:
-          ORACLE_PASSWORD: "Unique_Strong!Pass1"
+          ORACLE_PASSWORD: UniqueStrongPass1
           APP_USER: unique
-          APP_USER_PASSWORD: "Unique_Strong!Pass1"
+          APP_USER_PASSWORD: UniqueStrongPass1
         ports:
           - 1521:1521
+        # Oracle needs a generous startup window before health checks count.
         options: >-
           --health-cmd healthcheck.sh
           --health-interval 10s
-          --health-timeout 5s
+          --health-timeout 10s
           --health-retries 30
+          --health-start-period 90s
     steps:
       - uses: actions/checkout@v4
 
@@ -230,7 +233,7 @@ jobs:
               try:
                   oracledb.connect(
                       user="unique",
-                      password="Unique_Strong!Pass1",
+                      password="UniqueStrongPass1",
                       dsn="localhost:1521/FREEPDB1",
                   ).close()
                   print("Oracle ready")
@@ -247,7 +250,7 @@ jobs:
           # SQL Server and Oracle here (PG/MySQL disabled until their
           # procedural fixtures exist). oracle-free's default PDB is FREEPDB1.
           UNIQUE_TEST_MSSQL_URL: mssql://sa:Unique_Strong!Pass1@localhost:1433/master
-          UNIQUE_TEST_ORACLE_URL: oracle://unique:Unique_Strong!Pass1@localhost:1521/FREEPDB1
+          UNIQUE_TEST_ORACLE_URL: oracle://unique:UniqueStrongPass1@localhost:1521/FREEPDB1
         run: |
           # Run, capture output, and surface failures as ::error:: annotations
           # (readable via the annotations API; raw logs sit on a blocked blob).
