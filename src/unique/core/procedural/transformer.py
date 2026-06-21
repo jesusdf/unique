@@ -517,6 +517,20 @@ class ProceduralTransformer:
     # Data type transformations
     # ---------------------------------------------------------------
 
+    def _unknown_type_carrier(self) -> str:
+        """Permissive carrier type for an unresolved/non-portable source type.
+
+        Chosen per target so the emitted routine still compiles while the
+        original type is preserved in a /* UNIQUE */ comment for the user and
+        for a faithful reverse transpilation.
+        """
+        return {
+            "tsql": "SQL_VARIANT",
+            "oracle": "ANYDATA",
+            "postgresql": "TEXT",
+            "mysql": "LONGTEXT",
+        }.get(self._target, "VARCHAR")
+
     def _transform_data_type(self, dt: DataType) -> DataType:
         """Transform a data type between dialects."""
         type_name = dt.name.upper()
@@ -534,19 +548,16 @@ class ProceduralTransformer:
                         return self._transform_data_type(resolved)
                 except Exception:  # pragma: no cover - defensive
                     pass
-            if self._target == "tsql":
-                self._warnings.append(
-                    f"%%TYPE reference '{dt.name}' has no T-SQL equivalent. "
-                    "Manual type resolution required."
-                )
-                return DataType(name="SQL_VARIANT")
-            if self._target in ("postgresql", "mysql"):
-                self._warnings.append(
-                    f"%%TYPE reference '{dt.name}' could not be resolved "
-                    "without a database connection (use --db-url). Emitted "
-                    "as-is for manual review."
-                )
-            return dt
+            # Unresolved without a connection: emit a permissive carrier type
+            # and preserve the original reference as a comment so the
+            # substitution is documented and reversible.
+            self._warnings.append(
+                f"%TYPE reference '{dt.name}' could not be resolved without a "
+                "database connection (use --db-url). Emitted as a carrier type "
+                "with the original preserved in a /* UNIQUE */ comment."
+            )
+            carrier = self._unknown_type_carrier()
+            return DataType(name=carrier, origin_comment=dt.name)
 
         # Handle VARCHAR(MAX) → CLOB/TEXT
         if type_name in ("VARCHAR", "NVARCHAR") and dt.params == (-1,):
@@ -562,6 +573,10 @@ class ProceduralTransformer:
         base_type = type_name.split("(")[0].strip()
         if base_type in type_map:
             new_name = type_map[base_type]
+            # Source-specific types with no faithful target equivalent: preserve
+            # the original in a /* UNIQUE */ comment so the substitution is
+            # documented and a reverse transpilation can restore it exactly.
+            origin = dt.name if base_type in self._LOSSY_SOURCE_TYPES else None
             # If the mapping includes params (e.g., NUMBER(10)),
             # parse them out
             if "(" in new_name:
@@ -570,11 +585,25 @@ class ProceduralTransformer:
                     name = match.group(1)
                     params_str = match.group(2).split(",")
                     params = tuple(int(p.strip()) for p in params_str)
-                    return DataType(name=name, params=params)
-                return DataType(name=new_name)
-            return DataType(name=new_name, params=dt.params)
+                    return DataType(name=name, params=params, origin_comment=origin)
+                return DataType(name=new_name, origin_comment=origin)
+            return DataType(name=new_name, params=dt.params, origin_comment=origin)
 
         return dt
+
+    # Source types with no faithful equivalent in the other engines: the
+    # mapping is a best-effort carrier, so the original is worth preserving.
+    _LOSSY_SOURCE_TYPES: frozenset[str] = frozenset(
+        {
+            "SQL_VARIANT",  # T-SQL variant -> carrier text type
+            "ANYDATA",  # Oracle ANYDATA -> carrier
+            "XML",  # mapped to TEXT on MySQL (no native XML)
+            "XMLTYPE",
+            "HIERARCHYID",
+            "GEOGRAPHY",
+            "GEOMETRY",
+        }
+    )
 
     def _get_type_map(self) -> dict[str, str]:
         """Get the appropriate type mapping for source→target."""
