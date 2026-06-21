@@ -3,7 +3,7 @@
 This document tracks all outstanding work, ordered by priority. It is the
 authoritative backlog; `docs/STATUS.md` summarizes what is already done.
 
-Last reviewed: 2026-06-18 (after column-constraint preservation work).
+Last reviewed: 2026-06-21 (MySQL procedures: live-testing-driven fixes).
 
 ## Legend
 
@@ -95,10 +95,12 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       VARBINARY/BYTEA, ...) map to the target dialect both in our own emitter
       and in passthrough DDL. Found by the live syntax-validation layer
       (PostgreSQL rejected `NVARCHAR`).
-- [ ] **Data-type names inside procedural bodies (P2)** — variable/parameter
-      declarations in stored routines (e.g. `v_size NVARCHAR(5)`) still carry
-      the source type name. Extend the type mapping into the procedural engine
-      without disturbing string literals or identifiers.
+- [x] **Data-type names inside procedural bodies (P2)** — variable/parameter
+      declarations in stored routines (e.g. `v_size NVARCHAR(5)`) now map to the
+      target dialect's type via the procedural transformer's type map, without
+      disturbing string literals or identifiers. Source types with no faithful
+      equivalent (SQL_VARIANT, etc.) keep the original in a `/* UNIQUE: … */`
+      comment, including unresolved `%TYPE`/`%ROWTYPE` references.
 
 ## 4. Function mapping gaps (P2)
 
@@ -175,7 +177,57 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
 - [ ] **PyPI publication** — deferred until the tool has been used in real
       projects for a few months and proven stable. Not before then.
 
-## 6. Known limitations to keep documented (not bugs)
+## 6. MySQL stored-procedure live testing — findings (P1/P2)
+
+Surfaced while enabling live validation of `procedures_mysql.sql`. Items
+marked [x] are fixed and tested; [ ] are open.
+
+- [x] **Empty block from a dropped SET option** — `SET NOCOUNT ON` (and the
+      other dialect-specific SET options) were silently removed, which could
+      leave `IF ... THEN END IF` (rejected by MySQL) and erased information.
+      Now preserved as a `/* UNIQUE: <original> -- no <target> equivalent */`
+      comment, and any IF/WHILE/LOOP/FOR/BEGIN-END left without an executable
+      statement gets a dialect no-op (`DO 0;` MySQL, `NULL;` Oracle/PG).
+- [x] **T-SQL assignment-select dropped** — `SELECT @v = expr [, ...]` was
+      routed to embedded DML, where sqlglot turned `=` into a column alias
+      (`SELECT col AS v_x`) and lost the assignment. The T-SQL dispatcher now
+      detects this and emits `SELECT ... INTO`. Ordinary selects unaffected.
+- [x] **`OUTPUT ... INTO @var` → invalid `RETURNING` on MySQL (P1)** — an
+      `INSERT ... OUTPUT inserted.col INTO @var` became
+      `INSERT ... RETURNING inserted.col` for MySQL, which is invalid (MySQL
+      has no RETURNING) and dropped the `INTO @var` target. The procedural
+      MySQL DML cleaner now strips a RETURNING clause, emits the base
+      statement, and documents the dropped clause with a `-- UNIQUE:` comment
+      (Oracle/PostgreSQL keep native RETURNING). Fixed and tested
+      (TestOutputClauseToMySQL); the 4 fixture occurrences are now valid.
+- [ ] **`TOP n PERCENT` → invalid `LIMIT n PERCENT` on MySQL (P2)** — MySQL
+      LIMIT takes no PERCENT. Needs a rewrite (e.g. `LIMIT CEIL(n/100 * (SELECT
+      COUNT(*) ...))`) or a documented comment. Not in the current fixture.
+- [ ] **Double-quoted string literal → backtick identifier (P2)** — with
+      T-SQL `QUOTED_IDENTIFIER OFF`, `CHARINDEX(",", s)` uses `"` for a string,
+      but sqlglot (QUOTED_IDENTIFIER ON by default) treats it as an identifier
+      and emits `LOCATE(\`,\`, s)` for MySQL — a column reference, not the
+      comma character. Single-quoted literals are fine. Not in the current
+      fixture (which uses single quotes). Consider honoring a detected
+      `SET QUOTED_IDENTIFIER OFF`.
+
+## 7. Triggers — coverage to review (P2)
+
+- [ ] **Trigger transpilation test coverage** — verify (and add tests for)
+      the different trigger firing modes across engines: row-level vs
+      statement-level (`FOR EACH ROW`), and `BEFORE` / `AFTER` / `INSTEAD OF`.
+      T-SQL triggers are statement-level by default (with `inserted`/`deleted`
+      pseudo-tables) while Oracle/MySQL/PostgreSQL are commonly row-level with
+      `:NEW`/`:OLD` / `NEW`/`OLD` — the mapping between these models needs
+      explicit tests. Also cover engine-specific hazards, notably **Oracle
+      mutating-table** errors (a row-level trigger that queries/modifies its
+      own table): detect and document, since a faithful auto-rewrite
+      (e.g. to a compound trigger or statement-level + collection) is not
+      generally possible.
+
+
+
+## 8. Known limitations to keep documented (not bugs)
 
 These have no faithful cross-engine equivalent and are intentionally
 emitted as comments/warnings (see `docs/03-unsupported.md`):
@@ -183,7 +235,8 @@ emitted as comments/warnings (see `docs/03-unsupported.md`):
 - SQL Server system procedures (`sp_addextendedproperty`, `sp_rename`, ...).
 - SQL*Plus session directives (`SET FEEDBACK`, etc.) and `rem`/`prompt`
   (now preserved as comments).
-- `%TYPE`/`%ROWTYPE` without `--db-url` (emitted as `SQL_VARIANT` + warning).
+- `%TYPE`/`%ROWTYPE` without `--db-url` (emitted as a carrier type with the
+  original preserved in a `/* UNIQUE: … */` comment, plus a warning).
 - `EXECUTE IMMEDIATE ... USING` bind variables (T-SQL `sp_executesql`).
 - Engine-specific physical features (partitioning, tablespaces, filegroups,
   index storage clauses).
