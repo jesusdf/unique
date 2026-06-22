@@ -1891,7 +1891,15 @@ class ProceduralParser:
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            parts.append(tok.value)
+            # A line comment inside a captured expression would, once the
+            # multi-line expression is flattened to a single line, comment out
+            # everything after it (including the rest of the expression and the
+            # statement terminator). Convert it to a block comment so the text
+            # is preserved without swallowing the rest of the line.
+            if tok.type == TokenType.LINE_COMMENT:
+                parts.append(self._line_comment_to_block(tok.value))
+            else:
+                parts.append(tok.value)
             prev_line = tok.line
             first = False
             self._advance()
@@ -1899,6 +1907,17 @@ class ProceduralParser:
         if raw.upper() == "NULL":
             return Literal(value=None, dtype="null")
         return RawSQL(sql=raw, reason="captured expression")
+
+    @staticmethod
+    def _line_comment_to_block(text: str) -> str:
+        """Turn a ``-- comment`` token into a ``/* comment */`` block comment."""
+        body = text.lstrip()
+        if body.startswith("--"):
+            body = body[2:]
+        body = body.strip()
+        # Avoid nested block-comment terminators.
+        body = body.replace("*/", "* /")
+        return f"/* {body} */" if body else "/* */"
 
     def _parse_expression_until_keyword(self, *keywords: str) -> ASTNode:
         """Capture tokens as raw SQL until a keyword, semicolon, or END.

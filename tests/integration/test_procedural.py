@@ -847,3 +847,31 @@ class TestReturnValueInProcedure:
         assert "RETURN 0;" in out
         assert "RETURN v_x;" in out
         assert "LEAVE" not in out
+
+
+class TestInlineCommentInCapturedExpression:
+    """A line comment inside a captured multi-line expression must become a
+    block comment, otherwise flattening to one line comments out the rest of
+    the statement (breaking a CASE / the following statement)."""
+
+    def test_line_comments_in_case_become_block(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN\n"
+            "    SET @c = (SELECT CASE WHEN @x = 1 THEN 2  -- aaa\n"
+            "                          WHEN @x = 0 THEN 1  -- bbb\n"
+            "                          ELSE 0 END)          -- ccc\n"
+            "    IF @c = 2\n"
+            "        SELECT 1\n"
+            "END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        # The inline comments are preserved as block comments...
+        assert "/* aaa */" in out
+        assert "/* bbb */" in out
+        # ...and no executable line stays open due to a trailing -- comment:
+        # the CASE closes and the following IF is intact.
+        assert "ELSE 0 END" in out
+        assert "IF v_c = 2 THEN" in out
+        # No '--' line comment survives inside the SET expression line.
+        set_line = next(ln for ln in out.splitlines() if ln.strip().startswith("SET"))
+        assert "--" not in set_line

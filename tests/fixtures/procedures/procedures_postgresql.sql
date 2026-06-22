@@ -459,7 +459,7 @@ BEGIN
     IF ( ( v_col_6 IS NULL ) OR ( v_col_42 IS NULL ) ) THEN
             RETURN NULL;
     END IF;
-    v_col_12 := ( SELECT CASE WHEN v_col_42 = 1 THEN 2 -- xxxxxx WHEN v_col_42 = 0 AND v_col_13 IS NOT NULL THEN 1 -- col_151 ELSE 0 END ) -- xxxxxx -- xx xx xx xxxxxx;
+    v_col_12 := ( SELECT CASE WHEN v_col_42 = 1 THEN 2 /* xxxxxx */ WHEN v_col_42 = 0 AND v_col_13 IS NOT NULL THEN 1 /* col_151 */ ELSE 0 END ) /* xxxxxx */ /* xx xx xx xxxxxx */;
     IF v_col_12 = 2 THEN
             DELETE FROM tbl_6 WHERE col_6 = v_col_6 AND col_42 = 1 AND col_62 = v_col_62;
             SELECT col_76.col_46, LOWER(COALESCE(col_76.col_77, v_col_62 || '@' || v_col_61)) INTO v_col_72, v_col_73 FROM tbl_13 col_76 WHERE col_76 . col_62 = v_col_62;
@@ -587,7 +587,7 @@ BEGIN
     v_col_74 := REPLACE ( v_col_74 , '$xxxxxxxxx$' , v_col_88 );
     v_col_74 := REPLACE ( v_col_74 , '$xxx$' , v_col_75 );
     v_col_74 := REPLACE ( v_col_74 , '$xxxx$' , v_col_6 );
-    v_col_74 := REPLACE ( v_col_74 , '$xxxxxxxxx$' , v_mod ) -- xxxxxx xx xxxxxx xxx xxxx;
+    v_col_74 := REPLACE ( v_col_74 , '$xxxxxxxxx$' , v_mod ) /* xxxxxx xx xxxxxx xxx xxxx */;
     v_col_74 := REPLACE ( v_col_74 , CHAR ( 13 ) , '' );
     v_col_74 := REPLACE ( v_col_74 , CHAR ( 10 ) , '' );
     v_col_74 := REPLACE ( v_col_74 , '    ' , ' ' );
