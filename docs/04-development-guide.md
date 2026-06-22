@@ -38,7 +38,7 @@ docker build -t unique .
 docker run --rm unique transpile --from tsql --to postgresql < input.sql
 
 # Run the API server
-docker-compose up unique-api
+docker compose up   # serves API + web UI at http://localhost:8000/
 ```
 
 ## Project Structure
