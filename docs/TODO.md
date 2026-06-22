@@ -220,6 +220,15 @@ open.
       non-portable translation is commented out, so the script stays valid.
       Found by the live MySQL procedures-fixture check; tested
       (TestInlineTableValuedFunction).
+- [x] **Line comments inside a captured expression break the statement (P1)**
+      — a T-SQL `SET @v = (SELECT CASE … -- note\n … END) -- note` with inline
+      `--` comments, once the multi-line expression was flattened to a single
+      line, had the `--` comment out the rest of the line (the CASE close, the
+      terminator, and the following statement), producing `1064` near the next
+      `IF`. The expression capture now converts line comments to `/* … */`
+      block comments (`_line_comment_to_block`), preserving the text without
+      swallowing the line. Found by the live MySQL procedures-fixture check;
+      tested (TestInlineCommentInCapturedExpression).
 - [x] **`RETURN` in a MySQL procedure — bare or with a value (P1)** — `RETURN
       is only allowed in a FUNCTION` (error 1313). Both a bare early-exit
       `RETURN` and a `RETURN <value>` (a T-SQL procedure status code, which
