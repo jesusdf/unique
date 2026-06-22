@@ -332,7 +332,29 @@ open.
 
 
 
-## 8. Known limitations to keep documented (not bugs)
+## 8. Web UI, docs and packaging (P2/P3)
+
+- [x] **Editor boxes overflow on long lines (P2)** — the SQL input/output
+      editors widened past the viewport when pasting very long lines. Fixed in
+      `web/src/index.template.html`: grid items get `min-width: 0`, the editors
+      get `max-width: 100%`, CodeMirror keeps its horizontal scrollbar inside
+      its box (`.CodeMirror-scroll { overflow-x: auto }`), and the editors are
+      sized with `setSize("100%", …)`. Rebuilt `static/index.html` via
+      `web/build.py`.
+- [ ] **README slimming + docs split (P3)** — focus the README on the
+      sqlglot-based value proposition (what unique adds on top of sqlglot);
+      move installation/deployment and interfaces sections into
+      `docs/` files and link them from a Documentation section; remove
+      architecture/development prose that duplicates existing `docs/`.
+- [ ] **docker-compose example for end users (P3)** — replace the build-based
+      `docker-compose.yaml` example with one that pulls the published Docker
+      Hub image, aimed at an end user rather than a contributor.
+- [ ] **Pin sqlglot to an exact version (P2)** — depend on a fixed sqlglot
+      release so upstream changes can't silently break transpilation; bump
+      deliberately. (Analysis of vendoring/forking sqlglot — GRUB-style pinned
+      sources + local patches — recorded in `docs/sqlglot-dependency.md`.)
+
+## 9. Known limitations to keep documented (not bugs)
 
 These have no faithful cross-engine equivalent and are intentionally
 emitted as comments/warnings (see `docs/03-unsupported.md`):

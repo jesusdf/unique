@@ -67,7 +67,10 @@
   .ghost:hover { color: var(--text); border-color: var(--accent); }
   .editors { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 860px) { .editors { grid-template-columns: 1fr; } }
-  .editor { display: flex; flex-direction: column; }
+  /* min-width:0 lets each grid column hold its track width instead of being
+     stretched by long, non-wrapping SQL lines; the editor then scrolls
+     horizontally inside its own box rather than overflowing the page. */
+  .editor { display: flex; flex-direction: column; min-width: 0; }
   .editor .head {
     display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
     font-size: 13px; color: var(--muted);
@@ -77,19 +80,23 @@
     background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
   }
   textarea {
-    width: 100%; min-height: 380px; resize: vertical;
+    width: 100%; max-width: 100%; box-sizing: border-box;
+    min-height: 380px; resize: vertical; overflow: auto;
     background: var(--panel); color: var(--text); border: 1px solid var(--border);
     border-radius: 10px; padding: 14px; font-family: var(--mono); font-size: 13px;
-    line-height: 1.55; tab-size: 2;
+    line-height: 1.55; tab-size: 2; white-space: pre;
   }
   textarea:focus { outline: none; border-color: var(--accent); }
   textarea[readonly] { background: #13161f; }
   /* CodeMirror integration: match the panel look and textarea sizing. */
   .CodeMirror {
-    height: 380px; border: 1px solid var(--border); border-radius: 10px;
-    font-family: var(--mono); font-size: 13px; line-height: 1.55;
-    background: var(--panel);
+    height: 380px; max-width: 100%; border: 1px solid var(--border);
+    border-radius: 10px; font-family: var(--mono); font-size: 13px;
+    line-height: 1.55; background: var(--panel);
   }
+  /* Keep CodeMirror's own horizontal scrollbar inside the box so a very long
+     line never widens the editor past its column. */
+  .CodeMirror-scroll { overflow-x: auto !important; }
   .CodeMirror-focused { border-color: var(--accent); }
   .editor .cm-wrap { resize: vertical; overflow: hidden; }
   .CodeMirror-gutters { background: #13161f; border-right: 1px solid var(--border); }
@@ -375,12 +382,12 @@ async function translateFile() {
       mode: "text/x-mssql", theme: "dracula", lineNumbers: true,
       lineWrapping: false, matchBrackets: true, autofocus: true,
     });
-    cmInput.setSize(null, 380);
+    cmInput.setSize("100%", 380);
     cmOutput = CodeMirror.fromTextArea(el("output"), {
       mode: "text/x-pgsql", theme: "dracula", lineNumbers: true,
       lineWrapping: false, readOnly: true,
     });
-    cmOutput.setSize(null, 380);
+    cmOutput.setSize("100%", 380);
     // Re-detect dialect as the user types (debounced).
     cmInput.on("change", () => {
       clearTimeout(detectTimer);
