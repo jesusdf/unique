@@ -418,6 +418,18 @@ class ProceduralEmitter:
     def _emit_trigger(self, node: CreateTriggerStatement) -> str:
         name = self._qualified_name(node.schema, node.name)
         events = ", ".join(node.events) if node.events else "UPDATE"
+        timing = node.timing
+
+        # MySQL has no INSTEAD OF triggers (they apply to views in T-SQL/PG and
+        # have no MySQL form). Document the substitution and fall back to BEFORE
+        # so the trigger is at least syntactically valid for review.
+        instead_of_note = ""
+        if self._dialect == "mysql" and timing.upper().startswith("INSTEAD OF"):
+            instead_of_note = (
+                "-- UNIQUE: MySQL has no INSTEAD OF trigger; emitted as BEFORE "
+                "for review (original was INSTEAD OF, typically on a view).\n"
+            )
+            timing = "BEFORE"
 
         if self._dialect == "tsql":
             lines = [f"CREATE TRIGGER {name} ON {node.table}"]
@@ -432,15 +444,41 @@ class ProceduralEmitter:
                 lines.append("FOR EACH ROW")
             lines.append("BEGIN")
         elif self._dialect == "postgresql":
-            lines = [f"CREATE OR REPLACE TRIGGER {name}"]
-            lines.append(f"{node.timing} {events} ON {node.table}")
+            # PostgreSQL triggers call a separate trigger function that returns
+            # a trigger and contains the body. Emit both the function and the
+            # CREATE TRIGGER that invokes it.
+            func_name = f"{node.name}_func"
+            qfunc = self._qualified_name(node.schema, func_name)
+            fn_lines = [
+                f"CREATE OR REPLACE FUNCTION {qfunc}()",
+                "RETURNS TRIGGER",
+                "LANGUAGE plpgsql",
+                "AS $$",
+                "BEGIN",
+            ]
+            self._indent_level = 1
+            for stmt in node.body:
+                text = self._emit_node(stmt)
+                for line in text.split("\n"):
+                    fn_lines.append(f"{self._indent()}{line}" if line.strip() else "")
+            self._indent_level = 0
+            # A row-level AFTER trigger conventionally returns NULL; a BEFORE
+            # trigger returns NEW. Default to NEW, which is safe for BEFORE and
+            # ignored for AFTER row-level triggers.
+            fn_lines.append("    RETURN NEW;")
+            fn_lines.append("END;")
+            fn_lines.append("$$;")
+            trg_lines = [
+                f"CREATE OR REPLACE TRIGGER {name}",
+                f"{node.timing} {events} ON {node.table}",
+            ]
             if node.for_each == "ROW":
-                lines.append("FOR EACH ROW")
-            lines.append("EXECUTE FUNCTION {name}_func();")
-            return "\n".join(lines)
+                trg_lines.append("FOR EACH ROW")
+            trg_lines.append(f"EXECUTE FUNCTION {qfunc}();")
+            return "\n".join(fn_lines) + "\n\n" + "\n".join(trg_lines)
         else:
             lines = [f"CREATE TRIGGER {name}"]
-            lines.append(f"{node.timing} {events} ON {node.table}")
+            lines.append(f"{timing} {events} ON {node.table}")
             lines.append("FOR EACH ROW")
             lines.append("BEGIN")
 
@@ -455,7 +493,7 @@ class ProceduralEmitter:
             lines.append("END;")
         else:
             lines.append("END")
-        return "\n".join(lines)
+        return instead_of_note + "\n".join(lines)
 
     # ---------------------------------------------------------------
     # Declarations

@@ -309,17 +309,26 @@ open.
 
 ## 7. Triggers — coverage to review (P2)
 
-- [ ] **Trigger transpilation test coverage** — verify (and add tests for)
-      the different trigger firing modes across engines: row-level vs
-      statement-level (`FOR EACH ROW`), and `BEFORE` / `AFTER` / `INSTEAD OF`.
-      T-SQL triggers are statement-level by default (with `inserted`/`deleted`
-      pseudo-tables) while Oracle/MySQL/PostgreSQL are commonly row-level with
-      `:NEW`/`:OLD` / `NEW`/`OLD` — the mapping between these models needs
-      explicit tests. Also cover engine-specific hazards, notably **Oracle
-      mutating-table** errors (a row-level trigger that queries/modifies its
-      own table): detect and document, since a faithful auto-rewrite
-      (e.g. to a compound trigger or statement-level + collection) is not
-      generally possible.
+- [x] **Trigger transpilation test coverage** — added `test_triggers.py`
+      covering firing modes (BEFORE/AFTER/INSTEAD OF) and granularity
+      (row-level FOR EACH ROW vs statement-level) across engines, plus the
+      Oracle mutating-table hazard (body preserved, not auto-rewritten). Fixed
+      two real bugs found while writing them: the PostgreSQL emitter produced a
+      broken `EXECUTE FUNCTION {name}_func()` (literal placeholder) and dropped
+      the body — it now emits a proper `CREATE FUNCTION ... RETURNS TRIGGER`
+      plus the `CREATE TRIGGER` that calls it; and MySQL emitted an invalid
+      `INSTEAD OF` clause — it now documents the substitution with a
+      `-- UNIQUE:` comment and falls back to BEFORE. Still open: translating the
+      `inserted`/`deleted` pseudo-tables (T-SQL) to `NEW`/`OLD` (`:NEW`/`:OLD`)
+      and the statement- vs row-level semantic gap (see new item below).
+- [ ] **Trigger pseudo-table / granularity semantics (P2)** — T-SQL triggers
+      are statement-level with `inserted`/`deleted` pseudo-tables; Oracle/MySQL/
+      PostgreSQL row-level triggers use `:NEW`/`:OLD` / `NEW`/`OLD`. The
+      transpiler currently keeps `inserted`/`deleted` verbatim (invalid on the
+      other engines) and forces FOR EACH ROW. Map the pseudo-tables and either
+      preserve statement-level semantics (e.g. PostgreSQL transition tables
+      `REFERENCING NEW TABLE`) or document the change. This is a real semantic
+      gap, not just syntax.
 
 
 
