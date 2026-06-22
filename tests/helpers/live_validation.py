@@ -167,8 +167,10 @@ class MySQLValidator(SyntaxValidator):
                     if m:
                         created_tables.append(m.group(1))
                 cur.execute(stmt)
-                with contextlib.suppress(Exception):
-                    cur.fetchall()
+                # Fully drain every result set the statement produced, otherwise
+                # the next execute() raises "Commands out of sync" (2014). A
+                # statement can yield multiple result sets; consume them all.
+                self._drain(cur)
             return ValidationResult(ok=True)
         except Exception as e:  # noqa: BLE001
             return ValidationResult(ok=False, error=f"{e}\n--- sql ---\n{sql}")
@@ -181,6 +183,29 @@ class MySQLValidator(SyntaxValidator):
                     with contextlib.suppress(Exception):
                         cur.execute(f"DROP TABLE IF EXISTS {tbl}")
             cur.close()
+
+    @staticmethod
+    def _drain(cur: object) -> None:
+        """Consume every pending result set on a cursor.
+
+        Both pymysql and mysql-connector raise "Commands out of sync" (2014) on
+        the next execute() if a statement's result sets are left unread. Read
+        the current set, then walk ``nextset()`` until there are none left.
+        """
+        with contextlib.suppress(Exception):
+            cur.fetchall()  # type: ignore[attr-defined]
+        nextset = getattr(cur, "nextset", None)
+        if nextset is None:
+            return
+        while True:
+            try:
+                has_more = nextset()
+            except Exception:
+                break
+            if not has_more:
+                break
+            with contextlib.suppress(Exception):
+                cur.fetchall()  # type: ignore[attr-defined]
 
     def close(self) -> None:
         self._conn.close()
