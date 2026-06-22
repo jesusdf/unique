@@ -364,6 +364,15 @@ open.
       pinned sources + patch queue) recorded in `docs/sqlglot-dependency.md`;
       recommendation is pin-only for now, fork only if issues accumulate that
       can't be solved transformer-side.
+- [x] **Relicense to MIT (P2)** — switched from AGPL-3.0 to the MIT License:
+      replaced the `LICENSE` file, swapped the AGPL header in all Python files
+      for a short SPDX MIT header, and updated `pyproject.toml` and the README.
+      Source-file copyright lines aligned to the `LICENSE` holder.
+- [x] **CI: build the Docker image only on tags, gated on live checks (P2)** —
+      the `docker` job now runs only on a `v*` tag push (not on every push to
+      `main`) and `needs` the full gate including `metadata-live` and
+      `syntax-live`, so a published image is always verified end-to-end against
+      the real engines. `latest` now tracks the latest tagged release.
 
 ## 9. Known limitations to keep documented (not bugs)
 
