@@ -1421,7 +1421,7 @@ BEGIN
     /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
     DECLARE v_func1 DATETIME DEFAULT func1();
     DECLARE v_col_174 INT DEFAULT COALESCE((SELECT 1 FROM tbl_9 WHERE NOT col_96 IS NULL AND col_30 = 1), 0);
-    IF UPDATE ( col_32 ) THEN
+    IF NOT (NEW.col_32 <=> OLD.col_32) THEN
             /* xxxxxx xxxx xxxxxx */
             INSERT INTO tbl_8 (col_15, col_18, col_31, col_39, col_94) SELECT col_175.col_15, col_175.col_18, col_175.col_31, (4 - ((2 * v_col_174 * (1 - col_175.col_42)) + col_175.col_32)) AS col_39, v_func1 AS col_94 FROM inserted AS col_175 INNER JOIN deleted AS col_176 ON col_176.col_31 = col_175.col_31 WHERE col_175.col_32 <> col_176.col_32;
             /* xx xx xxxx xx xxxxxx xxxxxx xx xxxxx col_162 xx xxxxxx xxx x */
