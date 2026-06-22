@@ -214,6 +214,26 @@ marked [x] are fixed and tested; [ ] are open.
       Oracle/PostgreSQL get the same CREATE TEMPORARY TABLE rewrite, but their
       column-type mapping and the in-PL/SQL DDL restriction still need
       refinement (MySQL — the live-tested target — is correct).
+- [x] **TRY/CATCH → invalid EXCEPTION block on MySQL (P1)** — a T-SQL
+      TRY/CATCH was emitted with Oracle/PostgreSQL `EXCEPTION WHEN OTHERS THEN`
+      syntax for every non-T-SQL target, which MySQL rejects. MySQL now gets a
+      `DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN <catch> END;` declared before
+      the protected statements; Oracle/PostgreSQL keep the EXCEPTION block.
+      Tested (TestTryCatchToMySQL). Not in the current fixture, but common in
+      real error-handling code.
+- [ ] **`BEGIN TRAN`/`BEGIN TRANSACTION` not bounded (P2)** — a transaction
+      statement followed by DML on the same/next line mis-parses
+      (`TRAN AS \`UPDATE\``), and `@@ERROR` in the following `IF` is commented
+      out, breaking the condition. Needs the transaction keywords recognized as
+      their own statements. Not in the current fixture.
+- [ ] **`SET IDENTITY_INSERT t ON/OFF` (P3)** — mistranslated to
+      `IDENTITY_INSERT AS t`. No portable equivalent; emit a documented comment
+      (MySQL/Oracle/PG manage identity insertion differently). Not in fixture.
+- [ ] **`THROW`/`RAISERROR` argument shape (P2)** — mapped to MySQL `SIGNAL
+      SQLSTATE '45000' SET MESSAGE_TEXT = ...` but the message/number/severity
+      arguments are passed through raw (e.g. `MESSAGE_TEXT = 50000, 'msg', 1`),
+      which is not valid. Needs proper extraction of the message text (and a
+      format-substitution strategy for RAISERROR's printf-style args).
 - [ ] **`@@ERROR` in a condition → broken IF (P2)** — `IF @@ERROR <> 0` becomes
       `IF /* @@ERROR */ <> 0 THEN` (commented-out operand leaves an invalid
       condition). Map `@@ERROR`/`@@ROWCOUNT`-style globals used in expressions,
