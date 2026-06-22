@@ -745,3 +745,28 @@ class TestParameterlessRoutineParens:
         # The parameter list is still emitted normally (no doubled parens).
         assert "f()" not in out
         assert "v_a INT" in out
+
+
+class TestInlineTableValuedFunction:
+    """T-SQL inline table-valued functions (RETURNS TABLE) have no faithful
+    uniform equivalent; they must be documented and commented out, never
+    emitted as invalid executable SQL."""
+
+    SRC = (
+        "CREATE FUNCTION dbo.f(@s NVARCHAR(MAX)) "
+        "RETURNS TABLE AS "
+        "RETURN (SELECT value AS item FROM STRING_SPLIT(@s, ','))"
+    )
+
+    def test_mysql_documents_and_comments_out(self) -> None:
+        out = _transpile(self.SRC, "tsql", "mysql")
+        assert "-- UNIQUE: inline table-valued function" in out
+        # No executable RETURNS TABLE leaks (only commented lines).
+        code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
+        assert all("RETURNS TABLE" not in ln for ln in code)
+
+    def test_postgresql_documents_and_comments_out(self) -> None:
+        out = _transpile(self.SRC, "tsql", "postgresql")
+        assert "-- UNIQUE: inline table-valued function" in out
+        code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
+        assert all("RETURNS TABLE" not in ln for ln in code)

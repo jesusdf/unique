@@ -357,6 +357,43 @@ class ProceduralEmitter:
         return result.replace("CREATE PROCEDURE", "ALTER PROCEDURE", 1)
 
     def _emit_function(self, node: CreateFunctionStatement) -> str:
+        # T-SQL inline/multi-statement table-valued functions (RETURNS TABLE)
+        # have no faithful, uniform equivalent: MySQL has no table-returning
+        # functions at all; PostgreSQL needs RETURNS TABLE(col type ...) with
+        # RETURN QUERY; Oracle needs a pipelined function over a declared
+        # collection type. Rather than emit invalid SQL, document it for the
+        # other engines and comment out the (non-portable) translation so the
+        # surrounding script stays valid.
+        if (
+            node.return_type is not None
+            and node.return_type.name.upper() == "TABLE"
+            and self._dialect != "tsql"
+        ):
+            return self._emit_table_valued_function(node)
+        return self._emit_function_impl(node)
+
+    def _emit_table_valued_function(self, node: CreateFunctionStatement) -> str:
+        engine = {
+            "mysql": "MySQL has no table-returning functions; use a view or a "
+            "procedure with a result set",
+            "postgresql": "PostgreSQL needs RETURNS TABLE(col type ...) with "
+            "RETURN QUERY; review the column list",
+            "oracle": "Oracle needs a pipelined function over a declared "
+            "collection type; review manually",
+        }.get(self._dialect, "no direct equivalent on this engine")
+        note = (
+            f"-- UNIQUE: inline table-valued function ('RETURNS TABLE') has no "
+            f"direct equivalent. {engine}.\n"
+            f"-- The non-portable translation is commented out below for "
+            f"review:\n"
+        )
+        body = self._emit_function_impl(node)
+        commented = "\n".join(
+            f"-- {line}" if line.strip() else "--" for line in body.split("\n")
+        )
+        return note + commented
+
+    def _emit_function_impl(self, node: CreateFunctionStatement) -> str:
         name = self._qualified_name(node.schema, node.name)
         ret_type = (
             self._emit_data_type(node.return_type) if node.return_type else "void"
