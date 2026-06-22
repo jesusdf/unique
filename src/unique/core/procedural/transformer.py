@@ -706,14 +706,54 @@ class ProceduralTransformer:
             schema=self._target_schema(node.schema),
         )
 
-    def _transform_declare(self, node: DeclareStatement) -> DeclareStatement:
+    def _transform_declare(self, node: DeclareStatement) -> ASTNode:
         new_name = self._transform_var_name(node.name)
+        # T-SQL table variables (DECLARE @t TABLE (cols)) have no equivalent
+        # declaration in MySQL/Oracle/PostgreSQL. Rewrite to a CREATE TEMPORARY
+        # TABLE in the executable body (returning a non-Declare node moves it
+        # out of the declaration section). References to @t as a table resolve
+        # to the same transformed name.
+        if node.data_type.name.upper().startswith("TABLE") and self._target != "tsql":
+            self._var_map[node.name] = new_name
+            return self._table_variable_to_temp_table(new_name, node.data_type.name)
         new_type = self._transform_data_type(node.data_type)
         new_default = self._transform_node(node.default) if node.default else None
         self._var_map[node.name] = new_name
         if self._is_string_type(node.data_type):
             self._string_vars.add(new_name)
         return DeclareStatement(name=new_name, data_type=new_type, default=new_default)
+
+    def _table_variable_to_temp_table(self, name: str, type_text: str) -> ASTNode:
+        """Build a CREATE TEMPORARY TABLE from a captured ``TABLE (cols)`` type.
+
+        The column list is mapped through sqlglot so column data types are
+        translated to the target dialect (e.g. UNIQUEIDENTIFIER → the target's
+        type). A documenting comment records the original table-variable.
+        """
+        # type_text looks like: "TABLE ( col TYPE, ... )"
+        cols = type_text[len("TABLE") :].strip()
+        ddl = f"CREATE TABLE {name} {cols}"
+        translated = ddl
+        try:
+            import sqlglot
+
+            out = sqlglot.transpile(ddl, read="tsql", write=self._target)
+            if out and out[0].strip():
+                translated = out[0]
+        except Exception:
+            translated = ddl
+        # Make it a TEMPORARY table and keep the (already valid) column list.
+        translated = re.sub(
+            r"(?i)^\s*CREATE\s+TABLE\b",
+            "CREATE TEMPORARY TABLE",
+            translated,
+            count=1,
+        )
+        sql = (
+            f"{translated.rstrip(';')};  "
+            f"/* UNIQUE: was T-SQL table variable {name} */"
+        )
+        return RawSQL(sql=sql, reason="table variable -> temporary table")
 
     def _transform_set_variable(self, node: SetVariableStatement) -> ASTNode:
         new_name = self._transform_var_name(node.name)

@@ -200,6 +200,27 @@ marked [x] are fixed and tested; [ ] are open.
       statement, and documents the dropped clause with a `-- UNIQUE:` comment
       (Oracle/PostgreSQL keep native RETURNING). Fixed and tested
       (TestOutputClauseToMySQL); the 4 fixture occurrences are now valid.
+- [x] **Table variables `DECLARE @t TABLE (...)` on MySQL (P1)** — were emitted
+      verbatim as `DECLARE v_t TABLE (...)`, which MySQL rejects, and a table
+      variable immediately followed by `INSERT INTO @t ... ; SELECT ... FROM @t`
+      mis-parsed and dropped the following statement. Fixed: the transformer
+      rewrites a table-variable DECLARE to a `CREATE TEMPORARY TABLE` in the
+      executable body (column types mapped through sqlglot, so UNIQUEIDENTIFIER
+      etc. are translated) with a documenting comment; and the embedded-DML
+      splitter now ends an `INSERT ... VALUES (...)` before a following SELECT
+      (a genuine INSERT ... SELECT still stays together). The 4 fixture
+      occurrences are now valid and their UNIQUEIDENTIFIER columns mapped.
+      Tested (TestTableVariableToMySQL, TestInsertValuesSelectBoundary).
+      Oracle/PostgreSQL get the same CREATE TEMPORARY TABLE rewrite, but their
+      column-type mapping and the in-PL/SQL DDL restriction still need
+      refinement (MySQL — the live-tested target — is correct).
+- [ ] **`@@ERROR` in a condition → broken IF (P2)** — `IF @@ERROR <> 0` becomes
+      `IF /* @@ERROR */ <> 0 THEN` (commented-out operand leaves an invalid
+      condition). Map `@@ERROR`/`@@ROWCOUNT`-style globals used in expressions,
+      or rewrite the construct; at minimum avoid emitting a syntactically
+      broken condition. (`@@ROWCOUNT` alone already maps to `ROW_COUNT()`.)
+- [ ] **`WAITFOR DELAY '…'` on MySQL (P3)** — mistranslated to `WAITFOR AS
+      DELAY`. MySQL equivalent is `DO SLEEP(seconds)`. Not in the fixture.
 - [ ] **`TOP n PERCENT` → invalid `LIMIT n PERCENT` on MySQL (P2)** — MySQL
       LIMIT takes no PERCENT. Needs a rewrite (e.g. `LIMIT CEIL(n/100 * (SELECT
       COUNT(*) ...))`) or a documented comment. Not in the current fixture.
