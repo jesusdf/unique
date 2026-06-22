@@ -241,19 +241,20 @@ END;
 $$;
 
 -- IF OBJECT_ID(N'[dbo].[func5]', 'IF') IS NOT NULL DROP FUNCTION [dbo].[func5]
-CREATE OR REPLACE FUNCTION func5
-(
-    v_s TEXT,
-    v_delim VARCHAR(5)
-)
-RETURNS TABLE
-LANGUAGE plpgsql
-AS $$
-BEGIN
-    RETURN ( SELECT LTRIM ( RTRIM ( value ) ) AS item FROM STRING_SPLIT ( v_s , v_delim ) );
-END;
-$$;
-
+-- UNIQUE: inline table-valued function ('RETURNS TABLE') has no direct equivalent. PostgreSQL needs RETURNS TABLE(col type ...) with RETURN QUERY; review the column list.
+-- The non-portable translation is commented out below for review:
+-- CREATE OR REPLACE FUNCTION func5
+-- (
+--     v_s TEXT,
+--     v_delim VARCHAR(5)
+-- )
+-- RETURNS TABLE
+-- LANGUAGE plpgsql
+-- AS $$
+-- BEGIN
+--     RETURN ( SELECT LTRIM ( RTRIM ( value ) ) AS item FROM STRING_SPLIT ( v_s , v_delim ) );
+-- END;
+-- $$;
 -- -- xxxxxx xxxxxx
 
 

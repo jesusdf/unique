@@ -212,6 +212,14 @@ open.
       two engines when there are no parameters (Oracle allows omitting them).
       Found by the live MySQL procedures-fixture check; tested
       (TestParameterlessRoutineParens).
+- [x] **Inline table-valued function (`RETURNS TABLE`) on MySQL/PG/Oracle
+      (P1)** — a T-SQL inline TVF was emitted with an invalid `RETURNS TABLE`
+      (MySQL has no table-returning functions; PostgreSQL needs `RETURNS
+      TABLE(col type)` + `RETURN QUERY`; Oracle needs a pipelined function).
+      It is now documented with a per-engine `-- UNIQUE:` note and the
+      non-portable translation is commented out, so the script stays valid.
+      Found by the live MySQL procedures-fixture check; tested
+      (TestInlineTableValuedFunction).
 
 - [x] **PostgreSQL fixture — `dbo` schema everywhere** — `dbo.` survived in
       CREATE TABLE, routine names, embedded DML and scalar expressions

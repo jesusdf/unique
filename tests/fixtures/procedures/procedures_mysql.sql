@@ -239,19 +239,18 @@ END$$
 DELIMITER ;
 
 -- IF OBJECT_ID(N'[dbo].[func5]', 'IF') IS NOT NULL DROP FUNCTION [dbo].[func5]
-DELIMITER $$
-CREATE FUNCTION func5
-(
-    v_s LONGTEXT,
-    v_delim VARCHAR(5)
-)
-RETURNS TABLE
-DETERMINISTIC
-BEGIN
-    RETURN (SELECT LTRIM(RTRIM(value)) AS item FROM JSON_TABLE(CONCAT('["', REPLACE(v_s, v_delim, '","'), '"]'), '$[*]' COLUMNS(value VARCHAR(4000) PATH '$')) AS _ss);
-END$$
-DELIMITER ;
-
+-- UNIQUE: inline table-valued function ('RETURNS TABLE') has no direct equivalent. MySQL has no table-returning functions; use a view or a procedure with a result set.
+-- The non-portable translation is commented out below for review:
+-- CREATE FUNCTION func5
+-- (
+--     v_s LONGTEXT,
+--     v_delim VARCHAR(5)
+-- )
+-- RETURNS TABLE
+-- DETERMINISTIC
+-- BEGIN
+--     RETURN (SELECT LTRIM(RTRIM(value)) AS item FROM JSON_TABLE(CONCAT('["', REPLACE(v_s, v_delim, '","'), '"]'), '$[*]' COLUMNS(value VARCHAR(4000) PATH '$')) AS _ss);
+-- END
 -- -- xxxxxx xxxxxx
 
 
