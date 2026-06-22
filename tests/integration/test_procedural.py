@@ -901,3 +901,37 @@ class TestRaiserrorToMySQLSignal:
         src = "CREATE PROCEDURE dbo.p AS BEGIN " "RAISERROR ('boom', 16, 1) END"
         out = _transpile(src, "tsql", "oracle")
         assert "RAISE_APPLICATION_ERROR(-20001, 'boom')" in out
+
+
+class TestTableValuedFunctionInFrom:
+    """A table-valued function used in FROM is invalid on MySQL (no TVFs);
+    such a statement is commented out with a note. JSON_TABLE and the
+    STRING_SPLIT->JSON_TABLE rewrite are valid table sources and kept."""
+
+    def test_user_tvf_in_from_commented(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p @s NVARCHAR(200) AS BEGIN "
+            "SELECT item FROM dbo.func5(@s, ',') END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        assert "table-valued function in FROM" in out
+        code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
+        assert all("FUNC5" not in ln.upper() for ln in code)
+
+    def test_string_split_in_from_kept(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p @s NVARCHAR(MAX) AS BEGIN "
+            "SELECT value FROM STRING_SPLIT(@s, ',') END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        # STRING_SPLIT is rewritten to JSON_TABLE, a valid FROM source.
+        assert "table-valued function in FROM" not in out
+        assert "JSON_TABLE" in out
+
+    def test_normal_select_not_flagged(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "SELECT a FROM t WHERE id IN (SELECT x FROM u) END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        assert "table-valued function in FROM" not in out

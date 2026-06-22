@@ -87,3 +87,71 @@ python web/build.py
 
 The output is fully self-contained (no external resource loads), which is what
 lets it run behind an offline reverse proxy.
+
+## Database connection (`--db-url` / `db_url`)
+
+Some T-SQL/PL-SQL constructs can only be translated faithfully if the actual
+column types are known — the main example being Oracle `%TYPE`/`%ROWTYPE`
+references (e.g. `v_name H_TABLE.NAME%TYPE`). Without a connection, Unique
+cannot resolve what `H_TABLE.NAME` actually is, so it emits a permissive
+carrier type and records the original in a `/* UNIQUE: … */` comment plus a
+warning. Provide a connection string and Unique resolves the real type
+instead.
+
+The connection is **optional** and used only for metadata lookups; ordinary
+transpilation needs no database.
+
+- **CLI:** `--db-url "<url>"`
+- **Python:** `transpile(sql, source, target, db_url="<url>")`, or
+  `TranspileOptions(db_url="<url>")`
+
+### Connection URL format
+
+`scheme://user:password@host:port/database_or_service`
+
+The scheme selects the engine to connect to (independent of the `--from`/`--to`
+dialects):
+
+| Engine | Scheme(s) | Driver required | Example |
+| --- | --- | --- | --- |
+| SQL Server | `mssql`, `sqlserver` | `pyodbc` | `mssql://user:pass@localhost:1433/mydb` |
+| Oracle | `oracle` | `oracledb` | `oracle://user:pass@localhost:1521/FREEPDB1` |
+| PostgreSQL | `postgresql`, `postgres` | `psycopg` | `postgresql://user:pass@localhost:5432/mydb` |
+| MySQL | `mysql` | `mysql-connector-python` | `mysql://user:pass@localhost:3306/mydb` |
+
+The relevant driver must be installed (they are not hard dependencies of
+Unique); if it is missing, Unique raises an `ImportError` naming the driver.
+
+### Examples
+
+```bash
+# Oracle: resolve %TYPE/%ROWTYPE against a live schema while converting to MySQL
+unique transpile -s oracle -t mysql -f pkg.sql --db-url \
+  "oracle://app:secret@db.internal:1521/FREEPDB1"
+
+# SQL Server source, connecting to SQL Server for metadata
+unique transpile -s tsql -t postgresql -f proc.sql --db-url \
+  "mssql://sa:Str0ng!Pass@localhost:1433/sales"
+
+# PostgreSQL
+unique transpile -s postgresql -t mysql -f funcs.sql --db-url \
+  "postgresql://app:secret@localhost:5432/analytics"
+
+# MySQL
+unique transpile -s mysql -t tsql -f routines.sql --db-url \
+  "mysql://app:secret@localhost:3306/shop"
+```
+
+```python
+from unique.core import transpile
+
+result = transpile(
+    open("pkg.sql").read(),
+    source="oracle",
+    target="mysql",
+    db_url="oracle://app:secret@db.internal:1521/FREEPDB1",
+)
+print(result.sql)
+for w in result.warnings:
+    print("warning:", w)
+```

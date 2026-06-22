@@ -1051,28 +1051,75 @@ class ProceduralTransformer:
         sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
         return sql
 
-    def _mysql_clean_dml(self, sql: str) -> str:
-        """Strip T-SQL leftovers sqlglot keeps but MySQL rejects.
+    def _from_clause_has_function(self, sql: str) -> bool:
+        """Whether a SELECT references a function call in FROM/JOIN position
+        that MySQL cannot use as a table source.
 
-        - A ``RETURNING`` clause (produced from a T-SQL ``OUTPUT`` clause):
-          MySQL has no RETURNING/OUTPUT, so emit the base statement and a
-          documented comment instead of invalid SQL. Any ``inserted.``/
-          ``deleted.`` pseudo-table qualifier is noted too.
-        - The ``dbo`` schema/catalog qualifier on tables and table-valued
-          function calls (MySQL has no ``dbo`` schema; it would name a
-          non-existent database).
-        - Table hints such as ``WITH (NOLOCK)``, which have no MySQL form.
-
-        Only re-parses through sqlglot when there is actually something to
-        clean, so fragments that are already valid MySQL are returned
-        untouched (a round-trip would reflow them, e.g. requoting INTERVAL
-        literals).
+        MySQL has no general table-valued functions, so a call like
+        ``FROM func5(@s, ',')`` is a syntax error. A few functions *are* valid
+        table sources (``JSON_TABLE``) or are rewritten by a later pass into a
+        valid one (``STRING_SPLIT`` -> ``JSON_TABLE``); those are allowed.
         """
         import sqlglot
         from sqlglot import exp
 
-        # RETURNING (from OUTPUT) is invalid in MySQL — handle textually so the
-        # base statement stays intact and the dropped clause is documented.
+        if "(" not in sql or not re.search(r"(?i)\bFROM\b", sql):
+            return False
+        # Functions MySQL accepts (or that we rewrite) in FROM position.
+        allowed = {"JSON_TABLE", "STRING_SPLIT"}
+
+        def func_name(node: object) -> str:
+            if isinstance(node, exp.Anonymous):
+                return str(node.this).upper()
+            return type(node).__name__.upper()
+
+        try:
+            trees = sqlglot.parse(sql, read="mysql")
+        except Exception:
+            return False
+        for tree in trees:
+            if tree is None:
+                continue
+            for node in tree.find_all(exp.From, exp.Join):
+                this = node.this
+                if this is None:
+                    continue
+                target = this.this if isinstance(this, exp.Alias) else this
+                candidate = None
+                if isinstance(target, (exp.Anonymous, exp.Func)):
+                    candidate = target
+                elif isinstance(target, exp.Table):
+                    inner = target.this
+                    if isinstance(inner, (exp.Anonymous, exp.Func)):
+                        candidate = inner
+                if candidate is not None and func_name(candidate) not in allowed:
+                    return True
+        return False
+
+    def _mysql_clean_dml(self, sql: str) -> str:
+        """Strip T-SQL leftovers sqlglot keeps but MySQL rejects.
+
+        - A table-valued function in FROM/JOIN (no MySQL equivalent): the whole
+          statement is commented out with a note.
+        - A ``RETURNING`` clause (from a T-SQL ``OUTPUT``): MySQL has no
+          RETURNING, so emit the base statement plus a documented comment.
+        - The ``dbo`` schema qualifier and ``WITH (NOLOCK)`` hints.
+
+        Only re-parses through sqlglot when there is something to clean.
+        """
+        import sqlglot
+        from sqlglot import exp
+
+        if self._from_clause_has_function(sql):
+            commented = "\n".join(
+                f"-- {line}" if line.strip() else "--" for line in sql.split("\n")
+            )
+            return (
+                "-- UNIQUE: statement uses a table-valued function in FROM, "
+                "which MySQL does not support; commented out for review:\n"
+                f"{commented}"
+            )
+
         if re.search(r"(?i)\bRETURNING\b", sql):
             m = re.search(r"(?i)\bRETURNING\b\s+(.*?)\s*;?\s*$", sql)
             cols = m.group(1).strip().rstrip(";").strip() if m else ""
