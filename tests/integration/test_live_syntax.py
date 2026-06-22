@@ -45,10 +45,10 @@ _URLS = {
     "mysql": os.environ.get("UNIQUE_TEST_MYSQL_URL"),
 }
 
-# Targets validated live. PostgreSQL remains disabled until its procedural
-# fixture is generated; MySQL is enabled now that procedures_mysql.sql exists
-# and the validator understands DELIMITER blocks.
-_LIVE_TARGETS = ["tsql", "oracle", "mysql"]
+# Targets validated live, now that procedural fixtures exist for all four
+# engines and the validators understand each engine's routine syntax
+# (MySQL DELIMITER blocks, PostgreSQL dollar-quoted bodies).
+_LIVE_TARGETS = ["tsql", "oracle", "mysql", "postgresql"]
 
 # (source_dialect, source_sql) snippets that exercise constructs known to be
 # easy to mistranslate. Each is transpiled to every configured target and the

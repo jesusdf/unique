@@ -15,6 +15,13 @@ cover.
   → `SHA2`, `STRING_SPLIT` → `JSON_TABLE`), and any type without a faithful
   equivalent keeps its original in a `/* UNIQUE: … */` comment. Regenerate via
   the transpiler rather than editing by hand.
+- `procedures_postgresql.sql` — PostgreSQL: generated from the T-SQL fixture by
+  the transpiler (T-SQL → PostgreSQL). Routines are PL/pgSQL with dollar-quoted
+  (`AS $$ … $$`) bodies; the `dbo` schema is stripped, `OUTPUT` maps to
+  `RETURNING`, table variables become `CREATE TEMPORARY TABLE`, and
+  `NEWSEQUENTIALID()`/`NEWID()` map to `gen_random_uuid()`. Types with no
+  faithful equivalent (e.g. `SQL_VARIANT`) carry a `TEXT /* UNIQUE: … */`
+  marker. Regenerate via the transpiler rather than editing by hand.
 
 ## Provenance and anonymization
 

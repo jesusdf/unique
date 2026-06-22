@@ -38,6 +38,7 @@ _FIXTURES = [
     ("procedures_sqlserver.sql", "tsql"),
     ("procedures_oracle.sql", "oracle"),
     ("procedures_mysql.sql", "mysql"),
+    ("procedures_postgresql.sql", "postgresql"),
 ]
 
 # Domain terms that must never appear (anonymization guard).
@@ -70,8 +71,11 @@ def test_fixture_is_anonymized(filename: str, dialect: str) -> None:
 def test_fixture_splits_into_batches(filename: str, dialect: str) -> None:
     text = (FIXTURE_DIR / filename).read_text(encoding="utf-8")
     batches = BatchSplitter.split(text, dialect)
-    # Both fixtures contain dozens of statements/batches.
-    assert len(batches) > 20
+    # Every fixture contains many statements/batches. PostgreSQL groups each
+    # dollar-quoted routine body into a single batch, so it yields fewer than
+    # the others; a lower floor still confirms the splitter is working.
+    floor = 15 if dialect == "postgresql" else 20
+    assert len(batches) > floor
 
 
 @pytest.mark.parametrize("filename,dialect", _FIXTURES)
@@ -124,3 +128,26 @@ def test_mysql_fixture_wraps_routines_in_delimiter() -> None:
     assert text.count("DELIMITER $$") == text.count("DELIMITER ;")
     assert text.count("DELIMITER $$") == text.count("END$$")
     assert text.count("DELIMITER $$") > 20
+
+
+# Constructs that must never appear as executable PostgreSQL in the committed
+# fixture (they may still appear inside a /* UNIQUE: ... */ comment).
+_PG_NON_PORTABLE = re.compile(
+    r"(?i)\b(NVARCHAR|UNIQUEIDENTIFIER|SQL_VARIANT|NEWSEQUENTIALID|HASHBYTES)\b"
+    r"|\bdbo\s*\.|RETURNING\s+(?:inserted|deleted)\b|DECLARE\s+@"
+)
+
+
+def test_pg_fixture_has_no_executable_non_portable_constructs() -> None:
+    text = (FIXTURE_DIR / "procedures_postgresql.sql").read_text(encoding="utf-8")
+    code = _strip_comments(text)
+    leak = _PG_NON_PORTABLE.search(code)
+    assert leak is None, f"non-portable construct in PG fixture: {leak!r}"
+
+
+def test_pg_fixture_uses_plpgsql() -> None:
+    text = (FIXTURE_DIR / "procedures_postgresql.sql").read_text(encoding="utf-8")
+    # Routines are PL/pgSQL with dollar-quoted bodies.
+    assert "LANGUAGE plpgsql" in text
+    assert text.count("AS $$") == text.count("$$;")
+    assert text.count("LANGUAGE plpgsql") > 20

@@ -129,9 +129,7 @@ jobs:
     # 22.04 ships the Microsoft ODBC Driver 18 (msodbcsql18) preinstalled,
     # avoiding a flaky apt install of the Microsoft repo on newer runners.
     runs-on: ubuntu-22.04
-    # SQL Server, Oracle and MySQL are validated here. PostgreSQL is disabled
-    # until its procedural fixture is generated (see
-    # tests/integration/test_live_syntax.py::_LIVE_TARGETS).
+    # SQL Server, Oracle, MySQL and PostgreSQL are all validated here.
     services:
       mssql:
         image: mcr.microsoft.com/mssql/server:2022-latest
@@ -152,6 +150,19 @@ jobs:
           - 3307:3306
         options: >-
           --health-cmd "mysqladmin ping -h localhost -uunique -punique"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: unique
+          POSTGRES_PASSWORD: unique
+          POSTGRES_DB: unique
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U unique"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -268,11 +279,12 @@ jobs:
 
       - name: Run live syntax validation
         env:
-          # SQL Server, Oracle and MySQL here (PostgreSQL disabled until its
-          # procedural fixture exists). oracle-free's default PDB is FREEPDB1.
+          # All four engines are validated here. oracle-free's default PDB is
+          # FREEPDB1.
           UNIQUE_TEST_MSSQL_URL: mssql://sa:Unique_Strong!Pass1@localhost:1433/master
           UNIQUE_TEST_ORACLE_URL: oracle://unique:UniqueStrongPass1@localhost:1521/FREEPDB1
           UNIQUE_TEST_MYSQL_URL: mysql://unique:unique@localhost:3307/unique
+          UNIQUE_TEST_PG_URL: postgresql://unique:unique@localhost:5433/unique
         run: |
           # Run, capture output, and surface failures as ::error:: annotations
           # (readable via the annotations API; raw logs sit on a blocked blob).
