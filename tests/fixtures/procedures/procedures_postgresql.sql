@@ -173,7 +173,7 @@ AS $$
 BEGIN
     /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
     IF v_val IS NOT NULL THEN
-            v_where := COALESCE ( v_where + N' AND ' , N'' ) + v_col + N' ' + v_op + N' ' + v_param;
+            v_where := COALESCE(v_where || ' AND ', '') || v_col || ' ' || v_op || ' ' || v_param;
     END IF;
 END;
 $$;
@@ -192,7 +192,7 @@ BEGIN
     /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
     v_page := NULL;
     IF v_filter IS NOT NULL THEN
-            v_query := v_query + N' ' + v_filter;
+            v_query := v_query || ' ' || v_filter;
     END IF;
 END;
 $$;
@@ -208,7 +208,7 @@ RETURNS TIMESTAMP
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    RETURN (NOW() + INTERVAL '- 3 DAY');
+    RETURN (CURRENT_TIMESTAMP || INTERVAL '3 DAY');
 END;
 $$;
 
@@ -236,7 +236,7 @@ RETURNS TEXT
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    RETURN SHA256(v_payload + v_secret);
+    RETURN SHA256(v_payload || v_secret);
 END;
 $$;
 
@@ -461,22 +461,22 @@ BEGIN
     v_col_12 := ( SELECT CASE WHEN v_col_42 = 1 THEN 2 -- xxxxxx WHEN v_col_42 = 0 AND v_col_13 IS NOT NULL THEN 1 -- col_151 ELSE 0 END ) -- xxxxxx -- xx xx xx xxxxxx;
     IF v_col_12 = 2 THEN
             DELETE FROM tbl_6 WHERE col_6 = v_col_6 AND col_42 = 1 AND col_62 = v_col_62;
-            SELECT col_76 . col_46, LOWER ( COALESCE ( col_76 . col_77 , v_col_62 + '@' + v_col_61 ) ) INTO v_col_72, v_col_73 FROM tbl_13 col_76 WHERE col_76 . col_62 = v_col_62;
+            SELECT col_76.col_46, LOWER(COALESCE(col_76.col_77, v_col_62 || '@' || v_col_61)) INTO v_col_72, v_col_73 FROM tbl_13 col_76 WHERE col_76 . col_62 = v_col_62;
     END IF;
     -- xx xx xx xxxxxx
     IF v_col_12 = 1 THEN
             DELETE FROM tbl_6 WHERE col_6 = v_col_6 AND col_42 = 0 AND col_13 = v_col_13;
-            SELECT col_45.col_46, LOWER(COALESCE(col_45.col_73, CAST(col_45.col_13 AS VARCHAR(50)) + '@' + v_col_61)) INTO v_col_72, v_col_73 FROM tbl_2 col_3 INNER JOIN tbl_1 col_11 ON col_11 . col_1 = col_3 . col_1 INNER JOIN tbl_10 col_45 ON col_45 . col_13 = col_11 . col_13 WHERE col_3 . col_6 = v_col_6;
+            SELECT col_45.col_46, LOWER(COALESCE(col_45.col_73, CAST(col_45.col_13 AS VARCHAR(50)) || '@' || v_col_61)) INTO v_col_72, v_col_73 FROM tbl_2 col_3 INNER JOIN tbl_1 col_11 ON col_11 . col_1 = col_3 . col_1 INNER JOIN tbl_10 col_45 ON col_45 . col_13 = col_11 . col_13 WHERE col_3 . col_6 = v_col_6;
     END IF;
     -- xx xx xx xxxxxx
     IF v_col_12 = 0 THEN
             DELETE FROM tbl_6 WHERE col_6 = v_col_6 AND col_42 = 0 AND col_62 = v_col_62 AND col_13 IS NULL;
-            SELECT v_col_62, LOWER ( v_col_62 + '@' + v_col_61 ) INTO v_col_72, v_col_73 ;
+            SELECT v_col_62, LOWER(v_col_62 || '@' || v_col_61) INTO v_col_72, v_col_73 ;
     END IF;
     SELECT col_11 . col_50 INTO v_col_68 FROM tbl_2 col_3 INNER JOIN tbl_1 col_11 ON col_11 . col_1 = col_3 . col_1 WHERE col_3 . col_6 = v_col_6;
     -- xxxxxx xx xxxxxx xxx xxxxxx
-    v_col_69 := (v_col_68 + INTERVAL 'v_col_65 MINUTE');
-    v_col_70 := (v_col_68 + INTERVAL 'v_col_67 MINUTE');
+    v_col_69 := (v_col_68 || INTERVAL '65 MINUTE');
+    v_col_70 := (v_col_68 || INTERVAL '67 MINUTE');
     INSERT INTO tbl_6 (col_12, col_62, col_13, col_19, col_20, col_15, col_18, col_6, col_72, col_73, col_63, col_42, col_74, col_32, col_9, col_10) VALUES (v_col_12, v_col_62, v_col_13, v_col_15, v_func1, v_col_15, v_func1, v_col_6, v_col_72, v_col_73, v_col_63, v_col_42, '-', v_col_32, v_col_9, v_col_10);
     -- xx xxxxxx xxx xxxxxx xxxx xx xxxxxx xxxxx xxx xxxxxx xx xx xxxxx
     v_col_17 := LASTVAL();
@@ -547,16 +547,16 @@ BEGIN
     v_col_88 := REPLACE ( COALESCE ( v_col_62 , '' ) , '"' , '' );
     v_col_81 := COALESCE ( func3 ( 'xxxxxxxxxxx' , '/' ) , '/' );
     IF ( SUBSTRING ( v_col_81 , LENGTH ( v_col_81 ) , 1 ) <> '/' ) THEN
-            v_col_81 := v_col_81 + '/';
+            v_col_81 := v_col_81 || '/';
     END IF;
     v_col_80 := REPLACE ( v_col_80 , '~/' , v_col_81 );
     v_col_63 := REPLACE ( COALESCE ( v_col_63 , REPLACE ( v_col_80 , '{x}' , v_col_75 ) ) , '"' , '' );
     v_col_72 := REPLACE ( COALESCE ( v_col_72 , v_col_75 ) , '"' , '' );
-    v_col_73 := REPLACE ( COALESCE ( v_col_73 , v_col_75 + '@' + v_col_61 ) , '"' , '' );
+    v_col_73 := REPLACE(COALESCE(v_col_73, v_col_75 || '@' || v_col_61), '"', '');
     v_col_82 := TO_TIMESTAMP('xxxx-xx-xx xx:xx:xx', 'YYYY-MM-DD HH24:MI:SS');
     v_col_85 := DATEDIFF ( second , v_col_82 , v_func1 );
     v_col_86 := DATEDIFF ( second , v_col_82 , COALESCE ( v_col_69 , v_func1 ) );
-    v_col_87 := DATEDIFF ( second , v_col_82 , COALESCE ( v_col_70 , v_func1 + 1 ) );
+    v_col_87 := CAST(AGE(CAST(second AS TIMESTAMP), CAST(v_col_82 AS TIMESTAMP)) AS BIGINT);
     v_col_74 := '{
       "xxxxxxx": {
         "xxxx": {
@@ -829,7 +829,7 @@ BEGIN
             EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxx' , '=' , 'v_xxxxx' , v_col_98;
             EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxx' , '=' , 'v_xxxxxxxxx' , v_col_99;
             IF v_col_110 IS NOT NULL THEN
-                        v_col_109 := v_col_109 + ' WHERE ' + v_col_110;
+                        v_col_109 := v_col_109 || ' WHERE ' || v_col_110;
             END IF;
             EXECUTE proc_14 v_col_109 output , v_col_107 , v_col_108 output;
             EXECUTE sp_executesql v_col_109 , N'
@@ -963,7 +963,7 @@ BEGIN
             EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxxx' , v_col_39;
             EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxx' , '=' , 'v_xxxxx' , v_col_94;
             IF v_col_110 IS NOT NULL THEN
-                        v_col_109 := v_col_109 + ' WHERE ' + v_col_110;
+                        v_col_109 := v_col_109 || ' WHERE ' || v_col_110;
             END IF;
             EXECUTE proc_14 v_col_109 output , v_col_107 , v_col_108 output;
             EXECUTE sp_executesql v_col_109 , N'
@@ -1155,7 +1155,7 @@ BEGIN
             EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxx' , '=' , 'v_xxxxxxxxxx' , v_col_15;
             EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxx' , '=' , 'v_xxxxxxxx' , v_col_18;
             IF v_col_110 IS NOT NULL THEN
-                        v_col_109 := v_col_109 + ' WHERE ' + v_col_110;
+                        v_col_109 := v_col_109 || ' WHERE ' || v_col_110;
             END IF;
             EXECUTE proc_14 v_col_109 output , v_col_107 , v_col_108 output;
             EXECUTE sp_executesql v_col_109 , N'
@@ -1321,7 +1321,7 @@ BEGIN
             EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxx' , '=' , 'v_xxxxxxxxxx' , v_col_15;
             EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxx' , '=' , 'v_xxxxxxxx' , v_col_18;
             IF v_col_110 IS NOT NULL THEN
-                        v_col_109 := v_col_109 + ' WHERE ' + v_col_110;
+                        v_col_109 := v_col_109 || ' WHERE ' || v_col_110;
             END IF;
             EXECUTE proc_14 v_col_109 output , v_col_107 , v_col_108 output;
             EXECUTE sp_executesql v_col_109 , N'
@@ -1433,8 +1433,8 @@ DECLARE
     v_col_67 INTEGER := COALESCE ( ( SELECT TOP ( 1 ) col_67 FROM tbl_9 WHERE col_30 = 1 ORDER BY col_66 ASC ) , 1440 );
 BEGIN
     /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
-    UPDATE tbl_6 SET col_32 = 0 WHERE col_32 = 1 AND col_31 IN (SELECT col_171.col_31 FROM tbl_6 AS col_171 INNER JOIN tbl_2 AS col_56 ON col_56.col_6 = col_171.col_6 INNER JOIN tbl_1 AS col_11 ON col_11.col_1 = col_56.col_1 WHERE col_32 = 1 AND v_func1 > col_11.col_50 + INTERVAL '1 MINUTE' * v_col_67) /* xxxxxx xxx xxxxxx xx xx xxxxx xx xxxxxx */ /* xxxx xxx xxxx xxx xx x xxxxxx xxx xx xx xxxx xxxx xx xxxxxx */;
-    UPDATE tbl_6 SET col_32 = 0 WHERE col_32 = 1 AND v_func1 > COALESCE(col_33, v_func1) + INTERVAL '5 MINUTE';
+    UPDATE tbl_6 SET col_32 = 0 WHERE col_32 = 1 AND col_31 IN (SELECT col_171.col_31 FROM tbl_6 AS col_171 INNER JOIN tbl_2 AS col_56 ON col_56.col_6 = col_171.col_6 INNER JOIN tbl_1 AS col_11 ON col_11.col_1 = col_56.col_1 WHERE col_32 = 1 AND v_func1 > col_11.col_50 || INTERVAL '1 MINUTE' * v_col_67) /* xxxxxx xxx xxxxxx xx xx xxxxx xx xxxxxx */ /* xxxx xxx xxxx xxx xx x xxxxxx xxx xx xx xxxx xxxx xx xxxxxx */;
+    UPDATE tbl_6 SET col_32 = 0 WHERE col_32 = 1 AND v_func1 > COALESCE(col_33, v_func1) || INTERVAL '5 MINUTE';
     SELECT DISTINCT col_56.col_1 FROM tbl_2 AS col_56 WHERE EXISTS(SELECT NULL FROM tbl_6 AS col_37 WHERE col_37.col_6 = col_56.col_6 AND col_37.col_32 = 1 AND (v_col_13 IS NULL OR col_37.col_13 = v_col_13)) AND (v_col_1 IS NULL OR col_56.col_1 = v_col_1);
 END;
 $$;

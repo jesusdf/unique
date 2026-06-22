@@ -229,10 +229,13 @@ open.
       <expr>` swallowed a following DML statement. Both now stop at a statement
       boundary (own-line comment, new statement keyword, or a DML verb on a new
       line). This was a silent semantic-loss bug.
-- [ ] **T-SQL string `+` concatenation on PostgreSQL (P2)** — rewritten to
+- [x] **T-SQL string `+` concatenation on PostgreSQL (P2)** — was rewritten to
       `CONCAT` for MySQL but left as `+` for PostgreSQL, where string
-      concatenation is `||` (and `+` on text is an error). Add a PG rewrite
-      mirroring `_mysql_string_concat`.
+      concatenation is `||` (and `+` on text errors). The concat rewrite is now
+      shared (`_rewrite_string_concat`): MySQL emits `CONCAT(...)`, PostgreSQL
+      chains operands with the `||` (DPipe) operator. Numeric `+` is left
+      untouched; detection uses string literals and known string variables.
+      Tested (TestPostgreSQLStringConcat).
 
 - [x] **Empty block from a dropped SET option** — `SET NOCOUNT ON` (and the
       other dialect-specific SET options) were silently removed, which could

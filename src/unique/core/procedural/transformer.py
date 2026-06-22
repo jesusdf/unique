@@ -1042,6 +1042,7 @@ class ProceduralTransformer:
             sql = self._mysql_fix_cast_max(sql)
             sql = self._mysql_string_split(sql)
         if self._target == "postgresql":
+            sql = self._pg_string_concat(sql)
             sql = self._pg_clean_dml(sql)
         return EmbeddedDML(sql=sql, dialect=self._target)
 
@@ -1286,6 +1287,8 @@ class ProceduralTransformer:
             sql = self._mysql_clean_dml(sql)
             sql = self._mysql_fix_cast_max(sql)
             sql = self._mysql_string_split(sql)
+        if self._target == "postgresql":
+            sql = self._pg_string_concat(sql)
         if self._target in ("postgresql", "oracle"):
             # Functions/procedures are created without the T-SQL "dbo" schema
             # in these targets (dbo doesn't exist), so drop a dbo. qualifier on
@@ -1393,8 +1396,24 @@ class ProceduralTransformer:
     # signal), rewriting the whole chain to ``CONCAT(...)`` and dropping any
     # ``N`` prefixes. Pure arithmetic (``a + b``, ``x + 1``) is left intact.
     def _mysql_string_concat(self, sql: str) -> str:
+        return self._rewrite_string_concat(sql, "mysql")
+
+    def _pg_string_concat(self, sql: str) -> str:
+        return self._rewrite_string_concat(sql, "postgresql")
+
+    def _rewrite_string_concat(self, sql: str, target: str) -> str:
+        """Rewrite T-SQL string `+` concatenation for the target dialect.
+
+        T-SQL overloads `+` for both arithmetic and string concatenation. When
+        an operand is (or is known to be) a string, the chain is concatenation
+        and must use the target's construct: `CONCAT(...)` for MySQL, the `||`
+        operator for PostgreSQL (where `+` on text is an error). Numeric `+`
+        chains are left untouched.
+        """
         import sqlglot
         from sqlglot import exp
+
+        read = "mysql" if target == "mysql" else "postgres"
 
         def is_string_atom(n: exp.Expression) -> bool:
             return isinstance(n, exp.National) or (
@@ -1436,13 +1455,22 @@ class ProceduralTransformer:
                     return True
             return False
 
+        def build_concat(parts: list[exp.Expression]) -> exp.Expression:
+            if target == "mysql":
+                return cast(exp.Expression, exp.func("CONCAT", *parts))
+            # PostgreSQL: chain with the || (DPipe) operator.
+            node = parts[0]
+            for nxt in parts[1:]:
+                node = exp.DPipe(this=node, expression=nxt)
+            return node
+
         def convert(node: exp.Expression) -> exp.Expression:
             if isinstance(node, exp.Add):
                 parts: list[exp.Expression] = []
                 flatten_add(node, parts)
                 if has_string_operand(parts):
                     new_parts = [convert(denationalize(p.copy())) for p in parts]
-                    return cast(exp.Expression, exp.func("CONCAT", *new_parts))
+                    return build_concat(new_parts)
             for key, value in list(node.args.items()):
                 if isinstance(value, exp.Expression):
                     node.set(key, convert(value))
@@ -1473,20 +1501,20 @@ class ProceduralTransformer:
         wrapped = False
         tree = None
         try:
-            parsed = sqlglot.parse_one(sql, read="mysql")
+            parsed = sqlglot.parse_one(sql, read=read)
             if not isinstance(parsed, exp.Command):
                 tree = parsed
         except Exception:
             tree = None
         if tree is None:
             try:
-                tree = sqlglot.parse_one(f"SELECT {sql}", read="mysql")
+                tree = sqlglot.parse_one(f"SELECT {sql}", read=read)
                 wrapped = True
             except Exception:
                 return sql
         try:
             tree = convert(cast(exp.Expression, tree))
-            rendered = tree.sql(dialect="mysql")
+            rendered = tree.sql(dialect=read)
         except Exception:
             return sql
         if wrapped and rendered.upper().startswith("SELECT "):

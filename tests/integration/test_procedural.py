@@ -694,3 +694,34 @@ class TestAssignmentSelectBoundary:
         out = _transpile(src, "tsql", "postgresql")
         assert "v_y := 1;" in out
         assert "INSERT INTO u (a) VALUES (1)" in out
+
+
+class TestPostgreSQLStringConcat:
+    """T-SQL string `+` becomes the `||` operator on PostgreSQL (not `+`,
+    which errors on text), while numeric `+` is left alone."""
+
+    def test_string_concat_uses_pipes(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p @code NVARCHAR(50) AS BEGIN "
+            "DECLARE @msg NVARCHAR(200) "
+            "SET @msg = 'Error: ' + @code + '!' "
+            "END"
+        )
+        out = _transpile(src, "tsql", "postgresql")
+        assert "'Error: ' || v_code || '!'" in out
+        assert "+ v_code" not in out
+
+    def test_numeric_addition_unchanged(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN " "DECLARE @n INT SET @n = 1 + 2 + 3 END"
+        out = _transpile(src, "tsql", "postgresql")
+        assert "1 + 2 + 3" in out
+        assert "||" not in out
+
+    def test_concat_with_string_var_no_literal(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p @a NVARCHAR(10), @b NVARCHAR(10) AS BEGIN "
+            "DECLARE @c NVARCHAR(20) SET @c = @a + @b END"
+        )
+        out = _transpile(src, "tsql", "postgresql")
+        # Two known string vars concatenated -> ||, not numeric +.
+        assert "v_a || v_b" in out
