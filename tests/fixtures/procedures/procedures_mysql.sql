@@ -736,11 +736,11 @@ BEGIN
     UPDATE tbl_7 SET col_15 = v_col_15, col_18 = v_col_18, col_98 = v_col_98, col_99 = v_col_99 WHERE (col_97 = v_col_100) AND (col_31 = v_col_101) AND (col_23 = v_col_102) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL)) AND ((col_98 = v_col_105) OR (col_98 IS NULL AND v_col_105 IS NULL)) AND ((col_99 = v_col_106) OR (col_99 IS NULL AND v_col_106 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = ( 16947 , 16 , 1 );
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Application error', MYSQL_ERRNO = 16947;  -- UNIQUE: original RAISERROR/THROW severity/state args dropped: 16 , 1
     END IF;
     -- xxxxxx xx xxxxxx xxxx xx xxxxx xxxxxx
     IF v_col_97 IS NULL OR v_col_31 IS NULL OR v_col_23 IS NULL THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = ( 40302 , 16 , 1 );
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Application error', MYSQL_ERRNO = 40302;  -- UNIQUE: original RAISERROR/THROW severity/state args dropped: 16 , 1
     END IF;
 END$$
 DELIMITER ;
@@ -852,7 +852,7 @@ BEGIN
     DELETE FROM tbl_7 WHERE (col_97 = v_col_100) AND (col_31 = v_col_101) AND (col_23 = v_col_102) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL)) AND ((col_98 = v_col_105) OR (col_98 IS NULL AND v_col_105 IS NULL)) AND ((col_99 = v_col_106) OR (col_99 IS NULL AND v_col_106 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = ( 16947 , 16 , 1 );
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Application error', MYSQL_ERRNO = 16947;  -- UNIQUE: original RAISERROR/THROW severity/state args dropped: 16 , 1
     END IF;
 END$$
 DELIMITER ;
@@ -888,11 +888,11 @@ BEGIN
     UPDATE tbl_8 SET col_15 = v_col_15, col_18 = v_col_18, col_31 = v_col_31, col_39 = v_col_39, col_94 = v_col_94 WHERE (col_93 = v_col_112) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL)) AND ((col_31 = v_col_101) OR (col_31 IS NULL AND v_col_101 IS NULL)) AND ((col_39 = v_col_113) OR (col_39 IS NULL AND v_col_113 IS NULL)) AND ((col_94 = v_col_114) OR (col_94 IS NULL AND v_col_114 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = ( 16947 , 16 , 1 );
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Application error', MYSQL_ERRNO = 16947;  -- UNIQUE: original RAISERROR/THROW severity/state args dropped: 16 , 1
     END IF;
     -- xxxxxx xx xxxxxx xxxx xx xxxxx xxxxxx
     IF v_col_93 IS NULL THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = ( 40302 , 16 , 1 );
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Application error', MYSQL_ERRNO = 40302;  -- UNIQUE: original RAISERROR/THROW severity/state args dropped: 16 , 1
     END IF;
 END$$
 DELIMITER ;
@@ -974,7 +974,7 @@ BEGIN
     DELETE FROM tbl_8 WHERE (col_93 = v_col_112) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL)) AND ((col_31 = v_col_101) OR (col_31 IS NULL AND v_col_101 IS NULL)) AND ((col_39 = v_col_113) OR (col_39 IS NULL AND v_col_113 IS NULL)) AND ((col_94 = v_col_114) OR (col_94 IS NULL AND v_col_114 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = ( 16947 , 16 , 1 );
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Application error', MYSQL_ERRNO = 16947;  -- UNIQUE: original RAISERROR/THROW severity/state args dropped: 16 , 1
     END IF;
 END$$
 DELIMITER ;
@@ -1040,11 +1040,11 @@ BEGIN
     UPDATE tbl_6 SET col_6 = v_col_6, col_32 = v_col_32, col_33 = v_col_33, col_12 = v_col_12, col_42 = v_col_42, col_62 = v_col_62, col_13 = v_col_13, col_9 = v_col_9, col_10 = v_col_10, col_74 = v_col_74, col_38 = v_col_38, col_95 = v_col_95, col_96 = v_col_96, col_72 = v_col_72, col_73 = v_col_73, col_63 = v_col_63, col_19 = v_col_19, col_20 = v_col_20, col_15 = v_col_15, col_18 = v_col_18 WHERE (col_31 = v_col_101) AND ((col_6 = v_col_115) OR (col_6 IS NULL AND v_col_115 IS NULL)) AND ((col_32 = v_col_116) OR (col_32 IS NULL AND v_col_116 IS NULL)) AND ((col_33 = v_col_117) OR (col_33 IS NULL AND v_col_117 IS NULL)) AND ((col_12 = v_col_118) OR (col_12 IS NULL AND v_col_118 IS NULL)) AND ((col_42 = v_col_119) OR (col_42 IS NULL AND v_col_119 IS NULL)) AND ((col_62 = v_col_120) OR (col_62 IS NULL AND v_col_120 IS NULL)) AND ((col_13 = v_col_121) OR (col_13 IS NULL AND v_col_121 IS NULL)) AND ((col_9 = v_col_122) OR (col_9 IS NULL AND v_col_122 IS NULL)) AND ((col_10 = v_col_123) OR (col_10 IS NULL AND v_col_123 IS NULL)) AND ((col_74 = v_col_124) OR (col_74 IS NULL AND v_col_124 IS NULL)) AND ((col_38 = v_col_125) OR (col_38 IS NULL AND v_col_125 IS NULL)) AND ((col_95 = v_col_126) OR (col_95 IS NULL AND v_col_126 IS NULL)) AND ((col_96 = v_col_127) OR (col_96 IS NULL AND v_col_127 IS NULL)) AND ((col_72 = v_col_128) OR (col_72 IS NULL AND v_col_128 IS NULL)) AND ((col_73 = v_col_129) OR (col_73 IS NULL AND v_col_129 IS NULL)) AND ((col_63 = v_col_130) OR (col_63 IS NULL AND v_col_130 IS NULL)) AND ((col_19 = v_col_131) OR (col_19 IS NULL AND v_col_131 IS NULL)) AND ((col_20 = v_col_132) OR (col_20 IS NULL AND v_col_132 IS NULL)) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = ( 16947 , 16 , 1 );
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Application error', MYSQL_ERRNO = 16947;  -- UNIQUE: original RAISERROR/THROW severity/state args dropped: 16 , 1
     END IF;
     -- xxxxxx xx xxxxxx xxxx xx xxxxx xxxxxx
     IF v_col_31 IS NULL THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = ( 40302 , 16 , 1 );
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Application error', MYSQL_ERRNO = 40302;  -- UNIQUE: original RAISERROR/THROW severity/state args dropped: 16 , 1
     END IF;
 END$$
 DELIMITER ;
@@ -1171,7 +1171,7 @@ BEGIN
     DELETE FROM tbl_6 WHERE (col_31 = v_col_101) AND ((col_6 = v_col_115) OR (col_6 IS NULL AND v_col_115 IS NULL)) AND ((col_32 = v_col_116) OR (col_32 IS NULL AND v_col_116 IS NULL)) AND ((col_33 = v_col_117) OR (col_33 IS NULL AND v_col_117 IS NULL)) AND ((col_12 = v_col_118) OR (col_12 IS NULL AND v_col_118 IS NULL)) AND ((col_42 = v_col_119) OR (col_42 IS NULL AND v_col_119 IS NULL)) AND ((col_62 = v_col_120) OR (col_62 IS NULL AND v_col_120 IS NULL)) AND ((col_13 = v_col_121) OR (col_13 IS NULL AND v_col_121 IS NULL)) AND ((col_9 = v_col_122) OR (col_9 IS NULL AND v_col_122 IS NULL)) AND ((col_10 = v_col_123) OR (col_10 IS NULL AND v_col_123 IS NULL)) AND ((col_74 = v_col_124) OR (col_74 IS NULL AND v_col_124 IS NULL)) AND ((col_38 = v_col_125) OR (col_38 IS NULL AND v_col_125 IS NULL)) AND ((col_95 = v_col_126) OR (col_95 IS NULL AND v_col_126 IS NULL)) AND ((col_96 = v_col_127) OR (col_96 IS NULL AND v_col_127 IS NULL)) AND ((col_72 = v_col_128) OR (col_72 IS NULL AND v_col_128 IS NULL)) AND ((col_73 = v_col_129) OR (col_73 IS NULL AND v_col_129 IS NULL)) AND ((col_63 = v_col_130) OR (col_63 IS NULL AND v_col_130 IS NULL)) AND ((col_19 = v_col_131) OR (col_19 IS NULL AND v_col_131 IS NULL)) AND ((col_20 = v_col_132) OR (col_20 IS NULL AND v_col_132 IS NULL)) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = ( 16947 , 16 , 1 );
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Application error', MYSQL_ERRNO = 16947;  -- UNIQUE: original RAISERROR/THROW severity/state args dropped: 16 , 1
     END IF;
 END$$
 DELIMITER ;
@@ -1209,11 +1209,11 @@ BEGIN
     UPDATE tbl_3 SET col_7 = v_col_7, col_91 = v_col_91, col_19 = v_col_19, col_20 = v_col_20, col_15 = v_col_15, col_18 = v_col_18 WHERE (col_6 = v_col_115) AND ((col_7 = v_col_133) OR (col_7 IS NULL AND v_col_133 IS NULL)) AND ((col_91 = v_col_134) OR (col_91 IS NULL AND v_col_134 IS NULL)) AND ((col_19 = v_col_131) OR (col_19 IS NULL AND v_col_131 IS NULL)) AND ((col_20 = v_col_132) OR (col_20 IS NULL AND v_col_132 IS NULL)) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = ( 16947 , 16 , 1 );
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Application error', MYSQL_ERRNO = 16947;  -- UNIQUE: original RAISERROR/THROW severity/state args dropped: 16 , 1
     END IF;
     -- xxxxxx xx xxxxxx xxxx xx xxxxx xxxxxx
     IF v_col_6 IS NULL THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = ( 40302 , 16 , 1 );
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Application error', MYSQL_ERRNO = 40302;  -- UNIQUE: original RAISERROR/THROW severity/state args dropped: 16 , 1
     END IF;
 END$$
 DELIMITER ;
@@ -1298,7 +1298,7 @@ BEGIN
     DELETE FROM tbl_3 WHERE (col_6 = v_col_115) AND ((col_7 = v_col_133) OR (col_7 IS NULL AND v_col_133 IS NULL)) AND ((col_91 = v_col_134) OR (col_91 IS NULL AND v_col_134 IS NULL)) AND ((col_19 = v_col_131) OR (col_19 IS NULL AND v_col_131 IS NULL)) AND ((col_20 = v_col_132) OR (col_20 IS NULL AND v_col_132 IS NULL)) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
-            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = ( 16947 , 16 , 1 );
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Application error', MYSQL_ERRNO = 16947;  -- UNIQUE: original RAISERROR/THROW severity/state args dropped: 16 , 1
     END IF;
 END$$
 DELIMITER ;

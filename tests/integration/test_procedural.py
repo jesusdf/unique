@@ -875,3 +875,29 @@ class TestInlineCommentInCapturedExpression:
         # No '--' line comment survives inside the SET expression line.
         set_line = next(ln for ln in out.splitlines() if ln.strip().startswith("SET"))
         assert "--" not in set_line
+
+
+class TestRaiserrorToMySQLSignal:
+    """RAISERROR/THROW must become a valid MySQL SIGNAL: MESSAGE_TEXT is a
+    string and a numeric message id goes to MYSQL_ERRNO, not a raw arg tuple."""
+
+    def test_numeric_message_id(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN RAISERROR (16947, 16, 1) END"
+        out = _transpile(src, "tsql", "mysql")
+        assert "MESSAGE_TEXT = 'Application error'" in out
+        assert "MYSQL_ERRNO = 16947" in out
+        # The invalid tuple form must not appear.
+        assert "MESSAGE_TEXT = (" not in out
+
+    def test_string_message(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN " "RAISERROR ('Custom message', 16, 1) END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        assert "MESSAGE_TEXT = 'Custom message'" in out
+        assert "MESSAGE_TEXT = (" not in out
+
+    def test_oracle_uses_first_arg_only(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN " "RAISERROR ('boom', 16, 1) END"
+        out = _transpile(src, "tsql", "oracle")
+        assert "RAISE_APPLICATION_ERROR(-20001, 'boom')" in out
