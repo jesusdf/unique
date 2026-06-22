@@ -2,9 +2,11 @@
 name: unique-development-workflow
 description: >
   Development workflow skill for the Unique SQL Transpiler. Use this skill
-  when implementing new features, adding dialect support, writing tests, or
-  debugging transpilation issues. Covers TDD methodology, how to add new
-  AST nodes, how to extend a dialect, and testing patterns.
+  when implementing new features, adding dialect support, writing tests,
+  debugging transpilation issues, updating the backlog (docs/TODO.md), or
+  committing and pushing work. Covers TDD methodology, how to add new AST
+  nodes, how to extend a dialect, testing patterns, the pre-commit
+  verification gate, and the TODO + commit/push discipline.
 ---
 
 # Unique — Development Workflow
@@ -121,6 +123,71 @@ ruff check src/ tests/
 # Type checking
 mypy src/
 ```
+
+## Backlog discipline (docs/TODO.md)
+
+`docs/TODO.md` is the single source of truth for the backlog. Keep it current
+and treat it as part of the deliverable, not an afterthought.
+
+- **One TODO file only.** The authoritative backlog is `docs/TODO.md`. Do **not**
+  create a second TODO (e.g. a scratch `TODO.md` at the repo root); search for
+  an existing one before adding tasks and consolidate into `docs/TODO.md`.
+- **Record new work as you find it.** Whenever you discover a bug, gap, or
+  follow-up while doing something else, add an item immediately (with a short
+  rationale and a priority like P1/P2/P3) rather than relying on memory. Bugs
+  found via the live-validation layer are especially worth capturing.
+- **Mark items done, don't delete the context.** When you finish an item, flip
+  `- [ ]` to `- [x]` and append a one-line note on how it was solved (and the
+  test that covers it). This keeps the history useful for the next session.
+- **Don't duplicate entries.** If an item already exists, update it in place
+  instead of adding a near-identical one. Re-check after edits that a heading
+  or sibling bullet wasn't accidentally consumed by a replace.
+- **Commit & push on every TODO change.** Any time you touch `docs/TODO.md`,
+  commit it (together with the related code/test changes when there are any)
+  and push to `main`. The backlog on `main` should always reflect reality.
+
+## Pre-commit verification gate
+
+Before **every** commit, run the full gate and only commit if it is green:
+
+```bash
+black src/ tests/        # format
+isort src/ tests/        # import order
+ruff check src/ tests/   # lint  -> must print "All checks passed!"
+mypy src/unique/ --ignore-missing-imports   # types -> "no issues found"
+pytest tests/ -q         # full suite -> "<n> passed"
+```
+
+If a transformer/emitter/parser change affects the procedural fixtures,
+**regenerate them** before committing and review the diff (they are generated,
+never hand-edited):
+
+```bash
+# Example: regenerate the MySQL fixture from the T-SQL source
+python -m unique.cli.main transpile \
+  tests/fixtures/procedures/procedures_sqlserver.sql --from tsql --to mysql
+# (prepend the standard "DO NOT EDIT BY HAND" header; see SOURCES.md)
+```
+
+## Commit & push workflow
+
+- **Commit frequently**, one logical change per commit, with a descriptive
+  message (what changed and *why*, plus the test added). Conventional-commit
+  prefixes are used (`feat`, `fix`, `docs`, `build`, `test`, ...).
+- **Push to `main`** after the gate passes. The push uses a PAT that lives only
+  in `/mnt/project/repository.txt` and must never be printed, committed, or
+  documented:
+
+  ```bash
+  PAT="$(grep -oE 'github_pat_[A-Za-z0-9_]+' /mnt/project/repository.txt | head -1)"
+  git push "https://x-access-token:${PAT}@github.com/jesusdf/unique.git" main \
+    2>&1 | sed -E "s/${PAT}/[hidden]/g"
+  unset PAT
+  git remote set-url origin https://github.com/jesusdf/unique.git
+  ```
+
+- After pushing, it's good practice to **check CI** (see the CI section below)
+  and fix any failure before moving on.
 
 ## Common Patterns
 
