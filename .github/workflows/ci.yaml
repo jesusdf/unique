@@ -283,7 +283,7 @@ jobs:
           # FREEPDB1.
           UNIQUE_TEST_MSSQL_URL: mssql://sa:Unique_Strong!Pass1@localhost:1433/master
           UNIQUE_TEST_ORACLE_URL: oracle://unique:UniqueStrongPass1@localhost:1521/FREEPDB1
-          UNIQUE_TEST_MYSQL_URL: mysql://unique:unique@localhost:3307/unique
+          UNIQUE_TEST_MYSQL_URL: mysql://root:UniqueStrongPass1@localhost:3307/unique
           UNIQUE_TEST_PG_URL: postgresql://unique:unique@localhost:5433/unique
         run: |
           # Run, capture output, and surface failures as ::error:: annotations
