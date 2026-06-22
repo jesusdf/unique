@@ -754,6 +754,27 @@ class ProceduralEmitter:
                     lines.append(f"{self._indent()}{line}" if line.strip() else "")
             self._indent_level -= 1
             lines.append("END CATCH")
+        elif self._dialect == "mysql":
+            # MySQL has no EXCEPTION block; the catch logic goes into a
+            # DECLARE ... HANDLER declared at the top of the block, before the
+            # protected (try) statements.
+            lines = ["BEGIN"]
+            self._indent_level += 1
+            lines.append(f"{self._indent()}DECLARE EXIT HANDLER FOR SQLEXCEPTION")
+            lines.append(f"{self._indent()}BEGIN")
+            self._indent_level += 1
+            for stmt in node.catch_body:
+                text = self._emit_node(stmt)
+                for line in text.split("\n"):
+                    lines.append(f"{self._indent()}{line}" if line.strip() else "")
+            self._indent_level -= 1
+            lines.append(f"{self._indent()}END;")
+            for stmt in node.try_body:
+                text = self._emit_node(stmt)
+                for line in text.split("\n"):
+                    lines.append(f"{self._indent()}{line}" if line.strip() else "")
+            self._indent_level -= 1
+            lines.append("END;")
         else:
             lines = ["BEGIN"]
             self._indent_level += 1

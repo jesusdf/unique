@@ -562,3 +562,37 @@ class TestInsertValuesSelectBoundary:
         out = _transpile(src, "tsql", "mysql")
         # A genuine INSERT ... SELECT must remain a single statement.
         assert "INSERT INTO t (a, b) SELECT x, y FROM src" in out.replace("  ", " ")
+
+
+class TestTryCatchToMySQL:
+    """T-SQL TRY/CATCH must become a MySQL DECLARE ... HANDLER, not an
+    Oracle/PG EXCEPTION block (which MySQL rejects)."""
+
+    SRC = (
+        "CREATE PROCEDURE dbo.p AS BEGIN "
+        "BEGIN TRY "
+        "INSERT INTO t (a) VALUES (1) "
+        "END TRY "
+        "BEGIN CATCH "
+        "SELECT 1 "
+        "END CATCH "
+        "END"
+    )
+
+    def test_mysql_uses_handler_not_exception(self) -> None:
+        out = _transpile(self.SRC, "tsql", "mysql")
+        assert "DECLARE EXIT HANDLER FOR SQLEXCEPTION" in out
+        # The Oracle/PG EXCEPTION syntax must not leak into MySQL.
+        assert "WHEN OTHERS THEN" not in out
+
+    def test_handler_precedes_try_body(self) -> None:
+        out = _transpile(self.SRC, "tsql", "mysql")
+        handler_pos = out.find("DECLARE EXIT HANDLER")
+        insert_pos = out.find("INSERT INTO t")
+        # The handler must be declared before the protected statements.
+        assert 0 <= handler_pos < insert_pos
+
+    def test_oracle_still_uses_exception(self) -> None:
+        out = _transpile(self.SRC, "tsql", "oracle")
+        assert "EXCEPTION" in out
+        assert "WHEN OTHERS THEN" in out
