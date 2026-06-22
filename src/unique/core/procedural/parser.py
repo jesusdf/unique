@@ -1762,10 +1762,45 @@ class ProceduralParser:
     # ---------------------------------------------------------------
 
     def _parse_return(self) -> ASTNode:
-        """Parse RETURN [expression]."""
+        """Parse RETURN [expression].
+
+        A bare ``RETURN`` (T-SQL early-exit from a procedure) takes no value.
+        Only treat what follows as the return expression when it is on the same
+        source line and does not start a new statement; otherwise the following
+        statement (e.g. a `SELECT` on the next line) must not be absorbed.
+        """
         self._expect_keyword("RETURN")
-        if self._current().type == TokenType.SEMICOLON or self._at_end():
+        cur = self._current()
+        if cur.type == TokenType.SEMICOLON or self._at_end():
             self._match_type(TokenType.SEMICOLON)
+            return ReturnStatement()
+        # A statement keyword after RETURN means this RETURN has no value
+        # (early exit). A scalar return value never begins with one of these
+        # (a subquery value is parenthesized: RETURN (SELECT ...)), so this
+        # holds even on the same source line.
+        _stmt_starts = {
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "MERGE",
+            "IF",
+            "WHILE",
+            "SET",
+            "DECLARE",
+            "BEGIN",
+            "EXEC",
+            "EXECUTE",
+            "PRINT",
+            "RAISERROR",
+            "THROW",
+            "RETURN",
+            "FETCH",
+            "OPEN",
+            "CLOSE",
+            "END",
+        }
+        if cur.type == TokenType.KEYWORD and cur.upper_value in _stmt_starts:
             return ReturnStatement()
         value = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)

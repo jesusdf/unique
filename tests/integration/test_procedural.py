@@ -770,3 +770,48 @@ class TestInlineTableValuedFunction:
         assert "-- UNIQUE: inline table-valued function" in out
         code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
         assert all("RETURNS TABLE" not in ln for ln in code)
+
+
+class TestBareReturnInProcedure:
+    """A bare RETURN (early exit) in a T-SQL procedure is illegal in a MySQL
+    procedure body ('RETURN is only allowed in a FUNCTION'); it becomes LEAVE
+    of a labeled block. Oracle/PostgreSQL keep a plain RETURN."""
+
+    SRC = (
+        "CREATE PROCEDURE dbo.p @x INT AS BEGIN " "IF @x < 0 RETURN " "SELECT @x " "END"
+    )
+
+    def test_mysql_uses_leave_with_label(self) -> None:
+        out = _transpile(self.SRC, "tsql", "mysql")
+        assert "proc_exit: BEGIN" in out
+        assert "LEAVE proc_exit;" in out
+        # No bare RETURN; leaks (it is invalid in a MySQL procedure).
+        code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
+        assert all(ln.strip() != "RETURN;" for ln in code)
+
+    def test_following_statement_not_absorbed(self) -> None:
+        # The SELECT after the bare RETURN must survive as its own statement.
+        out = _transpile(self.SRC, "tsql", "mysql")
+        assert "SELECT v_x;" in out
+
+    def test_oracle_keeps_plain_return(self) -> None:
+        out = _transpile(self.SRC, "tsql", "oracle")
+        assert "RETURN;" in out
+        assert "LEAVE" not in out
+
+    def test_no_label_when_no_bare_return(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN SELECT 1 END"
+        out = _transpile(src, "tsql", "mysql")
+        assert "proc_exit" not in out
+
+    def test_function_return_value_preserved(self) -> None:
+        # A parenthesized subquery return value is kept (not treated as a bare
+        # RETURN swallowing a SELECT).
+        src = (
+            "CREATE FUNCTION dbo.f() RETURNS INT AS BEGIN "
+            "RETURN (SELECT COUNT(*) FROM t) END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        normalized = " ".join(out.split())
+        assert "RETURN ( SELECT COUNT ( * ) FROM t )" in normalized
+        assert "LEAVE" not in out

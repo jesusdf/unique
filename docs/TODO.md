@@ -220,6 +220,16 @@ open.
       non-portable translation is commented out, so the script stays valid.
       Found by the live MySQL procedures-fixture check; tested
       (TestInlineTableValuedFunction).
+- [x] **Bare `RETURN` (early exit) in a MySQL procedure (P1)** — `RETURN is
+      only allowed in a FUNCTION` (error 1313): a T-SQL procedure early-exit
+      `RETURN` was emitted verbatim, which MySQL rejects in a procedure body.
+      The MySQL emitter now wraps the procedure body in a `proc_exit:` labeled
+      block and translates a valueless `RETURN` to `LEAVE proc_exit;` (only
+      when such a RETURN is present); Oracle/PostgreSQL keep a plain `RETURN;`.
+      A related parser bug was fixed too: a valueless `RETURN` followed by a
+      statement keyword no longer swallows the following statement (a
+      parenthesized `RETURN (SELECT …)` value is still kept). Found by the live
+      MySQL procedures-fixture check; tested (TestBareReturnInProcedure).
 
 - [x] **PostgreSQL fixture — `dbo` schema everywhere** — `dbo.` survived in
       CREATE TABLE, routine names, embedded DML and scalar expressions
