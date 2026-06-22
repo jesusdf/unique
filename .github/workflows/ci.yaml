@@ -310,8 +310,12 @@ jobs:
   docker:
     name: Docker Build & Push
     runs-on: ubuntu-latest
-    needs: [lint, typecheck, test]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    # Only build/publish the image on a version tag, and only after the full
+    # quality gate — including the live syntax validation against the real
+    # engines — has passed. This guarantees a published image was verified
+    # end to end.
+    needs: [lint, typecheck, test, metadata-live, syntax-live]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -332,9 +336,7 @@ jobs:
         id: vars
         run: |
           echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -346,7 +348,7 @@ jobs:
           tags: |
             docker.io/${{ github.repository_owner }}/unique:latest
             docker.io/${{ github.repository_owner }}/unique:${{ steps.vars.outputs.sha_short }}
-            ${{ steps.vars.outputs.version && format('docker.io/{0}/unique:{1}', github.repository_owner, steps.vars.outputs.version) || '' }}
+            docker.io/${{ github.repository_owner }}/unique:${{ steps.vars.outputs.version }}
 
       - name: Update Docker Hub Description
         uses: peter-evans/dockerhub-description@v4

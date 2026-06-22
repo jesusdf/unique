@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir build \
 # --- Stage 2: runtime ---
 FROM python:3.12-slim
 
-LABEL maintainer="Unique Contributors" \
+LABEL maintainer="Jesús Diéguez Fernández" \
       description="SQL transpiler: translate scripts between SQL Server, Oracle, PostgreSQL, and MySQL"
 
 WORKDIR /app
