@@ -205,6 +205,14 @@ Surfaced while enabling live validation of `procedures_mysql.sql` and
 `procedures_postgresql.sql`. Items marked [x] are fixed and tested; [ ] are
 open.
 
+- [x] **Parameterless routine missing `()` on MySQL/PostgreSQL (P1)** — a
+      `CREATE FUNCTION f RETURNS …` / `CREATE PROCEDURE p` with no parameters
+      omitted the parameter parentheses, which MySQL and PostgreSQL reject
+      (`1064 … near 'DATETIME'`). The emitter now always emits `()` for those
+      two engines when there are no parameters (Oracle allows omitting them).
+      Found by the live MySQL procedures-fixture check; tested
+      (TestParameterlessRoutineParens).
+
 - [x] **PostgreSQL fixture — `dbo` schema everywhere** — `dbo.` survived in
       CREATE TABLE, routine names, embedded DML and scalar expressions
       (assignments, RETURN, COALESCE), naming a schema that doesn't exist in
