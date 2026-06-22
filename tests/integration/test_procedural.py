@@ -503,3 +503,62 @@ class TestOutputClauseToMySQL:
         out = _transpile(src, "tsql", "postgresql")
         # PostgreSQL supports RETURNING, so it must be kept.
         assert "RETURNING" in out
+
+
+class TestTableVariableToMySQL:
+    """T-SQL table variables have no DECLARE form in MySQL; they become a
+    CREATE TEMPORARY TABLE in the body, and the following statements survive."""
+
+    def test_table_variable_becomes_temp_table(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "DECLARE @tmp TABLE (id INT, name NVARCHAR(50)) "
+            "INSERT INTO @tmp (id) VALUES (1) "
+            "SELECT id FROM @tmp "
+            "END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        # No invalid table-variable DECLARE.
+        assert "DECLARE v_tmp TABLE" not in out
+        # A temporary table with mapped column types.
+        assert "CREATE TEMPORARY TABLE v_tmp" in out
+        assert "VARCHAR(50)" in out
+        # The statements after the declaration must be preserved.
+        assert "INSERT INTO v_tmp (id) VALUES (1)" in out
+        assert "SELECT id FROM v_tmp" in out
+
+    def test_uniqueidentifier_column_is_mapped(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "DECLARE @t TABLE (g UNIQUEIDENTIFIER) "
+            "SELECT g FROM @t "
+            "END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        assert "UNIQUEIDENTIFIER" not in out
+
+
+class TestInsertValuesSelectBoundary:
+    """INSERT ... VALUES (...) followed by SELECT must be two statements, not a
+    mis-parsed INSERT ... SELECT that drops the SELECT."""
+
+    def test_insert_values_then_select_preserved(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "INSERT INTO t (id) VALUES (1) "
+            "SELECT id FROM t "
+            "END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        assert "INSERT INTO t (id) VALUES (1)" in out
+        assert "SELECT id FROM t" in out
+
+    def test_insert_select_stays_together(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "INSERT INTO t (a, b) SELECT x, y FROM src "
+            "END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        # A genuine INSERT ... SELECT must remain a single statement.
+        assert "INSERT INTO t (a, b) SELECT x, y FROM src" in out.replace("  ", " ")

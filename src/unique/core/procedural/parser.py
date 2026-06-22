@@ -2028,6 +2028,7 @@ class ProceduralParser:
         case_depth = 0
         first = True
         prev_tok: Token | None = None
+        values_seen = False
         lead_verb = (
             self._current().upper_value
             if self._current().type == TokenType.KEYWORD
@@ -2059,10 +2060,12 @@ class ProceduralParser:
                 and begin_depth == 0
                 and case_depth == 0
                 and self._dialect == "tsql"
-                and self._starts_new_dml(tok, prev_tok, lead_verb)
+                and self._starts_new_dml(tok, prev_tok, lead_verb, values_seen)
             ):
                 break
 
+            if tok.is_keyword("VALUES"):
+                values_seen = True
             if tok.is_keyword("CASE"):
                 case_depth += 1
             elif tok.is_keyword("BEGIN"):
@@ -2181,7 +2184,11 @@ class ProceduralParser:
         }
 
     def _starts_new_dml(
-        self, tok: Token, prev_tok: Token | None, lead_verb: str = ""
+        self,
+        tok: Token,
+        prev_tok: Token | None,
+        lead_verb: str = "",
+        values_seen: bool = False,
     ) -> bool:
         """Whether ``tok`` begins a new DML statement after a previous one.
 
@@ -2196,10 +2203,22 @@ class ProceduralParser:
             self._DML_START_KEYWORDS
         ):
             return False
-        # An INSERT statement is commonly followed by its source SELECT; never
-        # split an INSERT before a SELECT/VALUES.
-        if lead_verb == "INSERT" and tok.upper_value == "SELECT":
+        # An INSERT ... SELECT keeps its source SELECT attached — but only when
+        # the INSERT has no VALUES clause yet. Once VALUES was seen, a SELECT on
+        # a new line is a separate statement (e.g. INSERT INTO @t VALUES (...)
+        # followed by SELECT ... FROM @t).
+        if lead_verb == "INSERT" and tok.upper_value == "SELECT" and not values_seen:
             return False
+        # After an INSERT ... VALUES (...), a SELECT is always a new statement
+        # (an INSERT cannot have both VALUES and a source SELECT), even on the
+        # same source line.
+        if (
+            lead_verb == "INSERT"
+            and tok.upper_value == "SELECT"
+            and values_seen
+            and prev_tok.type == TokenType.RPAREN
+        ):
+            return True
         if tok.line == prev_tok.line:
             return False
         # Previous token chains into this verb → not a boundary.

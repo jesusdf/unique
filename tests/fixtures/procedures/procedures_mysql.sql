@@ -298,9 +298,9 @@ CREATE PROCEDURE proc_2
 BEGIN
     DECLARE v_func1 DATETIME DEFAULT func1();
     DECLARE v_col_6 CHAR(36) DEFAULT NULL;
-    DECLARE v_col_16 TABLE ( col_17 UNIQUEIDENTIFIER );
 
     /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    CREATE TEMPORARY TABLE v_col_16 (col_17 UUID);  /* UNIQUE: was T-SQL table variable v_col_16 */
     IF ( v_col_2 IS NOT NULL ) THEN
             /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
             DO 0;
@@ -595,9 +595,8 @@ CREATE PROCEDURE proc_7
     IN v_col_18 DATETIME
 )
 BEGIN
-    DECLARE v_col_92 TABLE ( col_17 UNIQUEIDENTIFIER );
-
     /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    CREATE TEMPORARY TABLE v_col_92 (col_17 UUID);  /* UNIQUE: was T-SQL table variable v_col_92 */
     INSERT INTO tbl_3 (col_7, col_91, col_19, col_20, col_15, col_18) VALUES (v_col_7, v_col_91, v_col_19, v_col_20, v_col_15, v_col_18);
     -- UNIQUE: MySQL has no RETURNING/OUTPUT; the original statement returned: inserted.col_6;
     SET v_col_6 = ( SELECT MAX ( col_17 ) FROM v_col_92 );
@@ -625,9 +624,8 @@ CREATE PROCEDURE proc_8
     IN v_col_94 DATETIME
 )
 BEGIN
-    DECLARE v_col_92 TABLE ( col_17 INTEGER );
-
     /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    CREATE TEMPORARY TABLE v_col_92 (col_17 INT);  /* UNIQUE: was T-SQL table variable v_col_92 */
     INSERT INTO tbl_8 (col_15, col_18, col_31, col_39, col_94) VALUES (v_col_15, v_col_18, v_col_31, v_col_39, v_col_94);
     -- UNIQUE: MySQL has no RETURNING/OUTPUT; the original statement returned: inserted.col_93;
     SET v_col_93 = ( SELECT MAX ( col_17 ) FROM v_col_92 );
@@ -670,9 +668,8 @@ CREATE PROCEDURE proc_9
     IN v_col_18 DATETIME
 )
 BEGIN
-    DECLARE v_col_92 TABLE ( col_17 INTEGER );
-
     /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    CREATE TEMPORARY TABLE v_col_92 (col_17 INT);  /* UNIQUE: was T-SQL table variable v_col_92 */
     INSERT INTO tbl_6 (col_6, col_32, col_33, col_12, col_42, col_62, col_13, col_9, col_10, col_74, col_38, col_95, col_96, col_72, col_73, col_63, col_19, col_20, col_15, col_18) VALUES (v_col_6, v_col_32, v_col_33, v_col_12, v_col_42, v_col_62, v_col_13, v_col_9, v_col_10, v_col_74, v_col_38, v_col_95, v_col_96, v_col_72, v_col_73, v_col_63, v_col_19, v_col_20, v_col_15, v_col_18);
     -- UNIQUE: MySQL has no RETURNING/OUTPUT; the original statement returned: inserted.col_31;
     SET v_col_31 = ( SELECT MAX ( col_17 ) FROM v_col_92 );
