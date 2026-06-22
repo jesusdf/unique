@@ -203,7 +203,7 @@ $$;
 -- placeholders that preserve the call signatures and return types.
 -- ============================================================
 -- IF OBJECT_ID(N'[dbo].[func1]', 'FN') IS NOT NULL DROP FUNCTION [dbo].[func1]
-CREATE OR REPLACE FUNCTION func1
+CREATE OR REPLACE FUNCTION func1()
 RETURNS TIMESTAMP
 LANGUAGE plpgsql
 AS $$
@@ -1481,9 +1481,26 @@ $$;
 
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
+CREATE OR REPLACE FUNCTION col_173_func()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    v_func1 TIMESTAMP := func1 ( );
+    v_col_174 INTEGER := COALESCE ( ( SELECT 1 FROM tbl_9 WHERE col_96 IS NOT NULL AND col_30 = 1 ) , 0 );
+    IF UPDATE ( col_32 ) THEN
+            /* xxxxxx xxxx xxxxxx */
+            INSERT INTO tbl_8 (col_15, col_18, col_31, col_39, col_94) SELECT col_175.col_15, col_175.col_18, col_175.col_31, (4 - ((2 * v_col_174 * (1 - col_175.col_42)) + col_175.col_32)) AS col_39, v_func1 AS col_94 FROM inserted AS col_175 INNER JOIN deleted AS col_176 ON col_176.col_31 = col_175.col_31 WHERE col_175.col_32 <> col_176.col_32;
+            /* xx xx xxxx xx xxxxxx xxxxxx xx xxxxx col_162 xx xxxxxx xxx x */
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
 CREATE OR REPLACE TRIGGER col_173
 AFTER UPDATE ON tbl_6
-EXECUTE FUNCTION {name}_func();
+EXECUTE FUNCTION col_173_func();
 
 -- SET QUOTED_IDENTIFIER OFF
 -- SET ANSI_NULLS ON

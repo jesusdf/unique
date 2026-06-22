@@ -227,6 +227,10 @@ class ProceduralEmitter:
 
         if params_str:
             header += f"\n(\n{params_str}\n)"
+        elif self._dialect in ("mysql", "postgresql"):
+            # MySQL and PostgreSQL require the parameter parentheses even when
+            # empty (CREATE PROCEDURE p() ...); omitting them is a syntax error.
+            header += "()"
 
         # Separate declarations from body statements
         declarations: list[ASTNode] = []
@@ -378,6 +382,11 @@ class ProceduralEmitter:
 
         if params_str:
             header += f"\n(\n{params_str}\n)"
+        elif self._dialect in ("mysql", "postgresql"):
+            # MySQL and PostgreSQL require the parameter parentheses even when
+            # empty (CREATE FUNCTION f() ...); omitting them is a syntax error.
+            # Oracle allows a parameterless function with no parentheses.
+            header += "()"
 
         if self._dialect in ("tsql", "postgresql"):
             header += f"\nRETURNS {ret_type}"

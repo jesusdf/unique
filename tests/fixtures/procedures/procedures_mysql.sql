@@ -202,7 +202,7 @@ DELIMITER ;
 -- ============================================================
 -- IF OBJECT_ID(N'[dbo].[func1]', 'FN') IS NOT NULL DROP FUNCTION [dbo].[func1]
 DELIMITER $$
-CREATE FUNCTION func1
+CREATE FUNCTION func1()
 RETURNS DATETIME
 DETERMINISTIC
 BEGIN
@@ -313,7 +313,8 @@ BEGIN
             IF v_col_6 IS NULL THEN
                         INSERT INTO tbl_3 (col_19, col_20, col_15, col_18) SELECT v_col_15, v_func1, v_col_15, v_func1 WHERE NOT EXISTS(SELECT NULL FROM tbl_2 WHERE col_1 = v_col_1);
                         -- UNIQUE: MySQL has no RETURNING/OUTPUT; the original statement returned: inserted.col_6;
-                        SET v_col_6 = ( SELECT MAX ( col_17 ) FROM v_col_16 ) INSERT INTO tbl_2 ( col_1 , col_4 , col_6 , col_19 , col_20 , col_15 , col_18 ) SELECT v_col_1 , v_col_4 , v_col_6 , v_col_15 , v_func1 , v_col_15 , v_func1 WHERE NOT EXISTS ( SELECT null FROM tbl_2 WHERE col_1 = v_col_1 );
+                        SET v_col_6 = ( SELECT MAX ( col_17 ) FROM v_col_16 );
+                        INSERT INTO tbl_2 (col_1, col_4, col_6, col_19, col_20, col_15, col_18) SELECT v_col_1, v_col_4, v_col_6, v_col_15, v_func1, v_col_15, v_func1 WHERE NOT EXISTS(SELECT NULL FROM tbl_2 WHERE col_1 = v_col_1);
             END IF;
     END IF;
     SELECT LOWER(CAST(v_col_6 AS CHAR(36))) AS col_21;
@@ -465,7 +466,25 @@ BEGIN
             DELETE FROM tbl_6 WHERE col_6 = v_col_6 AND col_42 = 0 AND col_62 = v_col_62 AND col_13 IS NULL;
             SELECT v_col_62, LOWER(CONCAT(v_col_62, '@', v_col_61)) INTO v_col_72, v_col_73 ;
     END IF;
-    SELECT col_11 . col_50 INTO v_col_68 FROM tbl_2 col_3 INNER JOIN tbl_1 col_11 ON col_11 . col_1 = col_3 . col_1 WHERE col_3 . col_6 = v_col_6 -- xxxxxx xx xxxxxx xxx xxxxxx SET v_col_69 = DATE_ADD(v_col_68, INTERVAL v_col_65 MINUTE) SET v_col_70 = DATE_ADD(v_col_68, INTERVAL v_col_67 MINUTE) INSERT INTO tbl_6 ( col_12 , col_62 , col_13 , col_19 , col_20 , col_15 , col_18 , col_6 , col_72 , col_73 , col_63 , col_42 , col_74 , col_32 , col_9 , col_10 ) VALUES ( v_col_12 , v_col_62 , v_col_13 , v_col_15 , v_func1 , v_col_15 , v_func1 , v_col_6 , v_col_72 , v_col_73 , v_col_63 , v_col_42 , '-' , v_col_32 , v_col_9 , v_col_10 ) -- xx xxxxxx xxx xxxxxx xxxx xx xxxxxx xxxxx xxx xxxxxx xx xx xxxxx SET v_col_17 = LAST_INSERT_ID() SET v_col_75 = CONVERT ( VARCHAR ( 20 ) , v_col_17 ) IF ( v_col_64 IS NULL ) BEGIN SET v_col_74 = dbo . func2 ( v_col_61 , v_col_69 , v_col_70 , v_col_75 , v_col_71 , v_col_72 , v_col_73 , v_col_63 , v_col_42 );
+    SELECT col_11 . col_50 INTO v_col_68 FROM tbl_2 col_3 INNER JOIN tbl_1 col_11 ON col_11 . col_1 = col_3 . col_1 WHERE col_3 . col_6 = v_col_6;
+    -- xxxxxx xx xxxxxx xxx xxxxxx
+    SET v_col_69 = DATE_ADD(v_col_68, INTERVAL v_col_65 MINUTE);
+    SET v_col_70 = DATE_ADD(v_col_68, INTERVAL v_col_67 MINUTE);
+    INSERT INTO tbl_6 (col_12, col_62, col_13, col_19, col_20, col_15, col_18, col_6, col_72, col_73, col_63, col_42, col_74, col_32, col_9, col_10) VALUES (v_col_12, v_col_62, v_col_13, v_col_15, v_func1, v_col_15, v_func1, v_col_6, v_col_72, v_col_73, v_col_63, v_col_42, '-', v_col_32, v_col_9, v_col_10);
+    -- xx xxxxxx xxx xxxxxx xxxx xx xxxxxx xxxxx xxx xxxxxx xx xx xxxxx
+    SET v_col_17 = LAST_INSERT_ID();
+    SET v_col_75 = CAST(v_col_17 AS CHAR(20));
+    IF ( v_col_64 IS NULL ) THEN
+            SET v_col_74 = func2(v_col_61, v_col_69, v_col_70, v_col_75, v_col_71, v_col_72, v_col_73, v_col_63, v_col_42);
+    ELSE
+            SET v_col_74 = v_col_64;
+    END IF;
+    IF ( COALESCE ( v_col_74 , 'xxxxxxx-xxxx' ) = 'xxxxxxx-xxxx' ) THEN
+            DELETE FROM tbl_6 WHERE col_31 = v_col_17;
+    ELSE
+            UPDATE tbl_6 SET col_74 = v_col_74 WHERE col_31 = v_col_17;
+    END IF;
+    SELECT col_31, col_74 FROM tbl_6 WHERE col_31 = v_col_17;
 END$$
 DELIMITER ;
 
@@ -511,7 +530,8 @@ BEGIN
     DECLARE v_col_88 VARCHAR(50);
 
     -- xxxxxx
-    SET v_func1 = func1 ( ) SELECT v_col_79 = col_79 , v_col_83 = col_89 , v_col_84 = col_90 , v_col_80 = col_80 FROM tbl_9 WHERE col_61 = v_col_61 AND col_30 = 1;
+    SET v_func1 = func1();
+    SELECT col_79, col_89, col_90, col_80 INTO v_col_79, v_col_83, v_col_84, v_col_80 FROM tbl_9 WHERE col_61 = v_col_61 AND col_30 = 1;
     IF ( v_col_79 IS NULL OR v_col_62 IS NULL OR v_col_69 IS NULL OR v_col_70 IS NULL OR v_col_6 IS NULL ) THEN
             RETURN 'xxxxxxx-xxxx';
     END IF;

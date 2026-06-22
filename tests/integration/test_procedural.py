@@ -714,3 +714,34 @@ class TestPostgreSQLStringConcat:
         out = _transpile(src, "tsql", "postgresql")
         # Two known string vars concatenated -> ||, not numeric +.
         assert "v_a || v_b" in out
+
+
+class TestParameterlessRoutineParens:
+    """MySQL and PostgreSQL require the parameter parentheses even when a
+    routine takes no parameters; Oracle allows them to be omitted."""
+
+    FUNC = "CREATE FUNCTION dbo.f() RETURNS INT AS BEGIN RETURN 1 END"
+    PROC = "CREATE PROCEDURE dbo.p AS BEGIN SELECT 1 END"
+
+    def test_mysql_function_has_empty_parens(self) -> None:
+        out = _transpile(self.FUNC, "tsql", "mysql")
+        assert "CREATE FUNCTION f()" in out
+
+    def test_mysql_procedure_has_empty_parens(self) -> None:
+        out = _transpile(self.PROC, "tsql", "mysql")
+        assert "CREATE PROCEDURE p()" in out
+
+    def test_postgresql_function_has_empty_parens(self) -> None:
+        out = _transpile(self.FUNC, "tsql", "postgresql")
+        assert "FUNCTION f()" in out
+
+    def test_postgresql_procedure_has_empty_parens(self) -> None:
+        out = _transpile(self.PROC, "tsql", "postgresql")
+        assert "PROCEDURE p()" in out
+
+    def test_mysql_function_with_params_unchanged(self) -> None:
+        src = "CREATE FUNCTION dbo.f(@a INT) RETURNS INT AS BEGIN RETURN @a END"
+        out = _transpile(src, "tsql", "mysql")
+        # The parameter list is still emitted normally (no doubled parens).
+        assert "f()" not in out
+        assert "v_a INT" in out
