@@ -220,6 +220,19 @@ open.
       non-portable translation is commented out, so the script stays valid.
       Found by the live MySQL procedures-fixture check; tested
       (TestInlineTableValuedFunction).
+- [x] **Table-valued function in a `FROM` clause on MySQL (P1)** — a T-SQL
+      inline TVF used as a table source (`FROM dbo.func5(@s, ',')`) is a syntax
+      error in MySQL, which has no table-valued functions. The MySQL DML
+      cleaner now detects a function in FROM/JOIN position (via sqlglot) and
+      comments the whole statement out with a `-- UNIQUE:` note; `JSON_TABLE`
+      and the `STRING_SPLIT`→`JSON_TABLE` rewrite are recognized as valid table
+      sources and kept. Found by the live MySQL procedures-fixture check;
+      tested (TestTableValuedFunctionInFrom).
+- [x] **Document the `--db-url`/`db_url` connection parameter (P3)** — added a
+      "Database connection" section to `docs/07-interfaces.md` explaining what
+      it resolves (Oracle `%TYPE`/`%ROWTYPE` and other metadata-dependent
+      constructs), the URL format, per-engine schemes/drivers, and CLI/Python
+      examples for all four engines.
 - [x] **Line comments inside a captured expression break the statement (P1)**
       — a T-SQL `SET @v = (SELECT CASE … -- note\n … END) -- note` with inline
       `--` comments, once the multi-line expression was flattened to a single
