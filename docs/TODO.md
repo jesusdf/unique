@@ -101,6 +101,27 @@ sqlglot marks them "Unhandled" and they fall back to commented passthrough.
       disturbing string literals or identifiers. Source types with no faithful
       equivalent (SQL_VARIANT, etc.) keep the original in a `/* UNIQUE: … */`
       comment, including unresolved `%TYPE`/`%ROWTYPE` references.
+- [ ] **Restore the original from a `/* UNIQUE: … */` comment on reverse
+      transpilation (P2)** — when a non-portable type was lowered to a carrier
+      with the original preserved (e.g. `SQL_VARIANT` →
+      `TEXT /* UNIQUE: SQL_VARIANT */`, or an unresolved
+      `H_X.Y%TYPE` → `SQL_VARIANT /* UNIQUE: H_X.Y%TYPE */`), transpiling back
+      should emit the original type from the comment instead of keeping the
+      carrier, so a round-trip is faithful. Implementation sketch: in the
+      data-type parse path, if a type token is immediately followed by a
+      `/* UNIQUE: <original> */` comment, parse `<original>` and use it as the
+      `DataType.name` (dropping the carrier), so the existing emit path renders
+      it. Add round-trip tests (A→B→A) asserting the original type returns.
+      Evaluate generalizing this to **other constructs preserved in `UNIQUE`
+      comments**, not just types: e.g. a dropped `SET NOCOUNT ON` kept as
+      `/* UNIQUE: SET NOCOUNT ON -- no <target> equivalent */`, an
+      `OUTPUT`/`RETURNING` clause documented as a trailing `-- UNIQUE:` comment,
+      `MERGE`→`INSERT ... ON DUPLICATE KEY UPDATE` notes, etc. A single
+      "UNIQUE-comment restorer" pass that, when the target is the construct's
+      original engine, swaps the documented original back in for the carrier/
+      comment would make many lossy conversions reversible. Care needed: only
+      restore when the target actually supports the original construct, and
+      keep the line/`-- ` vs `/* */` comment-style rules intact.
 
 ## 4. Function mapping gaps (P2)
 
