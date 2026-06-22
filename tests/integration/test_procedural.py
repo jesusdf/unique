@@ -815,3 +815,35 @@ class TestBareReturnInProcedure:
         normalized = " ".join(out.split())
         assert "RETURN ( SELECT COUNT ( * ) FROM t )" in normalized
         assert "LEAVE" not in out
+
+
+class TestReturnValueInProcedure:
+    """A T-SQL procedure RETURN <value> (a status code) has no MySQL
+    equivalent; it becomes LEAVE with the value documented. In a function,
+    RETURN <value> is valid and kept."""
+
+    def test_return_value_in_procedure_becomes_leave(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p @x INT AS BEGIN "
+            "IF @x IS NULL RETURN NULL "
+            "SELECT @x "
+            "END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        assert "LEAVE proc_exit;" in out
+        assert "discarded procedure RETURN value" in out
+        code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
+        # No executable RETURN in the procedure (only LEAVE).
+        assert all(not ln.strip().startswith("RETURN") for ln in code)
+
+    def test_return_value_in_function_kept(self) -> None:
+        src = (
+            "CREATE FUNCTION dbo.f(@x INT) RETURNS INT AS BEGIN "
+            "IF @x IS NULL RETURN 0 "
+            "RETURN @x "
+            "END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        assert "RETURN 0;" in out
+        assert "RETURN v_x;" in out
+        assert "LEAVE" not in out

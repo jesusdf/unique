@@ -67,6 +67,9 @@ class ProceduralEmitter:
         # Label of the current MySQL procedure block, used to translate a bare
         # RETURN (early exit) into LEAVE <label>; None when not applicable.
         self._proc_leave_label: str | None = None
+        # Whether the MySQL routine body currently being emitted is a function
+        # (RETURN <value> valid) vs a procedure (RETURN illegal -> LEAVE).
+        self._in_mysql_function = False
 
     def emit(self, node: ASTNode) -> str:
         """Emit a procedural AST node as target-dialect SQL.
@@ -331,11 +334,16 @@ class ProceduralEmitter:
         header: str,
         declarations: list[ASTNode],
         body_stmts: list[ASTNode],
+        is_function: bool = False,
     ) -> str:
-        # A bare RETURN (early exit) is illegal in a MySQL procedure body
-        # ("RETURN is only allowed in a FUNCTION"); translate it to LEAVE of a
-        # labeled block. Only add the label when such a RETURN is present.
-        needs_label = self._body_has_bare_return(body_stmts)
+        # RETURN in a MySQL *procedure* is illegal ("RETURN is only allowed in a
+        # FUNCTION") — both a bare early-exit RETURN and a RETURN <value> (a
+        # T-SQL procedure status code, which MySQL has no concept of). In a
+        # procedure, translate any RETURN to LEAVE of a labeled block. In a
+        # function, RETURN <value> is valid and kept as-is.
+        prev_is_fn = self._in_mysql_function
+        self._in_mysql_function = is_function
+        needs_label = (not is_function) and self._body_has_any_return(body_stmts)
         prev_label = self._proc_leave_label
         lines = [f"{header}"]
         if needs_label:
@@ -356,16 +364,18 @@ class ProceduralEmitter:
         self._indent_level = 0
         lines.append("END")
         self._proc_leave_label = prev_label
+        self._in_mysql_function = prev_is_fn
         return "\n".join(lines)
 
-    def _body_has_bare_return(self, stmts: list[ASTNode]) -> bool:
-        """Whether any statement (recursively) is a valueless RETURN."""
+    def _body_has_any_return(self, stmts: list[ASTNode]) -> bool:
+        """Whether any statement (recursively) is a RETURN (with or without a
+        value). In a MySQL procedure even ``RETURN <value>`` is invalid."""
         for s in stmts:
-            if isinstance(s, ReturnStatement) and not s.value:
+            if isinstance(s, ReturnStatement):
                 return True
             for attr in ("body", "then_body", "else_body", "try_body", "catch_body"):
                 child = getattr(s, attr, None)
-                if child and self._body_has_bare_return(list(child)):
+                if child and self._body_has_any_return(list(child)):
                     return True
         return False
 
@@ -473,7 +483,9 @@ class ProceduralEmitter:
         elif self._dialect == "postgresql":
             return self._emit_pg_procedure_body(header, declarations, body_stmts)
         else:
-            return self._emit_mysql_procedure_body(header, declarations, body_stmts)
+            return self._emit_mysql_procedure_body(
+                header, declarations, body_stmts, is_function=True
+            )
 
     def _emit_trigger(self, node: CreateTriggerStatement) -> str:
         name = self._qualified_name(node.schema, node.name)
@@ -1074,13 +1086,24 @@ class ProceduralEmitter:
         return f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = {msg};"
 
     def _emit_return(self, node: ReturnStatement) -> str:
+        # In a MySQL procedure, RETURN is illegal whether or not it has a value
+        # (a T-SQL procedure RETURN <code> has no MySQL equivalent). Translate
+        # to LEAVE of the labeled procedure block; document a discarded value.
+        if (
+            self._dialect == "mysql"
+            and not self._in_mysql_function
+            and self._proc_leave_label
+        ):
+            if node.value:
+                val = self._emit_node(node.value)
+                return (
+                    f"LEAVE {self._proc_leave_label};  "
+                    f"-- UNIQUE: discarded procedure RETURN value ({val})"
+                )
+            return f"LEAVE {self._proc_leave_label};"
         if node.value:
             val = self._emit_node(node.value)
             return f"RETURN {val};"
-        # A bare RETURN in a MySQL procedure is illegal; LEAVE the labeled
-        # block instead (the label is set when emitting the procedure body).
-        if self._dialect == "mysql" and self._proc_leave_label:
-            return f"LEAVE {self._proc_leave_label};"
         return "RETURN;"
 
     def _emit_cursor_op(self, node: CursorOperation) -> str:
