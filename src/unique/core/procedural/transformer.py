@@ -603,6 +603,13 @@ class ProceduralTransformer:
                 return DataType(name=new_name, origin_comment=origin)
             return DataType(name=new_name, params=dt.params, origin_comment=origin)
 
+        # A source-specific type with no entry in the target type map (e.g.
+        # SQL_VARIANT for PostgreSQL): emit the permissive carrier type and
+        # preserve the original in a /* UNIQUE */ comment so it is documented
+        # and reversible, instead of leaking an unknown type the engine rejects.
+        if base_type in self._LOSSY_SOURCE_TYPES:
+            return DataType(name=self._unknown_type_carrier(), origin_comment=dt.name)
+
         return dt
 
     # Source types with no faithful equivalent in the other engines: the
@@ -726,27 +733,39 @@ class ProceduralTransformer:
     def _table_variable_to_temp_table(self, name: str, type_text: str) -> ASTNode:
         """Build a CREATE TEMPORARY TABLE from a captured ``TABLE (cols)`` type.
 
-        The column list is mapped through sqlglot so column data types are
-        translated to the target dialect (e.g. UNIQUEIDENTIFIER → the target's
-        type). A documenting comment records the original table-variable.
+        The column list is mapped through the project's own DDL converter so
+        column data types use the target dialect's portable names (e.g.
+        UNIQUEIDENTIFIER → CHAR(36) on MySQL, UUID on PostgreSQL), which is more
+        faithful than a raw sqlglot pass. A documenting comment records the
+        original table-variable.
         """
         # type_text looks like: "TABLE ( col TYPE, ... )"
         cols = type_text[len("TABLE") :].strip()
         ddl = f"CREATE TABLE {name} {cols}"
         translated = ddl
         try:
-            import sqlglot
+            from unique.core.ast_nodes import CreateTableStatement
+            from unique.core.converter import _emit_create_table, parse_sql
 
-            out = sqlglot.transpile(ddl, read="tsql", write=self._target)
-            if out and out[0].strip():
-                translated = out[0]
+            nodes = parse_sql(ddl, self._source)
+            if nodes and isinstance(nodes[0], CreateTableStatement):
+                translated = _emit_create_table(nodes[0], self._target)
         except Exception:
-            translated = ddl
+            # Fall back to a raw sqlglot pass if the converter path fails.
+            try:
+                import sqlglot
+
+                write_dialect = self._get_sqlglot_dialect(self._target)
+                out = sqlglot.transpile(ddl, read="tsql", write=write_dialect)
+                if out and out[0].strip():
+                    translated = out[0]
+            except Exception:
+                translated = ddl
         # Make it a TEMPORARY table and keep the (already valid) column list.
         translated = re.sub(
             r"(?i)^\s*CREATE\s+TABLE\b",
             "CREATE TEMPORARY TABLE",
-            translated,
+            translated.strip(),
             count=1,
         )
         sql = (
@@ -1022,7 +1041,25 @@ class ProceduralTransformer:
             sql = self._mysql_clean_dml(sql)
             sql = self._mysql_fix_cast_max(sql)
             sql = self._mysql_string_split(sql)
+        if self._target == "postgresql":
+            sql = self._pg_clean_dml(sql)
         return EmbeddedDML(sql=sql, dialect=self._target)
+
+    def _pg_clean_dml(self, sql: str) -> str:
+        """Strip T-SQL leftovers that PostgreSQL rejects.
+
+        - The ``dbo`` schema qualifier on tables/functions: PostgreSQL has no
+          ``dbo`` schema, so the bare name resolves in ``public`` (or the
+          search_path) instead of a non-existent schema.
+        - ``inserted.``/``deleted.`` pseudo-table qualifiers in a RETURNING
+          clause (from a T-SQL OUTPUT): PostgreSQL RETURNING references the
+          target's own columns, so the qualifier is dropped.
+        """
+        # RETURNING inserted.col / deleted.col -> RETURNING col
+        sql = re.sub(r"(?i)\b(?:inserted|deleted)\s*\.\s*", "", sql)
+        # dbo. qualifier (tables and function calls)
+        sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
+        return sql
 
     def _mysql_clean_dml(self, sql: str) -> str:
         """Strip T-SQL leftovers sqlglot keeps but MySQL rejects.
@@ -1215,23 +1252,30 @@ class ProceduralTransformer:
         _dml_count = len(
             re.findall(r"\b(?:SELECT|INSERT|UPDATE|DELETE|MERGE)\b", sql, re.IGNORECASE)
         )
+        _has_tsql_scalar = bool(re.search(r"(?i)\b(?:CONVERT|HASHBYTES)\s*\(", sql))
         if (
             self._source == "tsql"
             and self._target in ("oracle", "postgresql")
-            and _dml_count == 1
-            and re.search(r"\bSELECT\b", sql, re.IGNORECASE)
+            and _dml_count <= 1
+            and (re.search(r"\bSELECT\b", sql, re.IGNORECASE) or _has_tsql_scalar)
         ):
             try:
                 source_dialect = self._get_sqlglot_dialect(self._source)
                 target_dialect = self._get_sqlglot_dialect(self._target)
+                # Wrap as a SELECT so a bare scalar expression (e.g. a RETURN
+                # value) parses; unwrap afterwards.
+                had_select = bool(re.search(r"\bSELECT\b", sql, re.IGNORECASE))
+                to_parse = sql if had_select else f"SELECT {sql}"
                 results = sqlglot.transpile(
-                    f"SELECT {sql}",
+                    to_parse,
                     read=source_dialect,
                     write=target_dialect,
                     error_level=sqlglot.ErrorLevel.RAISE,
                 )
                 if results and results[0].upper().startswith("SELECT "):
-                    sql = results[0][len("SELECT ") :].rstrip().rstrip(";")
+                    out = results[0][len("SELECT ") :].rstrip().rstrip(";")
+                    out = self._unwrap_spurious_hash_format(out)
+                    sql = out
                     if self._target == "oracle":
                         sql = self._fix_oracle_dml(sql)
             except Exception:
@@ -1242,9 +1286,39 @@ class ProceduralTransformer:
             sql = self._mysql_clean_dml(sql)
             sql = self._mysql_fix_cast_max(sql)
             sql = self._mysql_string_split(sql)
+        if self._target in ("postgresql", "oracle"):
+            # Functions/procedures are created without the T-SQL "dbo" schema
+            # in these targets (dbo doesn't exist), so drop a dbo. qualifier on
+            # calls within expressions (e.g. ``dbo.func1()`` in an assignment,
+            # RETURN or COALESCE). The lexer may have split it as ``dbo . f``.
+            sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
         return RawSQL(sql=sql, reason=node.reason)
 
-    # T-SQL scalar constructs (CONVERT/CAST style codes, HASHBYTES, etc.) have
+    def _unwrap_spurious_hash_format(self, sql: str) -> str:
+        """Undo sqlglot's misreading of a T-SQL hash-stringify CONVERT.
+
+        ``CONVERT(varchar(max), HASHBYTES('SHA2_256', x), 2)`` stringifies a
+        hash; sqlglot maps HASHBYTES to SHA256 but treats the style code ``2``
+        as a date format, producing e.g.
+        ``CAST(TO_CHAR(SHA256(x), 'YY.MM.DD') AS VARCHAR(MAX))``. The hash
+        already returns a hex/text value, so strip the spurious TO_CHAR/format
+        and the (MAX) cast, leaving the bare hash call.
+        """
+        # CAST(TO_CHAR(<inner>, '...') AS VARCHAR(MAX)) -> <inner>
+        sql = re.sub(
+            r"(?i)CAST\s*\(\s*TO_CHAR\s*\(\s*(.+?)\s*,\s*'[^']*'\s*\)\s*"
+            r"AS\s+VARCHAR\s*\(\s*MAX\s*\)\s*\)",
+            r"\1",
+            sql,
+        )
+        # Bare TO_CHAR(<hash>, '...') with no surrounding cast.
+        sql = re.sub(
+            r"(?i)TO_CHAR\s*\(\s*(SHA\d*\s*\(.+?\))\s*,\s*'[^']*'\s*\)",
+            r"\1",
+            sql,
+        )
+        return sql
+
     # direct MySQL equivalents that sqlglot knows, but the procedural pipeline
     # captures expressions as text that often parses as an opaque Command. Re-
     # transpile the fragment from T-SQL to MySQL so CONVERT(t, x) -> CAST(x AS

@@ -1490,9 +1490,15 @@ class ProceduralParser:
             return None
 
         into_vars, exprs = assign
-        # Capture the remainder (FROM onward) up to the statement end.
+        # Capture the remainder (FROM onward) up to the statement end. Stop at a
+        # statement boundary so the following statements (SET/INSERT/IF/...) and
+        # any own-line comment are not absorbed into this one. T-SQL omits the
+        # ';' terminator, so we rely on the same boundary detection used for
+        # embedded DML.
         rest_parts: list[str] = []
         paren_depth = 0
+        prev_line: int | None = None
+        first_rest = True
         while not self._at_end():
             tok = self._current()
             if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
@@ -1500,11 +1506,56 @@ class ProceduralParser:
                 break
             if paren_depth == 0 and tok.is_keyword("END"):
                 break
+            # An own-line comment ends this statement (it belongs between
+            # statements, like in the body loop).
+            if (
+                paren_depth == 0
+                and not first_rest
+                and tok.type in (TokenType.LINE_COMMENT, TokenType.BLOCK_COMMENT)
+                and prev_line is not None
+                and tok.line is not None
+                and tok.line != prev_line
+            ):
+                break
+            # A new statement keyword on a new line ends this one.
+            if (
+                paren_depth == 0
+                and not first_rest
+                and tok.type == TokenType.KEYWORD
+                and tok.upper_value
+                in (
+                    "SET",
+                    "INSERT",
+                    "UPDATE",
+                    "DELETE",
+                    "MERGE",
+                    "SELECT",
+                    "IF",
+                    "WHILE",
+                    "RETURN",
+                    "EXEC",
+                    "EXECUTE",
+                    "DECLARE",
+                    "BEGIN",
+                    "PRINT",
+                    "RAISERROR",
+                    "THROW",
+                    "FETCH",
+                    "OPEN",
+                    "CLOSE",
+                )
+                and prev_line is not None
+                and tok.line is not None
+                and tok.line != prev_line
+            ):
+                break
             if tok.type == TokenType.LPAREN:
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
             rest_parts.append(tok.value)
+            prev_line = tok.line
+            first_rest = False
             self._advance()
 
         from unique.core.ast_nodes import RawSQL as _RawSQL
@@ -1768,8 +1819,62 @@ class ProceduralParser:
     # ---------------------------------------------------------------
 
     def _parse_expression_until_semicolon(self) -> ASTNode:
-        """Capture tokens as raw SQL until we hit a semicolon or END."""
-        return self._capture_raw_until(TokenType.SEMICOLON)
+        """Capture a scalar assignment value as raw SQL until a boundary.
+
+        Used for ``SET @var = <expr>``. Besides ';'/END and the usual
+        control-flow boundaries, a DML verb (SELECT/INSERT/UPDATE/DELETE/MERGE)
+        beginning a new line ends the value: a scalar assignment cannot contain
+        a bare statement, so the following statement must not be absorbed (a
+        common shape when T-SQL omits the ';' terminator).
+        """
+        parts: list[str] = []
+        paren_depth = 0
+        case_depth = 0
+        first = True
+        prev_line: int | None = None
+        dml_starts = {"SELECT", "INSERT", "UPDATE", "DELETE", "MERGE"}
+        while not self._at_end():
+            tok = self._current()
+            if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
+                break
+            if paren_depth == 0 and tok.is_keyword("END"):
+                if case_depth > 0:
+                    case_depth -= 1
+                else:
+                    break
+            elif paren_depth == 0 and tok.is_keyword("CASE"):
+                case_depth += 1
+            if (
+                not first
+                and paren_depth == 0
+                and case_depth == 0
+                and self._at_tsql_stmt_boundary()
+            ):
+                break
+            # A DML verb on a new line ends the scalar value.
+            if (
+                not first
+                and paren_depth == 0
+                and case_depth == 0
+                and tok.type == TokenType.KEYWORD
+                and tok.upper_value in dml_starts
+                and prev_line is not None
+                and tok.line is not None
+                and tok.line != prev_line
+            ):
+                break
+            if tok.type == TokenType.LPAREN:
+                paren_depth += 1
+            elif tok.type == TokenType.RPAREN:
+                paren_depth -= 1
+            parts.append(tok.value)
+            prev_line = tok.line
+            first = False
+            self._advance()
+        raw = " ".join(parts).strip()
+        if raw.upper() == "NULL":
+            return Literal(value=None, dtype="null")
+        return RawSQL(sql=raw, reason="captured expression")
 
     def _parse_expression_until_keyword(self, *keywords: str) -> ASTNode:
         """Capture tokens as raw SQL until a keyword, semicolon, or END.

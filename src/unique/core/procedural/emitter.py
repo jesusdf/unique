@@ -207,13 +207,17 @@ class ProceduralEmitter:
     def _qualified_name(self, schema: str | None, name: str) -> str:
         """Build a schema-qualified object name.
 
-        MySQL has no schema layer comparable to T-SQL's ``dbo`` (a schema is a
-        database there), so a source schema like ``dbo`` would point at a
-        non-existent database. Drop it for MySQL and emit the bare name.
+        T-SQL's default ``dbo`` schema has no counterpart in the other engines:
+        MySQL has no schema layer (a schema is a database), and in Oracle and
+        PostgreSQL ``dbo`` names a schema that doesn't exist. So drop a ``dbo``
+        qualifier for those targets and emit the bare name; preserve any other
+        (intentional) schema. For MySQL, drop any schema qualifier.
         """
         if not schema:
             return name
         if self._dialect == "mysql":
+            return name
+        if schema.lower() == "dbo" and self._dialect in ("oracle", "postgresql"):
             return name
         return f"{schema}.{name}"
 

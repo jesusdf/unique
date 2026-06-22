@@ -596,3 +596,101 @@ class TestTryCatchToMySQL:
         out = _transpile(self.SRC, "tsql", "oracle")
         assert "EXCEPTION" in out
         assert "WHEN OTHERS THEN" in out
+
+
+class TestPostgreSQLProcedureFixes:
+    """Bugs fixed while generating the PostgreSQL procedures fixture."""
+
+    def test_dbo_stripped_from_table_and_call(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "DECLARE @f INT = dbo.func1() "
+            "SELECT a FROM dbo.t WHERE id = 1 "
+            "END"
+        )
+        out = _transpile(src, "tsql", "postgresql")
+        assert "dbo." not in out.replace("-- ", "")
+        assert "FROM t" in out
+        assert "func1()" in out.replace(" ", "")
+
+    def test_procedure_name_dbo_stripped(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN SELECT 1 END"
+        out = _transpile(src, "tsql", "postgresql")
+        assert "PROCEDURE p" in out
+        assert "dbo.p" not in out
+
+    def test_sql_variant_carrier(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p @v SQL_VARIANT = NULL AS BEGIN " "SET @v = NULL END"
+        )
+        out = _transpile(src, "tsql", "postgresql")
+        assert "TEXT /* UNIQUE: SQL_VARIANT */" in out
+
+    def test_newsequentialid_maps_to_gen_random_uuid(self) -> None:
+        out = _transpile(
+            "CREATE TABLE t (id UNIQUEIDENTIFIER DEFAULT NEWSEQUENTIALID())",
+            "tsql",
+            "postgresql",
+        )
+        assert "gen_random_uuid()" in out
+        assert "NEWSEQUENTIALID" not in out
+
+    def test_convert_hashbytes_in_return(self) -> None:
+        src = (
+            "CREATE FUNCTION dbo.f(@p NVARCHAR(MAX)) RETURNS NVARCHAR(MAX) AS "
+            "BEGIN "
+            "RETURN CONVERT(nvarchar(max), HASHBYTES('SHA2_256', @p), 2) "
+            "END"
+        )
+        out = _transpile(src, "tsql", "postgresql")
+        assert "SHA256" in out.upper()
+        assert "HASHBYTES" not in out.upper()
+        assert "CONVERT" not in out.upper()
+
+    def test_output_into_maps_to_returning(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "DECLARE @id INT "
+            "INSERT INTO t (a) OUTPUT inserted.id INTO @id VALUES (1) "
+            "END"
+        )
+        out = _transpile(src, "tsql", "postgresql")
+        assert "RETURNING id" in out
+        assert "inserted." not in out
+
+
+class TestAssignmentSelectBoundary:
+    """A multi-line assignment-SELECT must not absorb the comment and the
+    statements that follow it (a parser boundary bug)."""
+
+    def test_following_statements_not_absorbed(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN\n"
+            "    SELECT\n"
+            "        @x = col\n"
+            "    FROM t\n"
+            "    WHERE id = @id\n"
+            "\n"
+            "    -- a note\n"
+            "    SET @y = 1\n"
+            "    INSERT INTO u (a) VALUES (1)\n"
+            "END"
+        )
+        out = _transpile(src, "tsql", "postgresql")
+        # The assignment-select becomes SELECT ... INTO.
+        assert "INTO v_x" in out
+        # The comment and both following statements survive as separate stmts.
+        assert "-- a note" in out
+        assert "v_y := 1;" in out
+        assert "INSERT INTO u (a) VALUES (1)" in out
+
+    def test_set_does_not_swallow_following_dml(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN\n"
+            "    SET @y = 1\n"
+            "    INSERT INTO u (a) VALUES (1)\n"
+            "END"
+        )
+        out = _transpile(src, "tsql", "postgresql")
+        assert "v_y := 1;" in out
+        assert "INSERT INTO u (a) VALUES (1)" in out

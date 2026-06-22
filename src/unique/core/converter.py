@@ -1285,13 +1285,14 @@ def _emit_delete(node: DeleteStatement, dialect: str) -> str:
 def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     """Emit a CREATE TABLE statement."""
     table_node = node.table
-    # The T-SQL default schema "dbo" has no meaning in Oracle or MySQL — strip
-    # it so tables are created in the current user's schema (Oracle) or the
-    # connected database (MySQL, where "dbo" would otherwise name a
-    # non-existent database).
-    if dialect in ("oracle", "mysql") and getattr(table_node, "schema", None) == (
-        "dbo"
-    ):
+    # The T-SQL default schema "dbo" has no meaning in Oracle, MySQL or
+    # PostgreSQL — strip it so tables land in the current user's schema
+    # (Oracle), the connected database (MySQL, where "dbo" would name a
+    # non-existent database), or the default "public" schema (PostgreSQL,
+    # where "dbo" would name a schema that doesn't exist).
+    if dialect in ("oracle", "mysql", "postgresql") and getattr(
+        table_node, "schema", None
+    ) == ("dbo"):
         table_node = TableRef(name=table_node.name, alias=table_node.alias)
     table = _emit_table_ref(table_node)
     temp = "TEMPORARY " if node.temporary else ""
@@ -1350,6 +1351,13 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     default_sql = re.sub(
                         r"(?i)\b(?:NEWSEQUENTIALID|NEWID)\s*\(\s*\)",
                         "(UUID())",
+                        default_sql,
+                    )
+                elif dialect == "postgresql":
+                    # PostgreSQL: gen_random_uuid() (pgcrypto / built-in 13+).
+                    default_sql = re.sub(
+                        r"(?i)\b(?:NEWSEQUENTIALID|NEWID)\s*\(\s*\)",
+                        "gen_random_uuid()",
                         default_sql,
                     )
                 default = f" DEFAULT {default_sql}"
