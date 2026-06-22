@@ -21,6 +21,7 @@ when the URL/driver is unavailable, so the default suite stays green.
 from __future__ import annotations
 
 import contextlib
+import re
 from dataclasses import dataclass
 
 
@@ -140,20 +141,45 @@ class MySQLValidator(SyntaxValidator):
 
         dbname = f"unique_val_{uuid.uuid4().hex[:12]}"
         cur = self._conn.cursor()
+        # Prefer an isolated throwaway database so DDL can't leak between
+        # validations. That needs the global CREATE privilege; if the connected
+        # user lacks it (e.g. a least-privilege user scoped to one schema), fall
+        # back to validating in the current database and dropping any tables the
+        # snippet creates, mirroring the Oracle validator's cleanup approach.
+        isolated = False
         try:
             cur.execute(f"CREATE DATABASE {dbname}")
             cur.execute(f"USE {dbname}")
+            isolated = True
+        except Exception:
+            isolated = False
+        created_tables: list[str] = []
+        try:
             for stmt in _split_mysql_statements(sql):
-                if _is_executable(stmt):
-                    cur.execute(stmt)
-                    with contextlib.suppress(Exception):
-                        cur.fetchall()
+                if not _is_executable(stmt):
+                    continue
+                if not isolated:
+                    m = re.search(
+                        r"(?is)\bCREATE\s+(?:TEMPORARY\s+)?TABLE\s+"
+                        r"(?:IF\s+NOT\s+EXISTS\s+)?[`\"]?([A-Za-z0-9_]+)",
+                        stmt,
+                    )
+                    if m:
+                        created_tables.append(m.group(1))
+                cur.execute(stmt)
+                with contextlib.suppress(Exception):
+                    cur.fetchall()
             return ValidationResult(ok=True)
         except Exception as e:  # noqa: BLE001
             return ValidationResult(ok=False, error=f"{e}\n--- sql ---\n{sql}")
         finally:
-            with contextlib.suppress(Exception):
-                cur.execute(f"DROP DATABASE IF EXISTS {dbname}")
+            if isolated:
+                with contextlib.suppress(Exception):
+                    cur.execute(f"DROP DATABASE IF EXISTS {dbname}")
+            else:
+                for tbl in reversed(created_tables):
+                    with contextlib.suppress(Exception):
+                        cur.execute(f"DROP TABLE IF EXISTS {tbl}")
             cur.close()
 
     def close(self) -> None:
