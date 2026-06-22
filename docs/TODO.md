@@ -349,10 +349,14 @@ open.
 - [ ] **docker-compose example for end users (P3)** — replace the build-based
       `docker-compose.yaml` example with one that pulls the published Docker
       Hub image, aimed at an end user rather than a contributor.
-- [ ] **Pin sqlglot to an exact version (P2)** — depend on a fixed sqlglot
-      release so upstream changes can't silently break transpilation; bump
-      deliberately. (Analysis of vendoring/forking sqlglot — GRUB-style pinned
-      sources + local patches — recorded in `docs/sqlglot-dependency.md`.)
+- [x] **Pin sqlglot to an exact version (P2)** — was `sqlglot>=25.0.0` (open
+      lower bound, pulled whatever was newest at install time); now pinned to
+      `sqlglot==30.11.0` so upstream changes can't silently break
+      transpilation. Upgrades are deliberate (bump, run suite + live job,
+      regenerate fixtures, review). Vendoring/forking analysis (GRUB-style
+      pinned sources + patch queue) recorded in `docs/sqlglot-dependency.md`;
+      recommendation is pin-only for now, fork only if issues accumulate that
+      can't be solved transformer-side.
 
 ## 9. Known limitations to keep documented (not bugs)
 
