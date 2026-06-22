@@ -107,3 +107,39 @@ class TestMutatingTableHazard:
         # The self-referencing UPDATE/SELECT on the same table is preserved.
         assert "UPDATE t SET" in out
         assert "SELECT COUNT(*) FROM t" in out.replace("  ", " ")
+
+
+def _tr(sql: str, source: str, target: str) -> str:
+    return Transpiler().transpile(sql, source=source, target=target).sql
+
+
+class TestTriggerUpdatePredicate:
+    """T-SQL UPDATE(col) inside a trigger tests whether a column changed; it
+    must be rewritten per engine, not emitted verbatim (invalid elsewhere)."""
+
+    SRC = (
+        "CREATE TRIGGER dbo.trg ON dbo.t\n"
+        "FOR UPDATE\nAS\nBEGIN\n"
+        "    IF UPDATE(col_32)\n"
+        "    BEGIN\n        INSERT INTO dbo.log (a) VALUES (1)\n    END\n"
+        "END"
+    )
+
+    def test_mysql(self) -> None:
+        out = _tr(self.SRC, "tsql", "mysql")
+        assert "NOT (NEW.col_32 <=> OLD.col_32)" in out
+        assert "UPDATE(col_32)" not in out.replace(" ", "")
+
+    def test_postgresql(self) -> None:
+        out = _tr(self.SRC, "tsql", "postgresql")
+        assert "NEW.col_32 IS DISTINCT FROM OLD.col_32" in out
+
+    def test_oracle(self) -> None:
+        out = _tr(self.SRC, "tsql", "oracle")
+        assert "UPDATING('col_32')" in out
+
+    def test_plain_update_statement_untouched(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN UPDATE t SET a = 1 END"
+        out = _tr(src, "tsql", "mysql")
+        assert "UPDATE t SET a = 1" in out
+        assert "NEW." not in out

@@ -220,6 +220,14 @@ open.
       non-portable translation is commented out, so the script stays valid.
       Found by the live MySQL procedures-fixture check; tested
       (TestInlineTableValuedFunction).
+- [x] **Trigger `UPDATE(col)` predicate (P1)** — T-SQL `IF UPDATE(col)` inside
+      a trigger (tests whether a column was affected) was emitted verbatim,
+      which is invalid outside T-SQL (MySQL error 1064). It is now rewritten per
+      engine: MySQL `NOT (NEW.col <=> OLD.col)`, PostgreSQL `(NEW.col IS DISTINCT
+      FROM OLD.col)`, Oracle `UPDATING('col')`. Only the function-style
+      `UPDATE(<column>)` predicate is matched, never an `UPDATE … SET`
+      statement. Found by the live MySQL procedures-fixture check; tested
+      (TestTriggerUpdatePredicate).
 - [x] **Table-valued function in a `FROM` clause on MySQL (P1)** — a T-SQL
       inline TVF used as a table source (`FROM dbo.func5(@s, ',')`) is a syntax
       error in MySQL, which has no table-valued functions. The MySQL DML

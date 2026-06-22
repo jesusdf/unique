@@ -1317,6 +1317,7 @@ class ProceduralTransformer:
                         sql = self._fix_oracle_dml(sql)
             except Exception:
                 pass
+        sql = self._rewrite_trigger_update_predicate(sql)
         if self._target == "mysql":
             sql = self._mysql_normalize_funcs(sql)
             sql = self._mysql_string_concat(sql)
@@ -1332,6 +1333,34 @@ class ProceduralTransformer:
             # RETURN or COALESCE). The lexer may have split it as ``dbo . f``.
             sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
         return RawSQL(sql=sql, reason=node.reason)
+
+    def _rewrite_trigger_update_predicate(self, sql: str) -> str:
+        """Rewrite the T-SQL trigger predicate ``UPDATE(col)`` per dialect.
+
+        Inside a trigger, T-SQL ``UPDATE(col)`` tests whether a column was
+        affected by the statement. The equivalents are:
+          - MySQL:      NOT (NEW.col <=> OLD.col)   (null-safe "changed")
+          - PostgreSQL: (NEW.col IS DISTINCT FROM OLD.col)
+          - Oracle:     UPDATING('col')
+
+        Only matches ``UPDATE(<identifier>)`` as a function-style predicate (a
+        single column name in parens), never an ``UPDATE … SET`` statement.
+        """
+        if self._target == "tsql":
+            return sql
+        pattern = re.compile(r"(?i)\bUPDATE\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)")
+
+        def repl(m: re.Match[str]) -> str:
+            col = m.group(1)
+            if self._target == "mysql":
+                return f"NOT (NEW.{col} <=> OLD.{col})"
+            if self._target == "postgresql":
+                return f"(NEW.{col} IS DISTINCT FROM OLD.{col})"
+            if self._target == "oracle":
+                return f"UPDATING('{col}')"
+            return m.group(0)
+
+        return pattern.sub(repl, sql)
 
     def _unwrap_spurious_hash_format(self, sql: str) -> str:
         """Undo sqlglot's misreading of a T-SQL hash-stringify CONVERT.
