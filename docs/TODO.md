@@ -322,11 +322,15 @@ open.
 - [ ] **`SET IDENTITY_INSERT t ON/OFF` (P3)** — mistranslated to
       `IDENTITY_INSERT AS t`. No portable equivalent; emit a documented comment
       (MySQL/Oracle/PG manage identity insertion differently). Not in fixture.
-- [ ] **`THROW`/`RAISERROR` argument shape (P2)** — mapped to MySQL `SIGNAL
-      SQLSTATE '45000' SET MESSAGE_TEXT = ...` but the message/number/severity
-      arguments are passed through raw (e.g. `MESSAGE_TEXT = 50000, 'msg', 1`),
-      which is not valid. Needs proper extraction of the message text (and a
-      format-substitution strategy for RAISERROR's printf-style args).
+- [x] **`THROW`/`RAISERROR` argument shape (P2)** — `RAISERROR(msg_or_id,
+      severity, state)` mapped to MySQL `SIGNAL ... SET MESSAGE_TEXT = (16947,
+      16, 1)`, an invalid tuple (error 1064). The emitter now splits the first
+      argument from the rest: a string becomes `MESSAGE_TEXT = '<msg>'`; a
+      numeric message id becomes `MESSAGE_TEXT = 'Application error',
+      MYSQL_ERRNO = <id>`; the dropped severity/state are documented in a
+      `-- UNIQUE:` comment. Oracle/PostgreSQL use only the first (message)
+      argument. Found by the live MySQL procedures-fixture check; tested
+      (TestRaiserrorToMySQLSignal).
 - [ ] **`@@ERROR` in a condition → broken IF (P2)** — `IF @@ERROR <> 0` becomes
       `IF /* @@ERROR */ <> 0 THEN` (commented-out operand leaves an invalid
       condition). Map `@@ERROR`/`@@ROWCOUNT`-style globals used in expressions,

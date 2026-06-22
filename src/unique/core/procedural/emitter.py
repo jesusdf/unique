@@ -1080,10 +1080,61 @@ class ProceduralEmitter:
         if self._dialect == "tsql":
             return f"RAISERROR({msg}, 16, 1);"
         elif self._dialect == "oracle":
-            return f"RAISE_APPLICATION_ERROR(-20001, {msg});"
+            first, _ = self._split_raise_args(msg)
+            return f"RAISE_APPLICATION_ERROR(-20001, {first});"
         elif self._dialect == "postgresql":
-            return f"RAISE EXCEPTION '%', {msg};"
-        return f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = {msg};"
+            first, _ = self._split_raise_args(msg)
+            return f"RAISE EXCEPTION '%', {first};"
+        # MySQL SIGNAL requires MESSAGE_TEXT to be a string and the error number
+        # in MYSQL_ERRNO; the raw T-SQL argument tuple "(msg_or_id, severity,
+        # state)" is invalid there. Split the first argument from the rest.
+        first, rest = self._split_raise_args(msg)
+        if first.startswith("'") or first.startswith('"'):
+            # A literal/expression message text.
+            sig = f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = {first}"
+        else:
+            # A numeric message id (or a variable) — MySQL can't resolve a
+            # message-id to text, so use it as the error number and document it.
+            sig = (
+                f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = "
+                f"'Application error', MYSQL_ERRNO = {first}"
+            )
+        comment = ""
+        if rest:
+            comment = (
+                f"  -- UNIQUE: original RAISERROR/THROW severity/state args "
+                f"dropped: {rest}"
+            )
+        return f"{sig};{comment}"
+
+    @staticmethod
+    def _split_raise_args(msg: str) -> tuple[str, str]:
+        """Split a RAISERROR/THROW argument blob into (first_arg, rest).
+
+        Handles an optional wrapping paren and respects nested parens and
+        quotes so commas inside a string/expression don't split it.
+        """
+        s = msg.strip()
+        if s.startswith("(") and s.endswith(")"):
+            s = s[1:-1].strip()
+        depth = 0
+        in_str = False
+        quote = ""
+        for i, ch in enumerate(s):
+            if in_str:
+                if ch == quote:
+                    in_str = False
+                continue
+            if ch in ("'", '"'):
+                in_str = True
+                quote = ch
+            elif ch in ("(", "["):
+                depth += 1
+            elif ch in (")", "]"):
+                depth -= 1
+            elif ch == "," and depth == 0:
+                return s[:i].strip(), s[i + 1 :].strip()
+        return s, ""
 
     def _emit_return(self, node: ReturnStatement) -> str:
         # In a MySQL procedure, RETURN is illegal whether or not it has a value
