@@ -1,13 +1,25 @@
 # ---------------------------------------------------------------------------
 # Unique SQL Transpiler — Docker Compose
+#
+# The default `unique` service pulls the prebuilt image from Docker Hub, so an
+# end user can run the API + web UI without building anything:
+#
+#     docker compose up -d        # then open http://localhost:8000/
+#
+# Pin a specific build by setting UNIQUE_TAG (e.g. a CI short SHA):
+#
+#     UNIQUE_TAG=abc1234 docker compose up -d
+#
+# Contributors who want to build from source instead can use the `dev`
+# profile (hot-reload, local Dockerfile.dev):
+#
+#     docker compose --profile dev up
 # ---------------------------------------------------------------------------
 
 services:
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: unique-api
+  unique:
+    image: jesusdf/unique:${UNIQUE_TAG:-latest}
+    container_name: unique
     ports:
       - "8000:8000"
     environment:
@@ -19,7 +31,8 @@ services:
       timeout: 5s
       retries: 3
 
-  # Development service with hot-reload and test dependencies
+  # Development service: builds from source with hot-reload and test deps.
+  # Enabled only via the `dev` profile so it never runs by default.
   dev:
     build:
       context: .

@@ -341,14 +341,21 @@ open.
       its box (`.CodeMirror-scroll { overflow-x: auto }`), and the editors are
       sized with `setSize("100%", …)`. Rebuilt `static/index.html` via
       `web/build.py`.
-- [ ] **README slimming + docs split (P3)** — focus the README on the
-      sqlglot-based value proposition (what unique adds on top of sqlglot);
-      move installation/deployment and interfaces sections into
-      `docs/` files and link them from a Documentation section; remove
-      architecture/development prose that duplicates existing `docs/`.
-- [ ] **docker-compose example for end users (P3)** — replace the build-based
-      `docker-compose.yaml` example with one that pulls the published Docker
-      Hub image, aimed at an end user rather than a contributor.
+- [x] **README slimming + docs split (P3)** — README rewritten to focus on the
+      sqlglot-based value proposition (a dedicated "Built on sqlglot — and what
+      Unique adds" section: procedural engine, shape-changing rewrites,
+      documented/reversible lossy conversions, comment preservation,
+      functional-equivalence guards, whole-script orchestration). Cut from 189
+      to ~96 lines. Installation/deployment moved to
+      [docs/06-installation.md](06-installation.md) and the CLI/Python/REST/web
+      interfaces to [docs/07-interfaces.md](07-interfaces.md), both linked from
+      the README's Documentation section. The duplicated Architecture / Project
+      Structure / Development prose was removed (it already lives in
+      `02-architecture.md` and `04-development-guide.md`).
+- [x] **docker-compose example for end users (P3)** — the default `unique`
+      service now pulls `jesusdf/unique:${UNIQUE_TAG:-latest}` from Docker Hub
+      (no build needed); the build-from-source path is kept under the `dev`
+      profile for contributors. Documented in `06-installation.md`.
 - [x] **Pin sqlglot to an exact version (P2)** — was `sqlglot>=25.0.0` (open
       lower bound, pulled whatever was newest at install time); now pinned to
       `sqlglot==30.11.0` so upstream changes can't silently break
