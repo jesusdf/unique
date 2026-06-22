@@ -64,6 +64,9 @@ class ProceduralEmitter:
         self._dialect = dialect
         self._indent_level = 0
         self._indent_str = "    "
+        # Label of the current MySQL procedure block, used to translate a bare
+        # RETURN (early exit) into LEAVE <label>; None when not applicable.
+        self._proc_leave_label: str | None = None
 
     def emit(self, node: ASTNode) -> str:
         """Emit a procedural AST node as target-dialect SQL.
@@ -329,8 +332,18 @@ class ProceduralEmitter:
         declarations: list[ASTNode],
         body_stmts: list[ASTNode],
     ) -> str:
+        # A bare RETURN (early exit) is illegal in a MySQL procedure body
+        # ("RETURN is only allowed in a FUNCTION"); translate it to LEAVE of a
+        # labeled block. Only add the label when such a RETURN is present.
+        needs_label = self._body_has_bare_return(body_stmts)
+        prev_label = self._proc_leave_label
         lines = [f"{header}"]
-        lines.append("BEGIN")
+        if needs_label:
+            self._proc_leave_label = "proc_exit"
+            lines.append(f"{self._proc_leave_label}: BEGIN")
+        else:
+            self._proc_leave_label = None
+            lines.append("BEGIN")
         self._indent_level = 1
         for decl in declarations:
             lines.append(f"{self._indent()}{self._emit_node(decl)}")
@@ -342,7 +355,19 @@ class ProceduralEmitter:
                 lines.append(f"{self._indent()}{line}" if line.strip() else "")
         self._indent_level = 0
         lines.append("END")
+        self._proc_leave_label = prev_label
         return "\n".join(lines)
+
+    def _body_has_bare_return(self, stmts: list[ASTNode]) -> bool:
+        """Whether any statement (recursively) is a valueless RETURN."""
+        for s in stmts:
+            if isinstance(s, ReturnStatement) and not s.value:
+                return True
+            for attr in ("body", "then_body", "else_body", "try_body", "catch_body"):
+                child = getattr(s, attr, None)
+                if child and self._body_has_bare_return(list(child)):
+                    return True
+        return False
 
     def _emit_alter_procedure(self, node: AlterProcedureStatement) -> str:
         """Emit ALTER PROCEDURE (T-SQL only)."""
@@ -1052,6 +1077,10 @@ class ProceduralEmitter:
         if node.value:
             val = self._emit_node(node.value)
             return f"RETURN {val};"
+        # A bare RETURN in a MySQL procedure is illegal; LEAVE the labeled
+        # block instead (the label is set when emitting the procedure body).
+        if self._dialect == "mysql" and self._proc_leave_label:
+            return f"LEAVE {self._proc_leave_label};"
         return "RETURN;"
 
     def _emit_cursor_op(self, node: CursorOperation) -> str:
