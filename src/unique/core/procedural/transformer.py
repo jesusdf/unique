@@ -491,27 +491,54 @@ class ProceduralTransformer:
         return sql
 
     def _transform_system_var(self, var: str) -> str:
-        """Transform system variables like @@ROWCOUNT, @@IDENTITY."""
+        """Transform system variables like @@ROWCOUNT, @@IDENTITY, @@ERROR.
+
+        ``@@ERROR``/``@@TRANCOUNT`` express T-SQL's imperative per-statement
+        error/transaction-depth checks, which the other engines have no direct
+        equivalent for (they use exception handlers). Emitting a bare comment in
+        their place left an invalid expression (e.g. ``IF /* @@ERROR */ <> 0``),
+        so a neutral ``0`` carrying an inline block comment is used instead — the
+        routine stays syntactically valid and the limitation is documented.
+        """
         upper = var.upper()
+        # A neutral, syntactically-valid placeholder for a global with no faithful
+        # equivalent: 0 plus an inline block comment (never a line comment, which
+        # would swallow the rest of an inline condition).
+        def _neutral(name: str, hint: str) -> str:
+            return f"0 /* UNIQUE: {name} has no {self._target} equivalent; {hint} */"
+
         if self._target == "oracle":
             mapping = {
                 "@@ROWCOUNT": "SQL%ROWCOUNT",
                 "@@IDENTITY": "/* @@IDENTITY: use <sequence>.CURRVAL */",
+                # SQLCODE is a valid Oracle function (0 in normal flow, the last
+                # error code inside an exception handler).
                 "@@ERROR": "SQLCODE",
-                "@@TRANCOUNT": "-- @@TRANCOUNT has no Oracle equivalent",
+                "@@TRANCOUNT": _neutral(
+                    "@@TRANCOUNT", "transactions are implicit"
+                ),
             }
             return mapping.get(upper, f"/* {var} */")
         elif self._target == "postgresql":
             mapping = {
                 "@@ROWCOUNT": "ROW_COUNT",
                 "@@IDENTITY": "LASTVAL()",
-                "@@ERROR": "SQLSTATE",
+                # SQLSTATE is only available inside an EXCEPTION handler in
+                # plpgsql, so it cannot stand in for an inline @@ERROR check.
+                "@@ERROR": _neutral("@@ERROR", "use an EXCEPTION handler"),
+                "@@TRANCOUNT": _neutral(
+                    "@@TRANCOUNT", "the routine manages its transaction"
+                ),
             }
             return mapping.get(upper, f"/* {var} */")
         elif self._target == "mysql":
             mapping = {
                 "@@ROWCOUNT": "ROW_COUNT()",
                 "@@IDENTITY": "LAST_INSERT_ID()",
+                "@@ERROR": _neutral("@@ERROR", "use a DECLARE ... HANDLER"),
+                "@@TRANCOUNT": _neutral(
+                    "@@TRANCOUNT", "the routine manages its transaction"
+                ),
             }
             return mapping.get(upper, f"/* {var} */")
         return var

@@ -347,9 +347,15 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     limit_expr = expr.args.get("limit")
     offset_expr = expr.args.get("offset")
     if limit_expr or offset_expr:
+        # T-SQL TOP n PERCENT carries a percent flag in sqlglot's limit options.
+        percent = False
+        if limit_expr is not None:
+            opts = limit_expr.args.get("limit_options")
+            percent = bool(opts and opts.args.get("percent"))
         limit = LimitClause(
             limit=convert_expression(limit_expr.expression) if limit_expr else None,
             offset=convert_expression(offset_expr.expression) if offset_expr else None,
+            percent=percent,
         )
 
     # DISTINCT
@@ -1752,8 +1758,11 @@ def _emit_limit(limit: LimitClause, dialect: str) -> str:
         if limit.offset:
             parts.append(f"OFFSET {_emit_expression(limit.offset, dialect)} ROWS")
         if limit.limit:
+            # Oracle natively supports FETCH FIRST n PERCENT ROWS ONLY.
+            pct = " PERCENT" if limit.percent else ""
             parts.append(
-                f"FETCH FIRST {_emit_expression(limit.limit, dialect)} ROWS ONLY"
+                f"FETCH FIRST {_emit_expression(limit.limit, dialect)}"
+                f"{pct} ROWS ONLY"
             )
         return "\n".join(parts)
 
@@ -1773,7 +1782,19 @@ def _emit_limit(limit: LimitClause, dialect: str) -> str:
     # PostgreSQL, MySQL: LIMIT ... OFFSET ...
     parts = []
     if limit.limit:
-        parts.append(f"LIMIT {_emit_expression(limit.limit, dialect)}")
+        limit_sql = f"LIMIT {_emit_expression(limit.limit, dialect)}"
+        if limit.percent:
+            # Neither MySQL nor PostgreSQL supports LIMIT n PERCENT. A faithful
+            # rewrite needs the total row count (LIMIT CEIL(n/100 * COUNT(*))),
+            # which can't be derived from a flat SELECT here; keep a valid row
+            # LIMIT and document the change rather than emit invalid SQL or
+            # silently drop the PERCENT semantics.
+            limit_sql += (
+                f" /* UNIQUE: source was TOP n PERCENT; {dialect} has no LIMIT "
+                "PERCENT — emitted as a row count, adjust to "
+                "CEIL(n/100 * total_rows) if a true percentage is required */"
+            )
+        parts.append(limit_sql)
     if limit.offset:
         parts.append(f"OFFSET {_emit_expression(limit.offset, dialect)}")
     return "\n".join(parts)

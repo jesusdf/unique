@@ -1013,3 +1013,41 @@ class TestSetIdentityInsert:
         assert "IDENTITY_INSERT AS" not in out
         # The INSERT must not absorb the trailing SET as a table alias.
         assert "AS `SET`" not in out
+
+
+class TestErrorGlobalInCondition:
+    """@@ERROR/@@TRANCOUNT have no faithful non-T-SQL equivalent; in a
+    condition they must not leave a syntactically broken operand."""
+
+    def test_error_in_if_mysql(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "UPDATE t SET a = 1 IF @@ERROR <> 0 RETURN END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        # Valid neutral operand + documenting comment, not a bare /* @@ERROR */.
+        assert "IF 0 /* UNIQUE: @@ERROR" in out
+        assert "IF /* @@ERROR */" not in out
+
+    def test_error_in_if_postgresql(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "UPDATE t SET a = 1 IF @@ERROR <> 0 RETURN END"
+        )
+        out = _transpile(src, "tsql", "postgresql")
+        assert "IF 0 /* UNIQUE: @@ERROR" in out
+        assert "SQLSTATE" not in out
+
+    def test_error_in_if_oracle_uses_sqlcode(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "UPDATE t SET a = 1 IF @@ERROR <> 0 RETURN END"
+        )
+        out = _transpile(src, "tsql", "oracle")
+        assert "IF SQLCODE <> 0" in out
+
+    def test_trancount_not_broken(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN IF @@TRANCOUNT > 0 COMMIT END"
+        for target in ("mysql", "postgresql"):
+            out = _transpile(src, "tsql", target)
+            assert "IF 0 /* UNIQUE: @@TRANCOUNT" in out

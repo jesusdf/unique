@@ -94,6 +94,36 @@ class TestParseSelectLimit:
         assert isinstance(stmt, SelectStatement)
         assert stmt.limit is not None
 
+    def test_tsql_top_percent_flag(self) -> None:
+        nodes = parse_sql("SELECT TOP 10 PERCENT a FROM t", "tsql")
+        stmt = nodes[0]
+        assert isinstance(stmt, SelectStatement)
+        assert stmt.limit is not None
+        assert stmt.limit.percent is True
+
+    def test_top_percent_oracle_native(self) -> None:
+        nodes = parse_sql("SELECT TOP 10 PERCENT a FROM t ORDER BY a", "tsql")
+        out = emit_sql(nodes, "oracle")
+        assert "FETCH FIRST 10 PERCENT ROWS ONLY" in out
+
+    def test_top_percent_mysql_documented(self) -> None:
+        nodes = parse_sql("SELECT TOP 10 PERCENT a FROM t ORDER BY a", "tsql")
+        out = emit_sql(nodes, "mysql")
+        assert "LIMIT 10" in out
+        assert "TOP n PERCENT" in out  # documented in a UNIQUE comment
+
+    def test_top_percent_postgresql_documented(self) -> None:
+        nodes = parse_sql("SELECT TOP 10 PERCENT a FROM t ORDER BY a", "tsql")
+        out = emit_sql(nodes, "postgresql")
+        assert "LIMIT 10" in out
+        assert "no LIMIT PERCENT" in out
+
+    def test_plain_top_not_marked_percent(self) -> None:
+        nodes = parse_sql("SELECT TOP 10 a FROM t", "tsql")
+        out = emit_sql(nodes, "mysql")
+        assert "LIMIT 10" in out
+        assert "PERCENT" not in out
+
 
 class TestParseSelectJoin:
     def test_inner_join(self) -> None:
