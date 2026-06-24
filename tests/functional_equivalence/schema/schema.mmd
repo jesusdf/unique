@@ -1,0 +1,48 @@
+%% Functional-equivalence test schema — minimal invoicing domain.
+%% Engine-agnostic. DRAFT: refine alongside schema/canonical.sql.
+%% Ideally regenerate this from the canonical DDL so it cannot drift.
+classDiagram
+    class customer {
+        +int id PK (identity)
+        string name
+        string email UNIQUE
+        text notes  %% from VARCHAR(MAX)
+    }
+    class product {
+        +int id PK (identity)
+        string name
+        decimal~10,2~ unit_price
+    }
+    class invoice {
+        +int id PK (identity)
+        +int customer_id FK
+        date issued_on
+        datetime created_at  %% trigger/clock-sensitive
+        bool is_paid  %% DEFAULT false
+        decimal~12,2~ total  %% maintained by trigger
+    }
+    class invoice_line {
+        +int id PK (identity)
+        +int invoice_id FK
+        +int product_id FK
+        int qty  %% CHECK qty > 0
+        decimal~10,2~ unit_price
+        decimal~12,2~ line_total  %% qty * unit_price
+    }
+    class payment {
+        +int id PK (identity)
+        +int invoice_id FK
+        date paid_on
+        decimal~12,2~ amount
+    }
+
+    customer "1" --> "*" invoice : places
+    invoice "1" --> "*" invoice_line : contains
+    product "1" --> "*" invoice_line : referenced by
+    invoice "1" --> "*" payment : settled by
+
+    %% Behavioral objects (not class-diagram nodes, listed for reference):
+    %%   view     v_invoice_totals  : SUM(line_total) per invoice
+    %%   trigger  trg_line_total    : AFTER INSERT/UPDATE ON invoice_line -> recompute invoice.total
+    %%   proc     create_invoice    : insert header + lines, return new invoice id
+    %%   function fn_tax            : tax amount for a given net amount
