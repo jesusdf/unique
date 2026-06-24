@@ -563,6 +563,16 @@ class ProceduralTransformer:
 
     def _transform_data_type(self, dt: DataType) -> DataType:
         """Transform a data type between dialects."""
+        # A carrier type parsed with its original preserved in a `/* UNIQUE: … */`
+        # comment: re-map the *original* for this target. The result keeps the
+        # original where the target supports it (faithful round-trip) and
+        # re-applies a carrier where it doesn't — handled by the normal path
+        # below. (origin_comment is cleared to avoid infinite recursion.)
+        if dt.origin_comment:
+            return self._transform_data_type(
+                DataType(name=dt.origin_comment, params=dt.params)
+            )
+
         type_name = dt.name.upper()
 
         # Handle %TYPE references
@@ -578,6 +588,11 @@ class ProceduralTransformer:
                         return self._transform_data_type(resolved)
                 except Exception:  # pragma: no cover - defensive
                     pass
+            # Oracle supports %TYPE/%ROWTYPE natively, so keep the reference as-is
+            # for an Oracle target (also makes a carrier round-trip back to Oracle
+            # faithful) instead of lowering it to a carrier.
+            if self._target == "oracle":
+                return DataType(name=dt.name, params=dt.params)
             # Unresolved without a connection: emit a permissive carrier type
             # and preserve the original reference as a comment so the
             # substitution is documented and reversible.
@@ -624,7 +639,13 @@ class ProceduralTransformer:
         # preserve the original in a /* UNIQUE */ comment so it is documented
         # and reversible, instead of leaking an unknown type the engine rejects.
         if base_type in self._LOSSY_SOURCE_TYPES:
-            return DataType(name=self._unknown_type_carrier(), origin_comment=dt.name)
+            carrier = self._unknown_type_carrier()
+            # If the target's carrier is the original type itself, the target
+            # supports it natively (e.g. SQL_VARIANT → T-SQL, ANYDATA → Oracle):
+            # emit it plainly, with no redundant carrier comment.
+            if carrier.upper() == base_type:
+                return DataType(name=dt.name, params=dt.params)
+            return DataType(name=carrier, origin_comment=dt.name)
 
         return dt
 

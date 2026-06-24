@@ -56,27 +56,23 @@ Key design risks, captured for when we start:
 - **Scope to the faithfully-transpilable subset**; lossy constructs stay covered
   by the existing syntactic + `-- UNIQUE:` comment tests.
 
-## 2. Reverse transpilation: restore originals from `/* UNIQUE: … */` comments (P2)
+## 2. Reverse transpilation: restore *non-type* originals from `/* UNIQUE: … */` comments (P2)
 
-When a non-portable construct was lowered to a carrier with the original
-preserved in a comment (e.g. `SQL_VARIANT` → `TEXT /* UNIQUE: SQL_VARIANT */`,
-or `H_X.Y%TYPE` → `SQL_VARIANT /* UNIQUE: H_X.Y%TYPE */`), transpiling **back**
-should emit the original from the comment instead of keeping the carrier, so a
-round-trip is faithful.
+The **type-carrier** case is done (see DONE.md): a non-portable type lowered to a
+carrier with the original in a `/* UNIQUE: <orig> */` comment now round-trips
+faithfully. What remains is generalizing the idea to **other constructs**
+preserved in `UNIQUE` comments.
 
-- [ ] Implementation sketch: in the data-type parse path, if a type token is
-      immediately followed by a `/* UNIQUE: <original> */` comment, parse
-      `<original>` and use it as the `DataType.name` (dropping the carrier), so
-      the existing emit path renders it. Add round-trip tests (A→B→A) asserting
-      the original type returns.
-- [ ] Evaluate generalizing to **other constructs preserved in `UNIQUE`
-      comments**, not just types: a dropped `SET NOCOUNT ON`, an
-      `OUTPUT`/`RETURNING` clause documented as a trailing comment,
-      `MERGE`→`INSERT ... ON DUPLICATE KEY UPDATE` notes, etc. A single
-      "UNIQUE-comment restorer" pass that swaps the documented original back in
-      when the target is the construct's original engine. Care: only restore when
-      the target actually supports the original, and keep the `-- ` vs `/* */`
-      comment-style rules intact.
+- [ ] Evaluate a single "UNIQUE-comment restorer" for non-type constructs: a
+      dropped `SET NOCOUNT ON` kept as `/* UNIQUE: SET NOCOUNT ON -- no <target>
+      equivalent */`, an `OUTPUT`/`RETURNING` clause documented as a trailing
+      `-- UNIQUE:` comment, `MERGE`→`INSERT ... ON DUPLICATE KEY UPDATE` notes,
+      etc. When the target is the construct's original engine, swap the
+      documented original back in for the carrier/comment. Care: only restore
+      when the target actually supports the original, and keep the `-- ` vs
+      `/* */` comment-style rules intact. (Lower value than the type case — these
+      are statements/clauses, not silently-wrong types — so weigh effort vs.
+      benefit before building.)
 
 ## 3. Trigger pseudo-table / granularity semantics (P2)
 
