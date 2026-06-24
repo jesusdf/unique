@@ -183,3 +183,36 @@ class TestMySQLDelimiterWrapping:
         out = transpiler.transpile(src, source="tsql", target="mysql").sql
         assert "DELIMITER $$" in out
         assert "DELIMITER ;" in out
+
+
+class TestQuotedIdentifierOff:
+    """Under T-SQL SET QUOTED_IDENTIFIER OFF, double-quoted text is a string
+    literal, not an identifier; the transpiler tracks the setting across
+    batches and rewrites "..." to '...' before parsing."""
+
+    def test_double_quote_becomes_string(self) -> None:
+        src = (
+            "SET QUOTED_IDENTIFIER OFF\nGO\n"
+            'SELECT a FROM t WHERE name = "John"'
+        )
+        out = transpile(src, source="tsql", target="mysql").sql
+        assert "= 'John'" in out
+        assert '"John"' not in out
+
+    def test_on_keeps_identifier(self) -> None:
+        # Default (ON): a double-quoted name stays an identifier.
+        out = transpile(
+            'SELECT a FROM t WHERE "name" = 1', source="tsql", target="mysql"
+        ).sql
+        assert "'name'" not in out
+
+    def test_off_then_on_resets(self) -> None:
+        src = (
+            "SET QUOTED_IDENTIFIER OFF\nGO\n"
+            'SELECT "x" AS c\nGO\n'
+            "SET QUOTED_IDENTIFIER ON\nGO\n"
+            'SELECT "y" AS c'
+        )
+        out = transpile(src, source="tsql", target="mysql").sql
+        assert "'x' AS c" in out  # OFF: string literal
+        assert "'y'" not in out  # ON: identifier again
