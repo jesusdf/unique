@@ -1,3 +1,8 @@
+> ℹ️ **Note from the developer / analyst**
+> 
+> This project is just too big for one lifetime, so I'm backing it with AI. 
+> The goal is to provide a working tool; how we get there is not that important.
+
 # Unique — SQL Transpiler
 
 Unique translates SQL scripts between **SQL Server (T-SQL)**, **Oracle**,
