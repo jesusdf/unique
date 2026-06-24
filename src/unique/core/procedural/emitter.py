@@ -46,6 +46,9 @@ from unique.core.ast_nodes import (
     SelectIntoStatement,
     SetVariableStatement,
     StatementList,
+    TransactionAction,
+    TransactionStatement,
+    WaitForStatement,
     TryCatchBlock,
     WhileStatement,
 )
@@ -116,6 +119,8 @@ class ProceduralEmitter:
             ContinueStatement: self._emit_continue,
             NullStatement: self._emit_null,
             CommentStatement: self._emit_comment,
+            TransactionStatement: self._emit_transaction,
+            WaitForStatement: self._emit_waitfor,
             EmbeddedDML: self._emit_embedded_dml,
             SelectIntoStatement: self._emit_select_into,
             RawSQL: self._emit_raw_sql,
@@ -1248,6 +1253,66 @@ class ProceduralEmitter:
             val = self._emit_node(node.value)
             return f"RETURN {val};"
         return "RETURN;"
+
+    def _emit_transaction(self, node: TransactionStatement) -> str:
+        """Emit a transaction-control statement for the target dialect."""
+        name = node.name
+        if node.action == TransactionAction.BEGIN:
+            if self._dialect == "tsql":
+                return f"BEGIN TRANSACTION{' ' + name if name else ''};"
+            if self._dialect == "mysql":
+                return "START TRANSACTION;"
+            if self._dialect == "postgresql":
+                # Inside a plpgsql function transaction control is illegal; a
+                # procedure starts its transaction implicitly. Document the
+                # dropped BEGIN rather than emit invalid SQL.
+                return (
+                    "/* UNIQUE: BEGIN TRANSACTION dropped -- PostgreSQL manages "
+                    "the routine transaction implicitly */"
+                )
+            # Oracle: transactions are implicit; BEGIN has no equivalent.
+            return (
+                "/* UNIQUE: BEGIN TRANSACTION dropped -- Oracle starts a "
+                "transaction implicitly */"
+            )
+        if node.action == TransactionAction.COMMIT:
+            return "COMMIT;"
+        if node.action == TransactionAction.ROLLBACK:
+            # ROLLBACK to a savepoint name keeps the name; a plain rollback does
+            # not. T-SQL "ROLLBACK TRAN name" rolls back to a save point.
+            if name:
+                if self._dialect == "tsql":
+                    return f"ROLLBACK TRANSACTION {name};"
+                if self._dialect in ("oracle", "postgresql", "mysql"):
+                    return f"ROLLBACK TO SAVEPOINT {name};"
+            return "ROLLBACK;"
+        # SAVEPOINT
+        if self._dialect == "tsql":
+            return f"SAVE TRANSACTION {name};" if name else "SAVE TRANSACTION;"
+        return f"SAVEPOINT {name};" if name else "SAVEPOINT;"
+
+    def _emit_waitfor(self, node: WaitForStatement) -> str:
+        """Emit a T-SQL WAITFOR for the target dialect.
+
+        DELAY (a relative pause) maps to each engine's sleep; TIME (wait until
+        an absolute clock time) has no portable equivalent and is documented.
+        """
+        if self._dialect == "tsql":
+            return f"WAITFOR {node.kind} '{node.value}';"
+        if node.kind == "TIME":
+            return (
+                f"/* UNIQUE: WAITFOR TIME '{node.value}' has no {self._dialect} "
+                "equivalent (wait until an absolute time) */"
+            )
+        secs = node.seconds if node.seconds is not None else 0
+        # Render whole seconds without a trailing .0 where possible.
+        secs_str = str(int(secs)) if float(secs).is_integer() else str(secs)
+        if self._dialect == "mysql":
+            return f"DO SLEEP({secs_str});"
+        if self._dialect == "postgresql":
+            return f"PERFORM pg_sleep({secs_str});"
+        # Oracle
+        return f"DBMS_LOCK.SLEEP({secs_str});"
 
     def _emit_cursor_op(self, node: CursorOperation) -> str:
         op = node.operation.upper()

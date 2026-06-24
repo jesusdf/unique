@@ -353,14 +353,23 @@ open.
       the protected statements; Oracle/PostgreSQL keep the EXCEPTION block.
       Tested (TestTryCatchToMySQL). Not in the current fixture, but common in
       real error-handling code.
-- [ ] **`BEGIN TRAN`/`BEGIN TRANSACTION` not bounded (P2)** — a transaction
-      statement followed by DML on the same/next line mis-parses
-      (`TRAN AS \`UPDATE\``), and `@@ERROR` in the following `IF` is commented
-      out, breaking the condition. Needs the transaction keywords recognized as
-      their own statements. Not in the current fixture.
-- [ ] **`SET IDENTITY_INSERT t ON/OFF` (P3)** — mistranslated to
-      `IDENTITY_INSERT AS t`. No portable equivalent; emit a documented comment
-      (MySQL/Oracle/PG manage identity insertion differently). Not in fixture.
+- [x] **`BEGIN TRAN`/`BEGIN TRANSACTION` not bounded (P2)** — transaction
+      keywords are now recognized as their own statements (parser dispatch +
+      lexer keywords TRAN/TRANSACTION/SAVE/WORK) and emitted via the existing
+      `TransactionStatement` node per dialect: `BEGIN TRANSACTION` → MySQL
+      `START TRANSACTION`, documented-comment for Oracle/PostgreSQL (transaction
+      implicit / managed by the routine); `COMMIT`/`ROLLBACK` pass through;
+      `SAVE TRAN name`/`ROLLBACK TRAN name` → `SAVEPOINT`/`ROLLBACK TO SAVEPOINT`.
+      Tested (TestTransactionControl). (`@@ERROR` in the following IF is a
+      separate item below.)
+- [x] **`SET IDENTITY_INSERT t ON/OFF` (P3)** — was mistranslated to
+      `IDENTITY_INSERT AS t`. Now recognized in the SET parser and emitted as a
+      documented `/* UNIQUE: … */` comment (MySQL/Oracle/PG manage identity
+      insertion differently). A related parser fix stops an embedded
+      INSERT/DELETE/SELECT before a following statement-level `SET` (peeking past
+      `SET` to tell a new statement from an UPDATE/MERGE `SET <col>` clause), so
+      the trailing `SET IDENTITY_INSERT … OFF` is no longer absorbed as a table
+      alias. Tested (TestSetIdentityInsert).
 - [x] **`THROW`/`RAISERROR` argument shape (P2)** — `RAISERROR(msg_or_id,
       severity, state)` mapped to MySQL `SIGNAL ... SET MESSAGE_TEXT = (16947,
       16, 1)`, an invalid tuple (error 1064). The emitter now splits the first
@@ -375,8 +384,12 @@ open.
       condition). Map `@@ERROR`/`@@ROWCOUNT`-style globals used in expressions,
       or rewrite the construct; at minimum avoid emitting a syntactically
       broken condition. (`@@ROWCOUNT` alone already maps to `ROW_COUNT()`.)
-- [ ] **`WAITFOR DELAY '…'` on MySQL (P3)** — mistranslated to `WAITFOR AS
-      DELAY`. MySQL equivalent is `DO SLEEP(seconds)`. Not in the fixture.
+- [x] **`WAITFOR DELAY '…'` (P3)** — was mistranslated to `WAITFOR AS DELAY`.
+      Now parsed into a `WaitForStatement` (the `hh:mm:ss` literal is converted
+      to seconds) and emitted per dialect: MySQL `DO SLEEP(n)`, PostgreSQL
+      `PERFORM pg_sleep(n)`, Oracle `DBMS_LOCK.SLEEP(n)`, T-SQL kept. `WAITFOR
+      TIME` (wait until an absolute clock time) has no portable form and is
+      documented with a comment. Tested (TestWaitFor).
 - [ ] **`TOP n PERCENT` → invalid `LIMIT n PERCENT` on MySQL (P2)** — MySQL
       LIMIT takes no PERCENT. Needs a rewrite (e.g. `LIMIT CEIL(n/100 * (SELECT
       COUNT(*) ...))`) or a documented comment. Not in the current fixture.
