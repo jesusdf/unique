@@ -935,3 +935,81 @@ class TestTableValuedFunctionInFrom:
         )
         out = _transpile(src, "tsql", "mysql")
         assert "table-valued function in FROM" not in out
+
+
+class TestTransactionControl:
+    """BEGIN TRAN / COMMIT / ROLLBACK / SAVE map per dialect instead of being
+    mis-parsed as a BEGIN...END block or a bare statement."""
+
+    def test_begin_transaction_mysql(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN BEGIN TRANSACTION COMMIT END"
+        out = _transpile(src, "tsql", "mysql")
+        assert "START TRANSACTION;" in out
+        assert "COMMIT;" in out
+        assert "TRANSACTION AS" not in out
+
+    def test_begin_transaction_documented_for_oracle_pg(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN BEGIN TRAN UPDATE t SET a = 1 COMMIT END"
+        for target in ("oracle", "postgresql"):
+            out = _transpile(src, "tsql", target)
+            assert "BEGIN TRANSACTION dropped" in out
+            assert "COMMIT;" in out
+
+    def test_rollback_to_savepoint(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN SAVE TRANSACTION sp "
+            "ROLLBACK TRANSACTION sp END"
+        )
+        out = _transpile(src, "tsql", "postgresql")
+        assert "SAVEPOINT sp;" in out
+        assert "ROLLBACK TO SAVEPOINT sp;" in out
+
+    def test_roundtrip_tsql_preserves(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN BEGIN TRANSACTION COMMIT END"
+        out = _transpile(src, "tsql", "tsql")
+        assert "BEGIN TRANSACTION;" in out
+        assert "COMMIT;" in out
+
+
+class TestWaitFor:
+    """WAITFOR DELAY maps to each engine's sleep; WAITFOR TIME is documented."""
+
+    def test_delay_to_mysql(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN WAITFOR DELAY '00:00:05' END"
+        out = _transpile(src, "tsql", "mysql")
+        assert "DO SLEEP(5);" in out
+        assert "WAITFOR" not in out
+
+    def test_delay_to_postgresql(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN WAITFOR DELAY '00:01:30' END"
+        out = _transpile(src, "tsql", "postgresql")
+        assert "PERFORM pg_sleep(90);" in out
+
+    def test_delay_to_oracle(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN WAITFOR DELAY '00:00:02' END"
+        out = _transpile(src, "tsql", "oracle")
+        assert "DBMS_LOCK.SLEEP(2);" in out
+
+    def test_time_documented(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN WAITFOR TIME '23:00:00' END"
+        out = _transpile(src, "tsql", "mysql")
+        assert "WAITFOR TIME" in out and "no mysql equivalent" in out
+
+
+class TestSetIdentityInsert:
+    """SET IDENTITY_INSERT has no portable equivalent: emit a documented
+    comment instead of the previously mis-parsed 'IDENTITY_INSERT AS t'."""
+
+    def test_documented_comment(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "SET IDENTITY_INSERT t ON "
+            "INSERT INTO t (id, a) VALUES (1, 2) "
+            "SET IDENTITY_INSERT t OFF END"
+        )
+        out = _transpile(src, "tsql", "mysql")
+        assert "SET IDENTITY_INSERT t ON" in out
+        assert "SET IDENTITY_INSERT t OFF" in out
+        assert "IDENTITY_INSERT AS" not in out
+        # The INSERT must not absorb the trailing SET as a table alias.
+        assert "AS `SET`" not in out

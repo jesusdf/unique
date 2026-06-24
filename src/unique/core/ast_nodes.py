@@ -571,6 +571,20 @@ class TransactionStatement(ASTNode):
 
 
 @dataclass(frozen=True)
+class WaitForStatement(ASTNode):
+    """T-SQL WAITFOR DELAY/TIME '<hh:mm:ss>'.
+
+    ``kind`` is "DELAY" (relative) or "TIME" (absolute); ``value`` is the raw
+    time literal. ``seconds`` is the parsed delay in seconds for a DELAY when it
+    can be derived (used by engines whose sleep takes a numeric argument).
+    """
+
+    kind: str
+    value: str
+    seconds: float | None = None
+
+
+@dataclass(frozen=True)
 class TypeReference(ASTNode):
     """Oracle %TYPE or %ROWTYPE reference."""
 

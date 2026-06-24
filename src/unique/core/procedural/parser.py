@@ -46,7 +46,10 @@ from unique.core.ast_nodes import (
     SelectIntoStatement,
     SetVariableStatement,
     StatementList,
+    TransactionAction,
+    TransactionStatement,
     TryCatchBlock,
+    WaitForStatement,
     WhileStatement,
 )
 from unique.core.procedural.lexer import Lexer, Token, TokenType
@@ -795,6 +798,12 @@ class ProceduralParser:
             return self._parse_tsql_if()
         elif tok.is_keyword("WHILE"):
             return self._parse_tsql_while()
+        elif tok.is_keyword("WAITFOR"):
+            return self._parse_waitfor()
+        elif tok.is_keyword("COMMIT", "ROLLBACK", "SAVE"):
+            return self._parse_transaction()
+        elif tok.is_keyword("BEGIN") and self._peek_is_transaction():
+            return self._parse_transaction()
         elif tok.is_keyword("BEGIN"):
             return self._parse_tsql_begin_block()
         elif tok.is_keyword("RETURN"):
@@ -856,6 +865,25 @@ class ProceduralParser:
             # preserve it as a comment (documenting the dropped statement).
             return RawSQL(sql=original, reason="Dialect-specific SET option")
 
+        # SET IDENTITY_INSERT <table> ON/OFF — no portable equivalent; capture
+        # the original so the transformer can document it as a comment instead
+        # of mis-parsing it as a DML statement.
+        if tok.is_keyword("IDENTITY_INSERT"):
+            self._advance()
+            target = ""
+            if self._current().type in (
+                TokenType.IDENTIFIER,
+                TokenType.VARIABLE,
+            ):
+                target = self._advance().value
+            state = ""
+            if self._current().is_keyword("ON", "OFF"):
+                state = self._advance().value
+            self._match_type(TokenType.SEMICOLON)
+            original = f"SET IDENTITY_INSERT {target} {state}".rstrip()
+            self._warnings.append(f"{original} skipped (no equivalent)")
+            return RawSQL(sql=original, reason="Dialect-specific SET option")
+
         # SET @variable = expression
         if tok.type == TokenType.VARIABLE:
             var_name = self._advance().value
@@ -865,6 +893,69 @@ class ProceduralParser:
             return SetVariableStatement(name=var_name, value=expr)
 
         return self._parse_embedded_dml()
+
+    def _peek_is_transaction(self) -> bool:
+        """Whether a BEGIN starts a transaction (BEGIN TRAN/TRANSACTION) rather
+        than a BEGIN...END block."""
+        nxt = self._peek(1)
+        return nxt.type == TokenType.KEYWORD and nxt.upper_value in (
+            "TRAN",
+            "TRANSACTION",
+        )
+
+    def _parse_transaction(self) -> ASTNode:
+        """Parse a T-SQL transaction-control statement.
+
+        Handles ``BEGIN TRAN[SACTION] [name]``, ``COMMIT [TRAN[SACTION]|WORK]``,
+        ``ROLLBACK [TRAN[SACTION]|WORK] [name]`` and ``SAVE TRAN[SACTION] name``.
+        An optional transaction/savepoint name is captured.
+        """
+        verb = self._advance().upper_value  # BEGIN | COMMIT | ROLLBACK | SAVE
+        # Consume an optional TRAN/TRANSACTION/WORK keyword.
+        self._match_keyword("TRAN", "TRANSACTION", "WORK")
+        # Optional transaction or savepoint name (identifier or @variable).
+        name: str | None = None
+        if self._current().type in (TokenType.IDENTIFIER, TokenType.VARIABLE):
+            name = self._advance().value
+        self._match_type(TokenType.SEMICOLON)
+
+        if verb == "BEGIN":
+            action = TransactionAction.BEGIN
+        elif verb == "COMMIT":
+            action = TransactionAction.COMMIT
+        elif verb == "SAVE":
+            action = TransactionAction.SAVEPOINT
+        else:
+            action = TransactionAction.ROLLBACK
+        return TransactionStatement(action=action, name=name)
+
+    def _parse_waitfor(self) -> ASTNode:
+        """Parse T-SQL ``WAITFOR DELAY '<hh:mm:ss>'`` / ``WAITFOR TIME '...'``."""
+        self._expect_keyword("WAITFOR")
+        kind = "DELAY"
+        if self._match_keyword("TIME"):
+            kind = "TIME"
+        else:
+            self._match_keyword("DELAY")
+        value = ""
+        if self._current().type == TokenType.STRING:
+            value = self._advance().value
+        self._match_type(TokenType.SEMICOLON)
+        literal = value.strip().strip("'\"")
+        seconds: float | None = None
+        if kind == "DELAY":
+            parts = literal.split(":")
+            try:
+                nums = [float(p) for p in parts]
+                if len(nums) == 3:
+                    seconds = nums[0] * 3600 + nums[1] * 60 + nums[2]
+                elif len(nums) == 2:
+                    seconds = nums[0] * 60 + nums[1]
+                elif len(nums) == 1:
+                    seconds = nums[0]
+            except ValueError:
+                seconds = None
+        return WaitForStatement(kind=kind, value=literal, seconds=seconds)
 
     def _parse_tsql_declare(self) -> ASTNode:
         """Parse DECLARE @var type [= value] [, @var2 type [= value] ...].
@@ -2136,6 +2227,10 @@ class ProceduralParser:
             "ELSE",
             "EXEC",
             "EXECUTE",
+            "WAITFOR",
+            "COMMIT",
+            "ROLLBACK",
+            "SAVE",
         }
     )
 
@@ -2209,6 +2304,22 @@ class ProceduralParser:
                 and case_depth == 0
                 and self._dialect == "tsql"
                 and self._starts_new_dml(tok, prev_tok, lead_verb, values_seen)
+            ):
+                break
+
+            # A depth-0 SET that begins a *statement* (SET NOCOUNT/IDENTITY_INSERT
+            # /other option, or SET @var = ...) ends the captured DML. This is
+            # distinguishable from an UPDATE/MERGE's own "SET <column> = ..."
+            # clause, whose SET is followed by a column identifier, by peeking at
+            # the token after SET.
+            if (
+                not first
+                and paren_depth == 0
+                and begin_depth == 0
+                and case_depth == 0
+                and self._dialect == "tsql"
+                and tok.is_keyword("SET")
+                and self._set_starts_statement(self._peek(1))
             ):
                 break
 
@@ -2330,6 +2441,30 @@ class ProceduralParser:
             "CLOSE",
             "ELSE",
         }
+
+    # Keywords that, following SET, mark a statement-level SET (not an
+    # UPDATE/MERGE "SET <column> = ..." clause).
+    _SET_OPTION_KEYWORDS = frozenset(
+        {
+            "NOCOUNT",
+            "IDENTITY_INSERT",
+            "QUOTED_IDENTIFIER",
+            "ANSI_NULLS",
+            "XACT_ABORT",
+            "ARITHABORT",
+            "ROWCOUNT",
+        }
+    )
+
+    def _set_starts_statement(self, after_set: Token) -> bool:
+        """Whether a SET token begins a new statement rather than continuing an
+        UPDATE/MERGE SET clause, judged by the token right after SET."""
+        if after_set.type == TokenType.VARIABLE:
+            return True
+        return (
+            after_set.type == TokenType.KEYWORD
+            and after_set.upper_value in self._SET_OPTION_KEYWORDS
+        )
 
     def _starts_new_dml(
         self,
