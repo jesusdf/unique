@@ -316,6 +316,23 @@ Surfaced while validating `procedures_postgresql.sql` against a real engine.
       back to BEFORE. (The `inserted`/`deleted` pseudo-table mapping remains open
       — see TODO.)
 
+- [x] **Trigger pseudo-tables `inserted`/`deleted` (P2)** — a T-SQL trigger
+      body's pseudo-tables are now handled per use (`_in_trigger` flag +
+      `_rewrite_trigger_pseudotables`). **Column qualifiers** (`inserted.col`/
+      `deleted.col`) map to the row-level `NEW.col`/`OLD.col` (`:NEW`/`:OLD` for
+      Oracle) — previously `_pg_clean_dml` stripped them to a bare column,
+      corrupting the semantics (`WHERE id = inserted.id` → `WHERE id = id`). A
+      **set-based use** (`FROM inserted`/`JOIN deleted`), which has no row-level
+      equivalent, is commented out with a `-- UNIQUE:` note pointing to the
+      manual rewrite (PostgreSQL transition tables / Oracle compound trigger /
+      no MySQL equivalent), with a dialect no-op so an enclosing IF isn't left
+      empty — instead of emitting SQL that fails at runtime. The strip is kept
+      for the non-trigger `OUTPUT`→`RETURNING` case (guarded by `_in_trigger`).
+      Fixtures regenerated; validated live on MySQL/PostgreSQL/Oracle (0 errors).
+      Tested (TestTriggerPseudoTables). The full set-based *preservation* (auto
+      transition tables / compound triggers) remains a possible future
+      enhancement.
+
 ## 8. Web UI, docs and packaging (P2/P3)
 
 - [x] **Editor boxes overflow on long lines (P2)** — fixed in

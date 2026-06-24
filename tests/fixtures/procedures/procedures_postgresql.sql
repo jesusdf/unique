@@ -1452,7 +1452,9 @@ BEGIN
     /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
     IF (NEW.col_32 IS DISTINCT FROM OLD.col_32) THEN
             /* xxxxxx xxxx xxxxxx */
-            INSERT INTO tbl_8 (col_15, col_18, col_31, col_39, col_94) SELECT col_175.col_15, col_175.col_18, col_175.col_31, (4 - ((2 * v_col_174 * (1 - col_175.col_42)) + col_175.col_32)) AS col_39, v_func1 AS col_94 FROM inserted AS col_175 INNER JOIN deleted AS col_176 ON col_176.col_31 = col_175.col_31 WHERE col_175.col_32 <> col_176.col_32;
+            -- UNIQUE: trigger uses the T-SQL set-based inserted/deleted pseudo-tables, which have no row-level (NEW/OLD) equivalent. Rewrite manually (PostgreSQL: a statement-level trigger with REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted; Oracle: a compound trigger; MySQL: no transition tables). Original:
+            -- INSERT INTO tbl_8 (col_15, col_18, col_31, col_39, col_94) SELECT col_175.col_15, col_175.col_18, col_175.col_31, (4 - ((2 * v_col_174 * (1 - col_175.col_42)) + col_175.col_32)) AS col_39, v_func1 AS col_94 FROM inserted AS col_175 INNER JOIN deleted AS col_176 ON col_176.col_31 = col_175.col_31 WHERE col_175.col_32 <> col_176.col_32
+            NULL;
             /* xx xx xxxx xx xxxxxx xxxxxx xx xxxxx col_162 xx xxxxxx xxx x */
     END IF;
     RETURN NEW;

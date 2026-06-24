@@ -1,5 +1,5 @@
 -- ============================================================
--- Oracle PL/SQL fixture: generated from procedures_sqlserver.sql
+-- Oracle fixture: generated from procedures_sqlserver.sql
 -- by the unique transpiler (T-SQL -> Oracle).
 -- Validated against Oracle 23c (FREEPDB1).
 -- DO NOT EDIT BY HAND -- regenerate via the transpiler.
@@ -1465,7 +1465,9 @@ BEGIN
     V_COL_174 NUMBER(10) := COALESCE ( ( SELECT 1 FROM tbl_9 WHERE col_96 IS NOT NULL AND col_30 = 1 ) , 0 );
     IF UPDATING('col_32') THEN
             /* xxxxxx xxxx xxxxxx */
-            INSERT INTO tbl_8 (col_15, col_18, col_31, col_39, col_94) SELECT col_175.col_15, col_175.col_18, col_175.col_31, (4 - ((2 * V_COL_174 * (1 - col_175.col_42)) + col_175.col_32)) AS col_39, V_FUNC1 AS col_94 FROM inserted col_175 INNER JOIN deleted col_176 ON col_176.col_31 = col_175.col_31 WHERE col_175.col_32 <> col_176.col_32;
+            -- UNIQUE: trigger uses the T-SQL set-based inserted/deleted pseudo-tables, which have no row-level (NEW/OLD) equivalent. Rewrite manually (PostgreSQL: a statement-level trigger with REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted; Oracle: a compound trigger; MySQL: no transition tables). Original:
+            -- INSERT INTO tbl_8 (col_15, col_18, col_31, col_39, col_94) SELECT col_175.col_15, col_175.col_18, col_175.col_31, (4 - ((2 * V_COL_174 * (1 - col_175.col_42)) + col_175.col_32)) AS col_39, V_FUNC1 AS col_94 FROM inserted col_175 INNER JOIN deleted col_176 ON col_176.col_31 = col_175.col_31 WHERE col_175.col_32 <> col_176.col_32
+            NULL;
             /* xx xx xxxx xx xxxxxx xxxxxx xx xxxxx col_162 xx xxxxxx xxx x */
     END IF;
 END;

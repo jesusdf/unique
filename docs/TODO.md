@@ -74,24 +74,23 @@ preserved in `UNIQUE` comments.
       are statements/clauses, not silently-wrong types — so weigh effort vs.
       benefit before building.)
 
-## 3. Trigger pseudo-table / granularity semantics (P2)
+## 3. Trigger set-based pseudo-table *preservation* (P3)
 
-T-SQL triggers are **statement-level** with `inserted`/`deleted` pseudo-tables
-(sets of affected rows); Oracle/MySQL/PostgreSQL row-level triggers use
-`:NEW`/`:OLD` / `NEW`/`OLD` (single row). The transpiler currently keeps
-`inserted`/`deleted` verbatim (invalid at runtime on the other engines) and
-forces `FOR EACH ROW`.
+The core of the trigger pseudo-table item is done (see DONE.md): column
+qualifiers map to `NEW`/`OLD`, and a set-based `FROM inserted`/`JOIN deleted` is
+**documented** with a `-- UNIQUE:` note (no row-level equivalent). What remains
+is the harder *preservation* path for a **pure** set-based trigger:
 
-- [ ] Map the pseudo-tables and either **preserve statement-level semantics**
-      (e.g. PostgreSQL transition tables `REFERENCING NEW TABLE AS inserted OLD
-      TABLE AS deleted` + `FOR EACH STATEMENT`; Oracle compound triggers) **or
-      document the change** where no faithful mapping exists (MySQL has only
-      row-level NEW/OLD and no transition tables, so a set-based trigger body
-      cannot be expressed — emit a `-- UNIQUE:` note rather than silently invalid
-      SQL). This is a real semantic gap, not just syntax — the dominant fixture
-      case (`FROM inserted JOIN deleted`) is set-based. The simpler column-
-      qualifier case (`inserted.col` → `NEW.col`) is a clean sub-win for
-      single-row triggers but only correct under single-row assumptions.
+- [ ] Auto-rewrite a pure set-based trigger instead of documenting it:
+      PostgreSQL statement-level trigger with `REFERENCING NEW TABLE AS inserted
+      OLD TABLE AS deleted` + `FOR EACH STATEMENT`; Oracle compound trigger.
+      MySQL has no transition tables, so it stays documented. Requires
+      coordinating the trigger header (granularity + REFERENCING) with the body,
+      and detecting "pure set-based" vs the mixed row-/set-level case (e.g. the
+      current fixture trigger combines `UPDATE(col)`→`NEW/OLD` with `FROM
+      inserted`), which cannot be expressed as a single trigger and must stay
+      documented. Lower priority — the documented form is already safe and
+      honest.
 
 ## 4. Packaging (P3)
 
