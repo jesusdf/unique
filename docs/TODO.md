@@ -414,18 +414,20 @@ open.
       a later `SET QUOTED_IDENTIFIER ON` restores identifier semantics.
       Single-quoted strings and `[bracketed]` identifiers are untouched. Tested
       (TestQuotedIdentifierOff). Not in the current fixture (single quotes).
-- [ ] **`CHARINDEX` in standalone DML → invalid `STR_POSITION` (P2)** —
+- [x] **`CHARINDEX` in standalone DML → invalid `STR_POSITION` (P2)** —
       discovered while testing the above. In a *non-procedural* DML batch,
       sqlglot parses `CHARINDEX(needle, haystack)` into a structured
       `exp.StrPosition` (args in named slots `this`/`substr`, not
-      `expressions`). The native converter's generic `_convert_function` reads
-      only `this`, emitting `STR_POSITION(haystack)` — a non-existent function
-      with the needle dropped. The *procedural* path already handles this
-      correctly (`_transform_substring_position`); the standalone DML converter
-      needs the same per-dialect mapping (MySQL `LOCATE`, PostgreSQL
-      `STRPOS`/`POSITION`, Oracle `INSTR`) and to collect the named arg slots
-      (generically, e.g. via `exp.Func.arg_types`, since other structured
-      functions share the shape). Not in the current fixture.
+      `expressions`), so the native converter's generic `_convert_function`
+      read only `this` and emitted `STR_POSITION(haystack)` — a non-existent
+      function with the needle dropped. `_convert_function` now canonicalizes
+      `StrPosition` to `CHARINDEX(needle, haystack[, start])`, and
+      `_emit_function` renders the right per-dialect function and argument order:
+      MySQL `LOCATE(needle, haystack[, start])`, Oracle `INSTR(haystack,
+      needle[, start])`, PostgreSQL `POSITION(needle IN haystack)` (with a
+      `SUBSTRING`+offset rewrite when a start position is given), T-SQL
+      `CHARINDEX`. Validated live on all three engines (position 2; PG start=3 →
+      4). Tested (TestCharIndexStandalone).
 
 ### PostgreSQL stored-procedure live testing — findings (P1/P2)
 

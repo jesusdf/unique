@@ -703,6 +703,24 @@ def _convert_alias(expr: exp.Alias) -> Alias:
 
 def _convert_function(expr: exp.Expression) -> FunctionCall:
     """Convert a function call."""
+    # StrPosition (T-SQL CHARINDEX, MySQL LOCATE, ...) keeps its arguments in
+    # named slots (this=haystack, substr=needle, position=start) rather than in
+    # `expressions`, so the generic collection below would drop all but the
+    # haystack. Canonicalize to CHARINDEX(needle, haystack[, start]); the emitter
+    # renders the right per-dialect function and argument order.
+    if isinstance(expr, exp.StrPosition):
+        needle = expr.args.get("substr")
+        haystack = expr.this
+        start = expr.args.get("position")
+        args: list[ASTNode] = []
+        if needle is not None:
+            args.append(convert_expression(needle))
+        if haystack is not None:
+            args.append(convert_expression(haystack))
+        if start is not None:
+            args.append(convert_expression(start))
+        return FunctionCall(name="CHARINDEX", args=tuple(args))
+
     name = expr.sql_name() if hasattr(expr, "sql_name") else type(expr).__name__.upper()
 
     args: list[ASTNode] = []
@@ -1556,6 +1574,32 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "oracle":
             return "SYSDATE"
         return "CURRENT_TIMESTAMP"
+
+    # Substring position: canonical CHARINDEX(needle, haystack[, start]) maps to
+    # each engine's function with its own argument order.
+    if node.name.upper() == "CHARINDEX" and len(node.args) >= 2:
+        needle = _emit_expression(node.args[0], dialect)
+        haystack = _emit_expression(node.args[1], dialect)
+        start = _emit_expression(node.args[2], dialect) if len(node.args) > 2 else None
+        if dialect == "tsql":
+            inner = f"{needle}, {haystack}" + (f", {start}" if start else "")
+            return f"CHARINDEX({inner})"
+        if dialect == "mysql":
+            # LOCATE(needle, haystack[, start])
+            inner = f"{needle}, {haystack}" + (f", {start}" if start else "")
+            return f"LOCATE({inner})"
+        if dialect == "oracle":
+            # INSTR(haystack, needle[, start])
+            inner = f"{haystack}, {needle}" + (f", {start}" if start else "")
+            return f"INSTR({inner})"
+        # postgresql: STRPOS has no start arg; use POSITION(needle IN haystack)
+        # and add the offset when a start position is given.
+        if start:
+            return (
+                f"(POSITION({needle} IN SUBSTRING({haystack} FROM {start})) "
+                f"+ {start} - 1)"
+            )
+        return f"POSITION({needle} IN {haystack})"
 
     # Map canonical function names to dialect-specific names
     name = _map_function_name(node.name, dialect)
