@@ -8,20 +8,20 @@
 CREATE TABLE tbl_15 (
   col_59 VARCHAR(5) NOT NULL,
   col_163 VARCHAR(200),
-  CONSTRAINT pk_tbl_15 PRIMARY KEY (col_59 NULLS FIRST)
+  CONSTRAINT pk_tbl_15 PRIMARY KEY (col_59)
 );
 
 CREATE TABLE tbl_14 (
   col_153 INT NOT NULL,
   col_163 VARCHAR(200),
-  CONSTRAINT pk_tbl_14 PRIMARY KEY (col_153 NULLS FIRST)
+  CONSTRAINT pk_tbl_14 PRIMARY KEY (col_153)
 );
 
 CREATE TABLE tbl_13 (
   col_62 VARCHAR(50) NOT NULL,
   col_46 VARCHAR(200),
   col_77 VARCHAR(200),
-  CONSTRAINT pk_tbl_13 PRIMARY KEY (col_62 NULLS FIRST)
+  CONSTRAINT pk_tbl_13 PRIMARY KEY (col_62)
 );
 
 CREATE TABLE tbl_12 (
@@ -29,14 +29,14 @@ CREATE TABLE tbl_12 (
   col_46 VARCHAR(200),
   col_153 INT,
   col_155 VARCHAR(5),
-  CONSTRAINT pk_tbl_12 PRIMARY KEY (col_59 NULLS FIRST)
+  CONSTRAINT pk_tbl_12 PRIMARY KEY (col_59)
 );
 
 CREATE TABLE tbl_11 (
   col_59 INT NOT NULL,
   col_60 INT,
   col_163 VARCHAR(200),
-  CONSTRAINT pk_tbl_11 PRIMARY KEY (col_59 NULLS FIRST)
+  CONSTRAINT pk_tbl_11 PRIMARY KEY (col_59)
 );
 
 CREATE TABLE tbl_10 (
@@ -47,7 +47,7 @@ CREATE TABLE tbl_10 (
   col_164 VARCHAR(200),
   col_165 VARCHAR(200),
   col_166 VARCHAR(200),
-  CONSTRAINT pk_tbl_10 PRIMARY KEY (col_13 NULLS FIRST)
+  CONSTRAINT pk_tbl_10 PRIMARY KEY (col_13)
 );
 
 CREATE TABLE tbl_1 (
@@ -56,7 +56,7 @@ CREATE TABLE tbl_1 (
   col_50 TIMESTAMP,
   col_58 INT,
   col_162 VARCHAR(50),
-  CONSTRAINT pk_tbl_1 PRIMARY KEY (col_1 NULLS FIRST)
+  CONSTRAINT pk_tbl_1 PRIMARY KEY (col_1)
 );
 
 CREATE TABLE tbl_3 (
@@ -67,7 +67,7 @@ CREATE TABLE tbl_3 (
   col_20 TIMESTAMP,
   col_15 VARCHAR(10),
   col_18 TIMESTAMP,
-  CONSTRAINT pk_tbl_3 PRIMARY KEY (col_6 NULLS FIRST)
+  CONSTRAINT pk_tbl_3 PRIMARY KEY (col_6)
 );
 
 CREATE TABLE tbl_2 (
@@ -94,21 +94,21 @@ CREATE TABLE tbl_5 (
   col_26 VARCHAR(200),
   col_28 INT,
   col_30 INT NOT NULL DEFAULT 1,
-  CONSTRAINT pk_tbl_5 PRIMARY KEY (col_23 NULLS FIRST)
+  CONSTRAINT pk_tbl_5 PRIMARY KEY (col_23)
 );
 
 CREATE TABLE tbl_9 (
   col_30 INT NOT NULL DEFAULT 1,
-  col_43 VARCHAR,
+  col_43 TEXT,
   col_61 VARCHAR(200),
   col_65 INT DEFAULT -1440,
   col_66 TIMESTAMP,
   col_67 INT DEFAULT 1440,
-  col_79 VARCHAR,
-  col_80 VARCHAR,
+  col_79 TEXT,
+  col_80 TEXT,
   col_89 VARCHAR(500),
   col_90 VARCHAR(500),
-  col_96 VARCHAR
+  col_96 TEXT
 );
 
 CREATE TABLE tbl_6 (
@@ -122,18 +122,18 @@ CREATE TABLE tbl_6 (
   col_20 TIMESTAMP,
   col_32 INT DEFAULT 0,
   col_33 TIMESTAMP,
-  col_38 VARCHAR,
+  col_38 TEXT,
   col_42 INT DEFAULT 0,
   col_62 VARCHAR(50),
   col_63 VARCHAR(1000),
   col_72 VARCHAR(200),
   col_73 VARCHAR(200),
-  col_74 VARCHAR,
+  col_74 TEXT,
   col_9 VARCHAR(200),
   col_10 VARCHAR(200),
-  col_95 VARCHAR,
-  col_96 VARCHAR,
-  CONSTRAINT pk_tbl_6 PRIMARY KEY (col_31 NULLS FIRST)
+  col_95 TEXT,
+  col_96 TEXT,
+  CONSTRAINT pk_tbl_6 PRIMARY KEY (col_31)
 );
 
 CREATE TABLE tbl_7 (
@@ -143,7 +143,7 @@ CREATE TABLE tbl_7 (
   col_15 VARCHAR(10),
   col_18 TIMESTAMP,
   col_98 INT,
-  col_99 VARCHAR
+  col_99 TEXT
 );
 
 CREATE TABLE tbl_8 (
@@ -153,7 +153,7 @@ CREATE TABLE tbl_8 (
   col_31 INT,
   col_39 INT,
   col_94 TIMESTAMP,
-  CONSTRAINT pk_tbl_8 PRIMARY KEY (col_93 NULLS FIRST)
+  CONSTRAINT pk_tbl_8 PRIMARY KEY (col_93)
 );
 
 -- -- ── Helper stored procedures called by the fixture ────────────────────────────
@@ -183,7 +183,7 @@ $$;
 CREATE OR REPLACE PROCEDURE proc_14
 (
     v_query OUT TEXT,
-    v_filter TEXT DEFAULT NULL,
+    v_filter TEXT,
     v_page OUT TEXT
 )
 LANGUAGE plpgsql
@@ -347,7 +347,7 @@ BEGIN
             /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
             NULL;
     END IF;
-    SELECT col_22.col_23, col_22.col_24 AS col_25, col_22.col_26 AS col_27, CAST(NULL AS VARCHAR(MAX)) AS value, col_22.col_28 AS col_29 FROM tbl_5 AS col_22 WHERE col_22.col_30 = 1 ORDER BY col_22.col_28 ASC NULLS FIRST;
+    SELECT col_22.col_23, col_22.col_24 AS col_25, col_22.col_26 AS col_27, CAST(NULL AS TEXT) AS value, col_22.col_28 AS col_29 FROM tbl_5 AS col_22 WHERE col_22.col_30 = 1 ORDER BY col_22.col_28 ASC NULLS FIRST;
 END;
 $$;
 
@@ -378,7 +378,7 @@ BEGIN
     END IF;
     UPDATE tbl_6 SET col_32 = 1, col_18 = v_func1 WHERE col_31 = v_col_31 AND col_32 = 0 AND NOT EXISTS(SELECT NULL FROM tbl_7 WHERE col_31 = v_col_31);
     UPDATE tbl_6 SET col_33 = v_func1 WHERE col_31 = v_col_31 AND NOT EXISTS(SELECT NULL FROM tbl_7 WHERE col_31 = v_col_31);
-    SELECT col_32, col_34, col_35, col_36 FROM (SELECT 1 AS col_32, col_37.col_38 AS col_34, CAST(NULL AS VARCHAR(MAX)) AS col_35, COALESCE((SELECT 1 FROM tbl_8 WHERE col_31 = v_col_31 AND col_39 = 3 /* xxxxxx xx xx xxxxxx */ LIMIT 1), 0) AS col_36 FROM tbl_6 AS col_37 INNER JOIN tbl_8 AS col_40 ON col_40.col_31 IN (SELECT col_31 FROM tbl_6 AS col_41 WHERE col_41.col_6 = col_37.col_6 AND col_32 = 1 AND col_42 = 1 /* xxxxxx */) AND col_40.col_39 = 3 /* xxxxxx xx xx xxxxxx */ WHERE col_37.col_31 = v_col_31 AND NOT EXISTS(SELECT NULL FROM tbl_7 WHERE col_31 = v_col_31 /* xx xx xx xxxxxx xx col_161 */ AND EXISTS(SELECT NULL FROM tbl_9 WHERE col_30 = 1 AND NOT col_43 IS NULL)) UNION ALL SELECT 0 AS col_32, CAST(NULL AS VARCHAR(MAX)) AS col_34, CAST(NULL AS VARCHAR(MAX)) AS col_35, 0 AS col_36) AS col_44 ORDER BY col_32 DESC NULLS LAST LIMIT 1;
+    SELECT col_32, col_34, col_35, col_36 FROM (SELECT 1 AS col_32, col_37.col_38 AS col_34, CAST(NULL AS TEXT) AS col_35, COALESCE((SELECT 1 FROM tbl_8 WHERE col_31 = v_col_31 AND col_39 = 3 /* xxxxxx xx xx xxxxxx */ LIMIT 1), 0) AS col_36 FROM tbl_6 AS col_37 INNER JOIN tbl_8 AS col_40 ON col_40.col_31 IN (SELECT col_31 FROM tbl_6 AS col_41 WHERE col_41.col_6 = col_37.col_6 AND col_32 = 1 AND col_42 = 1 /* xxxxxx */) AND col_40.col_39 = 3 /* xxxxxx xx xx xxxxxx */ WHERE col_37.col_31 = v_col_31 AND NOT EXISTS(SELECT NULL FROM tbl_7 WHERE col_31 = v_col_31 /* xx xx xx xxxxxx xx col_161 */ AND EXISTS(SELECT NULL FROM tbl_9 WHERE col_30 = 1 AND NOT col_43 IS NULL)) UNION ALL SELECT 0 AS col_32, CAST(NULL AS TEXT) AS col_34, CAST(NULL AS TEXT) AS col_35, 0 AS col_36) AS col_44 ORDER BY col_32 DESC NULLS LAST LIMIT 1;
 END;
 $$;
 
@@ -457,7 +457,7 @@ BEGIN
             NULL;
     END IF;
     IF ( ( v_col_6 IS NULL ) OR ( v_col_42 IS NULL ) ) THEN
-            RETURN NULL;
+            RETURN;  -- UNIQUE: discarded procedure RETURN value (NULL)
     END IF;
     v_col_12 := ( SELECT CASE WHEN v_col_42 = 1 THEN 2 /* xxxxxx */ WHEN v_col_42 = 0 AND v_col_13 IS NOT NULL THEN 1 /* col_151 */ ELSE 0 END ) /* xxxxxx */ /* xx xx xx xxxxxx */;
     IF v_col_12 = 2 THEN
@@ -555,9 +555,9 @@ BEGIN
     v_col_72 := REPLACE ( COALESCE ( v_col_72 , v_col_75 ) , '"' , '' );
     v_col_73 := REPLACE(COALESCE(v_col_73, v_col_75 || '@' || v_col_61), '"', '');
     v_col_82 := TO_TIMESTAMP('xxxx-xx-xx xx:xx:xx', 'YYYY-MM-DD HH24:MI:SS');
-    v_col_85 := DATEDIFF ( second , v_col_82 , v_func1 );
-    v_col_86 := DATEDIFF ( second , v_col_82 , COALESCE ( v_col_69 , v_func1 ) );
-    v_col_87 := CAST(AGE(CAST(second AS TIMESTAMP), CAST(v_col_82 AS TIMESTAMP)) AS BIGINT);
+    v_col_85 := CAST(EXTRACT(epoch FROM CAST(CAST(v_func1 AS TIMESTAMP) AS TIMESTAMP) - CAST(CAST(v_col_82 AS TIMESTAMP) AS TIMESTAMP)) AS BIGINT);
+    v_col_86 := CAST(EXTRACT(epoch FROM CAST(CAST(COALESCE(v_col_69, v_func1) AS TIMESTAMP) AS TIMESTAMP) - CAST(CAST(v_col_82 AS TIMESTAMP) AS TIMESTAMP)) AS BIGINT);
+    v_col_87 := CAST(EXTRACT(EPOCH FROM CAST(CAST(COALESCE(v_col_70, v_func1 + 1) AS TIMESTAMP) AS TIMESTAMP) - CAST(CAST(v_col_82 AS TIMESTAMP) AS TIMESTAMP)) AS BIGINT);
     v_col_74 := '{
       "xxxxxxx": {
         "xxxx": {
@@ -588,8 +588,8 @@ BEGIN
     v_col_74 := REPLACE ( v_col_74 , '$xxx$' , v_col_75 );
     v_col_74 := REPLACE ( v_col_74 , '$xxxx$' , v_col_6 );
     v_col_74 := REPLACE ( v_col_74 , '$xxxxxxxxx$' , v_mod ) /* xxxxxx xx xxxxxx xxx xxxx */;
-    v_col_74 := REPLACE ( v_col_74 , CHAR ( 13 ) , '' );
-    v_col_74 := REPLACE ( v_col_74 , CHAR ( 10 ) , '' );
+    v_col_74 := REPLACE(v_col_74, CHR(13), '');
+    v_col_74 := REPLACE(v_col_74, CHR(10), '');
     v_col_74 := REPLACE ( v_col_74 , '    ' , ' ' );
     v_col_74 := REPLACE ( v_col_74 , '  ' , ' ' );
     v_col_74 := REPLACE ( v_col_74 , '  ' , ' ' );
@@ -615,7 +615,7 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_7
 (
-    v_col_6 OUT UUID DEFAULT NULL,
+    v_col_6 OUT UUID,
     v_col_7 INTEGER DEFAULT NULL,
     v_col_91 VARCHAR(4000) DEFAULT NULL,
     v_col_19 VARCHAR(10) DEFAULT NULL,
@@ -647,7 +647,7 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_8
 (
-    v_col_93 OUT INTEGER DEFAULT NULL,
+    v_col_93 OUT INTEGER,
     v_col_15 VARCHAR(10) DEFAULT NULL,
     v_col_18 TIMESTAMP DEFAULT NULL,
     v_col_31 INTEGER DEFAULT NULL,
@@ -678,7 +678,7 @@ $$;
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_9
 (
-    v_col_31 OUT INTEGER DEFAULT NULL,
+    v_col_31 OUT INTEGER,
     v_col_6 UUID DEFAULT NULL,
     v_col_32 INTEGER DEFAULT NULL,
     v_col_33 TIMESTAMP DEFAULT NULL,
@@ -807,11 +807,12 @@ CREATE OR REPLACE PROCEDURE proc_12
 )
 LANGUAGE plpgsql
 AS $$
-BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+DECLARE
     v_col_108 TEXT;
     v_col_109 TEXT;
     v_col_110 TEXT;
+BEGIN
+    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
             /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
             NULL;
@@ -822,26 +823,18 @@ BEGIN
             v_col_109 := '
                         SELECT col_97, col_31, col_23, col_15, col_18, col_98, col_99
                         FROM tbl_7';
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxxxxxxx' , v_col_97;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxxxx' , v_col_31;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxxxxxx' , v_col_23;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxx' , '=' , 'v_xxxxxxxxxx' , v_col_15;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxx' , '=' , 'v_xxxxxxxx' , v_col_18;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxx' , '=' , 'v_xxxxx' , v_col_98;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxx' , '=' , 'v_xxxxxxxxx' , v_col_99;
+            CALL proc_13(v_col_110, 'xxxxxxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxxxxxx', v_col_97);
+            CALL proc_13(v_col_110, 'xxxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxxx', v_col_31);
+            CALL proc_13(v_col_110, 'xxxxxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxxxxx', v_col_23);
+            CALL proc_13(v_col_110, 'xxxxxxxxxx', '=', 'v_xxxxxxxxxx', v_col_15);
+            CALL proc_13(v_col_110, 'xxxxxxxx', '=', 'v_xxxxxxxx', v_col_18);
+            CALL proc_13(v_col_110, 'xxxxx', '=', 'v_xxxxx', v_col_98);
+            CALL proc_13(v_col_110, 'xxxxxxxxx', '=', 'v_xxxxxxxxx', v_col_99);
             IF v_col_110 IS NOT NULL THEN
                         v_col_109 := v_col_109 || ' WHERE ' || v_col_110;
             END IF;
-            EXECUTE proc_14 v_col_109 output , v_col_107 , v_col_108 output;
-            EXECUTE sp_executesql v_col_109 , N'
-                        v_xxxxxxxxxxxxxxxx xxx,
-                        v_xxxxxxxxxxxxx xxx,
-                        v_xxxxxxxxxxxxxxx xxx,
-                        v_xxxxxxxxxx xxxxxxx(xx),
-                        v_xxxxxxxx xxxxxxxx,
-                        v_xxxxx xxx,
-                        v_xxxxxxxxx xxxxxxx(xxx),
-                        v_xxxxxxxx_xxxxxx xxxxxxx(xxx)' , v_col_97 , v_col_31 , v_col_23 , v_col_15 , v_col_18 , v_col_98 , v_col_99 , v_col_108;
+            CALL proc_14(v_col_109, v_col_107, v_col_108);
+            EXECUTE v_col_109; -- UNIQUE: sp_executesql parameter declarations/bindings dropped; pass them via EXECUTE ... USING manually
     END IF;
 END;
 $$;
@@ -942,11 +935,12 @@ CREATE OR REPLACE PROCEDURE proc_17
 )
 LANGUAGE plpgsql
 AS $$
-BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+DECLARE
     v_col_108 TEXT;
     v_col_109 TEXT;
     v_col_110 TEXT;
+BEGIN
+    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
             /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
             NULL;
@@ -957,24 +951,17 @@ BEGIN
             v_col_109 := '
                         SELECT col_93, col_15, col_18, col_31, col_39, col_94
                         FROM tbl_8';
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxxxx' , v_col_93;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxx' , '=' , 'v_xxxxxxxxxx' , v_col_15;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxx' , '=' , 'v_xxxxxxxx' , v_col_18;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxxxx' , v_col_31;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxxx' , v_col_39;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxx' , '=' , 'v_xxxxx' , v_col_94;
+            CALL proc_13(v_col_110, 'xxxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxxx', v_col_93);
+            CALL proc_13(v_col_110, 'xxxxxxxxxx', '=', 'v_xxxxxxxxxx', v_col_15);
+            CALL proc_13(v_col_110, 'xxxxxxxx', '=', 'v_xxxxxxxx', v_col_18);
+            CALL proc_13(v_col_110, 'xxxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxxx', v_col_31);
+            CALL proc_13(v_col_110, 'xxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxx', v_col_39);
+            CALL proc_13(v_col_110, 'xxxxx', '=', 'v_xxxxx', v_col_94);
             IF v_col_110 IS NOT NULL THEN
                         v_col_109 := v_col_109 || ' WHERE ' || v_col_110;
             END IF;
-            EXECUTE proc_14 v_col_109 output , v_col_107 , v_col_108 output;
-            EXECUTE sp_executesql v_col_109 , N'
-                        v_xxxxxxxxxxxxx xxx,
-                        v_xxxxxxxxxx xxxxxxx(xx),
-                        v_xxxxxxxx xxxxxxxx,
-                        v_xxxxxxxxxxxxx xxx,
-                        v_xxxxxxxxxxxx xxx,
-                        v_xxxxx xxxxxxxx,
-                        v_xxxxxxxx_xxxxxx xxxxxxx(xxx)' , v_col_93 , v_col_15 , v_col_18 , v_col_31 , v_col_39 , v_col_94 , v_col_108;
+            CALL proc_14(v_col_109, v_col_107, v_col_108);
+            EXECUTE v_col_109; -- UNIQUE: sp_executesql parameter declarations/bindings dropped; pass them via EXECUTE ... USING manually
     END IF;
 END;
 $$;
@@ -1119,11 +1106,12 @@ CREATE OR REPLACE PROCEDURE proc_20
 )
 LANGUAGE plpgsql
 AS $$
-BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+DECLARE
     v_col_108 TEXT;
     v_col_109 TEXT;
     v_col_110 TEXT;
+BEGIN
+    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
             /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
             NULL;
@@ -1134,54 +1122,32 @@ BEGIN
             v_col_109 := '
                         SELECT col_31, col_6, col_32, col_33, col_12, col_42, col_62, col_13, col_9, col_10, col_74, col_38, col_95, col_96, col_72, col_73, col_63, col_19, col_20, col_15, col_18
                         FROM tbl_6';
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxxxx' , v_col_31;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxx' , '=' , 'v_xxxx' , v_col_6;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxx' , '=' , 'v_xxxxxxxx' , v_col_32;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxx' , '=' , 'v_xxxxxxxx' , v_col_33;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxx' , v_col_12;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxx' , '=' , 'v_xxxxxxxxx' , v_col_42;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxx' , '=' , 'v_xxxxxxx' , v_col_62;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxx' , '=' , 'v_xxxxxxxx' , v_col_13;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxxxx' , v_col_9;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxxxx' , v_col_10;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxx' , '=' , 'v_xxxxx' , v_col_74;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxx' , '=' , 'v_xxxxxxxxxx' , v_col_38;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxxxxxxx' , v_col_95;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxxxxx' , v_col_96;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxx' , '=' , 'v_xxxx' , v_col_72;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxx' , '=' , 'v_xxxxx' , v_col_73;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxx' , '=' , 'v_xxxxxx' , v_col_63;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxx' , v_col_19;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxx' , '=' , 'v_xxxxxxxxx' , v_col_20;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxx' , '=' , 'v_xxxxxxxxxx' , v_col_15;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxx' , '=' , 'v_xxxxxxxx' , v_col_18;
+            CALL proc_13(v_col_110, 'xxxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxxx', v_col_31);
+            CALL proc_13(v_col_110, 'xxxx', '=', 'v_xxxx', v_col_6);
+            CALL proc_13(v_col_110, 'xxxxxxxx', '=', 'v_xxxxxxxx', v_col_32);
+            CALL proc_13(v_col_110, 'xxxxxxxx', '=', 'v_xxxxxxxx', v_col_33);
+            CALL proc_13(v_col_110, 'xxxxxxxxxxx', '=', 'v_xxxxxxxxxxx', v_col_12);
+            CALL proc_13(v_col_110, 'xxxxxxxxx', '=', 'v_xxxxxxxxx', v_col_42);
+            CALL proc_13(v_col_110, 'xxxxxxx', '=', 'v_xxxxxxx', v_col_62);
+            CALL proc_13(v_col_110, 'xxxxxxxx', '=', 'v_xxxxxxxx', v_col_13);
+            CALL proc_13(v_col_110, 'xxxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxxx', v_col_9);
+            CALL proc_13(v_col_110, 'xxxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxxx', v_col_10);
+            CALL proc_13(v_col_110, 'xxxxx', '=', 'v_xxxxx', v_col_74);
+            CALL proc_13(v_col_110, 'xxxxxxxxxx', '=', 'v_xxxxxxxxxx', v_col_38);
+            CALL proc_13(v_col_110, 'xxxxxxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxxxxxx', v_col_95);
+            CALL proc_13(v_col_110, 'xxxxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxxxx', v_col_96);
+            CALL proc_13(v_col_110, 'xxxx', '=', 'v_xxxx', v_col_72);
+            CALL proc_13(v_col_110, 'xxxxx', '=', 'v_xxxxx', v_col_73);
+            CALL proc_13(v_col_110, 'xxxxxx', '=', 'v_xxxxxx', v_col_63);
+            CALL proc_13(v_col_110, 'xxxxxxxxxxx', '=', 'v_xxxxxxxxxxx', v_col_19);
+            CALL proc_13(v_col_110, 'xxxxxxxxx', '=', 'v_xxxxxxxxx', v_col_20);
+            CALL proc_13(v_col_110, 'xxxxxxxxxx', '=', 'v_xxxxxxxxxx', v_col_15);
+            CALL proc_13(v_col_110, 'xxxxxxxx', '=', 'v_xxxxxxxx', v_col_18);
             IF v_col_110 IS NOT NULL THEN
                         v_col_109 := v_col_109 || ' WHERE ' || v_col_110;
             END IF;
-            EXECUTE proc_14 v_col_109 output , v_col_107 , v_col_108 output;
-            EXECUTE sp_executesql v_col_109 , N'
-                        v_xxxxxxxxxxxxx xxx,
-                        v_xxxx xxxxxxxxxxxxxxxx,
-                        v_xxxxxxxx xxx,
-                        v_xxxxxxxx xxxxxxxx,
-                        v_xxxxxxxxxxx xxx,
-                        v_xxxxxxxxx xxx,
-                        v_xxxxxxx xxxxxxx(xx),
-                        v_xxxxxxxx xxx,
-                        v_xxxxxxxxxxxxx xxxxxxx(xxx),
-                        v_xxxxxxxxxxxxx xxxxxxx(xxx),
-                        v_xxxxx xxxxxxx(xxx),
-                        v_xxxxxxxxxx xxxxxxx(xxx),
-                        v_xxxxxxxxxxxxxxxx xxxxxxx(xxx),
-                        v_xxxxxxxxxxxxxx xxxxxxx(xxx),
-                        v_xxxx xxxxxxx(xxx),
-                        v_xxxxx xxxxxxx(xxx),
-                        v_xxxxxx xxxxxxx(xxxx),
-                        v_xxxxxxxxxxx xxxxxxx(xx),
-                        v_xxxxxxxxx xxxxxxxx,
-                        v_xxxxxxxxxx xxxxxxx(xx),
-                        v_xxxxxxxx xxxxxxxx,
-                        v_xxxxxxxx_xxxxxx xxxxxxx(xxx)' , v_col_31 , v_col_6 , v_col_32 , v_col_33 , v_col_12 , v_col_42 , v_col_62 , v_col_13 , v_col_9 , v_col_10 , v_col_74 , v_col_38 , v_col_95 , v_col_96 , v_col_72 , v_col_73 , v_col_63 , v_col_19 , v_col_20 , v_col_15 , v_col_18 , v_col_108;
+            CALL proc_14(v_col_109, v_col_107, v_col_108);
+            EXECUTE v_col_109; -- UNIQUE: sp_executesql parameter declarations/bindings dropped; pass them via EXECUTE ... USING manually
     END IF;
 END;
 $$;
@@ -1299,11 +1265,12 @@ CREATE OR REPLACE PROCEDURE proc_23
 )
 LANGUAGE plpgsql
 AS $$
-BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+DECLARE
     v_col_108 TEXT;
     v_col_109 TEXT;
     v_col_110 TEXT;
+BEGIN
+    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
             /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
             NULL;
@@ -1314,26 +1281,18 @@ BEGIN
             v_col_109 := '
                         SELECT col_6, col_7, col_91, col_19, col_20, col_15, col_18
                         FROM tbl_3';
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxx' , '=' , 'v_xxxx' , v_col_6;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxx' , '=' , 'v_xxxxxxx' , v_col_7;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxx' , '=' , 'v_xxxxxxxxxx' , v_col_91;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxxx' , '=' , 'v_xxxxxxxxxxx' , v_col_19;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxx' , '=' , 'v_xxxxxxxxx' , v_col_20;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxxxx' , '=' , 'v_xxxxxxxxxx' , v_col_15;
-            EXECUTE proc_13 v_col_110 OUTPUT , 'xxxxxxxx' , '=' , 'v_xxxxxxxx' , v_col_18;
+            CALL proc_13(v_col_110, 'xxxx', '=', 'v_xxxx', v_col_6);
+            CALL proc_13(v_col_110, 'xxxxxxx', '=', 'v_xxxxxxx', v_col_7);
+            CALL proc_13(v_col_110, 'xxxxxxxxxx', '=', 'v_xxxxxxxxxx', v_col_91);
+            CALL proc_13(v_col_110, 'xxxxxxxxxxx', '=', 'v_xxxxxxxxxxx', v_col_19);
+            CALL proc_13(v_col_110, 'xxxxxxxxx', '=', 'v_xxxxxxxxx', v_col_20);
+            CALL proc_13(v_col_110, 'xxxxxxxxxx', '=', 'v_xxxxxxxxxx', v_col_15);
+            CALL proc_13(v_col_110, 'xxxxxxxx', '=', 'v_xxxxxxxx', v_col_18);
             IF v_col_110 IS NOT NULL THEN
                         v_col_109 := v_col_109 || ' WHERE ' || v_col_110;
             END IF;
-            EXECUTE proc_14 v_col_109 output , v_col_107 , v_col_108 output;
-            EXECUTE sp_executesql v_col_109 , N'
-                        v_xxxx xxxxxxxxxxxxxxxx,
-                        v_xxxxxxx xxx,
-                        v_xxxxxxxxxx xxxxxxx(xxxx),
-                        v_xxxxxxxxxxx xxxxxxx(xx),
-                        v_xxxxxxxxx xxxxxxxx,
-                        v_xxxxxxxxxx xxxxxxx(xx),
-                        v_xxxxxxxx xxxxxxxx,
-                        v_xxxxxxxx_xxxxxx xxxxxxx(xxx)' , v_col_6 , v_col_7 , v_col_91 , v_col_19 , v_col_20 , v_col_15 , v_col_18 , v_col_108;
+            CALL proc_14(v_col_109, v_col_107, v_col_108);
+            EXECUTE v_col_109; -- UNIQUE: sp_executesql parameter declarations/bindings dropped; pass them via EXECUTE ... USING manually
     END IF;
 END;
 $$;
@@ -1486,10 +1445,11 @@ CREATE OR REPLACE FUNCTION col_173_func()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 AS $$
-BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+DECLARE
     v_func1 TIMESTAMP := func1 ( );
     v_col_174 INTEGER := COALESCE ( ( SELECT 1 FROM tbl_9 WHERE col_96 IS NOT NULL AND col_30 = 1 ) , 0 );
+BEGIN
+    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
     IF (NEW.col_32 IS DISTINCT FROM OLD.col_32) THEN
             /* xxxxxx xxxx xxxxxx */
             INSERT INTO tbl_8 (col_15, col_18, col_31, col_39, col_94) SELECT col_175.col_15, col_175.col_18, col_175.col_31, (4 - ((2 * v_col_174 * (1 - col_175.col_42)) + col_175.col_32)) AS col_39, v_func1 AS col_94 FROM inserted AS col_175 INNER JOIN deleted AS col_176 ON col_176.col_31 = col_175.col_31 WHERE col_175.col_32 <> col_176.col_32;

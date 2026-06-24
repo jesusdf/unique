@@ -855,6 +855,18 @@ _TYPE_NAME_MAP: dict[str, dict[str, str]] = {
 }
 
 
+# A bare character type (no length) reaching the emitter came from a T-SQL
+# VARCHAR(MAX)/NVARCHAR(MAX) whose MAX marker is lost during IR conversion.
+# Map it to each engine's large-text type. Keyed by the type name AFTER
+# _portable_type_name has mapped it to the target dialect.
+_BARE_CHAR_BIGTEXT: dict[str, dict[str, str]] = {
+    "oracle": {"VARCHAR2": "CLOB", "NVARCHAR2": "NCLOB"},
+    "mysql": {"VARCHAR": "LONGTEXT", "NVARCHAR": "LONGTEXT"},
+    "postgresql": {"VARCHAR": "TEXT", "NVARCHAR": "TEXT"},
+    "tsql": {"VARCHAR": "VARCHAR(MAX)", "NVARCHAR": "NVARCHAR(MAX)"},
+}
+
+
 def _portable_type_name(name: str, dialect: str) -> str:
     """Map a data-type name to the target dialect's equivalent.
 
@@ -1312,15 +1324,17 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             # don't append the caller's params on top of it.
             if col.data_type.params and "(" not in dtype:
                 dtype += f"({', '.join(str(p) for p in col.data_type.params)})"
-            # Oracle DDL: VARCHAR2/NVARCHAR2 without a length is invalid.
-            # T-SQL VARCHAR(MAX)/NVARCHAR(MAX) loses the MAX during IR conversion
-            # (non-numeric param is dropped); map to CLOB/NCLOB for Oracle.
-            if dialect == "oracle" and not col.data_type.params:
+            # A character type with no length is invalid DDL in most engines
+            # (MySQL/Oracle reject it; PostgreSQL treats bare VARCHAR as
+            # unlimited but that is not what was meant). It originates from a
+            # T-SQL VARCHAR(MAX)/NVARCHAR(MAX) whose MAX marker is dropped during
+            # IR conversion (the non-numeric param is not preserved). Map the
+            # bare character type to the dialect's large-text type.
+            if not col.data_type.params:
                 _base = dtype.upper().split("(")[0]
-                if _base in ("VARCHAR2",):
-                    dtype = "CLOB"
-                elif _base in ("NVARCHAR2",):
-                    dtype = "NCLOB"
+                _bigtext = _BARE_CHAR_BIGTEXT.get(dialect, {}).get(_base)
+                if _bigtext:
+                    dtype = _bigtext
             pk = " PRIMARY KEY" if col.primary_key else ""
             unique = " UNIQUE" if col.unique else ""
             default = ""
@@ -1437,9 +1451,10 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
                     f"generated column {col_name}; original computed column: "
                     f"{node.sql}"
                 )
-            # Oracle does not allow NULLS FIRST / NULLS LAST inside PRIMARY KEY
-            # or UNIQUE constraint column lists (only in ORDER BY / index specs).
-            if dialect == "oracle":
+            # Oracle and PostgreSQL do not allow NULLS FIRST / NULLS LAST inside
+            # PRIMARY KEY or UNIQUE constraint column lists (only in ORDER BY /
+            # index specs). sqlglot adds them when emulating ordering.
+            if dialect in ("oracle", "postgresql"):
                 fragment = re.sub(r"(?i)\s+NULLS\s+(?:FIRST|LAST)", "", fragment)
             return fragment
     except Exception as e:  # noqa: BLE001

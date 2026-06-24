@@ -205,28 +205,23 @@ Surfaced while enabling live validation of `procedures_mysql.sql` and
 `procedures_postgresql.sql`. Items marked [x] are fixed and tested; [ ] are
 open.
 
-> **CI checkpoint (live syntax chain).** The `syntax-live` job has been driven
-> error-by-error (each fix surfaces the next; diagnosed via the GitHub
-> annotations API since raw logs aren't reachable from the sandbox). As of the
-> last run on `5271b03`, all *syntax* errors (1064) for the MySQL fixture are
-> resolved — the current failure is no longer a syntax error but
-> `1146 Table 'tbl_6' doesn't exist`, caused by the next item below: the
-> `CREATE TABLE` itself fails (so later statements can't find the table).
-> **Next session (with VS Code + a real MySQL/PostgreSQL DB):** fix the
-> `VARCHAR(MAX)` mapping, regenerate fixtures, then keep iterating the live
-> check until `syntax-live` is green for both MySQL and PostgreSQL.
+> **CI checkpoint (live syntax chain).** The `syntax-live` job was driven
+> error-by-error to green. As of the live-DB session after `d306202`, the MySQL
+> and PostgreSQL procedures fixtures both validate with **0 errors** against real
+> engines (MariaDB 11 / PostgreSQL 16), executed statement-by-statement. The
+> `VARCHAR(MAX)` mapping and the PostgreSQL routine fixes below are done; the
+> fixtures were regenerated and re-validated.
 
-- [ ] **`VARCHAR(MAX)` / `NVARCHAR(MAX)` column type not mapped on MySQL (P1)**
-      — in a `CREATE TABLE`, a T-SQL `VARCHAR(MAX)`/`NVARCHAR(MAX)` column is
-      emitted as a bare `VARCHAR` (no length), which MySQL rejects; the
-      `CREATE TABLE` fails, so every later statement referencing that table
-      errors with `1146 … doesn't exist`. Fix: map `(N)VARCHAR(MAX)` to
-      `LONGTEXT` (MySQL) / `TEXT` (PostgreSQL) for column types in the DDL
-      converter, the same way the procedural body already collapses
-      `CAST(... AS VARCHAR(MAX))`. Repro: `CREATE TABLE x (a VARCHAR(MAX))`
-      → MySQL currently emits `a VARCHAR`. Found by the live MySQL
-      procedures-fixture check (tbl_6 has four `VARCHAR(MAX)` columns:
-      col_38/col_74/col_95/col_96).
+- [x] **`VARCHAR(MAX)` / `NVARCHAR(MAX)` column type not mapped (P1)**
+      — in a `CREATE TABLE`, a T-SQL `VARCHAR(MAX)`/`NVARCHAR(MAX)` column was
+      emitted as a bare `VARCHAR` (no length), which MySQL/Oracle reject; the
+      `CREATE TABLE` failed, so every later statement referencing that table
+      errored with `1146 … doesn't exist`. The MAX marker is dropped during IR
+      conversion (non-numeric param), so the emitter now maps a bare character
+      type to the dialect's large-text type via `_BARE_CHAR_BIGTEXT`: MySQL
+      `LONGTEXT`, PostgreSQL `TEXT`, Oracle `CLOB`/`NCLOB`, T-SQL
+      `VARCHAR(MAX)`. (Generalized from the earlier Oracle-only fix.) Found by
+      the live MySQL/PostgreSQL procedures-fixture checks.
 
 - [x] **Parameterless routine missing `()` on MySQL/PostgreSQL (P1)** — a
       `CREATE FUNCTION f RETURNS …` / `CREATE PROCEDURE p` with no parameters
@@ -392,6 +387,49 @@ open.
       comma character. Single-quoted literals are fine. Not in the current
       fixture (which uses single quotes). Consider honoring a detected
       `SET QUOTED_IDENTIFIER OFF`.
+
+### PostgreSQL stored-procedure live testing — findings (P1/P2)
+
+Surfaced while validating `procedures_postgresql.sql` against a real engine.
+All fixed and tested; the fixture now validates with 0 errors.
+
+- [x] **`NULLS FIRST`/`NULLS LAST` in a PRIMARY KEY/UNIQUE constraint (P1)** —
+      sqlglot adds them when emulating ordering, but PostgreSQL (like Oracle)
+      rejects them inside a constraint column list. Stripped for both engines in
+      `_emit_passthrough_inline`.
+- [x] **OUT parameter with a DEFAULT / OUT after a defaulted param (P1)** —
+      PostgreSQL allows defaults only on IN parameters, and an OUT/INOUT param
+      cannot follow a parameter that has a default. The emitter now drops the
+      default from every OUT/INOUT param and from any IN param positioned before
+      the last OUT/INOUT param, keeping the routine creatable.
+- [x] **Inline (multi-variable) DECLARE not hoisted (P1)** — a
+      `DECLARE @a X, @b Y` parses to a `StatementList` of declarations that the
+      declaration/​body separation didn't recognize, so the variables were
+      emitted inline in the body — invalid in PostgreSQL (no inline DECLARE) and
+      in Oracle. `_split_declarations` now flattens such lists so every
+      declaration is hoisted into the DECLARE/IS section (also applied to the
+      PostgreSQL trigger function body).
+- [x] **`EXEC proc @x OUTPUT` → invalid `EXECUTE … OUTPUT` (P1)** — a named
+      stored-procedure call was emitted as plpgsql dynamic `EXECUTE` with the
+      T-SQL `OUTPUT` keyword. `_emit_pg_execute` now distinguishes the three EXEC
+      shapes like MySQL: a named call becomes `CALL name(args)` (dropping
+      `OUTPUT`), `sp_executesql`/bare dynamic SQL becomes plpgsql
+      `EXECUTE <text> [USING …]`.
+- [x] **`RETURN <value>` in a PostgreSQL procedure (P1)** — a PG procedure
+      cannot return a value (only a function can). A T-SQL `RETURN <code>` in a
+      procedure is now emitted as a bare `RETURN;` with the discarded value in a
+      `-- UNIQUE:` comment; functions keep `RETURN <value>`. Tracked via a
+      `_in_pg_procedure` flag so the shared body emitter knows the routine kind.
+- [x] **`VARCHAR(MAX)` in a procedure-body CAST/expression (P1)** — sqlglot
+      leaves the T-SQL `MAX` length untranslated for PostgreSQL; `_pg_clean_dml`
+      now rewrites `(N)VARCHAR(MAX)` → `TEXT`.
+- [x] **`DATEDIFF(<non-day part>, …)` and `CHAR(n)` in a scalar expression
+      (P1)** — the dedicated DATEDIFF handler only covers DAY for PostgreSQL, and
+      T-SQL `CHAR(n)` (character-by-code) collides with PostgreSQL's `CHAR` type.
+      Scalar assignment/return expressions containing `DATEDIFF`/`CHAR` (besides
+      the existing `CONVERT`/`HASHBYTES`) now route through sqlglot, which renders
+      `EXTRACT(EPOCH …)` and `CHR(n)` correctly. DATEADD is intentionally left to
+      its dedicated handler (which keeps unknown dateparts as-is).
 
 ## 7. Triggers — coverage to review (P2)
 

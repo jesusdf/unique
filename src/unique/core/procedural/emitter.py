@@ -70,6 +70,9 @@ class ProceduralEmitter:
         # Whether the MySQL routine body currently being emitted is a function
         # (RETURN <value> valid) vs a procedure (RETURN illegal -> LEAVE).
         self._in_mysql_function = False
+        # Whether a PostgreSQL *procedure* body is being emitted. A PG procedure
+        # cannot RETURN a value (only RETURN; to exit early), unlike a function.
+        self._in_pg_procedure = False
 
     def emit(self, node: ASTNode) -> str:
         """Emit a procedural AST node as target-dialect SQL.
@@ -155,11 +158,26 @@ class ProceduralEmitter:
         ``is_function`` matters for MySQL, whose stored *functions* forbid the
         IN/OUT/INOUT direction keywords that procedures require.
         """
+        # PostgreSQL: only IN parameters may carry a DEFAULT, and an OUT/INOUT
+        # parameter cannot appear after a parameter that has a default. Compute
+        # the position of the last OUT/INOUT param so we can drop the default
+        # from any IN param before it (and from every OUT/INOUT param), keeping
+        # the routine creatable.
+        pg_last_out = -1
+        if self._dialect == "postgresql":
+            for i, q in enumerate(params):
+                if q.direction in ("OUT", "INOUT"):
+                    pg_last_out = i
+
         parts: list[str] = []
-        for p in params:
+        for idx, p in enumerate(params):
             dt = self._emit_data_type(p.data_type)
             default_str = ""
-            if p.default:
+            keep_default = bool(p.default)
+            if self._dialect == "postgresql" and p.default:
+                if p.direction in ("OUT", "INOUT") or idx < pg_last_out:
+                    keep_default = False
+            if keep_default and p.default:
                 val = self._emit_node(p.default)
                 if self._dialect == "tsql":
                     default_str = f" = {val}"
@@ -216,6 +234,32 @@ class ProceduralEmitter:
             return name
         return f"{schema}.{name}"
 
+    @staticmethod
+    def _split_declarations(
+        body: tuple[ASTNode, ...],
+    ) -> tuple[list[ASTNode], list[ASTNode]]:
+        """Split a routine body into (declarations, executable statements).
+
+        A multi-variable ``DECLARE @a X, @b Y`` is parsed into a ``StatementList``
+        of ``DeclareStatement``s; flatten such lists so every declaration is
+        hoisted. Oracle and PostgreSQL require all declarations in a section
+        before ``BEGIN`` (PostgreSQL has no ``DECLARE`` keyword inside the body),
+        so a declaration left inline produces invalid SQL.
+        """
+        declarations: list[ASTNode] = []
+        body_stmts: list[ASTNode] = []
+        for stmt in body:
+            if isinstance(stmt, (DeclareStatement, CursorDeclaration)):
+                declarations.append(stmt)
+            elif isinstance(stmt, StatementList) and stmt.statements and all(
+                isinstance(s, (DeclareStatement, CursorDeclaration))
+                for s in stmt.statements
+            ):
+                declarations.extend(stmt.statements)
+            else:
+                body_stmts.append(stmt)
+        return declarations, body_stmts
+
     def _emit_procedure(self, node: CreateProcedureStatement) -> str:
         name = self._qualified_name(node.schema, node.name)
 
@@ -239,13 +283,7 @@ class ProceduralEmitter:
             header += "()"
 
         # Separate declarations from body statements
-        declarations: list[ASTNode] = []
-        body_stmts: list[ASTNode] = []
-        for stmt in node.body:
-            if isinstance(stmt, (DeclareStatement, CursorDeclaration)):
-                declarations.append(stmt)
-            else:
-                body_stmts.append(stmt)
+        declarations, body_stmts = self._split_declarations(node.body)
 
         if self._dialect == "tsql":
             return self._emit_tsql_procedure_body(header, declarations, body_stmts)
@@ -308,7 +346,10 @@ class ProceduralEmitter:
         header: str,
         declarations: list[ASTNode],
         body_stmts: list[ASTNode],
+        is_function: bool = False,
     ) -> str:
+        prev_in_proc = self._in_pg_procedure
+        self._in_pg_procedure = not is_function
         lines = [f"{header}"]
         lines.append("LANGUAGE plpgsql")
         lines.append("AS $$")
@@ -327,6 +368,7 @@ class ProceduralEmitter:
         self._indent_level = 0
         lines.append("END;")
         lines.append("$$;")
+        self._in_pg_procedure = prev_in_proc
         return "\n".join(lines)
 
     def _emit_mysql_procedure_body(
@@ -467,21 +509,16 @@ class ProceduralEmitter:
         elif self._dialect == "oracle":
             header += f"\nRETURN {ret_type}"
 
-        declarations: list[ASTNode] = [
-            s for s in node.body if isinstance(s, (DeclareStatement, CursorDeclaration))
-        ]
-        body_stmts: list[ASTNode] = [
-            s
-            for s in node.body
-            if not isinstance(s, (DeclareStatement, CursorDeclaration))
-        ]
+        declarations, body_stmts = self._split_declarations(node.body)
 
         if self._dialect == "tsql":
             return self._emit_tsql_procedure_body(header, declarations, body_stmts)
         elif self._dialect == "oracle":
             return self._emit_oracle_procedure_body(header, declarations, body_stmts)
         elif self._dialect == "postgresql":
-            return self._emit_pg_procedure_body(header, declarations, body_stmts)
+            return self._emit_pg_procedure_body(
+                header, declarations, body_stmts, is_function=True
+            )
         else:
             return self._emit_mysql_procedure_body(
                 header, declarations, body_stmts, is_function=True
@@ -526,10 +563,19 @@ class ProceduralEmitter:
                 "RETURNS TRIGGER",
                 "LANGUAGE plpgsql",
                 "AS $$",
-                "BEGIN",
             ]
+            # Variable declarations must live in a DECLARE section before BEGIN
+            # (PostgreSQL has no inline DECLARE), so hoist them like a routine.
+            trg_decls, trg_body = self._split_declarations(tuple(node.body))
+            if trg_decls:
+                fn_lines.append("DECLARE")
+                self._indent_level = 1
+                for decl in trg_decls:
+                    fn_lines.append(f"{self._indent()}{self._emit_node(decl)}")
+                self._indent_level = 0
+            fn_lines.append("BEGIN")
             self._indent_level = 1
-            for stmt in node.body:
+            for stmt in trg_body:
                 text = self._emit_node(stmt)
                 for line in text.split("\n"):
                     fn_lines.append(f"{self._indent()}{line}" if line.strip() else "")
@@ -951,16 +997,57 @@ class ProceduralEmitter:
                 return f"EXECUTE IMMEDIATE {expr} USING {using};"
             return f"EXECUTE IMMEDIATE {expr};"
         elif self._dialect == "postgresql":
-            if params:
-                using = ", ".join(params)
-                return f"EXECUTE {expr} USING {using};"
-            return f"EXECUTE {expr};"
+            return self._emit_pg_execute(expr, params)
         # MySQL: distinguish three forms that all arrive as a captured
         # expression here:
         #   1. EXEC sp_executesql @sql, N'<decls>', @p1, ...  -> dynamic SQL
         #   2. EXEC proc_name @a OUTPUT, 'b', ...             -> a routine call
         #   3. EXEC @sql / EXEC ('...')                       -> dynamic SQL
         return self._emit_mysql_execute(expr, params)
+
+    def _emit_pg_execute(self, expr: str, params: list[str]) -> str:
+        """Emit a T-SQL EXEC for PostgreSQL.
+
+        Like MySQL, a captured EXEC arrives as one of three shapes: a
+        ``sp_executesql`` dynamic call, a named stored-procedure call, or a bare
+        dynamic-SQL string/variable. PostgreSQL invokes procedures with
+        ``CALL name(args)`` and runs dynamic SQL with plpgsql ``EXECUTE <text>``.
+        """
+        stripped = expr.strip()
+
+        # Case 1: sp_executesql — run the first argument (the SQL text); the
+        # N'...' parameter-declaration string and bindings can't be mapped to
+        # USING reliably from captured text, so document and drop them.
+        if re.match(r"(?i)^sp_executesql\b", stripped):
+            rest = stripped[len("sp_executesql") :].strip()
+            sql_arg = self._first_arg(rest)
+            note = (
+                " -- UNIQUE: sp_executesql parameter declarations/bindings "
+                "dropped; pass them via EXECUTE ... USING manually"
+                if "," in rest
+                else ""
+            )
+            return f"EXECUTE {sql_arg};{note}"
+
+        # Case 3: a bare variable/string/parenthesized expression is dynamic SQL.
+        if stripped.startswith(("@", "v_", "'", "(", "N'")):
+            if params:
+                using = ", ".join(params)
+                return f"EXECUTE {expr} USING {using};"
+            return f"EXECUTE {expr};"
+
+        # Case 2: a named stored-procedure call → CALL name(args). The trailing
+        # T-SQL OUTPUT keyword on an argument is dropped (an INOUT argument is
+        # already passed by reference).
+        m = re.match(r"(?i)^([A-Za-z_]\w*)\s*(.*)$", stripped)
+        if m:
+            proc_name = m.group(1)
+            args = self._split_exec_args(m.group(2).strip())
+            return f"CALL {proc_name}({', '.join(args)});"
+
+        if params:
+            return f"EXECUTE {expr} USING {', '.join(params)};"
+        return f"EXECUTE {expr};"
 
     def _emit_mysql_execute(self, expr: str, params: list[str]) -> str:
         stripped = expr.strip()
@@ -1152,6 +1239,11 @@ class ProceduralEmitter:
                     f"-- UNIQUE: discarded procedure RETURN value ({val})"
                 )
             return f"LEAVE {self._proc_leave_label};"
+        # A PostgreSQL procedure cannot RETURN a value; emit a bare RETURN and
+        # document the discarded code (a T-SQL RETURN <code> has no PG meaning).
+        if self._dialect == "postgresql" and self._in_pg_procedure and node.value:
+            val = self._emit_node(node.value)
+            return f"RETURN;  -- UNIQUE: discarded procedure RETURN value ({val})"
         if node.value:
             val = self._emit_node(node.value)
             return f"RETURN {val};"

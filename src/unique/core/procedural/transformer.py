@@ -1049,6 +1049,9 @@ class ProceduralTransformer:
         sql = re.sub(r"(?i)\b(?:inserted|deleted)\s*\.\s*", "", sql)
         # dbo. qualifier (tables and function calls)
         sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
+        # (N)VARCHAR(MAX) in a CAST/expression -> TEXT (sqlglot leaves the T-SQL
+        # MAX length untranslated for PostgreSQL, which has no such form).
+        sql = re.sub(r"(?i)\bN?VARCHAR\s*\(\s*MAX\s*\)", "TEXT", sql)
         return sql
 
     def _from_clause_has_function(self, sql: str) -> bool:
@@ -1289,7 +1292,14 @@ class ProceduralTransformer:
         _dml_count = len(
             re.findall(r"\b(?:SELECT|INSERT|UPDATE|DELETE|MERGE)\b", sql, re.IGNORECASE)
         )
-        _has_tsql_scalar = bool(re.search(r"(?i)\b(?:CONVERT|HASHBYTES)\s*\(", sql))
+        # CONVERT/HASHBYTES and the T-SQL CHAR(n) character function have no
+        # direct PG/Oracle form; DATEDIFF with a non-DAY part is left untranslated
+        # by the dedicated handler (which only covers a few parts). Route these
+        # through sqlglot, which renders them correctly. DATEADD is deliberately
+        # excluded: its dedicated handler intentionally leaves unknown parts as-is.
+        _has_tsql_scalar = bool(
+            re.search(r"(?i)\b(?:CONVERT|HASHBYTES|DATEDIFF|CHAR)\s*\(", sql)
+        )
         if (
             self._source == "tsql"
             and self._target in ("oracle", "postgresql")
