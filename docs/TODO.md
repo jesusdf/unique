@@ -379,20 +379,32 @@ open.
       `-- UNIQUE:` comment. Oracle/PostgreSQL use only the first (message)
       argument. Found by the live MySQL procedures-fixture check; tested
       (TestRaiserrorToMySQLSignal).
-- [ ] **`@@ERROR` in a condition → broken IF (P2)** — `IF @@ERROR <> 0` becomes
-      `IF /* @@ERROR */ <> 0 THEN` (commented-out operand leaves an invalid
-      condition). Map `@@ERROR`/`@@ROWCOUNT`-style globals used in expressions,
-      or rewrite the construct; at minimum avoid emitting a syntactically
-      broken condition. (`@@ROWCOUNT` alone already maps to `ROW_COUNT()`.)
+- [x] **`@@ERROR` in a condition → broken IF (P2)** — `IF @@ERROR <> 0` used to
+      become `IF /* @@ERROR */ <> 0 THEN` (a commented-out operand left an
+      invalid condition). `@@ERROR`/`@@TRANCOUNT` express T-SQL's imperative
+      per-statement error / transaction-depth checks, which the other engines
+      have no faithful equivalent for (they use exception handlers). They now map
+      to a neutral `0` carrying an inline block comment
+      (`0 /* UNIQUE: @@ERROR has no <target> equivalent; … */`), so the routine
+      stays syntactically valid and the limitation is documented; Oracle keeps
+      the valid `SQLCODE` function (verified valid outside a handler). Block
+      comments are used (never a line comment, which would swallow the rest of an
+      inline condition). Validated live on MySQL/PostgreSQL/Oracle. Tested
+      (TestErrorGlobalInCondition). (`@@ROWCOUNT` already maps to `ROW_COUNT()`.)
 - [x] **`WAITFOR DELAY '…'` (P3)** — was mistranslated to `WAITFOR AS DELAY`.
       Now parsed into a `WaitForStatement` (the `hh:mm:ss` literal is converted
       to seconds) and emitted per dialect: MySQL `DO SLEEP(n)`, PostgreSQL
       `PERFORM pg_sleep(n)`, Oracle `DBMS_LOCK.SLEEP(n)`, T-SQL kept. `WAITFOR
       TIME` (wait until an absolute clock time) has no portable form and is
       documented with a comment. Tested (TestWaitFor).
-- [ ] **`TOP n PERCENT` → invalid `LIMIT n PERCENT` on MySQL (P2)** — MySQL
-      LIMIT takes no PERCENT. Needs a rewrite (e.g. `LIMIT CEIL(n/100 * (SELECT
-      COUNT(*) ...))`) or a documented comment. Not in the current fixture.
+- [x] **`TOP n PERCENT` (P2)** — the PERCENT flag (from sqlglot's
+      `limit_options`) is now carried on `LimitClause.percent`. Oracle emits the
+      native `FETCH FIRST n PERCENT ROWS ONLY` (validated live: 10% of 20 rows →
+      2). MySQL and PostgreSQL have no `LIMIT n PERCENT`; rather than emit invalid
+      SQL or silently drop the semantics, they emit a valid row `LIMIT n` plus a
+      `/* UNIQUE: … adjust to CEIL(n/100 * total_rows) … */` comment. Previously
+      the PERCENT was dropped silently (n rows instead of n%). Tested
+      (TestParseSelectLimit::test_top_percent_*).
 - [ ] **Double-quoted string literal → backtick identifier (P2)** — with
       T-SQL `QUOTED_IDENTIFIER OFF`, `CHARINDEX(",", s)` uses `"` for a string,
       but sqlglot (QUOTED_IDENTIFIER ON by default) treats it as an identifier

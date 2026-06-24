@@ -264,10 +264,15 @@ class CTEDefinition(ASTNode):
 
 @dataclass(frozen=True)
 class LimitClause(ASTNode):
-    """LIMIT/OFFSET or TOP or FETCH FIRST."""
+    """LIMIT/OFFSET or TOP or FETCH FIRST.
+
+    ``percent`` marks a T-SQL ``TOP n PERCENT`` (limit by a fraction of rows
+    rather than a row count).
+    """
 
     limit: ASTNode | None = None
     offset: ASTNode | None = None
+    percent: bool = False
 
 
 # ---------------------------------------------------------------------------
