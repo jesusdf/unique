@@ -97,6 +97,24 @@ were occurrences across the four real-world fixtures (all 12 directional pairs).
       Source types with no faithful equivalent (SQL_VARIANT, etc.) keep the
       original in a `/* UNIQUE: … */` comment, including unresolved
       `%TYPE`/`%ROWTYPE` references.
+- [x] **Reverse transpilation: restore original *types* from `/* UNIQUE: … */`
+      carrier comments (P2)** — a type lowered to a carrier with the original
+      preserved (`SQL_VARIANT` → `TEXT /* UNIQUE: SQL_VARIANT */`, `emp.sal%TYPE`
+      → `LONGTEXT /* UNIQUE: emp.sal%TYPE */`) now round-trips faithfully. The
+      procedural parser captures the carrier comment (`_take_carrier_origin`,
+      read directly off the current token since `_match_type` skips comments) and
+      attaches the original to the parsed type as `origin_comment`. The
+      transformer then re-maps the *original* for the target: it returns the
+      original where the target supports it natively (so T-SQL recovers
+      `SQL_VARIANT` with **no** redundant comment; Oracle recovers `%TYPE`), and
+      re-applies a carrier where it doesn't (PG `TEXT`, MySQL `LONGTEXT`, Oracle
+      `ANYDATA`, each with the `/* UNIQUE: … */` note). Two supporting fixes: a
+      lossy type whose target carrier equals the original is emitted plainly
+      (no redundant comment), and a `%TYPE`/`%ROWTYPE` reference is kept as-is for
+      an Oracle target (Oracle supports it natively). Validated live on
+      MySQL/PostgreSQL/Oracle; fixtures byte-for-byte unchanged. Tested
+      (TestCarrierTypeRestoration). (Generalizing the restorer to non-type
+      constructs remains open — see TODO.)
 
 ## 4. Function mapping gaps (P2)
 

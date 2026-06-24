@@ -1051,3 +1051,56 @@ class TestErrorGlobalInCondition:
         for target in ("mysql", "postgresql"):
             out = _transpile(src, "tsql", target)
             assert "IF 0 /* UNIQUE: @@TRANCOUNT" in out
+
+
+class TestCarrierTypeRestoration:
+    """A non-portable type lowered to a carrier with the original preserved in a
+    /* UNIQUE: <orig> */ comment is restored on a reverse/onward transpilation:
+    the original returns where the target supports it, and a carrier is
+    re-applied where it doesn't."""
+
+    def _decl_line(self, sql: str, var: str) -> str:
+        return next(l.strip() for l in sql.splitlines() if var in l)
+
+    def test_sql_variant_round_trips_to_tsql(self) -> None:
+        carrier = _transpile(
+            "CREATE PROCEDURE p AS BEGIN DECLARE @v SQL_VARIANT END",
+            "tsql",
+            "postgresql",
+        )
+        assert "TEXT /* UNIQUE: SQL_VARIANT */" in carrier
+        back = _transpile(carrier.replace("CREATE OR REPLACE", "CREATE"),
+                          "postgresql", "tsql")
+        line = self._decl_line(back, "@v")
+        assert "SQL_VARIANT" in line
+        assert "/* UNIQUE:" not in line  # no redundant carrier comment
+
+    def test_sql_variant_recarriered_for_other_target(self) -> None:
+        carrier = _transpile(
+            "CREATE PROCEDURE p AS BEGIN DECLARE @v SQL_VARIANT END",
+            "tsql",
+            "postgresql",
+        ).replace("CREATE OR REPLACE", "CREATE")
+        mysql = _transpile(carrier, "postgresql", "mysql")
+        assert "LONGTEXT /* UNIQUE: SQL_VARIANT */" in mysql
+        oracle = _transpile(carrier, "postgresql", "oracle")
+        assert "ANYDATA /* UNIQUE: SQL_VARIANT */" in oracle
+
+    def test_type_reference_round_trips_to_oracle(self) -> None:
+        carrier = _transpile(
+            "CREATE PROCEDURE p AS v_x emp.sal%TYPE; BEGIN NULL; END;",
+            "oracle",
+            "mysql",
+        )
+        assert "/* UNIQUE: emp.sal%TYPE */" in carrier
+        back = _transpile(carrier, "mysql", "oracle")
+        line = self._decl_line(back, "v_x")
+        assert "emp.sal%TYPE" in line
+        assert "/* UNIQUE:" not in line
+
+    def test_non_carrier_comment_not_treated_as_type(self) -> None:
+        # A regular type followed by an unrelated comment must be unaffected.
+        out = _transpile(
+            "CREATE PROCEDURE p AS BEGIN DECLARE @n INT END", "tsql", "postgresql"
+        )
+        assert "v_n INTEGER" in out

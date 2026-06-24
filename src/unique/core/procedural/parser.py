@@ -634,6 +634,41 @@ class ProceduralParser:
     # Data types
     # ---------------------------------------------------------------
 
+    # A type-carrier marker left by a forward transpilation when a non-portable
+    # type was lowered to a permissive carrier, e.g. "TEXT /* UNIQUE: SQL_VARIANT
+    # */" or "SQL_VARIANT /* UNIQUE: H_X.Y%TYPE */". The captured group is the
+    # original type text (no "-- ..." suffix, which marks a non-type UNIQUE note).
+    _CARRIER_TYPE_RE = re.compile(r"(?is)^/\*\s*UNIQUE:\s*(?!.*--)(.+?)\s*\*/$")
+    # The restored original must look like a type: a (possibly qualified or
+    # %TYPE/%ROWTYPE) name with an optional parenthesized parameter list.
+    _CARRIER_TYPEISH_RE = re.compile(
+        r"(?i)^([\w.]+(?:%\w+)?)\s*(?:\(\s*([\w, ]+)\s*\))?$"
+    )
+
+    def _take_carrier_origin(self) -> str | None:
+        """If the current token is a ``/* UNIQUE: <orig> */`` type-carrier marker,
+        consume it and return ``<orig>`` (the original type text); else None.
+
+        A forward transpilation lowers a non-portable type to a permissive
+        carrier and records the original here. The original is attached to the
+        parsed (carrier) type as ``origin_comment`` so the transformer can decide,
+        per target, whether to restore the original (target supports it) or
+        re-emit a carrier — making a reverse/onward transpilation faithful.
+        Checked directly against the current token (not via ``_match_type``,
+        which skips comments).
+        """
+        tok = self._current()
+        if tok.type != TokenType.BLOCK_COMMENT:
+            return None
+        m = self._CARRIER_TYPE_RE.match(tok.value.strip())
+        if not m:
+            return None
+        original = m.group(1).strip()
+        if not self._CARRIER_TYPEISH_RE.match(original):
+            return None
+        self._advance()  # consume the carrier comment
+        return original
+
     def _parse_data_type(self) -> DataType:
         """Parse a SQL data type."""
         self._skip_comments()
@@ -660,6 +695,12 @@ class ProceduralParser:
                 self._advance()
             return DataType(name="TABLE " + " ".join(cols))
 
+        # A no-parameter carrier comment appears right here; capture it before
+        # _match_type (which skips comments) can discard it.
+        origin = self._take_carrier_origin()
+        if origin is not None:
+            return DataType(name=type_name, origin_comment=origin)
+
         if self._match_type(TokenType.LPAREN):
             guard = 0
             while not self._at_end() and self._current().type != TokenType.RPAREN:
@@ -676,8 +717,11 @@ class ProceduralParser:
                     # loop always makes progress (avoids infinite loops).
                     self._advance()
             self._match_type(TokenType.RPAREN)
+            origin = self._take_carrier_origin()
 
-        return DataType(name=type_name, params=tuple(params))
+        return DataType(
+            name=type_name, params=tuple(params), origin_comment=origin
+        )
 
     def _parse_data_type_or_reference(self) -> DataType:
         """Parse a data type that might be a %TYPE or %ROWTYPE reference."""
@@ -703,6 +747,11 @@ class ProceduralParser:
         # Regular type with optional params
         type_name = ".".join(name_parts)
         params: list[int] = []
+
+        origin = self._take_carrier_origin()
+        if origin is not None:
+            return DataType(name=type_name, origin_comment=origin)
+
         if self._match_type(TokenType.LPAREN):
             guard = 0
             while not self._at_end() and self._current().type != TokenType.RPAREN:
@@ -717,8 +766,11 @@ class ProceduralParser:
                 elif not self._match_type(TokenType.COMMA):
                     self._advance()
             self._match_type(TokenType.RPAREN)
+            origin = self._take_carrier_origin()
 
-        return DataType(name=type_name, params=tuple(params))
+        return DataType(
+            name=type_name, params=tuple(params), origin_comment=origin
+        )
 
     # ---------------------------------------------------------------
     # Body parsing — T-SQL
