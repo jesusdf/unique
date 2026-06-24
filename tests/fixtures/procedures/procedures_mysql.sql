@@ -99,16 +99,16 @@ CREATE TABLE tbl_5 (
 
 CREATE TABLE tbl_9 (
   col_30 INT NOT NULL DEFAULT 1,
-  col_43 VARCHAR,
+  col_43 LONGTEXT,
   col_61 VARCHAR(200),
   col_65 INT DEFAULT -1440,
   col_66 DATETIME,
   col_67 INT DEFAULT 1440,
-  col_79 VARCHAR,
-  col_80 VARCHAR,
+  col_79 LONGTEXT,
+  col_80 LONGTEXT,
   col_89 VARCHAR(500),
   col_90 VARCHAR(500),
-  col_96 VARCHAR
+  col_96 LONGTEXT
 );
 
 CREATE TABLE tbl_6 (
@@ -122,17 +122,17 @@ CREATE TABLE tbl_6 (
   col_20 DATETIME,
   col_32 INT DEFAULT 0,
   col_33 DATETIME,
-  col_38 VARCHAR,
+  col_38 LONGTEXT,
   col_42 INT DEFAULT 0,
   col_62 VARCHAR(50),
   col_63 VARCHAR(1000),
   col_72 VARCHAR(200),
   col_73 VARCHAR(200),
-  col_74 VARCHAR,
+  col_74 LONGTEXT,
   col_9 VARCHAR(200),
   col_10 VARCHAR(200),
-  col_95 VARCHAR,
-  col_96 VARCHAR,
+  col_95 LONGTEXT,
+  col_96 LONGTEXT,
   CONSTRAINT pk_tbl_6 PRIMARY KEY (col_31)
 );
 
@@ -143,7 +143,7 @@ CREATE TABLE tbl_7 (
   col_15 VARCHAR(10),
   col_18 DATETIME,
   col_98 INT,
-  col_99 VARCHAR
+  col_99 LONGTEXT
 );
 
 CREATE TABLE tbl_8 (
@@ -796,10 +796,11 @@ CREATE PROCEDURE proc_12
     IN v_col_2 INT
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
     DECLARE v_col_108 LONGTEXT;
     DECLARE v_col_109 LONGTEXT;
     DECLARE v_col_110 LONGTEXT;
+
+    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
             /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
             DO 0;
@@ -920,10 +921,11 @@ CREATE PROCEDURE proc_17
     IN v_col_2 INT
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
     DECLARE v_col_108 LONGTEXT;
     DECLARE v_col_109 LONGTEXT;
     DECLARE v_col_110 LONGTEXT;
+
+    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
             /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
             DO 0;
@@ -1087,10 +1089,11 @@ CREATE PROCEDURE proc_20
     IN v_col_2 INT
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
     DECLARE v_col_108 LONGTEXT;
     DECLARE v_col_109 LONGTEXT;
     DECLARE v_col_110 LONGTEXT;
+
+    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
             /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
             DO 0;
@@ -1242,10 +1245,11 @@ CREATE PROCEDURE proc_23
     IN v_col_2 INT
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
     DECLARE v_col_108 LONGTEXT;
     DECLARE v_col_109 LONGTEXT;
     DECLARE v_col_110 LONGTEXT;
+
+    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
             /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
             DO 0;
