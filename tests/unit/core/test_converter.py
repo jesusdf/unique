@@ -125,6 +125,39 @@ class TestParseSelectLimit:
         assert "PERCENT" not in out
 
 
+class TestCharIndexStandalone:
+    """CHARINDEX in a standalone DML statement maps to each engine's
+    substring-position function with the right argument order (the args live
+    in named slots on sqlglot's StrPosition, not in `expressions`)."""
+
+    def test_mysql_locate(self) -> None:
+        nodes = parse_sql("SELECT CHARINDEX(',', s) FROM t", "tsql")
+        out = emit_sql(nodes, "mysql")
+        assert "LOCATE(',', s)" in out
+        assert "STR_POSITION" not in out
+
+    def test_oracle_instr_order(self) -> None:
+        nodes = parse_sql("SELECT CHARINDEX(',', s) FROM t", "tsql")
+        out = emit_sql(nodes, "oracle")
+        # INSTR takes (haystack, needle).
+        assert "INSTR(s, ',')" in out
+
+    def test_postgresql_position(self) -> None:
+        nodes = parse_sql("SELECT CHARINDEX(',', s) FROM t", "tsql")
+        out = emit_sql(nodes, "postgresql")
+        assert "POSITION(',' IN s)" in out
+
+    def test_tsql_roundtrip(self) -> None:
+        nodes = parse_sql("SELECT CHARINDEX(',', s) FROM t", "tsql")
+        out = emit_sql(nodes, "tsql")
+        assert "CHARINDEX(',', s)" in out
+
+    def test_start_position_kept(self) -> None:
+        nodes = parse_sql("SELECT CHARINDEX(',', s, 3) FROM t", "tsql")
+        assert "LOCATE(',', s, 3)" in emit_sql(nodes, "mysql")
+        assert "INSTR(s, ',', 3)" in emit_sql(nodes, "oracle")
+
+
 class TestParseSelectJoin:
     def test_inner_join(self) -> None:
         sql = "SELECT * FROM a INNER JOIN b ON a.id = b.a_id"
