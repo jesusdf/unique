@@ -189,8 +189,8 @@ class TestTriggerPseudoTables:
             out = self._t(self._SET_BASED, target)
             assert "set-based inserted/deleted" in out
             # the original statement is commented out, not emitted as runnable
-            code = [l for l in out.splitlines() if not l.strip().startswith("--")]
-            assert all("FROM inserted" not in l for l in code)
+            code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
+            assert all("FROM inserted" not in ln for ln in code)
 
     def test_qualifier_not_applied_outside_trigger(self) -> None:
         # An OUTPUT inserted.col in a plain procedure keeps its own handling

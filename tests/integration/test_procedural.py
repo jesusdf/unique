@@ -1060,7 +1060,7 @@ class TestCarrierTypeRestoration:
     re-applied where it doesn't."""
 
     def _decl_line(self, sql: str, var: str) -> str:
-        return next(l.strip() for l in sql.splitlines() if var in l)
+        return next(ln.strip() for ln in sql.splitlines() if var in ln)
 
     def test_sql_variant_round_trips_to_tsql(self) -> None:
         carrier = _transpile(
@@ -1069,8 +1069,9 @@ class TestCarrierTypeRestoration:
             "postgresql",
         )
         assert "TEXT /* UNIQUE: SQL_VARIANT */" in carrier
-        back = _transpile(carrier.replace("CREATE OR REPLACE", "CREATE"),
-                          "postgresql", "tsql")
+        back = _transpile(
+            carrier.replace("CREATE OR REPLACE", "CREATE"), "postgresql", "tsql"
+        )
         line = self._decl_line(back, "@v")
         assert "SQL_VARIANT" in line
         assert "/* UNIQUE:" not in line  # no redundant carrier comment

@@ -48,8 +48,8 @@ from unique.core.ast_nodes import (
     StatementList,
     TransactionAction,
     TransactionStatement,
-    WaitForStatement,
     TryCatchBlock,
+    WaitForStatement,
     WhileStatement,
 )
 
@@ -179,9 +179,12 @@ class ProceduralEmitter:
             dt = self._emit_data_type(p.data_type)
             default_str = ""
             keep_default = bool(p.default)
-            if self._dialect == "postgresql" and p.default:
-                if p.direction in ("OUT", "INOUT") or idx < pg_last_out:
-                    keep_default = False
+            if (
+                self._dialect == "postgresql"
+                and p.default
+                and (p.direction in ("OUT", "INOUT") or idx < pg_last_out)
+            ):
+                keep_default = False
             if keep_default and p.default:
                 val = self._emit_node(p.default)
                 if self._dialect == "tsql":
@@ -256,9 +259,13 @@ class ProceduralEmitter:
         for stmt in body:
             if isinstance(stmt, (DeclareStatement, CursorDeclaration)):
                 declarations.append(stmt)
-            elif isinstance(stmt, StatementList) and stmt.statements and all(
-                isinstance(s, (DeclareStatement, CursorDeclaration))
-                for s in stmt.statements
+            elif (
+                isinstance(stmt, StatementList)
+                and stmt.statements
+                and all(
+                    isinstance(s, (DeclareStatement, CursorDeclaration))
+                    for s in stmt.statements
+                )
             ):
                 declarations.extend(stmt.statements)
             else:

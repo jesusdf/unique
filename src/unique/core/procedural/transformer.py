@@ -505,6 +505,7 @@ class ProceduralTransformer:
         routine stays syntactically valid and the limitation is documented.
         """
         upper = var.upper()
+
         # A neutral, syntactically-valid placeholder for a global with no faithful
         # equivalent: 0 plus an inline block comment (never a line comment, which
         # would swallow the rest of an inline condition).
@@ -518,9 +519,7 @@ class ProceduralTransformer:
                 # SQLCODE is a valid Oracle function (0 in normal flow, the last
                 # error code inside an exception handler).
                 "@@ERROR": "SQLCODE",
-                "@@TRANCOUNT": _neutral(
-                    "@@TRANCOUNT", "transactions are implicit"
-                ),
+                "@@TRANCOUNT": _neutral("@@TRANCOUNT", "transactions are implicit"),
             }
             return mapping.get(upper, f"/* {var} */")
         elif self._target == "postgresql":

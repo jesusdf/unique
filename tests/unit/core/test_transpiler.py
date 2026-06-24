@@ -191,10 +191,7 @@ class TestQuotedIdentifierOff:
     batches and rewrites "..." to '...' before parsing."""
 
     def test_double_quote_becomes_string(self) -> None:
-        src = (
-            "SET QUOTED_IDENTIFIER OFF\nGO\n"
-            'SELECT a FROM t WHERE name = "John"'
-        )
+        src = "SET QUOTED_IDENTIFIER OFF\nGO\n" 'SELECT a FROM t WHERE name = "John"'
         out = transpile(src, source="tsql", target="mysql").sql
         assert "= 'John'" in out
         assert '"John"' not in out

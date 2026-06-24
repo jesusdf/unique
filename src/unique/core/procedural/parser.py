@@ -719,9 +719,7 @@ class ProceduralParser:
             self._match_type(TokenType.RPAREN)
             origin = self._take_carrier_origin()
 
-        return DataType(
-            name=type_name, params=tuple(params), origin_comment=origin
-        )
+        return DataType(name=type_name, params=tuple(params), origin_comment=origin)
 
     def _parse_data_type_or_reference(self) -> DataType:
         """Parse a data type that might be a %TYPE or %ROWTYPE reference."""
@@ -768,9 +766,7 @@ class ProceduralParser:
             self._match_type(TokenType.RPAREN)
             origin = self._take_carrier_origin()
 
-        return DataType(
-            name=type_name, params=tuple(params), origin_comment=origin
-        )
+        return DataType(name=type_name, params=tuple(params), origin_comment=origin)
 
     # ---------------------------------------------------------------
     # Body parsing — T-SQL
@@ -852,9 +848,11 @@ class ProceduralParser:
             return self._parse_tsql_while()
         elif tok.is_keyword("WAITFOR"):
             return self._parse_waitfor()
-        elif tok.is_keyword("COMMIT", "ROLLBACK", "SAVE"):
-            return self._parse_transaction()
-        elif tok.is_keyword("BEGIN") and self._peek_is_transaction():
+        elif (
+            tok.is_keyword("COMMIT", "ROLLBACK", "SAVE")
+            or tok.is_keyword("BEGIN")
+            and self._peek_is_transaction()
+        ):
             return self._parse_transaction()
         elif tok.is_keyword("BEGIN"):
             return self._parse_tsql_begin_block()
