@@ -712,14 +712,14 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
         needle = expr.args.get("substr")
         haystack = expr.this
         start = expr.args.get("position")
-        args: list[ASTNode] = []
+        sp_args: list[ASTNode] = []
         if needle is not None:
-            args.append(convert_expression(needle))
+            sp_args.append(convert_expression(needle))
         if haystack is not None:
-            args.append(convert_expression(haystack))
+            sp_args.append(convert_expression(haystack))
         if start is not None:
-            args.append(convert_expression(start))
-        return FunctionCall(name="CHARINDEX", args=tuple(args))
+            sp_args.append(convert_expression(start))
+        return FunctionCall(name="CHARINDEX", args=tuple(sp_args))
 
     name = expr.sql_name() if hasattr(expr, "sql_name") else type(expr).__name__.upper()
 
