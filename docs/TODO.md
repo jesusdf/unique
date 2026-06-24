@@ -205,6 +205,29 @@ Surfaced while enabling live validation of `procedures_mysql.sql` and
 `procedures_postgresql.sql`. Items marked [x] are fixed and tested; [ ] are
 open.
 
+> **CI checkpoint (live syntax chain).** The `syntax-live` job has been driven
+> error-by-error (each fix surfaces the next; diagnosed via the GitHub
+> annotations API since raw logs aren't reachable from the sandbox). As of the
+> last run on `5271b03`, all *syntax* errors (1064) for the MySQL fixture are
+> resolved — the current failure is no longer a syntax error but
+> `1146 Table 'tbl_6' doesn't exist`, caused by the next item below: the
+> `CREATE TABLE` itself fails (so later statements can't find the table).
+> **Next session (with VS Code + a real MySQL/PostgreSQL DB):** fix the
+> `VARCHAR(MAX)` mapping, regenerate fixtures, then keep iterating the live
+> check until `syntax-live` is green for both MySQL and PostgreSQL.
+
+- [ ] **`VARCHAR(MAX)` / `NVARCHAR(MAX)` column type not mapped on MySQL (P1)**
+      — in a `CREATE TABLE`, a T-SQL `VARCHAR(MAX)`/`NVARCHAR(MAX)` column is
+      emitted as a bare `VARCHAR` (no length), which MySQL rejects; the
+      `CREATE TABLE` fails, so every later statement referencing that table
+      errors with `1146 … doesn't exist`. Fix: map `(N)VARCHAR(MAX)` to
+      `LONGTEXT` (MySQL) / `TEXT` (PostgreSQL) for column types in the DDL
+      converter, the same way the procedural body already collapses
+      `CAST(... AS VARCHAR(MAX))`. Repro: `CREATE TABLE x (a VARCHAR(MAX))`
+      → MySQL currently emits `a VARCHAR`. Found by the live MySQL
+      procedures-fixture check (tbl_6 has four `VARCHAR(MAX)` columns:
+      col_38/col_74/col_95/col_96).
+
 - [x] **Parameterless routine missing `()` on MySQL/PostgreSQL (P1)** — a
       `CREATE FUNCTION f RETURNS …` / `CREATE PROCEDURE p` with no parameters
       omitted the parameter parentheses, which MySQL and PostgreSQL reject
