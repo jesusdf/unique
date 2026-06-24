@@ -405,13 +405,27 @@ open.
       `/* UNIQUE: … adjust to CEIL(n/100 * total_rows) … */` comment. Previously
       the PERCENT was dropped silently (n rows instead of n%). Tested
       (TestParseSelectLimit::test_top_percent_*).
-- [ ] **Double-quoted string literal → backtick identifier (P2)** — with
-      T-SQL `QUOTED_IDENTIFIER OFF`, `CHARINDEX(",", s)` uses `"` for a string,
-      but sqlglot (QUOTED_IDENTIFIER ON by default) treats it as an identifier
-      and emits `LOCATE(\`,\`, s)` for MySQL — a column reference, not the
-      comma character. Single-quoted literals are fine. Not in the current
-      fixture (which uses single quotes). Consider honoring a detected
-      `SET QUOTED_IDENTIFIER OFF`.
+- [x] **Double-quoted string literal under `QUOTED_IDENTIFIER OFF` (P2)** — the
+      transpiler now tracks the `SET QUOTED_IDENTIFIER ON/OFF` session setting
+      across batches (T-SQL source). While OFF, each batch's `"..."` tokens are
+      rewritten to `'...'` string literals before parsing
+      (`_double_quoted_to_strings`, escaping embedded `'` and unescaping `""`),
+      so `WHERE name = "John"` becomes `= 'John'` instead of a column reference;
+      a later `SET QUOTED_IDENTIFIER ON` restores identifier semantics.
+      Single-quoted strings and `[bracketed]` identifiers are untouched. Tested
+      (TestQuotedIdentifierOff). Not in the current fixture (single quotes).
+- [ ] **`CHARINDEX` in standalone DML → invalid `STR_POSITION` (P2)** —
+      discovered while testing the above. In a *non-procedural* DML batch,
+      sqlglot parses `CHARINDEX(needle, haystack)` into a structured
+      `exp.StrPosition` (args in named slots `this`/`substr`, not
+      `expressions`). The native converter's generic `_convert_function` reads
+      only `this`, emitting `STR_POSITION(haystack)` — a non-existent function
+      with the needle dropped. The *procedural* path already handles this
+      correctly (`_transform_substring_position`); the standalone DML converter
+      needs the same per-dialect mapping (MySQL `LOCATE`, PostgreSQL
+      `STRPOS`/`POSITION`, Oracle `INSTR`) and to collect the named arg slots
+      (generically, e.g. via `exp.Func.arg_types`, since other structured
+      functions share the shape). Not in the current fixture.
 
 ### PostgreSQL stored-procedure live testing — findings (P1/P2)
 

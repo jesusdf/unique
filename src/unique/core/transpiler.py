@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from unique.core.batch_splitter import BatchSplitter, BatchType
 from unique.core.dialect import Dialect
@@ -58,6 +58,74 @@ def _warn(message: str, feature: str, source: str, target: str) -> TransformWarn
         source_dialect=source,
         target_dialect=target,
     )
+
+
+_QI_OFF_RE = re.compile(r"(?im)^\s*SET\s+QUOTED_IDENTIFIER\s+OFF\b")
+_QI_ON_RE = re.compile(r"(?im)^\s*SET\s+QUOTED_IDENTIFIER\s+ON\b")
+
+
+def _double_quoted_to_strings(sql: str) -> str:
+    """Rewrite ``"..."`` double-quoted tokens to ``'...'`` string literals.
+
+    Under T-SQL ``SET QUOTED_IDENTIFIER OFF``, double quotes delimit a string
+    literal (not an identifier), so ``CHARINDEX(",", s)`` searches for a comma.
+    The downstream parser (sqlglot) assumes QUOTED_IDENTIFIER ON and would read
+    ``","`` as an identifier. When OFF is in effect we convert every
+    double-quoted token to a single-quoted string, escaping embedded single
+    quotes (``'`` -> ``''``) and unescaping doubled double-quotes (``""`` ->
+    ``"``). Single-quoted strings and ``[bracketed]`` identifiers are left
+    untouched.
+    """
+    out: list[str] = []
+    i, n = 0, len(sql)
+    while i < n:
+        ch = sql[i]
+        # Copy comments verbatim so a '"' inside them is not converted.
+        if ch == "-" and i + 1 < n and sql[i + 1] == "-":
+            j = sql.find("\n", i)
+            j = n if j == -1 else j
+            out.append(sql[i:j])
+            i = j
+            continue
+        if ch == "/" and i + 1 < n and sql[i + 1] == "*":
+            j = sql.find("*/", i + 2)
+            j = n if j == -1 else j + 2
+            out.append(sql[i:j])
+            i = j
+            continue
+        if ch == "'":
+            # Copy a single-quoted string verbatim, honoring '' escapes.
+            out.append(ch)
+            i += 1
+            while i < n:
+                out.append(sql[i])
+                if sql[i] == "'":
+                    if i + 1 < n and sql[i + 1] == "'":
+                        out.append(sql[i + 1])
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch == '"':
+            i += 1
+            content: list[str] = []
+            while i < n:
+                if sql[i] == '"':
+                    if i + 1 < n and sql[i + 1] == '"':
+                        content.append('"')
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                content.append(sql[i])
+                i += 1
+            out.append("'" + "".join(content).replace("'", "''") + "'")
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
 
 
 def _is_comment_only(sql: str) -> bool:
@@ -197,6 +265,10 @@ class Transpiler:
             all_warnings: list[TransformWarning] = []
             all_unsupported: list[str] = []
             output_parts: list[tuple[str, bool]] = []  # (sql, is_comment)
+            # Running T-SQL QUOTED_IDENTIFIER state: under OFF, double-quoted
+            # tokens are string literals, so subsequent batches are preprocessed
+            # to convert "..." -> '...' before parsing.
+            quoted_identifier_off = False
 
             for batch in batches:
                 # Skip empty batches, but keep explicit COMMENT batches: they
@@ -204,6 +276,16 @@ class Transpiler:
                 # (e.g. Oracle 'rem'/'prompt' notices) in the output.
                 if batch.is_empty and batch.batch_type != BatchType.COMMENT:
                     continue
+
+                # Track SET QUOTED_IDENTIFIER ON/OFF so later batches read
+                # double quotes correctly (T-SQL source only).
+                if source == "tsql":
+                    if _QI_OFF_RE.search(batch.sql):
+                        quoted_identifier_off = True
+                    elif _QI_ON_RE.search(batch.sql):
+                        quoted_identifier_off = False
+                    if quoted_identifier_off and '"' in batch.sql:
+                        batch = replace(batch, sql=_double_quoted_to_strings(batch.sql))
 
                 if batch.batch_type == BatchType.PROCEDURAL:
                     result = self._transpile_procedural(
