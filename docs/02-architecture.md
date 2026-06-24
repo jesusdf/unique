@@ -431,7 +431,7 @@ Output SQL (target dialect)
 
 | Component | Technology | Justification |
 |-----------|-----------|---------------|
-| Language | Python 3.11+ | Versatility, ecosystem, readability |
+| Language | Python 3.12 | Versatility, ecosystem, readability |
 | SQL Parsing | sqlglot | Mature, multi-dialect SQL parser/transpiler |
 | CLI | Click | Clean CLI framework, composable commands |
 | REST API | FastAPI | Modern, async, auto-documented |
@@ -521,7 +521,7 @@ services:
 jobs:
   test:
     - Checkout
-    - Setup Python 3.11
+    - Setup Python 3.12
     - Install dependencies
     - Run ruff (lint)
     - Run mypy (type check)

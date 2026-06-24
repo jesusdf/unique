@@ -215,15 +215,23 @@ only partially supported:
   embedded in complex queries.
 - **`SET ROWCOUNT n`**: removed with a warning (deprecated; use `TOP`/
   `FETCH FIRST` instead).
+- **Set-based trigger pseudo-tables** (`FROM inserted JOIN deleted`): T-SQL
+  triggers are statement-level with `inserted`/`deleted` row sets. Column
+  qualifiers (`inserted.col`) map to the row-level `NEW`/`OLD` (`:NEW`/`:OLD`),
+  but a *set-based* use has no row-level equivalent and is documented with a
+  `-- UNIQUE:` note (PostgreSQL transition tables / Oracle compound triggers
+  would be needed; MySQL has neither). Pure set-based auto-rewrite is a TODO.
 
 ### Oracle → T-SQL specifics
 
 Validated against a 1,900-line real-world PL/SQL file (25 procedures):
 
-- **`%TYPE` / `%ROWTYPE` without `--db-url`**: emitted as `SQL_VARIANT`
-  with a warning, since the real column type is unknown without a database
-  connection. Provide `--db-url` to resolve these to the actual types from
-  `ALL_TAB_COLUMNS`. (The test file used 240 `%TYPE` references.)
+- **`%TYPE` / `%ROWTYPE` without `--db-url`**: emitted as a permissive carrier
+  type with a `/* UNIQUE: <original> */` comment and a warning, since the real
+  column type is unknown without a database connection. Provide `--db-url` to
+  resolve these to the actual types from `ALL_TAB_COLUMNS`. The original is
+  **restored on a reverse/onward transpilation** to an engine that supports it
+  (e.g. back to Oracle, the `%TYPE` reference returns).
 - **`EXECUTE IMMEDIATE ... USING bind1, bind2`**: Oracle bind-variable
   passing has no direct T-SQL equivalent; the `USING` clause is preserved
   in the dynamic SQL but flagged for manual conversion to `sp_executesql`

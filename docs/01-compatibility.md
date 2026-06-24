@@ -3,6 +3,14 @@
 This document maps every major SQL feature category across the four supported
 engines and indicates the transpilation support status for each.
 
+> **Note:** the matrix below is a point-in-time analysis. The procedural surface
+> has since been hardened substantially (transaction control, WAITFOR,
+> IDENTITY_INSERT, `@@ERROR`, `TOP n PERCENT`, QUOTED_IDENTIFIER, trigger
+> pseudo-tables, reversible type carriers, …) and all four procedural fixtures
+> now validate **live** against real engines with 0 errors, so several
+> "⚠️ Partial" rows below are effectively full today. See `docs/STATUS.md` for
+> the current state and `docs/DONE.md` for the detailed history.
+
 **Legend**
 
 | Symbol | Meaning |
