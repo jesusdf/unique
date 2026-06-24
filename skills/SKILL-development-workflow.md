@@ -174,18 +174,9 @@ python -m unique.cli.main transpile \
 - **Commit frequently**, one logical change per commit, with a descriptive
   message (what changed and *why*, plus the test added). Conventional-commit
   prefixes are used (`feat`, `fix`, `docs`, `build`, `test`, ...).
-- **Push to `main`** after the gate passes. The push uses a PAT that lives only
-  in `/mnt/project/repository.txt` and must never be printed, committed, or
-  documented:
-
-  ```bash
-  PAT="$(grep -oE 'github_pat_[A-Za-z0-9_]+' /mnt/project/repository.txt | head -1)"
-  git push "https://x-access-token:${PAT}@github.com/jesusdf/unique.git" main \
-    2>&1 | sed -E "s/${PAT}/[hidden]/g"
-  unset PAT
-  git remote set-url origin https://github.com/jesusdf/unique.git
-  ```
-
+- **Push to `main`** after the gate passes (`git push origin main`). The remote
+  and its credentials are configured in the local environment, outside the repo.
+  Never print, commit, or document a token or its location in a versioned file.
 - After pushing, it's good practice to **check CI** (see the CI section below)
   and fix any failure before moving on.
 
@@ -232,10 +223,10 @@ optionally left as comments in the output SQL.
 ## CI Pipeline and Diagnosing Failures
 
 CI is defined in `.github/workflows/ci.yaml` with these jobs: **Lint &
-Format**, **Type Check**, **Test** (Python 3.11 + 3.12), **Live Metadata
-Tests** (Postgres + MySQL service containers), **Live Syntax Validation**
-(Postgres + MySQL + SQL Server, validates transpiler output against the real
-engines' grammar), and **Docker Build & Push** (only on `main`/tags).
+Format** (black + ruff), **Type Check** (mypy), **Test** (Python 3.12), **Live
+Metadata Tests** (Postgres + MySQL service containers), **Live Syntax
+Validation** (Postgres + MySQL + SQL Server, validates transpiler output against
+the real engines' grammar), and **Docker Build & Push** (only on a `v*` tag).
 
 ### Checking CI status from the API
 
@@ -323,9 +314,11 @@ the reliable channel from this sandbox.
 The Live Syntax Validation job (and `tests/integration/test_live_syntax.py`)
 checks transpiled SQL against the real target engine instead of our own
 assumptions — the robust way to catch dialect violations (e.g. T-SQL
-`CREATE TABLE IF NOT EXISTS`, stray `;` before `GO`). SQL Server uses
-`SET PARSEONLY ON` (syntax check without compiling/resolving names);
-PostgreSQL/MySQL run inside a rolled-back transaction. Run locally with:
+`CREATE TABLE IF NOT EXISTS`, stray `;` before `GO`). SQL Server and PostgreSQL
+run the batches inside a rolled-back transaction (so dependent DDL resolves);
+MySQL (which auto-commits DDL) runs in a throwaway database that is dropped
+after. Oracle is validated with a drop-before/drop-after cleanup. Run locally
+with:
 
 ```bash
 docker compose -f docker-compose.test.yaml up -d   # postgres, mysql, mssql

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.12 (the supported/CI version)
 - Docker & Docker Compose (for containerized deployment)
 - Git
 

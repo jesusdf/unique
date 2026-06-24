@@ -27,7 +27,9 @@ from versions 2012 onward.
    implements a `Dialect` interface with a `Parser` and an `Emitter`. Adding a new
    engine means adding a new plugin without touching the core.
 
-3. **Python 3.11+** — Chosen for ecosystem richness, readability, and tooling.
+3. **Python 3.12** — the single supported/CI version (ecosystem richness,
+   readability, tooling). sqlglot does the per-statement parsing; Unique adds an
+   autonomous procedural engine for the stored-routine shell sqlglot can't model.
 
 4. **TDD with pytest** — Every feature starts with a failing test. The test suite
    lives in `tests/` and mirrors the `src/` structure.
@@ -43,29 +45,40 @@ unique/
 │   ├── 01-compatibility.md       # SQL feature compatibility matrix
 │   ├── 02-architecture.md        # Architecture & design decisions
 │   ├── 03-unsupported.md         # Features explicitly out of scope
-│   └── 04-development-guide.md   # How to add features, run tests
+│   ├── 04-development-guide.md   # How to add features, run tests
+│   ├── 05-procedural-engine.md   # The stored-routine pipeline
+│   ├── 06-installation.md        # pip / Docker / compose
+│   ├── 07-interfaces.md          # CLI / Python / REST / web UI
+│   ├── STATUS.md                 # Current project state
+│   ├── TODO.md                   # Pending backlog (authoritative)
+│   └── DONE.md                   # Archived completed work (why/how)
 ├── skills/                       # Claude AI continuity skills
 ├── src/unique/
 │   ├── core/
 │   │   ├── ast_nodes.py          # IR node definitions
-│   │   ├── transpiler.py         # Orchestrator: parse → transform → emit
-│   │   ├── dialect.py            # Abstract Dialect interface
-│   │   ├── registry.py           # Plugin registry
-│   │   └── errors.py             # Custom exceptions
-│   ├── dialects/
-│   │   ├── tsql/                 # SQL Server dialect plugin
-│   │   ├── oracle/               # Oracle dialect plugin
-│   │   ├── postgresql/           # PostgreSQL dialect plugin
-│   │   └── mysql/                # MySQL dialect plugin
-│   ├── cli/                      # CLI entry point (Click)
-│   └── api/                      # Optional REST API (FastAPI)
+│   │   ├── converter.py          # sqlglot AST ↔ IR conversion + DML/DDL emit
+│   │   ├── transformer.py        # DML/DDL transform passes
+│   │   ├── transpiler.py         # Orchestrator: split → classify → route → join
+│   │   ├── batch_splitter.py     # Dialect-aware batch splitting + classification
+│   │   ├── detection.py          # Source-dialect auto-detection
+│   │   ├── metadata.py           # Optional DB connection for %TYPE/%ROWTYPE
+│   │   ├── registry.py           # Plugin registry (entry-point discovery)
+│   │   ├── errors.py             # Custom exceptions
+│   │   └── procedural/           # Autonomous procedural engine
+│   │       ├── lexer.py          #   tokenizer for procedural SQL
+│   │       ├── parser.py         #   recursive descent (T-SQL + PL/SQL)
+│   │       ├── transformer.py    #   dialect-aware AST transforms
+│   │       └── emitter.py        #   target-dialect code generation
+│   ├── dialects/{tsql,oracle,postgresql,mysql}/   # Dialect plugins
+│   ├── cli/                      # CLI entry point
+│   └── api/                      # REST API (FastAPI) + web UI
+├── web/                          # Web UI source + build (build.py)
 ├── tests/
-│   ├── unit/core/                # Core logic unit tests
-│   ├── unit/dialects/            # Per-dialect tests
-│   ├── integration/              # End-to-end transpilation tests
-│   └── fixtures/                 # SQL fixture files
-├── Dockerfile
-├── docker-compose.yaml
+│   ├── unit/, integration/, property/   # Test suites
+│   ├── helpers/                  # live_validation, invariants, functional_equiv
+│   ├── fixtures/                 # SQL fixtures (incl. procedures/ for 4 engines)
+│   └── functional_equivalence/   # Functional-equivalence test DB (design + assets)
+├── Dockerfile / Dockerfile.dev / docker-compose.yaml
 ├── .github/workflows/ci.yaml
 ├── pyproject.toml
 └── README.md
