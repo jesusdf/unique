@@ -1,0 +1,65 @@
+# Engine-agnostic expected final state — the single source of truth for the
+# functional-equivalence harness. After running the (transpiled) scenario on any
+# engine, the harness reads each table into a normalized form and asserts it
+# against this spec. The SAME spec must hold for all engines → functional
+# equivalence.
+#
+# Status: DRAFT / placeholder. Values are illustrative until the canonical
+# scenario is authored. Use only deterministic values here (see README:
+# fixed dates, explicit decimal scale, no engine-defined behavior).
+#
+# Format:
+#   tables:
+#     <table>:
+#       row_count: <int>                     # exact number of rows
+#       rows:                                # optional: specific rows by PK
+#         - { <pk_col>: <v>, <col>: <v>, ... }  # asserted columns only
+#   notes: free-form, for humans
+#
+# Normalization applied on read before comparison (see harness):
+#   bool      -> Python bool (0/1 and false/true both map here)
+#   decimal   -> string at the column's declared scale (e.g. "121.00")
+#   char/text -> trimmed string
+#   null      -> the YAML `null` sentinel
+
+version: 1
+
+tables:
+  customer:
+    row_count: 2
+    rows:
+      - { id: 1, name: "Acme", email: "billing@acme.test" }
+      - { id: 2, name: "Globex", email: "ap@globex.test" }
+
+  product:
+    row_count: 2
+    rows:
+      - { id: 1, name: "Widget", unit_price: "10.00" }
+      - { id: 2, name: "Gadget", unit_price: "25.50" }
+
+  invoice:
+    row_count: 2
+    rows:
+      # Invoice 1: 2 Widgets + 1 Gadget = 20.00 + 25.50 = 45.50 (set by trigger)
+      - { id: 1, customer_id: 1, issued_on: "2024-01-15", total: "45.50", is_paid: false }
+      # Invoice 2: created via create_invoice() proc
+      - { id: 2, customer_id: 2, issued_on: "2024-02-01", total: "51.00", is_paid: true }
+
+  invoice_line:
+    row_count: 4
+    # line_total maintained as qty * unit_price; total rolls up into invoice.total
+    rows:
+      - { id: 1, invoice_id: 1, product_id: 1, qty: 2, unit_price: "10.00", line_total: "20.00" }
+      - { id: 2, invoice_id: 1, product_id: 2, qty: 1, unit_price: "25.50", line_total: "25.50" }
+
+  payment:
+    row_count: 1
+    rows:
+      - { id: 1, invoice_id: 2, amount: "51.00" }
+
+notes: >
+  Illustrative placeholder. The real values must be derived from the canonical
+  scenario once authored, and every asserted value must be deterministic across
+  all four engines (no clock-, division-, rounding- or collation-dependent
+  values). created_at (trigger/clock-stamped) is intentionally NOT asserted by
+  exact value here.
