@@ -313,6 +313,10 @@ class ProceduralTransformer:
         # string type. Used to disambiguate T-SQL '+' as concatenation when no
         # string literal is present (e.g. SHA2(@a + @b) over two text vars).
         self._string_vars: set[str] = set()
+        # True while transforming a trigger body, so embedded DML maps the
+        # T-SQL inserted/deleted pseudo-tables to NEW/OLD (or documents a
+        # set-based use that has no row-level equivalent).
+        self._in_trigger = False
 
     @staticmethod
     def _is_string_type(dt: DataType) -> bool:
@@ -735,7 +739,12 @@ class ProceduralTransformer:
         )
 
     def _transform_trigger(self, node: CreateTriggerStatement) -> ASTNode:
-        new_body = self._transform_body(node.body)
+        prev_in_trigger = self._in_trigger
+        self._in_trigger = True
+        try:
+            new_body = self._transform_body(node.body)
+        finally:
+            self._in_trigger = prev_in_trigger
         timing = node.timing
         if self._source == "tsql" and timing == "FOR":
             timing = "AFTER"
@@ -1081,7 +1090,46 @@ class ProceduralTransformer:
         if self._target == "postgresql":
             sql = self._pg_string_concat(sql)
             sql = self._pg_clean_dml(sql)
+        if self._in_trigger and self._target != "tsql":
+            sql = self._rewrite_trigger_pseudotables(sql)
         return EmbeddedDML(sql=sql, dialect=self._target)
+
+    # FROM/JOIN <pseudo-table> — a *set-based* use of inserted/deleted, which has
+    # no row-level (NEW/OLD) equivalent.
+    _PSEUDO_TABLE_SOURCE_RE = re.compile(
+        r"(?i)\b(?:FROM|JOIN)\s+(?:inserted|deleted)\b"
+    )
+
+    def _rewrite_trigger_pseudotables(self, sql: str) -> str:
+        """Map T-SQL inserted/deleted pseudo-tables in a trigger body.
+
+        - Column qualifiers (``inserted.col``/``deleted.col``) become the
+          row-level ``NEW.col``/``OLD.col`` (``:NEW``/``:OLD`` for Oracle).
+        - A *set-based* use (``FROM inserted``/``JOIN deleted``) has no row-level
+          equivalent; document the statement with a ``-- UNIQUE:`` note pointing
+          to a transition-table (PostgreSQL) / compound-trigger (Oracle) rewrite,
+          rather than emit SQL that fails at runtime. MySQL has no equivalent at
+          all (no transition tables).
+        """
+        if self._PSEUDO_TABLE_SOURCE_RE.search(sql):
+            note = (
+                "-- UNIQUE: trigger uses the T-SQL set-based inserted/deleted "
+                "pseudo-tables, which have no row-level (NEW/OLD) equivalent. "
+                "Rewrite manually (PostgreSQL: a statement-level trigger with "
+                "REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted; Oracle: "
+                "a compound trigger; MySQL: no transition tables). Original:"
+            )
+            body = "\n".join(f"-- {line}" for line in sql.splitlines())
+            # Leave a dialect no-op so an enclosing IF/loop is not left with only
+            # comments (an empty block is a syntax error). Harmless if redundant.
+            noop = "DO 0;" if self._target == "mysql" else "NULL;"
+            return f"{note}\n{body}\n{noop}"
+        # Column-qualifier form: map to NEW/OLD (row-level).
+        new_ref = ":NEW." if self._target == "oracle" else "NEW."
+        old_ref = ":OLD." if self._target == "oracle" else "OLD."
+        sql = re.sub(r"(?i)\binserted\s*\.\s*", new_ref, sql)
+        sql = re.sub(r"(?i)\bdeleted\s*\.\s*", old_ref, sql)
+        return sql
 
     def _pg_clean_dml(self, sql: str) -> str:
         """Strip T-SQL leftovers that PostgreSQL rejects.
@@ -1093,8 +1141,11 @@ class ProceduralTransformer:
           clause (from a T-SQL OUTPUT): PostgreSQL RETURNING references the
           target's own columns, so the qualifier is dropped.
         """
-        # RETURNING inserted.col / deleted.col -> RETURNING col
-        sql = re.sub(r"(?i)\b(?:inserted|deleted)\s*\.\s*", "", sql)
+        # RETURNING inserted.col / deleted.col -> RETURNING col. Only outside a
+        # trigger body: inside a trigger these qualifiers map to NEW/OLD (handled
+        # by _rewrite_trigger_pseudotables), not stripped.
+        if not self._in_trigger:
+            sql = re.sub(r"(?i)\b(?:inserted|deleted)\s*\.\s*", "", sql)
         # dbo. qualifier (tables and function calls)
         sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
         # (N)VARCHAR(MAX) in a CAST/expression -> TEXT (sqlglot leaves the T-SQL

@@ -143,3 +143,61 @@ class TestTriggerUpdatePredicate:
         out = _tr(src, "tsql", "mysql")
         assert "UPDATE t SET a = 1" in out
         assert "NEW." not in out
+
+
+class TestTriggerPseudoTables:
+    """T-SQL inserted/deleted pseudo-tables in a trigger body: column qualifiers
+    map to the row-level NEW/OLD; a set-based use (FROM/JOIN) is documented
+    (no row-level equivalent)."""
+
+    def _t(self, sql: str, target: str) -> str:
+        return Transpiler().transpile(sql, source="tsql", target=target).sql
+
+    _COL_QUALIFIER = (
+        "CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN "
+        "UPDATE t SET audit = inserted.col1 WHERE id = inserted.id END"
+    )
+    _SET_BASED = (
+        "CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN "
+        "INSERT INTO audit (a) SELECT i.col1 FROM inserted i JOIN deleted d "
+        "ON d.id = i.id END"
+    )
+
+    def test_qualifier_to_new_old_pg_mysql(self) -> None:
+        for target in ("postgresql", "mysql"):
+            out = self._t(self._COL_QUALIFIER, target)
+            assert "NEW.col1" in out
+            assert "NEW.id" in out
+            # the qualifier must not be stripped to a bare/ambiguous column
+            assert "= col1 WHERE" not in out
+
+    def test_qualifier_to_new_old_oracle(self) -> None:
+        out = self._t(self._COL_QUALIFIER, "oracle")
+        assert ":NEW.col1" in out
+        assert ":NEW.id" in out
+
+    def test_deleted_maps_to_old(self) -> None:
+        src = (
+            "CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN "
+            "UPDATE t SET a = deleted.col1 END"
+        )
+        assert "OLD.col1" in self._t(src, "postgresql")
+        assert ":OLD.col1" in self._t(src, "oracle")
+
+    def test_set_based_documented(self) -> None:
+        for target in ("postgresql", "mysql", "oracle"):
+            out = self._t(self._SET_BASED, target)
+            assert "set-based inserted/deleted" in out
+            # the original statement is commented out, not emitted as runnable
+            code = [l for l in out.splitlines() if not l.strip().startswith("--")]
+            assert all("FROM inserted" not in l for l in code)
+
+    def test_qualifier_not_applied_outside_trigger(self) -> None:
+        # An OUTPUT inserted.col in a plain procedure keeps its own handling
+        # (RETURNING/strip), not the trigger NEW/OLD mapping.
+        src = (
+            "CREATE PROCEDURE p AS BEGIN "
+            "INSERT INTO t (a) OUTPUT inserted.id INTO @v VALUES (1) END"
+        )
+        out = self._t(src, "postgresql")
+        assert "NEW.id" not in out
