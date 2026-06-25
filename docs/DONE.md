@@ -354,3 +354,54 @@ Surfaced while validating `procedures_postgresql.sql` against a real engine.
 - [x] **CI: build the Docker image only on tags, gated on live checks (P2)** —
       the `docker` job runs only on a `v*` tag push and `needs` the full gate
       including `metadata-live` and `syntax-live`. `latest` tracks the latest tag.
+
+## 9. Per-engine procedural plugin refactor + web polish (P1/P2)
+
+The procedural engine (the value-add over sqlglot) did not follow the plugin
+architecture the project promises ("each dialect a self-contained plugin; adding
+an engine doesn't touch the core"): it carried ~126 target-dialect conditionals
+(0 lexer, 11 parser, 58 transformer, 68 emitter). Refactored to a per-engine
+plugin shape, then the web UI was polished.
+
+- [x] **Emitter → per-target plugin package** — `ProceduralEmitter` is now a
+      base class (shared structure + overridable hooks) with one subclass per
+      target (`TSqlEmitter`/`OracleEmitter`/`PostgresEmitter`/`MySqlEmitter`),
+      selected by a factory via `__new__`. Every per-engine `if/elif` became an
+      overridable method/hook; the base has **0 dialect dispatch conditionals**
+      (down from 68). Fixed a dead `return` in `_translate_cursor_attrs` and an
+      Oracle RETURN/IN regression caught mid-refactor (guarded by
+      `TestPerEngineRoutineSurface`); extracted a shared `_emit_indented_stmts`.
+- [x] **Transformer → per-target plugin package, pair-aware** — same base +
+      per-target subclass + factory. A transform is a *source→target* operation,
+      so only target-only decisions moved into subclasses (via hooks like
+      `_system_var_map`, `_varchar_max_type`, `_uses_set_statement`,
+      `_transform_try_catch`, `_update_predicate`, `_fix_target_dml`, …); the
+      pair-dependent logic (variable naming `@x`→`V_X`/`v_x`/`@x`; scalar-function
+      mappings CHARINDEX/INSTR/LOCATE/STRPOS, DATEADD, DATEDIFF) and source-only
+      logic stay in the base parameterized by `self._source`, by design.
+- [x] **Parser — source-family consolidation** — the repeated body-parsing
+      branches became a single `_parse_routine_body` helper and an intentional
+      `_is_tsql_source()` predicate, rather than a 4-way subclass split (over-
+      structure for an almost-entirely-shared parser). Only the MySQL
+      parameter-syntax branch remains (a real source-family variation point).
+- [x] **Physical plugin layout** — `emitter.py`/`transformer.py` became
+      `emitter/` and `transformer/` packages mirroring `dialects/{engine}/`:
+      `{base,tsql,oracle,postgresql,mysql}.py`, each engine module
+      self-registering on import, `__init__.py` re-exporting the factory so the
+      public import path is unchanged. Adding an engine = one module + one
+      import line, touching no core logic.
+- [x] **Docs/skills updated** — `02-architecture.md`, `05-procedural-engine.md`
+      and `SKILL-project-overview.md` describe the per-engine plugin layout. The
+      `SKILL-development-workflow.md` gained a mandatory "Analyze before changing"
+      step and a "prioritize project goals over development convenience" rule.
+- [x] **Web UI: version label, file-section swap, opt-in db-url, logo (P2)** —
+      added `GET /api/v1/info` reporting the version label (derived from
+      `__version__` via `_display_version`, e.g. `0.2.0`→`v0.02`, so a release
+      needs no HTML edit) and a `db_connection_enabled` flag. The db-url option
+      is gated by the `UNIQUE_ALLOW_DB_CONNECTION` env var (wired in
+      Dockerfile/compose, documented in `06-installation.md`): both transpile
+      endpoints reject `db_url` with 403 when disabled; when enabled the UI shows
+      an optional "Database connection" field in both sections. Added a swap
+      button to the file section, a red sans-serif "U" logo (`static/logo.svg`)
+      used as the wordmark's capital, and tidied the file-row control alignment.
+      Released as tag **v0.02** (image published by CI).

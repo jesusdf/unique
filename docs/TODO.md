@@ -4,73 +4,13 @@ This document tracks **outstanding** work, ordered by priority. Completed work
 has been archived in [`docs/DONE.md`](DONE.md) (with the detailed why/how of
 each fix); `docs/STATUS.md` summarizes the project state at a higher level.
 
-Last reviewed: 2026-06-24.
+Last reviewed: 2026-06-25.
 
 ## Legend
 
 - **P1** — high impact, appears frequently in real schemas
 - **P2** — medium impact, common but not blocking
 - **P3** — lower impact / niche
-
----
-
-## 0. Refactor: per-engine procedural emitter/transformer (plugin architecture) (P1) — DONE
-
-**Status: complete.** All sub-items below are done, CI green, and the docs
-(`02-architecture.md`, `05-procedural-engine.md`) and skills updated to describe
-the per-engine plugin layout. Kept here as a record; the bullet history can be
-archived to DONE.md.
-
-**Why:** the procedural engine (`src/unique/core/procedural/`) is the novel
-value-add over sqlglot, but it did **not** follow the plugin architecture the
-project promises elsewhere ("each dialect a self-contained plugin; adding an
-engine doesn't touch the core"). It carried ~126 target-dialect conditionals
-(`if self._dialect == "mysql"` …): 0 in lexer, 11 in parser (source-family
-only), 58 in transformer, 68 in emitter.
-
-- [x] **Emitter**: extract `ProceduralEmitter` base + `TSqlEmitter`,
-      `OracleEmitter`, `PostgresEmitter`, `MySqlEmitter`; factory by target.
-      *Done:* base+subclasses+factory (via `__new__`); every per-engine branch
-      moved into an overridable method/hook on the relevant subclass. The base
-      emitter now has **0 dialect dispatch conditionals** (down from 68); the
-      only remaining `self._dialect` uses are text interpolations in comments.
-      A shared `_emit_indented_stmts` helper removed repeated block-emit loops,
-      a dead `return` in `_translate_cursor_attrs` was deleted, and an Oracle
-      RETURN/IN regression caught mid-refactor is guarded by
-      TestPerEngineRoutineSurface. Suite green (1029 passed), output unchanged.
-- [x] **Transformer**: base + per-engine pattern, **pair-aware**. *Done:*
-      base+subclasses+factory (via `__new__`, by target). Every *target-only*
-      decision moved into a hook overridden by the relevant target subclass
-      (`_system_var_map`, `_varchar_max_type`, `_supports_type_reference`,
-      `_strip_dbo_schema`, `_alter_becomes_create`, `_uses_set_statement`,
-      `_assignment_becomes_set`, `_noop_statement`/`_noop_sql`,
-      `_transform_try_catch`/`_transform_exception_block`, `_fix_target_dml`,
-      `_fix_raw_sql_target`, `_fix_unwrapped_scalar`, `_trigger_new_ref`/
-      `_trigger_old_ref`, `_rewrites_trigger_pseudotables`, `_has_update_predicate`/
-      `_update_predicate`, `_transform_null`/`_transform_loop`/
-      `_warn_for_loop_unsupported`, `_trigger_forces_or_replace`). The remaining
-      ~23 `self._target` uses are inside genuinely *pair-dependent* logic
-      (variable naming `@x`→`V_X`/`v_x`/`@x`; scalar-function mappings
-      CHARINDEX/INSTR/LOCATE/STRPOS, DATEADD, DATEDIFF that read per source and
-      emit per target) and *source*-only logic — these stay in the base
-      parameterized by `self._source`, by design (forcing them into target-only
-      subclasses would be incorrect). Suite green (1029), output unchanged.
-- [x] **Parser**: consolidated the source-family conditionals. *Done:* the
-      repeated body-parsing branches are now a single `_parse_routine_body`
-      helper (parameterized by `with_pg_header`), and the scattered
-      `self._dialect == "tsql"` tests are an intentional `_is_tsql_source()`
-      predicate. Only the MySQL parameter-syntax branch remains (a real
-      source-family variation point). No 4-way subclass split — that would be
-      over-structure for an almost-entirely-shared parser. Suite green (1029).
-- [x] **Physical plugin layout**: *Done.* `emitter.py` and `transformer.py`
-      are now per-engine packages mirroring `dialects/{engine}/`:
-      `emitter/{base,tsql,oracle,postgresql,mysql}.py` and
-      `transformer/{...}.py`, each engine module self-registering on import and
-      the `__init__.py` re-exporting the factory class so the public import path
-      is unchanged. Adding a new engine = one new module + one import line in the
-      package `__init__`, touching no core logic. Suite green (1029).
-- [ ] Update `docs/02-architecture.md`, `docs/05-procedural-engine.md`, and the
-      skills to describe the new per-engine structure.
 
 ---
 
