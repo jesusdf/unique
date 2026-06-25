@@ -67,16 +67,13 @@ suite stays green at every checkpoint.
       predicate. Only the MySQL parameter-syntax branch remains (a real
       source-family variation point). No 4-way subclass split — that would be
       over-structure for an almost-entirely-shared parser. Suite green (1029).
-- [ ] **Physical plugin layout (final step)**: once each base/subclass body is
-      complete, split `emitter.py` and `transformer.py` into per-engine
-      packages mirroring `dialects/{engine}/` — `emitter/{base,tsql,oracle,
-      postgresql,mysql}.py` and `transformer/{...}.py`, with `__init__.py`
-      exposing the factory and a registry that the engine modules auto-register
-      into. Goal: adding a new engine = adding one file + one import, touching
-      no core logic. Done last because moving methods between base and subclass
-      is trivial within one file and costly across files; the per-class split
-      already gives the architectural benefit, this is the file-level
-      reorganization.
+- [x] **Physical plugin layout**: *Done.* `emitter.py` and `transformer.py`
+      are now per-engine packages mirroring `dialects/{engine}/`:
+      `emitter/{base,tsql,oracle,postgresql,mysql}.py` and
+      `transformer/{...}.py`, each engine module self-registering on import and
+      the `__init__.py` re-exporting the factory class so the public import path
+      is unchanged. Adding a new engine = one new module + one import line in the
+      package `__init__`, touching no core logic. Suite green (1029).
 - [ ] Update `docs/02-architecture.md`, `docs/05-procedural-engine.md`, and the
       skills to describe the new per-engine structure.
 
