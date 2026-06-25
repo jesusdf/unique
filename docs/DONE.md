@@ -405,3 +405,45 @@ plugin shape, then the web UI was polished.
       button to the file section, a red sans-serif "U" logo (`static/logo.svg`)
       used as the wordmark's capital, and tidied the file-row control alignment.
       Released as tag **v0.02** (image published by CI).
+
+## 10. Reverse transpilation of non-type UNIQUE notes + set-based trigger rewrite (P2/P3)
+
+Two follow-ups to the type-carrier round-trip and the trigger pseudo-table work.
+
+- [x] **Restore documented source-only constructs on reverse transpilation.**
+      Generalized the type-carrier round-trip to *non-type* constructs. A forward
+      pass that drops a construct with no target equivalent (e.g.
+      `SET IDENTITY_INSERT`, `SET ROWCOUNT`) now documents it as
+      `/* UNIQUE: <orig> -- <source>-only, no <target> equivalent */`, recording
+      the source engine. The parser captures `<orig>` + `<source>` onto
+      `CommentStatement` (`restore_sql`/`restore_dialect`), and the transformer
+      re-injects the original when the target is that source engine, else keeps
+      the note so it survives onward transpilation to a third engine. Also:
+      preserve body-level block comments in the PL/SQL parser (so the note
+      reaches the AST), document the SET option from its *original* text before
+      target fixups (dbo-stripping) corrupt it, and fix `SET IDENTITY_INSERT`
+      capture to keep the schema-qualified table name (`dbo.t`, not `dbo`).
+      Tests: `TestUniqueCommentRestore`.
+
+- [x] **Rewrite a pure set-based trigger with PostgreSQL transition tables.**
+      A *purely* set-based T-SQL trigger (body uses `inserted`/`deleted` only via
+      `FROM`/`JOIN`, no row-level qualifier or `UPDATE(col)` predicate) is now
+      rewritten to a PostgreSQL statement-level trigger: the function returns
+      `NULL` and the trigger declares `REFERENCING NEW TABLE AS inserted OLD TABLE
+      AS deleted` + `FOR EACH STATEMENT`, so the set-based body runs as-is. A
+      *mixed* trigger (row-level and set-level together, like the fixture's
+      `IF UPDATE(col) … FROM inserted`) cannot be a single trigger and stays
+      documented. **Oracle and MySQL keep documenting** the set-based use:
+      Oracle has no *named* transition tables (a compound trigger would need a
+      manual PL/SQL collection — not a mechanical rewrite, and emitting
+      `FROM inserted` would be invalid), and MySQL has none at all. Faithfulness
+      won over a lossy rewrite. Adds `CreateTriggerStatement.set_based_transition`,
+      the `_supports_transition_tables` hook (PostgreSQL only), and pure-vs-mixed
+      detection over the whole trigger body (including the `IF` condition).
+      Tests: `TestSetBasedTriggerRewrite`.
+
+A design note on Oracle row-level → T-SQL set-based was also discussed: a
+faithful general conversion would wrap the row-level body in a cursor over
+`inserted` (RBAR, plus a PK-join problem for UPDATE), so a true set-based
+rewrite is only safe for a detectable subset; the rest should stay documented.
+Captured here for future reference rather than implemented.
