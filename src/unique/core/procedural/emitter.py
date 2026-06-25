@@ -1250,40 +1250,39 @@ class ProceduralEmitter:
         return "RETURN;"
 
     def _emit_transaction(self, node: TransactionStatement) -> str:
-        """Emit a transaction-control statement for the target dialect."""
+        """Emit a transaction-control statement for the target dialect.
+
+        The overall shape is shared; the parts that differ per engine are small
+        hooks (`_emit_begin_transaction`, `_rollback_to_savepoint`,
+        `_emit_savepoint`) that subclasses override.
+        """
         name = node.name
         if node.action == TransactionAction.BEGIN:
-            if self._dialect == "tsql":
-                return f"BEGIN TRANSACTION{' ' + name if name else ''};"
-            if self._dialect == "mysql":
-                return "START TRANSACTION;"
-            if self._dialect == "postgresql":
-                # Inside a plpgsql function transaction control is illegal; a
-                # procedure starts its transaction implicitly. Document the
-                # dropped BEGIN rather than emit invalid SQL.
-                return (
-                    "/* UNIQUE: BEGIN TRANSACTION dropped -- PostgreSQL manages "
-                    "the routine transaction implicitly */"
-                )
-            # Oracle: transactions are implicit; BEGIN has no equivalent.
-            return (
-                "/* UNIQUE: BEGIN TRANSACTION dropped -- Oracle starts a "
-                "transaction implicitly */"
-            )
+            return self._emit_begin_transaction(name)
         if node.action == TransactionAction.COMMIT:
             return "COMMIT;"
         if node.action == TransactionAction.ROLLBACK:
             # ROLLBACK to a savepoint name keeps the name; a plain rollback does
             # not. T-SQL "ROLLBACK TRAN name" rolls back to a save point.
             if name:
-                if self._dialect == "tsql":
-                    return f"ROLLBACK TRANSACTION {name};"
-                if self._dialect in ("oracle", "postgresql", "mysql"):
-                    return f"ROLLBACK TO SAVEPOINT {name};"
+                return self._rollback_to_savepoint(name)
             return "ROLLBACK;"
-        # SAVEPOINT
-        if self._dialect == "tsql":
-            return f"SAVE TRANSACTION {name};" if name else "SAVE TRANSACTION;"
+        return self._emit_savepoint(name)
+
+    def _emit_begin_transaction(self, name: str | None) -> str:
+        """BEGIN-transaction form. Default: implicit, document the dropped
+        statement (Oracle/PostgreSQL). T-SQL and MySQL override."""
+        return (
+            f"/* UNIQUE: BEGIN TRANSACTION dropped -- {self._dialect} starts a "
+            "transaction implicitly */"
+        )
+
+    def _rollback_to_savepoint(self, name: str) -> str:
+        """ROLLBACK to a named savepoint. Default standard SQL; T-SQL overrides."""
+        return f"ROLLBACK TO SAVEPOINT {name};"
+
+    def _emit_savepoint(self, name: str | None) -> str:
+        """SAVEPOINT form. Default standard SQL; T-SQL overrides."""
         return f"SAVEPOINT {name};" if name else "SAVEPOINT;"
 
     def _emit_waitfor(self, node: WaitForStatement) -> str:
@@ -1470,6 +1469,15 @@ class TSqlEmitter(ProceduralEmitter):
         lines.append("END CATCH")
         return "\n".join(lines)
 
+    def _emit_begin_transaction(self, name: str | None) -> str:
+        return f"BEGIN TRANSACTION{' ' + name if name else ''};"
+
+    def _rollback_to_savepoint(self, name: str) -> str:
+        return f"ROLLBACK TRANSACTION {name};"
+
+    def _emit_savepoint(self, name: str | None) -> str:
+        return f"SAVE TRANSACTION {name};" if name else "SAVE TRANSACTION;"
+
 
 class OracleEmitter(ProceduralEmitter):
     """Oracle PL/SQL procedural emitter."""
@@ -1519,6 +1527,14 @@ class PostgresEmitter(ProceduralEmitter):
             val = self._emit_node(node.value)
             return f"RETURN {val};"
         return "RETURN;"
+
+    def _emit_begin_transaction(self, name: str | None) -> str:
+        # Inside a plpgsql function transaction control is illegal; a procedure
+        # starts its transaction implicitly. Document the dropped BEGIN.
+        return (
+            "/* UNIQUE: BEGIN TRANSACTION dropped -- PostgreSQL manages "
+            "the routine transaction implicitly */"
+        )
 
 
 class MySqlEmitter(ProceduralEmitter):
@@ -1570,6 +1586,9 @@ class MySqlEmitter(ProceduralEmitter):
             val = self._emit_node(node.value)
             return f"RETURN {val};"
         return "RETURN;"
+
+    def _emit_begin_transaction(self, name: str | None) -> str:
+        return "START TRANSACTION;"
 
 
 _EMITTER_REGISTRY: dict[str, type[ProceduralEmitter]] = {

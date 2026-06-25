@@ -33,8 +33,15 @@ goal is to make every per-engine branch an overridable method instead of an
 `if/elif` chain. Pure refactor — output must not change, fixtures must not move,
 suite stays green at every checkpoint.
 
-- [ ] **Emitter**: extract `ProceduralEmitter` base + `TSqlEmitter`,
+- [~] **Emitter**: extract `ProceduralEmitter` base + `TSqlEmitter`,
       `OracleEmitter`, `PostgresEmitter`, `MySqlEmitter`; factory by target.
+      *In progress:* base+subclasses+factory in place (via `__new__`);
+      `_emit_procedure` (header/empty-parens/body hooks), `_emit_try_catch`, and
+      `_emit_return` are split per engine, and a shared `_emit_indented_stmts`
+      helper removed repeated block-emit loops. Remaining: `_emit_transaction`,
+      `_emit_if`/tsql/plsql, `_emit_execute`/pg/mysql, `_emit_raise_error`,
+      `_emit_function_impl`, `_emit_trigger`, and folding the leftover
+      `_emit_{tsql,oracle,pg,mysql}_procedure_body` into the subclasses.
 - [ ] **Transformer**: same base + per-engine subclass pattern.
 - [ ] **Parser**: split the 11 source-family conditionals cleanly if it helps.
 - [ ] Update `docs/02-architecture.md`, `docs/05-procedural-engine.md`, and the
