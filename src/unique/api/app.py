@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import io
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -14,16 +15,36 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from unique import __version__
 from unique.core.detection import detect_dialect
 from unique.core.errors import ParseError, UnknownDialectError
 from unique.core.transpiler import TranspileOptions, Transpiler
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
+#: The version label shown in the UI and reported by /api/v1/info.
+DISPLAY_VERSION = "v0.02"
+
+
+def _db_connection_enabled() -> bool:
+    """Whether database connections (the ``db-url`` parameter) are allowed.
+
+    Controlled by the ``UNIQUE_ALLOW_DB_CONNECTION`` environment variable so a
+    container can opt in. Accepts the usual truthy spellings; defaults to off,
+    since connecting to a live database is a privileged capability.
+    """
+    return os.environ.get("UNIQUE_ALLOW_DB_CONNECTION", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
 app = FastAPI(
     title="Unique SQL Transpiler",
     description="Transpile SQL between SQL Server, Oracle, PostgreSQL, and MySQL.",
-    version="0.1.0",
+    version=__version__,
 )
 
 _transpiler = Transpiler()
@@ -86,6 +107,19 @@ class DialectsResponse(BaseModel):
     dialects: list[str]
 
 
+class InfoResponse(BaseModel):
+    """Runtime info the UI needs to configure itself."""
+
+    version: str = Field(..., description="Human-readable version label, e.g. v0.02.")
+    db_connection_enabled: bool = Field(
+        ...,
+        description=(
+            "Whether the deployment allows providing a database connection URL "
+            "(controlled by the UNIQUE_ALLOW_DB_CONNECTION environment variable)."
+        ),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -94,12 +128,21 @@ class DialectsResponse(BaseModel):
 @app.post("/api/v1/transpile", response_model=TranspileResponse)
 async def transpile_sql(request: TranspileRequest) -> TranspileResponse:
     """Transpile SQL from one dialect to another."""
+    db_url = request.db_url
+    if db_url and not _db_connection_enabled():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Database connections are disabled on this deployment. Set "
+                "UNIQUE_ALLOW_DB_CONNECTION=1 to enable the db-url option."
+            ),
+        )
     try:
         result = _transpiler.transpile(
             sql=request.sql,
             source=request.source,
             target=request.target,
-            options=TranspileOptions(db_url=request.db_url),
+            options=TranspileOptions(db_url=db_url),
         )
     except UnknownDialectError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -137,6 +180,15 @@ async def list_dialects() -> DialectsResponse:
     return DialectsResponse(dialects=_transpiler.available_dialects())
 
 
+@app.get("/api/v1/info", response_model=InfoResponse)
+async def get_info() -> InfoResponse:
+    """Report the version label and feature flags the UI needs at load time."""
+    return InfoResponse(
+        version=DISPLAY_VERSION,
+        db_connection_enabled=_db_connection_enabled(),
+    )
+
+
 class DetectRequest(BaseModel):
     """Request body for the detect endpoint."""
 
@@ -167,12 +219,23 @@ async def transpile_file(
     file: UploadFile = File(...),  # noqa: B008 - FastAPI dependency pattern
     source: str = Form(...),  # noqa: B008 - FastAPI dependency pattern
     target: str = Form(...),  # noqa: B008 - FastAPI dependency pattern
+    db_url: str | None = Form(default=None),  # noqa: B008 - FastAPI pattern
 ) -> StreamingResponse:
     """Transpile an uploaded SQL file and stream back the translated file.
 
     ``source`` may be the literal ``auto`` to auto-detect the dialect from the
-    file contents.
+    file contents. ``db_url`` is an optional database connection URL for
+    resolving metadata-dependent constructs; it is rejected unless the
+    deployment enables database connections.
     """
+    if db_url and not _db_connection_enabled():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Database connections are disabled on this deployment. Set "
+                "UNIQUE_ALLOW_DB_CONNECTION=1 to enable the db-url option."
+            ),
+        )
     raw = await file.read()
     try:
         sql = raw.decode("utf-8")
@@ -190,7 +253,12 @@ async def transpile_file(
         resolved_source = detected.dialect
 
     try:
-        result = _transpiler.transpile(sql=sql, source=resolved_source, target=target)
+        result = _transpiler.transpile(
+            sql=sql,
+            source=resolved_source,
+            target=target,
+            options=TranspileOptions(db_url=db_url),
+        )
     except UnknownDialectError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except ParseError as e:
