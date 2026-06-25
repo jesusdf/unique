@@ -220,17 +220,19 @@ class ProceduralEmitter:
 
         T-SQL's default ``dbo`` schema has no counterpart in the other engines:
         MySQL has no schema layer (a schema is a database), and in Oracle and
-        PostgreSQL ``dbo`` names a schema that doesn't exist. So drop a ``dbo``
-        qualifier for those targets and emit the bare name; preserve any other
-        (intentional) schema. For MySQL, drop any schema qualifier.
+        PostgreSQL ``dbo`` names a schema that doesn't exist. Whether a schema
+        qualifier survives is decided per engine by ``_keep_schema``.
         """
         if not schema:
             return name
-        if self._dialect == "mysql":
-            return name
-        if schema.lower() == "dbo" and self._dialect in ("oracle", "postgresql"):
-            return name
-        return f"{schema}.{name}"
+        if self._keep_schema(schema):
+            return f"{schema}.{name}"
+        return name
+
+    def _keep_schema(self, schema: str) -> bool:
+        """Whether to keep a schema qualifier on an object name. Default (T-SQL)
+        keeps any schema; Oracle/PostgreSQL drop ``dbo``; MySQL drops all."""
+        return True
 
     @staticmethod
     def _split_declarations(
@@ -464,23 +466,25 @@ class ProceduralEmitter:
         if (
             node.return_type is not None
             and node.return_type.name.upper() == "TABLE"
-            and self._dialect != "tsql"
+            and not self._supports_table_valued_function()
         ):
             return self._emit_table_valued_function(node)
         return self._emit_function_impl(node)
 
+    def _supports_table_valued_function(self) -> bool:
+        """Whether the engine has a native table-valued function. Only T-SQL
+        does; the others document and comment it out."""
+        return False
+
+    def _tvf_unsupported_note(self) -> str:
+        """Per-engine explanation of why a table-valued function can't be
+        emitted natively. Overridden by each non-T-SQL engine."""
+        return "no direct equivalent on this engine"
+
     def _emit_table_valued_function(self, node: CreateFunctionStatement) -> str:
-        engine = {
-            "mysql": "MySQL has no table-returning functions; use a view or a "
-            "procedure with a result set",
-            "postgresql": "PostgreSQL needs RETURNS TABLE(col type ...) with "
-            "RETURN QUERY; review the column list",
-            "oracle": "Oracle needs a pipelined function over a declared "
-            "collection type; review manually",
-        }.get(self._dialect, "no direct equivalent on this engine")
         note = (
             f"-- UNIQUE: inline table-valued function ('RETURNS TABLE') has no "
-            f"direct equivalent. {engine}.\n"
+            f"direct equivalent. {self._tvf_unsupported_note()}.\n"
             f"-- The non-portable translation is commented out below for "
             f"review:\n"
         )
@@ -619,9 +623,12 @@ class ProceduralEmitter:
 
     def _emit_assignment(self, node: AssignmentStatement) -> str:
         val = self._emit_node(node.value)
-        if self._dialect in ("tsql", "mysql"):
-            return f"SET {node.target} = {val};"
-        return f"{node.target} := {val};"
+        return self._assignment_form(node.target, val)
+
+    def _assignment_form(self, target: str, val: str) -> str:
+        """Variable assignment form. Default (Oracle/PostgreSQL) ``x := v;``;
+        T-SQL and MySQL override with ``SET x = v;``."""
+        return f"{target} := {val};"
 
     # ---------------------------------------------------------------
     # Control flow
@@ -667,135 +674,60 @@ class ProceduralEmitter:
         return "\n".join(lines)
 
     def _emit_while(self, node: WhileStatement) -> str:
+        """Default (PL/SQL/MySQL) ``WHILE cond LOOP … END LOOP;``. T-SQL
+        overrides with the ``WHILE cond BEGIN … END`` block form."""
         cond = self._emit_node(node.condition)
-        if self._dialect == "tsql":
-            lines = [f"WHILE {cond}"]
-            lines.append("BEGIN")
-            self._indent_level += 1
-            for stmt in node.body:
-                text = self._emit_node(stmt)
-                for line in text.split("\n"):
-                    lines.append(f"{self._indent()}{line}" if line.strip() else "")
-            self._indent_level -= 1
-            lines.append("END")
-        else:
-            lines = [f"WHILE {cond} LOOP"]
-            self._indent_level += 1
-            for stmt in node.body:
-                text = self._emit_node(stmt)
-                for line in text.split("\n"):
-                    lines.append(f"{self._indent()}{line}" if line.strip() else "")
-            self._indent_level -= 1
-            lines.append("END LOOP;")
+        lines = [f"WHILE {cond} LOOP"]
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(node.body))
+        self._indent_level -= 1
+        lines.append("END LOOP;")
         return "\n".join(lines)
 
     def _emit_for_loop(self, node: ForLoopStatement) -> str:
         cursor_str = self._emit_node(node.cursor) if node.cursor else ""
         cursor_str = cursor_str.rstrip().rstrip(";")
 
-        body_lines: list[str] = []
         self._indent_level += 1
-        for stmt in node.body:
-            text = self._emit_node(stmt)
-            for line in text.split("\n"):
-                body_lines.append(f"{self._indent()}{line}" if line.strip() else "")
+        body_lines = self._emit_indented_stmts(node.body)
         self._indent_level -= 1
 
-        if self._dialect in ("oracle", "postgresql"):
-            # Native cursor FOR loop.
-            lines = [f"FOR {node.variable} IN {cursor_str} LOOP"]
-            lines.extend(body_lines)
-            lines.append("END LOOP;")
-            return "\n".join(lines)
+        return self._emit_for_loop_body(node.variable, cursor_str, body_lines)
 
-        # T-SQL and MySQL have no implicit cursor FOR loop. Emit an explicit
-        # cursor scaffold (structurally complete) so the developer only needs
-        # to fill the per-column fetch variables.
-        if self._dialect == "tsql":
-            cur = f"{node.variable}_cur"
-            lines = [
-                "-- UNIQUE: Oracle implicit cursor FOR-loop expanded to an "
-                "explicit T-SQL cursor.",
-                "-- Declare one @var per selected column and complete the "
-                "FETCH INTO list.",
-                f"DECLARE {cur} CURSOR LOCAL FAST_FORWARD FOR",
-                f"{cursor_str};",
-                f"OPEN {cur};",
-                f"FETCH NEXT FROM {cur} INTO /* @col1, @col2, ... */;",
-                "WHILE @@FETCH_STATUS = 0",
-                "BEGIN",
-            ]
-            lines.extend(body_lines)
-            lines.append(
-                f"{self._indent()}FETCH NEXT FROM {cur} INTO "
-                "/* @col1, @col2, ... */;"
-            )
-            lines.append("END;")
-            lines.append(f"CLOSE {cur};")
-            lines.append(f"DEALLOCATE {cur};")
-            return "\n".join(lines)
-
-        # mysql: explicit cursor inside a BEGIN ... END with a NOT FOUND
-        # handler driving a loop.
-        cur = f"{node.variable}_cur"
-        done = f"{node.variable}_done"
-        lines = [
-            "-- UNIQUE: Oracle implicit cursor FOR-loop expanded to an "
-            "explicit MySQL cursor.",
-            "-- Declare one variable per selected column and complete the "
-            "FETCH INTO list.",
-            f"DECLARE {done} INT DEFAULT FALSE;",
-            f"DECLARE {cur} CURSOR FOR {cursor_str};",
-            f"DECLARE CONTINUE HANDLER FOR NOT FOUND SET {done} = TRUE;",
-            f"OPEN {cur};",
-            f"{node.variable}_loop: LOOP",
-            f"{self._indent()}FETCH {cur} INTO /* col1, col2, ... */;",
-            f"{self._indent()}IF {done} THEN LEAVE {node.variable}_loop; END IF;",
-        ]
+    def _emit_for_loop_body(
+        self, variable: str, cursor_str: str, body_lines: list[str]
+    ) -> str:
+        """Emit a cursor FOR-loop. Default is the native PL/SQL/PL-pgSQL form;
+        T-SQL and MySQL override with an explicit-cursor scaffold."""
+        lines = [f"FOR {variable} IN {cursor_str} LOOP"]
         lines.extend(body_lines)
         lines.append("END LOOP;")
-        lines.append(f"CLOSE {cur};")
         return "\n".join(lines)
 
     def _emit_loop(self, node: LoopStatement) -> str:
-        body_lines: list[str] = []
         self._indent_level += 1
-        for stmt in node.body:
-            text = self._emit_node(stmt)
-            for line in text.split("\n"):
-                body_lines.append(f"{self._indent()}{line}" if line.strip() else "")
+        body_lines = self._emit_indented_stmts(node.body)
         self._indent_level -= 1
+        return self._emit_loop_body(body_lines)
 
-        if self._dialect == "tsql":
-            # Unconditional loop → WHILE 1 = 1 ... (exit via BREAK).
-            lines = ["WHILE 1 = 1", "BEGIN"]
-            lines.extend(body_lines)
-            lines.append("END")
-            return "\n".join(lines)
-        if self._dialect == "mysql":
-            lines = ["loop_lbl: LOOP"]
-            lines.extend(body_lines)
-            lines.append("END LOOP loop_lbl;")
-            return "\n".join(lines)
-        # Oracle / PostgreSQL
-        lines = ["LOOP"]
-        lines.extend(body_lines)
-        lines.append("END LOOP;")
+    def _emit_loop_body(self, body_lines: list[str]) -> str:
+        """Emit an unconditional loop. Default (Oracle/PostgreSQL) ``LOOP …
+        END LOOP;``. T-SQL and MySQL override."""
+        lines = ["LOOP", *body_lines, "END LOOP;"]
         return "\n".join(lines)
 
     def _emit_begin_end(self, node: BeginEndBlock) -> str:
         lines = ["BEGIN"]
         self._indent_level += 1
-        for stmt in node.statements:
-            text = self._emit_node(stmt)
-            for line in text.split("\n"):
-                lines.append(f"{self._indent()}{line}" if line.strip() else "")
+        lines.extend(self._emit_indented_stmts(node.statements))
         self._indent_level -= 1
-        if self._dialect == "tsql":
-            lines.append("END")
-        else:
-            lines.append("END;")
+        lines.append(self._block_end())
         return "\n".join(lines)
+
+    def _block_end(self) -> str:
+        """The closing keyword of a BEGIN…END block. Default ``END;``; T-SQL
+        overrides with ``END`` (no semicolon)."""
+        return "END;"
 
     def _emit_statement_list(self, node: StatementList) -> str:
         """Emit a transparent statement sequence (no wrapper)."""
@@ -1208,29 +1140,17 @@ class ProceduralEmitter:
         return f"{sql};"
 
     def _emit_select_into(self, node: SelectIntoStatement) -> str:
-        """Emit SELECT INTO in the target dialect's syntax.
-
-        T-SQL:    SELECT @v1 = col1, @v2 = col2 FROM ...
-        Oracle/PG: SELECT col1, col2 INTO v1, v2 FROM ...
+        """Emit SELECT … INTO in the target dialect's syntax. Default is the
+        standard ``SELECT col1, col2 INTO v1, v2 FROM …`` (Oracle/PG/MySQL);
+        T-SQL overrides with ``SELECT @v1 = col1, … FROM …``.
         """
         select_list = ""
         if node.columns:
             first = node.columns[0]
             select_list = first.sql if isinstance(first, RawSQL) else ""
         rest = node.rest_sql.rstrip(";").strip()
-
-        if self._dialect == "tsql":
-            cols = [c.strip() for c in select_list.split(",")]
-            targets = list(node.into_vars)
-            pairs = []
-            for i, var in enumerate(targets):
-                col = cols[i] if i < len(cols) else (cols[-1] if cols else "")
-                pairs.append(f"{var} = {col}")
-            assignments = ", ".join(pairs)
-            return f"SELECT {assignments} {rest};"
-        else:
-            into_clause = ", ".join(node.into_vars)
-            return f"SELECT {select_list} INTO {into_clause} {rest};"
+        into_clause = ", ".join(node.into_vars)
+        return f"SELECT {select_list} INTO {into_clause} {rest};"
 
     def _emit_raw_sql(self, node: RawSQL) -> str:
         return node.sql
@@ -1274,6 +1194,9 @@ class TSqlEmitter(ProceduralEmitter):
         direction_str = " OUTPUT" if p.direction in ("OUT", "INOUT") else ""
         return f"{p.name} {dt}{default_str}{direction_str}"
 
+    def _supports_table_valued_function(self) -> bool:
+        return True
+
     def _declare_default_op(self) -> str:
         return "="
 
@@ -1289,6 +1212,68 @@ class TSqlEmitter(ProceduralEmitter):
 
     def _emit_print(self, node: PrintStatement) -> str:
         return f"PRINT {self._emit_node(node.expression)};"
+
+    def _emit_while(self, node: WhileStatement) -> str:
+        cond = self._emit_node(node.condition)
+        lines = [f"WHILE {cond}", "BEGIN"]
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(node.body))
+        self._indent_level -= 1
+        lines.append("END")
+        return "\n".join(lines)
+
+    def _emit_loop_body(self, body_lines: list[str]) -> str:
+        # Unconditional loop → WHILE 1 = 1 ... (exit via BREAK).
+        return "\n".join(["WHILE 1 = 1", "BEGIN", *body_lines, "END"])
+
+    def _block_end(self) -> str:
+        return "END"
+
+    def _assignment_form(self, target: str, val: str) -> str:
+        return f"SET {target} = {val};"
+
+    def _emit_select_into(self, node: SelectIntoStatement) -> str:
+        select_list = ""
+        if node.columns:
+            first = node.columns[0]
+            select_list = first.sql if isinstance(first, RawSQL) else ""
+        rest = node.rest_sql.rstrip(";").strip()
+        cols = [c.strip() for c in select_list.split(",")]
+        targets = list(node.into_vars)
+        pairs = []
+        for i, var in enumerate(targets):
+            col = cols[i] if i < len(cols) else (cols[-1] if cols else "")
+            pairs.append(f"{var} = {col}")
+        assignments = ", ".join(pairs)
+        return f"SELECT {assignments} {rest};"
+
+    def _emit_for_loop_body(
+        self, variable: str, cursor_str: str, body_lines: list[str]
+    ) -> str:
+        # T-SQL has no implicit cursor FOR loop. Emit an explicit cursor
+        # scaffold (structurally complete) so the developer only needs to fill
+        # the per-column fetch variables.
+        cur = f"{variable}_cur"
+        lines = [
+            "-- UNIQUE: Oracle implicit cursor FOR-loop expanded to an "
+            "explicit T-SQL cursor.",
+            "-- Declare one @var per selected column and complete the "
+            "FETCH INTO list.",
+            f"DECLARE {cur} CURSOR LOCAL FAST_FORWARD FOR",
+            f"{cursor_str};",
+            f"OPEN {cur};",
+            f"FETCH NEXT FROM {cur} INTO /* @col1, @col2, ... */;",
+            "WHILE @@FETCH_STATUS = 0",
+            "BEGIN",
+        ]
+        lines.extend(body_lines)
+        lines.append(
+            f"{self._indent()}FETCH NEXT FROM {cur} INTO /* @col1, @col2, ... */;"
+        )
+        lines.append("END;")
+        lines.append(f"CLOSE {cur};")
+        lines.append(f"DEALLOCATE {cur};")
+        return "\n".join(lines)
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
         msg = self._emit_node(node.message) if node.message else "'Error'"
@@ -1406,6 +1391,16 @@ class OracleEmitter(ProceduralEmitter):
         prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
         return f"{prefix}PROCEDURE {name}"
 
+    def _keep_schema(self, schema: str) -> bool:
+        # 'dbo' is T-SQL's default schema and has no Oracle counterpart.
+        return schema.lower() != "dbo"
+
+    def _tvf_unsupported_note(self) -> str:
+        return (
+            "Oracle needs a pipelined function over a declared collection type; "
+            "review manually"
+        )
+
     def _emit_procedure_body(
         self,
         header: str,
@@ -1511,6 +1506,16 @@ class PostgresEmitter(ProceduralEmitter):
         prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
         return f"{prefix}PROCEDURE {name}"
 
+    def _keep_schema(self, schema: str) -> bool:
+        # 'dbo' is T-SQL's default schema and has no PostgreSQL counterpart.
+        return schema.lower() != "dbo"
+
+    def _tvf_unsupported_note(self) -> str:
+        return (
+            "PostgreSQL needs RETURNS TABLE(col type ...) with RETURN QUERY; "
+            "review the column list"
+        )
+
     def _wants_empty_parens(self) -> bool:
         return True
 
@@ -1615,6 +1620,47 @@ class MySqlEmitter(ProceduralEmitter):
     """MySQL procedural emitter."""
 
     dialect_name = "mysql"
+
+    def _keep_schema(self, schema: str) -> bool:
+        # MySQL has no schema layer (a schema is a database); drop all.
+        return False
+
+    def _tvf_unsupported_note(self) -> str:
+        return (
+            "MySQL has no table-returning functions; use a view or a procedure "
+            "with a result set"
+        )
+
+    def _emit_loop_body(self, body_lines: list[str]) -> str:
+        return "\n".join(["loop_lbl: LOOP", *body_lines, "END LOOP loop_lbl;"])
+
+    def _assignment_form(self, target: str, val: str) -> str:
+        return f"SET {target} = {val};"
+
+    def _emit_for_loop_body(
+        self, variable: str, cursor_str: str, body_lines: list[str]
+    ) -> str:
+        # MySQL: explicit cursor inside a BEGIN ... END with a NOT FOUND handler
+        # driving a loop.
+        cur = f"{variable}_cur"
+        done = f"{variable}_done"
+        lines = [
+            "-- UNIQUE: Oracle implicit cursor FOR-loop expanded to an "
+            "explicit MySQL cursor.",
+            "-- Declare one variable per selected column and complete the "
+            "FETCH INTO list.",
+            f"DECLARE {done} INT DEFAULT FALSE;",
+            f"DECLARE {cur} CURSOR FOR {cursor_str};",
+            f"DECLARE CONTINUE HANDLER FOR NOT FOUND SET {done} = TRUE;",
+            f"OPEN {cur};",
+            f"{variable}_loop: LOOP",
+            f"{self._indent()}FETCH {cur} INTO /* col1, col2, ... */;",
+            f"{self._indent()}IF {done} THEN LEAVE {variable}_loop; END IF;",
+        ]
+        lines.extend(body_lines)
+        lines.append("END LOOP;")
+        lines.append(f"CLOSE {cur};")
+        return "\n".join(lines)
 
     def _emit_param(
         self,
