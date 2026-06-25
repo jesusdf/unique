@@ -1094,19 +1094,20 @@ class ProceduralTransformer:
         except Exception as e:
             logger.debug("sqlglot transpile failed for DML: %s", e)
             self._warnings.append(f"Could not transpile DML: {e}")
-        if self._target == "oracle":
-            sql = self._fix_oracle_dml(sql)
-        if self._target == "mysql":
-            sql = self._mysql_string_concat(sql)
-            sql = self._mysql_clean_dml(sql)
-            sql = self._mysql_fix_cast_max(sql)
-            sql = self._mysql_string_split(sql)
-        if self._target == "postgresql":
-            sql = self._pg_string_concat(sql)
-            sql = self._pg_clean_dml(sql)
-        if self._in_trigger and self._target != "tsql":
+        sql = self._fix_target_dml(sql)
+        if self._in_trigger and self._rewrites_trigger_pseudotables():
             sql = self._rewrite_trigger_pseudotables(sql)
         return EmbeddedDML(sql=sql, dialect=self._target)
+
+    def _fix_target_dml(self, sql: str) -> str:
+        """Apply target-specific cleanups to sqlglot-transpiled DML. The base
+        (T-SQL) needs none; each target subclass overrides with its fixups."""
+        return sql
+
+    def _rewrites_trigger_pseudotables(self) -> bool:
+        """Whether inserted/deleted pseudo-tables get rewritten to NEW/OLD in a
+        trigger body. True for every target except T-SQL (which keeps them)."""
+        return True
 
     # FROM/JOIN <pseudo-table> — a *set-based* use of inserted/deleted, which has
     # no row-level (NEW/OLD) equivalent.
@@ -1136,14 +1137,25 @@ class ProceduralTransformer:
             body = "\n".join(f"-- {line}" for line in sql.splitlines())
             # Leave a dialect no-op so an enclosing IF/loop is not left with only
             # comments (an empty block is a syntax error). Harmless if redundant.
-            noop = "DO 0;" if self._target == "mysql" else "NULL;"
-            return f"{note}\n{body}\n{noop}"
+            return f"{note}\n{body}\n{self._noop_sql()}"
         # Column-qualifier form: map to NEW/OLD (row-level).
-        new_ref = ":NEW." if self._target == "oracle" else "NEW."
-        old_ref = ":OLD." if self._target == "oracle" else "OLD."
-        sql = re.sub(r"(?i)\binserted\s*\.\s*", new_ref, sql)
-        sql = re.sub(r"(?i)\bdeleted\s*\.\s*", old_ref, sql)
+        sql = re.sub(r"(?i)\binserted\s*\.\s*", self._trigger_new_ref(), sql)
+        sql = re.sub(r"(?i)\bdeleted\s*\.\s*", self._trigger_old_ref(), sql)
         return sql
+
+    def _noop_sql(self) -> str:
+        """A no-op statement as raw SQL text. Default ``NULL;``; MySQL ``DO 0;``."""
+        return "NULL;"
+
+    def _trigger_new_ref(self) -> str:
+        """Row-level NEW-row qualifier in a trigger. Default ``NEW.``; Oracle
+        ``:NEW.``."""
+        return "NEW."
+
+    def _trigger_old_ref(self) -> str:
+        """Row-level OLD-row qualifier in a trigger. Default ``OLD.``; Oracle
+        ``:OLD.``."""
+        return "OLD."
 
     def _pg_clean_dml(self, sql: str) -> str:
         """Strip T-SQL leftovers that PostgreSQL rejects.
@@ -2260,6 +2272,10 @@ class TSqlTransformer(ProceduralTransformer):
         # T-SQL keeps ALTER PROCEDURE as-is.
         return False
 
+    def _rewrites_trigger_pseudotables(self) -> bool:
+        # T-SQL keeps inserted/deleted pseudo-tables as-is.
+        return False
+
     def _uses_set_statement(self) -> bool:
         return True
 
@@ -2314,6 +2330,15 @@ class OracleTransformer(ProceduralTransformer):
             )
         )
 
+    def _fix_target_dml(self, sql: str) -> str:
+        return self._fix_oracle_dml(sql)
+
+    def _trigger_new_ref(self) -> str:
+        return ":NEW."
+
+    def _trigger_old_ref(self) -> str:
+        return ":OLD."
+
     def _varchar_max_type(self, is_unicode: bool) -> str | None:
         return "NCLOB" if is_unicode else "CLOB"
 
@@ -2337,6 +2362,11 @@ class PostgresTransformer(ProceduralTransformer):
 
     def _varchar_max_type(self, is_unicode: bool) -> str | None:
         return "TEXT"
+
+    def _fix_target_dml(self, sql: str) -> str:
+        sql = self._pg_string_concat(sql)
+        sql = self._pg_clean_dml(sql)
+        return sql
 
 
 class MySqlTransformer(ProceduralTransformer):
@@ -2365,6 +2395,16 @@ class MySqlTransformer(ProceduralTransformer):
         # statement to keep a block non-empty. Terminator included since the
         # IF/loop emitters don't add one for RawSQL.
         return RawSQL(sql="DO 0;", reason="no-op")
+
+    def _noop_sql(self) -> str:
+        return "DO 0;"
+
+    def _fix_target_dml(self, sql: str) -> str:
+        sql = self._mysql_string_concat(sql)
+        sql = self._mysql_clean_dml(sql)
+        sql = self._mysql_fix_cast_max(sql)
+        sql = self._mysql_string_split(sql)
+        return sql
 
 
 _TRANSFORMER_REGISTRY: dict[str, type[ProceduralTransformer]] = {
