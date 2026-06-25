@@ -546,6 +546,16 @@ class ProceduralTransformer:
         returns an empty map (no translation); each target subclass overrides."""
         return {}
 
+    def _supports_type_reference(self) -> bool:
+        """Whether the target supports ``%TYPE``/``%ROWTYPE`` natively (Oracle).
+        Others lower an unresolved reference to a carrier type."""
+        return False
+
+    def _varchar_max_type(self, is_unicode: bool) -> str | None:
+        """Target type for T-SQL ``VARCHAR(MAX)``/``NVARCHAR(MAX)``. The base
+        returns None (no change); each target subclass overrides."""
+        return None
+
     # ---------------------------------------------------------------
     # Data type transformations
     # ---------------------------------------------------------------
@@ -591,10 +601,10 @@ class ProceduralTransformer:
                         return self._transform_data_type(resolved)
                 except Exception:  # pragma: no cover - defensive
                     pass
-            # Oracle supports %TYPE/%ROWTYPE natively, so keep the reference as-is
-            # for an Oracle target (also makes a carrier round-trip back to Oracle
-            # faithful) instead of lowering it to a carrier.
-            if self._target == "oracle":
+            # Oracle supports %TYPE/%ROWTYPE natively, so keep the reference
+            # as-is for an Oracle target (also makes a carrier round-trip back
+            # to Oracle faithful) instead of lowering it to a carrier.
+            if self._supports_type_reference():
                 return DataType(name=dt.name, params=dt.params)
             # Unresolved without a connection: emit a permissive carrier type
             # and preserve the original reference as a comment so the
@@ -607,14 +617,11 @@ class ProceduralTransformer:
             carrier = self._unknown_type_carrier()
             return DataType(name=carrier, origin_comment=dt.name)
 
-        # Handle VARCHAR(MAX) → CLOB/TEXT
+        # Handle VARCHAR(MAX) → CLOB/TEXT/LONGTEXT (per target)
         if type_name in ("VARCHAR", "NVARCHAR") and dt.params == (-1,):
-            if self._target == "oracle":
-                return DataType(name="CLOB" if type_name == "VARCHAR" else "NCLOB")
-            elif self._target == "postgresql":
-                return DataType(name="TEXT")
-            elif self._target == "mysql":
-                return DataType(name="LONGTEXT")
+            mapped = self._varchar_max_type(type_name == "NVARCHAR")
+            if mapped is not None:
+                return DataType(name=mapped)
 
         # Lookup in mapping table
         type_map = self._get_type_map()
@@ -684,10 +691,16 @@ class ProceduralTransformer:
     # ---------------------------------------------------------------
 
     def _target_schema(self, schema: str | None) -> str | None:
-        """Return schema for target dialect; strip SQL Server's 'dbo' for Oracle."""
-        if self._target == "oracle" and schema and schema.lower() == "dbo":
+        """Return the schema for the target dialect; strip SQL Server's default
+        ``dbo`` where the target has no such schema (Oracle)."""
+        if schema and schema.lower() == "dbo" and self._strip_dbo_schema():
             return None
         return schema
+
+    def _strip_dbo_schema(self) -> bool:
+        """Whether to drop a ``dbo`` schema qualifier for this target. Default
+        keep; Oracle overrides to strip."""
+        return False
 
     def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
         new_params = self._transform_params(node.parameters)
@@ -707,7 +720,7 @@ class ProceduralTransformer:
         """Transform ALTER PROCEDURE (T-SQL) → CREATE OR REPLACE (others)."""
         new_params = self._transform_params(node.parameters)
         new_body = self._transform_body(node.body)
-        if self._target in ("oracle", "postgresql", "mysql"):
+        if self._alter_becomes_create():
             return CreateProcedureStatement(
                 name=node.name,
                 parameters=new_params,
@@ -721,6 +734,12 @@ class ProceduralTransformer:
             body=new_body,
             schema=node.schema,
         )
+
+    def _alter_becomes_create(self) -> bool:
+        """Whether ALTER PROCEDURE should become CREATE OR REPLACE on this
+        target. Default yes (Oracle/PostgreSQL/MySQL); T-SQL overrides to keep
+        ALTER."""
+        return True
 
     def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
         new_params = self._transform_params(node.parameters)
@@ -2241,6 +2260,10 @@ class TSqlTransformer(ProceduralTransformer):
 
     target_name = "tsql"
 
+    def _alter_becomes_create(self) -> bool:
+        # T-SQL keeps ALTER PROCEDURE as-is.
+        return False
+
 
 class OracleTransformer(ProceduralTransformer):
     """Transforms toward Oracle PL/SQL."""
@@ -2258,6 +2281,17 @@ class OracleTransformer(ProceduralTransformer):
                 "@@TRANCOUNT", "transactions are implicit"
             ),
         }
+
+    def _supports_type_reference(self) -> bool:
+        # Oracle supports %TYPE/%ROWTYPE natively.
+        return True
+
+    def _strip_dbo_schema(self) -> bool:
+        # Oracle objects live in the current user's schema; 'dbo' has no meaning.
+        return True
+
+    def _varchar_max_type(self, is_unicode: bool) -> str | None:
+        return "NCLOB" if is_unicode else "CLOB"
 
 
 class PostgresTransformer(ProceduralTransformer):
@@ -2277,6 +2311,9 @@ class PostgresTransformer(ProceduralTransformer):
             ),
         }
 
+    def _varchar_max_type(self, is_unicode: bool) -> str | None:
+        return "TEXT"
+
 
 class MySqlTransformer(ProceduralTransformer):
     """Transforms toward MySQL."""
@@ -2292,6 +2329,9 @@ class MySqlTransformer(ProceduralTransformer):
                 "@@TRANCOUNT", "the routine manages its transaction"
             ),
         }
+
+    def _varchar_max_type(self, is_unicode: bool) -> str | None:
+        return "LONGTEXT"
 
 
 _TRANSFORMER_REGISTRY: dict[str, type[ProceduralTransformer]] = {
