@@ -1290,9 +1290,9 @@ class ProceduralEmitter:
 
         DELAY (a relative pause) maps to each engine's sleep; TIME (wait until
         an absolute clock time) has no portable equivalent and is documented.
+        The base handles the non-T-SQL engines; TSqlEmitter overrides to emit
+        the native WAITFOR. The per-engine sleep call is the `_sleep_call` hook.
         """
-        if self._dialect == "tsql":
-            return f"WAITFOR {node.kind} '{node.value}';"
         if node.kind == "TIME":
             return (
                 f"/* UNIQUE: WAITFOR TIME '{node.value}' has no {self._dialect} "
@@ -1301,79 +1301,61 @@ class ProceduralEmitter:
         secs = node.seconds if node.seconds is not None else 0
         # Render whole seconds without a trailing .0 where possible.
         secs_str = str(int(secs)) if float(secs).is_integer() else str(secs)
-        if self._dialect == "mysql":
-            return f"DO SLEEP({secs_str});"
-        if self._dialect == "postgresql":
-            return f"PERFORM pg_sleep({secs_str});"
-        # Oracle
-        return f"DBMS_LOCK.SLEEP({secs_str});"
+        return self._sleep_call(secs_str)
+
+    def _sleep_call(self, secs: str) -> str:
+        """The engine's "sleep for N seconds" statement. Default is Oracle's
+        DBMS_LOCK.SLEEP; MySQL and PostgreSQL override."""
+        return f"DBMS_LOCK.SLEEP({secs});"
 
     def _emit_cursor_op(self, node: CursorOperation) -> str:
         op = node.operation.upper()
         if op == "OPEN":
             if node.query:
                 query_str = self._emit_node(node.query)
-                if self._dialect == "tsql":
-                    return f"OPEN {node.cursor_name};"
-                return f"OPEN {node.cursor_name} FOR\n{query_str};"
+                return self._emit_cursor_open(node.cursor_name, query_str)
             return f"OPEN {node.cursor_name};"
         elif op == "FETCH":
             into_str = ", ".join(node.into_vars)
-            if self._dialect == "tsql":
-                return f"FETCH NEXT FROM {node.cursor_name} INTO {into_str};"
-            return f"FETCH {node.cursor_name} INTO {into_str};"
+            return self._emit_cursor_fetch(node.cursor_name, into_str)
         elif op == "CLOSE":
             return f"CLOSE {node.cursor_name};"
         elif op == "DEALLOCATE":
-            if self._dialect == "tsql":
-                return f"DEALLOCATE {node.cursor_name};"
-            return f"-- DEALLOCATE not needed in {self._dialect}"
+            return self._emit_cursor_deallocate(node.cursor_name)
         return f"{op} {node.cursor_name};"
+
+    def _emit_cursor_open(self, cursor_name: str, query_str: str) -> str:
+        """OPEN a cursor with an inline query. Default (PL/SQL/PL-pgSQL) binds
+        the query with FOR; T-SQL overrides (the query is on DECLARE CURSOR)."""
+        return f"OPEN {cursor_name} FOR\n{query_str};"
+
+    def _emit_cursor_fetch(self, cursor_name: str, into_str: str) -> str:
+        """FETCH a row INTO variables. Default standard form; T-SQL overrides
+        with FETCH NEXT FROM."""
+        return f"FETCH {cursor_name} INTO {into_str};"
+
+    def _emit_cursor_deallocate(self, cursor_name: str) -> str:
+        """DEALLOCATE a cursor. Only T-SQL needs it; default documents the
+        no-op."""
+        return f"-- DEALLOCATE not needed in {self._dialect}"
 
     def _emit_exit(self, node: ExitStatement) -> str:
         cond = self._emit_node(node.condition) if node.condition else ""
         # Cursor %NOTFOUND / %FOUND have dialect-specific equivalents.
         cond = self._translate_cursor_attrs(cond)
-
-        if self._dialect == "tsql":
-            # T-SQL has no EXIT WHEN; use IF <cond> BREAK.
-            if cond:
-                return f"IF {cond} BREAK;"
-            return "BREAK;"
-        if self._dialect == "mysql":
-            # MySQL uses LEAVE with a loop label; emit a guarded LEAVE.
-            if cond:
-                return f"IF {cond} THEN LEAVE loop_lbl; END IF;"
-            return "LEAVE loop_lbl;"
-        # Oracle / PostgreSQL
+        # Default: Oracle / PostgreSQL EXIT [WHEN cond]. T-SQL and MySQL override.
         if cond:
             return f"EXIT WHEN {cond};"
         return "EXIT;"
 
     def _translate_cursor_attrs(self, expr: str) -> str:
-        """Translate Oracle cursor attributes to the target dialect."""
-        if not expr:
-            return expr
+        """Translate Oracle cursor attributes to the target dialect.
 
-        if self._dialect == "tsql":
-            # cur%NOTFOUND -> @@FETCH_STATUS <> 0 ; cur%FOUND -> = 0
-            expr = re.sub(
-                r"\w+\s*%\s*NOTFOUND", "@@FETCH_STATUS <> 0", expr, flags=re.I
-            )
-            expr = re.sub(r"\w+\s*%\s*FOUND", "@@FETCH_STATUS = 0", expr, flags=re.I)
-        elif self._dialect == "postgresql":
-            expr = re.sub(r"\w+\s*%\s*NOTFOUND", "NOT FOUND", expr, flags=re.I)
-            expr = re.sub(r"\w+\s*%\s*FOUND", "FOUND", expr, flags=re.I)
-        elif self._dialect == "mysql":
-            # MySQL signals end-of-cursor via a NOT FOUND handler; flag it.
-            expr = re.sub(
-                r"\w+\s*%\s*NOTFOUND",
-                "done /* set by CONTINUE HANDLER FOR NOT FOUND */",
-                expr,
-                flags=re.I,
-            )
+        Default leaves the expression unchanged; engines that have an
+        equivalent (T-SQL @@FETCH_STATUS, PostgreSQL FOUND, MySQL handler flag)
+        override this.
+        """
         return expr
-        return "EXIT;"
 
     def _emit_continue(self, node: ContinueStatement) -> str:
         if self._dialect == "tsql":
@@ -1478,6 +1460,35 @@ class TSqlEmitter(ProceduralEmitter):
     def _emit_savepoint(self, name: str | None) -> str:
         return f"SAVE TRANSACTION {name};" if name else "SAVE TRANSACTION;"
 
+    def _emit_waitfor(self, node: WaitForStatement) -> str:
+        return f"WAITFOR {node.kind} '{node.value}';"
+
+    def _emit_cursor_open(self, cursor_name: str, query_str: str) -> str:
+        # In T-SQL the query lives on DECLARE CURSOR, so OPEN takes no query.
+        return f"OPEN {cursor_name};"
+
+    def _emit_cursor_fetch(self, cursor_name: str, into_str: str) -> str:
+        return f"FETCH NEXT FROM {cursor_name} INTO {into_str};"
+
+    def _emit_cursor_deallocate(self, cursor_name: str) -> str:
+        return f"DEALLOCATE {cursor_name};"
+
+    def _emit_exit(self, node: ExitStatement) -> str:
+        cond = self._emit_node(node.condition) if node.condition else ""
+        cond = self._translate_cursor_attrs(cond)
+        # T-SQL has no EXIT WHEN; use IF <cond> BREAK.
+        if cond:
+            return f"IF {cond} BREAK;"
+        return "BREAK;"
+
+    def _translate_cursor_attrs(self, expr: str) -> str:
+        if not expr:
+            return expr
+        # cur%NOTFOUND -> @@FETCH_STATUS <> 0 ; cur%FOUND -> = 0
+        expr = re.sub(r"\w+\s*%\s*NOTFOUND", "@@FETCH_STATUS <> 0", expr, flags=re.I)
+        expr = re.sub(r"\w+\s*%\s*FOUND", "@@FETCH_STATUS = 0", expr, flags=re.I)
+        return expr
+
 
 class OracleEmitter(ProceduralEmitter):
     """Oracle PL/SQL procedural emitter."""
@@ -1536,6 +1547,16 @@ class PostgresEmitter(ProceduralEmitter):
             "the routine transaction implicitly */"
         )
 
+    def _sleep_call(self, secs: str) -> str:
+        return f"PERFORM pg_sleep({secs});"
+
+    def _translate_cursor_attrs(self, expr: str) -> str:
+        if not expr:
+            return expr
+        expr = re.sub(r"\w+\s*%\s*NOTFOUND", "NOT FOUND", expr, flags=re.I)
+        expr = re.sub(r"\w+\s*%\s*FOUND", "FOUND", expr, flags=re.I)
+        return expr
+
 
 class MySqlEmitter(ProceduralEmitter):
     """MySQL procedural emitter."""
@@ -1589,6 +1610,29 @@ class MySqlEmitter(ProceduralEmitter):
 
     def _emit_begin_transaction(self, name: str | None) -> str:
         return "START TRANSACTION;"
+
+    def _sleep_call(self, secs: str) -> str:
+        return f"DO SLEEP({secs});"
+
+    def _emit_exit(self, node: ExitStatement) -> str:
+        cond = self._emit_node(node.condition) if node.condition else ""
+        cond = self._translate_cursor_attrs(cond)
+        # MySQL uses LEAVE with a loop label; emit a guarded LEAVE.
+        if cond:
+            return f"IF {cond} THEN LEAVE loop_lbl; END IF;"
+        return "LEAVE loop_lbl;"
+
+    def _translate_cursor_attrs(self, expr: str) -> str:
+        if not expr:
+            return expr
+        # MySQL signals end-of-cursor via a NOT FOUND handler; flag it.
+        expr = re.sub(
+            r"\w+\s*%\s*NOTFOUND",
+            "done /* set by CONTINUE HANDLER FOR NOT FOUND */",
+            expr,
+            flags=re.I,
+        )
+        return expr
 
 
 _EMITTER_REGISTRY: dict[str, type[ProceduralEmitter]] = {
