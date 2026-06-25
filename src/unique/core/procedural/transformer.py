@@ -530,46 +530,21 @@ class ProceduralTransformer:
         routine stays syntactically valid and the limitation is documented.
         """
         upper = var.upper()
+        mapping = self._system_var_map()
+        if not mapping:
+            return var
+        return mapping.get(upper, f"/* {var} */")
 
-        # A neutral, syntactically-valid placeholder for a global with no faithful
-        # equivalent: 0 plus an inline block comment (never a line comment, which
-        # would swallow the rest of an inline condition).
-        def _neutral(name: str, hint: str) -> str:
-            return f"0 /* UNIQUE: {name} has no {self._target} equivalent; {hint} */"
+    def _neutral_global(self, name: str, hint: str) -> str:
+        """A neutral, syntactically-valid placeholder for a global with no
+        faithful equivalent: ``0`` plus an inline block comment (never a line
+        comment, which would swallow the rest of an inline condition)."""
+        return f"0 /* UNIQUE: {name} has no {self._target} equivalent; {hint} */"
 
-        if self._target == "oracle":
-            mapping = {
-                "@@ROWCOUNT": "SQL%ROWCOUNT",
-                "@@IDENTITY": "/* @@IDENTITY: use <sequence>.CURRVAL */",
-                # SQLCODE is a valid Oracle function (0 in normal flow, the last
-                # error code inside an exception handler).
-                "@@ERROR": "SQLCODE",
-                "@@TRANCOUNT": _neutral("@@TRANCOUNT", "transactions are implicit"),
-            }
-            return mapping.get(upper, f"/* {var} */")
-        elif self._target == "postgresql":
-            mapping = {
-                "@@ROWCOUNT": "ROW_COUNT",
-                "@@IDENTITY": "LASTVAL()",
-                # SQLSTATE is only available inside an EXCEPTION handler in
-                # plpgsql, so it cannot stand in for an inline @@ERROR check.
-                "@@ERROR": _neutral("@@ERROR", "use an EXCEPTION handler"),
-                "@@TRANCOUNT": _neutral(
-                    "@@TRANCOUNT", "the routine manages its transaction"
-                ),
-            }
-            return mapping.get(upper, f"/* {var} */")
-        elif self._target == "mysql":
-            mapping = {
-                "@@ROWCOUNT": "ROW_COUNT()",
-                "@@IDENTITY": "LAST_INSERT_ID()",
-                "@@ERROR": _neutral("@@ERROR", "use a DECLARE ... HANDLER"),
-                "@@TRANCOUNT": _neutral(
-                    "@@TRANCOUNT", "the routine manages its transaction"
-                ),
-            }
-            return mapping.get(upper, f"/* {var} */")
-        return var
+    def _system_var_map(self) -> dict[str, str]:
+        """Per-target mapping of T-SQL system globals (@@ROWCOUNT, …). The base
+        returns an empty map (no translation); each target subclass overrides."""
+        return {}
 
     # ---------------------------------------------------------------
     # Data type transformations
@@ -2272,17 +2247,51 @@ class OracleTransformer(ProceduralTransformer):
 
     target_name = "oracle"
 
+    def _system_var_map(self) -> dict[str, str]:
+        return {
+            "@@ROWCOUNT": "SQL%ROWCOUNT",
+            "@@IDENTITY": "/* @@IDENTITY: use <sequence>.CURRVAL */",
+            # SQLCODE is a valid Oracle function (0 in normal flow, the last
+            # error code inside an exception handler).
+            "@@ERROR": "SQLCODE",
+            "@@TRANCOUNT": self._neutral_global(
+                "@@TRANCOUNT", "transactions are implicit"
+            ),
+        }
+
 
 class PostgresTransformer(ProceduralTransformer):
     """Transforms toward PostgreSQL PL/pgSQL."""
 
     target_name = "postgresql"
 
+    def _system_var_map(self) -> dict[str, str]:
+        return {
+            "@@ROWCOUNT": "ROW_COUNT",
+            "@@IDENTITY": "LASTVAL()",
+            # SQLSTATE is only available inside an EXCEPTION handler in plpgsql,
+            # so it cannot stand in for an inline @@ERROR check.
+            "@@ERROR": self._neutral_global("@@ERROR", "use an EXCEPTION handler"),
+            "@@TRANCOUNT": self._neutral_global(
+                "@@TRANCOUNT", "the routine manages its transaction"
+            ),
+        }
+
 
 class MySqlTransformer(ProceduralTransformer):
     """Transforms toward MySQL."""
 
     target_name = "mysql"
+
+    def _system_var_map(self) -> dict[str, str]:
+        return {
+            "@@ROWCOUNT": "ROW_COUNT()",
+            "@@IDENTITY": "LAST_INSERT_ID()",
+            "@@ERROR": self._neutral_global("@@ERROR", "use a DECLARE ... HANDLER"),
+            "@@TRANCOUNT": self._neutral_global(
+                "@@TRANCOUNT", "the routine manages its transaction"
+            ),
+        }
 
 
 _TRANSFORMER_REGISTRY: dict[str, type[ProceduralTransformer]] = {
