@@ -2,11 +2,16 @@
 # SPDX-License-Identifier: MIT
 # See the LICENSE file in the project root for full license text.
 
-"""Procedural SQL transformer.
+"""Procedural AST transformer — base class and shared dialect maps.
 
-Transforms procedural IR AST nodes between dialects, handling
-differences in variable naming, control flow syntax, data types,
-built-in functions, and idiomatic patterns.
+Holds the engine-agnostic and source-dependent transform logic plus the default
+behavior, and the type/function mapping tables shared by all targets. Per-target
+specifics live in sibling modules ({tsql,oracle,postgresql,mysql}.py). Because
+a transform is a source->target operation, pair- and source-dependent logic
+stays here parameterized by ``self._source``; only target-only logic is
+overridden per target. The factory dispatches
+``ProceduralTransformer(source, target)`` to the right target subclass via a
+registry the engine modules populate on import.
 """
 
 from __future__ import annotations
@@ -54,7 +59,15 @@ from unique.core.ast_nodes import (
 
 logger = logging.getLogger(__name__)
 
-# Data type mapping tables
+#: Populated by the per-engine modules via ``register_transformer``.
+_TRANSFORMER_REGISTRY: dict[str, type[ProceduralTransformer]] = {}
+
+
+def register_transformer(name: str, cls: type[ProceduralTransformer]) -> None:
+    """Register a per-target transformer subclass under its target name."""
+    _TRANSFORMER_REGISTRY[name] = cls
+
+
 _TSQL_TO_ORACLE_TYPES: dict[str, str] = {
     "INT": "NUMBER(10)",
     "INTEGER": "NUMBER(10)",
@@ -2254,218 +2267,3 @@ class ProceduralTransformer:
             "mysql": "mysql",
         }
         return mapping.get(dialect, dialect)
-
-
-# ---------------------------------------------------------------------------
-# Per-target transformer subclasses
-# ---------------------------------------------------------------------------
-#
-# Each subclass overrides only the transform rules that are specific to its
-# *target* engine. Source-dependent and pair-dependent logic stays in the base
-# (parameterized by self._source), because a transform is a source→target
-# operation and a target subclass alone cannot know the source.
-
-
-class TSqlTransformer(ProceduralTransformer):
-    """Transforms toward T-SQL (SQL Server)."""
-
-    target_name = "tsql"
-
-    def _alter_becomes_create(self) -> bool:
-        # T-SQL keeps ALTER PROCEDURE as-is.
-        return False
-
-    def _rewrites_trigger_pseudotables(self) -> bool:
-        # T-SQL keeps inserted/deleted pseudo-tables as-is.
-        return False
-
-    def _warn_for_loop_unsupported(self) -> None:
-        self._warnings.append(
-            "FOR loop has no direct T-SQL equivalent. "
-            "Manual conversion to WHILE loop required."
-        )
-
-    def _transform_loop(self, node: LoopStatement) -> ASTNode:
-        # T-SQL has no bare LOOP; express it as WHILE 1=1.
-        return WhileStatement(
-            condition=RawSQL(sql="1=1", reason="infinite loop"),
-            body=self._ensure_non_empty_body(self._transform_body(node.body)),
-        )
-
-    def _transform_null(self, node: NullStatement) -> ASTNode:
-        return RawSQL(sql="-- NULL statement (no-op)", reason="no T-SQL equivalent")
-
-    def _has_update_predicate(self) -> bool:
-        # T-SQL keeps UPDATE(col) as-is.
-        return False
-
-    def _uses_set_statement(self) -> bool:
-        return True
-
-    def _assignment_becomes_set(self) -> bool:
-        return True
-
-    def _transform_exception_block(self, node: ExceptionBlock) -> ASTNode:
-        # T-SQL's only structured-handler form is TRY/CATCH; flatten the
-        # EXCEPTION handlers' bodies into the CATCH block.
-        body: list[ASTNode] = []
-        for handler in node.handlers:
-            body.extend(handler.body)
-        return TryCatchBlock(
-            try_body=(),
-            catch_body=self._transform_body(tuple(body)),
-        )
-
-
-class OracleTransformer(ProceduralTransformer):
-    """Transforms toward Oracle PL/SQL."""
-
-    target_name = "oracle"
-
-    def _system_var_map(self) -> dict[str, str]:
-        return {
-            "@@ROWCOUNT": "SQL%ROWCOUNT",
-            "@@IDENTITY": "/* @@IDENTITY: use <sequence>.CURRVAL */",
-            # SQLCODE is a valid Oracle function (0 in normal flow, the last
-            # error code inside an exception handler).
-            "@@ERROR": "SQLCODE",
-            "@@TRANCOUNT": self._neutral_global(
-                "@@TRANCOUNT", "transactions are implicit"
-            ),
-        }
-
-    def _supports_type_reference(self) -> bool:
-        # Oracle supports %TYPE/%ROWTYPE natively.
-        return True
-
-    def _strip_dbo_schema(self) -> bool:
-        # Oracle objects live in the current user's schema; 'dbo' has no meaning.
-        return True
-
-    def _trigger_forces_or_replace(self) -> bool:
-        return True
-
-    def _transform_try_catch(self, node: TryCatchBlock) -> ASTNode:
-        # Oracle expresses error handling as a PL/SQL EXCEPTION block.
-        return ExceptionBlock(
-            handlers=(
-                ExceptionHandler(
-                    exception_name="OTHERS",
-                    body=self._transform_body(node.catch_body),
-                ),
-            )
-        )
-
-    def _fix_target_dml(self, sql: str) -> str:
-        return self._fix_oracle_dml(sql)
-
-    def _update_predicate(self, col: str) -> str | None:
-        return f"UPDATING('{col}')"
-
-    def _fix_unwrapped_scalar(self, sql: str) -> str:
-        return self._fix_oracle_dml(sql)
-
-    def _fix_raw_sql_target(self, sql: str) -> str:
-        # dbo doesn't exist in Oracle; drop a dbo. qualifier on calls within
-        # expressions (e.g. dbo.func1() in an assignment, RETURN or COALESCE).
-        return re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
-
-    def _trigger_new_ref(self) -> str:
-        return ":NEW."
-
-    def _trigger_old_ref(self) -> str:
-        return ":OLD."
-
-    def _varchar_max_type(self, is_unicode: bool) -> str | None:
-        return "NCLOB" if is_unicode else "CLOB"
-
-
-class PostgresTransformer(ProceduralTransformer):
-    """Transforms toward PostgreSQL PL/pgSQL."""
-
-    target_name = "postgresql"
-
-    def _system_var_map(self) -> dict[str, str]:
-        return {
-            "@@ROWCOUNT": "ROW_COUNT",
-            "@@IDENTITY": "LASTVAL()",
-            # SQLSTATE is only available inside an EXCEPTION handler in plpgsql,
-            # so it cannot stand in for an inline @@ERROR check.
-            "@@ERROR": self._neutral_global("@@ERROR", "use an EXCEPTION handler"),
-            "@@TRANCOUNT": self._neutral_global(
-                "@@TRANCOUNT", "the routine manages its transaction"
-            ),
-        }
-
-    def _varchar_max_type(self, is_unicode: bool) -> str | None:
-        return "TEXT"
-
-    def _fix_target_dml(self, sql: str) -> str:
-        sql = self._pg_string_concat(sql)
-        sql = self._pg_clean_dml(sql)
-        return sql
-
-    def _update_predicate(self, col: str) -> str | None:
-        return f"(NEW.{col} IS DISTINCT FROM OLD.{col})"
-
-    def _fix_raw_sql_target(self, sql: str) -> str:
-        sql = self._pg_string_concat(sql)
-        # dbo doesn't exist in PostgreSQL; drop a dbo. qualifier on calls.
-        return re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
-
-
-class MySqlTransformer(ProceduralTransformer):
-    """Transforms toward MySQL."""
-
-    target_name = "mysql"
-
-    def _system_var_map(self) -> dict[str, str]:
-        return {
-            "@@ROWCOUNT": "ROW_COUNT()",
-            "@@IDENTITY": "LAST_INSERT_ID()",
-            "@@ERROR": self._neutral_global("@@ERROR", "use a DECLARE ... HANDLER"),
-            "@@TRANCOUNT": self._neutral_global(
-                "@@TRANCOUNT", "the routine manages its transaction"
-            ),
-        }
-
-    def _varchar_max_type(self, is_unicode: bool) -> str | None:
-        return "LONGTEXT"
-
-    def _uses_set_statement(self) -> bool:
-        return True
-
-    def _noop_statement(self) -> ASTNode:
-        # DO evaluates an expression and discards it; the cheapest valid
-        # statement to keep a block non-empty. Terminator included since the
-        # IF/loop emitters don't add one for RawSQL.
-        return RawSQL(sql="DO 0;", reason="no-op")
-
-    def _noop_sql(self) -> str:
-        return "DO 0;"
-
-    def _fix_target_dml(self, sql: str) -> str:
-        sql = self._mysql_string_concat(sql)
-        sql = self._mysql_clean_dml(sql)
-        sql = self._mysql_fix_cast_max(sql)
-        sql = self._mysql_string_split(sql)
-        return sql
-
-    def _update_predicate(self, col: str) -> str | None:
-        return f"NOT (NEW.{col} <=> OLD.{col})"
-
-    def _fix_raw_sql_target(self, sql: str) -> str:
-        sql = self._mysql_normalize_funcs(sql)
-        sql = self._mysql_string_concat(sql)
-        sql = self._mysql_clean_dml(sql)
-        sql = self._mysql_fix_cast_max(sql)
-        sql = self._mysql_string_split(sql)
-        return sql
-
-
-_TRANSFORMER_REGISTRY: dict[str, type[ProceduralTransformer]] = {
-    TSqlTransformer.target_name: TSqlTransformer,
-    OracleTransformer.target_name: OracleTransformer,
-    PostgresTransformer.target_name: PostgresTransformer,
-    MySqlTransformer.target_name: MySqlTransformer,
-}
