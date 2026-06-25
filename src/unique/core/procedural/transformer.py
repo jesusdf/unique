@@ -963,11 +963,7 @@ class ProceduralTransformer:
         )
 
     def _transform_for_loop(self, node: ForLoopStatement) -> ASTNode:
-        if self._target == "tsql":
-            self._warnings.append(
-                "FOR loop has no direct T-SQL equivalent. "
-                "Manual conversion to WHILE loop required."
-            )
+        self._warn_for_loop_unsupported()
         new_body = self._ensure_non_empty_body(self._transform_body(node.body))
         new_cursor = self._transform_node(node.cursor) if node.cursor else None
         return ForLoopStatement(
@@ -978,12 +974,13 @@ class ProceduralTransformer:
             body=new_body,
         )
 
+    def _warn_for_loop_unsupported(self) -> None:
+        """Hook for targets with no native FOR loop to record a warning. Default
+        does nothing; T-SQL overrides."""
+
     def _transform_loop(self, node: LoopStatement) -> ASTNode:
-        if self._target == "tsql":
-            return WhileStatement(
-                condition=RawSQL(sql="1=1", reason="infinite loop"),
-                body=self._ensure_non_empty_body(self._transform_body(node.body)),
-            )
+        """Default keeps an unconditional LOOP (Oracle/PG/MySQL); T-SQL
+        overrides to a ``WHILE 1=1`` (it has no bare LOOP)."""
         return LoopStatement(
             body=self._ensure_non_empty_body(self._transform_body(node.body))
         )
@@ -1402,8 +1399,8 @@ class ProceduralTransformer:
         return sql
 
     def _transform_null(self, node: NullStatement) -> ASTNode:
-        if self._target == "tsql":
-            return RawSQL(sql="-- NULL statement (no-op)", reason="no T-SQL equivalent")
+        """Default keeps the NULL no-op (Oracle/PG have ``NULL;``); T-SQL
+        overrides to a comment (it has no NULL statement)."""
         return node
 
     def _transform_raw_sql(self, node: RawSQL) -> RawSQL:
@@ -1447,55 +1444,56 @@ class ProceduralTransformer:
                 if results and results[0].upper().startswith("SELECT "):
                     out = results[0][len("SELECT ") :].rstrip().rstrip(";")
                     out = self._unwrap_spurious_hash_format(out)
-                    sql = out
-                    if self._target == "oracle":
-                        sql = self._fix_oracle_dml(sql)
+                    sql = self._fix_unwrapped_scalar(out)
             except Exception:
                 pass
         sql = self._rewrite_trigger_update_predicate(sql)
-        if self._target == "mysql":
-            sql = self._mysql_normalize_funcs(sql)
-            sql = self._mysql_string_concat(sql)
-            sql = self._mysql_clean_dml(sql)
-            sql = self._mysql_fix_cast_max(sql)
-            sql = self._mysql_string_split(sql)
-        if self._target == "postgresql":
-            sql = self._pg_string_concat(sql)
-        if self._target in ("postgresql", "oracle"):
-            # Functions/procedures are created without the T-SQL "dbo" schema
-            # in these targets (dbo doesn't exist), so drop a dbo. qualifier on
-            # calls within expressions (e.g. ``dbo.func1()`` in an assignment,
-            # RETURN or COALESCE). The lexer may have split it as ``dbo . f``.
-            sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
+        sql = self._fix_raw_sql_target(sql)
         return RawSQL(sql=sql, reason=node.reason)
+
+    def _fix_raw_sql_target(self, sql: str) -> str:
+        """Apply target-specific cleanups to a transformed raw-SQL expression.
+        The base (T-SQL) needs none; each target subclass overrides."""
+        return sql
+
+    def _fix_unwrapped_scalar(self, sql: str) -> str:
+        """Post-process a scalar expression just unwrapped from a sqlglot
+        SELECT. The base returns it unchanged; Oracle overrides to apply its
+        DML fixups."""
+        return sql
 
     def _rewrite_trigger_update_predicate(self, sql: str) -> str:
         """Rewrite the T-SQL trigger predicate ``UPDATE(col)`` per dialect.
 
         Inside a trigger, T-SQL ``UPDATE(col)`` tests whether a column was
-        affected by the statement. The equivalents are:
+        affected by the statement. The per-target equivalent is provided by
+        ``_update_predicate``:
           - MySQL:      NOT (NEW.col <=> OLD.col)   (null-safe "changed")
           - PostgreSQL: (NEW.col IS DISTINCT FROM OLD.col)
           - Oracle:     UPDATING('col')
 
         Only matches ``UPDATE(<identifier>)`` as a function-style predicate (a
         single column name in parens), never an ``UPDATE … SET`` statement.
+        T-SQL keeps the predicate as-is.
         """
-        if self._target == "tsql":
+        if not self._has_update_predicate():
             return sql
         pattern = re.compile(r"(?i)\bUPDATE\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)")
 
         def repl(m: re.Match[str]) -> str:
-            col = m.group(1)
-            if self._target == "mysql":
-                return f"NOT (NEW.{col} <=> OLD.{col})"
-            if self._target == "postgresql":
-                return f"(NEW.{col} IS DISTINCT FROM OLD.{col})"
-            if self._target == "oracle":
-                return f"UPDATING('{col}')"
-            return m.group(0)
+            return self._update_predicate(m.group(1)) or m.group(0)
 
         return pattern.sub(repl, sql)
+
+    def _has_update_predicate(self) -> bool:
+        """Whether this target rewrites the T-SQL ``UPDATE(col)`` trigger
+        predicate. True for all but T-SQL (which keeps it)."""
+        return True
+
+    def _update_predicate(self, col: str) -> str | None:
+        """Per-target rewrite of ``UPDATE(col)``. Overridden by each non-T-SQL
+        target; None means leave unchanged."""
+        return None
 
     def _unwrap_spurious_hash_format(self, sql: str) -> str:
         """Undo sqlglot's misreading of a T-SQL hash-stringify CONVERT.
@@ -2276,6 +2274,26 @@ class TSqlTransformer(ProceduralTransformer):
         # T-SQL keeps inserted/deleted pseudo-tables as-is.
         return False
 
+    def _warn_for_loop_unsupported(self) -> None:
+        self._warnings.append(
+            "FOR loop has no direct T-SQL equivalent. "
+            "Manual conversion to WHILE loop required."
+        )
+
+    def _transform_loop(self, node: LoopStatement) -> ASTNode:
+        # T-SQL has no bare LOOP; express it as WHILE 1=1.
+        return WhileStatement(
+            condition=RawSQL(sql="1=1", reason="infinite loop"),
+            body=self._ensure_non_empty_body(self._transform_body(node.body)),
+        )
+
+    def _transform_null(self, node: NullStatement) -> ASTNode:
+        return RawSQL(sql="-- NULL statement (no-op)", reason="no T-SQL equivalent")
+
+    def _has_update_predicate(self) -> bool:
+        # T-SQL keeps UPDATE(col) as-is.
+        return False
+
     def _uses_set_statement(self) -> bool:
         return True
 
@@ -2333,6 +2351,17 @@ class OracleTransformer(ProceduralTransformer):
     def _fix_target_dml(self, sql: str) -> str:
         return self._fix_oracle_dml(sql)
 
+    def _update_predicate(self, col: str) -> str | None:
+        return f"UPDATING('{col}')"
+
+    def _fix_unwrapped_scalar(self, sql: str) -> str:
+        return self._fix_oracle_dml(sql)
+
+    def _fix_raw_sql_target(self, sql: str) -> str:
+        # dbo doesn't exist in Oracle; drop a dbo. qualifier on calls within
+        # expressions (e.g. dbo.func1() in an assignment, RETURN or COALESCE).
+        return re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
+
     def _trigger_new_ref(self) -> str:
         return ":NEW."
 
@@ -2368,6 +2397,14 @@ class PostgresTransformer(ProceduralTransformer):
         sql = self._pg_clean_dml(sql)
         return sql
 
+    def _update_predicate(self, col: str) -> str | None:
+        return f"(NEW.{col} IS DISTINCT FROM OLD.{col})"
+
+    def _fix_raw_sql_target(self, sql: str) -> str:
+        sql = self._pg_string_concat(sql)
+        # dbo doesn't exist in PostgreSQL; drop a dbo. qualifier on calls.
+        return re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
+
 
 class MySqlTransformer(ProceduralTransformer):
     """Transforms toward MySQL."""
@@ -2400,6 +2437,17 @@ class MySqlTransformer(ProceduralTransformer):
         return "DO 0;"
 
     def _fix_target_dml(self, sql: str) -> str:
+        sql = self._mysql_string_concat(sql)
+        sql = self._mysql_clean_dml(sql)
+        sql = self._mysql_fix_cast_max(sql)
+        sql = self._mysql_string_split(sql)
+        return sql
+
+    def _update_predicate(self, col: str) -> str | None:
+        return f"NOT (NEW.{col} <=> OLD.{col})"
+
+    def _fix_raw_sql_target(self, sql: str) -> str:
+        sql = self._mysql_normalize_funcs(sql)
         sql = self._mysql_string_concat(sql)
         sql = self._mysql_clean_dml(sql)
         sql = self._mysql_fix_cast_max(sql)
