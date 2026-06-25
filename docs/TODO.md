@@ -33,15 +33,16 @@ goal is to make every per-engine branch an overridable method instead of an
 `if/elif` chain. Pure refactor — output must not change, fixtures must not move,
 suite stays green at every checkpoint.
 
-- [~] **Emitter**: extract `ProceduralEmitter` base + `TSqlEmitter`,
+- [x] **Emitter**: extract `ProceduralEmitter` base + `TSqlEmitter`,
       `OracleEmitter`, `PostgresEmitter`, `MySqlEmitter`; factory by target.
-      *In progress:* base+subclasses+factory in place (via `__new__`);
-      `_emit_procedure` (header/empty-parens/body hooks), `_emit_try_catch`, and
-      `_emit_return` are split per engine, and a shared `_emit_indented_stmts`
-      helper removed repeated block-emit loops. Remaining: `_emit_transaction`,
-      `_emit_if`/tsql/plsql, `_emit_execute`/pg/mysql, `_emit_raise_error`,
-      `_emit_function_impl`, `_emit_trigger`, and folding the leftover
-      `_emit_{tsql,oracle,pg,mysql}_procedure_body` into the subclasses.
+      *Done:* base+subclasses+factory (via `__new__`); every per-engine branch
+      moved into an overridable method/hook on the relevant subclass. The base
+      emitter now has **0 dialect dispatch conditionals** (down from 68); the
+      only remaining `self._dialect` uses are text interpolations in comments.
+      A shared `_emit_indented_stmts` helper removed repeated block-emit loops,
+      a dead `return` in `_translate_cursor_attrs` was deleted, and an Oracle
+      RETURN/IN regression caught mid-refactor is guarded by
+      TestPerEngineRoutineSurface. Suite green (1029 passed), output unchanged.
 - [ ] **Transformer**: same base + per-engine subclass pattern.
 - [ ] **Parser**: split the 11 source-family conditionals cleanly if it helps.
 - [ ] Update `docs/02-architecture.md`, `docs/05-procedural-engine.md`, and the
