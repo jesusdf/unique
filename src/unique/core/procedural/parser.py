@@ -179,12 +179,21 @@ class ProceduralParser:
         ):
             self._advance()
 
-    @staticmethod
-    def _normalize_comment(text: str, token_type: TokenType) -> CommentStatement:
+    # A forward pass that dropped a source-only construct leaves a note like
+    # "/* UNIQUE: <orig> -- <dialect>-only, no <target> equivalent */". Capture
+    # <orig> and <dialect> so a transpilation back to <dialect> can restore it.
+    _RESTORABLE_NOTE_RE = re.compile(
+        r"(?is)^/\*\s*UNIQUE:\s*(.+?)\s*--\s*([a-z0-9_]+)-only,.*?\*/$"
+    )
+
+    @classmethod
+    def _normalize_comment(cls, text: str, token_type: TokenType) -> CommentStatement:
         """Build a CommentStatement, normalizing only a line comment's spacing.
 
         The only permitted change to a source comment is ensuring exactly one
-        space after ``--`` (ANSI SQL). Block comments are preserved verbatim.
+        space after ``--`` (ANSI SQL). Block comments are preserved verbatim,
+        except that a restorable ``/* UNIQUE: … -- <dialect>-only … */`` note is
+        tagged with its restore payload (see ``CommentStatement``).
         """
         if token_type == TokenType.LINE_COMMENT:
             # Preserve everything after the leading dashes, but guarantee a
@@ -193,6 +202,14 @@ class ProceduralParser:
             stripped = body.lstrip(" \t")
             normalized = "-- " + stripped if stripped else "--"
             return CommentStatement(text=normalized.rstrip(), style="line")
+        m = cls._RESTORABLE_NOTE_RE.match(text.strip())
+        if m:
+            return CommentStatement(
+                text=text,
+                style="block",
+                restore_sql=m.group(1).strip(),
+                restore_dialect=m.group(2).strip(),
+            )
         return CommentStatement(text=text, style="block")
 
     def _take_comments(self) -> list[ASTNode]:
@@ -924,15 +941,17 @@ class ProceduralParser:
 
         # SET IDENTITY_INSERT <table> ON/OFF — no portable equivalent; capture
         # the original so the transformer can document it as a comment instead
-        # of mis-parsing it as a DML statement.
+        # of mis-parsing it as a DML statement. The table may be schema-qualified
+        # (dbo.t), which the lexer splits into identifier '.' identifier tokens.
         if tok.is_keyword("IDENTITY_INSERT"):
             self._advance()
             target = ""
-            if self._current().type in (
+            while self._current().type in (
                 TokenType.IDENTIFIER,
                 TokenType.VARIABLE,
+                TokenType.DOT,
             ):
-                target = self._advance().value
+                target += self._advance().value
             state = ""
             if self._current().is_keyword("ON", "OFF"):
                 state = self._advance().value
@@ -1284,7 +1303,18 @@ class ProceduralParser:
 
     def _parse_plsql_statement_inner(self) -> ASTNode | None:
         """Parse a single PL/SQL statement."""
-        self._skip_comments()
+        # Preserve a comment that occupies its own statement position (emit it
+        # as a CommentStatement, one per call) instead of discarding it, so a
+        # restorable "/* UNIQUE: … */" note survives onward transpilation — the
+        # same way the T-SQL body does.
+        if self._current().type in (
+            TokenType.LINE_COMMENT,
+            TokenType.BLOCK_COMMENT,
+        ):
+            tok = self._current()
+            self._advance()
+            return self._normalize_comment(tok.value, tok.type)
+
         if self._at_end():
             return None
 

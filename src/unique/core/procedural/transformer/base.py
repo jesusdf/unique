@@ -421,6 +421,7 @@ class ProceduralTransformer:
             SelectIntoStatement: self._transform_select_into,
             NullStatement: self._transform_null,
             RawSQL: self._transform_raw_sql,
+            CommentStatement: self._transform_comment,
         }
 
         handler = handlers.get(type(node))
@@ -432,9 +433,34 @@ class ProceduralTransformer:
         """Transform a sequence of body statements."""
         result: list[ASTNode] = []
         for stmt in stmts:
+            # A dropped dialect-specific SET option is documented from its
+            # *original* text; transforming it first (e.g. Oracle's dbo-stripping
+            # or DML fixups) would corrupt the text we want to preserve, so
+            # short-circuit before _transform_node touches it.
+            if isinstance(stmt, RawSQL) and "SET option" in stmt.reason:
+                result.append(self._preserve_dropped_set_option(stmt))
+                continue
             transformed = self._transform_node(stmt)
             result.append(self._preserve_dropped_set_option(transformed))
         return tuple(result)
+
+    def _transform_comment(self, node: CommentStatement) -> ASTNode:
+        """Restore a documented source-only construct when transpiling back to
+        its source engine.
+
+        A forward pass that dropped a construct with no equivalent on the target
+        left a ``/* UNIQUE: <orig> -- <dialect>-only … */`` note carrying the
+        original and its source dialect. If we are now transpiling *to* that
+        dialect, re-inject the original statement (a faithful round-trip);
+        otherwise keep the note unchanged so the documentation survives onward
+        transpilation to a third engine.
+        """
+        if node.restore_sql and node.restore_dialect == self._target:
+            sql = node.restore_sql.rstrip()
+            if not sql.endswith(";"):
+                sql += ";"
+            return RawSQL(sql=sql, reason="restored source-only construct")
+        return node
 
     def _preserve_dropped_set_option(self, node: ASTNode) -> ASTNode:
         """Turn a dropped dialect-specific SET option into a comment.
@@ -442,12 +468,17 @@ class ProceduralTransformer:
         Options like ``SET NOCOUNT ON`` have no equivalent in the target, but
         silently removing them can leave an empty block (e.g. ``IF ... THEN END
         IF``) that the engine rejects, and erases information. Replace the
-        statement with a ``/* UNIQUE: <original> */`` comment so the original is
-        documented and the block keeps a (no-op) body.
+        statement with a ``/* UNIQUE: <original> -- <source>-only, no <target>
+        equivalent */`` comment so the original is documented and the block keeps
+        a (no-op) body. Recording the *source* engine lets a later transpilation
+        back to that engine restore the original (see ``_transform_comment``).
         """
         if isinstance(node, RawSQL) and "SET option" in node.reason:
             return CommentStatement(
-                text=f"/* UNIQUE: {node.sql} -- no {self._target} equivalent */",
+                text=(
+                    f"/* UNIQUE: {node.sql} -- {self._source}-only, "
+                    f"no {self._target} equivalent */"
+                ),
                 style="block",
             )
         return node

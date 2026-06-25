@@ -673,10 +673,19 @@ class CommentStatement(ASTNode):
     for ``--`` comments or "block" for ``/* */`` comments. The transpiler
     re-emits the comment unchanged, except that a line comment is normalized to
     have exactly one space after ``--`` per ANSI SQL.
+
+    When the comment is a ``/* UNIQUE: <orig> -- <dialect>-only … */`` note left
+    by a forward pass that dropped a construct with no equivalent on the (then)
+    target, ``restore_sql`` carries ``<orig>`` and ``restore_dialect`` carries
+    ``<dialect>``. A later transpilation whose target equals ``restore_dialect``
+    restores ``<orig>`` instead of re-emitting the note (a faithful round-trip);
+    any other target keeps the note. Both are ``None`` for ordinary comments.
     """
 
     text: str
     style: str = "line"  # "line" | "block"
+    restore_sql: str | None = None
+    restore_dialect: str | None = None
 
 
 @dataclass(frozen=True)
