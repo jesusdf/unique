@@ -33,8 +33,32 @@
     display: flex; align-items: baseline; gap: 14px;
   }
   header h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
+  header .version {
+    font-size: 12px; font-weight: 600; color: var(--accent);
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 999px; padding: 2px 9px; letter-spacing: .3px;
+  }
+  header .version:empty { display: none; }
   header .tag { color: var(--muted); font-size: 13px; }
   header .spacer { flex: 1; }
+  .db-field {
+    margin: 0 0 16px; padding: 12px 14px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .db-field label {
+    display: block; font-size: 12px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px;
+  }
+  .db-field .db-optional { text-transform: none; letter-spacing: 0; opacity: .8; }
+  .db-input {
+    width: 100%; box-sizing: border-box;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 11px; font-family: var(--mono, monospace); font-size: 13px;
+  }
+  .db-input:focus { outline: none; border-color: var(--accent); }
+  .db-help { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
   header a { color: var(--accent-2); text-decoration: none; font-size: 13px; }
   main { padding: 24px; max-width: 1200px; margin: 0 auto; }
   .toolbar {
@@ -146,6 +170,7 @@
 <body>
 <header>
   <h1>Unique</h1>
+  <span class="version" id="versionTag" title="Application version"></span>
   <span class="tag">SQL transpiler — SQL&nbsp;Server · Oracle · PostgreSQL · MySQL</span>
   <span class="spacer"></span>
   <a href="/docs" target="_blank">API docs</a>
@@ -168,6 +193,18 @@
       <label>&nbsp;</label>
       <div class="detect-note" id="detectNote"></div>
     </div>
+  </div>
+
+  <div class="db-field" id="dbField" hidden>
+    <label for="dbUrl">
+      Database connection <span class="db-optional">(optional)</span>
+    </label>
+    <input type="text" id="dbUrl" class="db-input" spellcheck="false"
+           placeholder="e.g. oracle://user:pass@host:1521/service" />
+    <p class="db-help">
+      Provide a connection URL to resolve metadata-dependent constructs such as
+      Oracle <code>%TYPE</code>/<code>%ROWTYPE</code>. Leave empty to skip.
+    </p>
   </div>
 
   <div class="editors">
@@ -197,6 +234,7 @@
         <label for="fileSource">Source engine</label>
         <select id="fileSource"></select>
       </div>
+      <button class="swap-btn" id="fileSwap" title="Swap source and target">⇄</button>
       <div class="field">
         <label for="fileTarget">Target engine</label>
         <select id="fileTarget"></select>
@@ -206,6 +244,17 @@
         <input type="file" id="file" accept=".sql,.txt,text/plain" />
       </div>
       <button class="primary" id="runFile">Translate &amp; download</button>
+    </div>
+    <div class="db-field" id="fileDbField" hidden>
+      <label for="fileDbUrl">
+        Database connection <span class="db-optional">(optional)</span>
+      </label>
+      <input type="text" id="fileDbUrl" class="db-input" spellcheck="false"
+             placeholder="e.g. oracle://user:pass@host:1521/service" />
+      <p class="db-help">
+        Provide a connection URL to resolve metadata-dependent constructs such
+        as Oracle <code>%TYPE</code>/<code>%ROWTYPE</code>. Leave empty to skip.
+      </p>
     </div>
     <div class="messages" id="fileMessages" style="margin-top:14px;"></div>
   </section>
@@ -2255,6 +2304,17 @@ async function loadDialects() {
   }
 }
 
+let dbEnabled = false;
+
+async function loadInfo() {
+  try {
+    const res = await fetch(API + "/api/v1/info");
+    return await res.json();
+  } catch (e) {
+    return { version: "", db_connection_enabled: false };
+  }
+}
+
 function fillSelect(sel, dialects, { includeAuto = false } = {}) {
   sel.innerHTML = "";
   if (includeAuto) {
@@ -2331,9 +2391,14 @@ async function translate() {
   if (!sql.trim()) { showMessages(el("messages"), { error: "Please enter a source script." }); return; }
   btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>Translating…`;
   try {
+    const body = { sql, source, target };
+    if (dbEnabled) {
+      const dbUrl = el("dbUrl").value.trim();
+      if (dbUrl) body.db_url = dbUrl;
+    }
     const res = await fetch(API + "/api/v1/transpile", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sql, source, target }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -2366,6 +2431,10 @@ async function translateFile() {
   form.append("file", fileInput.files[0]);
   form.append("source", source);
   form.append("target", target);
+  if (dbEnabled) {
+    const dbUrl = el("fileDbUrl").value.trim();
+    if (dbUrl) form.append("db_url", dbUrl);
+  }
   btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>Working…`;
   try {
     const res = await fetch(API + "/api/v1/transpile/file", { method: "POST", body: form });
@@ -2427,6 +2496,15 @@ async function translateFile() {
   el("fileSource").value = "auto";
   el("fileTarget").value = "postgresql";
 
+  // Version label + optional database-connection fields.
+  const info = await loadInfo();
+  if (info.version) el("versionTag").textContent = info.version;
+  dbEnabled = !!info.db_connection_enabled;
+  if (dbEnabled) {
+    el("dbField").hidden = false;
+    el("fileDbField").hidden = false;
+  }
+
   el("run").addEventListener("click", translate);
   el("runFile").addEventListener("click", translateFile);
   el("clear").addEventListener("click", () => {
@@ -2448,6 +2526,15 @@ async function translateFile() {
     // Also swap text if there is a result to iterate on.
     const inp = getInput(), outp = getOutput();
     if (outp) { setInput(outp); setOutput(inp); }
+  });
+  el("fileSwap").addEventListener("click", () => {
+    const srcSel = el("fileSource"), tgtSel = el("fileTarget");
+    const s = srcSel.value, t = tgtSel.value;
+    // The file source may be "auto" (not a valid target). Swapping moves the
+    // target into the source slot; the source goes to the target unless it was
+    // "auto", in which case the target keeps its value (nothing to put there).
+    srcSel.value = t;
+    tgtSel.value = s === "auto" ? t : s;
   });
   el("source").addEventListener("change", () => {
     el("source").dataset.userSet = "1";

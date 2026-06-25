@@ -24,6 +24,11 @@ services:
       - "8000:8000"
     environment:
       - LOG_LEVEL=info
+      # Set to 1/true to allow providing a database connection URL (db-url) for
+      # resolving metadata-dependent constructs (e.g. Oracle %TYPE/%ROWTYPE).
+      # When enabled, the web UI shows an optional "Database connection" field.
+      # Off by default: connecting to a live database is a privileged action.
+      - UNIQUE_ALLOW_DB_CONNECTION=${UNIQUE_ALLOW_DB_CONNECTION:-0}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -45,6 +50,7 @@ services:
       - ./tests:/app/tests
     environment:
       - LOG_LEVEL=debug
+      - UNIQUE_ALLOW_DB_CONNECTION=${UNIQUE_ALLOW_DB_CONNECTION:-0}
     profiles:
       - dev
     command: ["uvicorn", "unique.api.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

@@ -33,6 +33,24 @@ class TestDialects:
             assert d in dialects
 
 
+class TestInfo:
+    def test_info_reports_version_label(self, client: TestClient) -> None:
+        resp = client.get("/api/v1/info")
+        assert resp.status_code == 200
+        assert resp.json()["version"] == "v0.02"
+
+    def test_info_db_disabled_by_default(self, client: TestClient) -> None:
+        resp = client.get("/api/v1/info")
+        assert resp.json()["db_connection_enabled"] is False
+
+    def test_info_db_enabled_via_env(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("UNIQUE_ALLOW_DB_CONNECTION", "true")
+        resp = client.get("/api/v1/info")
+        assert resp.json()["db_connection_enabled"] is True
+
+
 class TestTranspile:
     def test_basic_transpile(self, client: TestClient) -> None:
         resp = client.post(
@@ -64,7 +82,23 @@ class TestTranspile:
         assert resp.status_code == 200
         assert "PROCEDURE" in resp.json()["sql"].upper()
 
-    def test_db_url_field_accepted(self, client: TestClient) -> None:
+    def test_db_url_rejected_when_disabled(self, client: TestClient) -> None:
+        # Database connections are off by default; a db_url must be rejected.
+        resp = client.post(
+            "/api/v1/transpile",
+            json={
+                "sql": "SELECT 1;",
+                "source": "tsql",
+                "target": "oracle",
+                "db_url": "postgresql://u:p@127.0.0.1:1/none",
+            },
+        )
+        assert resp.status_code == 403
+
+    def test_db_url_accepted_when_enabled(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("UNIQUE_ALLOW_DB_CONNECTION", "1")
         resp = client.post(
             "/api/v1/transpile",
             json={
@@ -75,6 +109,14 @@ class TestTranspile:
             },
         )
         # Unreachable DB must not 500 for plain SQL.
+        assert resp.status_code == 200
+
+    def test_db_url_omitted_works_when_disabled(self, client: TestClient) -> None:
+        # No db_url: the request must succeed even with connections disabled.
+        resp = client.post(
+            "/api/v1/transpile",
+            json={"sql": "SELECT 1;", "source": "tsql", "target": "oracle"},
+        )
         assert resp.status_code == 200
 
     def test_missing_field_returns_422(self, client: TestClient) -> None:
@@ -175,3 +217,30 @@ class TestTranspileFile:
             files={"file": ("q.sql", b"SELECT 1", "text/plain")},
         )
         assert resp.status_code == 400
+
+    def test_file_db_url_rejected_when_disabled(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/transpile/file",
+            data={
+                "source": "tsql",
+                "target": "oracle",
+                "db_url": "postgresql://u:p@127.0.0.1:1/none",
+            },
+            files={"file": ("q.sql", b"SELECT 1", "text/plain")},
+        )
+        assert resp.status_code == 403
+
+    def test_file_db_url_accepted_when_enabled(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("UNIQUE_ALLOW_DB_CONNECTION", "1")
+        resp = client.post(
+            "/api/v1/transpile/file",
+            data={
+                "source": "tsql",
+                "target": "oracle",
+                "db_url": "postgresql://u:p@127.0.0.1:1/none",
+            },
+            files={"file": ("q.sql", b"SELECT 1", "text/plain")},
+        )
+        assert resp.status_code == 200

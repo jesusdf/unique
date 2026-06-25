@@ -28,6 +28,12 @@ RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
 RUN useradd --create-home appuser
 USER appuser
 
+# Allow providing a database connection URL (db-url) for resolving
+# metadata-dependent constructs (e.g. Oracle %TYPE/%ROWTYPE). Off by default,
+# since connecting to a live database is a privileged action. Set to 1/true to
+# enable; the web UI then shows an optional "Database connection" field.
+ENV UNIQUE_ALLOW_DB_CONNECTION=0
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
