@@ -176,68 +176,40 @@ class ProceduralEmitter:
         params: tuple[ParameterDefinition, ...],
         is_function: bool = False,
     ) -> str:
-        """Emit parameter list.
-
-        ``is_function`` matters for MySQL, whose stored *functions* forbid the
-        IN/OUT/INOUT direction keywords that procedures require.
-        """
-        # PostgreSQL: only IN parameters may carry a DEFAULT, and an OUT/INOUT
-        # parameter cannot appear after a parameter that has a default. Compute
-        # the position of the last OUT/INOUT param so we can drop the default
-        # from any IN param before it (and from every OUT/INOUT param), keeping
-        # the routine creatable.
-        pg_last_out = -1
-        if self._dialect == "postgresql":
-            for i, q in enumerate(params):
-                if q.direction in ("OUT", "INOUT"):
-                    pg_last_out = i
-
-        parts: list[str] = []
-        for idx, p in enumerate(params):
-            dt = self._emit_data_type(p.data_type)
-            default_str = ""
-            keep_default = bool(p.default)
-            if (
-                self._dialect == "postgresql"
-                and p.default
-                and (p.direction in ("OUT", "INOUT") or idx < pg_last_out)
-            ):
-                keep_default = False
-            if keep_default and p.default:
-                val = self._emit_node(p.default)
-                if self._dialect == "tsql":
-                    default_str = f" = {val}"
-                else:
-                    default_str = f" DEFAULT {val}"
-
-            if self._dialect == "tsql":
-                direction_str = " OUTPUT" if p.direction in ("OUT", "INOUT") else ""
-                parts.append(
-                    f"{self._indent()}{p.name} {dt}{default_str}{direction_str}"
-                )
-            elif self._dialect == "mysql":
-                # MySQL puts the direction *before* the parameter name and does
-                # not support per-parameter DEFAULT values; callers must always
-                # pass every argument. The default is dropped (and surfaced as a
-                # warning by the caller) rather than emitted as invalid syntax.
-                # Stored functions forbid direction keywords entirely.
-                direction_str = ""
-                if not is_function:
-                    if p.direction in ("OUT", "INOUT"):
-                        direction_str = f"{p.direction} "
-                    elif p.direction == "IN":
-                        direction_str = "IN "
-                parts.append(f"{self._indent()}{direction_str}{p.name} {dt}")
-            else:
-                direction_str = ""
-                if p.direction != "IN":
-                    direction_str = f"{p.direction} "
-                elif self._dialect == "oracle":
-                    direction_str = "IN "
-                parts.append(
-                    f"{self._indent()}{p.name} {direction_str}{dt}{default_str}"
-                )
+        """Emit a parameter list. The per-parameter formatting differs per
+        engine and is delegated to ``_emit_param``; the base provides the
+        default ``_keep_default`` policy (always keep)."""
+        parts = [
+            f"{self._indent()}{self._emit_param(p, idx, params, is_function)}"
+            for idx, p in enumerate(params)
+        ]
         return ",\n".join(parts)
+
+    def _keep_default(
+        self,
+        p: ParameterDefinition,
+        idx: int,
+        params: tuple[ParameterDefinition, ...],
+    ) -> bool:
+        """Whether a parameter's DEFAULT should be emitted. Default: keep it if
+        present. PostgreSQL overrides (OUT/INOUT and pre-OUT params drop it)."""
+        return bool(p.default)
+
+    def _emit_param(
+        self,
+        p: ParameterDefinition,
+        idx: int,
+        params: tuple[ParameterDefinition, ...],
+        is_function: bool,
+    ) -> str:
+        """Format a single parameter. Default is the PL/SQL form
+        ``name [DIR ]type[ DEFAULT v]``; T-SQL and MySQL override."""
+        dt = self._emit_data_type(p.data_type)
+        default_str = ""
+        if self._keep_default(p, idx, params) and p.default:
+            default_str = f" DEFAULT {self._emit_node(p.default)}"
+        direction_str = f"{p.direction} " if p.direction != "IN" else ""
+        return f"{p.name} {direction_str}{dt}{default_str}"
 
     # ---------------------------------------------------------------
     # Procedure / Function / Trigger
@@ -1312,6 +1284,18 @@ class TSqlEmitter(ProceduralEmitter):
 
     dialect_name = "tsql"
 
+    def _emit_param(
+        self,
+        p: ParameterDefinition,
+        idx: int,
+        params: tuple[ParameterDefinition, ...],
+        is_function: bool,
+    ) -> str:
+        dt = self._emit_data_type(p.data_type)
+        default_str = f" = {self._emit_node(p.default)}" if p.default else ""
+        direction_str = " OUTPUT" if p.direction in ("OUT", "INOUT") else ""
+        return f"{p.name} {dt}{default_str}{direction_str}"
+
     def _emit_try_catch(self, node: TryCatchBlock) -> str:
         lines = ["BEGIN TRY"]
         self._indent_level += 1
@@ -1436,9 +1420,6 @@ class OracleEmitter(ProceduralEmitter):
         prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
         return f"{prefix}FUNCTION {name}"
 
-    def _returns_clause(self, ret_type: str) -> str:
-        return f"\nRETURN {ret_type}"
-
     def _emit_function_body(
         self,
         header: str,
@@ -1469,6 +1450,24 @@ class PostgresEmitter(ProceduralEmitter):
     """PostgreSQL PL/pgSQL procedural emitter."""
 
     dialect_name = "postgresql"
+
+    def _keep_default(
+        self,
+        p: ParameterDefinition,
+        idx: int,
+        params: tuple[ParameterDefinition, ...],
+    ) -> bool:
+        # Only IN parameters may carry a DEFAULT, and an OUT/INOUT parameter
+        # cannot appear after a parameter that has a default. Drop the default
+        # from any OUT/INOUT param and from any IN param positioned before the
+        # last OUT/INOUT, keeping the routine creatable.
+        if not p.default:
+            return False
+        pg_last_out = -1
+        for i, q in enumerate(params):
+            if q.direction in ("OUT", "INOUT"):
+                pg_last_out = i
+        return not (p.direction in ("OUT", "INOUT") or idx < pg_last_out)
 
     def _procedure_header(self, name: str, or_replace: bool) -> str:
         prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
@@ -1578,6 +1577,27 @@ class MySqlEmitter(ProceduralEmitter):
     """MySQL procedural emitter."""
 
     dialect_name = "mysql"
+
+    def _emit_param(
+        self,
+        p: ParameterDefinition,
+        idx: int,
+        params: tuple[ParameterDefinition, ...],
+        is_function: bool,
+    ) -> str:
+        # MySQL puts the direction *before* the parameter name and does not
+        # support per-parameter DEFAULT values; callers must always pass every
+        # argument. The default is dropped (and surfaced as a warning by the
+        # caller) rather than emitted as invalid syntax. Stored functions forbid
+        # direction keywords entirely.
+        dt = self._emit_data_type(p.data_type)
+        direction_str = ""
+        if not is_function:
+            if p.direction in ("OUT", "INOUT"):
+                direction_str = f"{p.direction} "
+            elif p.direction == "IN":
+                direction_str = "IN "
+        return f"{direction_str}{p.name} {dt}"
 
     def _wants_empty_parens(self) -> bool:
         return True
