@@ -93,13 +93,53 @@ all dialects translate to and from.
 ```
 core/
 ├── __init__.py
-├── ast_nodes.py       # IR node type hierarchy
-├── transpiler.py      # Orchestrator
-├── transformer.py     # Transformation passes
-├── dialect.py         # Abstract dialect interface
-├── registry.py        # Plugin discovery & registration
-└── errors.py          # Exception hierarchy
+├── ast_nodes.py           # IR node type hierarchy
+├── transpiler.py          # Orchestrator
+├── converter.py           # sqlglot-backed DML/DDL path
+├── registry.py            # Plugin discovery & registration
+├── errors.py              # Exception hierarchy
+└── procedural/            # The procedural engine (the value-add over sqlglot)
+    ├── lexer.py           # Engine-agnostic tokenizer
+    ├── parser.py          # Source-family parser (T-SQL vs PL/SQL)
+    ├── emitter/           # Per-target emitter plugins
+    │   ├── __init__.py    #   factory + registry, re-exports ProceduralEmitter
+    │   ├── base.py        #   ProceduralEmitter: shared logic + overridable hooks
+    │   ├── tsql.py        #   TSqlEmitter
+    │   ├── oracle.py      #   OracleEmitter
+    │   ├── postgresql.py  #   PostgresEmitter
+    │   └── mysql.py       #   MySqlEmitter
+    └── transformer/       # Per-target transformer plugins (same shape)
+        ├── __init__.py
+        ├── base.py        #   ProceduralTransformer: shared + source/pair logic
+        ├── tsql.py / oracle.py / postgresql.py / mysql.py
 ```
+
+#### The procedural engine is itself plugin-structured
+
+The procedural engine (lexer → parser → transformer → emitter) is what Unique
+adds on top of sqlglot, and it follows the same per-engine plugin philosophy as
+the dialect plugins under `src/unique/dialects/`:
+
+- **Emitter** — output depends only on the *target* dialect, so
+  `ProceduralEmitter` is a base class holding the shared structure, and each
+  target is a subclass (`TSqlEmitter`, …) that overrides only the methods that
+  differ (e.g. `_emit_try_catch`, `_returns_clause`, `_assignment_form`).
+  `ProceduralEmitter(dialect)` is a factory (via `__new__`) that returns the
+  registered subclass. The base carries **no** `if dialect == …` dispatch.
+- **Transformer** — a transform is a *source → target* operation, so the
+  pattern is the same per *target* subclass, but pair-dependent logic (e.g.
+  variable naming `@x`→`V_X`/`v_x`/`@x`) and source-only logic stay in the base
+  parameterized by `self._source`; only genuinely target-only decisions are
+  overridden in the subclass.
+- **Parser** — depends on the *source* dialect, of which there are only two
+  syntactic families (T-SQL and PL/SQL), so it is a single class with the
+  family distinction named by `_is_tsql_source()` / `_parse_routine_body()`
+  rather than a subclass hierarchy.
+- **Lexer** — engine-agnostic; not specialized per dialect.
+
+Adding a new engine means adding one emitter module and one transformer module
+(plus a one-line import in each package `__init__`), without editing the shared
+core logic — the open/closed shape the architecture promises.
 
 #### ast_nodes.py — Intermediate Representation
 
