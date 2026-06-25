@@ -296,7 +296,32 @@ class ProceduralTransformer:
 
     Handles variable naming conventions, data type mappings,
     control flow syntax differences, and built-in function translations.
+
+    This base holds the engine-agnostic and source-dependent logic plus the
+    default behavior. Target-specific specifics live in per-target subclasses
+    (`TSqlTransformer`, `OracleTransformer`, `PostgresTransformer`,
+    `MySqlTransformer`), which override only what differs for that target.
+    Unlike the emitter, the transformer is a source→target operation: logic
+    that depends on the *pair* or only on the *source* stays in the base and is
+    parameterized by ``self._source`` rather than pushed into a target subclass.
+    Instantiating ``ProceduralTransformer(source, target)`` returns the right
+    target subclass via ``__new__``, so existing call sites need no change.
     """
+
+    #: Set on each subclass; the target dialect it handles.
+    target_name: str | None = None
+
+    def __new__(
+        cls,
+        source: str,
+        target: str,
+        metadata_resolver: object | None = None,
+    ) -> ProceduralTransformer:
+        if cls is ProceduralTransformer:
+            subclass = _TRANSFORMER_REGISTRY.get(target)
+            if subclass is not None:
+                return object.__new__(subclass)
+        return object.__new__(cls)
 
     def __init__(
         self,
@@ -2224,3 +2249,45 @@ class ProceduralTransformer:
             "mysql": "mysql",
         }
         return mapping.get(dialect, dialect)
+
+
+# ---------------------------------------------------------------------------
+# Per-target transformer subclasses
+# ---------------------------------------------------------------------------
+#
+# Each subclass overrides only the transform rules that are specific to its
+# *target* engine. Source-dependent and pair-dependent logic stays in the base
+# (parameterized by self._source), because a transform is a source→target
+# operation and a target subclass alone cannot know the source.
+
+
+class TSqlTransformer(ProceduralTransformer):
+    """Transforms toward T-SQL (SQL Server)."""
+
+    target_name = "tsql"
+
+
+class OracleTransformer(ProceduralTransformer):
+    """Transforms toward Oracle PL/SQL."""
+
+    target_name = "oracle"
+
+
+class PostgresTransformer(ProceduralTransformer):
+    """Transforms toward PostgreSQL PL/pgSQL."""
+
+    target_name = "postgresql"
+
+
+class MySqlTransformer(ProceduralTransformer):
+    """Transforms toward MySQL."""
+
+    target_name = "mysql"
+
+
+_TRANSFORMER_REGISTRY: dict[str, type[ProceduralTransformer]] = {
+    TSqlTransformer.target_name: TSqlTransformer,
+    OracleTransformer.target_name: OracleTransformer,
+    PostgresTransformer.target_name: PostgresTransformer,
+    MySqlTransformer.target_name: MySqlTransformer,
+}
