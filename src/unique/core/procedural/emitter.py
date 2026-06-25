@@ -61,7 +61,25 @@ class ProceduralEmitter:
 
     Generates syntactically correct procedural code from IR AST nodes,
     using the conventions and syntax of the target dialect.
+
+    This base class holds the engine-agnostic emission logic and the default
+    (T-SQL-leaning) behavior. Per-engine specifics live in subclasses
+    (`TSqlEmitter`, `OracleEmitter`, `PostgresEmitter`, `MySqlEmitter`), which
+    override only the methods that differ. Instantiating
+    ``ProceduralEmitter(dialect)`` returns the right subclass via ``__new__``,
+    so existing call sites need no change.
     """
+
+    #: Set on each subclass; maps to the dialect string it handles.
+    dialect_name: str | None = None
+
+    def __new__(cls, dialect: str) -> ProceduralEmitter:
+        # When constructed as the base class, dispatch to the engine subclass.
+        if cls is ProceduralEmitter:
+            subclass = _EMITTER_REGISTRY.get(dialect)
+            if subclass is not None:
+                return object.__new__(subclass)
+        return object.__new__(cls)
 
     def __init__(self, dialect: str) -> None:
         self._dialect = dialect
@@ -1448,3 +1466,49 @@ class ProceduralEmitter:
         if node.dtype == "string":
             return f"'{node.value}'"
         return str(node.value)
+
+
+# ---------------------------------------------------------------------------
+# Per-engine emitter subclasses
+# ---------------------------------------------------------------------------
+#
+# Each subclass overrides only the emission rules that differ for its engine.
+# The shared structure (node dispatch, indentation, parameter formatting, and
+# any genuinely engine-agnostic statement) stays in ProceduralEmitter above.
+#
+# This is the procedural-engine counterpart to the dialect plugins under
+# src/unique/dialects/: adding a new engine means adding a subclass here and
+# registering it, rather than threading another `if self._dialect == …` branch
+# through every method.
+
+
+class TSqlEmitter(ProceduralEmitter):
+    """T-SQL (SQL Server) procedural emitter."""
+
+    dialect_name = "tsql"
+
+
+class OracleEmitter(ProceduralEmitter):
+    """Oracle PL/SQL procedural emitter."""
+
+    dialect_name = "oracle"
+
+
+class PostgresEmitter(ProceduralEmitter):
+    """PostgreSQL PL/pgSQL procedural emitter."""
+
+    dialect_name = "postgresql"
+
+
+class MySqlEmitter(ProceduralEmitter):
+    """MySQL procedural emitter."""
+
+    dialect_name = "mysql"
+
+
+_EMITTER_REGISTRY: dict[str, type[ProceduralEmitter]] = {
+    TSqlEmitter.dialect_name: TSqlEmitter,
+    OracleEmitter.dialect_name: OracleEmitter,
+    PostgresEmitter.dialect_name: PostgresEmitter,
+    MySqlEmitter.dialect_name: MySqlEmitter,
+}
