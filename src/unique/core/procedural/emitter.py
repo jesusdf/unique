@@ -944,37 +944,15 @@ class ProceduralEmitter:
     def _emit_execute(self, node: ExecuteStatement) -> str:
         expr = self._emit_node(node.sql_expression)
         params = [self._emit_node(p) for p in node.params]
+        return self._emit_execute_stmt(expr, params)
 
-        if self._dialect == "tsql":
-            if params:
-                # Map Oracle USING binds to sp_executesql positional params.
-                # The dynamic SQL placeholders (:1, :2 / ?) should be replaced
-                # by @p1, @p2 manually; we emit a parameterized sp_executesql
-                # call and flag it for review.
-                names = [f"@p{i + 1}" for i in range(len(params))]
-                decl = ", ".join(f"{n} SQL_VARIANT" for n in names)
-                assigns = ", ".join(
-                    f"{n} = {val}" for n, val in zip(names, params, strict=False)
-                )
-                return (
-                    f"EXEC sp_executesql {expr}, N'{decl}', {assigns}; "
-                    f"-- UNIQUE: verify dynamic SQL placeholders match "
-                    f"{', '.join(names)}"
-                )
-            return f"EXEC sp_executesql {expr};"
-        elif self._dialect == "oracle":
-            if params:
-                using = ", ".join(params)
-                return f"EXECUTE IMMEDIATE {expr} USING {using};"
-            return f"EXECUTE IMMEDIATE {expr};"
-        elif self._dialect == "postgresql":
-            return self._emit_pg_execute(expr, params)
-        # MySQL: distinguish three forms that all arrive as a captured
-        # expression here:
-        #   1. EXEC sp_executesql @sql, N'<decls>', @p1, ...  -> dynamic SQL
-        #   2. EXEC proc_name @a OUTPUT, 'b', ...             -> a routine call
-        #   3. EXEC @sql / EXEC ('...')                       -> dynamic SQL
-        return self._emit_mysql_execute(expr, params)
+    def _emit_execute_stmt(self, expr: str, params: list[str]) -> str:
+        """Emit an EXEC/EXECUTE for this engine. Default is Oracle's
+        ``EXECUTE IMMEDIATE [USING …]``; each engine subclass overrides."""
+        if params:
+            using = ", ".join(params)
+            return f"EXECUTE IMMEDIATE {expr} USING {using};"
+        return f"EXECUTE IMMEDIATE {expr};"
 
     def _emit_pg_execute(self, expr: str, params: list[str]) -> str:
         """Emit a T-SQL EXEC for PostgreSQL.
@@ -1474,6 +1452,24 @@ class TSqlEmitter(ProceduralEmitter):
 
         return "\n".join(lines)
 
+    def _emit_execute_stmt(self, expr: str, params: list[str]) -> str:
+        if params:
+            # Map Oracle USING binds to sp_executesql positional params.
+            # The dynamic SQL placeholders (:1, :2 / ?) should be replaced
+            # by @p1, @p2 manually; we emit a parameterized sp_executesql
+            # call and flag it for review.
+            names = [f"@p{i + 1}" for i in range(len(params))]
+            decl = ", ".join(f"{n} SQL_VARIANT" for n in names)
+            assigns = ", ".join(
+                f"{n} = {val}" for n, val in zip(names, params, strict=False)
+            )
+            return (
+                f"EXEC sp_executesql {expr}, N'{decl}', {assigns}; "
+                f"-- UNIQUE: verify dynamic SQL placeholders match "
+                f"{', '.join(names)}"
+            )
+        return f"EXEC sp_executesql {expr};"
+
 
 class OracleEmitter(ProceduralEmitter):
     """Oracle PL/SQL procedural emitter."""
@@ -1534,6 +1530,9 @@ class PostgresEmitter(ProceduralEmitter):
 
     def _sleep_call(self, secs: str) -> str:
         return f"PERFORM pg_sleep({secs});"
+
+    def _emit_execute_stmt(self, expr: str, params: list[str]) -> str:
+        return self._emit_pg_execute(expr, params)
 
     def _translate_cursor_attrs(self, expr: str) -> str:
         if not expr:
@@ -1598,6 +1597,14 @@ class MySqlEmitter(ProceduralEmitter):
 
     def _sleep_call(self, secs: str) -> str:
         return f"DO SLEEP({secs});"
+
+    def _emit_execute_stmt(self, expr: str, params: list[str]) -> str:
+        # MySQL: distinguish three forms that all arrive as a captured
+        # expression here:
+        #   1. EXEC sp_executesql @sql, N'<decls>', @p1, ...  -> dynamic SQL
+        #   2. EXEC proc_name @a OUTPUT, 'b', ...             -> a routine call
+        #   3. EXEC @sql / EXEC ('...')                       -> dynamic SQL
+        return self._emit_mysql_execute(expr, params)
 
     def _emit_exit(self, node: ExitStatement) -> str:
         cond = self._emit_node(node.condition) if node.condition else ""
