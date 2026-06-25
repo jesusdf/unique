@@ -32,6 +32,10 @@
     padding: 18px 24px; border-bottom: 1px solid var(--border);
     display: flex; align-items: baseline; gap: 14px;
   }
+  header .logo {
+    align-self: center; display: block; flex: 0 0 auto;
+    width: 34px; height: 34px; margin-right: -4px;
+  }
   header h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
   header .version {
     font-size: 12px; font-weight: 600; color: var(--accent);
@@ -169,6 +173,7 @@
 </head>
 <body>
 <header>
+  <img src="/static/logo.svg" alt="Unique logo" class="logo" width="34" height="34" />
   <h1>Unique</h1>
   <span class="version" id="versionTag" title="Application version"></span>
   <span class="tag">SQL transpiler — SQL&nbsp;Server · Oracle · PostgreSQL · MySQL</span>
