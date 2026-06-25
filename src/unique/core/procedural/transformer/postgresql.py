@@ -34,6 +34,10 @@ class PostgresTransformer(ProceduralTransformer):
     def _varchar_max_type(self, is_unicode: bool) -> str | None:
         return "TEXT"
 
+    def _supports_transition_tables(self) -> bool:
+        # A statement-level trigger with REFERENCING NEW/OLD TABLE sees all rows.
+        return True
+
     def _fix_target_dml(self, sql: str) -> str:
         sql = self._pg_string_concat(sql)
         sql = self._pg_clean_dml(sql)

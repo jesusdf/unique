@@ -125,17 +125,25 @@ class PostgresEmitter(ProceduralEmitter):
         self._indent_level = 1
         fn_lines.extend(self._emit_indented_stmts(trg_body))
         self._indent_level = 0
-        # A row-level AFTER trigger conventionally returns NULL; a BEFORE
-        # trigger returns NEW. Default to NEW, which is safe for BEFORE and
-        # ignored for AFTER row-level triggers.
-        fn_lines.append("    RETURN NEW;")
+        # A statement-level (set-based) trigger function has no NEW row, so it
+        # returns NULL; a row-level AFTER returns NULL too and BEFORE returns
+        # NEW. Default to NEW (safe for BEFORE, ignored for AFTER row-level);
+        # for the set-based form return NULL.
+        fn_lines.append(
+            "    RETURN NULL;" if node.set_based_transition else "    RETURN NEW;"
+        )
         fn_lines.append("END;")
         fn_lines.append("$$;")
         trg_lines = [
             f"CREATE OR REPLACE TRIGGER {name}",
             f"{node.timing} {events} ON {node.table}",
         ]
-        if node.for_each == "ROW":
+        if node.set_based_transition:
+            # Expose the affected rows as the set-based transition tables the
+            # body references (named to match T-SQL's inserted/deleted).
+            trg_lines.append("REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted")
+            trg_lines.append("FOR EACH STATEMENT")
+        elif node.for_each == "ROW":
             trg_lines.append("FOR EACH ROW")
         trg_lines.append(f"EXECUTE FUNCTION {qfunc}();")
         return "\n".join(fn_lines) + "\n\n" + "\n".join(trg_lines)
