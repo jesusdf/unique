@@ -43,7 +43,18 @@ suite stays green at every checkpoint.
       a dead `return` in `_translate_cursor_attrs` was deleted, and an Oracle
       RETURN/IN regression caught mid-refactor is guarded by
       TestPerEngineRoutineSurface. Suite green (1029 passed), output unchanged.
-- [ ] **Transformer**: same base + per-engine subclass pattern.
+- [~] **Transformer**: base + per-engine pattern, but **pair-aware**.
+      *Analysis:* unlike the emitter (target-only), the transformer is a
+      source→target operation. Of its ~70 conditionals, most depend only on the
+      *target* (e.g. `@@ROWCOUNT`/type/sleep mapping) and move cleanly into
+      target subclasses with hooks; but ~17 depend on the *pair* (e.g. variable
+      naming `@x`→`V_X`/`v_x`/`@x`) and ~15 only on the *source* (origin
+      family). The pair- and source-dependent logic must NOT be forced into a
+      target-only subclass (that would re-introduce `source` conditionals or
+      duplicate logic); it stays in well-named methods that consult the source
+      explicitly. Plan: extract the target-only logic into per-target subclasses
+      first (biggest, cleanest win), keep pair/source logic as parameterized
+      strategy. Pure refactor, output unchanged, suite green at each checkpoint.
 - [ ] **Parser**: split the 11 source-family conditionals cleanly if it helps.
 - [ ] Update `docs/02-architecture.md`, `docs/05-procedural-engine.md`, and the
       skills to describe the new per-engine structure.
