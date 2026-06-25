@@ -185,7 +185,9 @@ class TestTriggerPseudoTables:
         assert ":OLD.col1" in self._t(src, "oracle")
 
     def test_set_based_documented(self) -> None:
-        for target in ("postgresql", "mysql", "oracle"):
+        # PostgreSQL now rewrites a pure set-based trigger with transition tables
+        # (see TestSetBasedTriggerRewrite); Oracle and MySQL still document it.
+        for target in ("mysql", "oracle"):
             out = self._t(self._SET_BASED, target)
             assert "set-based inserted/deleted" in out
             # the original statement is commented out, not emitted as runnable
@@ -201,3 +203,71 @@ class TestTriggerPseudoTables:
         )
         out = self._t(src, "postgresql")
         assert "NEW.id" not in out
+
+
+class TestSetBasedTriggerRewrite:
+    """A *purely* set-based trigger (uses only FROM/JOIN inserted/deleted, with
+    no row-level qualifier or UPDATE(col) predicate) is rewritten to the target's
+    set-based trigger form rather than merely documented — where the target has a
+    faithful equivalent:
+
+    - PostgreSQL: a statement-level trigger (FOR EACH STATEMENT) whose function
+      declares REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted. This is a
+      direct, faithful mapping of T-SQL's named inserted/deleted tables.
+    - Oracle: documented. Oracle has no named transition tables; a compound
+      trigger would require accumulating rows into a PL/SQL collection, which is
+      not a mechanical rewrite, so emitting it would risk invalid SQL.
+    - MySQL: documented (no transition tables at all).
+
+    A *mixed* trigger (row-level and set-level uses together) cannot be a single
+    trigger and stays documented on every target.
+    """
+
+    def _t(self, sql: str, target: str) -> str:
+        return Transpiler().transpile(sql, source="tsql", target=target).sql
+
+    _PURE_SET_BASED = (
+        "CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN "
+        "INSERT INTO audit (a, b) "
+        "SELECT i.col1, d.col1 FROM inserted i JOIN deleted d ON d.id = i.id "
+        "END"
+    )
+    _MIXED = (
+        "CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN "
+        "IF UPDATE(col1) "
+        "INSERT INTO audit (a) SELECT i.col1 FROM inserted i WHERE i.id = inserted.id "
+        "END"
+    )
+
+    def test_pure_set_based_to_postgresql_uses_transition_tables(self) -> None:
+        out = self._t(self._PURE_SET_BASED, "postgresql")
+        assert "REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted" in out
+        assert "FOR EACH STATEMENT" in out
+        code = "\n".join(
+            ln for ln in out.splitlines() if not ln.strip().startswith("--")
+        )
+        assert "FROM inserted" in code
+        assert "JOIN deleted" in code
+
+    def test_pure_set_based_to_oracle_documented(self) -> None:
+        # Oracle has no equivalent to T-SQL's named transition tables: a compound
+        # trigger would need to accumulate rows into a PL/SQL collection, which
+        # is not a mechanical rewrite of a set-based INSERT...SELECT. Emitting
+        # "FROM inserted" would be invalid Oracle, so document instead.
+        out = self._t(self._PURE_SET_BASED, "oracle")
+        assert "set-based inserted/deleted" in out
+        code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
+        assert all("FROM inserted" not in ln for ln in code)
+
+    def test_pure_set_based_to_mysql_documented(self) -> None:
+        out = self._t(self._PURE_SET_BASED, "mysql")
+        assert "set-based inserted/deleted" in out
+        code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
+        assert all("FROM inserted" not in ln for ln in code)
+
+    def test_mixed_trigger_stays_documented_everywhere(self) -> None:
+        for target in ("postgresql", "oracle", "mysql"):
+            out = self._t(self._MIXED, target)
+            assert "set-based inserted/deleted" in out
+            code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
+            assert all("FROM inserted" not in ln for ln in code)

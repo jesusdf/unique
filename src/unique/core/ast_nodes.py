@@ -712,7 +712,16 @@ class ExceptionBlock(ASTNode):
 
 @dataclass(frozen=True)
 class CreateTriggerStatement(ASTNode):
-    """CREATE TRIGGER statement."""
+    """CREATE TRIGGER statement.
+
+    ``set_based_transition`` is set by the transformer when a *purely* set-based
+    T-SQL trigger (using only ``FROM``/``JOIN inserted``/``deleted``) is being
+    rewritten to a target with named transition tables: a PostgreSQL
+    statement-level trigger whose function declares ``REFERENCING NEW TABLE AS
+    inserted OLD TABLE AS deleted``. It stays ``False`` for row-level, mixed, or
+    documented-only triggers (and for targets without a faithful equivalent,
+    such as Oracle and MySQL).
+    """
 
     name: str
     table: str
@@ -723,6 +732,7 @@ class CreateTriggerStatement(ASTNode):
     or_replace: bool = False
     schema: str | None = None
     condition: ASTNode | None = None
+    set_based_transition: bool = False
 
 
 @dataclass(frozen=True)

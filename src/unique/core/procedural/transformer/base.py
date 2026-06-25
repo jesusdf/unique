@@ -355,6 +355,10 @@ class ProceduralTransformer:
         # T-SQL inserted/deleted pseudo-tables to NEW/OLD (or documents a
         # set-based use that has no row-level equivalent).
         self._in_trigger = False
+        # True while transforming a *purely* set-based trigger that the target
+        # can express via transition tables; the set-based DML is then kept
+        # as-is (inserted/deleted survive) instead of being documented.
+        self._preserve_set_based_dml = False
 
     @staticmethod
     def _is_string_type(dt: DataType) -> bool:
@@ -803,10 +807,24 @@ class ProceduralTransformer:
     def _transform_trigger(self, node: CreateTriggerStatement) -> ASTNode:
         prev_in_trigger = self._in_trigger
         self._in_trigger = True
+        # A purely set-based T-SQL trigger (only FROM/JOIN inserted/deleted, no
+        # row-level qualifier or UPDATE(col) predicate) can be rewritten to a
+        # target's set-based trigger form (PG transition tables / Oracle compound
+        # trigger) instead of being documented. Decide this over the *whole*
+        # body before transforming it, and suppress the per-statement
+        # documentation while doing so.
+        set_based = (
+            self._source == "tsql"
+            and self._supports_transition_tables()
+            and self._is_pure_set_based_trigger(node.body)
+        )
+        prev_rewrite = self._preserve_set_based_dml
+        self._preserve_set_based_dml = set_based
         try:
             new_body = self._transform_body(node.body)
         finally:
             self._in_trigger = prev_in_trigger
+            self._preserve_set_based_dml = prev_rewrite
         timing = node.timing
         if self._source == "tsql" and timing == "FOR":
             timing = "AFTER"
@@ -815,11 +833,63 @@ class ProceduralTransformer:
             table=node.table,
             timing=timing,
             events=node.events,
-            for_each=node.for_each,
+            for_each="STATEMENT" if set_based else node.for_each,
             body=new_body,
             or_replace=self._trigger_forces_or_replace() or node.or_replace,
             schema=self._target_schema(node.schema),
+            set_based_transition=set_based,
         )
+
+    def _supports_transition_tables(self) -> bool:
+        """Whether the target can faithfully express a set-based trigger via
+        *named* transition tables matching T-SQL's inserted/deleted. Only
+        PostgreSQL can (a statement-level trigger with ``REFERENCING NEW TABLE AS
+        inserted OLD TABLE AS deleted``). Oracle has no named transition tables
+        (a compound trigger would need a manual PL/SQL collection, not a
+        mechanical rewrite), and MySQL has none at all, so both document the
+        set-based use instead."""
+        return False
+
+    def _is_pure_set_based_trigger(self, body: tuple[ASTNode, ...]) -> bool:
+        """A trigger is *purely* set-based when its body references the T-SQL
+        ``inserted``/``deleted`` pseudo-tables only via ``FROM``/``JOIN`` (a
+        set operation) and never via a row-level column qualifier
+        (``inserted.col`` outside FROM) or an ``UPDATE(col)`` predicate. Such a
+        trigger maps cleanly onto transition tables; a *mixed* one cannot be a
+        single trigger and must stay documented.
+        """
+        text = self._trigger_body_text(body)
+        if not self._PSEUDO_TABLE_SOURCE_RE.search(text):
+            return False  # not set-based at all
+        if re.search(r"(?i)\bUPDATE\s*\(", text):
+            return False  # row-level UPDATE(col) predicate -> mixed
+        # A column qualifier that is not the FROM/JOIN source is a row-level use;
+        # its presence alongside the set use makes the trigger mixed.
+        without_sources = self._PSEUDO_TABLE_SOURCE_RE.sub(" ", text)
+        return not re.search(r"(?i)\b(?:inserted|deleted)\s*\.", without_sources)
+
+    def _trigger_body_text(self, body: tuple[ASTNode, ...]) -> str:
+        """Flatten a trigger body to the raw SQL text of its statements, for
+        set-based/mixed classification (best-effort; recurses into blocks)."""
+        parts: list[str] = []
+
+        def walk(node: ASTNode) -> None:
+            sql = getattr(node, "sql", None)
+            if isinstance(sql, str):
+                parts.append(sql)
+            # The IF predicate (e.g. UPDATE(col)) lives in `condition`; include
+            # it so a row-level predicate marks the trigger as mixed.
+            cond = getattr(node, "condition", None)
+            if isinstance(cond, ASTNode):
+                walk(cond)
+            for attr in ("body", "statements", "then_body", "else_body"):
+                for child in getattr(node, attr, ()) or ():
+                    if isinstance(child, ASTNode):
+                        walk(child)
+
+        for stmt in body:
+            walk(stmt)
+        return "\n".join(parts)
 
     def _trigger_forces_or_replace(self) -> bool:
         """Whether a CREATE TRIGGER is forced to OR REPLACE on this target. Only
@@ -1173,6 +1243,11 @@ class ProceduralTransformer:
           all (no transition tables).
         """
         if self._PSEUDO_TABLE_SOURCE_RE.search(sql):
+            if self._preserve_set_based_dml:
+                # The trigger is being rewritten with transition tables that are
+                # literally named ``inserted``/``deleted`` (PG REFERENCING /
+                # Oracle compound trigger), so the set-based DML is valid as-is.
+                return sql
             note = (
                 "-- UNIQUE: trigger uses the T-SQL set-based inserted/deleted "
                 "pseudo-tables, which have no row-level (NEW/OLD) equivalent. "
