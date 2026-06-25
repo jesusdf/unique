@@ -32,11 +32,19 @@
     padding: 18px 24px; border-bottom: 1px solid var(--border);
     display: flex; align-items: baseline; gap: 14px;
   }
-  header .logo {
-    align-self: center; display: block; flex: 0 0 auto;
-    width: 34px; height: 34px; margin-right: -4px;
+  header .brand {
+    display: inline-flex; align-items: baseline; gap: 0;
   }
-  header h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
+  header .brand .logo {
+    /* The logo is the capital "U"; size and seat it so it reads as the first
+       letter of the wordmark, sitting on the text baseline. */
+    width: 21px; height: 21px; flex: 0 0 auto;
+    transform: translateY(2px);
+    margin-right: 1px;
+  }
+  header h1 {
+    font-size: 21px; margin: 0; letter-spacing: .5px; font-weight: 600;
+  }
   header .version {
     font-size: 12px; font-weight: 600; color: var(--accent);
     background: var(--panel-2); border: 1px solid var(--border);
@@ -76,17 +84,21 @@
   }
   select {
     background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 8px 10px; min-width: 150px;
+    border-radius: 8px; padding: 0 10px; min-width: 150px;
+    height: 40px; box-sizing: border-box;
   }
   .swap-btn {
     background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
-    border-radius: 8px; padding: 9px 12px; cursor: pointer; font-size: 16px;
+    border-radius: 8px; padding: 0 12px; cursor: pointer; font-size: 16px;
+    height: 40px; box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center;
   }
   .swap-btn:hover { border-color: var(--accent); }
   .primary {
     background: linear-gradient(180deg, var(--accent), #4072e6);
-    color: white; border: none; border-radius: 8px; padding: 10px 18px;
-    font-weight: 600; cursor: pointer;
+    color: white; border: none; border-radius: 8px; padding: 0 18px;
+    font-weight: 600; cursor: pointer; height: 40px; box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center;
   }
   .primary:hover { filter: brightness(1.07); }
   .primary:disabled { opacity: .5; cursor: default; }
@@ -152,11 +164,20 @@
   }
   section.file h2 { margin: 0 0 4px; font-size: 15px; }
   section.file p { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
-  .file-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+  /* Align every control on the same bottom edge; the swap button (no label)
+     and the file input get the same box height as the selects so the row reads
+     as one tidy line instead of staggered heights. */
+  .file-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .file-row .field { gap: 6px; }
+  .file-row input[type=file] { height: 40px; box-sizing: border-box; }
+  /* The swap button has no label above it, so it already sits level with the
+     select boxes via align-items:flex-end; a tiny side margin separates it. */
+  .file-row .swap-btn { margin: 0 2px; }
   input[type=file] {
     color: var(--muted); font-size: 13px;
     background: var(--panel-2); border: 1px solid var(--border);
     border-radius: 8px; padding: 8px;
+    display: flex; align-items: center;
   }
   input[type=file]::file-selector-button {
     background: var(--panel); color: var(--text); border: 1px solid var(--border);
@@ -173,8 +194,10 @@
 </head>
 <body>
 <header>
-  <img src="/static/logo.svg" alt="Unique logo" class="logo" width="34" height="34" />
-  <h1>Unique</h1>
+  <span class="brand">
+    <img src="/static/logo.svg" alt="U" class="logo" width="30" height="30" />
+    <h1>nique</h1>
+  </span>
   <span class="version" id="versionTag" title="Application version"></span>
   <span class="tag">SQL transpiler — SQL&nbsp;Server · Oracle · PostgreSQL · MySQL</span>
   <span class="spacer"></span>
