@@ -195,6 +195,21 @@ class TestUI:
         assert "logo.svg" in header
         assert header.index("logo.svg") < header.index("<h1>")
 
+    def test_static_assets_are_packaged_in_the_wheel(self) -> None:
+        # The container installs from the wheel, not the source tree, so every
+        # static asset type the UI references must be declared in package-data
+        # or it 404s in the image (as the SVG logo once did). Guard the SVG and
+        # the other web asset types explicitly.
+        import tomllib
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[3]
+        with open(root / "pyproject.toml", "rb") as fh:
+            cfg = tomllib.load(fh)
+        patterns = cfg["tool"]["setuptools"]["package-data"]["unique.api"]
+        for needed in ("static/*.svg", "static/*.html", "static/*.css", "static/*.js"):
+            assert needed in patterns, f"{needed} missing from wheel package-data"
+
 
 class TestTranspileFile:
     def test_file_with_explicit_source(self, client: TestClient) -> None:

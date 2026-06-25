@@ -59,7 +59,14 @@ mysql = "unique.dialects.mysql:MySQLDialect"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"unique.api" = ["static/*.html", "static/*.css", "static/*.js"]
+"unique.api" = [
+    "static/*.html",
+    "static/*.css",
+    "static/*.js",
+    "static/*.svg",
+    "static/*.png",
+    "static/*.ico",
+]
 
 [tool.black]
 line-length = 88
