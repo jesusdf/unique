@@ -408,6 +408,47 @@ class TestRoundTripStability:
         assert "DECLARE" in back
 
 
+class TestUniqueCommentRestore:
+    """A construct with no target equivalent is documented as a
+    ``/* UNIQUE: <orig> -- <src>-only … */`` comment on the forward pass; when
+    transpiled back to its source engine, the original must be restored rather
+    than left as a comment."""
+
+    def test_identity_insert_documented_then_restored(self) -> None:
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "SET IDENTITY_INSERT dbo.t ON; "
+            "INSERT INTO t VALUES (1) "
+            "END"
+        )
+        # Forward: T-SQL -> Oracle documents it (and records it is tsql-only).
+        oracle = _transpile(src, "tsql", "oracle")
+        assert "UNIQUE:" in oracle
+        assert "IDENTITY_INSERT" in oracle
+        assert "tsql-only" in oracle
+        # Back to T-SQL: the original statement is restored.
+        back = _transpile(oracle, "oracle", "tsql")
+        assert "SET IDENTITY_INSERT dbo.t ON" in back
+        assert "UNIQUE:" not in back
+
+    def test_not_restored_on_a_different_target(self) -> None:
+        # Oracle -> PostgreSQL (not the source engine) keeps the documentation;
+        # the tsql-only construct must stay inside the note, never injected as an
+        # executable statement.
+        src = (
+            "CREATE PROCEDURE dbo.p AS BEGIN "
+            "SET IDENTITY_INSERT dbo.t ON; "
+            "INSERT INTO t VALUES (1) "
+            "END"
+        )
+        oracle = _transpile(src, "tsql", "oracle")
+        pg = _transpile(oracle, "oracle", "postgresql")
+        assert "UNIQUE:" in pg
+        for line in pg.splitlines():
+            if "IDENTITY_INSERT" in line:
+                assert "UNIQUE:" in line
+
+
 class TestTSQLAssignmentSelect:
     """SELECT @v = expr (T-SQL variable assignment) must become SELECT ... INTO,
     not a column alias (which would silently drop the assignment)."""

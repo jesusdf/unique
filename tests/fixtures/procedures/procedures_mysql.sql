@@ -170,7 +170,7 @@ CREATE PROCEDURE proc_13
     IN v_val LONGTEXT /* UNIQUE: SQL_VARIANT */
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     IF v_val IS NOT NULL THEN
             SET v_where = CONCAT(COALESCE(CONCAT(v_where, ' AND '), ''), v_col, ' ', v_op, ' ', v_param);
     END IF;
@@ -187,7 +187,7 @@ CREATE PROCEDURE proc_14
     OUT v_page LONGTEXT
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     SET v_page = NULL;
     IF v_filter IS NOT NULL THEN
             SET v_query = CONCAT(v_query, ' ', v_filter);
@@ -267,9 +267,9 @@ CREATE PROCEDURE proc_1
     IN v_col_2 INT
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no mysql equivalent */
             DO 0;
     END IF;
     SELECT * FROM (SELECT DISTINCT col_3.col_1, col_3.col_4, col_5.col_6, col_5.col_7, col_8.col_9, col_8.col_10 FROM tbl_1 AS col_11 INNER JOIN tbl_2 AS col_3 ON col_3.col_1 = col_11.col_1 INNER JOIN tbl_3 AS col_5 ON col_5.col_6 = col_3.col_6 LEFT JOIN tbl_4 AS col_8 ON col_5.col_6 = col_8.col_6 WHERE col_3.col_1 = v_col_1 AND (col_8.col_6 IS NULL OR (col_8.col_12 = 1 AND col_8.col_13 = col_11.col_13)) UNION ALL SELECT v_col_1 AS col_1, 0 AS col_4, NULL AS col_6, NULL AS col_7, NULL AS col_9, NULL AS col_10) AS col_14 ORDER BY col_4 DESC LIMIT 1;
@@ -298,12 +298,12 @@ BEGIN
     DECLARE v_func1 DATETIME DEFAULT func1();
     DECLARE v_col_6 CHAR(36) DEFAULT NULL;
 
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     CREATE TEMPORARY TABLE v_col_16 (
       col_17 CHAR(36)
     );  /* UNIQUE: was T-SQL table variable v_col_16 */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no mysql equivalent */
             DO 0;
     END IF;
     IF ( v_col_1 IS NOT NULL ) THEN
@@ -336,9 +336,9 @@ CREATE PROCEDURE proc_3
     IN v_col_2 INT
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no mysql equivalent */
             DO 0;
     END IF;
     SELECT col_22.col_23, col_22.col_24 AS col_25, col_22.col_26 AS col_27, CAST(NULL AS CHAR) AS value, col_22.col_28 AS col_29 FROM tbl_5 AS col_22 WHERE col_22.col_30 = 1 ORDER BY col_22.col_28 ASC;
@@ -364,9 +364,9 @@ CREATE PROCEDURE proc_4
 BEGIN
     DECLARE v_func1 DATETIME DEFAULT func1();
 
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no mysql equivalent */
             DO 0;
     END IF;
     UPDATE tbl_6 SET col_32 = 1, col_18 = v_func1 WHERE col_31 = v_col_31 AND col_32 = 0 AND NOT EXISTS(SELECT NULL FROM tbl_7 WHERE col_31 = v_col_31);
@@ -392,9 +392,9 @@ CREATE PROCEDURE proc_5
     IN v_col_2 INT
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no mysql equivalent */
             DO 0;
     END IF;
     SELECT col_45.col_46 AS col_47, col_45.col_48 AS col_49, col_11.col_50 AS col_51, col_52.col_46 AS col_53, COALESCE((SELECT 1 FROM tbl_8 WHERE col_31 = v_col_31 AND col_39 = 1 /* xxxxxx xx xx col_6 xx xxxxxx */ ORDER BY col_31 ASC LIMIT 1), 0) AS col_54, COALESCE((SELECT 1 FROM tbl_7 WHERE col_31 = v_col_31 /* xx xx xx xxxxxx xx col_161 */ AND EXISTS(SELECT NULL FROM tbl_9 WHERE col_30 = 1 AND NOT col_43 IS NULL) ORDER BY col_31 ASC LIMIT 1), 0) AS col_55 FROM tbl_6 AS col_37 INNER JOIN tbl_2 AS col_56 ON col_37.col_6 = col_56.col_6 INNER JOIN tbl_1 AS col_11 ON col_56.col_1 = col_11.col_1 INNER JOIN tbl_10 AS col_45 ON col_11.col_13 = col_45.col_13 INNER JOIN tbl_11 AS col_57 ON col_11.col_58 = col_57.col_59 INNER JOIN tbl_12 AS col_52 ON col_57.col_60 = col_52.col_59 WHERE col_37.col_31 = v_col_31;
@@ -442,9 +442,9 @@ proc_exit: BEGIN
     DECLARE v_col_17 INT DEFAULT NULL;
     DECLARE v_col_12 INT DEFAULT NULL;
 
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no mysql equivalent */
             DO 0;
     END IF;
     IF ( ( v_col_6 IS NULL ) OR ( v_col_42 IS NULL ) ) THEN
@@ -616,7 +616,7 @@ CREATE PROCEDURE proc_7
     IN v_col_18 DATETIME
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     CREATE TEMPORARY TABLE v_col_92 (
       col_17 CHAR(36)
     );  /* UNIQUE: was T-SQL table variable v_col_92 */
@@ -647,7 +647,7 @@ CREATE PROCEDURE proc_8
     IN v_col_94 DATETIME
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     CREATE TEMPORARY TABLE v_col_92 (
       col_17 INT
     );  /* UNIQUE: was T-SQL table variable v_col_92 */
@@ -693,7 +693,7 @@ CREATE PROCEDURE proc_9
     IN v_col_18 DATETIME
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     CREATE TEMPORARY TABLE v_col_92 (
       col_17 INT
     );  /* UNIQUE: was T-SQL table variable v_col_92 */
@@ -732,7 +732,7 @@ CREATE PROCEDURE proc_10
     IN v_col_106 LONGTEXT
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     UPDATE tbl_7 SET col_15 = v_col_15, col_18 = v_col_18, col_98 = v_col_98, col_99 = v_col_99 WHERE (col_97 = v_col_100) AND (col_31 = v_col_101) AND (col_23 = v_col_102) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL)) AND ((col_98 = v_col_105) OR (col_98 IS NULL AND v_col_105 IS NULL)) AND ((col_99 = v_col_106) OR (col_99 IS NULL AND v_col_106 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
@@ -767,7 +767,7 @@ CREATE PROCEDURE proc_11
     IN v_col_99 LONGTEXT
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     INSERT INTO tbl_7 (col_97, col_31, col_23, col_15, col_18, col_98, col_99) VALUES (v_col_97, v_col_31, v_col_23, v_col_15, v_col_18, v_col_98, v_col_99);
 END$$
 DELIMITER ;
@@ -800,9 +800,9 @@ BEGIN
     DECLARE v_col_109 LONGTEXT;
     DECLARE v_col_110 LONGTEXT;
 
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no mysql equivalent */
             DO 0;
     END IF;
     IF v_col_97 IS NOT NULL AND v_col_31 IS NOT NULL AND v_col_23 IS NOT NULL AND v_col_107 IS NULL THEN
@@ -849,7 +849,7 @@ CREATE PROCEDURE proc_15
     IN v_col_106 LONGTEXT
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     DELETE FROM tbl_7 WHERE (col_97 = v_col_100) AND (col_31 = v_col_101) AND (col_23 = v_col_102) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL)) AND ((col_98 = v_col_105) OR (col_98 IS NULL AND v_col_105 IS NULL)) AND ((col_99 = v_col_106) OR (col_99 IS NULL AND v_col_106 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
@@ -885,7 +885,7 @@ CREATE PROCEDURE proc_16
     IN v_col_114 DATETIME
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     UPDATE tbl_8 SET col_15 = v_col_15, col_18 = v_col_18, col_31 = v_col_31, col_39 = v_col_39, col_94 = v_col_94 WHERE (col_93 = v_col_112) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL)) AND ((col_31 = v_col_101) OR (col_31 IS NULL AND v_col_101 IS NULL)) AND ((col_39 = v_col_113) OR (col_39 IS NULL AND v_col_113 IS NULL)) AND ((col_94 = v_col_114) OR (col_94 IS NULL AND v_col_114 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
@@ -925,9 +925,9 @@ BEGIN
     DECLARE v_col_109 LONGTEXT;
     DECLARE v_col_110 LONGTEXT;
 
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no mysql equivalent */
             DO 0;
     END IF;
     IF v_col_93 IS NOT NULL AND v_col_107 IS NULL THEN
@@ -972,7 +972,7 @@ CREATE PROCEDURE proc_18
     IN v_col_114 DATETIME
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     DELETE FROM tbl_8 WHERE (col_93 = v_col_112) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL)) AND ((col_31 = v_col_101) OR (col_31 IS NULL AND v_col_101 IS NULL)) AND ((col_39 = v_col_113) OR (col_39 IS NULL AND v_col_113 IS NULL)) AND ((col_94 = v_col_114) OR (col_94 IS NULL AND v_col_114 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
@@ -1038,7 +1038,7 @@ CREATE PROCEDURE proc_19
     IN v_col_104 DATETIME
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     UPDATE tbl_6 SET col_6 = v_col_6, col_32 = v_col_32, col_33 = v_col_33, col_12 = v_col_12, col_42 = v_col_42, col_62 = v_col_62, col_13 = v_col_13, col_9 = v_col_9, col_10 = v_col_10, col_74 = v_col_74, col_38 = v_col_38, col_95 = v_col_95, col_96 = v_col_96, col_72 = v_col_72, col_73 = v_col_73, col_63 = v_col_63, col_19 = v_col_19, col_20 = v_col_20, col_15 = v_col_15, col_18 = v_col_18 WHERE (col_31 = v_col_101) AND ((col_6 = v_col_115) OR (col_6 IS NULL AND v_col_115 IS NULL)) AND ((col_32 = v_col_116) OR (col_32 IS NULL AND v_col_116 IS NULL)) AND ((col_33 = v_col_117) OR (col_33 IS NULL AND v_col_117 IS NULL)) AND ((col_12 = v_col_118) OR (col_12 IS NULL AND v_col_118 IS NULL)) AND ((col_42 = v_col_119) OR (col_42 IS NULL AND v_col_119 IS NULL)) AND ((col_62 = v_col_120) OR (col_62 IS NULL AND v_col_120 IS NULL)) AND ((col_13 = v_col_121) OR (col_13 IS NULL AND v_col_121 IS NULL)) AND ((col_9 = v_col_122) OR (col_9 IS NULL AND v_col_122 IS NULL)) AND ((col_10 = v_col_123) OR (col_10 IS NULL AND v_col_123 IS NULL)) AND ((col_74 = v_col_124) OR (col_74 IS NULL AND v_col_124 IS NULL)) AND ((col_38 = v_col_125) OR (col_38 IS NULL AND v_col_125 IS NULL)) AND ((col_95 = v_col_126) OR (col_95 IS NULL AND v_col_126 IS NULL)) AND ((col_96 = v_col_127) OR (col_96 IS NULL AND v_col_127 IS NULL)) AND ((col_72 = v_col_128) OR (col_72 IS NULL AND v_col_128 IS NULL)) AND ((col_73 = v_col_129) OR (col_73 IS NULL AND v_col_129 IS NULL)) AND ((col_63 = v_col_130) OR (col_63 IS NULL AND v_col_130 IS NULL)) AND ((col_19 = v_col_131) OR (col_19 IS NULL AND v_col_131 IS NULL)) AND ((col_20 = v_col_132) OR (col_20 IS NULL AND v_col_132 IS NULL)) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
@@ -1093,9 +1093,9 @@ BEGIN
     DECLARE v_col_109 LONGTEXT;
     DECLARE v_col_110 LONGTEXT;
 
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no mysql equivalent */
             DO 0;
     END IF;
     IF v_col_31 IS NOT NULL AND v_col_107 IS NULL THEN
@@ -1170,7 +1170,7 @@ CREATE PROCEDURE proc_21
     IN v_col_104 DATETIME
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     DELETE FROM tbl_6 WHERE (col_31 = v_col_101) AND ((col_6 = v_col_115) OR (col_6 IS NULL AND v_col_115 IS NULL)) AND ((col_32 = v_col_116) OR (col_32 IS NULL AND v_col_116 IS NULL)) AND ((col_33 = v_col_117) OR (col_33 IS NULL AND v_col_117 IS NULL)) AND ((col_12 = v_col_118) OR (col_12 IS NULL AND v_col_118 IS NULL)) AND ((col_42 = v_col_119) OR (col_42 IS NULL AND v_col_119 IS NULL)) AND ((col_62 = v_col_120) OR (col_62 IS NULL AND v_col_120 IS NULL)) AND ((col_13 = v_col_121) OR (col_13 IS NULL AND v_col_121 IS NULL)) AND ((col_9 = v_col_122) OR (col_9 IS NULL AND v_col_122 IS NULL)) AND ((col_10 = v_col_123) OR (col_10 IS NULL AND v_col_123 IS NULL)) AND ((col_74 = v_col_124) OR (col_74 IS NULL AND v_col_124 IS NULL)) AND ((col_38 = v_col_125) OR (col_38 IS NULL AND v_col_125 IS NULL)) AND ((col_95 = v_col_126) OR (col_95 IS NULL AND v_col_126 IS NULL)) AND ((col_96 = v_col_127) OR (col_96 IS NULL AND v_col_127 IS NULL)) AND ((col_72 = v_col_128) OR (col_72 IS NULL AND v_col_128 IS NULL)) AND ((col_73 = v_col_129) OR (col_73 IS NULL AND v_col_129 IS NULL)) AND ((col_63 = v_col_130) OR (col_63 IS NULL AND v_col_130 IS NULL)) AND ((col_19 = v_col_131) OR (col_19 IS NULL AND v_col_131 IS NULL)) AND ((col_20 = v_col_132) OR (col_20 IS NULL AND v_col_132 IS NULL)) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
@@ -1208,7 +1208,7 @@ CREATE PROCEDURE proc_22
     IN v_col_104 DATETIME
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     UPDATE tbl_3 SET col_7 = v_col_7, col_91 = v_col_91, col_19 = v_col_19, col_20 = v_col_20, col_15 = v_col_15, col_18 = v_col_18 WHERE (col_6 = v_col_115) AND ((col_7 = v_col_133) OR (col_7 IS NULL AND v_col_133 IS NULL)) AND ((col_91 = v_col_134) OR (col_91 IS NULL AND v_col_134 IS NULL)) AND ((col_19 = v_col_131) OR (col_19 IS NULL AND v_col_131 IS NULL)) AND ((col_20 = v_col_132) OR (col_20 IS NULL AND v_col_132 IS NULL)) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
@@ -1249,9 +1249,9 @@ BEGIN
     DECLARE v_col_109 LONGTEXT;
     DECLARE v_col_110 LONGTEXT;
 
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no mysql equivalent */
             DO 0;
     END IF;
     IF v_col_6 IS NOT NULL AND v_col_107 IS NULL THEN
@@ -1298,7 +1298,7 @@ CREATE PROCEDURE proc_24
     IN v_col_104 DATETIME
 )
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     DELETE FROM tbl_3 WHERE (col_6 = v_col_115) AND ((col_7 = v_col_133) OR (col_7 IS NULL AND v_col_133 IS NULL)) AND ((col_91 = v_col_134) OR (col_91 IS NULL AND v_col_134 IS NULL)) AND ((col_19 = v_col_131) OR (col_19 IS NULL AND v_col_131 IS NULL)) AND ((col_20 = v_col_132) OR (col_20 IS NULL AND v_col_132 IS NULL)) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT() <> 1 THEN
@@ -1339,9 +1339,9 @@ BEGIN
     DECLARE v_func1 DATETIME DEFAULT func1();
     DECLARE v_col_147 DATETIME DEFAULT CAST(func1() AS DATE);
 
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no mysql equivalent */
             DO 0;
     END IF;
     -- UNIQUE: statement uses a table-valued function in FROM, which MySQL does not support; commented out for review:
@@ -1369,7 +1369,7 @@ BEGIN
     DECLARE v_func1 DATETIME DEFAULT func1();
     DECLARE v_col_67 INT DEFAULT COALESCE ( ( SELECT TOP ( 1 ) col_67 FROM tbl_9 WHERE col_30 = 1 ORDER BY col_66 ASC ) , 1440 );
 
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     UPDATE tbl_6 SET col_32 = 0 WHERE col_32 = 1 AND col_31 IN (SELECT col_171.col_31 FROM tbl_6 AS col_171 INNER JOIN tbl_2 AS col_56 ON col_56.col_6 = col_171.col_6 INNER JOIN tbl_1 AS col_11 ON col_11.col_1 = col_56.col_1 WHERE col_32 = 1 AND v_func1 > DATE_ADD(col_11.col_50, INTERVAL v_col_67 MINUTE)) /* xxxxxx xxx xxxxxx xx xx xxxxx xx xxxxxx */ /* xxxx xxx xxxx xxx xx x xxxxxx xxx xx xx xxxx xxxx xx xxxxxx */;
     UPDATE tbl_6 SET col_32 = 0 WHERE col_32 = 1 AND v_func1 > DATE_ADD(COALESCE(col_33, v_func1), INTERVAL 5 MINUTE);
     SELECT DISTINCT col_56.col_1 FROM tbl_2 AS col_56 WHERE EXISTS(SELECT NULL FROM tbl_6 AS col_37 WHERE col_37.col_6 = col_56.col_6 AND col_37.col_32 = 1 AND (v_col_13 IS NULL OR col_37.col_13 = v_col_13)) AND (v_col_1 IS NULL OR col_56.col_1 = v_col_1);
@@ -1395,9 +1395,9 @@ CREATE PROCEDURE proc_27
 BEGIN
     DECLARE v_col_6 CHAR(36) DEFAULT ( SELECT col_6 FROM tbl_2 WHERE col_1 = v_col_1 );
 
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no mysql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no mysql equivalent */
             DO 0;
     END IF;
     IF ( v_col_6 IS NOT NULL ) THEN
@@ -1422,7 +1422,7 @@ CREATE TRIGGER col_173
 AFTER UPDATE ON tbl_6
 FOR EACH ROW
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no mysql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no mysql equivalent */
     DECLARE v_func1 DATETIME DEFAULT func1();
     DECLARE v_col_174 INT DEFAULT COALESCE((SELECT 1 FROM tbl_9 WHERE NOT col_96 IS NULL AND col_30 = 1), 0);
     IF NOT (NEW.col_32 <=> OLD.col_32) THEN

@@ -171,7 +171,7 @@ CREATE OR REPLACE PROCEDURE proc_13
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF v_val IS NOT NULL THEN
             v_where := COALESCE(v_where || ' AND ', '') || v_col || ' ' || v_op || ' ' || v_param;
     END IF;
@@ -189,7 +189,7 @@ CREATE OR REPLACE PROCEDURE proc_14
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     v_page := NULL;
     IF v_filter IS NOT NULL THEN
             v_query := v_query || ' ' || v_filter;
@@ -272,9 +272,9 @@ CREATE OR REPLACE PROCEDURE proc_1
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     SELECT * FROM (SELECT DISTINCT col_3.col_1, col_3.col_4, col_5.col_6, col_5.col_7, col_8.col_9, col_8.col_10 FROM tbl_1 AS col_11 INNER JOIN tbl_2 AS col_3 ON col_3.col_1 = col_11.col_1 INNER JOIN tbl_3 AS col_5 ON col_5.col_6 = col_3.col_6 LEFT JOIN tbl_4 AS col_8 ON col_5.col_6 = col_8.col_6 WHERE col_3.col_1 = v_col_1 AND (col_8.col_6 IS NULL OR (col_8.col_12 = 1 AND col_8.col_13 = col_11.col_13)) UNION ALL SELECT v_col_1 AS col_1, 0 AS col_4, NULL AS col_6, NULL AS col_7, NULL AS col_9, NULL AS col_10) AS col_14 ORDER BY col_4 DESC NULLS LAST LIMIT 1;
@@ -304,12 +304,12 @@ DECLARE
     v_func1 TIMESTAMP := func1 ( );
     v_col_6 UUID := NULL;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     CREATE TEMPORARY TABLE v_col_16 (
       col_17 UUID
     );  /* UNIQUE: was T-SQL table variable v_col_16 */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     IF ( v_col_1 IS NOT NULL ) THEN
@@ -342,9 +342,9 @@ CREATE OR REPLACE PROCEDURE proc_3
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     SELECT col_22.col_23, col_22.col_24 AS col_25, col_22.col_26 AS col_27, CAST(NULL AS TEXT) AS value, col_22.col_28 AS col_29 FROM tbl_5 AS col_22 WHERE col_22.col_30 = 1 ORDER BY col_22.col_28 ASC NULLS FIRST;
@@ -371,9 +371,9 @@ AS $$
 DECLARE
     v_func1 TIMESTAMP := func1 ( );
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     UPDATE tbl_6 SET col_32 = 1, col_18 = v_func1 WHERE col_31 = v_col_31 AND col_32 = 0 AND NOT EXISTS(SELECT NULL FROM tbl_7 WHERE col_31 = v_col_31);
@@ -400,9 +400,9 @@ CREATE OR REPLACE PROCEDURE proc_5
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     SELECT col_45.col_46 AS col_47, col_45.col_48 AS col_49, col_11.col_50 AS col_51, col_52.col_46 AS col_53, COALESCE((SELECT 1 FROM tbl_8 WHERE col_31 = v_col_31 AND col_39 = 1 /* xxxxxx xx xx col_6 xx xxxxxx */ ORDER BY col_31 ASC NULLS FIRST LIMIT 1), 0) AS col_54, COALESCE((SELECT 1 FROM tbl_7 WHERE col_31 = v_col_31 /* xx xx xx xxxxxx xx col_161 */ AND EXISTS(SELECT NULL FROM tbl_9 WHERE col_30 = 1 AND NOT col_43 IS NULL) ORDER BY col_31 ASC NULLS FIRST LIMIT 1), 0) AS col_55 FROM tbl_6 AS col_37 INNER JOIN tbl_2 AS col_56 ON col_37.col_6 = col_56.col_6 INNER JOIN tbl_1 AS col_11 ON col_56.col_1 = col_11.col_1 INNER JOIN tbl_10 AS col_45 ON col_11.col_13 = col_45.col_13 INNER JOIN tbl_11 AS col_57 ON col_11.col_58 = col_57.col_59 INNER JOIN tbl_12 AS col_52 ON col_57.col_60 = col_52.col_59 WHERE col_37.col_31 = v_col_31;
@@ -451,9 +451,9 @@ DECLARE
     v_col_17 INTEGER := NULL;
     v_col_12 INTEGER := NULL;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     IF ( ( v_col_6 IS NULL ) OR ( v_col_42 IS NULL ) ) THEN
@@ -626,7 +626,7 @@ CREATE OR REPLACE PROCEDURE proc_7
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     CREATE TEMPORARY TABLE v_col_92 (
       col_17 UUID
     );  /* UNIQUE: was T-SQL table variable v_col_92 */
@@ -657,7 +657,7 @@ CREATE OR REPLACE PROCEDURE proc_8
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     CREATE TEMPORARY TABLE v_col_92 (
       col_17 INT
     );  /* UNIQUE: was T-SQL table variable v_col_92 */
@@ -703,7 +703,7 @@ CREATE OR REPLACE PROCEDURE proc_9
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     CREATE TEMPORARY TABLE v_col_92 (
       col_17 INT
     );  /* UNIQUE: was T-SQL table variable v_col_92 */
@@ -742,7 +742,7 @@ CREATE OR REPLACE PROCEDURE proc_10
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     UPDATE tbl_7 SET col_15 = v_col_15, col_18 = v_col_18, col_98 = v_col_98, col_99 = v_col_99 WHERE (col_97 = v_col_100) AND (col_31 = v_col_101) AND (col_23 = v_col_102) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL)) AND ((col_98 = v_col_105) OR (col_98 IS NULL AND v_col_105 IS NULL)) AND ((col_99 = v_col_106) OR (col_99 IS NULL AND v_col_106 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT <> 1 THEN
@@ -778,7 +778,7 @@ CREATE OR REPLACE PROCEDURE proc_11
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     INSERT INTO tbl_7 (col_97, col_31, col_23, col_15, col_18, col_98, col_99) VALUES (v_col_97, v_col_31, v_col_23, v_col_15, v_col_18, v_col_98, v_col_99);
 END;
 $$;
@@ -812,9 +812,9 @@ DECLARE
     v_col_109 TEXT;
     v_col_110 TEXT;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     IF v_col_97 IS NOT NULL AND v_col_31 IS NOT NULL AND v_col_23 IS NOT NULL AND v_col_107 IS NULL THEN
@@ -862,7 +862,7 @@ CREATE OR REPLACE PROCEDURE proc_15
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     DELETE FROM tbl_7 WHERE (col_97 = v_col_100) AND (col_31 = v_col_101) AND (col_23 = v_col_102) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL)) AND ((col_98 = v_col_105) OR (col_98 IS NULL AND v_col_105 IS NULL)) AND ((col_99 = v_col_106) OR (col_99 IS NULL AND v_col_106 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT <> 1 THEN
@@ -899,7 +899,7 @@ CREATE OR REPLACE PROCEDURE proc_16
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     UPDATE tbl_8 SET col_15 = v_col_15, col_18 = v_col_18, col_31 = v_col_31, col_39 = v_col_39, col_94 = v_col_94 WHERE (col_93 = v_col_112) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL)) AND ((col_31 = v_col_101) OR (col_31 IS NULL AND v_col_101 IS NULL)) AND ((col_39 = v_col_113) OR (col_39 IS NULL AND v_col_113 IS NULL)) AND ((col_94 = v_col_114) OR (col_94 IS NULL AND v_col_114 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT <> 1 THEN
@@ -940,9 +940,9 @@ DECLARE
     v_col_109 TEXT;
     v_col_110 TEXT;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     IF v_col_93 IS NOT NULL AND v_col_107 IS NULL THEN
@@ -988,7 +988,7 @@ CREATE OR REPLACE PROCEDURE proc_18
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     DELETE FROM tbl_8 WHERE (col_93 = v_col_112) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL)) AND ((col_31 = v_col_101) OR (col_31 IS NULL AND v_col_101 IS NULL)) AND ((col_39 = v_col_113) OR (col_39 IS NULL AND v_col_113 IS NULL)) AND ((col_94 = v_col_114) OR (col_94 IS NULL AND v_col_114 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT <> 1 THEN
@@ -1055,7 +1055,7 @@ CREATE OR REPLACE PROCEDURE proc_19
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     UPDATE tbl_6 SET col_6 = v_col_6, col_32 = v_col_32, col_33 = v_col_33, col_12 = v_col_12, col_42 = v_col_42, col_62 = v_col_62, col_13 = v_col_13, col_9 = v_col_9, col_10 = v_col_10, col_74 = v_col_74, col_38 = v_col_38, col_95 = v_col_95, col_96 = v_col_96, col_72 = v_col_72, col_73 = v_col_73, col_63 = v_col_63, col_19 = v_col_19, col_20 = v_col_20, col_15 = v_col_15, col_18 = v_col_18 WHERE (col_31 = v_col_101) AND ((col_6 = v_col_115) OR (col_6 IS NULL AND v_col_115 IS NULL)) AND ((col_32 = v_col_116) OR (col_32 IS NULL AND v_col_116 IS NULL)) AND ((col_33 = v_col_117) OR (col_33 IS NULL AND v_col_117 IS NULL)) AND ((col_12 = v_col_118) OR (col_12 IS NULL AND v_col_118 IS NULL)) AND ((col_42 = v_col_119) OR (col_42 IS NULL AND v_col_119 IS NULL)) AND ((col_62 = v_col_120) OR (col_62 IS NULL AND v_col_120 IS NULL)) AND ((col_13 = v_col_121) OR (col_13 IS NULL AND v_col_121 IS NULL)) AND ((col_9 = v_col_122) OR (col_9 IS NULL AND v_col_122 IS NULL)) AND ((col_10 = v_col_123) OR (col_10 IS NULL AND v_col_123 IS NULL)) AND ((col_74 = v_col_124) OR (col_74 IS NULL AND v_col_124 IS NULL)) AND ((col_38 = v_col_125) OR (col_38 IS NULL AND v_col_125 IS NULL)) AND ((col_95 = v_col_126) OR (col_95 IS NULL AND v_col_126 IS NULL)) AND ((col_96 = v_col_127) OR (col_96 IS NULL AND v_col_127 IS NULL)) AND ((col_72 = v_col_128) OR (col_72 IS NULL AND v_col_128 IS NULL)) AND ((col_73 = v_col_129) OR (col_73 IS NULL AND v_col_129 IS NULL)) AND ((col_63 = v_col_130) OR (col_63 IS NULL AND v_col_130 IS NULL)) AND ((col_19 = v_col_131) OR (col_19 IS NULL AND v_col_131 IS NULL)) AND ((col_20 = v_col_132) OR (col_20 IS NULL AND v_col_132 IS NULL)) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT <> 1 THEN
@@ -1111,9 +1111,9 @@ DECLARE
     v_col_109 TEXT;
     v_col_110 TEXT;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     IF v_col_31 IS NOT NULL AND v_col_107 IS NULL THEN
@@ -1189,7 +1189,7 @@ CREATE OR REPLACE PROCEDURE proc_21
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     DELETE FROM tbl_6 WHERE (col_31 = v_col_101) AND ((col_6 = v_col_115) OR (col_6 IS NULL AND v_col_115 IS NULL)) AND ((col_32 = v_col_116) OR (col_32 IS NULL AND v_col_116 IS NULL)) AND ((col_33 = v_col_117) OR (col_33 IS NULL AND v_col_117 IS NULL)) AND ((col_12 = v_col_118) OR (col_12 IS NULL AND v_col_118 IS NULL)) AND ((col_42 = v_col_119) OR (col_42 IS NULL AND v_col_119 IS NULL)) AND ((col_62 = v_col_120) OR (col_62 IS NULL AND v_col_120 IS NULL)) AND ((col_13 = v_col_121) OR (col_13 IS NULL AND v_col_121 IS NULL)) AND ((col_9 = v_col_122) OR (col_9 IS NULL AND v_col_122 IS NULL)) AND ((col_10 = v_col_123) OR (col_10 IS NULL AND v_col_123 IS NULL)) AND ((col_74 = v_col_124) OR (col_74 IS NULL AND v_col_124 IS NULL)) AND ((col_38 = v_col_125) OR (col_38 IS NULL AND v_col_125 IS NULL)) AND ((col_95 = v_col_126) OR (col_95 IS NULL AND v_col_126 IS NULL)) AND ((col_96 = v_col_127) OR (col_96 IS NULL AND v_col_127 IS NULL)) AND ((col_72 = v_col_128) OR (col_72 IS NULL AND v_col_128 IS NULL)) AND ((col_73 = v_col_129) OR (col_73 IS NULL AND v_col_129 IS NULL)) AND ((col_63 = v_col_130) OR (col_63 IS NULL AND v_col_130 IS NULL)) AND ((col_19 = v_col_131) OR (col_19 IS NULL AND v_col_131 IS NULL)) AND ((col_20 = v_col_132) OR (col_20 IS NULL AND v_col_132 IS NULL)) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT <> 1 THEN
@@ -1228,7 +1228,7 @@ CREATE OR REPLACE PROCEDURE proc_22
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     UPDATE tbl_3 SET col_7 = v_col_7, col_91 = v_col_91, col_19 = v_col_19, col_20 = v_col_20, col_15 = v_col_15, col_18 = v_col_18 WHERE (col_6 = v_col_115) AND ((col_7 = v_col_133) OR (col_7 IS NULL AND v_col_133 IS NULL)) AND ((col_91 = v_col_134) OR (col_91 IS NULL AND v_col_134 IS NULL)) AND ((col_19 = v_col_131) OR (col_19 IS NULL AND v_col_131 IS NULL)) AND ((col_20 = v_col_132) OR (col_20 IS NULL AND v_col_132 IS NULL)) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT <> 1 THEN
@@ -1270,9 +1270,9 @@ DECLARE
     v_col_109 TEXT;
     v_col_110 TEXT;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     IF v_col_6 IS NOT NULL AND v_col_107 IS NULL THEN
@@ -1320,7 +1320,7 @@ CREATE OR REPLACE PROCEDURE proc_24
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     DELETE FROM tbl_3 WHERE (col_6 = v_col_115) AND ((col_7 = v_col_133) OR (col_7 IS NULL AND v_col_133 IS NULL)) AND ((col_91 = v_col_134) OR (col_91 IS NULL AND v_col_134 IS NULL)) AND ((col_19 = v_col_131) OR (col_19 IS NULL AND v_col_131 IS NULL)) AND ((col_20 = v_col_132) OR (col_20 IS NULL AND v_col_132 IS NULL)) AND ((col_15 = v_col_103) OR (col_15 IS NULL AND v_col_103 IS NULL)) AND ((col_18 = v_col_104) OR (col_18 IS NULL AND v_col_104 IS NULL));
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
     IF ROW_COUNT <> 1 THEN
@@ -1362,9 +1362,9 @@ DECLARE
     v_func1 TIMESTAMP := func1 ( );
     v_col_147 TIMESTAMP := CAST ( func1 ( ) AS DATE );
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     SELECT col_1, col_50, col_148, CASE WHEN col_148 = 'A' THEN v_col_144 WHEN col_148 = 'B' THEN v_col_145 WHEN col_148 = 'C' THEN v_col_146 ELSE v_col_144 END AS col_149, col_150, col_58, col_13, col_151, col_152, col_137, col_60, col_153, col_154, col_138, col_155, CASE WHEN NOT col_156 IS NULL THEN v_col_143 WHEN NOT col_157 IS NULL THEN v_col_143 WHEN NOT col_158 IS NULL THEN v_col_142 WHEN NOT col_159 IS NULL THEN v_col_141 ELSE v_col_140 END AS col_160, col_159, col_158, col_157, col_156, col_161 FROM (SELECT DISTINCT col_11.col_1, col_11.col_50, col_11.col_162 AS col_148, col_11.col_58 AS col_150, col_57.col_163 AS col_58, col_11.col_13, col_45.col_46 AS col_151, COALESCE(col_37.col_10, col_45.col_164, col_45.col_165, col_45.col_166) AS col_152, col_57.col_60 AS col_137, col_52.col_46 AS col_60, col_52.col_153, col_167.col_163 AS col_154, col_52.col_155 AS col_138, col_22.col_163 AS col_155, (SELECT MIN(col_40.col_94) FROM tbl_8 AS col_40 WHERE col_40.col_31 IN (SELECT col_31 FROM tbl_6 AS col_168 WHERE col_168.col_6 = col_37.col_6 AND col_168.col_12 IN (0, 1) /* xxxxxx col_151 */) AND col_40.col_39 = 1 /* xxxxxx xx xx col_6 xx xxxxxx */) AS col_159, (SELECT MIN(col_40.col_94) FROM tbl_8 AS col_40 WHERE col_40.col_31 IN (SELECT col_31 FROM tbl_6 AS col_168 WHERE col_168.col_6 = col_37.col_6 AND col_168.col_12 IN (0, 1, 2) /* xxxxxx col_151 col_60 */) AND col_40.col_39 = 3 /* xxxxxx xx xx xxxxxx */) AS col_158, (SELECT MAX(col_40.col_94) FROM tbl_8 AS col_40 WHERE col_40.col_31 IN (SELECT col_31 FROM tbl_6 AS col_168 WHERE col_168.col_6 = col_37.col_6 AND col_168.col_12 IN (0, 1, 2) /* xxxxxx col_151 col_60 */) AND col_40.col_39 = 4 /* xxxxxx xx xx xxxxxx */) AS col_157, (SELECT MAX(col_40.col_94) FROM tbl_8 AS col_40 WHERE col_40.col_31 IN (SELECT col_31 FROM tbl_6 AS col_168 WHERE col_168.col_6 = col_37.col_6 AND col_168.col_12 IN (0, 1) /* xxxxxx col_151 col_60 */) AND col_40.col_39 = 2 /* xxxxxx xx xx col_6 xx xxxxxx */) AS col_156, COALESCE((SELECT 1 FROM tbl_7 WHERE col_31 = col_37.col_31 ORDER BY col_31 ASC NULLS FIRST /* xxxxxx xx xx xxxxxx xx col_161 */ LIMIT 1), 0) AS col_161 FROM tbl_1 AS col_11 INNER JOIN tbl_2 AS col_56 ON col_11.col_1 = col_56.col_1 INNER JOIN tbl_6 AS col_37 ON col_37.col_6 = col_56.col_6 INNER JOIN tbl_10 AS col_45 ON col_11.col_13 = col_45.col_13 INNER JOIN tbl_11 AS col_57 ON col_11.col_58 = col_57.col_59 INNER JOIN tbl_12 AS col_52 ON col_57.col_60 = col_52.col_59 INNER JOIN tbl_14 AS col_167 ON col_52.col_153 = col_167.col_153 INNER JOIN tbl_15 AS col_22 ON col_52.col_155 = col_22.col_59 WHERE col_11.col_50 BETWEEN COALESCE(v_col_135, v_col_147) AND COALESCE(v_col_136, v_func1) AND col_37.col_12 = 1 /* col_151 */ AND col_37.col_13 = col_11.col_13 AND col_37.col_42 = 0 AND (v_col_1 IS NULL OR col_11.col_1 = v_col_1) AND (v_col_137 IS NULL OR col_57.col_60 = v_col_137) AND (v_col_138 IS NULL OR col_52.col_155 = v_col_138) AND (v_col_139 IS NULL OR col_11.col_162 IN (SELECT item FROM FUNC5(v_col_139, ',')))) AS col_160 ORDER BY col_50 ASC NULLS FIRST;
@@ -1392,7 +1392,7 @@ DECLARE
     v_func1 TIMESTAMP := func1 ( );
     v_col_67 INTEGER := COALESCE ( ( SELECT TOP ( 1 ) col_67 FROM tbl_9 WHERE col_30 = 1 ORDER BY col_66 ASC ) , 1440 );
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     UPDATE tbl_6 SET col_32 = 0 WHERE col_32 = 1 AND col_31 IN (SELECT col_171.col_31 FROM tbl_6 AS col_171 INNER JOIN tbl_2 AS col_56 ON col_56.col_6 = col_171.col_6 INNER JOIN tbl_1 AS col_11 ON col_11.col_1 = col_56.col_1 WHERE col_32 = 1 AND v_func1 > col_11.col_50 || INTERVAL '1 MINUTE' * v_col_67) /* xxxxxx xxx xxxxxx xx xx xxxxx xx xxxxxx */ /* xxxx xxx xxxx xxx xx x xxxxxx xxx xx xx xxxx xxxx xx xxxxxx */;
     UPDATE tbl_6 SET col_32 = 0 WHERE col_32 = 1 AND v_func1 > COALESCE(col_33, v_func1) || INTERVAL '5 MINUTE';
     SELECT DISTINCT col_56.col_1 FROM tbl_2 AS col_56 WHERE EXISTS(SELECT NULL FROM tbl_6 AS col_37 WHERE col_37.col_6 = col_56.col_6 AND col_37.col_32 = 1 AND (v_col_13 IS NULL OR col_37.col_13 = v_col_13)) AND (v_col_1 IS NULL OR col_56.col_1 = v_col_1);
@@ -1419,9 +1419,9 @@ AS $$
 DECLARE
     v_col_6 UUID := ( SELECT col_6 FROM tbl_2 WHERE col_1 = v_col_1 );
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT v_col_2 -- no postgresql equivalent */
+            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     IF ( v_col_6 IS NOT NULL ) THEN
@@ -1449,7 +1449,7 @@ DECLARE
     v_func1 TIMESTAMP := func1 ( );
     v_col_174 INTEGER := COALESCE ( ( SELECT 1 FROM tbl_9 WHERE col_96 IS NOT NULL AND col_30 = 1 ) , 0 );
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- no postgresql equivalent */
+    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     IF (NEW.col_32 IS DISTINCT FROM OLD.col_32) THEN
             /* xxxxxx xxxx xxxxxx */
             -- UNIQUE: trigger uses the T-SQL set-based inserted/deleted pseudo-tables, which have no row-level (NEW/OLD) equivalent. Rewrite manually (PostgreSQL: a statement-level trigger with REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted; Oracle: a compound trigger; MySQL: no transition tables). Original:
