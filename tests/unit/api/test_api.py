@@ -39,6 +39,12 @@ class TestInfo:
         assert resp.status_code == 200
         assert resp.json()["version"] == "v0.02"
 
+    def test_version_label_is_derived_from_package_version(self) -> None:
+        # The UI label tracks unique.__version__ so a release needs no HTML edit.
+        from unique.api.app import _display_version
+
+        assert _display_version() == "v0.02"
+
     def test_info_db_disabled_by_default(self, client: TestClient) -> None:
         resp = client.get("/api/v1/info")
         assert resp.json()["db_connection_enabled"] is False
@@ -176,6 +182,18 @@ class TestUI:
         assert "CodeMirror" in body
         for cdn in ("cdnjs", "unpkg", "jsdelivr", "googleapis"):
             assert cdn not in body, f"external resource {cdn} must not be referenced"
+
+    def test_logo_is_served(self, client: TestClient) -> None:
+        resp = client.get("/static/logo.svg")
+        assert resp.status_code == 200
+        assert resp.headers["content-type"].startswith("image/svg")
+        assert "<svg" in resp.text
+
+    def test_logo_precedes_title_in_header(self, client: TestClient) -> None:
+        body = client.get("/").text
+        header = body[body.index("<header>") : body.index("</header>")]
+        assert "logo.svg" in header
+        assert header.index("logo.svg") < header.index("<h1>")
 
 
 class TestTranspileFile:

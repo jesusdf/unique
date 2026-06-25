@@ -22,8 +22,22 @@ from unique.core.transpiler import TranspileOptions, Transpiler
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
+
+def _display_version() -> str:
+    """The version label shown in the UI, derived from the package version.
+
+    Renders ``major.minor`` with the minor zero-padded to two digits and a
+    leading ``v`` (e.g. ``0.2.0`` -> ``v0.02``), so the label tracks
+    ``unique.__version__`` and never has to be edited by hand on a release.
+    """
+    parts = __version__.split(".")
+    major = parts[0] if parts else "0"
+    minor = parts[1] if len(parts) > 1 else "0"
+    return f"v{major}.{int(minor):02d}"
+
+
 #: The version label shown in the UI and reported by /api/v1/info.
-DISPLAY_VERSION = "v0.02"
+DISPLAY_VERSION = _display_version()
 
 
 def _db_connection_enabled() -> bool:
