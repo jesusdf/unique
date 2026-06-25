@@ -1242,26 +1242,8 @@ class ProceduralEmitter:
         return s, ""
 
     def _emit_return(self, node: ReturnStatement) -> str:
-        # In a MySQL procedure, RETURN is illegal whether or not it has a value
-        # (a T-SQL procedure RETURN <code> has no MySQL equivalent). Translate
-        # to LEAVE of the labeled procedure block; document a discarded value.
-        if (
-            self._dialect == "mysql"
-            and not self._in_mysql_function
-            and self._proc_leave_label
-        ):
-            if node.value:
-                val = self._emit_node(node.value)
-                return (
-                    f"LEAVE {self._proc_leave_label};  "
-                    f"-- UNIQUE: discarded procedure RETURN value ({val})"
-                )
-            return f"LEAVE {self._proc_leave_label};"
-        # A PostgreSQL procedure cannot RETURN a value; emit a bare RETURN and
-        # document the discarded code (a T-SQL RETURN <code> has no PG meaning).
-        if self._dialect == "postgresql" and self._in_pg_procedure and node.value:
-            val = self._emit_node(node.value)
-            return f"RETURN;  -- UNIQUE: discarded procedure RETURN value ({val})"
+        """Default RETURN: ``RETURN [value];``. MySQL and PostgreSQL override
+        this where a procedure cannot return a value."""
         if node.value:
             val = self._emit_node(node.value)
             return f"RETURN {val};"
@@ -1527,6 +1509,17 @@ class PostgresEmitter(ProceduralEmitter):
     ) -> str:
         return self._emit_pg_procedure_body(header, declarations, body_stmts)
 
+    def _emit_return(self, node: ReturnStatement) -> str:
+        # A PostgreSQL procedure cannot RETURN a value; emit a bare RETURN and
+        # document the discarded code (a T-SQL RETURN <code> has no PG meaning).
+        if self._in_pg_procedure and node.value:
+            val = self._emit_node(node.value)
+            return f"RETURN;  -- UNIQUE: discarded procedure RETURN value ({val})"
+        if node.value:
+            val = self._emit_node(node.value)
+            return f"RETURN {val};"
+        return "RETURN;"
+
 
 class MySqlEmitter(ProceduralEmitter):
     """MySQL procedural emitter."""
@@ -1560,6 +1553,23 @@ class MySqlEmitter(ProceduralEmitter):
         self._indent_level -= 1
         lines.append("END;")
         return "\n".join(lines)
+
+    def _emit_return(self, node: ReturnStatement) -> str:
+        # In a MySQL procedure, RETURN is illegal whether or not it has a value
+        # (a T-SQL procedure RETURN <code> has no MySQL equivalent). Translate
+        # to LEAVE of the labeled procedure block; document a discarded value.
+        if not self._in_mysql_function and self._proc_leave_label:
+            if node.value:
+                val = self._emit_node(node.value)
+                return (
+                    f"LEAVE {self._proc_leave_label};  "
+                    f"-- UNIQUE: discarded procedure RETURN value ({val})"
+                )
+            return f"LEAVE {self._proc_leave_label};"
+        if node.value:
+            val = self._emit_node(node.value)
+            return f"RETURN {val};"
+        return "RETURN;"
 
 
 _EMITTER_REGISTRY: dict[str, type[ProceduralEmitter]] = {
