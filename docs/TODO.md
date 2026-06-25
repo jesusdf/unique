@@ -14,24 +14,19 @@ Last reviewed: 2026-06-24.
 
 ---
 
-## 0. Refactor: per-engine procedural emitter/transformer (plugin architecture) (P1)
+## 0. Refactor: per-engine procedural emitter/transformer (plugin architecture) (P1) — DONE
+
+**Status: complete.** All sub-items below are done, CI green, and the docs
+(`02-architecture.md`, `05-procedural-engine.md`) and skills updated to describe
+the per-engine plugin layout. Kept here as a record; the bullet history can be
+archived to DONE.md.
 
 **Why:** the procedural engine (`src/unique/core/procedural/`) is the novel
-value-add over sqlglot, but it does **not** follow the plugin architecture the
+value-add over sqlglot, but it did **not** follow the plugin architecture the
 project promises elsewhere ("each dialect a self-contained plugin; adding an
-engine doesn't touch the core"). Instead it carries ~126 target-dialect
-conditionals (`if self._dialect == "mysql"` …): 0 in lexer, 11 in parser
-(source-family only), 58 in transformer, 68 in emitter. Adding a 5th engine
-today means hunting and editing dozens of methods.
-
-**Direction:** keep the lexer engine-agnostic and the parser split only by
-*source* family (T-SQL vs PL/SQL). Refactor the *target*-dependent pieces
-(emitter, then transformer) into a **base class + one subclass per engine**
-(Strategy / Template Method), with a factory choosing the subclass. The emitter
-is already half-way there (`_emit_{tsql,oracle,pg,mysql}_procedure_body`); the
-goal is to make every per-engine branch an overridable method instead of an
-`if/elif` chain. Pure refactor — output must not change, fixtures must not move,
-suite stays green at every checkpoint.
+engine doesn't touch the core"). It carried ~126 target-dialect conditionals
+(`if self._dialect == "mysql"` …): 0 in lexer, 11 in parser (source-family
+only), 58 in transformer, 68 in emitter.
 
 - [x] **Emitter**: extract `ProceduralEmitter` base + `TSqlEmitter`,
       `OracleEmitter`, `PostgresEmitter`, `MySqlEmitter`; factory by target.

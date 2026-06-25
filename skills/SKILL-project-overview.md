@@ -25,7 +25,12 @@ from versions 2012 onward.
 
 2. **Plugin architecture** — Each database dialect is a self-contained plugin that
    implements a `Dialect` interface with a `Parser` and an `Emitter`. Adding a new
-   engine means adding a new plugin without touching the core.
+   engine means adding a new plugin without touching the core. The **procedural
+   engine follows the same per-engine shape**: its emitter and transformer are
+   packages with a `base.py` (shared logic + overridable hooks) and one
+   self-registering module per target (`tsql.py`, `oracle.py`, …) selected by a
+   factory — no `if dialect == …` dispatch in the base. Adding an engine there is
+   one new emitter module + one new transformer module.
 
 3. **Python 3.12** — the single supported/CI version (ecosystem richness,
    readability, tooling). sqlglot does the per-statement parsing; Unique adds an
@@ -65,11 +70,15 @@ unique/
 │   │   ├── registry.py           # Plugin registry (entry-point discovery)
 │   │   ├── errors.py             # Custom exceptions
 │   │   └── procedural/           # Autonomous procedural engine
-│   │       ├── lexer.py          #   tokenizer for procedural SQL
-│   │       ├── parser.py         #   recursive descent (T-SQL + PL/SQL)
-│   │       ├── transformer.py    #   dialect-aware AST transforms
-│   │       └── emitter.py        #   target-dialect code generation
-│   ├── dialects/{tsql,oracle,postgresql,mysql}/   # Dialect plugins
+│   │       ├── lexer.py          #   tokenizer for procedural SQL (engine-agnostic)
+│   │       ├── parser.py         #   recursive descent (T-SQL + PL/SQL families)
+│   │       ├── transformer/      #   per-target transform plugins
+│   │       │   ├── base.py       #     shared + source/pair logic, factory, maps
+│   │       │   └── {tsql,oracle,postgresql,mysql}.py
+│   │       └── emitter/          #   per-target emission plugins
+│   │           ├── base.py       #     shared structure + overridable hooks, factory
+│   │           └── {tsql,oracle,postgresql,mysql}.py
+│   ├── dialects/{tsql,oracle,postgresql,mysql}/   # Dialect plugins (DML/DDL via sqlglot)
 │   ├── cli/                      # CLI entry point
 │   └── api/                      # REST API (FastAPI) + web UI
 ├── web/                          # Web UI source + build (build.py)

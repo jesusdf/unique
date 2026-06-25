@@ -114,7 +114,13 @@ Tokenizes procedural SQL into a stream of typed tokens:
 
 ### 3. ProceduralParser (`core/procedural/parser.py`)
 
-Recursive descent parser producing IR AST nodes:
+Recursive descent parser producing IR AST nodes. The parser depends on the
+*source* dialect, of which there are only two syntactic families — T-SQL and
+PL/SQL (Oracle/PostgreSQL/MySQL). That distinction is named by
+`_is_tsql_source()` and centralized in `_parse_routine_body()`, rather than
+scattered `if dialect == "tsql"` checks, so the parser stays a single class
+(a 4-way subclass split would be over-structure for an almost-entirely-shared
+body).
 
 ```
 parse_batch()
@@ -144,9 +150,22 @@ parse_body()
   └── parse_embedded_dml()  → delegates to sqlglot
 ```
 
-### 4. ProceduralTransformer (`core/procedural/transformer.py`)
+### 4. ProceduralTransformer (`core/procedural/transformer/`)
 
-Dialect-aware transformations on the procedural IR:
+A per-target package: `base.py` holds `ProceduralTransformer` (the shared
+transform logic, the type/function mapping tables, and the
+source/pair-dependent logic), and `tsql.py`/`oracle.py`/`postgresql.py`/
+`mysql.py` each hold one target subclass. `ProceduralTransformer(source,
+target)` is a factory that returns the registered target subclass.
+
+Because a transform is a *source → target* operation, only genuinely
+target-only decisions are overridden in a subclass (e.g. `_system_var_map`,
+`_uses_set_statement`, `_transform_try_catch`, `_update_predicate`). Logic that
+depends on the *pair* (e.g. variable naming `@x`→`V_X`/`v_x`/`@x`) or only on
+the *source* stays in the base parameterized by `self._source` — forcing it
+into a target-only subclass would be incorrect.
+
+Representative source→target mappings:
 
 | Source (T-SQL)                | Target (Oracle)                     |
 |-------------------------------|-------------------------------------|
@@ -158,11 +177,6 @@ Dialect-aware transformations on the procedural IR:
 | `WHILE ... BEGIN...END`      | `WHILE ... LOOP...END LOOP;`       |
 | `EXEC(@sql)`                 | `EXECUTE IMMEDIATE sql;`           |
 | `SET NOCOUNT ON`             | (removed)                          |
-| `TOP(1)`                     | `ROWNUM = 1` / `FETCH FIRST`      |
-| `ISNULL(a,b)`               | `NVL(a,b)`                         |
-| `GETDATE()`                  | `SYSDATE` / `NOW()`               |
-| `UNIQUEIDENTIFIER`           | `RAW(16)` / `UUID`                |
-| `SCOPE_IDENTITY()`           | sequence `.CURRVAL`                |
 | `@@ROWCOUNT`                 | `SQL%ROWCOUNT`                     |
 | `RAISERROR`                  | `RAISE_APPLICATION_ERROR`          |
 | `TRY...CATCH`               | `EXCEPTION WHEN OTHERS THEN`      |
@@ -170,10 +184,14 @@ Dialect-aware transformations on the procedural IR:
 
 (And the reverse direction, plus PG and MySQL variants.)
 
-### 5. ProceduralEmitter (`core/procedural/emitter.py`)
+### 5. ProceduralEmitter (`core/procedural/emitter/`)
 
-Generates target-dialect procedural SQL from the IR. Each target dialect
-has its own emission rules:
+A per-target package mirroring the transformer: `base.py` holds
+`ProceduralEmitter` (the shared emission structure and the overridable hooks),
+and `tsql.py`/`oracle.py`/`postgresql.py`/`mysql.py` each hold one target
+subclass overriding only what differs. `ProceduralEmitter(dialect)` is a
+factory returning the registered subclass; the base carries **no**
+`if dialect == …` dispatch. Each target's emission shape:
 
 - **T-SQL**: `CREATE PROCEDURE`, `@params`, `BEGIN...END`, `SET @x =`
 - **Oracle**: `CREATE OR REPLACE PROCEDURE`, `IS/AS`, `BEGIN...END;`,
@@ -181,6 +199,10 @@ has its own emission rules:
 - **PostgreSQL**: `CREATE OR REPLACE FUNCTION ... RETURNS void`,
   `$$` dollar-quoting, `LANGUAGE plpgsql`
 - **MySQL**: `CREATE PROCEDURE`, `DELIMITER //`, `BEGIN...END`
+
+Adding a new target engine means adding a `transformer/<engine>.py` and an
+`emitter/<engine>.py` (each self-registering on import) plus a one-line import
+in the package `__init__` — no change to the shared base logic.
 
 ### 6. MetadataResolver (`core/metadata.py`)
 
