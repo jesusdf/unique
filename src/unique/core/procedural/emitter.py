@@ -562,93 +562,48 @@ class ProceduralEmitter:
         return self._emit_procedure_body(header, declarations, body_stmts)
 
     def _emit_trigger(self, node: CreateTriggerStatement) -> str:
+        """Emit a CREATE TRIGGER. The base covers the engines that share a
+        ``header → body → END`` shape (T-SQL, Oracle, MySQL); PostgreSQL, whose
+        trigger body lives in a separate function, overrides this entirely.
+        """
         name = self._qualified_name(node.schema, node.name)
         events = ", ".join(node.events) if node.events else "UPDATE"
         timing = node.timing
 
-        # MySQL has no INSTEAD OF triggers (they apply to views in T-SQL/PG and
-        # have no MySQL form). Document the substitution and fall back to BEFORE
-        # so the trigger is at least syntactically valid for review.
-        instead_of_note = ""
-        if self._dialect == "mysql" and timing.upper().startswith("INSTEAD OF"):
-            instead_of_note = (
-                "-- UNIQUE: MySQL has no INSTEAD OF trigger; emitted as BEFORE "
-                "for review (original was INSTEAD OF, typically on a view).\n"
-            )
-            timing = "BEFORE"
-
-        if self._dialect == "tsql":
-            lines = [f"CREATE TRIGGER {name} ON {node.table}"]
-            lines.append(f"{node.timing} {events}")
-            lines.append("AS")
-            lines.append("BEGIN")
-        elif self._dialect == "oracle":
-            prefix = "CREATE OR REPLACE " if node.or_replace else "CREATE "
-            lines = [f"{prefix}TRIGGER {name}"]
-            lines.append(f"{node.timing} {events} ON {node.table}")
-            if node.for_each == "ROW":
-                lines.append("FOR EACH ROW")
-            lines.append("BEGIN")
-        elif self._dialect == "postgresql":
-            # PostgreSQL triggers call a separate trigger function that returns
-            # a trigger and contains the body. Emit both the function and the
-            # CREATE TRIGGER that invokes it.
-            func_name = f"{node.name}_func"
-            qfunc = self._qualified_name(node.schema, func_name)
-            fn_lines = [
-                f"CREATE OR REPLACE FUNCTION {qfunc}()",
-                "RETURNS TRIGGER",
-                "LANGUAGE plpgsql",
-                "AS $$",
-            ]
-            # Variable declarations must live in a DECLARE section before BEGIN
-            # (PostgreSQL has no inline DECLARE), so hoist them like a routine.
-            trg_decls, trg_body = self._split_declarations(tuple(node.body))
-            if trg_decls:
-                fn_lines.append("DECLARE")
-                self._indent_level = 1
-                for decl in trg_decls:
-                    fn_lines.append(f"{self._indent()}{self._emit_node(decl)}")
-                self._indent_level = 0
-            fn_lines.append("BEGIN")
-            self._indent_level = 1
-            for stmt in trg_body:
-                text = self._emit_node(stmt)
-                for line in text.split("\n"):
-                    fn_lines.append(f"{self._indent()}{line}" if line.strip() else "")
-            self._indent_level = 0
-            # A row-level AFTER trigger conventionally returns NULL; a BEFORE
-            # trigger returns NEW. Default to NEW, which is safe for BEFORE and
-            # ignored for AFTER row-level triggers.
-            fn_lines.append("    RETURN NEW;")
-            fn_lines.append("END;")
-            fn_lines.append("$$;")
-            trg_lines = [
-                f"CREATE OR REPLACE TRIGGER {name}",
-                f"{node.timing} {events} ON {node.table}",
-            ]
-            if node.for_each == "ROW":
-                trg_lines.append("FOR EACH ROW")
-            trg_lines.append(f"EXECUTE FUNCTION {qfunc}();")
-            return "\n".join(fn_lines) + "\n\n" + "\n".join(trg_lines)
-        else:
-            lines = [f"CREATE TRIGGER {name}"]
-            lines.append(f"{timing} {events} ON {node.table}")
-            lines.append("FOR EACH ROW")
-            lines.append("BEGIN")
+        note, timing = self._adjust_trigger_timing(timing)
+        lines = self._trigger_header(name, node, events, timing)
 
         self._indent_level = 1
-        for stmt in node.body:
-            text = self._emit_node(stmt)
-            for line in text.split("\n"):
-                lines.append(f"{self._indent()}{line}" if line.strip() else "")
+        lines.extend(self._emit_indented_stmts(node.body))
         self._indent_level = 0
+        lines.append(self._trigger_end())
+        return note + "\n".join(lines)
 
-        if self._dialect == "oracle":
-            lines.append("END;")
-        else:
-            lines.append("END")
-        return instead_of_note + "\n".join(lines)
+    def _adjust_trigger_timing(self, timing: str) -> tuple[str, str]:
+        """Return (note, timing). Engines that can't honor the requested timing
+        (MySQL has no INSTEAD OF) override to document and rewrite it."""
+        return "", timing
+
+    def _trigger_header(
+        self,
+        name: str,
+        node: CreateTriggerStatement,
+        events: str,
+        timing: str,
+    ) -> list[str]:
+        """The opening lines of a trigger, up to and including ``BEGIN``.
+        Default is the T-SQL form; Oracle and MySQL override."""
+        return [
+            f"CREATE TRIGGER {name} ON {node.table}",
+            f"{node.timing} {events}",
+            "AS",
+            "BEGIN",
+        ]
+
+    def _trigger_end(self) -> str:
+        """The closing line of a trigger body. Default ``END``; Oracle overrides
+        with ``END;``."""
+        return "END"
 
     # ---------------------------------------------------------------
     # Declarations
@@ -1492,6 +1447,23 @@ class OracleEmitter(ProceduralEmitter):
     ) -> str:
         return self._emit_oracle_procedure_body(header, declarations, body_stmts)
 
+    def _trigger_header(
+        self,
+        name: str,
+        node: CreateTriggerStatement,
+        events: str,
+        timing: str,
+    ) -> list[str]:
+        prefix = "CREATE OR REPLACE " if node.or_replace else "CREATE "
+        lines = [f"{prefix}TRIGGER {name}", f"{node.timing} {events} ON {node.table}"]
+        if node.for_each == "ROW":
+            lines.append("FOR EACH ROW")
+        lines.append("BEGIN")
+        return lines
+
+    def _trigger_end(self) -> str:
+        return "END;"
+
 
 class PostgresEmitter(ProceduralEmitter):
     """PostgreSQL PL/pgSQL procedural emitter."""
@@ -1526,6 +1498,48 @@ class PostgresEmitter(ProceduralEmitter):
         return self._emit_pg_procedure_body(
             header, declarations, body_stmts, is_function=True
         )
+
+    def _emit_trigger(self, node: CreateTriggerStatement) -> str:
+        # PostgreSQL triggers call a separate trigger function that returns a
+        # trigger and contains the body. Emit both the function and the CREATE
+        # TRIGGER that invokes it.
+        name = self._qualified_name(node.schema, node.name)
+        events = ", ".join(node.events) if node.events else "UPDATE"
+        func_name = f"{node.name}_func"
+        qfunc = self._qualified_name(node.schema, func_name)
+        fn_lines = [
+            f"CREATE OR REPLACE FUNCTION {qfunc}()",
+            "RETURNS TRIGGER",
+            "LANGUAGE plpgsql",
+            "AS $$",
+        ]
+        # Variable declarations must live in a DECLARE section before BEGIN
+        # (PostgreSQL has no inline DECLARE), so hoist them like a routine.
+        trg_decls, trg_body = self._split_declarations(tuple(node.body))
+        if trg_decls:
+            fn_lines.append("DECLARE")
+            self._indent_level = 1
+            for decl in trg_decls:
+                fn_lines.append(f"{self._indent()}{self._emit_node(decl)}")
+            self._indent_level = 0
+        fn_lines.append("BEGIN")
+        self._indent_level = 1
+        fn_lines.extend(self._emit_indented_stmts(trg_body))
+        self._indent_level = 0
+        # A row-level AFTER trigger conventionally returns NULL; a BEFORE
+        # trigger returns NEW. Default to NEW, which is safe for BEFORE and
+        # ignored for AFTER row-level triggers.
+        fn_lines.append("    RETURN NEW;")
+        fn_lines.append("END;")
+        fn_lines.append("$$;")
+        trg_lines = [
+            f"CREATE OR REPLACE TRIGGER {name}",
+            f"{node.timing} {events} ON {node.table}",
+        ]
+        if node.for_each == "ROW":
+            trg_lines.append("FOR EACH ROW")
+        trg_lines.append(f"EXECUTE FUNCTION {qfunc}();")
+        return "\n".join(fn_lines) + "\n\n" + "\n".join(trg_lines)
 
     def _emit_return(self, node: ReturnStatement) -> str:
         # A PostgreSQL procedure cannot RETURN a value; emit a bare RETURN and
@@ -1588,6 +1602,32 @@ class MySqlEmitter(ProceduralEmitter):
         return self._emit_mysql_procedure_body(
             header, declarations, body_stmts, is_function=True
         )
+
+    def _adjust_trigger_timing(self, timing: str) -> tuple[str, str]:
+        # MySQL has no INSTEAD OF triggers (they apply to views in T-SQL/PG and
+        # have no MySQL form). Document the substitution and fall back to BEFORE
+        # so the trigger is at least syntactically valid for review.
+        if timing.upper().startswith("INSTEAD OF"):
+            note = (
+                "-- UNIQUE: MySQL has no INSTEAD OF trigger; emitted as BEFORE "
+                "for review (original was INSTEAD OF, typically on a view).\n"
+            )
+            return note, "BEFORE"
+        return "", timing
+
+    def _trigger_header(
+        self,
+        name: str,
+        node: CreateTriggerStatement,
+        events: str,
+        timing: str,
+    ) -> list[str]:
+        return [
+            f"CREATE TRIGGER {name}",
+            f"{timing} {events} ON {node.table}",
+            "FOR EACH ROW",
+            "BEGIN",
+        ]
 
     def _emit_try_catch(self, node: TryCatchBlock) -> str:
         # MySQL has no EXCEPTION block; the catch logic goes into a
