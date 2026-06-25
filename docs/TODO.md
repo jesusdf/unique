@@ -56,43 +56,7 @@ Key design risks, captured for when we start:
 - **Scope to the faithfully-transpilable subset**; lossy constructs stay covered
   by the existing syntactic + `-- UNIQUE:` comment tests.
 
-## 2. Reverse transpilation: restore *non-type* originals from `/* UNIQUE: … */` comments (P2)
-
-The **type-carrier** case is done (see DONE.md): a non-portable type lowered to a
-carrier with the original in a `/* UNIQUE: <orig> */` comment now round-trips
-faithfully. What remains is generalizing the idea to **other constructs**
-preserved in `UNIQUE` comments.
-
-- [ ] Evaluate a single "UNIQUE-comment restorer" for non-type constructs: a
-      dropped `SET NOCOUNT ON` kept as `/* UNIQUE: SET NOCOUNT ON -- no <target>
-      equivalent */`, an `OUTPUT`/`RETURNING` clause documented as a trailing
-      `-- UNIQUE:` comment, `MERGE`→`INSERT ... ON DUPLICATE KEY UPDATE` notes,
-      etc. When the target is the construct's original engine, swap the
-      documented original back in for the carrier/comment. Care: only restore
-      when the target actually supports the original, and keep the `-- ` vs
-      `/* */` comment-style rules intact. (Lower value than the type case — these
-      are statements/clauses, not silently-wrong types — so weigh effort vs.
-      benefit before building.)
-
-## 3. Trigger set-based pseudo-table *preservation* (P3)
-
-The core of the trigger pseudo-table item is done (see DONE.md): column
-qualifiers map to `NEW`/`OLD`, and a set-based `FROM inserted`/`JOIN deleted` is
-**documented** with a `-- UNIQUE:` note (no row-level equivalent). What remains
-is the harder *preservation* path for a **pure** set-based trigger:
-
-- [ ] Auto-rewrite a pure set-based trigger instead of documenting it:
-      PostgreSQL statement-level trigger with `REFERENCING NEW TABLE AS inserted
-      OLD TABLE AS deleted` + `FOR EACH STATEMENT`; Oracle compound trigger.
-      MySQL has no transition tables, so it stays documented. Requires
-      coordinating the trigger header (granularity + REFERENCING) with the body,
-      and detecting "pure set-based" vs the mixed row-/set-level case (e.g. the
-      current fixture trigger combines `UPDATE(col)`→`NEW/OLD` with `FROM
-      inserted`), which cannot be expressed as a single trigger and must stay
-      documented. Lower priority — the documented form is already safe and
-      honest.
-
-## 4. Packaging (P3)
+## 2. Packaging (P3)
 
 - [ ] **PyPI publication** — deferred until the tool has been used in real
       projects for a few months and proven stable. Not before then.
