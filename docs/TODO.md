@@ -56,6 +56,16 @@ suite stays green at every checkpoint.
       first (biggest, cleanest win), keep pair/source logic as parameterized
       strategy. Pure refactor, output unchanged, suite green at each checkpoint.
 - [ ] **Parser**: split the 11 source-family conditionals cleanly if it helps.
+- [ ] **Physical plugin layout (final step)**: once each base/subclass body is
+      complete, split `emitter.py` and `transformer.py` into per-engine
+      packages mirroring `dialects/{engine}/` — `emitter/{base,tsql,oracle,
+      postgresql,mysql}.py` and `transformer/{...}.py`, with `__init__.py`
+      exposing the factory and a registry that the engine modules auto-register
+      into. Goal: adding a new engine = adding one file + one import, touching
+      no core logic. Done last because moving methods between base and subclass
+      is trivial within one file and costly across files; the per-class split
+      already gives the architectural benefit, this is the file-level
+      reorganization.
 - [ ] Update `docs/02-architecture.md`, `docs/05-procedural-engine.md`, and the
       skills to describe the new per-engine structure.
 

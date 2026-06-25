@@ -841,16 +841,30 @@ class ProceduralTransformer:
     def _transform_set_variable(self, node: SetVariableStatement) -> ASTNode:
         new_name = self._transform_var_name(node.name)
         new_value = self._transform_node(node.value)
-        if self._target in ("oracle", "postgresql"):
-            return AssignmentStatement(target=new_name, value=new_value)
-        return SetVariableStatement(name=new_name, value=new_value)
+        # SET keeps a SET statement on engines that have one (T-SQL, MySQL);
+        # Oracle/PostgreSQL lower it to a ``:=`` assignment.
+        if self._uses_set_statement():
+            return SetVariableStatement(name=new_name, value=new_value)
+        return AssignmentStatement(target=new_name, value=new_value)
 
     def _transform_assignment(self, node: AssignmentStatement) -> ASTNode:
         new_name = self._transform_var_name(node.target)
         new_value = self._transform_node(node.value)
-        if self._target == "tsql":
+        # A T-SQL target re-expresses an assignment as SET; the others keep an
+        # assignment node (MySQL's is rendered as SET by its emitter).
+        if self._assignment_becomes_set():
             return SetVariableStatement(name=new_name, value=new_value)
         return AssignmentStatement(target=new_name, value=new_value)
+
+    def _uses_set_statement(self) -> bool:
+        """Whether the target keeps a ``SET`` statement (T-SQL, MySQL) rather
+        than lowering it to a ``:=`` assignment (Oracle, PostgreSQL)."""
+        return False
+
+    def _assignment_becomes_set(self) -> bool:
+        """Whether a bare assignment is re-expressed as a ``SET`` statement.
+        Only T-SQL does; the base default keeps it an assignment."""
+        return False
 
     def _transform_if(self, node: IfStatement) -> IfStatement:
         new_cond = self._transform_node(node.condition)
@@ -876,13 +890,8 @@ class ProceduralTransformer:
         return (*body, self._noop_statement())
 
     def _noop_statement(self) -> ASTNode:
-        """A no-op statement valid in the target dialect."""
-        if self._target == "mysql":
-            # DO evaluates an expression and discards it; the cheapest valid
-            # statement to keep a block non-empty. Terminator included since
-            # the IF/loop emitters don't add one for RawSQL.
-            return RawSQL(sql="DO 0;", reason="no-op")
-        # Oracle PL/SQL and PostgreSQL PL/pgSQL use NULL; as a no-op.
+        """A no-op statement valid in the target dialect. Default is PL/SQL /
+        PL-pgSQL ``NULL;``; MySQL overrides with ``DO 0;``."""
         return NullStatement()
 
     def _transform_while(self, node: WhileStatement) -> WhileStatement:
@@ -901,28 +910,15 @@ class ProceduralTransformer:
         return StatementList(statements=self._transform_body(node.statements))
 
     def _transform_try_catch(self, node: TryCatchBlock) -> ASTNode:
-        if self._target == "oracle":
-            return ExceptionBlock(
-                handlers=(
-                    ExceptionHandler(
-                        exception_name="OTHERS",
-                        body=self._transform_body(node.catch_body),
-                    ),
-                )
-            )
+        """Default keeps a TRY/CATCH block (T-SQL/MySQL/PostgreSQL handle it in
+        the emitter); Oracle overrides to a PL/SQL EXCEPTION block."""
         new_try = self._transform_body(node.try_body)
         new_catch = self._transform_body(node.catch_body)
         return TryCatchBlock(try_body=new_try, catch_body=new_catch)
 
     def _transform_exception_block(self, node: ExceptionBlock) -> ASTNode:
-        if self._target == "tsql":
-            body: list[ASTNode] = []
-            for handler in node.handlers:
-                body.extend(handler.body)
-            return TryCatchBlock(
-                try_body=(),
-                catch_body=self._transform_body(tuple(body)),
-            )
+        """Default keeps an EXCEPTION block (Oracle/PostgreSQL); T-SQL overrides
+        to a TRY/CATCH (its only structured-handler form)."""
         handlers = tuple(
             ExceptionHandler(
                 exception_name=h.exception_name,
@@ -2264,6 +2260,23 @@ class TSqlTransformer(ProceduralTransformer):
         # T-SQL keeps ALTER PROCEDURE as-is.
         return False
 
+    def _uses_set_statement(self) -> bool:
+        return True
+
+    def _assignment_becomes_set(self) -> bool:
+        return True
+
+    def _transform_exception_block(self, node: ExceptionBlock) -> ASTNode:
+        # T-SQL's only structured-handler form is TRY/CATCH; flatten the
+        # EXCEPTION handlers' bodies into the CATCH block.
+        body: list[ASTNode] = []
+        for handler in node.handlers:
+            body.extend(handler.body)
+        return TryCatchBlock(
+            try_body=(),
+            catch_body=self._transform_body(tuple(body)),
+        )
+
 
 class OracleTransformer(ProceduralTransformer):
     """Transforms toward Oracle PL/SQL."""
@@ -2289,6 +2302,17 @@ class OracleTransformer(ProceduralTransformer):
     def _strip_dbo_schema(self) -> bool:
         # Oracle objects live in the current user's schema; 'dbo' has no meaning.
         return True
+
+    def _transform_try_catch(self, node: TryCatchBlock) -> ASTNode:
+        # Oracle expresses error handling as a PL/SQL EXCEPTION block.
+        return ExceptionBlock(
+            handlers=(
+                ExceptionHandler(
+                    exception_name="OTHERS",
+                    body=self._transform_body(node.catch_body),
+                ),
+            )
+        )
 
     def _varchar_max_type(self, is_unicode: bool) -> str | None:
         return "NCLOB" if is_unicode else "CLOB"
@@ -2332,6 +2356,15 @@ class MySqlTransformer(ProceduralTransformer):
 
     def _varchar_max_type(self, is_unicode: bool) -> str | None:
         return "LONGTEXT"
+
+    def _uses_set_statement(self) -> bool:
+        return True
+
+    def _noop_statement(self) -> ASTNode:
+        # DO evaluates an expression and discards it; the cheapest valid
+        # statement to keep a block non-empty. Terminator included since the
+        # IF/loop emitters don't add one for RawSQL.
+        return RawSQL(sql="DO 0;", reason="no-op")
 
 
 _TRANSFORMER_REGISTRY: dict[str, type[ProceduralTransformer]] = {
