@@ -4,12 +4,46 @@ description: >
   Development workflow skill for the Unique SQL Transpiler. Use this skill
   when implementing new features, adding dialect support, writing tests,
   debugging transpilation issues, updating the backlog (docs/TODO.md), or
-  committing and pushing work. Covers TDD methodology, how to add new AST
-  nodes, how to extend a dialect, testing patterns, the pre-commit
-  verification gate, and the TODO + commit/push discipline.
+  committing and pushing work. Covers the mandatory pre-change analysis,
+  TDD methodology, how to add new AST nodes, how to extend a dialect, testing
+  patterns, the pre-commit verification gate, and the TODO + commit/push
+  discipline.
 ---
 
 # Unique — Development Workflow
+
+## Analyze before changing (mandatory first step)
+
+Before writing or modifying any code, **read the code you are about to touch
+and the surrounding context first**, and flag any problem you find in it —
+even when it is not strictly what you were asked to change. Report, at minimum:
+
+- **Architecture-guide violations** — code that contradicts `docs/02-architecture.md`
+  (e.g. the procedural engine threading `if self._dialect == …` branches instead
+  of following the per-engine plugin/subclass architecture the project promises).
+- **Methodology breaches** — changes arriving without a failing test first
+  (TDD), fixtures hand-edited instead of regenerated, work landing without the
+  pre-commit gate, or the backlog/commit-push discipline being skipped.
+- **Policy breaches** — non-English code/comments/docs, missing SPDX/MIT
+  headers, secrets (the PAT) about to be printed or committed, output that
+  isn't validated against the live engines, etc.
+- **Anti-patterns and code smells** — long functions (>~30 lines), duplicated
+  logic, deep dialect conditionals, leaky abstractions, dead code, unclear
+  names, missing docstrings on public symbols.
+
+Surface these explicitly (in the response and, when actionable, as a
+`docs/TODO.md` item) before proceeding, so the human can decide. Do not
+silently work around a problem you noticed.
+
+**Prioritize the project's goals over development convenience.** The stated
+priorities are, in order: (1) the most *faithful* possible conversion, (2)
+maintainable code following Clean Code, (3) the plugin/per-engine architecture.
+When a quick or convenient fix conflicts with these, do **not** take the lazy or
+lax path: pick the solution that serves the project's goals — a real per-engine
+method over another `if/elif`, a correct transformation over a passthrough that
+"happens to compile", a regenerated fixture over a hand-tweak. If the faithful
+solution is large, say so and propose it; don't quietly downgrade the goal to
+make the change easier.
 
 ## TDD Cycle
 
