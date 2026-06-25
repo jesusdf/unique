@@ -1105,3 +1105,37 @@ class TestCarrierTypeRestoration:
             "CREATE PROCEDURE p AS BEGIN DECLARE @n INT END", "tsql", "postgresql"
         )
         assert "v_n INTEGER" in out
+
+
+class TestPerEngineRoutineSurface:
+    """Guards the per-engine emitter overrides that have thin test coverage:
+    Oracle's RETURN clause + explicit IN on function params, and the PRINT /
+    RAISERROR mappings for each engine. These caught a regression during the
+    per-engine emitter refactor."""
+
+    FUNC = "CREATE FUNCTION dbo.f(@a INT) RETURNS INT AS BEGIN RETURN @a END"
+
+    def test_oracle_function_uses_return_not_returns(self) -> None:
+        out = _transpile(self.FUNC, "tsql", "oracle")
+        assert "\nRETURN NUMBER(10)" in out
+        assert "RETURNS" not in out
+
+    def test_oracle_function_param_is_in(self) -> None:
+        out = _transpile(self.FUNC, "tsql", "oracle")
+        assert "IN NUMBER(10)" in out
+
+    def test_print_per_engine(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN PRINT 'hi' END"
+        assert "PRINT 'hi';" in _transpile(src, "tsql", "tsql")
+        assert "DBMS_OUTPUT.PUT_LINE('hi');" in _transpile(src, "tsql", "oracle")
+        assert "RAISE NOTICE '%', 'hi';" in _transpile(src, "tsql", "postgresql")
+        assert "SELECT 'hi';" in _transpile(src, "tsql", "mysql")
+
+    def test_raiserror_per_engine(self) -> None:
+        src = "CREATE PROCEDURE dbo.p AS BEGIN RAISERROR('boom', 16, 1) END"
+        assert "RAISERROR(" in _transpile(src, "tsql", "tsql")
+        assert "RAISE_APPLICATION_ERROR(-20001, 'boom');" in _transpile(
+            src, "tsql", "oracle"
+        )
+        assert "RAISE EXCEPTION '%', 'boom';" in _transpile(src, "tsql", "postgresql")
+        assert "SIGNAL SQLSTATE '45000'" in _transpile(src, "tsql", "mysql")

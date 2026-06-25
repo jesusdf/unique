@@ -586,17 +586,18 @@ class ProceduralEmitter:
         default_str = ""
         if node.default:
             val = self._emit_node(node.default)
-            if self._dialect == "tsql":
-                default_str = f" = {val}"
-            elif self._dialect == "mysql":
-                default_str = f" DEFAULT {val}"
-            else:
-                default_str = f" := {val}"
+            default_str = f" {self._declare_default_op()} {val}"
+        return f"{self._declare_prefix()}{node.name} {dt}{default_str};"
 
-        if self._dialect in ("tsql", "mysql"):
-            return f"DECLARE {node.name} {dt}{default_str};"
-        else:
-            return f"{node.name} {dt}{default_str};"
+    def _declare_default_op(self) -> str:
+        """Operator that introduces a variable's default. Default PL/SQL ``:=``;
+        T-SQL (``=``) and MySQL (``DEFAULT``) override."""
+        return ":="
+
+    def _declare_prefix(self) -> str:
+        """Leading keyword of a variable declaration. Default none (Oracle/PG
+        DECLARE section); T-SQL and MySQL override with ``DECLARE ``."""
+        return ""
 
     def _emit_cursor_decl(self, node: CursorDeclaration) -> str:
         query_str = ""
@@ -604,22 +605,9 @@ class ProceduralEmitter:
             # The query may be an EmbeddedDML that emits its own trailing
             # semicolon; strip it to avoid a double ';'.
             query_str = self._emit_node(node.query).rstrip().rstrip(";")
-
-        if self._dialect == "tsql":
-            body = f" FOR {query_str}" if query_str else ""
-            return f"DECLARE {node.name} CURSOR{body};"
-        elif self._dialect == "postgresql":
-            # PL/pgSQL: name CURSOR FOR <select>;
-            body = f" CURSOR FOR {query_str}" if query_str else " CURSOR"
-            return f"{node.name}{body};"
-        elif self._dialect == "mysql":
-            # MySQL: DECLARE name CURSOR FOR <select>;
-            body = f" FOR {query_str}" if query_str else ""
-            return f"DECLARE {node.name} CURSOR{body};"
-        else:
-            # Oracle PL/SQL: CURSOR name IS <select>;
-            body = f" IS {query_str}" if query_str else ""
-            return f"CURSOR {node.name}{body};"
+        # Default: Oracle PL/SQL: CURSOR name IS <select>;
+        body = f" IS {query_str}" if query_str else ""
+        return f"CURSOR {node.name}{body};"
 
     # ---------------------------------------------------------------
     # Variable operations
@@ -1018,25 +1006,15 @@ class ProceduralEmitter:
         return cleaned
 
     def _emit_print(self, node: PrintStatement) -> str:
+        """Default print is MySQL's ``SELECT <expr>;`` (no PRINT statement).
+        T-SQL, Oracle and PostgreSQL override."""
         expr = self._emit_node(node.expression)
-        if self._dialect == "tsql":
-            return f"PRINT {expr};"
-        elif self._dialect == "oracle":
-            return f"DBMS_OUTPUT.PUT_LINE({expr});"
-        elif self._dialect == "postgresql":
-            return f"RAISE NOTICE '%', {expr};"
         return f"SELECT {expr};"
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
+        """Default raise is MySQL's SIGNAL. T-SQL, Oracle and PostgreSQL
+        override with their own raise form."""
         msg = self._emit_node(node.message) if node.message else "'Error'"
-        if self._dialect == "tsql":
-            return f"RAISERROR({msg}, 16, 1);"
-        elif self._dialect == "oracle":
-            first, _ = self._split_raise_args(msg)
-            return f"RAISE_APPLICATION_ERROR(-20001, {first});"
-        elif self._dialect == "postgresql":
-            first, _ = self._split_raise_args(msg)
-            return f"RAISE EXCEPTION '%', {first};"
         # MySQL SIGNAL requires MESSAGE_TEXT to be a string and the error number
         # in MYSQL_ERRNO; the raw T-SQL argument tuple "(msg_or_id, severity,
         # state)" is invalid there. Split the first argument from the rest.
@@ -1296,6 +1274,26 @@ class TSqlEmitter(ProceduralEmitter):
         direction_str = " OUTPUT" if p.direction in ("OUT", "INOUT") else ""
         return f"{p.name} {dt}{default_str}{direction_str}"
 
+    def _declare_default_op(self) -> str:
+        return "="
+
+    def _declare_prefix(self) -> str:
+        return "DECLARE "
+
+    def _emit_cursor_decl(self, node: CursorDeclaration) -> str:
+        query_str = (
+            self._emit_node(node.query).rstrip().rstrip(";") if node.query else ""
+        )
+        body = f" FOR {query_str}" if query_str else ""
+        return f"DECLARE {node.name} CURSOR{body};"
+
+    def _emit_print(self, node: PrintStatement) -> str:
+        return f"PRINT {self._emit_node(node.expression)};"
+
+    def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
+        msg = self._emit_node(node.message) if node.message else "'Error'"
+        return f"RAISERROR({msg}, 16, 1);"
+
     def _emit_try_catch(self, node: TryCatchBlock) -> str:
         lines = ["BEGIN TRY"]
         self._indent_level += 1
@@ -1420,6 +1418,30 @@ class OracleEmitter(ProceduralEmitter):
         prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
         return f"{prefix}FUNCTION {name}"
 
+    def _returns_clause(self, ret_type: str) -> str:
+        return f"\nRETURN {ret_type}"
+
+    def _emit_param(
+        self,
+        p: ParameterDefinition,
+        idx: int,
+        params: tuple[ParameterDefinition, ...],
+        is_function: bool,
+    ) -> str:
+        # Oracle spells out IN for every parameter direction.
+        dt = self._emit_data_type(p.data_type)
+        default_str = f" DEFAULT {self._emit_node(p.default)}" if p.default else ""
+        direction_str = f"{p.direction} " if p.direction != "IN" else "IN "
+        return f"{p.name} {direction_str}{dt}{default_str}"
+
+    def _emit_print(self, node: PrintStatement) -> str:
+        return f"DBMS_OUTPUT.PUT_LINE({self._emit_node(node.expression)});"
+
+    def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
+        msg = self._emit_node(node.message) if node.message else "'Error'"
+        first, _ = self._split_raise_args(msg)
+        return f"RAISE_APPLICATION_ERROR(-20001, {first});"
+
     def _emit_function_body(
         self,
         header: str,
@@ -1468,6 +1490,22 @@ class PostgresEmitter(ProceduralEmitter):
             if q.direction in ("OUT", "INOUT"):
                 pg_last_out = i
         return not (p.direction in ("OUT", "INOUT") or idx < pg_last_out)
+
+    def _emit_cursor_decl(self, node: CursorDeclaration) -> str:
+        # PL/pgSQL: name CURSOR FOR <select>;
+        query_str = (
+            self._emit_node(node.query).rstrip().rstrip(";") if node.query else ""
+        )
+        body = f" CURSOR FOR {query_str}" if query_str else " CURSOR"
+        return f"{node.name}{body};"
+
+    def _emit_print(self, node: PrintStatement) -> str:
+        return f"RAISE NOTICE '%', {self._emit_node(node.expression)};"
+
+    def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
+        msg = self._emit_node(node.message) if node.message else "'Error'"
+        first, _ = self._split_raise_args(msg)
+        return f"RAISE EXCEPTION '%', {first};"
 
     def _procedure_header(self, name: str, or_replace: bool) -> str:
         prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
@@ -1598,6 +1636,20 @@ class MySqlEmitter(ProceduralEmitter):
             elif p.direction == "IN":
                 direction_str = "IN "
         return f"{direction_str}{p.name} {dt}"
+
+    def _declare_default_op(self) -> str:
+        return "DEFAULT"
+
+    def _declare_prefix(self) -> str:
+        return "DECLARE "
+
+    def _emit_cursor_decl(self, node: CursorDeclaration) -> str:
+        # MySQL: DECLARE name CURSOR FOR <select>;
+        query_str = (
+            self._emit_node(node.query).rstrip().rstrip(";") if node.query else ""
+        )
+        body = f" FOR {query_str}" if query_str else ""
+        return f"DECLARE {node.name} CURSOR{body};"
 
     def _wants_empty_parens(self) -> bool:
         return True
