@@ -60,16 +60,13 @@ suite stays green at every checkpoint.
       emit per target) and *source*-only logic — these stay in the base
       parameterized by `self._source`, by design (forcing them into target-only
       subclasses would be incorrect). Suite green (1029), output unchanged.
-- [~] **Parser**: consolidate the 11 source-family conditionals. *Analysis:*
-      the parser dispatches on the *source* dialect, and there are only **two
-      syntactic source families** — T-SQL (`AS … BEGIN END`) and PL/SQL
-      (Oracle/PostgreSQL/MySQL, `IS/AS … BEGIN END;`, with minor MySQL param
-      differences). A 4-way per-engine subclass split would be over-structure
-      here (the 2500-line body is almost entirely shared; the differences are a
-      handful of points). The right, maintainable move is to consolidate the
-      repeated `if tsql … else plsql` into a couple of well-named helpers/hooks
-      (`_is_tsql_source`, `_parse_routine_body`) rather than invent a hierarchy
-      that adds no value. Clean Code without over-engineering.
+- [x] **Parser**: consolidated the source-family conditionals. *Done:* the
+      repeated body-parsing branches are now a single `_parse_routine_body`
+      helper (parameterized by `with_pg_header`), and the scattered
+      `self._dialect == "tsql"` tests are an intentional `_is_tsql_source()`
+      predicate. Only the MySQL parameter-syntax branch remains (a real
+      source-family variation point). No 4-way subclass split — that would be
+      over-structure for an almost-entirely-shared parser. Suite green (1029).
 - [ ] **Physical plugin layout (final step)**: once each base/subclass body is
       complete, split `emitter.py` and `transformer.py` into per-engine
       packages mirroring `dialects/{engine}/` — `emitter/{base,tsql,oracle,
