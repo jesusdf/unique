@@ -2,30 +2,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="Unique logo">
   <title>Unique</title>
   <!--
-    Wordmark glyph: a serif capital "U" in red. Built from a single filled path
-    so it scales crisply at any size and needs no font to be installed. The two
-    stems carry top serifs and the bowl is rounded, with a slight thick/thin
-    contrast typical of a classic serif face.
+    Wordmark glyph: a capital "U" in red. Sans-serif with flat tops, thick
+    vertical stems, and a bowl that thins markedly at the bottom, giving a
+    strong thick/thin contrast. Single filled path, so it scales crisply at any
+    size and needs no font to be installed.
   -->
-  <path fill="#C9252C" fill-rule="evenodd" d="
-    M 11 16
-    L 43 16
-    L 43 24.5
-    L 33 25.5
-    L 33 59
-    C 33 70.5 39 76.5 50 76.5
-    C 61 76.5 67 69.5 67 58
-    L 67 25.5
-    L 57 24.5
-    L 57 16
-    L 89 16
-    L 89 24.5
-    L 79 25.5
-    L 79 58.5
-    C 79 76.5 67 87 49 87
-    C 31 87 23 76.5 23 59.5
-    L 23 25.5
-    L 11 24.5
+  <path fill="#C9252C" d="
+    M 15 13
+    L 15 58
+    C 15 79 31 89 50 89
+    C 69 89 85 79 85 58
+    L 85 13
+    L 68 13
+    L 68 58
+    C 68 75 60 84 50 84
+    C 40 84 32 75 32 58
+    L 32 13
     Z
   "/>
 </svg>
