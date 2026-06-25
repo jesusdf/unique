@@ -944,62 +944,32 @@ class ProceduralEmitter:
         """Emit a transparent statement sequence (no wrapper)."""
         return "\n".join(self._emit_node(stmt) for stmt in node.statements)
 
+    def _emit_indented_stmts(
+        self, stmts: tuple[ASTNode, ...] | list[ASTNode]
+    ) -> list[str]:
+        """Emit a sequence of statements at the current indent, one output line
+        per source line, blanking whitespace-only lines. Shared by the block
+        constructs (TRY/CATCH, IF, loops) across engines."""
+        out: list[str] = []
+        for stmt in stmts:
+            text = self._emit_node(stmt)
+            for line in text.split("\n"):
+                out.append(f"{self._indent()}{line}" if line.strip() else "")
+        return out
+
     def _emit_try_catch(self, node: TryCatchBlock) -> str:
-        if self._dialect == "tsql":
-            lines = ["BEGIN TRY"]
-            self._indent_level += 1
-            for stmt in node.try_body:
-                text = self._emit_node(stmt)
-                for line in text.split("\n"):
-                    lines.append(f"{self._indent()}{line}" if line.strip() else "")
-            self._indent_level -= 1
-            lines.append("END TRY")
-            lines.append("BEGIN CATCH")
-            self._indent_level += 1
-            for stmt in node.catch_body:
-                text = self._emit_node(stmt)
-                for line in text.split("\n"):
-                    lines.append(f"{self._indent()}{line}" if line.strip() else "")
-            self._indent_level -= 1
-            lines.append("END CATCH")
-        elif self._dialect == "mysql":
-            # MySQL has no EXCEPTION block; the catch logic goes into a
-            # DECLARE ... HANDLER declared at the top of the block, before the
-            # protected (try) statements.
-            lines = ["BEGIN"]
-            self._indent_level += 1
-            lines.append(f"{self._indent()}DECLARE EXIT HANDLER FOR SQLEXCEPTION")
-            lines.append(f"{self._indent()}BEGIN")
-            self._indent_level += 1
-            for stmt in node.catch_body:
-                text = self._emit_node(stmt)
-                for line in text.split("\n"):
-                    lines.append(f"{self._indent()}{line}" if line.strip() else "")
-            self._indent_level -= 1
-            lines.append(f"{self._indent()}END;")
-            for stmt in node.try_body:
-                text = self._emit_node(stmt)
-                for line in text.split("\n"):
-                    lines.append(f"{self._indent()}{line}" if line.strip() else "")
-            self._indent_level -= 1
-            lines.append("END;")
-        else:
-            lines = ["BEGIN"]
-            self._indent_level += 1
-            for stmt in node.try_body:
-                text = self._emit_node(stmt)
-                for line in text.split("\n"):
-                    lines.append(f"{self._indent()}{line}" if line.strip() else "")
-            self._indent_level -= 1
-            lines.append("EXCEPTION")
-            lines.append("WHEN OTHERS THEN")
-            self._indent_level += 1
-            for stmt in node.catch_body:
-                text = self._emit_node(stmt)
-                for line in text.split("\n"):
-                    lines.append(f"{self._indent()}{line}" if line.strip() else "")
-            self._indent_level -= 1
-            lines.append("END;")
+        """Default (PL/SQL-style) TRY/CATCH: a BEGIN … EXCEPTION WHEN OTHERS
+        block. T-SQL and MySQL override this with their own shapes."""
+        lines = ["BEGIN"]
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(node.try_body))
+        self._indent_level -= 1
+        lines.append("EXCEPTION")
+        lines.append("WHEN OTHERS THEN")
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(node.catch_body))
+        self._indent_level -= 1
+        lines.append("END;")
         return "\n".join(lines)
 
     def _emit_exception_block(self, node: ExceptionBlock) -> str:
@@ -1505,6 +1475,19 @@ class TSqlEmitter(ProceduralEmitter):
 
     dialect_name = "tsql"
 
+    def _emit_try_catch(self, node: TryCatchBlock) -> str:
+        lines = ["BEGIN TRY"]
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(node.try_body))
+        self._indent_level -= 1
+        lines.append("END TRY")
+        lines.append("BEGIN CATCH")
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(node.catch_body))
+        self._indent_level -= 1
+        lines.append("END CATCH")
+        return "\n".join(lines)
+
 
 class OracleEmitter(ProceduralEmitter):
     """Oracle PL/SQL procedural emitter."""
@@ -1560,6 +1543,23 @@ class MySqlEmitter(ProceduralEmitter):
         body_stmts: list[ASTNode],
     ) -> str:
         return self._emit_mysql_procedure_body(header, declarations, body_stmts)
+
+    def _emit_try_catch(self, node: TryCatchBlock) -> str:
+        # MySQL has no EXCEPTION block; the catch logic goes into a
+        # DECLARE ... HANDLER declared at the top of the block, before the
+        # protected (try) statements.
+        lines = ["BEGIN"]
+        self._indent_level += 1
+        lines.append(f"{self._indent()}DECLARE EXIT HANDLER FOR SQLEXCEPTION")
+        lines.append(f"{self._indent()}BEGIN")
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(node.catch_body))
+        self._indent_level -= 1
+        lines.append(f"{self._indent()}END;")
+        lines.extend(self._emit_indented_stmts(node.try_body))
+        self._indent_level -= 1
+        lines.append("END;")
+        return "\n".join(lines)
 
 
 _EMITTER_REGISTRY: dict[str, type[ProceduralEmitter]] = {
