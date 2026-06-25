@@ -89,6 +89,37 @@ class ProceduralParser:
         self._errors: list[ParseError] = []
         self._warnings: list[str] = []
 
+    # ------------------------------------------------------------------
+    # Source-family helpers
+    #
+    # The parser dispatches on the *source* dialect, of which there are only
+    # two syntactic families: T-SQL and PL/SQL (Oracle/PostgreSQL/MySQL). These
+    # helpers name that distinction so the family checks read intentionally
+    # rather than as scattered ``self._dialect == "tsql"`` tests.
+    # ------------------------------------------------------------------
+
+    def _is_tsql_source(self) -> bool:
+        """Whether the source dialect uses T-SQL procedural syntax."""
+        return self._dialect == "tsql"
+
+    def _parse_routine_body(self, with_pg_header: bool = True) -> list[ASTNode]:
+        """Consume a routine header and parse its body for the source family.
+
+        T-SQL uses ``AS <body>``; the PL/SQL family uses ``IS``/``AS``. When
+        ``with_pg_header`` is set, PostgreSQL/MySQL also carry an extra
+        ``LANGUAGE``/``$$`` header consumed by ``_consume_pg_routine_header``
+        (procedures and functions); triggers have no such header.
+        """
+        if self._is_tsql_source():
+            self._match_keyword("AS")
+            return list(self._parse_tsql_body())
+        if with_pg_header and self._dialect in ("postgresql", "mysql"):
+            self._consume_pg_routine_header()
+            return list(self._parse_plsql_body())
+        if self._match_keyword("AS") or self._match_keyword("IS"):
+            pass
+        return list(self._parse_plsql_body())
+
     def parse(self, sql: str) -> ParseResult:
         """Parse a procedural SQL batch into an IR AST node.
 
@@ -233,7 +264,7 @@ class ProceduralParser:
 
         if tok.is_keyword("CREATE"):
             return self._parse_create()
-        elif tok.is_keyword("ALTER") and self._dialect == "tsql":
+        elif tok.is_keyword("ALTER") and self._is_tsql_source():
             return self._parse_alter()
         else:
             return self._parse_fallback()
@@ -356,18 +387,9 @@ class ProceduralParser:
         name, schema = self._parse_qualified_name()
         params = self._parse_parameter_list()
 
-        if self._dialect == "tsql":
-            self._match_keyword("AS")
-            body = self._parse_tsql_body()
-        elif self._dialect in ("postgresql", "mysql"):
-            self._consume_pg_routine_header()
-            body = self._parse_plsql_body()
-        else:
-            if self._match_keyword("AS") or self._match_keyword("IS"):
-                pass
-            body = self._parse_plsql_body()
+        body = self._parse_routine_body()
 
-        if is_alter and self._dialect == "tsql":
+        if is_alter and self._is_tsql_source():
             return AlterProcedureStatement(
                 name=name,
                 parameters=tuple(params),
@@ -394,16 +416,7 @@ class ProceduralParser:
         if self._match_keyword("RETURN") or self._match_keyword("RETURNS"):
             return_type = self._parse_data_type()
 
-        if self._dialect == "tsql":
-            self._match_keyword("AS")
-            body = self._parse_tsql_body()
-        elif self._dialect in ("postgresql", "mysql"):
-            self._consume_pg_routine_header()
-            body = self._parse_plsql_body()
-        else:
-            if self._match_keyword("AS") or self._match_keyword("IS"):
-                pass
-            body = self._parse_plsql_body()
+        body = self._parse_routine_body()
 
         return CreateFunctionStatement(
             name=name,
@@ -463,13 +476,7 @@ class ProceduralParser:
                 self._match_keyword("STATEMENT")
 
         # Body
-        if self._dialect == "tsql":
-            self._match_keyword("AS")
-            body = self._parse_tsql_body()
-        else:
-            if self._match_keyword("AS") or self._match_keyword("IS"):
-                pass
-            body = self._parse_plsql_body()
+        body = self._parse_routine_body(with_pg_header=False)
 
         return CreateTriggerStatement(
             name=name,
@@ -543,7 +550,7 @@ class ProceduralParser:
             return params
 
         # Paren-less T-SQL: @p1 type, @p2 type AS ...
-        if self._dialect == "tsql" and self._current().type == TokenType.VARIABLE:
+        if self._is_tsql_source() and self._current().type == TokenType.VARIABLE:
             guard = 0
             while not self._at_end():
                 guard += 1
@@ -577,7 +584,7 @@ class ProceduralParser:
 
         tok = self._current()
 
-        if self._dialect == "tsql":
+        if self._is_tsql_source():
             # T-SQL: @name type [= default] [OUTPUT]
             if tok.type == TokenType.VARIABLE:
                 name = self._advance().value
@@ -2167,7 +2174,7 @@ class ProceduralParser:
                 not first
                 and paren_depth == 0
                 and case_depth == 0
-                and self._dialect == "tsql"
+                and self._is_tsql_source()
                 and tok.type == TokenType.KEYWORD
                 and tok.upper_value in self._DECLARE_DML_BOUNDARY
             ):
@@ -2290,7 +2297,7 @@ class ProceduralParser:
         Used to delimit statements that omit the trailing semicolon. Only
         active for the T-SQL dialect; Oracle/PG/MySQL rely on semicolons.
         """
-        if self._dialect != "tsql":
+        if not self._is_tsql_source():
             return False
         tok = self._current()
         if tok.type != TokenType.KEYWORD:
@@ -2352,7 +2359,7 @@ class ProceduralParser:
                 and paren_depth == 0
                 and begin_depth == 0
                 and case_depth == 0
-                and self._dialect == "tsql"
+                and self._is_tsql_source()
                 and self._starts_new_dml(tok, prev_tok, lead_verb, values_seen)
             ):
                 break
@@ -2367,7 +2374,7 @@ class ProceduralParser:
                 and paren_depth == 0
                 and begin_depth == 0
                 and case_depth == 0
-                and self._dialect == "tsql"
+                and self._is_tsql_source()
                 and tok.is_keyword("SET")
                 and self._set_starts_statement(self._peek(1))
             ):
