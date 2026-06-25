@@ -523,20 +523,7 @@ class ProceduralEmitter:
         ret_type = (
             self._emit_data_type(node.return_type) if node.return_type else "void"
         )
-
-        if self._dialect == "tsql":
-            header = f"CREATE FUNCTION {name}"
-        elif self._dialect == "oracle":
-            prefix = "CREATE OR REPLACE " if node.or_replace else "CREATE "
-            header = f"{prefix}FUNCTION {name}"
-        elif self._dialect == "mysql":
-            # MySQL stored functions do not support CREATE OR REPLACE; the
-            # idempotent DROP is emitted separately by the transpiler when
-            # needed. Always a plain CREATE here.
-            header = f"CREATE FUNCTION {name}"
-        else:
-            prefix = "CREATE OR REPLACE " if node.or_replace else "CREATE "
-            header = f"{prefix}FUNCTION {name}"
+        header = self._function_header(name, node.or_replace)
 
         self._indent_level += 1
         params_str = self._emit_params(node.parameters, is_function=True)
@@ -544,33 +531,35 @@ class ProceduralEmitter:
 
         if params_str:
             header += f"\n(\n{params_str}\n)"
-        elif self._dialect in ("mysql", "postgresql"):
+        elif self._wants_empty_parens():
             # MySQL and PostgreSQL require the parameter parentheses even when
-            # empty (CREATE FUNCTION f() ...); omitting them is a syntax error.
-            # Oracle allows a parameterless function with no parentheses.
+            # empty (CREATE FUNCTION f() ...). Oracle allows omitting them.
             header += "()"
 
-        if self._dialect in ("tsql", "postgresql"):
-            header += f"\nRETURNS {ret_type}"
-        elif self._dialect == "mysql":
-            header += f"\nRETURNS {ret_type}\nDETERMINISTIC"
-        elif self._dialect == "oracle":
-            header += f"\nRETURN {ret_type}"
+        header += self._returns_clause(ret_type)
 
         declarations, body_stmts = self._split_declarations(node.body)
+        return self._emit_function_body(header, declarations, body_stmts)
 
-        if self._dialect == "tsql":
-            return self._emit_tsql_procedure_body(header, declarations, body_stmts)
-        elif self._dialect == "oracle":
-            return self._emit_oracle_procedure_body(header, declarations, body_stmts)
-        elif self._dialect == "postgresql":
-            return self._emit_pg_procedure_body(
-                header, declarations, body_stmts, is_function=True
-            )
-        else:
-            return self._emit_mysql_procedure_body(
-                header, declarations, body_stmts, is_function=True
-            )
+    def _function_header(self, name: str, or_replace: bool) -> str:
+        """The ``CREATE … FUNCTION <name>`` header. Default is plain CREATE
+        (T-SQL, MySQL); Oracle/PostgreSQL override to add OR REPLACE."""
+        return f"CREATE FUNCTION {name}"
+
+    def _returns_clause(self, ret_type: str) -> str:
+        """The return-type clause appended to a function header. Default
+        ``\\nRETURNS <type>`` (T-SQL/PostgreSQL); Oracle and MySQL override."""
+        return f"\nRETURNS {ret_type}"
+
+    def _emit_function_body(
+        self,
+        header: str,
+        declarations: list[ASTNode],
+        body_stmts: list[ASTNode],
+    ) -> str:
+        """Emit a function body. Default is the T-SQL procedure-body shape;
+        engine subclasses override (PG/MySQL pass is_function=True)."""
+        return self._emit_procedure_body(header, declarations, body_stmts)
 
     def _emit_trigger(self, node: CreateTriggerStatement) -> str:
         name = self._qualified_name(node.schema, node.name)
@@ -1488,6 +1477,21 @@ class OracleEmitter(ProceduralEmitter):
     ) -> str:
         return self._emit_oracle_procedure_body(header, declarations, body_stmts)
 
+    def _function_header(self, name: str, or_replace: bool) -> str:
+        prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
+        return f"{prefix}FUNCTION {name}"
+
+    def _returns_clause(self, ret_type: str) -> str:
+        return f"\nRETURN {ret_type}"
+
+    def _emit_function_body(
+        self,
+        header: str,
+        declarations: list[ASTNode],
+        body_stmts: list[ASTNode],
+    ) -> str:
+        return self._emit_oracle_procedure_body(header, declarations, body_stmts)
+
 
 class PostgresEmitter(ProceduralEmitter):
     """PostgreSQL PL/pgSQL procedural emitter."""
@@ -1508,6 +1512,20 @@ class PostgresEmitter(ProceduralEmitter):
         body_stmts: list[ASTNode],
     ) -> str:
         return self._emit_pg_procedure_body(header, declarations, body_stmts)
+
+    def _function_header(self, name: str, or_replace: bool) -> str:
+        prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
+        return f"{prefix}FUNCTION {name}"
+
+    def _emit_function_body(
+        self,
+        header: str,
+        declarations: list[ASTNode],
+        body_stmts: list[ASTNode],
+    ) -> str:
+        return self._emit_pg_procedure_body(
+            header, declarations, body_stmts, is_function=True
+        )
 
     def _emit_return(self, node: ReturnStatement) -> str:
         # A PostgreSQL procedure cannot RETURN a value; emit a bare RETURN and
@@ -1557,6 +1575,19 @@ class MySqlEmitter(ProceduralEmitter):
         body_stmts: list[ASTNode],
     ) -> str:
         return self._emit_mysql_procedure_body(header, declarations, body_stmts)
+
+    def _returns_clause(self, ret_type: str) -> str:
+        return f"\nRETURNS {ret_type}\nDETERMINISTIC"
+
+    def _emit_function_body(
+        self,
+        header: str,
+        declarations: list[ASTNode],
+        body_stmts: list[ASTNode],
+    ) -> str:
+        return self._emit_mysql_procedure_body(
+            header, declarations, body_stmts, is_function=True
+        )
 
     def _emit_try_catch(self, node: TryCatchBlock) -> str:
         # MySQL has no EXCEPTION block; the catch logic goes into a
