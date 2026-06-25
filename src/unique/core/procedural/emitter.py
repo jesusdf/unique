@@ -292,14 +292,7 @@ class ProceduralEmitter:
 
     def _emit_procedure(self, node: CreateProcedureStatement) -> str:
         name = self._qualified_name(node.schema, node.name)
-
-        if self._dialect == "tsql":
-            header = f"CREATE PROCEDURE {name}"
-        elif self._dialect == "oracle" or self._dialect == "postgresql":
-            prefix = "CREATE OR REPLACE " if node.or_replace else "CREATE "
-            header = f"{prefix}PROCEDURE {name}"
-        else:
-            header = f"CREATE PROCEDURE {name}"
+        header = self._procedure_header(name, node.or_replace)
 
         self._indent_level += 1
         params_str = self._emit_params(node.parameters)
@@ -307,22 +300,47 @@ class ProceduralEmitter:
 
         if params_str:
             header += f"\n(\n{params_str}\n)"
-        elif self._dialect in ("mysql", "postgresql"):
-            # MySQL and PostgreSQL require the parameter parentheses even when
-            # empty (CREATE PROCEDURE p() ...); omitting them is a syntax error.
+        elif self._wants_empty_parens():
+            # Some engines require the parameter parentheses even when empty
+            # (CREATE PROCEDURE p() ...); omitting them is a syntax error.
             header += "()"
 
         # Separate declarations from body statements
         declarations, body_stmts = self._split_declarations(node.body)
+        return self._emit_procedure_body(header, declarations, body_stmts)
 
-        if self._dialect == "tsql":
-            return self._emit_tsql_procedure_body(header, declarations, body_stmts)
-        elif self._dialect == "oracle":
-            return self._emit_oracle_procedure_body(header, declarations, body_stmts)
-        elif self._dialect == "postgresql":
-            return self._emit_pg_procedure_body(header, declarations, body_stmts)
-        else:
-            return self._emit_mysql_procedure_body(header, declarations, body_stmts)
+    def _procedure_header(self, name: str, or_replace: bool) -> str:
+        """The ``CREATE … PROCEDURE <name>`` header line. Overridden by engines
+        that support ``CREATE OR REPLACE``."""
+        return f"CREATE PROCEDURE {name}"
+
+    def _wants_empty_parens(self) -> bool:
+        """Whether a parameterless routine must still emit ``()``. Overridden by
+        engines that require it (MySQL, PostgreSQL)."""
+        return False
+
+    def _emit_procedure_body(
+        self,
+        header: str,
+        declarations: list[ASTNode],
+        body_stmts: list[ASTNode],
+    ) -> str:
+        """Emit the procedure body. Default is the T-SQL shape; each engine
+        subclass overrides this with its own block structure."""
+        lines = [f"{header}\nAS\nBEGIN"]
+        self._indent_level = 1
+        lines.append(f"{self._indent()}SET NOCOUNT ON;\n")
+        for decl in declarations:
+            lines.append(f"{self._indent()}{self._emit_node(decl)}")
+        if declarations:
+            lines.append("")
+        for stmt in body_stmts:
+            text = self._emit_node(stmt)
+            for line in text.split("\n"):
+                lines.append(f"{self._indent()}{line}" if line.strip() else "")
+        self._indent_level = 0
+        lines.append("END")
+        return "\n".join(lines)
 
     def _emit_tsql_procedure_body(
         self,
@@ -1493,17 +1511,55 @@ class OracleEmitter(ProceduralEmitter):
 
     dialect_name = "oracle"
 
+    def _procedure_header(self, name: str, or_replace: bool) -> str:
+        prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
+        return f"{prefix}PROCEDURE {name}"
+
+    def _emit_procedure_body(
+        self,
+        header: str,
+        declarations: list[ASTNode],
+        body_stmts: list[ASTNode],
+    ) -> str:
+        return self._emit_oracle_procedure_body(header, declarations, body_stmts)
+
 
 class PostgresEmitter(ProceduralEmitter):
     """PostgreSQL PL/pgSQL procedural emitter."""
 
     dialect_name = "postgresql"
 
+    def _procedure_header(self, name: str, or_replace: bool) -> str:
+        prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
+        return f"{prefix}PROCEDURE {name}"
+
+    def _wants_empty_parens(self) -> bool:
+        return True
+
+    def _emit_procedure_body(
+        self,
+        header: str,
+        declarations: list[ASTNode],
+        body_stmts: list[ASTNode],
+    ) -> str:
+        return self._emit_pg_procedure_body(header, declarations, body_stmts)
+
 
 class MySqlEmitter(ProceduralEmitter):
     """MySQL procedural emitter."""
 
     dialect_name = "mysql"
+
+    def _wants_empty_parens(self) -> bool:
+        return True
+
+    def _emit_procedure_body(
+        self,
+        header: str,
+        declarations: list[ASTNode],
+        body_stmts: list[ASTNode],
+    ) -> str:
+        return self._emit_mysql_procedure_body(header, declarations, body_stmts)
 
 
 _EMITTER_REGISTRY: dict[str, type[ProceduralEmitter]] = {
