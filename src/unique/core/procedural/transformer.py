@@ -773,9 +773,14 @@ class ProceduralTransformer:
             events=node.events,
             for_each=node.for_each,
             body=new_body,
-            or_replace=True if self._target == "oracle" else node.or_replace,
+            or_replace=self._trigger_forces_or_replace() or node.or_replace,
             schema=self._target_schema(node.schema),
         )
+
+    def _trigger_forces_or_replace(self) -> bool:
+        """Whether a CREATE TRIGGER is forced to OR REPLACE on this target. Only
+        Oracle does; others keep the source flag."""
+        return False
 
     def _transform_declare(self, node: DeclareStatement) -> ASTNode:
         new_name = self._transform_var_name(node.name)
@@ -2335,6 +2340,9 @@ class OracleTransformer(ProceduralTransformer):
 
     def _strip_dbo_schema(self) -> bool:
         # Oracle objects live in the current user's schema; 'dbo' has no meaning.
+        return True
+
+    def _trigger_forces_or_replace(self) -> bool:
         return True
 
     def _transform_try_catch(self, node: TryCatchBlock) -> ASTNode:
