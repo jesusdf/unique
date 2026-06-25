@@ -43,18 +43,23 @@ suite stays green at every checkpoint.
       a dead `return` in `_translate_cursor_attrs` was deleted, and an Oracle
       RETURN/IN regression caught mid-refactor is guarded by
       TestPerEngineRoutineSurface. Suite green (1029 passed), output unchanged.
-- [~] **Transformer**: base + per-engine pattern, but **pair-aware**.
-      *Analysis:* unlike the emitter (target-only), the transformer is a
-      source→target operation. Of its ~70 conditionals, most depend only on the
-      *target* (e.g. `@@ROWCOUNT`/type/sleep mapping) and move cleanly into
-      target subclasses with hooks; but ~17 depend on the *pair* (e.g. variable
-      naming `@x`→`V_X`/`v_x`/`@x`) and ~15 only on the *source* (origin
-      family). The pair- and source-dependent logic must NOT be forced into a
-      target-only subclass (that would re-introduce `source` conditionals or
-      duplicate logic); it stays in well-named methods that consult the source
-      explicitly. Plan: extract the target-only logic into per-target subclasses
-      first (biggest, cleanest win), keep pair/source logic as parameterized
-      strategy. Pure refactor, output unchanged, suite green at each checkpoint.
+- [x] **Transformer**: base + per-engine pattern, **pair-aware**. *Done:*
+      base+subclasses+factory (via `__new__`, by target). Every *target-only*
+      decision moved into a hook overridden by the relevant target subclass
+      (`_system_var_map`, `_varchar_max_type`, `_supports_type_reference`,
+      `_strip_dbo_schema`, `_alter_becomes_create`, `_uses_set_statement`,
+      `_assignment_becomes_set`, `_noop_statement`/`_noop_sql`,
+      `_transform_try_catch`/`_transform_exception_block`, `_fix_target_dml`,
+      `_fix_raw_sql_target`, `_fix_unwrapped_scalar`, `_trigger_new_ref`/
+      `_trigger_old_ref`, `_rewrites_trigger_pseudotables`, `_has_update_predicate`/
+      `_update_predicate`, `_transform_null`/`_transform_loop`/
+      `_warn_for_loop_unsupported`, `_trigger_forces_or_replace`). The remaining
+      ~23 `self._target` uses are inside genuinely *pair-dependent* logic
+      (variable naming `@x`→`V_X`/`v_x`/`@x`; scalar-function mappings
+      CHARINDEX/INSTR/LOCATE/STRPOS, DATEADD, DATEDIFF that read per source and
+      emit per target) and *source*-only logic — these stay in the base
+      parameterized by `self._source`, by design (forcing them into target-only
+      subclasses would be incorrect). Suite green (1029), output unchanged.
 - [ ] **Parser**: split the 11 source-family conditionals cleanly if it helps.
 - [ ] **Physical plugin layout (final step)**: once each base/subclass body is
       complete, split `emitter.py` and `transformer.py` into per-engine
