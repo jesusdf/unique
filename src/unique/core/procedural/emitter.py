@@ -725,85 +725,38 @@ class ProceduralEmitter:
 
     def _emit_if(self, node: IfStatement) -> str:
         cond = self._emit_node(node.condition)
+        return self._emit_if_body(cond, node.then_body, node.else_body)
 
-        if self._dialect == "tsql":
-            return self._emit_tsql_if(cond, node.then_body, node.else_body)
-        else:
-            return self._emit_plsql_if(cond, node.then_body, node.else_body)
-
-    def _emit_tsql_if(
+    def _emit_if_body(
         self,
         cond: str,
         then_body: tuple[ASTNode, ...],
         else_body: tuple[ASTNode, ...],
     ) -> str:
-        lines = [f"IF {cond}"]
-        lines.append("BEGIN")
-        self._indent_level += 1
-        for stmt in then_body:
-            text = self._emit_node(stmt)
-            for line in text.split("\n"):
-                lines.append(f"{self._indent()}{line}" if line.strip() else "")
-        self._indent_level -= 1
-        lines.append("END")
-
-        if else_body:
-            if len(else_body) == 1 and isinstance(else_body[0], IfStatement):
-                lines.append(f"ELSE {self._emit_node(else_body[0])}")
-            else:
-                lines.append("ELSE")
-                lines.append("BEGIN")
-                self._indent_level += 1
-                for stmt in else_body:
-                    text = self._emit_node(stmt)
-                    for line in text.split("\n"):
-                        lines.append(f"{self._indent()}{line}" if line.strip() else "")
-                self._indent_level -= 1
-                lines.append("END")
-
-        return "\n".join(lines)
-
-    def _emit_plsql_if(
-        self,
-        cond: str,
-        then_body: tuple[ASTNode, ...],
-        else_body: tuple[ASTNode, ...],
-    ) -> str:
+        """Default (PL/SQL) IF … THEN … [ELSIF …] [ELSE …] END IF;. T-SQL
+        overrides with the BEGIN/END block form."""
         lines = [f"IF {cond} THEN"]
         self._indent_level += 1
-        for stmt in then_body:
-            text = self._emit_node(stmt)
-            for line in text.split("\n"):
-                lines.append(f"{self._indent()}{line}" if line.strip() else "")
+        lines.extend(self._emit_indented_stmts(then_body))
         self._indent_level -= 1
 
         if else_body:
             if len(else_body) == 1 and isinstance(else_body[0], IfStatement):
-                nested_cond = self._emit_node(else_body[0].condition)
+                nested = else_body[0]
+                nested_cond = self._emit_node(nested.condition)
                 lines.append(f"ELSIF {nested_cond} THEN")
                 self._indent_level += 1
-                for stmt in else_body[0].then_body:
-                    text = self._emit_node(stmt)
-                    for line in text.split("\n"):
-                        lines.append(f"{self._indent()}{line}" if line.strip() else "")
+                lines.extend(self._emit_indented_stmts(nested.then_body))
                 self._indent_level -= 1
-                if else_body[0].else_body:
+                if nested.else_body:
                     lines.append("ELSE")
                     self._indent_level += 1
-                    for stmt in else_body[0].else_body:
-                        text = self._emit_node(stmt)
-                        for line in text.split("\n"):
-                            lines.append(
-                                f"{self._indent()}{line}" if line.strip() else ""
-                            )
+                    lines.extend(self._emit_indented_stmts(nested.else_body))
                     self._indent_level -= 1
             else:
                 lines.append("ELSE")
                 self._indent_level += 1
-                for stmt in else_body:
-                    text = self._emit_node(stmt)
-                    for line in text.split("\n"):
-                        lines.append(f"{self._indent()}{line}" if line.strip() else "")
+                lines.extend(self._emit_indented_stmts(else_body))
                 self._indent_level -= 1
 
         lines.append("END IF;")
@@ -1358,16 +1311,15 @@ class ProceduralEmitter:
         return expr
 
     def _emit_continue(self, node: ContinueStatement) -> str:
-        if self._dialect == "tsql":
-            return "CONTINUE;"
+        """Default (PL/SQL) CONTINUE [WHEN cond]. T-SQL overrides (no WHEN)."""
         if node.condition:
             cond = self._emit_node(node.condition)
             return f"CONTINUE WHEN {cond};"
         return "CONTINUE;"
 
     def _emit_null(self, _node: NullStatement) -> str:
-        if self._dialect == "tsql":
-            return "-- NULL (no-op)"
+        """Default no-op statement is ``NULL;`` (PL/SQL). T-SQL overrides with a
+        comment (T-SQL has no NULL statement)."""
         return "NULL;"
 
     def _emit_comment(self, node: CommentStatement) -> str:
@@ -1488,6 +1440,39 @@ class TSqlEmitter(ProceduralEmitter):
         expr = re.sub(r"\w+\s*%\s*NOTFOUND", "@@FETCH_STATUS <> 0", expr, flags=re.I)
         expr = re.sub(r"\w+\s*%\s*FOUND", "@@FETCH_STATUS = 0", expr, flags=re.I)
         return expr
+
+    def _emit_continue(self, node: ContinueStatement) -> str:
+        # T-SQL CONTINUE takes no WHEN clause.
+        return "CONTINUE;"
+
+    def _emit_null(self, _node: NullStatement) -> str:
+        # T-SQL has no NULL statement; emit a no-op comment.
+        return "-- NULL (no-op)"
+
+    def _emit_if_body(
+        self,
+        cond: str,
+        then_body: tuple[ASTNode, ...],
+        else_body: tuple[ASTNode, ...],
+    ) -> str:
+        lines = [f"IF {cond}", "BEGIN"]
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(then_body))
+        self._indent_level -= 1
+        lines.append("END")
+
+        if else_body:
+            if len(else_body) == 1 and isinstance(else_body[0], IfStatement):
+                lines.append(f"ELSE {self._emit_node(else_body[0])}")
+            else:
+                lines.append("ELSE")
+                lines.append("BEGIN")
+                self._indent_level += 1
+                lines.extend(self._emit_indented_stmts(else_body))
+                self._indent_level -= 1
+                lines.append("END")
+
+        return "\n".join(lines)
 
 
 class OracleEmitter(ProceduralEmitter):
