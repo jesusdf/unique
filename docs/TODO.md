@@ -29,18 +29,30 @@ below are closed.
 
 High-level plan (details in that folder):
 
-- [ ] **Coverage matrix** — enumerate the behaviors to *guarantee* functionally
+- [x] **Coverage matrix** — enumerate the behaviors to *guarantee* functionally
       (data types, object types, trigger/proc/function/view semantics), proving
-      the schema is minimal yet complete.
+      the schema is minimal yet complete. Done: `tests/functional_equivalence/
+      coverage-matrix.md` locked for Phase 1 — every type/object mapped to a
+      scenario step and to an `expected_state.yaml` assertion, with a minimality
+      argument and a per-value determinism checklist. Resolved the draft gaps:
+      `fn_tax` now exercised via a tax-on-invoice path, `is_paid` set by an
+      explicit payment-path UPDATE, `created_at` is presence-asserted only.
 - [ ] **Minimal schema** — a small invoicing-style domain (customer, product,
       invoice, invoice_line, payment) that exercises every covered construct;
-      canonical DDL + a UML/Mermaid diagram generated from it.
+      canonical DDL + a UML/Mermaid diagram generated from it. Design done:
+      `schema/schema.mmd` locked and reconciled with the matrix (line_total is
+      `DECIMAL(10,2)`, totals `DECIMAL(12,2)`, identity pinned START 1). **DDL
+      (`schema/canonical.sql`) intentionally not yet written** — it is the first
+      SQL step, to be authored after this design pass; regenerate the diagram
+      from it then so the two can't drift.
 - [ ] **Deterministic scenario** — seed inserts + mutations whose outcome is
       identical across engines (fixed dates, explicit decimal scale, no
       engine-defined division/concat/rounding/collation behavior in asserted
       values).
-- [ ] **Engine-agnostic expected-state spec** (`expected_state.yaml`) — per-table
-      row counts and specific `pk → column` values, defined once.
+- [x] **Engine-agnostic expected-state spec** (`expected_state.yaml`) — per-table
+      row counts and specific `pk → column` values, defined once. Done: locked
+      for Phase 1, all values reconciled (invoice.total = net + 10% tax, every
+      taxed value exact at scale 2) and cross-checked against the matrix.
 - [ ] **Harness + CI** — for each engine: clean setup → run script → read each
       table into a canonical (type-normalized) form → assert against the spec →
       teardown. Reuse `tests/helpers/live_validation.py`. Start with one
