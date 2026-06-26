@@ -307,6 +307,42 @@ jobs:
           fi
           exit $rc
 
+      - name: Run functional-equivalence harness
+        # Non-gating until the first real-engine run is confirmed green: the
+        # harness is the system-under-test's acceptance run and its first live
+        # pass may surface per-engine wrinkles (statement splitting, a value
+        # normalization, or a genuine emitter finding) that are fixed in a
+        # DB-enabled environment. Flip to gating (remove continue-on-error) once
+        # it passes against the real engines. See tests/functional_equivalence/HARNESS.md.
+        continue-on-error: true
+        env:
+          # Reuses the same engines already started for this job. The harness
+          # transpiles the canonical schema+scenario per engine, runs them, and
+          # asserts each reaches the engine-agnostic expected_state.yaml.
+          UNIQUE_TEST_MSSQL_URL: mssql://sa:Unique_Strong!Pass1@localhost:1433/master
+          UNIQUE_TEST_ORACLE_URL: oracle://unique:UniqueStrongPass1@localhost:1521/FREEPDB1
+          UNIQUE_TEST_MYSQL_URL: mysql://root:UniqueStrongPass1@localhost:3307/unique
+          UNIQUE_TEST_PG_URL: postgresql://unique:unique@localhost:5433/unique
+        run: |
+          set +e
+          pytest tests/functional_equivalence/test_functional_equivalence_live.py -v -rA \
+            > /tmp/fe.out 2>&1
+          rc=$?
+          set -e
+          cat /tmp/fe.out
+          {
+            echo '### Functional-equivalence harness'
+            echo '```'
+            cat /tmp/fe.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ $rc -ne 0 ]; then
+            DETAIL=$(grep -E "^(FAILED|E |assert|.*diverged from)" /tmp/fe.out \
+              | head -40 | sed 's/%/%25/g; s/\r//g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Functional-equivalence harness failed::${DETAIL}"
+          fi
+          exit $rc
+
   docker:
     name: Docker Build & Push
     runs-on: ubuntu-latest
