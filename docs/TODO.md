@@ -143,11 +143,33 @@ High-level plan (details in that folder):
       row counts and specific `pk → column` values, defined once. Done: locked
       for Phase 1, all values reconciled (invoice.total = net + 10% tax, every
       taxed value exact at scale 2) and cross-checked against the matrix.
-- [ ] **Harness + CI** — for each engine: clean setup → run script → read each
-      table into a canonical (type-normalized) form → assert against the spec →
-      teardown. Reuse `tests/helpers/live_validation.py`. Start with one
-      canonical source (T-SQL) transpiled to the other three (4 runs); grow to
-      the full 4×4 matrix (each engine authored natively, cross-transpiled).
+- [x] **Harness built** — `state_check.py` (load `expected_state.yaml`, per-engine
+      value normalization: bool/int/decimal-scale/str-trim/date/NULL, and table
+      comparison) and `engine_runner.py` (statement splitter for GO / `;` /
+      Oracle `/`, keeping `$$…$$` and `BEGIN…END` bodies intact; lazy DB-API
+      connect per engine; run script + read tables). The live test
+      `test_functional_equivalence_live.py` transpiles schema+scenario per target,
+      runs them, and asserts the expected state; it **skips** unless the matching
+      `UNIQUE_TEST_*_URL` env var is set (same pattern as `test_live_syntax.py`).
+      The pure mechanics are CI-covered with no external DB: `test_state_check.py`
+      (17 cases) and `test_engine_runner.py` (splitter + an end-to-end read+compare
+      smoke test on SQLite). Added Oracle to `docker-compose.test.yaml` and a
+      runbook (`HARNESS.md`).
+- [ ] **Live run + final adjustments** (do in a DB-enabled environment). Bring up
+      the engines (`docker compose -f docker-compose.test.yaml up -d`), install
+      drivers (`psycopg pymysql oracledb [pyodbc]`), and run the live test
+      (see `HARNESS.md`). First-run wrinkles to fix where they surface: statement
+      splitting edge cases (`engine_runner.split_statements`), any transpiled
+      statement an engine rejects (a real emitter finding — fix the emitter),
+      and any "morally equal but unequal" value (extend `state_check.normalize`
+      + add a unit test). MySQL/Oracle set-based trigger effects are documented
+      divergences — assert trigger-maintained values on PostgreSQL (+ T-SQL).
+- [ ] **CI job for the live harness** (optional, after the manual run is green) —
+      a workflow job mirroring "Live Syntax Validation" that starts the compose
+      services and runs `test_functional_equivalence_live.py`.
+- [ ] **Phase 2: full 4×4 matrix** — author the scenario natively in each of the
+      four dialects and require all 16 source×target runs to converge on the
+      same `expected_state.yaml`.
 
 Key design risks, captured for when we start:
 - **Determinism** is the central challenge — see the folder README for the list
