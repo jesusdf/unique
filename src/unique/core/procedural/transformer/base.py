@@ -1194,8 +1194,20 @@ class ProceduralTransformer:
         return sql
 
     def _transform_embedded_dml(self, node: EmbeddedDML) -> EmbeddedDML:
-        """Transform embedded DML using sqlglot."""
+        """Transform embedded DML using sqlglot.
+
+        A cross-table ``UPDATE ... FROM ... JOIN`` is routed through the IR
+        converter/emitter instead, because sqlglot leaves it in the invalid
+        T-SQL ``UPDATE alias SET alias.col ... FROM tbl alias JOIN ...`` shape on
+        the other engines; the IR emitter renders each engine's idiomatic form.
+        """
         sql = self._transform_var_in_sql(node.sql)
+        rewritten = self._transform_cross_table_update(sql)
+        if rewritten is not None:
+            sql = rewritten
+            if self._in_trigger and self._rewrites_trigger_pseudotables():
+                sql = self._rewrite_trigger_pseudotables(sql)
+            return EmbeddedDML(sql=sql, dialect=self._target)
         try:
             source_dialect = self._get_sqlglot_dialect(self._source)
             target_dialect = self._get_sqlglot_dialect(self._target)
@@ -1214,6 +1226,44 @@ class ProceduralTransformer:
         if self._in_trigger and self._rewrites_trigger_pseudotables():
             sql = self._rewrite_trigger_pseudotables(sql)
         return EmbeddedDML(sql=sql, dialect=self._target)
+
+    def _transform_cross_table_update(self, sql: str) -> str | None:
+        """Render a cross-table ``UPDATE ... FROM/JOIN`` via the IR emitter.
+
+        Returns the target SQL when ``sql`` is exactly one UPDATE statement that
+        carries a FROM/JOIN (the shape sqlglot mishandles), else ``None`` so the
+        caller falls back to the normal sqlglot path.
+        """
+        from unique.core import converter as _conv
+
+        try:
+            parsed = sqlglot.parse(sql, read=self._get_sqlglot_dialect(self._source))
+        except Exception:  # noqa: BLE001 - fall back to sqlglot path
+            return None
+        statements = [s for s in parsed if s is not None]
+        if len(statements) != 1 or not isinstance(statements[0], sqlglot.exp.Update):
+            return None
+        update_expr = statements[0]
+        from_expr = update_expr.args.get("from_") or update_expr.args.get("from")
+        if from_expr is None:
+            return None
+        # Only handle joins against plain tables. A join against a subquery
+        # (e.g. an aggregate "JOIN (SELECT ... GROUP BY) agg") is not converted
+        # faithfully by the IR yet, so fall back to the documented degradation
+        # path rather than emit a broken "FROM <empty>".
+        source_table = from_expr.this
+        if isinstance(source_table, sqlglot.exp.Table):
+            for join_expr in source_table.args.get("joins") or []:
+                if not isinstance(join_expr.this, sqlglot.exp.Table):
+                    return None
+        try:
+            ir_node = _conv._convert_update(update_expr)
+            if ir_node.from_clause is None and not ir_node.joins:
+                return None
+            return _conv._emit_update(ir_node, self._target)
+        except Exception as e:  # noqa: BLE001 - fall back to sqlglot path
+            logger.debug("IR cross-table UPDATE rewrite failed: %s", e)
+            return None
 
     def _fix_target_dml(self, sql: str) -> str:
         """Apply target-specific cleanups to sqlglot-transpiled DML. The base
