@@ -1,34 +1,54 @@
 # Engine-agnostic expected final state — the single source of truth for the
 # functional-equivalence harness. After running the (transpiled) scenario on any
 # engine, the harness reads each table into a normalized form and asserts it
-# against this spec. The SAME spec must hold for all engines → functional
+# against this spec. The SAME spec must hold for all four engines → functional
 # equivalence.
 #
-# Status: DRAFT / placeholder. Values are illustrative until the canonical
-# scenario is authored. Use only deterministic values here (see README:
-# fixed dates, explicit decimal scale, no engine-defined behavior).
+# Status: LOCKED for Phase 1 (T-SQL canonical source → MySQL/PostgreSQL/Oracle).
+# Every value below is derived from scenario/canonical.sql (authored next) and
+# is deterministic across all four engines: fixed literal dates, explicit
+# DECIMAL(p, s), a tax rate (10%) chosen so every taxed value is exact at scale
+# 2 (no rounding-mode dependence), no integer-division, no NULL-concat, no
+# collation-dependent ordering. See coverage-matrix.md for the per-value
+# determinism proof and README.md for the rationale.
 #
 # Format:
 #   tables:
 #     <table>:
-#       row_count: <int>                     # exact number of rows
-#       rows:                                # optional: specific rows by PK
-#         - { <pk_col>: <v>, <col>: <v>, ... }  # asserted columns only
+#       row_count: <int>                       # exact number of rows
+#       rows:                                  # specific rows by PK
+#         - { <pk_col>: <v>, <col>: <v>, ... } # asserted columns only
 #   notes: free-form, for humans
 #
 # Normalization applied on read before comparison (see harness):
-#   bool      -> Python bool (0/1 and false/true both map here)
-#   decimal   -> string at the column's declared scale (e.g. "121.00")
-#   char/text -> trimmed string
-#   null      -> the YAML `null` sentinel
+#   bool       -> Python bool   (0/1 and false/true both map here)
+#   int/number -> Python int
+#   decimal    -> string at the column's declared scale (e.g. "61.05")
+#   char/text  -> trimmed string
+#   date       -> ISO "YYYY-MM-DD" string
+#   null       -> the YAML `null` sentinel
+#
+# Intentionally NOT asserted by exact value (documented divergence):
+#   invoice.created_at — trigger/clock-stamped DATETIME. The harness asserts it
+#   is present and non-null, never its literal value (see coverage-matrix.md,
+#   "DATETIME" row). Freezing the clock per engine is deferred to Phase 2.
 
 version: 1
 
+# Scenario recap (full ordered steps live in scenario/canonical.sql):
+#   1. seed 2 customers, 2 products
+#   2. direct INSERT invoice 1 + 2 lines        -> trg recomputes invoice.total
+#   3. UPDATE a line on invoice 1 (qty 2 -> 3)   -> trg readjusts invoice.total
+#   4. CALL create_invoice(...) builds invoice 2 -> DML-from-a-procedure path
+#   5. INSERT payment for invoice 2's full total -> marks invoice 2 is_paid
+# Tax is computed by fn_tax(net) = net * 0.10, exercised on each invoice total.
+
 tables:
+
   customer:
     row_count: 2
     rows:
-      - { id: 1, name: "Acme", email: "billing@acme.test" }
+      - { id: 1, name: "Acme",   email: "billing@acme.test" }
       - { id: 2, name: "Globex", email: "ap@globex.test" }
 
   product:
@@ -40,26 +60,39 @@ tables:
   invoice:
     row_count: 2
     rows:
-      # Invoice 1: 2 Widgets + 1 Gadget = 20.00 + 25.50 = 45.50 (set by trigger)
-      - { id: 1, customer_id: 1, issued_on: "2024-01-15", total: "45.50", is_paid: false }
-      # Invoice 2: created via create_invoice() proc
-      - { id: 2, customer_id: 2, issued_on: "2024-02-01", total: "51.00", is_paid: true }
+      # Invoice 1: direct insert (2 Widget + 1 Gadget = 45.50 net), then a line
+      # is updated to 3 Widget -> net 55.50; trigger maintains total = net + tax.
+      #   net 55.50 + fn_tax(55.50)=5.55 -> total 61.05 ; unpaid.
+      - { id: 1, customer_id: 1, issued_on: "2024-01-15", total: "61.05", is_paid: false }
+      # Invoice 2: built by create_invoice() (1 Widget + 1 Gadget = 35.50 net);
+      #   net 35.50 + fn_tax(35.50)=3.55 -> total 39.05 ; paid in full at step 5.
+      - { id: 2, customer_id: 2, issued_on: "2024-02-01", total: "39.05", is_paid: true }
 
   invoice_line:
     row_count: 4
-    # line_total maintained as qty * unit_price; total rolls up into invoice.total
+    # line_total maintained as qty * unit_price; the per-invoice net (sum of
+    # line_total) rolls up via the trigger into invoice.total (net + tax).
     rows:
-      - { id: 1, invoice_id: 1, product_id: 1, qty: 2, unit_price: "10.00", line_total: "20.00" }
+      # Invoice 1 (after the step-3 update: Widget qty 2 -> 3)
+      - { id: 1, invoice_id: 1, product_id: 1, qty: 3, unit_price: "10.00", line_total: "30.00" }
       - { id: 2, invoice_id: 1, product_id: 2, qty: 1, unit_price: "25.50", line_total: "25.50" }
+      # Invoice 2 (inserted by create_invoice)
+      - { id: 3, invoice_id: 2, product_id: 1, qty: 1, unit_price: "10.00", line_total: "10.00" }
+      - { id: 4, invoice_id: 2, product_id: 2, qty: 1, unit_price: "25.50", line_total: "25.50" }
 
   payment:
     row_count: 1
     rows:
-      - { id: 1, invoice_id: 2, amount: "51.00" }
+      # Pays invoice 2 in full (= its total 39.05); the payment path sets is_paid.
+      - { id: 1, invoice_id: 2, paid_on: "2024-02-05", amount: "39.05" }
 
 notes: >
-  Illustrative placeholder. The real values must be derived from the canonical
-  scenario once authored, and every asserted value must be deterministic across
-  all four engines (no clock-, division-, rounding- or collation-dependent
-  values). created_at (trigger/clock-stamped) is intentionally NOT asserted by
-  exact value here.
+  All values are reconciled and deterministic at DECIMAL scale 2. Tax rate is
+  fixed at 10% (fn_tax), chosen so every taxed subtotal (45.50, 55.50, 35.50)
+  yields an exact 2-decimal result, removing rounding-mode dependence between
+  engines. invoice.total = SUM(invoice_line.line_total) + fn_tax(that sum),
+  maintained by trg_line_total on INSERT/UPDATE of invoice_line; the step-3
+  line UPDATE proves the "update on a triggered table" path. invoice 2 is built
+  entirely through the create_invoice procedure (the "DML from a procedure"
+  path). invoice.created_at is intentionally excluded from value assertions
+  (clock-sensitive) and only checked for presence.
