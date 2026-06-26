@@ -98,6 +98,19 @@ def test_transpile_select(fixture):
     assert result == fixture.expected_sql
 ```
 
+### Round-trip operator/function tests (A -> B -> A')
+
+For anything whose *spelling* differs between engines -- operators (string `+`
+vs `||` vs `CONCAT`, bitwise, compound assignment) and functions modeled
+differently per dialect -- prefer a **round-trip** test over a one-way one. A
+one-way assertion can silently pass on a *no-op* conversion: T-SQL `+` left as
+`+` on Oracle "looks plausible", and a one-way test that only checks the target
+won't catch it. Transpiling A->B then B->A makes the regression obvious because
+A' then differs from A. This technique surfaced the string-concat, bitwise,
+compound-assignment and dropped-function-argument bugs. See
+`tests/integration/test_operator_roundtrip.py` and `test_function_translation.py`;
+cover all 12 engine pairs where the spelling can differ.
+
 ## Adding a New AST Node
 
 1. Define the node in `src/unique/core/ast_nodes.py`:
@@ -192,6 +205,31 @@ mypy src/unique/ --ignore-missing-imports   # types -> "no issues found"
 pytest tests/ -q         # full suite -> "<n> passed"
 ```
 
+**Watch the ruff result, not just the summary.** `ruff check` can print
+`No fixes available (... hidden fix ...)` while still **failing** -- it counts
+the issue as an error even when it can't auto-fix it (e.g. `SIM102` nested-`if`,
+`SIM103` return-the-condition). CI runs `black --check` / `isort --check-only` /
+`ruff check`, so a "1 error" you skim past locally turns into a red CI. Confirm
+ruff prints exactly `All checks passed!`.
+
+**Verify large edits survived the formatter.** `str_replace` and the black/isort
+auto-fixers have repeatedly **collapsed or deleted adjacent bodies** when an edit
+hit a big file (function bodies reduced to signature/docstring, test classes or
+doc tables silently dropped, leaving empty gaps). After any non-trivial edit to
+`converter.py`, `transpiler.py`, the procedural `base.py` files, a test module,
+or a docs/skills table, re-verify before trusting it:
+
+```bash
+python -c "import ast; ast.parse(open('PATH').read())"   # still parses?
+grep -c "def <helper_you_just_added>" PATH               # exists exactly once?
+git diff --stat PATH                                     # sane +/- ratio, not +2/-24?
+```
+
+and spot-check behaviour (a quick `Transpiler().transpile(...)`). For appending
+test classes use a bash heredoc (`cat >> file <<'PYEOF'`); for rewriting a whole
+function or a markdown table, use a small Python script that asserts the old text
+was found *exactly once* before replacing -- a silent miss corrupts the file.
+
 If a transformer/emitter/parser change affects the procedural fixtures,
 **regenerate them** before committing and review the diff (they are generated,
 never hand-edited):
@@ -233,11 +271,28 @@ def transpile(sql: str, source: str, target: str) -> str:
 Between parsing and emitting, a transform step normalizes dialect-specific
 constructs into portable equivalents:
 
-- `TOP n` → `LIMIT n`
-- `ISNULL()` → `COALESCE()`
-- `GETDATE()` → `NOW()` / `CURRENT_TIMESTAMP`
-- `NVL()` → `COALESCE()`
-- String concatenation: `+` ↔ `||` ↔ `CONCAT()`
+- `TOP n` -> `LIMIT n`
+- `ISNULL()` -> `COALESCE()`
+- `GETDATE()` -> `NOW()` / `CURRENT_TIMESTAMP`
+- `NVL()` -> `COALESCE()`
+- String concatenation: `+` <-> `||` <-> `CONCAT()`
+
+**Where the sqlglot workarounds live.** sqlglot does the per-statement parsing
+but has gaps we patch in `core/converter.py` for **standalone DML** (the
+procedural engine handles routine bodies separately, so a fix often needs doing
+in *both* places, or the DML form lags behind):
+
+- T-SQL string `+` -> concat: `_rewrite_tsql_string_concat` rewrites an `Add`
+  with a string-ish operand to `DPipe`; `col + col` without type info stays `+`.
+- Bitwise `& | ^ << >>`: mapped explicitly in `_convert_binary`/`_emit_binary`;
+  an unmapped operator is preserved verbatim, never coerced to `=`.
+- Compound assignment (`SET a += 1`): expanded to `a = a + 1` in
+  `transpiler._expand_tsql_compound_assignment` before sqlglot sees it.
+- Function arguments: `_convert_function` collects args in `arg_types` order so
+  named-slot args (Substring/Replace/Round/Stuff/DateAdd/Power/...) aren't lost.
+
+When you fix a sqlglot gap, check whether the same construct also flows through
+the procedural engine, and add a round-trip test.
 
 ### Error Handling
 
