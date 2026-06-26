@@ -69,17 +69,11 @@ GO
 -- ---- Step 4: DML from a stored procedure ------------------------------------
 -- create_invoice builds invoice 2 for Globex (1 Widget + 1 Gadget = net 35.50);
 -- trg_line_total sets total = 35.50 + fn_tax(35.50) 3.55 = 39.05. is_paid stays
--- at its DEFAULT 0 until step 5.
-
-DECLARE @inv2 INT;
-EXEC dbo.create_invoice
-    @customer_id = 2,
-    @issued_on   = '2024-02-01',
-    @product_a   = 1,
-    @qty_a       = 1,
-    @product_b   = 2,
-    @qty_b       = 1,
-    @new_id      = @inv2 OUTPUT;
+-- at its DEFAULT 0 until step 5. Positional arguments (no OUTPUT capture: the new
+-- id is invoice 2, referenced directly in step 5) so the call is a portable
+-- CALL create_invoice(...) on every engine.
+--   args: @customer_id, @issued_on, @product_a, @qty_a, @product_b, @qty_b
+EXEC dbo.create_invoice 2, '2024-02-01', 1, 1, 2, 1;
 GO
 
 

@@ -280,6 +280,34 @@ class TestDynamicSQL:
         assert "USING" in out
 
 
+class TestStandaloneExec:
+    """A standalone EXEC proc (not inside a CREATE PROCEDURE body) must also
+    become CALL proc(args) on the other engines, with named args turned
+    positional and OUTPUT dropped — not left as raw T-SQL EXEC."""
+
+    _EXEC = (
+        "EXEC dbo.create_invoice @customer_id = 2, @issued_on = '2024-02-01', "
+        "@product_a = 1, @qty_a = 1, @product_b = 2, @qty_b = 1"
+    )
+
+    def test_standalone_exec_to_postgresql(self) -> None:
+        out = _transpile(self._EXEC, "tsql", "postgresql")
+        assert "CALL create_invoice(" in out
+        assert "EXEC" not in out.upper().split("--")[0]
+
+    def test_standalone_exec_to_mysql(self) -> None:
+        out = _transpile(self._EXEC, "tsql", "mysql")
+        assert "CALL create_invoice(" in out
+
+    def test_standalone_exec_to_oracle(self) -> None:
+        out = _transpile(self._EXEC, "tsql", "oracle")
+        assert "create_invoice(" in out.lower()
+        assert "EXEC " not in out.upper().split("--")[0]
+        # Oracle runs a procedure call inside a PL/SQL block.
+        assert "BEGIN" in out.upper()
+        assert "END;" in out.upper()
+
+
 class TestTSQLExecToMySQL:
     """T-SQL EXEC has three shapes that must map to different MySQL forms."""
 

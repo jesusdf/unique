@@ -507,6 +507,21 @@ class StatementList(ASTNode):
 
 
 @dataclass(frozen=True)
+class AnonymousBlock(ASTNode):
+    """A top-level anonymous procedural block (no CREATE wrapper).
+
+    A bare ``EXEC proc …`` or a batch-level ``DECLARE @x …; …`` outside any
+    routine. The emitter renders the engine's anonymous-block form: PostgreSQL
+    ``DO $$ [DECLARE …] BEGIN … END $$;`` (or a plain ``CALL`` when there are no
+    declarations), Oracle ``BEGIN … END;`` / ``DECLARE … BEGIN … END;``, MySQL
+    has no anonymous block so a single call degrades to ``CALL`` and a
+    declaring block is documented.
+    """
+
+    statements: tuple[ASTNode, ...] = ()
+
+
+@dataclass(frozen=True)
 class TryCatchBlock(ASTNode):
     """TRY ... CATCH / EXCEPTION block."""
 
