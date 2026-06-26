@@ -159,6 +159,35 @@ JSON function names and path syntax differ between engines. The transpiler
 handles basic `JSON_VALUE` and `JSON_QUERY` equivalents but does not cover
 advanced JSON manipulation or PostgreSQL-specific JSONB operators.
 
+### 3.10 Bitwise Operators → Oracle
+
+Oracle has no infix bitwise operators — only the `BITAND()` function, and no
+portable `|`/`^`. T-SQL `a & b`, `a | b`, `a ^ b` are passed through unchanged
+when targeting Oracle (valid on PostgreSQL and MySQL, where `^` becomes `#` on
+PostgreSQL). They are **no longer silently corrupted to `=`** (a former
+converter default), but a faithful Oracle translation would require function
+rewrites and is not yet implemented.
+
+### 3.11 String Concatenation Between Untyped Columns
+
+In T-SQL `+` means concatenation when an operand is a string and addition when
+both are numeric. The transpiler rewrites `+` to the target's concatenation
+operator (`||`, or `CONCAT()` on MySQL) when an operand is *recognizably* a
+string — a literal, a varchar cast, or a string function. But `col1 + col2`
+between two columns is **ambiguous without type information**: T-SQL resolves it
+by the columns' declared types, which the standalone-DML path does not have (no
+`--db-url`). Such an expression is left as `+`. Add a cast
+(`CAST(col1 AS VARCHAR) + col2`) or run it through a routine with metadata.
+
+### 3.12 IIF and DATEPART (standalone DML)
+
+`IIF(cond, a, b)` is currently emitted as `IF(cond, a, b)` — valid on MySQL but
+not on Oracle/PostgreSQL, which need a `CASE WHEN` rewrite (pending; use
+`CASE WHEN` directly there meanwhile). `DATEPART(part, x)` may emit a
+non-standard `EXTRACT(part, x)`; prefer `YEAR(x)`/`MONTH(x)`/`DAY(x)`, which
+translate cleanly. These affect standalone DML; inside routines the procedural
+engine handles the common cases.
+
 ---
 
 ## 4. Behavioral Differences (Not Bugs)
@@ -217,10 +246,16 @@ only partially supported:
   `FETCH FIRST` instead).
 - **Set-based trigger pseudo-tables** (`FROM inserted JOIN deleted`): T-SQL
   triggers are statement-level with `inserted`/`deleted` row sets. Column
-  qualifiers (`inserted.col`) map to the row-level `NEW`/`OLD` (`:NEW`/`:OLD`),
-  but a *set-based* use has no row-level equivalent and is documented with a
-  `-- UNIQUE:` note (PostgreSQL transition tables / Oracle compound triggers
-  would be needed; MySQL has neither). Pure set-based auto-rewrite is a TODO.
+  qualifiers (`inserted.col`) map to the row-level `NEW`/`OLD` (`:NEW`/`:OLD`).
+  A **purely set-based** trigger (using `inserted`/`deleted` only via
+  `FROM`/`JOIN`, with no row-level qualifier or `UPDATE(col)` predicate) is now
+  **rewritten to a PostgreSQL statement-level trigger** with `REFERENCING NEW
+  TABLE AS inserted OLD TABLE AS deleted` + `FOR EACH STATEMENT`. Oracle and
+  MySQL keep documenting it with a `-- UNIQUE:` note: Oracle has no *named*
+  transition tables (a compound trigger would need a manual PL/SQL collection,
+  and `FROM inserted` would be invalid), and MySQL has neither. A **mixed**
+  trigger (row-level and set-level together) cannot be a single trigger and
+  stays documented on every target.
 
 ### Oracle → T-SQL specifics
 

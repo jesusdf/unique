@@ -40,10 +40,19 @@ work lives in `docs/DONE.md`.
       transpilation **restores the original type** where the target supports it
       (e.g. `SQL_VARIANT`→T-SQL, `%TYPE`→Oracle) and re-applies a carrier where it
       doesn't.
+- [x] **Standalone-DML operator & function fidelity** — a cross-engine audit
+      fixed several converter bugs: T-SQL string `+` maps to the target concat
+      operator (`||`/`CONCAT`), bitwise `& | ^ << >>` are preserved instead of
+      coerced to `=` (the dangerous default was removed), compound assignment
+      (`SET a += 1`) expands to `a = a + 1`, and specialized functions keep
+      **all** their arguments (sqlglot stores them in named slots — `SUBSTRING`,
+      `REPLACE`, `ROUND`, `STUFF`, `REPLICATE`, `DATEADD`, `POWER`, `NULLIF`, …).
 - [x] **Triggers** — firing modes/granularity across engines; PostgreSQL trigger
       function + CREATE TRIGGER; `UPDATE(col)` predicate per engine; `inserted`/
-      `deleted` pseudo-tables mapped to NEW/OLD (column qualifiers) or documented
-      (set-based use).
+      `deleted` pseudo-tables mapped to NEW/OLD (column qualifiers). A **pure**
+      set-based trigger is rewritten to a PostgreSQL statement-level trigger with
+      `REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted`; mixed/Oracle/MySQL
+      cases are documented.
 - [x] **Live validation** — `tests/helpers/live_validation.py` +
       `test_live_syntax.py` validate output against real engines (rolled-back
       transaction; MySQL in a throwaway database). The anonymized procedural
@@ -58,7 +67,7 @@ work lives in `docs/DONE.md`.
 
 ### Test suite
 
-1025 passing + 55 skipped (the skipped ones need a live DB and run in the CI
+1112 passing + 59 skipped (the skipped ones need a live DB and run in the CI
 live jobs). Run `pytest tests/ -q`.
 
 ### Dialect pair coverage
@@ -75,8 +84,12 @@ emitted as documented `-- UNIQUE:` comments / warnings, not silently dropped):
 - `%TYPE`/`%ROWTYPE` without `--db-url` → carrier type + `/* UNIQUE: … */`
   comment (now restored on a round-trip back to a supporting engine).
 - `EXECUTE IMMEDIATE ... USING` bind variables (T-SQL `sp_executesql`).
-- Set-based trigger bodies (`FROM inserted JOIN deleted`) → documented (no
-  row-level equivalent; MySQL has no transition tables).
+- Set-based trigger bodies (`FROM inserted JOIN deleted`) → **rewritten** to a
+  PostgreSQL statement-level trigger (transition tables); documented on
+  Oracle/MySQL and for mixed row-/set-level triggers.
+- Bitwise operators targeting Oracle (no infix bitwise; preserved as-is) and
+  `col + col` string concat without type info (left as `+`); `IIF`→`IF` and
+  `DATEPART`→`EXTRACT` rewrites pending for standalone DML.
 - SQL Server system procedures (`sp_addextendedproperty`, …), SQL*Plus
   directives, and engine-specific physical features (partitioning, tablespaces,
   filegroups, index storage clauses).

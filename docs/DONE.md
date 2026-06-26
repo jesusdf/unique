@@ -447,3 +447,46 @@ faithful general conversion would wrap the row-level body in a cursor over
 `inserted` (RBAR, plus a PK-join problem for UPDATE), so a true set-based
 rewrite is only safe for a detectable subset; the rest should stay documented.
 Captured here for future reference rather than implemented.
+
+## 11. Standalone-DML operator & function audit + packaging fix (P1/P2)
+
+A real-world report (`'1234' + '5678'` staying `+` on Oracle) triggered a
+systematic cross-engine audit of operators and functions in the standalone-DML
+path (the procedural engine already handled these inside routine bodies; the gap
+was DML-only). The round-trip technique (A→B→A') made no-op conversions visible.
+
+- [x] **String concatenation.** T-SQL `+` is concatenation when an operand is a
+      string, but sqlglot parses it as arithmetic `Add` and never re-maps it.
+      Rewrite an `Add` to `DPipe` when an operand is recognizably a string
+      (literal, varchar cast, string function — directly or transitively), so
+      sqlglot emits `||` (Oracle/PostgreSQL) or `CONCAT` (MySQL). Purely numeric
+      additions are untouched; ambiguous `col + col` without type info is left as
+      `+` (documented). Tests: `test_operator_roundtrip.py`.
+- [x] **Bitwise operators.** `& | ^ << >>` were silently coerced to `=` (a
+      converter default mapped unknown operators to `EQ`, so `a & b` became
+      `a = b`). Map them explicitly (PostgreSQL XOR is `#`) and **remove the
+      dangerous default** — an unmapped operator is preserved verbatim, never
+      turned into equality. Oracle has no infix bitwise operators, documented as
+      a known limitation.
+- [x] **Compound assignment.** `SET a += 1` was dropped by sqlglot to `SET = 1`
+      (data loss, no warning). Expand `col <op>= expr` to `col = col <op> expr`
+      before sqlglot, scoped to the UPDATE SET list so comparisons elsewhere are
+      untouched. Composes with the concat and bitwise fixes.
+- [x] **Function arguments.** sqlglot models specialized functions with their
+      arguments in *named slots* (`Substring`→start/length, `Replace`→expression/
+      replacement, `Round`→decimals, `Stuff`, `Replicate`, `DateAdd`→unit,
+      `Power`/`Nullif`→expression, …), not in `expressions`. `_convert_function`
+      read only `this` + `expressions`, dropping every named slot (`SUBSTRING(a,
+      1,3)`→`SUBSTR(a)`). Collect scalar arguments in declaration order from
+      `arg_types` (skipping boolean flags), keep variadics (COALESCE/CONCAT), and
+      read an `Anonymous` function's real name from `.name` instead of emitting
+      `ANONYMOUS`. Tests: `test_function_translation.py` (39 cases).
+- [x] **Packaging: static SVG/PNG/ICO in the wheel.** The logo 404'd in the
+      Docker image because the container installs from the wheel and
+      `package-data` only declared `static/*.{html,css,js}`; add `*.svg`/`*.png`/
+      `*.ico`, plus a test asserting the patterns are declared.
+
+Documentation (`01-compatibility.md`, `03-unsupported.md`, `STATUS.md`,
+`sqlglot-dependency.md`) updated to match. Released as **v0.05** (Docker image
+published by CI). The remaining `IIF`→`CASE WHEN` and `DATEPART`→`EXTRACT(…
+FROM …)` rewrites for standalone DML are noted as pending in `03-unsupported.md`.

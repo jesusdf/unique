@@ -8,8 +8,11 @@ engines and indicates the transpilation support status for each.
 > IDENTITY_INSERT, `@@ERROR`, `TOP n PERCENT`, QUOTED_IDENTIFIER, trigger
 > pseudo-tables, reversible type carriers, …) and all four procedural fixtures
 > now validate **live** against real engines with 0 errors, so several
-> "⚠️ Partial" rows below are effectively full today. See `docs/STATUS.md` for
-> the current state and `docs/DONE.md` for the detailed history.
+> "⚠️ Partial" rows below are effectively full today. A later standalone-DML
+> operator/function audit also fixed string-`+` concatenation, bitwise
+> operators, compound assignment, and named-slot function arguments (rows 1.2a,
+> 5.x). See `docs/STATUS.md` for the current state and `docs/DONE.md` for the
+> detailed history.
 
 **Legend**
 
@@ -49,6 +52,16 @@ engines and indicates the transpilation support status for each.
 | IS NULL / IS NOT NULL | ✓ | ✓ | ✓ | ✓ | ✅ |
 | EXISTS / NOT EXISTS | ✓ | ✓ | ✓ | ✓ | ✅ |
 | ANY / ALL / SOME | ✓ | ✓ | ✓ | ✓ | ✅ |
+
+### 1.2a Arithmetic, String & Bitwise Operators
+
+| Operator | T-SQL | Oracle | PostgreSQL | MySQL | Transpile Status |
+|----------|-------|--------|------------|-------|------------------|
+| Arithmetic `+ - * / %` | ✓ | ✓ (`%`→`MOD`) | ✓ | ✓ | ✅ |
+| String concatenation | `+` | `\|\|` | `\|\|` | `CONCAT()` | ✅ when an operand is a recognizable string; `col + col` with no type info stays `+` (see [03-unsupported](03-unsupported.md)) |
+| Compound assignment `+= -= *= /= %=` | ✓ | N/A | N/A | N/A | ✅ → `col = col <op> expr` |
+| Bitwise `&` `\|` | ✓ | N/A (`BITAND` only) | ✓ | ✓ | ⚠️ preserved as-is; valid on PostgreSQL/MySQL, not on Oracle |
+| Bitwise XOR `^` | ✓ | N/A | ✓ (`#`) | ✓ | ⚠️ `#` on PostgreSQL; not valid on Oracle |
 
 ### 1.3 JOINs
 
@@ -228,7 +241,7 @@ engines and indicates the transpilation support status for each.
 | Current date/time | GETDATE(), SYSDATETIME() | SYSDATE, SYSTIMESTAMP | NOW(), CURRENT_TIMESTAMP | NOW(), CURRENT_TIMESTAMP | ✅ |
 | Date add | DATEADD() | + INTERVAL | + INTERVAL | DATE_ADD() | ✅ |
 | Date diff | DATEDIFF() | date1 - date2 | DATE_PART('epoch', age()) | DATEDIFF() / TIMESTAMPDIFF() | ✅ |
-| Date part extract | DATEPART() / YEAR() etc. | EXTRACT() / TO_CHAR() | EXTRACT() / DATE_PART() | EXTRACT() / YEAR() etc. | ✅ |
+| Date part extract | DATEPART() / YEAR() etc. | EXTRACT() / TO_CHAR() | EXTRACT() / DATE_PART() | EXTRACT() / YEAR() etc. | ⚠️ `YEAR()/MONTH()/DAY()` ✅; standalone `DATEPART()` may emit non-standard `EXTRACT(part, x)` — prefer `YEAR(x)` etc. |
 | Date format | FORMAT() / CONVERT() | TO_CHAR() | TO_CHAR() | DATE_FORMAT() | ⚠️ Format specifiers differ |
 | Date truncate | N/A | TRUNC() | DATE_TRUNC() | DATE() / DATE_FORMAT() | ⚠️ |
 
@@ -246,7 +259,7 @@ engines and indicates the transpilation support status for each.
 | Feature | T-SQL | Oracle | PostgreSQL | MySQL | Transpile Status |
 |---------|-------|--------|------------|-------|------------------|
 | CASE WHEN | ✓ | ✓ | ✓ | ✓ | ✅ |
-| IIF() | ✓ | N/A | N/A | IF() | ✅ → CASE WHEN |
+| IIF() | ✓ | N/A | N/A | IF() | ⚠️ emitted as `IF()` (valid on MySQL; `CASE WHEN` rewrite for Oracle/PostgreSQL pending — see [03-unsupported](03-unsupported.md)) |
 | DECODE() | N/A | ✓ | N/A | N/A | ✅ → CASE WHEN |
 | GREATEST / LEAST | N/A (2022+) | ✓ | ✓ | ✓ | ✅ |
 
@@ -270,6 +283,7 @@ engines and indicates the transpilation support status for each.
 |---------|-------|------------------|----------------------|-------|------------------|
 | Variable declaration | DECLARE @var TYPE | var TYPE; | var TYPE; | DECLARE var TYPE; / SET @var | ✅ |
 | Variable assignment | SET @var = val | var := val; | var := val; | SET @var = val; | ✅ |
+| Compound assignment (UPDATE) | SET col += expr | N/A | N/A | N/A | ✅ → SET col = col + expr |
 | SELECT INTO variable | SELECT @var = col | SELECT col INTO var | SELECT col INTO var | SELECT col INTO var | ✅ |
 
 ### 6.2 Control Flow
@@ -355,6 +369,8 @@ engines and indicates the transpilation support status for each.
 | Row-level triggers | N/A | ✓ | ✓ | ✓ | ⚠️ |
 | Statement-level triggers | ✓ | ✓ | ✓ | N/A | ⚠️ |
 | Trigger referencing (NEW/OLD) | INSERTED/DELETED | :NEW/:OLD | NEW/OLD | NEW/OLD | ✅ |
+| Set-based trigger (FROM inserted/deleted) | ✓ | N/A | ✓ (transition tables) | N/A | ⚠️ PostgreSQL: rewritten to a statement-level trigger with `REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted`; Oracle/MySQL: documented |
+| Mixed row-/set-level trigger | ✓ | — | — | — | ⚠️ documented on every target (cannot be a single trigger) |
 
 ---
 
