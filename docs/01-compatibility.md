@@ -17,8 +17,13 @@ engines and indicates the transpilation support status for each.
 > "⚠️ Partial" rows below are effectively full today. A later standalone-DML
 > operator/function audit also fixed string-`+` concatenation, bitwise
 > operators, compound assignment, and named-slot function arguments (rows 1.2a,
-> 5.x). See `docs/STATUS.md` for the current state and `docs/DONE.md` for the
-> detailed history.
+> 5.x). A cross-table-`UPDATE` audit then fixed `UPDATE … FROM … JOIN` (row 2):
+> the source table and join predicate used to be dropped (a bare
+> `UPDATE t SET c = s.c` was emitted), and are now rendered per engine —
+> PostgreSQL `UPDATE t SET … FROM s WHERE …`, MySQL `UPDATE t JOIN s ON … SET …`,
+> Oracle a correlated-subquery `UPDATE`, T-SQL its native `FROM`/`JOIN`; the same
+> audit fixed a join alias emitted twice (`t2 b b`). See `docs/STATUS.md` for the
+> current state and `docs/DONE.md` for the detailed history.
 
 **Legend**
 

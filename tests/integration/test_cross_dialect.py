@@ -53,6 +53,16 @@ class TestCrossDialectSelect:
         assert "JOIN" in result.sql
 
     @pytest.mark.parametrize("source,target", ALL_PAIRS)
+    def test_select_join_with_alias_not_duplicated(
+        self, transpiler: Transpiler, source: str, target: str
+    ) -> None:
+        # A joined table with an alias must not emit the alias twice
+        # ("t2 b b"): _emit_table_ref already renders the alias.
+        sql = "SELECT a.x FROM t1 a INNER JOIN t2 b ON a.id = b.id"
+        result = transpiler.transpile(sql, source, target)
+        assert "b b" not in result.sql
+
+    @pytest.mark.parametrize("source,target", ALL_PAIRS)
     def test_select_order_by(
         self, transpiler: Transpiler, source: str, target: str
     ) -> None:
@@ -145,6 +155,54 @@ class TestCrossDialectDML:
         )
         assert "DELETE" in result.sql
         assert "WHERE" in result.sql
+
+    # ---- UPDATE ... FROM ... JOIN (cross-table update) ----
+    # T-SQL expresses a cross-table update as UPDATE t SET t.c = s.c FROM t
+    # JOIN s ON ...; the source table and join condition MUST survive, in each
+    # engine's idiomatic form. Losing them (emitting a bare "UPDATE t SET
+    # c = s.c") is a correctness bug: it references an undefined alias and
+    # updates every row.
+
+    _UPDATE_FROM_JOIN = (
+        "UPDATE il SET il.unit_price = p.unit_price "
+        "FROM invoice_line il "
+        "INNER JOIN product p ON p.id = il.product_id"
+    )
+
+    def test_update_from_join_to_postgresql_uses_from(
+        self, transpiler: Transpiler
+    ) -> None:
+        result = transpiler.transpile(self._UPDATE_FROM_JOIN, "tsql", "postgresql")
+        sql = result.sql.upper()
+        # PostgreSQL: UPDATE invoice_line SET unit_price = p.unit_price
+        #             FROM product p WHERE p.id = il.product_id
+        assert "FROM PRODUCT" in sql
+        assert "P.UNIT_PRICE" in sql
+        # The join predicate must be carried (as a WHERE in PostgreSQL).
+        assert "P.ID" in sql and "PRODUCT_ID" in sql
+
+    def test_update_from_join_to_mysql_keeps_join(self, transpiler: Transpiler) -> None:
+        result = transpiler.transpile(self._UPDATE_FROM_JOIN, "tsql", "mysql")
+        sql = result.sql.upper()
+        # MySQL: UPDATE invoice_line JOIN product p ON ... SET ...
+        assert "JOIN PRODUCT" in sql
+        assert "P.UNIT_PRICE" in sql
+        assert "ON " in sql and "PRODUCT_ID" in sql
+
+    def test_update_from_join_to_oracle_no_from_keyword(
+        self, transpiler: Transpiler
+    ) -> None:
+        result = transpiler.transpile(self._UPDATE_FROM_JOIN, "tsql", "oracle")
+        sql = result.sql.upper()
+        # Oracle has no UPDATE ... FROM; the source must still be referenced
+        # (correlated subquery or MERGE), so the product table and its key
+        # column have to appear, and there must be no bare "FROM PRODUCT"
+        # dangling after SET.
+        assert "PRODUCT" in sql
+        assert "PRODUCT_ID" in sql
+        # The assigned value must not reference an alias that no longer exists
+        # as a bare "SET ... = P.UNIT_PRICE" with nothing defining P.
+        assert "/* UNIQUE" not in result.sql or "PRODUCT" in result.sql
 
 
 class TestCrossDialectFunctions:
