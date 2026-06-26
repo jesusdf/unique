@@ -11,8 +11,10 @@ converting sqlglot's expression tree into our engine-agnostic IR.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import logging
 import re
+from typing import cast
 
 import sqlglot
 import sqlglot.expressions as exp
@@ -348,6 +350,13 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return _convert_case(expr)
     if isinstance(expr, exp.Cast):
         return _convert_cast(expr)
+    # A schema-qualified function call (e.g. dbo.fn_tax(net)) parses as a Dot
+    # (schema . func(...)). Fold it into a FunctionCall whose name keeps the
+    # qualifier ("dbo.fn_tax"); the emitter strips dbo for non-T-SQL targets.
+    if isinstance(expr, exp.Dot):
+        dot_func = _convert_qualified_function(expr)
+        if dot_func is not None:
+            return dot_func
     # exp.And / exp.Or (and other connectors) are *also* exp.Func in sqlglot's
     # class hierarchy, so the Binary check must come before the Func check or a
     # top-level "a AND b" would be emitted as the function call "AND(a, b)".
@@ -804,6 +813,21 @@ def _convert_alias(expr: exp.Alias) -> Alias:
         expression=convert_expression(expr.this),
         name=str(expr.alias),
     )
+
+
+def _convert_qualified_function(expr: exp.Dot) -> FunctionCall | None:
+    """Convert a ``schema.func(args)`` Dot into a qualified FunctionCall.
+
+    Returns ``None`` when the Dot is not a function call (e.g. a plain
+    ``a.b.c`` column path), so the caller can fall back to the generic handling.
+    """
+    inner = expr.expression
+    if not isinstance(inner, exp.Func):
+        return None
+    qualifier = expr.this
+    qualifier_name = qualifier.name if hasattr(qualifier, "name") else str(qualifier)
+    func = _convert_function(cast(exp.Expression, inner))
+    return dataclasses.replace(func, name=f"{qualifier_name}.{func.name}")
 
 
 def _convert_function(expr: exp.Expression) -> FunctionCall:
@@ -1735,6 +1759,19 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     return f"{tsql_guard}CREATE {temp}TABLE {exists}{table}"
 
 
+def _strip_dbo_function_name(node: FunctionCall) -> FunctionCall:
+    """Return a copy of ``node`` with a leading ``dbo.`` removed from its name.
+
+    A user function call like ``dbo.fn_tax`` keeps just ``fn_tax`` for the
+    non-T-SQL engines, where the ``dbo`` default schema does not exist. The
+    qualifier may be bare, bracketed (``[dbo].``) or quoted (``"dbo".``).
+    """
+    new_name = re.sub(r'(?i)^\s*(?:\[dbo\]|"dbo"|dbo)\s*\.\s*', "", node.name)
+    if new_name == node.name:
+        return node
+    return dataclasses.replace(node, name=new_name)
+
+
 def _strip_dbo_schema_qualifier(sql: str) -> str:
     """Remove the T-SQL ``dbo.`` schema qualifier from object names in ``sql``.
 
@@ -1908,6 +1945,11 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
 
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
+    # A user function may be schema-qualified (dbo.fn_tax). The "dbo" default
+    # schema is meaningless on the other engines, so drop it there, as for any
+    # other object reference. Built-in names never carry it.
+    if dialect in ("oracle", "mysql", "postgresql") and "." in node.name:
+        node = _strip_dbo_function_name(node)
     # Special handling for CURRENT_TIMESTAMP (no parens in some dialects)
     if node.name.upper() == "CURRENT_TIMESTAMP" and not node.args:
         if dialect == "tsql":
