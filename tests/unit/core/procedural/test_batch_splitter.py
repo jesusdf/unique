@@ -148,6 +148,29 @@ class TestClassification:
         sql = "CREATE TRIGGER t ON tbl AFTER INSERT AS BEGIN SELECT 1 END"
         assert classify_batch(sql, "tsql") == BatchType.PROCEDURAL
 
+    def test_exec_proc_is_procedural(self) -> None:
+        # A standalone EXEC of a stored procedure is a procedural call (it must
+        # become CALL proc(...) on the other engines), not plain DML.
+        sql = "EXEC dbo.create_invoice @customer_id = 2, @new_id = @x OUTPUT"
+        assert classify_batch(sql, "tsql") == BatchType.PROCEDURAL
+
+    def test_execute_keyword_is_procedural(self) -> None:
+        sql = "EXECUTE dbo.do_thing 1, 2"
+        assert classify_batch(sql, "tsql") == BatchType.PROCEDURAL
+
+    def test_batch_declare_is_procedural(self) -> None:
+        # A batch-level DECLARE (a variable, then statements using it) is an
+        # anonymous procedural block, not DML.
+        sql = "DECLARE @x INT;\nEXEC dbo.p @out = @x OUTPUT;"
+        assert classify_batch(sql, "tsql") == BatchType.PROCEDURAL
+
+    def test_exec_system_proc_not_procedural(self) -> None:
+        # System stored procedures (sp_*) are handled specially by the DML
+        # pipeline (documented/passed through), so they must NOT be routed to
+        # the procedural engine.
+        sql = "EXEC sp_addextendedproperty @name = 'x'"
+        assert classify_batch(sql, "tsql") != BatchType.PROCEDURAL
+
     def test_dml_select(self) -> None:
         assert classify_batch("SELECT * FROM t", "tsql") == BatchType.DML
 
