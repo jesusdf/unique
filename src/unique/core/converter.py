@@ -1557,6 +1557,21 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     return f"{tsql_guard}CREATE {temp}TABLE {exists}{table}"
 
 
+def _strip_dbo_from_references(fragment: str) -> str:
+    """Remove a leading ``dbo.`` qualifier from a FOREIGN KEY reference target.
+
+    A T-SQL ``REFERENCES dbo.customer (id)`` must become ``REFERENCES customer
+    (id)`` on Oracle/MySQL/PostgreSQL, where ``dbo`` names no real schema. Only
+    the table named right after ``REFERENCES`` is touched; the qualifier may be
+    bare (``dbo.``), bracketed (``[dbo].``) or quoted (``"dbo".``).
+    """
+    return re.sub(
+        r'(?i)(\bREFERENCES\s+)(?:\[dbo\]|"dbo"|dbo)\s*\.\s*',
+        r"\1",
+        fragment,
+    )
+
+
 def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
     """Re-transpile a constraint fragment for inclusion inside CREATE TABLE.
 
@@ -1604,6 +1619,12 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
             # index specs). sqlglot adds them when emulating ordering.
             if dialect in ("oracle", "postgresql"):
                 fragment = re.sub(r"(?i)\s+NULLS\s+(?:FIRST|LAST)", "", fragment)
+            # A FOREIGN KEY may REFERENCE a dbo-qualified table. The "dbo" schema
+            # is meaningless on the other engines (and would name a non-existent
+            # schema/database), exactly as for the table being created, so strip
+            # it from the reference target too.
+            if dialect in ("oracle", "mysql", "postgresql"):
+                fragment = _strip_dbo_from_references(fragment)
             return fragment
     except Exception as e:  # noqa: BLE001
         logger.warning("constraint transpile error: %s", e)

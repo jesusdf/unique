@@ -271,6 +271,25 @@ class TestCrossDialectDDL:
         assert "REFERENCES" in result.sql.upper()
 
     @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
+    def test_foreign_key_reference_strips_dbo_schema(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        # The T-SQL default schema "dbo" has no meaning on the other engines.
+        # It is already stripped from the table being created; a FOREIGN KEY
+        # that REFERENCES a dbo-qualified table must be stripped the same way,
+        # otherwise the emitted DDL points at a non-existent schema/database.
+        sql = (
+            "CREATE TABLE dbo.t (cust_id INT, "
+            "CONSTRAINT fk FOREIGN KEY (cust_id) "
+            "REFERENCES dbo.customer (id))"
+        )
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "REFERENCES" in result.sql.upper()
+        # The reference must name the bare table, not the dbo-qualified one.
+        assert "dbo.customer" not in result.sql
+        assert "customer" in result.sql
+
+    @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
     def test_table_level_unique_and_check(
         self, transpiler: Transpiler, target: str
     ) -> None:
