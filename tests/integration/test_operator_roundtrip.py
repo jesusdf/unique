@@ -105,3 +105,72 @@ class TestStringConcatRoundTrip:
         out = _t("SELECT name + ' suffix' AS x FROM t", "tsql", "postgresql")
         assert "||" in out
         assert "+" not in _norm(out).split("FROM")[0]
+
+
+class TestBitwiseOperators:
+    """Bitwise operators must never be silently coerced to "=" (a converter
+    default once turned ``a & b`` into ``a = b``, changing the meaning)."""
+
+    def test_bitwise_not_coerced_to_equality(self) -> None:
+        for op in ("&", "|", "^"):
+            sql = f"SELECT a {op} b AS x FROM t"
+            for target in ("oracle", "postgresql", "mysql"):
+                out = _t(sql, "tsql", target)
+                head = out.split("FROM")[0]
+                assert " = " not in head, f"{op} -> {target} became equality: {out!r}"
+
+    def test_bitwise_and_or_preserved(self) -> None:
+        for op in ("&", "|"):
+            for target in ("postgresql", "mysql"):
+                out = _t(f"SELECT a {op} b AS x FROM t", "tsql", target)
+                assert op in out.split("FROM")[0]
+
+    def test_postgresql_xor_uses_hash(self) -> None:
+        out = _t("SELECT a ^ b AS x FROM t", "tsql", "postgresql")
+        assert "#" in out.split("FROM")[0]
+        assert " = " not in out.split("FROM")[0]
+
+
+class TestBinaryArgFunctions:
+    """Functions sqlglot models as binary nodes (two args in this/expression,
+    not in expressions) must keep both arguments — POWER(a, b) once dropped the
+    second and became POWER(a)."""
+
+    def test_power_keeps_both_args(self) -> None:
+        for target in ("oracle", "postgresql", "mysql"):
+            out = _t("SELECT POWER(a, b) AS x FROM t", "tsql", target)
+            assert "POWER(a, b)" in out.replace("  ", " ")
+
+    def test_nullif_keeps_both_args(self) -> None:
+        for target in ("oracle", "postgresql", "mysql"):
+            out = _t("SELECT NULLIF(a, b) AS x FROM t", "tsql", target)
+            assert "NULLIF(a, b)" in out.replace("  ", " ")
+
+
+class TestCompoundAssignment:
+    """T-SQL ``SET a += 1`` must expand to ``SET a = a + 1`` rather than drop
+    the column (sqlglot cannot parse it and produced ``SET = 1``)."""
+
+    def test_plus_equals_expands(self) -> None:
+        for target in ("oracle", "postgresql", "mysql"):
+            out = _t("UPDATE t SET a += 1", "tsql", target)
+            assert _norm(out) == "UPDATE t SET a = a + 1"
+
+    def test_all_arithmetic_compounds(self) -> None:
+        for op in ("+", "-", "*", "/", "%"):
+            out = _t(f"UPDATE t SET a {op}= 2", "tsql", "postgresql")
+            assert _norm(out) == f"UPDATE t SET a = a {op} 2"
+
+    def test_multiple_columns_and_where_preserved(self) -> None:
+        out = _t("UPDATE t SET a += 1, b -= 2 WHERE id = 5", "tsql", "oracle")
+        assert _norm(out) == "UPDATE t SET a = a + 1, b = b - 2 WHERE id = 5"
+
+    def test_string_plus_equals_becomes_concat(self) -> None:
+        out = _t("UPDATE t SET name += '!'", "tsql", "postgresql")
+        assert _norm(out) == "UPDATE t SET name = name || '!'"
+
+    def test_comparison_in_where_not_touched(self) -> None:
+        # A "<=" in WHERE must not be mistaken for a compound assignment.
+        out = _t("UPDATE t SET a += 1 WHERE x <= 10", "tsql", "mysql")
+        assert "x <= 10" in out
+        assert _norm(out).startswith("UPDATE t SET a = a + 1")

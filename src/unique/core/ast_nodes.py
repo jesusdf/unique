@@ -96,6 +96,11 @@ class BinaryOperator(Enum):
     NOT_IN = auto()
     BETWEEN = auto()
     CONCAT = auto()
+    BIT_AND = auto()
+    BIT_OR = auto()
+    BIT_XOR = auto()
+    BIT_LSHIFT = auto()
+    BIT_RSHIFT = auto()
 
 
 class TransactionAction(Enum):

@@ -139,6 +139,39 @@ def _is_comment_only(sql: str) -> bool:
     )
 
 
+_COMPOUND_ASSIGN_RE = re.compile(
+    # column (optionally schema/table-qualified or [bracketed]) then one of the
+    # T-SQL compound assignment operators, captured so we can expand it.
+    r"(?P<col>(?:\[[^\]]+\]|[A-Za-z_][\w$]*)(?:\.(?:\[[^\]]+\]|[A-Za-z_][\w$]*))*)"
+    r"\s*(?P<op>\+=|-=|\*=|/=|%=|&=|\|=|\^=)\s*"
+)
+
+
+def _expand_tsql_compound_assignment(sql: str) -> str:
+    """Expand T-SQL compound assignment in an UPDATE SET list.
+
+    sqlglot does not parse ``SET a += 1`` and silently drops the column
+    (yielding ``SET = 1`` — invalid SQL and data loss). Rewrite each
+    ``col <op>= expr`` to the portable ``col = col <op> expr`` form before
+    sqlglot sees it. Only applied to UPDATE statements, and only to the SET
+    list, so comparison operators elsewhere are untouched.
+    """
+    m = re.search(r"(?i)\bUPDATE\b.*?\bSET\b", sql, re.DOTALL)
+    if not m:
+        return sql
+    set_start = m.end()
+    # The SET list ends at WHERE / FROM / the statement end.
+    tail = re.search(r"(?i)\b(WHERE|FROM)\b", sql[set_start:])
+    set_end = set_start + tail.start() if tail else len(sql)
+    head, set_list, rest = sql[:set_start], sql[set_start:set_end], sql[set_end:]
+
+    def repl(mo: re.Match[str]) -> str:
+        col, op = mo.group("col"), mo.group("op")[0]  # "+=" -> "+"
+        return f"{col} = {col} {op} "
+
+    return head + _COMPOUND_ASSIGN_RE.sub(repl, set_list) + rest
+
+
 def _extract_tsql_output(sql: str) -> tuple[str, str | None]:
     """Extract a T-SQL OUTPUT clause from a single DML statement.
 
@@ -451,6 +484,11 @@ class Transpiler:
         """Transpile a DML/DDL batch through the sqlglot pipeline."""
         warnings: list[TransformWarning] = []
         unsupported: list[str] = []
+
+        # T-SQL compound assignment (SET a += 1) is not understood by sqlglot,
+        # which would drop the column; expand it to "SET a = a + 1" first.
+        if source == "tsql":
+            sql = _expand_tsql_compound_assignment(sql)
 
         # System stored-procedure calls (e.g. EXEC sp_addextendedproperty,
         # sp_rename) are SQL Server metadata operations with no portable
