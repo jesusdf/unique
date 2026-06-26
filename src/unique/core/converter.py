@@ -348,10 +348,13 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return _convert_case(expr)
     if isinstance(expr, exp.Cast):
         return _convert_cast(expr)
-    if isinstance(expr, exp.Func):
-        return _convert_function(expr)
+    # exp.And / exp.Or (and other connectors) are *also* exp.Func in sqlglot's
+    # class hierarchy, so the Binary check must come before the Func check or a
+    # top-level "a AND b" would be emitted as the function call "AND(a, b)".
     if isinstance(expr, exp.Binary):
         return _convert_binary(expr)
+    if isinstance(expr, exp.Func):
+        return _convert_function(expr)
     if isinstance(expr, exp.Not):
         return UnaryOp(
             operator=UnaryOperator.NOT, operand=convert_expression(expr.this)

@@ -147,6 +147,21 @@ class TestCrossDialectDML:
         assert "WHERE" in result.sql
 
     @pytest.mark.parametrize("source,target", ALL_PAIRS)
+    def test_where_and_or_not_emitted_as_function(
+        self, transpiler: Transpiler, source: str, target: str
+    ) -> None:
+        # A top-level AND/OR in a WHERE must stay an infix operator, not become
+        # a function call "AND(a, b)" (exp.And is also an exp.Func, so the
+        # function branch must not capture it).
+        result = transpiler.transpile(
+            "UPDATE t SET a = 1 WHERE x = 1 AND y = 2",
+            source,
+            target,
+        )
+        assert "AND(" not in result.sql.upper().replace(" ", "")
+        assert "AND" in result.sql.upper()
+
+    @pytest.mark.parametrize("source,target", ALL_PAIRS)
     def test_delete(self, transpiler: Transpiler, source: str, target: str) -> None:
         result = transpiler.transpile(
             "DELETE FROM t WHERE id = 1",

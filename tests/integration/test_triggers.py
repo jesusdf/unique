@@ -249,6 +249,32 @@ class TestSetBasedTriggerRewrite:
         assert "FROM inserted" in code
         assert "JOIN deleted" in code
 
+    _SET_BASED_UPDATE = (
+        "CREATE TRIGGER trg ON invoice_line AFTER INSERT, UPDATE AS BEGIN "
+        "UPDATE il SET il.line_total = il.qty * il.unit_price "
+        "FROM invoice_line il INNER JOIN inserted i ON i.id = il.id "
+        "END"
+    )
+
+    def test_set_based_update_body_is_valid_postgresql(self) -> None:
+        # A set-based trigger whose body is an UPDATE ... FROM ... JOIN inserted
+        # must emit a PostgreSQL-valid UPDATE (target table once, source in FROM,
+        # join predicate in WHERE), not the raw T-SQL "UPDATE alias SET
+        # alias.col ... FROM tbl alias JOIN ..." that fails at runtime.
+        out = self._t(self._SET_BASED_UPDATE, "postgresql")
+        code = "\n".join(
+            ln for ln in out.splitlines() if not ln.strip().startswith("--")
+        )
+        assert "FOR EACH STATEMENT" in out
+        # The body must be preserved (not degraded to a comment) ...
+        assert "UPDATE" in code
+        assert "set-based inserted/deleted" not in out
+        # ... and rendered in PostgreSQL's UPDATE..FROM..WHERE form: no
+        # "SET il.line_total" qualified-target and no duplicated source table.
+        assert "SET il.line_total" not in code
+        assert "FROM inserted" in code
+        assert "WHERE" in code
+
     def test_pure_set_based_to_oracle_documented(self) -> None:
         # Oracle has no equivalent to T-SQL's named transition tables: a compound
         # trigger would need to accumulate rows into a PL/SQL collection, which

@@ -198,19 +198,21 @@ BEGIN
     INNER JOIN inserted AS i ON i.id = il.id;
 
     -- Recompute the rolled-up total (net + tax) for every affected invoice.
+    -- Uses a correlated subquery (not a JOIN against an aggregate subquery) so
+    -- the statement transpiles faithfully to every engine's UPDATE form.
     UPDATE inv
-    SET inv.total = agg.net + dbo.fn_tax(agg.net)
+    SET inv.total =
+        (SELECT SUM(il.line_total) FROM dbo.invoice_line AS il
+         WHERE il.invoice_id = inv.id)
+        + dbo.fn_tax(
+            (SELECT SUM(il.line_total) FROM dbo.invoice_line AS il
+             WHERE il.invoice_id = inv.id))
     FROM dbo.invoice AS inv
-    INNER JOIN (
-        SELECT il.invoice_id AS invoice_id, SUM(il.line_total) AS net
-        FROM dbo.invoice_line AS il
-        WHERE il.invoice_id IN (
-            SELECT invoice_id FROM inserted
-            UNION
-            SELECT invoice_id FROM deleted
-        )
-        GROUP BY il.invoice_id
-    ) AS agg ON agg.invoice_id = inv.id;
+    WHERE inv.id IN (
+        SELECT invoice_id FROM inserted
+        UNION
+        SELECT invoice_id FROM deleted
+    );
 END
 GO
 
@@ -252,15 +254,13 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
+    -- Mark an invoice paid once its payments cover its total. Correlated
+    -- subquery (not a JOIN against an aggregate) for faithful transpilation.
     UPDATE inv
     SET inv.is_paid = 1
     FROM dbo.invoice AS inv
-    INNER JOIN (
-        SELECT p.invoice_id AS invoice_id, SUM(p.amount) AS paid
-        FROM dbo.payment AS p
-        WHERE p.invoice_id IN (SELECT invoice_id FROM inserted)
-        GROUP BY p.invoice_id
-    ) AS agg ON agg.invoice_id = inv.id
-    WHERE agg.paid >= inv.total;
+    WHERE inv.id IN (SELECT invoice_id FROM inserted)
+      AND (SELECT SUM(p.amount) FROM dbo.payment AS p
+           WHERE p.invoice_id = inv.id) >= inv.total;
 END
 GO
