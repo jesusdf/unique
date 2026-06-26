@@ -847,11 +847,12 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
     # No-argument function (e.g. GETUTCDATE(), NEWID()): single `this` if any,
     # otherwise an empty argument list.
     args = []
-    if expr.this is not None and not isinstance(
-        expr, (exp.Column, exp.Table, exp.Anonymous)
+    if (
+        expr.this is not None
+        and not isinstance(expr, (exp.Column, exp.Table, exp.Anonymous))
+        and isinstance(expr.this, exp.Expression)
     ):
-        if isinstance(expr.this, exp.Expression):
-            args.append(convert_expression(expr.this))
+        args.append(convert_expression(expr.this))
     return FunctionCall(name=name, args=tuple(args))
 
 
