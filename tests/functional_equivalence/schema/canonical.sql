@@ -287,11 +287,12 @@ CREATE PROCEDURE dbo.create_invoice
     @product_a   INT,
     @qty_a       INT,
     @product_b   INT,
-    @qty_b       INT,
-    @new_id      INT OUTPUT
+    @qty_b       INT
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    DECLARE @new_id INT;
 
     INSERT INTO dbo.invoice (customer_id, issued_on, due_on, created_at, is_paid, total)
     VALUES (@customer_id, @issued_on, NULL, SYSDATETIME(), 0, 0);

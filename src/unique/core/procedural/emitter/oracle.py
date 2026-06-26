@@ -6,9 +6,13 @@
 
 from __future__ import annotations
 
+import re
+
 from unique.core.ast_nodes import (
+    AnonymousBlock,
     ASTNode,
     CreateTriggerStatement,
+    DeclareStatement,
     ParameterDefinition,
     PrintStatement,
     RaiseErrorStatement,
@@ -95,6 +99,50 @@ class OracleEmitter(ProceduralEmitter):
 
     def _trigger_end(self) -> str:
         return "END;"
+
+    def _emit_anonymous_block(self, node: AnonymousBlock) -> str:
+        """Oracle runs a top-level statement sequence as a PL/SQL anonymous
+        block: ``[DECLARE …] BEGIN … END;``. Procedure calls and assignments are
+        only valid inside such a block, so always wrap (even a single call)."""
+        decls = [s for s in node.statements if isinstance(s, DeclareStatement)]
+        body = [s for s in node.statements if not isinstance(s, DeclareStatement)]
+        lines: list[str] = []
+        if decls:
+            lines.append("DECLARE")
+            self._indent_level += 1
+            lines.extend(self._emit_indented_stmts(tuple(decls)))
+            self._indent_level -= 1
+        lines.append("BEGIN")
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(tuple(body)))
+        self._indent_level -= 1
+        lines.append("END;")
+        return "\n".join(lines)
+
+    def _emit_execute_stmt(self, expr: str, params: list[str]) -> str:
+        """Oracle EXEC handling.
+
+        A named stored-procedure call becomes ``name(args);`` (Oracle invokes a
+        procedure by name inside a PL/SQL block; the surrounding anonymous block
+        supplies BEGIN/END). A bare dynamic-SQL string/variable keeps
+        ``EXECUTE IMMEDIATE [USING …]``. The proc name may be schema-qualified
+        (dbo.create_invoice); the dbo default schema is dropped.
+        """
+        stripped = expr.strip()
+        # Dynamic SQL: a string literal, bind variable, or parenthesized text.
+        if stripped.startswith(("'", "@", "v_", "(", "N'", ":")):
+            if params:
+                return f"EXECUTE IMMEDIATE {expr} USING {', '.join(params)};"
+            return f"EXECUTE IMMEDIATE {expr};"
+        # Named procedure call.
+        m = re.match(r"(?i)^(?:\[?\w+\]?\s*\.\s*)*\[?(\w+)\]?\s*(.*)$", stripped)
+        if m:
+            proc_name = m.group(1)
+            args = self._split_exec_args(m.group(2).strip())
+            return f"{proc_name}({', '.join(args)});"
+        if params:
+            return f"EXECUTE IMMEDIATE {expr} USING {', '.join(params)};"
+        return f"EXECUTE IMMEDIATE {expr};"
 
 
 register_emitter(OracleEmitter.dialect_name, OracleEmitter)

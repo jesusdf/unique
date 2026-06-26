@@ -19,6 +19,7 @@ from collections.abc import Callable
 
 from unique.core.ast_nodes import (
     AlterProcedureStatement,
+    AnonymousBlock,
     AssignmentStatement,
     ASTNode,
     BeginEndBlock,
@@ -135,6 +136,7 @@ class ProceduralEmitter:
             LoopStatement: self._emit_loop,
             BeginEndBlock: self._emit_begin_end,
             StatementList: self._emit_statement_list,
+            AnonymousBlock: self._emit_anonymous_block,
             TryCatchBlock: self._emit_try_catch,
             ExceptionBlock: self._emit_exception_block,
             ExecuteStatement: self._emit_execute,
@@ -743,6 +745,31 @@ class ProceduralEmitter:
         """Emit a transparent statement sequence (no wrapper)."""
         return "\n".join(self._emit_node(stmt) for stmt in node.statements)
 
+    def _emit_anonymous_block(self, node: AnonymousBlock) -> str:
+        """Emit a top-level anonymous block.
+
+        Default (Oracle / T-SQL style): if the block declares variables, wrap it
+        in a PL/SQL-style ``[DECLARE …] BEGIN … END;``; otherwise emit the
+        statements directly (a bare ``CALL`` needs no wrapper). PostgreSQL and
+        MySQL override for their own anonymous-block rules.
+        """
+        decls = [s for s in node.statements if isinstance(s, DeclareStatement)]
+        body = [s for s in node.statements if not isinstance(s, DeclareStatement)]
+        if not decls:
+            return "\n".join(self._emit_node(s) for s in body)
+        lines: list[str] = []
+        if decls:
+            lines.append("DECLARE")
+            self._indent_level += 1
+            lines.extend(self._emit_indented_stmts(tuple(decls)))
+            self._indent_level -= 1
+        lines.append("BEGIN")
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(tuple(body)))
+        self._indent_level -= 1
+        lines.append(self._block_end())
+        return "\n".join(lines)
+
     def _emit_indented_stmts(
         self, stmts: tuple[ASTNode, ...] | list[ASTNode]
     ) -> list[str]:
@@ -831,10 +858,14 @@ class ProceduralEmitter:
                 return f"EXECUTE {expr} USING {using};"
             return f"EXECUTE {expr};"
 
-        # Case 2: a named stored-procedure call → CALL name(args). The trailing
-        # T-SQL OUTPUT keyword on an argument is dropped (an INOUT argument is
-        # already passed by reference).
-        m = re.match(r"(?i)^([A-Za-z_]\w*)\s*(.*)$", stripped)
+        # Case 2: a named stored-procedure call → CALL name(args). The proc name
+        # may be schema-qualified (dbo.create_invoice); the dbo default schema is
+        # dropped for PostgreSQL. The trailing T-SQL OUTPUT keyword on an
+        # argument is dropped (an INOUT argument is already passed by reference).
+        m = re.match(
+            r"(?i)^(?:\[?\w+\]?\s*\.\s*)*\[?(\w+)\]?\s*(.*)$",
+            stripped,
+        )
         if m:
             proc_name = m.group(1)
             args = self._split_exec_args(m.group(2).strip())
@@ -881,10 +912,14 @@ class ProceduralEmitter:
             )
 
         # Case 2: a named stored-procedure call. MySQL invokes procedures with
-        # CALL name(args). T-SQL's trailing OUTPUT keyword on an argument has
-        # no inline equivalent and is dropped (the @var is already passed by
-        # reference for an OUT parameter).
-        m = re.match(r"(?i)^([A-Za-z_][\w]*)\s*(.*)$", stripped)
+        # CALL name(args). The proc name may be schema-qualified
+        # (dbo.create_invoice); the dbo default schema is dropped. T-SQL's
+        # trailing OUTPUT keyword on an argument has no inline equivalent and is
+        # dropped (the @var is already passed by reference for an OUT parameter).
+        m = re.match(
+            r"(?i)^(?:\[?\w+\]?\s*\.\s*)*\[?(\w+)\]?\s*(.*)$",
+            stripped,
+        )
         if m:
             proc_name = m.group(1)
             arg_text = m.group(2).strip()

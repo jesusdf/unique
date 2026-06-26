@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 
 from unique.core.ast_nodes import (
     AlterProcedureStatement,
+    AnonymousBlock,
     AssignmentStatement,
     ASTNode,
     BeginEndBlock,
@@ -283,8 +284,26 @@ class ProceduralParser:
             return self._parse_create()
         elif tok.is_keyword("ALTER") and self._is_tsql_source():
             return self._parse_alter()
+        elif tok.is_keyword("EXEC", "EXECUTE", "DECLARE"):
+            # A standalone anonymous block (a bare EXEC of a procedure, or a
+            # DECLARE of batch-local variables followed by statements). Parse it
+            # as a statement sequence so EXEC becomes CALL etc., instead of
+            # falling back to verbatim RawSQL.
+            return self._parse_anonymous_block()
         else:
             return self._parse_fallback()
+
+    def _parse_anonymous_block(self) -> ASTNode:
+        """Parse a top-level statement sequence (no CREATE wrapper).
+
+        Returns an AnonymousBlock carrying the parsed statements; the emitter
+        renders the target-appropriate wrapper (e.g. PostgreSQL DO $$ … $$).
+        Falls back to RawSQL if nothing parses, so behavior never regresses.
+        """
+        statements = self._run_body_loop(self._parse_tsql_statement, ())
+        if not statements:
+            return RawSQL(sql="", reason="Empty or unparsable anonymous block")
+        return AnonymousBlock(statements=tuple(statements))
 
     def _parse_create(self) -> ASTNode:
         """Parse CREATE [OR REPLACE] PROCEDURE|FUNCTION|TRIGGER."""

@@ -120,15 +120,25 @@ High-level plan (details in that folder):
       DML pipeline documents them) and batch-level `DECLARE @…`. TDD:
       test_exec_proc_is_procedural / _execute_keyword_ / _batch_declare_ /
       _exec_system_proc_not_procedural. Full suite green (1149).
-- [ ] **Standalone anonymous block (`DECLARE … EXEC …`) emission.** Routing is
-      fixed, but the procedural emitter leaves a top-level anonymous block almost
-      verbatim (`DECLARE v_inv2 INT ; EXEC create_invoice … OUTPUT ;`) instead of
-      the target form: PostgreSQL needs a `DO $$ DECLARE … BEGIN CALL
-      create_invoice(…); END $$;` wrapper (or a plain `CALL` when no variable
-      capture is needed), `EXEC name args` → `CALL name(args)`, and the trailing
-      `OUTPUT` dropped with the OUT arg bound. The procedural engine already does
-      EXEC→CALL *inside* a CREATE PROCEDURE body; extend that to a standalone
-      anonymous block. Required before step 4 of the scenario runs end-to-end.
+- [x] **Standalone `EXEC proc` now emits `CALL` per engine.** A top-level
+      anonymous block parses to a new `AnonymousBlock` IR node (the top-level
+      parser routes a bare `EXEC`/`DECLARE` batch through the statement parser
+      instead of returning one verbatim `RawSQL`). `EXEC [dbo.]proc args` →
+      `CALL proc(args)` on PostgreSQL/MySQL and `proc(args);` on Oracle, with the
+      `dbo` schema stripped, the trailing `OUTPUT` keyword dropped, and the
+      qualified-name regex fixed in all three EXEC emitters (previously
+      `CALL dbo(. proc …)`). Oracle wraps the call in a `BEGIN … END;` PL/SQL
+      block (a bare call isn't runnable standalone). Scenario step 4 rewritten to
+      a positional call (the new id is invoice 2, used directly), and the unused
+      `@new_id OUTPUT` removed from `create_invoice`. Result: the full
+      schema+scenario transpile to PostgreSQL with **0 degraded steps / 0 UNIQUE
+      comments**. TDD: `TestStandaloneExec` (3 engines).
+- [ ] **Batch `DECLARE @x … @x OUTPUT` capture (deferred).** The simple proc
+      call is done; a block that *captures* a procedure's OUT parameter into a
+      batch-local variable still needs a target form (PostgreSQL `CALL` with an
+      INOUT inside a `DO $$ DECLARE … $$`, or an Oracle `DECLARE … BEGIN …`).
+      Not needed by the current scenario (it uses no OUT capture); revisit if a
+      future scenario does.
 - [x] **Engine-agnostic expected-state spec** (`expected_state.yaml`) — per-table
       row counts and specific `pk → column` values, defined once. Done: locked
       for Phase 1, all values reconciled (invoice.total = net + 10% tax, every
