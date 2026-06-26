@@ -74,6 +74,4 @@ comments/warnings (see `docs/03-unsupported.md`):
 - `%TYPE`/`%ROWTYPE` without `--db-url` (emitted as a carrier type with the
   original preserved in a `/* UNIQUE: … */` comment, plus a warning) — see item 2
   for making these reversible.
-- `EXECUTE IMMEDIATE ... USING` bind variables (T-SQL `sp_executesql`).
-- Engine-specific physical features (partitioning, tablespaces, filegroups,
-  index storage clauses).
+

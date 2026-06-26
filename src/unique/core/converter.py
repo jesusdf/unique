@@ -806,6 +806,22 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
 
     name = expr.sql_name() if hasattr(expr, "sql_name") else type(expr).__name__.upper()
 
+    # Some functions are modeled by sqlglot as binary nodes: the two arguments
+    # live in `this` and `expression` (singular), not in `expressions`. Examples:
+    # POWER(a, b) -> Pow, NULLIF(a, b) -> Nullif. Collect both, or the second
+    # argument is silently dropped (POWER(a, b) became POWER(a)).
+    second = expr.args.get("expression")
+    if (
+        second is not None
+        and not expr.expressions
+        and expr.this is not None
+        and isinstance(second, exp.Expression)
+    ):
+        return FunctionCall(
+            name=name,
+            args=(convert_expression(expr.this), convert_expression(second)),
+        )
+
     args: list[ASTNode] = []
     # Some functions (e.g. Coalesce) store the first arg in `this` and the rest
     # in `expressions`. Collect `this` first when expressions also exist.
@@ -829,8 +845,14 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
     return FunctionCall(name=name, args=tuple(args))
 
 
-def _convert_binary(expr: exp.Binary) -> BinaryOp:
-    """Convert a binary operation."""
+def _convert_binary(expr: exp.Binary) -> ASTNode:
+    """Convert a binary operation.
+
+    A binary operator that is not in the map is *not* silently coerced to ``=``
+    (a dangerous default that would change semantics — e.g. bitwise ``&`` became
+    ``=``). Instead the original expression is preserved as ``RawSQL`` so the
+    emitter re-renders it via sqlglot, which knows the per-dialect spelling.
+    """
     op_map: dict[type, BinaryOperator] = {
         exp.EQ: BinaryOperator.EQ,
         exp.NEQ: BinaryOperator.NEQ,
@@ -847,9 +869,17 @@ def _convert_binary(expr: exp.Binary) -> BinaryOp:
         exp.Mod: BinaryOperator.MOD,
         exp.Like: BinaryOperator.LIKE,
         exp.DPipe: BinaryOperator.CONCAT,
+        exp.BitwiseAnd: BinaryOperator.BIT_AND,
+        exp.BitwiseOr: BinaryOperator.BIT_OR,
+        exp.BitwiseXor: BinaryOperator.BIT_XOR,
+        exp.BitwiseLeftShift: BinaryOperator.BIT_LSHIFT,
+        exp.BitwiseRightShift: BinaryOperator.BIT_RSHIFT,
     }
 
-    operator = op_map.get(type(expr), BinaryOperator.EQ)
+    operator = op_map.get(type(expr))
+    if operator is None:
+        # Unknown operator: preserve verbatim rather than corrupt it to "=".
+        return RawSQL(sql=expr.sql(), reason=f"unmapped operator {type(expr).__name__}")
 
     return BinaryOp(
         operator=operator,
@@ -1740,9 +1770,14 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         BinaryOperator.NOT_IN: "NOT IN",
         BinaryOperator.BETWEEN: "BETWEEN",
         BinaryOperator.CONCAT: "||",
+        BinaryOperator.BIT_AND: "&",
+        BinaryOperator.BIT_OR: "|",
+        BinaryOperator.BIT_XOR: "^",
+        BinaryOperator.BIT_LSHIFT: "<<",
+        BinaryOperator.BIT_RSHIFT: ">>",
     }
 
-    op = op_map.get(node.operator, "=")
+    op = op_map[node.operator]
 
     # Dialect-specific overrides
     if node.operator == BinaryOperator.CONCAT:
@@ -1753,6 +1788,13 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
 
     if node.operator == BinaryOperator.MOD and dialect == "oracle":
         return f"MOD({left}, {right})"
+
+    # PostgreSQL spells bitwise XOR as "#" (and has no "^" bitwise operator;
+    # "^" there is exponentiation). Oracle has no infix bitwise operators at
+    # all — only BITAND(); the other forms have no faithful translation, so
+    # they are left as-is and flagged as a known limitation in the docs.
+    if node.operator == BinaryOperator.BIT_XOR and dialect == "postgresql":
+        op = "#"
 
     return f"{left} {op} {right}"
 
