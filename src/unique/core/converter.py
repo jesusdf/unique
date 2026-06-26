@@ -82,6 +82,83 @@ def sqlglot_dialect_name(dialect: str) -> str:
     return mapping.get(dialect, dialect)
 
 
+def _looks_like_string(node: exp.Expression) -> bool:
+    """Whether a sqlglot node is recognizably a string value.
+
+    Used to decide if a T-SQL ``+`` is string concatenation rather than
+    arithmetic addition: a string literal, a CHAR/VARCHAR/TEXT cast, an existing
+    concatenation, or a known string function.
+    """
+    if isinstance(node, exp.Literal):
+        return bool(node.args.get("is_string"))
+    if isinstance(node, (exp.DPipe, exp.Concat)):
+        return True
+    if isinstance(node, exp.Cast):
+        to = node.args.get("to")
+        if isinstance(to, exp.DataType):
+            return to.this in {
+                exp.DataType.Type.CHAR,
+                exp.DataType.Type.VARCHAR,
+                exp.DataType.Type.NCHAR,
+                exp.DataType.Type.NVARCHAR,
+                exp.DataType.Type.TEXT,
+            }
+    if isinstance(node, (exp.Substring, exp.Trim, exp.Upper, exp.Lower)):
+        return True
+    if isinstance(node, exp.Anonymous):
+        name = (node.name or "").upper()
+        return name in {
+            "LEFT",
+            "RIGHT",
+            "SUBSTRING",
+            "LTRIM",
+            "RTRIM",
+            "TRIM",
+            "UPPER",
+            "LOWER",
+            "REPLACE",
+            "FORMAT",
+            "STR",
+            "CONCAT",
+            "STUFF",
+        }
+    return False
+
+
+def _rewrite_tsql_string_concat(expr: exp.Expression) -> exp.Expression:
+    """Rewrite a T-SQL ``+`` that is string concatenation into ``||`` (DPipe).
+
+    In T-SQL ``+`` means concatenation when an operand is a string, but sqlglot
+    parses it as arithmetic ``Add`` regardless of operand type and does not
+    re-map it per dialect, so ``'a' + 'b'`` would wrongly stay ``+`` on Oracle/
+    PostgreSQL/MySQL. Convert an ``Add`` to ``DPipe`` when either side is
+    recognizably a string (directly, or transitively through a nested string
+    ``+`` already rewritten to ``DPipe``); purely numeric additions are left
+    untouched. sqlglot then emits ``||`` for Oracle/PostgreSQL and ``CONCAT``
+    for MySQL.
+    """
+
+    def transform(node: exp.Expression) -> exp.Expression:
+        if isinstance(node, exp.Add):
+            left, right = node.left, node.right
+            if left is None or right is None:
+                return node
+            if (
+                _looks_like_string(left)  # type: ignore[arg-type]
+                or _looks_like_string(right)  # type: ignore[arg-type]
+                or isinstance(left, exp.DPipe)
+                or isinstance(right, exp.DPipe)
+            ):
+                return exp.DPipe(this=left, expression=right)
+        return node
+
+    # Bottom-up so a nested "+" is rewritten to DPipe before its parent is
+    # examined, letting string-ness propagate up a chain (a + b + 'c').
+    result = expr.transform(transform)
+    assert isinstance(result, exp.Expression)
+    return result
+
+
 def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
     """Parse SQL text using sqlglot and convert to IR nodes.
 
@@ -105,6 +182,12 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
     for expression in parsed:
         if expression is None:
             continue
+        # T-SQL "+" on strings is concatenation; rewrite it to "||" so it maps
+        # to the target's concat operator (sqlglot keeps it as arithmetic "+").
+        if dialect == "tsql":
+            expression = _rewrite_tsql_string_concat(
+                expression  # type: ignore[arg-type]
+            )
         node = convert_expression(expression, dialect)  # type: ignore[arg-type]
         nodes.append(node)
 
