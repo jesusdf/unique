@@ -267,3 +267,45 @@ BEGIN
            WHERE p.invoice_id = inv.id) >= inv.total;
 END
 GO
+
+-- ----------------------------------------------------------------------------
+-- STORED PROCEDURE
+-- ----------------------------------------------------------------------------
+
+-- create_invoice: build an invoice header + its two lines for a customer, then
+-- return the new invoice id. The "DML from a procedure" path. unit_price is
+-- copied from product so a later reprice does not change historical lines;
+-- invoice.total is maintained by trg_line_total as each line is inserted, and
+-- is_paid is left at its DEFAULT (0).
+IF OBJECT_ID(N'dbo.create_invoice', N'P') IS NOT NULL
+    DROP PROCEDURE dbo.create_invoice
+GO
+
+CREATE PROCEDURE dbo.create_invoice
+    @customer_id INT,
+    @issued_on   DATE,
+    @product_a   INT,
+    @qty_a       INT,
+    @product_b   INT,
+    @qty_b       INT,
+    @new_id      INT OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    INSERT INTO dbo.invoice (customer_id, issued_on, due_on, created_at, is_paid, total)
+    VALUES (@customer_id, @issued_on, NULL, SYSDATETIME(), 0, 0);
+
+    SET @new_id = SCOPE_IDENTITY();
+
+    INSERT INTO dbo.invoice_line (invoice_id, product_id, qty, unit_price, line_total)
+    SELECT @new_id, p.id, @qty_a, p.unit_price, @qty_a * p.unit_price
+    FROM dbo.product AS p
+    WHERE p.id = @product_a;
+
+    INSERT INTO dbo.invoice_line (invoice_id, product_id, qty, unit_price, line_total)
+    SELECT @new_id, p.id, @qty_b, p.unit_price, @qty_b * p.unit_price
+    FROM dbo.product AS p
+    WHERE p.id = @product_b;
+END
+GO

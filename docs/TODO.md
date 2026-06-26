@@ -102,10 +102,23 @@ High-level plan (details in that folder):
       otherwise this stays a documented divergence, and the functional-
       equivalence harness should assert trigger-maintained values on PostgreSQL
       (+ T-SQL) and treat MySQL/Oracle trigger effects as out of scope.
-- [ ] **Deterministic scenario** — seed inserts + mutations whose outcome is
-      identical across engines (fixed dates, explicit decimal scale, no
-      engine-defined division/concat/rounding/collation behavior in asserted
-      values).
+- [x] **Deterministic scenario authored** (`scenario/canonical.sql`) — the five
+      locked steps in T-SQL: seed (2 customers, one with notes one NULL; 2
+      products), direct INSERT invoice 1 + 2 lines, UPDATE a line on the
+      triggered table (Widget qty 2→3), `create_invoice` proc call for invoice 2,
+      and a payment that marks it paid. All literals fixed (dates, `CAST(… AS
+      DECIMAL(p,s))`), 10% tax exact at scale 2. Also added the missing
+      `create_invoice` stored procedure to `schema/canonical.sql`. Schema +
+      scenario transpile to all three targets with exit 0; PostgreSQL output
+      spot-checked (proc body, INSERTs, triggered UPDATE all valid).
+- [ ] **`EXEC proc` / batch `DECLARE` don't transpile** (found validating the
+      scenario). A standalone `DECLARE @x INT; EXEC dbo.create_invoice …` (the
+      "DML from a procedure" call in step 4) degrades to `-- UNIQUE: Unhandled
+      expression type: Declare/Execute` on every target, so invoice 2 is never
+      created. `EXEC proc @a = …, @out OUTPUT` must become `CALL proc(…)`
+      (PostgreSQL/MySQL/Oracle), and a batch-level `DECLARE` + OUTPUT capture
+      needs a target form (PG `CALL` with INOUT, or a DO block). Required before
+      the scenario runs end-to-end; next up.
 - [x] **Engine-agnostic expected-state spec** (`expected_state.yaml`) — per-table
       row counts and specific `pk → column` values, defined once. Done: locked
       for Phase 1, all values reconciled (invoice.total = net + 10% tax, every
