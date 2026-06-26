@@ -63,6 +63,27 @@ High-level plan (details in that folder):
       Verified end-to-end: the canonical schema transpiles to all three engines
       with **0 executable `dbo.`** (remaining occurrences are inside harmless
       degraded-guard comments).
+- [x] **Standalone `UPDATE … FROM … JOIN` fixed** (found while validating the
+      canonical trigger bodies). The transpiler used to drop the source table
+      and join predicate entirely, emitting a bare `UPDATE t SET c = s.c`
+      (wrong: undefined alias, updates every row). `_convert_update` now lifts
+      `FROM`/`JOIN` into the IR and `_emit_update` renders each engine's
+      idiomatic cross-table form (PostgreSQL `FROM … WHERE`, MySQL `JOIN … SET`,
+      Oracle correlated subquery + `EXISTS`, T-SQL native `FROM`/`JOIN`). Also
+      fixed a long-standing bug where a join alias was emitted twice (`t2 b b`).
+      Tests first (`test_update_from_join_*`, `test_select_join_with_alias_not_duplicated`).
+- [ ] **Set-based trigger bodies still degrade in the procedural engine.** The
+      `UPDATE … FROM … JOIN` fix above lives on the sqlglot/standalone-DML path.
+      Trigger bodies go through the *procedural* engine (a separate parser/
+      transformer/emitter), which still rewrites the set-based
+      `inserted`/`deleted` UPDATEs in `trg_line_total`/`trg_invoice_touch`/
+      `trg_payment_paid` into `-- UNIQUE:` comments (PostgreSQL degrades 1 body,
+      MySQL/Oracle all 4), so the triggers are inert on the targets. To make the
+      functional-equivalence scenario meaningful, the procedural transformer
+      (`core/procedural/transformer/base.py`, set-based-trigger handling ~ll.
+      355–847) must delegate the embedded cross-table UPDATE to the now-correct
+      emitter (PG transition tables / Oracle compound trigger / MySQL per-row),
+      instead of documenting it. Largest remaining piece before the harness.
 - [ ] **Deterministic scenario** — seed inserts + mutations whose outcome is
       identical across engines (fixed dates, explicit decimal scale, no
       engine-defined division/concat/rounding/collation behavior in asserted

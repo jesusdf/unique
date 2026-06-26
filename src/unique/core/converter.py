@@ -534,7 +534,14 @@ def _convert_insert(expr: exp.Insert) -> InsertStatement:
 
 
 def _convert_update(expr: exp.Update) -> UpdateStatement:
-    """Convert a sqlglot Update to UpdateStatement."""
+    """Convert a sqlglot Update to UpdateStatement.
+
+    A cross-table ``UPDATE ... SET ... FROM t JOIN s ON ...`` keeps its source
+    table and joins: sqlglot nests them inside the ``from_`` clause's table
+    (``from_.this`` is the first source table, whose ``joins`` arg holds the
+    rest). They are lifted into ``from_clause``/``joins`` so the emitter can
+    render each engine's idiomatic cross-table update instead of dropping them.
+    """
     table = _convert_table_ref(expr.this)
 
     assignments: list[tuple[str, ASTNode]] = []
@@ -543,6 +550,16 @@ def _convert_update(expr: exp.Update) -> UpdateStatement:
             col_name = eq.this.name if hasattr(eq.this, "name") else str(eq.this)
             val = convert_expression(eq.expression)
             assignments.append((col_name, val))
+
+    from_clause: TableRef | None = None
+    joins: list[JoinClause] = []
+    from_expr = expr.args.get("from_") or expr.args.get("from")
+    if from_expr is not None:
+        source_table = from_expr.this
+        if isinstance(source_table, exp.Table):
+            from_clause = _convert_table_ref(source_table)
+            for join_expr in source_table.args.get("joins") or []:
+                joins.append(_convert_join(join_expr))
 
     where = None
     where_expr = expr.find(exp.Where)
@@ -553,6 +570,8 @@ def _convert_update(expr: exp.Update) -> UpdateStatement:
         table=table,
         assignments=tuple(assignments),
         where=where,
+        from_clause=from_clause,
+        joins=tuple(joins),
     )
 
 
@@ -1409,7 +1428,18 @@ def _emit_insert(node: InsertStatement, dialect: str) -> str:
 
 
 def _emit_update(node: UpdateStatement, dialect: str) -> str:
-    """Emit an UPDATE statement."""
+    """Emit an UPDATE statement.
+
+    A cross-table update (``from_clause``/``joins`` present) is rendered in each
+    engine's idiomatic form. T-SQL keeps ``UPDATE t SET ... FROM ... JOIN``;
+    PostgreSQL uses ``UPDATE t SET ... FROM ... WHERE <join preds>``; MySQL puts
+    the joins before SET (``UPDATE t JOIN s ON ... SET ...``); Oracle, which has
+    no ``UPDATE ... FROM``, uses correlated subqueries. A plain single-table
+    update is unchanged.
+    """
+    if node.from_clause is not None or node.joins:
+        return _emit_cross_table_update(node, dialect)
+
     table = _emit_table_ref(node.table, dialect)
     sets = ", ".join(
         f"{col} = {_emit_expression(val, dialect)}" for col, val in node.assignments
@@ -1419,6 +1449,155 @@ def _emit_update(node: UpdateStatement, dialect: str) -> str:
     if node.where:
         result += f"\nWHERE {_emit_expression(node.where, dialect)}"
 
+    return result
+
+
+def _emit_join_table_ref(table: TableRef | SubqueryExpression, dialect: str) -> str:
+    """Emit a join's source table, whether a plain table or a subquery."""
+    if isinstance(table, SubqueryExpression):
+        return f"({_emit_select(table.query, dialect)})"
+    return _emit_table_ref(table, dialect)
+
+
+def _emit_cross_table_update(node: UpdateStatement, dialect: str) -> str:
+    """Render a cross-table UPDATE (``UPDATE ... SET ... FROM/JOIN``) per engine.
+
+    The T-SQL target alias usually names the same table as the FROM's first
+    source (``UPDATE il SET il.c = p.c FROM invoice_line il JOIN product p``).
+    We treat that first source as the table being updated and the remaining
+    joins as the source side.
+    """
+    target = _cross_update_target(node)
+    assignments = [
+        (col, _emit_expression(val, dialect)) for col, val in node.assignments
+    ]
+
+    if dialect == "oracle":
+        return _emit_update_oracle_subquery(node, target, assignments)
+    if dialect == "mysql":
+        return _emit_update_mysql_join(node, target, assignments, dialect)
+    if dialect == "postgresql":
+        return _emit_update_postgres_from(node, target, assignments, dialect)
+    # T-SQL (and any other) keeps the native UPDATE ... FROM ... JOIN form.
+    return _emit_update_tsql_from(node, assignments, dialect)
+
+
+def _cross_update_target(node: UpdateStatement) -> TableRef:
+    """The real table being updated in a cross-table UPDATE.
+
+    The T-SQL ``node.table`` is typically the alias (e.g. ``il``); the FROM's
+    first source carries the actual table name and that alias. Prefer the FROM
+    source when its alias matches the target, so we emit the real table name.
+    """
+    tgt_name = node.table.name
+    if node.from_clause is not None:
+        fc = node.from_clause
+        if fc.alias == tgt_name or fc.name == tgt_name:
+            return fc
+    return node.table
+
+
+def _join_predicates(node: UpdateStatement, dialect: str) -> list[str]:
+    """Collect every join ON condition as a list of boolean SQL fragments."""
+    preds: list[str] = []
+    for join in node.joins:
+        if join.condition is not None:
+            preds.append(_emit_expression(join.condition, dialect))
+    return preds
+
+
+def _emit_update_postgres_from(
+    node: UpdateStatement,
+    target: TableRef,
+    assignments: list[tuple[str, str]],
+    dialect: str,
+) -> str:
+    """PostgreSQL: UPDATE t SET c = s.c FROM s [, ...] WHERE <join preds>."""
+    target_sql = _emit_table_ref(target, dialect)
+    sets = ", ".join(f"{col} = {val}" for col, val in assignments)
+    sources = [_emit_join_table_ref(j.table, dialect) for j in node.joins]
+    result = f"UPDATE {target_sql}\nSET {sets}"
+    if sources:
+        result += f"\nFROM {', '.join(sources)}"
+    conditions = _join_predicates(node, dialect)
+    if node.where is not None:
+        conditions.append(_emit_expression(node.where, dialect))
+    if conditions:
+        result += f"\nWHERE {' AND '.join(conditions)}"
+    return result
+
+
+def _emit_update_mysql_join(
+    node: UpdateStatement,
+    target: TableRef,
+    assignments: list[tuple[str, str]],
+    dialect: str,
+) -> str:
+    """MySQL: UPDATE t JOIN s ON ... SET t.c = s.c [WHERE ...]."""
+    target_sql = _emit_table_ref(target, dialect)
+    joins_sql = "".join(f"\n{_emit_join(j, dialect)}" for j in node.joins)
+    sets = ", ".join(f"{col} = {val}" for col, val in assignments)
+    result = f"UPDATE {target_sql}{joins_sql}\nSET {sets}"
+    if node.where is not None:
+        result += f"\nWHERE {_emit_expression(node.where, dialect)}"
+    return result
+
+
+def _emit_update_tsql_from(
+    node: UpdateStatement,
+    assignments: list[tuple[str, str]],
+    dialect: str,
+) -> str:
+    """T-SQL: UPDATE t SET t.c = s.c FROM t JOIN s ON ... [WHERE ...]."""
+    table = _emit_table_ref(node.table, dialect)
+    sets = ", ".join(f"{col} = {val}" for col, val in assignments)
+    result = f"UPDATE {table}\nSET {sets}"
+    if node.from_clause is not None:
+        from_sql = _emit_table_ref(node.from_clause, dialect)
+        joins_sql = "".join(f"\n{_emit_join(j, dialect)}" for j in node.joins)
+        result += f"\nFROM {from_sql}{joins_sql}"
+    if node.where is not None:
+        result += f"\nWHERE {_emit_expression(node.where, dialect)}"
+    return result
+
+
+def _emit_update_oracle_subquery(
+    node: UpdateStatement,
+    target: TableRef,
+    assignments: list[tuple[str, str]],
+) -> str:
+    """Oracle has no UPDATE ... FROM; use a correlated-subquery UPDATE.
+
+    For a single source join with predicate, each assigned value is rewritten
+    as ``(SELECT <expr> FROM <source> WHERE <join pred>)`` and an EXISTS guard
+    limits the update to rows that have a match. Falls back to a documented
+    comment when the shape is too complex to rewrite safely (multiple joins).
+    """
+    dialect = "oracle"
+    target_sql = _emit_table_ref(target, dialect)
+
+    if len(node.joins) != 1 or node.joins[0].condition is None:
+        original = _emit_update_tsql_from(node, assignments, dialect)
+        commented = "\n".join(f"-- {ln}" for ln in original.splitlines())
+        return (
+            "-- UNIQUE: Oracle has no UPDATE ... FROM with multiple joins; "
+            "rewrite as a MERGE or correlated subqueries. Original:\n" + commented
+        )
+
+    join = node.joins[0]
+    source_sql = _emit_join_table_ref(join.table, dialect)
+    assert join.condition is not None  # guarded by the check above
+    pred = _emit_expression(join.condition, dialect)
+
+    set_items = ", ".join(
+        f"{col} = (SELECT {val} FROM {source_sql} WHERE {pred})"
+        for col, val in assignments
+    )
+    result = f"UPDATE {target_sql}\nSET {set_items}"
+    conditions = [f"EXISTS (SELECT 1 FROM {source_sql} WHERE {pred})"]
+    if node.where is not None:
+        conditions.append(_emit_expression(node.where, dialect))
+    result += f"\nWHERE {' AND '.join(conditions)}"
     return result
 
 
@@ -1955,11 +2134,15 @@ def _emit_join(join: JoinClause, dialect: str) -> str:
 
     if isinstance(join.table, SubqueryExpression):
         table = f"({_emit_select(join.table.query, dialect)})"
+        # A subquery has no TableRef to carry the alias, so add it here.
+        if join.alias:
+            table += f" {join.alias}"
     else:
+        # _emit_table_ref already renders the table's own alias; adding
+        # join.alias again would duplicate it ("t2 b b").
         table = _emit_table_ref(join.table, dialect)
-
-    if join.alias:
-        table += f" {join.alias}"
+        if join.alias and not join.table.alias:
+            table += f" {join.alias}"
 
     result = f"{join_type} {table}"
 
