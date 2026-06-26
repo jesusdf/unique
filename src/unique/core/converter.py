@@ -804,44 +804,54 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
             sp_args.append(convert_expression(start))
         return FunctionCall(name="CHARINDEX", args=tuple(sp_args))
 
-    name = expr.sql_name() if hasattr(expr, "sql_name") else type(expr).__name__.upper()
-
-    # Some functions are modeled by sqlglot as binary nodes: the two arguments
-    # live in `this` and `expression` (singular), not in `expressions`. Examples:
-    # POWER(a, b) -> Pow, NULLIF(a, b) -> Nullif. Collect both, or the second
-    # argument is silently dropped (POWER(a, b) became POWER(a)).
-    second = expr.args.get("expression")
-    if (
-        second is not None
-        and not expr.expressions
-        and expr.this is not None
-        and isinstance(second, exp.Expression)
-    ):
+    # exp.Anonymous is an unrecognized function: its real name is in `this`
+    # (a string), not in sql_name() which returns "ANONYMOUS". Its arguments
+    # live in `expressions`.
+    if isinstance(expr, exp.Anonymous):
         return FunctionCall(
-            name=name,
-            args=(convert_expression(expr.this), convert_expression(second)),
+            name=str(expr.name),
+            args=tuple(convert_expression(a) for a in expr.expressions),
         )
 
-    args: list[ASTNode] = []
-    # Some functions (e.g. Coalesce) store the first arg in `this` and the rest
-    # in `expressions`. Collect `this` first when expressions also exist.
-    has_expressions = bool(expr.expressions)
-    if (
-        expr.this is not None
-        and has_expressions
-        and not isinstance(expr.this, (bool, str))
-    ):
-        args.append(convert_expression(expr.this))
-    for arg in expr.expressions or []:
-        args.append(convert_expression(arg))
-    # Single-argument functions: only `this`, no `expressions`
-    if (
-        not args
-        and expr.this is not None
-        and not isinstance(expr, (exp.Column, exp.Table))
-    ):
-        args.append(convert_expression(expr.this))
+    name = expr.sql_name() if hasattr(expr, "sql_name") else type(expr).__name__.upper()
 
+    # Generic argument collection. sqlglot models most specialized functions
+    # with their arguments in *named slots* (Substring -> this/start/length,
+    # Replace -> this/expression/replacement, Round -> this/decimals,
+    # DateAdd -> this/expression/unit, ...), not in `expressions`. The previous
+    # heuristic only read `this` + `expressions`, so every named slot was
+    # dropped (SUBSTRING(a,1,3) became SUBSTR(a)). Collect the scalar arguments
+    # in declaration order from `arg_types`, which preserves them all.
+    if expr.expressions:
+        # Variadic functions (COALESCE, CONCAT, ...) keep their args in
+        # `expressions`, with an optional leading `this`.
+        args = []
+        if expr.this is not None and not isinstance(expr.this, (bool, str)):
+            args.append(convert_expression(expr.this))
+        for arg in expr.expressions:
+            args.append(convert_expression(arg))
+        return FunctionCall(name=name, args=tuple(args))
+
+    ordered: list[ASTNode] = []
+    for slot in expr.arg_types:
+        value = expr.args.get(slot)
+        # Skip boolean flags (e.g. Round.truncate, Substring.zero_start) and
+        # non-expression metadata; keep only actual argument expressions.
+        if isinstance(value, exp.Expression) and not isinstance(
+            expr, (exp.Column, exp.Table)
+        ):
+            ordered.append(convert_expression(value))
+    if ordered:
+        return FunctionCall(name=name, args=tuple(ordered))
+
+    # No-argument function (e.g. GETUTCDATE(), NEWID()): single `this` if any,
+    # otherwise an empty argument list.
+    args = []
+    if expr.this is not None and not isinstance(
+        expr, (exp.Column, exp.Table, exp.Anonymous)
+    ):
+        if isinstance(expr.this, exp.Expression):
+            args.append(convert_expression(expr.this))
     return FunctionCall(name=name, args=tuple(args))
 
 
