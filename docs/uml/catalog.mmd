@@ -1,0 +1,161 @@
+%% Unique — UML catalog of the transpilable SQL surface.
+%% Engine-agnostic. This diagram documents WHAT the transpiler can translate
+%% (the capability catalog), independent of any single test schema. It is the
+%% visual companion to docs/01-compatibility.md (the authoritative feature
+%% matrix) — keep the two in sync. Stereotypes group the object kinds the
+%% project supports; dependency arrows show which schema objects a routine/
+%% trigger/view reads or writes. A small but representative example domain
+%% (invoicing) anchors the relationships so the diagram is concrete.
+classDiagram
+    direction LR
+
+    %% ============================ TABLES ============================
+    class customer {
+        <<table>>
+        +INT id  PK, identity/sequence/serial/auto_increment
+        VARCHAR name
+        VARCHAR email  UNIQUE
+        TEXT notes  NULL  -- TEXT/CLOB/LONGTEXT
+        DATETIME created_at  -- DEFAULT current-timestamp
+    }
+    class product {
+        <<table>>
+        +INT id  PK
+        VARCHAR name
+        DECIMAL unit_price  (10,2)
+        BIT is_active  -- BIT/BOOLEAN/NUMBER(1)
+    }
+    class invoice {
+        <<table>>
+        +INT id  PK
+        +INT customer_id  FK
+        DATE issued_on
+        DATE due_on  -- date arithmetic: issued_on + INTERVAL
+        DATETIME created_at
+        DATETIME updated_at  -- maintained on UPDATE
+        BIT is_paid  DEFAULT 0
+        DECIMAL total  (12,2)  -- maintained by trigger
+    }
+    class invoice_line {
+        <<table>>
+        +INT id  PK
+        +INT invoice_id  FK
+        +INT product_id  FK
+        INT qty  CHECK qty greater 0
+        DECIMAL unit_price  (10,2)
+        DECIMAL line_total  (10,2)  -- generated/maintained
+    }
+    class payment {
+        <<table>>
+        +INT id  PK
+        +INT invoice_id  FK
+        DATE paid_on
+        DECIMAL amount  (12,2)
+    }
+
+    %% ============================ VIEWS =============================
+    class v_invoice_totals {
+        <<view>>
+        invoice_id
+        net_total  -- SUM(line_total)
+        line_count
+    }
+    class v_overdue_invoices {
+        <<view>>
+        invoice_id
+        due_on
+        days_overdue  -- DATEDIFF(today, due_on)
+    }
+
+    %% ========================== SEQUENCES ===========================
+    class invoice_seq {
+        <<sequence>>
+        START 1
+        INCREMENT 1
+        -- T-SQL/Oracle/PG sequence; MySQL -> AUTO_INCREMENT
+    }
+
+    %% ========================== FUNCTIONS ===========================
+    class fn_tax {
+        <<function-scalar>>
+        IN net DECIMAL
+        RETURNS DECIMAL  -- net * rate
+    }
+    class fn_days_between {
+        <<function-scalar>>
+        IN d1 DATE
+        IN d2 DATE
+        RETURNS INT  -- DATEDIFF abstraction
+    }
+    class fn_invoice_lines {
+        <<function-table>>
+        IN invoice_id INT
+        RETURNS TABLE  -- table-valued; MySQL documented as out-of-scope
+    }
+
+    %% ========================= PROCEDURES ===========================
+    class create_invoice {
+        <<procedure>>
+        IN customer_id INT
+        IN issued_on DATE
+        OUT new_id INT
+        -- inserts header + lines; DML-from-a-procedure
+    }
+    class apply_payment {
+        <<procedure>>
+        IN invoice_id INT
+        IN amount DECIMAL
+        -- inserts payment; UPDATE invoice SET is_paid where fully paid
+    }
+    class recalc_overdue {
+        <<procedure>>
+        IN as_of DATE
+        -- cursor/loop over invoices; UPDATE using date arithmetic
+    }
+    class bulk_reprice {
+        <<procedure>>
+        IN pct DECIMAL
+        -- UPDATE ... FROM/JOIN: update-with-join across product/invoice_line
+    }
+
+    %% ========================== TRIGGERS ============================
+    class trg_line_total {
+        <<trigger>>
+        AFTER INSERT/UPDATE ON invoice_line
+        -- recompute invoice.total = SUM(line_total) + fn_tax(...)
+    }
+    class trg_invoice_touch {
+        <<trigger>>
+        BEFORE UPDATE ON invoice
+        -- set updated_at = current timestamp (date/time handling)
+    }
+    class trg_payment_paid {
+        <<trigger>>
+        AFTER INSERT ON payment
+        -- mark invoice.is_paid when payments cover total
+    }
+
+    %% ===================== STRUCTURAL RELATIONS =====================
+    customer "1" --> "*" invoice : places
+    invoice "1" --> "*" invoice_line : contains
+    product "1" --> "*" invoice_line : referenced by
+    invoice "1" --> "*" payment : settled by
+
+    %% =================== BEHAVIORAL DEPENDENCIES ====================
+    v_invoice_totals ..> invoice_line : reads
+    v_overdue_invoices ..> invoice : reads
+    invoice ..> invoice_seq : id from
+    fn_invoice_lines ..> invoice_line : reads
+    create_invoice ..> invoice : writes
+    create_invoice ..> invoice_line : writes
+    create_invoice ..> fn_tax : uses
+    apply_payment ..> payment : writes
+    apply_payment ..> invoice : updates
+    recalc_overdue ..> invoice : updates
+    recalc_overdue ..> fn_days_between : uses
+    bulk_reprice ..> invoice_line : updates
+    bulk_reprice ..> product : reads
+    trg_line_total ..> invoice : updates
+    trg_line_total ..> fn_tax : uses
+    trg_invoice_touch ..> invoice : updates
+    trg_payment_paid ..> invoice : updates

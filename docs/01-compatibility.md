@@ -3,6 +3,12 @@
 This document maps every major SQL feature category across the four supported
 engines and indicates the transpilation support status for each.
 
+> **See also:** [`uml/catalog.mmd`](uml/catalog.mmd) — a UML class diagram that
+> visualizes the full transpilable object catalog (tables, views, sequences,
+> scalar/table functions, procedures, and triggers) with their dependencies.
+> Includes the procedural surface (stored procedures and triggers) and the
+> date-handling / record-update paths an ER diagram would omit.
+
 > **Note:** the matrix below is a point-in-time analysis. The procedural surface
 > has since been hardened substantially (transaction control, WAITFOR,
 > IDENTITY_INSERT, `@@ERROR`, `TOP n PERCENT`, QUOTED_IDENTIFIER, trigger

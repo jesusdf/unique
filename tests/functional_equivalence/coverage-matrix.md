@@ -94,3 +94,81 @@ untested; drop step 4 and the procedure + DEFAULT paths vanish; drop step 5 and
 `is_paid`/payment are untested. No table, column, constraint, or routine is
 present that no step touches and no assertion covers — satisfying the matrix's
 own "minimal yet complete" rule.
+
+---
+
+## Scenario B — record-update paths & date handling (additive)
+
+Per the design decision to broaden the functional-equivalence DB *only* where it
+stays deterministic and faithfully transpilable, Scenario B extends (never
+rewrites) the locked Scenario A above. It is a **separate, additive block of
+steps** so the Scenario-A assertions in `expected_state.yaml` remain untouched;
+Scenario B adds its own tables/columns/objects and its own assertions. It exists
+to cover, on purpose, (a) the several distinct **UPDATE** shapes the transpiler
+handles and (b) cross-engine **date arithmetic / date functions**.
+
+### New schema surface used by Scenario B
+
+| Object / column | Kind | Purpose |
+|---|---|---|
+| `invoice.due_on` | `DATE` | `= issued_on + 30 days` — date arithmetic (`DATEADD`/`+ INTERVAL`/`DATE_ADD`) |
+| `invoice.updated_at` | `DATETIME` | bumped by `trg_invoice_touch` on every UPDATE (presence-asserted only) |
+| `product.is_active` | `BIT/BOOLEAN` | toggled by a searched UPDATE |
+| `trg_invoice_touch` | trigger (BEFORE UPDATE) | sets `updated_at` — proves a BEFORE-UPDATE trigger path |
+| `fn_days_between(d1,d2)` | scalar function | engine-neutral `DATEDIFF` wrapper, returns INT days |
+| `v_overdue_invoices` | view | `days_overdue = fn_days_between(:as_of, due_on)` where `> 0` |
+| `bulk_reprice(pct)` | procedure | UPDATE-with-JOIN across `product` → `invoice_line` |
+| `recalc_overdue(as_of)` | procedure | cursor/loop performing date-driven UPDATEs |
+
+### UPDATE shapes covered (the "different cases to update records")
+
+| # | UPDATE shape | Where exercised | Asserted effect |
+|---|---|---|---|
+| U1 | **Searched single-column** UPDATE (`SET is_active = 0 WHERE id = …`) | direct stmt | `product.is_active` flips |
+| U2 | **Multi-column** UPDATE in one statement | direct stmt on `invoice` | two columns change atomically |
+| U3 | **Compound assignment** (`SET col += expr`) → normalized to `col = col + expr` | direct stmt | numeric column incremented |
+| U4 | **UPDATE … FROM / JOIN** (cross-table) | `bulk_reprice` | `invoice_line.unit_price` set from `product` |
+| U5 | **UPDATE driven by a subquery / correlated value** | direct stmt | column set from a scalar subquery |
+| U6 | **UPDATE that fires a trigger** (BEFORE UPDATE) | any UPDATE on `invoice` | `updated_at` changes (presence) |
+| U7 | **UPDATE inside a cursor/loop in a procedure** | `recalc_overdue` | date-driven rows updated |
+
+`bulk_reprice` and U4 are the canonical "UPDATE with JOIN" row from
+`docs/01-compatibility.md` §2; the per-engine syntax adaptation (T-SQL
+`UPDATE…FROM` ↔ PostgreSQL `UPDATE…FROM` ↔ MySQL multi-table UPDATE ↔ Oracle
+`MERGE`/subquery) is exactly what we assert produces the same final rows.
+
+### Date handling covered
+
+| Date behavior | Construct | Determinism note |
+|---|---|---|
+| Date add | `issued_on + 30 days` → `due_on` | fixed literal base date; integer day offset is exact on all engines |
+| Date diff | `fn_days_between(as_of, due_on)` | `as_of` is a **passed-in fixed date**, never `NOW()`/`SYSDATE` |
+| Date compare | `WHERE due_on < as_of` in `v_overdue_invoices` | pure comparison of two `DATE`s |
+| Part extract | `YEAR(issued_on)` asserted | `YEAR()` maps cleanly (avoid bare `DATEPART()`, per §5.3) |
+| Touch timestamp | `updated_at` via trigger | clock-sensitive → **presence-asserted only**, never literal value |
+
+### Scenario B determinism checklist
+
+- [x] Every date is a **fixed literal** or a **passed-in parameter** (`as_of`),
+      never a clock function, in any asserted value.
+- [x] Date add uses an **integer day count** (`+30`), exact across engines — no
+      month/year arithmetic (which differs on end-of-month rules).
+- [x] `days_overdue` computed against the injected `as_of = 2024-03-01`; with
+      `due_on` of `2024-02-14`/`2024-03-02` it yields `+16` / `-1` → exactly one
+      invoice is overdue. Reconciled numerically.
+- [x] `bulk_reprice(10%)` keeps values exact at scale 2 (10.00→11.00,
+      25.50→28.05); no rounding-mode dependence.
+- [x] `updated_at` excluded from value assertions (presence only), like
+      `created_at`.
+
+### Why additive instead of editing Scenario A
+
+Rewriting Scenario A to fold in reprice/date columns would change its already
+locked, numerically-reconciled totals. Keeping Scenario B additive preserves
+those guarantees and isolates the new cross-engine surface (BEFORE-UPDATE
+trigger, UPDATE-with-JOIN, cursor UPDATE, date arithmetic) behind its own
+assertions, which is cheaper to reason about and to debug per engine.
+
+> Materialization note: the concrete `expected_state.yaml` rows for Scenario B
+> are authored together with `scenario/canonical.sql` in the next (first SQL)
+> step — this matrix locks the *design* of what those rows must prove.

@@ -14,12 +14,15 @@ classDiagram
         +int id PK (identity, start 1)
         string name
         decimal~10,2~ unit_price
+        bool is_active  %% Scenario B: toggled by a searched UPDATE
     }
     class invoice {
         +int id PK (identity, start 1)
         +int customer_id FK
         date issued_on
+        date due_on  %% Scenario B: issued_on + 30 days (date arithmetic)
         datetime created_at  %% clock-stamped; presence-asserted only
+        datetime updated_at  %% Scenario B: set by trg_invoice_touch on UPDATE
         bool is_paid  %% DEFAULT false; set true via payment path
         decimal~12,2~ total  %% = SUM(line_total) + fn_tax(...) ; maintained by trigger
     }
@@ -45,8 +48,13 @@ classDiagram
 
     %% Behavioral objects (not class-diagram nodes; listed for reference):
     %%   view     v_invoice_totals : SUM(line_total) per invoice (net, pre-tax)
+    %%   view     v_overdue_invoices: Scenario B; days_overdue via fn_days_between
     %%   function fn_tax           : scalar, returns net * 0.10 (10%), exact at scale 2
+    %%   function fn_days_between  : Scenario B; engine-neutral DATEDIFF wrapper
     %%   trigger  trg_line_total   : AFTER INSERT/UPDATE ON invoice_line
     %%                               -> invoice.total = SUM(line_total) + fn_tax(SUM(line_total))
+    %%   trigger  trg_invoice_touch: Scenario B; BEFORE UPDATE ON invoice -> updated_at
     %%   proc     create_invoice   : insert header + lines, return new invoice id
     %%                               (DEFAULT applies: is_paid starts false)
+    %%   proc     bulk_reprice     : Scenario B; UPDATE-with-JOIN product -> invoice_line
+    %%   proc     recalc_overdue   : Scenario B; cursor/loop date-driven UPDATEs
