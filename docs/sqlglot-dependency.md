@@ -49,9 +49,11 @@ directory of our own diffs applied at build time).
 - **Pros**: zero maintenance overhead; standard, well-understood dependency;
   upgrades are a one-line change; no divergence from upstream.
 - **Cons**: we cannot fix a sqlglot bug ourselves — we either work around it in
-  our transformer (where most of our current workarounds already live) or wait
-  for an upstream release. We are limited to behaviour the installed version
-  exposes.
+  our transformer and DML converter (e.g. rewriting T-SQL string `+` to `||`,
+  preserving bitwise operators sqlglot would mishandle, expanding compound
+  assignment, and collecting named-slot function arguments sqlglot stores
+  outside `expressions`) or wait for an upstream release. We are limited to
+  behaviour the installed version exposes.
 
 ### Option B — vendored fork with a patch queue (GRUB-style)
 
