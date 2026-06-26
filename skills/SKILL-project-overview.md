@@ -62,6 +62,8 @@ unique/
 │   ├── core/
 │   │   ├── ast_nodes.py          # IR node definitions
 │   │   ├── converter.py          # sqlglot AST ↔ IR conversion + DML/DDL emit
+│   │   │                         #   (also hosts the sqlglot DML workarounds:
+│   │   │                         #   string +→concat, bitwise ops, fn args)
 │   │   ├── transformer.py        # DML/DDL transform passes
 │   │   ├── transpiler.py         # Orchestrator: split → classify → route → join
 │   │   ├── batch_splitter.py     # Dialect-aware batch splitting + classification
