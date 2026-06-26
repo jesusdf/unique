@@ -37,14 +37,26 @@ High-level plan (details in that folder):
       argument and a per-value determinism checklist. Resolved the draft gaps:
       `fn_tax` now exercised via a tax-on-invoice path, `is_paid` set by an
       explicit payment-path UPDATE, `created_at` is presence-asserted only.
-- [ ] **Minimal schema** — a small invoicing-style domain (customer, product,
+- [x] **Minimal schema** — a small invoicing-style domain (customer, product,
       invoice, invoice_line, payment) that exercises every covered construct;
-      canonical DDL + a UML/Mermaid diagram generated from it. Design done:
-      `schema/schema.mmd` locked and reconciled with the matrix (line_total is
-      `DECIMAL(10,2)`, totals `DECIMAL(12,2)`, identity pinned START 1). **DDL
-      (`schema/canonical.sql`) intentionally not yet written** — it is the first
-      SQL step, to be authored after this design pass; regenerate the diagram
-      from it then so the two can't drift.
+      canonical DDL + a UML/Mermaid diagram. Design locked in `schema.mmd`;
+      canonical T-SQL DDL authored in `schema/canonical.sql` (Scenario A + B:
+      5 tables with PK/FK/UNIQUE/CHECK/DEFAULT and pinned identity, a sequence,
+      `fn_tax`/`fn_days_between`, `v_invoice_totals`/`v_overdue_invoices`, and
+      the `trg_line_total`/`trg_invoice_touch`/`trg_payment_paid` triggers).
+      Transpiles to all three targets with exit 0; output spot-checked.
+      Discovered + fixed while validating: a FOREIGN KEY that `REFERENCES` a
+      `dbo`-qualified table kept the `dbo.` on Oracle/MySQL/PostgreSQL (a real
+      transpiler bug; the schema of the *created* table was already stripped but
+      the reference target was not). Fixed in `converter.py` with a failing test
+      first (`test_foreign_key_reference_strips_dbo_schema`).
+- [ ] **dbo. still leaks on views / functions / triggers** (discovered while
+      validating the canonical schema). FK references are now stripped, but
+      `CREATE VIEW dbo.x`, `FROM dbo.t` inside view/function/trigger bodies, and
+      qualified names in trigger bodies still carry `dbo.` on the non-T-SQL
+      targets. Same root cause (the `dbo` default schema is meaningful only in
+      T-SQL), different code paths (not constraint passthrough). Fix per-engine
+      with tests, like the FK case. Tracked separately so the FK fix lands clean.
 - [ ] **Deterministic scenario** — seed inserts + mutations whose outcome is
       identical across engines (fixed dates, explicit decimal scale, no
       engine-defined division/concat/rounding/collation behavior in asserted
