@@ -72,6 +72,20 @@ _SET_PATTERN = re.compile(
 
 _IF_OBJECT_PATTERN = re.compile(r"(?i)^\s*IF\s+(?:OBJECT_ID|EXISTS)\b")
 
+# A standalone EXEC/EXECUTE of a stored procedure. The captured group is the
+# procedure's final (unqualified) name, so a system procedure (sp_*, possibly
+# schema-qualified like sys.sp_x) can be excluded — the DML pipeline
+# documents/passes those through.
+_TSQL_EXEC_PROC_PATTERN = re.compile(
+    r"(?i)^\s*EXEC(?:UTE)?\s+"
+    r"(?:\[?\w+\]?\s*\.\s*)*"  # optional schema/database qualifiers
+    r"\[?(\w+)\]?",  # group 1: the final procedure name
+)
+
+# A batch-level DECLARE (a local variable used by following statements) is an
+# anonymous procedural block, not DML.
+_TSQL_DECLARE_PATTERN = re.compile(r"(?i)^\s*DECLARE\s+@", re.MULTILINE)
+
 
 def classify_batch(sql: str, dialect: str) -> BatchType:
     """Classify a batch's content type.
@@ -102,6 +116,13 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
 
     if _IF_OBJECT_PATTERN.match(first_meaningful):
         return BatchType.SET_OPTION
+
+    if dialect == "tsql":
+        exec_match = _TSQL_EXEC_PROC_PATTERN.match(first_meaningful)
+        if exec_match and not exec_match.group(1).lower().startswith("sp_"):
+            return BatchType.PROCEDURAL
+        if _TSQL_DECLARE_PATTERN.match(first_meaningful):
+            return BatchType.PROCEDURAL
 
     pattern = _PROCEDURAL_PATTERNS.get(dialect)
     if pattern and pattern.search(stripped):

@@ -111,14 +111,24 @@ High-level plan (details in that folder):
       `create_invoice` stored procedure to `schema/canonical.sql`. Schema +
       scenario transpile to all three targets with exit 0; PostgreSQL output
       spot-checked (proc body, INSERTs, triggered UPDATE all valid).
-- [ ] **`EXEC proc` / batch `DECLARE` don't transpile** (found validating the
-      scenario). A standalone `DECLARE @x INT; EXEC dbo.create_invoice …` (the
-      "DML from a procedure" call in step 4) degrades to `-- UNIQUE: Unhandled
-      expression type: Declare/Execute` on every target, so invoice 2 is never
-      created. `EXEC proc @a = …, @out OUTPUT` must become `CALL proc(…)`
-      (PostgreSQL/MySQL/Oracle), and a batch-level `DECLARE` + OUTPUT capture
-      needs a target form (PG `CALL` with INOUT, or a DO block). Required before
-      the scenario runs end-to-end; next up.
+- [x] **`EXEC proc` / batch `DECLARE` now route to the procedural engine.** The
+      batch classifier only treated `CREATE/ALTER PROCEDURE/FUNCTION/TRIGGER` as
+      procedural, so a standalone `EXEC dbo.create_invoice …` or `DECLARE @x …`
+      fell to the sqlglot path and degraded to `-- UNIQUE: Unhandled … Declare/
+      Execute`. Added T-SQL classifier patterns for `EXEC/EXECUTE <user proc>`
+      (system `sp_*`, incl. schema-qualified `sys.sp_*`, still excluded so the
+      DML pipeline documents them) and batch-level `DECLARE @…`. TDD:
+      test_exec_proc_is_procedural / _execute_keyword_ / _batch_declare_ /
+      _exec_system_proc_not_procedural. Full suite green (1149).
+- [ ] **Standalone anonymous block (`DECLARE … EXEC …`) emission.** Routing is
+      fixed, but the procedural emitter leaves a top-level anonymous block almost
+      verbatim (`DECLARE v_inv2 INT ; EXEC create_invoice … OUTPUT ;`) instead of
+      the target form: PostgreSQL needs a `DO $$ DECLARE … BEGIN CALL
+      create_invoice(…); END $$;` wrapper (or a plain `CALL` when no variable
+      capture is needed), `EXEC name args` → `CALL name(args)`, and the trailing
+      `OUTPUT` dropped with the OUT arg bound. The procedural engine already does
+      EXEC→CALL *inside* a CREATE PROCEDURE body; extend that to a standalone
+      anonymous block. Required before step 4 of the scenario runs end-to-end.
 - [x] **Engine-agnostic expected-state spec** (`expected_state.yaml`) — per-table
       row counts and specific `pk → column` values, defined once. Done: locked
       for Phase 1, all values reconciled (invoice.total = net + 10% tax, every
