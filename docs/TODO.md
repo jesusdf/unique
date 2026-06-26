@@ -72,18 +72,36 @@ High-level plan (details in that folder):
       Oracle correlated subquery + `EXISTS`, T-SQL native `FROM`/`JOIN`). Also
       fixed a long-standing bug where a join alias was emitted twice (`t2 b b`).
       Tests first (`test_update_from_join_*`, `test_select_join_with_alias_not_duplicated`).
-- [ ] **Set-based trigger bodies still degrade in the procedural engine.** The
-      `UPDATE … FROM … JOIN` fix above lives on the sqlglot/standalone-DML path.
-      Trigger bodies go through the *procedural* engine (a separate parser/
-      transformer/emitter), which still rewrites the set-based
-      `inserted`/`deleted` UPDATEs in `trg_line_total`/`trg_invoice_touch`/
-      `trg_payment_paid` into `-- UNIQUE:` comments (PostgreSQL degrades 1 body,
-      MySQL/Oracle all 4), so the triggers are inert on the targets. To make the
-      functional-equivalence scenario meaningful, the procedural transformer
-      (`core/procedural/transformer/base.py`, set-based-trigger handling ~ll.
-      355–847) must delegate the embedded cross-table UPDATE to the now-correct
-      emitter (PG transition tables / Oracle compound trigger / MySQL per-row),
-      instead of documenting it. Largest remaining piece before the harness.
+- [x] **Set-based trigger bodies now functional on PostgreSQL.** The procedural
+      engine (a separate parser/transformer/emitter from the standalone-DML
+      path) used to delegate embedded DML straight to sqlglot, which mishandles
+      `UPDATE … FROM … JOIN`, leaving the set-based trigger UPDATEs invalid or
+      degraded. `_transform_embedded_dml` now routes a cross-table embedded
+      UPDATE through the IR converter/emitter, so PostgreSQL emits a valid
+      `UPDATE … FROM inserted WHERE …` inside the `FOR EACH STATEMENT` trigger
+      function (with `REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted`).
+      All three canonical triggers (`trg_line_total`, `trg_invoice_touch`,
+      `trg_payment_paid`) now transpile to **functional** PostgreSQL: 0 degraded
+      bodies, 0 executable `dbo.`, 0 empty `FROM`. Along the way, fixed three
+      general bugs (TDD): a top-level `AND`/`OR` in a WHERE emitted as a function
+      call `AND(a,b)` (`exp.And` is also `exp.Func`, so Binary is now checked
+      before Func); a schema-qualified user-function call `dbo.fn_tax(...)`
+      (parsed as an `exp.Dot`) kept `dbo.` and is now folded into a
+      FunctionCall whose qualifier is stripped per engine; and an empty `FROM`
+      when a join targeted a subquery (now falls back to the documented path).
+      Canonical trigger bodies were also rewritten to use correlated subqueries
+      (not JOIN-against-aggregate) — the faithfully-transpilable pattern.
+      MySQL/Oracle still document the set-based form (no named transition
+      tables); that is a real limitation, not a bug — see next item.
+- [ ] **MySQL/Oracle set-based triggers remain documented (by design).** Neither
+      has T-SQL's named `inserted`/`deleted` transition tables, so a set-based
+      trigger can't be mechanically rewritten to a single faithful trigger
+      (Oracle would need a compound trigger accumulating rows into a PL/SQL
+      collection; MySQL has no transition tables at all). Both emit a `-- UNIQUE:`
+      note today. Revisit only if a faithful automatic rewrite proves feasible;
+      otherwise this stays a documented divergence, and the functional-
+      equivalence harness should assert trigger-maintained values on PostgreSQL
+      (+ T-SQL) and treat MySQL/Oracle trigger effects as out of scope.
 - [ ] **Deterministic scenario** — seed inserts + mutations whose outcome is
       identical across engines (fixed dates, explicit decimal scale, no
       engine-defined division/concat/rounding/collation behavior in asserted

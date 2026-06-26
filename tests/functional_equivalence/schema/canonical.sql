@@ -231,13 +231,16 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF NOT UPDATE(updated_at)
-    BEGIN
-        UPDATE inv
-        SET inv.updated_at = SYSDATETIME()
-        FROM dbo.invoice AS inv
-        INNER JOIN inserted AS i ON i.id = inv.id;
-    END
+    -- Stamp updated_at for the affected rows. Set-based over inserted (no
+    -- UPDATE(col) predicate, so the trigger is *purely* set-based and maps onto
+    -- PostgreSQL transition tables). The WHERE guard skips rows already stamped
+    -- this second, preventing the AFTER-UPDATE trigger from re-firing forever.
+    UPDATE inv
+    SET inv.updated_at = SYSDATETIME()
+    FROM dbo.invoice AS inv
+    INNER JOIN inserted AS i ON i.id = inv.id
+    WHERE (inv.updated_at IS NULL
+       OR inv.updated_at <> SYSDATETIME());
 END
 GO
 

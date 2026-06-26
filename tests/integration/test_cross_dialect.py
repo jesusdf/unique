@@ -224,6 +224,20 @@ class TestCrossDialectFunctions:
     """Function translation across dialects."""
 
     @pytest.mark.parametrize("target", ("postgresql", "mysql", "oracle"))
+    def test_user_function_call_strips_dbo_schema(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        # A call to a dbo-qualified user function (dbo.fn_tax(...)) must drop the
+        # dbo. schema on the other engines, like any other object reference.
+        result = transpiler.transpile(
+            "SELECT dbo.fn_tax(net) FROM t",
+            "tsql",
+            target,
+        )
+        assert "dbo.fn_tax" not in result.sql
+        assert "fn_tax" in result.sql.lower()
+
+    @pytest.mark.parametrize("target", ("postgresql", "mysql", "oracle"))
     def test_isnull_from_tsql(self, transpiler: Transpiler, target: str) -> None:
         result = transpiler.transpile(
             "SELECT ISNULL(name, 'default') FROM t",
