@@ -301,6 +301,32 @@ class TestCrossDialectDDL:
         assert "UNIQUE" in result.sql.upper()
         assert "CHECK" in result.sql.upper()
 
+    @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
+    def test_create_view_strips_dbo_schema(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        # The "dbo" default schema is meaningless on the other engines. Both the
+        # view name and the tables referenced in its body must lose the prefix,
+        # or the emitted DDL names a non-existent schema/database.
+        sql = (
+            "CREATE VIEW dbo.v_totals AS "
+            "SELECT il.invoice_id, SUM(il.line_total) AS net "
+            "FROM dbo.invoice_line il GROUP BY il.invoice_id"
+        )
+        result = transpiler.transpile(sql, "tsql", target)
+        assert "dbo." not in result.sql
+        assert "v_totals" in result.sql
+        assert "invoice_line" in result.sql
+
+    @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
+    def test_create_sequence_strips_dbo_schema(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        sql = "CREATE SEQUENCE dbo.s AS INT START WITH 1 INCREMENT BY 1"
+        result = transpiler.transpile(sql, "tsql", target)
+        # MySQL has no sequences; it may degrade, but must not emit dbo.s.
+        assert "dbo.s" not in result.sql
+
     def test_mysql_binary_column_attribute_stripped(
         self, transpiler: Transpiler
     ) -> None:

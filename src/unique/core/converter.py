@@ -1213,7 +1213,7 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     if dialect == "mysql" and node.kind == "CREATE SEQUENCE":
         return (
             "-- UNIQUE: MySQL has no sequences; use an AUTO_INCREMENT column "
-            "instead. Original:\n-- " + node.sql
+            "instead. Original:\n-- " + _strip_dbo_schema_qualifier(node.sql)
         )
 
     # USE <db> switches the active database. Valid in MySQL and T-SQL only;
@@ -1261,6 +1261,8 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 result = _portable_index(result, dialect)
             else:
                 result = _portable_types_in_sql(result, dialect)
+            if dialect in ("oracle", "mysql", "postgresql"):
+                result = _strip_dbo_schema_qualifier(result)
             return result
     except Exception as e:  # noqa: BLE001 - report and fall back
         logger.warning("passthrough transpile error (%s): %s", node.kind, e)
@@ -1341,7 +1343,7 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
         if isinstance(node.from_clause, SubqueryExpression):
             parts.append(f"FROM ({_emit_select(node.from_clause.query, dialect)})")
         else:
-            parts.append(f"FROM {_emit_table_ref(node.from_clause)}")
+            parts.append(f"FROM {_emit_table_ref(node.from_clause, dialect)}")
 
     # JOINs
     for join in node.joins:
@@ -1388,7 +1390,7 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
 
 def _emit_insert(node: InsertStatement, dialect: str) -> str:
     """Emit an INSERT statement."""
-    table = _emit_table_ref(node.table)
+    table = _emit_table_ref(node.table, dialect)
     cols = f" ({', '.join(node.columns)})" if node.columns else ""
 
     if node.values:
@@ -1408,7 +1410,7 @@ def _emit_insert(node: InsertStatement, dialect: str) -> str:
 
 def _emit_update(node: UpdateStatement, dialect: str) -> str:
     """Emit an UPDATE statement."""
-    table = _emit_table_ref(node.table)
+    table = _emit_table_ref(node.table, dialect)
     sets = ", ".join(
         f"{col} = {_emit_expression(val, dialect)}" for col, val in node.assignments
     )
@@ -1422,7 +1424,7 @@ def _emit_update(node: UpdateStatement, dialect: str) -> str:
 
 def _emit_delete(node: DeleteStatement, dialect: str) -> str:
     """Emit a DELETE statement."""
-    table = _emit_table_ref(node.table)
+    table = _emit_table_ref(node.table, dialect)
     result = f"DELETE FROM {table}"
 
     if node.where:
@@ -1433,17 +1435,11 @@ def _emit_delete(node: DeleteStatement, dialect: str) -> str:
 
 def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     """Emit a CREATE TABLE statement."""
-    table_node = node.table
     # The T-SQL default schema "dbo" has no meaning in Oracle, MySQL or
-    # PostgreSQL — strip it so tables land in the current user's schema
-    # (Oracle), the connected database (MySQL, where "dbo" would name a
-    # non-existent database), or the default "public" schema (PostgreSQL,
-    # where "dbo" would name a schema that doesn't exist).
-    if dialect in ("oracle", "mysql", "postgresql") and getattr(
-        table_node, "schema", None
-    ) == ("dbo"):
-        table_node = TableRef(name=table_node.name, alias=table_node.alias)
-    table = _emit_table_ref(table_node)
+    # PostgreSQL; _emit_table_ref drops it for those dialects so the table lands
+    # in the current user's schema (Oracle), the connected database (MySQL), or
+    # the default "public" schema (PostgreSQL).
+    table = _emit_table_ref(node.table, dialect)
     temp = "TEMPORARY " if node.temporary else ""
     # T-SQL has no "CREATE TABLE IF NOT EXISTS"; the idiomatic equivalent is an
     # existence guard against the catalog. Other engines support the clause
@@ -1557,6 +1553,24 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     return f"{tsql_guard}CREATE {temp}TABLE {exists}{table}"
 
 
+def _strip_dbo_schema_qualifier(sql: str) -> str:
+    """Remove the T-SQL ``dbo.`` schema qualifier from object names in ``sql``.
+
+    ``dbo`` is the T-SQL default schema; it names no real schema on Oracle/
+    PostgreSQL and a non-existent database on MySQL, so a qualified reference
+    like ``dbo.invoice`` (in a CREATE SEQUENCE/INDEX, a view body, an FK
+    reference, etc.) must drop the prefix for those engines. The qualifier may
+    be bare (``dbo.``), bracketed (``[dbo].``) or quoted (``"dbo".``). Only a
+    ``dbo`` immediately followed by ``.`` and an identifier is touched, so a
+    column or value literally containing the text is left alone.
+    """
+    return re.sub(
+        r'(?i)(?:\[dbo\]|"dbo"|\bdbo)\s*\.\s*(?=[\w\[\"])',
+        "",
+        sql,
+    )
+
+
 def _strip_dbo_from_references(fragment: str) -> str:
     """Remove a leading ``dbo.`` qualifier from a FOREIGN KEY reference target.
 
@@ -1633,7 +1647,7 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
 
 def _emit_create_view(node: CreateViewStatement, dialect: str) -> str:
     """Emit a CREATE VIEW statement."""
-    name = _emit_table_ref(node.name)
+    name = _emit_table_ref(node.name, dialect)
     replace = "OR REPLACE " if node.or_replace else ""
     query = _emit_select(node.query, dialect)
     return f"CREATE {replace}VIEW {name} AS\n{query}"
@@ -1699,7 +1713,7 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         return _emit_window(node, dialect)
 
     if isinstance(node, TableRef):
-        return _emit_table_ref(node)
+        return _emit_table_ref(node, dialect)
 
     if isinstance(node, RawSQL):
         # Inline expression context (e.g. a column DEFAULT): emit the raw
@@ -1887,13 +1901,23 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
     return f"{func} OVER ({spec})"
 
 
-def _emit_table_ref(node: TableRef) -> str:
-    """Emit a table reference."""
+def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
+    """Emit a table reference.
+
+    When ``dialect`` is one of the non-T-SQL engines, the T-SQL default schema
+    ``dbo`` is dropped: it names no real schema on Oracle/PostgreSQL and would
+    name a non-existent database on MySQL. Passing ``dialect=None`` keeps the
+    reference verbatim (used where the schema must be preserved, e.g. a T-SQL
+    OBJECT_ID guard).
+    """
     parts = []
     if node.database:
         parts.append(node.database)
-    if node.schema:
-        parts.append(node.schema)
+    schema = node.schema
+    if dialect in ("oracle", "mysql", "postgresql") and schema == "dbo":
+        schema = None
+    if schema:
+        parts.append(schema)
     parts.append(node.name)
     result = ".".join(parts)
 
@@ -1932,7 +1956,7 @@ def _emit_join(join: JoinClause, dialect: str) -> str:
     if isinstance(join.table, SubqueryExpression):
         table = f"({_emit_select(join.table.query, dialect)})"
     else:
-        table = _emit_table_ref(join.table)
+        table = _emit_table_ref(join.table, dialect)
 
     if join.alias:
         table += f" {join.alias}"

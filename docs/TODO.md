@@ -50,13 +50,19 @@ High-level plan (details in that folder):
       transpiler bug; the schema of the *created* table was already stripped but
       the reference target was not). Fixed in `converter.py` with a failing test
       first (`test_foreign_key_reference_strips_dbo_schema`).
-- [ ] **dbo. still leaks on views / functions / triggers** (discovered while
-      validating the canonical schema). FK references are now stripped, but
-      `CREATE VIEW dbo.x`, `FROM dbo.t` inside view/function/trigger bodies, and
-      qualified names in trigger bodies still carry `dbo.` on the non-T-SQL
-      targets. Same root cause (the `dbo` default schema is meaningful only in
-      T-SQL), different code paths (not constraint passthrough). Fix per-engine
-      with tests, like the FK case. Tracked separately so the FK fix lands clean.
+- [x] **dbo. leak on views / sequences / object bodies** (discovered while
+      validating the canonical schema; now fixed). The `dbo` default schema is
+      meaningful only in T-SQL, so it is dropped for the three other engines.
+      Centralized the strip in `_emit_table_ref` (a new optional `dialect`
+      argument), which covers the view name, tables in a view/SELECT body, and
+      INSERT/UPDATE/DELETE/JOIN targets; the prior ad-hoc strip in
+      `_emit_create_table` now reuses it. A general `_strip_dbo_schema_qualifier`
+      cleans sqlglot passthrough output (CREATE SEQUENCE / INDEX / ALTER) and the
+      MySQL "no sequences" degradation comment. Failing tests first
+      (`test_create_view_strips_dbo_schema`, `test_create_sequence_strips_dbo_schema`).
+      Verified end-to-end: the canonical schema transpiles to all three engines
+      with **0 executable `dbo.`** (remaining occurrences are inside harmless
+      degraded-guard comments).
 - [ ] **Deterministic scenario** — seed inserts + mutations whose outcome is
       identical across engines (fixed dates, explicit decimal scale, no
       engine-defined division/concat/rounding/collation behavior in asserted
