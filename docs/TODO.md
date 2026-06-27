@@ -164,11 +164,12 @@ High-level plan (details in that folder):
       and any "morally equal but unequal" value (extend `state_check.normalize`
       + add a unit test). MySQL/Oracle set-based trigger effects are documented
       divergences — assert trigger-maintained values on PostgreSQL (+ T-SQL).
-- [x] **CI job for the live harness** — the `syntax-live` workflow job now runs
+- [x] **CI job for the live harness** — the `syntax-live` workflow job runs
       `test_functional_equivalence_live.py` against the same four engines it
       already starts (MSSQL/Oracle/MySQL/PostgreSQL), right after the live syntax
       validation, surfacing any divergence as a `::error::` annotation + step
-      summary. It is gating for the tagged Docker publish.
+      summary. Confirmed green against the real engines, so it is now **gating**
+      (the `continue-on-error` guard was removed) for the tagged Docker publish.
 - [ ] **Phase 2: full 4×4 matrix** — author the scenario natively in each of the
       four dialects and require all 16 source×target runs to converge on the
       same `expected_state.yaml`.
