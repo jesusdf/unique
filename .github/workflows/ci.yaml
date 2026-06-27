@@ -308,13 +308,10 @@ jobs:
           exit $rc
 
       - name: Run functional-equivalence harness
-        # Non-gating until the first real-engine run is confirmed green: the
-        # harness is the system-under-test's acceptance run and its first live
-        # pass may surface per-engine wrinkles (statement splitting, a value
-        # normalization, or a genuine emitter finding) that are fixed in a
-        # DB-enabled environment. Flip to gating (remove continue-on-error) once
-        # it passes against the real engines. See tests/functional_equivalence/HARNESS.md.
-        continue-on-error: true
+        # Gating: the harness is the system-under-test's acceptance run — author
+        # the scenario once in T-SQL, transpile to each engine, run, and assert
+        # all reach the engine-agnostic expected_state.yaml. Confirmed green
+        # against the real engines. See tests/functional_equivalence/HARNESS.md.
         env:
           # Reuses the same engines already started for this job. The harness
           # transpiles the canonical schema+scenario per engine, runs them, and
