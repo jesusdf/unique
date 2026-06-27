@@ -173,6 +173,24 @@ High-level plan (details in that folder):
 - [ ] **Phase 2: full 4×4 matrix** — author the scenario natively in each of the
       four dialects and require all 16 source×target runs to converge on the
       same `expected_state.yaml`.
+  - [x] **Native fixtures written** — `schema/{postgresql,mysql,oracle}.sql` and
+        `scenario/{postgresql,mysql,oracle}.sql`, each idiomatic to its engine
+        (PostgreSQL `GENERATED … IDENTITY` + statement-level transition-table
+        triggers; MySQL `AUTO_INCREMENT` + `TINYINT(1)` + row-level `FOR EACH ROW`
+        triggers with `DELIMITER //` routine bodies; Oracle `GENERATED … IDENTITY`
+        + `NUMBER(1)` booleans + **compound triggers** to dodge the mutating-table
+        error). All parse cleanly as their own source dialect (exercising each
+        parser) and share the canonical arithmetic (totals 61.05 / 39.05). The
+        T-SQL canonical stays `*/canonical.sql`.
+  - [x] **Harness splitter hardened for the native fixtures** — `split_statements`
+        now ignores `--` and `/* */` comments (an apostrophe or BEGIN/END inside
+        a comment no longer desyncs it) and honors MySQL `DELIMITER //` directives
+        (routine bodies kept intact, directives dropped). TDD in
+        `test_engine_runner.py`.
+  - [ ] **16-pair harness** — extend the live test to (a) run each native fixture
+        on its own engine, and (b) transpile each source dialect to the other
+        three; assert all 16 reach `expected_state.yaml`. Do in the DB-enabled
+        environment.
 
 Key design risks, captured for when we start:
 - **Determinism** is the central challenge — see the folder README for the list

@@ -49,7 +49,53 @@ def split_statements(sql: str, dialect: str) -> list[str]:
     if dialect == "oracle":
         return _split_oracle(sql)
 
+    if dialect == "mysql":
+        return _split_mysql(sql)
+
     return _split_semicolons(sql, dollar_quote=(dialect == "postgresql"))
+
+
+def _split_mysql(sql: str) -> list[str]:
+    """Split a MySQL script, honoring ``DELIMITER`` directives.
+
+    Routine bodies are wrapped in ``DELIMITER // … END // … DELIMITER ;`` so the
+    inner ``;`` don't split them. We segment the script by the active delimiter,
+    dropping the directives, and fall back to ``;``/BEGIN…END splitting for the
+    plain regions.
+    """
+    statements: list[str] = []
+    delimiter = ";"
+    buf: list[str] = []
+
+    def flush_plain(text: str) -> None:
+        statements.extend(_split_semicolons(text, dollar_quote=False))
+
+    for raw_line in sql.splitlines():
+        directive = re.match(r"(?i)^\s*DELIMITER\s+(\S+)\s*$", raw_line)
+        if directive:
+            # Flush whatever accumulated under the previous delimiter.
+            chunk = "\n".join(buf)
+            buf = []
+            if delimiter == ";":
+                flush_plain(chunk)
+            else:
+                statements.extend(_split_on_token(chunk, delimiter))
+            delimiter = directive.group(1)
+            continue
+        buf.append(raw_line)
+
+    chunk = "\n".join(buf)
+    if delimiter == ";":
+        flush_plain(chunk)
+    else:
+        statements.extend(_split_on_token(chunk, delimiter))
+    return [s for s in statements if s.strip()]
+
+
+def _split_on_token(text: str, token: str) -> list[str]:
+    """Split ``text`` on a literal delimiter token (e.g. ``//``), trimming it."""
+    parts = text.split(token)
+    return [p.strip() for p in parts if p.strip()]
 
 
 def _split_oracle(sql: str) -> list[str]:
@@ -83,6 +129,21 @@ def _split_semicolons(sql: str, *, dollar_quote: bool) -> list[str]:
     while i < len(text):
         ch = text[i]
         two = text[i : i + 2]
+        # Skip comments outside of strings/dollar-quotes so an apostrophe or the
+        # word BEGIN/END inside a comment can't desync the splitter.
+        if not in_dollar and not in_string:
+            if two == "--":
+                nl = text.find("\n", i)
+                end = len(text) if nl == -1 else nl
+                buf.append(text[i:end])
+                i = end
+                continue
+            if two == "/*":
+                close = text.find("*/", i + 2)
+                end = len(text) if close == -1 else close + 2
+                buf.append(text[i:end])
+                i = end
+                continue
         if dollar_quote and two == "$$":
             in_dollar = not in_dollar
             buf.append(two)
