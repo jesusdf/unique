@@ -64,6 +64,54 @@ class TestSplitStatements:
         assert any("BEGIN" in s and "proc()" in s for s in stmts)
         assert any("INSERT" in s for s in stmts)
 
+    def test_line_comment_with_apostrophe_does_not_swallow_semicolons(
+        self,
+    ) -> None:
+        # A '--' comment with an apostrophe (or the words BEGIN/END) must not be
+        # treated as opening a string / block, which would merge every following
+        # statement into one.
+        sql = (
+            "-- pay invoice 2's total now\n"
+            "INSERT INTO t VALUES (1);\n"
+            "-- BEGIN here is just prose, not a block\n"
+            "INSERT INTO t VALUES (2);\n"
+        )
+        for dialect in ("postgresql", "mysql"):
+            stmts = split_statements(sql, dialect)
+            assert len(stmts) == 2, f"{dialect}: {stmts}"
+
+    def test_block_comment_is_ignored(self) -> None:
+        sql = (
+            "/* note: don't split here; END */\n"
+            "INSERT INTO t VALUES (1);\n"
+            "INSERT INTO t VALUES (2);\n"
+        )
+        stmts = split_statements(sql, "postgresql")
+        assert len(stmts) == 2
+
+    def test_mysql_delimiter_directive_splits_routines(self) -> None:
+        # MySQL uses DELIMITER // around routine bodies (whose inner ';' must not
+        # split). The splitter must honor the active delimiter and drop the
+        # DELIMITER directives themselves.
+        sql = (
+            "INSERT INTO t VALUES (1);\n"
+            "DELIMITER //\n"
+            "CREATE TRIGGER trg BEFORE INSERT ON t FOR EACH ROW\n"
+            "BEGIN\n  SET NEW.x = 1;\nEND //\n"
+            "CREATE PROCEDURE p()\n"
+            "BEGIN\n  INSERT INTO u VALUES (1);\n  INSERT INTO u VALUES (2);\nEND //\n"
+            "DELIMITER ;\n"
+            "INSERT INTO t VALUES (2);\n"
+        )
+        stmts = split_statements(sql, "mysql")
+        # 2 plain INSERTs + the trigger + the procedure = 4; no DELIMITER lines,
+        # and no stray '//' clinging to a routine.
+        assert len(stmts) == 4, stmts
+        assert not any(s.strip().upper().startswith("DELIMITER") for s in stmts)
+        assert not any(s.rstrip().endswith("//") for s in stmts)
+        proc = [s for s in stmts if "CREATE PROCEDURE" in s][0]
+        assert proc.count("INSERT INTO u") == 2
+
 
 class TestHarnessEndToEndSQLite:
     """Prove the read+compare pipeline reaches the expected state from a real
