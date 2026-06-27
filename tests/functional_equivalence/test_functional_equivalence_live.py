@@ -38,15 +38,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.functional_equivalence.engine_runner import (
-    TABLES,
-    EngineRunner,
-    connect,
-)
-from tests.functional_equivalence.state_check import (
-    check_state,
-    load_expected_state,
-)
+from tests.functional_equivalence.engine_runner import TABLES, EngineRunner, connect
+from tests.functional_equivalence.state_check import check_state, load_expected_state
 from unique.core.transpiler import transpile
 
 _HERE = Path(__file__).parent

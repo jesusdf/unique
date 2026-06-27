@@ -72,7 +72,8 @@ class TestHarnessEndToEndSQLite:
 
     def test_expected_state_reached(self) -> None:
         con = sqlite3.connect(":memory:")
-        con.executescript("""
+        con.executescript(
+            """
             CREATE TABLE customer(id INTEGER PRIMARY KEY, name TEXT,
                 email TEXT, notes TEXT);
             INSERT INTO customer VALUES
@@ -93,7 +94,8 @@ class TestHarnessEndToEndSQLite:
             CREATE TABLE payment(id INTEGER PRIMARY KEY, invoice_id INT,
                 paid_on TEXT, amount NUMERIC);
             INSERT INTO payment VALUES (1,2,'2024-02-05',39.05);
-            """)
+            """
+        )
 
         def read_table(name: str) -> list[dict]:
             cur = con.execute(f"SELECT * FROM {name} ORDER BY id")
