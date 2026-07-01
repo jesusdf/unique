@@ -1,0 +1,33 @@
+# Pre-commit hooks pinned to the SAME versions CI enforces, so formatting and
+# linting are reproducible on every machine. Install once with:
+#
+#     pip install pre-commit
+#     pre-commit install
+#
+# Then black/isort/ruff/mypy run automatically before each commit, using these
+# exact versions regardless of what's otherwise on your PATH. Keep the `rev`s in
+# sync with the pins in pyproject.toml ([project.optional-dependencies].dev) and
+# the CI workflow.
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.10.0
+    hooks:
+      - id: black
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.17
+    hooks:
+      - id: ruff
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        args: ["src/unique/", "--ignore-missing-imports"]
+        pass_filenames: false
+        additional_dependencies: []

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unique"
-version = "0.6.0"
+version = "0.7.0"
 description = "A SQL transpiler that translates SQL scripts between SQL Server, Oracle, PostgreSQL, and MySQL."
 readme = "README.md"
 license = "MIT"
@@ -71,6 +71,13 @@ where = ["src"]
 ]
 
 [tool.black]
+# Pin the exact formatter version. black changes its formatting between releases,
+# so a mismatched local black would reformat files and then fail CI. With
+# required-version, black instead errors out immediately with a clear message
+# ("The required version `X` does not match the running version `Y`"), telling
+# the developer to install the pinned version. Keep this in sync with the
+# black== pin in [project.optional-dependencies].dev.
+required-version = "24.10.0"
 line-length = 88
 target-version = ["py311"]
 

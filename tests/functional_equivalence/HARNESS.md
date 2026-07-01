@@ -15,7 +15,7 @@ matching connection URL env var is set, so it never breaks CI.
 
 For each target in {PostgreSQL, MySQL, Oracle, and the T-SQL identity run}:
 
-1. Transpile `schema/canonical.sql` and `scenario/canonical.sql` from T-SQL to
+1. Transpile `schema/<dialect>.sql` and `scenario/<dialect>.sql` from T-SQL to
    the target (the identity run uses the canonical T-SQL unchanged).
 2. Execute the transpiled schema, then the scenario, on the live database.
 3. Read every table and assert it matches `expected_state.yaml` after

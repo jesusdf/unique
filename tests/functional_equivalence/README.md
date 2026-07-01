@@ -126,13 +126,28 @@ tests/functional_equivalence/
   coverage-matrix.md   ← feature → where-exercised matrix (proves minimal+complete)
   schema/
     schema.mmd         ← Mermaid class diagram (engine-agnostic)
-    canonical.sql      ← canonical DDL (T-SQL to start) — Phase 1 source
+    tsql.sql           ← T-SQL native DDL
+    postgresql.sql     ← PostgreSQL native DDL
+    mysql.sql          ← MySQL native DDL
+    oracle.sql         ← Oracle native DDL
   scenario/
-    README.md          ← the ordered operations live with the canonical script
-    canonical.sql      ← seed inserts + mutations (T-SQL to start)
+    README.md          ← the five ordered operations, with the T-SQL script
+    tsql.sql           ← T-SQL native seed + mutations
+    postgresql.sql     ← PostgreSQL native seed + mutations
+    mysql.sql          ← MySQL native seed + mutations
+    oracle.sql         ← Oracle native seed + mutations
   expected_state.yaml  ← engine-agnostic per-table assertions (single source of truth)
-  conftest / test_*.py ← the harness (added in Phase 1 build-out)
+  state_check.py       ← value normalization + table comparison (pure, unit-tested)
+  engine_runner.py     ← statement splitter + per-engine run/read driver
+  test_state_check.py  ← unit tests for the comparison core
+  test_engine_runner.py← splitter tests + SQLite end-to-end smoke test
+  test_functional_equivalence_live.py ← the 4×4 live matrix (skips w/o DB URLs)
+  HARNESS.md           ← runbook for the live run
 ```
+
+Only the four **native fixtures** per folder are committed. The live harness
+transpiles each source dialect to the other three **on the fly** at run time;
+no transpiled SQL is stored in the repo.
 
 ## Build phases
 

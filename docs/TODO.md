@@ -40,7 +40,7 @@ High-level plan (details in that folder):
 - [x] **Minimal schema** — a small invoicing-style domain (customer, product,
       invoice, invoice_line, payment) that exercises every covered construct;
       canonical DDL + a UML/Mermaid diagram. Design locked in `schema.mmd`;
-      canonical T-SQL DDL authored in `schema/canonical.sql` (Scenario A + B:
+      canonical T-SQL DDL authored in `schema/tsql.sql` (Scenario A + B:
       5 tables with PK/FK/UNIQUE/CHECK/DEFAULT and pinned identity, a sequence,
       `fn_tax`/`fn_days_between`, `v_invoice_totals`/`v_overdue_invoices`, and
       the `trg_line_total`/`trg_invoice_touch`/`trg_payment_paid` triggers).
@@ -102,13 +102,13 @@ High-level plan (details in that folder):
       otherwise this stays a documented divergence, and the functional-
       equivalence harness should assert trigger-maintained values on PostgreSQL
       (+ T-SQL) and treat MySQL/Oracle trigger effects as out of scope.
-- [x] **Deterministic scenario authored** (`scenario/canonical.sql`) — the five
+- [x] **Deterministic scenario authored** (`scenario/tsql.sql`) — the five
       locked steps in T-SQL: seed (2 customers, one with notes one NULL; 2
       products), direct INSERT invoice 1 + 2 lines, UPDATE a line on the
       triggered table (Widget qty 2→3), `create_invoice` proc call for invoice 2,
       and a payment that marks it paid. All literals fixed (dates, `CAST(… AS
       DECIMAL(p,s))`), 10% tax exact at scale 2. Also added the missing
-      `create_invoice` stored procedure to `schema/canonical.sql`. Schema +
+      `create_invoice` stored procedure to `schema/tsql.sql`. Schema +
       scenario transpile to all three targets with exit 0; PostgreSQL output
       spot-checked (proc body, INSERTs, triggered UPDATE all valid).
 - [x] **`EXEC proc` / batch `DECLARE` now route to the procedural engine.** The
@@ -181,16 +181,29 @@ High-level plan (details in that folder):
         + `NUMBER(1)` booleans + **compound triggers** to dodge the mutating-table
         error). All parse cleanly as their own source dialect (exercising each
         parser) and share the canonical arithmetic (totals 61.05 / 39.05). The
-        T-SQL canonical stays `*/canonical.sql`.
+        T-SQL native fixture is `*/tsql.sql`.
   - [x] **Harness splitter hardened for the native fixtures** — `split_statements`
         now ignores `--` and `/* */` comments (an apostrophe or BEGIN/END inside
         a comment no longer desyncs it) and honors MySQL `DELIMITER //` directives
         (routine bodies kept intact, directives dropped). TDD in
         `test_engine_runner.py`.
-  - [ ] **16-pair harness** — extend the live test to (a) run each native fixture
-        on its own engine, and (b) transpile each source dialect to the other
-        three; assert all 16 reach `expected_state.yaml`. Do in the DB-enabled
-        environment.
+  - [x] **16-pair harness wired** — `test_functional_equivalence_live.py` now
+        parametrizes all 16 (source, target) pairs. Only the four native fixtures
+        are committed; for source != target the harness transpiles the source's
+        native schema+scenario to the target **on the fly** (nothing transpiled
+        is stored). Each pair skips unless the target's `UNIQUE_TEST_*_URL` is
+        set. Collection verified (16 pairs, all skip cleanly without DB URLs; all
+        16 on-the-fly transpilations produce non-empty SQL). The CI `syntax-live`
+        job runs it; kept `continue-on-error` until the 12 cross-dialect pairs are
+        confirmed green on real engines (the T-SQL->{PG,MySQL,Oracle} column was
+        already green). Renamed `canonical.sql` -> `tsql.sql` so the four fixtures
+        are symmetric.
+  - [ ] **Confirm the 12 cross-dialect pairs on real engines**, then remove
+        `continue-on-error` to make the full 4×4 gating. The on-the-fly transpile
+        of the Oracle native fixture (compound trigger `:=`/`:NEW`, the
+        `FOR r IN (...) LOOP EXECUTE IMMEDIATE` drop block) currently falls back
+        to sqlglot "Command" for some procedural constructs — a live run will show
+        which need an emitter fix vs. which already execute.
 
 Key design risks, captured for when we start:
 - **Determinism** is the central challenge — see the folder README for the list

@@ -11,7 +11,7 @@ Oracle). Only the faithfully-transpilable subset lives here; lossy constructs
 stay covered by the syntactic / `-- UNIQUE:` tests, not this matrix.
 
 Step numbers below refer to the ordered scenario (also recapped in
-`expected_state.yaml` and authored in full in `scenario/canonical.sql`):
+`expected_state.yaml` and authored in full in `scenario/tsql.sql`):
 
 1. seed `customer`, `product`
 2. direct `INSERT` invoice 1 + 2 lines → `trg_line_total` recomputes `invoice.total`
@@ -170,5 +170,5 @@ trigger, UPDATE-with-JOIN, cursor UPDATE, date arithmetic) behind its own
 assertions, which is cheaper to reason about and to debug per engine.
 
 > Materialization note: the concrete `expected_state.yaml` rows for Scenario B
-> are authored together with `scenario/canonical.sql` in the next (first SQL)
+> are authored together with `scenario/tsql.sql` in the next (first SQL)
 > step — this matrix locks the *design* of what those rows must prove.
