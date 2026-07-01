@@ -5,7 +5,7 @@
 # equivalence.
 #
 # Status: LOCKED for Phase 1 (T-SQL canonical source → MySQL/PostgreSQL/Oracle).
-# Every value below is derived from scenario/canonical.sql (authored next) and
+# Every value below is derived from the native scenario/*.sql fixtures (authored next) and
 # is deterministic across all four engines: fixed literal dates, explicit
 # DECIMAL(p, s), a tax rate (10%) chosen so every taxed value is exact at scale
 # 2 (no rounding-mode dependence), no integer-division, no NULL-concat, no
@@ -35,7 +35,7 @@
 
 version: 1
 
-# Scenario recap (full ordered steps live in scenario/canonical.sql):
+# Scenario recap (full ordered steps live in the native scenario/*.sql fixtures):
 #   1. seed 2 customers, 2 products
 #   2. direct INSERT invoice 1 + 2 lines        -> trg recomputes invoice.total
 #   3. UPDATE a line on invoice 1 (qty 2 -> 3)   -> trg readjusts invoice.total

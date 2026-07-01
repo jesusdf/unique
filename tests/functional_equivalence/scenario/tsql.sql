@@ -1,7 +1,7 @@
 -- ============================================================================
 -- Unique — functional-equivalence canonical SCENARIO (Phase 1 source: T-SQL).
 --
--- The ordered mutations that, run against a fresh schema (schema/canonical.sql),
+-- The ordered mutations that, run against a fresh schema (schema/tsql.sql),
 -- produce exactly the state asserted in ../expected_state.yaml. The transpiler
 -- generates the MySQL / PostgreSQL / Oracle variants; the harness runs all four
 -- and checks each engine's final state against the single expected_state spec.

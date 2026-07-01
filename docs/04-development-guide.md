@@ -21,12 +21,28 @@ source .venv/bin/activate  # Linux/macOS
 # Install in development mode
 pip install -e ".[dev]"
 
+# Enable the pinned formatters/linters (recommended). This runs black, isort,
+# ruff and mypy before each commit using the SAME versions CI enforces, so a
+# newer local black can't reformat files and then fail CI.
+pip install pre-commit
+pre-commit install
+
 # Run tests
 pytest
 
 # Run with coverage
 pytest --cov=unique --cov-report=html
 ```
+
+## Formatting & linting versions
+
+Formatter output changes between releases, so the versions are pinned in three
+places that must stay in sync: `[project.optional-dependencies].dev` in
+`pyproject.toml`, `.pre-commit-config.yaml`, and the CI workflow. black is
+additionally pinned via `required-version` in `[tool.black]`, so if you run a
+mismatched black it fails fast with a clear message ("The required version `X`
+does not match the running version `Y`") instead of silently reformatting.
+Install the dev extras (or use pre-commit) to get the right versions.
 
 ## Docker
 

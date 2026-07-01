@@ -5,8 +5,8 @@ schema, produces the state asserted in `../expected_state.yaml`.
 
 Planned files (added in the build-out, see `../README.md`):
 
-- `canonical.sql` — the **single source of truth** for Phase 1: DDL (or `\i
-  ../schema/canonical.sql`) + seed inserts + mutations, authored in T-SQL. The
+- `tsql.sql` — the **single source of truth** for Phase 1: DDL (or `\i
+  ../schema/tsql.sql`) + seed inserts + mutations, authored in T-SQL. The
   transpiler generates the MySQL / PostgreSQL / Oracle variants; all four are
   run and checked against `../expected_state.yaml`.
 - (Phase 2) `canonical_mysql.sql`, `canonical_postgresql.sql`,
@@ -16,7 +16,7 @@ Planned files (added in the build-out, see `../README.md`):
 ## Locked ordered steps (Phase 1)
 
 The design is locked in `../coverage-matrix.md` and `../expected_state.yaml`.
-`canonical.sql` must implement exactly these five steps, in order:
+`tsql.sql` must implement exactly these five steps, in order:
 
 1. **Seed** 2 `customer` + 2 `product` rows (one customer has `notes`, one
    leaves it NULL).

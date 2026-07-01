@@ -2,33 +2,35 @@
 # SPDX-License-Identifier: MIT
 # See the LICENSE file in the project root for full license text.
 
-"""Functional-equivalence test against real engines.
+"""Functional-equivalence test against real engines — the 4x4 matrix.
 
-The gold-standard transpiler test: author the scenario once in T-SQL, let the
-transpiler generate the PostgreSQL / MySQL / Oracle variants, run all of them on
-real databases, and assert each reaches the *same* engine-agnostic final state
-(``expected_state.yaml``). This makes the transpiler the system under test.
+The gold-standard transpiler test. The repository stores only the **canonical
+native fixtures**, one per dialect (``schema/<dialect>.sql`` +
+``scenario/<dialect>.sql``), each authored idiomatically. The transpiled
+cross-dialect variants are produced **on the fly** here, never committed.
 
-These tests are **skipped unless** the matching connection URL env var is set,
-exactly like ``tests/integration/test_live_syntax.py``:
+For every (source, target) pair in {tsql, postgresql, mysql, oracle} squared:
 
-    UNIQUE_TEST_PG_URL     postgresql://unique:unique@localhost:5433/unique
-    UNIQUE_TEST_MYSQL_URL  mysql://unique:unique@localhost:3307/unique
-    UNIQUE_TEST_ORACLE_URL oracle://system:oracle@localhost:1521/FREEPDB1
-    UNIQUE_TEST_MSSQL_URL   (the T-SQL identity run; optional)
+- source == target: run the native fixture directly (also checks each fixture is
+  correct and exercises that dialect's emitter identity path).
+- source != target: transpile the source's native schema + scenario to the
+  target and run that.
 
-Bring the databases up with:
+Then read every table on the target and assert it matches the engine-agnostic
+``expected_state.yaml``. All 16 pairs reaching the same state == functional
+equivalence: the scenario, authored once per engine, means the same thing on all
+of them regardless of which engine it was written for.
 
-    docker compose -f docker-compose.test.yaml up -d
+Each pair is **skipped** unless the target engine's connection URL env var is
+set (so partial local runs work), exactly like ``test_live_syntax.py``:
 
-then run:
+    UNIQUE_TEST_MSSQL_URL   (T-SQL / SQL Server)
+    UNIQUE_TEST_PG_URL      (PostgreSQL)
+    UNIQUE_TEST_MYSQL_URL   (MySQL)
+    UNIQUE_TEST_ORACLE_URL  (Oracle)
 
-    UNIQUE_TEST_PG_URL=... UNIQUE_TEST_MYSQL_URL=... \\
-    pytest tests/functional_equivalence/test_functional_equivalence_live.py -v
-
-Phase 1: T-SQL source → {PostgreSQL, MySQL, Oracle} (+ T-SQL identity). The pure
-read+compare mechanics are covered without any engine in
-``test_engine_runner.py`` (SQLite) and ``test_state_check.py``.
+Bring the databases up with ``docker compose -f docker-compose.test.yaml up -d``
+and see ``HARNESS.md`` for the full runbook.
 """
 
 from __future__ import annotations
@@ -43,14 +45,11 @@ from tests.functional_equivalence.state_check import check_state, load_expected_
 from unique.core.transpiler import transpile
 
 _HERE = Path(__file__).parent
-_SCHEMA = (_HERE / "schema" / "canonical.sql").read_text()
-_SCENARIO = (_HERE / "scenario" / "canonical.sql").read_text()
 _EXPECTED = load_expected_state(_HERE / "expected_state.yaml")
 
-# The canonical source dialect for Phase 1.
-_SOURCE = "tsql"
+_DIALECTS = ("tsql", "postgresql", "mysql", "oracle")
 
-# target -> connection URL env var.
+# dialect -> connection URL env var (the engine that runs the transpiled SQL).
 _URL_ENV = {
     "tsql": "UNIQUE_TEST_MSSQL_URL",
     "postgresql": "UNIQUE_TEST_PG_URL",
@@ -58,20 +57,22 @@ _URL_ENV = {
     "oracle": "UNIQUE_TEST_ORACLE_URL",
 }
 
-# Phase 1 targets: the three transpiled engines plus the T-SQL identity run.
-_TARGETS = ["postgresql", "mysql", "oracle", "tsql"]
+# All 16 (source, target) pairs.
+_PAIRS = [(s, t) for s in _DIALECTS for t in _DIALECTS]
 
 
-def _transpile_for(target: str) -> tuple[str, str]:
-    """Return (schema_sql, scenario_sql) for ``target``.
+def _native(kind: str, dialect: str) -> str:
+    """Read a committed native fixture (kind is 'schema' or 'scenario')."""
+    return (_HERE / kind / f"{dialect}.sql").read_text()
 
-    For the T-SQL identity run the canonical source is used unchanged.
-    """
-    if target == _SOURCE:
-        return _SCHEMA, _SCENARIO
-    schema = transpile(_SCHEMA, source=_SOURCE, target=target).sql
-    scenario = transpile(_SCENARIO, source=_SOURCE, target=target).sql
-    return schema, scenario
+
+def _sql_for(kind: str, source: str, target: str) -> str:
+    """The SQL to run on ``target``: the native fixture when source==target,
+    otherwise the source fixture transpiled to the target (on the fly)."""
+    native = _native(kind, source)
+    if source == target:
+        return native
+    return transpile(native, source=source, target=target).sql
 
 
 def _runner_or_skip(target: str) -> EngineRunner:
@@ -88,9 +89,10 @@ def _runner_or_skip(target: str) -> EngineRunner:
 
 
 def _drop_all(runner: EngineRunner) -> None:
-    """Best-effort teardown so the run is repeatable. Order respects FKs."""
+    """Best-effort teardown so each pair starts clean. Order respects FKs."""
     for table in reversed(TABLES):
         for stmt in (
+            f"DROP TABLE IF EXISTS {table} CASCADE",
             f"DROP TABLE IF EXISTS {table}",
             f"DROP TABLE {table}",
         ):
@@ -105,21 +107,24 @@ def _drop_all(runner: EngineRunner) -> None:
                 cur.close()
 
 
-@pytest.mark.parametrize("target", _TARGETS)
-def test_functional_equivalence(target: str) -> None:
-    """Run the transpiled schema+scenario on ``target`` and assert it reaches
-    the engine-agnostic expected state."""
+@pytest.mark.parametrize(
+    "source,target",
+    _PAIRS,
+    ids=[f"{s}->{t}" for s, t in _PAIRS],
+)
+def test_functional_equivalence(source: str, target: str) -> None:
+    """Run the (transpiled) scenario for ``source`` on ``target`` and assert it
+    reaches the engine-agnostic expected state."""
     runner = _runner_or_skip(target)
     try:
         _drop_all(runner)
-        schema_sql, scenario_sql = _transpile_for(target)
-        runner.execute_script(schema_sql)
-        runner.execute_script(scenario_sql)
+        runner.execute_script(_sql_for("schema", source, target))
+        runner.execute_script(_sql_for("scenario", source, target))
 
-        mismatches = check_state(_EXPECTED, lambda name: runner.read_table(name))
+        mismatches = check_state(_EXPECTED, runner.read_table)
         assert (
             mismatches == []
-        ), f"{target} diverged from the expected state:\n" + "\n".join(
+        ), f"{source}->{target} diverged from the expected state:\n" + "\n".join(
             str(m) for m in mismatches
         )
     finally:
