@@ -111,6 +111,88 @@ compound-assignment and dropped-function-argument bugs. See
 `tests/integration/test_operator_roundtrip.py` and `test_function_translation.py`;
 cover all 12 engine pairs where the spelling can differ.
 
+### Test assertion quality (mandatory — see audit/2026-07-02)
+
+The 2026-07-02 audit proved that **72% of the integration suite passed with the
+transpiler replaced by an identity function** (output = input, zero
+translation). The dominant cause: keyword-presence assertions that are also
+true for the untranslated input. These rules are binding for every new or
+modified test:
+
+1. **The identity test.** Before writing an assertion, ask: *would this pass if
+   `transpile` returned its input unchanged?* If yes, the assertion verifies
+   nothing — rewrite it. Banned as the *only* assertions of a test:
+   `assert "SELECT" in out`, `assert "users" in out`, token/comma counts that
+   the input also satisfies, "doesn't crash / non-empty" checks.
+2. **Assert the target idiom present AND the source idiom absent.** The pattern
+   that makes a conversion test real:
+   ```python
+   out = transpiler.transpile("SELECT TOP 10 * FROM users", "tsql", "postgresql").sql
+   assert "LIMIT 10" in out          # target idiom appeared
+   assert "TOP" not in out.upper()   # source idiom is gone
+   ```
+3. **Parse every output in the target dialect** as a cheap validity gate —
+   milliseconds, no database, and it catches stripped identifier quoting,
+   JOINs without ON, missing INTERVAL, etc.:
+   ```python
+   import sqlglot
+   sqlglot.parse(out, read=_SQLGLOT_DIALECT[target],
+                 error_level=sqlglot.ErrorLevel.RAISE)
+   ```
+   Prefer putting this in a shared helper/fixture so it applies to whole test
+   modules. (sqlglot is lenient about some engine rules — the live CI jobs
+   remain the final gate — but it kills the worst class of bugs for free.)
+4. **Run the identity-mutation check after adding tests** for translation
+   behavior. Monkeypatch `Transpiler.transpile` to return
+   `TranspileResult(sql=sql)` and confirm your new tests FAIL under it:
+   ```python
+   # conftest plugin used by the audit — ~10 lines, keep it handy
+   def _identity(self, sql, source, target, options=None):
+       return TranspileResult(sql=sql, warnings=[], unsupported=[])
+   monkeypatch.setattr(Transpiler, "transpile", _identity)
+   ```
+   A translation test that survives the identity mutant is not done.
+5. **Prefer exact/golden assertions** for curated inputs over fuzzy ones. When
+   the full output is stable, compare it whole; diffs on change are easier to
+   review than clever substring logic.
+6. **Coverage % is not the goal.** 89% line coverage coexisted with the 72%
+   mutation-survival rate. Do not add tests to move the coverage number; add
+   tests that would fail if the behavior broke.
+
+### No-silent-loss invariant (mandatory)
+
+The project's core promise — "nothing is silently lost" — was violated in
+v0.7.0 (MERGE→MySQL vanished into a comment with `warnings == []`; the
+`THROW` message and `(+)` join semantics were dropped with no signal). Rules:
+
+- Any construct that cannot be mapped 1:1 **must** add an entry to
+  `result.warnings` or `result.unsupported` — the carrier comment
+  (`/* UNIQUE: ... */`) alone is NOT enough, because API/CLI consumers read
+  the result object, not the SQL text.
+- **Never emit a comment as the sole replacement for an executable statement**
+  without a corresponding `unsupported` entry.
+- **Never downgrade semantics silently** (outer→inner join, exception→null,
+  message dropped). If the faithful rewrite is hard, keep the original in a
+  carrier, register it as unsupported, and file a `docs/TODO.md` item.
+- Cheap enforcement to keep in tests: every `UNIQUE:` carrier in the output
+  must have a matching entry in `warnings`/`unsupported`.
+
+### Dual-pipeline symmetry rule
+
+Dialect knowledge lives in two stacks (sqlglot-based DML in
+`converter.py`/`transformer.py`; the procedural engine in `core/procedural/`),
+and mappings have drifted asymmetric (`STRING_AGG→GROUP_CONCAT` existed while
+`GROUP_CONCAT→STRING_AGG` did not; `ISNULL` mapped but boolean literals not).
+When adding or fixing any function/type/literal/pseudo-table mapping:
+
+1. Add it in **both directions** (A→B and B→A) unless one direction is
+   documented as impossible.
+2. Check **both pipelines** (standalone DML and procedural bodies) — a fix in
+   one usually needs the other.
+3. Add a **round-trip test** and a probe for each direction.
+4. Long term, prefer moving the mapping into a single shared table consumed by
+   both pipelines (see audit doc 03) rather than adding a fourth copy.
+
 ## Adding a New AST Node
 
 1. Define the node in `src/unique/core/ast_nodes.py`:
@@ -436,3 +518,63 @@ the live job):
 - **No `GO` after a comment** — comment-only batches/output are glued to the
   following statement with a newline, never followed by `GO`/`;`. See
   `Transpiler._join_parts` and `_is_comment_only`.
+- **No boolean literals** — `TRUE`/`FALSE` must become `1`/`0` in T-SQL output
+  (WHERE clauses, DEFAULTs on `BIT`). Mapping the BOOLEAN *type* is not enough.
+
+## Cross-engine gotchas confirmed broken in v0.7.0 (audit/2026-07-02)
+
+Regression list — each of these shipped invalid or semantically wrong output;
+when touching related code, verify the fix and its test exist:
+
+- **Identifier quoting must be translated, never stripped**: `` `x` `` (MySQL)
+  ↔ `"x"` (PG/Oracle) ↔ `[x]` (T-SQL). Stripping turns reserved-word or
+  mixed-case identifiers into syntax errors and changes case-folding semantics.
+- **Oracle `(+)` outer joins**: must become `LEFT/RIGHT OUTER JOIN ... ON`;
+  v0.7.0 emitted `INNER JOIN` with **no ON clause** (syntax error + silent
+  row loss). If unmappable, register unsupported — never inner-join it.
+- **MySQL date arithmetic needs `INTERVAL`**: `DATE_ADD(ts, INTERVAL 7 DAY)`,
+  never `DATE_ADD(ts, 7, DAY)`.
+- **`GROUP_CONCAT` ↔ `STRING_AGG`**: PG target needs `STRING_AGG(x, sep)`;
+  MySQL target needs `GROUP_CONCAT(x SEPARATOR sep)` — `GROUP_CONCAT(x, sep)`
+  is valid MySQL but concatenates `sep` to every value (wrong results).
+- **`ROWNUM` and `FROM dual`** must not reach non-Oracle targets:
+  `WHERE ROWNUM <= n` → `LIMIT n`/`FETCH FIRST`; drop `FROM dual` for PG/T-SQL
+  (MySQL tolerates it).
+- **`ILIKE`** exists only in PostgreSQL — rewrite (`LIKE` for MySQL/T-SQL with
+  a collation warning; `UPPER() LIKE UPPER()` for Oracle).
+- **PostgreSQL rejects `CURRENT_TIMESTAMP()`** with parens (e.g. in DDL
+  DEFAULTs) — emit `CURRENT_TIMESTAMP` or `now()`.
+- **Oracle formal parameters must be unconstrained**: `p IN NUMBER`, never
+  `p IN NUMBER(10,2)` (PLS-00103). The type mapper needs a parameter-position
+  mode; same applies to PL/SQL RETURN types.
+- **`THROW`/`RAISERROR` messages must survive**: map the message text into
+  `RAISE EXCEPTION '<msg>'` (PG), `RAISE_APPLICATION_ERROR(-2xxxx, '<msg>')`
+  (Oracle), `SET MESSAGE_TEXT = '<msg>'` (MySQL). Never substitute the error
+  number for the message.
+- **Zero-row semantics diverge**: T-SQL `SELECT @v = ...` leaves `@v` NULL on
+  no rows; Oracle `SELECT INTO` raises `NO_DATA_FOUND`. Faithful translation
+  needs an exception wrapper (or aggregate rewrite) — a bare `SELECT INTO`
+  makes later `IF v IS NULL` guards unreachable.
+- **MERGE → MySQL** must actually be rewritten (simple case: `INSERT ... ON
+  DUPLICATE KEY UPDATE`) or registered as unsupported with a warning — never
+  reduced to a comment with an empty result object.
+
+## Documentation must track behavior
+
+- Never mark a row ✅ in `docs/01-compatibility.md` (or claim a rewrite in
+  `docs/03-unsupported.md`) without a passing probe test for that construct in
+  each claimed direction. The audit found ✅ rows (ROWNUM, Boolean, MERGE→MySQL
+  decomposition) that the code did not implement.
+- CLI examples in README/docs must be copy-paste runnable against the real
+  interface (`unique transpile [FILE] --from X --to Y [-o OUT]`); `-s/-t/-f`
+  style flags in older examples do not exist.
+- When behavior changes, update the matrix and README claims in the same
+  commit.
+
+## API code rules (from audit doc 04)
+
+- FastAPI endpoints that call the (synchronous, CPU-bound) transpiler must be
+  plain `def`, not `async def` — otherwise they block the event loop.
+- Enforce input size limits on SQL bodies and file uploads.
+- Treat client-supplied `db_url` as SSRF surface: prefer server-side named
+  DSNs; never echo the URL in error responses.

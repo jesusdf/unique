@@ -214,7 +214,66 @@ Key design risks, captured for when we start:
 - **Scope to the faithfully-transpilable subset**; lossy constructs stay covered
   by the existing syntactic + `-- UNIQUE:` comment tests.
 
-## 2. Packaging (P3)
+## 2. Audit 2026-07-02 remediation (P1)
+
+Findings, evidence and reproductions live in **[`audit/2026-07-02/`](../audit/2026-07-02/)**.
+Work the items in this order; each fix requires a test that fails under the
+identity mutant (see `skills/SKILL-development-workflow.md` → *Test assertion
+quality*).
+
+**P1 — silent loss / invalid SQL (audit doc 01):**
+
+- [ ] Enforce the no-silent-loss invariant: every unmapped construct populates
+      `result.warnings`/`result.unsupported`; add the carrier↔warnings
+      consistency test. (S1-3 mechanism, cross-cutting)
+- [ ] Translate identifier quoting between engines instead of stripping it
+      (`` ` `` ↔ `"` ↔ `[]`). (S1-1)
+- [ ] Oracle `(+)` outer joins → proper `LEFT/RIGHT OUTER JOIN ... ON`, or
+      registered unsupported — never INNER JOIN without ON. (S1-2)
+- [ ] MERGE → MySQL: implement the simple-case `INSERT ... ON DUPLICATE KEY
+      UPDATE` rewrite the docs promise, or mark unsupported with warning. (S1-3)
+- [ ] `DATEADD` → MySQL `DATE_ADD(ts, INTERVAL n unit)`. (S1-4)
+- [ ] `ROWNUM` → `LIMIT`/`FETCH FIRST` for non-Oracle targets. (S1-5)
+- [ ] Drop `FROM dual` for PG/T-SQL targets. (S1-6)
+- [ ] `ILIKE` rewrite per target. (S1-7)
+- [ ] `GROUP_CONCAT` ↔ `STRING_AGG` both directions, with `SEPARATOR`
+      semantics fixed for the MySQL target. (S1-8, S2-1)
+- [ ] Boolean literals `TRUE/FALSE` → `1/0` for T-SQL (expressions and
+      DDL defaults). (S1-9)
+- [ ] PG DDL defaults: `CURRENT_TIMESTAMP` without parens. (S1-10)
+- [ ] Oracle emitter: unconstrained formal-parameter types (strip
+      length/precision in parameter position). (S1-11)
+- [ ] Preserve `THROW`/`RAISERROR` message text on all targets. (S2-2)
+- [ ] T-SQL assignment-select → Oracle: handle `NO_DATA_FOUND` divergence;
+      add an FE-harness scenario for it. (S2-3)
+
+**P1 — test hardening (audit doc 02):**
+
+- [ ] Rewrite `test_cross_dialect.py` / `test_function_translation.py` /
+      `test_real_world.py` assertions to the "target idiom present, source
+      idiom absent" pattern.
+- [ ] Shared helper: parse every transpiled output with sqlglot in the target
+      dialect (`ErrorLevel.RAISE`).
+- [ ] Add the identity-mutation check as a CI job with a kill-rate threshold.
+- [ ] Extend live-syntax CI coverage to standalone DML/DDL probes (not only
+      the procedural fixtures).
+
+**P2 — structure & ops (audit docs 03–04):**
+
+- [ ] Consolidate function/type/literal mappings into one table consumed by
+      both pipelines.
+- [ ] API: sync (`def`) endpoints or executor offload; input size limits;
+      `db_url` SSRF hardening (server-side named DSNs); generic 500 messages.
+- [ ] Split the >2000-line modules along their section-comment seams.
+
+**P2 — documentation drift (audit doc 05):**
+
+- [ ] Fix README/`docs/07-interfaces.md` CLI examples (`--from/--to`, no
+      inline-SQL positional).
+- [ ] Correct compatibility-matrix rows (ROWNUM, MERGE→MySQL, Boolean) or
+      implement them; add matrix probe tests.
+
+## 3. Packaging (P3)
 
 - [ ] **PyPI publication** — deferred until the tool has been used in real
       projects for a few months and proven stable. Not before then.
