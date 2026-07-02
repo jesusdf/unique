@@ -121,6 +121,28 @@ class Dialect(ABC):
 When resuming work, check `docs/STATUS.md` for the latest progress tracker.
 Each completed feature should have corresponding tests in the test suite.
 
+**Also check `audit/` for the latest audit** (first one: `audit/2026-07-02/`).
+Audits are ground truth about real defects and must not be contradicted by
+STATUS/README claims. Key standing lessons from 2026-07-02:
+
+- **Test assertions must fail under an identity transpiler.** 72% of the
+  integration suite passed when `transpile` returned its input unchanged.
+  Every conversion test asserts the target idiom is present AND the source
+  idiom is absent, and outputs are parsed in the target dialect. Details and
+  the mutation snippet: `skills/SKILL-development-workflow.md` and
+  `audit/2026-07-02/02-test-quality.md`.
+- **No silent loss.** Anything not mapped 1:1 must populate
+  `result.warnings`/`result.unsupported`; a carrier comment alone is not a
+  signal. Never replace an executable statement with only a comment.
+- **Mappings go in both directions and both pipelines** (standalone DML and
+  procedural) — asymmetric one-off fixes caused real bugs
+  (`GROUP_CONCAT`/`STRING_AGG`).
+- **Docs claims require probe tests.** No ✅ in the compatibility matrix
+  without a test proving it; README/CLI examples must be runnable as written.
+- Known-broken constructs fixed-or-pending are listed in
+  `audit/2026-07-02/01-functional-bugs.md`; check `docs/TODO.md` for their
+  current state before assuming they work.
+
 ## Key Libraries
 
 - `sqlglot` — Used as the primary SQL parsing foundation (supports all four
