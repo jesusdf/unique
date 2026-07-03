@@ -1056,6 +1056,9 @@ class ProceduralTransformer:
         from unique.core.converter import coerce_bit_literals_in_sql
 
         sql = coerce_bit_literals_in_sql(sql, self._target)
+        # sqlglot passes Oracle SYSTIMESTAMP through as an invalid SYSTIMESTAMP()
+        # on the other engines; map any niladic "now" spelling to the target's.
+        sql = self._map_now_in_sql(sql)
         sql = self._fix_target_dml(sql)
         if self._in_trigger and self._rewrites_trigger_pseudotables():
             sql = self._rewrite_trigger_pseudotables(sql)
@@ -1762,20 +1765,31 @@ class ProceduralTransformer:
     # Current-timestamp expression per dialect (shared mapping layer).
     _NOW_EXPR = CURRENT_TIMESTAMP_EXPR
 
+    #: Niladic "now" spellings that differ per engine in whether they take
+    #: parentheses: GETDATE() / NOW() (parens), SYSDATE / SYSTIMESTAMP (none).
+    #: SYSTIMESTAMP is listed before SYSDATE so the longer name matches first.
+    _NOW_PATTERN = re.compile(
+        r"\b(GETDATE\s*\(\s*\)|SYSTIMESTAMP\b(?:\s*\(\s*\))?"
+        r"|SYSDATE\b(?!\s*\()|NOW\s*\(\s*\))",
+        flags=re.IGNORECASE,
+    )
+
+    def _map_now_in_sql(self, sql: str) -> str:
+        """Replace any niladic current-timestamp spelling with the target's
+        form. Shared by the raw-text rewriter and the embedded-DML path so a
+        SYSTIMESTAMP in an UPDATE doesn't leak an invalid ``SYSTIMESTAMP()``."""
+        target_expr = self._NOW_EXPR.get(self._target)
+        if not target_expr:
+            return sql
+        return self._NOW_PATTERN.sub(target_expr, sql)
+
     def _transform_niladic_datetime(self, sql: str) -> str:
         """Translate current-timestamp expressions across dialects.
 
         Handles the forms that differ in whether they take parentheses:
         GETDATE() (T-SQL), SYSDATE (Oracle), NOW() (PG/MySQL).
         """
-        target_expr = self._NOW_EXPR.get(self._target)
-        if target_expr:
-            # Match GETDATE(), SYSDATE, NOW() (optional parens/spaces).
-            pattern = re.compile(
-                r"\b(GETDATE\s*\(\s*\)|SYSDATE\b(?!\s*\()|NOW\s*\(\s*\))",
-                flags=re.IGNORECASE,
-            )
-            sql = pattern.sub(target_expr, sql)
+        sql = self._map_now_in_sql(sql)
         # Argument-aware function rewrites run regardless of the niladic
         # datetime mapping above.
         sql = self._transform_dateadd(sql)

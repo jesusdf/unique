@@ -76,6 +76,48 @@ class TestCurrentTimestampDefault:
         _valid(out, "oracle")
 
 
+class TestOracleSystimestamp:
+    """Oracle ``SYSTIMESTAMP`` (the native FE schema's ``created_at``/
+    ``updated_at`` default) has no equivalent on the other engines and used to
+    leak as an invalid ``SYSTIMESTAMP()`` call — invalid even on Oracle, which
+    takes no parens. It must map to each target's current-timestamp form."""
+
+    def setup_method(self) -> None:
+        self.t = Transpiler()
+
+    _DDL = "CREATE TABLE t (created_at TIMESTAMP DEFAULT SYSTIMESTAMP NOT NULL)"
+
+    def test_ddl_default_to_postgresql(self) -> None:
+        out = self.t.transpile(self._DDL, "oracle", "postgresql").sql
+        assert "SYSTIMESTAMP" not in out.upper()
+        assert "DEFAULT CURRENT_TIMESTAMP" in out
+        _valid(out, "postgresql")
+
+    def test_ddl_default_to_mysql(self) -> None:
+        out = self.t.transpile(self._DDL, "oracle", "mysql").sql
+        assert "SYSTIMESTAMP" not in out.upper()
+        assert "CURRENT_TIMESTAMP" in out
+        _valid(out, "mysql")
+
+    def test_ddl_default_to_tsql(self) -> None:
+        out = self.t.transpile(self._DDL, "oracle", "tsql").sql
+        assert "SYSTIMESTAMP" not in out.upper()
+        assert "GETDATE()" in out
+        _valid(out, "tsql")
+
+    def test_procedural_assignment_to_postgresql(self) -> None:
+        # The trigger body ``:NEW.updated_at := SYSTIMESTAMP`` goes through the
+        # procedural pipeline; it must map too (dual-pipeline symmetry).
+        proc = (
+            "CREATE OR REPLACE PROCEDURE p IS\nBEGIN\n"
+            "    UPDATE t SET updated_at = SYSTIMESTAMP;\n"
+            "END;"
+        )
+        out = self.t.transpile(proc, "oracle", "postgresql").sql
+        assert "SYSTIMESTAMP" not in out.upper()
+        assert "CURRENT_TIMESTAMP" in out.upper()
+
+
 class TestOracleParameterTypes:
     """Oracle formal parameters must use unconstrained types (S1-11)."""
 

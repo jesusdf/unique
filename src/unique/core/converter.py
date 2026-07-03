@@ -2657,6 +2657,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if node.name.upper() == "CURRENT_TIMESTAMP" and not node.args:
         return CURRENT_TIMESTAMP_EXPR.get(dialect, "CURRENT_TIMESTAMP")
 
+    # Oracle niladic "now" spellings that sqlglot passes through as anonymous
+    # calls. SYSTIMESTAMP has no cross-engine parens form (it would leak as an
+    # invalid SYSTIMESTAMP() — invalid even on Oracle); SYSDATE is included for
+    # the same passthrough case. Map to each dialect's current-timestamp form.
+    if node.name.upper() in ("SYSTIMESTAMP", "SYSDATE") and not node.args:
+        return CURRENT_TIMESTAMP_EXPR.get(dialect, "CURRENT_TIMESTAMP")
+
     # Substring position: canonical CHARINDEX(needle, haystack[, start]) maps to
     # each engine's function with its own argument order.
     if node.name.upper() == "CHARINDEX" and len(node.args) >= 2:
