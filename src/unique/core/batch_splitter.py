@@ -323,22 +323,25 @@ class BatchSplitter:
         batch_start = 0
 
         for i, line in enumerate(sql.split("\n")):
-            if in_dollar_quote:
-                current.append(line)
-                if dollar_tag in line:
-                    in_dollar_quote = False
-                continue
-
-            dollar_match = re.search(r"\$([a-zA-Z_]*)\$", line)
-            if dollar_match:
-                dollar_tag = dollar_match.group(0)
-                rest = line[dollar_match.end() :]
-                if dollar_tag not in rest:
-                    in_dollar_quote = True
-                current.append(line)
-                continue
-
             current.append(line)
+
+            if in_dollar_quote:
+                if dollar_tag in line:
+                    # The closing $$ may be followed by "LANGUAGE plpgsql;" that
+                    # ends the statement, so fall through to the ;-split check
+                    # instead of swallowing the next statement into this batch.
+                    in_dollar_quote = False
+                else:
+                    continue
+            else:
+                dollar_match = re.search(r"\$([a-zA-Z_]*)\$", line)
+                if dollar_match:
+                    dollar_tag = dollar_match.group(0)
+                    rest = line[dollar_match.end() :]
+                    if dollar_tag not in rest:
+                        # Body opens here and continues on later lines.
+                        in_dollar_quote = True
+                        continue
 
             stripped_line = line.rstrip()
             if stripped_line.endswith(";") and not in_dollar_quote:

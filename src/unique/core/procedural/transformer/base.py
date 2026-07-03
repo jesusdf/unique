@@ -600,6 +600,17 @@ class ProceduralTransformer:
         new_return = (
             self._transform_data_type(node.return_type) if node.return_type else None
         )
+        # A PostgreSQL trigger function (``RETURNS TRIGGER``) is not a
+        # general-purpose function; without a trigger-function concept the target
+        # can't run it (the emitter documents it). Record the loss.
+        is_trigger_fn = (
+            node.return_type is not None and node.return_type.name.upper() == "TRIGGER"
+        )
+        if is_trigger_fn and not self._target_supports_delegating_trigger():
+            self._warnings.append(
+                f"PostgreSQL trigger function {node.name!r} ('RETURNS TRIGGER') "
+                f"has no {self._target} equivalent; documented."
+            )
         return CreateFunctionStatement(
             name=self._translate_ident_quoting(node.name) or node.name,
             parameters=new_params,
@@ -633,6 +644,16 @@ class ProceduralTransformer:
         timing = node.timing
         if self._source == "tsql" and timing == "FOR":
             timing = "AFTER"
+        # A PostgreSQL trigger delegating its body to a trigger function
+        # (``EXECUTE FUNCTION fn()``) has no equivalent on an engine that inlines
+        # the body and lacks statement-level transition tables (MySQL/Oracle/
+        # T-SQL): the emitter documents it, and the loss is recorded here.
+        if node.execute_function and not self._target_supports_delegating_trigger():
+            self._warnings.append(
+                f"PostgreSQL trigger {node.name!r} delegates to trigger function "
+                f"{node.execute_function}() and has no {self._target} equivalent "
+                "(no statement-level transition-table trigger); documented."
+            )
         return CreateTriggerStatement(
             name=self._translate_ident_quoting(node.name) or node.name,
             table=self._translate_ident_quoting(node.table) or node.table,
@@ -643,7 +664,15 @@ class ProceduralTransformer:
             or_replace=self._trigger_forces_or_replace() or node.or_replace,
             schema=self._target_schema(node.schema),
             set_based_transition=set_based,
+            execute_function=node.execute_function,
+            referencing=node.referencing,
         )
+
+    def _target_supports_delegating_trigger(self) -> bool:
+        """Whether the target expresses a trigger whose body lives in a separate
+        trigger function (PostgreSQL's ``EXECUTE FUNCTION``). Only PostgreSQL
+        does; the others inline the body and document the delegating form."""
+        return self._target == "postgresql"
 
     def _supports_transition_tables(self) -> bool:
         """Whether the target can faithfully express a set-based trigger via

@@ -779,6 +779,12 @@ class CreateTriggerStatement(ASTNode):
     inserted OLD TABLE AS deleted``. It stays ``False`` for row-level, mixed, or
     documented-only triggers (and for targets without a faithful equivalent,
     such as Oracle and MySQL).
+
+    ``execute_function`` holds the referenced trigger function when the trigger
+    delegates its body to one (PostgreSQL's ``… EXECUTE FUNCTION fn()`` form),
+    in which case ``body`` is empty and ``referencing`` carries the raw
+    ``REFERENCING … TABLE AS …`` transition-table clause for faithful
+    re-emission. Targets without this split (MySQL/Oracle/T-SQL) document it.
     """
 
     name: str
@@ -791,6 +797,8 @@ class CreateTriggerStatement(ASTNode):
     schema: str | None = None
     condition: ASTNode | None = None
     set_based_transition: bool = False
+    execute_function: str | None = None
+    referencing: str = ""
 
 
 @dataclass(frozen=True)
