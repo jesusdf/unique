@@ -12,16 +12,20 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, replace
 
 from unique.core.ast_nodes import (
     ASTNode,
     BinaryOp,
     BinaryOperator,
     CastExpression,
+    ColumnRef,
     DataType,
     FunctionCall,
+    LimitClause,
+    Literal,
     SelectStatement,
+    TableRef,
 )
 
 logger = logging.getLogger(__name__)
@@ -240,14 +244,136 @@ class TypeMapper(TransformPass):
 class SyntaxNormalizer(TransformPass):
     """Normalizes dialect-specific syntax to target equivalents.
 
-    Handles TOP → LIMIT, string concatenation operator differences, etc.
+    Handles TOP → LIMIT, string concatenation operator differences,
+    Oracle ROWNUM row limits and FROM dual (audit 2026-07-02, S1-5/S1-6).
     """
 
     def visit(self, node: ASTNode, ctx: TransformContext) -> ASTNode:
         """Normalize syntax constructs."""
         if isinstance(node, BinaryOp):
             return self._normalize_concat(node, ctx)
+        if isinstance(node, SelectStatement):
+            node = self._drop_dual(node, ctx)
+            node = self._rownum_to_limit(node, ctx)
         return node
+
+    @staticmethod
+    def _drop_dual(node: SelectStatement, ctx: TransformContext) -> SelectStatement:
+        """Drop ``FROM dual`` for engines where dual does not exist.
+
+        Oracle/MySQL accept it; PostgreSQL and T-SQL have no dual relation
+        and both allow a FROM-less SELECT.
+        """
+        if (
+            ctx.target in ("postgresql", "tsql")
+            and isinstance(node.from_clause, TableRef)
+            and node.from_clause.name.lower() == "dual"
+            and node.from_clause.schema is None
+            and not node.joins
+        ):
+            return replace(node, from_clause=None)
+        return node
+
+    def _rownum_to_limit(
+        self, node: SelectStatement, ctx: TransformContext
+    ) -> SelectStatement:
+        """Rewrite ``WHERE ROWNUM <= n`` as the target's row-limit clause.
+
+        Handles a top-level ROWNUM comparison, alone or AND-ed with other
+        predicates. Any other ROWNUM use (select list, OR branches, nested
+        expressions) has no simple LIMIT equivalent and is signalled instead
+        of being passed through as an unknown column.
+        """
+        if ctx.source != "oracle" or ctx.target == "oracle":
+            return node
+
+        limit_count: int | None = None
+        if node.where is not None and node.limit is None:
+            comparison, remainder = self._split_rownum_predicate(node.where)
+            if comparison is not None:
+                limit_count = self._rownum_limit_value(comparison)
+                if limit_count is not None:
+                    node = replace(
+                        node,
+                        where=remainder,
+                        limit=LimitClause(
+                            limit=Literal(value=limit_count, dtype="integer")
+                        ),
+                    )
+
+        if self._contains_rownum(node):
+            ctx.warn(
+                "ROWNUM has no direct equivalent here; rewrite as "
+                "LIMIT/FETCH or ROW_NUMBER() manually",
+                "rownum",
+            )
+            ctx.mark_unsupported("ROWNUM (non-limit usage)")
+        return node
+
+    @staticmethod
+    def _is_rownum(node: ASTNode) -> bool:
+        return (
+            isinstance(node, ColumnRef)
+            and node.table is None
+            and node.name.upper() == "ROWNUM"
+        )
+
+    def _split_rownum_predicate(
+        self, where: ASTNode
+    ) -> tuple[BinaryOp | None, ASTNode | None]:
+        """Extract a top-level ROWNUM comparison from a WHERE tree.
+
+        Returns (comparison, remaining_predicate). Only AND conjunctions are
+        traversed: under OR, removing the ROWNUM term would change semantics.
+        """
+        if isinstance(where, BinaryOp) and where.operator in (
+            BinaryOperator.LTE,
+            BinaryOperator.LT,
+        ):
+            if self._is_rownum(where.left):
+                return where, None
+            return None, where
+        if isinstance(where, BinaryOp) and where.operator == BinaryOperator.AND:
+            left_cmp, left_rest = self._split_rownum_predicate(where.left)
+            if left_cmp is not None:
+                if left_rest is None:
+                    return left_cmp, where.right
+                return left_cmp, replace(where, left=left_rest)
+            right_cmp, right_rest = self._split_rownum_predicate(where.right)
+            if right_cmp is not None:
+                if right_rest is None:
+                    return right_cmp, where.left
+                return right_cmp, replace(where, right=right_rest)
+        return None, where
+
+    @staticmethod
+    def _rownum_limit_value(comparison: BinaryOp) -> int | None:
+        """ROWNUM <= n -> n; ROWNUM < n -> n - 1 (integer literals only)."""
+        right = comparison.right
+        if not isinstance(right, Literal):
+            return None
+        try:
+            n = int(str(right.value))
+        except (TypeError, ValueError):
+            return None
+        return n if comparison.operator == BinaryOperator.LTE else n - 1
+
+    def _contains_rownum(self, node: ASTNode | None) -> bool:
+        """Deep scan for any remaining ROWNUM reference."""
+        if node is None:
+            return False
+        if self._is_rownum(node):
+            return True
+        for node_field in fields(node):
+            value = getattr(node, node_field.name)
+            if isinstance(value, ASTNode):
+                if self._contains_rownum(value):
+                    return True
+            elif isinstance(value, tuple):
+                for item in value:
+                    if isinstance(item, ASTNode) and self._contains_rownum(item):
+                        return True
+        return False
 
     def _normalize_concat(self, node: BinaryOp, ctx: TransformContext) -> ASTNode:
         """Normalize string concatenation between dialects."""
