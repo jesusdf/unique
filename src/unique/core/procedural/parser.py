@@ -1544,9 +1544,18 @@ class ProceduralParser:
         return CursorOperation(operation="CLOSE", cursor_name=cursor_name)
 
     def _parse_mysql_set(self) -> ASTNode:
-        """Parse a MySQL SET assignment: SET var = expr;"""
+        """Parse a MySQL SET assignment: SET var = expr;
+
+        The target may be dotted — a BEFORE trigger assigns the pseudo-row
+        column ``SET NEW.col = expr`` — so collect the whole ``a.b`` name
+        before the ``=`` instead of stopping at the first identifier.
+        """
         self._expect_keyword("SET")
-        target = self._parse_identifier()
+        name_parts = [self._parse_identifier()]
+        while self._current().type == TokenType.DOT:
+            self._advance()
+            name_parts.append(self._parse_identifier())
+        target = ".".join(name_parts)
         self._match_type(TokenType.OPERATOR)  # =
         value = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)

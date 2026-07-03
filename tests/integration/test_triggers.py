@@ -20,6 +20,8 @@ should preserve the body rather than silently "fix" it.
 
 from __future__ import annotations
 
+import re
+
 from unique.core.transpiler import Transpiler
 
 
@@ -388,3 +390,36 @@ class TestMySQLMultiEventTriggerSplit:
         assert out.count("CREATE TRIGGER") == 2
         assert "AFTER INSERT ON t" in out
         assert "AFTER UPDATE ON t" in out
+
+
+class TestMySQLRowAssignmentInTrigger:
+    """MySQL BEFORE-trigger row assignment `SET NEW.col = expr` must survive.
+
+    The parser read only a single identifier after SET, so `SET NEW.col = ...`
+    mangled to `NEW := . col = ...` (found on the sakila-style compute trigger
+    in the live FE run). It must become an assignment to the dotted target.
+    """
+
+    SQL = (
+        "CREATE TRIGGER trg_c BEFORE INSERT ON invoice_line\n"
+        "FOR EACH ROW\n"
+        "BEGIN\n"
+        "    SET NEW.line_total = NEW.qty * NEW.unit_price;\n"
+        "END"
+    )
+
+    @staticmethod
+    def _tight(sql: str) -> str:
+        # Collapse the token-joiner's cosmetic spaces around '.' so the
+        # assertion targets semantics, not whitespace.
+        return re.sub(r"\s*\.\s*", ".", sql)
+
+    def test_postgresql_assigns_dotted_target(self) -> None:
+        out = Transpiler().transpile(self.SQL, "mysql", "postgresql").sql
+        assert "NEW.line_total := NEW.qty * NEW.unit_price" in self._tight(out)
+        assert "NEW :=" not in out
+        assert ":= ." not in out
+
+    def test_mysql_roundtrip_keeps_set(self) -> None:
+        out = Transpiler().transpile(self.SQL, "mysql", "mysql").sql
+        assert "SET NEW.line_total = NEW.qty * NEW.unit_price" in self._tight(out)
