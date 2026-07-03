@@ -93,6 +93,14 @@ class TestTSQLToOracle:
         assert "V_NEW_ID :=" not in out
         assert "SET V_NEW_ID" not in out
 
+    def test_oracle_bare_proc_call_becomes_call(self) -> None:
+        # Oracle invokes a procedure by bare name inside a block (no CALL
+        # keyword); PG/MySQL need CALL name(args). It must not fall through to
+        # EmbeddedDML (sqlglot would mangle it to a bare NAME(args)).
+        src = "BEGIN\n    create_invoice(2, 1, 1);\nEND;"
+        assert "CALL create_invoice(2, 1, 1)" in _transpile(src, "oracle", "postgresql")
+        assert "CALL create_invoice(2, 1, 1)" in _transpile(src, "oracle", "mysql")
+
     def test_call_wraps_iso_date_argument(self) -> None:
         # A stored proc's DATE parameter receiving an ISO string must be wrapped
         # in an ANSI DATE literal for the Oracle call (ORA-01861 otherwise).
