@@ -17,7 +17,10 @@ import subprocess
 import sys
 
 # Minimum fraction of integration tests that must FAIL under the mutation.
-KILL_RATE_FLOOR = 0.30
+# Raised 0.30 -> 0.33 when test_real_world.py gained the hardened
+# TestOutputValidity gates (per-statement target-dialect parsing, foreign
+# quoting, per-fixture idiom checks); measured kill rate after: 36%.
+KILL_RATE_FLOOR = 0.33
 
 
 def main() -> int:

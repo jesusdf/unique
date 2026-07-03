@@ -250,9 +250,15 @@ quality*).
 **P1 — test hardening (audit doc 02):**
 
 - [x] Rewrite `test_cross_dialect.py` / `test_function_translation.py`
-      assertions (`test_real_world.py` still pending — needs procedural-aware
-      validity checks) to the "target idiom present, source
-      idiom absent" pattern.
+      assertions to the "target idiom present, source idiom absent" pattern.
+- [x] Harden `test_real_world.py` with procedural-aware validity gates
+      (`TestOutputValidity`): every non-procedural transpiled statement of the
+      four fixtures parses in the target dialect (FE-harness splitter +
+      `classify_batch` to exempt routine bodies), no bracket/backtick/GO
+      leaks into executable output, and each fixture's signature construct
+      is asserted in the target idiom. Building it surfaced and fixed 10
+      emitter bugs (see DONE.md: audit doc 02 hardening); integration
+      kill rate 28% → 36%, gate floor raised to 33%.
 - [x] Shared helper: parse every transpiled output with sqlglot in the target
       dialect (`ErrorLevel.RAISE`).
 - [x] Add the identity-mutation check as a CI job with a kill-rate threshold.
