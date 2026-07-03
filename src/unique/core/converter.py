@@ -349,6 +349,10 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return _convert_table(expr)
     if isinstance(expr, exp.Literal):
         return _convert_literal(expr)
+    if isinstance(expr, exp.Boolean):
+        # TRUE/FALSE literals; T-SQL and Oracle need 1/0 at emit time
+        # (audit 2026-07-02, S1-9).
+        return Literal(value=bool(expr.this), dtype="boolean")
     if isinstance(expr, exp.Star):
         return Star()
     if isinstance(expr, exp.Alias):
@@ -674,9 +678,13 @@ def _convert_create_table(
                     elif isinstance(kind, exp.UniqueColumnConstraint):
                         unique = True
                     elif isinstance(kind, exp.DefaultColumnConstraint):
-                        default = RawSQL(
-                            sql=kind.this.sql() if kind.this else "",
-                            reason="column default",
+                        # Convert properly so boolean/function defaults are
+                        # re-emitted in the target's own spelling (audit
+                        # 2026-07-02, S1-9/S1-10).
+                        default = (
+                            convert_expression(kind.this, source_dialect)
+                            if kind.this
+                            else None
                         )
                     elif isinstance(kind, exp.AutoIncrementColumnConstraint):
                         identity = True
@@ -1839,6 +1847,14 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                         "gen_random_uuid()",
                         default_sql,
                     )
+                if dialect in ("postgresql", "oracle"):
+                    # Both reject the parenthesized CURRENT_TIMESTAMP() form
+                    # in DDL defaults (audit 2026-07-02, S1-10).
+                    default_sql = re.sub(
+                        r"(?i)\bCURRENT_TIMESTAMP\s*\(\s*\)",
+                        "CURRENT_TIMESTAMP",
+                        default_sql,
+                    )
                 default = f" DEFAULT {default_sql}"
             identity = ""
             if col.identity:
@@ -2050,6 +2066,12 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
     if isinstance(node, Literal):
         if node.value is None:
             return "NULL"
+        if node.dtype == "boolean":
+            # T-SQL and Oracle (pre-23c) have no boolean literals in SQL
+            # contexts (audit 2026-07-02, S1-9).
+            if dialect in ("tsql", "oracle"):
+                return "1" if node.value else "0"
+            return "TRUE" if node.value else "FALSE"
         if node.dtype == "string" or (
             node.dtype == "unknown" and isinstance(node.value, str)
         ):
