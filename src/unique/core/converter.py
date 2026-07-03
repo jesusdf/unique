@@ -2084,8 +2084,202 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
     return str(node)
 
 
+_DATE_UNIT_ALIASES = {
+    "DD": "DAY",
+    "D": "DAY",
+    "DAYOFYEAR": "DAY",
+    "MM": "MONTH",
+    "M": "MONTH",
+    "YY": "YEAR",
+    "YYYY": "YEAR",
+    "HH": "HOUR",
+    "MI": "MINUTE",
+    "N": "MINUTE",
+    "SS": "SECOND",
+    "S": "SECOND",
+    "WK": "WEEK",
+    "WW": "WEEK",
+    "W": "WEEK",
+}
+_DATE_UNITS = {"DAY", "WEEK", "MONTH", "YEAR", "HOUR", "MINUTE", "SECOND"}
+
+# sqlglot canonicalization wrappers that must never reach emitted SQL.
+_SQLGLOT_WRAPPERS = {"TIME_STR_TO_TIME", "TS_OR_DS_TO_DATE", "TS_OR_DS_TO_TIMESTAMP"}
+
+
+def _unwrap_sqlglot_wrappers(node: ASTNode) -> ASTNode:
+    """Strip sqlglot-internal cast pseudo-functions from an argument."""
+    while (
+        isinstance(node, FunctionCall)
+        and node.name.upper() in _SQLGLOT_WRAPPERS
+        and len(node.args) == 1
+    ):
+        node = node.args[0]
+    return node
+
+
+def _date_unit_name(node: ASTNode) -> str | None:
+    """Extract a normalized date-part unit (DAY, MONTH, ...) from an IR arg."""
+    raw: str | None = None
+    if isinstance(node, RawSQL):
+        raw = node.sql
+    elif isinstance(node, Literal) and isinstance(node.value, str):
+        raw = node.value
+    elif isinstance(node, ColumnRef) and not node.table:
+        raw = node.name
+    if raw is None:
+        return None
+    unit = _DATE_UNIT_ALIASES.get(raw.strip().upper(), raw.strip().upper())
+    return unit if unit in _DATE_UNITS else None
+
+
+def _emit_date_add(node: FunctionCall, dialect: str) -> str | None:
+    """Emit DATE_ADD/DATE_SUB/DATEADD with the target's own idiom.
+
+    The IR canonical form is ``(ts, n, unit)``. Emitting the 3-argument
+    ``DATE_ADD(ts, 7, DAY)`` form is invalid on every engine (audit
+    2026-07-02, S1-4); each target needs its native spelling.
+    """
+    if len(node.args) != 3:
+        return None
+    unit = _date_unit_name(node.args[2])
+    if unit is None:
+        return None
+    ts = _emit_expression(_unwrap_sqlglot_wrappers(node.args[0]), dialect)
+    amount = node.args[1]
+    literal_n: str | None = None
+    if isinstance(amount, Literal) and re.fullmatch(r"-?\d+", str(amount.value)):
+        # MySQL parses INTERVAL amounts as string literals; use the bare number.
+        literal_n = str(amount.value)
+    n = literal_n if literal_n is not None else _emit_expression(amount, dialect)
+    sub = node.name.upper() == "DATE_SUB"
+
+    if dialect == "mysql":
+        fn = "DATE_SUB" if sub else "DATE_ADD"
+        return f"{fn}({ts}, INTERVAL {n} {unit})"
+    if dialect == "tsql":
+        signed = (f"-{n}" if literal_n is not None else f"-({n})") if sub else n
+        return f"DATEADD({unit}, {signed}, {ts})"
+    if dialect == "postgresql":
+        op = "-" if sub else "+"
+        if literal_n is not None:
+            return f"{ts} {op} INTERVAL '{n} {unit}'"
+        return f"{ts} {op} ({n}) * INTERVAL '1 {unit}'"
+    if dialect == "oracle":
+        if unit in ("MONTH", "YEAR"):
+            if unit == "MONTH":
+                months = n
+            elif literal_n is not None:
+                months = str(int(literal_n) * 12)
+            else:
+                months = f"({n}) * 12"
+            if sub:
+                signed = f"-{months}" if literal_n is not None else f"-({months})"
+            else:
+                signed = months
+            return f"ADD_MONTHS({ts}, {signed})"
+        op = "-" if sub else "+"
+        if unit == "WEEK":
+            days = str(int(literal_n) * 7) if literal_n is not None else f"({n}) * 7"
+            return f"{ts} {op} NUMTODSINTERVAL({days}, 'DAY')"
+        return f"{ts} {op} NUMTODSINTERVAL({n}, '{unit}')"
+    return None
+
+
+def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
+    """Emit DATEDIFF with T-SQL boundary-count semantics per target.
+
+    IR canonical argument order is ``(end, start, unit)``. T-SQL DATEDIFF
+    counts unit-boundary crossings, so month/year use calendar arithmetic
+    rather than elapsed-interval functions (audit 2026-07-02, S1-4).
+    """
+    if len(node.args) != 3:
+        return None
+    unit = _date_unit_name(node.args[2])
+    if unit is None:
+        return None
+    end = _emit_expression(_unwrap_sqlglot_wrappers(node.args[0]), dialect)
+    start = _emit_expression(_unwrap_sqlglot_wrappers(node.args[1]), dialect)
+
+    if dialect == "tsql":
+        return f"DATEDIFF({unit}, {start}, {end})"
+    if dialect == "mysql":
+        if unit == "DAY":
+            return f"DATEDIFF({end}, {start})"
+        if unit == "WEEK":
+            return f"FLOOR(DATEDIFF({end}, {start}) / 7)"
+        if unit == "MONTH":
+            return (
+                f"((YEAR({end}) * 12 + MONTH({end})) - "
+                f"(YEAR({start}) * 12 + MONTH({start})))"
+            )
+        if unit == "YEAR":
+            return f"(YEAR({end}) - YEAR({start}))"
+        k = {"HOUR": 3600, "MINUTE": 60, "SECOND": 1}[unit]
+        return (
+            f"(FLOOR(UNIX_TIMESTAMP({end}) / {k}) - "
+            f"FLOOR(UNIX_TIMESTAMP({start}) / {k}))"
+        )
+    if dialect == "postgresql":
+        if unit == "DAY":
+            return f"(CAST({end} AS DATE) - CAST({start} AS DATE))"
+        if unit == "WEEK":
+            return f"FLOOR((CAST({end} AS DATE) - CAST({start} AS DATE)) / 7)"
+        if unit == "MONTH":
+            return (
+                f"((EXTRACT(YEAR FROM {end}) * 12 + EXTRACT(MONTH FROM {end})) - "
+                f"(EXTRACT(YEAR FROM {start}) * 12 + EXTRACT(MONTH FROM {start})))"
+            )
+        if unit == "YEAR":
+            return f"(EXTRACT(YEAR FROM {end}) - EXTRACT(YEAR FROM {start}))"
+        k = {"HOUR": 3600, "MINUTE": 60, "SECOND": 1}[unit]
+        return (
+            f"(FLOOR(EXTRACT(EPOCH FROM {end}) / {k}) - "
+            f"FLOOR(EXTRACT(EPOCH FROM {start}) / {k}))"
+        )
+    if dialect == "oracle":
+        if unit == "DAY":
+            return f"(TRUNC(CAST({end} AS DATE)) - TRUNC(CAST({start} AS DATE)))"
+        if unit == "WEEK":
+            return (
+                f"FLOOR((TRUNC(CAST({end} AS DATE)) - "
+                f"TRUNC(CAST({start} AS DATE))) / 7)"
+            )
+        if unit == "MONTH":
+            return (
+                f"((EXTRACT(YEAR FROM {end}) * 12 + EXTRACT(MONTH FROM {end})) - "
+                f"(EXTRACT(YEAR FROM {start}) * 12 + EXTRACT(MONTH FROM {start})))"
+            )
+        if unit == "YEAR":
+            return f"(EXTRACT(YEAR FROM {end}) - EXTRACT(YEAR FROM {start}))"
+        trunc_fmt = {"HOUR": "HH24", "MINUTE": "MI"}.get(unit)
+        mult = {"HOUR": 24, "MINUTE": 1440, "SECOND": 86400}[unit]
+        if trunc_fmt:
+            return (
+                f"ROUND((TRUNC(CAST({end} AS DATE), '{trunc_fmt}') - "
+                f"TRUNC(CAST({start} AS DATE), '{trunc_fmt}')) * {mult})"
+            )
+        return f"ROUND((CAST({end} AS DATE) - CAST({start} AS DATE)) * {mult})"
+    return None
+
+
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
+    fn_name = node.name.upper()
+    # sqlglot-internal cast wrappers must never reach the output.
+    if fn_name in _SQLGLOT_WRAPPERS and len(node.args) == 1:
+        return _emit_expression(node.args[0], dialect)
+
+    # Date arithmetic has a distinct spelling per engine.
+    if fn_name in ("DATE_ADD", "DATE_SUB", "DATEADD"):
+        emitted = _emit_date_add(node, dialect)
+        if emitted is not None:
+            return emitted
+    if fn_name in ("DATEDIFF", "TIMESTAMPDIFF"):
+        emitted = _emit_date_diff(node, dialect)
+        if emitted is not None:
+            return emitted
+
     # A user function may be schema-qualified (dbo.fn_tax). The "dbo" default
     # schema is meaningless on the other engines, so drop it there, as for any
     # other object reference. Built-in names never carry it.
