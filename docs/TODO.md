@@ -301,8 +301,17 @@ quality*).
 - [ ] Consolidate function/type/literal mappings into one table consumed by
       both pipelines.
 - [x] API: sync (`def`) endpoints, input size limits (UNIQUE_MAX_SQL_BYTES),
-      BOM-aware decoding, generic 500 messages. Still pending: `db_url` SSRF
-      hardening via server-side named DSNs.
+      BOM-aware decoding, generic 500 messages.
+- [x] `db_url` SSRF hardening (A3): databases are configured server-side as
+      named DSNs (`UNIQUE_DSN_<NAME>`) and referenced by name (`db` field on
+      both endpoints); `/api/v1/info` exposes the names (never URLs) and the
+      UI renders them as a dropdown. A raw `db_url` now needs the extra
+      `UNIQUE_ALLOW_RAW_DB_URL` opt-in on top of
+      `UNIQUE_ALLOW_DB_CONNECTION`. Found and fixed along the way:
+      `web/src/index.template.html` had drifted behind the committed
+      generated `static/index.html` (a rebuild would have silently dropped
+      the db-field feature); the template was regenerated from the committed
+      output (round-trip verified) before applying the UI change.
 - [ ] Split the >2000-line modules along their section-comment seams.
 
 **P2 — documentation drift (audit doc 05):**

@@ -224,14 +224,17 @@
   </div>
 
   <div class="db-field" id="dbField" hidden>
-    <label for="dbUrl">
+    <label for="dbName">
       Database connection <span class="db-optional">(optional)</span>
     </label>
-    <input type="text" id="dbUrl" class="db-input" spellcheck="false"
+    <select id="dbName" class="db-input" hidden></select>
+    <input type="text" id="dbUrl" class="db-input" spellcheck="false" hidden
            placeholder="e.g. oracle://user:pass@host:1521/service" />
     <p class="db-help">
-      Provide a connection URL to resolve metadata-dependent constructs such as
-      Oracle <code>%TYPE</code>/<code>%ROWTYPE</code>. Leave empty to skip.
+      Used to resolve metadata-dependent constructs such as Oracle
+      <code>%TYPE</code>/<code>%ROWTYPE</code>. Databases are configured
+      server-side (<code>UNIQUE_DSN_&lt;NAME&gt;</code>) and referenced by
+      name. Leave empty to skip.
     </p>
   </div>
 
@@ -274,14 +277,17 @@
       <button class="primary" id="runFile">Translate &amp; download</button>
     </div>
     <div class="db-field" id="fileDbField" hidden>
-      <label for="fileDbUrl">
+      <label for="fileDbName">
         Database connection <span class="db-optional">(optional)</span>
       </label>
+      <select id="fileDbName" class="db-input" hidden></select>
       <input type="text" id="fileDbUrl" class="db-input" spellcheck="false"
-             placeholder="e.g. oracle://user:pass@host:1521/service" />
+             hidden placeholder="e.g. oracle://user:pass@host:1521/service" />
       <p class="db-help">
-        Provide a connection URL to resolve metadata-dependent constructs such
-        as Oracle <code>%TYPE</code>/<code>%ROWTYPE</code>. Leave empty to skip.
+        Used to resolve metadata-dependent constructs such as Oracle
+        <code>%TYPE</code>/<code>%ROWTYPE</code>. Databases are configured
+        server-side (<code>UNIQUE_DSN_&lt;NAME&gt;</code>) and referenced by
+        name. Leave empty to skip.
       </p>
     </div>
     <div class="messages" id="fileMessages" style="margin-top:14px;"></div>
@@ -2421,8 +2427,10 @@ async function translate() {
   try {
     const body = { sql, source, target };
     if (dbEnabled) {
+      const dbName = el("dbName").value;
       const dbUrl = el("dbUrl").value.trim();
-      if (dbUrl) body.db_url = dbUrl;
+      if (dbName) body.db = dbName;
+      else if (dbUrl) body.db_url = dbUrl;
     }
     const res = await fetch(API + "/api/v1/transpile", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -2460,8 +2468,10 @@ async function translateFile() {
   form.append("source", source);
   form.append("target", target);
   if (dbEnabled) {
+    const dbName = el("fileDbName").value;
     const dbUrl = el("fileDbUrl").value.trim();
-    if (dbUrl) form.append("db_url", dbUrl);
+    if (dbName) form.append("db", dbName);
+    else if (dbUrl) form.append("db_url", dbUrl);
   }
   btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>Working…`;
   try {
@@ -2524,13 +2534,34 @@ async function translateFile() {
   el("fileSource").value = "auto";
   el("fileTarget").value = "postgresql";
 
-  // Version label + optional database-connection fields.
+  // Version label + optional database-connection fields. Databases are
+  // referenced by server-configured DSN name; a raw URL input only appears
+  // when the deployment explicitly allows it (UNIQUE_ALLOW_RAW_DB_URL).
   const info = await loadInfo();
   if (info.version) el("versionTag").textContent = info.version;
   dbEnabled = !!info.db_connection_enabled;
-  if (dbEnabled) {
+  const dbNames = info.db_names || [];
+  const rawDbAllowed = !!info.raw_db_url_enabled;
+  if (dbEnabled && (dbNames.length || rawDbAllowed)) {
     el("dbField").hidden = false;
     el("fileDbField").hidden = false;
+    if (dbNames.length) {
+      for (const sel of [el("dbName"), el("fileDbName")]) {
+        sel.hidden = false;
+        const none = document.createElement("option");
+        none.value = ""; none.textContent = "(no database)";
+        sel.appendChild(none);
+        for (const name of dbNames) {
+          const opt = document.createElement("option");
+          opt.value = name; opt.textContent = name;
+          sel.appendChild(opt);
+        }
+      }
+    }
+    if (rawDbAllowed) {
+      el("dbUrl").hidden = false;
+      el("fileDbUrl").hidden = false;
+    }
   }
 
   el("run").addEventListener("click", translate);

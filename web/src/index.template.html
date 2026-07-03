@@ -30,9 +30,45 @@
     padding: 18px 24px; border-bottom: 1px solid var(--border);
     display: flex; align-items: baseline; gap: 14px;
   }
-  header h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
+  header .brand {
+    display: inline-flex; align-items: baseline; gap: 0;
+  }
+  header .brand .logo {
+    /* The logo is the capital "U"; size and seat it so it reads as the first
+       letter of the wordmark, sitting on the text baseline. */
+    width: 21px; height: 21px; flex: 0 0 auto;
+    transform: translateY(2px);
+    margin-right: 1px;
+  }
+  header h1 {
+    font-size: 21px; margin: 0; letter-spacing: .5px; font-weight: 600;
+  }
+  header .version {
+    font-size: 12px; font-weight: 600; color: var(--accent);
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 999px; padding: 2px 9px; letter-spacing: .3px;
+  }
+  header .version:empty { display: none; }
   header .tag { color: var(--muted); font-size: 13px; }
   header .spacer { flex: 1; }
+  .db-field {
+    margin: 0 0 16px; padding: 12px 14px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+  .db-field label {
+    display: block; font-size: 12px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px;
+  }
+  .db-field .db-optional { text-transform: none; letter-spacing: 0; opacity: .8; }
+  .db-input {
+    width: 100%; box-sizing: border-box;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 11px; font-family: var(--mono, monospace); font-size: 13px;
+  }
+  .db-input:focus { outline: none; border-color: var(--accent); }
+  .db-help { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
   header a { color: var(--accent-2); text-decoration: none; font-size: 13px; }
   main { padding: 24px; max-width: 1200px; margin: 0 auto; }
   .toolbar {
@@ -46,17 +82,21 @@
   }
   select {
     background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 8px 10px; min-width: 150px;
+    border-radius: 8px; padding: 0 10px; min-width: 150px;
+    height: 40px; box-sizing: border-box;
   }
   .swap-btn {
     background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
-    border-radius: 8px; padding: 9px 12px; cursor: pointer; font-size: 16px;
+    border-radius: 8px; padding: 0 12px; cursor: pointer; font-size: 16px;
+    height: 40px; box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center;
   }
   .swap-btn:hover { border-color: var(--accent); }
   .primary {
     background: linear-gradient(180deg, var(--accent), #4072e6);
-    color: white; border: none; border-radius: 8px; padding: 10px 18px;
-    font-weight: 600; cursor: pointer;
+    color: white; border: none; border-radius: 8px; padding: 0 18px;
+    font-weight: 600; cursor: pointer; height: 40px; box-sizing: border-box;
+    display: inline-flex; align-items: center; justify-content: center;
   }
   .primary:hover { filter: brightness(1.07); }
   .primary:disabled { opacity: .5; cursor: default; }
@@ -122,11 +162,20 @@
   }
   section.file h2 { margin: 0 0 4px; font-size: 15px; }
   section.file p { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
-  .file-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+  /* Align every control on the same bottom edge; the swap button (no label)
+     and the file input get the same box height as the selects so the row reads
+     as one tidy line instead of staggered heights. */
+  .file-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .file-row .field { gap: 6px; }
+  .file-row input[type=file] { height: 40px; box-sizing: border-box; }
+  /* The swap button has no label above it, so it already sits level with the
+     select boxes via align-items:flex-end; a tiny side margin separates it. */
+  .file-row .swap-btn { margin: 0 2px; }
   input[type=file] {
     color: var(--muted); font-size: 13px;
     background: var(--panel-2); border: 1px solid var(--border);
     border-radius: 8px; padding: 8px;
+    display: flex; align-items: center;
   }
   input[type=file]::file-selector-button {
     background: var(--panel); color: var(--text); border: 1px solid var(--border);
@@ -143,7 +192,11 @@
 </head>
 <body>
 <header>
-  <h1>Unique</h1>
+  <span class="brand">
+    <img src="/static/logo.svg" alt="U" class="logo" width="30" height="30" />
+    <h1>nique</h1>
+  </span>
+  <span class="version" id="versionTag" title="Application version"></span>
   <span class="tag">SQL transpiler — SQL&nbsp;Server · Oracle · PostgreSQL · MySQL</span>
   <span class="spacer"></span>
   <a href="/docs" target="_blank">API docs</a>
@@ -166,6 +219,21 @@
       <label>&nbsp;</label>
       <div class="detect-note" id="detectNote"></div>
     </div>
+  </div>
+
+  <div class="db-field" id="dbField" hidden>
+    <label for="dbName">
+      Database connection <span class="db-optional">(optional)</span>
+    </label>
+    <select id="dbName" class="db-input" hidden></select>
+    <input type="text" id="dbUrl" class="db-input" spellcheck="false" hidden
+           placeholder="e.g. oracle://user:pass@host:1521/service" />
+    <p class="db-help">
+      Used to resolve metadata-dependent constructs such as Oracle
+      <code>%TYPE</code>/<code>%ROWTYPE</code>. Databases are configured
+      server-side (<code>UNIQUE_DSN_&lt;NAME&gt;</code>) and referenced by
+      name. Leave empty to skip.
+    </p>
   </div>
 
   <div class="editors">
@@ -195,6 +263,7 @@
         <label for="fileSource">Source engine</label>
         <select id="fileSource"></select>
       </div>
+      <button class="swap-btn" id="fileSwap" title="Swap source and target">⇄</button>
       <div class="field">
         <label for="fileTarget">Target engine</label>
         <select id="fileTarget"></select>
@@ -204,6 +273,20 @@
         <input type="file" id="file" accept=".sql,.txt,text/plain" />
       </div>
       <button class="primary" id="runFile">Translate &amp; download</button>
+    </div>
+    <div class="db-field" id="fileDbField" hidden>
+      <label for="fileDbName">
+        Database connection <span class="db-optional">(optional)</span>
+      </label>
+      <select id="fileDbName" class="db-input" hidden></select>
+      <input type="text" id="fileDbUrl" class="db-input" spellcheck="false"
+             hidden placeholder="e.g. oracle://user:pass@host:1521/service" />
+      <p class="db-help">
+        Used to resolve metadata-dependent constructs such as Oracle
+        <code>%TYPE</code>/<code>%ROWTYPE</code>. Databases are configured
+        server-side (<code>UNIQUE_DSN_&lt;NAME&gt;</code>) and referenced by
+        name. Leave empty to skip.
+      </p>
     </div>
     <div class="messages" id="fileMessages" style="margin-top:14px;"></div>
   </section>
@@ -232,6 +315,17 @@ async function loadDialects() {
     return data.dialects;
   } catch (e) {
     return ["tsql", "oracle", "postgresql", "mysql"];
+  }
+}
+
+let dbEnabled = false;
+
+async function loadInfo() {
+  try {
+    const res = await fetch(API + "/api/v1/info");
+    return await res.json();
+  } catch (e) {
+    return { version: "", db_connection_enabled: false };
   }
 }
 
@@ -311,9 +405,16 @@ async function translate() {
   if (!sql.trim()) { showMessages(el("messages"), { error: "Please enter a source script." }); return; }
   btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>Translating…`;
   try {
+    const body = { sql, source, target };
+    if (dbEnabled) {
+      const dbName = el("dbName").value;
+      const dbUrl = el("dbUrl").value.trim();
+      if (dbName) body.db = dbName;
+      else if (dbUrl) body.db_url = dbUrl;
+    }
     const res = await fetch(API + "/api/v1/transpile", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sql, source, target }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
@@ -346,6 +447,12 @@ async function translateFile() {
   form.append("file", fileInput.files[0]);
   form.append("source", source);
   form.append("target", target);
+  if (dbEnabled) {
+    const dbName = el("fileDbName").value;
+    const dbUrl = el("fileDbUrl").value.trim();
+    if (dbName) form.append("db", dbName);
+    else if (dbUrl) form.append("db_url", dbUrl);
+  }
   btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>Working…`;
   try {
     const res = await fetch(API + "/api/v1/transpile/file", { method: "POST", body: form });
@@ -407,6 +514,36 @@ async function translateFile() {
   el("fileSource").value = "auto";
   el("fileTarget").value = "postgresql";
 
+  // Version label + optional database-connection fields. Databases are
+  // referenced by server-configured DSN name; a raw URL input only appears
+  // when the deployment explicitly allows it (UNIQUE_ALLOW_RAW_DB_URL).
+  const info = await loadInfo();
+  if (info.version) el("versionTag").textContent = info.version;
+  dbEnabled = !!info.db_connection_enabled;
+  const dbNames = info.db_names || [];
+  const rawDbAllowed = !!info.raw_db_url_enabled;
+  if (dbEnabled && (dbNames.length || rawDbAllowed)) {
+    el("dbField").hidden = false;
+    el("fileDbField").hidden = false;
+    if (dbNames.length) {
+      for (const sel of [el("dbName"), el("fileDbName")]) {
+        sel.hidden = false;
+        const none = document.createElement("option");
+        none.value = ""; none.textContent = "(no database)";
+        sel.appendChild(none);
+        for (const name of dbNames) {
+          const opt = document.createElement("option");
+          opt.value = name; opt.textContent = name;
+          sel.appendChild(opt);
+        }
+      }
+    }
+    if (rawDbAllowed) {
+      el("dbUrl").hidden = false;
+      el("fileDbUrl").hidden = false;
+    }
+  }
+
   el("run").addEventListener("click", translate);
   el("runFile").addEventListener("click", translateFile);
   el("clear").addEventListener("click", () => {
@@ -428,6 +565,15 @@ async function translateFile() {
     // Also swap text if there is a result to iterate on.
     const inp = getInput(), outp = getOutput();
     if (outp) { setInput(outp); setOutput(inp); }
+  });
+  el("fileSwap").addEventListener("click", () => {
+    const srcSel = el("fileSource"), tgtSel = el("fileTarget");
+    const s = srcSel.value, t = tgtSel.value;
+    // The file source may be "auto" (not a valid target). Swapping moves the
+    // target into the source slot; the source goes to the target unless it was
+    // "auto", in which case the target keeps its value (nothing to put there).
+    srcSel.value = t;
+    tgtSel.value = s === "auto" ? t : s;
   });
   el("source").addEventListener("change", () => {
     el("source").dataset.userSet = "1";

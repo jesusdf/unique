@@ -101,10 +101,13 @@ class TestTranspile:
         )
         assert resp.status_code == 403
 
-    def test_db_url_accepted_when_enabled(
+    def test_db_url_accepted_with_raw_opt_in(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # A raw URL needs UNIQUE_ALLOW_RAW_DB_URL on top of the connection
+        # gate (audit 2026-07-02, A3); named DSNs are the supported path.
         monkeypatch.setenv("UNIQUE_ALLOW_DB_CONNECTION", "1")
+        monkeypatch.setenv("UNIQUE_ALLOW_RAW_DB_URL", "1")
         resp = client.post(
             "/api/v1/transpile",
             json={
@@ -263,10 +266,11 @@ class TestTranspileFile:
         )
         assert resp.status_code == 403
 
-    def test_file_db_url_accepted_when_enabled(
+    def test_file_db_url_accepted_with_raw_opt_in(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("UNIQUE_ALLOW_DB_CONNECTION", "1")
+        monkeypatch.setenv("UNIQUE_ALLOW_RAW_DB_URL", "1")
         resp = client.post(
             "/api/v1/transpile/file",
             data={
@@ -342,3 +346,119 @@ class TestApiHardening:
         )
         assert response.status_code == 200
         assert "ñ" in response.text
+
+
+class TestNamedDsns:
+    """Server-side named DSNs (audit 2026-07-02, A3 — SSRF hardening).
+
+    The API references databases by name (``db``); the URL lives in a
+    ``UNIQUE_DSN_<NAME>`` env var on the server. A raw ``db_url`` is a
+    separate, stronger opt-in (``UNIQUE_ALLOW_RAW_DB_URL``) because it lets
+    any client make the server dial arbitrary hosts with arbitrary
+    credentials.
+    """
+
+    def test_named_dsn_resolves(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("UNIQUE_ALLOW_DB_CONNECTION", "1")
+        monkeypatch.setenv("UNIQUE_DSN_HR_TEST", "postgresql://u:p@127.0.0.1:1/none")
+        resp = client.post(
+            "/api/v1/transpile",
+            json={
+                "sql": "SELECT 1;",
+                "source": "tsql",
+                "target": "oracle",
+                "db": "hr-test",
+            },
+        )
+        # The DSN is unreachable, but plain SQL needs no metadata: 200.
+        assert resp.status_code == 200
+
+    def test_unknown_name_is_a_client_error(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("UNIQUE_ALLOW_DB_CONNECTION", "1")
+        resp = client.post(
+            "/api/v1/transpile",
+            json={
+                "sql": "SELECT 1;",
+                "source": "tsql",
+                "target": "oracle",
+                "db": "nope",
+            },
+        )
+        assert resp.status_code == 400
+        # Never echo configured URLs.
+        assert "://" not in resp.json()["detail"]
+
+    def test_named_dsn_requires_connections_enabled(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("UNIQUE_DSN_HR_TEST", "postgresql://u:p@127.0.0.1:1/none")
+        resp = client.post(
+            "/api/v1/transpile",
+            json={
+                "sql": "SELECT 1;",
+                "source": "tsql",
+                "target": "oracle",
+                "db": "hr-test",
+            },
+        )
+        assert resp.status_code == 403
+
+    def test_raw_db_url_needs_extra_opt_in(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # UNIQUE_ALLOW_DB_CONNECTION alone no longer admits raw URLs.
+        monkeypatch.setenv("UNIQUE_ALLOW_DB_CONNECTION", "1")
+        resp = client.post(
+            "/api/v1/transpile",
+            json={
+                "sql": "SELECT 1;",
+                "source": "tsql",
+                "target": "oracle",
+                "db_url": "postgresql://u:p@127.0.0.1:1/none",
+            },
+        )
+        assert resp.status_code == 403
+        assert "UNIQUE_ALLOW_RAW_DB_URL" in resp.json()["detail"]
+
+    def test_raw_db_url_with_both_flags(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("UNIQUE_ALLOW_DB_CONNECTION", "1")
+        monkeypatch.setenv("UNIQUE_ALLOW_RAW_DB_URL", "1")
+        resp = client.post(
+            "/api/v1/transpile",
+            json={
+                "sql": "SELECT 1;",
+                "source": "tsql",
+                "target": "oracle",
+                "db_url": "postgresql://u:p@127.0.0.1:1/none",
+            },
+        )
+        assert resp.status_code == 200
+
+    def test_info_lists_dsn_names_not_urls(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("UNIQUE_ALLOW_DB_CONNECTION", "1")
+        monkeypatch.setenv("UNIQUE_DSN_HR_TEST", "postgresql://u:p@127.0.0.1:1/none")
+        resp = client.get("/api/v1/info")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "hr-test" in data["db_names"]
+        assert "://" not in " ".join(data["db_names"])
+
+    def test_file_endpoint_accepts_named_dsn(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("UNIQUE_ALLOW_DB_CONNECTION", "1")
+        monkeypatch.setenv("UNIQUE_DSN_HR_TEST", "postgresql://u:p@127.0.0.1:1/none")
+        resp = client.post(
+            "/api/v1/transpile/file",
+            files={"file": ("q.sql", b"SELECT 1;")},
+            data={"source": "tsql", "target": "oracle", "db": "hr-test"},
+        )
+        assert resp.status_code == 200
