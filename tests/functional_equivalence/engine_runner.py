@@ -205,6 +205,98 @@ class EngineRunner:
         finally:
             cur.close()
 
+    def drop_all_objects(self) -> None:
+        """Best-effort teardown of every user view, function and procedure in the
+        schema (tables are dropped separately by the caller). The FE fixtures are
+        re-runnable via their own DROP guards, but a source whose guard degrades
+        to a comment (Oracle's catalog-driven DROP block) would otherwise leave
+        functions/views behind and fail the next same-target pair with an
+        "already exists" error. Querying the catalog keeps this engine-agnostic
+        and robust to overloaded routines."""
+        for stmt in self._object_drop_statements():
+            cur = self.connection.cursor()
+            try:
+                cur.execute(stmt)
+                self.connection.commit()
+            except Exception:
+                self.connection.rollback()
+            finally:
+                cur.close()
+
+    def _object_drop_statements(self) -> list[str]:
+        """Catalog-driven DROP statements for views + routines, per engine."""
+
+        def query(sql: str) -> list[tuple[Any, ...]]:
+            cur = self.connection.cursor()
+            try:
+                cur.execute(sql)
+                return list(cur.fetchall())
+            except Exception:
+                self.connection.rollback()
+                return []
+            finally:
+                cur.close()
+
+        if self.dialect == "postgresql":
+            views = [
+                f"DROP VIEW IF EXISTS {v} CASCADE"
+                for (v,) in query(
+                    "SELECT table_name FROM information_schema.views "
+                    "WHERE table_schema = 'public'"
+                )
+            ]
+            # regprocedure renders the full signature, so overloaded routines
+            # each drop cleanly (a bare name would be "not unique").
+            routines = [
+                f"DROP {'PROCEDURE' if kind == 'p' else 'FUNCTION'} "
+                f"IF EXISTS {sig} CASCADE"
+                for sig, kind in query(
+                    "SELECT p.oid::regprocedure::text, p.prokind FROM pg_proc p "
+                    "JOIN pg_namespace n ON n.oid = p.pronamespace "
+                    "WHERE n.nspname = 'public'"
+                )
+            ]
+            return views + routines
+        if self.dialect == "mysql":
+            views = [
+                f"DROP VIEW IF EXISTS {v}"
+                for (v,) in query(
+                    "SELECT table_name FROM information_schema.views "
+                    "WHERE table_schema = DATABASE()"
+                )
+            ]
+            routines = [
+                f"DROP {rtype} IF EXISTS {name}"
+                for name, rtype in query(
+                    "SELECT routine_name, routine_type FROM "
+                    "information_schema.routines WHERE routine_schema = DATABASE()"
+                )
+            ]
+            return views + routines
+        if self.dialect == "oracle":
+            return [
+                f"DROP {otype} {name}"
+                for name, otype in query(
+                    "SELECT object_name, object_type FROM user_objects "
+                    "WHERE object_type IN ('VIEW', 'FUNCTION', 'PROCEDURE', "
+                    "'PACKAGE', 'TRIGGER')"
+                )
+            ]
+        if self.dialect == "tsql":
+            drops: list[str] = []
+            for name, xtype in query(
+                "SELECT name, type FROM sys.objects "
+                "WHERE type IN ('V', 'P', 'FN', 'IF', 'TF')"
+            ):
+                kind = (
+                    "VIEW"
+                    if xtype.strip() == "V"
+                    else ("PROCEDURE" if xtype.strip() == "P" else "FUNCTION")
+                )
+                drops.append(f"DROP {kind} IF EXISTS {name}")
+            return drops
+        return []
+
 
 def connect(dialect: str, url: str) -> Any:
     """Open a DB-API connection for ``dialect`` from a URL.
