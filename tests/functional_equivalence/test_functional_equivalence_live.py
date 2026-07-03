@@ -93,6 +93,9 @@ def _runner_or_skip(target: str) -> EngineRunner:
 
 def _drop_all(runner: EngineRunner) -> None:
     """Best-effort teardown so each pair starts clean. Order respects FKs."""
+    # Drop views/functions/procedures first (a table drop leaves standalone
+    # routines/views behind, and a degraded Oracle DROP guard drops nothing).
+    runner.drop_all_objects()
     for table in reversed(TABLES):
         for stmt in (
             f"DROP TABLE IF EXISTS {table} CASCADE",
