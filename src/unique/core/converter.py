@@ -1488,10 +1488,21 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
             cte_parts.append(f"{cte.name}{cols} AS (\n{inner}\n)")
         parts.append(f"WITH {recursive}{', '.join(cte_parts)}")
 
-    # SELECT
+    # SELECT — T-SQL spells a plain row limit as TOP inside the SELECT
+    # clause (OFFSET/FETCH needs an ORDER BY and an offset). v0.7.0 reduced
+    # it to a comment, silently returning all rows (audit 2026-07-02).
+    top = ""
+    if (
+        dialect == "tsql"
+        and node.limit is not None
+        and node.limit.limit is not None
+        and node.limit.offset is None
+    ):
+        pct = " PERCENT" if node.limit.percent else ""
+        top = f"TOP {_emit_expression(node.limit.limit, dialect)}{pct} "
     distinct = "DISTINCT " if node.distinct else ""
     cols = ", ".join(_emit_expression(c, dialect) for c in node.columns) or "*"
-    parts.append(f"SELECT {distinct}{cols}")
+    parts.append(f"SELECT {distinct}{top}{cols}")
 
     # FROM
     if node.from_clause:
@@ -1527,7 +1538,9 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
 
     # LIMIT / OFFSET
     if node.limit:
-        parts.append(_emit_limit(node.limit, dialect))
+        limit_sql = _emit_limit(node.limit, dialect)
+        if limit_sql:
+            parts.append(limit_sql)
 
     result = "\n".join(parts)
 
@@ -2587,9 +2600,9 @@ def _emit_limit(limit: LimitClause, dialect: str) -> str:
                     f"FETCH NEXT {_emit_expression(limit.limit, dialect)} ROWS ONLY"
                 )
             return "\n".join(parts)
+        # A plain limit was already emitted as TOP in the SELECT clause.
         if limit.limit:
-            top_val = _emit_expression(limit.limit, dialect)
-            return f"/* TOP {top_val} — use OFFSET/FETCH for paging */"
+            return ""
 
     # PostgreSQL, MySQL: LIMIT ... OFFSET ...
     parts = []
