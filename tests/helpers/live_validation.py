@@ -153,19 +153,19 @@ class MySQLValidator(SyntaxValidator):
             isolated = True
         except Exception:
             isolated = False
-        created_tables: list[str] = []
+        # In the non-isolated path we must undo every object the script
+        # creates (tables *and* routines/triggers/views), or a leftover
+        # procedure makes the next run fail with "already exists" (1304). DDL
+        # auto-commits, so a rollback can't help.
+        created: list[tuple[str, str]] = []
         try:
             for stmt in _split_mysql_statements(sql):
                 if not _is_executable(stmt):
                     continue
                 if not isolated:
-                    m = re.search(
-                        r"(?is)\bCREATE\s+(?:TEMPORARY\s+)?TABLE\s+"
-                        r"(?:IF\s+NOT\s+EXISTS\s+)?[`\"]?([A-Za-z0-9_]+)",
-                        stmt,
-                    )
-                    if m:
-                        created_tables.append(m.group(1))
+                    obj = _mysql_created_object(stmt)
+                    if obj is not None:
+                        created.append(obj)
                 cur.execute(stmt)
                 # Fully drain every result set the statement produced, otherwise
                 # the next execute() raises "Commands out of sync" (2014). A
@@ -179,9 +179,14 @@ class MySQLValidator(SyntaxValidator):
                 with contextlib.suppress(Exception):
                     cur.execute(f"DROP DATABASE IF EXISTS {dbname}")
             else:
-                for tbl in reversed(created_tables):
+                # FK checks off so parent/child drop order doesn't matter.
+                with contextlib.suppress(Exception):
+                    cur.execute("SET FOREIGN_KEY_CHECKS=0")
+                for kind, name in reversed(created):
                     with contextlib.suppress(Exception):
-                        cur.execute(f"DROP TABLE IF EXISTS {tbl}")
+                        cur.execute(f"DROP {kind} IF EXISTS `{name}`")
+                with contextlib.suppress(Exception):
+                    cur.execute("SET FOREIGN_KEY_CHECKS=1")
             cur.close()
 
     @staticmethod
@@ -230,9 +235,11 @@ class OracleValidator(SyntaxValidator):
         self._conn.autocommit = False
 
     def validate(self, sql: str) -> ValidationResult:
-        # Oracle's driver rejects a trailing ';' / '/' terminator on a single
-        # statement, and only runs one statement per execute().
-        statements = [s for s in _split_semicolons(sql) if _is_executable(s)]
+        # Oracle's driver rejects a trailing '/' terminator and only runs one
+        # statement per execute(). PL/SQL blocks contain ';' inside their body,
+        # so we split on the SQL*Plus '/' terminator (a line of just '/') rather
+        # than on every ';'.
+        statements = [s for s in _split_oracle_statements(sql) if _is_executable(s)]
         created = _objects_created(sql)
         self._drop_all(created)  # pre-clean in case a prior run left objects
         cur = self._conn.cursor()
@@ -332,14 +339,28 @@ def _split_mysql_statements(sql: str) -> list[str]:
     statements: list[str] = []
     current_delim = ";"
     buf: list[str] = []
+
+    def _flush_default(chunk: str) -> None:
+        # A default-delimiter section holds several statements separated by
+        # ';'. Split them (line comments stripped so a ';' in a comment does
+        # not split) and keep each non-empty piece as its own statement, since
+        # the driver executes one statement per call.
+        for part in _strip_line_comments(chunk).split(";"):
+            if part.strip():
+                statements.append(part)
+
     for raw_line in sql.splitlines():
         stripped = raw_line.strip()
         # A "DELIMITER X" line switches the active terminator.
         if stripped.upper().startswith("DELIMITER "):
-            # Flush anything pending under the previous delimiter.
-            pending = "\n".join(buf).strip()
-            if pending:
-                statements.append(pending)
+            # Flush anything pending under the previous delimiter. Under the
+            # default ';' delimiter that pending text is many statements, so it
+            # must be split; a custom-delimiter block is a single statement.
+            pending = "\n".join(buf)
+            if current_delim == ";":
+                _flush_default(pending)
+            elif pending.strip():
+                statements.append(pending.strip())
             buf = []
             current_delim = stripped.split(None, 1)[1].strip()
             continue
@@ -356,11 +377,88 @@ def _split_mysql_statements(sql: str) -> list[str]:
     # Remaining buffer: split on ';' (default delimiter section).
     tail = "\n".join(buf)
     if current_delim == ";":
-        for part in _strip_line_comments(tail).split(";"):
-            if part.strip():
-                statements.append(part)
+        _flush_default(tail)
     elif tail.strip():
         statements.append(tail.strip())
+    return statements
+
+
+_MYSQL_CREATE_RE = re.compile(
+    r"(?is)\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:DEFINER\s*=\s*\S+\s+)?"
+    r"(?:TEMPORARY\s+)?(TABLE|PROCEDURE|FUNCTION|TRIGGER|VIEW|EVENT)\s+"
+    r"(?:IF\s+NOT\s+EXISTS\s+)?[`\"]?([A-Za-z0-9_]+)"
+)
+
+
+def _mysql_created_object(stmt: str) -> tuple[str, str] | None:
+    """Return ``(kind, name)`` for the object a MySQL statement creates.
+
+    Used to undo objects in the non-isolated validation path. ``kind`` is the
+    keyword accepted by ``DROP`` (``TABLE``/``PROCEDURE``/``FUNCTION``/
+    ``TRIGGER``/``VIEW``/``EVENT``).
+    """
+    m = _MYSQL_CREATE_RE.search(stmt)
+    if not m:
+        return None
+    return m.group(1).upper(), m.group(2)
+
+
+def _drop_leading_comment_lines(text: str) -> str:
+    """Drop leading blank and ``--`` comment lines from a chunk.
+
+    Used so a PL/SQL block preceded by degraded guard comments is still
+    recognized by its ``CREATE PROCEDURE`` / ``BEGIN`` head.
+    """
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines) and (
+        not lines[i].strip() or lines[i].lstrip().startswith("--")
+    ):
+        i += 1
+    return "\n".join(lines[i:])
+
+
+_PLSQL_HEAD_RE = re.compile(
+    r"(?is)^\s*(?:CREATE\s+(?:OR\s+REPLACE\s+)?"
+    r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE|TYPE)\b|DECLARE\b|BEGIN\b)"
+)
+
+
+def _split_oracle_statements(sql: str) -> list[str]:
+    """Split an Oracle script into statements, honoring the '/' terminator.
+
+    SQL*Plus terminates each statement with a line containing only ``/``. That
+    is the only reliable boundary for PL/SQL blocks (``CREATE PROCEDURE`` /
+    ``TRIGGER`` / anonymous ``BEGIN … END;``), whose bodies contain ``;``.
+    python-oracledb executes one statement per call and wants:
+
+    - no trailing ``/`` (it is not SQL), so the terminator lines are dropped;
+    - no trailing ``;`` on a plain SQL statement (ORA-00911), so it is stripped;
+    - the trailing ``;`` **kept** on a PL/SQL block (it closes ``END;``).
+
+    A chunk between terminators may still hold several ``;``-separated plain
+    statements (e.g. leading ``CREATE TABLE``s), so non-PL/SQL chunks are split
+    on ``;`` too.
+    """
+    chunks = re.split(r"(?m)^[ \t]*/[ \t]*$", sql)
+    statements: list[str] = []
+    for chunk in chunks:
+        if not chunk.strip():
+            continue
+        # A CREATE PROCEDURE/TRIGGER is often preceded by degraded ``--`` guard
+        # comments (e.g. the ``IF OBJECT_ID`` existence check). Skip leading
+        # blank/comment lines before deciding whether the chunk is PL/SQL.
+        body = _drop_leading_comment_lines(chunk)
+        if _PLSQL_HEAD_RE.match(body):
+            # A PL/SQL block: one statement, keep its terminating ';'.
+            statements.append(body.strip())
+        else:
+            # Plain SQL: may be several ';'-separated statements; strip the
+            # terminator ';' from each (comments stripped so a ';' inside one
+            # does not split).
+            for part in _strip_line_comments(chunk).split(";"):
+                if part.strip():
+                    statements.append(part.strip())
     return statements
 
 

@@ -29,6 +29,11 @@ services:
 
   mysql:
     image: mysql:8
+    # Binary logging is on by default in MySQL 8, which blocks a non-SUPER user
+    # (here `unique`) from creating stored routines/triggers unless the server
+    # trusts function creators (error 1419). The live-syntax tests create
+    # triggers/procedures, so enable that trust for the throwaway test stack.
+    command: --log-bin-trust-function-creators=1
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_USER: unique
