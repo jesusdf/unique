@@ -18,6 +18,7 @@ from typing import cast
 
 import sqlglot
 import sqlglot.expressions as exp
+from sqlglot import transforms
 
 from unique.core.ast_nodes import (
     Alias,
@@ -184,6 +185,14 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
     for expression in parsed:
         if expression is None:
             continue
+        # Oracle (+) join marks: rewrite into explicit LEFT/RIGHT OUTER JOINs
+        # with ON conditions before converting. sqlglot drops the mark on
+        # emit (turning an outer join into an inner one, silently), so the
+        # rewrite must happen at the tree level (audit 2026-07-02, S1-2).
+        if dialect == "oracle" and any(
+            c.args.get("join_mark") for c in expression.find_all(exp.Column)
+        ):
+            expression = transforms.eliminate_join_marks(expression)
         # T-SQL "+" on strings is concatenation; rewrite it to "||" so it maps
         # to the target's concat operator (sqlglot keeps it as arithmetic "+").
         if dialect == "tsql":
@@ -1152,11 +1161,14 @@ def _convert_join(expr: exp.Join) -> JoinClause:
     if on_expr:
         condition = convert_expression(on_expr)
 
+    using = tuple(ident.name for ident in (expr.args.get("using") or []))
+
     return JoinClause(
         join_type=join_type,
         table=table,
         alias=alias,
         condition=condition,
+        using=using,
     )
 
 
@@ -1489,8 +1501,11 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
             parts.append(f"FROM {_emit_table_ref(node.from_clause, dialect)}")
 
     # JOINs
+    left_name = None
+    if isinstance(node.from_clause, TableRef) and len(node.joins) == 1:
+        left_name = node.from_clause.alias or node.from_clause.name
     for join in node.joins:
-        parts.append(_emit_join(join, dialect))
+        parts.append(_emit_join(join, dialect, left_name=left_name))
 
     # WHERE
     if node.where:
@@ -2290,8 +2305,13 @@ def _object_id_name(node: TableRef) -> str:
     return ".".join(parts)
 
 
-def _emit_join(join: JoinClause, dialect: str) -> str:
-    """Emit a JOIN clause."""
+def _emit_join(join: JoinClause, dialect: str, left_name: str | None = None) -> str:
+    """Emit a JOIN clause.
+
+    ``left_name`` is the FROM relation's name/alias, supplied only for
+    single-join SELECTs; it lets a ``USING (...)`` join be rewritten as an
+    explicit ``ON`` for T-SQL, which has no USING syntax.
+    """
     type_map = {
         JoinType.INNER: "INNER JOIN",
         JoinType.LEFT: "LEFT JOIN",
@@ -2315,10 +2335,29 @@ def _emit_join(join: JoinClause, dialect: str) -> str:
         if join.alias and not join.table.alias:
             table += f" {join.alias}"
 
+    # A comma join parses as a bare Join with neither kind nor condition.
+    # "INNER JOIN b" without ON is a syntax error on PostgreSQL/Oracle; the
+    # faithful spelling of a comma join is CROSS JOIN (the WHERE clause
+    # still applies the predicates). (audit 2026-07-02, S1-2)
+    if join.condition is None and not join.using and join.join_type == JoinType.INNER:
+        join_type = "CROSS JOIN"
+
     result = f"{join_type} {table}"
 
     if join.condition:
         result += f" ON {_emit_expression(join.condition, dialect)}"
+    elif join.using:
+        right = join.alias or (
+            join.table.alias or join.table.name
+            if isinstance(join.table, TableRef)
+            else None
+        )
+        if dialect == "tsql" and left_name and right:
+            # T-SQL has no USING; expand to the equivalent ON predicate.
+            on = " AND ".join(f"{left_name}.{c} = {right}.{c}" for c in join.using)
+            result += f" ON {on}"
+        else:
+            result += f" USING ({', '.join(join.using)})"
 
     return result
 

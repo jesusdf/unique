@@ -263,12 +263,18 @@ class OrderByItem(ASTNode):
 
 @dataclass(frozen=True)
 class JoinClause(ASTNode):
-    """A JOIN clause."""
+    """A JOIN clause.
+
+    ``using`` holds the column names of a ``USING (...)`` join; it is
+    mutually exclusive with ``condition`` (audit 2026-07-02, S1-2 follow-up:
+    v0.7.0 dropped USING entirely).
+    """
 
     join_type: JoinType
     table: TableRef | SubqueryExpression
     alias: str | None = None
     condition: ASTNode | None = None
+    using: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
