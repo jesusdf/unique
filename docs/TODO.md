@@ -211,12 +211,15 @@ High-level plan (details in that folder):
         are symmetric.
   - [ ] **Confirm the 12 cross-dialect pairs on real engines**, then remove
         `continue-on-error` to make the full 4×4 gating. **Live status
-        2026-07-03 (PostgreSQL 16 + MariaDB 11): 6/6 reachable pairs green** —
-        tsql→postgresql, tsql→mysql, postgresql→postgresql, postgresql→mysql,
-        mysql→postgresql, mysql→mysql. The 10 remaining pairs need MSSQL
-        (pyodbc) or Oracle-target (server credentials) except the two
-        oracle-source→{pg,mysql} pairs, which are now live-testable and red on
-        Oracle *type/DDL* issues (below).
+        2026-07-03 (local `docker-compose.test.yaml`: PostgreSQL 16 + MySQL 8 +
+        Oracle Free 23): 9/12 reachable pairs green.** Oracle is now live locally
+        (`system/oracle` @ `FREEPDB1`), so all Oracle-target and Oracle-source
+        pairs run. Green: tsql→{pg,mysql,oracle}, postgresql→{pg,mysql,oracle},
+        mysql→{pg,mysql}, oracle→oracle. The 4 tsql-*target* pairs are still
+        skipped (no local `pyodbc`/MS ODBC driver). Real MySQL 8 (not the old
+        remote MariaDB) needs `--log-bin-trust-function-creators=1` to let the
+        non-SUPER `unique` user create routines/triggers — added to the compose
+        file. Remaining red: the 3 trigger-heavy pairs below.
         - [x] mysql→postgresql (**live green**): row-level `SET NEW.line_total`
           mangled to `NEW := . line_total`; the parser now reads the dotted
           pseudo-row target. Also needed cross-source `LAST_INSERT_ID()` →
@@ -229,30 +232,34 @@ High-level plan (details in that folder):
           trigger-maintained values excluded there). Also needed standalone
           `CALL` support and `INSERT … RETURNING id INTO v` →
           `SET v = LAST_INSERT_ID()`.
-        - [ ] oracle→postgresql / oracle→mysql (**now live-testable; DDL now
-          valid, red on Oracle triggers + harness teardown**). Handled this
-          session: the anonymous DROP block, SYSTIMESTAMP, FOR-loop / EXECUTE
-          IMMEDIATE, bare `NUMBER`→`BIGINT` (identity/PK/FK now valid —
-          `BIGINT AUTO_INCREMENT` / `BIGSERIAL`+`BIGINT` FK), and the
-          catalog-driven DROP block degraded to a comment on non-Oracle targets.
-          Remaining blockers:
-          - **Oracle trigger translation → PG/MySQL.** The row-level
-            `BEFORE INSERT … :NEW.col := expr` trigger emits malformed output
-            (`CREATE TRIGGER … BEFORE INSERT ON EXECUTE FUNCTION …` — no table,
-            empty function body), and the Oracle **COMPOUND** trigger
-            (`trg_line_total`, `trg_payment_paid`) is mangled (`DECLARE OR
-            UPDATE; ON …`). Needs: Oracle row-level trigger → PG trigger
-            function+binding / MySQL `FOR EACH ROW`; compound trigger → a
-            faithful per-target form or a documented degradation. Substantial —
+        - [x] **tsql→oracle, postgresql→oracle (live green).** Fixed this
+          session against the local Oracle: `CREATE SEQUENCE … AS <type>` clause
+          dropped (ORA-03048); multi-event triggers joined with `OR` not comma
+          (ORA-00969); ISO date strings written to date columns / passed as proc
+          date-args wrapped in ANSI `DATE '…'`/`TIMESTAMP '…'` (ORA-01861);
+          `CAST(str AS DATE)` → ANSI date literal; constrained types in a PL/SQL
+          `CAST` unconstrained (PLS-00103); T-SQL `SCOPE_IDENTITY()` capture →
+          `INSERT … RETURNING <idcol> INTO <var>` (harvested identity columns);
+          `RETURNING … INTO` peeled/re-appended so sqlglot can't drop the target
+          (ORA-00925). Harness: the FE engine-runner's Oracle splitter keeps a
+          trailing PL/SQL block's `END;` intact.
+        - [ ] oracle→postgresql / oracle→mysql, mysql→oracle (**still red — all
+          trigger translation**). Done this session: Oracle/PG trigger events
+          separated by `OR` now parse (was leaking `OR UPDATE ON …` into the
+          body); Oracle-source `:NEW.`/`:OLD.` normalized to `NEW.`/`OLD.` before
+          sqlglot (was emitting PG `%(NEW)s`). Remaining blockers:
+          - **Oracle COMPOUND TRIGGER (`trg_line_total`) → PG/MySQL.** The
+            AFTER-EACH-ROW + AFTER-STATEMENT set-based aggregation has no direct
+            form: PG needs a statement-level transition-table trigger + function;
+            MySQL has no transition tables at all (documented divergence). Emits
+            `variable "compound" has pseudo-type trigger` on PG. Substantial —
             own work item.
-          - **Harness teardown gap.** `_drop_all` drops only *tables*, so with
-            the Oracle DROP block degraded, functions/procedures/views persist
-            across runs (`FUNCTION fn_tax already exists`). Extend `_drop_all`
-            to also drop the schema's functions/procedures/views per engine
-            (they are known by name), making every pair re-runnable regardless
-            of the source's DROP strategy.
-        Oracle-**target** pairs still blocked (server credentials rejected; see
-        HARNESS.md runbook).
+          - **Row-level trigger body assignment per target.** oracle→mysql: a
+            `NEW.col := expr` body must become `SET NEW.col = expr` (MySQL 1064).
+            mysql→oracle: the reverse — MySQL `NEW.`/`OLD.` → Oracle `:NEW.`/
+            `:OLD.` (PLS-00201), plus MySQL `DATEDIFF` → Oracle in a routine body.
+        Oracle-**target** pairs are now live locally; **tsql-target** pairs still
+        need `pyodbc` + the MS ODBC driver installed (see HARNESS.md runbook).
 
 Key design risks, captured for when we start:
 - **Determinism** is the central challenge — see the folder README for the list
