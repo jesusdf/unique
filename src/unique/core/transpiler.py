@@ -63,6 +63,50 @@ def _warn(message: str, feature: str, source: str, target: str) -> TransformWarn
 _QI_OFF_RE = re.compile(r"(?im)^\s*SET\s+QUOTED_IDENTIFIER\s+OFF\b")
 _QI_ON_RE = re.compile(r"(?im)^\s*SET\s+QUOTED_IDENTIFIER\s+ON\b")
 
+# No-silent-loss invariant (audit 2026-07-02): a "UNIQUE:" carrier comment in
+# the output marks a lossy conversion, and every such carrier must be mirrored
+# in TranspileResult.warnings so API/CLI consumers get a programmatic signal.
+_CARRIER_RE = re.compile(r"UNIQUE:\s*(?P<frag>[^\n]*)")
+
+
+def _carrier_fragments(sql: str) -> list[str]:
+    """Extract the message fragment of each UNIQUE carrier comment in *sql*.
+
+    The fragment is the carrier text up to (excluding) a trailing
+    "Original:" marker, deduplicated preserving order.
+    """
+    seen: set[str] = set()
+    fragments: list[str] = []
+    for match in _CARRIER_RE.finditer(sql):
+        frag = match.group("frag").strip()
+        frag = re.sub(r"\s*Original:\s*$", "", frag).rstrip(" .;")
+        frag = frag.rstrip("*/ ").rstrip()
+        if frag and frag not in seen:
+            seen.add(frag)
+            fragments.append(frag)
+    return fragments
+
+
+def _warning_covers(fragment: str, messages: list[str]) -> bool:
+    """Return True if any warning message already reports *fragment*.
+
+    Coverage is a 3-consecutive-word overlap between the carrier fragment and
+    a warning message: warnings and carriers phrase the same fact differently,
+    but a real match always shares a distinctive run of words (e.g. "system
+    procedure sp_rename"). This keeps the synthesized warnings from
+    duplicating an already-registered one.
+    """
+    words = re.findall(r"[a-z0-9_]+", fragment.lower())
+    if len(words) < 3:
+        return any(fragment.lower() in m.lower() for m in messages)
+    shingles = {" ".join(words[i : i + 3]) for i in range(len(words) - 2)}
+    for message in messages:
+        mwords = re.findall(r"[a-z0-9_]+", message.lower())
+        msg_shingles = {" ".join(mwords[i : i + 3]) for i in range(len(mwords) - 2)}
+        if shingles & msg_shingles:
+            return True
+    return False
+
 
 def _double_quoted_to_strings(sql: str) -> str:
     """Rewrite ``"..."`` double-quoted tokens to ``'...'`` string literals.
@@ -366,6 +410,22 @@ class Transpiler:
                 output_parts.append((terminated, is_comment))
                 all_warnings.extend(result.warnings)
                 all_unsupported.extend(result.unsupported)
+
+                # No-silent-loss invariant: every UNIQUE carrier in this
+                # batch's output must be mirrored programmatically. Synthesize
+                # a warning for any carrier not already covered, and register
+                # an unsupported entry when an executable batch was reduced to
+                # comments (i.e. the statement was dropped from the output).
+                if batch.batch_type != BatchType.COMMENT:
+                    existing = [w.message for w in all_warnings]
+                    for frag in _carrier_fragments(terminated):
+                        if not _warning_covers(frag, existing):
+                            all_warnings.append(
+                                _warn(frag, "lossy_conversion", source, target)
+                            )
+                            existing.append(frag)
+                        if is_comment and frag not in all_unsupported:
+                            all_unsupported.append(frag)
 
             output_sql = self._join_parts(output_parts, target)
 
