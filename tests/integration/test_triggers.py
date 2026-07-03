@@ -72,6 +72,23 @@ class TestTriggerTiming:
         assert "DECLARE OR" not in out
         assert "OR UPDATE;" not in out
 
+    def test_mysql_source_new_ref_to_oracle(self) -> None:
+        # A MySQL row-level trigger's NEW./OLD. must become Oracle :NEW./:OLD.
+        # in both the assignment target/value and an embedded UPDATE (PLS-00201).
+        src = (
+            "CREATE TRIGGER trg_c\n"
+            "BEFORE INSERT ON invoice_line\n"
+            "FOR EACH ROW\n"
+            "BEGIN\n"
+            "    SET NEW.line_total = NEW.qty * NEW.unit_price;\n"
+            "END"
+        )
+        out = _t(src, "mysql", "oracle")
+        assert ":NEW.line_total := :NEW.qty * :NEW.unit_price" in out
+        # No bare NEW. survives, and no double-colon.
+        assert not re.search(r"(?<!:)\bNEW\.", out)
+        assert "::NEW" not in out
+
     def test_oracle_source_new_ref_to_postgresql(self) -> None:
         # :NEW./:OLD. must become NEW./OLD., not a %(NEW)s bind placeholder
         # (sqlglot would read :NEW as a bind variable).

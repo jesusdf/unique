@@ -362,6 +362,14 @@ class ProceduralTransformer:
 
     def _transform_var_name(self, name: str) -> str:
         """Transform variable names between naming conventions."""
+        # An Oracle trigger body assigns to the affected row via ``:NEW.col``;
+        # a MySQL/PostgreSQL source spells the assignment target ``NEW.col``.
+        if (
+            self._target == "oracle"
+            and self._in_trigger
+            and re.match(r"(?i)^(?:NEW|OLD)\s*\.", name)
+        ):
+            return self._to_oracle_row_ref(name)
         if self._source == "tsql" and self._target in ("oracle", "postgresql"):
             # @varName → V_VARNAME (Oracle) or v_varname (PG)
             clean = name.lstrip("@")
@@ -1173,6 +1181,16 @@ class ProceduralTransformer:
         sql = self._replace_oracle_date_add(sql)
         # Strip T-SQL RECOMPILE query hint that sqlglot leaves in Oracle output
         sql = re.sub(r"\s+RECOMPILE\b", "", sql, flags=re.IGNORECASE)
+        if self._in_trigger:
+            sql = self._to_oracle_row_ref(sql)
+        return sql
+
+    def _to_oracle_row_ref(self, sql: str) -> str:
+        """Map a MySQL/PostgreSQL-source ``NEW.``/``OLD.`` row reference to
+        Oracle's ``:NEW.``/``:OLD.`` (PLS-00201 otherwise). The negative
+        lookbehind leaves an already-``:``-prefixed reference untouched."""
+        sql = re.sub(r"(?i)(?<!:)\bNEW\s*\.\s*", ":NEW.", sql)
+        sql = re.sub(r"(?i)(?<!:)\bOLD\s*\.\s*", ":OLD.", sql)
         return sql
 
     def _transform_embedded_dml(self, node: EmbeddedDML) -> EmbeddedDML:
