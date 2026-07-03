@@ -606,6 +606,28 @@ emitter/transformer):**
       assignment target, its value, and an embedded `UPDATE` (PLS-00201); a
       negative lookbehind leaves an already `:`-prefixed reference untouched.
 
-Row-level trigger translation is now correct both directions; the 3 still-red
-pairs reduce to one feature — the aggregating trigger across the
-statement-level / compound / mutating-table boundary (see TODO §1).
+**Making the oracle-source pairs run end-to-end (still red on trigger values):**
+
+- [x] **MySQL 2-arg `DATEDIFF(end, start)` in a routine body** → `(end - start)`
+      (Oracle), `(end::date - start::date)` (PG), `DATEDIFF(DAY, start, end)`
+      (T-SQL). The 3-arg T-SQL form was already handled; the MySQL form leaked
+      verbatim (PLS-00201 / unknown function) in a function body.
+- [x] **Oracle COMPOUND TRIGGER degrades to a documented carrier** instead of
+      being shredded into garbage DECLAREs (`TYPE id_tab;`, `PLS_INTEGER ;;`)
+      that crashed PostgreSQL (`variable "compound" has pseudo-type trigger`).
+      The parser detects `COMPOUND`, consumes the definition, and the emitter
+      writes a `-- UNIQUE:` note + warning.
+- [x] **sqlglot `DATE_STR_TO_DATE` wrapper unwrapped** — an Oracle `DATE '…'`
+      literal transpiled to PG as the internal `DATE_STR_TO_DATE('…')`
+      (UndefinedFunction); added to the wrapper-unwrap set.
+- [x] **Oracle bare `name(args);` proc call parsed as a CallStatement** (was
+      EmbeddedDML → sqlglot mangled it to a bare `NAME(args)`, a syntax error on
+      PG/MySQL). A statement-position call is unambiguously a procedure call.
+
+Result: the transpiled Oracle schema+scenario now runs end-to-end on
+PostgreSQL/MySQL. Row-level trigger translation is correct both directions; the
+3 still-red pairs (`oracle→pg`, `oracle→mysql`, `mysql→oracle`) reduce to one
+feature — the aggregating trigger across the statement-level / compound /
+mutating-table boundary. `oracle→postgresql` now diverges *only* on the values
+those compound triggers would maintain (`invoice.total`, `is_paid`), confirming
+everything else is correct (see TODO §1).

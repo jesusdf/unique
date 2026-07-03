@@ -225,8 +225,11 @@ High-level plan (details in that folder):
           the full list of emitter/harness fixes are archived in **DONE §13**.
         - [ ] oracle→postgresql / oracle→mysql, mysql→oracle (**still red — the
           same trigger-aggregation feature**). Row-level trigger translation is
-          now correct in both directions (DONE §13). The remaining blocker is a
-          single feature:
+          now correct both directions, and the transpiled Oracle schema+scenario
+          runs end-to-end (DONE §13): `oracle→postgresql` now diverges **only**
+          on the values the compound triggers would maintain (`invoice.total`
+          expected 61.05/39.05 got 0.00; `is_paid`), confirming everything else
+          is correct. The one remaining feature:
           - **Aggregating trigger across the statement-level / compound /
             mutating-table boundary.** The canonical fixture maintains
             `invoice.total` by re-aggregating `invoice_line` when lines change.
