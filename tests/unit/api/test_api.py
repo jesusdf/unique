@@ -277,3 +277,68 @@ class TestTranspileFile:
             files={"file": ("q.sql", b"SELECT 1", "text/plain")},
         )
         assert resp.status_code == 200
+
+
+class TestApiHardening:
+    """Audit 2026-07-02 doc 04: size limits, error hygiene, sync handlers."""
+
+    def test_oversized_sql_body_rejected(self, client) -> None:
+        from unique.api import app as app_module
+
+        big = "SELECT 1; " * (app_module.MAX_SQL_BYTES // 10 + 1)
+        response = client.post(
+            "/api/v1/transpile",
+            json={"sql": big, "source": "tsql", "target": "postgresql"},
+        )
+        assert response.status_code == 422
+
+    def test_oversized_upload_rejected(self, client) -> None:
+        from unique.api import app as app_module
+
+        big = b"SELECT 1; " * (app_module.MAX_SQL_BYTES // 10 + 1)
+        response = client.post(
+            "/api/v1/transpile/file",
+            files={"file": ("big.sql", big, "text/plain")},
+            data={"source": "tsql", "target": "postgresql"},
+        )
+        assert response.status_code == 413
+
+    def test_internal_errors_do_not_leak_details(self, client, monkeypatch) -> None:
+        from unique.api import app as app_module
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("secret-db-url-oracle://scott:tiger@host")
+
+        monkeypatch.setattr(app_module._transpiler, "transpile", boom)
+        response = client.post(
+            "/api/v1/transpile",
+            json={"sql": "SELECT 1", "source": "tsql", "target": "postgresql"},
+        )
+        assert response.status_code == 500
+        assert "secret-db-url" not in response.text
+        assert "tiger" not in response.text
+
+    def test_endpoints_are_threadpool_safe(self) -> None:
+        # CPU-bound handlers must be plain functions so FastAPI runs them in
+        # its threadpool instead of blocking the event loop (audit A1).
+        import inspect
+
+        from unique.api import app as app_module
+
+        for fn in (
+            app_module.transpile_sql,
+            app_module.validate_sql,
+            app_module.transpile_file,
+            app_module.detect_sql_dialect,
+        ):
+            assert not inspect.iscoroutinefunction(fn), fn.__name__
+
+    def test_utf16_upload_decoded(self, client) -> None:
+        payload = "SELECT N'ñ' AS x".encode("utf-16")
+        response = client.post(
+            "/api/v1/transpile/file",
+            files={"file": ("script.sql", payload, "text/plain")},
+            data={"source": "tsql", "target": "postgresql"},
+        )
+        assert response.status_code == 200
+        assert "ñ" in response.text

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import os
 from pathlib import Path
 
@@ -21,6 +22,13 @@ from unique.core.errors import ParseError, UnknownDialectError
 from unique.core.transpiler import TranspileOptions, Transpiler
 
 _STATIC_DIR = Path(__file__).parent / "static"
+
+
+# Input size cap for SQL bodies and uploads (bytes/characters). CPU-bound
+# transpilation with unbounded input is a trivial DoS (audit 2026-07-02, A2).
+MAX_SQL_BYTES = int(os.environ.get("UNIQUE_MAX_SQL_BYTES", 2_000_000))
+
+logger = logging.getLogger(__name__)
 
 
 def _display_version() -> str:
@@ -72,7 +80,11 @@ _transpiler = Transpiler()
 class TranspileRequest(BaseModel):
     """Request body for the transpile endpoint."""
 
-    sql: str = Field(..., description="Source SQL text to transpile.")
+    sql: str = Field(
+        ...,
+        max_length=MAX_SQL_BYTES,
+        description="Source SQL text to transpile.",
+    )
     source: str = Field(..., description="Source dialect name.")
     target: str = Field(..., description="Target dialect name.")
     db_url: str | None = Field(
@@ -140,7 +152,7 @@ class InfoResponse(BaseModel):
 
 
 @app.post("/api/v1/transpile", response_model=TranspileResponse)
-async def transpile_sql(request: TranspileRequest) -> TranspileResponse:
+def transpile_sql(request: TranspileRequest) -> TranspileResponse:
     """Transpile SQL from one dialect to another."""
     db_url = request.db_url
     if db_url and not _db_connection_enabled():
@@ -163,7 +175,12 @@ async def transpile_sql(request: TranspileRequest) -> TranspileResponse:
     except ParseError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Transpilation failed: {e}") from e
+        # Never forward internal details (paths, driver errors, credentials)
+        # to the client (audit 2026-07-02, A4).
+        logger.exception("Transpilation failed")
+        raise HTTPException(
+            status_code=500, detail="Transpilation failed; see server logs."
+        ) from e
 
     return TranspileResponse(
         sql=result.sql,
@@ -176,7 +193,7 @@ async def transpile_sql(request: TranspileRequest) -> TranspileResponse:
 
 
 @app.post("/api/v1/validate", response_model=ValidateResponse)
-async def validate_sql(request: ValidateRequest) -> ValidateResponse:
+def validate_sql(request: ValidateRequest) -> ValidateResponse:
     """Validate SQL syntax by parsing it."""
     try:
         dialect = _transpiler.registry.get(request.dialect)
@@ -189,13 +206,13 @@ async def validate_sql(request: ValidateRequest) -> ValidateResponse:
 
 
 @app.get("/api/v1/dialects", response_model=DialectsResponse)
-async def list_dialects() -> DialectsResponse:
+def list_dialects() -> DialectsResponse:
     """List all available SQL dialects."""
     return DialectsResponse(dialects=_transpiler.available_dialects())
 
 
 @app.get("/api/v1/info", response_model=InfoResponse)
-async def get_info() -> InfoResponse:
+def get_info() -> InfoResponse:
     """Report the version label and feature flags the UI needs at load time."""
     return InfoResponse(
         version=DISPLAY_VERSION,
@@ -218,7 +235,7 @@ class DetectResponse(BaseModel):
 
 
 @app.post("/api/v1/detect", response_model=DetectResponse)
-async def detect_sql_dialect(request: DetectRequest) -> DetectResponse:
+def detect_sql_dialect(request: DetectRequest) -> DetectResponse:
     """Best-effort detection of the SQL dialect of a script."""
     result = detect_dialect(request.sql)
     return DetectResponse(
@@ -229,7 +246,7 @@ async def detect_sql_dialect(request: DetectRequest) -> DetectResponse:
 
 
 @app.post("/api/v1/transpile/file")
-async def transpile_file(
+def transpile_file(
     file: UploadFile = File(...),  # noqa: B008 - FastAPI dependency pattern
     source: str = Form(...),  # noqa: B008 - FastAPI dependency pattern
     target: str = Form(...),  # noqa: B008 - FastAPI dependency pattern
@@ -250,11 +267,21 @@ async def transpile_file(
                 "UNIQUE_ALLOW_DB_CONNECTION=1 to enable the db-url option."
             ),
         )
-    raw = await file.read()
-    try:
-        sql = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        sql = raw.decode("latin-1")
+    raw = file.file.read(MAX_SQL_BYTES + 1)
+    if len(raw) > MAX_SQL_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large; the limit is {MAX_SQL_BYTES} bytes.",
+        )
+    # BOM-aware decode: SQL Server tooling frequently emits UTF-16
+    # (audit 2026-07-02, A5). latin-1 stays as the never-failing last resort.
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        sql = raw.decode("utf-16")
+    else:
+        try:
+            sql = raw.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            sql = raw.decode("latin-1")
 
     resolved_source = source
     if source == "auto":
@@ -278,7 +305,10 @@ async def transpile_file(
     except ParseError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"Transpilation failed: {e}") from e
+        logger.exception("Transpilation failed")
+        raise HTTPException(
+            status_code=500, detail="Transpilation failed; see server logs."
+        ) from e
 
     # Build an output filename: <stem>.<target>.sql
     stem = (file.filename or "script").rsplit(".", 1)[0]
