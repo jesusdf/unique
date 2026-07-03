@@ -222,7 +222,78 @@ class ProceduralTransformer:
                 continue
             transformed = self._transform_node(stmt)
             result.append(self._preserve_dropped_set_option(transformed))
+        if self._target == "oracle":
+            result = self._capture_identity_via_returning(result)
         return tuple(result)
+
+    #: Marker left in an assignment value by the Oracle LAST_IDENTITY_EXPR
+    #: placeholder (SCOPE_IDENTITY/@@IDENTITY have no Oracle session form).
+    _ORACLE_LAST_IDENTITY_MARKER = "<sequence>.CURRVAL */"
+
+    def _capture_identity_via_returning(self, stmts: list[ASTNode]) -> list[ASTNode]:
+        """Rewrite the T-SQL ``INSERT; SET v = SCOPE_IDENTITY()`` pair into
+        Oracle's ``INSERT … RETURNING <idcol> INTO v`` (dropping the now-empty
+        assignment).
+
+        Oracle has no session-scoped last-identity function, so the id of an
+        identity column must be captured on the INSERT itself. Matches an
+        assignment whose value is only the last-identity placeholder and pairs
+        it with the most recent single-row ``INSERT … VALUES`` into a table
+        whose identity column is known.
+        """
+        from unique.core.converter import IDENTITY_COLUMNS
+
+        registry = IDENTITY_COLUMNS.get()
+        if not registry:
+            return stmts
+        out: list[ASTNode] = []
+        last_insert_idx: int | None = None
+        for stmt in stmts:
+            var = self._identity_assignment_var(stmt)
+            if var is not None and last_insert_idx is not None:
+                insert = out[last_insert_idx]
+                assert isinstance(insert, EmbeddedDML)
+                rewritten = self._append_returning_into(insert.sql, var, registry)
+                if rewritten is not None:
+                    out[last_insert_idx] = EmbeddedDML(
+                        sql=rewritten, dialect=insert.dialect
+                    )
+                    last_insert_idx = None
+                    continue  # drop the assignment; the INSERT now captures it
+            if isinstance(stmt, EmbeddedDML) and re.match(
+                r"(?is)\s*INSERT\s+INTO\b.*\bVALUES\b", stmt.sql
+            ):
+                last_insert_idx = len(out)
+            out.append(stmt)
+        return out
+
+    def _identity_assignment_var(self, stmt: ASTNode) -> str | None:
+        """Return the assigned variable when ``stmt`` is only a last-identity
+        capture (``v := <placeholder>``), else ``None``."""
+        if isinstance(stmt, (AssignmentStatement, SetVariableStatement)):
+            target = getattr(stmt, "target", None) or getattr(stmt, "name", None)
+            value = stmt.value
+            if (
+                isinstance(value, RawSQL)
+                and self._ORACLE_LAST_IDENTITY_MARKER in value.sql
+                and target
+            ):
+                return str(target)
+        return None
+
+    def _append_returning_into(
+        self, insert_sql: str, var: str, registry: dict[str, str]
+    ) -> str | None:
+        """Append ``RETURNING <idcol> INTO <var>`` to an INSERT when its target
+        table has a known identity column, else ``None``."""
+        m = re.match(r"(?is)\s*INSERT\s+INTO\s+([`\"\[]?\w+[`\"\]]?)", insert_sql)
+        if not m:
+            return None
+        table = m.group(1).strip('`"[]').lower()
+        idcol = registry.get(table)
+        if not idcol:
+            return None
+        return f"{insert_sql.rstrip().rstrip(';')} RETURNING {idcol} INTO {var}"
 
     def _transform_comment(self, node: CommentStatement) -> ASTNode:
         """Restore a documented source-only construct when transpiling back to

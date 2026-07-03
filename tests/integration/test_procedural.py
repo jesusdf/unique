@@ -64,6 +64,48 @@ class TestTSQLToOracle:
         assert "CAST ( 0.10 AS NUMBER )" in out
         assert "DECIMAL" not in out
 
+    IDENTITY_PROC = (
+        "CREATE TABLE dbo.invoice (\n"
+        "  id INT IDENTITY(1,1) NOT NULL,\n"
+        "  customer_id INT NOT NULL,\n"
+        "  CONSTRAINT pk_invoice PRIMARY KEY (id)\n"
+        ")\n"
+        "GO\n"
+        "CREATE PROCEDURE dbo.create_invoice @customer_id INT\n"
+        "AS\nBEGIN\n"
+        "    DECLARE @new_id INT;\n"
+        "    INSERT INTO dbo.invoice (customer_id) VALUES (@customer_id);\n"
+        "    SET @new_id = SCOPE_IDENTITY();\n"
+        "    INSERT INTO dbo.invoice_line (invoice_id) VALUES (@new_id);\n"
+        "END\nGO"
+    )
+
+    def test_scope_identity_becomes_returning_into(self) -> None:
+        # Oracle has no SCOPE_IDENTITY(); the id is captured on the INSERT via
+        # RETURNING <idcol> INTO <var>, and the separate assignment is dropped.
+        out = _transpile(self.IDENTITY_PROC, "tsql", "oracle")
+        assert (
+            "INSERT INTO invoice (customer_id) VALUES (V_CUSTOMER_ID) "
+            "RETURNING id INTO V_NEW_ID" in out
+        )
+        # The broken placeholder assignment must be gone.
+        assert "CURRVAL" not in out
+        assert "V_NEW_ID :=" not in out
+        assert "SET V_NEW_ID" not in out
+
+    def test_scope_identity_unknown_table_left_alone(self) -> None:
+        # With no harvested identity column, nothing is merged (no crash).
+        sql = (
+            "CREATE PROCEDURE dbo.p @x INT\n"
+            "AS\nBEGIN\n"
+            "    DECLARE @new_id INT;\n"
+            "    INSERT INTO dbo.mystery (x) VALUES (@x);\n"
+            "    SET @new_id = SCOPE_IDENTITY();\n"
+            "END\nGO"
+        )
+        out = _transpile(sql, "tsql", "oracle")
+        assert "RETURNING" not in out
+
 
 class TestOracleToTSQL:
     def test_procedure_body_translated(self) -> None:

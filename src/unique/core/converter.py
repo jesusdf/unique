@@ -234,6 +234,43 @@ _ISO_DATETIME_RE = re.compile(
     r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?)$"
 )
 
+# Identity/auto-increment column per table (table -> column name, lowercase).
+# T-SQL SCOPE_IDENTITY()/@@IDENTITY has no Oracle session equivalent; the
+# generated id is captured with ``INSERT … RETURNING <idcol> INTO <var>``, so
+# the procedural pipeline needs to know each table's identity column.
+IDENTITY_COLUMNS: contextvars.ContextVar[dict[str, str] | None] = (
+    contextvars.ContextVar("identity_columns", default=None)
+)
+
+_COLUMN_NAME_RE = re.compile(r"^\s*(\[[^\]]+\]|`[^`]+`|\"[^\"]+\"|\w+)\b")
+_IDENTITY_MARKER_RE = re.compile(
+    r"(?i)\b(?:IDENTITY|AUTO_INCREMENT|(?:BIG|SMALL)?SERIAL)\b"
+    r"|GENERATED\s+(?:ALWAYS|BY\s+DEFAULT)\s+AS\s+IDENTITY"
+)
+
+
+def harvest_identity_columns(sql: str) -> dict[str, str]:
+    """Collect each table's identity/auto-increment column from a script.
+
+    Works across source dialects (IDENTITY, AUTO_INCREMENT, SERIAL, GENERATED
+    … AS IDENTITY). Only the first such column per table is recorded (a table
+    has at most one). Used only when the target is Oracle.
+    """
+    result: dict[str, str] = {}
+    current: str | None = None
+    for line in sql.splitlines():
+        m = _CREATE_TABLE_NAME_RE.search(line)
+        if m:
+            name = m.group(1).replace("[", "").replace("]", "").replace('"', "")
+            current = name.split(".")[-1].lower()
+            continue
+        if current is None or current in result:
+            continue
+        cm = _COLUMN_NAME_RE.match(line)
+        if cm and _IDENTITY_MARKER_RE.search(line):
+            result[current] = cm.group(1).strip('[]"`').lower()
+    return result
+
 
 def harvest_date_columns(sql: str) -> dict[str, frozenset[str]]:
     """Collect date/time column names per table from a whole script.
