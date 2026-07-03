@@ -58,6 +58,20 @@ class TestTriggerTiming:
         assert "AFTER INSERT OR UPDATE ON t" in out
         assert "INSERT, UPDATE" not in out
 
+    def test_oracle_source_or_events_parsed(self) -> None:
+        # Oracle separates trigger events with OR; the parser must read the
+        # whole list (not leave ``OR UPDATE ON …`` unparsed in the body).
+        src = (
+            "CREATE TRIGGER t\n"
+            "BEFORE INSERT OR UPDATE ON tbl\n"
+            "FOR EACH ROW\nBEGIN\n    NULL;\nEND;\n/"
+        )
+        out = _t(src, "oracle", "postgresql")
+        assert "INSERT OR UPDATE ON tbl" in out
+        # The event separator must not leak into the body as garbage.
+        assert "DECLARE OR" not in out
+        assert "OR UPDATE;" not in out
+
     def test_multi_event_mysql_splits_per_event(self) -> None:
         # MySQL triggers fire on a single event, so a multi-event trigger is
         # split into one trigger per event.
