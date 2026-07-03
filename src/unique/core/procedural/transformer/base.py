@@ -1642,6 +1642,12 @@ class ProceduralTransformer:
 
     def _transform_raw_sql(self, node: RawSQL) -> RawSQL:
         sql = self._transform_var_in_sql(node.sql)
+        # An Oracle trigger body's assignment value carries ``:NEW.``/``:OLD.``
+        # row references; map them to the target's row qualifier (a no-op for the
+        # Oracle target). Mirrors _transform_embedded_dml so a value captured as a
+        # scalar expression is normalized the same as one inside embedded DML.
+        if self._source == "oracle" and self._in_trigger:
+            sql = self._normalize_oracle_pseudorecords(sql)
         # Apply function name transformations
         sql = self._transform_functions_in_sql(sql)
         # If the expression contains exactly one subquery (no other DML), try

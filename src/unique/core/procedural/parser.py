@@ -1487,6 +1487,14 @@ class ProceduralParser:
             return self._parse_embedded_dml()
         elif tok.is_keyword("DBMS_OUTPUT"):
             return self._parse_dbms_output()
+        elif tok.type == TokenType.COLON and self._starts_row_ref_assignment():
+            # Oracle row-level trigger assignment ``:NEW.col := expr``. The lexer
+            # emits ``:`` as a bare COLON, so drop it here and parse the rest as a
+            # ``NEW.col := expr`` assignment (the leading ``:`` is re-applied per
+            # target). Without this the statement would fall to embedded DML and
+            # the Oracle ``:=`` operator would leak to MySQL, which rejects it.
+            self._advance()  # consume the ':' of :NEW./:OLD.
+            return self._parse_plsql_assignment_or_call()
         elif tok.type in (TokenType.IDENTIFIER, TokenType.KEYWORD):
             # Could be assignment: name := expr; or procedure call
             return self._parse_plsql_assignment_or_call()
@@ -2028,6 +2036,28 @@ class ProceduralParser:
             into_vars=tuple(into_vars),
             rest_sql=rest_sql,
         )
+
+    def _starts_row_ref_assignment(self) -> bool:
+        """Whether the cursor sits on the ``:`` of an Oracle row-level trigger
+        assignment ``:NEW.col := …`` / ``:OLD.col := …``.
+
+        Requires a ``:=`` before the statement terminator, so a ``:NEW.col`` used
+        only as a value (never at statement start in valid PL/SQL) is left to the
+        embedded-DML path rather than mis-parsed as an assignment target."""
+        if self._current().type != TokenType.COLON:
+            return False
+        if self._peek(1).upper_value not in ("NEW", "OLD"):
+            return False
+        i = self._pos + 2
+        n = len(self._tokens)
+        while i < n:
+            ttype = self._tokens[i].type
+            if ttype in (TokenType.SEMICOLON, TokenType.EOF):
+                return False
+            if ttype == TokenType.ASSIGN:
+                return True
+            i += 1
+        return False
 
     def _parse_plsql_assignment_or_call(self) -> ASTNode:
         """Parse name := expr; or procedure_call(args);"""
