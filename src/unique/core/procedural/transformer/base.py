@@ -1123,6 +1123,7 @@ class ProceduralTransformer:
             from_clause=node.from_clause,
             where=node.where,
             rest_sql=rest,
+            tsql_assignment=node.tsql_assignment,
         )
 
     _DATE_ADD_START_RE = re.compile(r"DATE_ADD\s*\(", re.IGNORECASE)

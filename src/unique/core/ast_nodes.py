@@ -788,13 +788,20 @@ class AlterProcedureStatement(ASTNode):
 
 @dataclass(frozen=True)
 class SelectIntoStatement(ASTNode):
-    """SELECT ... INTO variable (PL/SQL, PG)."""
+    """SELECT ... INTO variable (PL/SQL, PG).
+
+    ``tsql_assignment`` marks a statement converted from a T-SQL
+    ``SELECT @v = col ...``: zero matching rows leave the variable
+    unchanged there, so the Oracle emitter must add a NO_DATA_FOUND
+    handler to preserve those semantics (audit 2026-07-02, S2-3).
+    """
 
     columns: tuple[ASTNode, ...] = ()
     into_vars: tuple[str, ...] = ()
     from_clause: ASTNode | None = None
     where: ASTNode | None = None
     rest_sql: str = ""
+    tsql_assignment: bool = False
 
 
 @dataclass(frozen=True)

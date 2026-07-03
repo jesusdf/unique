@@ -1750,6 +1750,7 @@ class ProceduralParser:
             columns=(_RawSQL(sql=", ".join(exprs), reason="select list"),),
             into_vars=tuple(into_vars),
             rest_sql=" ".join(rest_parts).strip(),
+            tsql_assignment=True,
         )
 
     def _parse_tsql_assignment_select(
@@ -1860,6 +1861,7 @@ class ProceduralParser:
                     columns=(_RawSQL2(sql=", ".join(exprs_a), reason="select list"),),
                     into_vars=tuple(into_vars_a),
                     rest_sql=rest_sql2,
+                    tsql_assignment=True,
                 )
             # Not a SELECT INTO and not an assignment — reparse as embedded DML
             self._pos = start

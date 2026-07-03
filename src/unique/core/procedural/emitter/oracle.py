@@ -16,6 +16,7 @@ from unique.core.ast_nodes import (
     ParameterDefinition,
     PrintStatement,
     RaiseErrorStatement,
+    SelectIntoStatement,
 )
 from unique.core.procedural.emitter.base import ProceduralEmitter, register_emitter
 
@@ -80,6 +81,24 @@ class OracleEmitter(ProceduralEmitter):
         default_str = f" DEFAULT {self._emit_node(p.default)}" if p.default else ""
         direction_str = f"{p.direction} " if p.direction != "IN" else "IN "
         return f"{p.name} {direction_str}{dt}{default_str}"
+
+    def _emit_select_into(self, node: SelectIntoStatement) -> str:
+        base = super()._emit_select_into(node)
+        if not node.tsql_assignment:
+            return base
+        # T-SQL "SELECT @v = col ..." leaves @v unchanged when no row
+        # matches; Oracle SELECT INTO raises NO_DATA_FOUND instead, which
+        # would make a following "IF v IS NULL" guard unreachable (audit
+        # 2026-07-02, S2-3). A nested block with an empty handler restores
+        # the T-SQL semantics.
+        return (
+            "BEGIN\n"
+            f"    {base}\n"
+            "EXCEPTION\n"
+            "    WHEN NO_DATA_FOUND THEN\n"
+            "        NULL;  -- T-SQL leaves the variables unchanged\n"
+            "END;"
+        )
 
     def _emit_print(self, node: PrintStatement) -> str:
         return f"DBMS_OUTPUT.PUT_LINE({self._emit_node(node.expression)});"
