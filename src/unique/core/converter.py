@@ -399,6 +399,10 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return convert_expression(expr.this)
     if isinstance(expr, exp.Ordered):
         return _convert_ordered(expr)
+    # MySQL charset introducer (_utf8'x'): the charset tag is MySQL-only
+    # syntax (and legacy even there); keep just the string literal.
+    if isinstance(expr, exp.Introducer):
+        return convert_expression(expr.expression)
 
     # Fallback: emit as raw SQL
     try:
@@ -800,6 +804,14 @@ def _convert_table_ref(expr: exp.Expression) -> TableRef:
                 if isinstance(alias_expr.this, str)
                 else str(alias_expr.this)
             )
+        # DROP SCHEMA x / USE x parse as a Table with only the db part set;
+        # promoting db to name avoids emitting a dangling "x." qualifier.
+        if not expr.name and expr.db:
+            return TableRef(
+                name=expr.db,
+                alias=alias,
+                quoted=_identifier_quoted(expr.args.get("db")),
+            )
         return TableRef(
             name=expr.name,
             schema=expr.db if expr.db else None,
@@ -1038,6 +1050,15 @@ _TYPE_NAME_MAP: dict[str, dict[str, str]] = {
         "UNIQUEIDENTIFIER": "UUID",
         "VARBINARY": "BYTEA",
         "IMAGE": "BYTEA",
+        # MySQL unsigned integers (sqlglot U-prefixed internal names): the
+        # next-wider signed type covers the unsigned range.
+        "UTINYINT": "SMALLINT",
+        "USMALLINT": "INTEGER",
+        "UMEDIUMINT": "INTEGER",
+        "UINT": "BIGINT",
+        "UBIGINT": "NUMERIC(20)",
+        "MEDIUMINT": "INTEGER",
+        "YEAR": "SMALLINT",
     },
     "mysql": {
         "NVARCHAR": "VARCHAR",
@@ -1049,6 +1070,14 @@ _TYPE_NAME_MAP: dict[str, dict[str, str]] = {
         "UUID": "CHAR(36)",
         "MONEY": "DECIMAL(19,4)",
         "IMAGE": "LONGBLOB",
+        # sqlglot parses MySQL's own unsigned/timestamp types into internal
+        # names; map them back to real MySQL spellings.
+        "UTINYINT": "TINYINT UNSIGNED",
+        "USMALLINT": "SMALLINT UNSIGNED",
+        "UMEDIUMINT": "MEDIUMINT UNSIGNED",
+        "UINT": "INT UNSIGNED",
+        "UBIGINT": "BIGINT UNSIGNED",
+        "TIMESTAMPTZ": "TIMESTAMP",
     },
     "oracle": {
         "NVARCHAR": "NVARCHAR2",
@@ -1065,6 +1094,16 @@ _TYPE_NAME_MAP: dict[str, dict[str, str]] = {
         "UUID": "RAW(16)",
         "MONEY": "NUMBER(19,4)",
         "IMAGE": "BLOB",
+        "UTINYINT": "NUMBER(3)",
+        "USMALLINT": "NUMBER(5)",
+        "UMEDIUMINT": "NUMBER(8)",
+        "UINT": "NUMBER(10)",
+        "UBIGINT": "NUMBER(20)",
+        "MEDIUMINT": "NUMBER(7)",
+        "YEAR": "NUMBER(4)",
+        # MySQL TIMESTAMP is timezone-aware (stored UTC), parsed by sqlglot
+        # as TIMESTAMPTZ.
+        "TIMESTAMPTZ": "TIMESTAMP WITH TIME ZONE",
     },
     "tsql": {
         "VARCHAR2": "VARCHAR",
@@ -1077,6 +1116,14 @@ _TYPE_NAME_MAP: dict[str, dict[str, str]] = {
         "BYTEA": "VARBINARY(MAX)",
         "UUID": "UNIQUEIDENTIFIER",
         "SERIAL": "INT",
+        "UTINYINT": "TINYINT",  # T-SQL TINYINT is already 0-255
+        "USMALLINT": "INT",
+        "UMEDIUMINT": "INT",
+        "UINT": "BIGINT",
+        "UBIGINT": "NUMERIC(20)",
+        "MEDIUMINT": "INT",
+        "YEAR": "SMALLINT",
+        "TIMESTAMPTZ": "DATETIMEOFFSET",
     },
 }
 
@@ -1134,6 +1181,16 @@ def _convert_data_type(expr: exp.Expression) -> DataType:
         if name == "USER-DEFINED" and expr.args.get("kind") is not None:
             kind = expr.args["kind"]
             name = kind.sql() if hasattr(kind, "sql") else str(kind)
+        # ENUM/SET carry string values, not numeric length params; keep them
+        # so the emitter can render the type faithfully (MySQL) or as
+        # VARCHAR + CHECK (everything else).
+        if name.upper() in ("ENUM", "SET"):
+            values = tuple(
+                str(p.this)
+                for p in expr.expressions
+                if isinstance(p, exp.Literal) and p.is_string
+            )
+            return DataType(name=name.upper(), values=values)
         params: list[int] = []
         for p in expr.expressions:
             if isinstance(p, exp.DataTypeParam):
@@ -1252,6 +1309,16 @@ def emit_sql(nodes: list[ASTNode], dialect: str) -> str:
     return ";\n\n".join(parts)
 
 
+def _comment_block(sql: str) -> str:
+    """Comment out every line of *sql* (``-- `` prefix).
+
+    Degraded passthroughs must comment the whole statement: prefixing only
+    the first line leaves the remaining lines as raw source SQL, executable
+    and invalid on the target.
+    """
+    return "\n".join(f"-- {ln}" if ln.strip() else "--" for ln in sql.splitlines())
+
+
 def emit_node(node: ASTNode, dialect: str) -> str:
     """Emit a single IR node as SQL text."""
     if isinstance(node, SelectStatement):
@@ -1269,7 +1336,7 @@ def emit_node(node: ASTNode, dialect: str) -> str:
     if isinstance(node, DropStatement):
         return _emit_drop(node, dialect)
     if isinstance(node, RawSQL):
-        return f"-- UNIQUE: {node.reason}\n-- {node.sql}"
+        return f"-- UNIQUE: {node.reason}\n{_comment_block(node.sql)}"
     if isinstance(node, PassthroughSQL):
         return _emit_passthrough(node, dialect)
     if isinstance(node, Script):
@@ -1372,7 +1439,8 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     if dialect == "mysql" and node.kind == "CREATE SEQUENCE":
         return (
             "-- UNIQUE: MySQL has no sequences; use an AUTO_INCREMENT column "
-            "instead. Original:\n-- " + _strip_dbo_schema_qualifier(node.sql)
+            "instead. Original:\n"
+            + _comment_block(_strip_dbo_schema_qualifier(node.sql))
         )
 
     # USE <db> switches the active database. Valid in MySQL and T-SQL only;
@@ -1380,7 +1448,8 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     if node.kind == "USE" and dialect in ("postgresql", "oracle"):
         return (
             f"-- UNIQUE: {dialect} has no USE statement; "
-            f"connect to the target database/schema instead.\n-- {node.sql}"
+            f"connect to the target database/schema instead.\n"
+            f"{_comment_block(node.sql)}"
         )
 
     # MySQL has no MERGE. The canonical one-UPDATE/one-INSERT pattern is
@@ -1391,7 +1460,7 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         upsert = _merge_to_mysql_upsert(node.sql, read)
         if upsert is not None:
             return upsert
-        commented = "\n".join(f"-- {ln}" for ln in node.sql.splitlines())
+        commented = _comment_block(node.sql)
         return (
             "-- UNIQUE: MySQL has no MERGE; rewrite as "
             "INSERT ... ON DUPLICATE KEY UPDATE. Original:\n" + commented
@@ -1400,7 +1469,7 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     # Oracle hierarchical query: keep as-is for Oracle; for others there is
     # no faithful automatic rewrite, so emit a documented comment.
     if node.kind == "CONNECT BY" and dialect != "oracle":
-        commented = "\n".join(f"-- {ln}" for ln in node.sql.splitlines())
+        commented = _comment_block(node.sql)
         return (
             "-- UNIQUE: Oracle CONNECT BY / START WITH hierarchical query has "
             "no automatic equivalent; rewrite as a WITH RECURSIVE CTE. "
@@ -1430,7 +1499,7 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             return result
     except Exception as e:  # noqa: BLE001 - report and fall back
         logger.warning("passthrough transpile error (%s): %s", node.kind, e)
-    return f"-- UNIQUE: Unhandled {node.kind}\n-- {node.sql}"
+    return f"-- UNIQUE: Unhandled {node.kind}\n{_comment_block(node.sql)}"
 
 
 def _portable_index(sql: str, dialect: str) -> str:
@@ -1739,7 +1808,7 @@ def _emit_update_oracle_subquery(
 
     if len(node.joins) != 1 or node.joins[0].condition is None:
         original = _emit_update_tsql_from(node, assignments, dialect)
-        commented = "\n".join(f"-- {ln}" for ln in original.splitlines())
+        commented = _comment_block(original)
         return (
             "-- UNIQUE: Oracle has no UPDATE ... FROM with multiple joins; "
             "rewrite as a MERGE or correlated subqueries. Original:\n" + commented
@@ -1773,6 +1842,38 @@ def _emit_delete(node: DeleteStatement, dialect: str) -> str:
     return result
 
 
+def _emit_enum_type(col: ColumnDefinition, dialect: str) -> tuple[str, str, str]:
+    """Render a MySQL ENUM/SET column type for *dialect*.
+
+    Returns ``(type_sql, inline_check_sql, trailing_note)``. MySQL keeps the
+    native type. Elsewhere ENUM becomes VARCHAR sized to the longest value
+    plus an inline CHECK carrying the value-list semantics; SET (an unordered
+    combination of values) has no CHECK equivalent, so it becomes a VARCHAR
+    wide enough for all values with a documented carrier note.
+    """
+    values = col.data_type.values
+    quoted_values = ", ".join("'" + v.replace("'", "''") + "'" for v in values)
+    kind = col.data_type.name.upper()
+    if dialect == "mysql":
+        return f"{kind}({quoted_values})", "", ""
+    varchar = _portable_type_name("VARCHAR", dialect)
+    col_name = _ident(col.name, col.quoted, dialect)
+    if kind == "ENUM":
+        max_len = max(len(v) for v in values)
+        return (
+            f"{varchar}({max_len})",
+            f" CHECK ({col_name} IN ({quoted_values}))",
+            "",
+        )
+    total_len = sum(len(v) for v in values) + max(len(values) - 1, 0)
+    note = (
+        f"-- UNIQUE: MySQL SET type on {col_name} has no {dialect} "
+        f"equivalent; stored as {varchar}({total_len}). "
+        f"Allowed members: {quoted_values}"
+    )
+    return f"{varchar}({total_len})", "", note
+
+
 def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     """Emit a CREATE TABLE statement."""
     # The T-SQL default schema "dbo" has no meaning in Oracle, MySQL or
@@ -1802,23 +1903,32 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
 
     if node.columns:
         col_defs = []
+        set_type_notes: list[str] = []
         for col in node.columns:
-            dtype = _portable_type_name(col.data_type.name, dialect)
-            # If the mapped name already carries a length (e.g. CHAR(36)),
-            # don't append the caller's params on top of it.
-            if col.data_type.params and "(" not in dtype:
-                dtype += f"({', '.join(str(p) for p in col.data_type.params)})"
-            # A character type with no length is invalid DDL in most engines
-            # (MySQL/Oracle reject it; PostgreSQL treats bare VARCHAR as
-            # unlimited but that is not what was meant). It originates from a
-            # T-SQL VARCHAR(MAX)/NVARCHAR(MAX) whose MAX marker is dropped during
-            # IR conversion (the non-numeric param is not preserved). Map the
-            # bare character type to the dialect's large-text type.
-            if not col.data_type.params:
-                _base = dtype.upper().split("(")[0]
-                _bigtext = _BARE_CHAR_BIGTEXT.get(dialect, {}).get(_base)
-                if _bigtext:
-                    dtype = _bigtext
+            check = ""
+            if col.data_type.name.upper() in ("ENUM", "SET") and col.data_type.values:
+                # MySQL keeps the native type; everyone else gets VARCHAR
+                # sized to the values, plus a CHECK for ENUM semantics.
+                dtype, check, note = _emit_enum_type(col, dialect)
+                if note:
+                    set_type_notes.append(note)
+            else:
+                dtype = _portable_type_name(col.data_type.name, dialect)
+                # If the mapped name already carries a length (e.g. CHAR(36)),
+                # don't append the caller's params on top of it.
+                if col.data_type.params and "(" not in dtype:
+                    dtype += f"({', '.join(str(p) for p in col.data_type.params)})"
+                # A character type with no length is invalid DDL in most engines
+                # (MySQL/Oracle reject it; PostgreSQL treats bare VARCHAR as
+                # unlimited but that is not what was meant). It originates from a
+                # T-SQL VARCHAR(MAX)/NVARCHAR(MAX) whose MAX marker is dropped
+                # during IR conversion (the non-numeric param is not preserved).
+                # Map the bare character type to the dialect's large-text type.
+                if not col.data_type.params:
+                    _base = dtype.upper().split("(")[0]
+                    _bigtext = _BARE_CHAR_BIGTEXT.get(dialect, {}).get(_base)
+                    if _bigtext:
+                        dtype = _bigtext
             pk = " PRIMARY KEY" if col.primary_key else ""
             unique = " UNIQUE" if col.unique else ""
             default = ""
@@ -1875,19 +1985,21 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 nullable = "" if (col.nullable or col.identity) else " NOT NULL"
                 col_name = _ident(col.name, col.quoted, dialect)
                 col_defs.append(
-                    f"  {col_name} {dtype}{identity}{default}{nullable}{pk}{unique}"
+                    f"  {col_name} {dtype}{identity}{default}{nullable}{pk}"
+                    f"{unique}{check}"
                 )
             else:
                 nullable = "" if col.nullable else " NOT NULL"
                 col_name = _ident(col.name, col.quoted, dialect)
                 col_defs.append(
-                    f"  {col_name} {dtype}{identity}{nullable}{default}{pk}{unique}"
+                    f"  {col_name} {dtype}{identity}{nullable}{default}{pk}"
+                    f"{unique}{check}"
                 )
         # Table-level constraints (PK/FK/UNIQUE/CHECK), re-transpiled.
         # A fragment may come back as a documented comment (e.g. a generated
         # column with no portable type); those can't live inside the
         # parenthesized column list, so collect them and append afterwards.
-        trailing_comments: list[str] = []
+        trailing_comments: list[str] = list(set_type_notes)
         for constraint in node.table_constraints:
             emitted = _emit_passthrough_inline(constraint, dialect)
             if emitted.lstrip().startswith("--"):
@@ -1957,8 +2069,22 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
     """
     read = sqlglot_dialect_name(node.source_dialect)
     write = sqlglot_dialect_name(dialect)
+    fragment_sql = node.sql
+    if node.source_dialect == "tsql" and dialect != "tsql":
+        # T-SQL physical hints in a table constraint (the CLUSTERED keyword,
+        # WITH (...) storage options, ON [filegroup]) have no meaning on the
+        # other engines, and sqlglot's non-T-SQL writers render them as bogus
+        # comma-separated column-list items ("PRIMARY KEY, CLUSTERED (...),
+        # WITH (...), ON ..."). Strip them before re-transpiling.
+        fragment_sql = re.sub(r"(?i)\b(NON)?CLUSTERED\s+", "", fragment_sql)
+        fragment_sql = re.sub(r"(?i)\s*WITH\s*\([^)]*\)", "", fragment_sql)
+        fragment_sql = re.sub(r"(?i)\s+ON\s+(?:\[[^\]]+\]|\w+)\s*$", "", fragment_sql)
+        # ASC/DESC are index hints inside a PK/UNIQUE column list; sqlglot's
+        # T-SQL reader itself rejects them once the CLUSTERED keyword is gone.
+        if re.match(r"(?i)\s*(CONSTRAINT|PRIMARY\s+KEY|UNIQUE)\b", fragment_sql):
+            fragment_sql = re.sub(r"(?i)\s+(?:ASC|DESC)\b", "", fragment_sql)
     try:
-        wrapped = f"CREATE TABLE __c__ (x INT, {node.sql})"
+        wrapped = f"CREATE TABLE __c__ (x INT, {fragment_sql})"
         out = sqlglot.transpile(wrapped, read=read, write=write)[0]
         inner = out[out.index("(") + 1 : out.rindex(")")]
         # Drop the placeholder "x INT," prefix.
@@ -1991,11 +2117,26 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
                     f"generated column {col_name}; original computed column: "
                     f"{node.sql}"
                 )
-            # Oracle and PostgreSQL do not allow NULLS FIRST / NULLS LAST inside
-            # PRIMARY KEY or UNIQUE constraint column lists (only in ORDER BY /
-            # index specs). sqlglot adds them when emulating ordering.
+            # Oracle and PostgreSQL do not allow NULLS FIRST / NULLS LAST or
+            # ASC / DESC inside PRIMARY KEY or UNIQUE constraint column lists
+            # (only in ORDER BY / index specs). sqlglot adds the NULLS
+            # ordering when emulating T-SQL ordering; ASC/DESC come straight
+            # from the SSMS-generated source and are index hints, not
+            # semantics, so dropping them is safe.
             if dialect in ("oracle", "postgresql"):
                 fragment = re.sub(r"(?i)\s+NULLS\s+(?:FIRST|LAST)", "", fragment)
+            if dialect != "tsql" and re.match(
+                r"(?i)\s*(CONSTRAINT|PRIMARY\s+KEY|UNIQUE)\b", fragment
+            ):
+                fragment = re.sub(r"(?i)\s+(?:ASC|DESC)\b", "", fragment)
+            # MySQL's named inline key "UNIQUE name (cols)" is only valid
+            # MySQL; the portable spelling is CONSTRAINT name UNIQUE (cols).
+            if dialect != "mysql":
+                fragment = re.sub(
+                    r"(?i)^UNIQUE\s+(?:KEY\s+|INDEX\s+)?([`\"\[\]\w]+)\s*\(",
+                    r"CONSTRAINT \1 UNIQUE (",
+                    fragment,
+                )
             # A FOREIGN KEY may REFERENCE a dbo-qualified table. The "dbo" schema
             # is meaningless on the other engines (and would name a non-existent
             # schema/database), exactly as for the table being created, so strip

@@ -8,7 +8,7 @@ import re
 
 import pytest
 
-from tests.helpers.validity import assert_translated
+from tests.helpers.validity import assert_translated, executable_lines
 from unique.core.transpiler import Transpiler
 
 # All 12 directional pairs (4 dialects × 3 targets each)
@@ -372,6 +372,63 @@ class TestCrossDialectDDL:
         sql = "CREATE TABLE t (id INT, CONSTRAINT pk PRIMARY KEY (id))"
         result = transpiler.transpile(sql, "tsql", target)
         assert "PRIMARY KEY" in result.sql.upper()
+
+    @pytest.mark.parametrize("target", ["tsql", "postgresql", "mysql"])
+    def test_oracle_organization_index_table_converted(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        # ORGANIZATION INDEX/HEAP is an Oracle physical-storage clause that
+        # sqlglot cannot parse, degrading the whole CREATE TABLE (columns and
+        # constraints included) to a commented passthrough. The clause carries
+        # no logical schema, so it must be stripped (with a documented
+        # carrier + warning) and the table converted normally (found on the
+        # HR sample schema's countries table).
+        sql = (
+            "CREATE TABLE countries\n"
+            "    ( country_id      CHAR(2)\n"
+            "       CONSTRAINT  country_id_nn NOT NULL\n"
+            "    , country_name    VARCHAR2(60)\n"
+            "    , CONSTRAINT     country_c_id_pk\n"
+            "        PRIMARY KEY (country_id)\n"
+            "    )\n"
+            "    ORGANIZATION INDEX;"
+        )
+        result = transpiler.transpile(sql, "oracle", target)
+        assert_translated(result.sql, target, absent=("ORGANIZATION",))
+        # The table must be *converted*, not degraded to a commented
+        # passthrough: CREATE TABLE and the PK must be executable lines.
+        body = executable_lines(result.sql)
+        assert "CREATE TABLE" in body.upper(), result.sql
+        assert "PRIMARY KEY" in body.upper(), result.sql
+        assert "UNIQUE:" in result.sql, result.sql
+        assert result.warnings, "dropped physical clause must be signalled"
+
+    @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
+    def test_table_level_primary_key_clustered_with_options(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        # The full SSMS-generated constraint form (AdventureWorksLT): the
+        # CLUSTERED hint, the WITH (...) storage options and the ON [filegroup]
+        # clause are T-SQL physical hints with no meaning elsewhere. sqlglot's
+        # non-T-SQL writers render them as bogus comma-separated column-list
+        # items ("PRIMARY KEY, CLUSTERED (...), WITH (...), ON ..."), so they
+        # must be stripped before re-transpiling the fragment.
+        sql = (
+            "CREATE TABLE [SalesLT].[PD](\n"
+            "  [PDID] [int] NOT NULL,\n"
+            "  [Desc] [nvarchar](400) NOT NULL,\n"
+            "  CONSTRAINT [PK_PD] PRIMARY KEY CLUSTERED ([PDID] ASC)\n"
+            "  WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, "
+            "IGNORE_DUP_KEY = OFF) ON [PRIMARY]\n"
+            ") ON [PRIMARY]"
+        )
+        result = transpiler.transpile(sql, "tsql", target)
+        assert_translated(
+            result.sql,
+            target,
+            present=("PRIMARY KEY",),
+            absent=("CLUSTERED", "PAD_INDEX"),
+        )
 
     @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
     def test_table_level_foreign_key(self, transpiler: Transpiler, target: str) -> None:
@@ -923,3 +980,75 @@ class TestMultipleStatements:
         # Both tables should appear in output
         assert "a" in result.sql.lower()
         assert "b" in result.sql.lower()
+
+
+class TestMySQLSourceDDL:
+    """MySQL-specific column types must map to valid target types.
+
+    Found on the sakila sample schema: unsigned integer types leaked as
+    sqlglot's internal names (USMALLINT/UTINYINT/UMEDIUMINT), YEAR and
+    MySQL TIMESTAMP (parsed as TIMESTAMPTZ) reached engines that reject
+    them, ENUM lost its value list silently, and a named inline UNIQUE KEY
+    re-emitted as "UNIQUE name (col)" which only MySQL accepts.
+    """
+
+    TABLE = (
+        "CREATE TABLE film (\n"
+        "  film_id SMALLINT UNSIGNED NOT NULL AUTO_INCREMENT,\n"
+        "  votes MEDIUMINT UNSIGNED NOT NULL,\n"
+        "  language_id TINYINT UNSIGNED NOT NULL,\n"
+        "  release_year YEAR DEFAULT NULL,\n"
+        "  last_update TIMESTAMP NOT NULL,\n"
+        "  rating ENUM('G','PG','PG-13','R','NC-17') DEFAULT 'G',\n"
+        "  PRIMARY KEY (film_id),\n"
+        "  UNIQUE KEY idx_votes (votes)\n"
+        ");"
+    )
+
+    @pytest.mark.parametrize("target", ["tsql", "oracle", "postgresql"])
+    def test_types_mapped_and_output_parses(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        result = transpiler.transpile(self.TABLE, "mysql", target)
+        absent = ["USMALLINT", "UTINYINT", "UMEDIUMINT", " YEAR ", "ENUM"]
+        if target != "postgresql":  # TIMESTAMPTZ is native PostgreSQL
+            absent.append("TIMESTAMPTZ")
+        assert_translated(result.sql, target, absent=tuple(absent))
+        body = executable_lines(result.sql)
+        assert "CREATE TABLE" in body.upper(), result.sql
+
+    @pytest.mark.parametrize("target", ["tsql", "oracle", "postgresql"])
+    def test_enum_becomes_check_constraint(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        # The value list is the ENUM's semantics; it must survive as a CHECK,
+        # not be dropped.
+        result = transpiler.transpile(self.TABLE, "mysql", target)
+        body = executable_lines(result.sql)
+        assert "CHECK" in body.upper(), result.sql
+        assert "'PG-13'" in body, result.sql
+
+    @pytest.mark.parametrize("target", ["tsql", "oracle", "postgresql"])
+    def test_named_inline_unique_key_is_a_constraint(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        result = transpiler.transpile(self.TABLE, "mysql", target)
+        body = executable_lines(result.sql)
+        assert re.search(r"(?i)CONSTRAINT\s+\S*idx_votes\S*\s+UNIQUE", body), result.sql
+
+    @pytest.mark.parametrize("target", ["tsql", "oracle", "postgresql"])
+    def test_drop_schema_keeps_name(self, transpiler: Transpiler, target: str) -> None:
+        # "DROP SCHEMA IF EXISTS sakila" parses with only the db part set;
+        # the emitter used to render a dangling "sakila." qualifier.
+        result = transpiler.transpile("DROP SCHEMA IF EXISTS sakila;", "mysql", target)
+        assert "sakila." not in result.sql
+        assert "sakila" in result.sql
+
+    @pytest.mark.parametrize("target", ["tsql", "oracle", "postgresql"])
+    def test_charset_introducer_stripped(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        # _utf8' ' is a MySQL charset introducer; other engines reject it.
+        sql = "SELECT CONCAT(a, _utf8' ', b) FROM t;"
+        result = transpiler.transpile(sql, "mysql", target)
+        assert_translated(result.sql, target, present=("' '",), absent=("_utf8",))

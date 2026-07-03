@@ -424,3 +424,21 @@ class TestMySQLDDLPortability:
         out = emit_sql(nodes, "mysql")
         assert "NEWID" not in out
         assert "UUID()" in out
+
+
+class TestRawSQLEmission:
+    """RawSQL passthrough must comment out every line, not just the first."""
+
+    def test_multiline_raw_sql_fully_commented(self) -> None:
+        from unique.core.ast_nodes import RawSQL
+        from unique.core.converter import emit_node
+
+        node = RawSQL(sql="CREATE WIDGET foo (\n  a int,\n  b int\n)", reason="x")
+        out = emit_node(node, "postgresql")
+        leaked = [
+            line
+            for line in out.splitlines()
+            if line.strip() and not line.lstrip().startswith("--")
+        ]
+        assert not leaked, f"executable lines leaked: {leaked!r}"
+        assert "UNIQUE: x" in out

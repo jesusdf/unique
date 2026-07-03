@@ -59,3 +59,27 @@ class TestNoSilentLoss:
         assert "UNIQUE:" not in result.sql
         assert result.warnings == []
         assert result.unsupported == []
+
+    def test_degraded_passthrough_comments_every_line(self) -> None:
+        # A multi-line statement that cannot be parsed at all (here the
+        # T-SQL xml(CONTENT schema-collection) column from AdventureWorksLT)
+        # degrades to a commented passthrough. Every line must be commented:
+        # commenting only the first line leaves the remaining lines as raw
+        # source SQL, executable and invalid on the target.
+        sql = (
+            "CREATE TABLE [SalesLT].[ProductModel](\n"
+            "\t[ProductModelID] [int] IDENTITY(1,1) NOT NULL,\n"
+            "\t[CatalogDescription] [xml](CONTENT "
+            "[SalesLT].[ProductDescriptionSchemaCollection]) NULL,\n"
+            "\t[ModifiedDate] [datetime] NOT NULL\n"
+            ") ON [PRIMARY]"
+        )
+        result = self.t.transpile(sql, "tsql", "postgresql")
+        assert "UNIQUE:" in result.sql
+        assert result.warnings, "degraded statement must be signalled"
+        leaked = [
+            line
+            for line in result.sql.splitlines()
+            if line.strip() and not line.lstrip().startswith("--")
+        ]
+        assert not leaked, f"executable lines leaked from passthrough: {leaked!r}"
