@@ -27,6 +27,7 @@ from unique.core.ast_nodes import (
     SelectStatement,
     TableRef,
 )
+from unique.core.mappings import CANONICAL_FUNCTION_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -89,20 +90,10 @@ class FunctionNormalizer(TransformPass):
     LEN → LENGTH, CHARINDEX → inversion to match target function names.
     """
 
-    # Canonical function mappings: source_name → (canonical_name, arg_transform)
+    # Plain renames come from the shared mapping layer (audit doc 03);
+    # IIF/DECODE become CASE expressions, handled structurally below.
     CANONICAL_MAP: dict[str, str] = {
-        # Null handling
-        "ISNULL": "COALESCE",
-        "NVL": "COALESCE",
-        "IFNULL": "COALESCE",
-        # Date/time
-        "GETDATE": "CURRENT_TIMESTAMP",
-        "SYSDATETIME": "CURRENT_TIMESTAMP",
-        "SYSDATE": "CURRENT_TIMESTAMP",
-        # String
-        "LEN": "LENGTH",
-        "SUBSTR": "SUBSTRING",
-        # Conditional
+        **CANONICAL_FUNCTION_NAMES,
         "IIF": "_IIF_TO_CASE",
         "DECODE": "_DECODE_TO_CASE",
     }

@@ -226,10 +226,12 @@ class TestFunctionMapping:
 
 
 class TestNiladicDatetime:
-    def test_sysdate_to_now_pg(self) -> None:
+    def test_sysdate_to_current_timestamp_pg(self) -> None:
+        # CURRENT_TIMESTAMP is the shared mapping layer's spelling for
+        # PG/MySQL (standard SQL, valid in both).
         t = ProceduralTransformer("oracle", "postgresql")
         result = t._transform_node(RawSQL(sql="v := SYSDATE", reason="x"))
-        assert "NOW()" in result.sql
+        assert "CURRENT_TIMESTAMP" in result.sql
 
     def test_sysdate_to_getdate_tsql(self) -> None:
         t = ProceduralTransformer("oracle", "tsql")
@@ -243,10 +245,10 @@ class TestNiladicDatetime:
         assert "SYSDATE" in result.sql
         assert "SYSDATE()" not in result.sql
 
-    def test_getdate_to_now_mysql(self) -> None:
+    def test_getdate_to_current_timestamp_mysql(self) -> None:
         t = ProceduralTransformer("tsql", "mysql")
         result = t._transform_node(RawSQL(sql="x = GETDATE()", reason="x"))
-        assert "NOW()" in result.sql
+        assert "CURRENT_TIMESTAMP" in result.sql
 
     def test_now_to_getdate_pg_tsql(self) -> None:
         t = ProceduralTransformer("postgresql", "tsql")

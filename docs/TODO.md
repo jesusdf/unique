@@ -298,8 +298,22 @@ quality*).
 
 **P2 — structure & ops (audit docs 03–04):**
 
-- [ ] Consolidate function/type/literal mappings into one table consumed by
-      both pipelines.
+- [x] Consolidate function/type/literal mappings into one module consumed by
+      both pipelines (`core/mappings.py`): the DML emit-side type map, the
+      procedural per-pair type/function maps, the canonical function renames,
+      and the current-timestamp/UUID spellings all live there now, with
+      `tests/unit/core/test_mappings.py` iterating them in both directions
+      (rename round-trips, no chained entries, cross-pipeline agreement with
+      an explicit documented-divergence list). The very first run of that
+      test surfaced and fixed two real asymmetries: `mysql→tsql` lacked
+      `UTC_TIMESTAMP→GETUTCDATE`, and the emit map sent `NTEXT→TEXT` on
+      MySQL (64 KB cap; now LONGTEXT, matching the procedural map). The
+      pipelines' current-timestamp spelling is unified to
+      `CURRENT_TIMESTAMP` on PG/MySQL. Remaining (follow-up, same audit
+      item): fold the regex-based per-construct rewrites (DATEADD/DATEDIFF,
+      STRING_AGG, date formats) into declarative entries, and move dialect
+      knowledge behind the per-engine plugin classes (doc 03 "plugin
+      architecture" note).
 - [x] API: sync (`def`) endpoints, input size limits (UNIQUE_MAX_SQL_BYTES),
       BOM-aware decoding, generic 500 messages.
 - [x] `db_url` SSRF hardening (A3): databases are configured server-side as
