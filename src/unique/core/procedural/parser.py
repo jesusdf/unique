@@ -1389,25 +1389,31 @@ class ProceduralParser:
         ``CALL`` lexes as an identifier, so the caller matches it by value."""
         self._advance()  # CALL
         name, schema = self._parse_qualified_name()
-        args = ""
-        if self._match_type(TokenType.LPAREN):
-            arg_tokens: list[str] = []
-            depth = 1
-            while not self._at_end() and depth > 0:
-                cur = self._current()
-                if cur.type == TokenType.LPAREN:
-                    depth += 1
-                elif cur.type == TokenType.RPAREN:
-                    depth -= 1
-                    if depth == 0:
-                        self._advance()
-                        break
-                arg_tokens.append(self._advance().value)
-            joined = " ".join(arg_tokens)
-            joined = re.sub(r"\s+([,)])", r"\1", joined)
-            args = re.sub(r"\(\s+", "(", joined).strip()
+        args = self._capture_call_args()
         self._match_type(TokenType.SEMICOLON)
         return CallStatement(name=name, args=args, schema=schema)
+
+    def _capture_call_args(self) -> str:
+        """Capture the ``(…)`` argument text of a procedure call, if present.
+        Assumes the current token is the opening ``(``; returns the normalized
+        argument text (no outer parens)."""
+        if not self._match_type(TokenType.LPAREN):
+            return ""
+        arg_tokens: list[str] = []
+        depth = 1
+        while not self._at_end() and depth > 0:
+            cur = self._current()
+            if cur.type == TokenType.LPAREN:
+                depth += 1
+            elif cur.type == TokenType.RPAREN:
+                depth -= 1
+                if depth == 0:
+                    self._advance()
+                    break
+            arg_tokens.append(self._advance().value)
+        joined = " ".join(arg_tokens)
+        joined = re.sub(r"\s+([,)])", r"\1", joined)
+        return re.sub(r"\(\s+", "(", joined).strip()
 
     def _parse_plsql_statement(self) -> ASTNode | None:
         """Parse a single PL/SQL statement, guaranteeing token progress."""
@@ -2049,6 +2055,17 @@ class ProceduralParser:
                 expr = self._parse_expression_until_semicolon()
                 self._match_type(TokenType.SEMICOLON)
                 return PrintStatement(expression=expr)
+
+        # A bare ``name(args);`` statement in PL/SQL is a procedure call (a
+        # function call only appears inside an expression). Capture it as a
+        # CallStatement so the target emits its own call syntax (PG/MySQL
+        # ``CALL name(args)``), rather than letting it fall through to
+        # EmbeddedDML where sqlglot mangles it into a bare ``NAME(args)``.
+        if self._current().type == TokenType.LPAREN:
+            args = self._capture_call_args()
+            self._match_type(TokenType.SEMICOLON)
+            schema = ".".join(name_parts[:-1]) or None
+            return CallStatement(name=name_parts[-1], args=args, schema=schema)
 
         # Procedure call or other statement
         expr = self._parse_expression_until_semicolon()
