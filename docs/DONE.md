@@ -490,3 +490,53 @@ Documentation (`01-compatibility.md`, `03-unsupported.md`, `STATUS.md`,
 `sqlglot-dependency.md`) updated to match. Released as **v0.05** (Docker image
 published by CI). The remaining `IIF`→`CASE WHEN` and `DATEPART`→`EXTRACT(…
 FROM …)` rewrites for standalone DML are noted as pending in `03-unsupported.md`.
+
+## 12. Real-world output-validity hardening — audit doc 02, test_real_world.py (P1)
+
+`test_real_world.py` had a 2% identity-mutation kill rate (audit doc 02): its
+invariants (non-empty, CREATE TABLE counts, jaccard) were all maximized by a
+no-op transpiler. The hardening added `TestOutputValidity` — per-statement
+target-dialect parsing (procedural-aware: the FE-harness splitter +
+`classify_batch` exempt routine bodies sqlglot cannot parse), a
+foreign-quoting/separator gate (`[x]` / backticks / `GO` must not survive in
+executable output), and per-fixture signature-idiom assertions. Building the
+gates surfaced 10 emitter bugs producing invalid SQL on the four fixtures —
+all fixed test-first:
+
+- [x] **Degraded passthroughs commented only the first line** — the other ~30
+      lines of a multi-line statement leaked as raw executable source SQL.
+      `_comment_block()` now comments every line at all fallback sites.
+      Similarity floors recalibrated (oracle 0.35 → 0.25): the leaked raw
+      lines had inflated the old values.
+- [x] **T-SQL `PRIMARY KEY/UNIQUE CLUSTERED (col ASC) WITH (...) ON [PRIMARY]`**
+      re-emitted as bogus comma-separated items; physical hints now stripped
+      before re-transpiling the constraint fragment.
+- [x] **Procedural headers kept bracket quoting** (`CREATE FUNCTION
+      [dbo].[fn](@p [tinyint]) RETURNS [nvarchar](15)`) — quoting now
+      translated on routine name/schema/trigger table; bracketed type names
+      unquoted before type-map lookup. Backtick tokenization added to the
+      procedural lexer (sakila's `` CREATE TRIGGER `ins_film` `` shredded).
+- [x] **Oracle `ORGANIZATION INDEX/HEAP`** degraded the whole CREATE TABLE;
+      the physical clause is stripped pre-parse with carrier + warning.
+- [x] **Oracle `ALTER TABLE ADD ( ... )`** re-emitted as `ADD COLUMNS (...)`
+      (invalid everywhere); unwrapped to T-SQL's ADD comma-list / one ADD per
+      item (PG/MySQL).
+- [x] **MySQL unsigned/YEAR/TIMESTAMP types** leaked sqlglot internals
+      (USMALLINT/UTINYINT/UMEDIUMINT) or invalid types; mapped per target.
+- [x] **ENUM lost its value list silently**; values now ride the IR
+      (`DataType.values`) — MySQL emits the native type, everyone else
+      VARCHAR(max-len) + inline CHECK (SET: sized VARCHAR + carrier note).
+- [x] **`UNIQUE idx (col)` / `DROP SCHEMA sakila.` / `_utf8' '`** — named
+      inline keys become `CONSTRAINT idx UNIQUE (col)`; a Table with only the
+      db part set no longer emits a dangling qualifier; charset introducers
+      reduce to the plain literal.
+- [x] **T-SQL alias types resolved** — `CREATE TYPE x FROM base` definitions
+      are harvested from the script (contextvar around the run) and columns
+      typed with the alias emit the base type (dbo.Name broke MySQL parsing).
+- [x] **MySQL `IF()` / T-SQL `IIF()`** translate per target (IIF / IF /
+      searched CASE); they used to leak verbatim (this also closes the
+      pending `IIF`→`CASE WHEN` note from §11).
+
+Result: 0 parse failures across all 12 fixture×target pairs (was 11/46 tsql,
+29/57 oracle→tsql, 8/26 mysql→tsql); integration kill rate 28% → 36%
+(`identity_mutation_check.py` floor raised to 33%).
