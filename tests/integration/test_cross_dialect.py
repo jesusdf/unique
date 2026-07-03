@@ -1137,3 +1137,22 @@ class TestOracleAlterAddParenthesized:
         body = executable_lines(result.sql).upper()
         assert re.search(r"ADD\s+A\b", body), result.sql
         assert re.search(r"ADD\s+B\b|,\s*B\b", body), result.sql
+
+
+class TestIntegerDisplayWidthToPostgres:
+    """MySQL integer display widths (TINYINT(1), INT(11)) must not survive
+    into PostgreSQL types (SMALLINT(1) is a syntax error there; found on the
+    live FE run of the MySQL native fixture)."""
+
+    @pytest.mark.parametrize(
+        "src_type", ["TINYINT(1)", "SMALLINT(4)", "INT(11)", "BIGINT(20)"]
+    )
+    def test_display_width_dropped(self, transpiler: Transpiler, src_type: str) -> None:
+        result = transpiler.transpile(
+            f"CREATE TABLE t (c {src_type} NOT NULL);", "mysql", "postgresql"
+        )
+        assert_translated(result.sql, target="postgresql")
+        body = executable_lines(result.sql)
+        assert not re.search(
+            r"(?i)\b(SMALLINT|INTEGER|INT|BIGINT)\s*\(", body
+        ), result.sql

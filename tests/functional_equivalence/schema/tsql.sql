@@ -310,3 +310,29 @@ BEGIN
     WHERE p.id = @product_b;
 END
 GO
+
+-- Payment-status flag (audit S2-3): the assignment-select matches no row for
+-- an unpaid invoice, leaving @amount unchanged (NULL here), so the IS NULL
+-- branch must run. Oracle's SELECT INTO raises NO_DATA_FOUND instead; the
+-- transpiled procedure must preserve the T-SQL semantics (empty handler).
+IF OBJECT_ID(N'dbo.flag_payment_status', N'P') IS NOT NULL
+    DROP PROCEDURE dbo.flag_payment_status
+GO
+
+CREATE PROCEDURE dbo.flag_payment_status
+    @customer_id INT,
+    @invoice_id  INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @amount DECIMAL(12, 2);
+
+    SELECT @amount = amount FROM dbo.payment WHERE invoice_id = @invoice_id;
+
+    IF @amount IS NULL
+        UPDATE dbo.customer SET notes = 'no payment' WHERE id = @customer_id;
+    ELSE
+        UPDATE dbo.customer SET notes = 'paid' WHERE id = @customer_id;
+END
+GO

@@ -125,8 +125,8 @@ class TestHarnessEndToEndSQLite:
             CREATE TABLE customer(id INTEGER PRIMARY KEY, name TEXT,
                 email TEXT, notes TEXT);
             INSERT INTO customer VALUES
-                (1,'Acme','billing@acme.test','Net-30 terms'),
-                (2,'Globex','ap@globex.test',NULL);
+                (1,'Acme','billing@acme.test','no payment'),
+                (2,'Globex','ap@globex.test','paid');
             CREATE TABLE product(id INTEGER PRIMARY KEY, name TEXT,
                 unit_price NUMERIC);
             INSERT INTO product VALUES (1,'Widget',10.00),(2,'Gadget',25.50);

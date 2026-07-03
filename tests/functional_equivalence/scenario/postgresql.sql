@@ -49,3 +49,8 @@ CALL create_invoice(2, DATE '2024-02-01', 1, 1, 2, 1);
 -- Step 5: payment equal to invoice 2's total -> trg_payment_paid marks it paid
 INSERT INTO payment (invoice_id, paid_on, amount)
 VALUES (2, DATE '2024-02-05', 39.05);
+
+-- Step 6: payment-status flag (audit S2-3 counterpart) -> customer 1 has no
+-- payment ('no payment'); customer 2 is paid ('paid').
+CALL flag_payment_status(1, 1);
+CALL flag_payment_status(2, 2);

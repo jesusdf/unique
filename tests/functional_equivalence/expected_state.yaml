@@ -41,6 +41,8 @@ version: 1
 #   3. UPDATE a line on invoice 1 (qty 2 -> 3)   -> trg readjusts invoice.total
 #   4. CALL create_invoice(...) builds invoice 2 -> DML-from-a-procedure path
 #   5. INSERT payment for invoice 2's full total -> marks invoice 2 is_paid
+#   6. CALL flag_payment_status(...) x2          -> assignment-select no-rows
+#      semantics (audit S2-3): writes customer.notes 'no payment' / 'paid'
 # Tax is computed by fn_tax(net) = net * 0.10, exercised on each invoice total.
 
 tables:
@@ -48,8 +50,11 @@ tables:
   customer:
     row_count: 2
     rows:
-      - { id: 1, name: "Acme",   email: "billing@acme.test" }
-      - { id: 2, name: "Globex", email: "ap@globex.test" }
+      # notes are (re)written by step 6 (flag_payment_status): invoice 1 has no
+      # payment row — the procedure's assignment-select must observe "no row"
+      # as a NULL/unchanged variable (audit S2-3), not die on NO_DATA_FOUND.
+      - { id: 1, name: "Acme",   email: "billing@acme.test", notes: "no payment" }
+      - { id: 2, name: "Globex", email: "ap@globex.test",    notes: "paid" }
 
   product:
     row_count: 2
@@ -85,6 +90,16 @@ tables:
     rows:
       # Pays invoice 2 in full (= its total 39.05); the payment path sets is_paid.
       - { id: 1, invoice_id: 2, paid_on: "2024-02-05", amount: "39.05" }
+
+# Values maintained by the schema's triggers. When the *source* fixture's
+# set-based triggers are a documented divergence on the target (MySQL and
+# Oracle have no named transition tables; the transpiled trigger bodies are
+# carrier comments there), the harness excludes these columns from the value
+# assertions — everything else (procedure DML, direct DML, defaults, the
+# S2-3 flag_payment_status notes) is still asserted in full.
+trigger_maintained:
+  invoice: [total, is_paid]
+  invoice_line: [line_total]
 
 notes: >
   All values are reconciled and deterministic at DECIMAL scale 2. Tax rate is

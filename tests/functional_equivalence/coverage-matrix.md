@@ -172,3 +172,20 @@ assertions, which is cheaper to reason about and to debug per engine.
 > Materialization note: the concrete `expected_state.yaml` rows for Scenario B
 > are authored together with `scenario/tsql.sql` in the next (first SQL)
 > step — this matrix locks the *design* of what those rows must prove.
+
+### Step 6 addendum — assignment-select no-rows semantics (audit S2-3)
+
+`flag_payment_status(customer_id, invoice_id)` reads `payment.amount` for an
+invoice into a local variable and writes `customer.notes` (`'no payment'` when
+the variable observed no row, `'paid'` otherwise). Called for (1, 1) — invoice
+1 has **no** payment row — and (2, 2), which is paid.
+
+- **What it proves:** a T-SQL assignment-select (`SELECT @v = col ...`) that
+  matches no row leaves the variable NULL/unchanged; the transpiled Oracle
+  `SELECT INTO` must not die on `NO_DATA_FOUND` (the S2-3 wrapper), and every
+  engine must take the `IS NULL` branch. Asserted via `customer.notes` on both
+  rows (deterministic string literals, no clock/locale dependence).
+- **Native counterparts:** the PostgreSQL/MySQL/Oracle fixtures author the
+  read with `SELECT MAX(amount) INTO ...` — an aggregate always returns one
+  row, so the no-payment case yields NULL portably and natively (no engine
+  raises). Only the T-SQL source exercises the S2-3 transform.

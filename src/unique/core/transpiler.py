@@ -20,7 +20,12 @@ import re
 from dataclasses import dataclass, field, replace
 
 from unique.core.batch_splitter import BatchSplitter, BatchType
-from unique.core.converter import TSQL_ALIAS_TYPES, harvest_tsql_alias_types
+from unique.core.converter import (
+    TSQL_ALIAS_TYPES,
+    TSQL_BIT_COLUMNS,
+    harvest_tsql_alias_types,
+    harvest_tsql_bit_columns,
+)
 from unique.core.dialect import Dialect
 from unique.core.procedural.emitter import ProceduralEmitter
 from unique.core.procedural.parser import ProceduralParser
@@ -38,6 +43,17 @@ _TSQL_DDL_GUARD_RE = re.compile(
     r"(?s)^(?:--[^\n]*\n\s*)*"
     r"IF\s+(?:OBJECT_ID|EXISTS)\s*\([^)]+\)\s*IS\s+NULL\s+"
     r"(CREATE\s+(?:TABLE|(?:UNIQUE\s+)?INDEX)\b.*)",
+    re.IGNORECASE,
+)
+
+# The cleanup counterpart: IF OBJECT_ID(...) IS NOT NULL DROP <kind> <name>.
+# Maps to the target's own conditional form (DROP ... IF EXISTS, or a
+# tolerant PL/SQL block on Oracle) so a transpiled schema stays re-runnable.
+_TSQL_DROP_GUARD_RE = re.compile(
+    r"(?s)^(?:--[^\n]*\n\s*)*"
+    r"IF\s+(?:OBJECT_ID|EXISTS)\s*\([^)]+\)\s*IS\s+NOT\s+NULL\s+"
+    r"DROP\s+(?P<kind>TABLE|VIEW|SEQUENCE|PROCEDURE|FUNCTION|TRIGGER|INDEX)\s+"
+    r"(?P<name>[\w\[\]\".]+)\s*;?\s*$",
     re.IGNORECASE,
 )
 
@@ -339,10 +355,15 @@ class Transpiler:
         # script: harvest them up front so columns typed with an alias resolve
         # to the base type on engines without alias types.
         alias_token = None
+        bit_token = None
         if source == "tsql" and target != "tsql":
             aliases = harvest_tsql_alias_types(sql)
             if aliases:
                 alias_token = TSQL_ALIAS_TYPES.set(aliases)
+            if target == "postgresql":
+                bit_columns = harvest_tsql_bit_columns(sql)
+                if bit_columns:
+                    bit_token = TSQL_BIT_COLUMNS.set(bit_columns)
 
         try:
             # Step 0: Split into batches
@@ -386,6 +407,11 @@ class Transpiler:
                         if source == "tsql" and target != "tsql"
                         else None
                     )
+                    drop_match = (
+                        _TSQL_DROP_GUARD_RE.match(batch.sql)
+                        if source == "tsql" and target != "tsql"
+                        else None
+                    )
                     if ddl_match:
                         result = self._transpile_dml(
                             ddl_match.group(1),
@@ -393,6 +419,13 @@ class Transpiler:
                             target,
                             source_dialect,
                             target_dialect,
+                        )
+                    elif drop_match:
+                        result = self._transpile_drop_guard(
+                            drop_match.group("kind"),
+                            drop_match.group("name"),
+                            source,
+                            target,
                         )
                     else:
                         result = self._transpile_set_option(batch.sql, source, target)
@@ -447,6 +480,8 @@ class Transpiler:
         finally:
             if alias_token is not None:
                 TSQL_ALIAS_TYPES.reset(alias_token)
+            if bit_token is not None:
+                TSQL_BIT_COLUMNS.reset(bit_token)
             if metadata_resolver:
                 metadata_resolver.close()
 
@@ -675,6 +710,51 @@ class Transpiler:
                 unsupported=unsupported,
             )
 
+    def _transpile_drop_guard(
+        self, kind: str, name: str, source: str, target: str
+    ) -> TranspileResult:
+        """Convert a T-SQL 'IF OBJECT_ID(...) IS NOT NULL DROP x' guard."""
+        kind = kind.upper()
+        # Bare object name: brackets/quotes and the dbo qualifier are T-SQL-only.
+        clean = re.sub(r'[\[\]"]', "", name)
+        clean = re.sub(r"(?i)^dbo\.", "", clean)
+        if target == "mysql" and kind == "SEQUENCE":
+            # MySQL has no sequences; keep the documented degradation the
+            # CREATE SEQUENCE counterpart also emits.
+            return self._transpile_set_option(
+                f"IF OBJECT_ID DROP SEQUENCE {clean}", source, target
+            )
+        if target == "oracle":
+            # No DROP ... IF EXISTS before 23c; a tolerant block is the idiom.
+            return TranspileResult(
+                sql=(
+                    "BEGIN\n"
+                    f"    EXECUTE IMMEDIATE 'DROP {kind} {clean}';\n"
+                    "EXCEPTION\n"
+                    "    WHEN OTHERS THEN NULL;  -- object did not exist\n"
+                    "END;"
+                )
+            )
+        if target == "postgresql" and kind == "TRIGGER":
+            # PostgreSQL's DROP TRIGGER needs the table name, which the T-SQL
+            # guard does not carry; resolve it from the catalog.
+            return TranspileResult(
+                sql=(
+                    "DO $$\n"
+                    "DECLARE r RECORD;\n"
+                    "BEGIN\n"
+                    "    FOR r IN SELECT tgname, tgrelid::regclass AS tbl\n"
+                    "             FROM pg_trigger\n"
+                    f"             WHERE tgname = '{clean.lower()}'"
+                    " AND NOT tgisinternal LOOP\n"
+                    "        EXECUTE format('DROP TRIGGER %I ON %s',"
+                    " r.tgname, r.tbl);\n"
+                    "    END LOOP;\n"
+                    "END $$;"
+                )
+            )
+        return TranspileResult(sql=f"DROP {kind} IF EXISTS {clean}")
+
     def _transpile_set_option(
         self, sql: str, source: str, target: str
     ) -> TranspileResult:
@@ -770,6 +850,13 @@ class Transpiler:
         # trailing ';' for the '$$' routine delimiter.
         if body.endswith(";"):
             body = body[:-1].rstrip()
+        # A batch may hold several routines (e.g. a multi-event trigger split
+        # into one trigger per event); each needs its own '$$' terminator.
+        body = re.sub(
+            r"(?m)^END\n\n(?=CREATE\s+(?:TRIGGER|PROCEDURE|FUNCTION)\b)",
+            "END$$\n\n",
+            body,
+        )
         wrapped = f"DELIMITER $$\n{body}$$\nDELIMITER ;"
         if head:
             # Drop a trailing blank line in the comment head for tidiness.

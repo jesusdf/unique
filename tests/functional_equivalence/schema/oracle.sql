@@ -27,6 +27,7 @@ BEGIN
         SELECT 'DROP ' || object_type || ' ' || object_name AS cmd
         FROM user_objects
         WHERE object_name IN ('FN_TAX', 'FN_DAYS_BETWEEN', 'CREATE_INVOICE',
+                              'FLAG_PAYMENT_STATUS',
                               'V_INVOICE_TOTALS', 'V_OVERDUE_INVOICES')
           AND object_type IN ('FUNCTION', 'PROCEDURE', 'VIEW')
     ) LOOP
@@ -249,5 +250,24 @@ BEGIN
     INSERT INTO invoice_line (invoice_id, product_id, qty, unit_price, line_total)
     SELECT v_new_id, p.id, p_qty_b, p.unit_price, p_qty_b * p.unit_price
     FROM product p WHERE p.id = p_product_b;
+END;
+/
+
+-- Payment-status flag (audit S2-3 counterpart). Authored with MAX() so the
+-- no-payment case yields NULL portably (an aggregate always returns one row,
+-- so native Oracle never raises NO_DATA_FOUND here).
+CREATE PROCEDURE flag_payment_status(
+    p_customer_id IN NUMBER,
+    p_invoice_id  IN NUMBER
+) IS
+    v_amount NUMBER(12, 2);
+BEGIN
+    SELECT MAX(amount) INTO v_amount FROM payment WHERE invoice_id = p_invoice_id;
+
+    IF v_amount IS NULL THEN
+        UPDATE customer SET notes = 'no payment' WHERE id = p_customer_id;
+    ELSE
+        UPDATE customer SET notes = 'paid' WHERE id = p_customer_id;
+    END IF;
 END;
 /

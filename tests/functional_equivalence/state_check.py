@@ -28,7 +28,7 @@ the expected value's kind, which avoids a separate per-column type registry.
 from __future__ import annotations
 
 import datetime as _dt
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -53,6 +53,10 @@ class ExpectedState:
     """The whole engine-agnostic expected state."""
 
     tables: tuple[TableExpectation, ...]
+    # table -> columns whose values are maintained by triggers. Excluded from
+    # assertion on targets where the source's set-based triggers are a
+    # documented divergence (MySQL/Oracle have no transition tables).
+    trigger_maintained: dict[str, frozenset[str]] = field(default_factory=dict)
 
     def table(self, name: str) -> TableExpectation:
         for t in self.tables:
@@ -88,7 +92,11 @@ def load_expected_state(path: str | Path) -> ExpectedState:
                 primary_key=_infer_primary_key(rows),
             )
         )
-    return ExpectedState(tables=tuple(tables))
+    trigger_maintained = {
+        table: frozenset(cols)
+        for table, cols in (data.get("trigger_maintained") or {}).items()
+    }
+    return ExpectedState(tables=tuple(tables), trigger_maintained=trigger_maintained)
 
 
 def _scale_of(expected_decimal: str) -> int:
@@ -167,6 +175,7 @@ class Mismatch:
 def check_table(
     expectation: TableExpectation,
     actual_rows: list[dict[str, Any]],
+    ignore_columns: frozenset[str] = frozenset(),
 ) -> list[Mismatch]:
     """Compare one table's actual rows against its expectation.
 
@@ -174,7 +183,9 @@ def check_table(
     in any order). Both sides are ordered by the primary key and every asserted
     column is normalized and compared. Columns not present in the expectation
     are ignored (e.g. clock-stamped ``created_at`` is presence-checked
-    separately, not value-asserted).
+    separately, not value-asserted), as are columns in ``ignore_columns``
+    (trigger-maintained values on targets where those triggers are a
+    documented divergence).
     """
     mismatches: list[Mismatch] = []
 
@@ -200,6 +211,8 @@ def check_table(
             mismatches.append(Mismatch(expectation.name, f"missing row {pk}={pk_val}"))
             continue
         for col, exp_val in exp_row.items():
+            if col in ignore_columns and col != pk:
+                continue
             if col not in act_row:
                 mismatches.append(
                     Mismatch(
@@ -224,15 +237,25 @@ def check_table(
 def check_state(
     expected: ExpectedState,
     read_table: Any,
+    *,
+    ignore_trigger_maintained: bool = False,
 ) -> list[Mismatch]:
     """Check every expected table using a ``read_table(name) -> rows`` callable.
 
     ``read_table`` returns a list of column→value dicts for the named table.
+    With ``ignore_trigger_maintained`` the columns listed in the spec's
+    ``trigger_maintained`` section are not value-asserted (used when the
+    source's set-based triggers are a documented divergence on the target).
     Returns all mismatches across all tables (empty list == functional
     equivalence holds for this engine).
     """
     all_mismatches: list[Mismatch] = []
     for expectation in expected.tables:
         rows = read_table(expectation.name)
-        all_mismatches.extend(check_table(expectation, rows))
+        ignore = (
+            expected.trigger_maintained.get(expectation.name, frozenset())
+            if ignore_trigger_maintained
+            else frozenset()
+        )
+        all_mismatches.extend(check_table(expectation, rows, ignore))
     return all_mismatches

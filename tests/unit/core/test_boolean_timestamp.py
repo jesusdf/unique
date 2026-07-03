@@ -113,3 +113,93 @@ class TestOracleParameterTypes:
         ).sql
         # Only *parameters* lose constraints; column DDL keeps them.
         assert "NVARCHAR2(50)" in out
+
+
+class TestBitDefaultToBoolean:
+    """T-SQL BIT DEFAULT 0/1 -> PostgreSQL BOOLEAN needs a boolean default.
+
+    PostgreSQL rejects "BOOLEAN DEFAULT 1" (integer default on a boolean
+    column) — found on the FE harness's first live run (product.is_active).
+    """
+
+    def setup_method(self) -> None:
+        self.t = Transpiler()
+
+    def test_bit_default_one_to_postgresql(self) -> None:
+        out = self.t.transpile(
+            "CREATE TABLE t (is_active BIT NOT NULL DEFAULT 1)",
+            "tsql",
+            "postgresql",
+        ).sql
+        assert "BOOLEAN" in out
+        assert "DEFAULT TRUE" in out
+        assert "DEFAULT 1" not in out
+        _valid(out, "postgresql")
+
+    def test_bit_default_zero_to_postgresql(self) -> None:
+        out = self.t.transpile(
+            "CREATE TABLE t (is_paid BIT NOT NULL DEFAULT (0))",
+            "tsql",
+            "postgresql",
+        ).sql
+        assert "DEFAULT FALSE" in out
+        _valid(out, "postgresql")
+
+    def test_bit_default_untouched_for_mysql(self) -> None:
+        # MySQL maps BIT -> BIT/TINYINT semantics where 0/1 defaults are fine.
+        out = self.t.transpile(
+            "CREATE TABLE t (is_active BIT NOT NULL DEFAULT 1)",
+            "tsql",
+            "mysql",
+        ).sql
+        assert "DEFAULT 1" in out
+
+
+class TestBitLiteralCoercion:
+    """0/1 literals written to a BIT column become TRUE/FALSE on PostgreSQL.
+
+    The CREATE TABLE statements in the same script declare which columns are
+    BIT; an INSERT/UPDATE that writes integer 0/1 into them must emit boolean
+    literals (PostgreSQL: 'column is of type boolean but expression is of
+    type integer', found on the live FE run).
+    """
+
+    SCRIPT = (
+        "CREATE TABLE dbo.product (\n"
+        "    id INT NOT NULL,\n"
+        "    qty INT NOT NULL,\n"
+        "    is_active BIT NOT NULL DEFAULT 1\n"
+        ")\nGO\n"
+        "INSERT INTO dbo.product (id, qty, is_active) VALUES (1, 1, 1)\nGO\n"
+        "UPDATE dbo.product SET is_active = 0, qty = 0 WHERE id = 1\nGO\n"
+    )
+
+    def setup_method(self) -> None:
+        self.t = Transpiler()
+
+    def test_insert_and_update_coerced_for_postgresql(self) -> None:
+        out = self.t.transpile(self.SCRIPT, "tsql", "postgresql").sql
+        assert "VALUES (1, 1, TRUE)" in out
+        assert "is_active = FALSE" in out
+        # Non-BIT columns keep their integer literals.
+        assert "qty = 0" in out
+
+    def test_mysql_keeps_integer_literals(self) -> None:
+        out = self.t.transpile(self.SCRIPT, "tsql", "mysql").sql
+        assert "VALUES (1, 1, 1)" in out
+
+    def test_procedure_body_insert_coerced_for_postgresql(self) -> None:
+        # The INSERT inside a procedure body goes through the procedural
+        # pipeline's embedded-DML path; it must coerce 0/1 on BIT columns too
+        # (found on the live FE run: create_invoice writes is_paid = 0).
+        script = (
+            "CREATE TABLE dbo.invoice (\n"
+            "    id INT NOT NULL,\n"
+            "    is_paid BIT NOT NULL DEFAULT 0\n"
+            ")\nGO\n"
+            "CREATE PROCEDURE dbo.mk @id INT AS BEGIN\n"
+            "    INSERT INTO dbo.invoice (id, is_paid) VALUES (@id, 0);\n"
+            "END\nGO\n"
+        )
+        out = self.t.transpile(script, "tsql", "postgresql").sql
+        assert "VALUES (v_id, FALSE)" in out, out

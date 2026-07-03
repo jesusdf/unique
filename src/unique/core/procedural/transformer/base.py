@@ -536,9 +536,11 @@ class ProceduralTransformer:
 
     def _transform_var_in_sql(self, sql: str) -> str:
         """Transform variable references within raw SQL text."""
-        if self._source == "tsql" and self._target == "oracle":
-            # Strip SQL Server's default schema prefix — Oracle objects live in
-            # the current user's schema and don't use "dbo." qualification.
+        if self._source == "tsql" and self._target != "tsql":
+            # Strip SQL Server's default schema prefix — none of the other
+            # engines has a "dbo" schema (Oracle objects live in the current
+            # user's schema, PostgreSQL's default is public, and a MySQL
+            # qualifier would name a database).
             sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
         if self._source == "tsql" and self._target in ("oracle", "postgresql"):
 
@@ -1261,6 +1263,11 @@ class ProceduralTransformer:
         except Exception as e:
             logger.debug("sqlglot transpile failed for DML: %s", e)
             self._warnings.append(f"Could not transpile DML: {e}")
+        # 0/1 literals written to a BIT column must become booleans on
+        # PostgreSQL (the standalone-DML emitter does the same).
+        from unique.core.converter import coerce_bit_literals_in_sql
+
+        sql = coerce_bit_literals_in_sql(sql, self._target)
         sql = self._fix_target_dml(sql)
         if self._in_trigger and self._rewrites_trigger_pseudotables():
             sql = self._rewrite_trigger_pseudotables(sql)

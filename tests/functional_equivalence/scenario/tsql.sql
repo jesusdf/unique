@@ -11,7 +11,7 @@
 -- at scale 2, no integer division / NULL-concat / collation-dependent ordering
 -- in any asserted value. Identity is pinned (START 1) so PK values are stable.
 --
--- The five locked steps (../scenario/README.md):
+-- The six locked steps (../scenario/README.md):
 --   1. seed 2 customers (one with notes, one NULL) + 2 products
 --   2. direct INSERT invoice 1 + 2 lines (2 Widget, 1 Gadget) -> trg sets total
 --   3. UPDATE a line on invoice 1 (Widget qty 2 -> 3)         -> trg readjusts
@@ -83,4 +83,17 @@ GO
 
 INSERT INTO dbo.payment (invoice_id, paid_on, amount)
 VALUES (2, '2024-02-05', CAST(39.05 AS DECIMAL(12, 2)));
+GO
+
+-- ---- Step 6: assignment-select no-rows semantics (audit S2-3) ---------------
+-- flag_payment_status reads the payment for an invoice with an assignment
+-- SELECT. Invoice 1 has no payment row: the variable must stay NULL (T-SQL
+-- leaves it unchanged; a transpiled Oracle SELECT INTO must not die on
+-- NO_DATA_FOUND) so customer 1 is flagged 'no payment'. Invoice 2 is paid,
+-- so customer 2 is flagged 'paid'.
+
+EXEC dbo.flag_payment_status 1, 1;
+GO
+
+EXEC dbo.flag_payment_status 2, 2;
 GO
