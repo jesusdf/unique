@@ -135,11 +135,15 @@ complex exception handling with multiple handlers may lose precision.
 
 ### 3.6 MERGE Statement → MySQL
 
-MySQL lacks MERGE. The transpiler decomposes MERGE into:
-- `INSERT ... ON DUPLICATE KEY UPDATE` (for simple cases)
-- Separate `INSERT` and `UPDATE` wrapped in a transaction (for complex cases)
+MySQL lacks MERGE. The canonical pattern (one unconditional WHEN MATCHED
+UPDATE plus one unconditional WHEN NOT MATCHED INSERT) is rewritten as
+`INSERT ... SELECT ... ON DUPLICATE KEY UPDATE`; the rewrite relies on a
+UNIQUE or PRIMARY KEY covering the ON-clause columns, which is noted in a
+carrier comment and mirrored in `result.warnings`.
 
-This may not be semantically identical for all edge cases.
+More complex MERGEs (conditional WHEN clauses, WHEN MATCHED DELETE, multiple
+branches) are preserved as a documented comment and registered in
+`result.warnings` / `result.unsupported` — never dropped silently.
 
 ### 3.7 OUTPUT / RETURNING Clause → MySQL
 

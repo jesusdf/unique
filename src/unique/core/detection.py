@@ -74,8 +74,11 @@ _SIGNALS: dict[str, list[_Rule]] = {
         (r"\bRETURNS\s+(SETOF|TABLE|TRIGGER)\b", 2),
         (r"\bNOW\s*\(\s*\)", 1),
         (r"::\w+", 2),  # ::cast syntax
-        (r"\bTEXT\b", 0),
-        (r"\bBOOLEAN\b", 0),
+        # Weak signals: TEXT/BOOLEAN exist on MySQL too, so they only
+        # nudge the score (they were dead weight-0 rules before the
+        # 2026-07-02 audit).
+        (r"\bTEXT\b", 1),
+        (r"\bBOOLEAN\b", 1),
         (r"\bRETURNING\b", 2),
         (r"\bON\s+CONFLICT\b", 3),
         (r"\bILIKE\b", 3),
