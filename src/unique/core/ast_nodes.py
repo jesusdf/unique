@@ -626,6 +626,21 @@ class ExecuteStatement(ASTNode):
 
 
 @dataclass(frozen=True)
+class CallStatement(ASTNode):
+    """A stored-procedure invocation (MySQL/PostgreSQL ``CALL name(args)``,
+    Oracle ``name(args)``, T-SQL ``EXEC name args``).
+
+    ``args`` is the raw argument text *inside* the parentheses, so each target
+    emitter re-wraps it in its own call syntax. Distinct from ExecuteStatement,
+    which models T-SQL ``EXEC``/Oracle ``EXECUTE IMMEDIATE`` dynamic SQL.
+    """
+
+    name: str
+    args: str = ""
+    schema: str | None = None
+
+
+@dataclass(frozen=True)
 class TransactionStatement(ASTNode):
     """Transaction control statement."""
 

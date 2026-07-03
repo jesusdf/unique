@@ -29,6 +29,7 @@ from unique.core.ast_nodes import (
     AssignmentStatement,
     ASTNode,
     BeginEndBlock,
+    CallStatement,
     CommentStatement,
     CreateFunctionStatement,
     CreateProcedureStatement,
@@ -200,6 +201,7 @@ class ProceduralTransformer:
             RawSQL: self._transform_raw_sql,
             CommentStatement: self._transform_comment,
             AnonymousBlock: self._transform_anonymous_block,
+            CallStatement: self._transform_call,
         }
 
         handler = handlers.get(type(node))
@@ -893,6 +895,14 @@ class ProceduralTransformer:
         top level. Default yes (Oracle/PostgreSQL/T-SQL); MySQL overrides to no
         (it has no procedural code outside a stored routine)."""
         return True
+
+    def _transform_call(self, node: CallStatement) -> ASTNode:
+        """Transform a stored-procedure call. The ``dbo`` default schema is
+        meaningful only on T-SQL, so drop it for the other targets; the argument
+        text gets the same niladic-now / string fixups as embedded DML."""
+        schema = self._target_schema(node.schema)
+        args = self._map_now_in_sql(node.args) if node.args else node.args
+        return CallStatement(name=node.name, args=args, schema=schema)
 
     def _transform_anonymous_block(self, node: AnonymousBlock) -> ASTNode:
         new_stmts = self._transform_body(node.statements)
