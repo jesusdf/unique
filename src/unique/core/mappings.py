@@ -68,6 +68,25 @@ UUID_FUNCTION: dict[str, str] = {
     "mysql": "UUID",
 }
 
+#: The "last generated identity value" expression per dialect. Oracle has no
+#: session-scoped form (the value comes from ``<sequence>.CURRVAL``), so it is
+#: emitted as a documented comment. Rewritten in both directions by the
+#: procedural transformer.
+LAST_IDENTITY_EXPR: dict[str, str] = {
+    "tsql": "SCOPE_IDENTITY()",
+    "postgresql": "LASTVAL()",
+    "mysql": "LAST_INSERT_ID()",
+    "oracle": "/* last identity: use <sequence>.CURRVAL */",
+}
+
+#: The source spellings recognized as a "last generated id" call, mapped to
+#: the dialect whose LAST_IDENTITY_EXPR they are (so any source is handled).
+LAST_IDENTITY_SOURCE_FUNCS: dict[str, str] = {
+    "SCOPE_IDENTITY": "tsql",
+    "LASTVAL": "postgresql",
+    "LAST_INSERT_ID": "mysql",
+}
+
 #: Per-pair function renames applied by the procedural pipeline to raw
 #: routine text (function-call positions only). Values starting with "--"
 #: document constructs that need manual conversion and are not rewritten.

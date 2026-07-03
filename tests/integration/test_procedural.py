@@ -1353,3 +1353,45 @@ class TestMySQLFunctionCallSpacing:
         out = _transpile(sql, "tsql", "mysql")
         assert "CAST(" in out.replace("CAST  (", "CAST (")
         assert not re.search(r"(?i)\bCAST\s+\(", out), out
+
+
+class TestLastInsertIdCrossDialect:
+    """The 'last generated id' function differs per engine (T-SQL
+    SCOPE_IDENTITY / PostgreSQL LASTVAL / MySQL LAST_INSERT_ID). It must be
+    translated regardless of source, not only from T-SQL (the MySQL native
+    FE fixture captures it in create_invoice — a live-run finding)."""
+
+    def _proc(self, get_id_call: str) -> str:
+        return (
+            "CREATE PROCEDURE mk()\n"
+            "BEGIN\n"
+            "    DECLARE v_id INT;\n"
+            "    INSERT INTO t (a) VALUES (1);\n"
+            f"    SET v_id = {get_id_call};\n"
+            "END"
+        )
+
+    def test_mysql_last_insert_id_to_postgresql(self) -> None:
+        out = _transpile(self._proc("LAST_INSERT_ID()"), "mysql", "postgresql")
+        assert "LASTVAL()" in out.upper()
+        assert "LAST_INSERT_ID" not in out.upper()
+
+    def test_mysql_last_insert_id_roundtrip(self) -> None:
+        out = _transpile(self._proc("LAST_INSERT_ID()"), "mysql", "mysql")
+        # Tolerate the token-joiner's cosmetic inner-paren space (valid MariaDB).
+        assert "LAST_INSERT_ID(" in out.upper()
+        assert "LASTVAL" not in out.upper()
+
+    def test_postgresql_lastval_to_mysql(self) -> None:
+        proc = (
+            "CREATE PROCEDURE mk()\n"
+            "LANGUAGE plpgsql AS $$\n"
+            "DECLARE v_id INT;\n"
+            "BEGIN\n"
+            "    INSERT INTO t (a) VALUES (1);\n"
+            "    v_id := LASTVAL();\n"
+            "END;\n$$;"
+        )
+        out = _transpile(proc, "postgresql", "mysql")
+        assert "LAST_INSERT_ID()" in out.upper()
+        assert "LASTVAL" not in out.upper()

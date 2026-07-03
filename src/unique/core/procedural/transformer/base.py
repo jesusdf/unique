@@ -58,6 +58,8 @@ from unique.core.ast_nodes import (
 )
 from unique.core.mappings import (
     CURRENT_TIMESTAMP_EXPR,
+    LAST_IDENTITY_EXPR,
+    LAST_IDENTITY_SOURCE_FUNCS,
     PROCEDURAL_FUNC_MAPS,
     PROCEDURAL_TYPE_MAPS,
 )
@@ -1755,7 +1757,7 @@ class ProceduralTransformer:
         sql = self._transform_substring_position(sql)
         sql = self._transform_decode(sql)
         sql = self._transform_string_agg(sql)
-        sql = self._transform_scope_identity(sql)
+        sql = self._transform_last_identity(sql)
         sql = self._transform_nvl2(sql)
         sql = self._transform_oracle_date_funcs(sql)
         sql = self._transform_mysql_date_funcs(sql)
@@ -1884,30 +1886,24 @@ class ProceduralTransformer:
 
         return self._rewrite_calls(sql, "NVL2", build)
 
-    def _transform_scope_identity(self, sql: str) -> str:
-        """Translate T-SQL SCOPE_IDENTITY()/IDENT_CURRENT(...) last-id calls.
+    def _transform_last_identity(self, sql: str) -> str:
+        """Translate the 'last generated id' call across dialects.
 
-        SCOPE_IDENTITY() returns the most recent identity value. Targets:
-        - PostgreSQL: LASTVAL()
-        - MySQL:      LAST_INSERT_ID()
-        - Oracle:     no portable form; emit a documented comment (the value
-          comes from <sequence>.CURRVAL, which needs the sequence name).
+        Each engine spells it differently — T-SQL ``SCOPE_IDENTITY()``,
+        PostgreSQL ``LASTVAL()``, MySQL ``LAST_INSERT_ID()`` — and Oracle has
+        no session-scoped form (the value comes from ``<sequence>.CURRVAL``),
+        so it is emitted as a documented comment. Handled for every source,
+        not only T-SQL (the shared mapping layer knows all spellings).
         """
-        if self._source != "tsql" or self._target == "tsql":
+        if self._source == self._target:
             return sql
-
-        replacement = {
-            "postgresql": "LASTVAL()",
-            "mysql": "LAST_INSERT_ID()",
-            "oracle": "/* SCOPE_IDENTITY: use <sequence>.CURRVAL */",
-        }.get(self._target)
+        replacement = LAST_IDENTITY_EXPR.get(self._target)
         if replacement is None:
             return sql
-
-        # SCOPE_IDENTITY() takes no arguments.
-        sql = re.sub(
-            r"\bSCOPE_IDENTITY\s*\(\s*\)", replacement, sql, flags=re.IGNORECASE
-        )
+        for func, dialect in LAST_IDENTITY_SOURCE_FUNCS.items():
+            if dialect != self._source:
+                continue
+            sql = re.sub(rf"\b{func}\s*\(\s*\)", replacement, sql, flags=re.IGNORECASE)
         return sql
 
     def _transform_string_agg(self, sql: str) -> str:
