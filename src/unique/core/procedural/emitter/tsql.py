@@ -213,7 +213,9 @@ class TSqlEmitter(ProceduralEmitter):
 
         return "\n".join(lines)
 
-    def _emit_execute_stmt(self, expr: str, params: list[str]) -> str:
+    def _emit_execute_stmt(
+        self, expr: str, params: list[str], immediate: bool = False
+    ) -> str:
         if params:
             # Map Oracle USING binds to sp_executesql positional params.
             # The dynamic SQL placeholders (:1, :2 / ?) should be replaced

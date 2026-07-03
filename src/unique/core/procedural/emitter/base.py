@@ -753,6 +753,8 @@ class ProceduralEmitter:
         statements directly (a bare ``CALL`` needs no wrapper). PostgreSQL and
         MySQL override for their own anonymous-block rules.
         """
+        if node.degraded:
+            return self._emit_degraded_anonymous_block(node)
         decls = [s for s in node.statements if isinstance(s, DeclareStatement)]
         body = [s for s in node.statements if not isinstance(s, DeclareStatement)]
         if not decls:
@@ -769,6 +771,25 @@ class ProceduralEmitter:
         self._indent_level -= 1
         lines.append(self._block_end())
         return "\n".join(lines)
+
+    def _emit_degraded_anonymous_block(self, node: AnonymousBlock) -> str:
+        """Render a block the target cannot run at the top level as a
+        ``-- UNIQUE:`` carrier comment (the transformer already recorded the
+        loss in ``result.warnings``), preserving the original for the reader
+        instead of emitting invalid SQL. The inner statements are rendered in a
+        BEGIN…END shell so the whole thing round-trips if fed back to an engine
+        that does support anonymous blocks."""
+        inner = self._emit_anonymous_block(
+            AnonymousBlock(statements=node.statements, degraded=False)
+        )
+        body = inner if inner.strip() else "BEGIN\nEND;"
+        commented = "\n".join(
+            f"-- {line}" if line.strip() else "--" for line in body.split("\n")
+        )
+        return (
+            "-- UNIQUE: anonymous PL/SQL block has no top-level "
+            f"{self.dialect_name} equivalent; preserved below:\n{commented}"
+        )
 
     def _emit_indented_stmts(
         self, stmts: tuple[ASTNode, ...] | list[ASTNode]
@@ -817,25 +838,40 @@ class ProceduralEmitter:
     def _emit_execute(self, node: ExecuteStatement) -> str:
         expr = self._emit_node(node.sql_expression)
         params = [self._emit_node(p) for p in node.params]
-        return self._emit_execute_stmt(expr, params)
+        return self._emit_execute_stmt(expr, params, node.immediate)
 
-    def _emit_execute_stmt(self, expr: str, params: list[str]) -> str:
+    def _emit_execute_stmt(
+        self, expr: str, params: list[str], immediate: bool = False
+    ) -> str:
         """Emit an EXEC/EXECUTE for this engine. Default is Oracle's
-        ``EXECUTE IMMEDIATE [USING …]``; each engine subclass overrides."""
+        ``EXECUTE IMMEDIATE [USING …]``; each engine subclass overrides.
+        ``immediate`` marks a dynamic-SQL run (Oracle EXECUTE IMMEDIATE)."""
         if params:
             using = ", ".join(params)
             return f"EXECUTE IMMEDIATE {expr} USING {using};"
         return f"EXECUTE IMMEDIATE {expr};"
 
-    def _emit_pg_execute(self, expr: str, params: list[str]) -> str:
+    def _emit_pg_execute(
+        self, expr: str, params: list[str], immediate: bool = False
+    ) -> str:
         """Emit a T-SQL EXEC for PostgreSQL.
 
         Like MySQL, a captured EXEC arrives as one of three shapes: a
         ``sp_executesql`` dynamic call, a named stored-procedure call, or a bare
         dynamic-SQL string/variable. PostgreSQL invokes procedures with
         ``CALL name(args)`` and runs dynamic SQL with plpgsql ``EXECUTE <text>``.
+        An Oracle ``EXECUTE IMMEDIATE`` (``immediate``) is always dynamic SQL, so
+        it maps straight to ``EXECUTE <expr>`` without the named-proc heuristics.
         """
         stripped = expr.strip()
+
+        # Oracle EXECUTE IMMEDIATE: unconditionally a dynamic-SQL run (the
+        # expression may be a record field like r.cmd, which the named-proc
+        # heuristic below would wrongly read as CALL cmd()).
+        if immediate:
+            if params:
+                return f"EXECUTE {expr} USING {', '.join(params)};"
+            return f"EXECUTE {expr};"
 
         # Case 1: sp_executesql — run the first argument (the SQL text); the
         # N'...' parameter-declaration string and bindings can't be mapped to
@@ -875,8 +911,20 @@ class ProceduralEmitter:
             return f"EXECUTE {expr} USING {', '.join(params)};"
         return f"EXECUTE {expr};"
 
-    def _emit_mysql_execute(self, expr: str, params: list[str]) -> str:
+    def _emit_mysql_execute(
+        self, expr: str, params: list[str], immediate: bool = False
+    ) -> str:
         stripped = expr.strip()
+
+        # Oracle EXECUTE IMMEDIATE: dynamic SQL run via the PREPARE workflow (a
+        # record field like r.cmd must not be read as a named-proc CALL). Any
+        # USING binds carry over to the EXECUTE.
+        if immediate:
+            using = f" USING {', '.join(params)}" if params else ""
+            return (
+                f"SET @_stmt = {expr}; PREPARE _dyn FROM @_stmt; "
+                f"EXECUTE _dyn{using}; DEALLOCATE PREPARE _dyn;"
+            )
 
         # Case 1: sp_executesql. The first comma-separated argument is the SQL
         # text to run; the second (an N'...' parameter-declaration string) and

@@ -221,13 +221,15 @@ class MySqlEmitter(ProceduralEmitter):
     def _sleep_call(self, secs: str) -> str:
         return f"DO SLEEP({secs});"
 
-    def _emit_execute_stmt(self, expr: str, params: list[str]) -> str:
+    def _emit_execute_stmt(
+        self, expr: str, params: list[str], immediate: bool = False
+    ) -> str:
         # MySQL: distinguish three forms that all arrive as a captured
         # expression here:
         #   1. EXEC sp_executesql @sql, N'<decls>', @p1, ...  -> dynamic SQL
         #   2. EXEC proc_name @a OUTPUT, 'b', ...             -> a routine call
         #   3. EXEC @sql / EXEC ('...')                       -> dynamic SQL
-        return self._emit_mysql_execute(expr, params)
+        return self._emit_mysql_execute(expr, params, immediate)
 
     def _emit_exit(self, node: ExitStatement) -> str:
         cond = self._emit_node(node.condition) if node.condition else ""

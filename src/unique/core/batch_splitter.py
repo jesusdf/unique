@@ -86,6 +86,9 @@ _TSQL_EXEC_PROC_PATTERN = re.compile(
 # anonymous procedural block, not DML.
 _TSQL_DECLARE_PATTERN = re.compile(r"(?i)^\s*DECLARE\s+@", re.MULTILINE)
 
+# A top-level Oracle anonymous PL/SQL block opens with BEGIN or DECLARE.
+_ORACLE_ANON_BLOCK_PATTERN = re.compile(r"(?i)^\s*(?:BEGIN|DECLARE)\b")
+
 
 def classify_batch(sql: str, dialect: str) -> BatchType:
     """Classify a batch's content type.
@@ -123,6 +126,13 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
             return BatchType.PROCEDURAL
         if _TSQL_DECLARE_PATTERN.match(first_meaningful):
             return BatchType.PROCEDURAL
+
+    if dialect == "oracle" and _ORACLE_ANON_BLOCK_PATTERN.match(first_meaningful):
+        # A top-level ``BEGIN … END;`` / ``DECLARE … BEGIN … END;`` is an
+        # anonymous PL/SQL block (Oracle has no ``BEGIN TRANSACTION``), not DML.
+        # Route it to the procedural engine so its loops / EXECUTE IMMEDIATE are
+        # translated, instead of letting the DML path mangle it.
+        return BatchType.PROCEDURAL
 
     pattern = _PROCEDURAL_PATTERNS.get(dialect)
     if pattern and pattern.search(stripped):

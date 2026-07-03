@@ -1395,3 +1395,62 @@ class TestLastInsertIdCrossDialect:
         out = _transpile(proc, "postgresql", "mysql")
         assert "LAST_INSERT_ID()" in out.upper()
         assert "LASTVAL" not in out.upper()
+
+
+class TestOracleAnonymousBlock:
+    """A top-level Oracle anonymous block (``BEGIN … END;``) — the re-runnable
+    DROP guard the native Oracle FE fixture opens with — used to fall to the
+    sqlglot DML path and mangle into invalid fragments (``FOR r IN (...) AS
+    LOOP;``, ``END AS LOOP;``, ``-- UNIQUE: … Transaction``). It must instead
+    route to the procedural engine: faithfully to a PostgreSQL ``DO $$ … $$``
+    block (which supports anonymous blocks, cursor FOR-loops and dynamic
+    EXECUTE), and to a documented degradation on MySQL (which cannot run
+    procedural code outside a stored routine) — never invalid SQL."""
+
+    BLOCK = (
+        "BEGIN\n"
+        "    FOR r IN (\n"
+        "        SELECT 'DROP TABLE ' || table_name AS cmd\n"
+        "        FROM user_tables\n"
+        "        WHERE table_name IN ('PAYMENT', 'INVOICE')\n"
+        "    ) LOOP\n"
+        "        EXECUTE IMMEDIATE r.cmd;\n"
+        "    END LOOP;\n"
+        "END;"
+    )
+
+    def test_to_postgresql_do_block(self) -> None:
+        out = _transpile(self.BLOCK, "oracle", "postgresql")
+        upper = out.upper()
+        # Wrapped in a PL/pgSQL DO block (anonymous blocks need one on PG).
+        assert "DO $$" in upper
+        assert "$$;" in out
+        # Cursor FOR-loop survives.
+        assert "FOR R IN" in upper
+        assert "END LOOP" in upper
+        # Oracle's EXECUTE IMMEDIATE becomes PL/pgSQL EXECUTE (dynamic SQL).
+        assert "EXECUTE IMMEDIATE" not in upper
+        assert re.search(r"(?i)\bEXECUTE\s+r\s*\.\s*cmd", out), out
+        # None of the old mangled fragments.
+        assert "AS LOOP" not in upper
+        assert "UNIQUE: UNHANDLED" not in upper
+
+    def test_to_mysql_degrades_with_warning(self) -> None:
+        result = Transpiler().transpile(self.BLOCK, source="oracle", target="mysql")
+        code = result.sql.split("--")[0].split("/*")[0]
+        # No bare, top-level procedural code leaks as executable MySQL.
+        assert "FOR R IN" not in code.upper()
+        assert "EXECUTE IMMEDIATE" not in code.upper()
+        # The loss is documented in the result object (no silent loss).
+        assert result.warnings or result.unsupported
+        # A carrier comment preserves the original for the reader.
+        assert "UNIQUE:" in result.sql
+
+    def test_oracle_roundtrip_stays_valid(self) -> None:
+        out = _transpile(self.BLOCK, "oracle", "oracle")
+        upper = out.upper()
+        assert upper.strip().startswith("BEGIN")
+        assert "FOR R IN" in upper
+        assert "EXECUTE IMMEDIATE" in upper
+        assert "END LOOP;" in upper
+        assert "AS LOOP" not in upper
