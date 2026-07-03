@@ -210,32 +210,44 @@ High-level plan (details in that folder):
         already green). Renamed `canonical.sql` -> `tsql.sql` so the four fixtures
         are symmetric.
   - [ ] **Confirm the 12 cross-dialect pairs on real engines**, then remove
-        `continue-on-error` to make the full 4×4 gating. Live status
-        (2026-07-03, PostgreSQL+MariaDB): **green** tsql→postgresql and
-        tsql→mysql. The identified red causes were fixed at the transpiler level
-        (unit/integration tests added, TDD); live re-confirmation still pending
-        (Oracle-source pairs blocked on server credentials — see below):
-        - [x] mysql→postgresql: row-level `SET NEW.line_total = ...` mangled to
-          `NEW := . line_total = ...` — the parser now reads the dotted
-          pseudo-row target so it assigns `NEW.col := expr`. The same pair also
-          needed cross-source `LAST_INSERT_ID()` → `LASTVAL()` (create_invoice).
-          (commits: parse dotted SET target; translate last-generated-id across
-          all sources.)
-        - [x] oracle→postgresql / oracle→mysql: the leading anonymous
-          `FOR r IN (...) LOOP EXECUTE IMMEDIATE` DROP block emitted invalid
-          fragments (`END AS LOOP;`, `-- UNIQUE: … Transaction`). It now routes
-          to the procedural engine: faithful PostgreSQL `DO $$ … $$` (cursor
-          FOR-loop + dynamic `EXECUTE`), documented degradation on MySQL (no
-          top-level procedural code). Also fixed the Oracle `SYSTIMESTAMP`
-          default/assignment leaking an invalid `SYSTIMESTAMP()` on every target.
-          (commits: route top-level Oracle anonymous blocks; map SYSTIMESTAMP.)
-        - [ ] postgresql→mysql: the pg trigger *function* (`RETURNS TRIGGER`)
-          transpiles as a MySQL function returning the nonexistent TRIGGER
-          type; needs a pg-source trigger-function + CREATE TRIGGER pairing
-          into a single MySQL trigger (or documented degradation). **Still red.**
-        Oracle-target pairs untested (server credentials rejected;
-        see HARNESS.md runbook), so oracle→{pg,mysql} live confirmation waits on
-        an Oracle reset even though the transpiler output is now valid.
+        `continue-on-error` to make the full 4×4 gating. **Live status
+        2026-07-03 (PostgreSQL 16 + MariaDB 11): 6/6 reachable pairs green** —
+        tsql→postgresql, tsql→mysql, postgresql→postgresql, postgresql→mysql,
+        mysql→postgresql, mysql→mysql. The 10 remaining pairs need MSSQL
+        (pyodbc) or Oracle-target (server credentials) except the two
+        oracle-source→{pg,mysql} pairs, which are now live-testable and red on
+        Oracle *type/DDL* issues (below).
+        - [x] mysql→postgresql (**live green**): row-level `SET NEW.line_total`
+          mangled to `NEW := . line_total`; the parser now reads the dotted
+          pseudo-row target. Also needed cross-source `LAST_INSERT_ID()` →
+          `LASTVAL()`, standalone `CALL create_invoice(...)` support, and the
+          MySQL combined-split DELIMITER fix.
+        - [x] postgresql→mysql (**live green**): the pg trigger function
+          (`RETURNS TRIGGER`) + `EXECUTE FUNCTION` binding now degrade to
+          documented `-- UNIQUE:` carriers with warnings (MySQL has no
+          statement-level transition-table triggers — a documented divergence,
+          trigger-maintained values excluded there). Also needed standalone
+          `CALL` support and `INSERT … RETURNING id INTO v` →
+          `SET v = LAST_INSERT_ID()`.
+        - [ ] oracle→postgresql / oracle→mysql (**now live-testable, red on
+          Oracle NUMBER/DDL**). The anonymous DROP block, SYSTIMESTAMP, FOR-loop
+          and EXECUTE IMMEDIATE are handled; the remaining blockers are Oracle
+          type mapping:
+          - `NUMBER GENERATED ALWAYS AS IDENTITY` → MySQL `DECIMAL
+            AUTO_INCREMENT` (invalid — AUTO_INCREMENT needs an integer type;
+            should be `INT/BIGINT AUTO_INCREMENT`) and → PostgreSQL a FK type
+            mismatch (`id SERIAL` int vs `customer_id DECIMAL`). An unqualified
+            Oracle `NUMBER` used as an identity/PK/FK should map to an integer
+            type, not DECIMAL.
+          - oracle→postgresql only: the re-runnable DROP block transpiles to a
+            valid `DO $$ … $$` but its body queries Oracle's `user_tables`/
+            `user_objects` data dictionary, which has no PostgreSQL equivalent
+            (fails at runtime). Since the harness runs its own `_drop_all`,
+            degrade this catalog-driven block to a documented comment on
+            non-Oracle targets (as MySQL already does) rather than emit a DO
+            block that can't run.
+        Oracle-**target** pairs still blocked (server credentials rejected; see
+        HARNESS.md runbook).
 
 Key design risks, captured for when we start:
 - **Determinism** is the central challenge — see the folder README for the list

@@ -124,12 +124,16 @@ def test_functional_equivalence(source: str, target: str) -> None:
         for script in _scripts_for(source, target):
             runner.execute_script(script)
 
-        # T-SQL's set-based triggers are a documented divergence on MySQL and
-        # Oracle (no named transition tables): their bodies arrive as carrier
-        # comments, so the values they maintain are out of scope there. The
-        # PostgreSQL target (faithful transition-table rewrite) and every
-        # native run assert the full state.
-        ignore_triggers = source == "tsql" and target in ("mysql", "oracle")
+        # Set-based / statement-level transition-table triggers (T-SQL's
+        # inserted/deleted, PostgreSQL's REFERENCING … TABLE + trigger function)
+        # are a documented divergence on MySQL and Oracle: their bodies arrive
+        # as carrier comments, so the values they maintain are out of scope
+        # there. The PostgreSQL target (faithful transition-table rewrite) and
+        # every native run assert the full state.
+        ignore_triggers = source in ("tsql", "postgresql") and target in (
+            "mysql",
+            "oracle",
+        )
         mismatches = check_state(
             _EXPECTED,
             runner.read_table,
