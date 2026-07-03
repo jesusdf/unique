@@ -948,6 +948,7 @@ def _convert_binary(expr: exp.Binary) -> ASTNode:
         exp.Div: BinaryOperator.DIV,
         exp.Mod: BinaryOperator.MOD,
         exp.Like: BinaryOperator.LIKE,
+        exp.ILike: BinaryOperator.ILIKE,
         exp.DPipe: BinaryOperator.CONCAT,
         exp.BitwiseAnd: BinaryOperator.BIT_AND,
         exp.BitwiseOr: BinaryOperator.BIT_OR,
@@ -2276,6 +2277,56 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
     return None
 
 
+def _emit_group_concat(node: FunctionCall, dialect: str) -> str | None:
+    """Emit the string-aggregation family in the target's own spelling.
+
+    IR canonical form: ``GROUP_CONCAT(expr[, separator])``. An Oracle LISTAGG
+    source may carry its WITHIN GROUP ordering folded into the first argument
+    as RawSQL ("expr ORDER BY ...").
+    """
+    first = node.args[0]
+    expr_sql: str
+    order_sql: str | None = None
+    if isinstance(first, RawSQL) and " ORDER BY " in first.sql:
+        expr_sql, order_sql = first.sql.split(" ORDER BY ", 1)
+        expr_sql = expr_sql.strip()
+        order_sql = re.sub(r"\s+NULLS\s+(FIRST|LAST)\s*$", "", order_sql.strip())
+    else:
+        expr_sql = _emit_expression(first, dialect)
+
+    sep: str | None = None
+    if len(node.args) > 1:
+        sep_node = node.args[1]
+        if isinstance(sep_node, Literal) and isinstance(sep_node.value, str):
+            sep = sep_node.value
+        else:
+            return None  # dynamic separator: fall through to generic emission
+    distinct = "DISTINCT " if node.distinct else ""
+
+    def quoted(s: str) -> str:
+        return "'" + s.replace("'", "''") + "'"
+
+    if dialect == "mysql":
+        order = f" ORDER BY {order_sql}" if order_sql else ""
+        separator = f" SEPARATOR {quoted(sep)}" if sep is not None else ""
+        return f"GROUP_CONCAT({distinct}{expr_sql}{order}{separator})"
+    if dialect == "postgresql":
+        order = f" ORDER BY {order_sql}" if order_sql else ""
+        return f"STRING_AGG({distinct}{expr_sql}, {quoted(sep or ',')}{order})"
+    if dialect == "tsql":
+        within = f" WITHIN GROUP (ORDER BY {order_sql})" if order_sql else ""
+        return f"STRING_AGG({expr_sql}, {quoted(sep or ',')}){within}"
+    if dialect == "oracle":
+        # LISTAGG requires WITHIN GROUP; default to ordering by the
+        # aggregated expression itself when the source specified none.
+        order = order_sql or expr_sql
+        return (
+            f"LISTAGG({distinct}{expr_sql}, {quoted(sep or ',')}) "
+            f"WITHIN GROUP (ORDER BY {order})"
+        )
+    return None
+
+
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
@@ -2290,6 +2341,15 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return emitted
     if fn_name in ("DATEDIFF", "TIMESTAMPDIFF"):
         emitted = _emit_date_diff(node, dialect)
+        if emitted is not None:
+            return emitted
+
+    # String aggregation: IR canonical form is GROUP_CONCAT(expr[, sep]).
+    # Each engine spells it differently, and MySQL's comma form
+    # GROUP_CONCAT(x, ',') concatenates ',' onto every value instead of
+    # separating them (audit 2026-07-02, S1-8/S2-1).
+    if fn_name in ("GROUP_CONCAT", "STRING_AGG", "LISTAGG") and node.args:
+        emitted = _emit_group_concat(node, dialect)
         if emitted is not None:
             return emitted
 
