@@ -2635,7 +2635,15 @@ _DATE_UNIT_ALIASES = {
 _DATE_UNITS = {"DAY", "WEEK", "MONTH", "YEAR", "HOUR", "MINUTE", "SECOND"}
 
 # sqlglot canonicalization wrappers that must never reach emitted SQL.
-_SQLGLOT_WRAPPERS = {"TIME_STR_TO_TIME", "TS_OR_DS_TO_DATE", "TS_OR_DS_TO_TIMESTAMP"}
+_SQLGLOT_WRAPPERS = {
+    "TIME_STR_TO_TIME",
+    "TS_OR_DS_TO_DATE",
+    "TS_OR_DS_TO_TIMESTAMP",
+    # sqlglot renders an Oracle ``DATE '…'`` literal as this internal wrapper
+    # when writing to some dialects; unwrap to the ISO string, which the target
+    # implicitly converts for a date column.
+    "DATE_STR_TO_DATE",
+}
 
 
 def _unwrap_sqlglot_wrappers(node: ASTNode) -> ASTNode:
