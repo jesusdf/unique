@@ -1245,6 +1245,84 @@ def emit_node(node: ASTNode, dialect: str) -> str:
     return _emit_expression(node, dialect)
 
 
+def _merge_to_mysql_upsert(sql: str, read: str) -> str | None:
+    """Rewrite a canonical MERGE as MySQL INSERT ... ON DUPLICATE KEY UPDATE.
+
+    Handles exactly one unconditional WHEN MATCHED THEN UPDATE plus one
+    unconditional WHEN NOT MATCHED THEN INSERT, with a table or subquery
+    source. Each UPDATE assignment must be either a literal or a source
+    column that also appears in the INSERT values (rewritten as
+    ``col = VALUES(col)``). Returns None when the MERGE is more complex, so
+    the caller falls back to the documented carrier comment.
+    """
+    try:
+        merge = sqlglot.parse_one(sql, read=read)
+    except Exception:  # noqa: BLE001 - unparseable, let caller fall back
+        return None
+    if not isinstance(merge, exp.Merge) or merge.args.get("returning"):
+        return None
+
+    whens = merge.args.get("whens")
+    when_list = list(whens.expressions) if whens else []
+    if len(when_list) != 2:
+        return None
+    update = insert = None
+    for when in when_list:
+        if when.args.get("condition") is not None:
+            return None
+        then = when.args.get("then")
+        if when.args.get("matched") and isinstance(then, exp.Update):
+            update = then
+        elif not when.args.get("matched") and isinstance(then, exp.Insert):
+            insert = then
+        else:
+            return None
+    if update is None or insert is None:
+        return None
+    if not isinstance(insert.this, exp.Tuple) or not isinstance(
+        insert.expression, exp.Tuple
+    ):
+        return None
+
+    insert_cols = [c.name for c in insert.this.expressions]
+    insert_vals = insert.expression.expressions
+    if len(insert_cols) != len(insert_vals):
+        return None
+    # Map each inserted value's SQL back to its column, so UPDATE assignments
+    # whose RHS is one of the inserted source columns become VALUES(col).
+    value_to_col = {
+        val.sql(dialect="mysql"): col
+        for col, val in zip(insert_cols, insert_vals, strict=True)
+    }
+
+    assignments: list[str] = []
+    for eq in update.expressions:
+        if not isinstance(eq, exp.EQ):
+            return None
+        target_col = eq.this.name  # strip any target-alias qualifier
+        rhs = eq.expression
+        rhs_sql = rhs.sql(dialect="mysql")
+        if rhs_sql in value_to_col:
+            assignments.append(f"{target_col} = VALUES({value_to_col[rhs_sql]})")
+        elif isinstance(rhs, (exp.Literal, exp.Null)):
+            assignments.append(f"{target_col} = {rhs_sql}")
+        else:
+            return None
+
+    target_sql = merge.this.sql(dialect="mysql")
+    source_sql = merge.args["using"].sql(dialect="mysql")
+    cols_sql = ", ".join(insert_cols)
+    vals_sql = ", ".join(v.sql(dialect="mysql") for v in insert_vals)
+    on_cols = ", ".join(sorted({c.name for c in merge.args["on"].find_all(exp.Column)}))
+    return (
+        f"INSERT INTO {target_sql} ({cols_sql})\n"
+        f"SELECT {vals_sql} FROM {source_sql}\n"
+        f"ON DUPLICATE KEY UPDATE {', '.join(assignments)};\n"
+        f"-- UNIQUE: MERGE rewritten as INSERT ... ON DUPLICATE KEY UPDATE; "
+        f"requires a UNIQUE or PRIMARY KEY on ({on_cols})"
+    )
+
+
 def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     """Re-transpile a passthrough statement to the target dialect.
 
@@ -1270,9 +1348,14 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             f"connect to the target database/schema instead.\n-- {node.sql}"
         )
 
-    # MySQL has no MERGE; the idiomatic equivalent is INSERT ... ON
-    # DUPLICATE KEY UPDATE, which needs key knowledge we can't infer safely.
+    # MySQL has no MERGE. The canonical one-UPDATE/one-INSERT pattern is
+    # rewritten as INSERT ... SELECT ... ON DUPLICATE KEY UPDATE (which relies
+    # on a UNIQUE/PRIMARY KEY covering the ON columns — noted in a carrier).
+    # Anything more complex falls back to a documented comment.
     if node.kind == "MERGE" and dialect == "mysql":
+        upsert = _merge_to_mysql_upsert(node.sql, read)
+        if upsert is not None:
+            return upsert
         commented = "\n".join(f"-- {ln}" for ln in node.sql.splitlines())
         return (
             "-- UNIQUE: MySQL has no MERGE; rewrite as "
