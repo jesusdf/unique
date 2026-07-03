@@ -251,10 +251,39 @@ class SyntaxNormalizer(TransformPass):
     def visit(self, node: ASTNode, ctx: TransformContext) -> ASTNode:
         """Normalize syntax constructs."""
         if isinstance(node, BinaryOp):
-            return self._normalize_concat(node, ctx)
+            node = self._normalize_ilike(node, ctx)
+            if isinstance(node, BinaryOp):
+                node = self._normalize_concat(node, ctx)
+            return node
         if isinstance(node, SelectStatement):
             node = self._drop_dual(node, ctx)
             node = self._rownum_to_limit(node, ctx)
+        return node
+
+    @staticmethod
+    def _normalize_ilike(node: BinaryOp, ctx: TransformContext) -> ASTNode:
+        """Rewrite ILIKE for engines that lack it (audit 2026-07-02, S1-7).
+
+        MySQL/T-SQL: plain LIKE — usually case-insensitive under their
+        default collations, but collation-dependent, so a warning is raised.
+        Oracle: UPPER(x) LIKE UPPER(y).
+        """
+        if node.operator != BinaryOperator.ILIKE or ctx.target == "postgresql":
+            return node
+        if ctx.target in ("mysql", "tsql"):
+            ctx.warn(
+                "ILIKE rewritten as LIKE; case-insensitivity depends on the "
+                "column collation",
+                "ilike",
+            )
+            return replace(node, operator=BinaryOperator.LIKE)
+        if ctx.target == "oracle":
+            return BinaryOp(
+                operator=BinaryOperator.LIKE,
+                left=FunctionCall(name="UPPER", args=(node.left,)),
+                right=FunctionCall(name="UPPER", args=(node.right,)),
+                location=node.location,
+            )
         return node
 
     @staticmethod
