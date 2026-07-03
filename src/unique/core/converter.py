@@ -58,6 +58,12 @@ from unique.core.ast_nodes import (
     WindowFunction,
     WindowSpec,
 )
+from unique.core.mappings import (
+    BARE_CHAR_BIGTEXT,
+    CURRENT_TIMESTAMP_EXPR,
+    EMIT_TYPE_MAP,
+    UUID_FUNCTION,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1186,111 +1192,11 @@ def _convert_cast(expr: exp.Cast) -> CastExpression:
     return CastExpression(expression=inner, target_type=target_type)
 
 
-# Non-portable type names mapped to a portable equivalent per target dialect.
-# T-SQL national/unicode types collapse to the regular char types elsewhere
-# (PostgreSQL/Oracle/MySQL store text as unicode by default).
-_TYPE_NAME_MAP: dict[str, dict[str, str]] = {
-    "postgresql": {
-        "NVARCHAR": "VARCHAR",
-        "NCHAR": "CHAR",
-        "NTEXT": "TEXT",
-        "DATETIME": "TIMESTAMP",
-        "DATETIME2": "TIMESTAMP",
-        "SMALLDATETIME": "TIMESTAMP",
-        "TINYINT": "SMALLINT",
-        "MONEY": "NUMERIC(19,4)",
-        "BIT": "BOOLEAN",
-        "UNIQUEIDENTIFIER": "UUID",
-        "VARBINARY": "BYTEA",
-        "IMAGE": "BYTEA",
-        # MySQL unsigned integers (sqlglot U-prefixed internal names): the
-        # next-wider signed type covers the unsigned range.
-        "UTINYINT": "SMALLINT",
-        "USMALLINT": "INTEGER",
-        "UMEDIUMINT": "INTEGER",
-        "UINT": "BIGINT",
-        "UBIGINT": "NUMERIC(20)",
-        "MEDIUMINT": "INTEGER",
-        "YEAR": "SMALLINT",
-    },
-    "mysql": {
-        "NVARCHAR": "VARCHAR",
-        "NCHAR": "CHAR",
-        "NTEXT": "TEXT",
-        "DATETIME2": "DATETIME",
-        "SMALLDATETIME": "DATETIME",
-        "UNIQUEIDENTIFIER": "CHAR(36)",
-        "UUID": "CHAR(36)",
-        "MONEY": "DECIMAL(19,4)",
-        "IMAGE": "LONGBLOB",
-        # sqlglot parses MySQL's own unsigned/timestamp types into internal
-        # names; map them back to real MySQL spellings.
-        "UTINYINT": "TINYINT UNSIGNED",
-        "USMALLINT": "SMALLINT UNSIGNED",
-        "UMEDIUMINT": "MEDIUMINT UNSIGNED",
-        "UINT": "INT UNSIGNED",
-        "UBIGINT": "BIGINT UNSIGNED",
-        "TIMESTAMPTZ": "TIMESTAMP",
-    },
-    "oracle": {
-        "NVARCHAR": "NVARCHAR2",
-        "VARCHAR": "VARCHAR2",
-        "NTEXT": "NCLOB",
-        "TEXT": "CLOB",
-        "DATETIME": "TIMESTAMP",
-        "DATETIME2": "TIMESTAMP",
-        "TINYINT": "NUMBER(3)",
-        "INT": "NUMBER(10)",
-        "BIGINT": "NUMBER(19)",
-        "BIT": "NUMBER(1)",
-        "UNIQUEIDENTIFIER": "RAW(16)",
-        "UUID": "RAW(16)",
-        "MONEY": "NUMBER(19,4)",
-        "IMAGE": "BLOB",
-        "UTINYINT": "NUMBER(3)",
-        "USMALLINT": "NUMBER(5)",
-        "UMEDIUMINT": "NUMBER(8)",
-        "UINT": "NUMBER(10)",
-        "UBIGINT": "NUMBER(20)",
-        "MEDIUMINT": "NUMBER(7)",
-        "YEAR": "NUMBER(4)",
-        # MySQL TIMESTAMP is timezone-aware (stored UTC), parsed by sqlglot
-        # as TIMESTAMPTZ.
-        "TIMESTAMPTZ": "TIMESTAMP WITH TIME ZONE",
-    },
-    "tsql": {
-        "VARCHAR2": "VARCHAR",
-        "NVARCHAR2": "NVARCHAR",
-        "NUMBER": "NUMERIC",
-        "CLOB": "VARCHAR(MAX)",
-        "NCLOB": "NVARCHAR(MAX)",
-        "BLOB": "VARBINARY(MAX)",
-        "BOOLEAN": "BIT",
-        "BYTEA": "VARBINARY(MAX)",
-        "UUID": "UNIQUEIDENTIFIER",
-        "SERIAL": "INT",
-        "UTINYINT": "TINYINT",  # T-SQL TINYINT is already 0-255
-        "USMALLINT": "INT",
-        "UMEDIUMINT": "INT",
-        "UINT": "BIGINT",
-        "UBIGINT": "NUMERIC(20)",
-        "MEDIUMINT": "INT",
-        "YEAR": "SMALLINT",
-        "TIMESTAMPTZ": "DATETIMEOFFSET",
-    },
-}
-
-
-# A bare character type (no length) reaching the emitter came from a T-SQL
-# VARCHAR(MAX)/NVARCHAR(MAX) whose MAX marker is lost during IR conversion.
-# Map it to each engine's large-text type. Keyed by the type name AFTER
-# _portable_type_name has mapped it to the target dialect.
-_BARE_CHAR_BIGTEXT: dict[str, dict[str, str]] = {
-    "oracle": {"VARCHAR2": "CLOB", "NVARCHAR2": "NCLOB"},
-    "mysql": {"VARCHAR": "LONGTEXT", "NVARCHAR": "LONGTEXT"},
-    "postgresql": {"VARCHAR": "TEXT", "NVARCHAR": "TEXT"},
-    "tsql": {"VARCHAR": "VARCHAR(MAX)", "NVARCHAR": "NVARCHAR(MAX)"},
-}
+# Type tables live in the shared declarative mapping layer (audit doc 03);
+# _TYPE_NAME_MAP / _BARE_CHAR_BIGTEXT are kept as local aliases for the many
+# call sites in this module.
+_TYPE_NAME_MAP = EMIT_TYPE_MAP
+_BARE_CHAR_BIGTEXT = BARE_CHAR_BIGTEXT
 
 
 def _portable_type_name(name: str, dialect: str) -> str:
@@ -2749,11 +2655,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         node = _strip_dbo_function_name(node)
     # Special handling for CURRENT_TIMESTAMP (no parens in some dialects)
     if node.name.upper() == "CURRENT_TIMESTAMP" and not node.args:
-        if dialect == "tsql":
-            return "GETDATE()"
-        if dialect == "oracle":
-            return "SYSDATE"
-        return "CURRENT_TIMESTAMP"
+        return CURRENT_TIMESTAMP_EXPR.get(dialect, "CURRENT_TIMESTAMP")
 
     # Substring position: canonical CHARINDEX(needle, haystack[, start]) maps to
     # each engine's function with its own argument order.
@@ -2813,12 +2715,7 @@ def _map_function_name(name: str, dialect: str) -> str:
     # UUID, which only exists on MySQL. Each engine has its own function
     # (found by a hardened test during audit 2026-07-02 remediation).
     if upper in ("UUID", "NEWID", "GEN_RANDOM_UUID", "SYS_GUID"):
-        return {
-            "tsql": "NEWID",
-            "mysql": "UUID",
-            "postgresql": "gen_random_uuid",
-            "oracle": "SYS_GUID",
-        }.get(dialect, name)
+        return UUID_FUNCTION.get(dialect, name)
 
     return name
 

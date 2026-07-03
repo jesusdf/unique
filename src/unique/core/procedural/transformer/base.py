@@ -56,6 +56,11 @@ from unique.core.ast_nodes import (
     TryCatchBlock,
     WhileStatement,
 )
+from unique.core.mappings import (
+    CURRENT_TIMESTAMP_EXPR,
+    PROCEDURAL_FUNC_MAPS,
+    PROCEDURAL_TYPE_MAPS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,242 +71,6 @@ _TRANSFORMER_REGISTRY: dict[str, type[ProceduralTransformer]] = {}
 def register_transformer(name: str, cls: type[ProceduralTransformer]) -> None:
     """Register a per-target transformer subclass under its target name."""
     _TRANSFORMER_REGISTRY[name] = cls
-
-
-_TSQL_TO_ORACLE_TYPES: dict[str, str] = {
-    "INT": "NUMBER(10)",
-    "INTEGER": "NUMBER(10)",
-    "BIGINT": "NUMBER(19)",
-    "SMALLINT": "NUMBER(5)",
-    "TINYINT": "NUMBER(3)",
-    "BIT": "NUMBER(1)",
-    "FLOAT": "FLOAT",
-    "REAL": "FLOAT",
-    "DECIMAL": "NUMBER",
-    "NUMERIC": "NUMBER",
-    "MONEY": "NUMBER(19,4)",
-    "SMALLMONEY": "NUMBER(10,4)",
-    "VARCHAR": "VARCHAR2",
-    "NVARCHAR": "NVARCHAR2",
-    "CHAR": "CHAR",
-    "NCHAR": "NCHAR",
-    "TEXT": "CLOB",
-    "NTEXT": "NCLOB",
-    "IMAGE": "BLOB",
-    "BINARY": "RAW",
-    "VARBINARY": "RAW",
-    "DATETIME": "DATE",
-    "DATETIME2": "TIMESTAMP",
-    "DATE": "DATE",
-    "TIME": "TIMESTAMP",
-    "SMALLDATETIME": "DATE",
-    "UNIQUEIDENTIFIER": "RAW(16)",
-    "XML": "XMLTYPE",
-    "SQL_VARIANT": "ANYDATA",
-}
-
-_ORACLE_TO_TSQL_TYPES: dict[str, str] = {
-    "NUMBER": "DECIMAL",
-    "VARCHAR2": "NVARCHAR",
-    "NVARCHAR2": "NVARCHAR",
-    "CLOB": "NVARCHAR(MAX)",
-    "NCLOB": "NVARCHAR(MAX)",
-    "BLOB": "VARBINARY(MAX)",
-    "RAW": "VARBINARY",
-    "DATE": "DATETIME",
-    "TIMESTAMP": "DATETIME2",
-    "XMLTYPE": "XML",
-    "BOOLEAN": "BIT",
-    "PLS_INTEGER": "INT",
-    "BINARY_INTEGER": "INT",
-    "ANYDATA": "SQL_VARIANT",
-}
-
-_ORACLE_TO_PG_TYPES: dict[str, str] = {
-    "NUMBER": "NUMERIC",
-    "VARCHAR2": "VARCHAR",
-    "NVARCHAR2": "VARCHAR",
-    "CLOB": "TEXT",
-    "NCLOB": "TEXT",
-    "BLOB": "BYTEA",
-    "RAW": "BYTEA",
-    "LONG": "TEXT",
-    "DATE": "TIMESTAMP",
-    "TIMESTAMP": "TIMESTAMP",
-    "XMLTYPE": "XML",
-    "BOOLEAN": "BOOLEAN",
-    "PLS_INTEGER": "INTEGER",
-    "BINARY_INTEGER": "INTEGER",
-    "BINARY_FLOAT": "REAL",
-    "BINARY_DOUBLE": "DOUBLE PRECISION",
-}
-
-_ORACLE_TO_MYSQL_TYPES: dict[str, str] = {
-    "NUMBER": "DECIMAL",
-    "VARCHAR2": "VARCHAR",
-    "NVARCHAR2": "VARCHAR",
-    "CLOB": "LONGTEXT",
-    "NCLOB": "LONGTEXT",
-    "BLOB": "LONGBLOB",
-    "RAW": "VARBINARY",
-    "LONG": "LONGTEXT",
-    "DATE": "DATETIME",
-    "TIMESTAMP": "DATETIME",
-    "XMLTYPE": "TEXT",
-    "BOOLEAN": "TINYINT(1)",
-    "PLS_INTEGER": "INT",
-    "BINARY_INTEGER": "INT",
-    "BINARY_FLOAT": "FLOAT",
-    "BINARY_DOUBLE": "DOUBLE",
-}
-
-_TSQL_TO_PG_TYPES: dict[str, str] = {
-    "INT": "INTEGER",
-    "BIGINT": "BIGINT",
-    "SMALLINT": "SMALLINT",
-    "TINYINT": "SMALLINT",
-    "BIT": "BOOLEAN",
-    "FLOAT": "DOUBLE PRECISION",
-    "REAL": "REAL",
-    "MONEY": "NUMERIC(19,4)",
-    "DATETIME": "TIMESTAMP",
-    "DATETIME2": "TIMESTAMP",
-    "SMALLDATETIME": "TIMESTAMP",
-    "UNIQUEIDENTIFIER": "UUID",
-    "TEXT": "TEXT",
-    "NTEXT": "TEXT",
-    "IMAGE": "BYTEA",
-    "BINARY": "BYTEA",
-    "VARBINARY": "BYTEA",
-    "VARCHAR": "VARCHAR",
-    "NVARCHAR": "VARCHAR",
-    "XML": "XML",
-}
-
-_TSQL_TO_MYSQL_TYPES: dict[str, str] = {
-    "INT": "INT",
-    "INTEGER": "INT",
-    "BIGINT": "BIGINT",
-    "SMALLINT": "SMALLINT",
-    "TINYINT": "TINYINT",
-    "BIT": "TINYINT(1)",
-    "FLOAT": "DOUBLE",
-    "REAL": "FLOAT",
-    "DECIMAL": "DECIMAL",
-    "NUMERIC": "DECIMAL",
-    "MONEY": "DECIMAL(19,4)",
-    "SMALLMONEY": "DECIMAL(10,4)",
-    "DATETIME": "DATETIME",
-    "DATETIME2": "DATETIME",
-    "SMALLDATETIME": "DATETIME",
-    "DATE": "DATE",
-    "TIME": "TIME",
-    "UNIQUEIDENTIFIER": "CHAR(36)",
-    "VARCHAR": "VARCHAR",
-    "NVARCHAR": "VARCHAR",
-    "CHAR": "CHAR",
-    "NCHAR": "CHAR",
-    "TEXT": "TEXT",
-    "NTEXT": "LONGTEXT",
-    "IMAGE": "LONGBLOB",
-    "BINARY": "BINARY",
-    "VARBINARY": "VARBINARY",
-    "XML": "TEXT",
-    # SQL_VARIANT stores values of various scalar types. MySQL has no variant
-    # type; LONGTEXT is the most permissive carrier that preserves arbitrary
-    # scalar values (callers compare/convert as needed), keeping functionality
-    # rather than dropping the column/parameter.
-    "SQL_VARIANT": "LONGTEXT",
-}
-
-# Function mapping tables
-_TSQL_TO_ORACLE_FUNCS: dict[str, str] = {
-    "GETUTCDATE": "SYS_EXTRACT_UTC(SYSTIMESTAMP)",
-    "ISNULL": "NVL",
-    "LEN": "LENGTH",
-    "NEWID": "SYS_GUID",
-    "UPPER": "UPPER",
-    "LOWER": "LOWER",
-    "LTRIM": "LTRIM",
-    "RTRIM": "RTRIM",
-    "REPLACE": "REPLACE",
-    "SUBSTRING": "SUBSTR",
-    "CEILING": "CEIL",
-    "SQUARE": "-- SQUARE(x) -> x*x",
-    "DATEDIFF": "-- DATEDIFF requires manual conversion",
-    "DATEADD": "-- DATEADD requires manual conversion",
-}
-
-_ORACLE_TO_TSQL_FUNCS: dict[str, str] = {
-    "NVL": "ISNULL",
-    "LENGTH": "LEN",
-    "SYS_GUID": "NEWID",
-    "SUBSTR": "SUBSTRING",
-    "CEIL": "CEILING",
-    "TO_CHAR": "CONVERT",
-    "TO_DATE": "CONVERT",
-    "TO_NUMBER": "CAST",
-    "TRUNC": "-- TRUNC requires manual conversion",
-}
-
-_TSQL_TO_PG_FUNCS: dict[str, str] = {
-    "GETUTCDATE": "NOW() AT TIME ZONE 'UTC'",
-    "ISNULL": "COALESCE",
-    "LEN": "LENGTH",
-    "NEWID": "GEN_RANDOM_UUID",
-    "SUBSTRING": "SUBSTRING",
-    "UPPER": "UPPER",
-    "LOWER": "LOWER",
-    "REPLACE": "REPLACE",
-    "CEILING": "CEIL",
-    "DATEDIFF": "-- DATEDIFF requires manual conversion",
-    "DATEADD": "-- DATEADD requires interval arithmetic",
-}
-
-_PG_TO_TSQL_FUNCS: dict[str, str] = {
-    "COALESCE": "COALESCE",
-    "LENGTH": "LEN",
-    "GEN_RANDOM_UUID": "NEWID",
-    "CEIL": "CEILING",
-}
-
-_TSQL_TO_MYSQL_FUNCS: dict[str, str] = {
-    "GETUTCDATE": "UTC_TIMESTAMP",
-    "ISNULL": "IFNULL",
-    "LEN": "CHAR_LENGTH",
-    "NEWID": "UUID",
-    "SUBSTRING": "SUBSTRING",
-    "UPPER": "UPPER",
-    "LOWER": "LOWER",
-    "REPLACE": "REPLACE",
-    "CEILING": "CEILING",
-    "DATEDIFF": "-- DATEDIFF differs (MySQL DATEDIFF returns days)",
-    "DATEADD": "-- DATEADD -> DATE_ADD with INTERVAL",
-}
-
-_MYSQL_TO_TSQL_FUNCS: dict[str, str] = {
-    "IFNULL": "ISNULL",
-    "CHAR_LENGTH": "LEN",
-    "LENGTH": "LEN",
-    "UUID": "NEWID",
-}
-
-_ORACLE_TO_PG_FUNCS: dict[str, str] = {
-    "NVL": "COALESCE",
-    "LENGTH": "LENGTH",
-    "SYS_GUID": "GEN_RANDOM_UUID",
-    "SUBSTR": "SUBSTRING",
-    "TO_CHAR": "TO_CHAR",
-    "TO_DATE": "TO_DATE",
-    "TO_NUMBER": "-- TO_NUMBER -> CAST(... AS NUMERIC)",
-}
-
-_ORACLE_TO_MYSQL_FUNCS: dict[str, str] = {
-    "NVL": "IFNULL",
-    "LENGTH": "CHAR_LENGTH",
-    "SYS_GUID": "UUID",
-    "SUBSTR": "SUBSTRING",
-}
 
 
 class ProceduralTransformer:
@@ -734,16 +503,7 @@ class ProceduralTransformer:
 
     def _get_type_map(self) -> dict[str, str]:
         """Get the appropriate type mapping for source→target."""
-        key = f"{self._source}_{self._target}"
-        maps = {
-            "tsql_oracle": _TSQL_TO_ORACLE_TYPES,
-            "oracle_tsql": _ORACLE_TO_TSQL_TYPES,
-            "oracle_postgresql": _ORACLE_TO_PG_TYPES,
-            "oracle_mysql": _ORACLE_TO_MYSQL_TYPES,
-            "tsql_postgresql": _TSQL_TO_PG_TYPES,
-            "tsql_mysql": _TSQL_TO_MYSQL_TYPES,
-        }
-        return maps.get(key, {})
+        return PROCEDURAL_TYPE_MAPS.get((self._source, self._target), {})
 
     # ---------------------------------------------------------------
     # Node-specific transformations
@@ -1971,14 +1731,8 @@ class ProceduralTransformer:
 
         return pattern.sub(repl, sql)
 
-    # Current-timestamp expressions, by dialect. Oracle/PG use a bare
-    # keyword; T-SQL/MySQL use a function call.
-    _NOW_EXPR = {
-        "tsql": "GETDATE()",
-        "oracle": "SYSDATE",
-        "postgresql": "NOW()",
-        "mysql": "NOW()",
-    }
+    # Current-timestamp expression per dialect (shared mapping layer).
+    _NOW_EXPR = CURRENT_TIMESTAMP_EXPR
 
     def _transform_niladic_datetime(self, sql: str) -> str:
         """Translate current-timestamp expressions across dialects.
@@ -2447,18 +2201,7 @@ class ProceduralTransformer:
         return self._rewrite_calls(sql, "DATEDIFF", build)
 
     def _get_func_map(self) -> dict[str, str]:
-        key = f"{self._source}_{self._target}"
-        maps = {
-            "tsql_oracle": _TSQL_TO_ORACLE_FUNCS,
-            "oracle_tsql": _ORACLE_TO_TSQL_FUNCS,
-            "tsql_postgresql": _TSQL_TO_PG_FUNCS,
-            "postgresql_tsql": _PG_TO_TSQL_FUNCS,
-            "tsql_mysql": _TSQL_TO_MYSQL_FUNCS,
-            "mysql_tsql": _MYSQL_TO_TSQL_FUNCS,
-            "oracle_postgresql": _ORACLE_TO_PG_FUNCS,
-            "oracle_mysql": _ORACLE_TO_MYSQL_FUNCS,
-        }
-        return maps.get(key, {})
+        return PROCEDURAL_FUNC_MAPS.get((self._source, self._target), {})
 
     @staticmethod
     def _get_sqlglot_dialect(dialect: str) -> str:
