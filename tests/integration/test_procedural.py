@@ -10,6 +10,8 @@ These exercise the full pipeline (split -> classify -> parse -> transform
 
 from __future__ import annotations
 
+import re
+
 from unique.core.transpiler import Transpiler
 
 
@@ -882,7 +884,9 @@ class TestBareReturnInProcedure:
         )
         out = _transpile(src, "tsql", "mysql")
         normalized = " ".join(out.split())
-        assert "RETURN ( SELECT COUNT ( * ) FROM t )" in normalized
+        assert (
+            "RETURN ( SELECT COUNT( * ) FROM t )" in normalized
+        )  # COUNT( collapsed: MariaDB rejects 'COUNT (' without IGNORE_SPACE
         assert "LEAVE" not in out
 
 
@@ -1307,3 +1311,45 @@ class TestBacktickedTriggerHeaders:
         )
         assert "`" not in body, out
         assert "ins_film" in out.lower()
+
+
+class TestAssignmentSelectDboStrip:
+    """The dbo. qualifier must be stripped from assignment-select bodies on
+    every non-T-SQL target, not only Oracle (PostgreSQL has no dbo schema; a
+    MySQL qualifier names a database). Found via the FE S2-3 scenario."""
+
+    SQL = (
+        "CREATE PROCEDURE dbo.p @id INT AS BEGIN "
+        "DECLARE @amt DECIMAL(12,2); "
+        "SELECT @amt = amount FROM dbo.payment WHERE invoice_id = @id; "
+        "END"
+    )
+
+    def test_postgresql_select_into_has_no_dbo(self) -> None:
+        out = _transpile(self.SQL, "tsql", "postgresql")
+        assert "dbo" not in out, out
+        assert "FROM payment" in out
+
+    def test_mysql_select_into_has_no_dbo(self) -> None:
+        out = _transpile(self.SQL, "tsql", "mysql")
+        assert "dbo" not in out, out
+        assert "FROM payment" in out
+
+
+class TestMySQLFunctionCallSpacing:
+    """MySQL/MariaDB reject a space between a built-in function name and its
+    parenthesis under the default sql_mode (no IGNORE_SPACE): the procedural
+    pipeline's token-joined expressions emitted 'CAST ( ... )', which broke
+    fn_tax on the live FE run."""
+
+    def test_cast_has_no_space_before_paren(self) -> None:
+        sql = (
+            "CREATE FUNCTION dbo.fn_tax (@net DECIMAL(12, 2))\n"
+            "RETURNS DECIMAL(12, 2)\n"
+            "AS\nBEGIN\n"
+            "    RETURN @net * CAST(0.10 AS DECIMAL(12, 2));\n"
+            "END"
+        )
+        out = _transpile(sql, "tsql", "mysql")
+        assert "CAST(" in out.replace("CAST  (", "CAST (")
+        assert not re.search(r"(?i)\bCAST\s+\(", out), out

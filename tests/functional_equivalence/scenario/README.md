@@ -16,7 +16,7 @@ Planned files (added in the build-out, see `../README.md`):
 ## Locked ordered steps (Phase 1)
 
 The design is locked in `../coverage-matrix.md` and `../expected_state.yaml`.
-`tsql.sql` must implement exactly these five steps, in order:
+`tsql.sql` must implement exactly these six steps, in order:
 
 1. **Seed** 2 `customer` + 2 `product` rows (one customer has `notes`, one
    leaves it NULL).
@@ -29,6 +29,12 @@ The design is locked in `../coverage-matrix.md` and `../expected_state.yaml`.
    "DML from a procedure" path).
 5. **INSERT `payment`** of 39.05 for invoice 2, then an explicit
    `UPDATE invoice SET is_paid = 1 WHERE id = 2` (the payment path).
+6. **CALL `flag_payment_status(...)`** for (customer 1, invoice 1) and
+   (customer 2, invoice 2) — the assignment-select no-rows semantics
+   (audit S2-3): invoice 1 has no payment row, so the procedure's variable
+   must observe "no row" as NULL/unchanged (a transpiled Oracle SELECT INTO
+   must not die on NO_DATA_FOUND) and write `customer.notes = 'no payment'`;
+   invoice 2 is paid → `'paid'`.
 
 Tax is `fn_tax(net) = net * 0.10`; the trigger folds it into `invoice.total`.
 

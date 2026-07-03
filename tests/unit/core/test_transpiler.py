@@ -213,3 +213,53 @@ class TestQuotedIdentifierOff:
         out = transpile(src, source="tsql", target="mysql").sql
         assert "'x' AS c" in out  # OFF: string literal
         assert "'y'" not in out  # ON: identifier again
+
+
+class TestTSQLDropGuards:
+    """T-SQL 'IF OBJECT_ID(...) IS NOT NULL DROP ...' cleanup guards.
+
+    They used to degrade to comments, so a transpiled schema was not
+    re-runnable (first live FE run: 'relation "invoice_seq" already
+    exists'). The guarded DROP maps to the target's own conditional form.
+    """
+
+    def setup_method(self) -> None:
+        self.t = Transpiler()
+
+    GUARD = (
+        "IF OBJECT_ID(N'dbo.invoice_seq', N'SO') IS NOT NULL\n"
+        "    DROP SEQUENCE dbo.invoice_seq\nGO"
+    )
+
+    def test_postgresql_drop_if_exists(self) -> None:
+        out = self.t.transpile(self.GUARD, "tsql", "postgresql").sql
+        assert "DROP SEQUENCE IF EXISTS invoice_seq" in out
+        assert "OBJECT_ID" not in out
+
+    def test_mysql_sequence_guard_stays_documented(self) -> None:
+        # MySQL has no sequences at all; the guard stays a documented note.
+        out = self.t.transpile(self.GUARD, "tsql", "mysql").sql
+        assert "DROP SEQUENCE" not in [
+            line for line in out.splitlines() if not line.lstrip().startswith("--")
+        ]
+
+    def test_mysql_drop_table_if_exists(self) -> None:
+        sql = (
+            "IF OBJECT_ID(N'dbo.customer', N'U') IS NOT NULL\n"
+            "    DROP TABLE dbo.customer\nGO"
+        )
+        out = self.t.transpile(sql, "tsql", "mysql").sql
+        assert "DROP TABLE IF EXISTS customer" in out
+
+    def test_oracle_guarded_drop_block(self) -> None:
+        out = self.t.transpile(self.GUARD, "tsql", "oracle").sql
+        assert "EXECUTE IMMEDIATE 'DROP SEQUENCE invoice_seq'" in out
+        assert "WHEN OTHERS THEN" in out
+
+    def test_procedure_guard_to_postgresql(self) -> None:
+        sql = (
+            "IF OBJECT_ID(N'dbo.create_invoice', N'P') IS NOT NULL\n"
+            "    DROP PROCEDURE dbo.create_invoice\nGO"
+        )
+        out = self.t.transpile(sql, "tsql", "postgresql").sql
+        assert "DROP PROCEDURE IF EXISTS create_invoice" in out

@@ -106,9 +106,32 @@ class PostgresEmitter(ProceduralEmitter):
         # PostgreSQL triggers call a separate trigger function that returns a
         # trigger and contains the body. Emit both the function and the CREATE
         # TRIGGER that invokes it.
-        name = self._qualified_name(node.schema, node.name)
-        events = ", ".join(node.events) if node.events else "UPDATE"
-        func_name = f"{node.name}_func"
+        #
+        # Transition-table rules (surfaced by the live FE harness): NEW TABLE
+        # is only legal on INSERT/UPDATE triggers, OLD TABLE only on
+        # UPDATE/DELETE, and a trigger declaring transition tables must have
+        # exactly ONE event — so a set-based multi-event trigger is split into
+        # one trigger (and function) per event.
+        events = tuple(node.events) if node.events else ("UPDATE",)
+        if not node.set_based_transition:
+            return self._emit_trigger_variant(node, events, suffix="")
+        if len(events) == 1:
+            return self._emit_trigger_variant(node, events, suffix="")
+        parts = [
+            self._emit_trigger_variant(node, (ev,), suffix=f"_{ev[:3].lower()}")
+            for ev in events
+        ]
+        return "\n\n".join(parts)
+
+    def _emit_trigger_variant(
+        self,
+        node: CreateTriggerStatement,
+        events: tuple[str, ...],
+        suffix: str,
+    ) -> str:
+        """Emit one trigger-function + CREATE TRIGGER pair for *events*."""
+        name = self._qualified_name(node.schema, node.name + suffix)
+        func_name = f"{node.name}{suffix}_func"
         qfunc = self._qualified_name(node.schema, func_name)
         fn_lines = [
             f"CREATE OR REPLACE FUNCTION {qfunc}()",
@@ -127,8 +150,42 @@ class PostgresEmitter(ProceduralEmitter):
             self._indent_level = 0
         fn_lines.append("BEGIN")
         self._indent_level = 1
-        fn_lines.extend(self._emit_indented_stmts(trg_body))
+        body_lines = self._emit_indented_stmts(trg_body)
         self._indent_level = 0
+        body_text = "\n".join(body_lines)
+        refs_inserted = re.search(r"\binserted\b", body_text) is not None
+        refs_deleted = re.search(r"\bdeleted\b", body_text) is not None
+        referencing: list[str] = []
+        preamble: list[str] = []
+        if node.set_based_transition:
+            # T-SQL does not re-fire a trigger from its own statements
+            # (RECURSIVE_TRIGGERS is OFF by default); PostgreSQL always
+            # does, so a set-based body that updates its own table would
+            # recurse until the stack limit. Bail out on nested firings.
+            preamble.append("    IF pg_trigger_depth() > 1 THEN")
+            preamble.append("        RETURN NULL;")
+            preamble.append("    END IF;")
+            event = events[0]
+            if refs_inserted:
+                if event in ("INSERT", "UPDATE"):
+                    referencing.append("NEW TABLE AS inserted")
+                else:
+                    # T-SQL's inserted is EMPTY (not absent) on DELETE.
+                    preamble.append(
+                        "    CREATE TEMP TABLE IF NOT EXISTS inserted "
+                        f"(LIKE {node.table}) ON COMMIT DROP;"
+                    )
+            if refs_deleted:
+                if event in ("UPDATE", "DELETE"):
+                    referencing.append("OLD TABLE AS deleted")
+                else:
+                    # T-SQL's deleted is EMPTY (not absent) on INSERT.
+                    preamble.append(
+                        "    CREATE TEMP TABLE IF NOT EXISTS deleted "
+                        f"(LIKE {node.table}) ON COMMIT DROP;"
+                    )
+        fn_lines.extend(preamble)
+        fn_lines.extend(body_lines)
         # A statement-level (set-based) trigger function has no NEW row, so it
         # returns NULL; a row-level AFTER returns NULL too and BEFORE returns
         # NEW. Default to NEW (safe for BEFORE, ignored for AFTER row-level);
@@ -140,12 +197,11 @@ class PostgresEmitter(ProceduralEmitter):
         fn_lines.append("$$;")
         trg_lines = [
             f"CREATE OR REPLACE TRIGGER {name}",
-            f"{node.timing} {events} ON {node.table}",
+            f"{node.timing} {' OR '.join(events)} ON {node.table}",
         ]
         if node.set_based_transition:
-            # Expose the affected rows as the set-based transition tables the
-            # body references (named to match T-SQL's inserted/deleted).
-            trg_lines.append("REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted")
+            if referencing:
+                trg_lines.append("REFERENCING " + " ".join(referencing))
             trg_lines.append("FOR EACH STATEMENT")
         elif node.for_each == "ROW":
             trg_lines.append("FOR EACH ROW")

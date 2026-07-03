@@ -153,8 +153,18 @@ class TestCheckState:
         # A read_table that returns exactly the expected rows (as a driver would).
         tables = {
             "customer": [
-                {"id": 1, "name": "Acme", "email": "billing@acme.test"},
-                {"id": 2, "name": "Globex", "email": "ap@globex.test"},
+                {
+                    "id": 1,
+                    "name": "Acme",
+                    "email": "billing@acme.test",
+                    "notes": "no payment",
+                },
+                {
+                    "id": 2,
+                    "name": "Globex",
+                    "email": "ap@globex.test",
+                    "notes": "paid",
+                },
             ],
             "product": [
                 {"id": 1, "name": "Widget", "unit_price": Decimal("10.00")},
@@ -221,3 +231,65 @@ class TestCheckState:
         }
         mismatches = check_state(state, lambda name: tables[name])
         assert mismatches == [], "\n".join(str(m) for m in mismatches)
+
+
+class TestTriggerMaintainedExclusion:
+    """Columns marked trigger_maintained can be excluded from assertion.
+
+    A set-based source trigger is a documented divergence on MySQL/Oracle
+    (no transition tables), so its maintained values are out of scope there
+    (TODO: 'assert trigger-maintained values on PostgreSQL (+ T-SQL)').
+    """
+
+    def _expected(self):
+        import textwrap
+
+        from tests.functional_equivalence.state_check import load_expected_state
+
+        text = textwrap.dedent(
+            """
+            version: 1
+            tables:
+              invoice:
+                row_count: 1
+                rows:
+                  - { id: 1, customer_id: 2, total: "61.05" }
+            trigger_maintained:
+              invoice: [total]
+            """
+        )
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+            f.write(text)
+            p = Path(f.name)
+        return load_expected_state(p)
+
+    def test_mismatch_reported_by_default(self):
+        from tests.functional_equivalence.state_check import check_state
+
+        expected = self._expected()
+        rows = {"invoice": [{"id": 1, "customer_id": 2, "total": "0.00"}]}
+        mismatches = check_state(expected, lambda t: rows[t])
+        assert mismatches, "total mismatch must be reported by default"
+
+    def test_ignored_when_flagged(self):
+        from tests.functional_equivalence.state_check import check_state
+
+        expected = self._expected()
+        rows = {"invoice": [{"id": 1, "customer_id": 2, "total": "0.00"}]}
+        mismatches = check_state(
+            expected, lambda t: rows[t], ignore_trigger_maintained=True
+        )
+        assert mismatches == []
+
+    def test_other_columns_still_asserted_when_flagged(self):
+        from tests.functional_equivalence.state_check import check_state
+
+        expected = self._expected()
+        rows = {"invoice": [{"id": 1, "customer_id": 9, "total": "0.00"}]}
+        mismatches = check_state(
+            expected, lambda t: rows[t], ignore_trigger_maintained=True
+        )
+        assert mismatches, "non-trigger columns must still be asserted"

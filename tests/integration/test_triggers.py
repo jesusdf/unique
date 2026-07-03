@@ -297,3 +297,94 @@ class TestSetBasedTriggerRewrite:
             assert "set-based inserted/deleted" in out
             code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
             assert all("FROM inserted" not in ln for ln in code)
+
+
+class TestSetBasedTriggerEventRules:
+    """PostgreSQL transition-table rules, surfaced by the first live FE run:
+
+    - OLD TABLE may only be declared on DELETE/UPDATE triggers and NEW TABLE
+      on INSERT/UPDATE ("ERROR: OLD TABLE can only be specified for a DELETE
+      or UPDATE trigger").
+    - A trigger with transition tables may have exactly ONE event ("ERROR:
+      transition tables cannot be specified for triggers with more than one
+      event"), so AFTER INSERT, UPDATE must split into one trigger per event.
+    """
+
+    def _t(self, sql: str) -> str:
+        return Transpiler().transpile(sql, source="tsql", target="postgresql").sql
+
+    def test_insert_only_trigger_declares_only_new_table(self) -> None:
+        sql = (
+            "CREATE TRIGGER trg_paid ON payment AFTER INSERT AS BEGIN "
+            "UPDATE inv SET inv.is_paid = 1 FROM invoice AS inv "
+            "WHERE inv.id IN (SELECT invoice_id FROM inserted) "
+            "END"
+        )
+        out = self._t(sql)
+        assert "REFERENCING NEW TABLE AS inserted" in out
+        assert "OLD TABLE" not in out
+
+    def test_multi_event_set_based_splits_into_one_trigger_per_event(self) -> None:
+        sql = (
+            "CREATE TRIGGER trg_total ON invoice_line AFTER INSERT, UPDATE AS BEGIN "
+            "UPDATE inv SET inv.total = 1 FROM invoice AS inv "
+            "WHERE inv.id IN (SELECT invoice_id FROM inserted "
+            "UNION SELECT invoice_id FROM deleted) "
+            "END"
+        )
+        out = self._t(sql)
+        # No multi-event trigger with transition tables.
+        assert "INSERT OR UPDATE" not in out and "INSERT, UPDATE" not in out
+        assert out.count("CREATE OR REPLACE TRIGGER") == 2
+        assert "AFTER INSERT ON invoice_line" in out
+        assert "AFTER UPDATE ON invoice_line" in out
+        # The UPDATE variant exposes both tables; the INSERT variant may not
+        # declare OLD TABLE.
+        insert_part = out[
+            out.index("AFTER INSERT ON") - 400 : out.index("AFTER INSERT ON") + 200
+        ]
+        assert "OLD TABLE" not in insert_part
+
+    def test_multi_event_row_trigger_joins_events_with_or(self) -> None:
+        # Without transition tables a multi-event trigger is legal, but the
+        # event list separator is OR in PostgreSQL, not a comma.
+        sql = (
+            "CREATE TRIGGER trg ON t AFTER INSERT, UPDATE AS BEGIN "
+            "UPDATE x SET a = 1 WHERE id = 1 "
+            "END"
+        )
+        out = self._t(sql)
+        assert "INSERT, UPDATE" not in out
+
+    def test_set_based_trigger_guards_against_recursive_firing(self) -> None:
+        # T-SQL does not re-fire a trigger from its own statements
+        # (RECURSIVE_TRIGGERS OFF by default); PostgreSQL always does, so a
+        # set-based trigger that updates its own table recurses until the
+        # stack limit (found on the live FE run). The emitted function must
+        # bail out on nested firings.
+        sql = (
+            "CREATE TRIGGER trg_total ON invoice_line AFTER UPDATE AS BEGIN "
+            "UPDATE il SET il.line_total = il.qty * il.unit_price "
+            "FROM invoice_line il INNER JOIN inserted i ON i.id = il.id "
+            "END"
+        )
+        out = self._t(sql)
+        assert "pg_trigger_depth()" in out
+
+
+class TestMySQLMultiEventTriggerSplit:
+    """MySQL allows exactly one event per trigger: AFTER INSERT, UPDATE must
+    become two triggers (found on the live FE run; MariaDB rejects the
+    multi-event shell outright)."""
+
+    def test_split_into_one_trigger_per_event(self) -> None:
+        sql = (
+            "CREATE TRIGGER trg ON t AFTER INSERT, UPDATE AS BEGIN "
+            "UPDATE x SET a = 1 WHERE id = 1 "
+            "END"
+        )
+        out = Transpiler().transpile(sql, source="tsql", target="mysql").sql
+        assert "INSERT, UPDATE" not in out
+        assert out.count("CREATE TRIGGER") == 2
+        assert "AFTER INSERT ON t" in out
+        assert "AFTER UPDATE ON t" in out

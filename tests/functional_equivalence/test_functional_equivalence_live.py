@@ -66,13 +66,16 @@ def _native(kind: str, dialect: str) -> str:
     return (_HERE / kind / f"{dialect}.sql").read_text()
 
 
-def _sql_for(kind: str, source: str, target: str) -> str:
-    """The SQL to run on ``target``: the native fixture when source==target,
-    otherwise the source fixture transpiled to the target (on the fly)."""
-    native = _native(kind, source)
+def _scripts_for(source: str, target: str) -> tuple[str, ...]:
+    """The scripts to run on ``target``: the native fixtures when
+    source==target, otherwise schema+scenario transpiled *as one script* (on
+    the fly). One transpile call matters: the transpiler harvests
+    cross-statement knowledge from the script (alias types, BIT columns) that
+    the scenario's DML depends on."""
     if source == target:
-        return native
-    return transpile(native, source=source, target=target).sql
+        return (_native("schema", source), _native("scenario", source))
+    combined = _native("schema", source) + "\n" + _native("scenario", source)
+    return (transpile(combined, source=source, target=target).sql,)
 
 
 def _runner_or_skip(target: str) -> EngineRunner:
@@ -118,10 +121,20 @@ def test_functional_equivalence(source: str, target: str) -> None:
     runner = _runner_or_skip(target)
     try:
         _drop_all(runner)
-        runner.execute_script(_sql_for("schema", source, target))
-        runner.execute_script(_sql_for("scenario", source, target))
+        for script in _scripts_for(source, target):
+            runner.execute_script(script)
 
-        mismatches = check_state(_EXPECTED, runner.read_table)
+        # T-SQL's set-based triggers are a documented divergence on MySQL and
+        # Oracle (no named transition tables): their bodies arrive as carrier
+        # comments, so the values they maintain are out of scope there. The
+        # PostgreSQL target (faithful transition-table rewrite) and every
+        # native run assert the full state.
+        ignore_triggers = source == "tsql" and target in ("mysql", "oracle")
+        mismatches = check_state(
+            _EXPECTED,
+            runner.read_table,
+            ignore_trigger_maintained=ignore_triggers,
+        )
         assert (
             mismatches == []
         ), f"{source}->{target} diverged from the expected state:\n" + "\n".join(

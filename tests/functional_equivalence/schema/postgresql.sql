@@ -20,6 +20,13 @@ DROP TABLE IF EXISTS product CASCADE;
 DROP TABLE IF EXISTS customer CASCADE;
 DROP FUNCTION IF EXISTS fn_tax(NUMERIC) CASCADE;
 DROP FUNCTION IF EXISTS fn_days_between(DATE, DATE) CASCADE;
+DROP PROCEDURE IF EXISTS create_invoice(INTEGER, DATE, INTEGER, INTEGER, INTEGER, INTEGER);
+DROP PROCEDURE IF EXISTS flag_payment_status(INTEGER, INTEGER);
+DROP FUNCTION IF EXISTS trg_line_total_ins_fn() CASCADE;
+DROP FUNCTION IF EXISTS trg_line_total_upd_fn() CASCADE;
+DROP FUNCTION IF EXISTS trg_line_total_fn() CASCADE;
+DROP FUNCTION IF EXISTS trg_invoice_touch_fn() CASCADE;
+DROP FUNCTION IF EXISTS trg_payment_paid_fn() CASCADE;
 
 
 -- ----------------------------------------------------------------------------
@@ -112,8 +119,43 @@ CREATE VIEW v_overdue_invoices AS
 -- ----------------------------------------------------------------------------
 
 -- Maintain invoice_line.line_total and roll up invoice.total = net + tax.
-CREATE FUNCTION trg_line_total_fn() RETURNS TRIGGER AS $$
+-- PostgreSQL allows transition tables only on single-event triggers (and
+-- OLD TABLE only on UPDATE/DELETE), so the INSERT and UPDATE paths are two
+-- triggers with per-event functions.
+CREATE FUNCTION trg_line_total_ins_fn() RETURNS TRIGGER AS $$
 BEGIN
+    -- Do not re-fire from our own statements (T-SQL semantics:
+    -- RECURSIVE_TRIGGERS OFF; also stops statement-level recursion).
+    IF pg_trigger_depth() > 1 THEN
+        RETURN NULL;
+    END IF;
+    UPDATE invoice_line il
+    SET line_total = il.qty * il.unit_price
+    FROM inserted i
+    WHERE i.id = il.id;
+
+    UPDATE invoice inv
+    SET total = (SELECT COALESCE(SUM(il.line_total), 0)
+                 FROM invoice_line il WHERE il.invoice_id = inv.id)
+              + fn_tax((SELECT COALESCE(SUM(il.line_total), 0)
+                        FROM invoice_line il WHERE il.invoice_id = inv.id))
+    WHERE inv.id IN (SELECT invoice_id FROM inserted);
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_line_total_ins
+    AFTER INSERT ON invoice_line
+    REFERENCING NEW TABLE AS inserted
+    FOR EACH STATEMENT EXECUTE FUNCTION trg_line_total_ins_fn();
+
+CREATE FUNCTION trg_line_total_upd_fn() RETURNS TRIGGER AS $$
+BEGIN
+    -- Do not re-fire from our own statements (T-SQL semantics:
+    -- RECURSIVE_TRIGGERS OFF; also stops statement-level recursion).
+    IF pg_trigger_depth() > 1 THEN
+        RETURN NULL;
+    END IF;
     UPDATE invoice_line il
     SET line_total = il.qty * il.unit_price
     FROM inserted i
@@ -130,14 +172,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER trg_line_total
-    AFTER INSERT OR UPDATE ON invoice_line
+CREATE TRIGGER trg_line_total_upd
+    AFTER UPDATE ON invoice_line
     REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted
-    FOR EACH STATEMENT EXECUTE FUNCTION trg_line_total_fn();
+    FOR EACH STATEMENT EXECUTE FUNCTION trg_line_total_upd_fn();
 
 -- Stamp updated_at on the affected rows (presence-asserted only).
 CREATE FUNCTION trg_invoice_touch_fn() RETURNS TRIGGER AS $$
 BEGIN
+    -- Do not re-fire from our own statements (T-SQL semantics:
+    -- RECURSIVE_TRIGGERS OFF; also stops statement-level recursion).
+    IF pg_trigger_depth() > 1 THEN
+        RETURN NULL;
+    END IF;
     UPDATE invoice inv
     SET updated_at = CURRENT_TIMESTAMP
     FROM inserted i
@@ -155,6 +202,11 @@ CREATE TRIGGER trg_invoice_touch
 -- Mark an invoice paid once its payments cover its total.
 CREATE FUNCTION trg_payment_paid_fn() RETURNS TRIGGER AS $$
 BEGIN
+    -- Do not re-fire from our own statements (T-SQL semantics:
+    -- RECURSIVE_TRIGGERS OFF; also stops statement-level recursion).
+    IF pg_trigger_depth() > 1 THEN
+        RETURN NULL;
+    END IF;
     UPDATE invoice inv
     SET is_paid = TRUE
     WHERE inv.id IN (SELECT invoice_id FROM inserted)
@@ -198,5 +250,25 @@ BEGIN
     INSERT INTO invoice_line (invoice_id, product_id, qty, unit_price, line_total)
     SELECT v_new_id, p.id, p_qty_b, p.unit_price, p_qty_b * p.unit_price
     FROM product p WHERE p.id = p_product_b;
+END;
+$$;
+
+-- Payment-status flag (audit S2-3 counterpart). Authored with MAX() so the
+-- no-payment case yields NULL portably (an aggregate always returns one row,
+-- so no engine raises on the empty case).
+CREATE PROCEDURE flag_payment_status(
+    p_customer_id INTEGER,
+    p_invoice_id  INTEGER
+) LANGUAGE plpgsql AS $$
+DECLARE
+    v_amount NUMERIC(12, 2);
+BEGIN
+    SELECT MAX(amount) INTO v_amount FROM payment WHERE invoice_id = p_invoice_id;
+
+    IF v_amount IS NULL THEN
+        UPDATE customer SET notes = 'no payment' WHERE id = p_customer_id;
+    ELSE
+        UPDATE customer SET notes = 'paid' WHERE id = p_customer_id;
+    END IF;
 END;
 $$;

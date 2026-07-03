@@ -155,15 +155,26 @@ High-level plan (details in that folder):
       (17 cases) and `test_engine_runner.py` (splitter + an end-to-end read+compare
       smoke test on SQLite). Added Oracle to `docker-compose.test.yaml` and a
       runbook (`HARNESS.md`).
-- [ ] **Live run + final adjustments** (do in a DB-enabled environment). Bring up
-      the engines (`docker compose -f docker-compose.test.yaml up -d`), install
-      drivers (`psycopg pymysql oracledb [pyodbc]`), and run the live test
-      (see `HARNESS.md`). First-run wrinkles to fix where they surface: statement
-      splitting edge cases (`engine_runner.split_statements`), any transpiled
-      statement an engine rejects (a real emitter finding — fix the emitter),
-      and any "morally equal but unequal" value (extend `state_check.normalize`
-      + add a unit test). MySQL/Oracle set-based trigger effects are documented
-      divergences — assert trigger-maintained values on PostgreSQL (+ T-SQL).
+- [x] **Live run + final adjustments** (2026-07-03, against real PostgreSQL 16
+      and MariaDB 11). The first live run surfaced and fixed, test-first:
+      PostgreSQL transition-table rules (single event per trigger, NEW/OLD
+      TABLE availability per event → the pg emitter and native fixture now
+      split multi-event set-based triggers, with a `pg_trigger_depth()` guard
+      emulating T-SQL's RECURSIVE_TRIGGERS OFF — unguarded, the rollup
+      trigger recursed to the stack limit); `BIT DEFAULT 1`/0-1 literals into
+      BOOLEAN columns (harvested BIT-column registry + emit-time coercion,
+      incl. embedded procedure DML); T-SQL `IF OBJECT_ID ... IS NOT NULL
+      DROP` guards now map to `DROP ... IF EXISTS`/pg_trigger DO-block/Oracle
+      tolerant block (transpiled schemas are re-runnable); MySQL one event
+      per trigger (split, and multi-routine DELIMITER wrapping); MariaDB's
+      no-IGNORE_SPACE rejection of `CAST (` (built-in call spacing collapsed);
+      MySQL integer display widths dropped for PostgreSQL; missing DROP VIEW
+      guards in the MySQL fixture. Trigger-maintained values
+      (`trigger_maintained` in expected_state.yaml) are excluded on targets
+      where the source's set-based triggers are documented divergences
+      (tsql→mysql/oracle), per the design note below. **Live-green pairs:**
+      tsql→postgresql, tsql→mysql, postgresql→postgresql, mysql→mysql.
+      MSSQL/Oracle identity pairs need pyodbc / valid Oracle credentials.
 - [x] **CI job for the live harness** — the `syntax-live` workflow job runs
       `test_functional_equivalence_live.py` against the same four engines it
       already starts (MSSQL/Oracle/MySQL/PostgreSQL), right after the live syntax
@@ -199,11 +210,23 @@ High-level plan (details in that folder):
         already green). Renamed `canonical.sql` -> `tsql.sql` so the four fixtures
         are symmetric.
   - [ ] **Confirm the 12 cross-dialect pairs on real engines**, then remove
-        `continue-on-error` to make the full 4×4 gating. The on-the-fly transpile
-        of the Oracle native fixture (compound trigger `:=`/`:NEW`, the
-        `FOR r IN (...) LOOP EXECUTE IMMEDIATE` drop block) currently falls back
-        to sqlglot "Command" for some procedural constructs — a live run will show
-        which need an emitter fix vs. which already execute.
+        `continue-on-error` to make the full 4×4 gating. Live status
+        (2026-07-03, PostgreSQL+MariaDB): **green** tsql→postgresql and
+        tsql→mysql; **red** with identified causes:
+        - postgresql→mysql: the pg trigger *function* (`RETURNS TRIGGER`)
+          transpiles as a MySQL function returning the nonexistent TRIGGER
+          type; needs a pg-source trigger-function + CREATE TRIGGER pairing
+          into a single MySQL trigger (or documented degradation).
+        - mysql→postgresql: row-level `SET NEW.line_total = ...` mangles to
+          `NEW := . line_total = ...`; the pg emitter needs dotted-target
+          assignments (`NEW.col := expr`).
+        - oracle→postgresql / oracle→mysql: the anonymous
+          `FOR r IN (...) LOOP EXECUTE IMMEDIATE` drop block emits invalid
+          fragments (`END AS LOOP;`); needs FOR-loop + EXECUTE IMMEDIATE
+          support in the anonymous-block path (pg: DO $$ ... $$) or a
+          documented degradation instead of invalid SQL.
+        Oracle-target pairs untested (server credentials rejected;
+        see HARNESS.md runbook).
 
 Key design risks, captured for when we start:
 - **Determinism** is the central challenge — see the folder README for the list
@@ -245,7 +268,15 @@ quality*).
       length/precision in parameter position). (S1-11)
 - [x] Preserve `THROW`/`RAISERROR` message text on all targets. (S2-2)
 - [x] T-SQL assignment-select → Oracle: handle `NO_DATA_FOUND` divergence
-      (nested block + empty handler). FE-harness scenario still pending. (S2-3)
+      (nested block + empty handler). (S2-3)
+- [x] FE-harness scenario for S2-3: step 6 (`flag_payment_status`) reads
+      `payment` with an assignment-select that matches no row for invoice 1
+      and writes `customer.notes` ('no payment'/'paid'), asserted in
+      `expected_state.yaml`; native counterparts use `MAX()` so only the
+      T-SQL source exercises the transform. Verified live on PostgreSQL and
+      MariaDB (Oracle blocked on server credentials; the wrapper itself is
+      unit-covered in `test_no_data_found.py`). Building it also fixed the
+      assignment-select `dbo.` strip for PG/MySQL targets.
 
 **P1 — test hardening (audit doc 02):**
 

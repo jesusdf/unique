@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 
 from unique.core.ast_nodes import (
@@ -25,9 +26,38 @@ class MySqlEmitter(ProceduralEmitter):
 
     dialect_name = "mysql"
 
+    # Built-in function names MySQL/MariaDB only recognize when the opening
+    # parenthesis follows immediately (default sql_mode, no IGNORE_SPACE).
+    # Token-joined expression text ("CAST ( x AS ... )") must be collapsed.
+    _NO_SPACE_FUNCS = re.compile(
+        r"(?i)\b(CAST|CONVERT|COUNT|SUM|MIN|MAX|AVG|COALESCE|IFNULL|NULLIF|"
+        r"CONCAT|SUBSTRING|SUBSTR|TRIM|UPPER|LOWER|ABS|ROUND|NOW|CURDATE|"
+        r"CURTIME|LENGTH|CHAR_LENGTH|GROUP_CONCAT|LAST_INSERT_ID)\s+\("
+    )
+
+    def emit(self, node: ASTNode) -> str:
+        return self._NO_SPACE_FUNCS.sub(lambda m: f"{m.group(1)}(", super().emit(node))
+
     def _keep_schema(self, schema: str) -> bool:
         # MySQL has no schema layer (a schema is a database); drop all.
         return False
+
+    def _emit_trigger(self, node: CreateTriggerStatement) -> str:
+        # MySQL allows exactly one event per trigger; split AFTER INSERT,
+        # UPDATE into one trigger per event (MariaDB rejects the multi-event
+        # shell outright).
+        events = tuple(node.events) if node.events else ()
+        if len(events) <= 1:
+            return super()._emit_trigger(node)
+        parts = [
+            super()._emit_trigger(
+                dataclasses.replace(
+                    node, name=f"{node.name}_{ev[:3].lower()}", events=(ev,)
+                )
+            )
+            for ev in events
+        ]
+        return "\n\n".join(parts)
 
     def _tvf_unsupported_note(self) -> str:
         return (

@@ -95,6 +95,122 @@ def _resolve_tsql_alias_type(dt: DataType) -> DataType:
     return aliases.get(key, dt)
 
 
+# BIT columns harvested from the script's CREATE TABLE statements (table ->
+# column names, lowercase). BIT maps to a real BOOLEAN on PostgreSQL, which
+# rejects the integer 0/1 literals a T-SQL script writes into those columns,
+# so INSERT/UPDATE literals are coerced at emit time.
+TSQL_BIT_COLUMNS: contextvars.ContextVar[dict[str, frozenset[str]] | None] = (
+    contextvars.ContextVar("tsql_bit_columns", default=None)
+)
+
+_CREATE_TABLE_NAME_RE = re.compile(
+    r"(?i)\bCREATE\s+TABLE\s+([\w\[\]\".]+)",
+)
+_BIT_COLUMN_RE = re.compile(
+    r"(?i)^\s*(\[[^\]]+\]|\w+)\s+(?:\[bit\]|bit)\b",
+)
+
+
+def harvest_tsql_bit_columns(sql: str) -> dict[str, frozenset[str]]:
+    """Collect BIT column names per table from a whole T-SQL script."""
+    result: dict[str, set[str]] = {}
+    current: str | None = None
+    for line in sql.splitlines():
+        m = _CREATE_TABLE_NAME_RE.search(line)
+        if m:
+            name = m.group(1).replace("[", "").replace("]", "").replace('"', "")
+            current = name.split(".")[-1].lower()
+            continue
+        if current is None:
+            continue
+        cm = _BIT_COLUMN_RE.match(line)
+        if cm:
+            col = cm.group(1).strip('[]"').lower()
+            result.setdefault(current, set()).add(col)
+    return {t: frozenset(c) for t, c in result.items()}
+
+
+def coerce_bit_literals_in_sql(sql: str, dialect: str) -> str:
+    """Rewrite 0/1 literals written to harvested BIT columns in raw SQL.
+
+    Used by the procedural pipeline for embedded DML, which is transpiled
+    through sqlglot rather than the IR emitter. Only INSERT ... (cols)
+    VALUES and UPDATE ... SET assignments are touched, and only on
+    PostgreSQL (where BIT maps to a real BOOLEAN).
+    """
+    if dialect != "postgresql":
+        return sql
+    registry = TSQL_BIT_COLUMNS.get()
+    if not registry:
+        return sql
+    try:
+        tree = sqlglot.parse_one(sql, read="postgres")
+    except Exception:  # noqa: BLE001 - leave unparseable SQL untouched
+        return sql
+
+    def as_bool(cell: exp.Expression) -> exp.Boolean | None:
+        if (
+            isinstance(cell, exp.Literal)
+            and not cell.is_string
+            and cell.this in ("0", "1")
+        ):
+            return exp.Boolean(this=cell.this == "1")
+        return None
+
+    changed = False
+    if isinstance(tree, exp.Insert) and isinstance(tree.this, exp.Schema):
+        schema_expr = tree.this
+        if isinstance(schema_expr.this, exp.Table):
+            cols = registry.get(schema_expr.this.name.lower(), frozenset())
+            names = [c.name.lower() for c in schema_expr.expressions]
+            values = tree.expression
+            if cols and isinstance(values, exp.Values):
+                for row in values.expressions:
+                    for i, cell in enumerate(row.expressions):
+                        if i < len(names) and names[i] in cols:
+                            replacement = as_bool(cell)
+                            if replacement is not None:
+                                cell.replace(replacement)
+                                changed = True
+    elif isinstance(tree, exp.Update) and isinstance(tree.this, exp.Table):
+        cols = registry.get(tree.this.name.lower(), frozenset())
+        if cols:
+            for assignment in tree.expressions:
+                if (
+                    isinstance(assignment, exp.EQ)
+                    and isinstance(assignment.this, exp.Column)
+                    and assignment.this.name.lower() in cols
+                ):
+                    replacement = as_bool(assignment.expression)
+                    if replacement is not None:
+                        assignment.expression.replace(replacement)
+                        changed = True
+    return tree.sql(dialect="postgres") if changed else sql
+
+
+def _coerce_bit_literal(
+    table: TableRef, column: str, value: ASTNode, dialect: str
+) -> ASTNode:
+    """Turn an integer 0/1 written to a known BIT column into a boolean."""
+    if dialect != "postgresql":
+        return value
+    registry = TSQL_BIT_COLUMNS.get()
+    if not registry:
+        return value
+    cols = registry.get(table.name.lower())
+    if not cols:
+        return value
+    if column.split(".")[-1].strip('[]"').lower() not in cols:
+        return value
+    if (
+        isinstance(value, Literal)
+        and value.dtype != "string"
+        and str(value.value) in ("0", "1")
+    ):
+        return Literal(value=str(value.value) == "1", dtype="boolean")
+    return value
+
+
 # Mapping from sqlglot join types to our JoinType enum
 _JOIN_TYPE_MAP = {
     "JOIN": JoinType.INNER,
@@ -1724,8 +1840,12 @@ def _emit_insert(node: InsertStatement, dialect: str) -> str:
     if node.values:
         rows = []
         for row in node.values:
-            vals = ", ".join(_emit_expression(v, dialect) for v in row)
-            rows.append(f"({vals})")
+            cells = []
+            for i, v in enumerate(row):
+                if node.columns and i < len(node.columns):
+                    v = _coerce_bit_literal(node.table, node.columns[i], v, dialect)
+                cells.append(_emit_expression(v, dialect))
+            rows.append(f"({', '.join(cells)})")
         values = ", ".join(rows)
         return f"INSERT INTO {table}{cols}\nVALUES {values}"
 
@@ -1750,9 +1870,11 @@ def _emit_update(node: UpdateStatement, dialect: str) -> str:
         return _emit_cross_table_update(node, dialect)
 
     table = _emit_table_ref(node.table, dialect)
-    sets = ", ".join(
-        f"{col} = {_emit_expression(val, dialect)}" for col, val in node.assignments
-    )
+    set_parts = []
+    for col, val in node.assignments:
+        val = _coerce_bit_literal(node.table, col, val, dialect)
+        set_parts.append(f"{col} = {_emit_expression(val, dialect)}")
+    sets = ", ".join(set_parts)
     result = f"UPDATE {table}\nSET {sets}"
 
     if node.where:
@@ -1778,7 +1900,8 @@ def _emit_cross_table_update(node: UpdateStatement, dialect: str) -> str:
     """
     target = _cross_update_target(node)
     assignments = [
-        (col, _emit_expression(val, dialect)) for col, val in node.assignments
+        (col, _emit_expression(_coerce_bit_literal(target, col, val, dialect), dialect))
+        for col, val in node.assignments
     ]
 
     if dialect == "oracle":
@@ -1994,8 +2117,16 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             else:
                 dtype = _portable_type_name(col.data_type.name, dialect)
                 # If the mapped name already carries a length (e.g. CHAR(36)),
-                # don't append the caller's params on top of it.
-                if col.data_type.params and "(" not in dtype:
+                # don't append the caller's params on top of it. PostgreSQL
+                # integer types take no parameters at all — a MySQL display
+                # width (TINYINT(1), INT(11)) would be a syntax error.
+                skip_params = dialect == "postgresql" and dtype.upper() in (
+                    "SMALLINT",
+                    "INT",
+                    "INTEGER",
+                    "BIGINT",
+                )
+                if col.data_type.params and "(" not in dtype and not skip_params:
                     dtype += f"({', '.join(str(p) for p in col.data_type.params)})"
                 # A character type with no length is invalid DDL in most engines
                 # (MySQL/Oracle reject it; PostgreSQL treats bare VARCHAR as
@@ -2044,6 +2175,12 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                         "CURRENT_TIMESTAMP",
                         default_sql,
                     )
+                if dialect == "postgresql" and dtype.upper() == "BOOLEAN":
+                    # A source BIT column arrives with a 0/1 default;
+                    # PostgreSQL rejects an integer default on BOOLEAN.
+                    m_bool = re.fullmatch(r"\(*\s*([01])\s*\)*", default_sql)
+                    if m_bool:
+                        default_sql = "TRUE" if m_bool.group(1) == "1" else "FALSE"
                 default = f" DEFAULT {default_sql}"
             identity = ""
             if col.identity:
