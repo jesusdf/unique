@@ -540,3 +540,72 @@ all fixed test-first:
 Result: 0 parse failures across all 12 fixture×target pairs (was 11/46 tsql,
 29/57 oracle→tsql, 8/26 mysql→tsql); integration kill rate 28% → 36%
 (`identity_mutation_check.py` floor raised to 33%).
+
+## 13. Live Oracle functional equivalence via local Docker (P1)
+
+The remote test stack's Oracle credentials were rejected, so every
+Oracle-target and Oracle-source functional-equivalence pair had been skipped.
+Running the local `docker-compose.test.yaml` stack instead (PostgreSQL 16 +
+**real MySQL 8** + **Oracle Free 23**, `system/oracle` @ `FREEPDB1`) made them
+live and moved the 4×4 matrix from **6 → 9 of 12 reachable pairs green** (all
+Oracle-target pairs plus `tsql/postgresql → oracle`; the 4 T-SQL-target pairs
+still skip — no local `pyodbc`). Real MySQL 8 (stricter than the old remote
+MariaDB) also surfaced harness bugs. Everything below was TDD, gate-clean.
+
+**Harness (`tests/helpers/live_validation.py`, `docker-compose.test.yaml`,
+`tests/functional_equivalence/engine_runner.py`):**
+
+- [x] **MySQL statement splitter glued the leading batch.** Everything before
+      the first `DELIMITER` was flushed as one `execute()` (1064). Split the
+      default-delimiter buffer on `;` at the DELIMITER switch, not just the tail.
+- [x] **Oracle validator shredded PL/SQL bodies.** It split on `;`, breaking
+      routine bodies and leaving stray `/` terminators (ORA-00900). Added a
+      SQL\*Plus `/`-aware splitter that keeps a PL/SQL block whole (recognized
+      past leading guard comments) and strips a trailing `;` only from plain SQL.
+- [x] **MySQL non-isolated cleanup dropped only tables**, so a leftover
+      procedure failed reruns (1304). Track and drop every created object
+      (tables, routines, triggers, views) with FK checks off.
+- [x] **MySQL 8 binary logging** blocks a non-SUPER user from creating
+      routines/triggers (1419); the compose file now sets
+      `--log-bin-trust-function-creators=1` for the throwaway test stack.
+- [x] **FE engine-runner Oracle splitter** dropped the terminating `;` of the
+      script's *last* PL/SQL block (no trailing `/`), so an anonymous
+      `BEGIN … END;` reached the engine as `BEGIN … END` (PLS-00103). Keep a
+      trailing PL/SQL block whole.
+
+**Oracle emitter / converter (`converter.py`, `transpiler.py`, procedural
+emitter/transformer):**
+
+- [x] **`CREATE SEQUENCE … AS <type>`** dropped for Oracle (ORA-03048);
+      PostgreSQL keeps its valid form.
+- [x] **Multi-event triggers** joined with `OR` not comma for Oracle
+      (`AFTER INSERT OR UPDATE`, ORA-00969) via an engine-specific hook; MySQL
+      still splits into one trigger per event.
+- [x] **ISO date/datetime handling for Oracle** (ORA-01861), keyed off
+      harvested date columns / proc date-parameter positions: a bare string
+      written to a date column, a string passed to a date proc-arg, and a
+      source `CAST(str AS DATE)` / `DATE '…'` literal all emit the ANSI
+      `DATE '…'` / `TIMESTAMP '…'` literal; other targets keep the ISO string.
+- [x] **Constrained types in a PL/SQL `CAST` unconstrained** — `CAST(x AS
+      NUMBER(12,2))` / `VARCHAR2(10)` drop the length and `DECIMAL`/`NUMERIC`
+      become `NUMBER` (PLS-00103, PL/SQL only).
+- [x] **Identity capture** — T-SQL `INSERT …; SET @id = SCOPE_IDENTITY()`
+      peephole-merges into `INSERT … RETURNING <idcol> INTO <var>` (harvested
+      identity columns; single-row VALUES inserts into a known table only).
+      Also: sqlglot silently drops the `INTO <var>` of a `RETURNING … INTO`, so
+      it is peeled before transpiling and re-appended natively for Oracle/PG
+      (was ORA-00925).
+
+**Trigger-body row references (both directions):**
+
+- [x] **Oracle/PG event list `OR`** now parses (was leaving `OR UPDATE ON …`
+      to leak into the body as garbage).
+- [x] **Oracle-source `:NEW.`/`:OLD.`** normalized to the target row qualifier
+      before sqlglot (was rendered as PG's `%(NEW)s` bind placeholder).
+- [x] **MySQL/PG-source `NEW.`/`OLD.` → Oracle `:NEW.`/`:OLD.`** in the
+      assignment target, its value, and an embedded `UPDATE` (PLS-00201); a
+      negative lookbehind leaves an already `:`-prefixed reference untouched.
+
+Row-level trigger translation is now correct both directions; the 3 still-red
+pairs reduce to one feature — the aggregating trigger across the
+statement-level / compound / mutating-table boundary (see TODO §1).
