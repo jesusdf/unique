@@ -20,6 +20,7 @@ import re
 from dataclasses import dataclass, field, replace
 
 from unique.core.batch_splitter import BatchSplitter, BatchType
+from unique.core.converter import TSQL_ALIAS_TYPES, harvest_tsql_alias_types
 from unique.core.dialect import Dialect
 from unique.core.procedural.emitter import ProceduralEmitter
 from unique.core.procedural.parser import ProceduralParser
@@ -334,6 +335,15 @@ class Transpiler:
             except Exception as e:
                 logger.warning("Could not connect to metadata database: %s", e)
 
+        # T-SQL alias types (CREATE TYPE x FROM base) defined anywhere in the
+        # script: harvest them up front so columns typed with an alias resolve
+        # to the base type on engines without alias types.
+        alias_token = None
+        if source == "tsql" and target != "tsql":
+            aliases = harvest_tsql_alias_types(sql)
+            if aliases:
+                alias_token = TSQL_ALIAS_TYPES.set(aliases)
+
         try:
             # Step 0: Split into batches
             batches = BatchSplitter.split(sql, source)
@@ -435,6 +445,8 @@ class Transpiler:
                 unsupported=all_unsupported,
             )
         finally:
+            if alias_token is not None:
+                TSQL_ALIAS_TYPES.reset(alias_token)
             if metadata_resolver:
                 metadata_resolver.close()
 

@@ -1266,3 +1266,44 @@ class TestBracketedRoutineHeaders:
         assert "NVARCHAR2" in out
         # tinyint -> NUMBER; the parameter position is unconstrained (S1-11).
         assert "V_STATUS IN NUMBER" in out
+
+
+class TestBacktickedTriggerHeaders:
+    """MySQL backtick-quoted trigger headers must be translated.
+
+    The procedural lexer used to have no backtick tokenization, so
+    CREATE TRIGGER `ins_film` ... ON `film` shredded into fragments
+    (found on the sakila schema).
+    """
+
+    SQL = (
+        "CREATE TRIGGER `ins_film` AFTER INSERT ON `film` FOR EACH ROW BEGIN\n"
+        "    INSERT INTO film_text (film_id, title)\n"
+        "        VALUES (new.film_id, new.title);\n"
+        "  END;;\n"
+    )
+
+    def test_postgresql_trigger_header(self) -> None:
+        out = _transpile(self.SQL, "mysql", "postgresql")
+        body = "\n".join(
+            line for line in out.splitlines() if not line.lstrip().startswith("--")
+        )
+        assert "`" not in body, out
+        assert "ins_film" in out
+        assert "ON film" in out
+
+    def test_tsql_trigger_header(self) -> None:
+        out = _transpile(self.SQL, "mysql", "tsql")
+        body = "\n".join(
+            line for line in out.splitlines() if not line.lstrip().startswith("--")
+        )
+        assert "`" not in body, out
+        assert "ins_film" in out
+
+    def test_oracle_trigger_header(self) -> None:
+        out = _transpile(self.SQL, "mysql", "oracle")
+        body = "\n".join(
+            line for line in out.splitlines() if not line.lstrip().startswith("--")
+        )
+        assert "`" not in body, out
+        assert "ins_film" in out.lower()

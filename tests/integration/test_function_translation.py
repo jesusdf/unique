@@ -17,7 +17,7 @@ import re
 
 import pytest
 
-from tests.helpers.validity import assert_translated
+from tests.helpers.validity import assert_translated, executable_lines
 from unique.core.transpiler import Transpiler
 
 _TARGETS = ("oracle", "postgresql", "mysql")
@@ -132,3 +132,41 @@ class TestKnownGoodMappings:
         assert_translated(
             out, "postgresql", present=("gen_random_uuid()",), absent=("NEWID",)
         )
+
+
+class TestConditionalFunction:
+    """MySQL IF() / T-SQL IIF() translate to each target's conditional.
+
+    Found on the sakila views: IF(cu.active, ...) leaked verbatim into
+    T-SQL/PostgreSQL/Oracle output, where no such function exists.
+    """
+
+    @pytest.mark.parametrize(
+        "source,expr",
+        [("mysql", "IF(a > 0, 'y', 'n')"), ("tsql", "IIF(a > 0, 'y', 'n')")],
+    )
+    @pytest.mark.parametrize("target", ("tsql", "oracle", "postgresql", "mysql"))
+    def test_conditional_translated(self, source: str, expr: str, target: str) -> None:
+        if source == target:
+            pytest.skip("same-dialect passthrough")
+        out = Transpiler().transpile(f"SELECT {expr} FROM t;", source, target).sql
+        idiom = {
+            "tsql": "IIF(",
+            "mysql": "IF(",
+            "oracle": "CASE WHEN",
+            "postgresql": "CASE WHEN",
+        }[target]
+        absent = {
+            "tsql": ("IF(",),  # IIF( contains IF( — checked via idiom below
+            "mysql": ("IIF(", "CASE WHEN"),
+            "oracle": ("IIF(", "IF("),
+            "postgresql": ("IIF(", "IF("),
+        }[target]
+        assert_translated(out, target, present=(idiom, "'y'", "'n'"))
+        body = executable_lines(out).upper()
+        for needle in absent:
+            if target == "tsql" and needle == "IF(":
+                # IIF( legitimately contains IF(; ensure no bare IF( remains.
+                assert not re.search(r"(?<!I)\bIF\(", body), out
+            else:
+                assert needle not in body, out
