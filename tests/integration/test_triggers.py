@@ -72,6 +72,21 @@ class TestTriggerTiming:
         assert "DECLARE OR" not in out
         assert "OR UPDATE;" not in out
 
+    def test_oracle_source_new_ref_to_postgresql(self) -> None:
+        # :NEW./:OLD. must become NEW./OLD., not a %(NEW)s bind placeholder
+        # (sqlglot would read :NEW as a bind variable).
+        src = (
+            "CREATE TRIGGER t\n"
+            "BEFORE INSERT ON tbl\n"
+            "FOR EACH ROW\nBEGIN\n"
+            "    :NEW.total := :NEW.qty * :NEW.price;\n"
+            "END;\n/"
+        )
+        out = _t(src, "oracle", "postgresql")
+        assert "NEW.total := NEW.qty * NEW.price" in out
+        assert "%(NEW)s" not in out
+        assert ":NEW" not in out
+
     def test_multi_event_mysql_splits_per_event(self) -> None:
         # MySQL triggers fire on a single event, so a multi-event trigger is
         # split into one trigger per event.

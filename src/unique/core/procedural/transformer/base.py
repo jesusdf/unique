@@ -1184,6 +1184,11 @@ class ProceduralTransformer:
         the other engines; the IR emitter renders each engine's idiomatic form.
         """
         sql = self._transform_var_in_sql(node.sql)
+        # Oracle's ``:NEW.``/``:OLD.`` pseudo-records must be normalized to the
+        # target's row qualifier *before* sqlglot, which would otherwise read
+        # ``:NEW`` as a bind placeholder and emit ``%(NEW)s`` for PostgreSQL.
+        if self._source == "oracle":
+            sql = self._normalize_oracle_pseudorecords(sql)
         # ``INSERT … RETURNING <col> INTO <var>`` captures a generated id. MySQL
         # has no RETURNING, and sqlglot drops the ``INTO <var>`` target, so peel
         # the capture off first and re-express it as ``SET <var> =
@@ -1326,6 +1331,14 @@ class ProceduralTransformer:
         # Column-qualifier form: map to NEW/OLD (row-level).
         sql = re.sub(r"(?i)\binserted\s*\.\s*", self._trigger_new_ref(), sql)
         sql = re.sub(r"(?i)\bdeleted\s*\.\s*", self._trigger_old_ref(), sql)
+        return sql
+
+    def _normalize_oracle_pseudorecords(self, sql: str) -> str:
+        """Map Oracle ``:NEW.``/``:OLD.`` (possibly lexed as ``: NEW .``) to the
+        target's row qualifier, so sqlglot doesn't misread ``:NEW`` as a bind
+        placeholder (``%(NEW)s`` on PostgreSQL)."""
+        sql = re.sub(r"(?i):\s*NEW\s*\.\s*", self._trigger_new_ref(), sql)
+        sql = re.sub(r"(?i):\s*OLD\s*\.\s*", self._trigger_old_ref(), sql)
         return sql
 
     def _noop_sql(self) -> str:
