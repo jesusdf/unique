@@ -65,7 +65,7 @@ doesn't, delegating the embedded DML/DQL to sqlglot. Concretely, Unique adds:
 pip install -e ".[dev]"
 
 # CLI
-unique transpile -s tsql -t postgresql -f input.sql -o output.sql
+unique transpile input.sql --from tsql --to postgresql -o output.sql
 ```
 
 ```python

@@ -8,10 +8,10 @@ whichever fits your workflow.
 
 ```bash
 # Transpile a file
-unique transpile -s tsql -t postgresql -f input.sql -o output.sql
+unique transpile input.sql --from tsql --to postgresql -o output.sql
 
 # Transpile inline SQL
-unique transpile -s tsql -t mysql "SELECT TOP 10 * FROM users"
+unique transpile query.sql --from tsql --to mysql  # input is a file path
 
 # List available dialects
 unique dialects
@@ -126,19 +126,19 @@ Unique); if it is missing, Unique raises an `ImportError` naming the driver.
 
 ```bash
 # Oracle: resolve %TYPE/%ROWTYPE against a live schema while converting to MySQL
-unique transpile -s oracle -t mysql -f pkg.sql --db-url \
+unique transpile pkg.sql --from oracle --to mysql --db-url \
   "oracle://app:secret@db.internal:1521/FREEPDB1"
 
 # SQL Server source, connecting to SQL Server for metadata
-unique transpile -s tsql -t postgresql -f proc.sql --db-url \
+unique transpile proc.sql --from tsql --to postgresql --db-url \
   "mssql://sa:Str0ng!Pass@localhost:1433/sales"
 
 # PostgreSQL
-unique transpile -s postgresql -t mysql -f funcs.sql --db-url \
+unique transpile funcs.sql --from postgresql --to mysql --db-url \
   "postgresql://app:secret@localhost:5432/analytics"
 
 # MySQL
-unique transpile -s mysql -t tsql -f routines.sql --db-url \
+unique transpile routines.sql --from mysql --to tsql --db-url \
   "mysql://app:secret@localhost:3306/shop"
 ```
 
