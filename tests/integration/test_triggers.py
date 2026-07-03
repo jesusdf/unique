@@ -423,3 +423,62 @@ class TestMySQLRowAssignmentInTrigger:
     def test_mysql_roundtrip_keeps_set(self) -> None:
         out = Transpiler().transpile(self.SQL, "mysql", "mysql").sql
         assert "SET NEW.line_total = NEW.qty * NEW.unit_price" in self._tight(out)
+
+
+class TestPostgresTriggerToMySQL:
+    """PostgreSQL splits trigger logic into a ``CREATE FUNCTION … RETURNS
+    TRIGGER`` plus a ``CREATE TRIGGER … EXECUTE FUNCTION fn()`` binding. MySQL
+    has neither a TRIGGER return type nor statement-level transition-table
+    triggers, so both must degrade to a documented ``-- UNIQUE:`` carrier with a
+    warning — never an invalid ``RETURNS TRIGGER`` or a mangled body (the
+    postgresql→mysql pair of the 4×4 matrix). Same divergence already documented
+    for T-SQL set-based triggers on MySQL."""
+
+    FUNC = (
+        "CREATE FUNCTION trg_touch_fn() RETURNS TRIGGER AS $$\n"
+        "BEGIN\n"
+        "    UPDATE invoice SET updated_at = CURRENT_TIMESTAMP\n"
+        "    WHERE id IN (SELECT id FROM inserted);\n"
+        "    RETURN NULL;\n"
+        "END;\n$$ LANGUAGE plpgsql;"
+    )
+
+    BINDING = (
+        "CREATE TRIGGER trg_touch AFTER UPDATE ON invoice\n"
+        "REFERENCING NEW TABLE AS inserted\n"
+        "FOR EACH STATEMENT EXECUTE FUNCTION trg_touch_fn();"
+    )
+
+    def _code(self, sql: str) -> str:
+        # The executable text with UNIQUE carrier comments stripped.
+        return "\n".join(
+            line for line in sql.split("\n") if not line.strip().startswith("--")
+        )
+
+    def test_trigger_function_degrades_with_warning(self) -> None:
+        r = Transpiler().transpile(self.FUNC, source="postgresql", target="mysql")
+        # No invalid RETURNS TRIGGER in the executable output.
+        assert "RETURNS TRIGGER" not in self._code(r.sql).upper()
+        assert "UNIQUE:" in r.sql
+        assert r.warnings or r.unsupported
+
+    def test_trigger_binding_degrades_with_warning(self) -> None:
+        r = Transpiler().transpile(self.BINDING, source="postgresql", target="mysql")
+        code = self._code(r.sql).upper()
+        # The old parser mangled EXECUTE FUNCTION into bogus DECLAREs.
+        assert "DECLARE REFERENCING" not in code
+        assert "DECLARE TABLE AS" not in code
+        # No executable CREATE TRIGGER shell (MySQL cannot run this one).
+        assert "EXECUTE FUNCTION" not in code
+        assert "UNIQUE:" in r.sql
+        assert r.warnings or r.unsupported
+
+    def test_binding_roundtrips_to_postgresql(self) -> None:
+        # pg->pg through the transpiler must keep the delegating binding valid.
+        out = (
+            Transpiler()
+            .transpile(self.BINDING, source="postgresql", target="postgresql")
+            .sql
+        )
+        assert "EXECUTE FUNCTION trg_touch_fn()" in out
+        assert "AFTER UPDATE ON invoice" in out

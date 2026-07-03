@@ -105,7 +105,15 @@ class PostgresEmitter(ProceduralEmitter):
             header, declarations, body_stmts, is_function=True
         )
 
+    def _supports_trigger_function(self) -> bool:
+        return True
+
     def _emit_trigger(self, node: CreateTriggerStatement) -> str:
+        # A PostgreSQL-source trigger already delegating to a trigger function
+        # (parsed with execute_function) is re-emitted as just the CREATE TRIGGER
+        # binding — the function it references is emitted as its own statement.
+        if node.execute_function:
+            return self._emit_delegating_trigger(node)
         # PostgreSQL triggers call a separate trigger function that returns a
         # trigger and contains the body. Emit both the function and the CREATE
         # TRIGGER that invokes it.
@@ -125,6 +133,21 @@ class PostgresEmitter(ProceduralEmitter):
             for ev in events
         ]
         return "\n\n".join(parts)
+
+    def _emit_delegating_trigger(self, node: CreateTriggerStatement) -> str:
+        """Re-emit a PostgreSQL trigger that binds to an existing trigger
+        function (the parsed ``… EXECUTE FUNCTION fn()`` form)."""
+        name = self._qualified_name(node.schema, node.name)
+        events = " OR ".join(node.events) if node.events else "UPDATE"
+        lines = [
+            f"CREATE OR REPLACE TRIGGER {name}",
+            f"{node.timing} {events} ON {node.table}",
+        ]
+        if node.referencing:
+            lines.append(f"REFERENCING {node.referencing}")
+        lines.append(f"FOR EACH {node.for_each}")
+        lines.append(f"EXECUTE FUNCTION {node.execute_function}();")
+        return "\n".join(lines)
 
     def _emit_trigger_variant(
         self,

@@ -520,6 +520,17 @@ class ProceduralParser:
         if not table_name and self._match_keyword("ON"):
             table_name, _ = self._parse_qualified_name()
 
+        # REFERENCING NEW TABLE AS x [OLD TABLE AS y] (PostgreSQL transition
+        # tables; lexed as an identifier, so match by value). Collect the raw
+        # clause up to FOR so it can be re-emitted faithfully to PostgreSQL.
+        referencing = ""
+        if self._current().upper_value == "REFERENCING":
+            self._advance()
+            ref_parts: list[str] = []
+            while not self._at_end() and not self._current().is_keyword("FOR"):
+                ref_parts.append(self._advance().value)
+            referencing = " ".join(ref_parts)
+
         # FOR EACH ROW (Oracle/PG)
         for_each = "STATEMENT"
         if self._match_keyword("FOR"):
@@ -529,8 +540,23 @@ class ProceduralParser:
             else:
                 self._match_keyword("STATEMENT")
 
-        # Body
-        body = self._parse_routine_body(with_pg_header=False)
+        # PostgreSQL delegates the body to a trigger function:
+        # ``EXECUTE {FUNCTION|PROCEDURE} fn(args)``. Capture the function name;
+        # the body lives in that separate CREATE FUNCTION. Other dialects inline
+        # the body after FOR EACH, parsed below.
+        execute_function: str | None = None
+        body: list[ASTNode] = []
+        if self._match_keyword("EXECUTE"):
+            if not self._match_keyword("FUNCTION"):
+                self._match_keyword("PROCEDURE")
+            execute_function, _ = self._parse_qualified_name()
+            if self._match_type(TokenType.LPAREN):
+                while not self._at_end() and self._current().type != TokenType.RPAREN:
+                    self._advance()
+                self._match_type(TokenType.RPAREN)
+            self._match_type(TokenType.SEMICOLON)
+        else:
+            body = self._parse_routine_body(with_pg_header=False)
 
         return CreateTriggerStatement(
             name=name,
@@ -541,6 +567,8 @@ class ProceduralParser:
             body=tuple(body),
             or_replace=or_replace,
             schema=schema,
+            execute_function=execute_function,
+            referencing=referencing,
         )
 
     # ---------------------------------------------------------------

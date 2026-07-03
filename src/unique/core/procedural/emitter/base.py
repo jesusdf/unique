@@ -481,12 +481,41 @@ class ProceduralEmitter:
             and not self._supports_table_valued_function()
         ):
             return self._emit_table_valued_function(node)
+        # A PostgreSQL trigger function ('RETURNS TRIGGER') is the body of a
+        # trigger, not a callable function; engines without trigger functions
+        # (MySQL/Oracle/T-SQL) cannot create it, so document it rather than emit
+        # an invalid ``RETURNS TRIGGER``.
+        if (
+            node.return_type is not None
+            and node.return_type.name.upper() == "TRIGGER"
+            and not self._supports_trigger_function()
+        ):
+            return self._emit_trigger_function_unsupported(node)
         return self._emit_function_impl(node)
 
     def _supports_table_valued_function(self) -> bool:
         """Whether the engine has a native table-valued function. Only T-SQL
         does; the others document and comment it out."""
         return False
+
+    def _supports_trigger_function(self) -> bool:
+        """Whether the engine has PostgreSQL-style trigger functions (a
+        ``RETURNS TRIGGER`` routine holding a trigger body). Only PostgreSQL
+        does; the others document and comment it out."""
+        return False
+
+    def _emit_trigger_function_unsupported(self, node: CreateFunctionStatement) -> str:
+        note = (
+            "-- UNIQUE: PostgreSQL trigger function ('RETURNS TRIGGER') has no "
+            f"{self.dialect_name} equivalent (no trigger functions; the body "
+            "belongs to a CREATE TRIGGER). The non-portable translation is "
+            "commented out below for review:\n"
+        )
+        body = self._emit_function_impl(node)
+        commented = "\n".join(
+            f"-- {line}" if line.strip() else "--" for line in body.split("\n")
+        )
+        return note + commented
 
     def _tvf_unsupported_note(self) -> str:
         """Per-engine explanation of why a table-valued function can't be
@@ -554,6 +583,12 @@ class ProceduralEmitter:
         ``header → body → END`` shape (T-SQL, Oracle, MySQL); PostgreSQL, whose
         trigger body lives in a separate function, overrides this entirely.
         """
+        # A PostgreSQL trigger that delegates its body to a trigger function
+        # (``EXECUTE FUNCTION fn()``) has no inline body to emit here, and these
+        # engines have no statement-level transition-table triggers. Document
+        # the binding rather than emit an empty/invalid trigger.
+        if node.execute_function:
+            return self._emit_delegating_trigger_unsupported(node)
         name = self._qualified_name(node.schema, node.name)
         events = ", ".join(node.events) if node.events else "UPDATE"
         timing = node.timing
@@ -566,6 +601,25 @@ class ProceduralEmitter:
         self._indent_level = 0
         lines.append(self._trigger_end())
         return note + "\n".join(lines)
+
+    def _emit_delegating_trigger_unsupported(self, node: CreateTriggerStatement) -> str:
+        """Document a PostgreSQL delegating trigger (``EXECUTE FUNCTION fn()``)
+        that this engine cannot express (no statement-level transition-table
+        triggers). Reconstructs the binding as a ``-- UNIQUE:`` carrier; the
+        transformer records the loss in ``result.warnings``."""
+        events = " OR ".join(node.events) if node.events else "UPDATE"
+        ref = f" REFERENCING {node.referencing}" if node.referencing else ""
+        binding = (
+            f"CREATE TRIGGER {node.name} {node.timing} {events} ON {node.table}"
+            f"{ref} FOR EACH {node.for_each} EXECUTE FUNCTION "
+            f"{node.execute_function}();"
+        )
+        return (
+            "-- UNIQUE: PostgreSQL statement-level trigger delegating to a "
+            f"trigger function has no {self.dialect_name} equivalent (no "
+            "transition tables / trigger functions). Original binding:\n"
+            f"-- {binding}"
+        )
 
     def _adjust_trigger_timing(self, timing: str) -> tuple[str, str]:
         """Return (note, timing). Engines that can't honor the requested timing
