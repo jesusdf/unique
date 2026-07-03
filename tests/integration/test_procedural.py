@@ -93,6 +93,18 @@ class TestTSQLToOracle:
         assert "V_NEW_ID :=" not in out
         assert "SET V_NEW_ID" not in out
 
+    def test_call_wraps_iso_date_argument(self) -> None:
+        # A stored proc's DATE parameter receiving an ISO string must be wrapped
+        # in an ANSI DATE literal for the Oracle call (ORA-01861 otherwise).
+        sql = (
+            "CREATE PROCEDURE dbo.create_invoice\n"
+            "    @customer_id INT, @issued_on DATE, @qty INT\n"
+            "AS\nBEGIN\n    SELECT 1\nEND\nGO\n"
+            "EXEC dbo.create_invoice 2, '2024-02-01', 1\nGO"
+        )
+        out = _transpile(sql, "tsql", "oracle")
+        assert "create_invoice(2, DATE '2024-02-01', 1)" in out
+
     def test_scope_identity_unknown_table_left_alone(self) -> None:
         # With no harvested identity column, nothing is merged (no crash).
         sql = (

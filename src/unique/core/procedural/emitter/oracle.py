@@ -168,7 +168,27 @@ class OracleEmitter(ProceduralEmitter):
         # Oracle invokes a procedure by bare name inside a PL/SQL block; the
         # surrounding anonymous block supplies BEGIN/END.
         name = self._qualified_name(node.schema, node.name)
-        return f"{name}({node.args});"
+        if not node.args.strip():
+            return f"{name}();"
+        args = self._wrap_date_args(node.name, self._split_exec_args(node.args))
+        return f"{name}({', '.join(args)});"
+
+    def _wrap_date_args(self, proc_name: str, args: list[str]) -> list[str]:
+        """Wrap ISO date-string arguments at a procedure's date-parameter
+        positions in ANSI ``DATE``/``TIMESTAMP`` literals (Oracle won't
+        implicitly convert them, ORA-01861)."""
+        from unique.core.converter import PROC_DATE_PARAMS, wrap_oracle_date_arg
+
+        registry = PROC_DATE_PARAMS.get()
+        if not registry:
+            return args
+        key = proc_name.strip('[]"`').split(".")[-1].lower()
+        positions = registry.get(key)
+        if not positions:
+            return args
+        return [
+            wrap_oracle_date_arg(a) if i in positions else a for i, a in enumerate(args)
+        ]
 
     def _emit_execute_stmt(
         self, expr: str, params: list[str], immediate: bool = False
@@ -193,7 +213,9 @@ class OracleEmitter(ProceduralEmitter):
         m = re.match(r"(?i)^(?:\[?\w+\]?\s*\.\s*)*\[?(\w+)\]?\s*(.*)$", stripped)
         if m:
             proc_name = m.group(1)
-            args = self._split_exec_args(m.group(2).strip())
+            args = self._wrap_date_args(
+                proc_name, self._split_exec_args(m.group(2).strip())
+            )
             return f"{proc_name}({', '.join(args)});"
         if params:
             return f"EXECUTE IMMEDIATE {expr} USING {', '.join(params)};"
