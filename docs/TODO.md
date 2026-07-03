@@ -4,7 +4,7 @@ This document tracks **outstanding** work, ordered by priority. Completed work
 has been archived in [`docs/DONE.md`](DONE.md) (with the detailed why/how of
 each fix); `docs/STATUS.md` summarizes the project state at a higher level.
 
-Last reviewed: 2026-06-25.
+Last reviewed: 2026-07-04.
 
 ## Legend
 
@@ -220,37 +220,13 @@ High-level plan (details in that folder):
         remote MariaDB) needs `--log-bin-trust-function-creators=1` to let the
         non-SUPER `unique` user create routines/triggers — added to the compose
         file. Remaining red: the 3 trigger-heavy pairs below.
-        - [x] mysql→postgresql (**live green**): row-level `SET NEW.line_total`
-          mangled to `NEW := . line_total`; the parser now reads the dotted
-          pseudo-row target. Also needed cross-source `LAST_INSERT_ID()` →
-          `LASTVAL()`, standalone `CALL create_invoice(...)` support, and the
-          MySQL combined-split DELIMITER fix.
-        - [x] postgresql→mysql (**live green**): the pg trigger function
-          (`RETURNS TRIGGER`) + `EXECUTE FUNCTION` binding now degrade to
-          documented `-- UNIQUE:` carriers with warnings (MySQL has no
-          statement-level transition-table triggers — a documented divergence,
-          trigger-maintained values excluded there). Also needed standalone
-          `CALL` support and `INSERT … RETURNING id INTO v` →
-          `SET v = LAST_INSERT_ID()`.
-        - [x] **tsql→oracle, postgresql→oracle (live green).** Fixed this
-          session against the local Oracle: `CREATE SEQUENCE … AS <type>` clause
-          dropped (ORA-03048); multi-event triggers joined with `OR` not comma
-          (ORA-00969); ISO date strings written to date columns / passed as proc
-          date-args wrapped in ANSI `DATE '…'`/`TIMESTAMP '…'` (ORA-01861);
-          `CAST(str AS DATE)` → ANSI date literal; constrained types in a PL/SQL
-          `CAST` unconstrained (PLS-00103); T-SQL `SCOPE_IDENTITY()` capture →
-          `INSERT … RETURNING <idcol> INTO <var>` (harvested identity columns);
-          `RETURNING … INTO` peeled/re-appended so sqlglot can't drop the target
-          (ORA-00925). Harness: the FE engine-runner's Oracle splitter keeps a
-          trailing PL/SQL block's `END;` intact.
+        - [x] mysql→postgresql, postgresql→mysql, **tsql→oracle,
+          postgresql→oracle** (**live green**) — the 3 new-green Oracle pairs and
+          the full list of emitter/harness fixes are archived in **DONE §13**.
         - [ ] oracle→postgresql / oracle→mysql, mysql→oracle (**still red — the
           same trigger-aggregation feature**). Row-level trigger translation is
-          now correct in both directions (done this session): Oracle/PG events
-          separated by `OR` now parse (was leaking `OR UPDATE ON …` into the
-          body); Oracle-source `:NEW.`/`:OLD.` normalized before sqlglot (was
-          emitting PG `%(NEW)s`); MySQL/PG-source `NEW.`/`OLD.` → Oracle
-          `:NEW.`/`:OLD.` in the assignment target, its value, and an embedded
-          `UPDATE` (was PLS-00201). The remaining blocker is a single feature:
+          now correct in both directions (DONE §13). The remaining blocker is a
+          single feature:
           - **Aggregating trigger across the statement-level / compound /
             mutating-table boundary.** The canonical fixture maintains
             `invoice.total` by re-aggregating `invoice_line` when lines change.
