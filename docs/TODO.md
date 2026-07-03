@@ -243,21 +243,31 @@ High-level plan (details in that folder):
           `RETURNING … INTO` peeled/re-appended so sqlglot can't drop the target
           (ORA-00925). Harness: the FE engine-runner's Oracle splitter keeps a
           trailing PL/SQL block's `END;` intact.
-        - [ ] oracle→postgresql / oracle→mysql, mysql→oracle (**still red — all
-          trigger translation**). Done this session: Oracle/PG trigger events
+        - [ ] oracle→postgresql / oracle→mysql, mysql→oracle (**still red — the
+          same trigger-aggregation feature**). Row-level trigger translation is
+          now correct in both directions (done this session): Oracle/PG events
           separated by `OR` now parse (was leaking `OR UPDATE ON …` into the
-          body); Oracle-source `:NEW.`/`:OLD.` normalized to `NEW.`/`OLD.` before
-          sqlglot (was emitting PG `%(NEW)s`). Remaining blockers:
-          - **Oracle COMPOUND TRIGGER (`trg_line_total`) → PG/MySQL.** The
-            AFTER-EACH-ROW + AFTER-STATEMENT set-based aggregation has no direct
-            form: PG needs a statement-level transition-table trigger + function;
-            MySQL has no transition tables at all (documented divergence). Emits
-            `variable "compound" has pseudo-type trigger` on PG. Substantial —
-            own work item.
-          - **Row-level trigger body assignment per target.** oracle→mysql: a
-            `NEW.col := expr` body must become `SET NEW.col = expr` (MySQL 1064).
-            mysql→oracle: the reverse — MySQL `NEW.`/`OLD.` → Oracle `:NEW.`/
-            `:OLD.` (PLS-00201), plus MySQL `DATEDIFF` → Oracle in a routine body.
+          body); Oracle-source `:NEW.`/`:OLD.` normalized before sqlglot (was
+          emitting PG `%(NEW)s`); MySQL/PG-source `NEW.`/`OLD.` → Oracle
+          `:NEW.`/`:OLD.` in the assignment target, its value, and an embedded
+          `UPDATE` (was PLS-00201). The remaining blocker is a single feature:
+          - **Aggregating trigger across the statement-level / compound /
+            mutating-table boundary.** The canonical fixture maintains
+            `invoice.total` by re-aggregating `invoice_line` when lines change.
+            Each engine spells this differently: T-SQL/PG statement-level
+            (transition tables), Oracle a COMPOUND TRIGGER, MySQL a row-level
+            trigger (allowed to query the same table). Cross-translating them is
+            unimplemented, so: oracle→pg emits `variable "compound" has
+            pseudo-type trigger`; mysql→oracle hits Oracle's mutating-table rule
+            (ORA-04091) because the MySQL row-level rollup can't be a plain
+            Oracle row-level trigger; oracle→mysql is a documented divergence
+            (MySQL has no statement-level/transition-table form at all). Needs:
+            parse the Oracle compound trigger; synthesize a compound trigger for
+            the Oracle *target* from a row-level aggregating source; and decide
+            the MySQL story (likely extend the harness `ignore_triggers` to the
+            aggregation trigger on engines that can't express it). Substantial —
+            own work item. (Also small: MySQL 2-arg `DATEDIFF(d2,d1)` → Oracle
+            `(d2 - d1)` in a routine body.)
         Oracle-**target** pairs are now live locally; **tsql-target** pairs still
         need `pyodbc` + the MS ODBC driver installed (see HARNESS.md runbook).
 
