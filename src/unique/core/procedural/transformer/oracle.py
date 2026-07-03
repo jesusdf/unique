@@ -85,6 +85,7 @@ class OracleTransformer(ProceduralTransformer):
         # dbo doesn't exist in Oracle; drop a dbo. qualifier on calls within
         # expressions (e.g. dbo.func1() in an assignment, RETURN or COALESCE).
         sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
+
         # A PL/SQL expression CAST rejects a constrained type (PLS-00103):
         # CAST(x AS NUMBER(12,2)) / VARCHAR2(10) must drop the length, and
         # DECIMAL/NUMERIC must become NUMBER. Only the numeric-constrained

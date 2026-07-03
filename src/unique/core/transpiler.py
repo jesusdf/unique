@@ -22,9 +22,11 @@ from dataclasses import dataclass, field, replace
 from unique.core.batch_splitter import BatchSplitter, BatchType
 from unique.core.converter import (
     DATE_COLUMNS,
+    IDENTITY_COLUMNS,
     TSQL_ALIAS_TYPES,
     TSQL_BIT_COLUMNS,
     harvest_date_columns,
+    harvest_identity_columns,
     harvest_tsql_alias_types,
     harvest_tsql_bit_columns,
 )
@@ -359,6 +361,7 @@ class Transpiler:
         alias_token = None
         bit_token = None
         date_token = None
+        identity_token = None
         if source == "tsql" and target != "tsql":
             aliases = harvest_tsql_alias_types(sql)
             if aliases:
@@ -373,6 +376,9 @@ class Transpiler:
             date_columns = harvest_date_columns(sql)
             if date_columns:
                 date_token = DATE_COLUMNS.set(date_columns)
+            identity_columns = harvest_identity_columns(sql)
+            if identity_columns:
+                identity_token = IDENTITY_COLUMNS.set(identity_columns)
 
         try:
             # Step 0: Split into batches
@@ -493,6 +499,8 @@ class Transpiler:
                 TSQL_BIT_COLUMNS.reset(bit_token)
             if date_token is not None:
                 DATE_COLUMNS.reset(date_token)
+            if identity_token is not None:
+                IDENTITY_COLUMNS.reset(identity_token)
             if metadata_resolver:
                 metadata_resolver.close()
 
