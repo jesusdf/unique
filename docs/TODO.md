@@ -229,23 +229,28 @@ High-level plan (details in that folder):
           trigger-maintained values excluded there). Also needed standalone
           `CALL` support and `INSERT … RETURNING id INTO v` →
           `SET v = LAST_INSERT_ID()`.
-        - [ ] oracle→postgresql / oracle→mysql (**now live-testable, red on
-          Oracle NUMBER/DDL**). The anonymous DROP block, SYSTIMESTAMP, FOR-loop
-          and EXECUTE IMMEDIATE are handled; the remaining blockers are Oracle
-          type mapping:
-          - `NUMBER GENERATED ALWAYS AS IDENTITY` → MySQL `DECIMAL
-            AUTO_INCREMENT` (invalid — AUTO_INCREMENT needs an integer type;
-            should be `INT/BIGINT AUTO_INCREMENT`) and → PostgreSQL a FK type
-            mismatch (`id SERIAL` int vs `customer_id DECIMAL`). An unqualified
-            Oracle `NUMBER` used as an identity/PK/FK should map to an integer
-            type, not DECIMAL.
-          - oracle→postgresql only: the re-runnable DROP block transpiles to a
-            valid `DO $$ … $$` but its body queries Oracle's `user_tables`/
-            `user_objects` data dictionary, which has no PostgreSQL equivalent
-            (fails at runtime). Since the harness runs its own `_drop_all`,
-            degrade this catalog-driven block to a documented comment on
-            non-Oracle targets (as MySQL already does) rather than emit a DO
-            block that can't run.
+        - [ ] oracle→postgresql / oracle→mysql (**now live-testable; DDL now
+          valid, red on Oracle triggers + harness teardown**). Handled this
+          session: the anonymous DROP block, SYSTIMESTAMP, FOR-loop / EXECUTE
+          IMMEDIATE, bare `NUMBER`→`BIGINT` (identity/PK/FK now valid —
+          `BIGINT AUTO_INCREMENT` / `BIGSERIAL`+`BIGINT` FK), and the
+          catalog-driven DROP block degraded to a comment on non-Oracle targets.
+          Remaining blockers:
+          - **Oracle trigger translation → PG/MySQL.** The row-level
+            `BEFORE INSERT … :NEW.col := expr` trigger emits malformed output
+            (`CREATE TRIGGER … BEFORE INSERT ON EXECUTE FUNCTION …` — no table,
+            empty function body), and the Oracle **COMPOUND** trigger
+            (`trg_line_total`, `trg_payment_paid`) is mangled (`DECLARE OR
+            UPDATE; ON …`). Needs: Oracle row-level trigger → PG trigger
+            function+binding / MySQL `FOR EACH ROW`; compound trigger → a
+            faithful per-target form or a documented degradation. Substantial —
+            own work item.
+          - **Harness teardown gap.** `_drop_all` drops only *tables*, so with
+            the Oracle DROP block degraded, functions/procedures/views persist
+            across runs (`FUNCTION fn_tax already exists`). Extend `_drop_all`
+            to also drop the schema's functions/procedures/views per engine
+            (they are known by name), making every pair re-runnable regardless
+            of the source's DROP strategy.
         Oracle-**target** pairs still blocked (server credentials rejected; see
         HARNESS.md runbook).
 
