@@ -1213,3 +1213,56 @@ class TestPerEngineRoutineSurface:
         )
         assert "RAISE EXCEPTION '%', 'boom';" in _transpile(src, "tsql", "postgresql")
         assert "SIGNAL SQLSTATE '45000'" in _transpile(src, "tsql", "mysql")
+
+
+class TestBracketedRoutineHeaders:
+    """T-SQL bracket-quoted routine names and types must be translated.
+
+    SSMS-generated scripts quote everything: CREATE FUNCTION [dbo].[fn]
+    (@p [tinyint]) RETURNS [nvarchar](15). The brackets are T-SQL-only
+    quoting (audit S1-1); leaking them into another engine's routine
+    header is invalid SQL there (found on AdventureWorksLT).
+    """
+
+    SQL = (
+        "CREATE FUNCTION [dbo].[ufnGetStatusText](@Status [tinyint])\n"
+        "RETURNS [nvarchar](15)\n"
+        "AS\n"
+        "BEGIN\n"
+        "    DECLARE @ret [nvarchar](15);\n"
+        "    SET @ret = 'x';\n"
+        "    RETURN @ret\n"
+        "END"
+    )
+
+    def _executable(self, out: str) -> str:
+        return "\n".join(
+            line for line in out.splitlines() if not line.lstrip().startswith("--")
+        )
+
+    def test_postgresql_header_unbracketed_and_types_mapped(self) -> None:
+        out = _transpile(self.SQL, "tsql", "postgresql")
+        body = self._executable(out)
+        assert "[" not in body, out
+        assert "ufnGetStatusText" in out
+        # dbo has no meaning on PostgreSQL; the routine lands unqualified.
+        assert "dbo." not in body
+        assert "VARCHAR(15)" in out
+        assert "SMALLINT" in out  # tinyint
+
+    def test_mysql_header_unbracketed_and_types_mapped(self) -> None:
+        out = _transpile(self.SQL, "tsql", "mysql")
+        body = self._executable(out)
+        assert "[" not in body, out
+        assert "ufnGetStatusText" in out
+        assert "VARCHAR(15)" in out
+        assert "TINYINT" in out
+
+    def test_oracle_header_unbracketed_and_types_mapped(self) -> None:
+        out = _transpile(self.SQL, "tsql", "oracle")
+        body = self._executable(out)
+        assert "[" not in body, out
+        assert "ufnGetStatusText".upper() in out.upper()
+        assert "NVARCHAR2" in out
+        # tinyint -> NUMBER; the parameter position is unconstrained (S1-11).
+        assert "V_STATUS IN NUMBER" in out
