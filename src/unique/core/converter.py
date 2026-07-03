@@ -685,6 +685,7 @@ def _convert_create_table(
                         identity=identity,
                         primary_key=primary_key,
                         unique=unique,
+                        quoted=_identifier_quoted(col_def.this),
                     )
                 )
             elif isinstance(
@@ -747,13 +748,23 @@ def _convert_drop(expr: exp.Drop) -> DropStatement:
     )
 
 
+def _identifier_quoted(node: exp.Expression | None) -> bool:
+    """True if *node* is a sqlglot Identifier that was quoted in the source."""
+    return isinstance(node, exp.Identifier) and bool(node.args.get("quoted"))
+
+
 def _convert_column(expr: exp.Column) -> ColumnRef:
     """Convert a column reference."""
     table = None
     if expr.table:
         table = expr.table
 
-    return ColumnRef(name=expr.name, table=table)
+    return ColumnRef(
+        name=expr.name,
+        table=table,
+        quoted=_identifier_quoted(expr.this),
+        table_quoted=_identifier_quoted(expr.args.get("table")),
+    )
 
 
 def _convert_table(expr: exp.Table) -> TableRef:
@@ -779,6 +790,8 @@ def _convert_table_ref(expr: exp.Expression) -> TableRef:
             database=(
                 expr.catalog if hasattr(expr, "catalog") and expr.catalog else None
             ),
+            quoted=_identifier_quoted(expr.this),
+            schema_quoted=_identifier_quoted(expr.args.get("db")),
         )
     if isinstance(expr, exp.Schema):
         return _convert_table_ref(expr.this)
@@ -812,6 +825,7 @@ def _convert_alias(expr: exp.Alias) -> Alias:
     return Alias(
         expression=convert_expression(expr.this),
         name=str(expr.alias),
+        quoted=_identifier_quoted(expr.args.get("alias")),
     )
 
 
@@ -1814,13 +1828,15 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 # Identity columns are implicitly NOT NULL in Oracle; adding NOT NULL
                 # explicitly after AS IDENTITY can cause parser errors in some versions.
                 nullable = "" if (col.nullable or col.identity) else " NOT NULL"
+                col_name = _ident(col.name, col.quoted, dialect)
                 col_defs.append(
-                    f"  {col.name} {dtype}{identity}{default}{nullable}{pk}{unique}"
+                    f"  {col_name} {dtype}{identity}{default}{nullable}{pk}{unique}"
                 )
             else:
                 nullable = "" if col.nullable else " NOT NULL"
+                col_name = _ident(col.name, col.quoted, dialect)
                 col_defs.append(
-                    f"  {col.name} {dtype}{identity}{nullable}{default}{pk}{unique}"
+                    f"  {col_name} {dtype}{identity}{nullable}{default}{pk}{unique}"
                 )
         # Table-level constraints (PK/FK/UNIQUE/CHECK), re-transpiled.
         # A fragment may come back as a documented comment (e.g. a generated
@@ -1963,12 +1979,39 @@ def _emit_drop(node: DropStatement, dialect: str) -> str:
     return f"DROP {node.object_type} {exists}{name}{cascade}"
 
 
+_IDENT_QUOTES = {
+    "tsql": ("[", "]"),
+    "mysql": ("`", "`"),
+    "postgresql": ('"', '"'),
+    "oracle": ('"', '"'),
+}
+
+
+def _quote_ident(name: str, dialect: str | None) -> str:
+    """Wrap *name* in the target dialect's identifier quote characters.
+
+    Quoting is translated between engines, never stripped (audit 2026-07-02,
+    S1-1): a quoted identifier may be a reserved word or case/space-sensitive,
+    so dropping the quotes changes meaning or breaks the syntax outright.
+    """
+    left, right = _IDENT_QUOTES.get(dialect or "tsql", ('"', '"'))
+    escaped = name.replace(right, right * 2)
+    return f"{left}{escaped}{right}"
+
+
+def _ident(name: str, quoted: bool, dialect: str | None) -> str:
+    """Emit an identifier, re-quoting it when it was quoted in the source."""
+    return _quote_ident(name, dialect) if quoted else name
+
+
 def _emit_expression(node: ASTNode, dialect: str) -> str:
     """Emit an expression node as SQL text."""
     if isinstance(node, ColumnRef):
+        name = _ident(node.name, node.quoted, dialect)
         if node.table:
-            return f"{node.table}.{node.name}"
-        return node.name
+            table = _ident(node.table, node.table_quoted, dialect)
+            return f"{table}.{name}"
+        return name
 
     if isinstance(node, Star):
         if node.table:
@@ -1987,7 +2030,7 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
 
     if isinstance(node, Alias):
         inner = _emit_expression(node.expression, dialect)
-        return f"{inner} AS {node.name}"
+        return f"{inner} AS {_ident(node.name, node.quoted, dialect)}"
 
     if isinstance(node, FunctionCall):
         return _emit_function(node, dialect)
@@ -2224,8 +2267,8 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
     if dialect in ("oracle", "mysql", "postgresql") and schema == "dbo":
         schema = None
     if schema:
-        parts.append(schema)
-    parts.append(node.name)
+        parts.append(_ident(schema, node.schema_quoted, dialect))
+    parts.append(_ident(node.name, node.quoted, dialect))
     result = ".".join(parts)
 
     if node.alias:

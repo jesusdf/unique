@@ -125,21 +125,34 @@ class Literal(ASTNode):
 
 @dataclass(frozen=True)
 class ColumnRef(ASTNode):
-    """Reference to a column, optionally qualified by table/schema."""
+    """Reference to a column, optionally qualified by table/schema.
+
+    ``quoted``/``table_quoted`` record whether the identifier was quoted in
+    the source, so emitters can re-quote it with the target dialect's quote
+    characters instead of stripping it (audit 2026-07-02, S1-1).
+    """
 
     name: str
     table: str | None = None
     schema: str | None = None
+    quoted: bool = False
+    table_quoted: bool = False
 
 
 @dataclass(frozen=True)
 class TableRef(ASTNode):
-    """Reference to a table, optionally qualified by schema and aliased."""
+    """Reference to a table, optionally qualified by schema and aliased.
+
+    ``quoted``/``schema_quoted`` record source quoting for faithful
+    re-quoting in the target dialect (audit 2026-07-02, S1-1).
+    """
 
     name: str
     schema: str | None = None
     alias: str | None = None
     database: str | None = None
+    quoted: bool = False
+    schema_quoted: bool = False
 
 
 @dataclass(frozen=True)
@@ -155,6 +168,7 @@ class Alias(ASTNode):
 
     expression: ASTNode
     name: str
+    quoted: bool = False
 
 
 @dataclass(frozen=True)
@@ -312,6 +326,7 @@ class ColumnDefinition(ASTNode):
     primary_key: bool = False
     unique: bool = False
     check: ASTNode | None = None
+    quoted: bool = False
 
 
 # ---------------------------------------------------------------------------
