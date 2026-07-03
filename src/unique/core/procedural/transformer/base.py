@@ -2410,22 +2410,21 @@ class ProceduralTransformer:
         return self._rewrite_calls(sql, "DATEADD", build)
 
     def _transform_datediff(self, sql: str) -> str:
-        """Translate simple T-SQL DATEDIFF(part, start, end) calls.
+        """Translate DATEDIFF across dialects.
 
-        T-SQL returns ``end - start`` in the given unit. Conversions:
+        T-SQL is 3-arg ``DATEDIFF(part, start, end)``; MySQL is 2-arg
+        ``DATEDIFF(end, start)`` (whole days). Both return ``end - start``.
+        Conversions:
         - Oracle: day -> (end - start); month -> MONTHS_BETWEEN(end, start);
           year -> MONTHS_BETWEEN(end, start)/12
         - PostgreSQL: day -> (end::date - start::date)
         - MySQL: day -> DATEDIFF(end, start); else TIMESTAMPDIFF(unit, ...)
+        - T-SQL: DATEDIFF(DAY, start, end)
         """
-        if self._source != "tsql" or self._target not in (
-            "oracle",
-            "postgresql",
-            "mysql",
-        ):
+        if self._source == self._target:
             return sql
 
-        def build(args: list[str]) -> str | None:
+        def build_tsql(args: list[str]) -> str | None:
             if len(args) != 3:
                 return None
             part, start, end = args
@@ -2449,7 +2448,24 @@ class ProceduralTransformer:
                 return f"DATEDIFF({end}, {start})"
             return f"TIMESTAMPDIFF({unit}, {start}, {end})"
 
-        return self._rewrite_calls(sql, "DATEDIFF", build)
+        def build_mysql(args: list[str]) -> str | None:
+            # MySQL DATEDIFF(end, start) is whole days (end - start).
+            if len(args) != 2:
+                return None
+            end, start = args
+            if self._target == "oracle":
+                return f"({end} - {start})"
+            if self._target == "postgresql":
+                return f"({end}::date - {start}::date)"
+            if self._target == "tsql":
+                return f"DATEDIFF(DAY, {start}, {end})"
+            return None
+
+        if self._source == "tsql" and self._target in ("oracle", "postgresql", "mysql"):
+            return self._rewrite_calls(sql, "DATEDIFF", build_tsql)
+        if self._source == "mysql" and self._target in ("oracle", "postgresql", "tsql"):
+            return self._rewrite_calls(sql, "DATEDIFF", build_mysql)
+        return sql
 
     def _get_func_map(self) -> dict[str, str]:
         return PROCEDURAL_FUNC_MAPS.get((self._source, self._target), {})

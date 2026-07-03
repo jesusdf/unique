@@ -96,3 +96,21 @@ class TestDateDiff:
         out = self.t.transpile("SELECT DATEDIFF(day, a, b) FROM t", "tsql", "tsql").sql
         assert "DATEDIFF(DAY, a, b)" in out or "DATEDIFF(day, a, b)" in out
         _valid(out, "tsql")
+
+    # MySQL's 2-arg DATEDIFF(end, start) is whole days; the procedural path
+    # (a routine body) must translate it for Oracle/PostgreSQL, which have no
+    # such function.
+    _MYSQL_FN = (
+        "CREATE FUNCTION fn_days_between(d1 DATE, d2 DATE) RETURNS INT\n"
+        "BEGIN\n    RETURN DATEDIFF(d2, d1);\nEND"
+    )
+
+    def test_mysql_datediff_body_to_oracle(self) -> None:
+        out = self.t.transpile(self._MYSQL_FN, "mysql", "oracle").sql
+        assert "RETURN (d2 - d1)" in out
+        assert "DATEDIFF" not in out
+
+    def test_mysql_datediff_body_to_postgresql(self) -> None:
+        out = self.t.transpile(self._MYSQL_FN, "mysql", "postgresql").sql
+        assert "(d2::date - d1::date)" in out
+        assert "DATEDIFF" not in out
