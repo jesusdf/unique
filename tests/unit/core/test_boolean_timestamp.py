@@ -245,3 +245,48 @@ class TestBitLiteralCoercion:
         )
         out = self.t.transpile(script, "tsql", "postgresql").sql
         assert "VALUES (v_id, FALSE)" in out, out
+
+
+class TestOracleBareNumberToInteger:
+    """Oracle's unqualified ``NUMBER`` (no precision) is used for integer
+    ids/counts. It must map to an integer type so identity/PK/FK columns are
+    valid — a DECIMAL can't be AUTO_INCREMENT on MySQL nor match a SERIAL PK on
+    PostgreSQL (the oracle→{mysql,postgresql} live DDL failures). ``NUMBER(p,s)``
+    keeps its DECIMAL mapping."""
+
+    def setup_method(self) -> None:
+        self.t = Transpiler()
+
+    _DDL = (
+        "CREATE TABLE invoice (\n"
+        "  id NUMBER GENERATED ALWAYS AS IDENTITY,\n"
+        "  customer_id NUMBER NOT NULL,\n"
+        "  unit_price NUMBER(10, 2) NOT NULL,\n"
+        "  CONSTRAINT fk FOREIGN KEY (customer_id) REFERENCES customer (id)\n"
+        ")"
+    )
+
+    def test_identity_and_fk_to_mysql(self) -> None:
+        out = self.t.transpile(self._DDL, "oracle", "mysql").sql
+        assert "id BIGINT AUTO_INCREMENT" in out
+        assert "customer_id BIGINT" in out
+        # A qualified NUMBER(p,s) is still a decimal.
+        assert "unit_price DECIMAL(10, 2)" in out
+        assert "DECIMAL AUTO_INCREMENT" not in out
+        _valid(out, "mysql")
+
+    def test_identity_and_fk_to_postgresql(self) -> None:
+        out = self.t.transpile(self._DDL, "oracle", "postgresql").sql
+        # BIGSERIAL (int8) so the BIGINT FK column matches.
+        assert "id BIGSERIAL" in out
+        assert "customer_id BIGINT" in out
+        assert "unit_price DECIMAL(10, 2)" in out or "unit_price NUMERIC(10, 2)" in out
+        _valid(out, "postgresql")
+
+    def test_bare_decimal_from_tsql_source_unchanged(self) -> None:
+        # A bare DECIMAL from a non-Oracle source keeps its meaning (no coercion).
+        out = self.t.transpile(
+            "CREATE TABLE t (amount DECIMAL)", "tsql", "postgresql"
+        ).sql
+        assert "BIGINT" not in out.upper()
+        assert "amount DECIMAL" in out or "amount NUMERIC" in out
