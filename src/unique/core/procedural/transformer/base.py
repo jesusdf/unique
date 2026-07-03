@@ -702,6 +702,17 @@ class ProceduralTransformer:
         )
 
     def _transform_trigger(self, node: CreateTriggerStatement) -> ASTNode:
+        # An Oracle COMPOUND TRIGGER has no mechanical cross-engine translation;
+        # the emitter documents it. Record the loss and keep the flag (the
+        # parser left the body empty), skipping the body-rewrite path.
+        if node.compound:
+            if self._source != self._target:
+                self._warnings.append(
+                    f"Oracle COMPOUND TRIGGER {node.name!r} on {node.table} has "
+                    f"no automatic {self._target} equivalent (statement-level "
+                    "aggregation over a PL/SQL collection); documented."
+                )
+            return node
         prev_in_trigger = self._in_trigger
         self._in_trigger = True
         # A purely set-based T-SQL trigger (only FROM/JOIN inserted/deleted, no

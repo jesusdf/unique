@@ -814,6 +814,10 @@ class CreateTriggerStatement(ASTNode):
     set_based_transition: bool = False
     execute_function: str | None = None
     referencing: str = ""
+    #: An Oracle COMPOUND TRIGGER (AFTER EACH ROW + AFTER STATEMENT sections
+    #: over a PL/SQL collection). No mechanical cross-engine equivalent yet, so
+    #: it is emitted as a documented ``-- UNIQUE:`` carrier rather than mangled.
+    compound: bool = False
 
 
 @dataclass(frozen=True)
