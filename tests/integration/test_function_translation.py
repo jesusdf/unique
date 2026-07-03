@@ -17,6 +17,7 @@ import re
 
 import pytest
 
+from tests.helpers.validity import assert_translated
 from unique.core.transpiler import Transpiler
 
 _TARGETS = ("oracle", "postgresql", "mysql")
@@ -41,6 +42,12 @@ class TestArgumentsPreserved:
         out = _expr(_t("SELECT SUBSTRING(a, 1, 3) FROM t", target))
         assert "1" in out and "3" in out and "a" in out
         assert out.count(",") == 2
+        expected = {
+            "oracle": "SUBSTR(",
+            "mysql": "SUBSTRING(",
+            "postgresql": "SUBSTRING(",
+        }[target]
+        assert out.upper().startswith(expected), out
 
     @pytest.mark.parametrize("target", _TARGETS)
     def test_replace_keeps_three_args(self, target: str) -> None:
@@ -61,11 +68,20 @@ class TestArgumentsPreserved:
     def test_replicate_keeps_count(self, target: str) -> None:
         out = _expr(_t("SELECT REPLICATE('x', 5) FROM t", target))
         assert "5" in out
+        assert out.upper().startswith(("REPEAT(", "RPAD(", "REPLICATE(")), out
+        if target in ("mysql", "postgresql"):
+            assert "REPLICATE" not in out.upper(), out
 
     @pytest.mark.parametrize("target", _TARGETS)
     def test_dateadd_keeps_all_args(self, target: str) -> None:
         out = _expr(_t("SELECT DATEADD(day, 1, a) FROM t", target))
         assert "1" in out and "a" in out
+        expected = {
+            "oracle": "a + NUMTODSINTERVAL(1, 'DAY')",
+            "mysql": "DATE_ADD(a, INTERVAL 1 DAY)",
+            "postgresql": "a + INTERVAL '1 DAY'",
+        }[target]
+        assert out == expected, out
 
     @pytest.mark.parametrize("target", _TARGETS)
     def test_coalesce_variadic(self, target: str) -> None:
@@ -99,11 +115,20 @@ class TestKnownGoodMappings:
     """Spot-check functions that do have clean cross-engine mappings."""
 
     def test_charindex_to_instr_oracle(self) -> None:
-        assert "INSTR" in _t("SELECT CHARINDEX('x', a) FROM t", "oracle").upper()
+        out = _t("SELECT CHARINDEX('x', a) FROM t", "oracle")
+        assert_translated(
+            out, "oracle", present=("INSTR(a, 'x')",), absent=("CHARINDEX",)
+        )
 
     def test_isnull_to_coalesce(self) -> None:
         for target in _TARGETS:
-            assert "COALESCE" in _t("SELECT ISNULL(a, 0) FROM t", target).upper()
+            out = _t("SELECT ISNULL(a, 0) FROM t", target)
+            assert_translated(
+                out, target, present=("COALESCE(a, 0)",), absent=("ISNULL",)
+            )
 
     def test_newid_to_uuid(self) -> None:
-        assert "UUID" in _t("SELECT NEWID() FROM t", "postgresql").upper()
+        out = _t("SELECT NEWID() FROM t", "postgresql")
+        assert_translated(
+            out, "postgresql", present=("gen_random_uuid()",), absent=("NEWID",)
+        )

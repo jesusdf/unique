@@ -2442,6 +2442,17 @@ def _map_function_name(name: str, dialect: str) -> str:
             return "SUBSTR"
         return "SUBSTRING"
 
+    # UUID generation: sqlglot canonicalizes NEWID/UUID/GEN_RANDOM_UUID to
+    # UUID, which only exists on MySQL. Each engine has its own function
+    # (found by a hardened test during audit 2026-07-02 remediation).
+    if upper in ("UUID", "NEWID", "GEN_RANDOM_UUID", "SYS_GUID"):
+        return {
+            "tsql": "NEWID",
+            "mysql": "UUID",
+            "postgresql": "gen_random_uuid",
+            "oracle": "SYS_GUID",
+        }.get(dialect, name)
+
     return name
 
 
