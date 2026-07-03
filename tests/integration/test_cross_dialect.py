@@ -8,6 +8,7 @@ import re
 
 import pytest
 
+from tests.helpers.validity import assert_translated
 from unique.core.transpiler import Transpiler
 
 # All 12 directional pairs (4 dialects × 3 targets each)
@@ -29,8 +30,7 @@ class TestCrossDialectSelect:
         self, transpiler: Transpiler, source: str, target: str
     ) -> None:
         result = transpiler.transpile("SELECT * FROM users", source, target)
-        assert "SELECT" in result.sql
-        assert "users" in result.sql
+        assert_translated(result.sql, target, present=("SELECT", "users"))
 
     @pytest.mark.parametrize("source,target", ALL_PAIRS)
     def test_select_where(
@@ -41,8 +41,7 @@ class TestCrossDialectSelect:
             source,
             target,
         )
-        assert "WHERE" in result.sql
-        assert "id" in result.sql
+        assert_translated(result.sql, target, present=("WHERE", "id"))
 
     @pytest.mark.parametrize("source,target", ALL_PAIRS)
     def test_select_join(
@@ -50,7 +49,7 @@ class TestCrossDialectSelect:
     ) -> None:
         sql = "SELECT a.id, b.name FROM a INNER JOIN b ON a.id = b.a_id"
         result = transpiler.transpile(sql, source, target)
-        assert "JOIN" in result.sql
+        assert_translated(result.sql, target, present=("JOIN b", "ON a.id = b.a_id"))
 
     @pytest.mark.parametrize("source,target", ALL_PAIRS)
     def test_select_join_with_alias_not_duplicated(
@@ -68,7 +67,7 @@ class TestCrossDialectSelect:
     ) -> None:
         sql = "SELECT * FROM users ORDER BY name ASC"
         result = transpiler.transpile(sql, source, target)
-        assert "ORDER BY" in result.sql
+        assert_translated(result.sql, target, present=("ORDER BY name",))
 
     @pytest.mark.parametrize("source,target", ALL_PAIRS)
     def test_select_group_by(
@@ -76,7 +75,7 @@ class TestCrossDialectSelect:
     ) -> None:
         sql = "SELECT dept, COUNT(*) FROM emp GROUP BY dept"
         result = transpiler.transpile(sql, source, target)
-        assert "GROUP BY" in result.sql
+        assert_translated(result.sql, target, present=("COUNT(*)", "GROUP BY dept"))
 
     @pytest.mark.parametrize("source,target", ALL_PAIRS)
     def test_select_distinct(
@@ -84,7 +83,7 @@ class TestCrossDialectSelect:
     ) -> None:
         sql = "SELECT DISTINCT name FROM users"
         result = transpiler.transpile(sql, source, target)
-        assert "DISTINCT" in result.sql
+        assert_translated(result.sql, target, present=("DISTINCT name",))
 
 
 class TestCrossDialectLimit:
@@ -97,9 +96,14 @@ class TestCrossDialectLimit:
             "tsql",
             target,
         )
-        assert "users" in result.sql
-        # Every target should produce valid output (no raw None)
-        assert "None" not in result.sql or "/* UNIQUE:" in result.sql
+        idiom = {
+            "tsql": "TOP 10",
+            "postgresql": "LIMIT 10",
+            "mysql": "LIMIT 10",
+            "oracle": "FETCH FIRST 10 ROWS ONLY",
+        }[target]
+        absent = () if target == "tsql" else ("TOP",)
+        assert_translated(result.sql, target, present=(idiom,), absent=absent)
 
     @pytest.mark.parametrize("target", TARGETS)
     def test_pg_limit_to_target(self, transpiler: Transpiler, target: str) -> None:
@@ -108,7 +112,14 @@ class TestCrossDialectLimit:
             "postgresql",
             target,
         )
-        assert "users" in result.sql
+        idiom = {
+            "tsql": "TOP 10",
+            "postgresql": "LIMIT 10",
+            "mysql": "LIMIT 10",
+            "oracle": "FETCH FIRST 10 ROWS ONLY",
+        }[target]
+        absent = () if target in ("postgresql", "mysql") else ("LIMIT",)
+        assert_translated(result.sql, target, present=(idiom,), absent=absent)
 
     @pytest.mark.parametrize("target", TARGETS)
     def test_pg_limit_offset_to_target(
@@ -119,7 +130,13 @@ class TestCrossDialectLimit:
             "postgresql",
             target,
         )
-        assert "users" in result.sql
+        idioms = {
+            "tsql": ("OFFSET 20 ROWS", "FETCH NEXT 10 ROWS ONLY"),
+            "postgresql": ("LIMIT 10", "OFFSET 20"),
+            "mysql": ("LIMIT 10", "OFFSET 20"),
+            "oracle": ("OFFSET 20 ROWS", "FETCH FIRST 10 ROWS ONLY"),
+        }[target]
+        assert_translated(result.sql, target, present=idioms)
 
 
 class TestCrossDialectDML:
@@ -132,8 +149,9 @@ class TestCrossDialectDML:
             source,
             target,
         )
-        assert "INSERT INTO" in result.sql
-        assert "(a, b)" in result.sql
+        assert_translated(
+            result.sql, target, present=("INSERT INTO", "(a, b)", "(1, 'x')")
+        )
 
     @pytest.mark.parametrize("source,target", ALL_PAIRS)
     def test_update(self, transpiler: Transpiler, source: str, target: str) -> None:
@@ -244,8 +262,12 @@ class TestCrossDialectFunctions:
             "tsql",
             target,
         )
-        sql_upper = result.sql.upper()
-        assert "COALESCE" in sql_upper or "NVL" in sql_upper
+        assert_translated(
+            result.sql,
+            target,
+            present=("COALESCE(name, 'default')",),
+            absent=("ISNULL",),
+        )
 
     @pytest.mark.parametrize("target", ("tsql", "mysql", "postgresql"))
     def test_nvl_from_oracle(self, transpiler: Transpiler, target: str) -> None:
@@ -254,8 +276,12 @@ class TestCrossDialectFunctions:
             "oracle",
             target,
         )
-        sql_upper = result.sql.upper()
-        assert "COALESCE" in sql_upper or "ISNULL" in sql_upper or "NVL" in sql_upper
+        assert_translated(
+            result.sql,
+            target,
+            present=("COALESCE(name, 'default')",),
+            absent=("NVL",),
+        )
 
     @pytest.mark.parametrize("source,target", ALL_PAIRS)
     def test_count_star(self, transpiler: Transpiler, source: str, target: str) -> None:

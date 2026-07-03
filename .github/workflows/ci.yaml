@@ -63,6 +63,11 @@ jobs:
       - name: Run tests with coverage
         run: pytest tests/ -v --cov=unique --cov-report=xml --cov-report=term-missing
 
+      - name: Identity-mutation gate (test-assertion quality)
+        # Fails if too few integration tests detect a no-op transpiler; see
+        # audit/2026-07-02/02-test-quality.md and scripts/identity_mutation_check.py.
+        run: python scripts/identity_mutation_check.py
+
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
