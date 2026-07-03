@@ -104,6 +104,26 @@ transpilation needs no database.
 - **CLI:** `--db-url "<url>"`
 - **Python:** `transpile(sql, source, target, db_url="<url>")`, or
   `TranspileOptions(db_url="<url>")`
+- **REST API:** databases are configured **server-side** as named DSNs and
+  referenced by name — never as raw URLs (audit 2026-07-02, A3: a raw URL
+  from a client is an SSRF/credential-relay primitive on a shared service):
+
+  ```bash
+  # Server: enable connections and configure the allowed DSNs by name
+  export UNIQUE_ALLOW_DB_CONNECTION=1
+  export UNIQUE_DSN_HR_READONLY="oracle://app:secret@db.internal:1521/FREEPDB1"
+
+  # Client: reference the DSN by name (lowercase, '_' and '-' equivalent)
+  curl -X POST http://localhost:8000/api/v1/transpile \
+    -H "Content-Type: application/json" \
+    -d '{"sql": "...", "source": "oracle", "target": "mysql", "db": "hr-readonly"}'
+  ```
+
+  `GET /api/v1/info` lists the configured names (`db_names`, never the URLs)
+  so the UI can offer them. A raw `db_url` in the request body is only
+  honored when the deployment *additionally* sets
+  `UNIQUE_ALLOW_RAW_DB_URL=1`; this is discouraged outside single-user lab
+  setups.
 
 ### Connection URL format
 

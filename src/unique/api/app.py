@@ -63,6 +63,79 @@ def _db_connection_enabled() -> bool:
     }
 
 
+def _raw_db_url_enabled() -> bool:
+    """Whether clients may send a *raw* ``db_url`` (audit 2026-07-02, A3).
+
+    A raw URL lets any API client make the server open TCP connections to
+    arbitrary hosts with arbitrary credentials — an SSRF/credential-relay
+    primitive — so it needs its own opt-in on top of
+    ``UNIQUE_ALLOW_DB_CONNECTION``. The supported path is a server-side
+    named DSN (``UNIQUE_DSN_<NAME>``) referenced by name.
+    """
+    return os.environ.get("UNIQUE_ALLOW_RAW_DB_URL", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+_DSN_ENV_PREFIX = "UNIQUE_DSN_"
+
+
+def _named_dsns() -> dict[str, str]:
+    """Server-configured DSNs, keyed by their lowercase hyphenated name.
+
+    ``UNIQUE_DSN_HR_READONLY=oracle://...`` is referenced by clients as
+    ``db: "hr-readonly"``. URLs never leave the server.
+    """
+    return {
+        key[len(_DSN_ENV_PREFIX) :].lower().replace("_", "-"): value.strip()
+        for key, value in os.environ.items()
+        if key.startswith(_DSN_ENV_PREFIX) and value.strip()
+    }
+
+
+def _resolve_db_option(db: str | None, db_url: str | None) -> str | None:
+    """Resolve the connection URL for a request, enforcing the A3 policy.
+
+    ``db`` names a server-side DSN; ``db_url`` is a raw URL needing the
+    extra ``UNIQUE_ALLOW_RAW_DB_URL`` opt-in. Raises HTTPException on any
+    policy violation, never echoing configured URLs.
+    """
+    if not db and not db_url:
+        return None
+    if not _db_connection_enabled():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Database connections are disabled on this deployment. Set "
+                "UNIQUE_ALLOW_DB_CONNECTION=1 to enable the db option."
+            ),
+        )
+    if db:
+        url = _named_dsns().get(db.strip().lower().replace("_", "-"))
+        if url is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Unknown database name {db!r}. Configure it server-side "
+                    "as UNIQUE_DSN_<NAME> and reference it by name."
+                ),
+            )
+        return url
+    if not _raw_db_url_enabled():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Raw db_url values are disabled on this deployment. Use a "
+                "server-side named DSN (UNIQUE_DSN_<NAME> + db=<name>), or "
+                "set UNIQUE_ALLOW_RAW_DB_URL=1 to accept raw URLs."
+            ),
+        )
+    return db_url
+
+
 app = FastAPI(
     title="Unique SQL Transpiler",
     description="Transpile SQL between SQL Server, Oracle, PostgreSQL, and MySQL.",
@@ -87,12 +160,20 @@ class TranspileRequest(BaseModel):
     )
     source: str = Field(..., description="Source dialect name.")
     target: str = Field(..., description="Target dialect name.")
+    db: str | None = Field(
+        default=None,
+        description=(
+            "Optional name of a server-configured DSN (UNIQUE_DSN_<NAME>) "
+            "used to resolve metadata-dependent constructs such as Oracle "
+            "%TYPE/%ROWTYPE references."
+        ),
+    )
     db_url: str | None = Field(
         default=None,
         description=(
-            "Optional database connection URL for resolving "
-            "metadata-dependent constructs such as Oracle %TYPE/%ROWTYPE "
-            "references."
+            "Optional raw database connection URL. Disabled unless the "
+            "deployment sets UNIQUE_ALLOW_RAW_DB_URL; prefer a named DSN "
+            "(the 'db' field)."
         ),
     )
 
@@ -140,8 +221,22 @@ class InfoResponse(BaseModel):
     db_connection_enabled: bool = Field(
         ...,
         description=(
-            "Whether the deployment allows providing a database connection URL "
+            "Whether the deployment allows database connections "
             "(controlled by the UNIQUE_ALLOW_DB_CONNECTION environment variable)."
+        ),
+    )
+    db_names: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Names of the server-configured DSNs (UNIQUE_DSN_<NAME>) a client "
+            "may reference via the 'db' field. URLs are never exposed."
+        ),
+    )
+    raw_db_url_enabled: bool = Field(
+        default=False,
+        description=(
+            "Whether raw db_url values are accepted "
+            "(UNIQUE_ALLOW_RAW_DB_URL; discouraged, see docs)."
         ),
     )
 
@@ -154,15 +249,7 @@ class InfoResponse(BaseModel):
 @app.post("/api/v1/transpile", response_model=TranspileResponse)
 def transpile_sql(request: TranspileRequest) -> TranspileResponse:
     """Transpile SQL from one dialect to another."""
-    db_url = request.db_url
-    if db_url and not _db_connection_enabled():
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "Database connections are disabled on this deployment. Set "
-                "UNIQUE_ALLOW_DB_CONNECTION=1 to enable the db-url option."
-            ),
-        )
+    db_url = _resolve_db_option(request.db, request.db_url)
     try:
         result = _transpiler.transpile(
             sql=request.sql,
@@ -217,6 +304,8 @@ def get_info() -> InfoResponse:
     return InfoResponse(
         version=DISPLAY_VERSION,
         db_connection_enabled=_db_connection_enabled(),
+        db_names=sorted(_named_dsns()),
+        raw_db_url_enabled=_raw_db_url_enabled(),
     )
 
 
@@ -250,23 +339,17 @@ def transpile_file(
     file: UploadFile = File(...),  # noqa: B008 - FastAPI dependency pattern
     source: str = Form(...),  # noqa: B008 - FastAPI dependency pattern
     target: str = Form(...),  # noqa: B008 - FastAPI dependency pattern
+    db: str | None = Form(default=None),  # noqa: B008 - FastAPI pattern
     db_url: str | None = Form(default=None),  # noqa: B008 - FastAPI pattern
 ) -> StreamingResponse:
     """Transpile an uploaded SQL file and stream back the translated file.
 
     ``source`` may be the literal ``auto`` to auto-detect the dialect from the
-    file contents. ``db_url`` is an optional database connection URL for
-    resolving metadata-dependent constructs; it is rejected unless the
-    deployment enables database connections.
+    file contents. ``db`` names a server-configured DSN (UNIQUE_DSN_<NAME>)
+    for resolving metadata-dependent constructs; a raw ``db_url`` needs the
+    extra UNIQUE_ALLOW_RAW_DB_URL opt-in (audit 2026-07-02, A3).
     """
-    if db_url and not _db_connection_enabled():
-        raise HTTPException(
-            status_code=403,
-            detail=(
-                "Database connections are disabled on this deployment. Set "
-                "UNIQUE_ALLOW_DB_CONNECTION=1 to enable the db-url option."
-            ),
-        )
+    db_url = _resolve_db_option(db, db_url)
     raw = file.file.read(MAX_SQL_BYTES + 1)
     if len(raw) > MAX_SQL_BYTES:
         raise HTTPException(
