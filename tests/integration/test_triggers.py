@@ -104,6 +104,25 @@ class TestTriggerTiming:
         assert "%(NEW)s" not in out
         assert ":NEW" not in out
 
+    def test_oracle_source_new_ref_to_mysql(self) -> None:
+        # An Oracle row-level assignment ``:NEW.col := expr`` is a PL/SQL
+        # assignment, not runnable DML. MySQL spells it ``SET NEW.col = expr``;
+        # emitting the bare ``NEW.col := expr`` (the raw-passthrough shape) is a
+        # syntax error on MySQL.
+        src = (
+            "CREATE TRIGGER t\n"
+            "BEFORE INSERT ON tbl\n"
+            "FOR EACH ROW\nBEGIN\n"
+            "    :NEW.total := :NEW.qty * :NEW.price;\n"
+            "END;\n/"
+        )
+        out = _t(src, "oracle", "mysql")
+        assert "SET NEW.total = NEW.qty * NEW.price" in out
+        # The Oracle-only ``:=`` assignment operator and ``:NEW`` bind form must
+        # not leak into MySQL output.
+        assert ":=" not in out
+        assert ":NEW" not in out
+
     def test_multi_event_mysql_splits_per_event(self) -> None:
         # MySQL triggers fire on a single event, so a multi-event trigger is
         # split into one trigger per event.
