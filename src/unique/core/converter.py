@@ -11,6 +11,7 @@ converting sqlglot's expression tree into our engine-agnostic IR.
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import dataclasses
 import logging
 import re
@@ -59,6 +60,40 @@ from unique.core.ast_nodes import (
 )
 
 logger = logging.getLogger(__name__)
+
+# T-SQL alias types (CREATE TYPE x FROM base) harvested from the script being
+# transpiled, keyed by lowercase unqualified name. The transpiler sets this
+# around a run (contextvar: safe under the API's threadpool) so column types
+# referencing an alias resolve to the base type on engines without aliases.
+TSQL_ALIAS_TYPES: contextvars.ContextVar[dict[str, DataType] | None] = (
+    contextvars.ContextVar("tsql_alias_types", default=None)
+)
+
+_CREATE_ALIAS_TYPE_RE = re.compile(
+    r"(?im)^\s*CREATE\s+TYPE\s+(?:\[?dbo\]?\s*\.\s*)?\[?(\w+)\]?\s+"
+    r"FROM\s+\[?(\w+)\]?\s*(?:\(\s*(\d+)(?:\s*,\s*(\d+))?\s*\))?"
+)
+
+
+def harvest_tsql_alias_types(sql: str) -> dict[str, DataType]:
+    """Collect T-SQL alias-type definitions from a whole script."""
+    aliases: dict[str, DataType] = {}
+    for m in _CREATE_ALIAS_TYPE_RE.finditer(sql):
+        name, base, p1, p2 = m.groups()
+        params = tuple(int(p) for p in (p1, p2) if p is not None)
+        aliases[name.lower()] = DataType(name=base.upper(), params=params)
+    return aliases
+
+
+def _resolve_tsql_alias_type(dt: DataType) -> DataType:
+    """Resolve a column type that names a harvested T-SQL alias type."""
+    aliases = TSQL_ALIAS_TYPES.get()
+    if not aliases:
+        return dt
+    key = re.sub(r'(?i)^(?:\[dbo\]|"dbo"|dbo)\s*\.\s*', "", dt.name)
+    key = key.strip('[]"').lower()
+    return aliases.get(key, dt)
+
 
 # Mapping from sqlglot join types to our JoinType enum
 _JOIN_TYPE_MAP = {
@@ -662,7 +697,9 @@ def _convert_create_table(
 
                 dtype = DataType(name="VARCHAR")
                 if col_def.args.get("kind"):
-                    dtype = _convert_data_type(col_def.args["kind"])
+                    dtype = _resolve_tsql_alias_type(
+                        _convert_data_type(col_def.args["kind"])
+                    )
 
                 nullable = True
                 identity = False
@@ -1494,12 +1531,54 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 result = _portable_index(result, dialect)
             else:
                 result = _portable_types_in_sql(result, dialect)
+            if dialect != "oracle":
+                result = _portable_alter_add(result, dialect)
             if dialect in ("oracle", "mysql", "postgresql"):
                 result = _strip_dbo_schema_qualifier(result)
             return result
     except Exception as e:  # noqa: BLE001 - report and fall back
         logger.warning("passthrough transpile error (%s): %s", node.kind, e)
     return f"-- UNIQUE: Unhandled {node.kind}\n{_comment_block(node.sql)}"
+
+
+def _split_top_level_commas(text: str) -> list[str]:
+    """Split *text* on commas not nested inside parentheses or strings."""
+    parts: list[str] = []
+    depth = 0
+    in_string = False
+    start = 0
+    for i, ch in enumerate(text):
+        if in_string:
+            if ch == "'":
+                in_string = False
+        elif ch == "'":
+            in_string = True
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append(text[start:i])
+            start = i + 1
+    parts.append(text[start:])
+    return parts
+
+
+def _portable_alter_add(sql: str, dialect: str) -> str:
+    """Unwrap Oracle's parenthesized ALTER TABLE ADD ( ... ) form.
+
+    sqlglot's non-Oracle writers render it as "ADD COLUMNS (item, ...)",
+    which no other engine parses. T-SQL takes a plain comma list after one
+    ADD; PostgreSQL/MySQL need one ADD per item.
+    """
+    m = re.search(r"(?is)\bADD\s+COLUMNS\s*\((.*)\)\s*$", sql)
+    if not m:
+        return sql
+    items = [i.strip() for i in _split_top_level_commas(m.group(1))]
+    head = sql[: m.start()].rstrip()
+    if dialect == "tsql":
+        return f"{head} ADD {', '.join(items)}"
+    return f"{head} ADD " + ", ADD ".join(items)
 
 
 def _portable_index(sql: str, dialect: str) -> str:
@@ -2515,6 +2594,16 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         emitted = _emit_group_concat(node, dialect)
         if emitted is not None:
             return emitted
+
+    # Conditional shorthand: MySQL IF() / T-SQL IIF(). Neither exists on
+    # PostgreSQL/Oracle, whose spelling is a searched CASE.
+    if fn_name in ("IF", "IIF") and len(node.args) == 3:
+        cond, then_v, else_v = (_emit_expression(a, dialect) for a in node.args)
+        if dialect == "tsql":
+            return f"IIF({cond}, {then_v}, {else_v})"
+        if dialect == "mysql":
+            return f"IF({cond}, {then_v}, {else_v})"
+        return f"CASE WHEN {cond} THEN {then_v} ELSE {else_v} END"
 
     # A user function may be schema-qualified (dbo.fn_tax). The "dbo" default
     # schema is meaningless on the other engines, so drop it there, as for any

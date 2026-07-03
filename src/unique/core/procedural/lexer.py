@@ -442,6 +442,17 @@ class Lexer:
             self._emit(TokenType.IDENTIFIER, self._sql[start : self._pos], line, col)
             return
 
+        # Quoted identifier `backticks` (MySQL)
+        if ch == "`":
+            start = self._pos
+            self._advance()
+            while not self._at_end() and self._peek() != "`":
+                self._advance()
+            if not self._at_end():
+                self._advance()
+            self._emit(TokenType.IDENTIFIER, self._sql[start : self._pos], line, col)
+            return
+
         # Numbers
         if ch.isdigit() or (ch == "." and self._peek(1).isdigit()):
             start = self._pos

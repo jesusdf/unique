@@ -1052,3 +1052,88 @@ class TestMySQLSourceDDL:
         sql = "SELECT CONCAT(a, _utf8' ', b) FROM t;"
         result = transpiler.transpile(sql, "mysql", target)
         assert_translated(result.sql, target, present=("' '",), absent=("_utf8",))
+
+
+class TestTSQLAliasTypes:
+    """T-SQL alias types (CREATE TYPE x FROM base) resolve to their base.
+
+    The other engines have no alias types (PostgreSQL DOMAINs are close but
+    not emitted today), so a column typed [dbo].[Name] must be emitted with
+    the alias's base type, harvested from the CREATE TYPE statements in the
+    same script (found on AdventureWorksLT, where dbo.Name columns leaked
+    into every target and broke MySQL parsing).
+    """
+
+    SQL = (
+        "CREATE TYPE [dbo].[Name] FROM [nvarchar](50) NULL\n"
+        "GO\n"
+        "CREATE TABLE [SalesLT].[Customer](\n"
+        "\t[CustomerID] [int] NOT NULL,\n"
+        "\t[FirstName] [dbo].[Name] NOT NULL\n"
+        ")\n"
+        "GO\n"
+    )
+
+    @pytest.mark.parametrize(
+        "target,expected_type",
+        [
+            ("postgresql", "VARCHAR(50)"),
+            ("mysql", "VARCHAR(50)"),
+            ("oracle", "NVARCHAR2(50)"),
+        ],
+    )
+    def test_alias_column_resolves_to_base_type(
+        self, transpiler: Transpiler, target: str, expected_type: str
+    ) -> None:
+        result = transpiler.transpile(self.SQL, "tsql", target)
+        body = executable_lines(result.sql)
+        assert "dbo.Name" not in body, result.sql
+        assert expected_type in body, result.sql
+
+    def test_alias_without_definition_left_untouched(
+        self, transpiler: Transpiler
+    ) -> None:
+        # No CREATE TYPE in the script: nothing to resolve against, the
+        # qualified type name passes through as before.
+        sql = "CREATE TABLE t ([col] [dbo].[Name] NOT NULL)"
+        result = transpiler.transpile(sql, "tsql", "postgresql")
+        assert "Name" in result.sql
+
+
+class TestOracleAlterAddParenthesized:
+    """Oracle ALTER TABLE ADD ( ... ) must unwrap for the other engines.
+
+    sqlglot renders the parenthesized form as "ADD COLUMNS (...)", which no
+    other engine parses (found on the HR sample schema, where every
+    PK/FK/CHECK arrives as ALTER TABLE ADD (CONSTRAINT ...)).
+    """
+
+    @pytest.mark.parametrize("target", ["tsql", "postgresql", "mysql"])
+    def test_single_constraint_unwrapped(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        sql = (
+            "ALTER TABLE countries\n"
+            "ADD ( CONSTRAINT countr_reg_fk\n"
+            "         FOREIGN KEY (region_id)\n"
+            "          REFERENCES regions(region_id)\n"
+            "    );"
+        )
+        result = transpiler.transpile(sql, "oracle", target)
+        assert_translated(
+            result.sql,
+            target,
+            present=("ADD CONSTRAINT countr_reg_fk", "FOREIGN KEY"),
+            absent=("ADD COLUMNS",),
+        )
+
+    @pytest.mark.parametrize("target", ["tsql", "postgresql", "mysql"])
+    def test_multiple_columns_unwrapped(
+        self, transpiler: Transpiler, target: str
+    ) -> None:
+        sql = "ALTER TABLE t ADD (a NUMBER(3), b VARCHAR2(10));"
+        result = transpiler.transpile(sql, "oracle", target)
+        assert_translated(result.sql, target, absent=("ADD COLUMNS",))
+        body = executable_lines(result.sql).upper()
+        assert re.search(r"ADD\s+A\b", body), result.sql
+        assert re.search(r"ADD\s+B\b|,\s*B\b", body), result.sql
