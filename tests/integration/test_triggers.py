@@ -46,6 +46,25 @@ class TestTriggerTiming:
         assert "AFTER INSERT ON t" in out
         assert "FOR EACH ROW" in out
 
+    AFTER_INSERT_UPDATE = (
+        "CREATE TRIGGER trg ON dbo.t\n"
+        "AFTER INSERT, UPDATE\n"
+        "AS\nBEGIN\n    UPDATE dbo.t SET n = 1 WHERE id = 1\nEND"
+    )
+
+    def test_multi_event_oracle_uses_or(self) -> None:
+        # Oracle separates events with OR; a comma is ORA-00969.
+        out = _t(self.AFTER_INSERT_UPDATE, "tsql", "oracle")
+        assert "AFTER INSERT OR UPDATE ON t" in out
+        assert "INSERT, UPDATE" not in out
+
+    def test_multi_event_mysql_splits_per_event(self) -> None:
+        # MySQL triggers fire on a single event, so a multi-event trigger is
+        # split into one trigger per event.
+        out = _t(self.AFTER_INSERT_UPDATE, "tsql", "mysql")
+        assert "AFTER INSERT ON t" in out
+        assert "AFTER UPDATE ON t" in out
+
     def test_after_insert_postgresql_emits_function_and_trigger(self) -> None:
         out = _t(self.AFTER_INSERT, "tsql", "postgresql")
         # PostgreSQL needs a trigger function the trigger calls.

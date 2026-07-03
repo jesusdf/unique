@@ -1,5 +1,7 @@
 """Tests for the Transpiler orchestrator and convenience function."""
 
+import re
+
 import pytest
 
 from unique.core.errors import UnknownDialectError
@@ -263,3 +265,80 @@ class TestTSQLDropGuards:
         )
         out = self.t.transpile(sql, "tsql", "postgresql").sql
         assert "DROP PROCEDURE IF EXISTS create_invoice" in out
+
+
+class TestCreateSequence:
+    """CREATE SEQUENCE with a T-SQL ``AS <type>`` clause.
+
+    T-SQL and PostgreSQL accept ``CREATE SEQUENCE s AS INT ...``; Oracle does
+    not (ORA-03048: 'AS' is not valid following the sequence name), so the type
+    clause must be dropped for Oracle.
+    """
+
+    def setup_method(self) -> None:
+        self.t = Transpiler()
+
+    SEQ = (
+        "CREATE SEQUENCE dbo.invoice_seq\n"
+        "    AS INT\n    START WITH 1\n    INCREMENT BY 1"
+    )
+
+    def test_oracle_drops_as_type(self) -> None:
+        out = self.t.transpile(self.SEQ, "tsql", "oracle").sql
+        assert "CREATE SEQUENCE invoice_seq" in out
+        # No 'AS <type>' clause survives (would be ORA-03048).
+        assert not re.search(r"(?i)\bSEQUENCE\s+invoice_seq\s+AS\b", out)
+        assert "START WITH 1" in out
+        assert "INCREMENT BY 1" in out
+
+    def test_postgresql_keeps_valid_sequence(self) -> None:
+        out = self.t.transpile(self.SEQ, "tsql", "postgresql").sql
+        assert "CREATE SEQUENCE invoice_seq" in out
+        assert "START WITH 1" in out
+
+
+class TestOracleDateLiterals:
+    """ISO date/datetime strings inserted into DATE columns.
+
+    Oracle has no default that reads a bare '2024-01-15' as a date
+    (ORA-01861), so a string literal written to a harvested date column is
+    wrapped in an ANSI DATE/TIMESTAMP literal. Other targets accept the ISO
+    string implicitly and are left unchanged.
+    """
+
+    def setup_method(self) -> None:
+        self.t = Transpiler()
+
+    SCHEMA = (
+        "CREATE TABLE dbo.evt (\n"
+        "  id INT IDENTITY(1,1) NOT NULL,\n"
+        "  d DATE NOT NULL,\n"
+        "  ts DATETIME NULL\n"
+        ");\n"
+    )
+    INSERT = (
+        "INSERT INTO dbo.evt (d, ts) VALUES ('2024-01-15', '2024-01-15 10:30:00');\n"
+    )
+
+    def test_oracle_wraps_date_and_timestamp(self) -> None:
+        out = self.t.transpile(self.SCHEMA + self.INSERT, "tsql", "oracle").sql
+        assert "DATE '2024-01-15'" in out
+        assert "TIMESTAMP '2024-01-15 10:30:00'" in out
+        # The bare string must not survive for the date column.
+        assert "('2024-01-15'" not in out
+
+    def test_oracle_update_wraps_date(self) -> None:
+        upd = "UPDATE dbo.evt SET d = '2024-03-01' WHERE id = 1;\n"
+        out = self.t.transpile(self.SCHEMA + upd, "tsql", "oracle").sql
+        assert "d = DATE '2024-03-01'" in out
+
+    def test_non_date_column_untouched(self) -> None:
+        # A string into a non-date column stays a plain string literal.
+        sql = self.SCHEMA + "INSERT INTO dbo.evt (d) VALUES ('2024-01-15');\n"
+        out = self.t.transpile(sql, "tsql", "oracle").sql
+        assert "DATE '2024-01-15'" in out
+
+    def test_postgresql_leaves_iso_string(self) -> None:
+        out = self.t.transpile(self.SCHEMA + self.INSERT, "tsql", "postgresql").sql
+        assert "'2024-01-15'" in out
+        assert "DATE '2024-01-15'" not in out

@@ -592,7 +592,7 @@ class ProceduralEmitter:
         if node.execute_function:
             return self._emit_delegating_trigger_unsupported(node)
         name = self._qualified_name(node.schema, node.name)
-        events = ", ".join(node.events) if node.events else "UPDATE"
+        events = self._join_trigger_events(node.events)
         timing = node.timing
 
         note, timing = self._adjust_trigger_timing(timing)
@@ -627,6 +627,11 @@ class ProceduralEmitter:
         """Return (note, timing). Engines that can't honor the requested timing
         (MySQL has no INSTEAD OF) override to document and rewrite it."""
         return "", timing
+
+    def _join_trigger_events(self, events: tuple[str, ...]) -> str:
+        """Join a trigger's DML events. T-SQL and MySQL use a comma list;
+        Oracle overrides to ``INSERT OR UPDATE`` (a comma there is ORA-00969)."""
+        return ", ".join(events) if events else "UPDATE"
 
     def _trigger_header(
         self,
