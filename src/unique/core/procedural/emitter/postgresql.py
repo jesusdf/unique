@@ -9,13 +9,16 @@ from __future__ import annotations
 import re
 
 from unique.core.ast_nodes import (
+    AnonymousBlock,
     ASTNode,
     CreateTriggerStatement,
     CursorDeclaration,
+    DeclareStatement,
     ParameterDefinition,
     PrintStatement,
     RaiseErrorStatement,
     ReturnStatement,
+    needs_procedural_wrapper,
 )
 from unique.core.procedural.emitter.base import ProceduralEmitter, register_emitter
 
@@ -230,8 +233,40 @@ class PostgresEmitter(ProceduralEmitter):
     def _sleep_call(self, secs: str) -> str:
         return f"PERFORM pg_sleep({secs});"
 
-    def _emit_execute_stmt(self, expr: str, params: list[str]) -> str:
-        return self._emit_pg_execute(expr, params)
+    def _emit_execute_stmt(
+        self, expr: str, params: list[str], immediate: bool = False
+    ) -> str:
+        return self._emit_pg_execute(expr, params, immediate)
+
+    def _emit_anonymous_block(self, node: AnonymousBlock) -> str:
+        """PostgreSQL runs a top-level anonymous block inside ``DO $$ … $$;``.
+
+        A block that only calls procedures (no declarations, no control flow)
+        needs no wrapper — a bare ``CALL`` runs standalone — so it is emitted
+        directly, matching the standalone-EXEC path. Anything with declarations
+        or control flow is wrapped in a ``DO $$ [DECLARE …] BEGIN … END $$;``
+        PL/pgSQL block.
+        """
+        if node.degraded:
+            return self._emit_degraded_anonymous_block(node)
+        decls = [s for s in node.statements if isinstance(s, DeclareStatement)]
+        body = [s for s in node.statements if not isinstance(s, DeclareStatement)]
+        needs_wrapper = needs_procedural_wrapper(node.statements)
+        if not needs_wrapper:
+            return "\n".join(self._emit_node(s) for s in body)
+
+        lines = ["DO $$"]
+        if decls:
+            lines.append("DECLARE")
+            self._indent_level += 1
+            lines.extend(self._emit_indented_stmts(tuple(decls)))
+            self._indent_level -= 1
+        lines.append("BEGIN")
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(tuple(body)))
+        self._indent_level -= 1
+        lines.append("END $$;")
+        return "\n".join(lines)
 
     def _translate_cursor_attrs(self, expr: str) -> str:
         if not expr:

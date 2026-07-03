@@ -18,6 +18,12 @@ class MySqlTransformer(ProceduralTransformer):
 
     target_name = "mysql"
 
+    def _supports_top_level_anonymous_block(self) -> bool:
+        # MySQL has no procedural code (BEGIN … END, loops, dynamic SQL in a
+        # cursor) outside a stored routine, so a control-flow anonymous block
+        # cannot run at the top level; it is documented instead.
+        return False
+
     def _system_var_map(self) -> dict[str, str]:
         return {
             "@@ROWCOUNT": "ROW_COUNT()",

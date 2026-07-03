@@ -540,9 +540,15 @@ class AnonymousBlock(ASTNode):
     declarations), Oracle ``BEGIN … END;`` / ``DECLARE … BEGIN … END;``, MySQL
     has no anonymous block so a single call degrades to ``CALL`` and a
     declaring block is documented.
+
+    ``degraded`` marks a block a target cannot run at the top level (e.g. a
+    MySQL block containing control flow / a cursor loop): the emitter renders it
+    as a ``-- UNIQUE:`` carrier comment, and the transformer registers the loss
+    in ``result.warnings`` so nothing is silently dropped.
     """
 
     statements: tuple[ASTNode, ...] = ()
+    degraded: bool = False
 
 
 @dataclass(frozen=True)
@@ -605,10 +611,18 @@ class ParameterDefinition(ASTNode):
 
 @dataclass(frozen=True)
 class ExecuteStatement(ASTNode):
-    """Dynamic SQL execution."""
+    """Dynamic SQL execution.
+
+    ``immediate`` marks an Oracle ``EXECUTE IMMEDIATE`` (always a dynamic-SQL
+    string/expression), as opposed to a T-SQL ``EXEC <proc>`` whose argument may
+    be a named stored procedure. The distinction lets each target emitter route
+    a genuine dynamic-SQL run to its ``EXECUTE``/``PREPARE`` form instead of the
+    named-procedure ``CALL`` heuristic.
+    """
 
     sql_expression: ASTNode
     params: tuple[ASTNode, ...] = ()
+    immediate: bool = False
 
 
 @dataclass(frozen=True)
@@ -856,3 +870,32 @@ class Script(ASTNode):
     """A complete SQL script containing multiple statements."""
 
     statements: tuple[ASTNode, ...] = ()
+
+
+# ---------------------------------------------------------------------------
+# Shared classifiers
+# ---------------------------------------------------------------------------
+
+#: Node types that make an anonymous block genuine procedural code — control
+#: flow, declarations, cursors — and so require a procedural wrapper to run
+#: (a PL/pgSQL ``DO $$ … $$`` on PostgreSQL, ``BEGIN … END;`` on Oracle). A
+#: block of only simple statements (a bare CALL / DML) runs without one. Both
+#: the transformer (to decide degradation on a target with no top-level block)
+#: and the emitter (to decide wrapping) key off this single list.
+PROCEDURAL_WRAPPER_NODES: tuple[type[ASTNode], ...] = (
+    IfStatement,
+    WhileStatement,
+    ForLoopStatement,
+    LoopStatement,
+    BeginEndBlock,
+    DeclareStatement,
+    ExceptionBlock,
+    TryCatchBlock,
+    CursorDeclaration,
+    CursorOperation,
+)
+
+
+def needs_procedural_wrapper(statements: tuple[ASTNode, ...]) -> bool:
+    """Whether any statement requires a procedural wrapper to run."""
+    return any(isinstance(s, PROCEDURAL_WRAPPER_NODES) for s in statements)

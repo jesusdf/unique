@@ -158,7 +158,9 @@ class OracleEmitter(ProceduralEmitter):
         lines.append("END;")
         return "\n".join(lines)
 
-    def _emit_execute_stmt(self, expr: str, params: list[str]) -> str:
+    def _emit_execute_stmt(
+        self, expr: str, params: list[str], immediate: bool = False
+    ) -> str:
         """Oracle EXEC handling.
 
         A named stored-procedure call becomes ``name(args);`` (Oracle invokes a
@@ -168,8 +170,10 @@ class OracleEmitter(ProceduralEmitter):
         (dbo.create_invoice); the dbo default schema is dropped.
         """
         stripped = expr.strip()
-        # Dynamic SQL: a string literal, bind variable, or parenthesized text.
-        if stripped.startswith(("'", "@", "v_", "(", "N'", ":")):
+        # An Oracle EXECUTE IMMEDIATE (or a dynamic-SQL string/bind/expression)
+        # keeps ``EXECUTE IMMEDIATE`` — the ``immediate`` flag settles the case a
+        # record field (r.cmd) would otherwise misread as a named-proc call.
+        if immediate or stripped.startswith(("'", "@", "v_", "(", "N'", ":")):
             if params:
                 return f"EXECUTE IMMEDIATE {expr} USING {', '.join(params)};"
             return f"EXECUTE IMMEDIATE {expr};"

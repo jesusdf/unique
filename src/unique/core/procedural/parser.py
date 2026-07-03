@@ -290,6 +290,11 @@ class ProceduralParser:
             # as a statement sequence so EXEC becomes CALL etc., instead of
             # falling back to verbatim RawSQL.
             return self._parse_anonymous_block()
+        elif tok.is_keyword("BEGIN") and not self._is_tsql_source():
+            # A top-level Oracle/PL-SQL anonymous ``BEGIN … END;`` block (the
+            # re-runnable DROP guard a schema opens with). T-SQL is excluded:
+            # a bare BEGIN there is a transaction/BEGIN-TRY, handled elsewhere.
+            return self._parse_anonymous_block()
         else:
             return self._parse_fallback()
 
@@ -298,9 +303,22 @@ class ProceduralParser:
 
         Returns an AnonymousBlock carrying the parsed statements; the emitter
         renders the target-appropriate wrapper (e.g. PostgreSQL DO $$ … $$).
+        A leading ``BEGIN``/trailing ``END`` PL/SQL wrapper is unwrapped so the
+        block holds only its inner statements. Non-T-SQL sources parse the body
+        with the PL/SQL statement parser (FOR loops, EXECUTE IMMEDIATE, …).
         Falls back to RawSQL if nothing parses, so behavior never regresses.
         """
-        statements = self._run_body_loop(self._parse_tsql_statement, ())
+        parse_stmt = (
+            self._parse_tsql_statement
+            if self._is_tsql_source()
+            else self._parse_plsql_statement
+        )
+        wrapped = self._match_keyword("BEGIN")
+        stop = ("END",) if wrapped else ()
+        statements = self._run_body_loop(parse_stmt, stop)
+        if wrapped:
+            self._match_keyword("END")
+            self._match_type(TokenType.SEMICOLON)
         if not statements:
             return RawSQL(sql="", reason="Empty or unparsable anonymous block")
         return AnonymousBlock(statements=tuple(statements))
@@ -1615,7 +1633,9 @@ class ProceduralParser:
                     break
 
         self._match_type(TokenType.SEMICOLON)
-        return ExecuteStatement(sql_expression=expr, params=tuple(params))
+        return ExecuteStatement(
+            sql_expression=expr, params=tuple(params), immediate=True
+        )
 
     def _parse_plsql_exception(self) -> ASTNode:
         """Parse EXCEPTION block."""

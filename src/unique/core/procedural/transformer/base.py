@@ -25,6 +25,7 @@ import sqlglot
 
 from unique.core.ast_nodes import (
     AlterProcedureStatement,
+    AnonymousBlock,
     AssignmentStatement,
     ASTNode,
     BeginEndBlock,
@@ -55,6 +56,7 @@ from unique.core.ast_nodes import (
     StatementList,
     TryCatchBlock,
     WhileStatement,
+    needs_procedural_wrapper,
 )
 from unique.core.mappings import (
     CURRENT_TIMESTAMP_EXPR,
@@ -197,6 +199,7 @@ class ProceduralTransformer:
             NullStatement: self._transform_null,
             RawSQL: self._transform_raw_sql,
             CommentStatement: self._transform_comment,
+            AnonymousBlock: self._transform_anonymous_block,
         }
 
         handler = handlers.get(type(node))
@@ -852,7 +855,30 @@ class ProceduralTransformer:
     def _transform_execute(self, node: ExecuteStatement) -> ASTNode:
         new_expr = self._transform_node(node.sql_expression)
         new_params = tuple(self._transform_node(p) for p in node.params)
-        return ExecuteStatement(sql_expression=new_expr, params=new_params)
+        return ExecuteStatement(
+            sql_expression=new_expr, params=new_params, immediate=node.immediate
+        )
+
+    def _supports_top_level_anonymous_block(self) -> bool:
+        """Whether the target can run a wrapped anonymous procedural block at the
+        top level. Default yes (Oracle/PostgreSQL/T-SQL); MySQL overrides to no
+        (it has no procedural code outside a stored routine)."""
+        return True
+
+    def _transform_anonymous_block(self, node: AnonymousBlock) -> ASTNode:
+        new_stmts = self._transform_body(node.statements)
+        needs_wrapper = needs_procedural_wrapper(new_stmts)
+        if needs_wrapper and not self._supports_top_level_anonymous_block():
+            # No faithful top-level form on this target: document the loss in the
+            # result object and emit the block as a carrier comment, never as
+            # invalid executable SQL.
+            self._warnings.append(
+                f"{self._source} anonymous PL/SQL block with control flow has no "
+                f"top-level {self._target} equivalent (no procedural code outside "
+                "a stored routine); preserved as a comment."
+            )
+            return AnonymousBlock(statements=new_stmts, degraded=True)
+        return AnonymousBlock(statements=new_stmts, degraded=node.degraded)
 
     def _transform_print(self, node: PrintStatement) -> PrintStatement:
         return PrintStatement(expression=self._transform_node(node.expression))
