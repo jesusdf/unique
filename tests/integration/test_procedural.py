@@ -50,6 +50,20 @@ class TestTSQLToOracle:
         out = _transpile(sql, "tsql", "oracle")
         assert ":=" in out
 
+    def test_cast_in_plsql_body_drops_constraint(self) -> None:
+        # Oracle PL/SQL CAST rejects a constrained type (PLS-00103) and DECIMAL;
+        # it must become an unconstrained NUMBER.
+        sql = (
+            "CREATE FUNCTION dbo.fn_tax (@net DECIMAL(12, 2))\n"
+            "RETURNS DECIMAL(12, 2)\n"
+            "AS\nBEGIN\n"
+            "    RETURN @net * CAST(0.10 AS DECIMAL(12, 2))\n"
+            "END"
+        )
+        out = _transpile(sql, "tsql", "oracle")
+        assert "CAST ( 0.10 AS NUMBER )" in out
+        assert "DECIMAL" not in out
+
 
 class TestOracleToTSQL:
     def test_procedure_body_translated(self) -> None:

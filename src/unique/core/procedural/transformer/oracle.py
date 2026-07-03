@@ -68,10 +68,32 @@ class OracleTransformer(ProceduralTransformer):
     def _fix_unwrapped_scalar(self, sql: str) -> str:
         return self._fix_oracle_dml(sql)
 
+    # Type names Oracle's CAST wants instead of the T-SQL spelling.
+    _CAST_TYPE_MAP = {
+        "DECIMAL": "NUMBER",
+        "NUMERIC": "NUMBER",
+        "DEC": "NUMBER",
+        "VARCHAR": "VARCHAR2",
+        "NVARCHAR": "NVARCHAR2",
+    }
+    _CAST_CONSTRAINED_RE = re.compile(
+        r"(?i)\bAS\s+(DECIMAL|NUMERIC|DEC|NUMBER|FLOAT|VARCHAR2?|NVARCHAR2?|CHAR|NCHAR)"
+        r"\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\)"
+    )
+
     def _fix_raw_sql_target(self, sql: str) -> str:
         # dbo doesn't exist in Oracle; drop a dbo. qualifier on calls within
         # expressions (e.g. dbo.func1() in an assignment, RETURN or COALESCE).
-        return re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
+        sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
+        # A PL/SQL expression CAST rejects a constrained type (PLS-00103):
+        # CAST(x AS NUMBER(12,2)) / VARCHAR2(10) must drop the length, and
+        # DECIMAL/NUMERIC must become NUMBER. Only the numeric-constrained
+        # ``AS <type>(...)`` form (never an alias or function call) is matched.
+        def _unconstrained_cast_type(m: re.Match[str]) -> str:
+            typ = m.group(1).upper()
+            return f"AS {self._CAST_TYPE_MAP.get(typ, typ)}"
+
+        return self._CAST_CONSTRAINED_RE.sub(_unconstrained_cast_type, sql)
 
     def _trigger_new_ref(self) -> str:
         return ":NEW."
