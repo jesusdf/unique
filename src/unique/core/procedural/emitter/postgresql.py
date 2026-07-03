@@ -110,6 +110,8 @@ class PostgresEmitter(ProceduralEmitter):
         return True
 
     def _emit_trigger(self, node: CreateTriggerStatement) -> str:
+        if node.compound:
+            return self._emit_compound_trigger_unsupported(node)
         # A PostgreSQL-source trigger already delegating to a trigger function
         # (parsed with execute_function) is re-emitted as just the CREATE TRIGGER
         # binding — the function it references is emitted as its own statement.

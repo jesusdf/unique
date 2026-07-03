@@ -529,6 +529,23 @@ class ProceduralParser:
         if not table_name and self._match_keyword("ON"):
             table_name, _ = self._parse_qualified_name()
 
+        # Oracle COMPOUND TRIGGER (declarations + AFTER EACH ROW / AFTER
+        # STATEMENT sections over a PL/SQL collection). There is no mechanical
+        # cross-engine translation yet; consume the rest of the definition and
+        # flag it so the emitter documents it instead of shredding the body.
+        if self._current().upper_value == "COMPOUND":
+            while not self._at_end():
+                self._advance()
+            return CreateTriggerStatement(
+                name=name,
+                table=table_name,
+                timing=timing,
+                events=tuple(events),
+                or_replace=or_replace,
+                schema=schema,
+                compound=True,
+            )
+
         # REFERENCING NEW TABLE AS x [OLD TABLE AS y] (PostgreSQL transition
         # tables; lexed as an identifier, so match by value). Collect the raw
         # clause up to FOR so it can be re-emitted faithfully to PostgreSQL.

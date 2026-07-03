@@ -547,3 +547,46 @@ class TestPostgresTriggerToMySQL:
         )
         assert "EXECUTE FUNCTION trg_touch_fn()" in out
         assert "AFTER UPDATE ON invoice" in out
+
+
+class TestOracleCompoundTrigger:
+    """An Oracle COMPOUND TRIGGER (collection + AFTER EACH ROW / AFTER STATEMENT)
+    has no mechanical cross-engine translation yet, so it must degrade to a
+    documented ``-- UNIQUE:`` carrier + warning — never mangled invalid SQL."""
+
+    SRC = (
+        "CREATE TRIGGER trg_line_total\n"
+        "FOR INSERT OR UPDATE ON invoice_line\n"
+        "COMPOUND TRIGGER\n"
+        "    TYPE id_tab IS TABLE OF NUMBER INDEX BY PLS_INTEGER;\n"
+        "    g_ids id_tab;\n"
+        "    g_n   PLS_INTEGER := 0;\n"
+        "    AFTER EACH ROW IS\n"
+        "    BEGIN\n"
+        "        g_n := g_n + 1;\n"
+        "        g_ids(g_n) := :NEW.invoice_id;\n"
+        "    END AFTER EACH ROW;\n"
+        "    AFTER STATEMENT IS\n"
+        "    BEGIN\n"
+        "        FOR i IN 1 .. g_n LOOP\n"
+        "            UPDATE invoice SET total = 0 WHERE id = g_ids(i);\n"
+        "        END LOOP;\n"
+        "    END AFTER STATEMENT;\n"
+        "END;\n/"
+    )
+
+    def _run(self, target: str):  # type: ignore[no-untyped-def]
+        return Transpiler().transpile(self.SRC, source="oracle", target=target)
+
+    def test_degrades_to_carrier_postgresql(self) -> None:
+        r = self._run("postgresql")
+        assert "-- UNIQUE: Oracle COMPOUND TRIGGER trg_line_total" in r.sql
+        # None of the PL/SQL collection internals leak as executable SQL.
+        for leak in ("TYPE id_tab", "PLS_INTEGER", "AFTER EACH", "id_tab;"):
+            assert leak not in r.sql
+        assert r.warnings or r.unsupported
+
+    def test_degrades_to_carrier_mysql(self) -> None:
+        r = self._run("mysql")
+        assert "-- UNIQUE: Oracle COMPOUND TRIGGER" in r.sql
+        assert "PLS_INTEGER" not in r.sql

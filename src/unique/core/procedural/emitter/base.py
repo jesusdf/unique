@@ -585,6 +585,8 @@ class ProceduralEmitter:
         ``header → body → END`` shape (T-SQL, Oracle, MySQL); PostgreSQL, whose
         trigger body lives in a separate function, overrides this entirely.
         """
+        if node.compound:
+            return self._emit_compound_trigger_unsupported(node)
         # A PostgreSQL trigger that delegates its body to a trigger function
         # (``EXECUTE FUNCTION fn()``) has no inline body to emit here, and these
         # engines have no statement-level transition-table triggers. Document
@@ -603,6 +605,20 @@ class ProceduralEmitter:
         self._indent_level = 0
         lines.append(self._trigger_end())
         return note + "\n".join(lines)
+
+    def _emit_compound_trigger_unsupported(self, node: CreateTriggerStatement) -> str:
+        """Document an Oracle COMPOUND TRIGGER, which has no mechanical
+        cross-engine equivalent (it accumulates affected rows in a PL/SQL
+        collection and re-aggregates in AFTER STATEMENT)."""
+        events = self._join_trigger_events(node.events)
+        return (
+            f"-- UNIQUE: Oracle COMPOUND TRIGGER {node.name} ({node.timing} "
+            f"{events} ON {node.table}) has no automatic {self.dialect_name} "
+            "equivalent — it collects affected rows in a PL/SQL collection and "
+            "re-aggregates in AFTER STATEMENT. Rewrite manually (PostgreSQL: a "
+            "statement-level trigger with REFERENCING NEW TABLE; MySQL: a "
+            "row-level trigger that re-reads the table)."
+        )
 
     def _emit_delegating_trigger_unsupported(self, node: CreateTriggerStatement) -> str:
         """Document a PostgreSQL delegating trigger (``EXECUTE FUNCTION fn()``)
