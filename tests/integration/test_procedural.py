@@ -1186,12 +1186,17 @@ class TestPerEngineRoutineSurface:
 
     def test_oracle_function_uses_return_not_returns(self) -> None:
         out = _transpile(self.FUNC, "tsql", "oracle")
-        assert "\nRETURN NUMBER(10)" in out
+        # Unconstrained in RETURN position: NUMBER(10) is PLS-00103
+        # (audit 2026-07-02, S1-11).
+        assert "\nRETURN NUMBER" in out
+        assert "RETURN NUMBER(10)" not in out
         assert "RETURNS" not in out
 
     def test_oracle_function_param_is_in(self) -> None:
         out = _transpile(self.FUNC, "tsql", "oracle")
-        assert "IN NUMBER(10)" in out
+        # Unconstrained in parameter position (audit 2026-07-02, S1-11).
+        assert "IN NUMBER" in out
+        assert "IN NUMBER(10)" not in out
 
     def test_print_per_engine(self) -> None:
         src = "CREATE PROCEDURE dbo.p AS BEGIN PRINT 'hi' END"
