@@ -904,8 +904,51 @@ class ProceduralTransformer:
         args = self._map_now_in_sql(node.args) if node.args else node.args
         return CallStatement(name=node.name, args=args, schema=schema)
 
+    #: Oracle data-dictionary views (USER_*/ALL_*/DBA_*). A block querying them
+    #: (a catalog-driven re-runnable DROP guard) has no portable equivalent —
+    #: the views don't exist on any other engine, so even a valid DO $$ block
+    #: fails at runtime.
+    _ORACLE_CATALOG_RE = re.compile(
+        r"(?i)\b(?:user|all|dba)_(?:tab|obj|col|con|ind|seq|view|trigger|source|proc)\w*\b"
+    )
+
+    def _references_oracle_catalog(self, statements: tuple[ASTNode, ...]) -> bool:
+        """Whether any statement (recursively) queries an Oracle data-dictionary
+        view — detected on the raw SQL text carried by RawSQL / EmbeddedDML /
+        FOR-loop cursors."""
+
+        def walk(node: ASTNode) -> bool:
+            text = getattr(node, "sql", None)
+            if isinstance(text, str) and self._ORACLE_CATALOG_RE.search(text):
+                return True
+            for attr in ("cursor", "query", "sql_expression", "value", "condition"):
+                child = getattr(node, attr, None)
+                if isinstance(child, ASTNode) and walk(child):
+                    return True
+            for attr in ("statements", "body", "then_body", "else_body", "params"):
+                for child in getattr(node, attr, ()) or ():
+                    if isinstance(child, ASTNode) and walk(child):
+                        return True
+            return False
+
+        return any(walk(s) for s in statements)
+
     def _transform_anonymous_block(self, node: AnonymousBlock) -> ASTNode:
         new_stmts = self._transform_body(node.statements)
+        if (
+            self._source == "oracle"
+            and self._target != "oracle"
+            and self._references_oracle_catalog(node.statements)
+        ):
+            # A catalog-driven DROP guard: valid syntax on the target (PG DO $$)
+            # but its USER_*/ALL_* views don't exist there, so it can't run.
+            # Document it (the harness recreates a clean schema itself).
+            self._warnings.append(
+                "Oracle anonymous block querying the data dictionary "
+                f"(USER_*/ALL_* views) has no {self._target} equivalent; "
+                "preserved as a comment."
+            )
+            return AnonymousBlock(statements=new_stmts, degraded=True)
         needs_wrapper = needs_procedural_wrapper(new_stmts)
         if needs_wrapper and not self._supports_top_level_anonymous_block():
             # No faithful top-level form on this target: document the loss in the

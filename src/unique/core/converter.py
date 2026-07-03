@@ -822,6 +822,19 @@ def _convert_create_table(
                     dtype = _resolve_tsql_alias_type(
                         _convert_data_type(col_def.args["kind"])
                     )
+                    # Oracle's unqualified NUMBER (no precision/scale) parses to
+                    # a bare DECIMAL but denotes an integer id/count: map it to
+                    # BIGINT so identity/PK/FK columns are valid (a DECIMAL can't
+                    # be AUTO_INCREMENT on MySQL, nor match an integer PK for a
+                    # foreign key). Only for an Oracle source — a bare DECIMAL
+                    # from other engines keeps its meaning. NUMBER(p,s) has
+                    # params and is untouched.
+                    if (
+                        source_dialect == "oracle"
+                        and dtype.name.upper() in ("DECIMAL", "NUMERIC")
+                        and not dtype.params
+                    ):
+                        dtype = DataType(name="BIGINT")
 
                 nullable = True
                 identity = False
@@ -2093,7 +2106,9 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 if dialect == "mysql":
                     identity = " AUTO_INCREMENT"
                 elif dialect == "postgresql":
-                    dtype = "SERIAL"
+                    # BIGSERIAL when the column is a 64-bit integer so a FK from
+                    # another BIGINT column matches (SERIAL is only int4).
+                    dtype = "BIGSERIAL" if dtype.upper() == "BIGINT" else "SERIAL"
                     identity = ""
                 elif dialect == "tsql":
                     identity = " IDENTITY(1,1)"

@@ -1524,3 +1524,39 @@ class TestReturningIntoCaptureToMySQL:
         out = _transpile(self.PROC, "postgresql", "postgresql")
         assert "LAST_INSERT_ID" not in out.upper()
         assert "RETURNING" in out.upper()
+
+
+class TestOracleCatalogDropBlock:
+    """The Oracle re-runnable DROP guard queries the data dictionary
+    (USER_TABLES / USER_OBJECTS). Those views exist on no other engine, so even
+    a syntactically valid PostgreSQL DO $$ block fails at runtime — it must
+    degrade to a documented comment on every non-Oracle target (the harness
+    recreates a clean schema itself)."""
+
+    BLOCK = (
+        "BEGIN\n"
+        "    FOR r IN (SELECT 'DROP TABLE ' || table_name AS cmd\n"
+        "              FROM user_tables WHERE table_name IN ('T')) LOOP\n"
+        "        EXECUTE IMMEDIATE r.cmd;\n"
+        "    END LOOP;\n"
+        "END;"
+    )
+
+    def _code(self, sql: str) -> str:
+        return "\n".join(
+            line for line in sql.split("\n") if not line.strip().startswith("--")
+        )
+
+    def test_degrades_on_postgresql(self) -> None:
+        result = Transpiler().transpile(
+            self.BLOCK, source="oracle", target="postgresql"
+        )
+        # No executable reference to the Oracle catalog view.
+        assert "user_tables" not in self._code(result.sql).lower()
+        assert "UNIQUE:" in result.sql
+        assert result.warnings or result.unsupported
+
+    def test_degrades_on_mysql(self) -> None:
+        result = Transpiler().transpile(self.BLOCK, source="oracle", target="mysql")
+        assert "user_tables" not in self._code(result.sql).lower()
+        assert result.warnings or result.unsupported
