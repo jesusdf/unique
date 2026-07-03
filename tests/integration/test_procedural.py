@@ -1492,3 +1492,35 @@ class TestStandaloneCall:
         code = self._code(out)
         assert "EXEC create_invoice 2, '2024-02-01', 1, 1, 2, 1" in code
         assert "CALL " not in code.upper()
+
+
+class TestReturningIntoCaptureToMySQL:
+    """PostgreSQL ``INSERT … RETURNING id INTO v`` captures a generated id.
+    MySQL has no RETURNING, so it must become ``INSERT …; SET v =
+    LAST_INSERT_ID();`` — not a dropped capture that leaves ``v`` NULL (the
+    create_invoice failure on the postgresql→mysql live run)."""
+
+    PROC = (
+        "CREATE PROCEDURE mk() LANGUAGE plpgsql AS $$\n"
+        "DECLARE v_new_id INT;\n"
+        "BEGIN\n"
+        "    INSERT INTO invoice (customer_id) VALUES (1) RETURNING id INTO v_new_id;\n"
+        "    INSERT INTO line (invoice_id) VALUES (v_new_id);\n"
+        "END;\n$$;"
+    )
+
+    def test_returning_into_becomes_last_insert_id(self) -> None:
+        out = _transpile(self.PROC, "postgresql", "mysql")
+        code = "\n".join(
+            line for line in out.split("\n") if not line.strip().startswith("--")
+        )
+        assert "RETURNING" not in code.upper()
+        assert "SET v_new_id = LAST_INSERT_ID()" in code
+        # The INSERT itself is preserved.
+        assert "INSERT INTO invoice" in code
+
+    def test_returning_into_preserved_for_postgresql(self) -> None:
+        # pg->pg keeps the native RETURNING … INTO (no LAST_INSERT_ID).
+        out = _transpile(self.PROC, "postgresql", "postgresql")
+        assert "LAST_INSERT_ID" not in out.upper()
+        assert "RETURNING" in out.upper()

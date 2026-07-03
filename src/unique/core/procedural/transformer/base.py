@@ -1070,12 +1070,18 @@ class ProceduralTransformer:
         the other engines; the IR emitter renders each engine's idiomatic form.
         """
         sql = self._transform_var_in_sql(node.sql)
+        # ``INSERT … RETURNING <col> INTO <var>`` captures a generated id. MySQL
+        # has no RETURNING, and sqlglot drops the ``INTO <var>`` target, so peel
+        # the capture off first and re-express it as ``SET <var> =
+        # LAST_INSERT_ID()`` after the INSERT (faithful id capture, not a
+        # silently dropped assignment).
+        sql, capture_suffix = self._peel_returning_capture(sql)
         rewritten = self._transform_cross_table_update(sql)
         if rewritten is not None:
             sql = rewritten
             if self._in_trigger and self._rewrites_trigger_pseudotables():
                 sql = self._rewrite_trigger_pseudotables(sql)
-            return EmbeddedDML(sql=sql, dialect=self._target)
+            return EmbeddedDML(sql=sql + capture_suffix, dialect=self._target)
         try:
             source_dialect = self._get_sqlglot_dialect(self._source)
             target_dialect = self._get_sqlglot_dialect(self._target)
@@ -1101,7 +1107,25 @@ class ProceduralTransformer:
         sql = self._fix_target_dml(sql)
         if self._in_trigger and self._rewrites_trigger_pseudotables():
             sql = self._rewrite_trigger_pseudotables(sql)
-        return EmbeddedDML(sql=sql, dialect=self._target)
+        return EmbeddedDML(sql=sql + capture_suffix, dialect=self._target)
+
+    def _peel_returning_capture(self, sql: str) -> tuple[str, str]:
+        """Split an ``INSERT … RETURNING <col> INTO <var>`` into the base
+        statement and a target-appropriate id-capture suffix.
+
+        Only MySQL needs this (no RETURNING; the id comes from
+        ``LAST_INSERT_ID()``). PostgreSQL and Oracle support ``RETURNING …
+        INTO`` natively, so they keep the statement whole. Returns
+        ``(sql, suffix)``; ``suffix`` is empty when nothing is peeled.
+        """
+        if self._target != "mysql":
+            return sql, ""
+        m = re.search(r"(?is)\bRETURNING\b\s+.+?\s+INTO\s+([\w.]+)\s*;?\s*$", sql)
+        if not m:
+            return sql, ""
+        var = m.group(1)
+        base = sql[: m.start()].rstrip().rstrip(";").rstrip()
+        return base, f";\nSET {var} = {LAST_IDENTITY_EXPR['mysql']};"
 
     def _transform_cross_table_update(self, sql: str) -> str | None:
         """Render a cross-table ``UPDATE ... FROM/JOIN`` via the IR emitter.
