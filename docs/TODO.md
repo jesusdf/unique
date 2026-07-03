@@ -212,21 +212,30 @@ High-level plan (details in that folder):
   - [ ] **Confirm the 12 cross-dialect pairs on real engines**, then remove
         `continue-on-error` to make the full 4×4 gating. Live status
         (2026-07-03, PostgreSQL+MariaDB): **green** tsql→postgresql and
-        tsql→mysql; **red** with identified causes:
-        - postgresql→mysql: the pg trigger *function* (`RETURNS TRIGGER`)
+        tsql→mysql. The identified red causes were fixed at the transpiler level
+        (unit/integration tests added, TDD); live re-confirmation still pending
+        (Oracle-source pairs blocked on server credentials — see below):
+        - [x] mysql→postgresql: row-level `SET NEW.line_total = ...` mangled to
+          `NEW := . line_total = ...` — the parser now reads the dotted
+          pseudo-row target so it assigns `NEW.col := expr`. The same pair also
+          needed cross-source `LAST_INSERT_ID()` → `LASTVAL()` (create_invoice).
+          (commits: parse dotted SET target; translate last-generated-id across
+          all sources.)
+        - [x] oracle→postgresql / oracle→mysql: the leading anonymous
+          `FOR r IN (...) LOOP EXECUTE IMMEDIATE` DROP block emitted invalid
+          fragments (`END AS LOOP;`, `-- UNIQUE: … Transaction`). It now routes
+          to the procedural engine: faithful PostgreSQL `DO $$ … $$` (cursor
+          FOR-loop + dynamic `EXECUTE`), documented degradation on MySQL (no
+          top-level procedural code). Also fixed the Oracle `SYSTIMESTAMP`
+          default/assignment leaking an invalid `SYSTIMESTAMP()` on every target.
+          (commits: route top-level Oracle anonymous blocks; map SYSTIMESTAMP.)
+        - [ ] postgresql→mysql: the pg trigger *function* (`RETURNS TRIGGER`)
           transpiles as a MySQL function returning the nonexistent TRIGGER
           type; needs a pg-source trigger-function + CREATE TRIGGER pairing
-          into a single MySQL trigger (or documented degradation).
-        - mysql→postgresql: row-level `SET NEW.line_total = ...` mangles to
-          `NEW := . line_total = ...`; the pg emitter needs dotted-target
-          assignments (`NEW.col := expr`).
-        - oracle→postgresql / oracle→mysql: the anonymous
-          `FOR r IN (...) LOOP EXECUTE IMMEDIATE` drop block emits invalid
-          fragments (`END AS LOOP;`); needs FOR-loop + EXECUTE IMMEDIATE
-          support in the anonymous-block path (pg: DO $$ ... $$) or a
-          documented degradation instead of invalid SQL.
+          into a single MySQL trigger (or documented degradation). **Still red.**
         Oracle-target pairs untested (server credentials rejected;
-        see HARNESS.md runbook).
+        see HARNESS.md runbook), so oracle→{pg,mysql} live confirmation waits on
+        an Oracle reset even though the transpiler output is now valid.
 
 Key design risks, captured for when we start:
 - **Determinism** is the central challenge — see the folder README for the list
