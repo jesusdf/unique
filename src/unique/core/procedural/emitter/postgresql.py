@@ -11,6 +11,7 @@ import re
 from unique.core.ast_nodes import (
     AnonymousBlock,
     ASTNode,
+    CallStatement,
     CreateTriggerStatement,
     CursorDeclaration,
     DeclareStatement,
@@ -260,6 +261,10 @@ class PostgresEmitter(ProceduralEmitter):
         self, expr: str, params: list[str], immediate: bool = False
     ) -> str:
         return self._emit_pg_execute(expr, params, immediate)
+
+    def _emit_call(self, node: CallStatement) -> str:
+        name = self._qualified_name(node.schema, node.name)
+        return f"CALL {name}({node.args});"
 
     def _emit_anonymous_block(self, node: AnonymousBlock) -> str:
         """PostgreSQL runs a top-level anonymous block inside ``DO $$ … $$;``.

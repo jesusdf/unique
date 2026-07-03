@@ -23,6 +23,7 @@ from unique.core.ast_nodes import (
     AssignmentStatement,
     ASTNode,
     BeginEndBlock,
+    CallStatement,
     CommentStatement,
     ContinueStatement,
     CreateFunctionStatement,
@@ -140,6 +141,7 @@ class ProceduralEmitter:
             TryCatchBlock: self._emit_try_catch,
             ExceptionBlock: self._emit_exception_block,
             ExecuteStatement: self._emit_execute,
+            CallStatement: self._emit_call,
             PrintStatement: self._emit_print,
             RaiseErrorStatement: self._emit_raise_error,
             ReturnStatement: self._emit_return,
@@ -888,6 +890,13 @@ class ProceduralEmitter:
     # ---------------------------------------------------------------
     # Simple statements
     # ---------------------------------------------------------------
+
+    def _emit_call(self, node: CallStatement) -> str:
+        """Emit a stored-procedure call. Default is T-SQL ``EXEC name args``;
+        PostgreSQL/MySQL (``CALL name(args)``) and Oracle (``name(args);``)
+        override with their own call syntax."""
+        name = self._qualified_name(node.schema, node.name)
+        return f"EXEC {name} {node.args};" if node.args else f"EXEC {name};"
 
     def _emit_execute(self, node: ExecuteStatement) -> str:
         expr = self._emit_node(node.sql_expression)

@@ -89,6 +89,9 @@ _TSQL_DECLARE_PATTERN = re.compile(r"(?i)^\s*DECLARE\s+@", re.MULTILINE)
 # A top-level Oracle anonymous PL/SQL block opens with BEGIN or DECLARE.
 _ORACLE_ANON_BLOCK_PATTERN = re.compile(r"(?i)^\s*(?:BEGIN|DECLARE)\b")
 
+# A standalone stored-procedure call: CALL proc(...) (MySQL/PostgreSQL/Oracle).
+_CALL_PROC_PATTERN = re.compile(r"(?i)^\s*CALL\s+\w")
+
 
 def classify_batch(sql: str, dialect: str) -> BatchType:
     """Classify a batch's content type.
@@ -126,6 +129,12 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
             return BatchType.PROCEDURAL
         if _TSQL_DECLARE_PATTERN.match(first_meaningful):
             return BatchType.PROCEDURAL
+
+    if _CALL_PROC_PATTERN.match(first_meaningful):
+        # A standalone stored-procedure call (MySQL/PostgreSQL/Oracle
+        # ``CALL proc(args)``). Route it to the procedural engine so it becomes
+        # each target's call form instead of an "unhandled Command" comment.
+        return BatchType.PROCEDURAL
 
     if dialect == "oracle" and _ORACLE_ANON_BLOCK_PATTERN.match(first_meaningful):
         # A top-level ``BEGIN … END;`` / ``DECLARE … BEGIN … END;`` is an
@@ -417,11 +426,17 @@ class BatchSplitter:
                     flush(i - 1)
                 delimiter = delimiter_match.group(1)
                 batch_start = i + 1
+                # A custom delimiter delimits routine bodies itself, so any
+                # BEGIN/END tracking state is stale — reset it so it can't leak
+                # past the directive (a lingering in_routine would stop every
+                # following ``;`` statement from splitting).
+                in_routine = False
+                begin_depth = 0
                 continue
 
-            # Track routine bodies (BEGIN/END nesting) when no custom
-            # delimiter is in effect.
-            if routine_re.search(line):
+            # Track routine bodies (BEGIN/END nesting) only when no custom
+            # delimiter is in effect (a custom delimiter marks the boundaries).
+            if delimiter == ";" and routine_re.search(line):
                 in_routine = True
             if in_routine and delimiter == ";":
                 # Count BEGIN/END on this line, ignoring END IF/END LOOP etc.

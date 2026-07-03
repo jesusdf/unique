@@ -11,6 +11,7 @@ import re
 from unique.core.ast_nodes import (
     AnonymousBlock,
     ASTNode,
+    CallStatement,
     CreateTriggerStatement,
     DeclareStatement,
     ParameterDefinition,
@@ -157,6 +158,12 @@ class OracleEmitter(ProceduralEmitter):
         self._indent_level -= 1
         lines.append("END;")
         return "\n".join(lines)
+
+    def _emit_call(self, node: CallStatement) -> str:
+        # Oracle invokes a procedure by bare name inside a PL/SQL block; the
+        # surrounding anonymous block supplies BEGIN/END.
+        name = self._qualified_name(node.schema, node.name)
+        return f"{name}({node.args});"
 
     def _emit_execute_stmt(
         self, expr: str, params: list[str], immediate: bool = False

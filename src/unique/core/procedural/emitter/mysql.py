@@ -11,6 +11,7 @@ import re
 
 from unique.core.ast_nodes import (
     ASTNode,
+    CallStatement,
     CreateTriggerStatement,
     CursorDeclaration,
     ExitStatement,
@@ -220,6 +221,10 @@ class MySqlEmitter(ProceduralEmitter):
 
     def _sleep_call(self, secs: str) -> str:
         return f"DO SLEEP({secs});"
+
+    def _emit_call(self, node: CallStatement) -> str:
+        # MySQL has no schema layer, so any qualifier is dropped by name lookup.
+        return f"CALL {node.name}({node.args});"
 
     def _emit_execute_stmt(
         self, expr: str, params: list[str], immediate: bool = False

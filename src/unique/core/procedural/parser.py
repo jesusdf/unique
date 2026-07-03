@@ -20,6 +20,7 @@ from unique.core.ast_nodes import (
     AssignmentStatement,
     ASTNode,
     BeginEndBlock,
+    CallStatement,
     CommentStatement,
     ContinueStatement,
     CreateFunctionStatement,
@@ -294,6 +295,11 @@ class ProceduralParser:
             # A top-level Oracle/PL-SQL anonymous ``BEGIN … END;`` block (the
             # re-runnable DROP guard a schema opens with). T-SQL is excluded:
             # a bare BEGIN there is a transaction/BEGIN-TRY, handled elsewhere.
+            return self._parse_anonymous_block()
+        elif tok.upper_value == "CALL":
+            # A standalone stored-procedure call (MySQL/PostgreSQL/Oracle
+            # ``CALL proc(args)``). Wrap it in an anonymous block so each target
+            # gets its call form (Oracle needs a BEGIN … END; shell).
             return self._parse_anonymous_block()
         else:
             return self._parse_fallback()
@@ -1358,6 +1364,31 @@ class ProceduralParser:
         self._match_type(TokenType.SEMICOLON)
         return DeclareStatement(name=name, data_type=data_type, default=default)
 
+    def _parse_call_statement(self) -> ASTNode:
+        """Parse a stored-procedure call: ``CALL name(args)`` (MySQL/PG/Oracle).
+        ``CALL`` lexes as an identifier, so the caller matches it by value."""
+        self._advance()  # CALL
+        name, schema = self._parse_qualified_name()
+        args = ""
+        if self._match_type(TokenType.LPAREN):
+            arg_tokens: list[str] = []
+            depth = 1
+            while not self._at_end() and depth > 0:
+                cur = self._current()
+                if cur.type == TokenType.LPAREN:
+                    depth += 1
+                elif cur.type == TokenType.RPAREN:
+                    depth -= 1
+                    if depth == 0:
+                        self._advance()
+                        break
+                arg_tokens.append(self._advance().value)
+            joined = " ".join(arg_tokens)
+            joined = re.sub(r"\s+([,)])", r"\1", joined)
+            args = re.sub(r"\(\s+", "(", joined).strip()
+        self._match_type(TokenType.SEMICOLON)
+        return CallStatement(name=name, args=args, schema=schema)
+
     def _parse_plsql_statement(self) -> ASTNode | None:
         """Parse a single PL/SQL statement, guaranteeing token progress."""
         before = self._pos
@@ -1385,6 +1416,8 @@ class ProceduralParser:
 
         tok = self._current()
 
+        if tok.upper_value == "CALL" and tok.type != TokenType.KEYWORD:
+            return self._parse_call_statement()
         if tok.is_keyword("DECLARE"):
             # MySQL places variable declarations inside BEGIN ... END.
             self._advance()

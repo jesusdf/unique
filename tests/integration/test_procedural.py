@@ -1454,3 +1454,41 @@ class TestOracleAnonymousBlock:
         assert "EXECUTE IMMEDIATE" in upper
         assert "END LOOP;" in upper
         assert "AS LOOP" not in upper
+
+
+class TestStandaloneCall:
+    """A standalone ``CALL proc(args)`` (a scenario invoking a stored procedure
+    from a MySQL/PostgreSQL source) must become each target's call form, not an
+    ``-- UNIQUE: Unhandled expression type: Command`` comment (which silently
+    dropped the call — the FE-harness blocker for the pg↔mysql pairs)."""
+
+    CALL = "CALL create_invoice(2, '2024-02-01', 1, 1, 2, 1);"
+
+    def _code(self, sql: str) -> str:
+        return "\n".join(
+            line for line in sql.split("\n") if not line.strip().startswith("--")
+        )
+
+    def test_mysql_to_postgresql_keeps_call(self) -> None:
+        out = _transpile(self.CALL, "mysql", "postgresql")
+        assert "CALL create_invoice(2, '2024-02-01', 1, 1, 2, 1)" in out
+        assert "Unhandled expression" not in out
+
+    def test_postgresql_to_mysql_keeps_call(self) -> None:
+        out = _transpile(self.CALL, "postgresql", "mysql")
+        assert "CALL create_invoice(2, '2024-02-01', 1, 1, 2, 1)" in out
+        assert "Unhandled expression" not in out
+
+    def test_mysql_to_oracle_wraps_in_block(self) -> None:
+        out = _transpile(self.CALL, "mysql", "oracle")
+        code = self._code(out)
+        # Oracle invokes by bare name inside a PL/SQL block, no CALL keyword.
+        assert "create_invoice(2, '2024-02-01', 1, 1, 2, 1)" in code
+        assert "BEGIN" in code.upper() and "END;" in code.upper()
+        assert "CALL " not in code.upper()
+
+    def test_mysql_to_tsql_uses_exec(self) -> None:
+        out = _transpile(self.CALL, "mysql", "tsql")
+        code = self._code(out)
+        assert "EXEC create_invoice 2, '2024-02-01', 1, 1, 2, 1" in code
+        assert "CALL " not in code.upper()
