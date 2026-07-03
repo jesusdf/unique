@@ -634,6 +634,15 @@ class ProceduralTransformer:
                 DataType(name=dt.origin_comment, params=dt.params)
             )
 
+        # SSMS scripts bracket-quote even type names ([tinyint], [nvarchar]).
+        # The quoting is source identifier syntax, not part of the type name,
+        # so strip it before any mapping (audit S1-1, procedural pipeline).
+        unquoted = self._QUOTED_IDENT_SEGMENT.sub(
+            lambda m: m.group(1) or m.group(2) or m.group(3) or "", dt.name
+        )
+        if unquoted != dt.name:
+            dt = DataType(name=unquoted, params=dt.params)
+
         type_name = dt.name.upper()
 
         # Handle %TYPE references
@@ -738,9 +747,38 @@ class ProceduralTransformer:
     # Node-specific transformations
     # ---------------------------------------------------------------
 
+    # A source-quoted identifier segment: [x] (T-SQL), "x" (Oracle/PG),
+    # `x` (MySQL). Used to translate quoting on routine headers.
+    _QUOTED_IDENT_SEGMENT = re.compile(r'\[([^\]]*)\]|"([^"]*)"|`([^`]*)`')
+
+    def _translate_ident_quoting(self, name: str | None) -> str | None:
+        """Translate source identifier quoting on a (possibly dot-qualified)
+        object name (audit S1-1, procedural pipeline).
+
+        SSMS scripts quote every header identifier ([dbo].[fn]); leaking the
+        brackets into another engine's routine header is invalid SQL there.
+        A plain-word segment is emitted bare; a segment that genuinely needs
+        quoting (non-word characters) is re-quoted with the target's own
+        convention.
+        """
+        if not name:
+            return name
+
+        def repl(m: re.Match[str]) -> str:
+            inner = m.group(1) or m.group(2) or m.group(3) or ""
+            if re.fullmatch(r"\w+", inner):
+                return inner
+            left, right = {"tsql": ("[", "]"), "mysql": ("`", "`")}.get(
+                self._target, ('"', '"')
+            )
+            return f"{left}{inner}{right}"
+
+        return self._QUOTED_IDENT_SEGMENT.sub(repl, name)
+
     def _target_schema(self, schema: str | None) -> str | None:
         """Return the schema for the target dialect; strip SQL Server's default
         ``dbo`` where the target has no such schema (Oracle)."""
+        schema = self._translate_ident_quoting(schema)
         if schema and schema.lower() == "dbo" and self._strip_dbo_schema():
             return None
         return schema
@@ -757,7 +795,7 @@ class ProceduralTransformer:
         if self._source == "tsql" and self._target in ("oracle", "postgresql"):
             or_replace = True
         return CreateProcedureStatement(
-            name=node.name,
+            name=self._translate_ident_quoting(node.name) or node.name,
             parameters=new_params,
             body=new_body,
             or_replace=or_replace,
@@ -770,7 +808,7 @@ class ProceduralTransformer:
         new_body = self._transform_body(node.body)
         if self._alter_becomes_create():
             return CreateProcedureStatement(
-                name=node.name,
+                name=self._translate_ident_quoting(node.name) or node.name,
                 parameters=new_params,
                 body=new_body,
                 or_replace=True,
@@ -796,7 +834,7 @@ class ProceduralTransformer:
             self._transform_data_type(node.return_type) if node.return_type else None
         )
         return CreateFunctionStatement(
-            name=node.name,
+            name=self._translate_ident_quoting(node.name) or node.name,
             parameters=new_params,
             return_type=new_return,
             body=new_body,
@@ -829,8 +867,8 @@ class ProceduralTransformer:
         if self._source == "tsql" and timing == "FOR":
             timing = "AFTER"
         return CreateTriggerStatement(
-            name=node.name,
-            table=node.table,
+            name=self._translate_ident_quoting(node.name) or node.name,
+            table=self._translate_ident_quoting(node.table) or node.table,
             timing=timing,
             events=node.events,
             for_each="STATEMENT" if set_based else node.for_each,
