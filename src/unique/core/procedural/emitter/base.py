@@ -994,18 +994,21 @@ class ProceduralEmitter:
         msg = self._emit_node(node.message) if node.message else "'Error'"
         # MySQL SIGNAL requires MESSAGE_TEXT to be a string and the error number
         # in MYSQL_ERRNO; the raw T-SQL argument tuple "(msg_or_id, severity,
-        # state)" is invalid there. Split the first argument from the rest.
-        first, rest = self._split_raise_args(msg)
-        if first.startswith("'") or first.startswith('"'):
-            # A literal/expression message text.
-            sig = f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = {first}"
-        else:
-            # A numeric message id (or a variable) — MySQL can't resolve a
-            # message-id to text, so use it as the error number and document it.
+        # state)" is invalid there. Keep the human-readable message AND the
+        # error number when both exist (audit 2026-07-02, S2-2).
+        text, number, rest = self._raise_parts(msg)
+        if text is not None:
+            errno = f", MYSQL_ERRNO = {number}" if number is not None else ""
+            sig = f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = {text}{errno}"
+        elif number is not None:
+            # A numeric message id only — MySQL can't resolve a message-id to
+            # text, so use it as the error number and document it.
             sig = (
                 f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = "
-                f"'Application error', MYSQL_ERRNO = {first}"
+                f"'Application error', MYSQL_ERRNO = {number}"
             )
+        else:
+            sig = f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = {msg}"
         comment = ""
         if rest:
             comment = (
@@ -1013,6 +1016,29 @@ class ProceduralEmitter:
                 f"dropped: {rest}"
             )
         return f"{sig};{comment}"
+
+    @classmethod
+    def _raise_parts(cls, msg: str) -> tuple[str | None, str | None, str]:
+        """Classify a RAISERROR/THROW argument blob.
+
+        Returns ``(message_text, error_number, remaining_args)``. T-SQL THROW
+        is ``errno, 'msg', state``; RAISERROR is ``('msg'|msg_id, severity,
+        state)``. The message is the first quoted argument, the number the
+        first purely-numeric one; the rest (severity/state) is returned for
+        documentation. Using the number as the message loses the
+        operator-facing text (audit 2026-07-02, S2-2).
+        """
+        remaining = msg.strip()
+        if remaining.startswith("(") and remaining.endswith(")"):
+            remaining = remaining[1:-1].strip()
+        args: list[str] = []
+        while remaining:
+            first, remaining = cls._split_raise_args(remaining)
+            args.append(first)
+        text = next((a for a in args if a.startswith("'") or a.startswith('"')), None)
+        number = next((a for a in args if re.fullmatch(r"\d+", a)), None)
+        rest = [a for a in args if a is not text and a is not number]
+        return text, number, ", ".join(rest)
 
     @staticmethod
     def _split_raise_args(msg: str) -> tuple[str, str]:

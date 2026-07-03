@@ -86,8 +86,14 @@ class OracleEmitter(ProceduralEmitter):
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
         msg = self._emit_node(node.message) if node.message else "'Error'"
-        first, _ = self._split_raise_args(msg)
-        return f"RAISE_APPLICATION_ERROR(-20001, {first});"
+        # Message text preserved; T-SQL user error numbers 50000-50999 map
+        # onto Oracle's -20000..-20999 user range (audit 2026-07-02, S2-2).
+        text, number, _ = self._raise_parts(msg)
+        code = -20001
+        if number is not None and 50000 <= int(number) <= 50999:
+            code = -(20000 + (int(number) - 50000))
+        payload = text or number or msg
+        return f"RAISE_APPLICATION_ERROR({code}, {payload});"
 
     def _emit_function_body(
         self,

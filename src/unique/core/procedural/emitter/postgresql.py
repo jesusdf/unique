@@ -56,8 +56,12 @@ class PostgresEmitter(ProceduralEmitter):
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
         msg = self._emit_node(node.message) if node.message else "'Error'"
-        first, _ = self._split_raise_args(msg)
-        return f"RAISE EXCEPTION '%', {first};"
+        # Keep the human-readable message, not the error number (audit
+        # 2026-07-02, S2-2). The '%%'-format form is safe for texts that
+        # contain literal % characters.
+        text, number, _ = self._raise_parts(msg)
+        payload = text or number or msg
+        return f"RAISE EXCEPTION '%', {payload};"
 
     def _procedure_header(self, name: str, or_replace: bool) -> str:
         prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
