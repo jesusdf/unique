@@ -550,6 +550,37 @@ class Transpiler:
         if source == "tsql":
             sql = _expand_tsql_compound_assignment(sql)
 
+        # Oracle ORGANIZATION INDEX/HEAP: a physical-storage clause sqlglot
+        # cannot parse, which would degrade the whole CREATE TABLE (columns
+        # and constraints included) to a commented passthrough. The clause
+        # carries no logical schema, so strip it and document the drop.
+        org_carrier = ""
+        if (
+            source == "oracle"
+            and target != "oracle"
+            and re.match(r"(?is)^\s*CREATE\s+TABLE\b", sql)
+        ):
+            stripped_sql, n_org = re.subn(
+                r"(?is)\)\s*ORGANIZATION\s+(INDEX|HEAP)\s*(;?)\s*$",
+                r")\2",
+                sql,
+            )
+            if n_org:
+                sql = stripped_sql
+                org_carrier = (
+                    "\n-- UNIQUE: Oracle ORGANIZATION INDEX/HEAP is a "
+                    "physical-storage clause with no equivalent here; dropped."
+                )
+                warnings.append(
+                    _warn(
+                        "Oracle ORGANIZATION INDEX/HEAP physical clause "
+                        "dropped (no logical-schema impact)",
+                        "physical_clause",
+                        source,
+                        target,
+                    )
+                )
+
         # System stored-procedure calls (e.g. EXEC sp_addextendedproperty,
         # sp_rename) are SQL Server metadata operations with no portable
         # equivalent. Emit them as an informational comment instead of
@@ -611,10 +642,10 @@ class Transpiler:
             if source != target:
                 transformer = Transformer(source, target)
                 ir_nodes = transformer.transform(ir_nodes)
-                warnings = transformer.warnings
+                warnings.extend(transformer.warnings)
                 unsupported = transformer.unsupported
 
-            output_sql = target_dialect.emit(ir_nodes)
+            output_sql = target_dialect.emit(ir_nodes) + org_carrier
 
             return TranspileResult(
                 sql=output_sql,

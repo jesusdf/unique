@@ -242,10 +242,14 @@ class TestGenericInvariants:
     # fixtures carry heavy proprietary DDL (PL/SQL, sp_addextendedproperty,
     # XML schemas) that is legitimately turned into comments, so their floors
     # are lower. These guard against *regressions*, not perfection.
+    # The Oracle floor was recalibrated (0.35 -> 0.25) when degraded
+    # passthroughs started commenting *every* line: the raw lines that used
+    # to leak into the output inflated the old similarity (jaccard ignores
+    # comments). Honest post-fix values are 0.27-0.31.
     _RT_FLOOR = {
         "postgresql": 0.90,
         "mysql": 0.45,
-        "oracle": 0.35,
+        "oracle": 0.25,
         "tsql": 0.30,
     }
 

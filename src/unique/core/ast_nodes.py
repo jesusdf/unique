@@ -312,6 +312,9 @@ class DataType(ASTNode):
     name: str
     params: tuple[int, ...] = ()
     unsigned: bool = False
+    # ENUM/SET value lists (MySQL): the allowed strings are the type's
+    # semantics, carried so non-MySQL emitters can render VARCHAR + CHECK.
+    values: tuple[str, ...] = ()
     # When a source type cannot be translated faithfully (an unresolved
     # %TYPE/%ROWTYPE reference, or a type with no direct target equivalent),
     # the original source type text is preserved here so the emitter can append
