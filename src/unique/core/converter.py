@@ -272,6 +272,56 @@ def harvest_identity_columns(sql: str) -> dict[str, str]:
     return result
 
 
+# Positional indexes of a stored procedure's date/time parameters (proc name
+# -> set of 0-based positions). Used to wrap an ISO date-string argument in an
+# Oracle CALL (create_invoice(2, '2024-02-01', …)) as an ANSI DATE literal,
+# since Oracle won't implicitly convert it (ORA-01861).
+PROC_DATE_PARAMS: contextvars.ContextVar[dict[str, frozenset[int]] | None] = (
+    contextvars.ContextVar("proc_date_params", default=None)
+)
+
+_DATE_TYPE_TOKENS = {
+    "DATE",
+    "DATETIME",
+    "DATETIME2",
+    "SMALLDATETIME",
+    "DATETIMEOFFSET",
+    "TIMESTAMP",
+    "TIMESTAMPTZ",
+}
+_PROC_HEADER_RE = re.compile(
+    r"(?is)\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?PROC(?:EDURE)?\s+"
+    r"([\w\[\]\".]+)\s*(.*?)\s*\b(?:AS|IS|BEGIN|LANGUAGE)\b"
+)
+
+
+def harvest_proc_date_params(sql: str) -> dict[str, frozenset[int]]:
+    """Collect the positional indexes of each procedure's date parameters.
+
+    Works across source dialects (T-SQL ``@p DATE`` and the parenthesized
+    ``(p IN DATE)`` forms). Used only when the target is Oracle.
+    """
+    result: dict[str, frozenset[int]] = {}
+    for m in _PROC_HEADER_RE.finditer(sql):
+        name = m.group(1).replace("[", "").replace("]", "").replace('"', "")
+        name = name.split(".")[-1].lower()
+        section = m.group(2).strip()
+        if section.startswith("(") and section.endswith(")"):
+            section = section[1:-1]
+        if not section.strip():
+            continue
+        positions: set[int] = set()
+        for i, part in enumerate(_split_top_level_commas(section)):
+            tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", part)
+            # Skip the parameter name (and IN/OUT direction) — only the type
+            # tokens decide, so a parameter *named* "date" is not a false match.
+            if any(t.upper() in _DATE_TYPE_TOKENS for t in tokens[1:]):
+                positions.add(i)
+        if positions:
+            result[name] = frozenset(positions)
+    return result
+
+
 def harvest_date_columns(sql: str) -> dict[str, frozenset[str]]:
     """Collect date/time column names per table from a whole script.
 
@@ -313,12 +363,35 @@ def _coerce_date_literal(
     if not (isinstance(value, Literal) and isinstance(value.value, str)):
         return value
     text = value.value.strip()
+    wrapped = _oracle_date_literal(text)
+    return RawSQL(sql=wrapped) if wrapped is not None else value
+
+
+def _oracle_date_literal(text: str) -> str | None:
+    """Return the ANSI ``DATE``/``TIMESTAMP`` literal for an ISO date/datetime
+    string, or ``None`` when *text* is not one."""
     if _ISO_DATE_RE.match(text):
-        return RawSQL(sql=f"DATE '{text}'")
+        return f"DATE '{text}'"
     dt = _ISO_DATETIME_RE.match(text)
     if dt:
-        return RawSQL(sql=f"TIMESTAMP '{dt.group(1)} {dt.group(2)}'")
-    return value
+        return f"TIMESTAMP '{dt.group(1)} {dt.group(2)}'"
+    return None
+
+
+def wrap_oracle_date_arg(arg: str) -> str:
+    """Wrap a quoted ISO date/datetime CALL argument in an ANSI literal.
+
+    ``'2024-02-01'`` -> ``DATE '2024-02-01'``. Non-date or unquoted arguments
+    are returned unchanged. Used for Oracle stored-procedure call arguments at
+    known date-parameter positions (Oracle won't implicitly convert the string,
+    ORA-01861).
+    """
+    s = arg.strip()
+    if len(s) >= 2 and s[0] == "'" and s[-1] == "'":
+        wrapped = _oracle_date_literal(s[1:-1])
+        if wrapped is not None:
+            return wrapped
+    return arg
 
 
 # Mapping from sqlglot join types to our JoinType enum

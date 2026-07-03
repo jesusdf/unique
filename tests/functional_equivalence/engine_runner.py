@@ -112,9 +112,21 @@ def _split_oracle(sql: str) -> list[str]:
         buf.append(line)
     tail = "\n".join(buf).strip()
     if tail:
-        # Any remaining plain statements are ;-separated.
-        statements.extend(_split_semicolons(tail, dollar_quote=False))
+        # The last statement in the script has no trailing ``/``. If it is a
+        # PL/SQL block (anonymous BEGIN/DECLARE or CREATE PROCEDURE/…), keep it
+        # whole — its terminating ``END;`` semicolon is required, and
+        # ;-splitting would strip it (PLS-00103). Plain statements are split.
+        if _ORACLE_PLSQL_HEAD_RE.match(tail):
+            statements.append(tail)
+        else:
+            statements.extend(_split_semicolons(tail, dollar_quote=False))
     return [s for s in statements if s.strip()]
+
+
+_ORACLE_PLSQL_HEAD_RE = re.compile(
+    r"(?is)^\s*(?:DECLARE\b|BEGIN\b|CREATE\s+(?:OR\s+REPLACE\s+)?"
+    r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE|TYPE)\b)"
+)
 
 
 def _split_semicolons(sql: str, *, dollar_quote: bool) -> list[str]:
