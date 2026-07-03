@@ -1232,19 +1232,26 @@ class ProceduralTransformer:
         """Split an ``INSERT … RETURNING <col> INTO <var>`` into the base
         statement and a target-appropriate id-capture suffix.
 
-        Only MySQL needs this (no RETURNING; the id comes from
-        ``LAST_INSERT_ID()``). PostgreSQL and Oracle support ``RETURNING …
-        INTO`` natively, so they keep the statement whole. Returns
-        ``(sql, suffix)``; ``suffix`` is empty when nothing is peeled.
+        sqlglot silently drops the ``INTO <var>`` target, so it must be peeled
+        off before transpiling and re-expressed:
+
+        - MySQL has no RETURNING; capture the id with ``SET <var> =
+          LAST_INSERT_ID()`` after the INSERT.
+        - Oracle/PostgreSQL support ``RETURNING … INTO`` natively; re-append it
+          to the (transpiled) INSERT so the target is not lost (ORA-00925).
+
+        Returns ``(sql, suffix)``; ``suffix`` is empty when nothing is peeled.
         """
-        if self._target != "mysql":
-            return sql, ""
-        m = re.search(r"(?is)\bRETURNING\b\s+.+?\s+INTO\s+([\w.]+)\s*;?\s*$", sql)
+        m = re.search(r"(?is)\bRETURNING\b\s+(.+?)\s+INTO\s+([\w.]+)\s*;?\s*$", sql)
         if not m:
             return sql, ""
-        var = m.group(1)
+        cols, var = m.group(1).strip(), m.group(2)
         base = sql[: m.start()].rstrip().rstrip(";").rstrip()
-        return base, f";\nSET {var} = {LAST_IDENTITY_EXPR['mysql']};"
+        if self._target == "mysql":
+            return base, f";\nSET {var} = {LAST_IDENTITY_EXPR['mysql']};"
+        if self._target in ("oracle", "postgresql"):
+            return base, f" RETURNING {cols} INTO {var}"
+        return sql, ""
 
     def _transform_cross_table_update(self, sql: str) -> str | None:
         """Render a cross-table ``UPDATE ... FROM/JOIN`` via the IR emitter.

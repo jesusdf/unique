@@ -2579,6 +2579,18 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         return _emit_case(node, dialect)
 
     if isinstance(node, CastExpression):
+        # Oracle can't CAST an ISO string to DATE/TIMESTAMP (it applies
+        # NLS_DATE_FORMAT, ORA-01861). It does accept the ANSI literal
+        # ``DATE '…'`` / ``TIMESTAMP '…'`` directly, so emit that instead.
+        if (
+            dialect == "oracle"
+            and node.target_type.name.upper() in ("DATE", "TIMESTAMP")
+            and isinstance(node.expression, Literal)
+            and isinstance(node.expression.value, str)
+        ):
+            lit = _oracle_date_literal(node.expression.value.strip())
+            if lit is not None:
+                return lit
         inner = _emit_expression(node.expression, dialect)
         dtype = node.target_type.name
         if node.target_type.params:

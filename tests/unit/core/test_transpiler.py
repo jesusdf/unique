@@ -342,3 +342,14 @@ class TestOracleDateLiterals:
         out = self.t.transpile(self.SCHEMA + self.INSERT, "tsql", "postgresql").sql
         assert "'2024-01-15'" in out
         assert "DATE '2024-01-15'" not in out
+
+    def test_oracle_cast_to_date_becomes_ansi_literal(self) -> None:
+        # A PostgreSQL DATE literal transpiles as CAST('…' AS DATE); Oracle
+        # can't implicitly convert that string (ORA-01861), so emit DATE '…'.
+        sql = (
+            "CREATE TABLE evt (id INT GENERATED ALWAYS AS IDENTITY, d DATE NOT NULL);\n"
+            "INSERT INTO evt (d) VALUES (DATE '2024-01-15');\n"
+        )
+        out = self.t.transpile(sql, "postgresql", "oracle").sql
+        assert "DATE '2024-01-15'" in out
+        assert "CAST('2024-01-15' AS DATE)" not in out
