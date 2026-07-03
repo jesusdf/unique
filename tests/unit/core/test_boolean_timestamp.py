@@ -74,3 +74,42 @@ class TestCurrentTimestampDefault:
         ).sql
         assert "CURRENT_TIMESTAMP()" not in out
         _valid(out, "oracle")
+
+
+class TestOracleParameterTypes:
+    """Oracle formal parameters must use unconstrained types (S1-11)."""
+
+    def setup_method(self) -> None:
+        self.t = Transpiler()
+
+    def test_sized_parameter_types_are_unconstrained(self) -> None:
+        proc = (
+            "CREATE PROCEDURE dbo.upd @id INT, @pct DECIMAL(5,2), "
+            "@name NVARCHAR(50) AS BEGIN "
+            "UPDATE p SET v = @pct WHERE id = @id; END"
+        )
+        out = self.t.transpile(proc, "tsql", "oracle").sql
+        header = out.split("AS")[0]
+        # PLS-00103: length/precision are not allowed on formal parameters.
+        assert "V_ID IN NUMBER" in header
+        assert "V_PCT IN NUMBER" in header
+        assert "V_NAME IN NVARCHAR2" in header
+        assert "(10)" not in header
+        assert "(5, 2)" not in header and "(5,2)" not in header
+        assert "(50)" not in header
+
+    def test_function_return_type_unconstrained(self) -> None:
+        fn = (
+            "CREATE FUNCTION dbo.fmt (@s NVARCHAR(100)) "
+            "RETURNS NVARCHAR(100) AS BEGIN RETURN @s; END"
+        )
+        out = self.t.transpile(fn, "tsql", "oracle").sql
+        header = out.split("IS")[0].split("AS")[0]
+        assert "(100)" not in header
+
+    def test_table_column_types_keep_size(self) -> None:
+        out = self.t.transpile(
+            "CREATE TABLE t (name NVARCHAR(50))", "tsql", "oracle"
+        ).sql
+        # Only *parameters* lose constraints; column DDL keeps them.
+        assert "NVARCHAR2(50)" in out

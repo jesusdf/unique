@@ -19,6 +19,17 @@ from unique.core.ast_nodes import (
 )
 from unique.core.procedural.emitter.base import ProceduralEmitter, register_emitter
 
+_SIZE_RE = re.compile(r"\(\s*\d+\s*(?:,\s*\d+\s*)?\)")
+
+
+def _unconstrained(data_type: str) -> str:
+    """Strip length/precision from a type for parameter/RETURN position.
+
+    Oracle rejects constrained types on formal parameters and function
+    return clauses (PLS-00103); ``NUMBER(5, 2)`` must become ``NUMBER``.
+    """
+    return _SIZE_RE.sub("", data_type).strip()
+
 
 class OracleEmitter(ProceduralEmitter):
     """Oracle PL/SQL procedural emitter."""
@@ -52,7 +63,7 @@ class OracleEmitter(ProceduralEmitter):
         return f"{prefix}FUNCTION {name}"
 
     def _returns_clause(self, ret_type: str) -> str:
-        return f"\nRETURN {ret_type}"
+        return f"\nRETURN {_unconstrained(ret_type)}"
 
     def _emit_param(
         self,
@@ -61,8 +72,11 @@ class OracleEmitter(ProceduralEmitter):
         params: tuple[ParameterDefinition, ...],
         is_function: bool,
     ) -> str:
-        # Oracle spells out IN for every parameter direction.
-        dt = self._emit_data_type(p.data_type)
+        # Oracle spells out IN for every parameter direction. Formal
+        # parameters (and RETURN types) must use unconstrained types:
+        # NUMBER(10) or VARCHAR2(50) raise PLS-00103 in a parameter list
+        # (audit 2026-07-02, S1-11).
+        dt = _unconstrained(self._emit_data_type(p.data_type))
         default_str = f" DEFAULT {self._emit_node(p.default)}" if p.default else ""
         direction_str = f"{p.direction} " if p.direction != "IN" else "IN "
         return f"{p.name} {direction_str}{dt}{default_str}"
