@@ -511,14 +511,17 @@ class ProceduralParser:
         elif self._match_keyword("FOR"):
             timing = "FOR"
 
-        # Events: INSERT, UPDATE, DELETE
+        # Events: INSERT, UPDATE, DELETE. T-SQL separates them with a comma
+        # (``AFTER INSERT, UPDATE``); Oracle/PostgreSQL with ``OR``
+        # (``BEFORE INSERT OR UPDATE``). Accept either separator.
         events = []
         while True:
             tok = self._current()
             if tok.is_keyword("INSERT", "UPDATE", "DELETE"):
                 events.append(self._advance().upper_value)
-                if not self._match_type(TokenType.COMMA):
-                    break
+                if self._match_type(TokenType.COMMA) or self._match_keyword("OR"):
+                    continue
+                break
             else:
                 break
 
