@@ -217,6 +217,73 @@ def _coerce_bit_literal(
     return value
 
 
+# DATE/DATETIME/TIMESTAMP columns harvested per table (table -> column names,
+# lowercase). Oracle has no default that reads an ISO string as a date, so a
+# bare '2024-01-15' written to such a column raises ORA-01861; the literal is
+# wrapped in an ANSI DATE/TIMESTAMP literal at emit time (Oracle target only).
+DATE_COLUMNS: contextvars.ContextVar[dict[str, frozenset[str]] | None] = (
+    contextvars.ContextVar("date_columns", default=None)
+)
+
+_DATE_COLUMN_RE = re.compile(
+    r"(?i)^\s*(\[[^\]]+\]|`[^`]+`|\"[^\"]+\"|\w+)\s+"
+    r"(DATE|DATETIME2?|SMALLDATETIME|DATETIMEOFFSET|TIMESTAMP(?:TZ)?)\b"
+)
+_ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_ISO_DATETIME_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?)$"
+)
+
+
+def harvest_date_columns(sql: str) -> dict[str, frozenset[str]]:
+    """Collect date/time column names per table from a whole script.
+
+    Works across source dialects (the type keyword is enough); only used when
+    the target is Oracle.
+    """
+    result: dict[str, set[str]] = {}
+    current: str | None = None
+    for line in sql.splitlines():
+        m = _CREATE_TABLE_NAME_RE.search(line)
+        if m:
+            name = m.group(1).replace("[", "").replace("]", "").replace('"', "")
+            current = name.split(".")[-1].lower()
+            continue
+        if current is None:
+            continue
+        cm = _DATE_COLUMN_RE.match(line)
+        if cm:
+            col = cm.group(1).strip('[]"`').lower()
+            result.setdefault(current, set()).add(col)
+    return {t: frozenset(c) for t, c in result.items()}
+
+
+def _coerce_date_literal(
+    table: TableRef, column: str, value: ASTNode, dialect: str
+) -> ASTNode:
+    """Wrap an ISO date/datetime string written to a known date column in an
+    ANSI ``DATE``/``TIMESTAMP`` literal so Oracle accepts it (ORA-01861)."""
+    if dialect != "oracle":
+        return value
+    registry = DATE_COLUMNS.get()
+    if not registry:
+        return value
+    cols = registry.get(table.name.lower())
+    if not cols:
+        return value
+    if column.split(".")[-1].strip('[]"`').lower() not in cols:
+        return value
+    if not (isinstance(value, Literal) and isinstance(value.value, str)):
+        return value
+    text = value.value.strip()
+    if _ISO_DATE_RE.match(text):
+        return RawSQL(sql=f"DATE '{text}'")
+    dt = _ISO_DATETIME_RE.match(text)
+    if dt:
+        return RawSQL(sql=f"TIMESTAMP '{dt.group(1)} {dt.group(2)}'")
+    return value
+
+
 # Mapping from sqlglot join types to our JoinType enum
 _JOIN_TYPE_MAP = {
     "JOIN": JoinType.INNER,
@@ -1566,6 +1633,8 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 result = _portable_index(result, dialect)
             else:
                 result = _portable_types_in_sql(result, dialect)
+            if node.kind == "CREATE SEQUENCE" and dialect == "oracle":
+                result = _oracle_sequence_drop_type(result)
             if dialect != "oracle":
                 result = _portable_alter_add(result, dialect)
             if dialect in ("oracle", "mysql", "postgresql"):
@@ -1597,6 +1666,22 @@ def _split_top_level_commas(text: str) -> list[str]:
             start = i + 1
     parts.append(text[start:])
     return parts
+
+
+def _oracle_sequence_drop_type(sql: str) -> str:
+    """Drop the ``AS <type>`` clause from a CREATE SEQUENCE for Oracle.
+
+    T-SQL/PostgreSQL allow ``CREATE SEQUENCE s AS INT ...`` to bound the
+    sequence's data type; Oracle has no such clause and rejects it
+    (ORA-03048). sqlglot maps the type but keeps the clause, so remove the
+    ``AS <type>`` that follows the sequence name.
+    """
+    return re.sub(
+        r"(?is)(\bCREATE\s+SEQUENCE\s+\S+)\s+AS\s+\w+(?:\s*\([^)]*\))?",
+        r"\1",
+        sql,
+        count=1,
+    )
 
 
 def _portable_alter_add(sql: str, dialect: str) -> str:
@@ -1763,6 +1848,7 @@ def _emit_insert(node: InsertStatement, dialect: str) -> str:
             for i, v in enumerate(row):
                 if node.columns and i < len(node.columns):
                     v = _coerce_bit_literal(node.table, node.columns[i], v, dialect)
+                    v = _coerce_date_literal(node.table, node.columns[i], v, dialect)
                 cells.append(_emit_expression(v, dialect))
             rows.append(f"({', '.join(cells)})")
         values = ", ".join(rows)
@@ -1792,6 +1878,7 @@ def _emit_update(node: UpdateStatement, dialect: str) -> str:
     set_parts = []
     for col, val in node.assignments:
         val = _coerce_bit_literal(node.table, col, val, dialect)
+        val = _coerce_date_literal(node.table, col, val, dialect)
         set_parts.append(f"{col} = {_emit_expression(val, dialect)}")
     sets = ", ".join(set_parts)
     result = f"UPDATE {table}\nSET {sets}"
@@ -1819,7 +1906,15 @@ def _emit_cross_table_update(node: UpdateStatement, dialect: str) -> str:
     """
     target = _cross_update_target(node)
     assignments = [
-        (col, _emit_expression(_coerce_bit_literal(target, col, val, dialect), dialect))
+        (
+            col,
+            _emit_expression(
+                _coerce_date_literal(
+                    target, col, _coerce_bit_literal(target, col, val, dialect), dialect
+                ),
+                dialect,
+            ),
+        )
         for col, val in node.assignments
     ]
 

@@ -21,8 +21,10 @@ from dataclasses import dataclass, field, replace
 
 from unique.core.batch_splitter import BatchSplitter, BatchType
 from unique.core.converter import (
+    DATE_COLUMNS,
     TSQL_ALIAS_TYPES,
     TSQL_BIT_COLUMNS,
+    harvest_date_columns,
     harvest_tsql_alias_types,
     harvest_tsql_bit_columns,
 )
@@ -356,6 +358,7 @@ class Transpiler:
         # to the base type on engines without alias types.
         alias_token = None
         bit_token = None
+        date_token = None
         if source == "tsql" and target != "tsql":
             aliases = harvest_tsql_alias_types(sql)
             if aliases:
@@ -364,6 +367,12 @@ class Transpiler:
                 bit_columns = harvest_tsql_bit_columns(sql)
                 if bit_columns:
                     bit_token = TSQL_BIT_COLUMNS.set(bit_columns)
+        # Oracle can't read a bare ISO date string into a date column; harvest
+        # date columns (any source dialect) so their literals are wrapped.
+        if target == "oracle" and source != "oracle":
+            date_columns = harvest_date_columns(sql)
+            if date_columns:
+                date_token = DATE_COLUMNS.set(date_columns)
 
         try:
             # Step 0: Split into batches
@@ -482,6 +491,8 @@ class Transpiler:
                 TSQL_ALIAS_TYPES.reset(alias_token)
             if bit_token is not None:
                 TSQL_BIT_COLUMNS.reset(bit_token)
+            if date_token is not None:
+                DATE_COLUMNS.reset(date_token)
             if metadata_resolver:
                 metadata_resolver.close()
 

@@ -123,6 +123,11 @@ class OracleEmitter(ProceduralEmitter):
     ) -> str:
         return self._emit_oracle_procedure_body(header, declarations, body_stmts)
 
+    def _join_trigger_events(self, events: tuple[str, ...]) -> str:
+        """Oracle separates trigger events with ``OR`` (``INSERT OR UPDATE``);
+        a comma list is a syntax error (ORA-00969)."""
+        return " OR ".join(events) if events else "UPDATE"
+
     def _trigger_header(
         self,
         name: str,
