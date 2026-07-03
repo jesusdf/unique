@@ -105,6 +105,21 @@ class TestTSQLToOracle:
         out = _transpile(sql, "tsql", "oracle")
         assert "create_invoice(2, DATE '2024-02-01', 1)" in out
 
+    def test_returning_into_preserved_from_pg_source(self) -> None:
+        # sqlglot drops the ``INTO <var>`` of a RETURNING clause; it must be
+        # peeled and re-appended, or Oracle raises ORA-00925.
+        sql = (
+            "CREATE PROCEDURE create_invoice(p_customer_id INTEGER)\n"
+            "LANGUAGE plpgsql AS $$\n"
+            "DECLARE\n    v_new_id INTEGER;\n"
+            "BEGIN\n"
+            "    INSERT INTO invoice (customer_id) VALUES (p_customer_id)\n"
+            "    RETURNING id INTO v_new_id;\n"
+            "END;\n$$;"
+        )
+        out = _transpile(sql, "postgresql", "oracle")
+        assert "RETURNING id INTO v_new_id" in out
+
     def test_scope_identity_unknown_table_left_alone(self) -> None:
         # With no harvested identity column, nothing is merged (no crash).
         sql = (
