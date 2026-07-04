@@ -26,11 +26,13 @@ from unique.core.converter import (
     PROC_DATE_PARAMS,
     TSQL_ALIAS_TYPES,
     TSQL_BIT_COLUMNS,
+    USER_FUNCTIONS,
     harvest_date_columns,
     harvest_identity_columns,
     harvest_proc_date_params,
     harvest_tsql_alias_types,
     harvest_tsql_bit_columns,
+    harvest_user_functions,
 )
 from unique.core.dialect import Dialect
 from unique.core.procedural.emitter import ProceduralEmitter
@@ -365,6 +367,7 @@ class Transpiler:
         date_token = None
         identity_token = None
         proc_date_token = None
+        func_token = None
         if source == "tsql" and target != "tsql":
             aliases = harvest_tsql_alias_types(sql)
             if aliases:
@@ -379,12 +382,21 @@ class Transpiler:
             date_columns = harvest_date_columns(sql)
             if date_columns:
                 date_token = DATE_COLUMNS.set(date_columns)
-            identity_columns = harvest_identity_columns(sql)
-            if identity_columns:
-                identity_token = IDENTITY_COLUMNS.set(identity_columns)
             proc_date_params = harvest_proc_date_params(sql)
             if proc_date_params:
                 proc_date_token = PROC_DATE_PARAMS.set(proc_date_params)
+        # A row-level trigger becomes a T-SQL statement-level trigger keyed on the
+        # table's identity/PK (``… WHERE <pk> IN (SELECT <pk> FROM inserted)``),
+        # and its scalar-UDF calls must be qualified ``dbo.<fn>``; harvest both
+        # (also identity for the Oracle target's compound-trigger synthesis).
+        if target in ("oracle", "tsql") and source != target:
+            identity_columns = harvest_identity_columns(sql)
+            if identity_columns:
+                identity_token = IDENTITY_COLUMNS.set(identity_columns)
+        if target == "tsql" and source != "tsql":
+            user_functions = harvest_user_functions(sql)
+            if user_functions:
+                func_token = USER_FUNCTIONS.set(user_functions)
 
         try:
             # Step 0: Split into batches
@@ -509,6 +521,8 @@ class Transpiler:
                 IDENTITY_COLUMNS.reset(identity_token)
             if proc_date_token is not None:
                 PROC_DATE_PARAMS.reset(proc_date_token)
+            if func_token is not None:
+                USER_FUNCTIONS.reset(func_token)
             if metadata_resolver:
                 metadata_resolver.close()
 

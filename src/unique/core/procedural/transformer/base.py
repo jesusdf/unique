@@ -738,6 +738,11 @@ class ProceduralTransformer:
         if node.compound:
             if self._target_lowers_compound_to_row_level() and node.compound_row_body:
                 return self._lower_compound_trigger(node)
+            # A statement-level target (T-SQL) expresses the same re-aggregation
+            # as an ``inserted``/``deleted`` trigger.
+            statement_form = self._lower_compound_for_statement_target(node)
+            if statement_form is not None:
+                return statement_form
             if self._source != self._target:
                 self._warnings.append(
                     f"Oracle COMPOUND TRIGGER {node.name!r} on {node.table} has "
@@ -745,6 +750,12 @@ class ProceduralTransformer:
                     "aggregation over a PL/SQL collection); documented."
                 )
             return node
+        # A row-level trigger (NEW/OLD, per row) has no equivalent on a target
+        # whose triggers are only statement-level (T-SQL): rewrite it to a
+        # set-based ``inserted``/``deleted`` trigger. Other targets keep it.
+        converted = self._rowlevel_trigger_override(node)
+        if converted is not None:
+            return converted
         prev_in_trigger = self._in_trigger
         self._in_trigger = True
         # A purely set-based T-SQL trigger (only FROM/JOIN inserted/deleted, no
@@ -791,6 +802,21 @@ class ProceduralTransformer:
             execute_function=node.execute_function,
             referencing=node.referencing,
         )
+
+    def _rowlevel_trigger_override(
+        self, node: CreateTriggerStatement
+    ) -> ASTNode | None:
+        """Hook: rewrite a row-level source trigger into the target's own form.
+        Only the T-SQL target (statement-level triggers only) overrides this; the
+        default keeps the row-level trigger."""
+        return None
+
+    def _lower_compound_for_statement_target(
+        self, node: CreateTriggerStatement
+    ) -> ASTNode | None:
+        """Hook: express an Oracle COMPOUND trigger's re-aggregation as a
+        statement-level trigger. Only the T-SQL target overrides this."""
+        return None
 
     def _target_lowers_compound_to_row_level(self) -> bool:
         """Whether the target can run an Oracle COMPOUND TRIGGER's re-aggregation
@@ -1329,20 +1355,22 @@ class ProceduralTransformer:
         sqlglot silently drops the ``INTO <var>`` target, so it must be peeled
         off before transpiling and re-expressed:
 
-        - MySQL has no RETURNING; capture the id with ``SET <var> =
-          LAST_INSERT_ID()`` after the INSERT.
+        - MySQL/T-SQL have no ``RETURNING … INTO``; capture the id with
+          ``SET <var> = LAST_INSERT_ID()`` / ``SCOPE_IDENTITY()`` after the
+          INSERT (T-SQL's ``OUTPUT … INTO`` needs a *table* variable, not the
+          scalar the source declared).
         - Oracle/PostgreSQL support ``RETURNING … INTO`` natively; re-append it
           to the (transpiled) INSERT so the target is not lost (ORA-00925).
 
         Returns ``(sql, suffix)``; ``suffix`` is empty when nothing is peeled.
         """
-        m = re.search(r"(?is)\bRETURNING\b\s+(.+?)\s+INTO\s+([\w.]+)\s*;?\s*$", sql)
+        m = re.search(r"(?is)\bRETURNING\b\s+(.+?)\s+INTO\s+(@?[\w.]+)\s*;?\s*$", sql)
         if not m:
             return sql, ""
         cols, var = m.group(1).strip(), m.group(2)
         base = sql[: m.start()].rstrip().rstrip(";").rstrip()
-        if self._target == "mysql":
-            return base, f";\nSET {var} = {LAST_IDENTITY_EXPR['mysql']};"
+        if self._target in ("mysql", "tsql"):
+            return base, f";\nSET {var} = {LAST_IDENTITY_EXPR[self._target]};"
         if self._target in ("oracle", "postgresql"):
             return base, f" RETURNING {cols} INTO {var}"
         return sql, ""

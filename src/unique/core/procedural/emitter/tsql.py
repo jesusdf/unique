@@ -10,6 +10,7 @@ import re
 
 from unique.core.ast_nodes import (
     ASTNode,
+    CallStatement,
     ContinueStatement,
     CursorDeclaration,
     ExitStatement,
@@ -39,11 +40,25 @@ class TSqlEmitter(ProceduralEmitter):
         params: tuple[ParameterDefinition, ...],
         is_function: bool,
     ) -> str:
-        dt = self._emit_data_type(p.data_type)
+        dt = self._tsql_scaled_numeric(self._emit_data_type(p.data_type))
         default_str = f" = {self._emit_node(p.default)}" if p.default else ""
         direction_str = " OUTPUT" if p.direction in ("OUT", "INOUT") else ""
         name = p.name if p.name.startswith("@") else f"@{p.name}"
         return f"{name} {dt}{default_str}{direction_str}"
+
+    def _returns_clause(self, ret_type: str) -> str:
+        return f"\nRETURNS {self._tsql_scaled_numeric(ret_type)}"
+
+    _BARE_NUMERIC_RE = re.compile(r"(?i)^\s*(DECIMAL|NUMERIC|DEC)\s*$")
+
+    def _tsql_scaled_numeric(self, type_str: str) -> str:
+        """A bare T-SQL ``DECIMAL``/``NUMERIC`` is ``(18, 0)`` — it rounds to an
+        integer. A routine parameter/return from an unconstrained source
+        ``NUMBER`` must keep a fractional scale, or e.g. a tax of 5.55 comes back
+        as 6. Give it a wide exact scale."""
+        if self._BARE_NUMERIC_RE.match(type_str):
+            return f"{type_str.strip()}(38, 10)"
+        return type_str
 
     def _emit_function_body(
         self,
@@ -67,6 +82,16 @@ class TSqlEmitter(ProceduralEmitter):
         self._indent_level = 0
         lines.append("END")
         return "\n".join(lines)
+
+    _ANSI_DATE_LITERAL_RE = re.compile(r"(?i)\b(?:DATE|TIMESTAMP)\s+(?=')")
+
+    def _emit_call(self, node: CallStatement) -> str:
+        # An ANSI ``DATE '…'`` / ``TIMESTAMP '…'`` literal argument (from an
+        # Oracle/PG source) has no T-SQL form; pass the bare string, which T-SQL
+        # implicitly converts to the parameter's date type.
+        args = self._ANSI_DATE_LITERAL_RE.sub("", node.args) if node.args else node.args
+        name = self._qualified_name(node.schema, node.name)
+        return f"EXEC {name} {args};" if args else f"EXEC {name};"
 
     def _supports_table_valued_function(self) -> bool:
         return True
