@@ -714,3 +714,44 @@ subtraction → `DATEDIFF`, MySQL-source `@` var sigils in routine bodies, and �
 the substantial one — trigger translation *to* T-SQL (statement-level
 `inserted`/`deleted` synthesized from PG trigger-function / Oracle COMPOUND /
 MySQL row-level sources).
+
+## 16. Full 4×4 matrix green — trigger translation *to* T-SQL (P1)
+
+The last 4 pairs (T-SQL as target) went green, so **all 16 source×target
+functional-equivalence pairs converge on the same `expected_state.yaml`,
+live** (SQL Server 2022 via pymssql + PostgreSQL 16 + MySQL 8 + Oracle Free 23).
+All TDD, gate-clean.
+
+**T-SQL DDL/routine fixes (surfaced pair by pair):** date subtraction `d2 - d1`
+→ `DATEDIFF(DAY, d1, d2)` (a `_date_vars` registry mirrors `_string_vars`);
+MySQL-source routine bodies gain the `@` sigil on local/param references (not
+just the declaration); `CREATE OR REPLACE VIEW` → `CREATE OR ALTER VIEW`;
+`RETURNING … INTO @v` → `SET @v = SCOPE_IDENTITY()` (T-SQL `OUTPUT … INTO` needs
+a *table* variable); an ANSI `DATE '…'` EXEC argument → the bare string; and a
+bare `DECIMAL`/`NUMERIC` routine param/return (an unconstrained source `NUMBER`)
+is `(18,0)` on T-SQL and rounds to an integer, so it gets a wide exact scale
+(fn_tax 5.55 stays 5.55, total 61.05 not 61.50).
+
+**Trigger translation to T-SQL** (T-SQL triggers are statement-level over
+`inserted`/`deleted`, with no per-row NEW/OLD):
+
+- **MySQL / Oracle row-level source** — a `SET NEW.col = expr` (incl. Oracle's
+  `:NEW.col :=`) becomes `UPDATE <tbl> SET col = <expr> WHERE <pk> IN (SELECT
+  <pk> FROM inserted)` (PK from the identity registry, now harvested for the
+  T-SQL target); an embedded `UPDATE <tgt> <alias> SET … WHERE <alias>.<key> =
+  NEW.<fk>` becomes a set-based update scoped to `inserted` (target alias
+  dropped — T-SQL forbids it — the inner `NEW.<fk>` correlated to `<tgt>.<key>`,
+  the outer equality → `<tgt>.<key> IN (SELECT <fk> FROM inserted)`). An Oracle
+  COMPOUND trigger reuses its captured `compound_row_body`.
+- **PostgreSQL source** — a trigger delegating to a `RETURNS TRIGGER` function is
+  merged: the function text is harvested by name (`PG_TRIGGER_FN_BODIES`), its
+  body inlined into `CREATE TRIGGER … AS BEGIN … END` with the
+  `pg_trigger_depth()` guard (T-SQL: RECURSIVE_TRIGGERS OFF) and `RETURN`
+  dropped; the standalone function is dropped as a one-line note.
+- A scalar-UDF call in any of these is qualified `dbo.<fn>` (harvested
+  `CREATE FUNCTION` names) — T-SQL rejects an unqualified scalar UDF.
+
+**Harness:** SQL Server is reachable **root-free via pymssql** (its wheel bundles
+FreeTDS); `connect()` uses it for a `mssql://…` URL and pyodbc for an ODBC
+connection string. Remaining: wire a SQL Server driver into CI and drop the
+`syntax-live` `continue-on-error` to make the 4×4 gating (TODO §1).

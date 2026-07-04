@@ -101,11 +101,8 @@ See `docs/TODO.md`. Highest priority:
 - [x] **Functional-equivalence test database** — a minimal invoicing schema +
       deterministic scenario + engine-agnostic expected-state spec + a harness
       that runs the transpiled scripts on each engine and asserts identical final
-      state (`tests/functional_equivalence/`). **All 12 reachable source×target
-      pairs are live-green**; the 4 T-SQL-*target* pairs still skip pending
-      `pyodbc` (see TODO §1, DONE §13–14).
+      state (`tests/functional_equivalence/`). **All 16 source×target pairs are
+      live-green** (SQL Server reached root-free via pymssql); see TODO §1,
+      DONE §13–16. Remaining: wire a SQL Server driver into CI to make it gating.
 - [ ] Generalize the `/* UNIQUE: … */` restorer to non-type constructs.
-- [ ] Auto-rewrite a *pure* set-based trigger (PostgreSQL transition tables /
-      Oracle compound trigger) instead of documenting it. (Aggregation triggers
-      already translate across the compound / mutating-table boundary — DONE §14.)
 - [ ] Publish to PyPI — **deferred (do not publish yet)**.
