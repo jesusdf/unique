@@ -736,3 +736,40 @@ class TestRowLevelTriggerToTSql:
         )
         out = _t(src, "mysql", "tsql")
         assert "dbo.fn_tax(" in out.replace("FN_TAX", "fn_tax")
+
+
+class TestPgDelegatingTriggerToTSql:
+    """A PostgreSQL trigger delegates its body to a ``RETURNS TRIGGER`` function
+    (``… EXECUTE FUNCTION fn()``). T-SQL has no trigger functions, so the body is
+    inlined into the trigger; the ``pg_trigger_depth`` guard and ``RETURN`` are
+    dropped and the ``inserted``/``deleted`` transition tables map straight over."""
+
+    SRC = (
+        "CREATE FUNCTION trg_agg_fn() RETURNS TRIGGER AS $$\n"
+        "BEGIN\n"
+        "    IF pg_trigger_depth() > 1 THEN\n"
+        "        RETURN NULL;\n"
+        "    END IF;\n"
+        "    UPDATE invoice inv SET total = (SELECT COALESCE(SUM(il.line_total), 0)\n"
+        "        FROM invoice_line il WHERE il.invoice_id = inv.id)\n"
+        "    WHERE inv.id IN (SELECT invoice_id FROM inserted);\n"
+        "    RETURN NULL;\n"
+        "END; $$ LANGUAGE plpgsql;\n"
+        "CREATE TRIGGER trg_agg AFTER INSERT ON invoice_line\n"
+        "    REFERENCING NEW TABLE AS inserted\n"
+        "    FOR EACH STATEMENT EXECUTE FUNCTION trg_agg_fn();"
+    )
+
+    def test_inlined_into_tsql_trigger(self) -> None:
+        out = _t(self.SRC, "postgresql", "tsql")
+        assert "CREATE TRIGGER trg_agg ON invoice_line" in out
+        assert "AFTER INSERT" in out
+        # The set-based body over inserted is inlined.
+        assert "invoice.id IN (SELECT invoice_id FROM inserted)" in out
+        # The delegating carrier and the PG-only guard/RETURN are gone from the
+        # trigger; the T-SQL UPDATE target takes no AS alias.
+        trigger = out.split("CREATE TRIGGER trg_agg", 1)[1]
+        assert "pg_trigger_depth" not in trigger
+        assert "RETURN NULL" not in trigger
+        assert "EXECUTE FUNCTION" not in trigger
+        assert "UPDATE invoice AS" not in out

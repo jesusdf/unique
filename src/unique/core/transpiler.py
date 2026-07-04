@@ -23,12 +23,14 @@ from unique.core.batch_splitter import BatchSplitter, BatchType
 from unique.core.converter import (
     DATE_COLUMNS,
     IDENTITY_COLUMNS,
+    PG_TRIGGER_FN_BODIES,
     PROC_DATE_PARAMS,
     TSQL_ALIAS_TYPES,
     TSQL_BIT_COLUMNS,
     USER_FUNCTIONS,
     harvest_date_columns,
     harvest_identity_columns,
+    harvest_pg_trigger_functions,
     harvest_proc_date_params,
     harvest_tsql_alias_types,
     harvest_tsql_bit_columns,
@@ -393,10 +395,16 @@ class Transpiler:
             identity_columns = harvest_identity_columns(sql)
             if identity_columns:
                 identity_token = IDENTITY_COLUMNS.set(identity_columns)
+        pg_trigger_fn_token = None
         if target == "tsql" and source != "tsql":
             user_functions = harvest_user_functions(sql)
             if user_functions:
                 func_token = USER_FUNCTIONS.set(user_functions)
+        # A PostgreSQL trigger function is inlined into its T-SQL trigger.
+        if target == "tsql" and source == "postgresql":
+            pg_trigger_fns = harvest_pg_trigger_functions(sql)
+            if pg_trigger_fns:
+                pg_trigger_fn_token = PG_TRIGGER_FN_BODIES.set(pg_trigger_fns)
 
         try:
             # Step 0: Split into batches
@@ -523,6 +531,8 @@ class Transpiler:
                 PROC_DATE_PARAMS.reset(proc_date_token)
             if func_token is not None:
                 USER_FUNCTIONS.reset(func_token)
+            if pg_trigger_fn_token is not None:
+                PG_TRIGGER_FN_BODIES.reset(pg_trigger_fn_token)
             if metadata_resolver:
                 metadata_resolver.close()
 

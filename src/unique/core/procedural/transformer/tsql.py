@@ -14,15 +14,17 @@ from unique.core.ast_nodes import (
     CreateTriggerStatement,
     EmbeddedDML,
     ExceptionBlock,
+    IfStatement,
     Literal,
     LoopStatement,
     NullStatement,
     RawSQL,
+    ReturnStatement,
     SetVariableStatement,
     TryCatchBlock,
     WhileStatement,
 )
-from unique.core.converter import IDENTITY_COLUMNS, USER_FUNCTIONS
+from unique.core.converter import IDENTITY_COLUMNS, PG_TRIGGER_FN_BODIES, USER_FUNCTIONS
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
     register_transformer,
@@ -77,6 +79,40 @@ class TSqlTransformer(ProceduralTransformer):
         if not node.compound_row_body:
             return None
         return self._tsql_statement_trigger(node, node.compound_row_body)
+
+    def _inline_delegating_trigger(
+        self, node: CreateTriggerStatement
+    ) -> ASTNode | None:
+        # A PostgreSQL trigger delegates to a ``RETURNS TRIGGER`` function; T-SQL
+        # has no trigger functions, so inline the harvested function body. Its
+        # statement-level ``inserted``/``deleted`` UPDATEs map straight to T-SQL;
+        # the ``pg_trigger_depth()`` guard (T-SQL: RECURSIVE_TRIGGERS OFF) and
+        # ``RETURN`` are dropped.
+        bodies = PG_TRIGGER_FN_BODIES.get() or {}
+        src = bodies.get((node.execute_function or "").lower())
+        if src is None:
+            return None
+        from unique.core.procedural.parser import ProceduralParser
+
+        fn_node = ProceduralParser(self._source).parse(src).node
+        body = tuple(getattr(fn_node, "body", ()) or ())
+        kept = tuple(b for b in body if not self._is_pg_trigger_noise(b))
+        return self._tsql_statement_trigger(node, kept)
+
+    def _trigger_function_is_inlined(self, name: str) -> bool:
+        bodies = PG_TRIGGER_FN_BODIES.get() or {}
+        return name.strip('[]"`').split(".")[-1].lower() in bodies
+
+    @staticmethod
+    def _is_pg_trigger_noise(node: ASTNode) -> bool:
+        """A ``RETURN`` (T-SQL triggers do not return) or the ``pg_trigger_depth``
+        recursion guard, both dropped when inlining a PG trigger function."""
+        if isinstance(node, ReturnStatement):
+            return True
+        if isinstance(node, IfStatement):
+            cond = getattr(node.condition, "sql", "") or ""
+            return "pg_trigger_depth" in cond.lower()
+        return False
 
     def _tsql_statement_trigger(
         self, node: CreateTriggerStatement, body_nodes: tuple[ASTNode, ...]
