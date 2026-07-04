@@ -2241,14 +2241,15 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             else:
                 dtype = _portable_type_name(col.data_type.name, dialect)
                 # If the mapped name already carries a length (e.g. CHAR(36)),
-                # don't append the caller's params on top of it. PostgreSQL
-                # integer types take no parameters at all — a MySQL display
+                # don't append the caller's params on top of it. PostgreSQL and
+                # T-SQL integer types take no parameters at all — a MySQL display
                 # width (TINYINT(1), INT(11)) would be a syntax error.
-                skip_params = dialect == "postgresql" and dtype.upper() in (
+                skip_params = dialect in ("postgresql", "tsql") and dtype.upper() in (
                     "SMALLINT",
                     "INT",
                     "INTEGER",
                     "BIGINT",
+                    "TINYINT",
                 )
                 if col.data_type.params and "(" not in dtype and not skip_params:
                     dtype += f"({', '.join(str(p) for p in col.data_type.params)})"

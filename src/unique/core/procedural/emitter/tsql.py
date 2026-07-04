@@ -42,7 +42,31 @@ class TSqlEmitter(ProceduralEmitter):
         dt = self._emit_data_type(p.data_type)
         default_str = f" = {self._emit_node(p.default)}" if p.default else ""
         direction_str = " OUTPUT" if p.direction in ("OUT", "INOUT") else ""
-        return f"{p.name} {dt}{default_str}{direction_str}"
+        name = p.name if p.name.startswith("@") else f"@{p.name}"
+        return f"{name} {dt}{default_str}{direction_str}"
+
+    def _emit_function_body(
+        self,
+        header: str,
+        declarations: list[ASTNode],
+        body_stmts: list[ASTNode],
+    ) -> str:
+        """A T-SQL scalar function forbids ``SET NOCOUNT`` (a side-effecting SET
+        option, error 443), so — unlike a procedure — its body carries no such
+        preamble: ``AS BEGIN [DECLARE …] … RETURN … END``."""
+        lines = [f"{header}\nAS\nBEGIN"]
+        self._indent_level = 1
+        for decl in declarations:
+            lines.append(f"{self._indent()}{self._emit_node(decl)}")
+        if declarations:
+            lines.append("")
+        for stmt in body_stmts:
+            text = self._emit_node(stmt)
+            for line in text.split("\n"):
+                lines.append(f"{self._indent()}{line}" if line.strip() else "")
+        self._indent_level = 0
+        lines.append("END")
+        return "\n".join(lines)
 
     def _supports_table_valued_function(self) -> bool:
         return True
