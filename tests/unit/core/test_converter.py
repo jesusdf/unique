@@ -426,6 +426,25 @@ class TestMySQLDDLPortability:
         assert "UUID()" in out
 
 
+class TestTransactionControl:
+    """COMMIT / ROLLBACK / TRUNCATE are valid on every engine (a data-migration
+    dump is full of them); they must pass through, not degrade to a carrier."""
+
+    def test_commit_rollback_truncate_pass_through(self) -> None:
+        for stmt, needle in (
+            ("COMMIT", "COMMIT"),
+            ("ROLLBACK", "ROLLBACK"),
+            ("TRUNCATE TABLE t", "TRUNCATE TABLE t"),
+        ):
+            for src in ("oracle", "tsql"):
+                for tgt in ("postgresql", "mysql", "tsql", "oracle"):
+                    if src == tgt:
+                        continue
+                    out = emit_sql(parse_sql(stmt, src), tgt)
+                    assert needle.upper() in out.upper(), (src, tgt, stmt, out)
+                    assert "-- UNIQUE:" not in out, (src, tgt, stmt, out)
+
+
 class TestTSQLTypePortability:
     """Types that must be adapted when *targeting* T-SQL — surfaced by the live
     SQL Server functional-equivalence pairs."""

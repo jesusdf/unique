@@ -674,6 +674,15 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
         and isinstance(expr.this, exp.Schema)
     ):
         return _convert_create_table(expr, source_dialect)
+    # Transaction/DDL control (COMMIT / ROLLBACK / TRUNCATE) is valid on every
+    # target — a data-migration dump is full of these — so re-transpile it via
+    # the passthrough path instead of degrading each to an "Unhandled" carrier.
+    if isinstance(expr, (exp.Commit, exp.Rollback, exp.TruncateTable)):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="statement",
+        )
     return _convert_expression_impl(expr)
 
 
