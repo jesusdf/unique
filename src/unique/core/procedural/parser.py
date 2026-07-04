@@ -530,12 +530,20 @@ class ProceduralParser:
             table_name, _ = self._parse_qualified_name()
 
         # Oracle COMPOUND TRIGGER (declarations + AFTER EACH ROW / AFTER
-        # STATEMENT sections over a PL/SQL collection). There is no mechanical
-        # cross-engine translation yet; consume the rest of the definition and
-        # flag it so the emitter documents it instead of shredding the body.
+        # STATEMENT sections over a PL/SQL collection). Consume the rest of the
+        # definition (so the emitter documents it rather than shredding the body)
+        # and, when it matches the common "collect the affected key per row,
+        # re-aggregate once in AFTER STATEMENT" idiom, also capture a row-level
+        # equivalent body a mutating-table-free target (PostgreSQL) can run.
         if self._current().upper_value == "COMPOUND":
+            raw_parts: list[str] = []
             while not self._at_end():
-                self._advance()
+                tok = self._advance()
+                if tok.type not in (
+                    TokenType.LINE_COMMENT,
+                    TokenType.BLOCK_COMMENT,
+                ):
+                    raw_parts.append(tok.value)
             return CreateTriggerStatement(
                 name=name,
                 table=table_name,
@@ -544,6 +552,7 @@ class ProceduralParser:
                 or_replace=or_replace,
                 schema=schema,
                 compound=True,
+                compound_row_body=self._compound_row_body(" ".join(raw_parts)),
             )
 
         # REFERENCING NEW TABLE AS x [OLD TABLE AS y] (PostgreSQL transition
@@ -596,6 +605,44 @@ class ProceduralParser:
             execute_function=execute_function,
             referencing=referencing,
         )
+
+    # The common Oracle COMPOUND TRIGGER aggregation idiom: a collection filled
+    # from ``:NEW.<fk>`` (or ``:OLD.``) once per row in AFTER EACH ROW, then
+    # re-read in an AFTER STATEMENT ``FOR <v> IN 1 .. <n> LOOP`` that
+    # re-aggregates the parent. Matched over the space-joined body tokens, so the
+    # patterns tolerate the whitespace the lexer leaves around ``.``/``:``/``:=``.
+    _COMPOUND_COLLECT_RE = re.compile(
+        r"(?is)AFTER\s+EACH\s+ROW\b.*?"
+        r"(\w+)\s*\(\s*\w+\s*\)\s*:=\s*(:\s*(?:NEW|OLD)\s*\.\s*\w+)\s*;"
+    )
+    _COMPOUND_STMT_LOOP_RE = re.compile(
+        r"(?is)AFTER\s+STATEMENT\b.*?\bBEGIN\b.*?"
+        r"\bFOR\s+(\w+)\s+IN\b.*?\bLOOP\b(.*?)\bEND\s+LOOP\b"
+    )
+
+    def _compound_row_body(self, raw: str) -> tuple[ASTNode, ...]:
+        """Extract a row-level equivalent of a COMPOUND TRIGGER's AFTER STATEMENT
+        aggregation, or ``()`` when the body does not match the recognized idiom.
+
+        The collection re-read (``<coll>(<loop_var>)``) is rewritten to the
+        collected per-row key (``:NEW.<fk>``), so the aggregating statement is
+        keyed on the current row — exactly what a plain row-level AFTER trigger
+        needs on an engine (PostgreSQL) that lets a trigger re-read its table."""
+        collect = self._COMPOUND_COLLECT_RE.search(raw)
+        loop = self._COMPOUND_STMT_LOOP_RE.search(raw)
+        if not collect or not loop:
+            return ()
+        coll_name, key_ref = collect.group(1), collect.group(2)
+        loop_var, loop_body = loop.group(1), loop.group(2)
+        # ": NEW . invoice_id" -> ":NEW.invoice_id"
+        key_ref = re.sub(r"\s+", "", key_ref)
+        rewritten = re.sub(
+            rf"(?is)\b{re.escape(coll_name)}\s*\(\s*{re.escape(loop_var)}\s*\)",
+            key_ref,
+            loop_body,
+        )
+        stmts = [s.strip() for s in rewritten.split(";") if s.strip()]
+        return tuple(EmbeddedDML(sql=s, dialect=self._dialect) for s in stmts)
 
     # ---------------------------------------------------------------
     # Identifiers and names

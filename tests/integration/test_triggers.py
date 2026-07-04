@@ -570,8 +570,13 @@ class TestPostgresTriggerToMySQL:
 
 class TestOracleCompoundTrigger:
     """An Oracle COMPOUND TRIGGER (collection + AFTER EACH ROW / AFTER STATEMENT)
-    has no mechanical cross-engine translation yet, so it must degrade to a
-    documented ``-- UNIQUE:`` carrier + warning — never mangled invalid SQL."""
+    exists to dodge the mutating-table error (ORA-04091) when re-aggregating a
+    parent row after child rows change.
+
+    PostgreSQL has no such restriction, so the aggregation is lowered to a plain
+    row-level AFTER trigger that re-reads the table (keyed on the collected
+    NEW.<fk>). MySQL keeps a documented ``-- UNIQUE:`` carrier + warning (the
+    documented-divergence MySQL story) — never mangled invalid SQL."""
 
     SRC = (
         "CREATE TRIGGER trg_line_total\n"
@@ -597,15 +602,25 @@ class TestOracleCompoundTrigger:
     def _run(self, target: str):  # type: ignore[no-untyped-def]
         return Transpiler().transpile(self.SRC, source="oracle", target=target)
 
-    def test_degrades_to_carrier_postgresql(self) -> None:
-        r = self._run("postgresql")
-        assert "-- UNIQUE: Oracle COMPOUND TRIGGER trg_line_total" in r.sql
-        # None of the PL/SQL collection internals leak as executable SQL.
-        for leak in ("TYPE id_tab", "PLS_INTEGER", "AFTER EACH", "id_tab;"):
-            assert leak not in r.sql
-        assert r.warnings or r.unsupported
+    def test_lowers_to_row_level_postgresql(self) -> None:
+        out = self._run("postgresql").sql
+        # No carrier: the compound trigger is faithfully lowered, not documented.
+        assert "-- UNIQUE: Oracle COMPOUND TRIGGER" not in out
+        # A PostgreSQL row-level trigger + its trigger function.
+        assert "CREATE OR REPLACE FUNCTION" in out
+        assert "RETURNS TRIGGER" in out
+        assert "FOR EACH ROW" in out
+        assert "AFTER INSERT OR UPDATE ON invoice_line" in out
+        # g_ids(i) is rewritten to the collected row reference; the AFTER
+        # STATEMENT UPDATE becomes the trigger body.
+        assert "NEW.invoice_id" in out
+        assert "UPDATE invoice SET total = 0" in out
+        # None of the PL/SQL collection internals leak.
+        for leak in ("g_ids", "PLS_INTEGER", "id_tab", ":NEW", "AFTER EACH"):
+            assert leak not in out
 
     def test_degrades_to_carrier_mysql(self) -> None:
         r = self._run("mysql")
         assert "-- UNIQUE: Oracle COMPOUND TRIGGER" in r.sql
         assert "PLS_INTEGER" not in r.sql
+        assert r.warnings or r.unsupported
