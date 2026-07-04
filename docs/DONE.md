@@ -685,3 +685,32 @@ code paths ran):**
       integer — so a transpiled `fn_tax` returned 6 instead of 5.55 and the
       aggregated total came back 61.50 instead of 61.05. `_unconstrained` now maps
       the bare numeric names to `NUMBER` (keeps the value's own scale).
+
+## 15. Reaching SQL Server root-free (pymssql) + first T-SQL-target fixes (P1)
+
+The 4 T-SQL-*target* functional-equivalence pairs had always skipped: the MS ODBC
+driver needs root to install, and pyodbc is useless without it. **pymssql**
+bundles FreeTDS in its wheel and connects with no system driver, so the harness
+`connect()` now parses a `mssql://user:pass@host:port/db` URL and uses pymssql,
+still preferring pyodbc for an ODBC connection string (CI). Added the
+`mssql-freetds` optional-dependency. `tsql→tsql` is now live-green.
+
+Running the T-SQL-target pairs for the first time surfaced long-latent emitter
+bugs (all TDD, `test_converter.py::TestTSQLTypePortability`):
+
+- [x] **Source `TIMESTAMP` → T-SQL `DATETIME2`.** T-SQL `TIMESTAMP` is
+      `ROWVERSION` (an auto binary value), not a wall clock, and rejects a
+      `DEFAULT` (error 1755).
+- [x] **Integer display width dropped for T-SQL** (`TINYINT(1)`, error 2716) —
+      the existing PostgreSQL width-strip now also covers T-SQL, plus `TINYINT`.
+- [x] **No `SET NOCOUNT` inside a T-SQL function** (error 443, a side-effecting
+      SET option) — the T-SQL emitter gains a function-specific body without the
+      procedure preamble; procedures keep it.
+- [x] **T-SQL parameters always carry `@`** — the emitter guarantees the sigil
+      regardless of source.
+
+Still **not green** (tracked in TODO §1): the 3 cross→tsql pairs need date
+subtraction → `DATEDIFF`, MySQL-source `@` var sigils in routine bodies, and —
+the substantial one — trigger translation *to* T-SQL (statement-level
+`inserted`/`deleted` synthesized from PG trigger-function / Oracle COMPOUND /
+MySQL row-level sources).
