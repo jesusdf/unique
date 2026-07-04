@@ -82,6 +82,41 @@ class TestTranspiler:
         assert "ALTER TABLE X ADD COLUMN c" in out
         assert "-- UNIQUE:" not in out
 
+    def test_if_guard_with_else_keeps_then_branch(self, transpiler: Transpiler) -> None:
+        # SSMA emits ``IF NOT EXISTS (…) <DDL> ELSE PRINT '… already exists'``;
+        # only the THEN branch is a real statement — the ELSE PRINT is dropped,
+        # not dragged into the DDL (which would degrade to a Command carrier).
+        sql = (
+            "IF NOT EXISTS (SELECT * FROM syscolumns WHERE name = 'fecha')\n"
+            "    ALTER TABLE dbo.T ADD fecha DATETIME NULL\n"
+            "ELSE\n    PRINT '[!] Warning: la columna ya existe'"
+        )
+        out = transpiler.transpile(sql, source="tsql", target="oracle").sql
+        assert "ALTER TABLE T ADD fecha" in out
+        assert "ELSE" not in out
+        assert "-- UNIQUE:" not in out
+
+    def test_constraint_check_state_toggle(self, transpiler: Transpiler) -> None:
+        # ALTER TABLE t {CHECK|NOCHECK} CONSTRAINT c -> enable/disable per target.
+        enable = "ALTER TABLE X WITH CHECK CHECK CONSTRAINT fk"
+        disable = "ALTER TABLE X NOCHECK CONSTRAINT fk"
+        assert (
+            "ENABLE CONSTRAINT fk"
+            in transpiler.transpile(enable, source="tsql", target="oracle").sql
+        )
+        assert (
+            "DISABLE CONSTRAINT fk"
+            in transpiler.transpile(disable, source="tsql", target="oracle").sql
+        )
+        assert (
+            "VALIDATE CONSTRAINT fk"
+            in transpiler.transpile(enable, source="tsql", target="postgresql").sql
+        )
+        # MySQL has no equivalent: preserved as a restorable note, not dropped.
+        mysql_out = transpiler.transpile(disable, source="tsql", target="mysql").sql
+        assert "/* UNIQUE:" in mysql_out
+        assert "NOCHECK CONSTRAINT fk" in mysql_out
+
     def test_add_default_constraint(self, transpiler: Transpiler) -> None:
         # T-SQL ``ADD [CONSTRAINT n] DEFAULT v FOR c`` -> each engine's
         # set-column-default form (Oracle MODIFY, others ALTER COLUMN SET).
