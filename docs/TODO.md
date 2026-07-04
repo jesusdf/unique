@@ -4,8 +4,9 @@ This document tracks **outstanding** work, ordered by priority. Completed work
 has been archived in [`docs/DONE.md`](DONE.md) (with the detailed why/how of
 each fix); `docs/STATUS.md` summarizes the project state at a higher level.
 
-Last reviewed: 2026-07-04 (aggregation-trigger translation — all 12 reachable
-functional-equivalence pairs live-green; see DONE §14).
+Last reviewed: 2026-07-04 (full 4×4 functional-equivalence matrix — **all 16
+source×target pairs live-green**, incl. trigger translation to T-SQL and SQL
+Server via pymssql; see DONE §14–16).
 
 ## Legend
 
@@ -182,9 +183,10 @@ High-level plan (details in that folder):
       validation, surfacing any divergence as a `::error::` annotation + step
       summary. Confirmed green against the real engines, so it is now **gating**
       (the `continue-on-error` guard was removed) for the tagged Docker publish.
-- [ ] **Phase 2: full 4×4 matrix** — author the scenario natively in each of the
-      four dialects and require all 16 source×target runs to converge on the
-      same `expected_state.yaml`.
+- [x] **Phase 2: full 4×4 matrix — all 16 source×target pairs converge on the
+      same `expected_state.yaml`, live-green** (local `docker-compose.test.yaml`:
+      SQL Server 2022 via pymssql + PostgreSQL 16 + MySQL 8 + Oracle Free 23). See
+      DONE §14–16.
   - [x] **Native fixtures written** — `schema/{postgresql,mysql,oracle}.sql` and
         `scenario/{postgresql,mysql,oracle}.sql`, each idiomatic to its engine
         (PostgreSQL `GENERATED … IDENTITY` + statement-level transition-table
@@ -228,29 +230,19 @@ High-level plan (details in that folder):
         `SET NEW.col = expr` on MySQL; a bare Oracle `DECIMAL`/`NUMERIC`/`DEC`
         parameter/RETURN type (NUMBER(38,0), rounds to integer) now becomes
         `NUMBER`.
-  - [ ] **Finish the 4 T-SQL-*target* pairs, then make the full 4×4 gating.** The
-        harness now reaches SQL Server via **pymssql** (no MS ODBC driver needed;
-        DONE §15), so these pairs run locally at last — `tsql→tsql` is green.
-        Fixed the first wave of latent T-SQL emitter bugs (TIMESTAMP→DATETIME2,
-        integer display-width, no `SET NOCOUNT` in a function, `@` param sigil).
-        The 3 cross→tsql pairs (`postgresql/mysql/oracle→tsql`) are **not green
-        yet**; remaining transpiler work, smallest first:
-        - [ ] Date subtraction `d2 - d1` (a DATE/DATETIME pair) → T-SQL
-          `DATEDIFF(DAY, d1, d2)` — surfaced by `fn_days_between`.
-        - [ ] MySQL-source routine bodies: prefix local variable / parameter
-          references with `@` for the T-SQL target (declaration side already done;
-          body references still leak the bare name).
-        - [ ] **Trigger translation *to* T-SQL** (the big one, its own work item):
-          synthesize a T-SQL statement-level `inserted`/`deleted` trigger from a
-          PostgreSQL trigger-function/transition-table source, an Oracle COMPOUND
-          trigger, and a MySQL row-level trigger. Today all three degrade to a
-          `-- UNIQUE:` carrier, so the trigger-maintained values
-          (`invoice.total`, `is_paid`, `line_total`) are unmaintained on the
-          T-SQL target — comparable in size to the aggregation-trigger feature
-          (DONE §14).
-        Once all 16 pairs are green, drop the CI `syntax-live` `continue-on-error`
-        to make the 4×4 gating. (CI still needs a SQL Server driver — pymssql or
-        pyodbc + MS ODBC; see HARNESS.md.)
+  - [x] **The 4 T-SQL-*target* pairs are green** (DONE §15–16). The harness reaches
+        SQL Server via **pymssql** (no MS ODBC driver / root needed); a wave of
+        latent T-SQL emitter bugs was fixed (TIMESTAMP→DATETIME2, integer display
+        width, no `SET NOCOUNT` in a function, `@` sigils, date-subtraction →
+        DATEDIFF, `CREATE OR ALTER VIEW`, `RETURNING…INTO` → `SCOPE_IDENTITY`,
+        `dbo.`-qualified UDF calls, ANSI `DATE '…'` EXEC args, bare-numeric scale);
+        and **trigger translation *to* T-SQL** — a statement-level
+        `inserted`/`deleted` trigger synthesized from a MySQL row-level, an Oracle
+        row-level/COMPOUND, and a PostgreSQL trigger-function source.
+  - [ ] **Make the CI 4×4 gating** — locally all 16 pairs are green, so drop the
+        `syntax-live` `continue-on-error`. Needs a SQL Server driver in CI
+        (pymssql — pip-only, or pyodbc + MS ODBC); see HARNESS.md. The only
+        remaining step is CI wiring, not the transpiler.
 
 Key design risks, captured for when we start:
 - **Determinism** is the central challenge — see the folder README for the list
