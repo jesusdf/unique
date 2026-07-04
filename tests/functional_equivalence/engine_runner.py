@@ -327,9 +327,14 @@ def connect(dialect: str, url: str) -> Any:
 
             return psycopg2.connect(_pg_url_for_psycopg2(url))
     if dialect == "mysql":
-        import pymysql
+        try:
+            import pymysql
 
-        return _connect_mysql(url, pymysql)
+            return _connect_mysql(url, pymysql)
+        except ImportError:
+            import mysql.connector  # type: ignore[import-untyped]
+
+            return _connect_mysql_connector(url, mysql.connector)
     if dialect == "oracle":
         import oracledb
 
@@ -341,8 +346,9 @@ def connect(dialect: str, url: str) -> Any:
 
 def _connect_tsql(url: str) -> Any:
     """Connect to SQL Server. A full ODBC connection string (``DRIVER={…};…``)
-    uses pyodbc + the MS ODBC driver (CI); a ``mssql://user:pass@host:port/db``
-    URL uses pymssql, whose wheel bundles FreeTDS and needs no system driver."""
+    uses pyodbc directly; a ``mssql://user:pass@host:port/db`` URL prefers pymssql
+    (its wheel bundles FreeTDS, no system driver) and falls back to pyodbc + the
+    MS ODBC driver — so the harness runs under either driver set (local or CI)."""
     if "://" not in url:
         import pyodbc
 
@@ -354,8 +360,17 @@ def _connect_tsql(url: str) -> Any:
     if not m:
         raise ValueError(f"unparseable SQL Server URL: {url}")
     user, pwd, host, port, db = m.groups()
-    import pymssql
+    try:
+        import pymssql
+    except ImportError:
+        import pyodbc
 
+        conn_str = (
+            "DRIVER={ODBC Driver 18 for SQL Server};"
+            f"SERVER={host},{port or 1433};DATABASE={db};"
+            f"UID={user};PWD={pwd};TrustServerCertificate=yes;"
+        )
+        return pyodbc.connect(conn_str)
     return pymssql.connect(
         server=host, port=int(port or 1433), user=user, password=pwd, database=db
     )
@@ -377,6 +392,22 @@ def _connect_mysql(url: str, pymysql: Any) -> Any:
         host=host,
         port=int(port or 3306),
         database=db,
+    )
+
+
+def _connect_mysql_connector(url: str, connector: Any) -> Any:
+    # Fallback driver (CI installs mysql-connector-python, not pymysql).
+    m = re.match(r"mysql(?:\+\w+)?://([^:]+):([^@]*)@([^:/]+)(?::(\d+))?/(\w+)", url)
+    if not m:
+        raise ValueError(f"unparseable MySQL URL: {url}")
+    user, pwd, host, port, db = m.groups()
+    return connector.connect(
+        user=user,
+        password=pwd,
+        host=host,
+        port=int(port or 3306),
+        database=db,
+        autocommit=False,
     )
 
 

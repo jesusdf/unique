@@ -239,10 +239,12 @@ High-level plan (details in that folder):
         and **trigger translation *to* T-SQL** — a statement-level
         `inserted`/`deleted` trigger synthesized from a MySQL row-level, an Oracle
         row-level/COMPOUND, and a PostgreSQL trigger-function source.
-  - [ ] **Make the CI 4×4 gating** — locally all 16 pairs are green, so drop the
-        `syntax-live` `continue-on-error`. Needs a SQL Server driver in CI
-        (pymssql — pip-only, or pyodbc + MS ODBC); see HARNESS.md. The only
-        remaining step is CI wiring, not the transpiler.
+  - [x] **CI 4×4 is gating** — the `syntax-live` job installs `pymssql` (so the
+        FE harness reaches SQL Server without the flaky msodbcsql18 apt install)
+        and the functional-equivalence step dropped its `continue-on-error`. The
+        harness `connect()` is driver-flexible (pymssql↔pyodbc, pymysql↔mysql-
+        connector), so it runs under either the local or the CI driver set;
+        verified locally by running the full matrix with `pymysql` blocked.
 
 Key design risks, captured for when we start:
 - **Determinism** is the central challenge — see the folder README for the list
