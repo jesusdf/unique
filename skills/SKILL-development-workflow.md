@@ -253,6 +253,22 @@ ruff check src/ tests/
 mypy src/
 ```
 
+### Performance: never build a string by ``+=`` in a loop (mandatory)
+
+The transpiler runs over whole scripts (a real dump is 200k+ lines / 25 MB of
+output), so a quadratic hot path turns seconds into minutes. **Accumulating a
+string with ``out += piece`` inside a loop that iterates over
+input-proportional data (batches, statements, rows, output parts) is O(n²)** —
+each concatenation copies the entire accumulator. Build a **list** and
+``"".join()`` (or ``sep.join()``) **once** at the end. Same rule for any
+per-item work that rescans a growing collection (e.g. checking each item against
+all previously accumulated items → dedupe with a ``set`` instead of an O(n)
+scan). A 13 MB migration script went from **421 s to ~30 s** by fixing exactly
+these two shapes (``_join_parts`` and the carrier↔warning reconciliation); the
+same pattern must not be reintroduced. Per-statement ``result += clause`` for a
+*fixed* number of clauses (WHERE/FROM/…) is fine — the danger is only the
+input-proportional loop.
+
 ## Backlog discipline (docs/TODO.md)
 
 `docs/TODO.md` is the single source of truth for the backlog. Keep it current
