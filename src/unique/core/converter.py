@@ -2495,7 +2495,12 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
 def _emit_create_view(node: CreateViewStatement, dialect: str) -> str:
     """Emit a CREATE VIEW statement."""
     name = _emit_table_ref(node.name, dialect)
-    replace = "OR REPLACE " if node.or_replace else ""
+    if node.or_replace:
+        # T-SQL has no CREATE OR REPLACE VIEW; CREATE OR ALTER VIEW (2016+) is
+        # the equivalent that re-creates an existing view in place.
+        replace = "OR ALTER " if dialect == "tsql" else "OR REPLACE "
+    else:
+        replace = ""
     query = _emit_select(node.query, dialect)
     return f"CREATE {replace}VIEW {name} AS\n{query}"
 
