@@ -285,11 +285,14 @@ class ProceduralParser:
             return self._parse_create()
         elif tok.is_keyword("ALTER") and self._is_tsql_source():
             return self._parse_alter()
-        elif tok.is_keyword("EXEC", "EXECUTE", "DECLARE"):
-            # A standalone anonymous block (a bare EXEC of a procedure, or a
-            # DECLARE of batch-local variables followed by statements). Parse it
-            # as a statement sequence so EXEC becomes CALL etc., instead of
-            # falling back to verbatim RawSQL.
+        elif tok.is_keyword("EXEC", "EXECUTE", "DECLARE", "PRINT", "SET"):
+            # A standalone anonymous block: a bare EXEC of a procedure, a DECLARE
+            # of batch-local variables, a diagnostic PRINT, or a ``SET @v = …``
+            # variable assignment. Parse it as a statement sequence so PRINT
+            # becomes the target's message form and the assignment/EXEC is
+            # translated, instead of falling back to verbatim RawSQL. (The batch
+            # classifier only routes a ``SET @var`` assignment here — a session
+            # option like ``SET NOCOUNT ON`` stays on the SET_OPTION path.)
             return self._parse_anonymous_block()
         elif tok.is_keyword("BEGIN") and not self._is_tsql_source():
             # A top-level Oracle/PL-SQL anonymous ``BEGIN … END;`` block (the

@@ -66,9 +66,11 @@ _PROCEDURAL_PATTERNS = {
     ),
 }
 
-_SET_PATTERN = re.compile(
-    r"(?i)^\s*SET\s+(?:NOCOUNT|QUOTED_IDENTIFIER|ANSI_NULLS|XACT_ABORT|ARITHABORT)\b"
-)
+# A T-SQL session/config option: ``SET <option> …`` where the option is an
+# identifier (NOCOUNT, ANSI_NULLS, NOEXEC, DATEFORMAT, IDENTITY_INSERT, …), i.e.
+# anything but a ``SET @var = …`` assignment (which is procedural). None of these
+# options has a cross-engine equivalent, so they are documented, not executed.
+_SET_PATTERN = re.compile(r"(?i)^\s*SET\s+(?!@)[A-Za-z_]\w*")
 
 _IF_OBJECT_PATTERN = re.compile(r"(?i)^\s*IF\s+(?:OBJECT_ID|EXISTS)\b")
 
@@ -85,6 +87,13 @@ _TSQL_EXEC_PROC_PATTERN = re.compile(
 # A batch-level DECLARE (a local variable used by following statements) is an
 # anonymous procedural block, not DML.
 _TSQL_DECLARE_PATTERN = re.compile(r"(?i)^\s*DECLARE\s+@", re.MULTILINE)
+
+# A top-level PRINT and a variable assignment (``SET @v = …``, distinct from a
+# session option like ``SET NOCOUNT ON``) are procedural: route them to the
+# procedural engine so PRINT becomes each target's message form and the
+# assignment is translated, instead of a DML "Unhandled expression" carrier.
+_TSQL_PRINT_PATTERN = re.compile(r"(?i)^\s*PRINT\b")
+_TSQL_SET_VAR_PATTERN = re.compile(r"(?i)^\s*SET\s+@\w+\s*=(?![=])")
 
 # A top-level Oracle anonymous PL/SQL block opens with BEGIN or DECLARE.
 _ORACLE_ANON_BLOCK_PATTERN = re.compile(r"(?i)^\s*(?:BEGIN|DECLARE)\b")
@@ -128,6 +137,10 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
         if exec_match and not exec_match.group(1).lower().startswith("sp_"):
             return BatchType.PROCEDURAL
         if _TSQL_DECLARE_PATTERN.match(first_meaningful):
+            return BatchType.PROCEDURAL
+        if _TSQL_PRINT_PATTERN.match(first_meaningful):
+            return BatchType.PROCEDURAL
+        if _TSQL_SET_VAR_PATTERN.match(first_meaningful):
             return BatchType.PROCEDURAL
 
     if _CALL_PROC_PATTERN.match(first_meaningful):

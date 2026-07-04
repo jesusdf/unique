@@ -281,7 +281,12 @@ class PostgresEmitter(ProceduralEmitter):
             return self._emit_degraded_anonymous_block(node)
         decls = [s for s in node.statements if isinstance(s, DeclareStatement)]
         body = [s for s in node.statements if not isinstance(s, DeclareStatement)]
-        needs_wrapper = needs_procedural_wrapper(node.statements)
+        # A PRINT becomes ``RAISE NOTICE``, which is PL/pgSQL-only and needs the
+        # DO wrapper even though it is not "control flow" (so MySQL, where PRINT
+        # is a standalone SELECT, still emits it bare).
+        needs_wrapper = needs_procedural_wrapper(node.statements) or any(
+            isinstance(s, PrintStatement) for s in node.statements
+        )
         if not needs_wrapper:
             return "\n".join(self._emit_node(s) for s in body)
 
