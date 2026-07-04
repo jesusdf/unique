@@ -292,6 +292,28 @@ def harvest_user_functions(sql: str) -> frozenset[str]:
     return frozenset(names)
 
 
+# A PostgreSQL trigger delegates its body to a ``RETURNS TRIGGER`` function
+# (``… EXECUTE FUNCTION fn()``). T-SQL inlines the body in the trigger, so the
+# function's full text is harvested by name to merge into its trigger.
+PG_TRIGGER_FN_BODIES: contextvars.ContextVar[dict[str, str] | None] = (
+    contextvars.ContextVar("pg_trigger_fn_bodies", default=None)
+)
+
+_PG_TRIGGER_FN_RE = re.compile(
+    r"(?is)\bCREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(\w+)\s*\(\s*\)\s+"
+    r"RETURNS\s+TRIGGER\b.*?\$\$.*?\$\$"
+)
+
+
+def harvest_pg_trigger_functions(sql: str) -> dict[str, str]:
+    """Map each ``RETURNS TRIGGER`` function's bare name to its full CREATE text
+    (dollar-quoted body included), for inlining into a T-SQL trigger."""
+    result: dict[str, str] = {}
+    for m in _PG_TRIGGER_FN_RE.finditer(sql):
+        result[m.group(1).lower()] = m.group(0)
+    return result
+
+
 # Positional indexes of a stored procedure's date/time parameters (proc name
 # -> set of 0-based positions). Used to wrap an ISO date-string argument in an
 # Oracle CALL (create_invoice(2, '2024-02-01', …)) as an ANSI DATE literal,

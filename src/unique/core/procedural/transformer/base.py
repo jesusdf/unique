@@ -713,6 +713,14 @@ class ProceduralTransformer:
         is_trigger_fn = (
             node.return_type is not None and node.return_type.name.upper() == "TRIGGER"
         )
+        if is_trigger_fn and self._trigger_function_is_inlined(node.name):
+            # Its body has been merged into the T-SQL trigger; drop the standalone
+            # function rather than leave a redundant carrier comment.
+            return CommentStatement(
+                text=f"-- UNIQUE: trigger function {node.name} inlined into its "
+                "T-SQL trigger",
+                style="line",
+            )
         if is_trigger_fn and not self._target_supports_delegating_trigger():
             self._warnings.append(
                 f"PostgreSQL trigger function {node.name!r} ('RETURNS TRIGGER') "
@@ -756,6 +764,12 @@ class ProceduralTransformer:
         converted = self._rowlevel_trigger_override(node)
         if converted is not None:
             return converted
+        # A PostgreSQL trigger delegating to a ``RETURNS TRIGGER`` function is
+        # inlined into a T-SQL trigger (which has no separate trigger function).
+        if node.execute_function:
+            inlined = self._inline_delegating_trigger(node)
+            if inlined is not None:
+                return inlined
         prev_in_trigger = self._in_trigger
         self._in_trigger = True
         # A purely set-based T-SQL trigger (only FROM/JOIN inserted/deleted, no
@@ -817,6 +831,18 @@ class ProceduralTransformer:
         """Hook: express an Oracle COMPOUND trigger's re-aggregation as a
         statement-level trigger. Only the T-SQL target overrides this."""
         return None
+
+    def _inline_delegating_trigger(
+        self, node: CreateTriggerStatement
+    ) -> ASTNode | None:
+        """Hook: inline a PostgreSQL trigger function's body into the trigger.
+        Only the T-SQL target overrides this."""
+        return None
+
+    def _trigger_function_is_inlined(self, name: str) -> bool:
+        """Whether a ``RETURNS TRIGGER`` function of this name is merged into its
+        trigger (so the standalone definition is dropped). True only on T-SQL."""
+        return False
 
     def _target_lowers_compound_to_row_level(self) -> bool:
         """Whether the target can run an Oracle COMPOUND TRIGGER's re-aggregation
