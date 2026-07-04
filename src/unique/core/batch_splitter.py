@@ -191,7 +191,9 @@ class BatchSplitter:
     @staticmethod
     def _split_tsql(sql: str) -> list[Batch]:
         """Split T-SQL on GO batch separators."""
-        parts = re.split(r"(?m)^GO\s*$", sql)
+        # GO is a case-insensitive batch terminator (``go`` is valid) and may
+        # carry leading whitespace; match it as the FE-harness splitter does.
+        parts = re.split(r"(?im)^\s*GO\s*$", sql)
         batches = []
         line_offset = 0
         for part in parts:

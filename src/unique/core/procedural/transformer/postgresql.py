@@ -34,6 +34,10 @@ class PostgresTransformer(ProceduralTransformer):
     def _varchar_max_type(self, is_unicode: bool) -> str | None:
         return "TEXT"
 
+    def _named_arg_op(self) -> str | None:
+        # PostgreSQL passes a procedure's named argument as ``name => value``.
+        return "=>"
+
     def _supports_transition_tables(self) -> bool:
         # A statement-level trigger with REFERENCING NEW/OLD TABLE sees all rows.
         return True
