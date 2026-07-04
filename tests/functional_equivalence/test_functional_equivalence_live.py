@@ -60,6 +60,27 @@ _URL_ENV = {
 # All 16 (source, target) pairs.
 _PAIRS = [(s, t) for s in _DIALECTS for t in _DIALECTS]
 
+# (source, target) pairs where the source's *aggregation* trigger (re-aggregate a
+# parent row when child rows change) has no faithful automatic form on the target,
+# so its body arrives as a carrier comment and the values it maintains
+# (``invoice.total`` / ``is_paid``) are a documented divergence, excluded from the
+# assertion. Every other pair asserts the full state:
+#   - PostgreSQL target — a row-level re-read trigger (PG has no mutating-table
+#     rule), including the Oracle COMPOUND trigger lowered to it;
+#   - Oracle target from a row-level re-read source (MySQL) — a synthesized
+#     COMPOUND trigger;
+#   - every native (source == target) run.
+# T-SQL/PostgreSQL set-based (transition-table) sources have no such form on
+# MySQL/Oracle; the Oracle COMPOUND source has none on MySQL (per the MySQL
+# documented-divergence decision).
+_DOCUMENTED_TRIGGER_DIVERGENCE = {
+    ("tsql", "mysql"),
+    ("tsql", "oracle"),
+    ("postgresql", "mysql"),
+    ("postgresql", "oracle"),
+    ("oracle", "mysql"),
+}
+
 
 def _native(kind: str, dialect: str) -> str:
     """Read a committed native fixture (kind is 'schema' or 'scenario')."""
@@ -127,16 +148,12 @@ def test_functional_equivalence(source: str, target: str) -> None:
         for script in _scripts_for(source, target):
             runner.execute_script(script)
 
-        # Set-based / statement-level transition-table triggers (T-SQL's
-        # inserted/deleted, PostgreSQL's REFERENCING … TABLE + trigger function)
-        # are a documented divergence on MySQL and Oracle: their bodies arrive
-        # as carrier comments, so the values they maintain are out of scope
-        # there. The PostgreSQL target (faithful transition-table rewrite) and
-        # every native run assert the full state.
-        ignore_triggers = source in ("tsql", "postgresql") and target in (
-            "mysql",
-            "oracle",
-        )
+        # An aggregation trigger with no faithful automatic form on the target
+        # is a documented divergence: its body arrives as a carrier comment, so
+        # the values it maintains are out of scope. Every other pair (a PG
+        # row-level re-read, a synthesized Oracle compound trigger, or a native
+        # run) asserts the full state.
+        ignore_triggers = (source, target) in _DOCUMENTED_TRIGGER_DIVERGENCE
         mismatches = check_state(
             _EXPECTED,
             runner.read_table,
