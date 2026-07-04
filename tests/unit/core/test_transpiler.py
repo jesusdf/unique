@@ -41,6 +41,47 @@ class TestTranspiler:
         # Every occurrence is preserved (none dropped by the dedup).
         assert result.sql.count("sp_addextendedproperty") >= 200
 
+    def test_if_not_exists_create_guard_transpiles_ddl(
+        self, transpiler: Transpiler
+    ) -> None:
+        # IF NOT EXISTS (<catalog query>) CREATE TABLE X: the catalog condition
+        # has no cross-engine form, so keep the intent — transpile the CREATE.
+        sql = (
+            "IF NOT EXISTS (SELECT * FROM sys.objects WHERE name = 'X')\n"
+            "CREATE TABLE X (id INT)"
+        )
+        out = transpiler.transpile(sql, source="tsql", target="postgresql").sql
+        assert "CREATE TABLE X" in out
+        assert "-- UNIQUE:" not in out
+        assert "sys.objects" not in out
+
+    def test_if_not_exists_begin_end_with_print(self, transpiler: Transpiler) -> None:
+        # A guard body opening with a diagnostic PRINT before the DDL: the PRINT
+        # is dropped, the DDL transpiled (not degraded to a Command carrier).
+        sql = (
+            "IF NOT EXISTS (SELECT * FROM sys.objects WHERE name = 'X')\n"
+            "BEGIN\n    PRINT 'Creating X'\n    CREATE TABLE X (id INT)\nEND"
+        )
+        out = transpiler.transpile(sql, source="tsql", target="oracle").sql
+        assert "CREATE TABLE X" in out
+        assert "PRINT" not in out
+        assert "-- UNIQUE:" not in out
+
+    def test_if_exists_drop_guard_is_idempotent(self, transpiler: Transpiler) -> None:
+        sql = "IF EXISTS (SELECT * FROM sys.objects WHERE name = 'X')\nDROP TABLE X"
+        out = transpiler.transpile(sql, source="tsql", target="postgresql").sql
+        assert "DROP TABLE IF EXISTS X" in out
+        assert "-- UNIQUE:" not in out
+
+    def test_if_not_exists_alter_add_column(self, transpiler: Transpiler) -> None:
+        sql = (
+            "IF NOT EXISTS (SELECT * FROM syscolumns WHERE id = OBJECT_ID('X') "
+            "AND name = 'c')\nALTER TABLE X ADD c INT"
+        )
+        out = transpiler.transpile(sql, source="tsql", target="postgresql").sql
+        assert "ALTER TABLE X ADD COLUMN c" in out
+        assert "-- UNIQUE:" not in out
+
     def test_system_procedure_becomes_comment(self, transpiler: Transpiler) -> None:
         result = transpiler.transpile(
             "EXEC sys.sp_addextendedproperty @name=N'x', @value=N'y'",
