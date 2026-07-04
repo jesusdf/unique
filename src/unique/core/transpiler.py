@@ -67,6 +67,58 @@ _TSQL_DROP_GUARD_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A re-runnable migration guard ``IF [NOT] EXISTS (<catalog query>) [BEGIN]
+# <stmt> [END]``. The condition queries T-SQL system catalogs (sys.objects /
+# syscolumns / sysindexes) that have no faithful cross-engine form, so only the
+# intent — run the guarded statement — is kept, matching the OBJECT_ID guards.
+_TSQL_EXISTS_GUARD_HEAD_RE = re.compile(
+    r"(?is)^\s*(?:--[^\n]*\n\s*)*IF\s+(?:NOT\s+)?EXISTS\s*\("
+)
+_DROP_STMT_RE = re.compile(
+    r"(?is)^\s*DROP\s+"
+    r"(?P<kind>TABLE|VIEW|SEQUENCE|PROCEDURE|FUNCTION|TRIGGER|INDEX)\s+"
+    r"(?P<name>[\w\[\]\".]+)"
+)
+
+
+def _extract_exists_guard(sql: str) -> str | None:
+    """Return the guarded statement of a T-SQL ``IF [NOT] EXISTS (…) [BEGIN] …
+    [END]`` migration guard (a single ``BEGIN … END`` wrapper is unwrapped), or
+    ``None`` when *sql* is not that shape."""
+    head = _TSQL_EXISTS_GUARD_HEAD_RE.match(sql)
+    if not head:
+        return None
+    # Skip the balanced-parens catalog condition (it may nest parentheses).
+    depth = 0
+    i = head.end() - 1
+    n = len(sql)
+    while i < n:
+        ch = sql[i]
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    if depth != 0:
+        return None
+    rest = sql[i + 1 :].strip()
+    unwrapped = re.match(r"(?is)^BEGIN\b(.*)\bEND\b\s*;?\s*$", rest)
+    if unwrapped:
+        rest = unwrapped.group(1).strip()
+    # A guard body often opens with a diagnostic ``PRINT 'Creating X'`` (or a
+    # SET) before the DDL; drop those leading noise lines so the DDL is what gets
+    # transpiled (the message is not worth carrying, and mixing it in would make
+    # sqlglot degrade the whole block to a Command carrier).
+    while True:
+        noise = re.match(r"(?is)^\s*(?:PRINT|SET)\b[^\n]*(?:\n|$)", rest)
+        if not noise:
+            break
+        rest = rest[noise.end() :].lstrip()
+    return rest or None
+
+
 # A MySQL routine whose body contains ';' statement terminators must be wrapped
 # in a DELIMITER block so a client doesn't cut the script at the first inner
 # ';'. Matches the leading keyword of a compound routine definition (any
@@ -474,6 +526,27 @@ class Transpiler:
                             source,
                             target,
                         )
+                    elif (
+                        source == "tsql"
+                        and target != "tsql"
+                        and (guarded := _extract_exists_guard(batch.sql)) is not None
+                    ):
+                        # IF [NOT] EXISTS (<catalog query>) <guarded stmt>: keep
+                        # the intent — a guarded DROP becomes an idempotent
+                        # DROP ... IF EXISTS; any other guarded statement is just
+                        # transpiled (the catalog condition has no target form).
+                        drop_stmt = _DROP_STMT_RE.match(guarded)
+                        if drop_stmt:
+                            result = self._transpile_drop_guard(
+                                drop_stmt.group("kind"),
+                                drop_stmt.group("name"),
+                                source,
+                                target,
+                            )
+                        else:
+                            result = self._transpile_dml(
+                                guarded, source, target, source_dialect, target_dialect
+                            )
                     else:
                         result = self._transpile_set_option(batch.sql, source, target)
                 elif batch.batch_type == BatchType.COMMENT:

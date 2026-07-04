@@ -72,7 +72,9 @@ _PROCEDURAL_PATTERNS = {
 # options has a cross-engine equivalent, so they are documented, not executed.
 _SET_PATTERN = re.compile(r"(?i)^\s*SET\s+(?!@)[A-Za-z_]\w*")
 
-_IF_OBJECT_PATTERN = re.compile(r"(?i)^\s*IF\s+(?:OBJECT_ID|EXISTS)\b")
+# A migration guard: ``IF [NOT] EXISTS (…)`` / ``IF OBJECT_ID(…) IS [NOT] NULL``.
+# Routed to the SET_OPTION path, which extracts and transpiles the guarded DDL.
+_IF_OBJECT_PATTERN = re.compile(r"(?i)^\s*IF\s+(?:NOT\s+)?(?:OBJECT_ID|EXISTS)\b")
 
 # A standalone EXEC/EXECUTE of a stored procedure. The captured group is the
 # procedure's final (unqualified) name, so a system procedure (sp_*, possibly
