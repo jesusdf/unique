@@ -535,12 +535,16 @@ def _objects_created(sql: str) -> list[tuple[str, str]]:
     """
     import re
 
+    # Keep any surrounding quote (``"order"``/``[order]``/`` `order` ``) so the
+    # DROP re-quotes a reserved-word name (``DROP TABLE "order"``, not the
+    # invalid bare ``DROP TABLE order``).
+    _name = r"([`\"\[]?[A-Za-z_]\w*[`\"\]]?)"
     tables = re.findall(
         r"(?i)\bCREATE\s+(?:GLOBAL\s+TEMPORARY\s+)?TABLE\s+"
-        r"(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_]\w*)",
+        r"(?:IF\s+NOT\s+EXISTS\s+)?" + _name,
         sql,
     )
-    indexes = re.findall(r"(?i)\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+([A-Za-z_]\w*)", sql)
+    indexes = re.findall(r"(?i)\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+" + _name, sql)
     out: list[tuple[str, str]] = [("INDEX", n) for n in indexes]
     out += [("TABLE", n) for n in tables]
     return out

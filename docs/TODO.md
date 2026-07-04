@@ -311,8 +311,14 @@ quality*).
 - [x] Shared helper: parse every transpiled output with sqlglot in the target
       dialect (`ErrorLevel.RAISE`).
 - [x] Add the identity-mutation check as a CI job with a kill-rate threshold.
-- [ ] Extend live-syntax CI coverage to standalone DML/DDL probes (not only
-      the procedural fixtures).
+- [x] Extend live-syntax CI coverage to standalone DML/DDL probes — added 10
+      snippets exercising the audit S1/S2 constructs (CURRENT_TIMESTAMP / boolean
+      / CHECK DDL defaults, Oracle `(+)` outer join, ROWNUM, ILIKE, GROUP_CONCAT
+      ↔ STRING_AGG ↔ LISTAGG, DATEADD, reserved-word identifier quoting), each
+      transpiled and executed on every configured engine. Fixed a validator
+      cleanup gap surfaced by the reserved-word probe: `_objects_created` now
+      keeps a quoted name so Oracle emits `DROP TABLE "order"` (auto-committed
+      DDL was leaking, ORA-00955 on rerun).
 
 **P2 — structure & ops (audit docs 03–04):**
 

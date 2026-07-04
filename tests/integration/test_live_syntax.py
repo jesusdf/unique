@@ -72,6 +72,50 @@ _SNIPPETS = [
         "CREATE TABLE t (id INT, total AS (id * 2) PERSISTED)",
         _ALL,
     ),
+    # --- standalone DML/DDL constructs from the 2026-07-02 audit (S1/S2),
+    # validated live so the emitter's output is confirmed against each engine.
+    # S1-10: a CURRENT_TIMESTAMP DDL default (T-SQL TIMESTAMP is ROWVERSION, so
+    # this also confirms the DATETIME2 remap).
+    (
+        "postgresql",
+        "CREATE TABLE t (id INT, ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+        _ALL,
+    ),
+    # S1-9: a boolean literal default (T-SQL BIT DEFAULT 1, MySQL TINYINT).
+    ("postgresql", "CREATE TABLE t (active BOOLEAN DEFAULT TRUE)", _ALL),
+    # A CHECK constraint must survive to every engine.
+    ("tsql", "CREATE TABLE t (n INT CHECK (n > 0))", _ALL),
+    # S1-2: Oracle ``(+)`` outer join -> LEFT/RIGHT OUTER JOIN … ON.
+    (
+        "oracle",
+        "CREATE TABLE a (id INT); CREATE TABLE b (id INT); "
+        "SELECT a.id FROM a, b WHERE a.id = b.id(+)",
+        _ALL,
+    ),
+    # S1-5: ROWNUM row-limit -> LIMIT / FETCH FIRST / TOP.
+    ("oracle", "CREATE TABLE t (x INT); SELECT x FROM t WHERE ROWNUM <= 5", _ALL),
+    # S1-7: ILIKE -> each engine's case-insensitive match.
+    (
+        "postgresql",
+        "CREATE TABLE t (name VARCHAR(50)); SELECT name FROM t WHERE name ILIKE 'a%'",
+        _ALL,
+    ),
+    # S1-8 / S2-1: GROUP_CONCAT <-> STRING_AGG <-> LISTAGG.
+    (
+        "mysql",
+        "CREATE TABLE t (name VARCHAR(50)); "
+        "SELECT GROUP_CONCAT(name SEPARATOR ',') AS c FROM t",
+        _ALL,
+    ),
+    (
+        "postgresql",
+        "CREATE TABLE t (name VARCHAR(50)); SELECT STRING_AGG(name, ',') AS c FROM t",
+        _ALL,
+    ),
+    # S1-4: DATEADD -> DATE_ADD / interval arithmetic.
+    ("tsql", "CREATE TABLE t (d DATE); SELECT DATEADD(day, 7, d) AS d2 FROM t", _ALL),
+    # S1-1: identifier quoting translated (a reserved word as an identifier).
+    ("mysql", "CREATE TABLE `order` (`id` INT); SELECT `id` FROM `order`", _ALL),
 ]
 
 
