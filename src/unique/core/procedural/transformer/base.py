@@ -125,6 +125,10 @@ class ProceduralTransformer:
         # string type. Used to disambiguate T-SQL '+' as concatenation when no
         # string literal is present (e.g. SHA2(@a + @b) over two text vars).
         self._string_vars: set[str] = set()
+        # Names (transformed form) of DATE/DATETIME variables/parameters. Used to
+        # rewrite ``d2 - d1`` (legal date subtraction on the source) to
+        # ``DATEDIFF(DAY, d1, d2)`` for the T-SQL target, which rejects the ``-``.
+        self._date_vars: set[str] = set()
         # True while transforming a trigger body, so embedded DML maps the
         # T-SQL inserted/deleted pseudo-tables to NEW/OLD (or documents a
         # set-based use that has no row-level equivalent).
@@ -151,6 +155,18 @@ class ProceduralTransformer:
             "TINYTEXT",
             "CLOB",
             "NCLOB",
+        }
+
+    @staticmethod
+    def _is_date_type(dt: DataType) -> bool:
+        base = dt.name.split("(")[0].strip().upper()
+        return base in {
+            "DATE",
+            "DATETIME",
+            "DATETIME2",
+            "SMALLDATETIME",
+            "TIMESTAMP",
+            "TIMESTAMPTZ",
         }
 
     @property
@@ -346,6 +362,8 @@ class ProceduralTransformer:
             self._var_map[p.name] = new_name
             if self._is_string_type(p.data_type):
                 self._string_vars.add(new_name)
+            if self._is_date_type(p.data_type):
+                self._date_vars.add(new_name)
             result.append(
                 ParameterDefinition(
                     name=new_name,
@@ -387,6 +405,9 @@ class ProceduralTransformer:
             if clean.upper().startswith("V_"):
                 clean = clean[2:]
             return f"@{clean.lower()}"
+        elif self._source == "mysql" and self._target == "tsql":
+            # MySQL local variables/params have no sigil; T-SQL requires ``@``.
+            return name if name.startswith("@") else f"@{name}"
         return name
 
     def _transform_var_in_sql(self, sql: str) -> str:
@@ -419,7 +440,12 @@ class ProceduralTransformer:
                 return f"v_{clean.lower()}"
 
             sql = re.sub(r"@@?\w+", replace_var_mysql, sql)
-        elif self._source in ("oracle", "postgresql") and self._target == "tsql":
+        elif self._source in ("oracle", "postgresql", "mysql") and self._target == (
+            "tsql"
+        ):
+            # Prefix known variable/parameter names with T-SQL's ``@`` (the map
+            # holds source-name → transformed ``@name``); a bare column of the
+            # same name is not in the map, so it is left alone.
             for old_name, new_name in self._var_map.items():
                 sql = re.sub(rf"\b{re.escape(old_name)}\b", new_name, sql)
         return sql
@@ -874,6 +900,8 @@ class ProceduralTransformer:
         self._var_map[node.name] = new_name
         if self._is_string_type(node.data_type):
             self._string_vars.add(new_name)
+        if self._is_date_type(node.data_type):
+            self._date_vars.add(new_name)
         return DeclareStatement(name=new_name, data_type=new_type, default=new_default)
 
     def _table_variable_to_temp_table(self, name: str, type_text: str) -> ASTNode:

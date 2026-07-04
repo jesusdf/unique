@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import re
+
 from unique.core.ast_nodes import (
     ASTNode,
     ExceptionBlock,
@@ -25,6 +27,24 @@ class TSqlTransformer(ProceduralTransformer):
     """Transforms toward T-SQL (SQL Server)."""
 
     target_name = "tsql"
+
+    #: ``a - b`` between two identifiers (used to rewrite date subtraction).
+    _SUBTRACT_RE = re.compile(r"(@?\w+)\s*-\s*(@?\w+)")
+
+    def _fix_raw_sql_target(self, sql: str) -> str:
+        # T-SQL has no date ``-`` operator (error 8117 / 257). ``d2 - d1`` over
+        # two DATE/DATETIME vars/params becomes ``DATEDIFF(DAY, d1, d2)`` (days
+        # from d1 to d2), matching the source's date-difference semantics.
+        if not self._date_vars:
+            return sql
+
+        def repl(m: re.Match[str]) -> str:
+            a, b = m.group(1), m.group(2)
+            if a in self._date_vars and b in self._date_vars:
+                return f"DATEDIFF(DAY, {b}, {a})"
+            return m.group(0)
+
+        return self._SUBTRACT_RE.sub(repl, sql)
 
     def _alter_becomes_create(self) -> bool:
         # T-SQL keeps ALTER PROCEDURE as-is.

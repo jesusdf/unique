@@ -156,6 +156,22 @@ class TestOracleParameterTypes:
         # Only *parameters* lose constraints; column DDL keeps them.
         assert "NVARCHAR2(50)" in out
 
+    def test_date_subtraction_becomes_datediff(self) -> None:
+        # T-SQL has no date '-' operator; d2 - d1 over two DATE params must
+        # become DATEDIFF(DAY, d1, d2) (days from d1 to d2).
+        pg = (
+            "CREATE FUNCTION fn_days_between(d1 DATE, d2 DATE) RETURNS INTEGER\n"
+            "AS $$ BEGIN RETURN d2 - d1; END $$ LANGUAGE plpgsql;"
+        )
+        ora = (
+            "CREATE FUNCTION fn_days_between(d1 DATE, d2 DATE) RETURN NUMBER IS\n"
+            "BEGIN\n    RETURN d2 - d1;\nEND;\n/"
+        )
+        for src, fn in (("postgresql", pg), ("oracle", ora)):
+            out = self.t.transpile(fn, src, "tsql").sql
+            assert "DATEDIFF(DAY, @d1, @d2)" in out, src
+            assert "@d2 - @d1" not in out, src
+
     def test_unconstrained_decimal_becomes_number(self) -> None:
         # A bare Oracle DECIMAL is NUMBER(38, 0) and rounds to an integer. Once
         # the (p, s) is stripped for a parameter/RETURN, DECIMAL must become
