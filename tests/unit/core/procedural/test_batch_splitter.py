@@ -25,6 +25,17 @@ class TestTSQLSplitting:
         batches = BatchSplitter.split(sql, "tsql")
         assert len(batches) == 2
 
+    def test_print_and_set_var_are_procedural(self) -> None:
+        from unique.core.batch_splitter import BatchType, classify_batch
+
+        # PRINT and a ``SET @var = …`` assignment are procedural (converted),
+        # while a session option like SET NOEXEC / ANSI_PADDING is documented.
+        assert classify_batch("PRINT 'hi'", "tsql") is BatchType.PROCEDURAL
+        assert classify_batch("SET @v = 5", "tsql") is BatchType.PROCEDURAL
+        assert classify_batch("SET NOEXEC ON", "tsql") is BatchType.SET_OPTION
+        assert classify_batch("SET ANSI_PADDING ON", "tsql") is BatchType.SET_OPTION
+        assert classify_batch("SET NOCOUNT ON", "tsql") is BatchType.SET_OPTION
+
     def test_split_on_lowercase_go(self) -> None:
         # GO is a case-insensitive batch terminator; a lowercase ``go`` after an
         # EXEC must not be absorbed into the statement.

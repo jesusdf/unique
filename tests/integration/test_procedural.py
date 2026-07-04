@@ -403,6 +403,33 @@ class TestStandaloneExec:
         assert "END;" in out.upper()
 
 
+class TestTopLevelPrintAndSet:
+    """A standalone (top-level) PRINT / ``SET @var = …`` is procedural: PRINT
+    becomes each engine's message form and the assignment is translated, instead
+    of a DML 'Unhandled expression' carrier."""
+
+    def test_print_to_oracle(self) -> None:
+        out = _transpile("PRINT 'hi'", "tsql", "oracle")
+        assert "DBMS_OUTPUT.PUT_LINE('hi')" in out
+        assert "-- UNIQUE:" not in out
+
+    def test_print_to_postgresql_is_wrapped(self) -> None:
+        # RAISE NOTICE is PL/pgSQL-only, so it needs the DO $$ … $$ wrapper.
+        out = _transpile("PRINT 'hi'", "tsql", "postgresql")
+        assert "DO $$" in out
+        assert "RAISE NOTICE '%', 'hi'" in out
+
+    def test_print_to_mysql_is_bare_select(self) -> None:
+        out = _transpile("PRINT 'hi'", "tsql", "mysql")
+        assert "SELECT 'hi'" in out
+        assert "DO $$" not in out
+
+    def test_set_var_assignment_translated(self) -> None:
+        out = _transpile("DECLARE @v INT;\nSET @v = 5", "tsql", "oracle")
+        assert "V_V := 5" in out
+        assert "-- UNIQUE:" not in out
+
+
 class TestExecNamedArgs:
     """A T-SQL ``EXEC proc @name = value`` uses named-parameter syntax; Oracle and
     PostgreSQL spell it ``proc(name => value)`` — the ``@`` sigil dropped and the
