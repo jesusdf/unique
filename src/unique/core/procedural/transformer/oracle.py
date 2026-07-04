@@ -101,6 +101,10 @@ class OracleTransformer(ProceduralTransformer):
 
         return self._CAST_CONSTRAINED_RE.sub(_unconstrained_cast_type, sql)
 
+    def _named_arg_op(self) -> str | None:
+        # Oracle passes a procedure's named argument as ``name => value``.
+        return "=>"
+
     def _trigger_new_ref(self) -> str:
         return ":NEW."
 

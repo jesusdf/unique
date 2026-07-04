@@ -25,6 +25,14 @@ class TestTSQLSplitting:
         batches = BatchSplitter.split(sql, "tsql")
         assert len(batches) == 2
 
+    def test_split_on_lowercase_go(self) -> None:
+        # GO is a case-insensitive batch terminator; a lowercase ``go`` after an
+        # EXEC must not be absorbed into the statement.
+        sql = "EXEC myproc @a=1\ngo\nSELECT 2\nGo"
+        batches = [b for b in BatchSplitter.split(sql, "tsql") if not b.is_empty]
+        assert len(batches) == 2
+        assert "go" not in batches[0].sql.lower()
+
 
 class TestOracleSplitting:
     def test_split_on_slash(self) -> None:

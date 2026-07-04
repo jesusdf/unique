@@ -1091,11 +1091,27 @@ class ProceduralTransformer:
         return ExceptionBlock(handlers=handlers)
 
     def _transform_execute(self, node: ExecuteStatement) -> ASTNode:
-        new_expr = self._transform_node(node.sql_expression)
+        expr = node.sql_expression
+        op = self._named_arg_op()
+        if op and isinstance(expr, RawSQL):
+            # A T-SQL ``EXEC proc @param = value`` uses named-parameter syntax;
+            # Oracle/PostgreSQL spell it ``proc(param => value)``. Convert the LHS
+            # parameter names (dropping the ``@`` sigil) *before* the generic
+            # ``@var → V_var`` rename mangles them into local-variable names; an
+            # RHS variable value keeps its own transformation.
+            rewritten = re.sub(r"@(\w+)\s*=(?![=>])\s*", rf"\1 {op} ", expr.sql)
+            expr = RawSQL(sql=rewritten, reason=expr.reason)
+        new_expr = self._transform_node(expr)
         new_params = tuple(self._transform_node(p) for p in node.params)
         return ExecuteStatement(
             sql_expression=new_expr, params=new_params, immediate=node.immediate
         )
+
+    def _named_arg_op(self) -> str | None:
+        """The named-argument operator in a procedure call, or ``None`` when the
+        target has no named-argument syntax. Oracle/PostgreSQL use ``=>``; T-SQL
+        keeps ``@name = value`` and MySQL's CALL is positional-only."""
+        return None
 
     def _supports_top_level_anonymous_block(self) -> bool:
         """Whether the target can run a wrapped anonymous procedural block at the
