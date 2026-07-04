@@ -19,6 +19,28 @@ class TestTranspiler:
         assert "SELECT" in result.sql
         assert "users" in result.sql
 
+    def test_join_parts_glues_comment_to_next(self, transpiler: Transpiler) -> None:
+        # _join_parts accumulates pieces and joins once (O(n) — a prior O(n²)
+        # ``out += …`` dominated huge scripts). A comment part glues to the
+        # following executable part with a newline (no batch separator), while
+        # two executable parts get the target's separator.
+        parts = [("-- note", True), ("SELECT 1", False), ("SELECT 2", False)]
+        out = transpiler._join_parts(parts, "postgresql")
+        assert out == "-- note\nSELECT 1\n\nSELECT 2"
+        # T-SQL uses GO between executable parts, still no GO after the comment.
+        out_tsql = transpiler._join_parts(parts, "tsql")
+        assert out_tsql == "-- note\nSELECT 1\nGO\n\nSELECT 2"
+
+    def test_repeated_lossy_statements_scale(self, transpiler: Transpiler) -> None:
+        # Many identical carriers must not blow up (the carrier↔warning
+        # reconciliation is now deduped per unique fragment): every occurrence is
+        # still emitted, and the run completes without O(n²) reconciliation.
+        stmt = "EXEC sys.sp_addextendedproperty @name=N'x', @value=N'y'"
+        script = "\nGO\n".join([stmt] * 200)
+        result = transpiler.transpile(script, source="tsql", target="oracle")
+        # Every occurrence is preserved (none dropped by the dedup).
+        assert result.sql.count("sp_addextendedproperty") >= 200
+
     def test_system_procedure_becomes_comment(self, transpiler: Transpiler) -> None:
         result = transpiler.transpile(
             "EXEC sys.sp_addextendedproperty @name=N'x', @value=N'y'",

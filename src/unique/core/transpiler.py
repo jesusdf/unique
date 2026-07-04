@@ -414,6 +414,12 @@ class Transpiler:
             all_warnings: list[TransformWarning] = []
             all_unsupported: list[str] = []
             output_parts: list[tuple[str, bool]] = []  # (sql, is_comment)
+            # Carrier fragments already reconciled against the warnings, so a
+            # fragment repeated across thousands of batches (a big migration dump)
+            # is checked once, not O(carriers × warnings) — that reconciliation
+            # was the dominant super-linear cost on very large scripts.
+            reconciled_frags: set[str] = set()
+            unsupported_seen: set[str] = set()
             # Running T-SQL QUOTED_IDENTIFIER state: under OFF, double-quoted
             # tokens are string literals, so subsequent batches are preprocessed
             # to convert "..." -> '...' before parsing.
@@ -501,15 +507,22 @@ class Transpiler:
                 # an unsupported entry when an executable batch was reduced to
                 # comments (i.e. the statement was dropped from the output).
                 if batch.batch_type != BatchType.COMMENT:
-                    existing = [w.message for w in all_warnings]
-                    for frag in _carrier_fragments(terminated):
-                        if not _warning_covers(frag, existing):
-                            all_warnings.append(
-                                _warn(frag, "lossy_conversion", source, target)
-                            )
-                            existing.append(frag)
-                        if is_comment and frag not in all_unsupported:
-                            all_unsupported.append(frag)
+                    frags = _carrier_fragments(terminated)
+                    new_frags = [f for f in frags if f not in reconciled_frags]
+                    if new_frags:
+                        existing = [w.message for w in all_warnings]
+                        for frag in new_frags:
+                            reconciled_frags.add(frag)
+                            if not _warning_covers(frag, existing):
+                                all_warnings.append(
+                                    _warn(frag, "lossy_conversion", source, target)
+                                )
+                                existing.append(frag)
+                    if is_comment:
+                        for frag in frags:
+                            if frag not in unsupported_seen:
+                                unsupported_seen.add(frag)
+                                all_unsupported.append(frag)
 
             output_sql = self._join_parts(output_parts, target)
 
@@ -547,16 +560,20 @@ class Transpiler:
         if not parts:
             return ""
         separator = self._get_batch_separator(target)
-        out = parts[0][0]
+        # Accumulate pieces and join once: repeated ``out += …`` copies the whole
+        # (multi-MB) accumulator each time — O(n²) — which dominated very large
+        # scripts. The trailing-newline rstrip only affects the previous piece.
+        pieces = [parts[0][0]]
         for i in range(1, len(parts)):
             prev_is_comment = parts[i - 1][1]
             text, _ = parts[i]
             if prev_is_comment:
                 # Glue the comment to the following part with a newline.
-                out = out.rstrip("\n") + "\n" + text
+                pieces[-1] = pieces[-1].rstrip("\n")
+                pieces.append("\n" + text)
             else:
-                out += separator + text
-        return out
+                pieces.append(separator + text)
+        return "".join(pieces)
 
     def _transpile_procedural(
         self,
