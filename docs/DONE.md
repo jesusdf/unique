@@ -631,3 +631,57 @@ feature — the aggregating trigger across the statement-level / compound /
 mutating-table boundary. `oracle→postgresql` now diverges *only* on the values
 those compound triggers would maintain (`invoice.total`, `is_paid`), confirming
 everything else is correct (see TODO §1).
+
+## 14. Aggregation-trigger translation — all 12 reachable FE pairs green (P1)
+
+The last 3 red functional-equivalence pairs all reduced to one feature: an
+*aggregation* trigger (re-aggregate a parent row when child rows change) crossing
+the statement-level / compound / mutating-table boundary. The mutating-table
+restriction is **Oracle-specific** — PostgreSQL and MySQL let a row-level trigger
+re-read the table it fires on — which set the translation strategy. All TDD,
+gate-clean; the local `docker-compose.test.yaml` matrix is now **12/12 reachable
+pairs green** (the 4 T-SQL-*target* pairs still skip — no `pyodbc`).
+
+**`oracle→postgresql` — lower the COMPOUND trigger to a PG row-level trigger.**
+An Oracle COMPOUND TRIGGER exists only to dodge ORA-04091; PostgreSQL doesn't
+need it. The parser recognizes the "collect `:NEW.<fk>` in AFTER EACH ROW,
+re-aggregate in an AFTER STATEMENT `FOR v IN 1 .. n LOOP`" idiom and stores the
+loop's statement(s) — with the collection re-read `coll(v)` rewritten to the
+collected `:NEW.<fk>` — in `CreateTriggerStatement.compound_row_body`. For the
+PostgreSQL target the transformer lowers it to a plain row-level AFTER trigger
+(the existing PG emitter renders the trigger function + binding; the embedded-DML
+pipeline maps `:NEW.`→`NEW.` and `NVL`→`COALESCE`). Oracle (shares the
+restriction) and MySQL (documented) keep the `-- UNIQUE:` carrier; an unmatched
+body falls back to the carrier.
+
+**`mysql→oracle` — synthesize a COMPOUND trigger from a row-level re-read.** The
+inverse: a MySQL row-level AFTER trigger whose body reads its own triggering
+table hits ORA-04091 as a plain Oracle row-level trigger. The Oracle emitter
+detects the hazard (a row-level AFTER trigger reading/writing its own table in a
+FROM/JOIN/UPDATE/INTO position) and emits a COMPOUND TRIGGER: a PLS_INTEGER-
+indexed collection per distinct `:NEW.`/`:OLD.` key (typed via
+`<table>.<col>%TYPE`, so no catalog is needed), filled in AFTER EACH ROW, and the
+body re-keyed to the collection in a `FOR` loop in AFTER STATEMENT.
+
+**`oracle→mysql` — documented divergence (the agreed MySQL story).** MySQL can
+express the aggregation as a row-level re-read, but per the design decision the
+compound body stays a `-- UNIQUE:` carrier and its maintained values
+(`invoice.total`, `is_paid`) are excluded from the assertion via the harness's
+new explicit `_DOCUMENTED_TRIGGER_DIVERGENCE` set (replacing the ad-hoc
+`source in (tsql, postgresql) and target in (mysql, oracle)` guard).
+
+**Two bugs surfaced en route (both were latent — the pairs errored before these
+code paths ran):**
+
+- [x] **Oracle row-level `:NEW.col := expr` → MySQL `SET NEW.col = expr`.** The
+      lexer emits `:` as a bare COLON, so the assignment fell to embedded DML and
+      only `:NEW.`→`NEW.` was regex-normalized, leaving Oracle's `:=` — a syntax
+      error on MySQL (PostgreSQL tolerated it). The PL/SQL dispatcher now parses a
+      `:NEW.`/`:OLD.`-led `:=` statement as an AssignmentStatement, and a raw-SQL
+      assignment value normalizes `:NEW.`/`:OLD.` like embedded DML does.
+- [x] **Bare Oracle `DECIMAL`/`NUMERIC`/`DEC` → `NUMBER` in parameter/RETURN
+      position.** Unconstraining a formal type (PLS-00103) stripped `DECIMAL(12,2)`
+      to a bare `DECIMAL`, which is `NUMBER(38,0)` and silently rounds to an
+      integer — so a transpiled `fn_tax` returned 6 instead of 5.55 and the
+      aggregated total came back 61.50 instead of 61.05. `_unconstrained` now maps
+      the bare numeric names to `NUMBER` (keeps the value's own scale).
