@@ -23,14 +23,23 @@ from unique.core.procedural.emitter.base import ProceduralEmitter, register_emit
 
 _SIZE_RE = re.compile(r"\(\s*\d+\s*(?:,\s*\d+\s*)?\)")
 
+# A *bare* Oracle DECIMAL/NUMERIC/DEC is NUMBER(38, 0) — it silently rounds to an
+# integer. Once the length/precision is stripped for a parameter/RETURN position,
+# these must become NUMBER (unconstrained, so the value keeps its own scale);
+# otherwise e.g. a tax function returning 5.55 comes back as 6 (PLS-00103 aside).
+_BARE_NUMERIC_TO_NUMBER = {"DECIMAL": "NUMBER", "NUMERIC": "NUMBER", "DEC": "NUMBER"}
+
 
 def _unconstrained(data_type: str) -> str:
     """Strip length/precision from a type for parameter/RETURN position.
 
     Oracle rejects constrained types on formal parameters and function
-    return clauses (PLS-00103); ``NUMBER(5, 2)`` must become ``NUMBER``.
+    return clauses (PLS-00103); ``NUMBER(5, 2)`` must become ``NUMBER``. A bare
+    ``DECIMAL``/``NUMERIC``/``DEC`` further becomes ``NUMBER`` so it does not
+    default to integer scale.
     """
-    return _SIZE_RE.sub("", data_type).strip()
+    stripped = _SIZE_RE.sub("", data_type).strip()
+    return _BARE_NUMERIC_TO_NUMBER.get(stripped.upper(), stripped)
 
 
 class OracleEmitter(ProceduralEmitter):
@@ -127,6 +136,98 @@ class OracleEmitter(ProceduralEmitter):
         """Oracle separates trigger events with ``OR`` (``INSERT OR UPDATE``);
         a comma list is a syntax error (ORA-00969)."""
         return " OR ".join(events) if events else "UPDATE"
+
+    #: A ``:NEW.col`` / ``:OLD.col`` pseudo-record reference in emitted PL/SQL.
+    _ROW_REF_RE = re.compile(r"(?i):\s*(NEW|OLD)\s*\.\s*(\w+)")
+
+    def _emit_trigger(self, node: CreateTriggerStatement) -> str:
+        # A row-level AFTER trigger whose body re-reads its own triggering table
+        # (a child→parent re-aggregation, legal on MySQL/PostgreSQL) raises
+        # ORA-04091 (mutating table) on Oracle. Synthesize a COMPOUND TRIGGER
+        # that collects the affected keys per row and re-aggregates once in AFTER
+        # STATEMENT, when the table is no longer mutating.
+        if (
+            not node.compound
+            and not node.execute_function
+            and node.for_each == "ROW"
+            and node.timing.upper() == "AFTER"
+        ):
+            synthesized = self._synthesize_mutating_safe_trigger(node)
+            if synthesized is not None:
+                return synthesized
+        return super()._emit_trigger(node)
+
+    def _body_reads_table(self, body_text: str, table: str) -> bool:
+        """Whether the trigger body reads/writes its own triggering *table* (in a
+        FROM/JOIN/UPDATE/INTO position, not via the ``:NEW.``/``:OLD.`` record) —
+        the mutating-table hazard on a row-level Oracle trigger."""
+        bare = table.strip('[]"`').split(".")[-1]
+        return bool(
+            re.search(
+                rf"(?i)\b(?:FROM|JOIN|UPDATE|INTO)\s+{re.escape(bare)}\b", body_text
+            )
+        )
+
+    def _synthesize_mutating_safe_trigger(
+        self, node: CreateTriggerStatement
+    ) -> str | None:
+        """Rewrite a mutating-table-prone row-level trigger into a COMPOUND
+        TRIGGER, or ``None`` when it is not the recognized re-aggregation shape
+        (no self-read, or no ``:NEW.``/``:OLD.`` key to collect)."""
+        self._indent_level = 0
+        body_text = "\n".join(self._emit_node(s) for s in node.body).strip()
+        if not self._body_reads_table(body_text, node.table):
+            return None
+        # Collect the distinct :NEW./:OLD. column refs (first-appearance order),
+        # each backed by its own PLS_INTEGER-indexed collection.
+        keys: dict[tuple[str, str], str] = {}
+        for m in self._ROW_REF_RE.finditer(body_text):
+            k = (m.group(1).upper(), m.group(2))
+            if k not in keys:
+                keys[k] = f"unique_key_{len(keys) + 1}"
+        if not keys:
+            return None
+        loop_body = self._ROW_REF_RE.sub(
+            lambda m: f"{keys[(m.group(1).upper(), m.group(2))]}(unique_i)", body_text
+        )
+        name = self._qualified_name(node.schema, node.name)
+        events = self._join_trigger_events(node.events)
+        bare_table = node.table.strip('[]"`').split(".")[-1]
+
+        decls: list[str] = []
+        collects = ["        g_n := g_n + 1;"]
+        for idx, ((kind, col), var) in enumerate(keys.items(), start=1):
+            typ = f"unique_kt_{idx}"
+            decls.append(
+                f"    TYPE {typ} IS TABLE OF {bare_table}.{col}%TYPE "
+                "INDEX BY PLS_INTEGER;"
+            )
+            decls.append(f"    {var} {typ};")
+            collects.append(f"        {var}(g_n) := :{kind}.{col};")
+        decls.append("    g_n PLS_INTEGER := 0;")
+
+        loop_lines = [f"            {line}" for line in loop_body.split("\n")]
+        prefix = "CREATE OR REPLACE " if node.or_replace else "CREATE "
+        lines = [
+            f"{prefix}TRIGGER {name}",
+            f"FOR {events} ON {node.table}",
+            "COMPOUND TRIGGER",
+            *decls,
+            "",
+            "    AFTER EACH ROW IS",
+            "    BEGIN",
+            *collects,
+            "    END AFTER EACH ROW;",
+            "",
+            "    AFTER STATEMENT IS",
+            "    BEGIN",
+            "        FOR unique_i IN 1 .. g_n LOOP",
+            *loop_lines,
+            "        END LOOP;",
+            "    END AFTER STATEMENT;",
+            "END;",
+        ]
+        return "\n".join(lines)
 
     def _trigger_header(
         self,
