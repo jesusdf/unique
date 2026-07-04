@@ -192,8 +192,12 @@ jobs:
 
       - name: Install dependencies and DB drivers
         run: |
+          # pymssql (bundled FreeTDS) lets the functional-equivalence harness
+          # reach SQL Server without the MS ODBC driver, so it is unaffected by a
+          # flaky msodbcsql18 apt install; the syntax step still uses pyodbc.
           pip install -e ".[dev]" "psycopg[binary]>=3.1.0" \
-            "mysql-connector-python>=8.3.0" "pyodbc>=5.1.0" "oracledb>=2.0.0"
+            "mysql-connector-python>=8.3.0" "pyodbc>=5.1.0" "oracledb>=2.0.0" \
+            "pymssql>=2.3.0"
 
       - name: Ensure Microsoft ODBC Driver 18
         run: |
@@ -313,14 +317,10 @@ jobs:
           exit $rc
 
       - name: Run functional-equivalence harness (4x4 matrix)
-        # Non-gating until the full 16-pair matrix is confirmed green against the
-        # real engines: the repo holds only the four native fixtures, and this
-        # step transpiles each source dialect to the other three on the fly, so
-        # the 12 cross-dialect pairs may still surface per-engine wrinkles (a
-        # procedural construct that needs an emitter fix). The T-SQL->{PG,MySQL,
-        # Oracle} column was already confirmed green. Flip to gating (remove
-        # continue-on-error) once all 16 pass. See tests/functional_equivalence/HARNESS.md.
-        continue-on-error: true
+        # Gating: all 16 (source, target) pairs are confirmed live-green (the repo
+        # holds only the four native fixtures; source != target is transpiled on
+        # the fly and asserted against the engine-agnostic expected_state.yaml).
+        # See tests/functional_equivalence/HARNESS.md and docs/DONE.md §16.
         env:
           # Reuses the same engines already started for this job. For every
           # (source, target) pair the harness runs the native fixture (source ==
