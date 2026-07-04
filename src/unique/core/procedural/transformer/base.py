@@ -702,10 +702,16 @@ class ProceduralTransformer:
         )
 
     def _transform_trigger(self, node: CreateTriggerStatement) -> ASTNode:
-        # An Oracle COMPOUND TRIGGER has no mechanical cross-engine translation;
-        # the emitter documents it. Record the loss and keep the flag (the
-        # parser left the body empty), skipping the body-rewrite path.
+        # An Oracle COMPOUND TRIGGER exists to dodge the mutating-table error
+        # (ORA-04091) when re-aggregating a parent row after child rows change.
+        # A target without that restriction (PostgreSQL) runs the same
+        # aggregation as a plain row-level AFTER trigger that re-reads the table;
+        # lower the recognized idiom to it. Targets that either share the
+        # restriction (Oracle) or have no equivalent (MySQL) keep a documented
+        # carrier.
         if node.compound:
+            if self._target_lowers_compound_to_row_level() and node.compound_row_body:
+                return self._lower_compound_trigger(node)
             if self._source != self._target:
                 self._warnings.append(
                     f"Oracle COMPOUND TRIGGER {node.name!r} on {node.table} has "
@@ -758,6 +764,37 @@ class ProceduralTransformer:
             set_based_transition=set_based,
             execute_function=node.execute_function,
             referencing=node.referencing,
+        )
+
+    def _target_lowers_compound_to_row_level(self) -> bool:
+        """Whether the target can run an Oracle COMPOUND TRIGGER's re-aggregation
+        as a plain row-level AFTER trigger. True only where a trigger may re-read
+        its own table without the mutating-table error — PostgreSQL. (MySQL also
+        allows the re-read but the aggregation is a documented divergence there;
+        Oracle shares the restriction and keeps the compound form.)"""
+        return self._target == "postgresql"
+
+    def _lower_compound_trigger(
+        self, node: CreateTriggerStatement
+    ) -> CreateTriggerStatement:
+        """Lower a recognized Oracle COMPOUND TRIGGER to a row-level AFTER trigger
+        whose body is the AFTER STATEMENT aggregation keyed on the collected
+        ``:NEW.<fk>`` (see the parser's ``_compound_row_body``)."""
+        prev_in_trigger = self._in_trigger
+        self._in_trigger = True
+        try:
+            new_body = self._transform_body(node.compound_row_body)
+        finally:
+            self._in_trigger = prev_in_trigger
+        return CreateTriggerStatement(
+            name=self._translate_ident_quoting(node.name) or node.name,
+            table=self._translate_ident_quoting(node.table) or node.table,
+            timing="AFTER",
+            events=node.events,
+            for_each="ROW",
+            body=new_body,
+            or_replace=self._trigger_forces_or_replace() or node.or_replace,
+            schema=self._target_schema(node.schema),
         )
 
     def _target_supports_delegating_trigger(self) -> bool:

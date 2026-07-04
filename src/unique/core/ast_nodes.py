@@ -815,9 +815,16 @@ class CreateTriggerStatement(ASTNode):
     execute_function: str | None = None
     referencing: str = ""
     #: An Oracle COMPOUND TRIGGER (AFTER EACH ROW + AFTER STATEMENT sections
-    #: over a PL/SQL collection). No mechanical cross-engine equivalent yet, so
-    #: it is emitted as a documented ``-- UNIQUE:`` carrier rather than mangled.
+    #: over a PL/SQL collection). On a target with a mutating-table restriction
+    #: (Oracle) or no equivalent (MySQL) it is emitted as a documented
+    #: ``-- UNIQUE:`` carrier rather than mangled.
     compound: bool = False
+    #: For the recognized "collect the affected key in AFTER EACH ROW, re-aggregate
+    #: in AFTER STATEMENT" idiom, the AFTER STATEMENT body with the collection
+    #: reference rewritten to the collected ``:NEW.<fk>``. A target without a
+    #: mutating-table restriction (PostgreSQL) lowers this to a plain row-level
+    #: AFTER trigger; empty when the idiom is not recognized (carrier fallback).
+    compound_row_body: tuple[ASTNode, ...] = ()
 
 
 @dataclass(frozen=True)
