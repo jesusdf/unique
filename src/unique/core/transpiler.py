@@ -104,6 +104,12 @@ def _extract_exists_guard(sql: str) -> str | None:
     if depth != 0:
         return None
     rest = sql[i + 1 :].strip()
+    # A guard commonly has an ELSE branch — usually a diagnostic ``PRINT '… already
+    # exists'``. Keep only the THEN branch; cut at a line-starting ELSE (so an
+    # ELSE inside a CASE expression is left intact).
+    else_cut = re.search(r"(?im)^\s*ELSE\b", rest)
+    if else_cut:
+        rest = rest[: else_cut.start()].strip()
     unwrapped = re.match(r"(?is)^BEGIN\b(.*)\bEND\b\s*;?\s*$", rest)
     if unwrapped:
         rest = unwrapped.group(1).strip()
@@ -278,6 +284,41 @@ def _rewrite_tsql_default_constraint(sql: str) -> str:
 _ORACLE_ALTER_DEFAULT_RE = re.compile(
     r"(?i)\bALTER\s+COLUMN\s+(?P<col>[\w\[\]\".]+)\s+SET\s+DEFAULT\b"
 )
+
+
+# A (possibly schema-qualified) identifier: a [bracketed] name may hold any char
+# but ']' (SSMA constraint names embed '$'), a "quoted" one any but '"'.
+_TSQL_ID = r'(?:\[[^\]]+\]|"[^"]+"|[\w$]+)'
+_TSQL_QNAME = rf"(?:{_TSQL_ID}\.)*{_TSQL_ID}"
+
+# T-SQL enables/disables constraint checking: ``ALTER TABLE t [WITH [NO]CHECK]
+# {CHECK|NOCHECK} CONSTRAINT {name|ALL}`` (SSMA emits these around bulk loads).
+_TSQL_CHECK_CONSTRAINT_RE = re.compile(
+    rf"(?is)^(?P<head>\s*ALTER\s+TABLE\s+{_TSQL_QNAME})\s+"
+    r"(?:WITH\s+(?:NO)?CHECK\s+)?(?P<op>NOCHECK|CHECK)\s+CONSTRAINT\s+"
+    rf"(?P<name>{_TSQL_QNAME}|ALL)\s*;?\s*$"
+)
+
+
+def _rewrite_tsql_constraint_state(sql: str, target: str) -> str | None:
+    """``ALTER TABLE t {CHECK|NOCHECK} CONSTRAINT c`` -> the target's
+    enable/disable form. Returns ``None`` if *sql* is not that shape, or ``""``
+    when the target has no equivalent (caller emits a restorable note)."""
+    m = _TSQL_CHECK_CONSTRAINT_RE.match(sql)
+    if not m:
+        return None
+    head, op, name = m.group("head"), m.group("op").upper(), m.group("name")
+    if name.upper() == "ALL":
+        return ""  # no clean per-target "all constraints" form
+    # We bypass sqlglot here, so convert the T-SQL [brackets] to bare identifiers
+    # (as sqlglot would for these targets); the note keeps the original.
+    head = re.sub(r"\[([^\]]+)\]", r"\1", head)
+    name = re.sub(r"\[([^\]]+)\]", r"\1", name)
+    if target == "oracle":
+        return f"{head} {'ENABLE' if op == 'CHECK' else 'DISABLE'} CONSTRAINT {name}"
+    if target == "postgresql" and op == "CHECK":
+        return f"{head} VALIDATE CONSTRAINT {name}"
+    return ""  # PostgreSQL NOCHECK / MySQL: no equivalent
 
 
 def _parses_in_target(sql: str, target: str) -> bool:
@@ -824,6 +865,36 @@ class Transpiler:
                         source,
                         target,
                     )
+                )
+
+        # T-SQL constraint check-state toggles (ALTER TABLE t CHECK/NOCHECK
+        # CONSTRAINT c): translate to the target's enable/disable, else keep a
+        # restorable note. Runs before physical stripping (which would eat the
+        # leading WITH CHECK) and bypasses sqlglot, which cannot parse the form.
+        if (
+            source == "tsql"
+            and target != "tsql"
+            and re.match(r"(?is)^\s*ALTER\s+TABLE\b", sql)
+        ):
+            state = _rewrite_tsql_constraint_state(sql, target)
+            if state:
+                return TranspileResult(
+                    sql=state + ";", warnings=warnings, unsupported=unsupported
+                )
+            if state == "":
+                return TranspileResult(
+                    sql=f"/* UNIQUE: {sql.strip().rstrip(';')} -- tsql-only, no "
+                    f"{target} equivalent (constraint check-state) */",
+                    warnings=[
+                        _warn(
+                            "T-SQL constraint check-state toggle preserved as a "
+                            "restorable note",
+                            "constraint_state",
+                            source,
+                            target,
+                        )
+                    ],
+                    unsupported=unsupported,
                 )
 
         # System stored-procedure calls (e.g. EXEC sp_addextendedproperty,
