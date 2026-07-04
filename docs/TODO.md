@@ -4,7 +4,8 @@ This document tracks **outstanding** work, ordered by priority. Completed work
 has been archived in [`docs/DONE.md`](DONE.md) (with the detailed why/how of
 each fix); `docs/STATUS.md` summarizes the project state at a higher level.
 
-Last reviewed: 2026-07-04.
+Last reviewed: 2026-07-04 (aggregation-trigger translation — all 12 reachable
+functional-equivalence pairs live-green; see DONE §14).
 
 ## Legend
 
@@ -209,46 +210,28 @@ High-level plan (details in that folder):
         confirmed green on real engines (the T-SQL->{PG,MySQL,Oracle} column was
         already green). Renamed `canonical.sql` -> `tsql.sql` so the four fixtures
         are symmetric.
-  - [ ] **Confirm the 12 cross-dialect pairs on real engines**, then remove
-        `continue-on-error` to make the full 4×4 gating. **Live status
-        2026-07-03 (local `docker-compose.test.yaml`: PostgreSQL 16 + MySQL 8 +
-        Oracle Free 23): 9/12 reachable pairs green.** Oracle is now live locally
-        (`system/oracle` @ `FREEPDB1`), so all Oracle-target and Oracle-source
-        pairs run. Green: tsql→{pg,mysql,oracle}, postgresql→{pg,mysql,oracle},
-        mysql→{pg,mysql}, oracle→oracle. The 4 tsql-*target* pairs are still
-        skipped (no local `pyodbc`/MS ODBC driver). Real MySQL 8 (not the old
-        remote MariaDB) needs `--log-bin-trust-function-creators=1` to let the
-        non-SUPER `unique` user create routines/triggers — added to the compose
-        file. Remaining red: the 3 trigger-heavy pairs below.
-        - [x] mysql→postgresql, postgresql→mysql, **tsql→oracle,
-          postgresql→oracle** (**live green**) — the 3 new-green Oracle pairs and
-          the full list of emitter/harness fixes are archived in **DONE §13**.
-        - [ ] oracle→postgresql / oracle→mysql, mysql→oracle (**still red — the
-          same trigger-aggregation feature**). Row-level trigger translation is
-          now correct both directions, and the transpiled Oracle schema+scenario
-          runs end-to-end (DONE §13): `oracle→postgresql` now diverges **only**
-          on the values the compound triggers would maintain (`invoice.total`
-          expected 61.05/39.05 got 0.00; `is_paid`), confirming everything else
-          is correct. The one remaining feature:
-          - **Aggregating trigger across the statement-level / compound /
-            mutating-table boundary.** The canonical fixture maintains
-            `invoice.total` by re-aggregating `invoice_line` when lines change.
-            Each engine spells this differently: T-SQL/PG statement-level
-            (transition tables), Oracle a COMPOUND TRIGGER, MySQL a row-level
-            trigger (allowed to query the same table). Cross-translating them is
-            unimplemented, so: oracle→pg emits `variable "compound" has
-            pseudo-type trigger`; mysql→oracle hits Oracle's mutating-table rule
-            (ORA-04091) because the MySQL row-level rollup can't be a plain
-            Oracle row-level trigger; oracle→mysql is a documented divergence
-            (MySQL has no statement-level/transition-table form at all). Needs:
-            parse the Oracle compound trigger; synthesize a compound trigger for
-            the Oracle *target* from a row-level aggregating source; and decide
-            the MySQL story (likely extend the harness `ignore_triggers` to the
-            aggregation trigger on engines that can't express it). Substantial —
-            own work item. (Also small: MySQL 2-arg `DATEDIFF(d2,d1)` → Oracle
-            `(d2 - d1)` in a routine body.)
-        Oracle-**target** pairs are now live locally; **tsql-target** pairs still
-        need `pyodbc` + the MS ODBC driver installed (see HARNESS.md runbook).
+  - [x] **All 12 reachable cross-dialect pairs are live-green** (local
+        `docker-compose.test.yaml`: PostgreSQL 16 + MySQL 8 + Oracle Free 23,
+        `system/oracle` @ `FREEPDB1`). The last 3 red pairs went green with the
+        aggregation-trigger translation (**DONE §14**):
+        - `oracle→postgresql` — the Oracle COMPOUND trigger is lowered to a plain
+          PostgreSQL row-level AFTER trigger (PG has no mutating-table rule).
+        - `mysql→oracle` — a MySQL row-level re-read is synthesized into an Oracle
+          COMPOUND trigger (collection filled in AFTER EACH ROW, re-aggregated in
+          AFTER STATEMENT), dodging ORA-04091.
+        - `oracle→mysql` — the aggregation is a **documented divergence** (per the
+          agreed MySQL story): the compound body degrades to a `-- UNIQUE:`
+          carrier and its maintained values are excluded via
+          `_DOCUMENTED_TRIGGER_DIVERGENCE`; the rest of the script runs and the
+          state matches.
+        Also fixed en route: an Oracle row-level `:NEW.col := expr` now lowers to
+        `SET NEW.col = expr` on MySQL; a bare Oracle `DECIMAL`/`NUMERIC`/`DEC`
+        parameter/RETURN type (NUMBER(38,0), rounds to integer) now becomes
+        `NUMBER`.
+  - [ ] **Make the full 4×4 gating** — the local matrix is 12/12 reachable green,
+        so CI can drop `continue-on-error` **once the 4 tsql-*target* pairs run**
+        (they still skip everywhere without `pyodbc` + the MS ODBC driver; see
+        HARNESS.md). Pre-existing infra blocker, independent of the transpiler.
 
 Key design risks, captured for when we start:
 - **Determinism** is the central challenge — see the folder README for the list
