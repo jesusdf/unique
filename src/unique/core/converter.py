@@ -272,6 +272,26 @@ def harvest_identity_columns(sql: str) -> dict[str, str]:
     return result
 
 
+# Names (lowercased) of user-defined functions declared in the script. A T-SQL
+# scalar UDF call must be schema-qualified (``dbo.fn_tax(…)``) or it errors as an
+# unknown built-in; used to qualify calls when targeting T-SQL.
+USER_FUNCTIONS: contextvars.ContextVar[frozenset[str] | None] = contextvars.ContextVar(
+    "user_functions", default=None
+)
+
+_CREATE_FUNCTION_NAME_RE = re.compile(
+    r"(?im)^\s*CREATE\s+(?:OR\s+(?:REPLACE|ALTER)\s+)?FUNCTION\s+" r"([\w\[\]\"`.]+)"
+)
+
+
+def harvest_user_functions(sql: str) -> frozenset[str]:
+    """Collect the bare names of user-defined functions created in *sql*."""
+    names: set[str] = set()
+    for m in _CREATE_FUNCTION_NAME_RE.finditer(sql):
+        names.add(m.group(1).strip('[]"`').split(".")[-1].lower())
+    return frozenset(names)
+
+
 # Positional indexes of a stored procedure's date/time parameters (proc name
 # -> set of 0-based positions). Used to wrap an ISO date-string argument in an
 # Oracle CALL (create_invoice(2, '2024-02-01', …)) as an ANSI DATE literal,

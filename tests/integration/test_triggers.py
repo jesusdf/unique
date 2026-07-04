@@ -677,3 +677,62 @@ class TestOracleCompoundTrigger:
         assert "-- UNIQUE: Oracle COMPOUND TRIGGER" in r.sql
         assert "PLS_INTEGER" not in r.sql
         assert r.warnings or r.unsupported
+
+
+class TestRowLevelTriggerToTSql:
+    """T-SQL triggers are statement-level over ``inserted``/``deleted``; a
+    row-level source trigger (``FOR EACH ROW`` with NEW/OLD) is rewritten to that
+    form — a ``SET NEW.col`` becomes a set-based UPDATE of the affected rows, an
+    embedded UPDATE keyed on ``NEW.<fk>`` is scoped via ``inserted``."""
+
+    def test_new_assignment_becomes_setbased_update(self) -> None:
+        src = (
+            "CREATE TABLE invoice_line "
+            "(id INT AUTO_INCREMENT PRIMARY KEY, qty INT, "
+            "unit_price DECIMAL(10,2), line_total DECIMAL(12,2));\n"
+            "CREATE TRIGGER t BEFORE INSERT ON invoice_line FOR EACH ROW\n"
+            "BEGIN\n    SET NEW.line_total = NEW.qty * NEW.unit_price;\nEND"
+        )
+        out = _t(src, "mysql", "tsql")
+        assert "CREATE TRIGGER t ON invoice_line" in out
+        assert "AFTER INSERT" in out
+        assert "FOR EACH ROW" not in out
+        assert "UPDATE invoice_line SET line_total = qty * unit_price" in out
+        assert "WHERE id IN (SELECT id FROM inserted)" in out
+        assert "NEW." not in out
+
+    def test_embedded_update_keyed_on_new_fk_scoped_to_inserted(self) -> None:
+        src = (
+            "CREATE TABLE invoice (id INT AUTO_INCREMENT PRIMARY KEY, "
+            "total DECIMAL(12,2));\n"
+            "CREATE TABLE invoice_line (id INT AUTO_INCREMENT PRIMARY KEY, "
+            "invoice_id INT, line_total DECIMAL(12,2));\n"
+            "CREATE TRIGGER t AFTER INSERT ON invoice_line FOR EACH ROW\n"
+            "BEGIN\n"
+            "    UPDATE invoice inv SET total = (SELECT COALESCE(SUM(il.line_total)"
+            ", 0) FROM invoice_line il WHERE il.invoice_id = NEW.invoice_id) "
+            "WHERE inv.id = NEW.invoice_id;\nEND"
+        )
+        out = _t(src, "mysql", "tsql")
+        # Outer correlation scoped to inserted; a T-SQL UPDATE target takes no
+        # ``AS`` alias, so it refers to the table by name.
+        assert "invoice.id IN (SELECT invoice_id FROM inserted)" in out
+        assert "il.invoice_id = invoice.id" in out
+        assert "NEW." not in out
+        assert "UPDATE invoice AS" not in out
+
+    def test_scalar_udf_call_is_dbo_qualified(self) -> None:
+        src = (
+            "CREATE FUNCTION fn_tax(net DECIMAL(12,2)) RETURNS DECIMAL(12,2)\n"
+            "DETERMINISTIC\nBEGIN\n    RETURN net * 0.10;\nEND;\n"
+            "CREATE TABLE invoice (id INT AUTO_INCREMENT PRIMARY KEY, "
+            "total DECIMAL(12,2));\n"
+            "CREATE TABLE invoice_line (id INT AUTO_INCREMENT PRIMARY KEY, "
+            "invoice_id INT, line_total DECIMAL(12,2));\n"
+            "CREATE TRIGGER t AFTER INSERT ON invoice_line FOR EACH ROW\n"
+            "BEGIN\n"
+            "    UPDATE invoice inv SET total = fn_tax(inv.total) "
+            "WHERE inv.id = NEW.invoice_id;\nEND"
+        )
+        out = _t(src, "mysql", "tsql")
+        assert "dbo.fn_tax(" in out.replace("FN_TAX", "fn_tax")
