@@ -40,6 +40,10 @@ mssql = ["pyodbc>=5.0.0"]
 oracle = ["oracledb>=2.0.0"]
 postgresql = ["psycopg[binary]>=3.1.0"]
 mysql = ["mysql-connector-python>=8.3.0"]
+# pymssql bundles FreeTDS in its wheel, so it reaches SQL Server with no system
+# ODBC driver — used by the functional-equivalence harness where the MS ODBC
+# driver can't be installed (the harness prefers pyodbc when it is present).
+mssql-freetds = ["pymssql>=2.3.0"]
 # Convenience group installing all database drivers at once.
 db = [
     "pyodbc>=5.0.0",

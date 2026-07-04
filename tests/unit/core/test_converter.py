@@ -426,6 +426,30 @@ class TestMySQLDDLPortability:
         assert "UUID()" in out
 
 
+class TestTSQLTypePortability:
+    """Types that must be adapted when *targeting* T-SQL — surfaced by the live
+    SQL Server functional-equivalence pairs."""
+
+    def test_timestamp_becomes_datetime2(self) -> None:
+        # T-SQL TIMESTAMP is ROWVERSION (an auto binary value), not a datetime,
+        # and rejects a DEFAULT; a source TIMESTAMP column must become DATETIME2.
+        for src in ("postgresql", "oracle"):
+            nodes = parse_sql(
+                "CREATE TABLE t (created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)",
+                src,
+            )
+            out = emit_sql(nodes, "tsql").upper()
+            assert "DATETIME2" in out, src
+            assert "TIMESTAMP" not in out, src
+
+    def test_tinyint_display_width_dropped(self) -> None:
+        # MySQL's TINYINT(1) boolean idiom; T-SQL TINYINT takes no display width.
+        nodes = parse_sql("CREATE TABLE t (flag TINYINT(1) DEFAULT 0)", "mysql")
+        out = emit_sql(nodes, "tsql").upper()
+        assert "TINYINT" in out
+        assert "(1)" not in out
+
+
 class TestRawSQLEmission:
     """RawSQL passthrough must comment out every line, not just the first."""
 

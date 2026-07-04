@@ -335,10 +335,30 @@ def connect(dialect: str, url: str) -> Any:
 
         return _connect_oracle(url, oracledb)
     if dialect == "tsql":
+        return _connect_tsql(url)
+    raise ValueError(f"unknown dialect: {dialect}")
+
+
+def _connect_tsql(url: str) -> Any:
+    """Connect to SQL Server. A full ODBC connection string (``DRIVER={…};…``)
+    uses pyodbc + the MS ODBC driver (CI); a ``mssql://user:pass@host:port/db``
+    URL uses pymssql, whose wheel bundles FreeTDS and needs no system driver."""
+    if "://" not in url:
         import pyodbc
 
         return pyodbc.connect(url)
-    raise ValueError(f"unknown dialect: {dialect}")
+    m = re.match(
+        r"(?:mssql|tsql|sqlserver)(?:\+\w+)?://([^:]+):([^@]*)@([^:/]+)(?::(\d+))?/(\w+)",
+        url,
+    )
+    if not m:
+        raise ValueError(f"unparseable SQL Server URL: {url}")
+    user, pwd, host, port, db = m.groups()
+    import pymssql
+
+    return pymssql.connect(
+        server=host, port=int(port or 1433), user=user, password=pwd, database=db
+    )
 
 
 def _pg_url_for_psycopg2(url: str) -> str:

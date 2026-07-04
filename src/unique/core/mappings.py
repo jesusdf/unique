@@ -273,6 +273,9 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "MEDIUMINT": "INT",
         "YEAR": "SMALLINT",
         "TIMESTAMPTZ": "DATETIMEOFFSET",
+        # T-SQL TIMESTAMP is ROWVERSION (an auto binary value), not a datetime,
+        # and cannot take a DEFAULT — a wall clock column must be DATETIME2.
+        "TIMESTAMP": "DATETIME2",
     },
 }
 
