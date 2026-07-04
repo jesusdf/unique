@@ -190,9 +190,62 @@ class TestMutatingTableHazard:
             "    UPDATE dbo.t SET n = (SELECT COUNT(*) FROM dbo.t)\nEND"
         )
         out = _t(src, "tsql", "oracle")
-        # The self-referencing UPDATE/SELECT on the same table is preserved.
+        # A T-SQL statement-level trigger stays statement-level on Oracle (no
+        # FOR EACH ROW, so no mutating-table error); the self-referencing
+        # UPDATE/SELECT on the same table is preserved.
         assert "UPDATE t SET" in out
         assert "SELECT COUNT(*) FROM t" in out.replace("  ", " ")
+
+
+class TestRowLevelReReadToOracleCompound:
+    """A MySQL/PostgreSQL row-level trigger may re-read its own triggering table
+    (aggregate a parent from its children); Oracle raises ORA-04091 for that in a
+    plain row-level trigger, so it must be synthesized into a COMPOUND trigger:
+    collect the affected key per row, re-aggregate once in AFTER STATEMENT."""
+
+    AGG = (
+        "CREATE TRIGGER trg_agg\n"
+        "AFTER INSERT ON invoice_line\n"
+        "FOR EACH ROW\n"
+        "BEGIN\n"
+        "    UPDATE invoice SET total = (SELECT COALESCE(SUM(line_total), 0)\n"
+        "        FROM invoice_line WHERE invoice_id = NEW.invoice_id)\n"
+        "    WHERE id = NEW.invoice_id;\n"
+        "END"
+    )
+
+    def test_synthesizes_compound_trigger(self) -> None:
+        out = _t(self.AGG, "mysql", "oracle")
+        # A compound trigger, not the ORA-04091-prone plain row-level form.
+        assert "COMPOUND TRIGGER" in out
+        assert "FOR INSERT ON invoice_line" in out
+        assert "AFTER EACH ROW IS" in out
+        assert "AFTER STATEMENT IS" in out
+        assert "FOR EACH ROW" not in out
+        # The affected key is collected per row (%TYPE avoids needing the catalog)
+        # and re-read in the loop instead of the raw :NEW ref.
+        assert "invoice_line.invoice_id%TYPE" in out
+        assert ":NEW.invoice_id" in out  # the AFTER EACH ROW collect
+        assert re.search(r"FOR\s+\w+\s+IN\s+1\s*\.\.\s*", out)
+        # Inside the AFTER STATEMENT loop the re-read is keyed on the collection,
+        # so no :NEW ref survives in the aggregating UPDATE's WHERE.
+        after_stmt = out.split("AFTER STATEMENT IS", 1)[1]
+        assert ":NEW" not in after_stmt
+
+    def test_non_self_referencing_row_trigger_stays_row_level(self) -> None:
+        # A row-level trigger that does NOT read its own table is safe on Oracle;
+        # it must stay a plain row-level trigger (no needless compound rewrite).
+        src = (
+            "CREATE TRIGGER trg_touch\n"
+            "BEFORE UPDATE ON invoice\n"
+            "FOR EACH ROW\n"
+            "BEGIN\n"
+            "    SET NEW.total = NEW.total + 1;\n"
+            "END"
+        )
+        out = _t(src, "mysql", "oracle")
+        assert "COMPOUND TRIGGER" not in out
+        assert "FOR EACH ROW" in out
 
 
 def _tr(sql: str, source: str, target: str) -> str:

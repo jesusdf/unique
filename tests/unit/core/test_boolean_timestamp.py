@@ -156,6 +156,20 @@ class TestOracleParameterTypes:
         # Only *parameters* lose constraints; column DDL keeps them.
         assert "NVARCHAR2(50)" in out
 
+    def test_unconstrained_decimal_becomes_number(self) -> None:
+        # A bare Oracle DECIMAL is NUMBER(38, 0) and rounds to an integer. Once
+        # the (p, s) is stripped for a parameter/RETURN, DECIMAL must become
+        # NUMBER (unconstrained -> keeps the value's scale), or a tax function
+        # returning net * 0.10 = 5.55 comes back as 6.
+        fn = (
+            "CREATE FUNCTION fn_tax(net DECIMAL(12, 2)) RETURNS DECIMAL(12, 2)\n"
+            "DETERMINISTIC\nBEGIN\n    RETURN net * 0.10;\nEND"
+        )
+        out = self.t.transpile(fn, "mysql", "oracle").sql
+        assert "net IN NUMBER" in out
+        assert "RETURN NUMBER" in out
+        assert "DECIMAL" not in out
+
 
 class TestBitDefaultToBoolean:
     """T-SQL BIT DEFAULT 0/1 -> PostgreSQL BOOLEAN needs a boolean default.
