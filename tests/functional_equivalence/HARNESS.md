@@ -49,7 +49,11 @@ UNIQUE_TEST_ORACLE_URL=oracle://system:oracle@localhost:1521/FREEPDB1 \
 pytest tests/functional_equivalence/test_functional_equivalence_live.py -v
 ```
 
-Add `UNIQUE_TEST_MSSQL_URL=...` (with `pyodbc`) to include the T-SQL identity run.
+Add `UNIQUE_TEST_MSSQL_URL=mssql://sa:<pw>@127.0.0.1:1433/master` to include the
+T-SQL runs. The driver is chosen from the URL form: a `mssql://…` URL uses
+**pymssql** (`pip install pymssql` — bundles FreeTDS, so **no MS ODBC driver /
+root needed**); a raw `DRIVER={…};…` ODBC connection string uses `pyodbc`.
+`tsql→tsql` passes today; the cross→tsql pairs are still WIP (see TODO §1).
 
 ## 4. Expected first-run adjustments
 

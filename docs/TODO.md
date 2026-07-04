@@ -228,10 +228,29 @@ High-level plan (details in that folder):
         `SET NEW.col = expr` on MySQL; a bare Oracle `DECIMAL`/`NUMERIC`/`DEC`
         parameter/RETURN type (NUMBER(38,0), rounds to integer) now becomes
         `NUMBER`.
-  - [ ] **Make the full 4×4 gating** — the local matrix is 12/12 reachable green,
-        so CI can drop `continue-on-error` **once the 4 tsql-*target* pairs run**
-        (they still skip everywhere without `pyodbc` + the MS ODBC driver; see
-        HARNESS.md). Pre-existing infra blocker, independent of the transpiler.
+  - [ ] **Finish the 4 T-SQL-*target* pairs, then make the full 4×4 gating.** The
+        harness now reaches SQL Server via **pymssql** (no MS ODBC driver needed;
+        DONE §15), so these pairs run locally at last — `tsql→tsql` is green.
+        Fixed the first wave of latent T-SQL emitter bugs (TIMESTAMP→DATETIME2,
+        integer display-width, no `SET NOCOUNT` in a function, `@` param sigil).
+        The 3 cross→tsql pairs (`postgresql/mysql/oracle→tsql`) are **not green
+        yet**; remaining transpiler work, smallest first:
+        - [ ] Date subtraction `d2 - d1` (a DATE/DATETIME pair) → T-SQL
+          `DATEDIFF(DAY, d1, d2)` — surfaced by `fn_days_between`.
+        - [ ] MySQL-source routine bodies: prefix local variable / parameter
+          references with `@` for the T-SQL target (declaration side already done;
+          body references still leak the bare name).
+        - [ ] **Trigger translation *to* T-SQL** (the big one, its own work item):
+          synthesize a T-SQL statement-level `inserted`/`deleted` trigger from a
+          PostgreSQL trigger-function/transition-table source, an Oracle COMPOUND
+          trigger, and a MySQL row-level trigger. Today all three degrade to a
+          `-- UNIQUE:` carrier, so the trigger-maintained values
+          (`invoice.total`, `is_paid`, `line_total`) are unmaintained on the
+          T-SQL target — comparable in size to the aggregation-trigger feature
+          (DONE §14).
+        Once all 16 pairs are green, drop the CI `syntax-live` `continue-on-error`
+        to make the 4×4 gating. (CI still needs a SQL Server driver — pymssql or
+        pyodbc + MS ODBC; see HARNESS.md.)
 
 Key design risks, captured for when we start:
 - **Determinism** is the central challenge — see the folder README for the list
