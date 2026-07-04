@@ -82,6 +82,33 @@ class TestTranspiler:
         assert "ALTER TABLE X ADD COLUMN c" in out
         assert "-- UNIQUE:" not in out
 
+    def test_add_default_constraint(self, transpiler: Transpiler) -> None:
+        # T-SQL ``ADD [CONSTRAINT n] DEFAULT v FOR c`` -> each engine's
+        # set-column-default form (Oracle MODIFY, others ALTER COLUMN SET).
+        sql = "ALTER TABLE X ADD CONSTRAINT df DEFAULT 0 FOR c"
+        assert (
+            "ALTER COLUMN c SET DEFAULT 0"
+            in transpiler.transpile(sql, source="tsql", target="postgresql").sql
+        )
+        assert (
+            "ALTER COLUMN c SET DEFAULT 0"
+            in transpiler.transpile(sql, source="tsql", target="mysql").sql
+        )
+        assert (
+            "MODIFY c DEFAULT 0"
+            in transpiler.transpile(sql, source="tsql", target="oracle").sql
+        )
+
+    def test_add_default_non_portable_value_falls_back(
+        self, transpiler: Transpiler
+    ) -> None:
+        # A default whose value has no clean target form (NEWID()) must document,
+        # not emit invalid SQL.
+        sql = "ALTER TABLE X ADD DEFAULT (NEWID()) FOR rowguid"
+        out = transpiler.transpile(sql, source="tsql", target="mysql").sql
+        assert "-- UNIQUE:" in out
+        assert "CHAR()" not in out
+
     def test_system_procedure_becomes_comment(self, transpiler: Transpiler) -> None:
         result = transpiler.transpile(
             "EXEC sys.sp_addextendedproperty @name=N'x', @value=N'y'",

@@ -251,6 +251,56 @@ def _double_quoted_to_strings(sql: str) -> str:
     return "".join(out)
 
 
+# T-SQL adds a column default with a *named or unnamed* constraint:
+# ``ALTER TABLE t ADD [CONSTRAINT n] DEFAULT <val> FOR <col>``. sqlglot passes
+# this through unchanged (invalid elsewhere), so rewrite it to each target's
+# set-default form before parsing.
+_TSQL_ADD_DEFAULT_RE = re.compile(
+    r"(?is)^(?P<head>\s*ALTER\s+TABLE\s+[\w\[\].\"]+)\s+ADD\s+"
+    r'(?:CONSTRAINT\s+[\w\[\]"]+\s+)?DEFAULT\s+(?P<val>.+?)\s+FOR\s+'
+    r'(?P<col>[\w\[\]"]+)\s*;?\s*$'
+)
+
+
+def _rewrite_tsql_default_constraint(sql: str) -> str:
+    """``ALTER TABLE t ADD [CONSTRAINT n] DEFAULT v FOR c`` -> the ANSI
+    ``ALTER TABLE t ALTER COLUMN c SET DEFAULT v`` (which sqlglot parses and
+    whose value it translates). Oracle's ``MODIFY`` form is a post-emit fixup."""
+    m = _TSQL_ADD_DEFAULT_RE.match(sql)
+    if not m:
+        return sql
+    head, val, col = m.group("head"), m.group("val").strip(), m.group("col")
+    return f"{head} ALTER COLUMN {col} SET DEFAULT {val}"
+
+
+# Oracle sets a column default with ``MODIFY col DEFAULT v`` (no SET); sqlglot
+# leaves the ANSI ``ALTER COLUMN … SET DEFAULT`` unchanged, so fix it up.
+_ORACLE_ALTER_DEFAULT_RE = re.compile(
+    r"(?i)\bALTER\s+COLUMN\s+(?P<col>[\w\[\]\".]+)\s+SET\s+DEFAULT\b"
+)
+
+
+def _parses_in_target(sql: str, target: str) -> bool:
+    """Whether every statement in *sql* parses as valid target SQL. Used to fall
+    back to a documented carrier when a rewrite would emit invalid output."""
+    import sqlglot
+
+    from unique.core.converter import sqlglot_dialect_name
+
+    try:
+        dialect = sqlglot_dialect_name(target)
+        for part in sql.split(";"):
+            stmt = part.strip()
+            if not stmt or stmt.startswith("--"):
+                continue
+            sqlglot.parse_one(
+                stmt, dialect=dialect, error_level=sqlglot.ErrorLevel.RAISE
+            )
+        return True
+    except Exception:
+        return False
+
+
 def _is_comment_only(sql: str) -> bool:
     """Whether ``sql`` consists solely of blank lines and ``--`` comments."""
     stripped = sql.strip()
@@ -735,8 +785,15 @@ class Transpiler:
 
         # T-SQL compound assignment (SET a += 1) is not understood by sqlglot,
         # which would drop the column; expand it to "SET a = a + 1" first.
+        was_default_constraint = False
+        default_original = ""
         if source == "tsql":
             sql = _expand_tsql_compound_assignment(sql)
+            rewritten = _rewrite_tsql_default_constraint(sql)
+            if rewritten != sql:
+                was_default_constraint = True
+                default_original = sql
+                sql = rewritten
 
         # Oracle ORGANIZATION INDEX/HEAP: a physical-storage clause sqlglot
         # cannot parse, which would degrade the whole CREATE TABLE (columns
@@ -834,6 +891,29 @@ class Transpiler:
                 unsupported = transformer.unsupported
 
             output_sql = target_dialect.emit(ir_nodes) + org_carrier
+            if was_default_constraint and target == "oracle":
+                # Oracle spells a column default change ``MODIFY col DEFAULT v``.
+                output_sql = _ORACLE_ALTER_DEFAULT_RE.sub(
+                    r"MODIFY \g<col> DEFAULT", output_sql
+                )
+            if was_default_constraint and not _parses_in_target(output_sql, target):
+                # The default value did not translate to valid target SQL (e.g. a
+                # T-SQL-only NEWID()); keep the original as a documented carrier
+                # rather than emit invalid SQL.
+                return TranspileResult(
+                    sql="-- UNIQUE: T-SQL default constraint value has no "
+                    f"{target} equivalent:\n"
+                    + "\n".join(f"-- {ln}" for ln in default_original.splitlines()),
+                    warnings=[
+                        _warn(
+                            "T-SQL default-constraint value has no target form",
+                            "ddl_default",
+                            source,
+                            target,
+                        )
+                    ],
+                    unsupported=unsupported,
+                )
 
             return TranspileResult(
                 sql=output_sql,
