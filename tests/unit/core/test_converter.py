@@ -452,9 +452,7 @@ class TestTSQLTypePortability:
     def test_create_or_replace_view_becomes_or_alter(self) -> None:
         # T-SQL has no CREATE OR REPLACE VIEW; it is CREATE OR ALTER VIEW (2016+).
         for src in ("postgresql", "oracle"):
-            nodes = parse_sql(
-                "CREATE OR REPLACE VIEW v AS SELECT id FROM t", src
-            )
+            nodes = parse_sql("CREATE OR REPLACE VIEW v AS SELECT id FROM t", src)
             out = emit_sql(nodes, "tsql").upper()
             assert "CREATE OR ALTER VIEW" in out, src
             assert "OR REPLACE" not in out, src
