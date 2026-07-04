@@ -307,6 +307,19 @@ class TestApiHardening:
         )
         assert response.status_code == 413
 
+    def test_default_cap_allows_large_scripts(self, client) -> None:
+        from unique.api import app as app_module
+
+        # The default cap accommodates large real migration scripts, well above
+        # the former 2 MB; a 3 MB body (over that old cap) is accepted.
+        assert app_module.MAX_SQL_BYTES >= 8_000_000
+        sql = "SELECT '" + "x" * 3_000_000 + "' AS c"
+        response = client.post(
+            "/api/v1/transpile",
+            json={"sql": sql, "source": "tsql", "target": "oracle"},
+        )
+        assert response.status_code == 200
+
     def test_internal_errors_do_not_leak_details(self, client, monkeypatch) -> None:
         from unique.api import app as app_module
 

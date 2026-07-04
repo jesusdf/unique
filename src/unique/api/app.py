@@ -25,8 +25,10 @@ _STATIC_DIR = Path(__file__).parent / "static"
 
 
 # Input size cap for SQL bodies and uploads (bytes/characters). CPU-bound
-# transpilation with unbounded input is a trivial DoS (audit 2026-07-02, A2).
-MAX_SQL_BYTES = int(os.environ.get("UNIQUE_MAX_SQL_BYTES", 2_000_000))
+# transpilation with unbounded input is a trivial DoS (audit 2026-07-02, A2), so
+# the cap stays; the default is 64 MB to accommodate large real migration
+# scripts, and ``UNIQUE_MAX_SQL_BYTES`` tunes it per deployment.
+MAX_SQL_BYTES = int(os.environ.get("UNIQUE_MAX_SQL_BYTES", 64_000_000))
 
 logger = logging.getLogger(__name__)
 
