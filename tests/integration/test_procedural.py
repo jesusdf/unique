@@ -293,8 +293,10 @@ class TestMySQLAsSource:
         out = _transpile(sql, "mysql", "tsql")
         assert "DETERMINISTIC" not in out
         assert "READS SQL DATA" not in out
-        assert "DECLARE v" in out
-        assert "RETURN v" in out
+        # MySQL local vars/params gain T-SQL's ``@`` sigil (declaration + body).
+        assert "DECLARE @v" in out
+        assert "RETURN @v" in out
+        assert "@v = @p * 2" in out
 
     def test_routine_not_fragmented_without_delimiter(self) -> None:
         from unique.core.batch_splitter import BatchSplitter
