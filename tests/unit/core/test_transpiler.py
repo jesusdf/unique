@@ -96,6 +96,35 @@ class TestTranspiler:
         assert "ELSE" not in out
         assert "-- UNIQUE:" not in out
 
+    def test_guard_preserves_leading_comment(self, transpiler: Transpiler) -> None:
+        # A section header preceding an IF NOT EXISTS guard must survive (the head
+        # regex consumes the comment lines; they are re-attached, not dropped).
+        sql = (
+            "-- CREACION DE LA TABLA t\n"
+            "IF NOT EXISTS (SELECT * FROM sysobjects WHERE id = object_id('t'))\n"
+            "    CREATE TABLE dbo.t (id INT NOT NULL)"
+        )
+        for target in ("oracle", "postgresql", "mysql"):
+            out = transpiler.transpile(sql, source="tsql", target=target).sql
+            assert "-- CREACION DE LA TABLA t" in out, target
+            assert "CREATE TABLE t" in out
+
+    def test_procedural_preserves_leading_comment_block(
+        self, transpiler: Transpiler
+    ) -> None:
+        # A comment header preceding a procedural CREATE (the procedural parser
+        # starts at the keyword and drops it) is re-attached, once, not lost.
+        sql = (
+            "-- <codegen>\n"
+            "--   <nombre>TRG_X</nombre>\n"
+            "-- </codegen>\n"
+            "CREATE OR REPLACE TRIGGER trg_x BEFORE INSERT ON t FOR EACH ROW\n"
+            "BEGIN\n  :NEW.id := 1;\nEND;\n/"
+        )
+        for target in ("postgresql", "tsql", "mysql", "oracle"):
+            out = transpiler.transpile(sql, source="oracle", target=target).sql
+            assert out.count("<codegen>") == 1, target
+
     def test_constraint_check_state_toggle(self, transpiler: Transpiler) -> None:
         # ALTER TABLE t {CHECK|NOCHECK} CONSTRAINT c -> enable/disable per target.
         enable = "ALTER TABLE X WITH CHECK CHECK CONSTRAINT fk"

@@ -73,7 +73,7 @@ _TSQL_DROP_GUARD_RE = re.compile(
 # syscolumns / sysindexes) that have no faithful cross-engine form, so only the
 # intent — run the guarded statement — is kept, matching the OBJECT_ID guards.
 _TSQL_EXISTS_GUARD_HEAD_RE = re.compile(
-    r"(?is)^\s*(?:--[^\n]*\n\s*)*IF\s+(?:NOT\s+)?EXISTS\s*\("
+    r"(?is)^\s*(?P<comments>(?:--[^\n]*\n\s*)*)IF\s+(?:NOT\s+)?EXISTS\s*\("
 )
 _DROP_STMT_RE = re.compile(
     r"(?is)^\s*DROP\s+"
@@ -89,6 +89,13 @@ def _extract_exists_guard(sql: str) -> str | None:
     head = _TSQL_EXISTS_GUARD_HEAD_RE.match(sql)
     if not head:
         return None
+    # Preserve any comment lines that preceded the guard (e.g. a section header
+    # "-- CREACION DE LA TABLA x") — the head regex consumes them, so re-attach
+    # them to the guarded statement rather than dropping them.
+    leading_comments = "".join(
+        line + "\n"
+        for line in re.findall(r"(?m)^[ \t]*(--[^\n]*?)[ \t]*$", head.group("comments"))
+    )
     # Skip the balanced-parens catalog condition (it may nest parentheses).
     depth = 0
     i = head.end() - 1
@@ -123,7 +130,9 @@ def _extract_exists_guard(sql: str) -> str | None:
         if not noise:
             break
         rest = rest[noise.end() :].lstrip()
-    return rest or None
+    if not rest:
+        return None
+    return leading_comments + rest
 
 
 # A MySQL routine whose body contains ';' statement terminators must be wrapped
@@ -834,6 +843,12 @@ class Transpiler:
         warnings: list[TransformWarning] = []
         unsupported: list[str] = []
 
+        # The procedural parser starts at the first keyword and drops any comment
+        # lines/blocks that precede the routine (e.g. a "-- <codegen> …" header).
+        # Capture them here so they are re-attached to the emitted output.
+        lead = re.match(r"(?s)^([ \t]*(?:--[^\n]*\n|/\*.*?\*/[ \t]*\n?)+)", sql)
+        leading_comments = lead.group(1).rstrip("\n") + "\n" if lead else ""
+
         try:
             # Parse
             parser = ProceduralParser(source)
@@ -875,7 +890,7 @@ class Transpiler:
             output_sql = emitter.emit(node)
 
             return TranspileResult(
-                sql=output_sql,
+                sql=leading_comments + output_sql,
                 warnings=warnings,
                 unsupported=unsupported,
             )
