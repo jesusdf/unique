@@ -13,6 +13,9 @@ unique transpile input.sql --from tsql --to postgresql -o output.sql
 # Transpile inline SQL
 unique transpile query.sql --from tsql --to mysql  # input is a file path
 
+# Migrate off SQLite (import-only: SQLite is a valid --from, never a --to)
+unique transpile app.db.sql --from sqlite --to postgresql -o output.sql
+
 # List available dialects
 unique dialects
 

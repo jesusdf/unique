@@ -95,7 +95,8 @@ core/
 ├── __init__.py
 ├── ast_nodes.py           # IR node type hierarchy
 ├── transpiler.py          # Orchestrator
-├── converter.py           # sqlglot-backed DML/DDL path
+├── converter/             # sqlglot-backed DML/DDL path (package:
+│                          #   _base/harvest/convert/emit submodules)
 ├── registry.py            # Plugin discovery & registration
 ├── errors.py              # Exception hierarchy
 └── procedural/            # The procedural engine (the value-add over sqlglot)
@@ -324,6 +325,13 @@ dialects/<name>/
 ├── types.py         # Type mapping table
 └── keywords.py      # Reserved words & syntax specifics
 ```
+
+A dialect may be **source-only** (its `source_only` property returns `True`):
+it provides a parser but its `emit()` raises, and the orchestrator rejects it as
+a target. **SQLite** (`dialects/sqlite/`) is source-only — it has no procedural
+language, so it can be a migration source but never a target; the `/dialects`
+API and the web UI expose which dialects are source-only so the target picker can
+exclude them.
 
 #### Parser Strategy
 

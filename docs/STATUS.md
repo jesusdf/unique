@@ -1,26 +1,33 @@
 # Unique — Project Status
 
-## Current Phase: Functional-Equivalence Testing
+## Current state: v0.9.0
 
-The DML/DDL pipeline and the autonomous procedural engine are complete for all
-12 dialect pairs, and the transpiler's output is validated **live against real
-engines** (MySQL/MariaDB, PostgreSQL, Oracle) — the procedural fixtures load
-into each engine with **0 errors**. The next milestone moves from *syntactic*
-validity to *functional* equivalence: confirm that a migrated script produces
-the **same final database state** (see `tests/functional_equivalence/` for the
-design, and `docs/TODO.md` for the backlog). The detailed history of finished
-work lives in `docs/DONE.md`.
+The DML/DDL pipeline and the autonomous procedural engine are complete, and
+**functional equivalence** holds across the **full 4×4 matrix — all 16
+source×target pairs converge on the same final database state**, validated live
+against real engines (SQL Server via pymssql, PostgreSQL, MySQL/MariaDB, and
+Oracle via a local container). Since then the tool has been hardened on real
+migration dumps: two O(n²) hot paths removed (a 13 MB script 421 s → ~30 s, now
+linear), broad T-SQL migration-idiom coverage (`IF [NOT] EXISTS` guards incl.
+their `ELSE` branch, `ADD [CONSTRAINT] DEFAULT … FOR`, constraint check-state,
+COMMIT/ROLLBACK/TRUNCATE passthrough, restorable physical index clauses with a
+tsql round-trip), Oracle `/`-terminator and DML/DDL comment-preservation fixes,
+a GNU-parallel test runner (~62 s → ~23 s), and **SQLite added as an import-only
+source**. The detailed history lives in `docs/DONE.md`; the backlog
+(`docs/TODO.md`) is now packaging-only.
 
 ### Completed (high level)
 
 - [x] **Core engine (DML/DQL/DDL)** — IR nodes (`ast_nodes.py`), shared
-      sqlglot↔IR converter (`converter.py`), transform passes (`transformer.py`),
-      orchestrator (`transpiler.py`), dialect registry, error hierarchy.
+      sqlglot↔IR converter (the `converter/` package: `_base`/`harvest`/`convert`/
+      `emit`), transform passes (`transformer.py`), orchestrator
+      (`transpiler.py`), dialect registry, error hierarchy.
 - [x] **Autonomous procedural engine** — batch splitter, lexer, recursive-descent
       parser, transformer, emitter (`core/procedural/`), plus an optional
       metadata resolver (`metadata.py`) for `%TYPE`/`%ROWTYPE`. Independent of
       sqlglot for the procedural shell; embedded DML is delegated to sqlglot.
-- [x] **Dialect plugins** — T-SQL, Oracle, PostgreSQL, MySQL (source and target).
+- [x] **Dialect plugins** — T-SQL, Oracle, PostgreSQL, MySQL (source and target),
+      plus SQLite as an **import-only source** (never a target).
 - [x] **Interfaces** — CLI (`unique transpile/validate/dialects`, `--db-url`),
       REST API (FastAPI), Python library, and an embedded web UI.
 - [x] **DDL coverage** — ALTER TABLE, CREATE INDEX (incl. CLUSTERED/INCLUDE/
@@ -67,8 +74,9 @@ work lives in `docs/DONE.md`.
 
 ### Test suite
 
-1112 passing + 59 skipped (the skipped ones need a live DB and run in the CI
-live jobs). Run `pytest tests/ -q`.
+~1490 passing + ~120 skipped (the skipped ones need a live DB and run in the CI
+live jobs). Run `pytest tests/ -q`, or `scripts/test-parallel.sh` for a
+GNU-parallel run across cores (~62 s → ~23 s).
 
 ### Dialect pair coverage
 
@@ -96,13 +104,13 @@ emitted as documented `-- UNIQUE:` comments / warnings, not silently dropped):
 
 ### Next steps
 
-See `docs/TODO.md`. Highest priority:
+The functional-equivalence and audit-remediation backlogs are complete (see
+`docs/DONE.md` §13–18). `docs/TODO.md` now holds only:
 
-- [x] **Functional-equivalence test database** — a minimal invoicing schema +
-      deterministic scenario + engine-agnostic expected-state spec + a harness
-      that runs the transpiled scripts on each engine and asserts identical final
-      state (`tests/functional_equivalence/`). **All 16 source×target pairs are
-      live-green** (SQL Server reached root-free via pymssql); see TODO §1,
-      DONE §13–16. Remaining: wire a SQL Server driver into CI to make it gating.
-- [ ] Generalize the `/* UNIQUE: … */` restorer to non-type constructs.
+- [ ] **SQLite import — phases 2–3**: source-side function mappings
+      (`last_insert_rowid()`, `strftime`, `ifnull`→COALESCE, …) and row-level
+      trigger translation from SQLite. Phase 1 (registration + DML/DDL source) is
+      done.
+- [ ] Generalize the `/* UNIQUE: … */` restorer to `%TYPE` on the DML path
+      (already wired for physical index clauses).
 - [ ] Publish to PyPI — **deferred (do not publish yet)**.

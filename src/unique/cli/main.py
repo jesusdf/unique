@@ -26,13 +26,13 @@ def cli() -> None:
     "--from",
     "source",
     required=True,
-    help="Source dialect (tsql, oracle, postgresql, mysql).",
+    help="Source dialect (tsql, oracle, postgresql, mysql, sqlite).",
 )
 @click.option(
     "--to",
     "target",
     required=True,
-    help="Target dialect (tsql, oracle, postgresql, mysql).",
+    help="Target dialect (tsql, oracle, postgresql, mysql; not sqlite).",
 )
 @click.option(
     "--output", "-o", type=click.Path(), help="Output file. Defaults to stdout."
@@ -127,7 +127,8 @@ def list_dialects() -> None:
     for name in registry.available():
         dialect = registry.get(name)
         features = len(dialect.supported_features())
-        click.echo(f"  {name:<15} ({features} features)")
+        role = " [import-only]" if dialect.source_only else ""
+        click.echo(f"  {name:<15} ({features} features){role}")
 
 
 if __name__ == "__main__":

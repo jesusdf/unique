@@ -7,7 +7,9 @@
 
 Unique translates SQL scripts between **SQL Server (T-SQL)**, **Oracle**,
 **PostgreSQL**, and **MySQL** — including stored procedures, functions, and
-triggers, not just standalone queries.
+triggers, not just standalone queries. **SQLite** is supported as an
+**import-only source** (SQLite → the four server engines): it has no procedural
+language, so it can be a migration source but never a target.
 
 ## Built on sqlglot — and what Unique adds
 
@@ -53,7 +55,8 @@ doesn't, delegating the embedded DML/DQL to sqlglot. Concretely, Unique adds:
 
 ## Features
 
-- **4 dialects**: SQL Server, Oracle, PostgreSQL, MySQL (2012+ coverage)
+- **4 target dialects**: SQL Server, Oracle, PostgreSQL, MySQL (2012+ coverage),
+  plus **SQLite as an import-only source**
 - **AST + intermediate representation**: Parse → Transform → Emit
 - **Plugin architecture**: add new dialects via Python entry points
 - **CLI, REST API, Python library, and web UI**

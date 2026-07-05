@@ -3,6 +3,16 @@
 This document maps every major SQL feature category across the four supported
 engines and indicates the transpilation support status for each.
 
+> **SQLite (import-only).** SQLite is supported as a transpilation **source
+> only** — SQLite → SQL Server / Oracle / PostgreSQL / MySQL. It has no
+> procedural language (no stored procedures, functions or anonymous blocks), so
+> it can never be a faithful procedural *target*; the tool rejects `sqlite` as a
+> target with a clear error, and the web UI offers it as a source but not a
+> target. Its DML/DDL surface (type affinity → the target's real types,
+> `INTEGER PRIMARY KEY [AUTOINCREMENT]` → identity/serial, etc.) transpiles
+> through the same sqlglot + IR path as the other sources. The matrix below
+> describes the four full engines.
+
 > **See also:** [`uml/catalog.mmd`](uml/catalog.mmd) — a UML class diagram that
 > visualizes the full transpilable object catalog (tables, views, sequences,
 > scalar/table functions, procedures, and triggers) with their dependencies.
