@@ -237,7 +237,20 @@ pytest --cov=unique --cov-report=html
 
 # Single test
 pytest -k "test_select_with_top"
+
+# Fast full run across CPU cores (needs GNU parallel; ~62s -> ~23s on 8 cores)
+scripts/test-parallel.sh
+# ...with combined coverage (COVERAGE_CORE=sysmon keeps it near-free)
+COV=1 scripts/test-parallel.sh
 ```
+
+A serial `pytest` run is dominated by one heavy file
+(`tests/integration/test_real_world.py`, ~48 s), so file-level parallelism does
+not help. `scripts/test-parallel.sh` collects every node ID, round-robins them
+into `nproc` groups and runs one pytest process per group via GNU parallel — the
+same command CI uses (`COV=1 PYTEST_PYTHON=python`). It runs so often per session
+that the ~3x speedup is worth it; it falls back to a single `pytest` run when
+GNU parallel is absent.
 
 ## Code Quality
 

@@ -108,3 +108,8 @@ pythonpath = ["tests"]
 markers = [
     "integration: tests that require a live external database (skipped by default)",
 ]
+
+[tool.coverage.run]
+source = ["unique"]
+# Combine data files written by the parallel test runner's per-worker processes.
+relative_files = true
