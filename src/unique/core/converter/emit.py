@@ -419,6 +419,10 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
             parts.append(f"FROM ({_emit_select(node.from_clause.query, dialect)})")
         else:
             parts.append(f"FROM {_emit_table_ref(node.from_clause, dialect)}")
+    elif dialect == "oracle":
+        # Oracle requires a FROM clause: a table-less SELECT (e.g. ``SELECT 1``,
+        # ``SELECT SYSDATE``) reads from the DUAL pseudo-table, else ORA-00923.
+        parts.append("FROM DUAL")
 
     # JOINs
     left_name = None
