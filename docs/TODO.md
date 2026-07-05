@@ -350,17 +350,23 @@ quality*).
       generated `static/index.html` (a rebuild would have silently dropped
       the db-field feature); the template was regenerated from the committed
       output (round-trip verified) before applying the UI change.
-- [ ] Split the >2000-line modules (`converter.py` 3329, `procedural/parser.py`
-      2848, `procedural/transformer/base.py` 2633). **Reassessed 2026-07-05:**
-      there are *no* section-comment seams to split along, and the code is
-      tightly coupled — `converter.py`'s harvesters depend on a helper defined
-      later (`_split_top_level_commas`), and the parse and emit halves call each
-      other through `PassthroughSQL` re-transpilation, so a naive extraction
-      creates import cycles. This is a dedicated package-conversion refactor
-      (e.g. `converter/{util,harvest,parse,emit}.py` re-exported from
-      `__init__.py`, shared pure helpers pulled into a `util` submodule first),
-      not a quick seam split. Do it in a focused session with the full gate run
-      after each extraction — not bundled with feature work on a green tree.
+- [x] Split the >2000-line modules. **Done 2026-07-05 for the one module where
+      it helps; the other two are intentionally left whole (analysis below).**
+  - **`converter.py` (3329) → `converter/` package** — `_base` (shared state +
+    leaf helpers), `harvest`, `convert`, `emit`, each < 1600 lines, re-exported
+    from `__init__`. Clean because these are free functions and parse/emit never
+    call each other (only convert/emit import a few coercion helpers from
+    harvest → no cycles).
+  - **`procedural/parser.py` (2848) and `procedural/transformer/base.py` (2633)
+    are single cohesive classes** (`ProceduralParser`, 89 methods;
+    `ProceduralTransformer`, 121). Splitting a class means mixins, and a
+    concern-grouping of the parser shows the methods are heavily interleaved (a
+    recursive-descent parser: 53 statement methods calling each other, the
+    token-cursor primitives, and the expression/DDL methods, with no contiguous
+    sections). A mixin split would scatter tightly-coupled logic across files and
+    fight mypy-strict (every cross-mixin `self._parse_x()` needs a base-class
+    declaration) for no readability gain — it would make the code *worse*. Kept
+    whole by design; revisit only if a genuinely independent sub-parser emerges.
 
 **P2 — documentation drift (audit doc 05):**
 
