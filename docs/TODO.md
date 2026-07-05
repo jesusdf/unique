@@ -16,7 +16,18 @@ packaging remains.
 
 ---
 
-## 1. Packaging (P3)
+## 1. Corpus-sweep function/type gaps (P2)
+
+Surfaced by `test_corpus_live.py` and annotated `-- @xfail` in the corpus. Fix,
+then remove the annotation (the sweep flags it once it starts passing):
+
+- [ ] MySQL `NOW()`/`CURDATE()` -> Oracle/SQL Server (SYSTIMESTAMP/GETDATE, etc.).
+- [ ] Oracle `NVL2`, `DECODE` -> CASE for the other targets.
+- [ ] Oracle `TO_CHAR`/`TO_DATE` format models; MySQL 2-arg `DATEDIFF(a,b)`.
+- [ ] `TRUNC(number)`, T-SQL `CONVERT(type, expr)`, `CAST(... AS BOOLEAN/INT)`
+      per target; `CURRENT_DATE` emitted with parens; T-SQL string `+` chain.
+
+## 2. Packaging (P3)
 
 - [ ] **PyPI publication** — deferred until the tool has been used in real
       projects for a few months and proven stable. Not before then.

@@ -307,9 +307,13 @@ jobs:
           # TestOracleTypeResolutionAcrossEngines proves an Oracle %TYPE/%ROWTYPE
           # source resolves through a --db-url of every engine (it seeds its own
           # self-contained probe table, so it needs no pre-seeded schema).
+          # test_corpus_live sweeps the SQL corpus (transpile -> execute on the
+          # real engine) so invalid output that a permissive parser would accept
+          # is still caught; documented gaps are annotated -- @xfail in the corpus.
           set +e
           pytest tests/integration/test_live_syntax.py \
             "tests/integration/test_metadata_live.py::TestOracleTypeResolutionAcrossEngines" \
+            tests/integration/test_corpus_live.py \
             -v -rA \
             > /tmp/pytest.out 2>&1
           rc=$?
