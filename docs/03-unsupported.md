@@ -17,6 +17,21 @@ rowid aliases — is read via sqlglot and converted like any other source.
 
 ---
 
+## 0b. Indexing an unbounded TEXT/BLOB column (intrinsic)
+
+PostgreSQL and SQLite let you put a `TEXT`/`BLOB` (unbounded) column in an index
+or UNIQUE constraint. **MySQL, SQL Server and Oracle cannot index an unbounded
+binary/text column** — MySQL/SQL Server require a bounded type or a prefix
+length, Oracle cannot index a LOB. This is a source-schema ↔ target-engine
+mismatch, not a transpiler bug: the column type carries no length, so no correct
+bounded form can be inferred. (MediaWiki itself sidesteps this by declaring these
+columns `VARBINARY(255)` in its MySQL schema and `TEXT`/`BLOB` in its PostgreSQL/
+SQLite schemas.) Transpile such a schema to MySQL/SQL Server/Oracle and the
+engine rejects the index; bound the column type in the source, or add a
+prefix/hash index by hand.
+
+---
+
 ## 1. Fully Unsupported (❌)
 
 These features will **never** be transpiled. They are silently dropped or

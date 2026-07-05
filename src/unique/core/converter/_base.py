@@ -615,7 +615,8 @@ _RESERVED_IDENTIFIERS: dict[str, frozenset[str]] = {
         }
     ),
     "mysql": _RESERVED_COMMON | frozenset({"COLLATION", "LIMIT", "USAGE", "READ"}),
-    "tsql": _RESERVED_COMMON | frozenset({"USER", "PERCENT", "IDENTITY"}),
+    "tsql": _RESERVED_COMMON
+    | frozenset({"USER", "PERCENT", "IDENTITY", "FILE", "PLAN", "KEY", "READTEXT"}),
 }
 
 
