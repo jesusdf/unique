@@ -304,6 +304,29 @@ and treat it as part of the deliverable, not an afterthought.
   commit it (together with the related code/test changes when there are any)
   and push to `main`. The backlog on `main` should always reflect reality.
 
+## Documentation discipline (scope/support changes — mandatory)
+
+**Any change to what the transpiler supports or how it behaves must update the
+documentation in the same change** — docs are part of the deliverable, not an
+afterthought. A change is scope/support-affecting when it: makes a construct
+transpile that previously degraded to a carrier (or vice versa), adds/removes a
+dialect, adds a type/function mapping or a per-dialect idiom, closes or discovers
+an intrinsic limitation, or otherwise changes the compatibility surface.
+
+When that happens, update the relevant docs in the same commit:
+
+- **`docs/03-unsupported.md`** — move an item out of "unsupported/partial" when it
+  now works, or add one when a new limitation is found. Keep the reason accurate.
+- **`docs/01-compatibility.md`** — the feature matrix and any per-dialect notes.
+- **`docs/STATUS.md`** — the project-state snapshot: it names a version and must
+  reflect the **current** release, not a stale one. If it has drifted, rewrite it.
+- **`docs/DONE.md`** — archive the completed work with its why/how and the test
+  that covers it (mirrors the backlog "mark done, keep context" rule).
+
+The "point-in-time" state docs (`STATUS.md`, the compatibility matrix) age
+silently; treat a version bump as a trigger to confirm they still describe
+reality. When in doubt, prefer rewriting a stale section over patching around it.
+
 ## Pre-commit verification gate
 
 Before **every** commit, run the full gate and only commit if it is green:
