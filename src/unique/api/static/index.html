@@ -2527,12 +2527,17 @@ async function translateFile() {
   fillSelect(el("target"), dialects);
   fillSelect(el("fileSource"), dialects, { includeAuto: true });
   fillSelect(el("fileTarget"), dialects);
-  el("source").value = "tsql";
-  el("target").value = "postgresql";
-  setEditorMode(cmInput, "tsql");
-  setEditorMode(cmOutput, "postgresql");
+  // Default the combos to the list's first element (and the first differing
+  // one for the target) rather than a hard-coded dialect, so the selection
+  // tracks the dialect list instead of always showing PostgreSQL.
+  const firstSource = dialects[0];
+  const firstTarget = dialects.find((d) => d !== firstSource) ?? firstSource;
+  el("source").value = firstSource;
+  el("target").value = firstTarget;
+  setEditorMode(cmInput, firstSource);
+  setEditorMode(cmOutput, firstTarget);
   el("fileSource").value = "auto";
-  el("fileTarget").value = "postgresql";
+  el("fileTarget").value = firstTarget;
 
   // Version label + optional database-connection fields. Databases are
   // referenced by server-configured DSN name; a raw URL input only appears
