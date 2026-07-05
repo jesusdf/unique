@@ -1872,10 +1872,37 @@ def _portable_index(sql: str, dialect: str) -> str:
     - A filtered-index WHERE clause is supported by PostgreSQL (partial
       index) but not MySQL/Oracle; flag it for those.
     """
+    if dialect == "tsql":
+        # Round-trip: restore physical index clauses this tool stripped on a
+        # forward pass, recorded in a ``/* UNIQUE: … -- tsql-only … (physical
+        # index clause) */`` note — CLUSTERED is positional (after CREATE
+        # [UNIQUE]); WITH (...) / ON <fg> are trailing.
+        note = re.search(
+            r"(?is)\s*/\*\s*UNIQUE:\s*(?P<clauses>.+?)\s*--\s*tsql-only,"
+            r"[^*]*?physical index clause[^*]*?\*/",
+            sql,
+        )
+        if note:
+            sql = (
+                (sql[: note.start()].rstrip() + sql[note.end() :]).rstrip().rstrip(";")
+            )
+            clauses = note.group("clauses").strip()
+            lead = re.match(r"(?i)(?P<kw>(?:NON)?CLUSTERED)\b\s*(?P<rest>.*)$", clauses)
+            if lead:
+                sql = re.sub(
+                    r"(?i)\bCREATE\s+(UNIQUE\s+)?INDEX\b",
+                    lambda m: f"CREATE {m.group(1) or ''}{lead.group('kw')} INDEX",
+                    sql,
+                    count=1,
+                )
+                clauses = lead.group("rest").strip()
+            if clauses:
+                sql = f"{sql} {clauses}"
+
     dropped_physical: list[str] = []
     if dialect != "tsql":
 
-        def _drop(match: "re.Match[str]") -> str:
+        def _drop(match: re.Match[str]) -> str:
             dropped_physical.append(match.group(0).strip())
             return ""
 
