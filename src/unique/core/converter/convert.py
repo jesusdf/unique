@@ -435,35 +435,37 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     )
 
 
+def _set_op_type(node: exp.Union) -> SetOperationType:
+    if isinstance(node, exp.Intersect):
+        return SetOperationType.INTERSECT
+    if isinstance(node, exp.Except):
+        return SetOperationType.EXCEPT
+    if node.args.get("distinct") is False:
+        return SetOperationType.UNION_ALL
+    return SetOperationType.UNION
+
+
 def _convert_union(expr: exp.Union) -> SelectStatement:
-    """Convert a UNION/INTERSECT/EXCEPT to a SelectStatement with set operation."""
-    left = _convert_select(expr.this)
-    right = _convert_select(expr.expression)
+    """Convert a UNION/INTERSECT/EXCEPT chain to a linked SelectStatement.
 
-    # Determine set operation type
-    if isinstance(expr, exp.Intersect):
-        set_op = SetOperationType.INTERSECT
-    elif isinstance(expr, exp.Except):
-        set_op = SetOperationType.EXCEPT
-    elif expr.args.get("distinct") is False:
-        set_op = SetOperationType.UNION_ALL
-    else:
-        set_op = SetOperationType.UNION
+    sqlglot parses ``A UNION B UNION C`` left-nested as ``Union(Union(A, B), C)``.
+    Flatten the whole chain (converting only the outer two operands silently
+    dropped every middle arm) into a base statement whose ``set_query`` links
+    each subsequent arm in left-to-right order.
+    """
+    ops: list[tuple[SetOperationType, SelectStatement]] = []
+    node: exp.Expression = expr
+    while isinstance(node, exp.Union):
+        ops.append((_set_op_type(node), _convert_select(node.expression)))
+        node = node.this
+    ops.reverse()  # first..last set operation, left to right
 
-    return SelectStatement(
-        columns=left.columns,
-        from_clause=left.from_clause,
-        joins=left.joins,
-        where=left.where,
-        group_by=left.group_by,
-        having=left.having,
-        order_by=left.order_by,
-        limit=left.limit,
-        distinct=left.distinct,
-        ctes=left.ctes,
-        set_op=set_op,
-        set_query=right,
-    )
+    selects = [_convert_select(node), *(s for _, s in ops)]
+    set_ops = [op for op, _ in ops]
+    result = selects[-1]
+    for i in range(len(set_ops) - 1, -1, -1):
+        result = dataclasses.replace(selects[i], set_op=set_ops[i], set_query=result)
+    return result
 
 
 def _convert_insert(expr: exp.Insert) -> InsertStatement:
