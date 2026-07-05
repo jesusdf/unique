@@ -625,6 +625,18 @@ class TestUniqueCommentRestore:
     transpiled back to its source engine, the original must be restored rather
     than left as a comment."""
 
+    def test_type_reference_documented_then_restored(self) -> None:
+        # Oracle %TYPE has no target equivalent without a live catalog: it lowers
+        # to a carrier type with a /* UNIQUE: <orig> */ note, and a transpilation
+        # back to Oracle restores the original %TYPE reference.
+        src = "CREATE PROCEDURE p (v_id employees.id%TYPE) AS BEGIN NULL; END;"
+        pg = _transpile(src, "oracle", "postgresql")
+        assert "UNIQUE:" in pg
+        assert "employees.id%TYPE" in pg  # preserved in the note
+        back = _transpile(pg, "postgresql", "oracle")
+        assert "employees.id%TYPE" in back  # restored as the real type
+        assert "UNIQUE:" not in back
+
     def test_identity_insert_documented_then_restored(self) -> None:
         src = (
             "CREATE PROCEDURE dbo.p AS BEGIN "
