@@ -755,3 +755,43 @@ is `(18,0)` on T-SQL and rounds to an integer, so it gets a wide exact scale
 FreeTDS); `connect()` uses it for a `mssql://…` URL and pyodbc for an ODBC
 connection string. Remaining: wire a SQL Server driver into CI and drop the
 `syntax-live` `continue-on-error` to make the 4×4 gating (TODO §1).
+
+## 17. Large-script performance + T-SQL migration-idiom coverage (P1/P2)
+
+Driven by running two real dumps through the tool (a 13k-line T-SQL migration
+script and a 216k-line / 13 MB Oracle dump).
+
+**Performance — two O(n²) hot paths removed (421 s → ~30 s on the 13 MB file,
+now linear ~0.14 ms/line):**
+- `Transpiler._join_parts` accumulated the whole multi-MB output with
+  ``out += piece`` (O(output²)); rebuilt as a list + one `"".join()`.
+- The carrier↔warning reconciliation re-scanned every accumulated warning for
+  every carrier of every batch (O(carriers × warnings), shingle sets); dedupe
+  carrier fragments globally so each unique fragment is reconciled once.
+- COMMIT / ROLLBACK / TRUNCATE now pass through (PassthroughSQL) instead of a
+  per-statement Command carrier — a dump has thousands.
+- A mandatory rule was added to `SKILL-development-workflow.md`: never build a
+  string with `+=` in an input-proportional loop.
+
+**T-SQL migration idioms (SSMA output) — `-- UNIQUE:` carriers on the sample
+script cut 969 → ~190 (~80%):**
+- `IF [NOT] EXISTS (<catalog query>) [BEGIN] <stmt> [END] [ELSE PRINT …]` guards:
+  the catalog condition has no cross-engine form, so keep the intent — transpile
+  the guarded statement (idempotent `DROP … IF EXISTS` for a guarded DROP).
+  Balanced-parens condition skipped, single `BEGIN…END` unwrapped, a leading
+  diagnostic `PRINT`/`SET` and the whole `ELSE` branch dropped.
+- `ALTER TABLE t ADD [CONSTRAINT n] DEFAULT v FOR c` → `ALTER COLUMN c SET
+  DEFAULT v` (Oracle `MODIFY c DEFAULT v`); validate the output and fall back to
+  a restorable note when the value has no clean target form (e.g. `NEWID()`).
+- `ALTER TABLE t [WITH [NO]CHECK] {CHECK|NOCHECK} CONSTRAINT c` → Oracle
+  ENABLE/DISABLE, PostgreSQL VALIDATE (CHECK); a restorable note otherwise.
+  Handles `[bracketed]` schema/constraint names (SSMA embeds `$`).
+
+**Restorable physical index clauses (completing the %TYPE precedent):**
+CLUSTERED/NONCLUSTERED, `WITH (options)` and `ON <filegroup>` were dropped
+*silently* from a CREATE INDEX; now preserved in a restorable
+``/* UNIQUE: … -- tsql-only … (physical index clause) */`` note, and **restored**
+when transpiling back to T-SQL (CLUSTERED re-inserted after `CREATE [UNIQUE]`,
+WITH/ON re-appended). `CREATE CLUSTERED INDEX` survives tsql→pg→tsql intact.
+
+**Web:** upload cap raised 2 MB → 64 MB (`UNIQUE_MAX_SQL_BYTES`).
