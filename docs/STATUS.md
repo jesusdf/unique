@@ -105,12 +105,8 @@ emitted as documented `-- UNIQUE:` comments / warnings, not silently dropped):
 ### Next steps
 
 The functional-equivalence and audit-remediation backlogs are complete (see
-`docs/DONE.md` §13–18). `docs/TODO.md` now holds only:
+`docs/DONE.md` §13–19), and SQLite import support (phases 1–3: source-only
+registration, function mappings, row-level triggers) is done. `docs/TODO.md` now
+holds only:
 
-- [ ] **SQLite import — phases 2–3**: source-side function mappings
-      (`last_insert_rowid()`, `strftime`, `ifnull`→COALESCE, …) and row-level
-      trigger translation from SQLite. Phase 1 (registration + DML/DDL source) is
-      done.
-- [ ] Generalize the `/* UNIQUE: … */` restorer to `%TYPE` on the DML path
-      (already wired for physical index clauses).
 - [ ] Publish to PyPI — **deferred (do not publish yet)**.
