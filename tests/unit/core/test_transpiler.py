@@ -204,6 +204,32 @@ class TestTranspiler:
         assert "/" not in out
         assert out.rstrip().endswith(";")
 
+    def test_sqlite_trigger_to_targets(self, transpiler: Transpiler) -> None:
+        # A SQLite row-level trigger routes through the procedural engine and
+        # translates to each target's trigger form (Phase 3).
+        trg = (
+            "CREATE TRIGGER trg AFTER INSERT ON orders\n"
+            "FOR EACH ROW\n"
+            "BEGIN\n"
+            "  UPDATE stats SET total = total + NEW.amount WHERE id = NEW.cat_id;\n"
+            "END"
+        )
+        # Oracle: PL/SQL trigger with :NEW.
+        oracle = transpiler.transpile(trg, source="sqlite", target="oracle").sql
+        assert "CREATE OR REPLACE TRIGGER trg" in oracle
+        assert ":NEW.amount" in oracle
+        assert "-- UNIQUE:" not in oracle
+        # MySQL: DELIMITER-wrapped trigger with NEW.
+        mysql = transpiler.transpile(trg, source="sqlite", target="mysql").sql
+        assert "CREATE TRIGGER trg" in mysql
+        assert "NEW.amount" in mysql
+        assert "-- UNIQUE:" not in mysql
+        # PostgreSQL: trigger function + CREATE TRIGGER.
+        pg = transpiler.transpile(trg, source="sqlite", target="postgresql").sql
+        assert "RETURNS TRIGGER" in pg
+        assert "CREATE OR REPLACE TRIGGER trg" in pg
+        assert "-- UNIQUE:" not in pg
+
     def test_sqlite_source_function_mappings(self, transpiler: Transpiler) -> None:
         # SQLite-only functions rewrite to each target's form (Phase 2).
         def out(sql: str, tgt: str) -> str:
