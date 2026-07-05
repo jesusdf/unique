@@ -1226,3 +1226,23 @@ Remaining pairs (PostgreSQL/SQLite → MySQL/SQL Server/Oracle) all reduce to on
 **intrinsic** impedance — indexing an unbounded `TEXT`/`BLOB` column, which those
 engines cannot do — documented in `docs/03-unsupported.md` §0b and skipped in
 the test's `_KNOWN_GAPS`.
+
+## 21. Cross-engine %TYPE/%ROWTYPE resolution + SQLite metadata source (P2)
+
+`--db-url` metadata resolution now works from **any of the five engines** and
+covers both reference kinds:
+
+- **SQLite as a metadata source** — `sqlite:///file.db` reads declared types via
+  `PRAGMA table_info` (SQLite has no `INFORMATION_SCHEMA`), parsing the affinity
+  string into name + length/precision/scale.
+- **SQL Server via pymssql** — `_connect_tsql` prefers pymssql (root-free) and
+  falls back to pyodbc; the `INFORMATION_SCHEMA` queries use a per-driver
+  parameter marker so both work.
+- **`%ROWTYPE` now consults the DB** — previously ignored, it is resolved via
+  `resolve_table_columns` and the record's columns are documented in the warning
+  (targets without a record type still emit a carrier).
+- **Test** — `TestOracleTypeResolutionAcrossEngines` transpiles one Oracle
+  `%TYPE`/`%ROWTYPE` source against a `--db-url` for each engine (seeding a
+  self-contained probe table), asserting `%TYPE` resolves to a concrete type and
+  `%ROWTYPE` is read from the schema. Wired into the `syntax-live` CI job (all
+  four servers) plus SQLite, and unit-tested against an in-memory SQLite DB.

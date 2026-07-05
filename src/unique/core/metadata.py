@@ -13,6 +13,7 @@ Supported connection URL formats:
   - Oracle:      oracle://user:pass@host:port/service
   - PostgreSQL:  postgresql://user:pass@host:port/database
   - MySQL:       mysql://user:pass@host:port/database
+  - SQLite:      sqlite:///path/to/file.db  (or sqlite:///:memory:)
 """
 
 from __future__ import annotations
@@ -67,6 +68,9 @@ class MetadataResolver:
         self._connection: Any = None
         self._cache = MetadataCache()
         self._connected = False
+        # DB-API parameter marker for INFORMATION_SCHEMA queries; set per driver
+        # (pyodbc uses "?", pymssql/psycopg/mysql use "%s", sqlite uses "?").
+        self._placeholder = "%s"
 
     @classmethod
     def from_url(cls, url: str) -> MetadataResolver:
@@ -92,6 +96,7 @@ class MetadataResolver:
             "postgresql": "postgresql",
             "postgres": "postgresql",
             "mysql": "mysql",
+            "sqlite": "sqlite",
         }
 
         dialect = dialect_map.get(scheme)
@@ -116,6 +121,8 @@ class MetadataResolver:
                 self._connect_postgresql(parsed)
             elif self._dialect == "mysql":
                 self._connect_mysql(parsed)
+            elif self._dialect == "sqlite":
+                self._connect_sqlite(url, parsed)
             self._connected = True
             logger.info("Connected to %s database", self._dialect)
         except ImportError as e:
@@ -126,23 +133,52 @@ class MetadataResolver:
             raise
 
     def _connect_tsql(self, parsed: Any) -> None:
-        """Connect to SQL Server using pyodbc."""
-        import pyodbc
-
+        """Connect to SQL Server, preferring pymssql (root-free, its wheel
+        bundles FreeTDS) and falling back to pyodbc + the MS ODBC driver."""
         host = parsed.hostname or "localhost"
         port = parsed.port or 1433
         database = parsed.path.lstrip("/") if parsed.path else "master"
         user = parsed.username or ""
         password = parsed.password or ""
 
-        conn_str = (
-            f"DRIVER={{ODBC Driver 17 for SQL Server}};"
-            f"SERVER={host},{port};"
-            f"DATABASE={database};"
-            f"UID={user};"
-            f"PWD={password}"
-        )
-        self._connection = pyodbc.connect(conn_str)
+        try:
+            import pymssql
+
+            self._connection = pymssql.connect(
+                server=host,
+                port=str(port),
+                user=user,
+                password=password,
+                database=database,
+            )
+            self._placeholder = "%s"  # pymssql uses pyformat
+        except ImportError:
+            import pyodbc
+
+            conn_str = (
+                f"DRIVER={{ODBC Driver 18 for SQL Server}};"
+                f"SERVER={host},{port};"
+                f"DATABASE={database};"
+                f"UID={user};"
+                f"PWD={password};"
+                "TrustServerCertificate=yes"
+            )
+            self._connection = pyodbc.connect(conn_str)
+            self._placeholder = "?"  # pyodbc uses qmark
+
+    def _connect_sqlite(self, url: str, parsed: Any) -> None:
+        """Connect to a SQLite database file using the stdlib driver.
+
+        Accepts ``sqlite:///abs/path.db`` (``parsed.path`` == "/abs/path.db")
+        and ``sqlite:///:memory:``.
+        """
+        import sqlite3
+
+        path = parsed.path or url[len("sqlite://") :]
+        if path.lstrip("/") == ":memory:":
+            path = ":memory:"
+        self._connection = sqlite3.connect(path)
+        self._placeholder = "?"  # sqlite3 uses qmark
 
     def _connect_oracle(self, parsed: Any) -> None:
         """Connect to Oracle using oracledb."""
@@ -274,6 +310,32 @@ class MetadataResolver:
             schema_name = parts[0] if len(parts) > 1 else None
             table_name = parts[-1]
 
+            # SQLite has no INFORMATION_SCHEMA; read the declared types with
+            # PRAGMA table_info and parse the affinity string ourselves.
+            if self._dialect == "sqlite":
+                cursor.execute(f'PRAGMA table_info("{table_name}")')
+                match = next(
+                    (
+                        r
+                        for r in cursor.fetchall()
+                        if str(r[1]).upper() == column.upper()
+                    ),
+                    None,
+                )
+                cursor.close()
+                if match is None:
+                    return None
+                name, ml, prec, scale = self._parse_sqlite_type(str(match[2]))
+                return ColumnInfo(
+                    table_name=table_name,
+                    column_name=column,
+                    data_type=name,
+                    max_length=ml,
+                    precision=prec,
+                    scale=scale,
+                    is_nullable=not match[3],  # PRAGMA notnull flag
+                )
+
             if self._dialect == "oracle":
                 sql = """
                     SELECT DATA_TYPE, DATA_LENGTH, DATA_PRECISION, DATA_SCALE,
@@ -288,33 +350,20 @@ class MetadataResolver:
                     params = (table_name, column, schema_name)
                 cursor.execute(sql, params)
 
-            elif self._dialect == "tsql":
-                sql = """
+            else:  # tsql / postgresql / mysql: INFORMATION_SCHEMA
+                ph = self._placeholder
+                sql = f"""
                     SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH,
                            NUMERIC_PRECISION, NUMERIC_SCALE, IS_NULLABLE
                     FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE UPPER(TABLE_NAME) = UPPER(?)
-                      AND UPPER(COLUMN_NAME) = UPPER(?)
+                    WHERE UPPER(TABLE_NAME) = UPPER({ph})
+                      AND UPPER(COLUMN_NAME) = UPPER({ph})
                 """
                 params_list = [table_name, column]
                 if schema_name:
-                    sql += " AND UPPER(TABLE_SCHEMA) = UPPER(?)"
+                    sql += f" AND UPPER(TABLE_SCHEMA) = UPPER({ph})"
                     params_list.append(schema_name)
                 cursor.execute(sql, params_list)
-
-            elif self._dialect in ("postgresql", "mysql"):
-                sql = """
-                    SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH,
-                           NUMERIC_PRECISION, NUMERIC_SCALE, IS_NULLABLE
-                    FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE UPPER(TABLE_NAME) = UPPER(%s)
-                      AND UPPER(COLUMN_NAME) = UPPER(%s)
-                """
-                params_pg = [table_name, column]
-                if schema_name:
-                    sql += " AND UPPER(TABLE_SCHEMA) = UPPER(%s)"
-                    params_pg.append(schema_name)
-                cursor.execute(sql, params_pg)
 
             row = cursor.fetchone()
             cursor.close()
@@ -345,27 +394,34 @@ class MetadataResolver:
             parts = table.split(".")
             table_name = parts[-1]
 
-            if self._dialect == "oracle":
-                sql = """
-                    SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH,
-                           DATA_PRECISION, DATA_SCALE, NULLABLE
-                    FROM ALL_TAB_COLUMNS
-                    WHERE UPPER(TABLE_NAME) = UPPER(:1)
-                    ORDER BY COLUMN_ID
-                """
-                cursor.execute(sql, (table_name,))
+            if self._dialect == "sqlite":
+                cursor.execute(f'PRAGMA table_info("{table_name}")')
+                rows = []
+                for r in cursor.fetchall():  # (cid, name, type, notnull, dflt, pk)
+                    name, ml, prec, scale = self._parse_sqlite_type(str(r[2]))
+                    rows.append((r[1], name, ml, prec, scale, "NO" if r[3] else "YES"))
+                cursor.close()
             else:
-                sql = """
-                    SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH,
-                           NUMERIC_PRECISION, NUMERIC_SCALE, IS_NULLABLE
-                    FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE UPPER(TABLE_NAME) = UPPER(%s)
-                    ORDER BY ORDINAL_POSITION
-                """
+                if self._dialect == "oracle":
+                    sql = """
+                        SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH,
+                               DATA_PRECISION, DATA_SCALE, NULLABLE
+                        FROM ALL_TAB_COLUMNS
+                        WHERE UPPER(TABLE_NAME) = UPPER(:1)
+                        ORDER BY COLUMN_ID
+                    """
+                else:
+                    ph = self._placeholder
+                    sql = f"""
+                        SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH,
+                               NUMERIC_PRECISION, NUMERIC_SCALE, IS_NULLABLE
+                        FROM INFORMATION_SCHEMA.COLUMNS
+                        WHERE UPPER(TABLE_NAME) = UPPER({ph})
+                        ORDER BY ORDINAL_POSITION
+                    """
                 cursor.execute(sql, (table_name,))
-
-            rows = cursor.fetchall()
-            cursor.close()
+                rows = cursor.fetchall()
+                cursor.close()
 
             if rows:
                 return [
@@ -385,6 +441,49 @@ class MetadataResolver:
             logger.warning("Failed to query table columns: %s", e)
 
         return None
+
+    _SQLITE_CHAR_TYPES = frozenset(
+        {
+            "VARCHAR",
+            "VARCHAR2",
+            "NVARCHAR",
+            "NVARCHAR2",
+            "CHAR",
+            "NCHAR",
+            "CHARACTER",
+            "TEXT",
+            "CLOB",
+            "RAW",
+            "BINARY",
+            "VARBINARY",
+        }
+    )
+
+    @classmethod
+    def _parse_sqlite_type(
+        cls, decl: str
+    ) -> tuple[str, int | None, int | None, int | None]:
+        """Parse a SQLite declared type (affinity) into name + length/precision.
+
+        e.g. ``VARCHAR(100)`` -> ("VARCHAR", 100, None, None);
+        ``NUMERIC(12, 2)`` -> ("NUMERIC", None, 12, 2); ``INTEGER`` -> ("INTEGER",
+        None, None, None). A parenthesized size is a length for character types
+        and a precision/scale otherwise.
+        """
+        m = re.match(
+            r"\s*([A-Za-z0-9_ ]+?)\s*(?:\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\))?\s*$",
+            decl or "",
+        )
+        if not m:
+            return (decl or "TEXT").strip().upper() or "TEXT", None, None, None
+        name = m.group(1).strip().upper()
+        p1 = int(m.group(2)) if m.group(2) else None
+        p2 = int(m.group(3)) if m.group(3) else None
+        if p1 is None:
+            return name, None, None, None
+        if name in cls._SQLITE_CHAR_TYPES:
+            return name, p1, None, None
+        return name, None, p1, p2
 
     @staticmethod
     def _column_info_to_datatype(info: ColumnInfo) -> DataType:

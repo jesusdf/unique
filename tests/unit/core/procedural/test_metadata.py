@@ -220,3 +220,67 @@ class TestContextManager:
         with r as ctx:
             assert ctx.is_connected is True
         assert r.is_connected is False
+
+
+class TestParseSqliteType:
+    @pytest.mark.parametrize(
+        "decl,expected",
+        [
+            ("VARCHAR(100)", ("VARCHAR", 100, None, None)),
+            ("varchar(50)", ("VARCHAR", 50, None, None)),
+            ("NUMERIC(10, 2)", ("NUMERIC", None, 10, 2)),
+            ("DECIMAL(8)", ("DECIMAL", None, 8, None)),
+            ("INTEGER", ("INTEGER", None, None, None)),
+            ("TEXT", ("TEXT", None, None, None)),
+            ("", ("TEXT", None, None, None)),
+        ],
+    )
+    def test_parse(
+        self, decl: str, expected: tuple[str, object, object, object]
+    ) -> None:
+        assert MetadataResolver._parse_sqlite_type(decl) == expected
+
+
+class TestSQLiteResolver:
+    """SQLite as a metadata source (via PRAGMA table_info, no INFORMATION_SCHEMA)."""
+
+    def _seed(self, tmp_path: object) -> str:
+        import sqlite3
+
+        path = tmp_path / "probe.db"  # type: ignore[operator]
+        conn = sqlite3.connect(str(path))
+        conn.executescript(
+            "CREATE TABLE customer (id INTEGER PRIMARY KEY, "
+            "name VARCHAR(100) NOT NULL, unit_price NUMERIC(10,2), notes TEXT);"
+        )
+        conn.commit()
+        conn.close()
+        return f"sqlite:///{path}"
+
+    def test_resolve_char_and_numeric(self, tmp_path: object) -> None:
+        with MetadataResolver.from_url(self._seed(tmp_path)) as r:
+            assert r.is_connected is True
+            name = r.resolve_column_type("customer", "name")
+            assert name is not None and name.name == "VARCHAR" and name.params == (100,)
+            price = r.resolve_type_reference("customer.unit_price%TYPE")
+            assert price is not None and price.name == "NUMERIC"
+            assert price.params == (10, 2)
+
+    def test_resolve_table_columns(self, tmp_path: object) -> None:
+        with MetadataResolver.from_url(self._seed(tmp_path)) as r:
+            cols = r.resolve_table_columns("customer")
+            assert cols is not None
+            assert [c.column_name for c in cols] == [
+                "id",
+                "name",
+                "unit_price",
+                "notes",
+            ]
+
+    def test_unknown_column_returns_none(self, tmp_path: object) -> None:
+        with MetadataResolver.from_url(self._seed(tmp_path)) as r:
+            assert r.resolve_column_type("customer", "missing") is None
+
+    def test_in_memory_url_connects(self) -> None:
+        with MetadataResolver.from_url("sqlite:///:memory:") as r:
+            assert r.is_connected is True
