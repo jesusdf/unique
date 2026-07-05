@@ -1872,12 +1872,20 @@ def _portable_index(sql: str, dialect: str) -> str:
     - A filtered-index WHERE clause is supported by PostgreSQL (partial
       index) but not MySQL/Oracle; flag it for those.
     """
+    dropped_physical: list[str] = []
     if dialect != "tsql":
-        sql = re.sub(r"(?i)\b(NON)?CLUSTERED\s+", "", sql)
+
+        def _drop(match: "re.Match[str]") -> str:
+            dropped_physical.append(match.group(0).strip())
+            return ""
+
+        sql = re.sub(r"(?i)\s*\b(NON)?CLUSTERED\b", _drop, sql)
         # T-SQL physical index storage options (WITH (PAD_INDEX = ..., ...))
-        # and ON [filegroup] have no portable equivalent; drop them.
-        sql = re.sub(r"(?i)\s+WITH\s*\([^)]*\)", "", sql)
-        sql = re.sub(r"(?i)\s+ON\s+\[[^\]]+\]\s*$", "", sql)
+        # and ON <filegroup> have no portable equivalent; drop them — but keep
+        # the original in a restorable note (never a silent loss). The filegroup
+        # name may already be requoted ("PRIMARY") by the time we see it.
+        sql = re.sub(r"(?i)\s+WITH\s*\([^)]*\)", _drop, sql)
+        sql = re.sub(r'(?i)\s+ON\s+(?:\[[^\]]+\]|"[^"]+"|\w+)\s*$', _drop, sql)
 
     # sqlglot emulates PostgreSQL's NULLS-ordering by prefixing an index key
     # with "CASE WHEN col IS NULL THEN 1 ELSE 0 END, col". That expression is
@@ -1909,6 +1917,14 @@ def _portable_index(sql: str, dialect: str) -> str:
                 + f"\n-- UNIQUE: {dialect} does not support filtered indexes; "
                 f"dropped predicate:{m.group(0)}"
             )
+    if dropped_physical:
+        # Preserve the stripped physical clauses in a restorable note so the
+        # original can be recovered on a transpilation back to T-SQL.
+        clauses = " ".join(dropped_physical)
+        sql += (
+            f"\n/* UNIQUE: {clauses} -- tsql-only, no {dialect} equivalent "
+            "(physical index clause) */"
+        )
     return sql
 
 
