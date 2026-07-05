@@ -95,7 +95,7 @@ High-level plan (details in that folder):
       (not JOIN-against-aggregate) — the faithfully-transpilable pattern.
       MySQL/Oracle still document the set-based form (no named transition
       tables); that is a real limitation, not a bug — see next item.
-- [ ] **MySQL/Oracle set-based triggers remain documented (by design).** Neither
+- [x] **MySQL/Oracle set-based triggers remain documented (by design).** Neither
       has T-SQL's named `inserted`/`deleted` transition tables, so a set-based
       trigger can't be mechanically rewritten to a single faithful trigger
       (Oracle would need a compound trigger accumulating rows into a PL/SQL
