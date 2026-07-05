@@ -95,6 +95,12 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 
+[tool.ruff.lint.per-file-ignores]
+# The converter package splits one module into _base/harvest/convert/emit and
+# re-exports shared state/helpers via ``from ._base import *``; F403/F405 are the
+# expected cost of that pattern (mypy still resolves the names via __all__).
+"src/unique/core/converter/*.py" = ["F403", "F405"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true

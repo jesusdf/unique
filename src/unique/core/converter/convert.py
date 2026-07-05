@@ -1,0 +1,1062 @@
+# Copyright (c) 2026 Jesús Diéguez Fernández
+# SPDX-License-Identifier: MIT
+# See the LICENSE file in the project root for full license text.
+
+"""Shared converter from sqlglot AST to Unique IR nodes.
+
+All dialect parsers delegate to this module for the heavy lifting of
+converting sqlglot's expression tree into our engine-agnostic IR.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import dataclasses
+from typing import cast
+
+import sqlglot
+import sqlglot.expressions as exp
+from sqlglot import transforms
+
+from unique.core.ast_nodes import (
+    Alias,
+    ASTNode,
+    BinaryOp,
+    BinaryOperator,
+    CaseExpression,
+    CastExpression,
+    ColumnDefinition,
+    ColumnRef,
+    CreateTableStatement,
+    CreateViewStatement,
+    CTEDefinition,
+    DataType,
+    DeleteStatement,
+    DropStatement,
+    FunctionCall,
+    InsertStatement,
+    JoinClause,
+    JoinType,
+    LimitClause,
+    Literal,
+    OrderByItem,
+    OrderDirection,
+    PassthroughSQL,
+    RawSQL,
+    SelectStatement,
+    SetOperationType,
+    Star,
+    SubqueryExpression,
+    TableRef,
+    UnaryOp,
+    UnaryOperator,
+    UpdateStatement,
+    WindowFunction,
+    WindowSpec,
+)
+
+# Split out of the former single-file converter; see the package __init__.
+from unique.core.converter._base import *  # noqa: F401,F403
+from unique.core.converter.harvest import _resolve_tsql_alias_type  # noqa: F401
+
+
+def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
+    """Parse SQL text using sqlglot and convert to IR nodes.
+
+    Args:
+        sql: Raw SQL text.
+        dialect: Our dialect name ('tsql', 'oracle', 'postgresql', 'mysql').
+
+    Returns:
+        A list of IR ASTNode instances.
+    """
+    sg_dialect = sqlglot_dialect_name(dialect)
+    try:
+        parsed = sqlglot.parse(
+            sql, read=sg_dialect, error_level=sqlglot.ErrorLevel.WARN
+        )
+    except Exception as e:
+        logger.warning("sqlglot parse error: %s", e)
+        return [RawSQL(sql=sql, reason=str(e))]
+
+    nodes: list[ASTNode] = []
+    for expression in parsed:
+        if expression is None:
+            continue
+        # Oracle (+) join marks: rewrite into explicit LEFT/RIGHT OUTER JOINs
+        # with ON conditions before converting. sqlglot drops the mark on
+        # emit (turning an outer join into an inner one, silently), so the
+        # rewrite must happen at the tree level (audit 2026-07-02, S1-2).
+        if dialect == "oracle" and any(
+            c.args.get("join_mark") for c in expression.find_all(exp.Column)
+        ):
+            expression = transforms.eliminate_join_marks(expression)
+        # T-SQL "+" on strings is concatenation; rewrite it to "||" so it maps
+        # to the target's concat operator (sqlglot keeps it as arithmetic "+").
+        if dialect == "tsql":
+            expression = _rewrite_tsql_string_concat(
+                expression  # type: ignore[arg-type]
+            )
+        node = convert_expression(expression, dialect)  # type: ignore[arg-type]
+        nodes.append(node)
+
+    return nodes
+
+
+def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> ASTNode:
+    """Convert a single sqlglot expression to an IR node.
+
+    Dispatches based on the sqlglot expression type. ``source_dialect`` is
+    used to re-transpile passthrough statements (ALTER, CREATE INDEX, ...)
+    that sqlglot handles directly but we do not model structurally.
+    """
+    # Statements sqlglot transpiles well but we don't model in IR: keep them
+    # as PassthroughSQL so the emitter can re-transpile to the target.
+    if isinstance(expr, (exp.Alter, exp.Create)) and _is_passthrough_create(expr):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind=_passthrough_kind(expr),
+        )
+    if isinstance(expr, exp.Alter):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="ALTER",
+        )
+    if isinstance(expr, exp.Use):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="USE",
+        )
+    if isinstance(expr, exp.Merge):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="MERGE",
+        )
+    # INSERT/UPDATE/DELETE with a RETURNING clause: our DML IR drops it, so
+    # pass through to sqlglot (which maps RETURNING <-> OUTPUT) to preserve
+    # the returned columns.
+    if isinstance(expr, (exp.Insert, exp.Update, exp.Delete)) and expr.args.get(
+        "returning"
+    ):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="RETURNING",
+        )
+    # Oracle hierarchical queries (START WITH / CONNECT BY) have no faithful
+    # automatic rewrite; emit a documented comment instead of silently
+    # dropping the clause (which would change results).
+    if isinstance(expr, exp.Select) and expr.args.get("connect") is not None:
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="CONNECT BY",
+        )
+    # T-SQL "SELECT ... INTO <table>" creates a new table. sqlglot maps it
+    # correctly per dialect (CREATE TABLE AS for MySQL, SELECT INTO for
+    # PG/Oracle); our SELECT converter would drop the INTO, so pass through.
+    if isinstance(expr, exp.Select) and isinstance(expr.args.get("into"), exp.Into):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="SELECT INTO",
+        )
+    # SELECT clauses our IR does not model (row locks like FOR UPDATE,
+    # QUALIFY) would otherwise be dropped silently; pass them through so
+    # sqlglot can translate them and the semantics are preserved.
+    if isinstance(expr, exp.Select) and (
+        expr.args.get("locks") or expr.args.get("qualify") is not None
+    ):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="SELECT",
+        )
+    # T-SQL CONVERT(type, value, style) uses numeric style codes for date
+    # formatting that sqlglot maps to TO_CHAR/DATE_FORMAT patterns. Our
+    # expression converter would drop the value and style, so pass the whole
+    # statement through when a styled CONVERT is present.
+    if isinstance(expr, exp.Select) and any(
+        c.args.get("style") is not None for c in expr.find_all(exp.Convert)
+    ):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="SELECT",
+        )
+    # CREATE TABLE is modeled in IR but its table-level constraints are kept
+    # as passthrough fragments, which need the source dialect.
+    if (
+        isinstance(expr, exp.Create)
+        and (expr.args.get("kind") or "").upper() in ("TABLE", "")
+        and isinstance(expr.this, exp.Schema)
+    ):
+        return _convert_create_table(expr, source_dialect)
+    # Transaction/DDL control (COMMIT / ROLLBACK / TRUNCATE) is valid on every
+    # target — a data-migration dump is full of these — so re-transpile it via
+    # the passthrough path instead of degrading each to an "Unhandled" carrier.
+    if isinstance(expr, (exp.Commit, exp.Rollback, exp.TruncateTable)):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="statement",
+        )
+    return _convert_expression_impl(expr)
+
+
+def _is_passthrough_create(expr: exp.Expression) -> bool:
+    """Whether a CREATE should be passed through to sqlglot unchanged.
+
+    Tables and views are modeled in IR; indexes (including T-SQL
+    CLUSTERED/NONCLUSTERED), sequences, and schemas are not, so they
+    round-trip through sqlglot.
+    """
+    if not isinstance(expr, exp.Create):
+        return False
+    kind = (expr.args.get("kind") or "").upper()
+    return "INDEX" in kind or kind in ("SEQUENCE", "SCHEMA")
+
+
+def _passthrough_kind(expr: exp.Expression) -> str:
+    if isinstance(expr, exp.Create):
+        kind = (expr.args.get("kind") or "").upper()
+        # Normalize CLUSTERED/NONCLUSTERED index variants to a common kind.
+        if "INDEX" in kind:
+            return "CREATE INDEX"
+        return "CREATE " + kind
+    return type(expr).__name__.upper()
+
+
+def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
+    """Convert a single sqlglot expression to an IR node.
+
+    Dispatches based on the sqlglot expression type.
+    """
+    if isinstance(expr, exp.Select):
+        return _convert_select(expr)
+    if isinstance(expr, exp.Insert):
+        return _convert_insert(expr)
+    if isinstance(expr, exp.Update):
+        return _convert_update(expr)
+    if isinstance(expr, exp.Delete):
+        return _convert_delete(expr)
+    if isinstance(expr, exp.Create):
+        return _convert_create(expr)
+    if isinstance(expr, exp.Drop):
+        return _convert_drop(expr)
+    if isinstance(expr, exp.Union):
+        return _convert_union(expr)
+    if isinstance(expr, exp.Column):
+        return _convert_column(expr)
+    if isinstance(expr, exp.Table):
+        return _convert_table(expr)
+    if isinstance(expr, exp.Literal):
+        return _convert_literal(expr)
+    if isinstance(expr, exp.Boolean):
+        # TRUE/FALSE literals; T-SQL and Oracle need 1/0 at emit time
+        # (audit 2026-07-02, S1-9).
+        return Literal(value=bool(expr.this), dtype="boolean")
+    if isinstance(expr, exp.Star):
+        return Star()
+    if isinstance(expr, exp.Alias):
+        return _convert_alias(expr)
+    if isinstance(expr, exp.Anonymous):
+        return _convert_function(expr)
+    if isinstance(expr, exp.Case):
+        return _convert_case(expr)
+    if isinstance(expr, exp.Cast):
+        return _convert_cast(expr)
+    # A schema-qualified function call (e.g. dbo.fn_tax(net)) parses as a Dot
+    # (schema . func(...)). Fold it into a FunctionCall whose name keeps the
+    # qualifier ("dbo.fn_tax"); the emitter strips dbo for non-T-SQL targets.
+    if isinstance(expr, exp.Dot):
+        dot_func = _convert_qualified_function(expr)
+        if dot_func is not None:
+            return dot_func
+    # exp.And / exp.Or (and other connectors) are *also* exp.Func in sqlglot's
+    # class hierarchy, so the Binary check must come before the Func check or a
+    # top-level "a AND b" would be emitted as the function call "AND(a, b)".
+    if isinstance(expr, exp.Binary):
+        return _convert_binary(expr)
+    if isinstance(expr, exp.Func):
+        return _convert_function(expr)
+    if isinstance(expr, exp.Not):
+        return UnaryOp(
+            operator=UnaryOperator.NOT, operand=convert_expression(expr.this)
+        )
+    if isinstance(expr, exp.Neg):
+        return UnaryOp(
+            operator=UnaryOperator.NEGATIVE,
+            operand=convert_expression(expr.this),
+        )
+    if isinstance(expr, exp.Is):
+        return _convert_is(expr)
+    if isinstance(expr, exp.Subquery):
+        inner = expr.this
+        if isinstance(inner, (exp.Select, exp.Union)):
+            return SubqueryExpression(query=_convert_select(inner))
+        return RawSQL(sql=expr.sql(), reason="Complex subquery")
+    if isinstance(expr, exp.Window):
+        return _convert_window(expr)
+    if isinstance(expr, exp.Paren):
+        return convert_expression(expr.this)
+    if isinstance(expr, exp.Ordered):
+        return _convert_ordered(expr)
+    # MySQL charset introducer (_utf8'x'): the charset tag is MySQL-only
+    # syntax (and legacy even there); keep just the string literal.
+    if isinstance(expr, exp.Introducer):
+        return convert_expression(expr.expression)
+
+    # Fallback: emit as raw SQL
+    try:
+        raw = expr.sql()
+    except Exception:
+        raw = str(expr)
+    return RawSQL(sql=raw, reason=f"Unhandled expression type: {type(expr).__name__}")
+
+
+def _convert_select(expr: exp.Expression) -> SelectStatement:
+    """Convert a sqlglot Select expression to a SelectStatement IR node."""
+    # Handle Union by extracting the left Select
+    if isinstance(expr, exp.Union):
+        return _convert_union(expr)
+
+    columns = tuple(convert_expression(col) for col in (expr.expressions or []))
+
+    # FROM
+    from_clause = None
+    from_expr = expr.find(exp.From)
+    if from_expr and from_expr.this:
+        from_clause = _convert_table_or_subquery(from_expr.this)
+
+    # JOINs
+    joins = tuple(_convert_join(j) for j in (expr.args.get("joins") or []))
+
+    # WHERE
+    where = None
+    where_expr = expr.find(exp.Where)
+    if where_expr:
+        where = convert_expression(where_expr.this)
+
+    # GROUP BY
+    group_by_expr = expr.args.get("group")
+    group_by = tuple(
+        convert_expression(g)
+        for g in (group_by_expr.expressions if group_by_expr else [])
+    )
+
+    # HAVING
+    having = None
+    having_expr = expr.find(exp.Having)
+    if having_expr:
+        having = convert_expression(having_expr.this)
+
+    # ORDER BY
+    order_by_expr = expr.args.get("order")
+    order_by: tuple[OrderByItem, ...] = ()
+    if order_by_expr:
+        order_by = tuple(_convert_ordered(o) for o in order_by_expr.expressions)
+
+    # LIMIT / OFFSET
+    limit = None
+    limit_expr = expr.args.get("limit")
+    offset_expr = expr.args.get("offset")
+    if limit_expr or offset_expr:
+        # T-SQL TOP n PERCENT carries a percent flag in sqlglot's limit options.
+        percent = False
+        if limit_expr is not None:
+            opts = limit_expr.args.get("limit_options")
+            percent = bool(opts and opts.args.get("percent"))
+        limit = LimitClause(
+            limit=convert_expression(limit_expr.expression) if limit_expr else None,
+            offset=convert_expression(offset_expr.expression) if offset_expr else None,
+            percent=percent,
+        )
+
+    # DISTINCT
+    distinct = expr.args.get("distinct") is not None
+
+    # CTEs
+    ctes: tuple[CTEDefinition, ...] = ()
+    with_clause = expr.args.get("with") or expr.args.get("with_")
+    if with_clause:
+        ctes = tuple(_convert_cte(c) for c in with_clause.expressions)
+
+    return SelectStatement(
+        columns=columns,
+        from_clause=from_clause,
+        joins=joins,
+        where=where,
+        group_by=group_by,
+        having=having,
+        order_by=order_by,
+        limit=limit,
+        distinct=distinct,
+        ctes=ctes,
+    )
+
+
+def _convert_union(expr: exp.Union) -> SelectStatement:
+    """Convert a UNION/INTERSECT/EXCEPT to a SelectStatement with set operation."""
+    left = _convert_select(expr.this)
+    right = _convert_select(expr.expression)
+
+    # Determine set operation type
+    if isinstance(expr, exp.Intersect):
+        set_op = SetOperationType.INTERSECT
+    elif isinstance(expr, exp.Except):
+        set_op = SetOperationType.EXCEPT
+    elif expr.args.get("distinct") is False:
+        set_op = SetOperationType.UNION_ALL
+    else:
+        set_op = SetOperationType.UNION
+
+    return SelectStatement(
+        columns=left.columns,
+        from_clause=left.from_clause,
+        joins=left.joins,
+        where=left.where,
+        group_by=left.group_by,
+        having=left.having,
+        order_by=left.order_by,
+        limit=left.limit,
+        distinct=left.distinct,
+        ctes=left.ctes,
+        set_op=set_op,
+        set_query=right,
+    )
+
+
+def _convert_insert(expr: exp.Insert) -> InsertStatement:
+    """Convert a sqlglot Insert to InsertStatement."""
+    table = _convert_table_ref(expr.this)
+
+    columns: tuple[str, ...] = ()
+    # In sqlglot v30+, columns may be embedded in a Schema node
+    schema_node = expr.this
+    if isinstance(schema_node, exp.Schema) and schema_node.expressions:
+        columns = tuple(
+            c.name if hasattr(c, "name") else str(c) for c in schema_node.expressions
+        )
+    else:
+        col_expr = expr.args.get("columns")
+        if col_expr:
+            columns = tuple(c.name if hasattr(c, "name") else str(c) for c in col_expr)
+
+    # VALUES
+    values: tuple[tuple[ASTNode, ...], ...] = ()
+    val_expr = expr.args.get("expression")
+    if isinstance(val_expr, exp.Values):
+        values = tuple(
+            tuple(convert_expression(v) for v in row.expressions)
+            for row in val_expr.expressions
+        )
+
+    # SELECT
+    select = None
+    if isinstance(val_expr, exp.Select):
+        select = _convert_select(val_expr)
+
+    return InsertStatement(
+        table=table,
+        columns=columns,
+        values=values,
+        select=select,
+    )
+
+
+def _convert_update(expr: exp.Update) -> UpdateStatement:
+    """Convert a sqlglot Update to UpdateStatement.
+
+    A cross-table ``UPDATE ... SET ... FROM t JOIN s ON ...`` keeps its source
+    table and joins: sqlglot nests them inside the ``from_`` clause's table
+    (``from_.this`` is the first source table, whose ``joins`` arg holds the
+    rest). They are lifted into ``from_clause``/``joins`` so the emitter can
+    render each engine's idiomatic cross-table update instead of dropping them.
+    """
+    table = _convert_table_ref(expr.this)
+
+    assignments: list[tuple[str, ASTNode]] = []
+    for eq in expr.args.get("expressions", []):
+        if isinstance(eq, exp.EQ):
+            col_name = eq.this.name if hasattr(eq.this, "name") else str(eq.this)
+            val = convert_expression(eq.expression)
+            assignments.append((col_name, val))
+
+    from_clause: TableRef | None = None
+    joins: list[JoinClause] = []
+    from_expr = expr.args.get("from_") or expr.args.get("from")
+    if from_expr is not None:
+        source_table = from_expr.this
+        if isinstance(source_table, exp.Table):
+            from_clause = _convert_table_ref(source_table)
+            for join_expr in source_table.args.get("joins") or []:
+                joins.append(_convert_join(join_expr))
+
+    where = None
+    where_expr = expr.find(exp.Where)
+    if where_expr:
+        where = convert_expression(where_expr.this)
+
+    return UpdateStatement(
+        table=table,
+        assignments=tuple(assignments),
+        where=where,
+        from_clause=from_clause,
+        joins=tuple(joins),
+    )
+
+
+def _convert_delete(expr: exp.Delete) -> DeleteStatement:
+    """Convert a sqlglot Delete to DeleteStatement."""
+    table = _convert_table_ref(expr.this)
+
+    where = None
+    where_expr = expr.find(exp.Where)
+    if where_expr:
+        where = convert_expression(where_expr.this)
+
+    return DeleteStatement(table=table, where=where)
+
+
+def _convert_create(expr: exp.Create) -> ASTNode:
+    """Convert a sqlglot Create to the appropriate IR node."""
+    kind = (expr.args.get("kind") or "").upper()
+
+    if kind == "TABLE":
+        return _convert_create_table(expr)
+    if kind == "VIEW":
+        return _convert_create_view(expr)
+
+    return RawSQL(sql=expr.sql(), reason=f"Unhandled CREATE {kind}")
+
+
+def _convert_create_table(
+    expr: exp.Create, source_dialect: str = "tsql"
+) -> CreateTableStatement:
+    """Convert CREATE TABLE."""
+    table = _convert_table_ref(expr.this)
+
+    columns: list[ColumnDefinition] = []
+    constraints: list[PassthroughSQL] = []
+    schema_expr = expr.this
+    if isinstance(schema_expr, exp.Schema):
+        table = _convert_table_ref(schema_expr.this)
+        for col_def in schema_expr.expressions:
+            if isinstance(col_def, exp.ColumnDef):
+                # Computed/generated columns (AS (expr) [PERSISTED]) have no
+                # plain type; sqlglot translates them to GENERATED ALWAYS AS
+                # (...) STORED. Keep the column as a passthrough fragment so
+                # the expression and type are preserved.
+                if any(
+                    isinstance(getattr(c, "kind", None), exp.ComputedColumnConstraint)
+                    for c in col_def.args.get("constraints", [])
+                ):
+                    constraints.append(
+                        PassthroughSQL(
+                            sql=col_def.sql(
+                                dialect=sqlglot_dialect_name(source_dialect)
+                            ),
+                            source_dialect=source_dialect,
+                            kind="COLUMN",
+                        )
+                    )
+                    continue
+
+                dtype = DataType(name="VARCHAR")
+                if col_def.args.get("kind"):
+                    dtype = _resolve_tsql_alias_type(
+                        _convert_data_type(col_def.args["kind"])
+                    )
+                    # Oracle's unqualified NUMBER (no precision/scale) parses to
+                    # a bare DECIMAL but denotes an integer id/count: map it to
+                    # BIGINT so identity/PK/FK columns are valid (a DECIMAL can't
+                    # be AUTO_INCREMENT on MySQL, nor match an integer PK for a
+                    # foreign key). Only for an Oracle source — a bare DECIMAL
+                    # from other engines keeps its meaning. NUMBER(p,s) has
+                    # params and is untouched.
+                    if (
+                        source_dialect == "oracle"
+                        and dtype.name.upper() in ("DECIMAL", "NUMERIC")
+                        and not dtype.params
+                    ):
+                        dtype = DataType(name="BIGINT")
+
+                nullable = True
+                identity = False
+                primary_key = False
+                unique = False
+                default: ASTNode | None = None
+                for constraint in col_def.args.get("constraints", []):
+                    kind = getattr(constraint, "kind", None)
+                    if isinstance(kind, exp.NotNullColumnConstraint):
+                        # sqlglot uses this for both "NOT NULL" and an
+                        # explicit "NULL" (allow_null=True).
+                        nullable = bool(getattr(kind, "args", {}).get("allow_null"))
+                    elif isinstance(kind, exp.GeneratedAsIdentityColumnConstraint):
+                        identity = True
+                    elif isinstance(kind, exp.PrimaryKeyColumnConstraint):
+                        primary_key = True
+                    elif isinstance(kind, exp.UniqueColumnConstraint):
+                        unique = True
+                    elif isinstance(kind, exp.DefaultColumnConstraint):
+                        # Convert properly so boolean/function defaults are
+                        # re-emitted in the target's own spelling (audit
+                        # 2026-07-02, S1-9/S1-10).
+                        default = (
+                            convert_expression(kind.this, source_dialect)
+                            if kind.this
+                            else None
+                        )
+                    elif isinstance(kind, exp.AutoIncrementColumnConstraint):
+                        identity = True
+
+                columns.append(
+                    ColumnDefinition(
+                        name=(
+                            col_def.this.name
+                            if hasattr(col_def.this, "name")
+                            else str(col_def.this)
+                        ),
+                        data_type=dtype,
+                        nullable=nullable,
+                        default=default,
+                        identity=identity,
+                        primary_key=primary_key,
+                        unique=unique,
+                        quoted=_identifier_quoted(col_def.this),
+                    )
+                )
+            elif isinstance(
+                col_def,
+                (
+                    exp.Constraint,
+                    exp.PrimaryKey,
+                    exp.ForeignKey,
+                    exp.UniqueColumnConstraint,
+                    exp.CheckColumnConstraint,
+                ),
+            ):
+                # Table-level constraint: keep as a passthrough fragment so
+                # the emitter can re-transpile it per dialect via sqlglot.
+                constraints.append(
+                    PassthroughSQL(
+                        sql=col_def.sql(dialect=sqlglot_dialect_name(source_dialect)),
+                        source_dialect=source_dialect,
+                        kind="CONSTRAINT",
+                    )
+                )
+
+    # sqlglot stores exists=False when IF NOT EXISTS is absent (not None),
+    # so "is not None" would wrongly set if_not_exists=True for every table.
+    if_not_exists = bool(expr.args.get("exists"))
+
+    return CreateTableStatement(
+        table=table,
+        columns=tuple(columns),
+        if_not_exists=if_not_exists,
+        table_constraints=tuple(constraints),
+    )
+
+
+def _convert_create_view(expr: exp.Create) -> CreateViewStatement:
+    """Convert CREATE VIEW."""
+    name_expr = expr.this
+    table = _convert_table_ref(name_expr)
+
+    query_expr = expr.args.get("expression")
+    query = _convert_select(query_expr) if query_expr else SelectStatement()
+
+    return CreateViewStatement(
+        name=table,
+        query=query,
+        or_replace=expr.args.get("replace") is not None,
+    )
+
+
+def _convert_drop(expr: exp.Drop) -> DropStatement:
+    """Convert DROP statement."""
+    kind = (expr.args.get("kind") or "TABLE").upper()
+    table = _convert_table_ref(expr.this) if expr.this else TableRef(name="unknown")
+    if_exists = expr.args.get("exists") is not None
+
+    return DropStatement(
+        object_type=kind,
+        name=table,
+        if_exists=if_exists,
+    )
+
+
+def _convert_column(expr: exp.Column) -> ColumnRef:
+    """Convert a column reference."""
+    table = None
+    if expr.table:
+        table = expr.table
+
+    return ColumnRef(
+        name=expr.name,
+        table=table,
+        quoted=_identifier_quoted(expr.this),
+        table_quoted=_identifier_quoted(expr.args.get("table")),
+    )
+
+
+def _convert_table(expr: exp.Table) -> TableRef:
+    """Convert a table expression."""
+    return _convert_table_ref(expr)
+
+
+def _convert_table_ref(expr: exp.Expression) -> TableRef:
+    """Convert any expression to a TableRef."""
+    if isinstance(expr, exp.Table):
+        alias = None
+        alias_expr = expr.args.get("alias")
+        if alias_expr:
+            alias = (
+                alias_expr.this
+                if isinstance(alias_expr.this, str)
+                else str(alias_expr.this)
+            )
+        # DROP SCHEMA x / USE x parse as a Table with only the db part set;
+        # promoting db to name avoids emitting a dangling "x." qualifier.
+        if not expr.name and expr.db:
+            return TableRef(
+                name=expr.db,
+                alias=alias,
+                quoted=_identifier_quoted(expr.args.get("db")),
+            )
+        return TableRef(
+            name=expr.name,
+            schema=expr.db if expr.db else None,
+            alias=alias,
+            database=(
+                expr.catalog if hasattr(expr, "catalog") and expr.catalog else None
+            ),
+            quoted=_identifier_quoted(expr.this),
+            schema_quoted=_identifier_quoted(expr.args.get("db")),
+        )
+    if isinstance(expr, exp.Schema):
+        return _convert_table_ref(expr.this)
+    if hasattr(expr, "name"):
+        return TableRef(name=expr.name)
+    return TableRef(name=str(expr))
+
+
+def _convert_table_or_subquery(expr: exp.Expression) -> TableRef | SubqueryExpression:
+    """Convert to either TableRef or SubqueryExpression."""
+    if isinstance(expr, exp.Subquery):
+        inner = expr.this
+        if isinstance(inner, (exp.Select, exp.Union)):
+            return SubqueryExpression(query=_convert_select(inner))
+    return _convert_table_ref(expr)
+
+
+def _convert_literal(expr: exp.Literal) -> Literal:
+    """Convert a literal value."""
+    if expr.is_int:
+        return Literal(value=int(expr.this), dtype="integer")
+    if expr.is_number:
+        return Literal(value=float(expr.this), dtype="number")
+    if expr.is_string:
+        return Literal(value=str(expr.this), dtype="string")
+    return Literal(value=expr.this, dtype="unknown")
+
+
+def _convert_alias(expr: exp.Alias) -> Alias:
+    """Convert an alias expression."""
+    return Alias(
+        expression=convert_expression(expr.this),
+        name=str(expr.alias),
+        quoted=_identifier_quoted(expr.args.get("alias")),
+    )
+
+
+def _convert_qualified_function(expr: exp.Dot) -> FunctionCall | None:
+    """Convert a ``schema.func(args)`` Dot into a qualified FunctionCall.
+
+    Returns ``None`` when the Dot is not a function call (e.g. a plain
+    ``a.b.c`` column path), so the caller can fall back to the generic handling.
+    """
+    inner = expr.expression
+    if not isinstance(inner, exp.Func):
+        return None
+    qualifier = expr.this
+    qualifier_name = qualifier.name if hasattr(qualifier, "name") else str(qualifier)
+    func = _convert_function(cast(exp.Expression, inner))
+    return dataclasses.replace(func, name=f"{qualifier_name}.{func.name}")
+
+
+def _convert_function(expr: exp.Expression) -> FunctionCall:
+    """Convert a function call."""
+    # StrPosition (T-SQL CHARINDEX, MySQL LOCATE, ...) keeps its arguments in
+    # named slots (this=haystack, substr=needle, position=start) rather than in
+    # `expressions`, so the generic collection below would drop all but the
+    # haystack. Canonicalize to CHARINDEX(needle, haystack[, start]); the emitter
+    # renders the right per-dialect function and argument order.
+    if isinstance(expr, exp.StrPosition):
+        needle = expr.args.get("substr")
+        haystack = expr.this
+        start = expr.args.get("position")
+        sp_args: list[ASTNode] = []
+        if needle is not None:
+            sp_args.append(convert_expression(needle))
+        if haystack is not None:
+            sp_args.append(convert_expression(haystack))
+        if start is not None:
+            sp_args.append(convert_expression(start))
+        return FunctionCall(name="CHARINDEX", args=tuple(sp_args))
+
+    # exp.Anonymous is an unrecognized function: its real name is in `this`
+    # (a string), not in sql_name() which returns "ANONYMOUS". Its arguments
+    # live in `expressions`.
+    if isinstance(expr, exp.Anonymous):
+        return FunctionCall(
+            name=str(expr.name),
+            args=tuple(convert_expression(a) for a in expr.expressions),
+        )
+
+    name = expr.sql_name() if hasattr(expr, "sql_name") else type(expr).__name__.upper()
+
+    # Generic argument collection. sqlglot models most specialized functions
+    # with their arguments in *named slots* (Substring -> this/start/length,
+    # Replace -> this/expression/replacement, Round -> this/decimals,
+    # DateAdd -> this/expression/unit, ...), not in `expressions`. The previous
+    # heuristic only read `this` + `expressions`, so every named slot was
+    # dropped (SUBSTRING(a,1,3) became SUBSTR(a)). Collect the scalar arguments
+    # in declaration order from `arg_types`, which preserves them all.
+    if expr.expressions:
+        # Variadic functions (COALESCE, CONCAT, ...) keep their args in
+        # `expressions`, with an optional leading `this`.
+        args = []
+        if expr.this is not None and not isinstance(expr.this, (bool, str)):
+            args.append(convert_expression(expr.this))
+        for arg in expr.expressions:
+            args.append(convert_expression(arg))
+        return FunctionCall(name=name, args=tuple(args))
+
+    ordered: list[ASTNode] = []
+    for slot in expr.arg_types:
+        value = expr.args.get(slot)
+        # Skip boolean flags (e.g. Round.truncate, Substring.zero_start) and
+        # non-expression metadata; keep only actual argument expressions.
+        if isinstance(value, exp.Expression) and not isinstance(
+            expr, (exp.Column, exp.Table)
+        ):
+            ordered.append(convert_expression(value))
+    if ordered:
+        return FunctionCall(name=name, args=tuple(ordered))
+
+    # No-argument function (e.g. GETUTCDATE(), NEWID()): single `this` if any,
+    # otherwise an empty argument list.
+    args = []
+    if (
+        expr.this is not None
+        and not isinstance(expr, (exp.Column, exp.Table, exp.Anonymous))
+        and isinstance(expr.this, exp.Expression)
+    ):
+        args.append(convert_expression(expr.this))
+    return FunctionCall(name=name, args=tuple(args))
+
+
+def _convert_binary(expr: exp.Binary) -> ASTNode:
+    """Convert a binary operation.
+
+    A binary operator that is not in the map is *not* silently coerced to ``=``
+    (a dangerous default that would change semantics — e.g. bitwise ``&`` became
+    ``=``). Instead the original expression is preserved as ``RawSQL`` so the
+    emitter re-renders it via sqlglot, which knows the per-dialect spelling.
+    """
+    op_map: dict[type, BinaryOperator] = {
+        exp.EQ: BinaryOperator.EQ,
+        exp.NEQ: BinaryOperator.NEQ,
+        exp.LT: BinaryOperator.LT,
+        exp.GT: BinaryOperator.GT,
+        exp.LTE: BinaryOperator.LTE,
+        exp.GTE: BinaryOperator.GTE,
+        exp.And: BinaryOperator.AND,
+        exp.Or: BinaryOperator.OR,
+        exp.Add: BinaryOperator.ADD,
+        exp.Sub: BinaryOperator.SUB,
+        exp.Mul: BinaryOperator.MUL,
+        exp.Div: BinaryOperator.DIV,
+        exp.Mod: BinaryOperator.MOD,
+        exp.Like: BinaryOperator.LIKE,
+        exp.ILike: BinaryOperator.ILIKE,
+        exp.DPipe: BinaryOperator.CONCAT,
+        exp.BitwiseAnd: BinaryOperator.BIT_AND,
+        exp.BitwiseOr: BinaryOperator.BIT_OR,
+        exp.BitwiseXor: BinaryOperator.BIT_XOR,
+        exp.BitwiseLeftShift: BinaryOperator.BIT_LSHIFT,
+        exp.BitwiseRightShift: BinaryOperator.BIT_RSHIFT,
+    }
+
+    operator = op_map.get(type(expr))
+    if operator is None:
+        # Unknown operator: preserve verbatim rather than corrupt it to "=".
+        return RawSQL(sql=expr.sql(), reason=f"unmapped operator {type(expr).__name__}")
+
+    return BinaryOp(
+        operator=operator,
+        left=convert_expression(expr.this),
+        right=convert_expression(expr.expression),
+    )
+
+
+def _convert_is(expr: exp.Is) -> UnaryOp:
+    """Convert IS NULL / IS NOT NULL."""
+    if isinstance(expr.expression, exp.Null):
+        return UnaryOp(
+            operator=UnaryOperator.IS_NULL,
+            operand=convert_expression(expr.this),
+        )
+    return UnaryOp(
+        operator=UnaryOperator.IS_NOT_NULL,
+        operand=convert_expression(expr.this),
+    )
+
+
+def _convert_case(expr: exp.Case) -> CaseExpression:
+    """Convert a CASE expression."""
+    operand = None
+    if expr.this:
+        operand = convert_expression(expr.this)
+
+    whens: list[tuple[ASTNode, ASTNode]] = []
+    for ifs in expr.args.get("ifs", []):
+        condition = convert_expression(ifs.this)
+        result = convert_expression(ifs.args.get("true"))
+        whens.append((condition, result))
+
+    else_expr = None
+    default = expr.args.get("default")
+    if default:
+        else_expr = convert_expression(default)
+
+    return CaseExpression(
+        operand=operand,
+        whens=tuple(whens),
+        else_expr=else_expr,
+    )
+
+
+def _convert_cast(expr: exp.Cast) -> CastExpression:
+    """Convert a CAST expression."""
+    inner = convert_expression(expr.this)
+    target_type = _convert_data_type(expr.to)
+    return CastExpression(expression=inner, target_type=target_type)
+
+
+def _convert_data_type(expr: exp.Expression) -> DataType:
+    """Convert a sqlglot data type expression to our DataType."""
+    if isinstance(expr, exp.DataType):
+        name = expr.this.value if hasattr(expr.this, "value") else str(expr.this)
+        # User-defined / domain types (e.g. T-SQL [dbo].[Name]) carry their
+        # real name in the 'kind' arg; sqlglot's 'this' is just USER-DEFINED.
+        if name == "USER-DEFINED" and expr.args.get("kind") is not None:
+            kind = expr.args["kind"]
+            name = kind.sql() if hasattr(kind, "sql") else str(kind)
+        # ENUM/SET carry string values, not numeric length params; keep them
+        # so the emitter can render the type faithfully (MySQL) or as
+        # VARCHAR + CHECK (everything else).
+        if name.upper() in ("ENUM", "SET"):
+            values = tuple(
+                str(p.this)
+                for p in expr.expressions
+                if isinstance(p, exp.Literal) and p.is_string
+            )
+            return DataType(name=name.upper(), values=values)
+        params: list[int] = []
+        for p in expr.expressions:
+            if isinstance(p, exp.DataTypeParam):
+                if p.this and hasattr(p.this, "this"):
+                    with contextlib.suppress(ValueError, TypeError):
+                        params.append(int(p.this.this))
+            elif isinstance(p, exp.Literal) and p.is_int:
+                params.append(int(p.this))
+        return DataType(name=name, params=tuple(params))
+    return DataType(name=str(expr))
+
+
+def _convert_join(expr: exp.Join) -> JoinClause:
+    """Convert a JOIN expression."""
+    # Determine join type
+    join_kind = expr.side or ""
+    join_type_str = f"{join_kind} JOIN".strip().upper()
+    if expr.args.get("kind"):
+        join_type_str = f"{join_kind} {expr.args['kind']} JOIN".strip().upper()
+
+    join_type = _JOIN_TYPE_MAP.get(join_type_str, JoinType.INNER)
+
+    table_expr = expr.this
+    table = _convert_table_ref(table_expr)
+
+    alias = None
+    if isinstance(table_expr, exp.Table):
+        alias_expr = table_expr.args.get("alias")
+        if alias_expr:
+            alias = str(alias_expr.this)
+
+    condition = None
+    on_expr = expr.args.get("on")
+    if on_expr:
+        condition = convert_expression(on_expr)
+
+    using = tuple(ident.name for ident in (expr.args.get("using") or []))
+
+    return JoinClause(
+        join_type=join_type,
+        table=table,
+        alias=alias,
+        condition=condition,
+        using=using,
+    )
+
+
+def _convert_window(expr: exp.Window) -> WindowFunction:
+    """Convert a window function expression."""
+    func_expr = expr.this
+    function = convert_expression(func_expr)
+    if not isinstance(function, FunctionCall):
+        function = FunctionCall(name=str(func_expr), args=())
+
+    partition_by: tuple[ASTNode, ...] = ()
+    order_by: tuple[OrderByItem, ...] = ()
+
+    partition = expr.args.get("partition_by")
+    if partition:
+        partition_by = tuple(convert_expression(p) for p in partition)
+
+    order = expr.args.get("order")
+    if order:
+        order_by = tuple(
+            (
+                _convert_ordered(o)
+                if isinstance(o, exp.Ordered)
+                else OrderByItem(expression=convert_expression(o))
+            )
+            for o in (order.expressions if hasattr(order, "expressions") else [order])
+        )
+
+    window_spec = WindowSpec(partition_by=partition_by, order_by=order_by)
+    return WindowFunction(function=function, window=window_spec)
+
+
+def _convert_ordered(expr: exp.Ordered) -> OrderByItem:
+    """Convert an ORDER BY item."""
+    inner = convert_expression(expr.this)
+    desc = expr.args.get("desc")
+    direction = OrderDirection.DESC if desc else OrderDirection.ASC
+    return OrderByItem(expression=inner, direction=direction)
+
+
+def _convert_cte(expr: exp.CTE) -> CTEDefinition:
+    """Convert a CTE definition."""
+    name = expr.alias if isinstance(expr.alias, str) else str(expr.alias)
+    query_expr = expr.this
+    query = _convert_select(query_expr) if query_expr else SelectStatement()
+
+    return CTEDefinition(name=name, query=query)
