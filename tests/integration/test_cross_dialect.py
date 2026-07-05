@@ -730,6 +730,19 @@ class TestDDLPassthrough:
         assert keyword in result.sql.upper()
         assert "-- UNIQUE: Unhandled" not in result.sql
 
+    @pytest.mark.parametrize("keyword", ["CLUSTERED", "NONCLUSTERED"])
+    @pytest.mark.parametrize("target", ["postgresql", "oracle", "mysql"])
+    def test_physical_index_clause_round_trips_to_tsql(
+        self, transpiler: Transpiler, keyword: str, target: str
+    ) -> None:
+        # A physical hint stripped on the forward pass is restored on the way
+        # back to T-SQL from the /* UNIQUE: … */ note (like %TYPE).
+        original = f"CREATE {keyword} INDEX ix ON t (a)"
+        forward = transpiler.transpile(original, "tsql", target).sql
+        back = transpiler.transpile(forward, target, "tsql").sql
+        assert f"CREATE {keyword} INDEX" in back.upper()
+        assert "/* UNIQUE:" not in back  # note consumed by the restore
+
     def test_include_index_kept_for_postgresql(self, transpiler: Transpiler) -> None:
         sql = "CREATE INDEX idx ON t (a) INCLUDE (b, c)"
         result = transpiler.transpile(sql, "tsql", "postgresql")
