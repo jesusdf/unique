@@ -1291,3 +1291,27 @@ minimal statement (the payoff over a fixed corpus):
 Runs in the plain (no-DB) suite (100 examples/property). Together with the live
 corpus sweep (§22) this replaces ad-hoc manual query testing with generated
 inputs + real-engine execution + always-true invariants.
+
+## 24. Corpus-sweep function/type gaps closed (TODO §1 liquidated)
+
+All 13 engine-specific function/type gaps the live corpus sweep (§22) surfaced —
+annotated `-- @xfail` in the corpus — are fixed, and the sweep is fully green
+(395/395 executed live). Each is a per-target handler in `_emit_function`
+(sqlglot's own translation was the reference output to replicate):
+
+- **Null/conditional**: Oracle `NVL2` and `DECODE` (parsed as `DecodeCase`) ->
+  searched `CASE` for non-Oracle targets.
+- **Date/time**: MySQL `NOW()` -> each engine's current-timestamp; `CURDATE()` /
+  PostgreSQL `CURRENT_DATE` -> each engine's current-date (no stray parens);
+  MySQL 2-arg `DATEDIFF(end, start)` -> per-target day count; Oracle `TO_CHAR`
+  and `TO_DATE` format models translated between the Oracle / strftime / .NET
+  models (`_convert_date_format`).
+- **Numeric/cast**: numeric `TRUNC(x)` -> `TRUNCATE`/`ROUND(…,0,1)`; T-SQL
+  `CONVERT(type, expr)` -> `CAST` (VARCHAR/INT -> CHAR/SIGNED on MySQL); `CAST
+  AS BOOLEAN/INT` -> BIT / SIGNED per target.
+- **String `+` chain**: `_rewrite_tsql_string_concat` now runs to a fixpoint, so
+  every `+` in `'a' + 'b' + 'c'` becomes the concat operator (sqlglot's transform
+  doesn't re-descend into a replaced node).
+
+Pinned as fast unit tests in `test_function_mappings.py`. `docs/TODO.md` is now
+packaging-only again.

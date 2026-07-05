@@ -60,7 +60,62 @@ from unique.core.converter.harvest import (  # noqa: F401
     _coerce_date_literal,
     _oracle_date_literal,
 )
-from unique.core.mappings import CURRENT_TIMESTAMP_EXPR
+from unique.core.mappings import CURRENT_DATE_EXPR, CURRENT_TIMESTAMP_EXPR
+
+# Per-dialect CAST target-type overrides: MySQL CAST accepts only a fixed set
+# (SIGNED/UNSIGNED/CHAR/DATE/…), not INT/BOOLEAN; T-SQL has no BOOLEAN (it is BIT).
+_CAST_TYPE_MAP: dict[str, dict[str, str]] = {
+    "mysql": {
+        "INT": "SIGNED",
+        "INTEGER": "SIGNED",
+        "BIGINT": "SIGNED",
+        "SMALLINT": "SIGNED",
+        "TINYINT": "SIGNED",
+        "BOOLEAN": "SIGNED",
+        "BOOL": "SIGNED",
+    },
+    "tsql": {"BOOLEAN": "BIT", "BOOL": "BIT"},
+}
+
+# Date format-model tokens as (Oracle/PostgreSQL, strftime [MySQL], T-SQL .NET),
+# longest-first so YYYY matches before YY and MONTH before MON/MM.
+_DATE_FMT_TOKENS: list[tuple[str, str, str]] = [
+    ("YYYY", "%Y", "yyyy"),
+    ("YY", "%y", "yy"),
+    ("MONTH", "%M", "MMMM"),
+    ("MON", "%b", "MMM"),
+    ("HH24", "%H", "HH"),
+    ("HH12", "%h", "hh"),
+    ("MM", "%m", "MM"),
+    ("DD", "%d", "dd"),
+    ("HH", "%h", "hh"),
+    ("MI", "%i", "mm"),
+    ("SS", "%s", "ss"),
+    ("DAY", "%W", "dddd"),
+    ("DY", "%a", "ddd"),
+]
+_FMT_MODEL_IDX = {"oracle": 0, "strftime": 1, "tsql": 2}
+
+
+def _convert_date_format(fmt: str, src_model: str, dst_model: str) -> str:
+    """Translate a date format string between the Oracle, strftime and .NET
+    models (longest-token match; literal characters pass through)."""
+    si, di = _FMT_MODEL_IDX[src_model], _FMT_MODEL_IDX[dst_model]
+    toks = sorted(_DATE_FMT_TOKENS, key=lambda t: -len(t[si]))
+    out: list[str] = []
+    i = 0
+    while i < len(fmt):
+        for tok in toks:
+            src_tok = tok[si]
+            seg = fmt[i : i + len(src_tok)]
+            if seg == src_tok if si == 1 else seg.upper() == src_tok:
+                out.append(tok[di])
+                i += len(src_tok)
+                break
+        else:
+            out.append(fmt[i])
+            i += 1
+    return "".join(out)
 
 
 def _portable_type_name(name: str, dialect: str) -> str:
@@ -1094,8 +1149,13 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             if lit is not None:
                 return lit
         inner = _emit_expression(node.expression, dialect)
+        # MySQL CAST only accepts a fixed set of target types (SIGNED, not INT;
+        # no BOOLEAN); T-SQL has no BOOLEAN (it is BIT).
         dtype = node.target_type.name
-        if node.target_type.params:
+        mapped = _CAST_TYPE_MAP.get(dialect, {}).get(dtype.upper())
+        if mapped:
+            dtype = mapped
+        elif node.target_type.params:
             dtype += f"({', '.join(str(p) for p in node.target_type.params)})"
         return f"CAST({inner} AS {dtype})"
 
@@ -1177,6 +1237,16 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
     counts unit-boundary crossings, so month/year use calendar arithmetic
     rather than elapsed-interval functions (audit 2026-07-02, S1-4).
     """
+    if len(node.args) == 2:
+        # MySQL DATEDIFF(end, start): whole days between two dates.
+        end = _emit_expression(node.args[0], dialect)
+        start = _emit_expression(node.args[1], dialect)
+        if dialect == "mysql":
+            return f"DATEDIFF({end}, {start})"
+        if dialect == "tsql":
+            return f"DATEDIFF(DAY, {start}, {end})"
+        # PostgreSQL / Oracle: subtracting two dates yields the day count.
+        return f"(CAST({end} AS DATE) - CAST({start} AS DATE))"
     if len(node.args) != 3:
         return None
     unit = _date_unit_name(node.args[2])
@@ -1333,6 +1403,112 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"IF({cond}, {then_v}, {else_v})"
         return f"CASE WHEN {cond} THEN {then_v} ELSE {else_v} END"
 
+    # Oracle NVL2(a, b, c): b when a is not null, else c. Only Oracle has it.
+    if fn_name == "NVL2" and len(node.args) == 3:
+        a, b, c = (_emit_expression(x, dialect) for x in node.args)
+        if dialect == "oracle":
+            return f"NVL2({a}, {b}, {c})"
+        return f"CASE WHEN {a} IS NOT NULL THEN {b} ELSE {c} END"
+
+    # Oracle DECODE(expr, s1, r1[, s2, r2, ...][, default]): a searched CASE
+    # everywhere else. sqlglot parses it as DecodeCase (IR name DECODE_CASE).
+    if fn_name in ("DECODE", "DECODE_CASE") and len(node.args) >= 3:
+        parts = [_emit_expression(x, dialect) for x in node.args]
+        if dialect == "oracle":
+            return f"DECODE({', '.join(parts)})"
+        subject, whens, i = parts[0], [], 1
+        while i + 1 < len(parts):
+            whens.append(f"WHEN {subject} = {parts[i]} THEN {parts[i + 1]}")
+            i += 2
+        default = f" ELSE {parts[i]}" if i < len(parts) else ""
+        return f"CASE {' '.join(whens)}{default} END"
+
+    # Niladic current-date spellings: PostgreSQL CURRENT_DATE, MySQL CURDATE().
+    # Each engine names "today" differently (and CURRENT_DATE takes no parens).
+    if fn_name in ("CURRENT_DATE", "CURDATE") and not node.args:
+        return CURRENT_DATE_EXPR.get(dialect, "CURRENT_DATE")
+
+    # Numeric TRUNC(x): only PostgreSQL/Oracle have TRUNC. A bare numeric literal
+    # is truncation-toward-zero (a date TRUNC keeps its native form untouched).
+    if (
+        fn_name == "TRUNC"
+        and len(node.args) == 1
+        and isinstance(node.args[0], Literal)
+        and str(node.args[0].dtype) in ("integer", "number")
+    ):
+        x = _emit_expression(node.args[0], dialect)
+        if dialect == "tsql":
+            return f"ROUND({x}, 0, 1)"  # 3rd arg truncates instead of rounding
+        if dialect == "mysql":
+            return f"TRUNCATE({x}, 0)"
+
+    # T-SQL CONVERT(type, expr): sqlglot keeps the type as raw SQL in arg 0.
+    # Everywhere else this is a plain CAST.
+    if (
+        fn_name == "CONVERT"
+        and len(node.args) == 2
+        and isinstance(node.args[0], RawSQL)
+    ):
+        target_type = node.args[0].sql.strip()
+        value = _emit_expression(node.args[1], dialect)
+        if dialect == "tsql":
+            return f"CONVERT({target_type}, {value})"
+        if dialect == "mysql":
+            # MySQL CAST has no VARCHAR/INT spelling — use CHAR / SIGNED.
+            target_type = re.sub(r"(?i)^VARCHAR\b", "CHAR", target_type)
+            target_type = re.sub(
+                r"(?i)^(?:INT|INTEGER|BIGINT)\b", "SIGNED", target_type
+            )
+        return f"CAST({value} AS {target_type})"
+
+    # Date <-> string formatting. sqlglot keeps TO_CHAR's Oracle format model but
+    # normalizes the DATE_FORMAT/STR_TO_DATE ones to strftime; translate per
+    # target (PostgreSQL shares Oracle's model; T-SQL uses FORMAT/.NET).
+    if (
+        fn_name == "TO_CHAR"
+        and len(node.args) == 2
+        and isinstance(node.args[1], Literal)
+    ):
+        value = _emit_expression(node.args[0], dialect)
+        fmt = str(node.args[1].value)
+        if dialect in ("oracle", "postgresql"):
+            return f"TO_CHAR({value}, '{fmt}')"
+        if dialect == "mysql":
+            my = _convert_date_format(fmt, "oracle", "strftime")
+            return f"DATE_FORMAT({value}, '{my}')"
+        return f"FORMAT({value}, '{_convert_date_format(fmt, 'oracle', 'tsql')}')"
+
+    if (
+        fn_name == "TIME_TO_STR"
+        and len(node.args) == 2
+        and isinstance(node.args[1], Literal)
+    ):
+        value = _emit_expression(node.args[0], dialect)
+        fmt = str(node.args[1].value)  # strftime
+        if dialect == "mysql":
+            return f"DATE_FORMAT({value}, '{fmt}')"
+        if dialect in ("oracle", "postgresql"):
+            return (
+                f"TO_CHAR({value}, '{_convert_date_format(fmt, 'strftime', 'oracle')}')"
+            )
+        return f"FORMAT({value}, '{_convert_date_format(fmt, 'strftime', 'tsql')}')"
+
+    if (
+        fn_name == "STR_TO_DATE"
+        and len(node.args) == 2
+        and isinstance(node.args[1], Literal)
+    ):
+        value = _emit_expression(node.args[0], dialect)
+        fmt = str(node.args[1].value)  # strftime
+        if dialect == "mysql":
+            return f"STR_TO_DATE({value}, '{fmt}')"
+        if dialect in ("oracle", "postgresql"):
+            return (
+                f"TO_DATE({value}, '{_convert_date_format(fmt, 'strftime', 'oracle')}')"
+            )
+        # T-SQL: an ISO string casts directly; exotic formats would need CONVERT+style.
+        return f"CAST({value} AS DATE)"
+
     # A user function may be schema-qualified (dbo.fn_tax). The "dbo" default
     # schema is meaningless on the other engines, so drop it there, as for any
     # other object reference. Built-in names never carry it.
@@ -1346,7 +1522,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # calls. SYSTIMESTAMP has no cross-engine parens form (it would leak as an
     # invalid SYSTIMESTAMP() — invalid even on Oracle); SYSDATE is included for
     # the same passthrough case. Map to each dialect's current-timestamp form.
-    if node.name.upper() in ("SYSTIMESTAMP", "SYSDATE") and not node.args:
+    if node.name.upper() in ("SYSTIMESTAMP", "SYSDATE", "NOW") and not node.args:
         return CURRENT_TIMESTAMP_EXPR.get(dialect, "CURRENT_TIMESTAMP")
 
     # Substring position: canonical CHARINDEX(needle, haystack[, start]) maps to

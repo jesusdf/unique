@@ -2,7 +2,6 @@
 -- @@@
 SELECT NOW() AS now
 -- @@@
--- @xfail: oracle tsql  # CURRENT_DATE emitted with parens (invalid there)
 SELECT CURRENT_DATE AS today
 -- @@@
 SELECT 'a' || 'b' AS concatenated
@@ -13,7 +12,6 @@ SELECT POSITION('l' IN 'hello') AS p
 -- @@@
 SELECT SUBSTRING('hello' FROM 1 FOR 3) AS s
 -- @@@
--- @xfail: mysql tsql  # no BOOLEAN type (needs BIT/TINYINT mapping in a CAST)
 SELECT CAST(1 AS BOOLEAN) AS b
 -- @@@
 SELECT 5 % 2 AS m

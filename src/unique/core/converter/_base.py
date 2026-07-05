@@ -318,10 +318,17 @@ def _rewrite_tsql_string_concat(expr: exp.Expression) -> exp.Expression:
                 return exp.DPipe(this=left, expression=right)
         return node
 
-    # Bottom-up so a nested "+" is rewritten to DPipe before its parent is
-    # examined, letting string-ness propagate up a chain (a + b + 'c').
-    result = expr.transform(transform)
-    assert isinstance(result, exp.Expression)
+    # sqlglot's transform does not re-descend into a replaced node, so one pass
+    # only converts the outermost "+" of a chain (``'a' + 'b' + 'c'`` would leave
+    # the inner ``+``). Re-apply to a fixpoint so string-ness propagates the whole
+    # chain (each pass converts one more level once its child is a DPipe).
+    result = expr
+    for _ in range(64):
+        transformed = result.transform(transform)
+        assert isinstance(transformed, exp.Expression)
+        if transformed.sql() == result.sql():
+            break
+        result = transformed
     return result
 
 
