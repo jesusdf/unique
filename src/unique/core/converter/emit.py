@@ -11,8 +11,10 @@ converting sqlglot's expression tree into our engine-agnostic IR.
 from __future__ import annotations
 
 import re
+from typing import cast
 
 import sqlglot
+import sqlglot.expressions as exp
 
 from unique.core.ast_nodes import (
     Alias,
@@ -168,14 +170,12 @@ def emit_node(node: ASTNode, dialect: str) -> str:
     return _emit_expression(node, dialect)
 
 
-def _quote_reserved_identifiers(
-    expr: sqlglot.Expression, dialect: str
-) -> sqlglot.Expression:
+def _quote_reserved_identifiers(expr: exp.Expression, dialect: str) -> exp.Expression:
     """Mark identifiers that are reserved words in *dialect* as quoted, so a
     passthrough CREATE INDEX / ALTER on a reserved name emits valid SQL."""
     reserved = _RESERVED_IDENTIFIERS.get(dialect, frozenset())
     if reserved:
-        for ident in expr.find_all(sqlglot.exp.Identifier):
+        for ident in expr.find_all(exp.Identifier):
             if not ident.args.get("quoted") and str(ident.this).upper() in reserved:
                 ident.set("quoted", True)
     return expr
@@ -245,11 +245,13 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     try:
         # Parse → quote reserved-word identifiers → generate, so a passthrough
         # CREATE INDEX / ALTER on a reserved name (e.g. ``collation``) is valid.
-        parsed = [
-            _quote_reserved_identifiers(e, dialect) if e else e
+        out = [
+            _quote_reserved_identifiers(cast(exp.Expression, e), dialect).sql(
+                dialect=write
+            )
             for e in sqlglot.parse(node.sql, read=read)
+            if e is not None
         ]
-        out = [e.sql(dialect=write) for e in parsed if e]
         if out and out[0].strip():
             result = out[0]
             if node.kind == "CREATE INDEX":
