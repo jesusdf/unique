@@ -99,6 +99,16 @@ and Docker details.
 - [Procedural Engine](docs/05-procedural-engine.md) — the stored-routine pipeline
 - [sqlglot Dependency](docs/sqlglot-dependency.md) — pinning and fork analysis
 
+## Project language
+
+**This project is English-only by design** — code, comments, documentation,
+commit messages, and all program output (warnings, `-- UNIQUE:` carriers, error
+messages) are written in English, and there are no plans to translate it. This
+is deliberate: transpiler diagnostics quote or mirror the engines' own error
+text, which is English, so keeping everything in one language means an error
+message can be searched verbatim on the web without fighting different
+localizations of the same error.
+
 ## License
 
 MIT (see [LICENSE](LICENSE)).

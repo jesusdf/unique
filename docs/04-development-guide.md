@@ -1,5 +1,11 @@
 # Unique — Development Guide
 
+> **English-only by design.** All contributions — code, comments, docs, commit
+> messages, and program output (warnings, `-- UNIQUE:` carriers, errors) — are in
+> English, and the project is not translated. Diagnostics mirror the engines'
+> own (English) error text, so one language keeps an error message searchable
+> verbatim on the web. Please keep new code and messages in English.
+
 ## Prerequisites
 
 - Python 3.12 (the supported/CI version)
