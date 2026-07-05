@@ -52,6 +52,7 @@ from unique.core.ast_nodes import (
 
 # Split out of the former single-file converter; see the package __init__.
 from unique.core.converter._base import *  # noqa: F401,F403
+from unique.core.converter._base import _RESERVED_IDENTIFIERS
 from unique.core.converter.harvest import (  # noqa: F401
     _coerce_bit_literal,
     _coerce_date_literal,
@@ -167,6 +168,19 @@ def emit_node(node: ASTNode, dialect: str) -> str:
     return _emit_expression(node, dialect)
 
 
+def _quote_reserved_identifiers(
+    expr: sqlglot.Expression, dialect: str
+) -> sqlglot.Expression:
+    """Mark identifiers that are reserved words in *dialect* as quoted, so a
+    passthrough CREATE INDEX / ALTER on a reserved name emits valid SQL."""
+    reserved = _RESERVED_IDENTIFIERS.get(dialect, frozenset())
+    if reserved:
+        for ident in expr.find_all(sqlglot.exp.Identifier):
+            if not ident.args.get("quoted") and str(ident.this).upper() in reserved:
+                ident.set("quoted", True)
+    return expr
+
+
 def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     """Re-transpile a passthrough statement to the target dialect.
 
@@ -229,7 +243,13 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         )
 
     try:
-        out = sqlglot.transpile(node.sql, read=read, write=write)
+        # Parse → quote reserved-word identifiers → generate, so a passthrough
+        # CREATE INDEX / ALTER on a reserved name (e.g. ``collation``) is valid.
+        parsed = [
+            _quote_reserved_identifiers(e, dialect) if e else e
+            for e in sqlglot.parse(node.sql, read=read)
+        ]
+        out = [e.sql(dialect=write) for e in parsed if e]
         if out and out[0].strip():
             result = out[0]
             if node.kind == "CREATE INDEX":
@@ -757,6 +777,17 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     _bigtext = _BARE_CHAR_BIGTEXT.get(dialect, {}).get(_base)
                     if _bigtext:
                         dtype = _bigtext
+                    # A binary type with no length (a SQLite BLOB affinity) is
+                    # invalid where the target needs one (MySQL VARBINARY, Oracle
+                    # RAW): a length-less binary is a BLOB. ``"(" not in dtype``
+                    # guards types whose mapped name already has a length
+                    # (UNIQUEIDENTIFIER -> RAW(16)).
+                    elif (
+                        _base in ("VARBINARY", "BINARY", "RAW")
+                        and "(" not in dtype
+                        and dialect in ("mysql", "oracle")
+                    ):
+                        dtype = "BLOB"
             pk = " PRIMARY KEY" if col.primary_key else ""
             unique = " UNIQUE" if col.unique else ""
             default = ""
@@ -799,9 +830,36 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     m_bool = re.fullmatch(r"\(*\s*([01])\s*\)*", default_sql)
                     if m_bool:
                         default_sql = "TRUE" if m_bool.group(1) == "1" else "FALSE"
-                default = f" DEFAULT {default_sql}"
+                # Oracle rejects a string default on a RAW/BLOB column (ORA-01465:
+                # it must be hex). A MySQL ``VARBINARY DEFAULT '…'`` stores text
+                # in a binary column; drop the (non-portable) default rather than
+                # emit invalid HEXTORAW guesswork.
+                if (
+                    dialect == "oracle"
+                    and dtype.upper().split("(")[0] in ("RAW", "BLOB")
+                    and re.fullmatch(r"'[^']*'", default_sql.strip())
+                ):
+                    default_sql = ""
+                default = f" DEFAULT {default_sql}" if default_sql else ""
+            # A PostgreSQL SERIAL/BIGSERIAL/SMALLSERIAL column is an
+            # auto-increment integer + sequence. On another engine it must become
+            # the base integer type plus that engine's identity clause (leaving
+            # ``BIGSERIAL`` verbatim is invalid MySQL/Oracle/T-SQL).
+            _serial_base = {
+                "SMALLSERIAL": "SMALLINT",
+                "SERIAL2": "SMALLINT",
+                "SERIAL": "INTEGER",
+                "SERIAL4": "INTEGER",
+                "BIGSERIAL": "BIGINT",
+                "SERIAL8": "BIGINT",
+            }
+            is_serial = col.data_type.name.upper() in _serial_base
+            if is_serial and dialect != "postgresql":
+                dtype = _portable_type_name(
+                    _serial_base[col.data_type.name.upper()], dialect
+                )
             identity = ""
-            if col.identity:
+            if col.identity or (is_serial and dialect != "postgresql"):
                 if dialect == "mysql":
                     identity = " AUTO_INCREMENT"
                 elif dialect == "postgresql":

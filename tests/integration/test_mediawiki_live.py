@@ -44,16 +44,14 @@ _SCHEMAS = [
     ("sqlite-tables.sql", "sqlite"),
 ]
 
-# Pairs with documented remaining gaps this real schema surfaces (tracked in
-# docs/TODO.md "MediaWiki live-schema gaps"): reserved words inside
-# sqlglot-passthrough statements (CREATE INDEX on `collation`), PostgreSQL
-# SERIAL/BIGSERIAL -> MySQL AUTO_INCREMENT, Oracle RAW columns with a ``''``
-# string default (ORA-01465), and more PostgreSQL-source -> Oracle type rows.
+# Green live: mysql -> {postgresql, oracle} and sqlite -> postgresql.
+# Remaining documented gaps this real schema surfaces (tracked in docs/TODO.md
+# "MediaWiki live-schema gaps"): a BLOB/TEXT column in a MySQL key needs a prefix
+# length (postgresql/sqlite -> mysql), and a few PostgreSQL/SQLite-source ->
+# Oracle type/index cases (functional index, ORA-00907).
 _KNOWN_GAPS = {
-    ("mysql", "oracle"),
     ("postgresql", "mysql"),
     ("postgresql", "oracle"),
-    ("sqlite", "postgresql"),
     ("sqlite", "mysql"),
     ("sqlite", "oracle"),
 }
