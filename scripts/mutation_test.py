@@ -29,9 +29,16 @@ import time
 from pathlib import Path
 
 _CMP = {
-    ast.Eq: ast.NotEq, ast.NotEq: ast.Eq, ast.Lt: ast.GtE, ast.Gt: ast.LtE,
-    ast.LtE: ast.Gt, ast.GtE: ast.Lt, ast.Is: ast.IsNot, ast.IsNot: ast.Is,
-    ast.In: ast.NotIn, ast.NotIn: ast.In,
+    ast.Eq: ast.NotEq,
+    ast.NotEq: ast.Eq,
+    ast.Lt: ast.GtE,
+    ast.Gt: ast.LtE,
+    ast.LtE: ast.Gt,
+    ast.GtE: ast.Lt,
+    ast.Is: ast.IsNot,
+    ast.IsNot: ast.Is,
+    ast.In: ast.NotIn,
+    ast.NotIn: ast.In,
 }
 _BOOL = {ast.And: ast.Or, ast.Or: ast.And}
 _ARITH = {ast.Add: ast.Sub, ast.Sub: ast.Add, ast.Mult: ast.Div, ast.Div: ast.Mult}
@@ -39,61 +46,94 @@ _ARITH = {ast.Add: ast.Sub, ast.Sub: ast.Add, ast.Mult: ast.Div, ast.Div: ast.Mu
 _DEFAULT_TESTS = ["tests/unit/core", "tests/integration/test_cross_dialect.py"]
 
 
+# Closure factories (bind their arguments, so the loop variable is not captured).
+def _set_compare(node: ast.Compare, idx: int, op_cls: type) -> object:
+    return lambda: node.ops.__setitem__(idx, op_cls())
+
+
+def _set_op(node: ast.AST, op_cls: type) -> object:
+    return lambda: setattr(node, "op", op_cls())
+
+
+def _set_value(node: ast.Constant, value: object) -> object:
+    return lambda: setattr(node, "value", value)
+
+
 def _sites(tree: ast.Module) -> list[tuple[str, object, object]]:
     """Collect (description, apply, restore) one-node mutation sites."""
     sites: list[tuple[str, object, object]] = []
     for node in ast.walk(tree):
+        line = node.lineno if hasattr(node, "lineno") else 0
         if isinstance(node, ast.Compare):
             for i, op in enumerate(node.ops):
                 if type(op) in _CMP:
                     nk, ok = _CMP[type(op)], type(op)
-                    sites.append((
-                        f"L{node.lineno} cmp {ok.__name__}->{nk.__name__}",
-                        (lambda n, i, k: lambda: n.ops.__setitem__(i, k()))(node, i, nk),
-                        (lambda n, i, k: lambda: n.ops.__setitem__(i, k()))(node, i, ok),
-                    ))
+                    sites.append(
+                        (
+                            f"L{line} cmp {ok.__name__}->{nk.__name__}",
+                            _set_compare(node, i, nk),
+                            _set_compare(node, i, ok),
+                        )
+                    )
         elif isinstance(node, ast.BoolOp) and type(node.op) in _BOOL:
             nk, ok = _BOOL[type(node.op)], type(node.op)
-            sites.append((
-                f"L{node.lineno} bool {ok.__name__}->{nk.__name__}",
-                (lambda n, k: lambda: setattr(n, "op", k()))(node, nk),
-                (lambda n, k: lambda: setattr(n, "op", k()))(node, ok),
-            ))
+            sites.append(
+                (
+                    f"L{line} bool {ok.__name__}->{nk.__name__}",
+                    _set_op(node, nk),
+                    _set_op(node, ok),
+                )
+            )
         elif isinstance(node, ast.BinOp) and type(node.op) in _ARITH:
             nk, ok = _ARITH[type(node.op)], type(node.op)
-            sites.append((
-                f"L{node.lineno} arith {ok.__name__}->{nk.__name__}",
-                (lambda n, k: lambda: setattr(n, "op", k()))(node, nk),
-                (lambda n, k: lambda: setattr(n, "op", k()))(node, ok),
-            ))
+            sites.append(
+                (
+                    f"L{line} arith {ok.__name__}->{nk.__name__}",
+                    _set_op(node, nk),
+                    _set_op(node, ok),
+                )
+            )
         elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-            sites.append((
-                f"L{node.lineno} drop-not",
-                (lambda n: lambda: setattr(n, "op", ast.UAdd()))(node),
-                (lambda n: lambda: setattr(n, "op", ast.Not()))(node),
-            ))
+            sites.append(
+                (f"L{line} drop-not", _set_op(node, ast.UAdd), _set_op(node, ast.Not))
+            )
         elif isinstance(node, ast.Constant) and isinstance(node.value, bool):
             v = node.value
-            sites.append((
-                f"L{node.lineno} const {v}->{not v}",
-                (lambda n, x: lambda: setattr(n, "value", x))(node, not v),
-                (lambda n, x: lambda: setattr(n, "value", x))(node, v),
-            ))
+            sites.append(
+                (
+                    f"L{line} const {v}->{not v}",
+                    _set_value(node, not v),
+                    _set_value(node, v),
+                )
+            )
         elif isinstance(node, ast.Constant) and isinstance(node.value, int):
             v = node.value
-            sites.append((
-                f"L{node.lineno} int {v}->{v + 1}",
-                (lambda n, x: lambda: setattr(n, "value", x))(node, v + 1),
-                (lambda n, x: lambda: setattr(n, "value", x))(node, v),
-            ))
+            sites.append(
+                (
+                    f"L{line} int {v}->{v + 1}",
+                    _set_value(node, v + 1),
+                    _set_value(node, v),
+                )
+            )
     return sites
 
 
 def _run(tests: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, "-m", "pytest", *tests,
-         "-q", "-x", "--tb=no", "-p", "no:cacheprovider", "--no-header"],
-        capture_output=True, text=True,
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            *tests,
+            "-q",
+            "-x",
+            "--tb=no",
+            "-p",
+            "no:cacheprovider",
+            "--no-header",
+        ],
+        capture_output=True,
+        text=True,
     )
 
 
@@ -121,24 +161,35 @@ def mutate_module(path: Path, tests: list[str], limit: int | None) -> list[str]:
                 survived += 1
                 survivors.append(desc)
             if (i + 1) % 25 == 0:
-                print(f"  {i + 1}/{len(sites)} killed={killed} survived={survived}"
-                      f" ({time.time() - t0:.0f}s)", flush=True)
+                print(
+                    f"  {i + 1}/{len(sites)} killed={killed} survived={survived}"
+                    f" ({time.time() - t0:.0f}s)",
+                    flush=True,
+                )
     finally:
         path.write_text(original)
     total = killed + survived
     score = killed / total if total else 1.0
-    print(f"  score {killed}/{total} killed ({score:.0%}), {survived} survivors,"
-          f" {time.time() - t0:.0f}s", flush=True)
+    print(
+        f"  score {killed}/{total} killed ({score:.0%}), {survived} survivors,"
+        f" {time.time() - t0:.0f}s",
+        flush=True,
+    )
     return survivors
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("modules", nargs="+", help="source files to mutate")
-    parser.add_argument("--tests", nargs="*", default=_DEFAULT_TESTS,
-                        help="pytest selection run per mutant")
-    parser.add_argument("--limit", type=int, default=None,
-                        help="cap mutants per module (quick runs)")
+    parser.add_argument(
+        "--tests",
+        nargs="*",
+        default=_DEFAULT_TESTS,
+        help="pytest selection run per mutant",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=None, help="cap mutants per module (quick runs)"
+    )
     args = parser.parse_args()
 
     baseline = _run(args.tests)
