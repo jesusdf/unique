@@ -1246,3 +1246,27 @@ covers both reference kinds:
   self-contained probe table), asserting `%TYPE` resolves to a concrete type and
   `%ROWTYPE` is read from the schema. Wired into the `syntax-live` CI job (all
   four servers) plus SQLite, and unit-tested against an in-memory SQLite DB.
+
+## 22. Corpus × live-execution sweep (bug-catching harness, approach 1)
+
+Instead of finding bugs by running queries by hand, a corpus of self-contained
+SQL (`tests/fixtures/corpus/<dialect>.sql`) is transpiled to every valid target
+and the output is **executed against the real engine** (rolled back) via
+`test_corpus_live.py` — wired into the `syntax-live` CI job, plus a
+`scripts/corpus-sweep.py` for ad-hoc local sweeps (`--private` also sweeps the
+gitignored real-world fixtures). Executing (not just parsing) is essential: a
+permissive parser accepts output a real engine rejects.
+
+The first run immediately caught three real converter bugs, now fixed + unit-
+pinned (`test_subquery_limit.py`):
+
+- **Derived-table alias dropped** — `FROM (SELECT …) t` lost `t`, so references
+  to it (and the derived table itself on MySQL) were invalid.
+- **Joined subquery dropped** — `… JOIN (SELECT …) b ON …` flattened the
+  subquery to an empty `TableRef`, emitting `INNER JOIN  ON …`.
+- **`LIMIT None` leak** — a T-SQL `OFFSET … FETCH NEXT n` parses to `exp.Fetch`
+  whose count is in `args["count"]`, not `.expression`, so the count was lost.
+
+Remaining engine-specific function/type gaps the sweep surfaced are annotated
+inline with `-- @xfail: <targets>` in the corpus (a documented backlog; the test
+flags them if they start passing). See docs/TODO.md.
