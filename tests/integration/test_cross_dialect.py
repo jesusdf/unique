@@ -509,10 +509,13 @@ class TestCrossDialectDDL:
         assert "-- UNIQUE: Unhandled" not in result.sql
 
     def test_mysql_binary_type_preserved(self, transpiler: Transpiler) -> None:
-        # The BINARY(n) data type must NOT be stripped.
+        # Binary data must survive, mapped to the target's binary type — not left
+        # as ``BINARY(16)`` (PostgreSQL has no BINARY type; it uses BYTEA, which
+        # takes no length).
         sql = "CREATE TABLE t (data BINARY(16))"
         result = transpiler.transpile(sql, "mysql", "postgresql")
-        assert "BINARY(16)" in result.sql.upper()
+        assert "BYTEA" in result.sql.upper()
+        assert "BINARY(16)" not in result.sql.upper()
 
     @pytest.mark.parametrize("target", ["postgresql", "mysql", "oracle"])
     def test_computed_column_preserved(
