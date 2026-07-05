@@ -403,6 +403,38 @@ class TestStandaloneExec:
         assert "END;" in out.upper()
 
 
+class TestExecOutputCapture:
+    """A batch that DECLAREs a variable and captures a procedure's OUTPUT
+    parameter into it (``EXEC p @out = @v OUTPUT``) must become the target's
+    OUT/INOUT call form inside a procedural block, with the batch variable
+    carried through to later statements."""
+
+    _BATCH = (
+        "DECLARE @new_id INT;\n"
+        "EXEC create_invoice @customer_id = 1, @new_id = @new_id OUTPUT;\n"
+        "UPDATE log SET last_id = @new_id;"
+    )
+
+    def test_output_capture_to_postgresql(self) -> None:
+        out = _transpile(self._BATCH, "tsql", "postgresql")
+        assert "DO $$" in out
+        assert "DECLARE" in out.upper()
+        # The OUT arg is passed as the CALL's INOUT slot and reused afterwards.
+        assert "CALL create_invoice(" in out
+        assert "new_id => v_new_id" in out
+        assert "last_id = v_new_id" in out
+        assert "OUTPUT" not in out.upper()
+        assert "-- UNIQUE:" not in out
+
+    def test_output_capture_to_oracle(self) -> None:
+        out = _transpile(self._BATCH, "tsql", "oracle")
+        assert "BEGIN" in out.upper() and "END;" in out.upper()
+        assert "create_invoice(" in out.lower()
+        assert "V_NEW_ID" in out.upper()
+        assert "OUTPUT" not in out.upper()
+        assert "-- UNIQUE:" not in out
+
+
 class TestTopLevelPrintAndSet:
     """A standalone (top-level) PRINT / ``SET @var = …`` is procedural: PRINT
     becomes each engine's message form and the assignment is translated, instead
