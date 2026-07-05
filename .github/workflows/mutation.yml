@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  issues: write  # open a tracking issue when a module regresses below its floor
 
 jobs:
   mutation:
@@ -69,3 +70,59 @@ jobs:
             echo '```'
             echo '</details>'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check mutation floors
+        # Fails (red job) on a real regression: a module's score dropped below its
+        # floor, or the harness produced no scores (a crash). Normal survivors do
+        # not fail it — the mutation steps above swallow their non-zero exit.
+        run: |
+          python - <<'PY'
+          import re, sys
+          FLOORS = {
+              "convert.py": 65, "emit.py": 60, "_base.py": 38,
+              "harvest.py": 48, "base.py": 52,  # transformer/base.py
+          }
+          scores, current = {}, None
+          for path in ("/tmp/mut_dml.txt", "/tmp/mut_proc.txt"):
+              try:
+                  lines = open(path).read().splitlines()
+              except FileNotFoundError:
+                  continue
+              for line in lines:
+                  m = re.search(r"=== \S+/([\w.]+\.py)\s+\(\d+ mutants\)", line)
+                  if m:
+                      current = m.group(1)
+                      continue
+                  m = re.search(r"score \d+/\d+ killed \((\d+)%\)", line)
+                  if m and current:
+                      scores[current] = int(m.group(1))
+                      current = None
+          if not scores:
+              print("::error::mutation produced no scores (harness crash?)")
+              sys.exit(1)
+          problems = [
+              f"{n}: {p}% < floor {FLOORS[n]}%"
+              for n, p in scores.items() if n in FLOORS and p < FLOORS[n]
+          ]
+          print("measured:", scores)
+          if problems:
+              print("::error::mutation-score regression: " + "; ".join(problems))
+              sys.exit(1)
+          print("all measured modules at/above floor")
+          PY
+
+      - name: Open an issue on regression
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          title="Nightly mutation regression"
+          run_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          # Avoid spam: only open one if there is no open issue already.
+          existing=$(gh issue list --state open --search "in:title $title" --json number --jq 'length')
+          if [ "$existing" = "0" ]; then
+            gh issue create --title "$title ($(date -u +%F))" --body \
+              "The nightly mutation job failed: a module's test-assertion score dropped below its floor, or the harness errored. Review the surviving mutants and add assertions (or fix the harness). Run: $run_url"
+          else
+            echo "an open '$title' issue already exists — not duplicating."
+          fi
