@@ -350,7 +350,17 @@ quality*).
       generated `static/index.html` (a rebuild would have silently dropped
       the db-field feature); the template was regenerated from the committed
       output (round-trip verified) before applying the UI change.
-- [ ] Split the >2000-line modules along their section-comment seams.
+- [ ] Split the >2000-line modules (`converter.py` 3329, `procedural/parser.py`
+      2848, `procedural/transformer/base.py` 2633). **Reassessed 2026-07-05:**
+      there are *no* section-comment seams to split along, and the code is
+      tightly coupled — `converter.py`'s harvesters depend on a helper defined
+      later (`_split_top_level_commas`), and the parse and emit halves call each
+      other through `PassthroughSQL` re-transpilation, so a naive extraction
+      creates import cycles. This is a dedicated package-conversion refactor
+      (e.g. `converter/{util,harvest,parse,emit}.py` re-exported from
+      `__init__.py`, shared pure helpers pulled into a `util` submodule first),
+      not a quick seam split. Do it in a focused session with the full gate run
+      after each extraction — not bundled with feature work on a green tree.
 
 **P2 — documentation drift (audit doc 05):**
 
