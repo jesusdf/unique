@@ -227,6 +227,9 @@ class SubqueryExpression(ASTNode):
     """A subquery used as an expression."""
 
     query: SelectStatement
+    # Derived-table alias when the subquery is a FROM/JOIN relation
+    # (``(SELECT …) t``); None for a scalar subquery.
+    alias: str | None = None
 
 
 @dataclass(frozen=True)

@@ -326,7 +326,9 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     if isinstance(expr, exp.Subquery):
         inner = expr.this
         if isinstance(inner, (exp.Select, exp.Union)):
-            return SubqueryExpression(query=_convert_select(inner))
+            return SubqueryExpression(
+                query=_convert_select(inner), alias=expr.alias or None
+            )
         return RawSQL(sql=expr.sql(), reason="Complex subquery")
     if isinstance(expr, exp.Window):
         return _convert_window(expr)
@@ -395,12 +397,17 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     offset_expr = expr.args.get("offset")
     if limit_expr or offset_expr:
         # T-SQL TOP n PERCENT carries a percent flag in sqlglot's limit options.
+        # ``OFFSET … FETCH NEXT n ROWS`` parses to an exp.Fetch whose count is in
+        # args["count"], not .expression — so read either (else LIMIT leaks None).
         percent = False
+        limit_count = None
         if limit_expr is not None:
             opts = limit_expr.args.get("limit_options")
             percent = bool(opts and opts.args.get("percent"))
+            count_node = limit_expr.args.get("count") or limit_expr.expression
+            limit_count = convert_expression(count_node) if count_node else None
         limit = LimitClause(
-            limit=convert_expression(limit_expr.expression) if limit_expr else None,
+            limit=limit_count,
             offset=convert_expression(offset_expr.expression) if offset_expr else None,
             percent=percent,
         )
@@ -779,7 +786,11 @@ def _convert_table_or_subquery(expr: exp.Expression) -> TableRef | SubqueryExpre
     if isinstance(expr, exp.Subquery):
         inner = expr.this
         if isinstance(inner, (exp.Select, exp.Union)):
-            return SubqueryExpression(query=_convert_select(inner))
+            # A derived table's alias (``(SELECT …) t``) must be carried through,
+            # or references to it — and the derived table itself on MySQL — break.
+            return SubqueryExpression(
+                query=_convert_select(inner), alias=expr.alias or None
+            )
     return _convert_table_ref(expr)
 
 
@@ -1020,13 +1031,18 @@ def _convert_join(expr: exp.Join) -> JoinClause:
     join_type = _JOIN_TYPE_MAP.get(join_type_str, JoinType.INNER)
 
     table_expr = expr.this
-    table = _convert_table_ref(table_expr)
+    # A joined derived table (``… JOIN (SELECT …) b ON …``) is a Subquery, not a
+    # Table; _convert_table_ref would flatten it to an empty TableRef, dropping
+    # the whole joined relation.
+    table = _convert_table_or_subquery(table_expr)
 
     alias = None
     if isinstance(table_expr, exp.Table):
         alias_expr = table_expr.args.get("alias")
         if alias_expr:
             alias = str(alias_expr.this)
+    elif isinstance(table_expr, exp.Subquery):
+        alias = table_expr.alias or None
 
     condition = None
     on_expr = expr.args.get("on")

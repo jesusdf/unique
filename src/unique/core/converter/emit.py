@@ -416,7 +416,12 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
     # FROM
     if node.from_clause:
         if isinstance(node.from_clause, SubqueryExpression):
-            parts.append(f"FROM ({_emit_select(node.from_clause.query, dialect)})")
+            # A derived table needs its alias, or references to it (and, on
+            # MySQL, the derived table itself) are invalid.
+            sub_alias = f" {node.from_clause.alias}" if node.from_clause.alias else ""
+            parts.append(
+                f"FROM ({_emit_select(node.from_clause.query, dialect)}){sub_alias}"
+            )
         else:
             parts.append(f"FROM {_emit_table_ref(node.from_clause, dialect)}")
     elif dialect == "oracle":
