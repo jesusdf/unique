@@ -144,6 +144,43 @@ class TestTranspiler:
         assert "-- UNIQUE:" in out
         assert "CHAR()" not in out
 
+    def test_oracle_slash_only_after_plsql_blocks(
+        self, transpiler: Transpiler
+    ) -> None:
+        # Oracle's ``/`` executes the buffer: it must follow a PL/SQL block but
+        # never a plain ``;``-terminated statement (which it would re-run).
+        sql = (
+            "UPDATE t SET a = 1 WHERE id = 2;\nGO\n"
+            "CREATE PROCEDURE p AS BEGIN SELECT 1; END;\nGO\n"
+            "INSERT INTO t (a) VALUES (3);\nGO"
+        )
+        out = transpiler.transpile(sql, source="tsql", target="oracle").sql
+        lines = [ln.strip() for ln in out.splitlines()]
+        # Exactly one ``/`` — the one after the procedure's END;.
+        assert lines.count("/") == 1
+        slash_idx = lines.index("/")
+        assert lines[slash_idx - 1] == "END;"
+
+    def test_oracle_trailing_plsql_block_gets_slash(
+        self, transpiler: Transpiler
+    ) -> None:
+        # A PL/SQL block as the *last* batch still needs its ``/`` to run.
+        out = transpiler.transpile(
+            "CREATE PROCEDURE p AS BEGIN SELECT 1; END;",
+            source="tsql",
+            target="oracle",
+        ).sql
+        assert out.rstrip().endswith("/")
+
+    def test_oracle_no_trailing_slash_after_plain_dml(
+        self, transpiler: Transpiler
+    ) -> None:
+        out = transpiler.transpile(
+            "UPDATE t SET a = 1 WHERE id = 2", source="tsql", target="oracle"
+        ).sql
+        assert "/" not in out
+        assert out.rstrip().endswith(";")
+
     def test_system_procedure_becomes_comment(self, transpiler: Transpiler) -> None:
         result = transpiler.transpile(
             "EXEC sys.sp_addextendedproperty @name=N'x', @value=N'y'",

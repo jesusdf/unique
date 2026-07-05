@@ -343,6 +343,26 @@ def _parses_in_target(sql: str, target: str) -> bool:
         return False
 
 
+# A PL/SQL block or stored program unit: Oracle needs a ``/`` terminator to run
+# it (its internal ``;`` do not terminate the statement). A plain ``;``-ended
+# DML/DDL statement must NOT be followed by ``/`` — that re-executes it.
+_ORACLE_PLSQL_RE = re.compile(
+    r"(?is)^\s*(?:"
+    r"CREATE\s+(?:OR\s+REPLACE\s+)?(?:(?:NON)?EDITIONABLE\s+)?"
+    r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE)\b"
+    r"|DECLARE\b|BEGIN\b"
+    r")"
+)
+
+
+def _oracle_needs_slash(sql: str) -> bool:
+    """Whether an emitted Oracle statement is a PL/SQL block needing a ``/``."""
+    body = "\n".join(
+        line for line in sql.splitlines() if not line.lstrip().startswith("--")
+    ).strip()
+    return bool(body) and bool(_ORACLE_PLSQL_RE.match(body))
+
+
 def _is_comment_only(sql: str) -> bool:
     """Whether ``sql`` consists solely of blank lines and ``--`` comments."""
     stripped = sql.strip()
@@ -727,23 +747,37 @@ class Transpiler:
         than the batch separator, so we don't emit a useless ``GO`` (T-SQL) or
         ``/`` (Oracle) after a comment. The batch separator is only used
         between two executable parts.
+
+        Oracle's ``/`` executes the SQL*Plus buffer, so it must follow **only**
+        PL/SQL blocks (which internal ``;`` don't terminate); after a plain
+        ``;``-terminated DML/DDL statement a ``/`` would re-run it. So for Oracle
+        the delimiter is chosen per preceding statement, and a trailing PL/SQL
+        block still gets its own ``/``.
         """
         if not parts:
             return ""
-        separator = self._get_batch_separator(target)
+        default_sep = self._get_batch_separator(target)
+        oracle = target == "oracle"
         # Accumulate pieces and join once: repeated ``out += …`` copies the whole
         # (multi-MB) accumulator each time — O(n²) — which dominated very large
         # scripts. The trailing-newline rstrip only affects the previous piece.
         pieces = [parts[0][0]]
         for i in range(1, len(parts)):
-            prev_is_comment = parts[i - 1][1]
+            prev_text, prev_is_comment = parts[i - 1]
             text, _ = parts[i]
             if prev_is_comment:
                 # Glue the comment to the following part with a newline.
                 pieces[-1] = pieces[-1].rstrip("\n")
                 pieces.append("\n" + text)
+            elif oracle:
+                sep = "\n/\n\n" if _oracle_needs_slash(prev_text) else "\n\n"
+                pieces.append(sep + text)
             else:
-                pieces.append(separator + text)
+                pieces.append(default_sep + text)
+        if oracle:
+            last_text, last_is_comment = parts[-1]
+            if not last_is_comment and _oracle_needs_slash(last_text):
+                pieces.append("\n/")
         return "".join(pieces)
 
     def _transpile_procedural(
