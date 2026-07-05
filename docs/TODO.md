@@ -26,27 +26,26 @@ source needs no new procedural plugin. Common real use case: migrating *off* an
 embedded/prototype SQLite DB onto a server. Live FE testing is free (`sqlite3`
 is stdlib, in-memory).
 
-- [ ] **Phase 1 — registration + DML/DDL source.** Register a source-only
-      `sqlite` dialect (parses via sqlglot; `emit()`/`target="sqlite"` raises a
-      clear "SQLite is import-only" error). Add the sqlglot mapping
-      (`"sqlite": "sqlite"`), the UI (source-only, disabled as target), and
-      SQLite-source IR quirks in the converter: type affinity
-      (INTEGER/TEXT/REAL/BLOB/NUMERIC → the target's real types),
-      `INTEGER PRIMARY KEY [AUTOINCREMENT]` (rowid alias) → identity/serial,
-      no schema qualifiers, booleans as 0/1. The design wrinkle: the
-      `DialectRegistry` is symmetric — introduce a source-only marker and update
-      the `available_dialects` == 4 test / matrix / UI accordingly.
-- [ ] **Phase 2 — SQLite source functions.** `last_insert_rowid()`,
-      `strftime`/`datetime('now')` → each target's date functions,
-      `ifnull` → COALESCE, `substr`, `typeof`, `hex(randomblob(...))`.
-- [ ] **Phase 3 — row-level trigger translation from SQLite.** A SQLite
-      `CREATE TRIGGER … FOR EACH ROW BEGIN <stmts> END` (NEW/OLD, simple SQL
-      body, no variables/control-flow) → the target's row-level trigger,
-      reusing the existing trigger machinery.
-- [ ] **Real-world fixtures + FE.** Vendor the MediaWiki schema variants
-      (mysql/postgres/sqlite) under `tests/` with attribution; add real-world
-      validity tests (incl. sqlite → the four targets) and, once Phase 1 lands,
-      a small SQLite-source FE scenario run in-memory via `sqlite3`.
+- [x] **Phase 1 — registration + DML/DDL source.** Source-only `sqlite` dialect
+      (parses via sqlglot; `emit()`/`target="sqlite"` raises); sqlglot mapping;
+      `source_only` marker on the Dialect base; API `/dialects` exposes it and the
+      web target combo filters it out. sqlglot + the shared converter already
+      handle the DML/DDL quirks (type affinity, `INTEGER PRIMARY KEY
+      [AUTOINCREMENT]` → identity/serial). DONE.
+- [x] **Phase 2 — SQLite source functions.** `last_insert_rowid()` → the
+      target's last-identity expr, `datetime('now')`/`date('now')` →
+      CURRENT_TIMESTAMP/CURRENT_DATE, `random()` → RANDOM()/DBMS_RANDOM.VALUE;
+      sqlglot already covers `ifnull`→COALESCE, `substr`, `instr`, `group_concat`.
+      DONE.
+- [x] **Phase 3 — row-level trigger translation from SQLite.** A `sqlite` entry
+      in the procedural-batch classifier routes `CREATE TRIGGER … FOR EACH ROW
+      BEGIN … END` to the procedural engine, which already produces the Oracle/
+      MySQL/PostgreSQL trigger forms (BEFORE/AFTER, INSERT/UPDATE/DELETE, OLD/NEW,
+      WHEN). DONE.
+- [x] **Real-world fixtures.** MediaWiki schema variants vendored under
+      `tests/fixtures/real_world/mediawiki/` with GPL attribution; validity test
+      transpiles each (incl. sqlite → the four targets). DONE. *(A dedicated
+      in-memory SQLite-source FE scenario remains a possible future addition.)*
 
 ## 2. Packaging (P3)
 
