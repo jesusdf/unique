@@ -45,3 +45,9 @@ CREATE TABLE corpus_tsql_dml (id INT PRIMARY KEY, n INT);
 INSERT INTO corpus_tsql_dml (id, n) VALUES (1, 10), (2, 20);
 UPDATE corpus_tsql_dml SET n = n + 1 WHERE id = 1;
 DELETE FROM corpus_tsql_dml WHERE id = 2;
+-- @@@
+SELECT 5 | 3 AS bor
+-- @@@
+SELECT 5 & 3 AS band
+-- @@@
+SELECT 5 ^ 3 AS bxor

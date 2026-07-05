@@ -1559,6 +1559,17 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     return f"{name}({distinct}{args})"
 
 
+_ORACLE_BITWISE = frozenset(
+    {
+        BinaryOperator.BIT_AND,
+        BinaryOperator.BIT_OR,
+        BinaryOperator.BIT_XOR,
+        BinaryOperator.BIT_LSHIFT,
+        BinaryOperator.BIT_RSHIFT,
+    }
+)
+
+
 def _emit_binary(node: BinaryOp, dialect: str) -> str:
     """Emit a binary operation."""
     left = _emit_expression(node.left, dialect)
@@ -1603,12 +1614,24 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
     if node.operator == BinaryOperator.MOD and dialect == "oracle":
         return f"MOD({left}, {right})"
 
-    # PostgreSQL spells bitwise XOR as "#" (and has no "^" bitwise operator;
-    # "^" there is exponentiation). Oracle has no infix bitwise operators at
-    # all — only BITAND(); the other forms have no faithful translation, so
-    # they are left as-is and flagged as a known limitation in the docs.
+    # PostgreSQL spells bitwise XOR as "#" ("^" there is exponentiation).
     if node.operator == BinaryOperator.BIT_XOR and dialect == "postgresql":
         op = "#"
+
+    # Oracle has no infix bitwise operators — only BITAND(). Express the others
+    # via exact integer identities (for non-negative integers), validated live:
+    #   a|b = a+b-(a&b),  a^b = a+b-2*(a&b),  a<<b = a*2^b,  a>>b = floor(a/2^b).
+    if dialect == "oracle" and node.operator in _ORACLE_BITWISE:
+        if node.operator == BinaryOperator.BIT_AND:
+            return f"BITAND({left}, {right})"
+        if node.operator == BinaryOperator.BIT_OR:
+            return f"({left} + {right} - BITAND({left}, {right}))"
+        if node.operator == BinaryOperator.BIT_XOR:
+            return f"({left} + {right} - 2 * BITAND({left}, {right}))"
+        if node.operator == BinaryOperator.BIT_LSHIFT:
+            return f"({left} * POWER(2, {right}))"
+        if node.operator == BinaryOperator.BIT_RSHIFT:
+            return f"FLOOR({left} / POWER(2, {right}))"
 
     return f"{left} {op} {right}"
 

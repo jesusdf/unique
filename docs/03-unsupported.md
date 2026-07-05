@@ -192,12 +192,20 @@ advanced JSON manipulation or PostgreSQL-specific JSONB operators.
 
 ### 3.10 Bitwise Operators → Oracle
 
-Oracle has no infix bitwise operators — only the `BITAND()` function, and no
-portable `|`/`^`. T-SQL `a & b`, `a | b`, `a ^ b` are passed through unchanged
-when targeting Oracle (valid on PostgreSQL and MySQL, where `^` becomes `#` on
-PostgreSQL). They are **no longer silently corrupted to `=`** (a former
-converter default), but a faithful Oracle translation would require function
-rewrites and is not yet implemented.
+Oracle has no infix bitwise operators (`|` is string concat, `^`/`&` are
+errors). They are now translated via exact integer identities (validated live
+against Oracle; correct for non-negative integers):
+
+| T-SQL | Oracle |
+|-------|--------|
+| `a & b` | `BITAND(a, b)` |
+| `a \| b` | `a + b - BITAND(a, b)` |
+| `a ^ b` | `a + b - 2 * BITAND(a, b)` |
+| `a << b` | `a * POWER(2, b)` |
+| `a >> b` | `FLOOR(a / POWER(2, b))` |
+
+On PostgreSQL `^` becomes `#` (its XOR); MySQL keeps the native operators.
+(A former converter default silently corrupted these to `=`; long fixed.)
 
 ### 3.11 String Concatenation Between Untyped Columns
 
@@ -210,14 +218,13 @@ by the columns' declared types, which the standalone-DML path does not have (no
 `--db-url`). Such an expression is left as `+`. Add a cast
 (`CAST(col1 AS VARCHAR) + col2`) or run it through a routine with metadata.
 
-### 3.12 IIF and DATEPART (standalone DML)
+### 3.12 DATEPART (standalone DML)
 
-`IIF(cond, a, b)` is currently emitted as `IF(cond, a, b)` — valid on MySQL but
-not on Oracle/PostgreSQL, which need a `CASE WHEN` rewrite (pending; use
-`CASE WHEN` directly there meanwhile). `DATEPART(part, x)` may emit a
-non-standard `EXTRACT(part, x)`; prefer `YEAR(x)`/`MONTH(x)`/`DAY(x)`, which
-translate cleanly. These affect standalone DML; inside routines the procedural
-engine handles the common cases.
+`IIF(cond, a, b)` is translated to a searched `CASE WHEN cond THEN a ELSE b END`
+for Oracle/PostgreSQL (kept as `IIF`/`IF` where native). `DATEPART(part, x)` may
+emit a non-standard `EXTRACT(part, x)`; prefer `YEAR(x)`/`MONTH(x)`/`DAY(x)`,
+which translate cleanly. This affects standalone DML; inside routines the
+procedural engine handles the common cases.
 
 ---
 
