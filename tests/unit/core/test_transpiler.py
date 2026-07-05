@@ -175,16 +175,37 @@ class TestTranspiler:
 
     def test_unknown_source_raises(self, transpiler: Transpiler) -> None:
         with pytest.raises(UnknownDialectError):
-            transpiler.transpile("SELECT 1", source="sqlite", target="tsql")
+            transpiler.transpile("SELECT 1", source="db2", target="tsql")
 
     def test_unknown_target_raises(self, transpiler: Transpiler) -> None:
         with pytest.raises(UnknownDialectError):
-            transpiler.transpile("SELECT 1", source="tsql", target="sqlite")
+            transpiler.transpile("SELECT 1", source="tsql", target="db2")
 
     def test_available_dialects(self, transpiler: Transpiler) -> None:
         dialects = transpiler.available_dialects()
-        assert len(dialects) == 4
+        # Four full engines + SQLite (import-only source).
+        assert len(dialects) == 5
         assert "tsql" in dialects
+        assert "sqlite" in dialects
+
+    def test_sqlite_is_source_only(self, transpiler: Transpiler) -> None:
+        assert transpiler.source_only_dialects() == ["sqlite"]
+
+    def test_sqlite_source_transpiles(self, transpiler: Transpiler) -> None:
+        # SQLite as a source is a first-class DML/DDL path.
+        out = transpiler.transpile(
+            "CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT, n TEXT);",
+            source="sqlite",
+            target="postgresql",
+        ).sql
+        assert "CREATE TABLE t" in out
+        assert "-- UNIQUE:" not in out
+
+    def test_sqlite_rejected_as_target(self, transpiler: Transpiler) -> None:
+        from unique.core.errors import UnsupportedFeatureError
+
+        with pytest.raises(UnsupportedFeatureError, match="import-only"):
+            transpiler.transpile("SELECT 1", source="tsql", target="sqlite")
 
     def test_top_to_limit(self, transpiler: Transpiler) -> None:
         result = transpiler.transpile(

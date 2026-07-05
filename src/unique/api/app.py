@@ -214,6 +214,9 @@ class DialectsResponse(BaseModel):
     """Response listing available dialects."""
 
     dialects: list[str]
+    # Dialects valid only as a transpilation source (import-only, e.g. SQLite);
+    # the UI offers them as a source but not as a target.
+    source_only: list[str] = []
 
 
 class InfoResponse(BaseModel):
@@ -297,7 +300,10 @@ def validate_sql(request: ValidateRequest) -> ValidateResponse:
 @app.get("/api/v1/dialects", response_model=DialectsResponse)
 def list_dialects() -> DialectsResponse:
     """List all available SQL dialects."""
-    return DialectsResponse(dialects=_transpiler.available_dialects())
+    return DialectsResponse(
+        dialects=_transpiler.available_dialects(),
+        source_only=_transpiler.source_only_dialects(),
+    )
 
 
 @app.get("/api/v1/info", response_model=InfoResponse)

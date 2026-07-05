@@ -37,6 +37,7 @@ from unique.core.converter import (
     harvest_user_functions,
 )
 from unique.core.dialect import Dialect
+from unique.core.errors import UnsupportedFeatureError
 from unique.core.procedural.emitter import ProceduralEmitter
 from unique.core.procedural.parser import ProceduralParser
 from unique.core.procedural.transformer import ProceduralTransformer
@@ -490,6 +491,12 @@ class Transpiler:
         # Validate dialects
         source_dialect = self.registry.get(source)
         target_dialect = self.registry.get(target)
+        if target_dialect.source_only:
+            raise UnsupportedFeatureError(
+                f"{target} is import-only (a source only, never a target)",
+                source,
+                target,
+            )
 
         logger.info("Transpiling from %s to %s", source, target)
 
@@ -1169,8 +1176,16 @@ class Transpiler:
         return separators.get(target, "\n\n")
 
     def available_dialects(self) -> list[str]:
-        """List all available dialect names."""
+        """List all available dialect names (valid as a transpilation source)."""
         return self.registry.available()
+
+    def source_only_dialects(self) -> list[str]:
+        """Dialects that may only be a source (import-only), never a target."""
+        return [
+            name
+            for name in self.registry.available()
+            if self.registry.get(name).source_only
+        ]
 
 
 def transpile(

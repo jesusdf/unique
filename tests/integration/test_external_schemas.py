@@ -19,10 +19,11 @@ from unique.core.transpiler import Transpiler
 
 _FIXTURES = Path(__file__).parent.parent / "fixtures" / "real_world" / "mediawiki"
 
-# (fixture file, its source dialect). SQLite is added once import support lands.
+# (fixture file, its source dialect).
 _SCHEMAS = [
     ("mysql-tables.sql", "mysql"),
     ("postgres-tables.sql", "postgresql"),
+    ("sqlite-tables.sql", "sqlite"),  # import-only source
 ]
 _TARGETS = ["tsql", "oracle", "postgresql", "mysql"]
 

@@ -101,6 +101,7 @@ class DialectRegistry:
         from unique.dialects.mysql import MySQLDialect
         from unique.dialects.oracle import OracleDialect
         from unique.dialects.postgresql import PostgreSQLDialect
+        from unique.dialects.sqlite import SQLiteDialect
         from unique.dialects.tsql import TSQLDialect
 
         for dialect_cls in [
@@ -108,6 +109,7 @@ class DialectRegistry:
             OracleDialect,
             PostgreSQLDialect,
             MySQLDialect,
+            SQLiteDialect,  # import-only (source only)
         ]:
             registry.register(dialect_cls())  # type: ignore[abstract]
 
