@@ -722,7 +722,12 @@ class TestDDLPassthrough:
         sql = f"CREATE {keyword} INDEX idx ON t (a)"
         result = transpiler.transpile(sql, "tsql", target)
         assert "CREATE INDEX" in result.sql.upper()
-        assert keyword not in result.sql.upper()
+        # The physical hint is stripped from the executable index but preserved
+        # in a restorable /* UNIQUE: … */ note (no silent loss).
+        executable = result.sql.split("/* UNIQUE:")[0]
+        assert keyword not in executable.upper()
+        assert "/* UNIQUE:" in result.sql
+        assert keyword in result.sql.upper()
         assert "-- UNIQUE: Unhandled" not in result.sql
 
     def test_include_index_kept_for_postgresql(self, transpiler: Transpiler) -> None:
@@ -764,7 +769,11 @@ class TestDDLPassthrough:
         )
         result = transpiler.transpile(sql, "tsql", target)
         assert "CREATE INDEX" in result.sql.upper()
-        assert "PAD_INDEX" not in result.sql.upper()
+        # Storage options are stripped from the executable index but preserved
+        # in a restorable /* UNIQUE: … */ note (no silent loss).
+        executable = result.sql.split("/* UNIQUE:")[0]
+        assert "PAD_INDEX" not in executable.upper()
+        assert "PAD_INDEX" in result.sql.upper()
         # The table reference (ON s.customer) must survive.
         assert "customer" in result.sql.lower()
 
