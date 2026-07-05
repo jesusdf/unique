@@ -310,10 +310,13 @@ jobs:
           # test_corpus_live sweeps the SQL corpus (transpile -> execute on the
           # real engine) so invalid output that a permissive parser would accept
           # is still caught; documented gaps are annotated -- @xfail in the corpus.
+          # test_corpus_results_live goes further: it compares the *result* of the
+          # source vs the transpiled output, catching semantic (wrong-answer) bugs.
           set +e
           pytest tests/integration/test_live_syntax.py \
             "tests/integration/test_metadata_live.py::TestOracleTypeResolutionAcrossEngines" \
             tests/integration/test_corpus_live.py \
+            tests/integration/test_corpus_results_live.py \
             -v -rA \
             > /tmp/pytest.out 2>&1
           rc=$?

@@ -1315,3 +1315,24 @@ annotated `-- @xfail` in the corpus — are fixed, and the sweep is fully green
 
 Pinned as fast unit tests in `test_function_mappings.py`. `docs/TODO.md` is now
 packaging-only again.
+
+## 25. Mutation testing + differential result testing (test-quality push)
+
+Two measurement/improvement layers on top of the corpus harness:
+
+- **Mutation testing** (`scripts/mutation_test.py`, nightly `mutation.yml`):
+  mutates a module one node at a time and reports the score + surviving
+  mutants — the objective test-assertion-quality metric the identity gate only
+  approximates with one mutant. Baselines: convert.py 73%, emit.py 69%,
+  transformer/base.py 62%; the weak functions are recorded in `docs/TODO.md` §1.
+- **Differential result testing** (`tests/helpers/corpus_diff.py` +
+  `test_corpus_results_live.py`, in the syntax-live CI job): executes each
+  result-comparable corpus SELECT on its source engine and its transpiled output
+  on each target, comparing normalized result sets. Catches *semantic* bugs that
+  syntactic validity misses.
+
+On its first clean run the differential test caught a real semantic bug:
+**a UNION of 3+ arms dropped every middle arm** (`_convert_union` converted only
+the outer two operands). Fixed by flattening the whole left-nested chain into a
+linked `set_query`; regression-pinned in `test_subquery_limit.py`. It also
+surfaced that EXCEPT/INTERSECT never reach `_convert_union` (tracked in TODO §2).
