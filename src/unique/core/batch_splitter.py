@@ -64,6 +64,11 @@ _PROCEDURAL_PATTERNS = {
         r"(?i)^\s*CREATE\s+(?:DEFINER\s*=\s*\S+\s+)?(?:PROCEDURE|FUNCTION|TRIGGER)\b",
         re.MULTILINE,
     ),
+    # SQLite has only triggers (no stored procedures or functions).
+    "sqlite": re.compile(
+        r"(?i)^\s*CREATE\s+(?:TEMP\s+|TEMPORARY\s+)?TRIGGER\b",
+        re.MULTILINE,
+    ),
 }
 
 # A T-SQL session/config option: ``SET <option> …`` where the option is an
