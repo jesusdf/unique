@@ -144,9 +144,32 @@ class TestTranspiler:
         assert "-- UNIQUE:" in out
         assert "CHAR()" not in out
 
-    def test_oracle_slash_only_after_plsql_blocks(
+    def test_comments_preserved_dml_path(self, transpiler: Transpiler) -> None:
+        # DML/DDL comments were dropped by the sqlglot->IR conversion; they must
+        # now survive tsql->oracle (leading, between, trailing, and inline).
+        sql = (
+            "-- header note\n"
+            "SELECT 1;\n"
+            "-- between note\n"
+            "SELECT 2 -- trailing note\n"
+        )
+        out = transpiler.transpile(sql, source="tsql", target="oracle").sql
+        for note in ("header note", "between note", "trailing note"):
+            assert note in out, note
+
+    def test_comment_before_go_preserved(self, transpiler: Transpiler) -> None:
+        sql = "SELECT 1\n-- note before go\nGO\nSELECT 2"
+        out = transpiler.transpile(sql, source="tsql", target="oracle").sql
+        assert "note before go" in out
+
+    def test_inline_create_table_comment_preserved(
         self, transpiler: Transpiler
     ) -> None:
+        sql = "CREATE TABLE t (\n  id INT, -- the id\n  n VARCHAR(10)\n)"
+        out = transpiler.transpile(sql, source="tsql", target="postgresql").sql
+        assert "the id" in out
+
+    def test_oracle_slash_only_after_plsql_blocks(self, transpiler: Transpiler) -> None:
         # Oracle's ``/`` executes the buffer: it must follow a PL/SQL block but
         # never a plain ``;``-terminated statement (which it would re-run).
         sql = (

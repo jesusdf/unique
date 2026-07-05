@@ -23,6 +23,7 @@ from unique.core.ast_nodes import (
     CastExpression,
     ColumnDefinition,
     ColumnRef,
+    CommentStatement,
     CreateTableStatement,
     CreateViewStatement,
     DeleteStatement,
@@ -104,16 +105,24 @@ def emit_sql(nodes: list[ASTNode], dialect: str) -> str:
     Returns:
         Formatted SQL text.
     """
-    parts: list[str] = []
+    parts: list[tuple[str, bool]] = []
     for node in nodes:
         sql = emit_node(node, dialect)
         if sql:
-            parts.append(sql)
+            parts.append((sql, isinstance(node, CommentStatement)))
+    if not parts:
+        return ""
     # T-SQL separates batches with GO and does not terminate statements with
-    # ';'. Other dialects use ';' as the statement terminator.
-    if dialect == "tsql":
-        return "\nGO\n\n".join(parts)
-    return ";\n\n".join(parts)
+    # ';'. Other dialects use ';' as the statement terminator. A preserved
+    # comment glues to the following statement with a newline (no ';'/GO after
+    # it), so it reads as that statement's leading comment.
+    separator = "\nGO\n\n" if dialect == "tsql" else ";\n\n"
+    pieces = [parts[0][0]]
+    for i in range(1, len(parts)):
+        prev_is_comment = parts[i - 1][1]
+        text = parts[i][0]
+        pieces.append(("\n" if prev_is_comment else separator) + text)
+    return "".join(pieces)
 
 
 def _comment_block(sql: str) -> str:
@@ -128,6 +137,10 @@ def _comment_block(sql: str) -> str:
 
 def emit_node(node: ASTNode, dialect: str) -> str:
     """Emit a single IR node as SQL text."""
+    if isinstance(node, CommentStatement):
+        # A preserved source comment, re-emitted verbatim (text keeps its
+        # ``--`` / ``/* */`` delimiters).
+        return node.text
     if isinstance(node, SelectStatement):
         return _emit_select(node, dialect)
     if isinstance(node, InsertStatement):
