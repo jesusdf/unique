@@ -135,12 +135,14 @@ High-level plan (details in that folder):
       `@new_id OUTPUT` removed from `create_invoice`. Result: the full
       schema+scenario transpile to PostgreSQL with **0 degraded steps / 0 UNIQUE
       comments**. TDD: `TestStandaloneExec` (3 engines).
-- [ ] **Batch `DECLARE @x … @x OUTPUT` capture (deferred).** The simple proc
-      call is done; a block that *captures* a procedure's OUT parameter into a
-      batch-local variable still needs a target form (PostgreSQL `CALL` with an
-      INOUT inside a `DO $$ DECLARE … $$`, or an Oracle `DECLARE … BEGIN …`).
-      Not needed by the current scenario (it uses no OUT capture); revisit if a
-      future scenario does.
+- [x] **Batch `DECLARE @x … @x OUTPUT` capture.** A block that captures a
+      procedure's OUT parameter into a batch-local variable now emits the
+      target's OUT/INOUT call form: PostgreSQL `DO $$ DECLARE v_x …; BEGIN CALL
+      p(… => v_x); … END $$`, Oracle `DECLARE v_x …; BEGIN p(… => v_x); … END;`
+      (the batch variable carries through to later statements, `OUTPUT` dropped).
+      MySQL degrades by design — it has no top-level anonymous block. Verified
+      2026-07-05 (TODO reassessed): the anonymous-block + named-arg handling
+      already covers it. TDD: `TestExecOutputCapture` (PostgreSQL, Oracle).
 - [x] **Engine-agnostic expected-state spec** (`expected_state.yaml`) — per-table
       row counts and specific `pk → column` values, defined once. Done: locked
       for Phase 1, all values reconciled (invoice.total = net + 10% tax, every
