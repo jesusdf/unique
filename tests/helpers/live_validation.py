@@ -58,10 +58,8 @@ class MSSQLValidator(SyntaxValidator):
     dialect = "tsql"
 
     def __init__(self, url: str) -> None:
-        import pyodbc  # noqa: F401 - imported for its availability
-
+        # _connect_mssql connects with autocommit disabled under either driver.
         self._conn = _connect_mssql(url)
-        self._conn.autocommit = False
 
     def validate(self, sql: str) -> ValidationResult:
         cur = self._conn.cursor()
@@ -496,20 +494,31 @@ def _connect_mysql_connector(url: str, connector):  # type: ignore[no-untyped-de
 
 
 def _connect_mssql(url: str):  # type: ignore[no-untyped-def]
+    """Connect to SQL Server, preferring pymssql (root-free, its wheel bundles
+    FreeTDS) and falling back to pyodbc + the MS ODBC driver."""
     from urllib.parse import urlparse
 
-    import pyodbc
-
     p = urlparse(url)
-    driver = "{ODBC Driver 18 for SQL Server}"
-    conn_str = (
-        f"DRIVER={driver};"
-        f"SERVER={p.hostname or 'localhost'},{p.port or 1433};"
-        f"DATABASE={(p.path or '/').lstrip('/') or 'master'};"
-        f"UID={p.username or 'sa'};PWD={p.password or ''};"
-        "TrustServerCertificate=yes;"
-    )
-    return pyodbc.connect(conn_str, autocommit=False)
+    host = p.hostname or "localhost"
+    port = int(p.port or 1433)
+    db = (p.path or "/").lstrip("/") or "master"
+    user = p.username or "sa"
+    pwd = p.password or ""
+    try:
+        import pymssql
+
+        return pymssql.connect(
+            server=host, port=port, user=user, password=pwd, database=db
+        )
+    except ImportError:
+        import pyodbc
+
+        conn_str = (
+            "DRIVER={ODBC Driver 18 for SQL Server};"
+            f"SERVER={host},{port};DATABASE={db};"
+            f"UID={user};PWD={pwd};TrustServerCertificate=yes;"
+        )
+        return pyodbc.connect(conn_str, autocommit=False)
 
 
 def _parse_oracle_url(url: str) -> tuple[str, str, str]:
