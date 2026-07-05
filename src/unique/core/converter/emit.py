@@ -348,6 +348,9 @@ def _portable_index(sql: str, dialect: str) -> str:
             lambda m: m.group("col"),
             sql,
         )
+        # A bare NULLS FIRST/LAST in an index column list is invalid on Oracle,
+        # MySQL and T-SQL (allowed only in ORDER BY); sqlglot may add it.
+        sql = re.sub(r"(?i)\s+NULLS\s+(?:FIRST|LAST)", "", sql)
 
     if dialect in ("mysql", "oracle"):
         # INCLUDE (...) covering columns: not supported.
@@ -830,13 +833,15 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     m_bool = re.fullmatch(r"\(*\s*([01])\s*\)*", default_sql)
                     if m_bool:
                         default_sql = "TRUE" if m_bool.group(1) == "1" else "FALSE"
-                # Oracle rejects a string default on a RAW/BLOB column (ORA-01465:
-                # it must be hex). A MySQL ``VARBINARY DEFAULT '…'`` stores text
-                # in a binary column; drop the (non-portable) default rather than
-                # emit invalid HEXTORAW guesswork.
+                # A string default on a binary column is invalid on Oracle
+                # (ORA-01465: must be hex) and SQL Server (implicit varchar ->
+                # varbinary conversion, error 257). A MySQL ``VARBINARY DEFAULT
+                # '…'`` stores text in a binary column; drop the non-portable
+                # default rather than emit invalid hex guesswork.
                 if (
-                    dialect == "oracle"
-                    and dtype.upper().split("(")[0] in ("RAW", "BLOB")
+                    dialect in ("oracle", "tsql")
+                    and dtype.upper().split("(")[0]
+                    in ("RAW", "BLOB", "VARBINARY", "BINARY")
                     and re.fullmatch(r"'[^']*'", default_sql.strip())
                 ):
                     default_sql = ""

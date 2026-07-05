@@ -44,16 +44,19 @@ _SCHEMAS = [
     ("sqlite-tables.sql", "sqlite"),
 ]
 
-# Green live: mysql -> {postgresql, oracle} and sqlite -> postgresql.
-# Remaining documented gaps this real schema surfaces (tracked in docs/TODO.md
-# "MediaWiki live-schema gaps"): a BLOB/TEXT column in a MySQL key needs a prefix
-# length (postgresql/sqlite -> mysql), and a few PostgreSQL/SQLite-source ->
-# Oracle type/index cases (functional index, ORA-00907).
+# Green live: mysql -> {postgresql, oracle, tsql} and sqlite -> postgresql.
+# The remaining pairs all reduce to one *intrinsic* impedance (see
+# docs/03-unsupported.md): the PostgreSQL/SQLite schemas index columns declared
+# as unbounded TEXT/BLOB, and MySQL/SQL Server/Oracle cannot index an unbounded
+# binary/text column (MediaWiki's own MySQL schema uses VARBINARY(255) for
+# exactly these). Not a transpiler bug — a source-schema/target-engine mismatch.
 _KNOWN_GAPS = {
     ("postgresql", "mysql"),
     ("postgresql", "oracle"),
+    ("postgresql", "tsql"),
     ("sqlite", "mysql"),
     ("sqlite", "oracle"),
+    ("sqlite", "tsql"),
 }
 
 

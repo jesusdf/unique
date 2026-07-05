@@ -1196,3 +1196,33 @@ is stdlib, in-memory).
       transpiles each (incl. sqlite → the four targets). DONE. *(A dedicated
       in-memory SQLite-source FE scenario remains a possible future addition.)*
 
+
+## 20. MediaWiki live-schema bug-hunt (P2)
+
+Executing the transpiled MediaWiki 1.46 schema (64 tables) against **live**
+engines (`test_mediawiki_live.py`) surfaced a class of real DDL bugs that the
+sqlglot parse-check missed. Green live now: **`mysql → {postgresql, oracle,
+tsql}`** and **`sqlite → postgresql`**. Fixed:
+
+- **Binary/LOB types:** PostgreSQL `BYTEA`/`BLOB` take no length; MySQL
+  TINY/MEDIUM/LONG `BLOB`→`BYTEA`/`BLOB`/`VARBINARY(MAX)` and `*TEXT`→`TEXT`/
+  `CLOB`/`VARCHAR(MAX)`; Oracle has no `VARBINARY` (→`RAW`, keep length) or
+  `DOUBLE` (→`BINARY_DOUBLE`); unsigned floats (`UDOUBLE`…) per target; a
+  length-less binary (SQLite BLOB affinity) → `BLOB`.
+- **Reserved-word identifiers** quoted for the target — in both the IR emit path
+  (`_ident`) and sqlglot-passthrough statements (`_emit_passthrough` parses,
+  marks reserved identifiers quoted, regenerates); added engine-specific reserved
+  words (`collation`, `file`, `comment`, …).
+- **`SERIAL`/`BIGSERIAL`/`SMALLSERIAL`** as a source → the target's identity
+  (MySQL `AUTO_INCREMENT`, Oracle `GENERATED AS IDENTITY`, T-SQL `IDENTITY`) on
+  the base integer type.
+- **String default on a binary column** dropped for Oracle (ORA-01465) and
+  SQL Server (error 257); **bare `NULLS FIRST/LAST`** stripped from index
+  columns for non-PostgreSQL targets.
+- **SQL Server live validator** now prefers **pymssql** (root-free), pyodbc
+  fallback — so the `→tsql` targets run locally.
+
+Remaining pairs (PostgreSQL/SQLite → MySQL/SQL Server/Oracle) all reduce to one
+**intrinsic** impedance — indexing an unbounded `TEXT`/`BLOB` column, which those
+engines cannot do — documented in `docs/03-unsupported.md` §0b and skipped in
+the test's `_KNOWN_GAPS`.
