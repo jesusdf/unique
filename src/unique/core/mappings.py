@@ -198,7 +198,13 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "VARBINARY": "BYTEA",
         "BINARY": "BYTEA",
         "BLOB": "BYTEA",
+        "TINYBLOB": "BYTEA",
+        "MEDIUMBLOB": "BYTEA",
+        "LONGBLOB": "BYTEA",
         "IMAGE": "BYTEA",
+        "TINYTEXT": "TEXT",
+        "MEDIUMTEXT": "TEXT",
+        "LONGTEXT": "TEXT",
         # MySQL unsigned integers (sqlglot U-prefixed internal names): the
         # next-wider signed type covers the unsigned range.
         "UTINYINT": "SMALLINT",
@@ -206,6 +212,10 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "UMEDIUMINT": "INTEGER",
         "UINT": "BIGINT",
         "UBIGINT": "NUMERIC(20)",
+        # Unsigned floats have no PostgreSQL equivalent — use the signed type.
+        "UDOUBLE": "DOUBLE PRECISION",
+        "UFLOAT": "REAL",
+        "UDECIMAL": "DECIMAL",
         "MEDIUMINT": "INTEGER",
         "YEAR": "SMALLINT",
     },

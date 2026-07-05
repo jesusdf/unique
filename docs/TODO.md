@@ -16,7 +16,28 @@ packaging remains.
 
 ---
 
-## 1. Packaging (P3)
+## 1. MediaWiki live-schema gaps (P2)
+
+`tests/integration/test_mediawiki_live.py` executes the transpiled MediaWiki
+schema against real engines. `mysql -> postgresql` is fully green; the remaining
+source→target pairs are skipped as documented gaps this real schema surfaced
+(fix them and remove from `_KNOWN_GAPS`):
+
+- [ ] **Reserved words in sqlglot-passthrough statements** (e.g. `CREATE UNIQUE
+      INDEX … ON collation (…)`): `_ident` quotes reserved identifiers in the
+      IR emit path (CREATE TABLE) but CREATE INDEX / ALTER go through sqlglot,
+      which does not quote them. Affects `sqlite→postgresql`, `mysql→oracle`.
+- [ ] **PostgreSQL `SERIAL`/`BIGSERIAL` → MySQL**: emit `INT/BIGINT
+      AUTO_INCREMENT` (currently leaks `BIGSERIAL`, a MySQL syntax error).
+      Affects `postgresql→mysql`, `sqlite→mysql`.
+- [ ] **More PostgreSQL-source → Oracle type rows** (ORA-00902/00906) and
+      **Oracle `RAW`/`BLOB` columns with a `''` string default** (ORA-01465 — a
+      MySQL `VARBINARY DEFAULT ''` should drop the default or use EMPTY_BLOB()).
+      Affects `*→oracle`.
+- [ ] Wire a root-free SQL Server driver (pymssql) into the live validator so
+      the `→tsql` pairs run (they currently skip: the validator needs pyodbc).
+
+## 2. Packaging (P3)
 
 - [ ] **PyPI publication** — deferred until the tool has been used in real
       projects for a few months and proven stable. Not before then.
