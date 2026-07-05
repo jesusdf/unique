@@ -37,13 +37,13 @@ class TestInfo:
     def test_info_reports_version_label(self, client: TestClient) -> None:
         resp = client.get("/api/v1/info")
         assert resp.status_code == 200
-        assert resp.json()["version"] == "v0.11"
+        assert resp.json()["version"] == "v0.12"
 
     def test_version_label_is_derived_from_package_version(self) -> None:
         # The UI label tracks unique.__version__ so a release needs no HTML edit.
         from unique.api.app import _display_version
 
-        assert _display_version() == "v0.11"
+        assert _display_version() == "v0.12"
 
     def test_info_db_disabled_by_default(self, client: TestClient) -> None:
         resp = client.get("/api/v1/info")
