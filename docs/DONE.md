@@ -1371,3 +1371,21 @@ Detection: `test_no_ir_leak.py` asserts the output never contains an IR-node rep
 (`SourceLocation(` / `SelectStatement(` / `RawSQL(` / …) for EXISTS/IN/scalar
 subqueries; the same invariant was added to the generative property test so any
 future str()/repr() fallback is caught. Corpus + result-diff coverage added.
+
+## 28. Bitwise operators -> Oracle (creative BITAND/POWER identities)
+
+Reviewing the unsupported list for creative equivalents (each validated against
+the *real* engine, since a permissive parser lies):
+
+- **Bitwise -> Oracle**: Oracle has no infix bitwise operators (`|` is concat,
+  `^`/`&` are errors), so they were emitted verbatim = invalid. Now translated
+  via exact integer identities, live-validated (`5|3=7`, `5^3=6`, `5&3=1`,
+  `8<<2=32`, `20>>2=5`): `a&b=BITAND(a,b)`, `a|b=a+b-BITAND(a,b)`,
+  `a^b=a+b-2*BITAND(a,b)`, `a<<b=a*POWER(2,b)`, `a>>b=FLOOR(a/POWER(2,b))`. Corpus
+  + differential-result coverage (results match the source engine's).
+- **`IF EXISTS (subquery) THEN`** — investigated (the reported inspiration): it
+  actually **compiles on Oracle 23 and MySQL 8** (both now allow a subquery in a
+  boolean/IF condition), so no rewrite is needed on the supported engine
+  versions. The validate-against-the-real-engine step is what caught this — the
+  premise (that it was invalid) was wrong for current Oracle/MySQL.
+- `IIF -> CASE` was already implemented; the stale doc note was corrected.
