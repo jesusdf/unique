@@ -81,6 +81,33 @@ class TestFromDual:
         out = self.t.transpile("SELECT 1 FROM dual", "oracle", "mysql").sql
         _valid(out, "mysql")
 
+    def test_tableless_select_gets_dual_for_oracle(self) -> None:
+        # The reverse of dropping DUAL: a table-less SELECT is invalid Oracle
+        # (ORA-00923), so a T-SQL ``SELECT 1`` must gain ``FROM DUAL``.
+        out = self.t.transpile("SELECT 1", "tsql", "oracle").sql
+        assert "FROM DUAL" in out.upper()
+        _valid(out, "oracle")
+
+    def test_tableless_select_null_with_comment_to_oracle(self) -> None:
+        # Regression: "-- c\nSELECT NULL\nGO" emitted ``SELECT NULL`` with no
+        # FROM (invalid Oracle); the comment must survive and DUAL be added.
+        out = self.t.transpile("-- c\nselect null\ngo", "tsql", "oracle").sql
+        assert "-- c" in out
+        assert "SELECT NULL" in out.upper()
+        assert "FROM DUAL" in out.upper()
+        _valid(out, "oracle")
+
+    def test_tableless_select_dual_from_mysql(self) -> None:
+        out = self.t.transpile("SELECT SYSDATE()", "mysql", "oracle").sql
+        assert "FROM DUAL" in out.upper()
+        _valid(out, "oracle")
+
+    def test_select_with_from_unchanged_for_oracle(self) -> None:
+        # A SELECT that already has a FROM must not get a spurious DUAL.
+        out = self.t.transpile("SELECT id FROM t", "tsql", "oracle").sql
+        assert "DUAL" not in out.upper()
+        _valid(out, "oracle")
+
 
 class TestLimitToTsql:
     def setup_method(self) -> None:
