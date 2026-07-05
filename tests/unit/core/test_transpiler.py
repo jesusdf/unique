@@ -204,6 +204,19 @@ class TestTranspiler:
         assert "/" not in out
         assert out.rstrip().endswith(";")
 
+    def test_sqlite_source_function_mappings(self, transpiler: Transpiler) -> None:
+        # SQLite-only functions rewrite to each target's form (Phase 2).
+        def out(sql: str, tgt: str) -> str:
+            return transpiler.transpile(sql, source="sqlite", target=tgt).sql
+
+        assert "LASTVAL()" in out("SELECT last_insert_rowid()", "postgresql")
+        assert "LAST_INSERT_ID()" in out("SELECT last_insert_rowid()", "mysql")
+        assert "CURRENT_TIMESTAMP" in out("SELECT datetime('now')", "postgresql")
+        assert "SYSDATE" in out("SELECT datetime('now')", "oracle")
+        assert "CURRENT_DATE" in out("SELECT date('now')", "mysql")
+        assert "RANDOM()" in out("SELECT random()", "postgresql")
+        assert "DBMS_RANDOM.VALUE" in out("SELECT random()", "oracle")
+
     def test_system_procedure_becomes_comment(self, transpiler: Transpiler) -> None:
         result = transpiler.transpile(
             "EXEC sys.sp_addextendedproperty @name=N'x', @value=N'y'",
