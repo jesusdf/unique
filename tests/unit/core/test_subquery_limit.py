@@ -86,3 +86,23 @@ class TestMultiArmSetOp:
                 assert out.upper().count("SELECT") == arms, (target, out)
                 assert "UNIQUE:" not in out
                 _valid(out, target)
+
+    def test_except_intersect_are_transpiled(self) -> None:
+        # exp.Except/exp.Intersect are not exp.Union subclasses, so they used to
+        # miss the dispatch to _convert_union and degrade to a carrier.
+        for sql in (
+            "SELECT 1 EXCEPT SELECT 2",
+            "SELECT 3 EXCEPT SELECT 2 EXCEPT SELECT 1",
+            "SELECT 1 INTERSECT SELECT 1",
+        ):
+            for target in ("postgresql", "oracle", "mysql", "tsql"):
+                out = self.t.transpile(sql, "tsql", target).sql
+                assert "UNIQUE:" not in out, (target, out)
+                _valid(out, target)
+        # Oracle spells EXCEPT as MINUS.
+        assert (
+            "MINUS"
+            in self.t.transpile(
+                "SELECT 1 EXCEPT SELECT 2", "tsql", "oracle"
+            ).sql.upper()
+        )
