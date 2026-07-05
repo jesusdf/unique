@@ -8,10 +8,29 @@ engines and indicates the transpilation support status for each.
 > procedural language (no stored procedures, functions or anonymous blocks), so
 > it can never be a faithful procedural *target*; the tool rejects `sqlite` as a
 > target with a clear error, and the web UI offers it as a source but not a
-> target. Its DML/DDL surface (type affinity → the target's real types,
-> `INTEGER PRIMARY KEY [AUTOINCREMENT]` → identity/serial, etc.) transpiles
-> through the same sqlglot + IR path as the other sources. The matrix below
-> describes the four full engines.
+> target.
+>
+> **Supported from a SQLite source:**
+> - **DDL** — `CREATE TABLE` (type affinity → the target's real types:
+>   INTEGER/TEXT/REAL/BLOB/NUMERIC; a length-less binary → BLOB),
+>   `INTEGER PRIMARY KEY [AUTOINCREMENT]` → the target's identity/serial,
+>   `CREATE INDEX` / `CREATE VIEW`, `ALTER TABLE`, `DROP`.
+> - **DML/DQL** — `SELECT`/`INSERT`/`UPDATE`/`DELETE`, CTEs (incl. recursive),
+>   window functions.
+> - **Functions** — most map via sqlglot (`ifnull`→COALESCE, `substr`, `instr`,
+>   `group_concat`, …); SQLite-specific ones are rewritten per target
+>   (`last_insert_rowid()` → the target's last-identity expression,
+>   `datetime('now')`/`date('now')` → CURRENT_TIMESTAMP/CURRENT_DATE,
+>   `random()` → RANDOM()/DBMS_RANDOM.VALUE).
+> - **Triggers** — a row-level `CREATE TRIGGER … FOR EACH ROW BEGIN … END`
+>   (NEW/OLD, WHEN, BEFORE/AFTER, INSERT/UPDATE/DELETE) → the target's trigger.
+>
+> **Not supported:** SQLite as a *target*; `typeof`/`hex(randomblob(…))` and
+> other SQLite-only functions with no target equivalent (documented carriers);
+> indexing an unbounded `TEXT`/`BLOB` column on MySQL/SQL Server/Oracle (see
+> §0b in [`03-unsupported.md`](03-unsupported.md)).
+>
+> The matrix below describes the four full engines.
 
 > **See also:** [`uml/catalog.mmd`](uml/catalog.mmd) — a UML class diagram that
 > visualizes the full transpilable object catalog (tables, views, sequences,

@@ -295,12 +295,12 @@
 <!-- CODEMIRROR_JS -->
 <script>
 const API = "";
-const ENGINE_LABELS = { tsql: "SQL Server (T-SQL)", oracle: "Oracle", postgresql: "PostgreSQL", mysql: "MySQL" };
+const ENGINE_LABELS = { tsql: "SQL Server (T-SQL)", oracle: "Oracle", postgresql: "PostgreSQL", mysql: "MySQL", sqlite: "SQLite" };
 
 // CodeMirror editor instances (created in init). Accessors below fall back to
 // the raw <textarea> if CodeMirror failed to load, so the UI still works.
 let cmInput = null, cmOutput = null;
-const CM_MODE = { tsql: "text/x-mssql", oracle: "text/x-plsql", postgresql: "text/x-pgsql", mysql: "text/x-mysql" };
+const CM_MODE = { tsql: "text/x-mssql", oracle: "text/x-plsql", postgresql: "text/x-pgsql", mysql: "text/x-mysql", sqlite: "text/x-sqlite" };
 
 function getInput() { return cmInput ? cmInput.getValue() : el("input").value; }
 function setInput(v) { cmInput ? cmInput.setValue(v) : (el("input").value = v); }
@@ -385,9 +385,9 @@ async function autoDetect() {
       const label = ENGINE_LABELS[data.dialect] || data.dialect;
       note.textContent = `Detected: ${label} (${pct}% confidence)`;
       badge.textContent = `looks like ${label}`;
-      // Only auto-apply when the user hasn't manually overridden recently.
-      if (el("source").dataset.userSet !== "1") {
-        el("source").value = data.dialect;
+      // Keep the combo on "Auto-detect" (the detected engine is used at
+      // translate time); just highlight the editor as the detected dialect.
+      if (el("source").value === "auto") {
         setEditorMode(cmInput, data.dialect);
       }
     } else {
@@ -399,10 +399,16 @@ async function autoDetect() {
 
 async function translate() {
   const sql = getInput();
-  const source = el("source").value;
+  let source = el("source").value;
   const target = el("target").value;
   const btn = el("run");
   if (!sql.trim()) { showMessages(el("messages"), { error: "Please enter a source script." }); return; }
+  // "Auto-detect" resolves to the detected engine (populated while typing).
+  if (source === "auto") {
+    if (!lastDetected) { await autoDetect(); }
+    source = lastDetected;
+    if (!source) { showMessages(el("messages"), { error: "Could not auto-detect the source engine — pick one from the list." }); return; }
+  }
   btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>Translating…`;
   try {
     const body = { sql, source, target };
@@ -505,16 +511,15 @@ async function translateFile() {
   const { dialects, sourceOnly } = await loadDialects();
   // Import-only dialects (e.g. SQLite) may be a source but not a target.
   const targets = dialects.filter((d) => !sourceOnly.includes(d));
-  fillSelect(el("source"), dialects);
+  fillSelect(el("source"), dialects, { includeAuto: true });
   fillSelect(el("target"), targets);
   fillSelect(el("fileSource"), dialects, { includeAuto: true });
   fillSelect(el("fileTarget"), targets);
-  // Default the combos to the list's first element (and the first differing
-  // target) rather than a hard-coded dialect, so the selection tracks the
-  // dialect list instead of always showing PostgreSQL.
+  // The source combos default to "Auto-detect"; the target defaults to the
+  // list's first (non-source-only) element rather than a hard-coded dialect.
   const firstSource = dialects[0];
   const firstTarget = targets.find((d) => d !== firstSource) ?? targets[0];
-  el("source").value = firstSource;
+  el("source").value = "auto";
   el("target").value = firstTarget;
   setEditorMode(cmInput, firstSource);
   setEditorMode(cmOutput, firstTarget);
