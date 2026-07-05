@@ -13,7 +13,6 @@ SELECT SUBSTRING('hello', 1, 3) AS s
 -- @@@
 SELECT CHARINDEX('l', 'hello') AS p
 -- @@@
--- @xfail: oracle postgresql  # T-SQL string + chain not fully coerced to || (untyped)
 SELECT 'a' + 'b' + 'c' AS concatenated
 -- @@@
 SELECT IIF(1 = 1, 'y', 'n') AS iif
@@ -24,7 +23,6 @@ SELECT DATEDIFF(DAY, CAST('2024-01-01' AS DATE), CAST('2024-01-08' AS DATE)) AS 
 -- @@@
 SELECT CAST(GETDATE() AS DATE) AS today
 -- @@@
--- @xfail: mysql oracle postgresql  # T-SQL CONVERT(type, expr) not translated
 SELECT CONVERT(VARCHAR(20), 12345) AS str
 -- @@@
 SELECT TOP 2 x FROM (SELECT 1 AS x UNION SELECT 2 UNION SELECT 3) t ORDER BY x

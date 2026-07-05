@@ -9,7 +9,6 @@ SELECT SYSTIMESTAMP FROM dual
 -- @@@
 SELECT NVL(NULL, 1) AS c FROM dual
 -- @@@
--- @xfail: mysql postgresql tsql  # NVL2 not mapped to CASE for these targets
 SELECT NVL2(1, 'a', 'b') AS c FROM dual
 -- @@@
 SELECT SUBSTR('hello', 1, 3) AS s FROM dual
@@ -20,18 +19,14 @@ SELECT 'a' || 'b' || 'c' AS concatenated FROM dual
 -- @@@
 SELECT LENGTH('hello') AS l FROM dual
 -- @@@
--- @xfail: mysql postgresql tsql  # DECODE not lowered to CASE
 SELECT DECODE(1, 1, 'one', 2, 'two', 'other') AS d FROM dual
 -- @@@
--- @xfail: mysql postgresql tsql  # TO_CHAR(date, fmt) format model not translated
 SELECT TO_CHAR(SYSDATE, 'YYYY-MM-DD') AS d FROM dual
 -- @@@
--- @xfail: postgresql tsql  # TO_DATE format model not translated
 SELECT TO_DATE('2024-01-01', 'YYYY-MM-DD') AS d FROM dual
 -- @@@
 SELECT x FROM (SELECT 1 AS x UNION SELECT 2) t WHERE ROWNUM <= 1
 -- @@@
--- @xfail: mysql tsql  # TRUNC(number) not mapped (TRUNCATE / no equivalent)
 SELECT MOD(10, 3) AS m, TRUNC(3.7) AS t FROM dual
 -- @@@
 CREATE TABLE corpus_ora_types (

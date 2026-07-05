@@ -60,6 +60,14 @@ CURRENT_TIMESTAMP_EXPR: dict[str, str] = {
     "mysql": "CURRENT_TIMESTAMP",
 }
 
+#: The current-date expression per dialect (niladic; "today" at midnight).
+CURRENT_DATE_EXPR: dict[str, str] = {
+    "tsql": "CAST(GETDATE() AS DATE)",
+    "oracle": "TRUNC(SYSDATE)",
+    "postgresql": "CURRENT_DATE",
+    "mysql": "CURDATE()",
+}
+
 #: UUID-generating function per dialect. sqlglot canonicalizes
 #: NEWID/GEN_RANDOM_UUID/SYS_GUID to UUID, which only exists on MySQL.
 UUID_FUNCTION: dict[str, str] = {

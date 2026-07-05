@@ -22,7 +22,6 @@ SELECT COALESCE(NULL, NULL, 7) AS c
 -- @@@
 SELECT NULLIF(1, 1) AS n
 -- @@@
--- @xfail: mysql  # MySQL CAST uses SIGNED, not INT
 SELECT CAST('123' AS INT) AS i
 -- @@@
 SELECT CAST(1 AS DECIMAL(10, 2)) AS d
