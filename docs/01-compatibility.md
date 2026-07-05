@@ -38,21 +38,17 @@ engines and indicates the transpilation support status for each.
 > Includes the procedural surface (stored procedures and triggers) and the
 > date-handling / record-update paths an ER diagram would omit.
 
-> **Note:** the matrix below is a point-in-time analysis. The procedural surface
-> has since been hardened substantially (transaction control, WAITFOR,
-> IDENTITY_INSERT, `@@ERROR`, `TOP n PERCENT`, QUOTED_IDENTIFIER, trigger
-> pseudo-tables, reversible type carriers, …) and all four procedural fixtures
-> now validate **live** against real engines with 0 errors, so several
-> "⚠️ Partial" rows below are effectively full today. A later standalone-DML
-> operator/function audit also fixed string-`+` concatenation, bitwise
-> operators, compound assignment, and named-slot function arguments (rows 1.2a,
-> 5.x). A cross-table-`UPDATE` audit then fixed `UPDATE … FROM … JOIN` (row 2):
-> the source table and join predicate used to be dropped (a bare
-> `UPDATE t SET c = s.c` was emitted), and are now rendered per engine —
-> PostgreSQL `UPDATE t SET … FROM s WHERE …`, MySQL `UPDATE t JOIN s ON … SET …`,
-> Oracle a correlated-subquery `UPDATE`, T-SQL its native `FROM`/`JOIN`; the same
-> audit fixed a join alias emitted twice (`t2 b b`). See `docs/STATUS.md` for the
-> current state and `docs/DONE.md` for the detailed history.
+> **Note:** the rows below are kept in sync with reality, but a matrix always
+> lags the code. What keeps it honest is the **bug-detection infrastructure**
+> (corpus × live execution, generative fuzzing, differential result testing,
+> nightly mutation testing) — see `docs/STATUS.md`. Recent additions folded into
+> the rows: set operations of any arity incl. `EXCEPT`/`INTERSECT`→Oracle `MINUS`
+> (§1.7), bitwise operators → Oracle via `BITAND`/`POWER` identities (§1.2a),
+> cross-table `UPDATE … FROM … JOIN` per engine (§2), string-`+`/compound
+> assignment/named-slot function arguments, and reversible type carriers. All
+> four procedural fixtures validate **live** with 0 errors, so several
+> "⚠️ Partial" procedural rows are effectively full today. See `docs/DONE.md`
+> for the detailed history.
 
 **Legend**
 
@@ -100,8 +96,8 @@ engines and indicates the transpilation support status for each.
 | Arithmetic `+ - * / %` | ✓ | ✓ (`%`→`MOD`) | ✓ | ✓ | ✅ |
 | String concatenation | `+` | `\|\|` | `\|\|` | `CONCAT()` | ✅ when an operand is a recognizable string; `col + col` with no type info stays `+` (see [03-unsupported](03-unsupported.md)) |
 | Compound assignment `+= -= *= /= %=` | ✓ | N/A | N/A | N/A | ✅ → `col = col <op> expr` |
-| Bitwise `&` `\|` | ✓ | N/A (`BITAND` only) | ✓ | ✓ | ⚠️ preserved as-is; valid on PostgreSQL/MySQL, not on Oracle |
-| Bitwise XOR `^` | ✓ | N/A | ✓ (`#`) | ✓ | ⚠️ `#` on PostgreSQL; not valid on Oracle |
+| Bitwise `&` `\|` | ✓ | `BITAND` + identity | ✓ | ✓ | ✅ Oracle via `BITAND`/`a+b-BITAND` (live-validated) |
+| Bitwise XOR `^`, shifts `<< >>` | ✓ | `BITAND`/`POWER` | ✓ (`#` XOR) | ✓ | ✅ Oracle via `a+b-2*BITAND` / `POWER(2,n)`; `#` on PostgreSQL |
 
 ### 1.3 JOINs
 
