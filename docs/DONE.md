@@ -1270,3 +1270,24 @@ pinned (`test_subquery_limit.py`):
 Remaining engine-specific function/type gaps the sweep surfaced are annotated
 inline with `-- @xfail: <targets>` in the corpus (a documented backlog; the test
 flags them if they start passing). See docs/TODO.md.
+
+## 23. Generative fuzzing + preservation invariants (approaches 4 & 3)
+
+`tests/helpers/sql_gen.py` is a Hypothesis generator of portable, self-contained
+SELECT statements (nested numeric expressions, derived tables, joined derived
+tables, WHERE/ORDER BY, optional leading comment). `tests/property/
+test_dml_properties.py` drives it and asserts, for every source→target pair,
+invariants that must always hold — with Hypothesis shrinking any failure to a
+minimal statement (the payoff over a fixed corpus):
+
+- **no crash** and non-empty output;
+- **no Python `None` leak** into the SQL;
+- **output is valid target SQL** (sqlglot RAISE — catches a dropped derived-table
+  alias or an empty `INNER JOIN  ON`, i.e. the structural bugs from §22);
+- **leading comments preserved**;
+- **derived-table aliases conserved** (no silent loss);
+- **source→target→source round-trip stays valid**.
+
+Runs in the plain (no-DB) suite (100 examples/property). Together with the live
+corpus sweep (§22) this replaces ad-hoc manual query testing with generated
+inputs + real-engine execution + always-true invariants.
