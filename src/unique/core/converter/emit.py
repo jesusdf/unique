@@ -1626,7 +1626,8 @@ def _emit_unary(node: UnaryOp, dialect: str) -> str:
     if node.operator == UnaryOperator.IS_NOT_NULL:
         return f"{operand} IS NOT NULL"
     if node.operator == UnaryOperator.EXISTS:
-        return f"EXISTS ({operand})"
+        # operand is a SubqueryExpression, already rendered with its own parens.
+        return f"EXISTS {operand}"
 
     return operand
 
