@@ -216,6 +216,7 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "UDOUBLE": "DOUBLE PRECISION",
         "UFLOAT": "REAL",
         "UDECIMAL": "DECIMAL",
+        "DOUBLE": "DOUBLE PRECISION",
         "MEDIUMINT": "INTEGER",
         "YEAR": "SMALLINT",
     },
@@ -256,6 +257,12 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "UNIQUEIDENTIFIER": "RAW(16)",
         "UUID": "RAW(16)",
         "MONEY": "NUMBER(19,4)",
+        # Oracle has no DOUBLE (BINARY_DOUBLE is the 64-bit float); FLOAT is a
+        # valid Oracle type, so it is left as-is.
+        "DOUBLE": "BINARY_DOUBLE",
+        "UDOUBLE": "BINARY_DOUBLE",
+        "UFLOAT": "FLOAT",
+        "UDECIMAL": "NUMBER",
         "IMAGE": "BLOB",
         "TINYBLOB": "BLOB",
         "MEDIUMBLOB": "BLOB",

@@ -19,21 +19,22 @@ packaging remains.
 ## 1. MediaWiki live-schema gaps (P2)
 
 `tests/integration/test_mediawiki_live.py` executes the transpiled MediaWiki
-schema against real engines. `mysql -> postgresql` is fully green; the remaining
-source→target pairs are skipped as documented gaps this real schema surfaced
-(fix them and remove from `_KNOWN_GAPS`):
+schema against real engines. **Green:** `mysql → {postgresql, oracle}` and
+`sqlite → postgresql`. The remaining pairs are skipped as documented gaps (fix
+them and remove from `_KNOWN_GAPS`):
 
-- [ ] **Reserved words in sqlglot-passthrough statements** (e.g. `CREATE UNIQUE
-      INDEX … ON collation (…)`): `_ident` quotes reserved identifiers in the
-      IR emit path (CREATE TABLE) but CREATE INDEX / ALTER go through sqlglot,
-      which does not quote them. Affects `sqlite→postgresql`, `mysql→oracle`.
-- [ ] **PostgreSQL `SERIAL`/`BIGSERIAL` → MySQL**: emit `INT/BIGINT
-      AUTO_INCREMENT` (currently leaks `BIGSERIAL`, a MySQL syntax error).
-      Affects `postgresql→mysql`, `sqlite→mysql`.
-- [ ] **More PostgreSQL-source → Oracle type rows** (ORA-00902/00906) and
-      **Oracle `RAW`/`BLOB` columns with a `''` string default** (ORA-01465 — a
-      MySQL `VARBINARY DEFAULT ''` should drop the default or use EMPTY_BLOB()).
-      Affects `*→oracle`.
+- [x] **Reserved words in passthrough** (`CREATE INDEX ON collation`), **binary/
+      LOB type mappings** (bare binary → BLOB; unsigned floats; DOUBLE →
+      BINARY_DOUBLE; MySQL blob/text families), **`SERIAL`/`BIGSERIAL` → each
+      target's identity**, and **Oracle RAW/BLOB with a string default** — all
+      fixed (v0.10.1+).
+- [ ] **BLOB/TEXT column in a MySQL key needs a prefix length** (MySQL 1170).
+      A source `TEXT`/`BLOB` column (PostgreSQL/SQLite) used in a UNIQUE/index
+      has no length; MySQL requires `col(191)`. Affects `postgresql→mysql`,
+      `sqlite→mysql`.
+- [ ] **A few PostgreSQL/SQLite-source → Oracle cases**: a functional/expression
+      index (ORA-02327) and one remaining type (ORA-00907). Affects
+      `postgresql→oracle`, `sqlite→oracle`.
 - [ ] Wire a root-free SQL Server driver (pymssql) into the live validator so
       the `→tsql` pairs run (they currently skip: the validator needs pyodbc).
 

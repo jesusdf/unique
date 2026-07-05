@@ -605,6 +605,13 @@ _RESERVED_IDENTIFIERS: dict[str, frozenset[str]] = {
             "ROW",
             "RAW",
             "LONG",
+            "FILE",
+            "COMMENT",
+            "SHARE",
+            "START",
+            "SYNONYM",
+            "UID",
+            "VALIDATE",
         }
     ),
     "mysql": _RESERVED_COMMON | frozenset({"COLLATION", "LIMIT", "USAGE", "READ"}),
