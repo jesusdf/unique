@@ -304,8 +304,13 @@ jobs:
         run: |
           # Run, capture output, and surface failures as ::error:: annotations
           # (readable via the annotations API; raw logs sit on a blocked blob).
+          # TestOracleTypeResolutionAcrossEngines proves an Oracle %TYPE/%ROWTYPE
+          # source resolves through a --db-url of every engine (it seeds its own
+          # self-contained probe table, so it needs no pre-seeded schema).
           set +e
-          pytest tests/integration/test_live_syntax.py -v -rA \
+          pytest tests/integration/test_live_syntax.py \
+            "tests/integration/test_metadata_live.py::TestOracleTypeResolutionAcrossEngines" \
+            -v -rA \
             > /tmp/pytest.out 2>&1
           rc=$?
           set -e

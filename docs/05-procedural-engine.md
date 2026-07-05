@@ -222,12 +222,22 @@ class MetadataResolver:
 Supports connection via:
 - `--db-url` CLI parameter: standard connection string
 - API request body: `db_url` field
-- Drivers: `pyodbc` (SQL Server), `oracledb` (Oracle),
-  `psycopg` (PostgreSQL), `mysql-connector-python` (MySQL)
+- Drivers: `pymssql` (SQL Server, preferred — root-free) or `pyodbc`;
+  `oracledb` (Oracle), `psycopg` (PostgreSQL),
+  `mysql-connector-python` (MySQL), and `sqlite3` (SQLite, stdlib). SQLite reads
+  its declared types with `PRAGMA table_info`; the others use `INFORMATION_SCHEMA`
+  (Oracle uses `ALL_TAB_COLUMNS`).
 
-When no database connection is provided, `%TYPE` references are emitted
-as comments with a warning, or mapped to a best-guess type based on the
-column name conventions.
+The metadata source is independent of the source/target dialects — an Oracle
+`%TYPE`/`%ROWTYPE` source can be resolved through any of the five engines
+(the same schema usually exists on each during a migration). `%TYPE` becomes the
+concrete column type; `%ROWTYPE` is validated against the schema and its columns
+are documented (targets without a record type keep it as a carrier).
+
+When no database connection is provided, `%TYPE`/`%ROWTYPE` references are emitted
+as a permissive carrier type with the original preserved in a `/* UNIQUE: … */`
+comment and a warning (kept as-is for an Oracle target, which supports them
+natively).
 
 ## Integration Points
 

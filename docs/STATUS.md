@@ -90,7 +90,10 @@ See `docs/03-unsupported.md` for the full list. Highlights (intentionally
 emitted as documented `-- UNIQUE:` comments / warnings, not silently dropped):
 
 - `%TYPE`/`%ROWTYPE` without `--db-url` → carrier type + `/* UNIQUE: … */`
-  comment (now restored on a round-trip back to a supporting engine).
+  comment (now restored on a round-trip back to a supporting engine). **With
+  `--db-url`** the reference resolves against a live schema on *any* of the five
+  engines (SQL Server, Oracle, PostgreSQL, MySQL, SQLite): `%TYPE` → the concrete
+  column type, `%ROWTYPE` → validated and its columns documented.
 - `EXECUTE IMMEDIATE ... USING` bind variables (T-SQL `sp_executesql`).
 - Set-based trigger bodies (`FROM inserted JOIN deleted`) → **rewritten** to a
   PostgreSQL statement-level trigger (transition tables); documented on

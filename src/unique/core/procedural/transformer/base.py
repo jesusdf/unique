@@ -528,11 +528,11 @@ class ProceduralTransformer:
 
         type_name = dt.name.upper()
 
-        # Handle %TYPE references
+        # Handle %TYPE / %ROWTYPE references
         if "%TYPE" in type_name or "%ROWTYPE" in type_name:
-            # If a metadata connection is available, try to resolve to a real
-            # column type first.
-            if self._metadata is not None and "%TYPE" in type_name:
+            is_rowtype = "%ROWTYPE" in type_name
+            # %TYPE: resolve to the concrete column type when a DB is connected.
+            if self._metadata is not None and not is_rowtype:
                 try:
                     resolved = self._metadata.resolve_type_reference(  # type: ignore[attr-defined]
                         dt.name
@@ -541,19 +541,42 @@ class ProceduralTransformer:
                         return self._transform_data_type(resolved)
                 except Exception:  # pragma: no cover - defensive
                     pass
+            # %ROWTYPE: consult the DB for the record's columns so the carrier
+            # (below) documents the concrete shape the row stands for.
+            resolved_cols = None
+            if self._metadata is not None and is_rowtype:
+                try:
+                    table_ref = dt.name.split("%")[0]
+                    resolved_cols = self._metadata.resolve_table_columns(  # type: ignore[attr-defined]
+                        table_ref
+                    )
+                except Exception:  # pragma: no cover - defensive
+                    resolved_cols = None
             # Oracle supports %TYPE/%ROWTYPE natively, so keep the reference
             # as-is for an Oracle target (also makes a carrier round-trip back
             # to Oracle faithful) instead of lowering it to a carrier.
             if self._supports_type_reference():
                 return DataType(name=dt.name, params=dt.params)
-            # Unresolved without a connection: emit a permissive carrier type
-            # and preserve the original reference as a comment so the
-            # substitution is documented and reversible.
-            self._warnings.append(
-                f"%TYPE reference '{dt.name}' could not be resolved without a "
-                "database connection (use --db-url). Emitted as a carrier type "
-                "with the original preserved in a /* UNIQUE */ comment."
-            )
+            # No native support: emit a permissive carrier type and preserve the
+            # original reference as a comment so the substitution is documented
+            # and reversible.
+            kind = "%ROWTYPE" if is_rowtype else "%TYPE"
+            if is_rowtype and resolved_cols:
+                cols_desc = ", ".join(
+                    f"{c.column_name} {c.data_type}" for c in resolved_cols
+                )
+                self._warnings.append(
+                    f"%ROWTYPE reference '{dt.name}' resolved via --db-url to "
+                    f"{len(resolved_cols)} columns ({cols_desc}); the target has "
+                    "no record type, so it is emitted as a carrier with the "
+                    "original preserved in a /* UNIQUE */ comment."
+                )
+            else:
+                self._warnings.append(
+                    f"{kind} reference '{dt.name}' could not be resolved without "
+                    "a database connection (use --db-url). Emitted as a carrier "
+                    "type with the original preserved in a /* UNIQUE */ comment."
+                )
             carrier = self._unknown_type_carrier()
             return DataType(name=carrier, origin_comment=dt.name)
 

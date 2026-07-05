@@ -137,13 +137,26 @@ dialects):
 
 | Engine | Scheme(s) | Driver required | Example |
 | --- | --- | --- | --- |
-| SQL Server | `mssql`, `sqlserver` | `pyodbc` | `mssql://user:pass@localhost:1433/mydb` |
+| SQL Server | `mssql`, `sqlserver` | `pymssql` (preferred) or `pyodbc` | `mssql://user:pass@localhost:1433/mydb` |
 | Oracle | `oracle` | `oracledb` | `oracle://user:pass@localhost:1521/FREEPDB1` |
 | PostgreSQL | `postgresql`, `postgres` | `psycopg` | `postgresql://user:pass@localhost:5432/mydb` |
 | MySQL | `mysql` | `mysql-connector-python` | `mysql://user:pass@localhost:3306/mydb` |
+| SQLite | `sqlite` | `sqlite3` (stdlib — always available) | `sqlite:///path/to/file.db` |
 
 The relevant driver must be installed (they are not hard dependencies of
 Unique); if it is missing, Unique raises an `ImportError` naming the driver.
+SQL Server prefers `pymssql` (its wheel bundles FreeTDS — no system ODBC driver
+needed) and falls back to `pyodbc`.
+
+The metadata source is **independent of the `--from`/`--to` dialects**: because
+the same schema typically exists on every engine during a migration, an Oracle
+`%TYPE`/`%ROWTYPE` source can be resolved through a `--db-url` pointing at *any*
+of the five engines above (including a SQLite file). A `%TYPE` reference is
+replaced by the concrete column type; a `%ROWTYPE` reference is validated against
+the connected schema and its columns are recorded in the accompanying
+`/* UNIQUE: … */` comment and warning (targets without a record type keep it as a
+carrier). This is covered end-to-end by
+`tests/integration/test_metadata_live.py::TestOracleTypeResolutionAcrossEngines`.
 
 ### Examples
 
