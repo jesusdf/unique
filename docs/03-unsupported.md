@@ -5,6 +5,18 @@ transpilation, along with the reasoning.
 
 ---
 
+## 0. SQLite is import-only
+
+**SQLite cannot be a transpilation target.** It has no procedural language (no
+stored procedures, functions or anonymous PL/SQL-style blocks), so a faithful
+target mapping is impossible; the tool raises a clear `UnsupportedFeatureError`
+when `sqlite` is requested as a target, and the web UI hides it from the target
+list. SQLite **is** supported as a **source** (SQLite → the four server
+engines): its DML/DDL — type affinity, `AUTOINCREMENT`, `INTEGER PRIMARY KEY`
+rowid aliases — is read via sqlglot and converted like any other source.
+
+---
+
 ## 1. Fully Unsupported (❌)
 
 These features will **never** be transpiled. They are silently dropped or
