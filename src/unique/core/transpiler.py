@@ -363,6 +363,49 @@ def _oracle_needs_slash(sql: str) -> bool:
     return bool(body) and bool(_ORACLE_PLSQL_RE.match(body))
 
 
+# SQLite source functions sqlglot leaves untranslated. Rewritten per target in
+# the emitted output (SQLite is import-only, so these only ever run source-side).
+_SQLITE_RANDOM = {
+    "postgresql": "RANDOM()",
+    "oracle": "DBMS_RANDOM.VALUE",
+    "mysql": "RAND()",
+    "tsql": "RAND()",
+}
+_SQLITE_CURRENT_DATE = {
+    "tsql": "CAST(GETDATE() AS DATE)",
+    "oracle": "TRUNC(SYSDATE)",
+    "postgresql": "CURRENT_DATE",
+    "mysql": "CURRENT_DATE",
+}
+
+
+def _rewrite_sqlite_functions(sql: str, target: str) -> str:
+    """Rewrite SQLite-only functions in emitted output to the target's form."""
+    from unique.core.mappings import CURRENT_TIMESTAMP_EXPR, LAST_IDENTITY_EXPR
+
+    # last_insert_rowid() -> the target's last-identity expression (Oracle has no
+    # session function for it, so leave the SQLite call as a visible marker).
+    last_id = LAST_IDENTITY_EXPR.get(target, "")
+    if last_id and not last_id.startswith("/*"):
+        sql = re.sub(r"(?i)\blast_insert_rowid\s*\(\s*\)", last_id, sql)
+    # datetime('now') / date('now') -> current timestamp / current date.
+    sql = re.sub(
+        r"(?i)\bdatetime\s*\(\s*'now'\s*\)",
+        CURRENT_TIMESTAMP_EXPR.get(target, "CURRENT_TIMESTAMP"),
+        sql,
+    )
+    sql = re.sub(
+        r"(?i)\bdate\s*\(\s*'now'\s*\)",
+        _SQLITE_CURRENT_DATE.get(target, "CURRENT_DATE"),
+        sql,
+    )
+    # SQLite random() -> RAND() via sqlglot; fix the engines that spell it
+    # differently (PostgreSQL RANDOM(), Oracle DBMS_RANDOM.VALUE).
+    if target in ("postgresql", "oracle"):
+        sql = re.sub(r"(?i)\bRAND\s*\(\s*\)", _SQLITE_RANDOM[target], sql)
+    return sql
+
+
 def _is_comment_only(sql: str) -> bool:
     """Whether ``sql`` consists solely of blank lines and ``--`` comments."""
     stripped = sql.strip()
@@ -1003,6 +1046,8 @@ class Transpiler:
                 unsupported = transformer.unsupported
 
             output_sql = target_dialect.emit(ir_nodes) + org_carrier
+            if source == "sqlite":
+                output_sql = _rewrite_sqlite_functions(output_sql, target)
             if was_default_constraint and target == "oracle":
                 # Oracle spells a column default change ``MODIFY col DEFAULT v``.
                 output_sql = _ORACLE_ALTER_DEFAULT_RE.sub(
