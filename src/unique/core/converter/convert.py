@@ -27,6 +27,7 @@ from unique.core.ast_nodes import (
     CastExpression,
     ColumnDefinition,
     ColumnRef,
+    CommentStatement,
     CreateTableStatement,
     CreateViewStatement,
     CTEDefinition,
@@ -83,6 +84,23 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
     for expression in parsed:
         if expression is None:
             continue
+        # Preserve the statement's leading comments (sqlglot attaches them to the
+        # expression); our IR conversion would otherwise drop them. Re-emit them
+        # as CommentStatements just before the statement, and clear them so a
+        # PassthroughSQL ``.sql()`` doesn't also render them.
+        leading = getattr(expression, "comments", None)
+        if leading:
+            for raw in leading:
+                text = (raw or "").strip()
+                if "\n" in text:
+                    nodes.append(CommentStatement(text=f"/* {text} */", style="block"))
+                else:
+                    nodes.append(
+                        CommentStatement(
+                            text=f"-- {text}" if text else "--", style="line"
+                        )
+                    )
+            expression.comments = None
         # Oracle (+) join marks: rewrite into explicit LEFT/RIGHT OUTER JOINs
         # with ON conditions before converting. sqlglot drops the mark on
         # emit (turning an outer join into an inner one, silently), so the
@@ -99,6 +117,16 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
             )
         node = convert_expression(expression, dialect)  # type: ignore[arg-type]
         nodes.append(node)
+        # Trailing / inline comments attach to child nodes, not the statement;
+        # collect them so they aren't lost (re-emitted after the statement —
+        # position may shift slightly, but nothing is dropped).
+        for sub in expression.walk():
+            if sub is expression or not sub.comments:
+                continue
+            for raw in sub.comments:
+                text = (raw or "").strip()
+                if text:
+                    nodes.append(CommentStatement(text=f"-- {text}", style="line"))
 
     return nodes
 
