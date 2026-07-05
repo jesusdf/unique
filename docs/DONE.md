@@ -1336,3 +1336,19 @@ On its first clean run the differential test caught a real semantic bug:
 the outer two operands). Fixed by flattening the whole left-nested chain into a
 linked `set_query`; regression-pinned in `test_subquery_limit.py`. It also
 surfaced that EXCEPT/INTERSECT never reach `_convert_union` (tracked in TODO §2).
+
+## 26. EXCEPT/INTERSECT converted + assertion hardening (TODO §1/§2 cleared)
+
+- **EXCEPT / INTERSECT** now transpile (they were carriers): `exp.Except`/
+  `exp.Intersect` are not `exp.Union` subclasses but share `exp.SetOperation`, so
+  the dispatch and the multi-arm flatten loop now key on `SetOperation`. Oracle
+  gets `MINUS`; a 3-arm `A EXCEPT B EXCEPT C` keeps every arm. Corpus + unit +
+  result-diff coverage added.
+- **Assertion hardening** for the convert.py mutation survivors (column-flag
+  defaults `nullable`/`primary_key`/`unique`/`identity`, DISTINCT, idempotent
+  DROP) in `test_ddl_flags.py` — asserting the default/negative case, not just
+  the positive one. Re-measured: convert.py 73% -> 79% mutation score (survivors
+  down despite the EXCEPT code adding 15 new mutants).
+
+`docs/TODO.md` is packaging-only again; test-assertion quality is now a
+continuously-tracked metric (the nightly mutation job), not a static backlog.

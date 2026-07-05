@@ -276,7 +276,7 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return _convert_create(expr)
     if isinstance(expr, exp.Drop):
         return _convert_drop(expr)
-    if isinstance(expr, exp.Union):
+    if isinstance(expr, exp.SetOperation):
         return _convert_union(expr)
     if isinstance(expr, exp.Column):
         return _convert_column(expr)
@@ -325,7 +325,7 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return _convert_is(expr)
     if isinstance(expr, exp.Subquery):
         inner = expr.this
-        if isinstance(inner, (exp.Select, exp.Union)):
+        if isinstance(inner, (exp.Select, exp.SetOperation)):
             return SubqueryExpression(
                 query=_convert_select(inner), alias=expr.alias or None
             )
@@ -352,7 +352,7 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
 def _convert_select(expr: exp.Expression) -> SelectStatement:
     """Convert a sqlglot Select expression to a SelectStatement IR node."""
     # Handle Union by extracting the left Select
-    if isinstance(expr, exp.Union):
+    if isinstance(expr, exp.SetOperation):
         return _convert_union(expr)
 
     columns = tuple(convert_expression(col) for col in (expr.expressions or []))
@@ -435,7 +435,7 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     )
 
 
-def _set_op_type(node: exp.Union) -> SetOperationType:
+def _set_op_type(node: exp.SetOperation) -> SetOperationType:
     if isinstance(node, exp.Intersect):
         return SetOperationType.INTERSECT
     if isinstance(node, exp.Except):
@@ -445,7 +445,7 @@ def _set_op_type(node: exp.Union) -> SetOperationType:
     return SetOperationType.UNION
 
 
-def _convert_union(expr: exp.Union) -> SelectStatement:
+def _convert_union(expr: exp.SetOperation) -> SelectStatement:
     """Convert a UNION/INTERSECT/EXCEPT chain to a linked SelectStatement.
 
     sqlglot parses ``A UNION B UNION C`` left-nested as ``Union(Union(A, B), C)``.
@@ -455,7 +455,7 @@ def _convert_union(expr: exp.Union) -> SelectStatement:
     """
     ops: list[tuple[SetOperationType, SelectStatement]] = []
     node: exp.Expression = expr
-    while isinstance(node, exp.Union):
+    while isinstance(node, exp.SetOperation):
         ops.append((_set_op_type(node), _convert_select(node.expression)))
         node = node.this
     ops.reverse()  # first..last set operation, left to right
@@ -787,7 +787,7 @@ def _convert_table_or_subquery(expr: exp.Expression) -> TableRef | SubqueryExpre
     """Convert to either TableRef or SubqueryExpression."""
     if isinstance(expr, exp.Subquery):
         inner = expr.this
-        if isinstance(inner, (exp.Select, exp.Union)):
+        if isinstance(inner, (exp.Select, exp.SetOperation)):
             # A derived table's alias (``(SELECT …) t``) must be carried through,
             # or references to it — and the derived table itself on MySQL — break.
             return SubqueryExpression(
