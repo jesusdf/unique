@@ -537,9 +537,90 @@ def _quote_ident(name: str, dialect: str | None) -> str:
     return f"{left}{escaped}{right}"
 
 
+# Reserved words that commonly appear as table/column names in real schemas and
+# must be quoted for the target engine (a bare ``CREATE TABLE collation`` is a
+# syntax error on PostgreSQL and Oracle). Curated per dialect — over-quoting a
+# non-reserved word is harmless, so a shared common core is included in each.
+_RESERVED_COMMON = frozenset(
+    {
+        "USER",
+        "ORDER",
+        "GROUP",
+        "TABLE",
+        "COLUMN",
+        "SELECT",
+        "WHERE",
+        "FROM",
+        "CHECK",
+        "DEFAULT",
+        "PRIMARY",
+        "REFERENCES",
+        "UNIQUE",
+        "CONSTRAINT",
+        "INDEX",
+        "COMMENT",
+        "DESC",
+        "ASC",
+        "KEY",
+        "LEVEL",
+        "SESSION",
+        "ALL",
+        "AND",
+        "OR",
+        "NOT",
+        "NULL",
+        "IN",
+        "IS",
+        "LIKE",
+        "BETWEEN",
+        "CASE",
+        "WHEN",
+        "THEN",
+        "ELSE",
+        "END",
+        "AS",
+        "ON",
+        "BY",
+        "TO",
+        "VALUES",
+    }
+)
+_RESERVED_IDENTIFIERS: dict[str, frozenset[str]] = {
+    "postgresql": _RESERVED_COMMON
+    | frozenset({"COLLATION", "LIMIT", "OFFSET", "USING", "DO", "ARRAY", "ANY"}),
+    "oracle": _RESERVED_COMMON
+    | frozenset(
+        {
+            "COLLATION",
+            "DATE",
+            "NUMBER",
+            "SIZE",
+            "ROWID",
+            "ROWNUM",
+            "ACCESS",
+            "AUDIT",
+            "CLUSTER",
+            "RESOURCE",
+            "MODE",
+            "ROW",
+            "RAW",
+            "LONG",
+        }
+    ),
+    "mysql": _RESERVED_COMMON | frozenset({"COLLATION", "LIMIT", "USAGE", "READ"}),
+    "tsql": _RESERVED_COMMON | frozenset({"USER", "PERCENT", "IDENTITY"}),
+}
+
+
 def _ident(name: str, quoted: bool, dialect: str | None) -> str:
-    """Emit an identifier, re-quoting it when it was quoted in the source."""
-    return _quote_ident(name, dialect) if quoted else name
+    """Emit an identifier, quoting it when the source quoted it *or* when it is a
+    reserved word in the target dialect (else it is invalid unquoted DDL)."""
+    if quoted or (
+        dialect is not None
+        and name.upper() in _RESERVED_IDENTIFIERS.get(dialect, frozenset())
+    ):
+        return _quote_ident(name, dialect)
+    return name
 
 
 _DATE_UNIT_ALIASES = {

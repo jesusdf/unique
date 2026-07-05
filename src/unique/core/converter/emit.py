@@ -726,12 +726,23 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 # don't append the caller's params on top of it. PostgreSQL and
                 # T-SQL integer types take no parameters at all — a MySQL display
                 # width (TINYINT(1), INT(11)) would be a syntax error.
-                skip_params = dialect in ("postgresql", "tsql") and dtype.upper() in (
-                    "SMALLINT",
-                    "INT",
-                    "INTEGER",
-                    "BIGINT",
-                    "TINYINT",
+                skip_params = (
+                    (
+                        dialect in ("postgresql", "tsql")
+                        and dtype.upper()
+                        in ("SMALLINT", "INT", "INTEGER", "BIGINT", "TINYINT")
+                    )
+                    or (
+                        # PostgreSQL BYTEA / BLOB take no length (a MySQL
+                        # VARBINARY(64) maps to BYTEA, not BYTEA(64)).
+                        dialect == "postgresql"
+                        and dtype.upper() in ("BYTEA", "BLOB")
+                    )
+                    or (
+                        # Oracle LOB types take no length (BLOB/CLOB, not BLOB(255)).
+                        dialect == "oracle"
+                        and dtype.upper() in ("BLOB", "CLOB", "NCLOB")
+                    )
                 )
                 if col.data_type.params and "(" not in dtype and not skip_params:
                     dtype += f"({', '.join(str(p) for p in col.data_type.params)})"
