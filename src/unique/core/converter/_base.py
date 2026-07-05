@@ -243,6 +243,7 @@ def sqlglot_dialect_name(dialect: str) -> str:
         "oracle": "oracle",
         "postgresql": "postgres",
         "mysql": "mysql",
+        "sqlite": "sqlite",
     }
     return mapping.get(dialect, dialect)
 

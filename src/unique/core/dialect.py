@@ -23,6 +23,12 @@ class Dialect(ABC):
     def name(self) -> str:
         """Unique identifier for this dialect (e.g. 'tsql', 'oracle')."""
 
+    @property
+    def source_only(self) -> bool:
+        """Whether this dialect can only be a transpilation *source*, never a
+        target (e.g. SQLite, which has no procedural language). Default: False."""
+        return False
+
     @abstractmethod
     def parse(self, sql: str) -> list[ASTNode]:
         """Parse raw SQL text into a list of IR nodes.

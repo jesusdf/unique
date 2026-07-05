@@ -38,14 +38,16 @@ class TestDialectRegistry:
         assert registry.is_registered("postgresql") is True
         assert registry.is_registered("oracle") is False
 
-    def test_with_builtins_loads_four_dialects(self) -> None:
+    def test_with_builtins_loads_all_dialects(self) -> None:
         registry = DialectRegistry.with_builtins()
         available = registry.available()
-        assert len(available) == 4
-        assert "tsql" in available
-        assert "oracle" in available
-        assert "postgresql" in available
-        assert "mysql" in available
+        # Four full engines + SQLite (import-only source).
+        assert len(available) == 5
+        for name in ("tsql", "oracle", "postgresql", "mysql", "sqlite"):
+            assert name in available
+        # SQLite is a source-only dialect; the four servers are not.
+        assert registry.get("sqlite").source_only
+        assert not registry.get("postgresql").source_only
 
     def test_auto_discover(self) -> None:
         """auto_discover should find entry-point registered dialects."""

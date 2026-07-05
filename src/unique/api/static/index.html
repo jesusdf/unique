@@ -2332,9 +2332,9 @@ async function loadDialects() {
   try {
     const res = await fetch(API + "/api/v1/dialects");
     const data = await res.json();
-    return data.dialects;
+    return { dialects: data.dialects, sourceOnly: data.source_only || [] };
   } catch (e) {
-    return ["tsql", "oracle", "postgresql", "mysql"];
+    return { dialects: ["tsql", "oracle", "postgresql", "mysql"], sourceOnly: [] };
   }
 }
 
@@ -2522,16 +2522,18 @@ async function translateFile() {
     });
   }
 
-  const dialects = await loadDialects();
+  const { dialects, sourceOnly } = await loadDialects();
+  // Import-only dialects (e.g. SQLite) may be a source but not a target.
+  const targets = dialects.filter((d) => !sourceOnly.includes(d));
   fillSelect(el("source"), dialects);
-  fillSelect(el("target"), dialects);
+  fillSelect(el("target"), targets);
   fillSelect(el("fileSource"), dialects, { includeAuto: true });
-  fillSelect(el("fileTarget"), dialects);
+  fillSelect(el("fileTarget"), targets);
   // Default the combos to the list's first element (and the first differing
-  // one for the target) rather than a hard-coded dialect, so the selection
-  // tracks the dialect list instead of always showing PostgreSQL.
+  // target) rather than a hard-coded dialect, so the selection tracks the
+  // dialect list instead of always showing PostgreSQL.
   const firstSource = dialects[0];
-  const firstTarget = dialects.find((d) => d !== firstSource) ?? firstSource;
+  const firstTarget = targets.find((d) => d !== firstSource) ?? targets[0];
   el("source").value = firstSource;
   el("target").value = firstTarget;
   setEditorMode(cmInput, firstSource);
