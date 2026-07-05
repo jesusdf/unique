@@ -67,3 +67,22 @@ class TestOffsetFetchLimit:
             assert "None" not in out, (target, out)
             assert "10" in out
             _valid(out, target)
+
+
+class TestMultiArmSetOp:
+    """A UNION of 3+ arms dropped every middle arm (found by the differential
+    result test: source returned {1,2}, target {1,3})."""
+
+    def setup_method(self) -> None:
+        self.t = Transpiler()
+
+    def test_three_and_four_way_union_keep_all_arms(self) -> None:
+        for sql, arms in [
+            ("SELECT 1 AS x UNION SELECT 2 UNION SELECT 3", 3),
+            ("SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4", 4),
+        ]:
+            for target in ("postgresql", "oracle", "mysql", "tsql"):
+                out = self.t.transpile(sql, "tsql", target).sql
+                assert out.upper().count("SELECT") == arms, (target, out)
+                assert "UNIQUE:" not in out
+                _valid(out, target)
