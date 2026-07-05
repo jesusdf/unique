@@ -310,6 +310,19 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     # top-level "a AND b" would be emitted as the function call "AND(a, b)".
     if isinstance(expr, exp.Binary):
         return _convert_binary(expr)
+    # EXISTS is a Func in sqlglot; convert its subquery to a SubqueryExpression
+    # so it emits as SQL. Otherwise _convert_function keeps the raw SelectStatement
+    # as an argument and the emitter leaks its Python repr into the output.
+    if isinstance(expr, exp.Exists):
+        inner = expr.this
+        if isinstance(inner, (exp.Select, exp.SetOperation)):
+            return UnaryOp(
+                operator=UnaryOperator.EXISTS,
+                operand=SubqueryExpression(query=_convert_select(inner)),
+            )
+        return RawSQL(sql=expr.sql(), reason="Complex EXISTS")
+    if isinstance(expr, exp.Null):
+        return Literal(value=None, dtype="null")
     if isinstance(expr, exp.Func):
         return _convert_function(expr)
     if isinstance(expr, exp.Not):
@@ -357,9 +370,11 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
 
     columns = tuple(convert_expression(col) for col in (expr.expressions or []))
 
-    # FROM
+    # FROM — use the direct arg, not find(), which recurses into a subquery in
+    # the WHERE (e.g. NOT EXISTS (SELECT … FROM t)) and would pull that table
+    # into this SELECT's FROM. sqlglot keys it "from_" (older versions "from").
     from_clause = None
-    from_expr = expr.find(exp.From)
+    from_expr = expr.args.get("from_") or expr.args.get("from")
     if from_expr and from_expr.this:
         from_clause = _convert_table_or_subquery(from_expr.this)
 

@@ -1352,3 +1352,22 @@ surfaced that EXCEPT/INTERSECT never reach `_convert_union` (tracked in TODO §2
 
 `docs/TODO.md` is packaging-only again; test-assertion quality is now a
 continuously-tracked metric (the nightly mutation job), not a static backlog.
+
+## 27. IR-node repr leaked into SQL (EXISTS subquery) + detection guard
+
+Transpiling `INSERT … SELECT <literals> WHERE NOT EXISTS (SELECT … FROM t …)`
+leaked a Python dataclass repr into the output —
+`WHERE NOT EXISTS(SelectStatement(location=SourceLocation(...), …))` — because:
+
+- `exp.Exists` is a Func, so it went through `_convert_function` and kept the raw
+  `SelectStatement` as an argument; the emitter then hit its `str()` fallback.
+  Fixed by converting `exp.Exists` to `UnaryOp(EXISTS, SubqueryExpression(...))`
+  so the subquery emits as SQL (and `exp.Null` -> a NULL literal, not a carrier).
+- The outer table-less SELECT stole the subquery's FROM: `_convert_select` used
+  `expr.find(exp.From)` (recursive) instead of the direct `args["from_"]`, so the
+  NOT EXISTS subquery's `FROM t` became the outer SELECT's FROM. Fixed.
+
+Detection: `test_no_ir_leak.py` asserts the output never contains an IR-node repr
+(`SourceLocation(` / `SelectStatement(` / `RawSQL(` / …) for EXISTS/IN/scalar
+subqueries; the same invariant was added to the generative property test so any
+future str()/repr() fallback is caught. Corpus + result-diff coverage added.

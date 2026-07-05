@@ -64,6 +64,8 @@ def test_output_is_valid_target_sql(sql: str, source: str) -> None:
         out = transpile(sql, source, target).sql
         assert out.strip(), (source, target, sql)
         assert "None" not in out, (source, target, sql, out)
+        # An IR node's repr must never leak into the SQL (a str()/repr() fallback).
+        assert "SourceLocation(" not in out, (source, target, sql, out)
         _assert_valid(out, target, (source, target, sql))
 
 
