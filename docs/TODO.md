@@ -64,5 +64,7 @@ comments/warnings (see `docs/03-unsupported.md`):
   (preserved as comments).
 - `%TYPE`/`%ROWTYPE` without `--db-url` (emitted as a carrier type with the
   original preserved in a `/* UNIQUE: … */` comment, plus a warning). The
-  restorable-note round-trip is already wired for physical index clauses
-  (DONE §17); extending it to `%TYPE` on the DML path is the remaining piece.
+  round-trip **restores the original** on a transpilation back to a supporting
+  engine — verified for `%TYPE` via the procedural path and for physical index
+  clauses via the DML path (`%TYPE` is PL/SQL-only, so it never appears in a
+  DML/DDL statement).
