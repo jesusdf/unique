@@ -232,7 +232,12 @@ class OracleTransformer(ProceduralTransformer):
         return ":OLD."
 
     def _varchar_max_type(self, is_unicode: bool) -> str | None:
-        return "NCLOB" if is_unicode else "CLOB"
+        # VARCHAR(MAX)/NVARCHAR(MAX) -> CLOB/NCLOB cannot be a comparison or join
+        # key in PL/SQL (ORA-22848). A procedure parameter/variable is a scalar,
+        # so map it to a bounded VARCHAR2/NVARCHAR2 (Oracle's largest) — this is
+        # comparable and sufficient for scalar use. (A value beyond the bound
+        # would need Oracle's MAX_STRING_SIZE = EXTENDED.)
+        return "NVARCHAR2(2000)" if is_unicode else "VARCHAR2(4000)"
 
 
 register_transformer(OracleTransformer.target_name, OracleTransformer)

@@ -64,10 +64,15 @@ class TestDataTypeMapping:
         assert result.name == "NVARCHAR2"
         assert result.params == (50,)
 
-    def test_varchar_max_to_oracle_clob(self) -> None:
+    def test_varchar_max_to_oracle_bounded_varchar2(self) -> None:
+        # VARCHAR(MAX) -> a bounded VARCHAR2, not CLOB: a CLOB cannot be a
+        # comparison/join key in PL/SQL (ORA-22848), and these columns are used
+        # as predicates in real procedures.
         t = ProceduralTransformer("tsql", "oracle")
         result = t._transform_data_type(DataType(name="VARCHAR", params=(-1,)))
-        assert result.name == "CLOB"
+        assert result.name == "VARCHAR2(4000)"
+        nresult = t._transform_data_type(DataType(name="NVARCHAR", params=(-1,)))
+        assert nresult.name == "NVARCHAR2(2000)"
 
     def test_varchar_max_to_postgresql_text(self) -> None:
         t = ProceduralTransformer("tsql", "postgresql")
