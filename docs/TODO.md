@@ -30,9 +30,11 @@ splitter no longer shreds a PL/SQL block after plain SQL (spurious `ORA-00900`);
 (3) a body assignment `x := (SELECT …)` -> `SELECT … INTO x FROM DUAL`; (4) a
 subquery-initialised declaration `v TYPE := (SELECT …)` hoisted to the body as a
 `SELECT … INTO`; (5) `SELECT TOP (n)` in a scalar subquery -> `FETCH FIRST`;
-(6) a **bare result `SELECT` -> a `SYS_REFCURSOR` OUT parameter opened FOR the
-query** (`PLS-00428`) — the body is now correct; only the call sites need
-adapting. This took the sweep from 26 -> **20 INVALID** of 32 objects.
+(6) a bare result `SELECT` -> a `SYS_REFCURSOR` OUT parameter opened FOR the
+query (`PLS-00428`); (7) `EXEC sp_executesql @stmt, N'…', @a, @b` -> Oracle
+`EXECUTE IMMEDIATE @stmt USING @a, @b` (paramdef dropped). Sweep: 26 -> **20
+INVALID** of 32 (several procs stack multiple errors, so clearing a class often
+exposes the next rather than dropping the object count).
 
 The remainder is a **long tail of distinct issues** (each its own fix; a proc
 often stacks several, so the count drops slowly as layers are peeled):

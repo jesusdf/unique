@@ -314,6 +314,17 @@ class OracleEmitter(ProceduralEmitter):
         (dbo.create_invoice); the dbo default schema is dropped.
         """
         stripped = expr.strip()
+        # T-SQL ``sp_executesql @stmt, N'<paramdefs>', @a, @b, …`` -> Oracle
+        # parameterized dynamic SQL ``EXECUTE IMMEDIATE @stmt USING @a, @b, …``.
+        # The paramdef string is dropped (Oracle infers bind types positionally).
+        if re.match(r"(?i)^sp_executesql\b", stripped):
+            args = self._split_exec_args(stripped[len("sp_executesql") :].strip())
+            if args:
+                stmt = args[0]
+                binds = args[2:]  # args[1] is the N'<paramdefs>' string — dropped
+                if binds:
+                    return f"EXECUTE IMMEDIATE {stmt} USING {', '.join(binds)};"
+                return f"EXECUTE IMMEDIATE {stmt};"
         # An Oracle EXECUTE IMMEDIATE (or a dynamic-SQL string/bind/expression)
         # keeps ``EXECUTE IMMEDIATE`` — the ``immediate`` flag settles the case a
         # record field (r.cmd) would otherwise misread as a named-proc call.
