@@ -455,6 +455,13 @@ _PLSQL_HEAD_RE = re.compile(
     r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE|TYPE)\b|DECLARE\b|BEGIN\b)"
 )
 
+# The same head, but findable at any line start — used to locate a PL/SQL block
+# that follows plain SQL within one '/'-delimited chunk.
+_PLSQL_BLOCK_START = re.compile(
+    r"(?im)^[ \t]*(?:CREATE\s+(?:OR\s+REPLACE\s+)?"
+    r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE|TYPE)\b|DECLARE\b|BEGIN\b)"
+)
+
 
 def _split_oracle_statements(sql: str) -> list[str]:
     """Split an Oracle script into statements, honoring the '/' terminator.
@@ -485,12 +492,19 @@ def _split_oracle_statements(sql: str) -> list[str]:
             # A PL/SQL block: one statement, keep its terminating ';'.
             statements.append(body.strip())
         else:
-            # Plain SQL: may be several ';'-separated statements; strip the
-            # terminator ';' from each (comments stripped so a ';' inside one
-            # does not split).
-            for part in _strip_line_comments(chunk).split(";"):
+            # Plain SQL, possibly *followed by* a PL/SQL block in the same chunk:
+            # the transpiler ends a CREATE TABLE with ';' (no '/') and a
+            # procedure that follows has no '/' before it, so both land here.
+            # Split the plain-SQL prefix on ';', but once a PL/SQL block opens,
+            # everything to the chunk's end is that one block (its body ';' must
+            # not split it, and its block comments must stay intact).
+            head = _PLSQL_BLOCK_START.search(chunk)
+            prefix = chunk[: head.start()] if head else chunk
+            for part in _strip_line_comments(prefix).split(";"):
                 if part.strip():
                     statements.append(part.strip())
+            if head and chunk[head.start() :].strip():
+                statements.append(chunk[head.start() :].strip())
     return statements
 
 
