@@ -347,10 +347,19 @@ def fingerprint(sql: str, dialect: str) -> ProcedureFingerprint:
                 fp.loops += 1
             elif isinstance(node, CursorOperation):
                 # Count an OPEN as a loop-equivalent driver; FETCH/CLOSE are
-                # part of the same construct and not double-counted.
+                # part of the same construct and not double-counted. But an
+                # ``OPEN c FOR <query>`` with an inline query is a result-set
+                # returned via a SYS_REFCURSOR OUT (the Oracle form of a bare
+                # T-SQL ``SELECT``), not a loop: count the query's DML instead
+                # (``_iter_nodes`` doesn't descend into ``.query``).
                 op = (getattr(node, "operation", "") or "").upper()
-                if op == "OPEN":
+                query = getattr(node, "query", None)
+                if op == "OPEN" and query is None:
                     fp.loops += 1
+                elif op == "OPEN" and query is not None:
+                    qtext = getattr(query, "sql", None)
+                    if isinstance(qtext, str):
+                        dml_fragments.append(qtext)
             elif isinstance(node, ReturnStatement):
                 fp.returns += 1
             elif isinstance(node, RaiseErrorStatement):

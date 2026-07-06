@@ -28,23 +28,21 @@ were simply invisible with the execute-only check).
 **Fixed:** (1) string-`+` -> `||` (`PLS-00306`); (2) the validator's Oracle
 splitter no longer shreds a PL/SQL block after plain SQL (spurious `ORA-00900`);
 (3) a body assignment `x := (SELECT …)` -> `SELECT … INTO x FROM DUAL`; (4) a
-subquery-initialised declaration `v TYPE := (SELECT …)` is hoisted to the body as
-a `SELECT … INTO`. This took the sweep from 26 -> **22 INVALID** of 32 objects.
+subquery-initialised declaration `v TYPE := (SELECT …)` hoisted to the body as a
+`SELECT … INTO`; (5) `SELECT TOP (n)` in a scalar subquery -> `FETCH FIRST`;
+(6) a **bare result `SELECT` -> a `SYS_REFCURSOR` OUT parameter opened FOR the
+query** (`PLS-00428`) — the body is now correct; only the call sites need
+adapting. This took the sweep from 26 -> **20 INVALID** of 32 objects.
 
 The remainder is a **long tail of distinct issues** (each its own fix; a proc
 often stacks several, so the count drops slowly as layers are peeled):
 
-- [ ] **`TOP (n)` inside a scalar subquery** — `(SELECT TOP (1) c FROM t ORDER BY …)`
-      is invalid Oracle (`ORA-00907`); needs `ROWNUM`/`FETCH FIRST` inside the
-      subquery (the procedural path doesn't route it through sqlglot's TOP rewrite).
 - [ ] **CLOB comparison (`ORA-22848`)** — an unbounded `NVARCHAR`/`NCLOB` used in a
       WHERE/JOIN key; map to `VARCHAR2(4000)` (or dbms_lob compare).
 - [ ] **`ORA-00910` length too long** — a `VARCHAR2(> 4000)` (or `NVARCHAR(MAX)`)
       exceeds Oracle's limit; clamp/`CLOB`.
 - [ ] **table variable** (`CREATE TEMPORARY TABLE` in block) — carrier or a
       schema-level GTT + `EXECUTE IMMEDIATE`.
-- [ ] **bare result `SELECT`** (`PLS-00428`) — no PL/SQL equivalent → ref cursor
-      OUT or carrier.
 - [ ] **trigger-local declarations** — a trigger emits `V … := …` inside `BEGIN`
       instead of a `DECLARE` section (`PLS-00103` at the trigger's first line).
 - [ ] **function gaps** — `TRY_CAST`, `SHA256`/`HASHBYTES`, `EXTRACT(EPOCH …)`,
