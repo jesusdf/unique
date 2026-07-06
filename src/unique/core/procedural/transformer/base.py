@@ -1359,6 +1359,14 @@ class ProceduralTransformer:
 
     def _oracle_function_fixes(self, sql: str) -> str:
         """Rewrite T-SQL functions Oracle lacks a direct spelling for."""
+        # Oracle forbids ``AS`` before a *table* alias (``FROM t AS x`` -> ORA-00907;
+        # only column aliases may use AS). sqlglot drops it for a top-level query,
+        # but an IR cross-table UPDATE keeps it in its subquery — strip it here.
+        sql = re.sub(
+            r"(?i)\b(FROM|JOIN)\s+([A-Za-z_]\w*)\s+AS\s+([A-Za-z_]\w*)",
+            r"\1 \2 \3",
+            sql,
+        )
         # T-SQL ``INSERT … OUTPUT inserted.<col> INTO @tablevar`` becomes a bare
         # ``RETURNING <expr>`` with no INTO. Oracle RETURNING can only target a
         # scalar/collection, never a table, so drop it and document: the GTT (the
@@ -1369,10 +1377,11 @@ class ProceduralTransformer:
             r"  /* UNIQUE: OUTPUT \1 dropped — populate the temp table manually */",
             sql,
         )
-        # VARCHAR(MAX)/NVARCHAR(MAX) as a CAST target in an expression is invalid
-        # Oracle; use a bounded VARCHAR2/NVARCHAR2 (as for column/param types).
-        sql = re.sub(r"(?i)\bNVARCHAR\s*\(\s*MAX\s*\)", "NVARCHAR2(2000)", sql)
-        sql = re.sub(r"(?i)\bVARCHAR\s*\(\s*MAX\s*\)", "VARCHAR2(4000)", sql)
+        # VARCHAR(MAX)/NVARCHAR(MAX) (and the sqlglot VARCHAR2(MAX) spelling) as a
+        # CAST target in an expression is invalid Oracle; use a bounded
+        # VARCHAR2/NVARCHAR2 (as for column/param types).
+        sql = re.sub(r"(?i)\bNVARCHAR2?\s*\(\s*MAX\s*\)", "NVARCHAR2(2000)", sql)
+        sql = re.sub(r"(?i)\bVARCHAR2?\s*\(\s*MAX\s*\)", "VARCHAR2(4000)", sql)
         # TRY_CAST(x AS type) -> CAST(x AS type DEFAULT NULL ON CONVERSION ERROR)
         # (Oracle 12.2+): returns NULL on a bad value instead of raising.
         sql = re.sub(
