@@ -120,21 +120,42 @@ class OracleTransformer(ProceduralTransformer):
     def _transform_if(self, node: IfStatement) -> ASTNode:
         stmt = super()._transform_if(node)
         # `IF EXISTS (<subquery>) THEN …` is invalid PL/SQL — EXISTS is a SQL
-        # operator, not a boolean expression (PLS-00204). With no ELSE, emulate it
-        # with a cursor FOR loop over a one-row probe: the body runs once iff the
-        # subquery returns a row (`SELECT 1 FROM DUAL WHERE [NOT] EXISTS (…)`).
-        if not isinstance(stmt, IfStatement) or stmt.else_body:
+        # operator, not a boolean expression (PLS-00204). Emulate it with a cursor
+        # FOR loop over a one-row probe: the body runs once iff the subquery
+        # returns a row (`SELECT 1 FROM DUAL WHERE [NOT] EXISTS (…)`).
+        if not isinstance(stmt, IfStatement):
             return stmt
         cond = stmt.condition
-        if isinstance(cond, RawSQL) and re.match(
-            r"(?is)^\s*(?:NOT\s+)?EXISTS\s*\(", cond.sql
+        if not (
+            isinstance(cond, RawSQL)
+            and re.match(r"(?is)^\s*(?:NOT\s+)?EXISTS\s*\(", cond.sql)
         ):
-            return ForLoopStatement(
-                variable="unique_guard",
-                cursor=RawSQL(sql=f"(SELECT 1 FROM DUAL WHERE {cond.sql.strip()})"),
-                body=stmt.then_body,
-            )
-        return stmt
+            return stmt
+        then_loop = self._exists_probe_loop(cond.sql, stmt.then_body)
+        if not stmt.else_body:
+            return then_loop
+        # ELSE: a second FOR over the *negated* probe — EXISTS and NOT EXISTS are
+        # mutually exclusive, so exactly one body fires.
+        else_loop = self._exists_probe_loop(
+            self._negate_exists(cond.sql), stmt.else_body
+        )
+        return StatementList(statements=(then_loop, else_loop))
+
+    @staticmethod
+    def _exists_probe_loop(
+        where_sql: str, body: tuple[ASTNode, ...]
+    ) -> ForLoopStatement:
+        return ForLoopStatement(
+            variable="unique_guard",
+            cursor=RawSQL(sql=f"(SELECT 1 FROM DUAL WHERE {where_sql.strip()})"),
+            body=body,
+        )
+
+    @staticmethod
+    def _negate_exists(sql: str) -> str:
+        """Negate an ``EXISTS``/``NOT EXISTS`` predicate."""
+        m = re.match(r"(?is)^\s*NOT\s+(EXISTS\b.*)$", sql)
+        return m.group(1).strip() if m else f"NOT {sql.strip()}"
 
     def _shadow_reassigned_params(self, node: _Routine) -> _Routine:
         """T-SQL freely reassigns a routine's parameters; an Oracle IN parameter
