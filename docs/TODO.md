@@ -25,35 +25,36 @@ execute-only check masked (and the CI *does* run a live Oracle — the failures
 were simply invisible with the execute-only check).
 `test_procedures_fixture_is_valid_live[oracle]` `xfail`s until these are fixed.
 
-**Done so far:** (1) T-SQL string-`+` concatenation in procedural bodies now
-becomes Oracle `||` (`PLS-00306` cleared); (2) the live-validator's Oracle
-statement splitter no longer shreds a PL/SQL block that follows plain SQL in one
-`/`-chunk — that removed the spurious `ORA-00900` positives (the transpiler
-output was valid SQL*Plus). A clean sweep now leaves **23 INVALID** of 32 objects
-across the classes below; each is a distinct, non-trivial procedural
-transformation (a multi-turn effort, not one change):
+**Fixed:** (1) string-`+` -> `||` (`PLS-00306`); (2) the validator's Oracle
+splitter no longer shreds a PL/SQL block after plain SQL (spurious `ORA-00900`);
+(3) a body assignment `x := (SELECT …)` -> `SELECT … INTO x FROM DUAL`; (4) a
+subquery-initialised declaration `v TYPE := (SELECT …)` is hoisted to the body as
+a `SELECT … INTO`. This took the sweep from 26 -> **22 INVALID** of 32 objects.
 
-- [ ] **`PLS-00103` variable initialised from a subquery** — `v TYPE := (SELECT …)`
-      in the declare section is invalid PL/SQL; restructure to a `SELECT … INTO v`
-      in the body. (Biggest single class.)
-- [ ] **`PLS-00103` `CREATE … TABLE` inside the block** — a T-SQL table variable
-      (`DECLARE @t TABLE(...)`) becomes `CREATE TEMPORARY TABLE` *inside* `BEGIN`,
-      which Oracle forbids (a GTT is schema-level DDL). Emit a documented carrier,
-      or a schema-level GTT + `EXECUTE IMMEDIATE`.
-- [ ] **`PLS-00428` bare `SELECT`** — a result-returning `SELECT` in a proc body
-      needs `INTO`/a ref cursor; there is no direct PL/SQL equivalent → carrier.
-- [ ] **`PLS-00204` `IF EXISTS(subquery)`** — invalid in PL/SQL; needs the creative
-      rewrite (`FOR _ IN (SELECT 1 FROM (<subq>) WHERE ROWNUM = 1) LOOP … END
-      LOOP;`, or `COUNT(*) INTO v` for the ELSE case). *(Earlier "works on Oracle
-      23" was a false positive — the proc CREATE'd but was INVALID.)*
-- [ ] **`ORA-00900`** on a set-based-trigger carrier — the `-- UNIQUE:` block is
-      followed by an orphan `END IF`/`END` fragment (a statement-split bug).
-- [ ] **`ORA-00942` / `PLS-00111` / `PLS-00122`** — remaining smaller cases (some
-      may cascade from the above once the earlier ones are fixed).
+The remainder is a **long tail of distinct issues** (each its own fix; a proc
+often stacks several, so the count drops slowly as layers are peeled):
 
-These are a **phased effort** (not a single change): the procedural -> Oracle path
-does not yet produce valid PL/SQL for complex real-world procedures. The
-validator + `xfail` now track progress objectively.
+- [ ] **`TOP (n)` inside a scalar subquery** — `(SELECT TOP (1) c FROM t ORDER BY …)`
+      is invalid Oracle (`ORA-00907`); needs `ROWNUM`/`FETCH FIRST` inside the
+      subquery (the procedural path doesn't route it through sqlglot's TOP rewrite).
+- [ ] **CLOB comparison (`ORA-22848`)** — an unbounded `NVARCHAR`/`NCLOB` used in a
+      WHERE/JOIN key; map to `VARCHAR2(4000)` (or dbms_lob compare).
+- [ ] **`ORA-00910` length too long** — a `VARCHAR2(> 4000)` (or `NVARCHAR(MAX)`)
+      exceeds Oracle's limit; clamp/`CLOB`.
+- [ ] **table variable** (`CREATE TEMPORARY TABLE` in block) — carrier or a
+      schema-level GTT + `EXECUTE IMMEDIATE`.
+- [ ] **bare result `SELECT`** (`PLS-00428`) — no PL/SQL equivalent → ref cursor
+      OUT or carrier.
+- [ ] **trigger-local declarations** — a trigger emits `V … := …` inside `BEGIN`
+      instead of a `DECLARE` section (`PLS-00103` at the trigger's first line).
+- [ ] **function gaps** — `TRY_CAST`, `SHA256`/`HASHBYTES`, `EXTRACT(EPOCH …)`,
+      and a call to a carrier'd function (`FUNC5` -> `ORA-00904` cascade).
+- [ ] **`sp_executesql`** dynamic SQL (`EXECUTE IMMEDIATE sp_executesql …`).
+- [ ] **`IF EXISTS(subquery)`** (`PLS-00204`) — the creative `FOR _ IN (SELECT 1
+      FROM (<subq>) WHERE ROWNUM = 1) LOOP … END LOOP;` rewrite.
+
+A **phased effort**, tracked objectively by the validator + `xfail`; being worked
+class-by-class.
 
 ## 2. Packaging (P3)
 
