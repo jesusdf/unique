@@ -358,24 +358,48 @@ class ProceduralEmitter:
         body_stmts: list[ASTNode],
     ) -> str:
         lines = [f"{header}"]
+        # A declaration initialised from a subquery (`v TYPE := (SELECT …)`) is
+        # invalid in the Oracle declare section (PLS-00405); declare the variable
+        # bare and run the SELECT … INTO at the top of the body instead.
+        hoisted: list[str] = []
         if declarations:
             lines.append("IS")
             self._indent_level = 1
             for decl in declarations:
-                lines.append(f"{self._indent()}{self._emit_node(decl)}")
+                split = self._oracle_split_subquery_default(decl)
+                if split is not None:
+                    decl_line, select_into = split
+                    lines.append(f"{self._indent()}{decl_line}")
+                    hoisted.append(select_into)
+                else:
+                    lines.append(f"{self._indent()}{self._emit_node(decl)}")
             self._indent_level = 0
         else:
             lines.append("AS")
 
         lines.append("BEGIN")
         self._indent_level = 1
-        for stmt in body_stmts:
-            text = self._emit_node(stmt)
+        for stmt in [*hoisted, *body_stmts]:
+            text = stmt if isinstance(stmt, str) else self._emit_node(stmt)
             for line in text.split("\n"):
                 lines.append(f"{self._indent()}{line}" if line.strip() else "")
         self._indent_level = 0
         lines.append("END;")
         return "\n".join(lines)
+
+    def _oracle_split_subquery_default(self, decl: ASTNode) -> tuple[str, str] | None:
+        """If *decl* is a variable initialised from a subquery, return
+        ``(bare_declaration, "SELECT … INTO v FROM DUAL;")``; else ``None``."""
+        if not isinstance(decl, DeclareStatement) or not decl.default:
+            return None
+        val = self._emit_node(decl.default)
+        if not re.search(r"\(\s*SELECT\b", val, re.IGNORECASE):
+            return None
+        dt = self._emit_data_type(decl.data_type)
+        return (
+            f"{self._declare_prefix()}{decl.name} {dt};",
+            f"SELECT {val.strip()} INTO {decl.name} FROM DUAL;",
+        )
 
     def _emit_pg_procedure_body(
         self,
