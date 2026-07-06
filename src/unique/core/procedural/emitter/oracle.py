@@ -94,6 +94,22 @@ class OracleEmitter(ProceduralEmitter):
         if getattr(self, "_in_oracle_procedure", False) and node.value:
             val = self._emit_node(node.value)
             return f"RETURN;  -- UNIQUE: discarded procedure RETURN value ({val})"
+        # A function RETURN whose value uses a SQL-only operator (CAST, a SQL-only
+        # builtin like STANDARD_HASH, a scalar subquery) is invalid in a PL/SQL
+        # expression (PLS-00201/00103). Evaluate it in SQL context and return the
+        # result via a nested block.
+        if node.value:
+            val = self._emit_node(node.value)
+            rt = getattr(self, "_oracle_fn_return_type", None)
+            if rt and _SQL_ONLY_IN_PLSQL.search(val):
+                return (
+                    "DECLARE\n"
+                    f"    v_unique_ret {rt};\n"
+                    "BEGIN\n"
+                    f"    SELECT {val} INTO v_unique_ret FROM DUAL;\n"
+                    "    RETURN v_unique_ret;\n"
+                    "END;"
+                )
         return super()._emit_return(node)
 
     def _function_header(self, name: str, or_replace: bool) -> str:
@@ -101,6 +117,9 @@ class OracleEmitter(ProceduralEmitter):
         return f"{prefix}FUNCTION {name}"
 
     def _returns_clause(self, ret_type: str) -> str:
+        # Keep the constrained type for a possible RETURN-via-SELECT-INTO local
+        # (the RETURN clause itself must be unconstrained).
+        self._oracle_fn_return_type = ret_type
         return f"\nRETURN {_unconstrained(ret_type)}"
 
     def _emit_param(
