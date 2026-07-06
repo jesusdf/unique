@@ -1439,6 +1439,10 @@ class ProceduralTransformer:
             lambda inner: f"RAWTOHEX(STANDARD_HASH({inner.rsplit(',', 1)[0].strip()},"
             " 'SHA256'))",
         )
+        # A stray sqlglot TIME_STR_TO_TIME / DATE_STR_TO_DATE wrapper around an
+        # already-temporal operand is spurious on Oracle — unwrap it.
+        sql = self._rewrite_balanced_call(sql, "TIME_STR_TO_TIME", lambda inner: inner)
+        sql = self._rewrite_balanced_call(sql, "DATE_STR_TO_DATE", lambda inner: inner)
         # EXTRACT(EPOCH FROM x): Oracle has no EPOCH — seconds since the Unix epoch
         # is (x_as_date - 1970-01-01) * 86400.
         sql = self._rewrite_balanced_call(
@@ -2727,10 +2731,19 @@ class ProceduralTransformer:
         def build_tsql(args: list[str]) -> str | None:
             if len(args) != 3:
                 return None
-            part, start, end = args
+            # T-SQL DATEDIFF(part, start, end) = end - start. A sqlglot re-pass
+            # rewrites it to its canonical DATEDIFF(end, start, part) (part last),
+            # wrapping the operands in TIME_STR_TO_TIME — accept either layout.
+            if self._DATEPART_UNITS.get(args[0].strip().lower()):
+                part, start, end = args
+            elif self._DATEPART_UNITS.get(args[2].strip().lower()):
+                end, start, part = args
+            else:
+                return None
             unit = self._DATEPART_UNITS.get(part.strip().lower())
             if not unit:
                 return None
+            start, end = self._unwrap_time_str(start), self._unwrap_time_str(end)
             if self._target == "oracle":
                 if unit == "DAY":
                     return f"({end} - {start})"
@@ -2738,6 +2751,10 @@ class ProceduralTransformer:
                     return f"MONTHS_BETWEEN({end}, {start})"
                 if unit == "YEAR":
                     return f"(MONTHS_BETWEEN({end}, {start}) / 12)"
+                # A sub-day unit is a fraction of the (end - start) day count.
+                factor = {"HOUR": 24, "MINUTE": 1440, "SECOND": 86400}.get(unit)
+                if factor:
+                    return f"(({end} - {start}) * {factor})"
                 return None
             if self._target == "postgresql":
                 if unit == "DAY":
@@ -2766,6 +2783,15 @@ class ProceduralTransformer:
         if self._source == "mysql" and self._target in ("oracle", "postgresql", "tsql"):
             return self._rewrite_calls(sql, "DATEDIFF", build_mysql)
         return sql
+
+    @staticmethod
+    def _unwrap_time_str(expr: str) -> str:
+        """Strip a sqlglot TIME_STR_TO_TIME / DATE_STR_TO_DATE wrapper around an
+        operand that is already a DATE/TIMESTAMP (spurious on Oracle)."""
+        m = re.fullmatch(
+            r"(?is)\s*(?:TIME_STR_TO_TIME|DATE_STR_TO_DATE)\s*\((.*)\)\s*", expr
+        )
+        return m.group(1).strip() if m else expr
 
     def _get_func_map(self) -> dict[str, str]:
         return PROCEDURAL_FUNC_MAPS.get((self._source, self._target), {})
