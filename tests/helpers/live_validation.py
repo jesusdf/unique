@@ -239,17 +239,51 @@ class OracleValidator(SyntaxValidator):
         # than on every ';'.
         statements = [s for s in _split_oracle_statements(sql) if _is_executable(s)]
         created = _objects_created(sql)
-        self._drop_all(created)  # pre-clean in case a prior run left objects
+        compilable = _oracle_compilable_objects(sql)
+        self._drop_all(created + compilable)  # pre-clean any leftovers
         cur = self._conn.cursor()
         try:
             for stmt in statements:
                 cur.execute(stmt.strip())
+            # Oracle compiles PL/SQL objects *lazily*: CREATE succeeds even when
+            # the body is invalid (the object is left INVALID), so executing the
+            # DDL without error is not proof the routine is valid. Query the
+            # compile errors so a broken procedure/function/trigger/package is
+            # reported instead of silently passing.
+            compile_error = self._first_compile_error(compilable)
+            if compile_error is not None:
+                return ValidationResult(
+                    ok=False, error=f"{compile_error}\n--- sql ---\n{sql}"
+                )
             return ValidationResult(ok=True)
         except Exception as e:  # noqa: BLE001
             return ValidationResult(ok=False, error=f"{e}\n--- sql ---\n{sql}")
         finally:
             cur.close()
-            self._drop_all(created)
+            self._drop_all(created + compilable)
+
+    def _first_compile_error(self, compilable: list[tuple[str, str]]) -> str | None:
+        """Return the first PL/SQL compile error on a created object, or None."""
+        if not compilable:
+            return None
+        cur = self._conn.cursor()
+        try:
+            for _kind, name in compilable:
+                cur.execute(
+                    "SELECT type, line, text FROM user_errors "
+                    "WHERE name = :n ORDER BY sequence",
+                    {"n": name},
+                )
+                row = cur.fetchone()
+                if row is not None:
+                    etype, line, text = row
+                    return (
+                        f"{etype} {name} compiled INVALID "
+                        f"(line {line}): {text.strip()}"
+                    )
+            return None
+        finally:
+            cur.close()
 
     def _drop_all(self, created: list[tuple[str, str]]) -> None:
         cur = self._conn.cursor()
@@ -556,4 +590,23 @@ def _objects_created(sql: str) -> list[tuple[str, str]]:
     indexes = re.findall(r"(?i)\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+" + _name, sql)
     out: list[tuple[str, str]] = [("INDEX", n) for n in indexes]
     out += [("TABLE", n) for n in tables]
+    return out
+
+
+def _oracle_compilable_objects(sql: str) -> list[tuple[str, str]]:
+    """CREATE'd PL/SQL objects (procedure/function/trigger/package) a snippet
+    defines. Used to query USER_ERRORS (Oracle compiles them lazily) and to
+    drop them afterwards. Names are upper-cased and unquoted to match the data
+    dictionary's storage of unquoted identifiers.
+    """
+    import re
+
+    out: list[tuple[str, str]] = []
+    for kind, name in re.findall(
+        r"(?i)\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:(?:NON)?EDITIONABLE\s+)?"
+        r"(PROCEDURE|FUNCTION|TRIGGER|PACKAGE)\b(?:\s+BODY)?\s+"
+        r'(?:"?\w+"?\s*\.\s*)?"?(\w+)"?',
+        sql,
+    ):
+        out.append((kind.upper(), name.upper()))
     return out
