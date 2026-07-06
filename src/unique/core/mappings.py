@@ -370,7 +370,11 @@ PROCEDURAL_TYPE_MAPS: dict[tuple[str, str], dict[str, str]] = {
         "SMALLDATETIME": "DATE",
         "UNIQUEIDENTIFIER": "RAW(16)",
         "XML": "XMLTYPE",
-        "SQL_VARIANT": "ANYDATA",
+        # SQL_VARIANT -> ANYDATA is faithful but unusable: a plain value can't be
+        # passed to an ANYDATA parameter (PLS-00306), so procedures that pass one
+        # fail to compile. Use a bounded VARCHAR2 (values pass, typed ones convert
+        # implicitly); the original is kept in a /* UNIQUE: SQL_VARIANT */ comment.
+        "SQL_VARIANT": "VARCHAR2(4000)",
     },
     ("oracle", "tsql"): {
         "NUMBER": "DECIMAL",
