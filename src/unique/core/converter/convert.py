@@ -323,6 +323,17 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return RawSQL(sql=expr.sql(), reason="Complex EXISTS")
     if isinstance(expr, exp.Null):
         return Literal(value=None, dtype="null")
+    # EXTRACT/DATEPART -> a FunctionCall the emitter renders as EXTRACT(part FROM x).
+    # Keep the part as a clean keyword rather than an "unhandled Var" carrier.
+    if isinstance(expr, exp.Extract):
+        part = expr.this.name if isinstance(expr.this, exp.Var) else str(expr.this)
+        return FunctionCall(
+            name="EXTRACT",
+            args=(
+                RawSQL(sql=part.upper(), reason="date part"),
+                convert_expression(expr.expression),
+            ),
+        )
     if isinstance(expr, exp.Func):
         return _convert_function(expr)
     if isinstance(expr, exp.Not):

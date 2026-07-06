@@ -73,28 +73,51 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "TINYINT": "SIGNED",
         "BOOLEAN": "SIGNED",
         "BOOL": "SIGNED",
+        # T-SQL's precise datetime types -> MySQL's DATETIME.
+        "DATETIME2": "DATETIME",
+        "SMALLDATETIME": "DATETIME",
     },
     "tsql": {"BOOLEAN": "BIT", "BOOL": "BIT"},
+    # DATETIME/DATETIME2/SMALLDATETIME are T-SQL types; Oracle/PostgreSQL use
+    # TIMESTAMP. Passing DATETIME through fails (ORA-00902 / invalid pg type).
+    "oracle": {
+        "DATETIME": "TIMESTAMP",
+        "DATETIME2": "TIMESTAMP",
+        "SMALLDATETIME": "TIMESTAMP",
+    },
+    "postgresql": {
+        "DATETIME": "TIMESTAMP",
+        "DATETIME2": "TIMESTAMP",
+        "SMALLDATETIME": "TIMESTAMP",
+    },
 }
 
-# Date format-model tokens as (Oracle/PostgreSQL, strftime [MySQL], T-SQL .NET),
-# longest-first so YYYY matches before YY and MONTH before MON/MM.
-_DATE_FMT_TOKENS: list[tuple[str, str, str]] = [
-    ("YYYY", "%Y", "yyyy"),
-    ("YY", "%y", "yy"),
-    ("MONTH", "%M", "MMMM"),
-    ("MON", "%b", "MMM"),
-    ("HH24", "%H", "HH"),
-    ("HH12", "%h", "hh"),
-    ("MM", "%m", "MM"),
-    ("DD", "%d", "dd"),
-    ("HH", "%h", "hh"),
-    ("MI", "%i", "mm"),
-    ("SS", "%s", "ss"),
-    ("DAY", "%W", "dddd"),
-    ("DY", "%a", "ddd"),
+# Date format-model tokens across the four conventions this tool bridges:
+#   oracle  — Oracle/PostgreSQL TO_CHAR/TO_DATE model
+#   mysql   — MySQL DATE_FORMAT/STR_TO_DATE (%i minute, %M month name, %s second)
+#   tsql    — T-SQL FORMAT .NET custom format (MM month, mm minute, HH 24h)
+#   python  — Python-strftime (%M minute, %m month, %S second) — sqlglot's
+#             *canonical* format for TimeToStr/StrToTime, so it is the model we
+#             receive when a T-SQL FORMAT / MySQL DATE_FORMAT is parsed.
+# Longest-first so YYYY matches before YY and MONTH before MON/MM.
+_DATE_FMT_TOKENS: list[tuple[str, str, str, str]] = [
+    ("YYYY", "%Y", "yyyy", "%Y"),
+    ("YY", "%y", "yy", "%y"),
+    ("MONTH", "%M", "MMMM", "%B"),
+    ("MON", "%b", "MMM", "%b"),
+    ("HH24", "%H", "HH", "%H"),
+    ("HH12", "%h", "hh", "%I"),
+    ("MM", "%m", "MM", "%m"),
+    ("DD", "%d", "dd", "%d"),
+    ("HH", "%h", "hh", "%I"),
+    ("MI", "%i", "mm", "%M"),
+    ("SS", "%s", "ss", "%S"),
+    ("DAY", "%W", "dddd", "%A"),
+    ("DY", "%a", "ddd", "%a"),
+    ("AM", "%p", "tt", "%p"),
+    ("PM", "%p", "tt", "%p"),
 ]
-_FMT_MODEL_IDX = {"oracle": 0, "strftime": 1, "tsql": 2}
+_FMT_MODEL_IDX = {"oracle": 0, "mysql": 1, "tsql": 2, "python": 3}
 
 
 def _convert_date_format(fmt: str, src_model: str, dst_model: str) -> str:
@@ -102,13 +125,16 @@ def _convert_date_format(fmt: str, src_model: str, dst_model: str) -> str:
     models (longest-token match; literal characters pass through)."""
     si, di = _FMT_MODEL_IDX[src_model], _FMT_MODEL_IDX[dst_model]
     toks = sorted(_DATE_FMT_TOKENS, key=lambda t: -len(t[si]))
+    # strftime (%m vs %M) and .NET (MM month vs mm minute, HH 24h vs hh 12h) are
+    # case-sensitive; only the Oracle model is case-insensitive.
+    case_sensitive = si != _FMT_MODEL_IDX["oracle"]
     out: list[str] = []
     i = 0
     while i < len(fmt):
         for tok in toks:
             src_tok = tok[si]
             seg = fmt[i : i + len(src_tok)]
-            if seg == src_tok if si == 1 else seg.upper() == src_tok:
+            if (seg == src_tok) if case_sensitive else (seg.upper() == src_tok):
                 out.append(tok[di])
                 i += len(src_tok)
                 break
@@ -1403,6 +1429,14 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"IF({cond}, {then_v}, {else_v})"
         return f"CASE WHEN {cond} THEN {then_v} ELSE {else_v} END"
 
+    # EXTRACT(part FROM x): the standard spelling. sqlglot parses DATEPART/EXTRACT
+    # to exp.Extract; the generic path would emit EXTRACT(part, x) (comma), which
+    # Oracle/PostgreSQL/MySQL all reject. The FROM form is valid on all three.
+    if fn_name == "EXTRACT" and len(node.args) == 2:
+        part = _emit_expression(node.args[0], dialect).strip("'\"").upper()
+        value = _emit_expression(node.args[1], dialect)
+        return f"EXTRACT({part} FROM {value})"
+
     # Oracle NVL2(a, b, c): b when a is not null, else c. Only Oracle has it.
     if fn_name == "NVL2" and len(node.args) == 3:
         a, b, c = (_emit_expression(x, dialect) for x in node.args)
@@ -1474,37 +1508,44 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect in ("oracle", "postgresql"):
             return f"TO_CHAR({value}, '{fmt}')"
         if dialect == "mysql":
-            my = _convert_date_format(fmt, "oracle", "strftime")
+            my = _convert_date_format(fmt, "oracle", "mysql")
             return f"DATE_FORMAT({value}, '{my}')"
         return f"FORMAT({value}, '{_convert_date_format(fmt, 'oracle', 'tsql')}')"
 
+    # TIME_TO_STR: sqlglot's canonical for a date->string format (T-SQL FORMAT and
+    # MySQL DATE_FORMAT both normalize here), and its format model is *Python*
+    # strftime (%M minute, %m month), not MySQL's (%i minute, %M month name).
     if (
         fn_name == "TIME_TO_STR"
         and len(node.args) == 2
         and isinstance(node.args[1], Literal)
     ):
         value = _emit_expression(node.args[0], dialect)
-        fmt = str(node.args[1].value)  # strftime
+        fmt = str(node.args[1].value)  # python strftime
         if dialect == "mysql":
-            return f"DATE_FORMAT({value}, '{fmt}')"
+            my = _convert_date_format(fmt, "python", "mysql")
+            return f"DATE_FORMAT({value}, '{my}')"
         if dialect in ("oracle", "postgresql"):
             return (
-                f"TO_CHAR({value}, '{_convert_date_format(fmt, 'strftime', 'oracle')}')"
+                f"TO_CHAR({value}, '{_convert_date_format(fmt, 'python', 'oracle')}')"
             )
-        return f"FORMAT({value}, '{_convert_date_format(fmt, 'strftime', 'tsql')}')"
+        return f"FORMAT({value}, '{_convert_date_format(fmt, 'python', 'tsql')}')"
 
+    # STR_TO_DATE: sqlglot's canonical for a string->date parse; its format is
+    # likewise Python strftime.
     if (
         fn_name == "STR_TO_DATE"
         and len(node.args) == 2
         and isinstance(node.args[1], Literal)
     ):
         value = _emit_expression(node.args[0], dialect)
-        fmt = str(node.args[1].value)  # strftime
+        fmt = str(node.args[1].value)  # python strftime
         if dialect == "mysql":
-            return f"STR_TO_DATE({value}, '{fmt}')"
+            my = _convert_date_format(fmt, "python", "mysql")
+            return f"STR_TO_DATE({value}, '{my}')"
         if dialect in ("oracle", "postgresql"):
             return (
-                f"TO_DATE({value}, '{_convert_date_format(fmt, 'strftime', 'oracle')}')"
+                f"TO_DATE({value}, '{_convert_date_format(fmt, 'python', 'oracle')}')"
             )
         # T-SQL: an ISO string casts directly; exotic formats would need CONVERT+style.
         return f"CAST({value} AS DATE)"
