@@ -16,47 +16,26 @@ packaging remains.
 
 ---
 
-## 1. Oracle procedural output — validity backlog (P1)
+## 1. Oracle procedural output — validity backlog (P1) — ✅ DONE (26 -> 0)
 
-The Oracle live-validator now queries `USER_ERRORS` after a `CREATE`
-(Oracle compiles PL/SQL **lazily** — `CREATE` succeeds even when the body is
-invalid, leaving the object `INVALID`). This exposed real bugs the old
-execute-only check masked (and the CI *does* run a live Oracle — the failures
-were simply invisible with the execute-only check).
-`test_procedures_fixture_is_valid_live[oracle]` `xfail`s until these are fixed.
+**Complete.** The T-SQL procedures fixture (32 objects) now transpiles to
+**fully-valid Oracle** — `test_procedures_fixture_is_valid_live[oracle]` asserts it
+(the `xfail` is gone). The Oracle live-validator queries `USER_ERRORS` after each
+`CREATE` (Oracle compiles PL/SQL *lazily*, so `CREATE` succeeds even for an invalid
+body) and recompiles to settle forward dependencies. Detailed why/how of each fix
+is archived in [`docs/DONE.md`](DONE.md); the arc, in brief:
 
-**Fixed:** (1) string-`+` -> `||` (`PLS-00306`); (2) the validator's Oracle
-splitter no longer shreds a PL/SQL block after plain SQL (spurious `ORA-00900`);
-(3) a body assignment `x := (SELECT …)` -> `SELECT … INTO x FROM DUAL`; (4) a
-subquery-initialised declaration `v TYPE := (SELECT …)` hoisted to the body as a
-`SELECT … INTO`; (5) `SELECT TOP (n)` in a scalar subquery -> `FETCH FIRST`;
-(6) a bare result `SELECT` -> a `SYS_REFCURSOR` OUT parameter opened FOR the
-query (`PLS-00428`); (7) `EXEC sp_executesql @stmt, N'…', @a, @b` -> Oracle
-`EXECUTE IMMEDIATE @stmt USING @a, @b` (paramdef dropped). Sweep: 26 -> **20
-INVALID** of 32 (several procs stack multiple errors, so clearing a class often
-exposes the next rather than dropping the object count).
-
-**Fixed since (each a real feature/fix, all live-validated):** CLOB/`SQL_VARIANT`
--> bounded `VARCHAR2`; Oracle-less functions `TRY_CAST`/`SHA256`/`EXTRACT(EPOCH …)`,
-`VARCHAR(MAX)` casts, character-CAST length, `DATEDIFF` sub-day + canonical layout,
-`TIME_STR_TO_TIME` unwrap; **table variable -> hoisted GTT** (+ `OUTPUT INTO`
-carrier); OUT/IN OUT params take no DEFAULT; `AS`-before-table-alias; **trigger
-DECLARE section**; CAST/RETURN are SQL-only in PL/SQL (evaluated via `SELECT …
-INTO … FROM DUAL` / a nested block); procedure/trigger RETURN carries no value;
-**reassigned IN parameters shadowed with locals**. The validator now recompiles
-invalid objects to settle forward dependencies (FUNC4 -> FUNC2 -> PROC_6).
-
-**Sweep: 26 -> 1 INVALID** (of 32). The one remaining:
-
-- [ ] **PROC_25 via FUNC5 — inline table-valued function** (`RETURNS TABLE`). The
-      last feature: emit the T-SQL TVF as an Oracle **pipelined function** over a
-      collection type (hoisted like the GTT), translate its `STRING_SPLIT` body to
-      `CONNECT BY`/`REGEXP_SUBSTR`, and rewrite the caller's `FROM func5(…)` to
-      `FROM TABLE(func5(…))` (preserving the `item` column). Until then FUNC5 is a
-      documented carrier and PROC_25 hits `ORA-00904`.
-
-Once PROC_25 validates, drop the `xfail` on `test_procedures_fixture_is_valid_live[oracle]`
-(task #42) and bump the version.
+- **Expression/type:** string-`+` -> `||`; subquery / CAST assignments and RETURNs
+  are SQL-only in PL/SQL, so via `SELECT … INTO v FROM DUAL` (or a nested block);
+  `SELECT TOP (n)` -> `FETCH FIRST`; CLOB/`SQL_VARIANT` -> bounded `VARCHAR2`;
+  `TRY_CAST`/`SHA256`/`EXTRACT(EPOCH …)`/`VARCHAR(MAX)`-cast/character-CAST length;
+  `DATEDIFF` sub-day + canonical layout; `TIME_STR_TO_TIME` unwrap.
+- **Structure (features):** bare result `SELECT` -> `SYS_REFCURSOR` OUT; `EXEC
+  sp_executesql` -> `EXECUTE IMMEDIATE … USING`; **table variable -> hoisted GTT**;
+  **trigger DECLARE section**; **reassigned IN parameters shadowed with locals**;
+  **inline split TVF -> `SYS.ODCIVARCHAR2LIST` function** + `TABLE(fn(…))` callers.
+- **Rules:** OUT/IN OUT params take no DEFAULT; procedure/trigger RETURN carries no
+  value; no `AS` before a table alias.
 
 ## 2. Packaging (P3)
 
