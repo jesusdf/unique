@@ -82,6 +82,13 @@ class OracleTransformer(ProceduralTransformer):
     )
 
     def _fix_raw_sql_target(self, sql: str) -> str:
+        # T-SQL ``TOP (n)`` has no Oracle keyword; sqlglot rewrites the enclosing
+        # SELECT to ``FETCH FIRST n ROWS ONLY`` (ORA-00907 otherwise). Only pay
+        # the round-trip on a real row limit (``TOP <digits>``), not a column
+        # named "top"; fall back to the original on any parse failure.
+        if re.search(r"(?i)\bTOP\s*\(?\s*\d", sql):
+            sql = self._top_to_oracle(sql)
+
         # dbo doesn't exist in Oracle; drop a dbo. qualifier on calls within
         # expressions (e.g. dbo.func1() in an assignment, RETURN or COALESCE).
         sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
@@ -103,6 +110,17 @@ class OracleTransformer(ProceduralTransformer):
             return f"AS {self._CAST_TYPE_MAP.get(typ, typ)}"
 
         return self._CAST_CONSTRAINED_RE.sub(_unconstrained_cast_type, sql)
+
+    @staticmethod
+    def _top_to_oracle(sql: str) -> str:
+        """Rewrite a fragment's ``SELECT TOP (n) …`` to Oracle via sqlglot."""
+        import sqlglot
+
+        try:
+            out = sqlglot.transpile(sql, read="tsql", write="oracle")
+        except Exception:
+            return sql
+        return out[0] if out else sql
 
     def _named_arg_op(self) -> str | None:
         # Oracle passes a procedure's named argument as ``name => value``.
