@@ -172,7 +172,25 @@ class OracleEmitter(ProceduralEmitter):
             synthesized = self._synthesize_mutating_safe_trigger(node)
             if synthesized is not None:
                 return synthesized
-        return super()._emit_trigger(node)
+        if node.compound or node.execute_function:
+            return super()._emit_trigger(node)
+        # Oracle requires trigger-local variables in a DECLARE section before
+        # BEGIN (T-SQL declares them inline in the body). Split them out and reuse
+        # the procedure-body emitter (DECLARE instead of IS; subquery-initialised
+        # declarations are hoisted to SELECT … INTO the same way).
+        name = self._qualified_name(node.schema, node.name)
+        events = self._join_trigger_events(node.events)
+        note, timing = self._adjust_trigger_timing(node.timing)
+        header_lines = self._trigger_header(name, node, events, timing)
+        header_lines = [ln for ln in header_lines if ln != "BEGIN"]
+        declarations, body_stmts = self._split_declarations(node.body)
+        return note + self._emit_oracle_procedure_body(
+            "\n".join(header_lines),
+            declarations,
+            body_stmts,
+            decl_keyword="DECLARE",
+            no_decl_keyword="",
+        )
 
     def _body_reads_table(self, body_text: str, table: str) -> bool:
         """Whether the trigger body reads/writes its own triggering *table* (in a

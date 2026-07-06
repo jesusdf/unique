@@ -356,14 +356,18 @@ class ProceduralEmitter:
         header: str,
         declarations: list[ASTNode],
         body_stmts: list[ASTNode],
+        decl_keyword: str = "IS",
+        no_decl_keyword: str = "AS",
     ) -> str:
+        # A procedure's declare section opens with IS (else AS); a trigger's opens
+        # with DECLARE and is omitted entirely when there are no declarations.
         lines = [f"{header}"]
         # A declaration initialised from a subquery (`v TYPE := (SELECT …)`) is
         # invalid in the Oracle declare section (PLS-00405); declare the variable
         # bare and run the SELECT … INTO at the top of the body instead.
         hoisted: list[str] = []
         if declarations:
-            lines.append("IS")
+            lines.append(decl_keyword)
             self._indent_level = 1
             for decl in declarations:
                 split = self._oracle_split_subquery_default(decl)
@@ -374,8 +378,8 @@ class ProceduralEmitter:
                 else:
                     lines.append(f"{self._indent()}{self._emit_node(decl)}")
             self._indent_level = 0
-        else:
-            lines.append("AS")
+        elif no_decl_keyword:
+            lines.append(no_decl_keyword)
 
         lines.append("BEGIN")
         self._indent_level = 1
