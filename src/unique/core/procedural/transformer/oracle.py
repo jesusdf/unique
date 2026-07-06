@@ -8,14 +8,17 @@ from __future__ import annotations
 
 import dataclasses
 import re
-from typing import Any
+from typing import Any, TypeVar
 
 from unique.core.ast_nodes import (
     AlterProcedureStatement,
+    AssignmentStatement,
     ASTNode,
     BeginEndBlock,
+    CreateFunctionStatement,
     CreateProcedureStatement,
     DataType,
+    DeclareStatement,
     EmbeddedDML,
     ExceptionBlock,
     ExceptionHandler,
@@ -33,6 +36,10 @@ from unique.core.procedural.transformer.base import (
     register_transformer,
 )
 
+#: A routine whose reassigned IN parameters can be shadowed (both carry
+#: ``parameters`` and ``body``); the TypeVar preserves the concrete type.
+_Routine = TypeVar("_Routine", CreateProcedureStatement, CreateFunctionStatement)
+
 
 class OracleTransformer(ProceduralTransformer):
     """Transforms toward Oracle PL/SQL."""
@@ -47,6 +54,7 @@ class OracleTransformer(ProceduralTransformer):
         # carrier, where the whole body must also be rewritten by hand).
         proc = super()._transform_procedure(node)
         if isinstance(proc, CreateProcedureStatement):
+            proc = self._shadow_reassigned_params(proc)
             return self._hoist_table_variables(self._result_selects_to_refcursors(proc))
         return proc
 
@@ -56,6 +64,7 @@ class OracleTransformer(ProceduralTransformer):
         # same result-set → SYS_REFCURSOR and table-variable → GTT rewrites.
         proc = super()._transform_alter_procedure(node)
         if isinstance(proc, CreateProcedureStatement):
+            proc = self._shadow_reassigned_params(proc)
             return self._hoist_table_variables(self._result_selects_to_refcursors(proc))
         return proc
 
@@ -98,6 +107,66 @@ class OracleTransformer(ProceduralTransformer):
             for var, gtt, cols in gtts
         ]
         return StatementList(statements=tuple([*ddls, new_proc]))
+
+    def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
+        fn = super()._transform_function(node)
+        if isinstance(fn, CreateFunctionStatement):
+            return self._shadow_reassigned_params(fn)
+        return fn
+
+    def _shadow_reassigned_params(self, node: _Routine) -> _Routine:
+        """T-SQL freely reassigns a routine's parameters; an Oracle IN parameter
+        is read-only (PLS-00363). For each IN parameter the body assigns to, rename
+        the parameter (``p`` -> ``p_IN``) and add a local ``p := p_IN`` shadow, so
+        the body reads/writes the local and the call sites (positional) are
+        unaffected."""
+        params = node.parameters
+        in_params = {p.name: p for p in params if p.direction == "IN"}
+        if not in_params:
+            return node
+        assigned = self._collect_assigned_targets(node.body) & set(in_params)
+        if not assigned:
+            return node
+        new_params = tuple(
+            dataclasses.replace(p, name=f"{p.name}_IN") if p.name in assigned else p
+            for p in params
+        )
+        shadows = tuple(
+            DeclareStatement(
+                name=p.name,
+                data_type=in_params[p.name].data_type,
+                default=RawSQL(sql=f"{p.name}_IN"),
+            )
+            for p in params
+            if p.name in assigned
+        )
+        return dataclasses.replace(
+            node, parameters=new_params, body=shadows + node.body
+        )
+
+    def _collect_assigned_targets(self, stmts: tuple[ASTNode, ...]) -> set[str]:
+        """Every variable name that appears as an assignment target anywhere in a
+        statement tree (recursing into control-flow blocks)."""
+        found: set[str] = set()
+
+        def walk(node: ASTNode) -> None:
+            if isinstance(node, AssignmentStatement):
+                found.add(node.target)
+            for f in dataclasses.fields(node):
+                val = getattr(node, f.name)
+                if (
+                    isinstance(val, tuple)
+                    and val
+                    and hasattr(val[0], "__dataclass_fields__")
+                ):
+                    for item in val:
+                        walk(item)
+                elif hasattr(val, "__dataclass_fields__"):
+                    walk(val)
+
+        for stmt in stmts:
+            walk(stmt)
+        return found
 
     def _rename_idents(self, node: ASTNode, renames: dict[str, str]) -> ASTNode:
         """Rename bare identifiers (word-boundary) in every ``sql`` string of a
