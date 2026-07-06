@@ -192,6 +192,9 @@ class OracleTransformer(ProceduralTransformer):
         # expressions (e.g. dbo.func1() in an assignment, RETURN or COALESCE).
         sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
 
+        # T-SQL functions Oracle lacks (TRY_CAST, …).
+        sql = self._oracle_function_fixes(sql)
+
         # T-SQL string ``+`` in an assignment/return expression -> Oracle ``||``.
         sql = self._rewrite_string_concat(sql, "oracle")
 

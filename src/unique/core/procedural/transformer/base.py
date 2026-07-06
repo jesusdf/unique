@@ -1346,6 +1346,7 @@ class ProceduralTransformer:
     def _fix_oracle_dml(self, sql: str) -> str:
         """Post-process sqlglot Oracle output to correct unsupported constructs."""
         sql = self._replace_oracle_date_add(sql)
+        sql = self._oracle_function_fixes(sql)
         # Oracle has no string ``+``; a chain with a string operand must use ``||``
         # (PLS-00306 otherwise). sqlglot leaves ``+`` since it can't tell concat
         # from arithmetic without type info — do it here as for PostgreSQL/MySQL.
@@ -1355,6 +1356,65 @@ class ProceduralTransformer:
         if self._in_trigger:
             sql = self._to_oracle_row_ref(sql)
         return sql
+
+    def _oracle_function_fixes(self, sql: str) -> str:
+        """Rewrite T-SQL functions Oracle lacks a direct spelling for."""
+        # VARCHAR(MAX)/NVARCHAR(MAX) as a CAST target in an expression is invalid
+        # Oracle; use a bounded VARCHAR2/NVARCHAR2 (as for column/param types).
+        sql = re.sub(r"(?i)\bNVARCHAR\s*\(\s*MAX\s*\)", "NVARCHAR2(2000)", sql)
+        sql = re.sub(r"(?i)\bVARCHAR\s*\(\s*MAX\s*\)", "VARCHAR2(4000)", sql)
+        # TRY_CAST(x AS type) -> CAST(x AS type DEFAULT NULL ON CONVERSION ERROR)
+        # (Oracle 12.2+): returns NULL on a bad value instead of raising.
+        sql = re.sub(
+            r"(?i)\bTRY_CAST\s*\(\s*(.+?)\s+AS\s+"
+            r"([A-Za-z_]\w*(?:\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\))?)\s*\)",
+            r"CAST(\1 AS \2 DEFAULT NULL ON CONVERSION ERROR)",
+            sql,
+        )
+        # SHA256(x) / SHA2(x, 256) -> RAWTOHEX(STANDARD_HASH(x, 'SHA256')): Oracle
+        # STANDARD_HASH returns RAW, so RAWTOHEX gives the hex string T-SQL yields.
+        sql = self._rewrite_balanced_call(
+            sql, "SHA256", lambda inner: f"RAWTOHEX(STANDARD_HASH({inner}, 'SHA256'))"
+        )
+        sql = self._rewrite_balanced_call(
+            sql,
+            "SHA2",
+            lambda inner: f"RAWTOHEX(STANDARD_HASH({inner.rsplit(',', 1)[0].strip()},"
+            " 'SHA256'))",
+        )
+        # EXTRACT(EPOCH FROM x): Oracle has no EPOCH — seconds since the Unix epoch
+        # is (x_as_date - 1970-01-01) * 86400.
+        sql = self._rewrite_balanced_call(
+            sql,
+            "EXTRACT",
+            lambda inner: (
+                f"((CAST({inner[len('EPOCH FROM'):].strip()} AS DATE)"
+                " - DATE '1970-01-01') * 86400)"
+                if inner.strip().upper().startswith("EPOCH FROM")
+                else f"EXTRACT({inner})"
+            ),
+        )
+        return sql
+
+    @staticmethod
+    def _rewrite_balanced_call(sql: str, name: str, build: Callable[[str], str]) -> str:
+        """Replace ``name(<balanced>)`` calls, passing the inner text to *build*."""
+        out: list[str] = []
+        i = 0
+        pat = re.compile(rf"(?i)\b{name}\s*\(")
+        while True:
+            m = pat.search(sql, i)
+            if not m:
+                out.append(sql[i:])
+                break
+            out.append(sql[i : m.start()])
+            depth, j = 1, m.end()
+            while j < len(sql) and depth:
+                depth += (sql[j] == "(") - (sql[j] == ")")
+                j += 1
+            out.append(build(sql[m.end() : j - 1]))
+            i = j
+        return "".join(out)
 
     def _to_oracle_row_ref(self, sql: str) -> str:
         """Map a MySQL/PostgreSQL-source ``NEW.``/``OLD.`` row reference to
