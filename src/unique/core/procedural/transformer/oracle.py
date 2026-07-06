@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+from typing import Any
 
 from unique.core.ast_nodes import (
     AlterProcedureStatement,
@@ -101,7 +102,7 @@ class OracleTransformer(ProceduralTransformer):
     def _rename_idents(self, node: ASTNode, renames: dict[str, str]) -> ASTNode:
         """Rename bare identifiers (word-boundary) in every ``sql`` string of a
         node tree — used to point table-variable references at the hoisted GTT."""
-        changes: dict[str, object] = {}
+        changes: dict[str, Any] = {}
         for f in dataclasses.fields(node):
             val = getattr(node, f.name)
             if f.name == "sql" and isinstance(val, str):
