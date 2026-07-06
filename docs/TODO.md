@@ -49,7 +49,6 @@ often stacks several, so the count drops slowly as layers are peeled):
       instead of a `DECLARE` section (`PLS-00103` at the trigger's first line).
 - [ ] **function gaps** — `TRY_CAST`, `SHA256`/`HASHBYTES`, `EXTRACT(EPOCH …)`,
       and a call to a carrier'd function (`FUNC5` -> `ORA-00904` cascade).
-- [ ] **`sp_executesql`** dynamic SQL (`EXECUTE IMMEDIATE sp_executesql …`).
 - [ ] **`IF EXISTS(subquery)`** (`PLS-00204`) — the creative `FOR _ IN (SELECT 1
       FROM (<subq>) WHERE ROWNUM = 1) LOOP … END LOOP;` rewrite.
 
