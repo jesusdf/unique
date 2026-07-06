@@ -299,6 +299,14 @@ class ProceduralParser:
             # re-runnable DROP guard a schema opens with). T-SQL is excluded:
             # a bare BEGIN there is a transaction/BEGIN-TRY, handled elsewhere.
             return self._parse_anonymous_block()
+        elif tok.is_keyword("IF") and self._is_tsql_source():
+            # A top-level T-SQL control-flow guard (``IF [NOT] EXISTS(…) BEGIN …
+            # END``) the batch classifier routed here — i.e. a *non-catalog*
+            # condition (a system-catalog guard is handled on the DDL path). Parse
+            # it as an anonymous block so the IF is translated (on Oracle,
+            # ``IF EXISTS`` becomes a cursor FOR-loop emulation) instead of a
+            # verbatim RawSQL carrier.
+            return self._parse_anonymous_block()
         elif tok.upper_value == "CALL":
             # A standalone stored-procedure call (MySQL/PostgreSQL/Oracle
             # ``CALL proc(args)``). Wrap it in an anonymous block so each target
@@ -1052,15 +1060,19 @@ class ProceduralParser:
         self._expect_keyword("SET")
         tok = self._current()
 
-        # SET NOCOUNT ON/OFF — skip these
-        if tok.is_keyword(
+        # SET NOCOUNT/NOEXEC/… ON/OFF — a session option with no portable
+        # equivalent (documented as a comment). Match on the option name, not the
+        # token type: some (e.g. NOEXEC) are not reserved words and lex as bare
+        # identifiers. IDENTITY_INSERT is handled separately below.
+        if tok.upper_value in {
             "NOCOUNT",
+            "NOEXEC",
             "QUOTED_IDENTIFIER",
             "ANSI_NULLS",
             "XACT_ABORT",
             "ARITHABORT",
             "ROWCOUNT",
-        ):
+        }:
             kw = self._advance().value
             # These options take a short argument (ON/OFF or a value/var).
             # T-SQL statements often omit the trailing semicolon, so we must
@@ -2563,9 +2575,10 @@ class ProceduralParser:
         upper = tok.upper_value
         if upper in self._TSQL_STMT_BOUNDARY_KEYWORDS:
             return True
-        # Standalone "SET @var = ..." assignment (distinct from the SET
-        # clause of an UPDATE, where the target is a column identifier).
-        return upper == "SET" and self._peek(1).type == TokenType.VARIABLE
+        # A standalone SET statement — ``SET @var = …`` or a session option
+        # (``SET NOEXEC ON``) — begins a statement; the SET clause of an
+        # UPDATE/MERGE (target is a column identifier) does not.
+        return upper == "SET" and self._set_starts_statement(self._peek(1))
 
     # ---------------------------------------------------------------
     # Embedded DML (delegated to sqlglot later)
@@ -2762,6 +2775,7 @@ class ProceduralParser:
     _SET_OPTION_KEYWORDS = frozenset(
         {
             "NOCOUNT",
+            "NOEXEC",
             "IDENTITY_INSERT",
             "QUOTED_IDENTIFIER",
             "ANSI_NULLS",
@@ -2776,10 +2790,10 @@ class ProceduralParser:
         UPDATE/MERGE SET clause, judged by the token right after SET."""
         if after_set.type == TokenType.VARIABLE:
             return True
-        return (
-            after_set.type == TokenType.KEYWORD
-            and after_set.upper_value in self._SET_OPTION_KEYWORDS
-        )
+        # A session option (SET NOEXEC/NOCOUNT/…). The option name may lex as a
+        # keyword or a bare identifier (e.g. NOEXEC is not a reserved word), so
+        # match on the name, not the token type.
+        return after_set.upper_value in self._SET_OPTION_KEYWORDS
 
     def _starts_new_dml(
         self,

@@ -1057,7 +1057,7 @@ class ProceduralTransformer:
         Only T-SQL does; the base default keeps it an assignment."""
         return False
 
-    def _transform_if(self, node: IfStatement) -> IfStatement:
+    def _transform_if(self, node: IfStatement) -> ASTNode:
         new_cond = self._transform_node(node.condition)
         new_then = self._ensure_non_empty_body(self._transform_body(node.then_body))
         # An ELSE that becomes empty is dropped entirely (valid everywhere);

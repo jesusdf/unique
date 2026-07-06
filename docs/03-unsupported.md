@@ -313,10 +313,16 @@ only partially supported:
 - **Non-catalog `IF EXISTS(…) BEGIN … END` control flow**: only a *system-catalog*
   existence guard (`IF [NOT] EXISTS(SELECT … FROM sys.…)` / `OBJECT_ID`) is
   treated as an idempotent-DDL guard whose condition is dropped and whose body is
-  transpiled. A **real-data** condition (e.g. `IF EXISTS (SELECT NULL) BEGIN … END`)
-  is control flow — dropping its guard would silently change semantics — so a
-  top-level block that the procedural parser cannot fully model is **preserved as
-  a documented `-- UNIQUE:` carrier with a warning** rather than mistranslated.
+  transpiled. A **real-data** condition (e.g. `IF EXISTS (SELECT NULL FROM t …)
+  BEGIN … END`, common in migration scripts) is control flow — dropping its guard
+  would silently change semantics. On **Oracle**, where `IF EXISTS(subquery)` is
+  invalid PL/SQL (PLS-00204), a THEN-only guard is **emulated with a cursor FOR
+  loop** over a one-row probe — `FOR … IN (SELECT 1 FROM DUAL WHERE [NOT]
+  EXISTS(<subquery>)) LOOP <body> END LOOP` — so the body runs once iff the
+  subquery returns a row; the top-level block is wrapped in an anonymous `BEGIN …
+  END; /`. (A guard with an `ELSE`, or a body the engine can't model, is still a
+  documented `-- UNIQUE:` carrier with a warning.) A T-SQL session directive such
+  as `SET NOEXEC ON` inside the block has no Oracle equivalent and is carried.
 - **Set-based trigger pseudo-tables** (`FROM inserted JOIN deleted`): T-SQL
   triggers are statement-level with `inserted`/`deleted` row sets. Column
   qualifiers (`inserted.col`) map to the row-level `NEW`/`OLD` (`:NEW`/`:OLD`).
