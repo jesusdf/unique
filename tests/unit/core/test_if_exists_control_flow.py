@@ -78,6 +78,18 @@ class TestNonCatalogIfExists:
         assert "PUT_LINE('SKIP')" in up.replace(" ", ""), r.sql  # not merged
         assert any("NOEXEC" in w.message for w in r.warnings), r.warnings
 
+    def test_guard_block_hugs_begin_end(self) -> None:
+        # The guard loop reads like the catalog-guard form — `BEGIN FOR …
+        # END LOOP; END;` — not BEGIN and END; on their own lines.
+        r = t.transpile(
+            "IF EXISTS (SELECT NULL FROM dbo.t WHERE c = 1) BEGIN PRINT 'x' END",
+            "tsql",
+            "oracle",
+        )
+        assert "BEGIN FOR unique_guard" in r.sql, r.sql
+        assert "END LOOP; END;" in r.sql, r.sql
+        assert "BEGIN\n" not in r.sql, r.sql  # no standalone BEGIN line
+
     def test_empty_guard_body_gets_a_noop(self) -> None:
         # An empty guarded body must not leave an empty FOR loop (PLS-00103); the
         # engine's non-empty-body rule fills it with a NULL; no-op.

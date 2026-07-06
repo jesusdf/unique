@@ -15,11 +15,13 @@ from unique.core.ast_nodes import (
     CreateFunctionStatement,
     CreateTriggerStatement,
     DeclareStatement,
+    ForLoopStatement,
     ParameterDefinition,
     PrintStatement,
     RaiseErrorStatement,
     ReturnStatement,
     SelectIntoStatement,
+    StatementList,
 )
 from unique.core.procedural.emitter.base import (
     _SQL_ONLY_IN_PLSQL,
@@ -28,6 +30,25 @@ from unique.core.procedural.emitter.base import (
 )
 
 _SIZE_RE = re.compile(r"\(\s*\d+\s*(?:,\s*\d+\s*)?\)")
+
+# The IF-EXISTS guard emulation names its probe loop this (see the oracle
+# transformer's _exists_probe_loop). A top-level block that is only such loop(s)
+# is rendered compact — ``BEGIN FOR … END LOOP; END;`` — to match the catalog
+# guard's shape instead of putting BEGIN/END on their own lines.
+_GUARD_LOOP_VAR = "unique_guard"
+
+
+def _is_exists_guard_body(body: list[ASTNode]) -> bool:
+    """True when a top-level block body is an ``IF EXISTS`` guard lowered to cursor
+    FOR-loop probe(s): a single loop, or a THEN/ELSE pair wrapped in a
+    ``StatementList``, each over the ``unique_guard`` variable."""
+    stmts: tuple[ASTNode, ...] | list[ASTNode] = body
+    if len(body) == 1 and isinstance(body[0], StatementList):
+        stmts = body[0].statements
+    return bool(stmts) and all(
+        isinstance(s, ForLoopStatement) and s.variable == _GUARD_LOOP_VAR for s in stmts
+    )
+
 
 # A *bare* Oracle DECIMAL/NUMERIC/DEC is NUMBER(38, 0) — it silently rounds to an
 # integer. Once the length/precision is stripped for a parameter/RETURN position,
@@ -352,6 +373,13 @@ class OracleEmitter(ProceduralEmitter):
         only valid inside such a block, so always wrap (even a single call)."""
         decls = [s for s in node.statements if isinstance(s, DeclareStatement)]
         body = [s for s in node.statements if not isinstance(s, DeclareStatement)]
+        if not decls and _is_exists_guard_body(body):
+            # Hug BEGIN/END onto the guard loop(s): `BEGIN FOR … END LOOP; END;`,
+            # matching the catalog-guard form (top-level, so indent is 0).
+            body_lines = self._emit_indented_stmts(tuple(body))
+            body_lines[0] = f"BEGIN {body_lines[0]}"
+            body_lines[-1] = f"{body_lines[-1]} END;"
+            return "\n".join(body_lines)
         lines: list[str] = []
         if decls:
             lines.append("DECLARE")
