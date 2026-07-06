@@ -256,9 +256,11 @@ jobs:
           PY
 
       - name: Wait for Oracle
+        id: oracle_wait
         continue-on-error: true
         run: |
           python - <<'PY'
+          import os
           import time
           try:
               import oracledb
@@ -281,17 +283,23 @@ jobs:
                   time.sleep(5)
           if not ok:
               print("Oracle not ready; its checks will skip.")
+          # Publish readiness so the log-surfacing step below fires only on a
+          # genuine startup failure (not on every healthy run).
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"ready={'true' if ok else 'false'}\n")
           PY
 
-      - name: Oracle container logs (debug)
-        if: always()
+      - name: Oracle container logs (on startup failure)
+        # Only surface the container logs — as an ::error:: annotation, readable
+        # via the annotations API when the raw logs sit on a blocked blob — when
+        # Oracle did NOT come up. On a healthy run this step is skipped, so success
+        # no longer carries a spurious red 'failure' annotation (its SGA banner).
+        if: always() && steps.oracle_wait.outputs.ready != 'true'
         run: |
           LOG="$(docker logs oracle 2>&1 | tail -25 || true)"
-          # Surface as an ::error:: so it's readable via the annotations API
-          # (raw logs sit on a blocked blob).
           ENC="${LOG//'%'/'%25'}"
           ENC="${ENC//$'\n'/'%0A'}"
-          echo "::error title=oracle-logs::${ENC}"
+          echo "::error title=oracle-logs (startup failed)::${ENC}"
 
       - name: Run live syntax validation
         env:
