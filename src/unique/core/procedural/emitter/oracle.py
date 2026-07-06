@@ -12,6 +12,7 @@ from unique.core.ast_nodes import (
     AnonymousBlock,
     ASTNode,
     CallStatement,
+    CreateFunctionStatement,
     CreateTriggerStatement,
     DeclareStatement,
     ParameterDefinition,
@@ -184,6 +185,33 @@ class OracleEmitter(ProceduralEmitter):
     ) -> str:
         self._in_oracle_procedure = False
         return self._emit_oracle_procedure_body(header, declarations, body_stmts)
+
+    def _emit_table_valued_function(self, node: CreateFunctionStatement) -> str:
+        # A T-SQL inline table-valued function that splits a string (STRING_SPLIT
+        # body) becomes an Oracle function returning the built-in
+        # SYS.ODCIVARCHAR2LIST collection — no custom type or pipelining needed.
+        # Callers read ``COLUMN_VALUE FROM TABLE(fn(...))``. Any other TVF shape
+        # stays a documented carrier (the base implementation).
+        body_text = " ".join(self._emit_node(s) for s in node.body).upper()
+        if "STRING_SPLIT" not in body_text or len(node.parameters) < 2:
+            return super()._emit_table_valued_function(node)
+        name = self._qualified_name(node.schema, node.name)
+        s, delim = node.parameters[0].name, node.parameters[1].name
+        self._indent_level += 1
+        params_str = self._emit_params(node.parameters)
+        self._indent_level -= 1
+        split = f"REGEXP_SUBSTR({s}, '[^' || {delim} || ']+', 1, LEVEL)"
+        return (
+            f"CREATE OR REPLACE FUNCTION {name}\n(\n{params_str}\n)\n"
+            "RETURN SYS.ODCIVARCHAR2LIST IS\n"
+            "    v_result SYS.ODCIVARCHAR2LIST := SYS.ODCIVARCHAR2LIST();\n"
+            "BEGIN\n"
+            f"    SELECT TRIM({split})\n"
+            "    BULK COLLECT INTO v_result FROM DUAL\n"
+            f"    CONNECT BY {split} IS NOT NULL;\n"
+            "    RETURN v_result;\n"
+            "END;"
+        )
 
     def _join_trigger_events(self, events: tuple[str, ...]) -> str:
         """Oracle separates trigger events with ``OR`` (``INSERT OR UPDATE``);
