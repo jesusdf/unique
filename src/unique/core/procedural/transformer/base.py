@@ -1518,11 +1518,17 @@ class ProceduralTransformer:
         try:
             source_dialect = self._get_sqlglot_dialect(self._source)
             target_dialect = self._get_sqlglot_dialect(self._target)
+            # Pretty-print only long embedded DML (a result-set SELECT with many
+            # columns/joins, a wide UPDATE): a one-liner of 2 000+ chars is
+            # unreadable, while a short statement reads best on one line. The
+            # emitter indents each output line by the block level, so the
+            # multi-line form stays aligned with the surrounding procedural code.
             results = sqlglot.transpile(
                 sql,
                 read=source_dialect,
                 write=target_dialect,
                 error_level=sqlglot.ErrorLevel.WARN,
+                pretty=len(sql) > 200,
             )
             if results:
                 sql = results[0]
