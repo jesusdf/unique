@@ -12,6 +12,22 @@ description: >
 
 # Unique — Development Workflow
 
+## Confidential fixtures (mandatory)
+
+Everything under **`fixtures-private/`** (e.g. `test.sql`, `bigtest.sql`) is a real
+client's confidential SQL. The repository is **public**. You may extrapolate the
+*functionality* (the patterns, the constructs, the bugs they expose) but **never
+the file content**: never copy a real object name — table, procedure (including
+`sp_*` helpers), column, schema, view, or a revision number — into anything that
+gets committed (tests, source-code comments, commit messages, docs).
+
+When writing a test or example from something seen in a private fixture,
+**anonymize**: use generic names (`t`, `c`, `my_proc`, `sp_customproc`,
+`schema_version`, revision `1`) that reproduce the pattern without the real
+identifier. Keep the real names in the working conversation only. If a real name
+has already been committed, fix the files **and rewrite git history**
+(`git filter-repo --replace-text --replace-message`, then force-push) to purge it.
+
 ## Analyze before changing (mandatory first step)
 
 Before writing or modifying any code, **read the code you are about to touch

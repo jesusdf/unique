@@ -26,3 +26,7 @@ the file. When guidance here and a skill disagree, the skill is authoritative.
 - **Tests:** `pytest` (serial) or `scripts/test-parallel.sh` (across cores, needs
   GNU parallel). The gate is black + isort + ruff + mypy + the full suite green.
 - **Never** commit or push unless asked; branch off `main` first when you do.
+- **Confidential:** `fixtures-private/` is a real client's SQL and this repo is
+  public — extrapolate functionality, but never copy a real object name (table,
+  proc, column, revision…) into committed tests/comments/messages. Anonymize. See
+  the [development-workflow skill](skills/SKILL-development-workflow.md).
