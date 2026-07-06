@@ -36,32 +36,27 @@ query (`PLS-00428`); (7) `EXEC sp_executesql @stmt, N'…', @a, @b` -> Oracle
 INVALID** of 32 (several procs stack multiple errors, so clearing a class often
 exposes the next rather than dropping the object count).
 
-Also fixed since: CLOB-comparison keys (`VARCHAR(MAX)` -> bounded `VARCHAR2`, both
-DDL and procedural), `SQL_VARIANT` -> `VARCHAR2` (ANYDATA can't take a plain value
-in a call), and Oracle-less functions `TRY_CAST`/`SHA256`/`EXTRACT(EPOCH …)` and
-`VARCHAR(MAX)` casts. Sweep: **26 -> 12 INVALID** (of 32).
+**Fixed since (each a real feature/fix, all live-validated):** CLOB/`SQL_VARIANT`
+-> bounded `VARCHAR2`; Oracle-less functions `TRY_CAST`/`SHA256`/`EXTRACT(EPOCH …)`,
+`VARCHAR(MAX)` casts, character-CAST length, `DATEDIFF` sub-day + canonical layout,
+`TIME_STR_TO_TIME` unwrap; **table variable -> hoisted GTT** (+ `OUTPUT INTO`
+carrier); OUT/IN OUT params take no DEFAULT; `AS`-before-table-alias; **trigger
+DECLARE section**; CAST/RETURN are SQL-only in PL/SQL (evaluated via `SELECT …
+INTO … FROM DUAL` / a nested block); procedure/trigger RETURN carries no value;
+**reassigned IN parameters shadowed with locals**. The validator now recompiles
+invalid objects to settle forward dependencies (FUNC4 -> FUNC2 -> PROC_6).
 
-The remaining **12 need structural features, not one-line fixes** — mostly
-T-SQL-specific patterns with no clean Oracle equivalent:
+**Sweep: 26 -> 1 INVALID** (of 32). The one remaining:
 
-- [ ] **Table variable** (`DECLARE @t TABLE …`, 4 procs) — needs a schema-level
-      Global Temporary Table *hoisted before the procedure* (a CREATE cannot live
-      inside a PL/SQL block, and the block references it statically) **plus**
-      `INSERT … OUTPUT … INTO @t` -> `RETURNING … BULK COLLECT INTO`. A real feature.
-- [ ] **Table-valued function in `FROM`** (`FUNC5`, 1 proc) — a T-SQL TVF becomes
-      an Oracle pipelined function over a collection type; it is currently a
-      carrier, so callers hit `ORA-00904`.
-- [ ] **Deeply-nested date arithmetic** (`FUNC2`, ~14 stacked errors) — layered
-      `CAST(CAST(… AS TIMESTAMP) …)` / EPOCH math; needs a focused rewrite.
-- [ ] **Trigger-local declarations** — declarations emitted inside `BEGIN` need a
-      trigger `DECLARE` section.
-- [ ] **Assorted single-statement fixes** — `AS` before a table alias in an IR
-      cross-table `UPDATE` subquery (`ORA-00907`), a couple of length/paren cases.
+- [ ] **PROC_25 via FUNC5 — inline table-valued function** (`RETURNS TABLE`). The
+      last feature: emit the T-SQL TVF as an Oracle **pipelined function** over a
+      collection type (hoisted like the GTT), translate its `STRING_SPLIT` body to
+      `CONNECT BY`/`REGEXP_SUBSTR`, and rewrite the caller's `FROM func5(…)` to
+      `FROM TABLE(func5(…))` (preserving the `item` column). Until then FUNC5 is a
+      documented carrier and PROC_25 hits `ORA-00904`.
 
-These are a genuine multi-session effort; reaching **exactly 0** requires the
-table-variable and TVF features above (or carrier-ing whole procedures, which
-would break the mandatory DML-verb-conservation invariant). Tracked by the
-validator + `xfail`.
+Once PROC_25 validates, drop the `xfail` on `test_procedures_fixture_is_valid_live[oracle]`
+(task #42) and bump the version.
 
 ## 2. Packaging (P3)
 
