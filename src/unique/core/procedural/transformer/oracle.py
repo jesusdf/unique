@@ -46,17 +46,79 @@ class OracleTransformer(ProceduralTransformer):
         # carrier, where the whole body must also be rewritten by hand).
         proc = super()._transform_procedure(node)
         if isinstance(proc, CreateProcedureStatement):
-            return self._result_selects_to_refcursors(proc)
+            return self._hoist_table_variables(self._result_selects_to_refcursors(proc))
         return proc
 
     def _transform_alter_procedure(self, node: AlterProcedureStatement) -> ASTNode:
         # An idempotent T-SQL routine is often a stub CREATE + the real body in
         # ALTER PROCEDURE, which lowers to CREATE OR REPLACE on Oracle. Apply the
-        # same result-set → SYS_REFCURSOR rewrite as for a plain procedure.
+        # same result-set → SYS_REFCURSOR and table-variable → GTT rewrites.
         proc = super()._transform_alter_procedure(node)
         if isinstance(proc, CreateProcedureStatement):
-            return self._result_selects_to_refcursors(proc)
+            return self._hoist_table_variables(self._result_selects_to_refcursors(proc))
         return proc
+
+    def _hoist_table_variables(self, proc: CreateProcedureStatement) -> ASTNode:
+        """A T-SQL table variable has no in-block Oracle form (a CREATE cannot
+        live in PL/SQL, and the body references it statically). Lift it to a
+        schema-level Global Temporary Table emitted *before* the procedure, with
+        a per-procedure-unique name (the same ``@t`` in two procedures would
+        clash), and rename the body references."""
+        gtts: list[tuple[str, str, str]] = []  # (var, gtt_name, columns)
+        kept: list[ASTNode] = []
+        for stmt in proc.body:
+            if (
+                isinstance(stmt, RawSQL)
+                and stmt.reason == "table variable -> temporary table"
+            ):
+                m = re.match(
+                    r"(?is)\s*CREATE\s+TEMPORARY\s+TABLE\s+(\w+)\s*(\(.*\))\s*;",
+                    stmt.sql,
+                )
+                if m:
+                    var, cols = m.group(1), m.group(2).strip()
+                    gtts.append((var, f"{proc.name}_{var}"[:120], cols))
+                    continue  # drop the in-body CREATE
+            kept.append(stmt)
+        if not gtts:
+            return proc
+
+        renames = {var: gtt for var, gtt, _ in gtts}
+        new_proc = dataclasses.replace(
+            proc, body=tuple(self._rename_idents(s, renames) for s in kept)
+        )
+        ddls: list[ASTNode] = [
+            RawSQL(
+                sql=(
+                    f"CREATE GLOBAL TEMPORARY TABLE {gtt} {cols} ON COMMIT DELETE"
+                    f" ROWS;  /* UNIQUE: was T-SQL table variable {var} */"
+                )
+            )
+            for var, gtt, cols in gtts
+        ]
+        return StatementList(statements=tuple([*ddls, new_proc]))
+
+    def _rename_idents(self, node: ASTNode, renames: dict[str, str]) -> ASTNode:
+        """Rename bare identifiers (word-boundary) in every ``sql`` string of a
+        node tree — used to point table-variable references at the hoisted GTT."""
+        changes: dict[str, object] = {}
+        for f in dataclasses.fields(node):
+            val = getattr(node, f.name)
+            if f.name == "sql" and isinstance(val, str):
+                new = val
+                for old, gtt in renames.items():
+                    new = re.sub(rf"\b{re.escape(old)}\b", gtt, new)
+                if new != val:
+                    changes[f.name] = new
+            elif (
+                isinstance(val, tuple)
+                and val
+                and hasattr(val[0], "__dataclass_fields__")
+            ):
+                changes[f.name] = tuple(self._rename_idents(c, renames) for c in val)
+            elif hasattr(val, "__dataclass_fields__"):
+                changes[f.name] = self._rename_idents(val, renames)
+        return dataclasses.replace(node, **changes) if changes else node
 
     def _result_selects_to_refcursors(
         self, proc: CreateProcedureStatement

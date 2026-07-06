@@ -364,12 +364,23 @@ _ORACLE_PLSQL_RE = re.compile(
 )
 
 
+# A stored program unit CREATE anywhere in the chunk (a table-variable GTT is
+# hoisted as plain ``;``-terminated DDL *before* the CREATE PROCEDURE, so the
+# block still needs a trailing ``/`` even though the chunk starts with DDL).
+_ORACLE_PLSQL_UNIT_RE = re.compile(
+    r"(?im)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:(?:NON)?EDITIONABLE\s+)?"
+    r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE)\b"
+)
+
+
 def _oracle_needs_slash(sql: str) -> bool:
     """Whether an emitted Oracle statement is a PL/SQL block needing a ``/``."""
     body = "\n".join(
         line for line in sql.splitlines() if not line.lstrip().startswith("--")
     ).strip()
-    return bool(body) and bool(_ORACLE_PLSQL_RE.match(body))
+    return bool(body) and (
+        bool(_ORACLE_PLSQL_RE.match(body)) or bool(_ORACLE_PLSQL_UNIT_RE.search(body))
+    )
 
 
 # SQLite source functions sqlglot leaves untranslated. Rewritten per target in

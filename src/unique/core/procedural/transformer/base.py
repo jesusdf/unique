@@ -1359,6 +1359,16 @@ class ProceduralTransformer:
 
     def _oracle_function_fixes(self, sql: str) -> str:
         """Rewrite T-SQL functions Oracle lacks a direct spelling for."""
+        # T-SQL ``INSERT … OUTPUT inserted.<col> INTO @tablevar`` becomes a bare
+        # ``RETURNING <expr>`` with no INTO. Oracle RETURNING can only target a
+        # scalar/collection, never a table, so drop it and document: the GTT (the
+        # table variable's replacement) must be populated by hand. A legitimate
+        # ``RETURNING … INTO <var>`` (with INTO) is left untouched.
+        sql = re.sub(
+            r"(?i)\s+RETURNING\s+((?:(?!\bINTO\b)[^;])+?)\s*(?=;|$)",
+            r"  /* UNIQUE: OUTPUT \1 dropped — populate the temp table manually */",
+            sql,
+        )
         # VARCHAR(MAX)/NVARCHAR(MAX) as a CAST target in an expression is invalid
         # Oracle; use a bounded VARCHAR2/NVARCHAR2 (as for column/param types).
         sql = re.sub(r"(?i)\bNVARCHAR\s*\(\s*MAX\s*\)", "NVARCHAR2(2000)", sql)
