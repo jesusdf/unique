@@ -81,6 +81,15 @@ _SET_PATTERN = re.compile(r"(?i)^\s*SET\s+(?!@)[A-Za-z_]\w*")
 # Routed to the SET_OPTION path, which extracts and transpiles the guarded DDL.
 _IF_OBJECT_PATTERN = re.compile(r"(?i)^\s*IF\s+(?:NOT\s+)?(?:OBJECT_ID|EXISTS)\b")
 
+# The guard-drop is only correct when the condition queries a *system catalog*
+# (it has no target form, so the idempotent intent is kept by running the guarded
+# DDL). A real-data condition must not have its guard dropped.
+_CATALOG_REF_RE = re.compile(
+    r"(?i)\b(?:OBJECT_ID|sysobjects|syscolumns|sysindexes|INFORMATION_SCHEMA)\b"
+    r"|\bsys\.\w"
+)
+_TSQL_BEGIN_BLOCK_RE = re.compile(r"(?i)\bBEGIN\b")
+
 # A standalone EXEC/EXECUTE of a stored procedure. The captured group is the
 # procedure's final (unqualified) name, so a system procedure (sp_*, possibly
 # schema-qualified like sys.sp_x) can be excluded — the DML pipeline
@@ -137,6 +146,16 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
         return BatchType.SET_OPTION
 
     if _IF_OBJECT_PATTERN.match(first_meaningful):
+        # A non-catalog ``IF EXISTS(…) BEGIN … END`` is procedural control flow,
+        # not an idempotent-DDL guard: dropping its condition (as the guard path
+        # does) would silently change semantics. Route it to the procedural
+        # engine, which preserves it as a documented carrier + warning.
+        if (
+            dialect == "tsql"
+            and _TSQL_BEGIN_BLOCK_RE.search(stripped)
+            and not _CATALOG_REF_RE.search(stripped)
+        ):
+            return BatchType.PROCEDURAL
         return BatchType.SET_OPTION
 
     if dialect == "tsql":

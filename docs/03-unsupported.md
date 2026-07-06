@@ -306,6 +306,13 @@ only partially supported:
   embedded in complex queries.
 - **`SET ROWCOUNT n`**: removed with a warning (deprecated; use `TOP`/
   `FETCH FIRST` instead).
+- **Non-catalog `IF EXISTS(…) BEGIN … END` control flow**: only a *system-catalog*
+  existence guard (`IF [NOT] EXISTS(SELECT … FROM sys.…)` / `OBJECT_ID`) is
+  treated as an idempotent-DDL guard whose condition is dropped and whose body is
+  transpiled. A **real-data** condition (e.g. `IF EXISTS (SELECT NULL) BEGIN … END`)
+  is control flow — dropping its guard would silently change semantics — so a
+  top-level block that the procedural parser cannot fully model is **preserved as
+  a documented `-- UNIQUE:` carrier with a warning** rather than mistranslated.
 - **Set-based trigger pseudo-tables** (`FROM inserted JOIN deleted`): T-SQL
   triggers are statement-level with `inserted`/`deleted` row sets. Column
   qualifiers (`inserted.col`) map to the row-level `NEW`/`OLD` (`:NEW`/`:OLD`).

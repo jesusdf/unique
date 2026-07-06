@@ -1356,6 +1356,12 @@ class ProceduralEmitter:
         return f"SELECT {select_list} INTO {into_clause} {rest};"
 
     def _emit_raw_sql(self, node: RawSQL) -> str:
+        # A construct the parser could not understand is preserved as a documented
+        # carrier comment rather than emitted as (invalid) executable SQL, so it
+        # never silently changes behaviour or breaks the target script.
+        if node.reason == "Could not parse procedural construct":
+            body = "\n".join(f"-- {line}" for line in node.sql.splitlines() or [""])
+            return f"-- UNIQUE: could not translate; preserved for review\n{body}"
         return node.sql
 
     def _emit_literal(self, node: Literal) -> str:

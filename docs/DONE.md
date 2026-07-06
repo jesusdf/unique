@@ -1412,3 +1412,19 @@ The docs still listed `IIF`→`CASE` and `DATEPART`→`EXTRACT` as pending; a re
   (pre-existing, orthogonal).
 - **`IIF`→`CASE`** was already implemented; corrected the stale matrix row and
   `03-unsupported` §3.12. Tests: `test_date_format.py`, `test_no_ir_leak.py`.
+
+## 30. Non-catalog IF EXISTS(...) BEGIN...END no longer silently dropped
+
+`IF EXISTS (SELECT NULL) BEGIN SELECT 2 END` (tsql->oracle) transpiled to just
+`SELECT 2 FROM DUAL` — valid SQL that runs with the **guard silently removed**
+(the worst kind of loss: looks fine, wrong semantics). Root cause: the
+migration-guard path (`_extract_exists_guard`) matched *any* `IF EXISTS(...)` and
+dropped the condition, assuming — but never checking — that it queried a system
+catalog.
+
+Fix: the guard-drop now requires a **catalog reference** (`sys.*`, `OBJECT_ID`,
+`INFORMATION_SCHEMA`, `sysobjects/…`). A non-catalog `IF EXISTS(...) BEGIN...END`
+is classified as procedural control flow; the procedural parser preserves a block
+it cannot fully model as a documented `-- UNIQUE:` carrier and now **registers a
+warning** on the fallback (previously silent). A genuine catalog guard still
+transpiles its guarded DDL. Pinned in `test_if_exists_control_flow.py`.
