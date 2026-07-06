@@ -246,8 +246,7 @@ class TestTriggerMaintainedExclusion:
 
         from tests.functional_equivalence.state_check import load_expected_state
 
-        text = textwrap.dedent(
-            """
+        text = textwrap.dedent("""
             version: 1
             tables:
               invoice:
@@ -256,8 +255,7 @@ class TestTriggerMaintainedExclusion:
                   - { id: 1, customer_id: 2, total: "61.05" }
             trigger_maintained:
               invoice: [total]
-            """
-        )
+            """)
         import tempfile
         from pathlib import Path
 

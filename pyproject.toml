@@ -27,7 +27,7 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=5.0.0",
-    "black==24.10.0",
+    "black==26.3.1",
     "isort==5.13.2",
     "ruff==0.15.17",
     "mypy==1.13.0",
@@ -88,9 +88,9 @@ where = ["src"]
 # ("The required version `X` does not match the running version `Y`"), telling
 # the developer to install the pinned version. Keep this in sync with the
 # black== pin in [project.optional-dependencies].dev.
-required-version = "24.10.0"
+required-version = "26.3.1"
 line-length = 88
-target-version = ["py311"]
+target-version = ["py313"]
 
 [tool.isort]
 profile = "black"
