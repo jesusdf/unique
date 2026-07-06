@@ -1346,6 +1346,10 @@ class ProceduralTransformer:
     def _fix_oracle_dml(self, sql: str) -> str:
         """Post-process sqlglot Oracle output to correct unsupported constructs."""
         sql = self._replace_oracle_date_add(sql)
+        # Oracle has no string ``+``; a chain with a string operand must use ``||``
+        # (PLS-00306 otherwise). sqlglot leaves ``+`` since it can't tell concat
+        # from arithmetic without type info — do it here as for PostgreSQL/MySQL.
+        sql = self._rewrite_string_concat(sql, "oracle")
         # Strip T-SQL RECOMPILE query hint that sqlglot leaves in Oracle output
         sql = re.sub(r"\s+RECOMPILE\b", "", sql, flags=re.IGNORECASE)
         if self._in_trigger:

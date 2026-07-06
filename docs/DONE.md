@@ -1428,3 +1428,17 @@ is classified as procedural control flow; the procedural parser preserves a bloc
 it cannot fully model as a documented `-- UNIQUE:` carrier and now **registers a
 warning** on the fallback (previously silent). A genuine catalog guard still
 transpiles its guarded DDL. Pinned in `test_if_exists_control_flow.py`.
+
+## 31. Oracle procedural string concat + nightly cron; validity backlog opened
+
+- **String `+` -> `||` in Oracle procedural bodies.** The `+`-as-concat rewrite
+  (already applied for PostgreSQL/MySQL) now also runs for Oracle in
+  `_fix_oracle_dml` and the assignment/return path (`_fix_raw_sql_target`), so
+  `V_WHERE := a + N' AND ' + b` becomes `a || ' AND ' || b` instead of failing
+  with PLS-00306. Validated live.
+- **Nightly mutation job** moved to **04:44 UTC** (`cron: "44 4 * * *"`).
+- The Oracle validity sweep (see DONE #30 / TODO §1) is now precisely
+  categorized: 24 INVALID objects remain across distinct, non-trivial procedural
+  transformations (subquery-initialised variables, table-variable GTTs, bare
+  result SELECTs, IF EXISTS, a statement-split trigger-carrier orphan). A phased
+  effort, tracked objectively by the validator + `xfail`.
