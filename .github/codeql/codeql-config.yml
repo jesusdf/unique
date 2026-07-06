@@ -1,0 +1,19 @@
+name: "Unique — scoped CodeQL"
+
+# Scope the scan to the security-sensitive code so findings stay signal-rich:
+#   src/unique/api  — the FastAPI surface: untrusted SQL / db_url / file-upload
+#                     input, database connections, served HTML. The real attack
+#                     surface (SSRF, path traversal, error leakage, injection),
+#                     already hardened by hand (audit 2026-07-02, doc 04) — this
+#                     guards against regressions.
+#   src/unique/core — the engine; its metadata resolver runs live catalog
+#                     queries. NOTE: the transpiler here *deliberately* builds
+#                     SQL strings (that is the whole point of a transpiler), so
+#                     expect some "SQL injection" findings to triage and dismiss
+#                     as by-design rather than treat as bugs.
+#
+# tests/, scripts/, docs/, src/unique/dialects and the CLI are intentionally out
+# of scope. Widen `paths` (or drop it) if the coverage need grows.
+paths:
+  - src/unique/api
+  - src/unique/core
