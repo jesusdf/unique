@@ -296,9 +296,13 @@ only partially supported:
   assignments) so these bodies parse correctly. Chained DML such as
   `INSERT ... SELECT` and `UPDATE ... SET` is kept intact. Rare edge cases
   with unusual formatting may still need review.
-- **`DECLARE @t TABLE (...)`** (table variables): the column list is
-  captured verbatim; Oracle/PostgreSQL have no direct equivalent (use a
-  collection type or temporary table).
+- **`DECLARE @t TABLE (...)`** (table variables): on **Oracle**, hoisted to a
+  schema-level **Global Temporary Table** emitted before the routine (a CREATE
+  cannot live in a PL/SQL block, and the block references it statically), with a
+  per-routine-unique name and renamed references; an accompanying `INSERT … OUTPUT
+  … INTO @t` is a documented carrier (Oracle `RETURNING` cannot target a table, so
+  the GTT is populated manually). **PostgreSQL/MySQL** have no direct equivalent —
+  the column list is captured verbatim (use a collection type or temporary table).
 - **`SELECT ... INTO @var`** combined with `OUTPUT ... INTO`: the `OUTPUT`
   clause is engine-specific and emitted as raw SQL.
 - **Variable-assignment `SELECT`** (`SELECT @x = col`): handled for the

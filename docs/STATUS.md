@@ -1,6 +1,6 @@
 # Unique — Project Status
 
-## Current state: v0.15.0
+## Current state: v0.18.0
 
 The DML/DDL pipeline and the autonomous procedural engine are complete, and
 **functional equivalence** holds across the **full 4×4 matrix — all 16
@@ -9,8 +9,12 @@ against real engines (SQL Server via pymssql, PostgreSQL, MySQL/MariaDB, and
 Oracle via a local container). Since the functional-equivalence milestone the
 tool has been hardened extensively on **real migration dumps and real schemas**,
 and — most significantly — a **bug-detection infrastructure** now drives quality
-instead of hand-written examples. The detailed history lives in `docs/DONE.md`;
-the backlog (`docs/TODO.md`) is packaging-only.
+instead of hand-written examples. Most recently, the **T-SQL → Oracle procedures
+fixture (32 objects) transpiles to fully-valid PL/SQL** — the Oracle live
+validator queries `USER_ERRORS` (Oracle compiles PL/SQL lazily) and the whole
+procedural validity backlog is closed (26 → 0 INVALID; `docs/DONE.md` §33). The
+detailed history lives in `docs/DONE.md`; the backlog (`docs/TODO.md`) is
+packaging-only.
 
 ### Bug-detection infrastructure (what replaced ad-hoc manual testing)
 

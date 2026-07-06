@@ -307,7 +307,7 @@ engines and indicates the transpilation support status for each.
 | CONVERT | ✓ | N/A | N/A | ✓ | ✅ → CAST |
 | TO_NUMBER / TO_DATE / TO_CHAR | N/A | ✓ | ✓ | N/A | ✅ → CAST / FORMAT |
 | :: operator | N/A | N/A | ✓ | N/A | ✅ → CAST |
-| TRY_CAST / TRY_CONVERT | ✓ | N/A | N/A | N/A | ⚠️ → CASE + validation |
+| TRY_CAST / TRY_CONVERT | ✓ | N/A | N/A | N/A | ⚠️ → Oracle `CAST(… DEFAULT NULL ON CONVERSION ERROR)`; else CASE + validation |
 
 ---
 
@@ -341,7 +341,7 @@ engines and indicates the transpilation support status for each.
 |---------|-------|--------|------------|-------|------------------|
 | CREATE PROCEDURE | ✓ | ✓ | ✓ | ✓ | ✅ |
 | CREATE FUNCTION (scalar) | ✓ | ✓ | ✓ | ✓ | ✅ |
-| CREATE FUNCTION (table-valued) | ✓ | ✓ (pipelined) | ✓ (RETURNS TABLE) | N/A | ⚠️ |
+| CREATE FUNCTION (table-valued) | ✓ | ✓ (pipelined) | ✓ (RETURNS TABLE) | N/A | ⚠️ → a T-SQL string-split TVF becomes an Oracle `SYS.ODCIVARCHAR2LIST` function (`TABLE(fn(…))` callers); other shapes carrier |
 | IN / OUT / INOUT params | ✓ | ✓ | ✓ | ✓ | ✅ |
 | Default parameter values | ✓ | ✓ | ✓ | N/A | ⚠️ |
 | Overloading | N/A | ✓ | ✓ | N/A | ❌ |

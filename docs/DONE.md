@@ -1465,3 +1465,49 @@ each fix validated against a live Oracle:
 Sweep of the T-SQL procedures fixture -> Oracle: **26 -> 20 INVALID** (of 32); the
 rest is a documented long tail (TODO §1). `test_oracle_refcursor.py`,
 `test_oracle_subquery_assign.py`.
+
+## 33. Oracle procedural validity backlog complete — 26 -> 0 INVALID
+
+The whole T-SQL procedures fixture (32 objects) now transpiles to **fully-valid
+Oracle**; `test_procedures_fixture_is_valid_live[oracle]` asserts it (the
+special-case `xfail` is gone). Each fix was validated against a live Oracle,
+class by class. The validator also **recompiles** invalid objects after loading to
+settle forward dependencies (an object referencing one defined later in the script
+compiles INVALID first — e.g. `FUNC4 -> FUNC2 -> PROC_6`), as a real deployment
+does.
+
+Structural features (each a real translation, not a carrier):
+
+- **`EXEC sp_executesql @stmt, N'…', @a, @b` -> `EXECUTE IMMEDIATE @stmt USING @a,
+  @b`** (the parameter-definition string is dropped).
+- **Table variable -> hoisted Global Temporary Table.** A `DECLARE @t TABLE(…)`
+  has no in-block Oracle form (a CREATE can't live in PL/SQL, and the block
+  references it statically). Lift it to a schema-level GTT emitted *before* the
+  procedure, with a per-procedure-unique name and renamed body references. An
+  `INSERT … OUTPUT … INTO @t` (which Oracle RETURNING can't target a table with)
+  is a documented carrier.
+- **Trigger-local variables in a DECLARE section** (T-SQL declares them inline).
+- **Reassigned IN parameters shadowed with locals** (`p -> p_IN` + `p := p_IN`);
+  an Oracle IN parameter is read-only (PLS-00363), positional call sites unchanged.
+- **Function RETURN of a SQL-only expression** (CAST, a SQL-only builtin like
+  STANDARD_HASH, a scalar subquery) via `SELECT <expr> INTO v FROM DUAL; RETURN v`
+  in a nested block.
+- **Inline split table-valued function -> a `SYS.ODCIVARCHAR2LIST` function**
+  (built-in collection; `REGEXP_SUBSTR` + `CONNECT BY`, no custom type/pipelining);
+  callers rewritten `FROM fn(…)` -> `COLUMN_VALUE FROM TABLE(fn(…))`.
+
+Expression / type / rule fixes: CLOB & `SQL_VARIANT` -> bounded `VARCHAR2` (a CLOB
+can't be a comparison key, ANYDATA can't take a plain call argument);
+`TRY_CAST` -> `CAST(… DEFAULT NULL ON CONVERSION ERROR)` (a *character* cast keeps
+its length and takes no DEFAULT clause); `SHA256`/`HASHBYTES` -> `STANDARD_HASH`;
+`EXTRACT(EPOCH …)` and `DATEDIFF` sub-day units via date arithmetic; the sqlglot
+`TIME_STR_TO_TIME`/`DATE_STR_TO_DATE` wrapper unwrapped; `VARCHAR(MAX)` casts
+bounded; CAST/subquery/RETURN treated as SQL-only in a PL/SQL expression; OUT/IN
+OUT parameters take no DEFAULT (PLS-00230); a procedure/trigger RETURN carries no
+value (PLS-00372); no `AS` before a table alias (ORA-00907, incl. the IR
+cross-table UPDATE subquery, applied after the concat re-pass that re-adds it).
+
+Test-harness: the functional-equivalence / real-world Oracle script splitter now
+separates a `;`-DDL prefix from a trailing PL/SQL DROP guard and finds a PL/SQL
+unit head *outside strings/comments* (so a `declare` inside a view's XML query
+can't trip it) — mimicking SQL*Plus for a programmatic client. Version 0.18.0.
