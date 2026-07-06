@@ -35,15 +35,21 @@ class TestDialects:
 
 class TestInfo:
     def test_info_reports_version_label(self, client: TestClient) -> None:
-        resp = client.get("/api/v1/info")
-        assert resp.status_code == 200
-        assert resp.json()["version"] == "v0.19"
-
-    def test_version_label_is_derived_from_package_version(self) -> None:
-        # The UI label tracks unique.__version__ so a release needs no HTML edit.
         from unique.api.app import _display_version
 
-        assert _display_version() == "v0.19"
+        resp = client.get("/api/v1/info")
+        assert resp.status_code == 200
+        # The reported label is the derived one — no hard-coded version to bump.
+        assert resp.json()["version"] == _display_version()
+
+    def test_version_label_is_derived_from_package_version(self) -> None:
+        # The UI label tracks unique.__version__ (single-sourced) so a release
+        # edits the version in exactly one place and needs no HTML/test edit.
+        from unique import __version__
+        from unique.api.app import _display_version
+
+        major, minor = (__version__.split(".") + ["0", "0"])[:2]
+        assert _display_version() == f"v{major}.{int(minor):02d}"
 
     def test_info_db_disabled_by_default(self, client: TestClient) -> None:
         resp = client.get("/api/v1/info")
