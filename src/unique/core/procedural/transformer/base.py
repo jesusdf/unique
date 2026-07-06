@@ -1352,7 +1352,6 @@ class ProceduralTransformer:
     def _fix_oracle_dml(self, sql: str) -> str:
         """Post-process sqlglot Oracle output to correct unsupported constructs."""
         sql = self._replace_oracle_date_add(sql)
-        sql = self._oracle_function_fixes(sql)
         # Oracle has no string ``+``; a chain with a string operand must use ``||``
         # (PLS-00306 otherwise). sqlglot leaves ``+`` since it can't tell concat
         # from arithmetic without type info — do it here as for PostgreSQL/MySQL.
@@ -1361,6 +1360,9 @@ class ProceduralTransformer:
         sql = re.sub(r"\s+RECOMPILE\b", "", sql, flags=re.IGNORECASE)
         if self._in_trigger:
             sql = self._to_oracle_row_ref(sql)
+        # Last: _rewrite_string_concat re-parses through sqlglot, which re-adds an
+        # ``AS`` before a subquery's table alias — so run the spelling fixes after.
+        sql = self._oracle_function_fixes(sql)
         return sql
 
     def _oracle_function_fixes(self, sql: str) -> str:
@@ -1481,6 +1483,10 @@ class ProceduralTransformer:
         rewritten = self._transform_cross_table_update(sql)
         if rewritten is not None:
             sql = rewritten
+            # The IR-emitted UPDATE bypasses _fix_target_dml; still apply the
+            # Oracle spelling fixes (e.g. AS before a subquery's table alias).
+            if self._target == "oracle":
+                sql = self._oracle_function_fixes(sql)
             if self._in_trigger and self._rewrites_trigger_pseudotables():
                 sql = self._rewrite_trigger_pseudotables(sql)
             return EmbeddedDML(sql=sql + capture_suffix, dialect=self._target)
