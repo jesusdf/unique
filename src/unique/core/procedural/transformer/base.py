@@ -69,6 +69,12 @@ from unique.core.mappings import (
 
 logger = logging.getLogger(__name__)
 
+# Character cast targets: a CAST to these never fails, so Oracle rejects a
+# ``DEFAULT … ON CONVERSION ERROR`` clause on them (used by the TRY_CAST rewrite).
+_CHAR_CAST_TYPES = frozenset(
+    {"VARCHAR2", "NVARCHAR2", "VARCHAR", "NVARCHAR", "CHAR", "NCHAR", "CLOB", "NCLOB"}
+)
+
 #: Populated by the per-engine modules via ``register_transformer``.
 _TRANSFORMER_REGISTRY: dict[str, type[ProceduralTransformer]] = {}
 
@@ -1382,12 +1388,21 @@ class ProceduralTransformer:
         # VARCHAR2/NVARCHAR2 (as for column/param types).
         sql = re.sub(r"(?i)\bNVARCHAR2?\s*\(\s*MAX\s*\)", "NVARCHAR2(2000)", sql)
         sql = re.sub(r"(?i)\bVARCHAR2?\s*\(\s*MAX\s*\)", "VARCHAR2(4000)", sql)
+
         # TRY_CAST(x AS type) -> CAST(x AS type DEFAULT NULL ON CONVERSION ERROR)
-        # (Oracle 12.2+): returns NULL on a bad value instead of raising.
+        # (Oracle 12.2+): returns NULL on a bad value instead of raising. Oracle
+        # rejects the DEFAULT clause for a character target (a cast to VARCHAR2
+        # never fails), so a character TRY_CAST is a plain CAST.
+        def _try_cast(m: re.Match[str]) -> str:
+            val, typ = m.group(1), m.group(2)
+            if typ.split("(")[0].strip().upper() in _CHAR_CAST_TYPES:
+                return f"CAST({val} AS {typ})"
+            return f"CAST({val} AS {typ} DEFAULT NULL ON CONVERSION ERROR)"
+
         sql = re.sub(
             r"(?i)\bTRY_CAST\s*\(\s*(.+?)\s+AS\s+"
             r"([A-Za-z_]\w*(?:\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\))?)\s*\)",
-            r"CAST(\1 AS \2 DEFAULT NULL ON CONVERSION ERROR)",
+            _try_cast,
             sql,
         )
         # SHA256(x) / SHA2(x, 256) -> RAWTOHEX(STANDARD_HASH(x, 'SHA256')): Oracle
