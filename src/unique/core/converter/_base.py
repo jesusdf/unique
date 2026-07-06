@@ -218,7 +218,13 @@ _DATE_TYPE_TOKENS = {
 
 _PROC_HEADER_RE = re.compile(
     r"(?is)\bCREATE\s+(?:OR\s+(?:ALTER|REPLACE)\s+)?PROC(?:EDURE)?\s+"
-    r"([\w\[\]\".]+)\s*(.*?)\s*\b(?:AS|IS|BEGIN|LANGUAGE)\b"
+    # Possessive quantifiers (``++`` / ``*+``, Python 3.11+) remove the polynomial
+    # backtracking a crafted, unterminated header could exploit (ReDoS — CodeQL
+    # py/polynomial-redos): the name is a maximal identifier run and the leading
+    # whitespace is fixed, so neither can re-split against ``(.*?)``. The trailing
+    # ``\s*`` is dropped because ``group(2)`` is ``.strip()``-ed downstream, so the
+    # captured section is unchanged (verified equivalent on real headers).
+    r"([\w\[\]\".]++)\s*+(.*?)\b(?:AS|IS|BEGIN|LANGUAGE)\b"
 )
 
 
