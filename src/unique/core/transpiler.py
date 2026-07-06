@@ -111,13 +111,11 @@ def _oracle_idempotent_create(ddl: str) -> str | None:
     kind, name = m.group("kind").upper(), m.group("name").upper()
     body = ddl.strip().rstrip(";").rstrip()
     return (
-        "BEGIN\n"
-        "  FOR unique_guard IN (SELECT 1 FROM DUAL WHERE NOT EXISTS (\n"
+        "BEGIN FOR unique_guard IN (SELECT 1 FROM DUAL WHERE NOT EXISTS (\n"
         f"      SELECT 1 FROM user_objects WHERE object_name = '{name}' "
         f"AND object_type = '{kind}')) LOOP\n"
         f"    EXECUTE IMMEDIATE {_oracle_q_quote(body)};\n"
-        "  END LOOP;\n"
-        "END;"
+        "  END LOOP; END;"
     )
 
 
