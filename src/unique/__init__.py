@@ -4,4 +4,4 @@
 
 """Unique — A SQL transpiler for SQL Server, Oracle, PostgreSQL, and MySQL."""
 
-__version__ = "0.19.0"
+__version__ = "0.20.0"
