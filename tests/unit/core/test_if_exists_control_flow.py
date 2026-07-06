@@ -78,14 +78,43 @@ class TestNonCatalogIfExists:
         assert "PUT_LINE('SKIP')" in up.replace(" ", ""), r.sql  # not merged
         assert any("NOEXEC" in w.message for w in r.warnings), r.warnings
 
-    def test_catalog_guard_still_transpiles_body(self) -> None:
-        # A genuine idempotent-DDL guard (system catalog) keeps its old behaviour:
-        # drop the catalog check, transpile the guarded CREATE.
+    def test_empty_guard_body_gets_a_noop(self) -> None:
+        # An empty guarded body must not leave an empty FOR loop (PLS-00103); the
+        # engine's non-empty-body rule fills it with a NULL; no-op.
+        r = t.transpile(
+            "IF EXISTS (SELECT NULL FROM dbo.t WHERE c = 1) BEGIN END",
+            "tsql",
+            "oracle",
+        )
+        up = r.sql.upper()
+        assert "LOOP" in up and "NULL;" in up, r.sql
+
+    def test_catalog_guard_idempotent_on_oracle(self) -> None:
+        # A system-catalog idempotent-DDL guard becomes an Oracle idempotent
+        # CREATE: the catalog condition (no faithful Oracle form) is replaced by a
+        # user_objects probe, and the DDL runs via EXECUTE IMMEDIATE only when the
+        # object is absent — so a re-run does not fail with ORA-00955. Portable to
+        # every Oracle version (unlike CREATE … IF NOT EXISTS).
         r = t.transpile(
             "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 't') "
             "BEGIN CREATE TABLE t (a INT) END",
             "tsql",
             "oracle",
         )
+        up = r.sql.upper()
+        assert "EXECUTE IMMEDIATE" in up and "USER_OBJECTS" in up, r.sql
+        assert "OBJECT_NAME = 'T'" in up and "OBJECT_TYPE = 'TABLE'" in up, r.sql
+        assert "CREATE TABLE T" in up, r.sql  # the DDL is preserved (in the q-quote)
+        assert "SYS.TABLES" not in up, r.sql  # catalog condition translated away
+
+    def test_catalog_guard_bare_ddl_on_non_oracle(self) -> None:
+        # Other targets keep the bare (or IF NOT EXISTS) DDL — the FOR/EXECUTE
+        # IMMEDIATE wrapper is Oracle-specific.
+        r = t.transpile(
+            "IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 't') "
+            "BEGIN CREATE TABLE t (a INT) END",
+            "tsql",
+            "postgresql",
+        )
+        assert "EXECUTE IMMEDIATE" not in r.sql.upper(), r.sql
         assert "CREATE TABLE" in r.sql.upper(), r.sql
-        assert "SYS.TABLES" not in r.sql.upper(), r.sql

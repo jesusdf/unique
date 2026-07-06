@@ -82,6 +82,45 @@ _DROP_STMT_RE = re.compile(
 )
 
 
+_ORACLE_CREATE_OBJ_RE = re.compile(
+    r"(?is)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+|BITMAP\s+)*"
+    r"(?P<kind>TABLE|INDEX|VIEW|SEQUENCE|SYNONYM|TYPE)\s+"
+    r'(?:"?\w+"?\s*\.\s*)?"?(?P<name>\w+)"?'
+)
+
+
+def _oracle_q_quote(s: str) -> str:
+    """Wrap *s* in an Oracle ``q'…'`` literal, picking a delimiter whose closing
+    sequence is absent so an embedded ``'`` never needs doubling."""
+    for open_c, close_c in (("[", "]"), ("{", "}"), ("<", ">"), ("!", "!"), ("#", "#")):
+        if close_c + "'" not in s:
+            return f"q'{open_c}{s}{close_c}'"
+    return "'" + s.replace("'", "''") + "'"  # pragma: no cover — degenerate DDL
+
+
+def _oracle_idempotent_create(ddl: str) -> str | None:
+    """Make a guarded ``CREATE`` idempotent on Oracle. Oracle DDL cannot be a
+    conditional (static) statement inside PL/SQL, so run it via ``EXECUTE
+    IMMEDIATE`` only when the object is absent — a catalog probe over
+    ``user_objects`` (covers every object type). Portable to every Oracle version
+    (unlike ``CREATE … IF NOT EXISTS``, 23ai+). Returns ``None`` if the object's
+    kind/name can't be identified (caller keeps the bare DDL)."""
+    m = _ORACLE_CREATE_OBJ_RE.match(ddl)
+    if not m:
+        return None
+    kind, name = m.group("kind").upper(), m.group("name").upper()
+    body = ddl.strip().rstrip(";").rstrip()
+    return (
+        "BEGIN\n"
+        "  FOR unique_guard IN (SELECT 1 FROM DUAL WHERE NOT EXISTS (\n"
+        f"      SELECT 1 FROM user_objects WHERE object_name = '{name}' "
+        f"AND object_type = '{kind}')) LOOP\n"
+        f"    EXECUTE IMMEDIATE {_oracle_q_quote(body)};\n"
+        "  END LOOP;\n"
+        "END;"
+    )
+
+
 def _extract_exists_guard(sql: str) -> str | None:
     """Return the guarded statement of a T-SQL ``IF [NOT] EXISTS (…) [BEGIN] …
     [END]`` migration guard (a single ``BEGIN … END`` wrapper is unwrapped), or
@@ -728,6 +767,7 @@ class Transpiler:
                             source_dialect,
                             target_dialect,
                         )
+                        result = self._oracle_guard_idempotent(result, target)
                     elif drop_match:
                         result = self._transpile_drop_guard(
                             drop_match.group("kind"),
@@ -756,6 +796,7 @@ class Transpiler:
                             result = self._transpile_dml(
                                 guarded, source, target, source_dialect, target_dialect
                             )
+                            result = self._oracle_guard_idempotent(result, target)
                     else:
                         result = self._transpile_set_option(batch.sql, source, target)
                 elif batch.batch_type == BatchType.COMMENT:
@@ -1149,6 +1190,21 @@ class Transpiler:
                 warnings=warnings,
                 unsupported=unsupported,
             )
+
+    def _oracle_guard_idempotent(
+        self, result: TranspileResult, target: str
+    ) -> TranspileResult:
+        """For an Oracle target, wrap a guarded ``CREATE`` so it runs only if the
+        object is absent (idempotent + portable — see ``_oracle_idempotent_create``);
+        every other target keeps the bare DDL (the guard is T-SQL-only idiom)."""
+        if target != "oracle":
+            return result
+        wrapped = _oracle_idempotent_create(result.sql)
+        if wrapped is None:
+            return result
+        return TranspileResult(
+            sql=wrapped, warnings=result.warnings, unsupported=result.unsupported
+        )
 
     def _transpile_drop_guard(
         self, kind: str, name: str, source: str, target: str
