@@ -712,7 +712,16 @@ class ProceduralEmitter:
 
     def _emit_assignment(self, node: AssignmentStatement) -> str:
         val = self._emit_node(node.value)
+        via_select = self._assignment_via_select(node.target, val)
+        if via_select is not None:
+            return via_select
         return self._assignment_form(node.target, val)
+
+    def _assignment_via_select(self, target: str, val: str) -> str | None:
+        """Some engines cannot assign the result of a subquery with ``:=``.
+        Default: no rewrite (PostgreSQL/MySQL allow a scalar subquery in the
+        assigned expression); Oracle overrides."""
+        return None
 
     def _assignment_form(self, target: str, val: str) -> str:
         """Variable assignment form. Default (Oracle/PostgreSQL) ``x := v;``;
