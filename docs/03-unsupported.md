@@ -106,9 +106,32 @@ transpilation target:
 
 ### 3.1 Date Format Strings
 
-Format specifiers differ between engines (e.g., `'YYYY-MM-DD'` in Oracle vs
-`'%Y-%m-%d'` in MySQL). The transpiler maps common format patterns but cannot
-guarantee equivalence for all custom format strings.
+Format models differ between engines. The transpiler bridges four conventions —
+Oracle/PostgreSQL `TO_CHAR`/`TO_DATE`, MySQL `DATE_FORMAT`/`STR_TO_DATE`, T-SQL
+`FORMAT` (.NET custom format), and Python-strftime (sqlglot's canonical for a
+parsed `FORMAT`/`DATE_FORMAT`) — via this token table (validated live):
+
+| Meaning | Oracle / PostgreSQL | MySQL `DATE_FORMAT` | T-SQL `FORMAT` (.NET) | Python-strftime |
+|---------|--------------------|--------------------|-----------------------|-----------------|
+| 4-digit year | `YYYY` | `%Y` | `yyyy` | `%Y` |
+| 2-digit year | `YY` | `%y` | `yy` | `%y` |
+| Month (number) | `MM` | `%m` | `MM` | `%m` |
+| Month (name) | `MONTH` | `%M` | `MMMM` | `%B` |
+| Month (abbrev) | `MON` | `%b` | `MMM` | `%b` |
+| Day of month | `DD` | `%d` | `dd` | `%d` |
+| Day (name) | `DAY` | `%W` | `dddd` | `%A` |
+| Day (abbrev) | `DY` | `%a` | `ddd` | `%a` |
+| Hour (24) | `HH24` | `%H` | `HH` | `%H` |
+| Hour (12) | `HH12` / `HH` | `%h` | `hh` | `%I` |
+| Minute | `MI` | `%i` | `mm` | `%M` |
+| Second | `SS` | `%s` | `ss` | `%S` |
+| AM/PM | `AM` / `PM` | `%p` | `tt` | `%p` |
+
+The two subtle traps this handles correctly: the **.NET model is case-sensitive**
+(`MM` = month, `mm` = minute; `HH` = 24-hour, `hh` = 12-hour), and **MySQL's `%M`
+is a month name while Python/sqlglot's `%M` is the minute** — conflating them
+turned `14:30` into `14:June`. Tokens outside this table pass through literally,
+so an exotic custom format may still need manual review.
 
 #### Supported function translations
 
@@ -218,13 +241,14 @@ by the columns' declared types, which the standalone-DML path does not have (no
 `--db-url`). Such an expression is left as `+`. Add a cast
 (`CAST(col1 AS VARCHAR) + col2`) or run it through a routine with metadata.
 
-### 3.12 DATEPART (standalone DML)
+### 3.12 IIF and DATEPART (handled)
 
 `IIF(cond, a, b)` is translated to a searched `CASE WHEN cond THEN a ELSE b END`
-for Oracle/PostgreSQL (kept as `IIF`/`IF` where native). `DATEPART(part, x)` may
-emit a non-standard `EXTRACT(part, x)`; prefer `YEAR(x)`/`MONTH(x)`/`DAY(x)`,
-which translate cleanly. This affects standalone DML; inside routines the
-procedural engine handles the common cases.
+for Oracle/PostgreSQL (kept as `IIF`/`IF` where native), and `DATEPART(part, x)`
+emits the standard `EXTRACT(part FROM x)` (not the comma form every engine
+rejects). Both are validated live. Only date parts outside the common
+year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
+still need review.
 
 ---
 

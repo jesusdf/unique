@@ -257,7 +257,7 @@ engines and indicates the transpilation support status for each.
 | Padding | LEFT()/RIGHT() | LPAD()/RPAD() | LPAD()/RPAD() | LPAD()/RPAD() | ✅ |
 | String split | STRING_SPLIT() | REGEXP_SUBSTR | STRING_TO_ARRAY() / REGEXP_SPLIT_TO_TABLE() | N/A | ⚠️ |
 | Reverse | REVERSE() | REVERSE() | REVERSE() | REVERSE() | ✅ |
-| Format | FORMAT() | TO_CHAR() | TO_CHAR() | FORMAT() | ⚠️ Format strings differ |
+| Format | FORMAT() | TO_CHAR() | TO_CHAR() | FORMAT() | ✅ format-model table bridges Oracle/MySQL/.NET/strftime (§3.1 of [03-unsupported](03-unsupported.md)) |
 
 ### 5.2 Numeric Functions
 
@@ -277,8 +277,8 @@ engines and indicates the transpilation support status for each.
 | Current date/time | GETDATE(), SYSDATETIME() | SYSDATE, SYSTIMESTAMP | NOW(), CURRENT_TIMESTAMP | NOW(), CURRENT_TIMESTAMP | ✅ |
 | Date add | DATEADD() | + INTERVAL | + INTERVAL | DATE_ADD() | ✅ |
 | Date diff | DATEDIFF() | date1 - date2 | DATE_PART('epoch', age()) | DATEDIFF() / TIMESTAMPDIFF() | ✅ |
-| Date part extract | DATEPART() / YEAR() etc. | EXTRACT() / TO_CHAR() | EXTRACT() / DATE_PART() | EXTRACT() / YEAR() etc. | ⚠️ `YEAR()/MONTH()/DAY()` ✅; standalone `DATEPART()` may emit non-standard `EXTRACT(part, x)` — prefer `YEAR(x)` etc. |
-| Date format | FORMAT() / CONVERT() | TO_CHAR() | TO_CHAR() | DATE_FORMAT() | ⚠️ Format specifiers differ |
+| Date part extract | DATEPART() / YEAR() etc. | EXTRACT() / TO_CHAR() | EXTRACT() / DATE_PART() | EXTRACT() / YEAR() etc. | ✅ `DATEPART`/`YEAR`/`MONTH`/`DAY` → `EXTRACT(part FROM x)` (live-validated) |
+| Date format | FORMAT() / CONVERT() | TO_CHAR() | TO_CHAR() | DATE_FORMAT() | ✅ four-way format-model table (§3.1 of [03-unsupported](03-unsupported.md)); exotic tokens pass through |
 | Date truncate | N/A | TRUNC() | DATE_TRUNC() | DATE() / DATE_FORMAT() | ⚠️ |
 
 ### 5.4 Null Handling Functions
@@ -295,7 +295,7 @@ engines and indicates the transpilation support status for each.
 | Feature | T-SQL | Oracle | PostgreSQL | MySQL | Transpile Status |
 |---------|-------|--------|------------|-------|------------------|
 | CASE WHEN | ✓ | ✓ | ✓ | ✓ | ✅ |
-| IIF() | ✓ | N/A | N/A | IF() | ⚠️ emitted as `IF()` (valid on MySQL; `CASE WHEN` rewrite for Oracle/PostgreSQL pending — see [03-unsupported](03-unsupported.md)) |
+| IIF() | ✓ (IIF) | CASE WHEN | CASE WHEN | IF() | ✅ Oracle/PostgreSQL → `CASE WHEN`; MySQL `IF()`; T-SQL `IIF()` (live-validated) |
 | DECODE() | N/A | ✓ | N/A | N/A | ✅ → CASE WHEN |
 | GREATEST / LEAST | N/A (2022+) | ✓ | ✓ | ✓ | ✅ |
 

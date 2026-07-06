@@ -488,8 +488,9 @@ was DML-only). The round-trip technique (A→B→A') made no-op conversions visi
 
 Documentation (`01-compatibility.md`, `03-unsupported.md`, `STATUS.md`,
 `sqlglot-dependency.md`) updated to match. Released as **v0.05** (Docker image
-published by CI). The remaining `IIF`→`CASE WHEN` and `DATEPART`→`EXTRACT(…
-FROM …)` rewrites for standalone DML are noted as pending in `03-unsupported.md`.
+published by CI). (The `IIF`→`CASE WHEN` and `DATEPART`→`EXTRACT(… FROM …)`
+rewrites for standalone DML noted here as pending were later completed — see the
+date-format/EXTRACT entry below.)
 
 ## 12. Real-world output-validity hardening — audit doc 02, test_real_world.py (P1)
 
@@ -1389,3 +1390,25 @@ the *real* engine, since a permissive parser lies):
   versions. The validate-against-the-real-engine step is what caught this — the
   premise (that it was invalid) was wrong for current Oracle/MySQL.
 - `IIF -> CASE` was already implemented; the stale doc note was corrected.
+
+## 29. Date part/format + datetime casts (finish the "pending" date items)
+
+The docs still listed `IIF`→`CASE` and `DATEPART`→`EXTRACT` as pending; a review
+(each validated against the *real* engine) closed the genuine gaps:
+
+- **`DATEPART(part, x)` -> `EXTRACT(part FROM x)`** (was the invalid comma form
+  `EXTRACT(part, x)`, rejected by all three targets). `exp.Extract` is converted
+  to a clean FunctionCall the emitter renders with `FROM`.
+- **Date FORMAT model** — documented the four-convention token table (Oracle /
+  MySQL DATE_FORMAT / T-SQL .NET / Python-strftime) in `03-unsupported.md` §3.1
+  and fixed two real bugs: the **.NET model is case-sensitive** (`MM` month vs
+  `mm` minute), and sqlglot's `TimeToStr`/`StrToTime` canonical is **Python**
+  strftime (`%M` minute), not MySQL's (`%M` month name) — the conflation rendered
+  `14:30` as `14:June`. All 7 cross-engine round-trips now return the same value.
+- **`CAST(x AS DATETIME/DATETIME2/SMALLDATETIME)` -> `TIMESTAMP`** on Oracle/
+  PostgreSQL (previously passed through and failed; `_CAST_TYPE_MAP` had no
+  Oracle/PostgreSQL entries) and `DATETIME` on MySQL. Non-literal casts validated
+  live; casting a string literal to a date on Oracle still depends on NLS format
+  (pre-existing, orthogonal).
+- **`IIF`→`CASE`** was already implemented; corrected the stale matrix row and
+  `03-unsupported` §3.12. Tests: `test_date_format.py`, `test_no_ir_leak.py`.
