@@ -168,6 +168,33 @@ class TestTranspiler:
         assert "MODIFY (c VARCHAR2(100))" in out
         assert "Unhandled expression type: Command" not in out
 
+    def test_create_schema_oracle_documented_carrier(
+        self, transpiler: Transpiler
+    ) -> None:
+        # T-SQL CREATE SCHEMA (here as EXEC('…') dynamic SQL) has no Oracle form —
+        # a schema is a database user — so it degrades to a documented carrier with
+        # a CREATE USER hint, not a bare "Unhandled Execute".
+        result = transpiler.transpile(
+            "EXEC('CREATE SCHEMA [myschema] AUTHORIZATION [dbo]')",
+            source="tsql",
+            target="oracle",
+        )
+        assert "CREATE USER myschema" in result.sql
+        assert "Unhandled expression type" not in result.sql
+        assert any("CREATE SCHEMA" in u for u in result.unsupported)
+
+    def test_create_schema_postgres_and_mysql(self, transpiler: Transpiler) -> None:
+        # PostgreSQL/MySQL have CREATE SCHEMA; emit an idempotent one and drop the
+        # T-SQL owner (AUTHORIZATION) with a warning.
+        for target in ("postgresql", "mysql"):
+            result = transpiler.transpile(
+                "CREATE SCHEMA myschema AUTHORIZATION dbo",
+                source="tsql",
+                target=target,
+            )
+            assert result.sql.strip() == "CREATE SCHEMA IF NOT EXISTS myschema;"
+            assert any("AUTHORIZATION" in w.message for w in result.warnings)
+
     def test_if_guard_with_else_keeps_then_branch(self, transpiler: Transpiler) -> None:
         # SSMA emits ``IF NOT EXISTS (…) <DDL> ELSE PRINT '… already exists'``;
         # only the THEN branch is a real statement — the ELSE PRINT is dropped,

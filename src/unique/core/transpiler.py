@@ -82,6 +82,16 @@ _DROP_STMT_RE = re.compile(
 )
 
 
+# T-SQL "CREATE SCHEMA <name> [AUTHORIZATION <owner>]", possibly wrapped in
+# dynamic SQL: "EXEC('CREATE SCHEMA …')". sqlglot leaves the EXEC(...) as an opaque
+# Execute (its string argument is never transpiled), so this is handled directly.
+_TSQL_CREATE_SCHEMA_RE = re.compile(
+    r"(?is)^\s*(?:EXEC(?:UTE)?\s*\(\s*N?'\s*)?"
+    r"CREATE\s+SCHEMA\s+(?P<name>\[?\w+\]?|\"[^\"]+\")"
+    r"(?:\s+AUTHORIZATION\s+(?P<owner>\[?\w+\]?|\"[^\"]+\"))?"
+    r"\s*(?:'\s*\))?\s*;?\s*$"
+)
+
 # T-SQL "ALTER TABLE t ALTER COLUMN c <type> [NULL|NOT NULL]". sqlglot cannot
 # parse the trailing nullability (falls back to a Command) and emits a non-Oracle
 # "ALTER COLUMN … SET DATA TYPE" for the type change, so this is handled directly.
@@ -1088,6 +1098,56 @@ class Transpiler:
             return stmt
         return f"ALTER TABLE {table} ALTER COLUMN {colname} {coltype}{null};"
 
+    def _transpile_create_schema(
+        self, sql: str, source: str, target: str
+    ) -> TranspileResult | None:
+        """T-SQL ``CREATE SCHEMA <name> [AUTHORIZATION <owner>]`` (often wrapped in
+        ``EXEC('…')`` dynamic SQL, which sqlglot leaves opaque). PostgreSQL/MySQL
+        have ``CREATE SCHEMA``; Oracle has no namespace object — a schema is a
+        database user — so it degrades to a documented carrier. Returns ``None``
+        when unmatched."""
+        m = _TSQL_CREATE_SCHEMA_RE.match(sql)
+        if not m:
+            return None
+        name = m.group("name").strip('[]"')
+        if target == "oracle":
+            body = "\n".join(f"-- {ln}" for ln in sql.strip().splitlines())
+            return TranspileResult(
+                sql=(
+                    "-- UNIQUE: T-SQL CREATE SCHEMA has no Oracle equivalent — an "
+                    "Oracle schema is a database user. Create it manually, e.g. "
+                    f"CREATE USER {name} …; original:\n{body}"
+                ),
+                warnings=[
+                    _warn(
+                        f"CREATE SCHEMA {name} carried (an Oracle schema is a user; "
+                        "create it with CREATE USER)",
+                        "create_schema",
+                        source,
+                        target,
+                    )
+                ],
+                unsupported=[f"CREATE SCHEMA {name} has no Oracle equivalent"],
+            )
+        # PostgreSQL has schemas; MySQL's CREATE SCHEMA is CREATE DATABASE. Emit an
+        # idempotent CREATE SCHEMA; the T-SQL owner rarely maps, so drop it + warn.
+        warnings = []
+        if m.group("owner"):
+            warnings.append(
+                _warn(
+                    "CREATE SCHEMA AUTHORIZATION <owner> dropped (the T-SQL owner "
+                    f"has no {target} counterpart)",
+                    "create_schema",
+                    source,
+                    target,
+                )
+            )
+        return TranspileResult(
+            sql=f"CREATE SCHEMA IF NOT EXISTS {name};",
+            warnings=warnings,
+            unsupported=[],
+        )
+
     def _transpile_dml(
         self,
         sql: str,
@@ -1106,6 +1166,9 @@ class Transpiler:
             )
             if altered is not None:
                 return altered
+            schema = self._transpile_create_schema(sql, source, target)
+            if schema is not None:
+                return schema
 
         # T-SQL compound assignment (SET a += 1) is not understood by sqlglot,
         # which would drop the column; expand it to "SET a = a + 1" first.
