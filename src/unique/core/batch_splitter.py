@@ -90,8 +90,75 @@ _CATALOG_REF_RE = re.compile(
 )
 _TSQL_BEGIN_BLOCK_RE = re.compile(r"(?i)\bBEGIN\b")
 
+# Well-known SQL Server system stored procedures (Microsoft-shipped) with no
+# portable equivalent — routed to the DML pipeline, which documents/passes them
+# through. The ``sp_`` prefix ALONE is not a reliable signal: user code legally
+# names procedures ``sp_*`` too (this repo's ``sp_helperproc``/``sp_customproc`` synonym
+# helpers, for one), so only these known names are treated as system; any other
+# ``sp_*`` is a normal procedure call routed to the procedural engine (-> CALL).
+_TSQL_SYSTEM_PROCS = frozenset(
+    {
+        "sp_executesql",
+        "sp_rename",
+        "sp_refreshview",
+        "sp_recompile",
+        "sp_addextendedproperty",
+        "sp_updateextendedproperty",
+        "sp_dropextendedproperty",
+        "sp_bindrule",
+        "sp_unbindrule",
+        "sp_bindefault",
+        "sp_unbindefault",
+        "sp_addtype",
+        "sp_droptype",
+        "sp_settriggerorder",
+        "sp_changeobjectowner",
+        "sp_addmessage",
+        "sp_dropmessage",
+        "sp_configure",
+        "sp_dboption",
+        "sp_tableoption",
+        "sp_depends",
+        "sp_help",
+        "sp_helptext",
+        "sp_helpindex",
+        "sp_helpconstraint",
+        "sp_columns",
+        "sp_tables",
+        "sp_stored_procedures",
+        "sp_spaceused",
+        "sp_who",
+        "sp_lock",
+        "sp_addlinkedserver",
+        "sp_addlinkedsrvlogin",
+        "sp_serveroption",
+        "sp_msforeachtable",
+        "sp_msforeachdb",
+        "sp_addrole",
+        "sp_addrolemember",
+        "sp_droprolemember",
+        "sp_grantdbaccess",
+        "sp_revokedbaccess",
+        "sp_addlogin",
+        "sp_droplogin",
+        "sp_adduser",
+        "sp_dropuser",
+        "sp_password",
+        "sp_defaultdb",
+        "sp_addsrvrolemember",
+        "sp_dropsrvrolemember",
+        "sp_grantlogin",
+        "sp_revokelogin",
+        "sp_fulltext_database",
+        "sp_fulltext_table",
+        "sp_fulltext_column",
+        "sp_fulltext_catalog",
+        "sp_reset_connection",
+    }
+)
+
 # A standalone EXEC/EXECUTE of a stored procedure. The captured group is the
-# procedure's final (unqualified) name, so a system procedure (sp_*, possibly
+# procedure's final (unqualified) name, so a known system procedure (possibly
 # schema-qualified like sys.sp_x) can be excluded — the DML pipeline
 # documents/passes those through.
 _TSQL_EXEC_PROC_PATTERN = re.compile(
@@ -160,7 +227,7 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
 
     if dialect == "tsql":
         exec_match = _TSQL_EXEC_PROC_PATTERN.match(first_meaningful)
-        if exec_match and not exec_match.group(1).lower().startswith("sp_"):
+        if exec_match and exec_match.group(1).lower() not in _TSQL_SYSTEM_PROCS:
             return BatchType.PROCEDURAL
         if _TSQL_DECLARE_PATTERN.match(first_meaningful):
             return BatchType.PROCEDURAL

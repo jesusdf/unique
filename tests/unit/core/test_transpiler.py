@@ -306,6 +306,21 @@ class TestTranspiler:
         assert "sp_addextendedproperty" in result.sql
         assert any("System procedure" in u for u in result.unsupported)
 
+    def test_custom_sp_prefixed_proc_becomes_a_call(
+        self, transpiler: Transpiler
+    ) -> None:
+        # The sp_ prefix is not actually reserved: user procedures use it too
+        # (this repo's own sp_helperproc/sp_customproc synonym helpers, for one). An
+        # unknown sp_* is a real call, not dropped as a system procedure.
+        result = transpiler.transpile(
+            "exec sp_customproc 'dbo', 'sample_obj', 'bs_sample'",
+            source="tsql",
+            target="oracle",
+        )
+        assert "sp_customproc('dbo', 'sample_obj', 'bs_sample')" in result.sql
+        assert "system procedure" not in result.sql.lower()
+        assert not any("System procedure" in u for u in result.unsupported)
+
     def test_system_procedure_passthrough_same_dialect(
         self, transpiler: Transpiler
     ) -> None:

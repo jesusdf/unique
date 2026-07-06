@@ -19,7 +19,7 @@ import logging
 import re
 from dataclasses import dataclass, field, replace
 
-from unique.core.batch_splitter import BatchSplitter, BatchType
+from unique.core.batch_splitter import _TSQL_SYSTEM_PROCS, BatchSplitter, BatchType
 from unique.core.converter import (
     DATE_COLUMNS,
     IDENTITY_COLUMNS,
@@ -1125,7 +1125,7 @@ class Transpiler:
         if source == "tsql" and target != "tsql":
             stripped = sql.lstrip()
             m = re.match(r"(?i)^EXEC(?:UTE)?\s+(?:\[?\w+\]?\.)*\[?(sp_\w+)", stripped)
-            if m:
+            if m and m.group(1).lower() in _TSQL_SYSTEM_PROCS:
                 proc = m.group(1)
                 unsupported.append(f"System procedure {proc} has no equivalent")
                 return TranspileResult(
