@@ -2,10 +2,12 @@
 
 The migration-guard path drops the `IF [NOT] EXISTS(<catalog query>)` condition
 and transpiles only the guarded DDL (the catalog check has no target form). That
-is wrong for a *real* condition: `IF EXISTS (SELECT NULL) BEGIN SELECT 2 END`
-must not silently become `SELECT 2` (the guard — and its semantics — gone). It is
-now routed to the procedural engine and preserved as a documented carrier with a
-warning; a genuine system-catalog guard is still transpiled.
+is wrong for a *real* condition: `IF EXISTS (SELECT NULL FROM t) BEGIN … END`
+must not silently lose the guard. On Oracle it is emulated — `IF EXISTS(subquery)`
+is invalid PL/SQL (PLS-00204), so with no ELSE it becomes a cursor FOR loop over a
+one-row probe (`FOR … IN (SELECT 1 FROM DUAL WHERE EXISTS (subquery)) LOOP … END
+LOOP`): the body runs once iff the subquery returns a row. A genuine system-catalog
+guard is still transpiled (condition dropped, DDL emitted). Validated live.
 """
 
 from unique.core.transpiler import Transpiler
@@ -14,17 +16,37 @@ t = Transpiler()
 
 
 class TestNonCatalogIfExists:
-    def test_guard_not_silently_dropped(self) -> None:
+    def test_if_exists_emulated_as_for_loop(self) -> None:
+        # A real-data IF EXISTS with a valid body (a migration guard).
         r = t.transpile(
-            "if exists (select null)\nbegin\n  select 2\nend", "tsql", "oracle"
+            "IF EXISTS (SELECT NULL FROM dbo.schema_version WHERE revision = 1)\n"
+            "BEGIN\n  PRINT 'already applied'\nEND",
+            "tsql",
+            "oracle",
         )
-        upper = r.sql.upper()
-        # The dangerous old behaviour: the whole block collapsing to `SELECT 2`.
-        assert "-- UNIQUE" in upper or "IF EXISTS" in upper, r.sql
-        # The condition must survive in some form — not a bare guardless SELECT.
-        assert not r.sql.strip().upper().startswith("SELECT 2"), r.sql
-        # And the loss must be reported, never silent.
-        assert r.warnings, "a carrier must carry a warning"
+        up = r.sql.upper()
+        # The EXISTS condition survives — emulated as a cursor FOR-loop probe,
+        # never silently collapsed to a bare, guardless body.
+        assert "FOR " in up and "WHERE EXISTS" in up and "LOOP" in up, r.sql
+        assert "DBMS_OUTPUT.PUT_LINE" in up, r.sql
+        # It is a real translation (not a carrier), so the invalid `IF EXISTS …
+        # THEN` form must not appear.
+        assert "IF EXISTS" not in up, r.sql
+
+    def test_set_noexec_carried_and_not_merged(self) -> None:
+        # A migration guard: PRINT + `SET NOEXEC ON` (a session option with no
+        # Oracle equivalent). PRINT must not absorb the following SET, and the
+        # SET is a documented carrier with a warning.
+        r = t.transpile(
+            "IF EXISTS (SELECT NULL FROM dbo.schema_version WHERE revision = 1)\n"
+            "BEGIN\n  PRINT 'skip'\n  SET NOEXEC ON\nEND",
+            "tsql",
+            "oracle",
+        )
+        up = r.sql.upper()
+        assert "NOEXEC" in up and "UNIQUE:" in up, r.sql  # carried, not executed
+        assert "PUT_LINE('SKIP')" in up.replace(" ", ""), r.sql  # not merged
+        assert any("NOEXEC" in w.message for w in r.warnings), r.warnings
 
     def test_catalog_guard_still_transpiles_body(self) -> None:
         # A genuine idempotent-DDL guard (system catalog) keeps its old behaviour:

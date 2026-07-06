@@ -117,6 +117,25 @@ class OracleTransformer(ProceduralTransformer):
             return self._shadow_reassigned_params(fn)
         return fn
 
+    def _transform_if(self, node: IfStatement) -> ASTNode:
+        stmt = super()._transform_if(node)
+        # `IF EXISTS (<subquery>) THEN …` is invalid PL/SQL — EXISTS is a SQL
+        # operator, not a boolean expression (PLS-00204). With no ELSE, emulate it
+        # with a cursor FOR loop over a one-row probe: the body runs once iff the
+        # subquery returns a row (`SELECT 1 FROM DUAL WHERE [NOT] EXISTS (…)`).
+        if not isinstance(stmt, IfStatement) or stmt.else_body:
+            return stmt
+        cond = stmt.condition
+        if isinstance(cond, RawSQL) and re.match(
+            r"(?is)^\s*(?:NOT\s+)?EXISTS\s*\(", cond.sql
+        ):
+            return ForLoopStatement(
+                variable="unique_guard",
+                cursor=RawSQL(sql=f"(SELECT 1 FROM DUAL WHERE {cond.sql.strip()})"),
+                body=stmt.then_body,
+            )
+        return stmt
+
     def _shadow_reassigned_params(self, node: _Routine) -> _Routine:
         """T-SQL freely reassigns a routine's parameters; an Oracle IN parameter
         is read-only (PLS-00363). For each IN parameter the body assigns to, rename
