@@ -1442,3 +1442,26 @@ transpiles its guarded DDL. Pinned in `test_if_exists_control_flow.py`.
   transformations (subquery-initialised variables, table-variable GTTs, bare
   result SELECTs, IF EXISTS, a statement-split trigger-carrier orphan). A phased
   effort, tracked objectively by the validator + `xfail`.
+
+## 32. Result-set SELECT -> SYS_REFCURSOR OUT on Oracle (+ TOP, more)
+
+Continuing the Oracle procedural validity backlog, worked class-by-class with
+each fix validated against a live Oracle:
+
+- **A bare result-set `SELECT` becomes a `SYS_REFCURSOR` OUT parameter** opened
+  FOR that query (`OPEN result_cursor FOR SELECT …`). A T-SQL procedure returns
+  rows with a bare SELECT; Oracle PL/SQL has no equivalent, and the *only* faithful
+  form is a ref cursor. This preserves the query so the procedure body is correct
+  — only the call sites adapt — vs a carrier, where the whole body would also need
+  a manual rewrite (per user guidance). Applied for both CREATE and the T-SQL
+  stub+`ALTER PROCEDURE` idiom; multiple result sets get distinct cursors; a
+  `SELECT … INTO`/assignment is left alone.
+- The equivalence **fingerprint** now recognizes `OPEN c FOR <query>`: its query's
+  verbs/fields/conditions are counted (structure preserved) and it is not counted
+  as a loop — so the mandatory DML-conservation invariant still holds.
+- Also: `SELECT TOP (n)` in a scalar subquery -> `FETCH FIRST n ROWS ONLY` (via
+  sqlglot); body/declare subquery assignments -> `SELECT … INTO … FROM DUAL`.
+
+Sweep of the T-SQL procedures fixture -> Oracle: **26 -> 20 INVALID** (of 32); the
+rest is a documented long tail (TODO §1). `test_oracle_refcursor.py`,
+`test_oracle_subquery_assign.py`.

@@ -6,13 +6,26 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 
 from unique.core.ast_nodes import (
+    AlterProcedureStatement,
     ASTNode,
+    BeginEndBlock,
+    CreateProcedureStatement,
+    DataType,
+    EmbeddedDML,
     ExceptionBlock,
     ExceptionHandler,
+    ForLoopStatement,
+    IfStatement,
+    LoopStatement,
+    ParameterDefinition,
+    RawSQL,
+    StatementList,
     TryCatchBlock,
+    WhileStatement,
 )
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
@@ -24,6 +37,92 @@ class OracleTransformer(ProceduralTransformer):
     """Transforms toward Oracle PL/SQL."""
 
     target_name = "oracle"
+
+    def _transform_procedure(self, node: ASTNode) -> ASTNode:
+        # A T-SQL procedure returns a result set with a bare ``SELECT``. Oracle
+        # has no equivalent inside PL/SQL, so give the procedure a ``SYS_REFCURSOR``
+        # OUT parameter per result set and ``OPEN`` it FOR that query — the
+        # procedure body then works; only the *call sites* need adapting (vs a
+        # carrier, where the whole body must also be rewritten by hand).
+        proc = super()._transform_procedure(node)
+        if isinstance(proc, CreateProcedureStatement):
+            return self._result_selects_to_refcursors(proc)
+        return proc
+
+    def _transform_alter_procedure(self, node: AlterProcedureStatement) -> ASTNode:
+        # An idempotent T-SQL routine is often a stub CREATE + the real body in
+        # ALTER PROCEDURE, which lowers to CREATE OR REPLACE on Oracle. Apply the
+        # same result-set → SYS_REFCURSOR rewrite as for a plain procedure.
+        proc = super()._transform_alter_procedure(node)
+        if isinstance(proc, CreateProcedureStatement):
+            return self._result_selects_to_refcursors(proc)
+        return proc
+
+    def _result_selects_to_refcursors(
+        self, proc: CreateProcedureStatement
+    ) -> CreateProcedureStatement:
+        cursors: list[str] = []
+        new_body = self._rewrite_result_selects(proc.body, cursors)
+        if not cursors:
+            return proc
+        cursor_params = tuple(
+            ParameterDefinition(
+                name=c, data_type=DataType(name="SYS_REFCURSOR"), direction="OUT"
+            )
+            for c in cursors
+        )
+        return dataclasses.replace(
+            proc, parameters=proc.parameters + cursor_params, body=new_body
+        )
+
+    def _rewrite_result_selects(
+        self, stmts: tuple[ASTNode, ...], cursors: list[str]
+    ) -> tuple[ASTNode, ...]:
+        """Replace each bare result ``SELECT`` with ``OPEN <cursor> FOR …``,
+        recursing into control-flow blocks; append allocated cursor names."""
+        out: list[ASTNode] = []
+        for stmt in stmts:
+            if isinstance(stmt, EmbeddedDML) and self._is_result_select(stmt.sql):
+                name = (
+                    "RESULT_CURSOR"
+                    if not cursors
+                    else f"RESULT_CURSOR_{len(cursors) + 1}"
+                )
+                cursors.append(name)
+                query = stmt.sql.rstrip(";").strip()
+                out.append(RawSQL(sql=f"OPEN {name} FOR {query};"))
+            elif isinstance(stmt, IfStatement):
+                out.append(
+                    dataclasses.replace(
+                        stmt,
+                        then_body=self._rewrite_result_selects(stmt.then_body, cursors),
+                        else_body=self._rewrite_result_selects(stmt.else_body, cursors),
+                    )
+                )
+            elif isinstance(stmt, (WhileStatement, ForLoopStatement, LoopStatement)):
+                out.append(
+                    dataclasses.replace(
+                        stmt, body=self._rewrite_result_selects(stmt.body, cursors)
+                    )
+                )
+            elif isinstance(stmt, (BeginEndBlock, StatementList)):
+                out.append(
+                    dataclasses.replace(
+                        stmt,
+                        statements=self._rewrite_result_selects(
+                            stmt.statements, cursors
+                        ),
+                    )
+                )
+            else:
+                out.append(stmt)
+        return tuple(out)
+
+    @staticmethod
+    def _is_result_select(sql: str) -> bool:
+        """A top-level result-set SELECT (returns rows, no INTO target)."""
+        s = sql.strip()
+        return bool(re.match(r"(?i)^SELECT\b", s)) and not re.search(r"(?i)\bINTO\b", s)
 
     def _system_var_map(self) -> dict[str, str]:
         return {
