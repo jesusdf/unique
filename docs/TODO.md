@@ -16,7 +16,35 @@ packaging remains.
 
 ---
 
-## 1. Packaging (P3)
+## 1. Oracle procedural output — validity backlog (P1)
+
+The Oracle live-validator now queries `USER_ERRORS` after a `CREATE`
+(Oracle compiles PL/SQL **lazily** — `CREATE` succeeds even when the body is
+invalid, leaving the object `INVALID`). This exposed real bugs the old
+execute-only check masked. `test_procedures_fixture_is_valid_live[oracle]` fails
+until these are fixed; a sweep of the T-SQL procedures fixture -> Oracle showed
+several classes:
+
+- [ ] **`PLS-00204` `EXISTS` in PL/SQL** — `IF EXISTS(subquery) THEN` is invalid
+      Oracle (no subquery in a boolean expr). Needs the creative rewrite
+      (`FOR _ IN (SELECT 1 FROM (<subq>) WHERE ROWNUM = 1) LOOP … END LOOP;`, or a
+      `COUNT(*) INTO v` for the ELSE case). *(Earlier "works on Oracle 23" was a
+      false positive — the proc CREATE'd but was INVALID.)*
+- [ ] **`PLS-00103` statement boundaries** (`Encountered "CREATE"/"SELECT"`) — a
+      PL/SQL body emits a run-together or misplaced statement.
+- [ ] **`PLS-00103` variable use** (`Encountered "V_COL_…"`) — a declared/used
+      local variable is mis-emitted.
+- [ ] **`PLS-00306` call to `'+'`** — the untyped `col + col` concat reaches
+      Oracle as arithmetic on strings.
+- [ ] **`ORA-00910` length too long** — a type-length mapping.
+- [ ] **`ORA-00900`** on a set-based-trigger carrier — the `-- UNIQUE:` block for
+      an unsupported trigger is followed by an invalid fragment.
+
+**CI gap:** the live jobs do not run a real Oracle (only PG/MySQL/MSSQL), so none
+of the above is caught in CI. Consider an Oracle service in the live job, or run
+the validity sweep as a scheduled job.
+
+## 2. Packaging (P3)
 
 - [ ] **PyPI publication** — deferred until the tool has been used in real
       projects for a few months and proven stable. Not before then.
