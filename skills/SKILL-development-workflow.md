@@ -6,8 +6,8 @@ description: >
   debugging transpilation issues, updating the backlog (docs/TODO.md), or
   committing and pushing work. Covers the mandatory pre-change analysis,
   TDD methodology, how to add new AST nodes, how to extend a dialect, testing
-  patterns, the pre-commit verification gate, and the TODO + commit/push
-  discipline.
+  patterns, the pre-commit verification gate, the TODO + commit/push
+  discipline, and cutting a release (single-sourced version + tag).
 ---
 
 # Unique — Development Workflow
@@ -385,6 +385,31 @@ python -m unique.cli.main transpile \
   Never print, commit, or document a token or its location in a versioned file.
 - After pushing, it's good practice to **check CI** (see the CI section below)
   and fix any failure before moving on.
+
+## Releasing (version bump + tag)
+
+The version is **single-sourced** from `__version__` in `src/unique/__init__.py`;
+`pyproject.toml` reads it dynamically (`[tool.setuptools.dynamic] version =
+{attr = "unique.__version__"}`), the API's `_display_version()` derives its label
+from it, and `tests/unit/api/test_api.py` asserts against that derivation — so a
+release edits the version in **exactly one place**. Do **not** hand-edit the
+version in more than one file (and never with a one-liner that opens a file for
+write before reading it — that truncates it).
+
+Use the release script, which does the whole flow (bump → gate → commit → annotated
+tag → push):
+
+```bash
+scripts/release.py minor            # 0.19.3 -> 0.20.0  (also: major | patch | X.Y.Z)
+scripts/release.py minor --dry-run  # print the plan, change nothing
+scripts/release.py patch --no-push  # commit + tag locally, don't push
+```
+
+It refuses to run off `main`, on a dirty tree, or if the tag already exists; runs
+`black/isort/ruff/mypy/pytest` and **reverts the bump if the gate fails**; and
+tags annotated as `vX.Y.Z` / `unique X.Y.Z` (the repo convention). After a
+milestone release, refresh the `Current state: vX.Y.Z` line in `docs/STATUS.md`
+(narrative, not auto-updated).
 
 ## Common Patterns
 
