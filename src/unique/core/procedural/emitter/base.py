@@ -379,8 +379,8 @@ class ProceduralEmitter:
 
         lines.append("BEGIN")
         self._indent_level = 1
-        for stmt in [*hoisted, *body_stmts]:
-            text = stmt if isinstance(stmt, str) else self._emit_node(stmt)
+        texts = [*hoisted, *(self._emit_node(stmt) for stmt in body_stmts)]
+        for text in texts:
             for line in text.split("\n"):
                 lines.append(f"{self._indent()}{line}" if line.strip() else "")
         self._indent_level = 0

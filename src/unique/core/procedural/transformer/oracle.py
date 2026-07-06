@@ -38,7 +38,7 @@ class OracleTransformer(ProceduralTransformer):
 
     target_name = "oracle"
 
-    def _transform_procedure(self, node: ASTNode) -> ASTNode:
+    def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
         # A T-SQL procedure returns a result set with a bare ``SELECT``. Oracle
         # has no equivalent inside PL/SQL, so give the procedure a ``SYS_REFCURSOR``
         # OUT parameter per result set and ``OPEN`` it FOR that query — the
