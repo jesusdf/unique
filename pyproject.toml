@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unique"
-version = "0.19.0"
+# Single-sourced from src/unique/__init__.py (__version__); see
+# [tool.setuptools.dynamic] below. Bump the version in exactly one place there.
+dynamic = ["version"]
 description = "A SQL transpiler that translates SQL scripts between SQL Server, Oracle, PostgreSQL, and MySQL."
 readme = "README.md"
 license = "MIT"
@@ -60,6 +62,11 @@ tsql = "unique.dialects.tsql:TSQLDialect"
 oracle = "unique.dialects.oracle:OracleDialect"
 postgresql = "unique.dialects.postgresql:PostgreSQLDialect"
 mysql = "unique.dialects.mysql:MySQLDialect"
+
+[tool.setuptools.dynamic]
+# The one place the version lives; setuptools reads it (by AST, no import) from
+# ``__version__`` in src/unique/__init__.py.
+version = {attr = "unique.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
