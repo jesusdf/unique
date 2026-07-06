@@ -3,7 +3,7 @@
 # ---------------------------------------------------------------------------
 
 # --- Stage 1: build ---
-FROM python:3.12-slim AS builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /build
 COPY pyproject.toml README.md ./
@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir build \
     && python -m build --wheel --outdir /build/dist
 
 # --- Stage 2: runtime ---
-FROM python:3.12-slim
+FROM python:3.13-slim
 
 LABEL maintainer="Jesús Diéguez Fernández" \
       description="SQL transpiler: translate scripts between SQL Server, Oracle, PostgreSQL, and MySQL"

@@ -10,7 +10,7 @@ dynamic = ["version"]
 description = "A SQL transpiler that translates SQL scripts between SQL Server, Oracle, PostgreSQL, and MySQL."
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.12"
+requires-python = ">=3.13"
 authors = [
     {name = "Jesús Diéguez Fernández"},
 ]
@@ -97,7 +97,7 @@ profile = "black"
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
@@ -109,7 +109,7 @@ select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 "src/unique/core/converter/*.py" = ["F403", "F405"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.13"
 strict = true
 warn_return_any = true
 warn_unused_configs = true

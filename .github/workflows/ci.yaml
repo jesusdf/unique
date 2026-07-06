@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
@@ -38,7 +38,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
@@ -47,15 +47,15 @@ jobs:
         run: mypy src/unique/ --ignore-missing-imports
 
   test:
-    name: Test (Python 3.12)
+    name: Test (Python 3.13)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 
       - uses: actions/setup-python@v6
         with:
-          # Single version, matching the Docker image (python:3.12-slim).
-          python-version: "3.12"
+          # Single version, matching the Docker image (python:3.13-slim).
+          python-version: "3.13"
 
       - name: Install dependencies
         run: pip install -e ".[dev]"
@@ -117,7 +117,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Install dependencies and DB drivers
         run: pip install -e ".[dev]" "psycopg[binary]>=3.1.0" "mysql-connector-python>=8.3.0"
@@ -183,7 +183,7 @@ jobs:
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Start Oracle Free container
         run: |
