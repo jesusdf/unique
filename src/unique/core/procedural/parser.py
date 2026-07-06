@@ -2837,11 +2837,16 @@ class ProceduralParser:
     # ---------------------------------------------------------------
 
     def _parse_fallback(self) -> ASTNode:
-        """When we can't parse, capture everything as RawSQL."""
+        """When we can't parse, capture everything as RawSQL (a documented
+        carrier) and register a warning so the loss is never silent."""
         parts: list[str] = []
         while not self._at_end():
             parts.append(self._current().value)
             self._advance()
+        self._warnings.append(
+            "Could not parse procedural construct; preserved as a documented "
+            "carrier for manual review"
+        )
         return RawSQL(
             sql=" ".join(parts).strip(),
             reason="Could not parse procedural construct",
