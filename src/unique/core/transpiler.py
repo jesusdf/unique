@@ -1020,6 +1020,42 @@ class Transpiler:
                 was_default_constraint = True
                 default_original = sql
                 sql = rewritten
+            # TEXTIMAGE_ON <filegroup> (physical placement of a table's LOB
+            # columns) is a storage clause sqlglot cannot parse: left in, it
+            # degrades the whole CREATE TABLE to a Command passthrough (columns
+            # and constraints lost). Like ON <filegroup> / WITH (...) — dropped in
+            # the emitter — it carries no logical schema, so strip it pre-parse.
+            sql, n_lob = re.subn(
+                r"(?is)\s+TEXTIMAGE_ON\s+(?:\[[^\]]+\]|\"[^\"]+\"|\w+)", "", sql
+            )
+            if n_lob:
+                warnings.append(
+                    _warn(
+                        "T-SQL TEXTIMAGE_ON filegroup clause dropped (physical "
+                        "storage, no logical-schema impact)",
+                        "physical_clause",
+                        source,
+                        target,
+                    )
+                )
+            # "ALTER TABLE t WITH [NO]CHECK ADD CONSTRAINT …": the WITH
+            # CHECK/NOCHECK modifier precedes ADD and makes sqlglot fall back to a
+            # Command (losing the constraint). Strip it so the constraint
+            # transpiles. WITH CHECK just re-asserts the default (validate), but
+            # NOCHECK (add without validating existing rows) has no portable form,
+            # so warn — the target will validate on add.
+            sql = re.sub(r"(?is)\bWITH\s+CHECK\s+ADD\b", "ADD", sql)
+            sql, n_nocheck = re.subn(r"(?is)\bWITH\s+NOCHECK\s+ADD\b", "ADD", sql)
+            if n_nocheck:
+                warnings.append(
+                    _warn(
+                        "T-SQL WITH NOCHECK dropped; the constraint is added and "
+                        "the target validates existing rows (no NOVALIDATE applied)",
+                        "constraint_check",
+                        source,
+                        target,
+                    )
+                )
 
         # Oracle ORGANIZATION INDEX/HEAP: a physical-storage clause sqlglot
         # cannot parse, which would degrade the whole CREATE TABLE (columns

@@ -82,6 +82,30 @@ class TestTranspiler:
         assert "ALTER TABLE X ADD COLUMN c" in out
         assert "-- UNIQUE:" not in out
 
+    def test_textimage_on_filegroup_stripped(self, transpiler: Transpiler) -> None:
+        # TEXTIMAGE_ON <filegroup> (LOB storage placement) makes sqlglot fall back
+        # to a Command, losing the whole CREATE TABLE; it is stripped pre-parse so
+        # the table transpiles.
+        sql = (
+            "CREATE TABLE [S].[T] ([a] [int] NOT NULL, [b] [nvarchar](9) NULL) "
+            "ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]"
+        )
+        out = transpiler.transpile(sql, source="tsql", target="oracle").sql
+        assert "Unhandled expression type: Command" not in out, out
+        assert "CREATE TABLE" in out.upper() and "TEXTIMAGE_ON" not in out.upper()
+
+    def test_alter_add_constraint_with_nocheck_stripped(
+        self, transpiler: Transpiler
+    ) -> None:
+        # "ALTER TABLE t WITH NOCHECK ADD CONSTRAINT …": the WITH NOCHECK modifier
+        # makes sqlglot fall back to a Command; it is stripped so the constraint
+        # transpiles (with a warning that the target validates existing rows).
+        sql = "ALTER TABLE [S].[T] WITH NOCHECK ADD CONSTRAINT [c] CHECK (([x] > 0))"
+        result = transpiler.transpile(sql, source="tsql", target="oracle")
+        assert "Unhandled expression type: Command" not in result.sql, result.sql
+        assert "CONSTRAINT" in result.sql.upper() and "CHECK" in result.sql.upper()
+        assert any("NOCHECK" in w.message for w in result.warnings), result.warnings
+
     def test_if_guard_with_else_keeps_then_branch(self, transpiler: Transpiler) -> None:
         # SSMA emits ``IF NOT EXISTS (…) <DDL> ELSE PRINT '… already exists'``;
         # only the THEN branch is a real statement — the ELSE PRINT is dropped,
