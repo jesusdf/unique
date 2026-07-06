@@ -245,6 +245,11 @@ class OracleValidator(SyntaxValidator):
         try:
             for stmt in statements:
                 cur.execute(stmt.strip())
+            # An object that references one defined later in the script compiles
+            # INVALID on first pass (a forward dependency). Recompile invalid
+            # objects — as a real deployment does — so the dependency order
+            # settles before we look for a *genuine* compile error.
+            self._recompile_invalid()
             # Oracle compiles PL/SQL objects *lazily*: CREATE succeeds even when
             # the body is invalid (the object is left INVALID), so executing the
             # DDL without error is not proof the routine is valid. Query the
@@ -261,6 +266,26 @@ class OracleValidator(SyntaxValidator):
         finally:
             cur.close()
             self._drop_all(created + compilable)
+
+    def _recompile_invalid(self) -> None:
+        """Recompile INVALID PL/SQL objects to resolve forward dependencies (a
+        few passes settle a dependency chain like FUNC4 -> FUNC2 -> PROC_6)."""
+        cur = self._conn.cursor()
+        try:
+            for _ in range(4):
+                cur.execute(
+                    "SELECT object_type, object_name FROM user_objects "
+                    "WHERE status = 'INVALID' AND object_type IN "
+                    "('PROCEDURE', 'FUNCTION', 'TRIGGER', 'PACKAGE', 'PACKAGE BODY')"
+                )
+                invalid = cur.fetchall()
+                if not invalid:
+                    return
+                for otype, oname in invalid:
+                    with contextlib.suppress(Exception):
+                        cur.execute(f'ALTER {otype} "{oname}" COMPILE')
+        finally:
+            cur.close()
 
     def _first_compile_error(self, compilable: list[tuple[str, str]]) -> str | None:
         """Return the first PL/SQL compile error on a created object, or None."""
