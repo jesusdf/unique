@@ -106,21 +106,72 @@ def _split_oracle(sql: str) -> list[str]:
         if line.strip() == "/":
             block = "\n".join(buf).strip()
             if block:
-                statements.append(block)
+                statements.extend(_split_oracle_block(block))
             buf = []
             continue
         buf.append(line)
     tail = "\n".join(buf).strip()
     if tail:
-        # The last statement in the script has no trailing ``/``. If it is a
-        # PL/SQL block (anonymous BEGIN/DECLARE or CREATE PROCEDURE/…), keep it
-        # whole — its terminating ``END;`` semicolon is required, and
-        # ;-splitting would strip it (PLS-00103). Plain statements are split.
-        if _ORACLE_PLSQL_HEAD_RE.match(tail):
-            statements.append(tail)
-        else:
-            statements.extend(_split_semicolons(tail, dollar_quote=False))
-    return [s for s in statements if s.strip()]
+        statements.extend(_split_oracle_block(tail))
+    return [s for s in statements if s.strip() and not _is_comment_only(s)]
+
+
+def _is_comment_only(s: str) -> bool:
+    """A fragment that is only SQL comments (executing it raises ORA-00900)."""
+    return re.sub(r"(?s)--[^\n]*|/\*.*?\*/", "", s).strip() == ""
+
+
+def _split_oracle_block(block: str) -> list[str]:
+    """Split one ``/``-delimited chunk. It is a single PL/SQL block, plain
+    ``;``-terminated DDL, or (re-runnable scripts) ``;``-DDL followed by a PL/SQL
+    DROP guard — SQL*Plus runs the DDL at ``;`` and the block at ``/``, but a
+    programmatic client must send them separately (else ORA-03405). A leading
+    comment before a PL/SQL block keeps it whole; otherwise split the leading DDL
+    at ``;`` and keep the PL/SQL block whole (its ``END;`` is required; ``;``
+    -splitting would strip it, PLS-00103)."""
+    core = re.sub(r"(?s)^(?:\s|--[^\n]*|/\*.*?\*/)+", "", block)
+    if _ORACLE_PLSQL_HEAD_RE.match(core):
+        return [block]
+    # A ``/``-terminated PL/SQL unit is last in the chunk (each gets its own
+    # ``/``). Split at its *head* — found outside strings/comments so a
+    # ``declare``/``begin`` inside an XML query in a view can't trip it — and keep
+    # it whole (``;``-splitting a routine's declarations would break it).
+    pos = _first_toplevel_plsql_head(block)
+    if pos < 0:
+        return _split_semicolons(block, dollar_quote=False)
+    ddl, plsql = block[:pos], block[pos:].strip()
+    parts = _split_semicolons(ddl, dollar_quote=False) if ddl.strip() else []
+    if plsql:
+        parts.append(plsql)
+    return parts
+
+
+def _first_toplevel_plsql_head(text: str) -> int:
+    """Index of the first PL/SQL unit head (CREATE PROCEDURE/FUNCTION/… or a bare
+    BEGIN/DECLARE) at a line start and outside any string/comment, or -1."""
+    i, n, in_string, line_start = 0, len(text), False, True
+    while i < n:
+        if not in_string:
+            if text[i : i + 2] == "--":
+                nl = text.find("\n", i)
+                i = n if nl == -1 else nl
+                continue
+            if text[i : i + 2] == "/*":
+                close = text.find("*/", i + 2)
+                i = n if close == -1 else close + 2
+                continue
+        ch = text[i]
+        if ch == "'":
+            in_string = not in_string
+            line_start = False
+        elif ch == "\n":
+            line_start = True
+        elif not ch.isspace():
+            if line_start and not in_string and _ORACLE_PLSQL_HEAD_RE.match(text[i:]):
+                return i
+            line_start = False
+        i += 1
+    return -1
 
 
 _ORACLE_PLSQL_HEAD_RE = re.compile(

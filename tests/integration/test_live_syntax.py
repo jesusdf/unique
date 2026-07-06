@@ -177,14 +177,9 @@ def test_procedures_fixture_is_valid_live(target: str) -> None:
     try:
         out = transpile(fixture.read_text(encoding="utf-8"), "tsql", target).sql
         verdict = validator.validate(out)
-        if target == "oracle" and not verdict.ok:
-            # Known backlog (docs/TODO.md §1): the Oracle validator now checks
-            # USER_ERRORS, so lazily-INVALID PL/SQL is caught. Several procedural
-            # constructs still produce invalid Oracle. xfail (not a hard fail) so
-            # it is documented and flips to a pass once fixed.
-            pytest.xfail(
-                f"Oracle procedural output has known gaps: {verdict.error[:160]}"
-            )
+        # The Oracle validator queries USER_ERRORS (Oracle compiles PL/SQL
+        # lazily) and recompiles to settle forward dependencies; the full
+        # procedures fixture now transpiles to valid Oracle.
         assert verdict.ok, (
             f"tsql -> {target} procedures fixture is invalid:\n"
             f"Engine error: {verdict.error}"
