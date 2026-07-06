@@ -373,6 +373,34 @@ _ORACLE_PLSQL_UNIT_RE = re.compile(
 )
 
 
+def _harvest_split_tvf_names(sql: str) -> set[str]:
+    """Names of T-SQL inline table-valued functions that split a string (a
+    ``RETURNS TABLE`` body using ``STRING_SPLIT``) — emitted on Oracle as
+    ``SYS.ODCIVARCHAR2LIST`` functions whose callers need ``TABLE(fn(…))``."""
+    return {
+        m.lower()
+        for m in re.findall(
+            r"(?is)(?:CREATE|ALTER)\s+FUNCTION\s+(?:\[?\w+\]?\.)?\[?(\w+)\]?\s*"
+            r"\((?:[^()]|\([^()]*\))*\)\s*RETURNS\s+TABLE\b.{0,300}?\bSTRING_SPLIT\b",
+            sql,
+        )
+    }
+
+
+def _rewrite_tvf_callers(sql: str, names: set[str]) -> str:
+    """Wrap a split-TVF call in a FROM clause with ``TABLE(…)`` and read its
+    single column as ``COLUMN_VALUE`` (the ODCIVARCHAR2LIST column)."""
+    for name in names:
+        n = re.escape(name)
+        sql = re.sub(
+            rf"(?i)\bSELECT\s+\w+\s+FROM\s+({n}\s*\([^)]*\))",
+            r"SELECT column_value FROM TABLE(\1)",
+            sql,
+        )
+        sql = re.sub(rf"(?i)\bFROM\s+({n}\s*\([^)]*\))", r"FROM TABLE(\1)", sql)
+    return sql
+
+
 def _oracle_needs_slash(sql: str) -> bool:
     """Whether an emitted Oracle statement is a PL/SQL block needing a ``/``."""
     body = "\n".join(
@@ -779,6 +807,14 @@ class Transpiler:
                                 all_unsupported.append(frag)
 
             output_sql = self._join_parts(output_parts, target)
+
+            # A T-SQL split TVF becomes an Oracle ODCIVARCHAR2LIST function; its
+            # callers must read COLUMN_VALUE FROM TABLE(fn(…)). Rewrite them once
+            # the whole (multi-object) script is assembled.
+            if target == "oracle":
+                tvf_names = _harvest_split_tvf_names(sql)
+                if tvf_names:
+                    output_sql = _rewrite_tvf_callers(output_sql, tvf_names)
 
             return TranspileResult(
                 sql=output_sql,

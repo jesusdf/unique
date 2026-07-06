@@ -99,9 +99,12 @@ class OracleTransformer(ProceduralTransformer):
         )
         ddls: list[ASTNode] = [
             RawSQL(
+                # The documenting comment leads the statement — a trailing comment
+                # after the ``;`` splits off as its own (invalid) statement.
                 sql=(
-                    f"CREATE GLOBAL TEMPORARY TABLE {gtt} {cols} ON COMMIT DELETE"
-                    f" ROWS;  /* UNIQUE: was T-SQL table variable {var} */"
+                    f"/* UNIQUE: was T-SQL table variable {var} */\n"
+                    f"CREATE GLOBAL TEMPORARY TABLE {gtt} {cols} "
+                    "ON COMMIT DELETE ROWS;"
                 )
             )
             for var, gtt, cols in gtts
