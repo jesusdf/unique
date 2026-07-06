@@ -327,8 +327,12 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
 #: T-SQL VARCHAR(MAX)/NVARCHAR(MAX) whose MAX marker is lost during IR
 #: conversion. Map it to each engine's large-text type. Keyed by the type
 #: name AFTER EMIT_TYPE_MAP has mapped it to the target dialect.
+# T-SQL VARCHAR(MAX)/NVARCHAR(MAX) -> the target's large-text type. Oracle uses a
+# bounded VARCHAR2/NVARCHAR2 rather than CLOB/NCLOB: a CLOB cannot be a comparison
+# or join key (ORA-22848), and these columns are routinely used as predicates. A
+# value beyond the bound needs Oracle's MAX_STRING_SIZE = EXTENDED.
 BARE_CHAR_BIGTEXT: dict[str, dict[str, str]] = {
-    "oracle": {"VARCHAR2": "CLOB", "NVARCHAR2": "NCLOB"},
+    "oracle": {"VARCHAR2": "VARCHAR2(4000)", "NVARCHAR2": "NVARCHAR2(2000)"},
     "mysql": {"VARCHAR": "LONGTEXT", "NVARCHAR": "LONGTEXT"},
     "postgresql": {"VARCHAR": "TEXT", "NVARCHAR": "TEXT"},
     "tsql": {"VARCHAR": "VARCHAR(MAX)", "NVARCHAR": "NVARCHAR(MAX)"},
