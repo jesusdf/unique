@@ -17,9 +17,14 @@ from unique.core.ast_nodes import (
     ParameterDefinition,
     PrintStatement,
     RaiseErrorStatement,
+    ReturnStatement,
     SelectIntoStatement,
 )
-from unique.core.procedural.emitter.base import ProceduralEmitter, register_emitter
+from unique.core.procedural.emitter.base import (
+    _SQL_ONLY_IN_PLSQL,
+    ProceduralEmitter,
+    register_emitter,
+)
 
 _SIZE_RE = re.compile(r"\(\s*\d+\s*(?:,\s*\d+\s*)?\)")
 
@@ -56,13 +61,14 @@ class OracleEmitter(ProceduralEmitter):
         return schema.lower() != "dbo"
 
     def _assignment_via_select(self, target: str, val: str) -> str | None:
-        # Oracle PL/SQL forbids a subquery inside an expression (PLS-00405), so
-        # `x := (SELECT …)` / `x := COALESCE((SELECT …), d)` is invalid. Evaluate
-        # the whole expression in SQL context instead:
+        # Oracle PL/SQL forbids a subquery inside an expression (PLS-00405) and
+        # rejects a SQL-only operator like CAST in a procedural expression
+        # (PLS-00103), so `x := (SELECT …)` / `x := LOWER(CAST(…))` is invalid.
+        # Evaluate the whole expression in SQL context instead:
         #   SELECT <expr> INTO x FROM DUAL;
-        # A scalar subquery yields NULL when it matches no row — matching T-SQL's
-        # `SET @x = (SELECT …)` (and avoiding NO_DATA_FOUND).
-        if re.search(r"\(\s*SELECT\b", val, re.IGNORECASE):
+        # DUAL yields exactly one row (NULL for a no-row scalar subquery), matching
+        # T-SQL's `SET @x = …` and avoiding NO_DATA_FOUND.
+        if re.search(_SQL_ONLY_IN_PLSQL, val):
             return f"SELECT {val.strip()} INTO {target} FROM DUAL;"
         return None
 
@@ -78,7 +84,17 @@ class OracleEmitter(ProceduralEmitter):
         declarations: list[ASTNode],
         body_stmts: list[ASTNode],
     ) -> str:
+        self._in_oracle_procedure = True
         return self._emit_oracle_procedure_body(header, declarations, body_stmts)
+
+    def _emit_return(self, node: ReturnStatement) -> str:
+        # An Oracle procedure's RETURN cannot carry a value (PLS-00372); a T-SQL
+        # ``RETURN <code>`` has no equivalent. Emit a bare RETURN and document the
+        # discarded value. A function keeps ``RETURN <value>``.
+        if getattr(self, "_in_oracle_procedure", False) and node.value:
+            val = self._emit_node(node.value)
+            return f"RETURN;  -- UNIQUE: discarded procedure RETURN value ({val})"
+        return super()._emit_return(node)
 
     def _function_header(self, name: str, or_replace: bool) -> str:
         prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
@@ -147,6 +163,7 @@ class OracleEmitter(ProceduralEmitter):
         declarations: list[ASTNode],
         body_stmts: list[ASTNode],
     ) -> str:
+        self._in_oracle_procedure = False
         return self._emit_oracle_procedure_body(header, declarations, body_stmts)
 
     def _join_trigger_events(self, events: tuple[str, ...]) -> str:
@@ -184,6 +201,7 @@ class OracleEmitter(ProceduralEmitter):
         header_lines = self._trigger_header(name, node, events, timing)
         header_lines = [ln for ln in header_lines if ln != "BEGIN"]
         declarations, body_stmts = self._split_declarations(node.body)
+        self._in_oracle_procedure = True  # a trigger RETURN cannot carry a value
         return note + self._emit_oracle_procedure_body(
             "\n".join(header_lines),
             declarations,

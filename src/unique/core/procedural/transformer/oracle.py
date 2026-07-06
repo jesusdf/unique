@@ -240,7 +240,12 @@ class OracleTransformer(ProceduralTransformer):
     }
     _CAST_CONSTRAINED_RE = re.compile(
         r"(?i)\bAS\s+(DECIMAL|NUMERIC|DEC|NUMBER|FLOAT|VARCHAR2?|NVARCHAR2?|CHAR|NCHAR)"
-        r"\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\)"
+        r"(\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\))"
+    )
+    #: A CAST to these keeps its length — a character CAST with none is ORA-00906
+    #: (only a numeric CAST's precision is dropped, for PLS-00103).
+    _CAST_KEEP_LENGTH = frozenset(
+        {"VARCHAR", "VARCHAR2", "NVARCHAR", "NVARCHAR2", "CHAR", "NCHAR"}
     )
 
     def _fix_raw_sql_target(self, sql: str) -> str:
@@ -254,9 +259,6 @@ class OracleTransformer(ProceduralTransformer):
         # dbo doesn't exist in Oracle; drop a dbo. qualifier on calls within
         # expressions (e.g. dbo.func1() in an assignment, RETURN or COALESCE).
         sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
-
-        # T-SQL functions Oracle lacks (TRY_CAST, …).
-        sql = self._oracle_function_fixes(sql)
 
         # T-SQL string ``+`` in an assignment/return expression -> Oracle ``||``.
         sql = self._rewrite_string_concat(sql, "oracle")
@@ -272,9 +274,14 @@ class OracleTransformer(ProceduralTransformer):
         # ``AS <type>(...)`` form (never an alias or function call) is matched.
         def _unconstrained_cast_type(m: re.Match[str]) -> str:
             typ = m.group(1).upper()
-            return f"AS {self._CAST_TYPE_MAP.get(typ, typ)}"
+            mapped = self._CAST_TYPE_MAP.get(typ, typ)
+            length = m.group(2) if typ in self._CAST_KEEP_LENGTH else ""
+            return f"AS {mapped}{length}"
 
-        return self._CAST_CONSTRAINED_RE.sub(_unconstrained_cast_type, sql)
+        sql = self._CAST_CONSTRAINED_RE.sub(_unconstrained_cast_type, sql)
+        # Last: after the concat re-pass (which can drop a CAST's length) and the
+        # constraint strip — TRY_CAST, a bare character CAST needing a length, etc.
+        return self._oracle_function_fixes(sql)
 
     @staticmethod
     def _top_to_oracle(sql: str) -> str:

@@ -59,6 +59,11 @@ from unique.core.ast_nodes import (
 
 logger = logging.getLogger(__name__)
 
+#: A SQL-only operator that Oracle rejects in a *procedural* expression — a scalar
+#: subquery (PLS-00405) or CAST (PLS-00103). An assignment/declaration whose value
+#: contains one must be evaluated in SQL context (``SELECT … INTO v FROM DUAL``).
+_SQL_ONLY_IN_PLSQL = re.compile(r"(?i)\(\s*SELECT\b|\bCAST\s*\(")
+
 #: Populated by the per-engine modules via ``register_emitter``.
 _EMITTER_REGISTRY: dict[str, type[ProceduralEmitter]] = {}
 
@@ -392,12 +397,14 @@ class ProceduralEmitter:
         return "\n".join(lines)
 
     def _oracle_split_subquery_default(self, decl: ASTNode) -> tuple[str, str] | None:
-        """If *decl* is a variable initialised from a subquery, return
-        ``(bare_declaration, "SELECT … INTO v FROM DUAL;")``; else ``None``."""
+        """If *decl* is a variable initialised from a SQL-only expression (a
+        subquery or CAST), return ``(bare_declaration, "SELECT … INTO v FROM
+        DUAL;")`` — such an expression is invalid in the declare section; else
+        ``None``."""
         if not isinstance(decl, DeclareStatement) or not decl.default:
             return None
         val = self._emit_node(decl.default)
-        if not re.search(r"\(\s*SELECT\b", val, re.IGNORECASE):
+        if not _SQL_ONLY_IN_PLSQL.search(val):
             return None
         dt = self._emit_data_type(decl.data_type)
         return (

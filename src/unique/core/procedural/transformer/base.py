@@ -1391,13 +1391,34 @@ class ProceduralTransformer:
         sql = re.sub(r"(?i)\bNVARCHAR2?\s*\(\s*MAX\s*\)", "NVARCHAR2(2000)", sql)
         sql = re.sub(r"(?i)\bVARCHAR2?\s*\(\s*MAX\s*\)", "VARCHAR2(4000)", sql)
 
+        # A character CAST needs a length in Oracle (`CAST(x AS VARCHAR2)` ->
+        # ORA-00906). sqlglot keeps CONVERT(VARCHAR(n), …)'s length, but a later
+        # concat re-pass drops it; restore a bounded one.
+        def _char_cast_size(m: re.Match[str]) -> str:
+            base = m.group(1)
+            b = base.upper()
+            if b in ("VARCHAR2", "VARCHAR"):
+                size = "4000"
+            elif b == "NCHAR":
+                size = "1000"
+            else:  # NVARCHAR2/NVARCHAR/CHAR
+                size = "2000"
+            return f"AS {base}({size}))"
+
+        sql = re.sub(r"(?i)\bAS\s+(N?VARCHAR2?|N?CHAR)\s*\)", _char_cast_size, sql)
+
         # TRY_CAST(x AS type) -> CAST(x AS type DEFAULT NULL ON CONVERSION ERROR)
         # (Oracle 12.2+): returns NULL on a bad value instead of raising. Oracle
         # rejects the DEFAULT clause for a character target (a cast to VARCHAR2
         # never fails), so a character TRY_CAST is a plain CAST.
         def _try_cast(m: re.Match[str]) -> str:
             val, typ = m.group(1), m.group(2)
-            if typ.split("(")[0].strip().upper() in _CHAR_CAST_TYPES:
+            base = typ.split("(")[0].strip().upper()
+            if base in _CHAR_CAST_TYPES:
+                # A character CAST needs a length in Oracle (CAST(x AS VARCHAR2)
+                # -> ORA-00906); CLOB/NCLOB take none.
+                if "(" not in typ and base not in ("CLOB", "NCLOB"):
+                    typ = f"{typ.strip()}({'2000' if base.startswith('N') else '4000'})"
                 return f"CAST({val} AS {typ})"
             return f"CAST({val} AS {typ} DEFAULT NULL ON CONVERSION ERROR)"
 
