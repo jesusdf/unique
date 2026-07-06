@@ -36,24 +36,32 @@ query (`PLS-00428`); (7) `EXEC sp_executesql @stmt, N'…', @a, @b` -> Oracle
 INVALID** of 32 (several procs stack multiple errors, so clearing a class often
 exposes the next rather than dropping the object count).
 
-The remainder is a **long tail of distinct issues** (each its own fix; a proc
-often stacks several, so the count drops slowly as layers are peeled):
+Also fixed since: CLOB-comparison keys (`VARCHAR(MAX)` -> bounded `VARCHAR2`, both
+DDL and procedural), `SQL_VARIANT` -> `VARCHAR2` (ANYDATA can't take a plain value
+in a call), and Oracle-less functions `TRY_CAST`/`SHA256`/`EXTRACT(EPOCH …)` and
+`VARCHAR(MAX)` casts. Sweep: **26 -> 12 INVALID** (of 32).
 
-- [ ] **CLOB comparison (`ORA-22848`)** — an unbounded `NVARCHAR`/`NCLOB` used in a
-      WHERE/JOIN key; map to `VARCHAR2(4000)` (or dbms_lob compare).
-- [ ] **`ORA-00910` length too long** — a `VARCHAR2(> 4000)` (or `NVARCHAR(MAX)`)
-      exceeds Oracle's limit; clamp/`CLOB`.
-- [ ] **table variable** (`CREATE TEMPORARY TABLE` in block) — carrier or a
-      schema-level GTT + `EXECUTE IMMEDIATE`.
-- [ ] **trigger-local declarations** — a trigger emits `V … := …` inside `BEGIN`
-      instead of a `DECLARE` section (`PLS-00103` at the trigger's first line).
-- [ ] **function gaps** — `TRY_CAST`, `SHA256`/`HASHBYTES`, `EXTRACT(EPOCH …)`,
-      and a call to a carrier'd function (`FUNC5` -> `ORA-00904` cascade).
-- [ ] **`IF EXISTS(subquery)`** (`PLS-00204`) — the creative `FOR _ IN (SELECT 1
-      FROM (<subq>) WHERE ROWNUM = 1) LOOP … END LOOP;` rewrite.
+The remaining **12 need structural features, not one-line fixes** — mostly
+T-SQL-specific patterns with no clean Oracle equivalent:
 
-A **phased effort**, tracked objectively by the validator + `xfail`; being worked
-class-by-class.
+- [ ] **Table variable** (`DECLARE @t TABLE …`, 4 procs) — needs a schema-level
+      Global Temporary Table *hoisted before the procedure* (a CREATE cannot live
+      inside a PL/SQL block, and the block references it statically) **plus**
+      `INSERT … OUTPUT … INTO @t` -> `RETURNING … BULK COLLECT INTO`. A real feature.
+- [ ] **Table-valued function in `FROM`** (`FUNC5`, 1 proc) — a T-SQL TVF becomes
+      an Oracle pipelined function over a collection type; it is currently a
+      carrier, so callers hit `ORA-00904`.
+- [ ] **Deeply-nested date arithmetic** (`FUNC2`, ~14 stacked errors) — layered
+      `CAST(CAST(… AS TIMESTAMP) …)` / EPOCH math; needs a focused rewrite.
+- [ ] **Trigger-local declarations** — declarations emitted inside `BEGIN` need a
+      trigger `DECLARE` section.
+- [ ] **Assorted single-statement fixes** — `AS` before a table alias in an IR
+      cross-table `UPDATE` subquery (`ORA-00907`), a couple of length/paren cases.
+
+These are a genuine multi-session effort; reaching **exactly 0** requires the
+table-variable and TVF features above (or carrier-ing whole procedures, which
+would break the mandatory DML-verb-conservation invariant). Tracked by the
+validator + `xfail`.
 
 ## 2. Packaging (P3)
 
