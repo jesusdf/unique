@@ -310,10 +310,21 @@ only partially supported:
   embedded in complex queries.
 - **`SET ROWCOUNT n`**: removed with a warning (deprecated; use `TOP`/
   `FETCH FIRST` instead).
-- **Non-catalog `IF EXISTS(…) BEGIN … END` control flow**: only a *system-catalog*
-  existence guard (`IF [NOT] EXISTS(SELECT … FROM sys.…)` / `OBJECT_ID`) is
-  treated as an idempotent-DDL guard whose condition is dropped and whose body is
-  transpiled. A **real-data** condition (e.g. `IF EXISTS (SELECT NULL FROM t …)
+- **`IF [NOT] EXISTS(…)` DDL guards** (idempotent migration scripts): a
+  *system-catalog* existence guard (`IF [NOT] EXISTS(SELECT … FROM sys.…)` /
+  `OBJECT_ID`). The catalog query has no faithful cross-engine form, so on most
+  targets the condition is dropped and the guarded DDL is emitted (PostgreSQL/MySQL
+  use their own `CREATE … IF NOT EXISTS` where available). On **Oracle** the guard
+  is kept idempotently and portably: a guarded `CREATE` becomes a `user_objects`
+  existence probe + `EXECUTE IMMEDIATE` — `BEGIN FOR _ IN (SELECT 1 FROM DUAL WHERE
+  NOT EXISTS(SELECT 1 FROM user_objects WHERE object_name='X' AND object_type='…'))
+  LOOP EXECUTE IMMEDIATE q'[<ddl>]'; END LOOP; END; /`. This is the idiomatic Oracle
+  form (DDL cannot be a conditional statement inline, so `EXECUTE IMMEDIATE` is
+  required; `q'[…]'` avoids escaping) and works on every version — unlike `CREATE …
+  IF NOT EXISTS` (23ai+). A re-run no longer fails with `ORA-00955`. (A guarded
+  `DROP` maps to `DROP … IF EXISTS` / a tolerant block.)
+- **Non-catalog `IF EXISTS(…) BEGIN … END` control flow**: a **real-data**
+  condition (e.g. `IF EXISTS (SELECT NULL FROM t …)
   BEGIN … END`, common in migration scripts) is control flow — dropping its guard
   would silently change semantics. On **Oracle**, where `IF EXISTS(subquery)` is
   invalid PL/SQL (PLS-00204), it is **emulated with a cursor FOR loop** over a
