@@ -25,10 +25,13 @@ execute-only check masked (and the CI *does* run a live Oracle — the failures
 were simply invisible with the execute-only check).
 `test_procedures_fixture_is_valid_live[oracle]` `xfail`s until these are fixed.
 
-**Done:** the T-SQL string-`+` concatenation in procedural bodies now becomes
-Oracle `||` (`PLS-00306` cleared). A sweep of the T-SQL procedures fixture ->
-Oracle leaves **24 INVALID** objects across these classes; each is a distinct,
-non-trivial procedural transformation:
+**Done so far:** (1) T-SQL string-`+` concatenation in procedural bodies now
+becomes Oracle `||` (`PLS-00306` cleared); (2) the live-validator's Oracle
+statement splitter no longer shreds a PL/SQL block that follows plain SQL in one
+`/`-chunk — that removed the spurious `ORA-00900` positives (the transpiler
+output was valid SQL*Plus). A clean sweep now leaves **23 INVALID** of 32 objects
+across the classes below; each is a distinct, non-trivial procedural
+transformation (a multi-turn effort, not one change):
 
 - [ ] **`PLS-00103` variable initialised from a subquery** — `v TYPE := (SELECT …)`
       in the declare section is invalid PL/SQL; restructure to a `SELECT … INTO v`
