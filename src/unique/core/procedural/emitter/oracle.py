@@ -99,7 +99,13 @@ class OracleEmitter(ProceduralEmitter):
         # NUMBER(10) or VARCHAR2(50) raise PLS-00103 in a parameter list
         # (audit 2026-07-02, S1-11).
         dt = _unconstrained(self._emit_data_type(p.data_type))
-        default_str = f" DEFAULT {self._emit_node(p.default)}" if p.default else ""
+        # Oracle rejects a DEFAULT on an OUT/IN OUT parameter (PLS-00230); T-SQL
+        # allows one (``@p type = NULL OUTPUT``). Keep it only for IN.
+        default_str = (
+            f" DEFAULT {self._emit_node(p.default)}"
+            if p.default and p.direction == "IN"
+            else ""
+        )
         direction_str = f"{p.direction} " if p.direction != "IN" else "IN "
         return f"{p.name} {direction_str}{dt}{default_str}"
 
