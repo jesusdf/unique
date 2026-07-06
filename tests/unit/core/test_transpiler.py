@@ -106,6 +106,68 @@ class TestTranspiler:
         assert "CONSTRAINT" in result.sql.upper() and "CHECK" in result.sql.upper()
         assert any("NOCHECK" in w.message for w in result.warnings), result.warnings
 
+    def test_alter_column_to_oracle_modify(self, transpiler: Transpiler) -> None:
+        # T-SQL "ALTER COLUMN c <type> [NULL|NOT NULL]" -> Oracle MODIFY(...).
+        # sqlglot alone can't parse the nullability suffix (Command) and emits an
+        # invalid "ALTER COLUMN … SET DATA TYPE" for the type change.
+        out = transpiler.transpile(
+            "ALTER TABLE dbo.t ALTER COLUMN c VARCHAR(100) NOT NULL",
+            source="tsql",
+            target="oracle",
+        ).sql
+        assert out.strip() == "ALTER TABLE t MODIFY (c VARCHAR2(100) NOT NULL);"
+
+    def test_alter_column_varbinary_max_omits_redundant_null(
+        self, transpiler: Transpiler
+    ) -> None:
+        # VARBINARY(MAX) -> BLOB (no size); the redundant NULL is omitted on Oracle
+        # (explicit NULL raises ORA-01451 when the column is already nullable), with
+        # a warning so the nullability directive is not silently lost.
+        result = transpiler.transpile(
+            "ALTER TABLE dbo.t ALTER COLUMN c VARBINARY(MAX) NULL",
+            source="tsql",
+            target="oracle",
+        )
+        assert result.sql.strip() == "ALTER TABLE t MODIFY (c BLOB);"
+        assert any("nullability" in w.message.lower() for w in result.warnings)
+
+    def test_alter_column_postgres_type_then_nullability(
+        self, transpiler: Transpiler
+    ) -> None:
+        out = transpiler.transpile(
+            "ALTER TABLE dbo.t ALTER COLUMN c INT NOT NULL",
+            source="tsql",
+            target="postgresql",
+        ).sql
+        assert "ALTER COLUMN c TYPE INT" in out
+        assert "ALTER COLUMN c SET NOT NULL" in out
+
+    def test_alter_column_mysql_modify_column(self, transpiler: Transpiler) -> None:
+        out = transpiler.transpile(
+            "ALTER TABLE dbo.t ALTER COLUMN c VARCHAR(50) NULL",
+            source="tsql",
+            target="mysql",
+        ).sql
+        assert out.strip() == "ALTER TABLE t MODIFY COLUMN c VARCHAR(50) NULL;"
+
+    def test_guarded_alter_column_keeps_header_comment(
+        self, transpiler: Transpiler
+    ) -> None:
+        # A section-header comment before a catalog-guarded ALTER COLUMN survives
+        # and the ALTER still transpiles (the comment used to leave it a Command
+        # carrier, because the guard re-attaches it ahead of the ALTER).
+        sql = (
+            "-- section header\n"
+            "IF EXISTS (SELECT * FROM syscolumns WHERE id = object_id('dbo.t') "
+            "AND name = 'c')\n"
+            "    ALTER TABLE dbo.t ALTER COLUMN c VARCHAR(100) NULL\n"
+            "ELSE\n    PRINT 'skip'"
+        )
+        out = transpiler.transpile(sql, source="tsql", target="oracle").sql
+        assert "-- section header" in out
+        assert "MODIFY (c VARCHAR2(100))" in out
+        assert "Unhandled expression type: Command" not in out
+
     def test_if_guard_with_else_keeps_then_branch(self, transpiler: Transpiler) -> None:
         # SSMA emits ``IF NOT EXISTS (…) <DDL> ELSE PRINT '… already exists'``;
         # only the THEN branch is a real statement — the ELSE PRINT is dropped,

@@ -82,6 +82,19 @@ _DROP_STMT_RE = re.compile(
 )
 
 
+# T-SQL "ALTER TABLE t ALTER COLUMN c <type> [NULL|NOT NULL]". sqlglot cannot
+# parse the trailing nullability (falls back to a Command) and emits a non-Oracle
+# "ALTER COLUMN … SET DATA TYPE" for the type change, so this is handled directly.
+_TSQL_ALTER_COLUMN_RE = re.compile(
+    # A guarded ALTER arrives with its section-header comments re-attached, so
+    # skip (and preserve) leading comment/blank lines before ALTER.
+    r"(?is)^(?P<lead>(?:[^\S\n]*(?:--[^\n]*)?\n)*)[^\S\n]*"
+    r"ALTER\s+TABLE\s+(?P<table>\[?\w+\]?(?:\s*\.\s*\[?\w+\]?)*)\s+"
+    r"ALTER\s+COLUMN\s+(?P<col>\[?\w+\]?)\s+"
+    r"(?P<type>[A-Za-z]\w*(?:\s*\(\s*[\w, ]+\s*\))?)"
+    r"(?:\s+(?P<null>NOT\s+NULL|NULL))?\s*;?\s*$"
+)
+
 _ORACLE_CREATE_OBJ_RE = re.compile(
     r"(?is)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:UNIQUE\s+|BITMAP\s+)*"
     r"(?P<kind>TABLE|INDEX|VIEW|SEQUENCE|SYNONYM|TYPE)\s+"
@@ -997,6 +1010,84 @@ class Transpiler:
                 unsupported=unsupported,
             )
 
+    def _transpile_alter_column(
+        self,
+        sql: str,
+        source: str,
+        target: str,
+        source_dialect: Dialect,
+        target_dialect: Dialect,
+    ) -> TranspileResult | None:
+        """Build the target's column-modify form for a T-SQL ``ALTER TABLE t ALTER
+        COLUMN c <type> [NULL|NOT NULL]``. Reuses the CREATE-TABLE column mapping
+        (name + type, incl. ``VARBINARY(MAX)`` -> ``BLOB``) via a synthetic
+        one-column table; returns ``None`` (keep the sqlglot path) if it can't be
+        matched/mapped cleanly."""
+        m = _TSQL_ALTER_COLUMN_RE.match(sql)
+        if not m:
+            return None
+        nullability = " ".join((m.group("null") or "").upper().split())
+        synth = self._transpile_dml(
+            f"CREATE TABLE {m.group('table')} ({m.group('col')} {m.group('type')})",
+            source,
+            target,
+            source_dialect,
+            target_dialect,
+        ).sql
+        cm = re.search(
+            r"(?is)CREATE\s+TABLE\s+(?P<table>[^\s(]+)\s*\((?P<body>.*)\)", synth
+        )
+        if not cm:
+            return None
+        coldef = " ".join(cm.group("body").split()).rstrip(",").strip()
+        parts = coldef.split(None, 1)
+        if len(parts) != 2:
+            return None
+        colname, coltype = parts
+        warnings = []
+        if target == "oracle" and nullability == "NULL":
+            warnings.append(
+                _warn(
+                    "Oracle MODIFY keeps the column's current nullability; the "
+                    "redundant NULL is omitted (an explicit NULL raises ORA-01451 "
+                    "when the column is already nullable)",
+                    "alter_column_null",
+                    source,
+                    target,
+                )
+            )
+        return TranspileResult(
+            sql=(m.group("lead") or "")
+            + self._alter_column_stmt(
+                target, cm.group("table"), colname, coltype, nullability
+            ),
+            warnings=warnings,
+            unsupported=[],
+        )
+
+    @staticmethod
+    def _alter_column_stmt(
+        target: str, table: str, colname: str, coltype: str, nullability: str
+    ) -> str:
+        """The target's spelling of a column type/nullability change."""
+        null = f" {nullability}" if nullability else ""
+        if target == "oracle":
+            # MODIFY (c type NULL) raises ORA-01451 when the column is already
+            # nullable, and MODIFY (c type) keeps the current nullability — so
+            # emit an explicit NOT NULL only, never a redundant NULL.
+            nn = " NOT NULL" if nullability == "NOT NULL" else ""
+            return f"ALTER TABLE {table} MODIFY ({colname} {coltype}{nn});"
+        if target == "mysql":
+            return f"ALTER TABLE {table} MODIFY COLUMN {colname} {coltype}{null};"
+        if target == "postgresql":
+            stmt = f"ALTER TABLE {table} ALTER COLUMN {colname} TYPE {coltype};"
+            if nullability == "NOT NULL":
+                stmt += f"\nALTER TABLE {table} ALTER COLUMN {colname} SET NOT NULL;"
+            elif nullability == "NULL":
+                stmt += f"\nALTER TABLE {table} ALTER COLUMN {colname} DROP NOT NULL;"
+            return stmt
+        return f"ALTER TABLE {table} ALTER COLUMN {colname} {coltype}{null};"
+
     def _transpile_dml(
         self,
         sql: str,
@@ -1008,6 +1099,13 @@ class Transpiler:
         """Transpile a DML/DDL batch through the sqlglot pipeline."""
         warnings: list[TransformWarning] = []
         unsupported: list[str] = []
+
+        if source == "tsql" and target != "tsql":
+            altered = self._transpile_alter_column(
+                sql, source, target, source_dialect, target_dialect
+            )
+            if altered is not None:
+                return altered
 
         # T-SQL compound assignment (SET a += 1) is not understood by sqlglot,
         # which would drop the column; expand it to "SET a = a + 1" first.
