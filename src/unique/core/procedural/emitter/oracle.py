@@ -55,6 +55,17 @@ class OracleEmitter(ProceduralEmitter):
         # 'dbo' is T-SQL's default schema and has no Oracle counterpart.
         return schema.lower() != "dbo"
 
+    def _assignment_via_select(self, target: str, val: str) -> str | None:
+        # Oracle PL/SQL forbids a subquery inside an expression (PLS-00405), so
+        # `x := (SELECT …)` / `x := COALESCE((SELECT …), d)` is invalid. Evaluate
+        # the whole expression in SQL context instead:
+        #   SELECT <expr> INTO x FROM DUAL;
+        # A scalar subquery yields NULL when it matches no row — matching T-SQL's
+        # `SET @x = (SELECT …)` (and avoiding NO_DATA_FOUND).
+        if re.search(r"\(\s*SELECT\b", val, re.IGNORECASE):
+            return f"SELECT {val.strip()} INTO {target} FROM DUAL;"
+        return None
+
     def _tvf_unsupported_note(self) -> str:
         return (
             "Oracle needs a pipelined function over a declared collection type; "
