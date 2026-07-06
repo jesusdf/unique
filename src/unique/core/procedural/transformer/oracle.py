@@ -86,6 +86,9 @@ class OracleTransformer(ProceduralTransformer):
         # expressions (e.g. dbo.func1() in an assignment, RETURN or COALESCE).
         sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
 
+        # T-SQL string ``+`` in an assignment/return expression -> Oracle ``||``.
+        sql = self._rewrite_string_concat(sql, "oracle")
+
         # A MySQL/PostgreSQL-source trigger body's NEW./OLD. row reference in an
         # assignment value becomes Oracle's :NEW./:OLD.
         if self._in_trigger:

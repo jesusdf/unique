@@ -8,7 +8,7 @@ name: Mutation testing (nightly)
 
 on:
   schedule:
-    - cron: "0 3 * * *"  # 03:00 UTC nightly
+    - cron: "44 4 * * *"  # 04:44 UTC nightly
   workflow_dispatch: {}
 
 permissions:

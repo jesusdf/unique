@@ -21,28 +21,36 @@ packaging remains.
 The Oracle live-validator now queries `USER_ERRORS` after a `CREATE`
 (Oracle compiles PL/SQL **lazily** — `CREATE` succeeds even when the body is
 invalid, leaving the object `INVALID`). This exposed real bugs the old
-execute-only check masked. `test_procedures_fixture_is_valid_live[oracle]` fails
-until these are fixed; a sweep of the T-SQL procedures fixture -> Oracle showed
-several classes:
+execute-only check masked (and the CI *does* run a live Oracle — the failures
+were simply invisible with the execute-only check).
+`test_procedures_fixture_is_valid_live[oracle]` `xfail`s until these are fixed.
 
-- [ ] **`PLS-00204` `EXISTS` in PL/SQL** — `IF EXISTS(subquery) THEN` is invalid
-      Oracle (no subquery in a boolean expr). Needs the creative rewrite
-      (`FOR _ IN (SELECT 1 FROM (<subq>) WHERE ROWNUM = 1) LOOP … END LOOP;`, or a
-      `COUNT(*) INTO v` for the ELSE case). *(Earlier "works on Oracle 23" was a
-      false positive — the proc CREATE'd but was INVALID.)*
-- [ ] **`PLS-00103` statement boundaries** (`Encountered "CREATE"/"SELECT"`) — a
-      PL/SQL body emits a run-together or misplaced statement.
-- [ ] **`PLS-00103` variable use** (`Encountered "V_COL_…"`) — a declared/used
-      local variable is mis-emitted.
-- [ ] **`PLS-00306` call to `'+'`** — the untyped `col + col` concat reaches
-      Oracle as arithmetic on strings.
-- [ ] **`ORA-00910` length too long** — a type-length mapping.
-- [ ] **`ORA-00900`** on a set-based-trigger carrier — the `-- UNIQUE:` block for
-      an unsupported trigger is followed by an invalid fragment.
+**Done:** the T-SQL string-`+` concatenation in procedural bodies now becomes
+Oracle `||` (`PLS-00306` cleared). A sweep of the T-SQL procedures fixture ->
+Oracle leaves **24 INVALID** objects across these classes; each is a distinct,
+non-trivial procedural transformation:
 
-**CI gap:** the live jobs do not run a real Oracle (only PG/MySQL/MSSQL), so none
-of the above is caught in CI. Consider an Oracle service in the live job, or run
-the validity sweep as a scheduled job.
+- [ ] **`PLS-00103` variable initialised from a subquery** — `v TYPE := (SELECT …)`
+      in the declare section is invalid PL/SQL; restructure to a `SELECT … INTO v`
+      in the body. (Biggest single class.)
+- [ ] **`PLS-00103` `CREATE … TABLE` inside the block** — a T-SQL table variable
+      (`DECLARE @t TABLE(...)`) becomes `CREATE TEMPORARY TABLE` *inside* `BEGIN`,
+      which Oracle forbids (a GTT is schema-level DDL). Emit a documented carrier,
+      or a schema-level GTT + `EXECUTE IMMEDIATE`.
+- [ ] **`PLS-00428` bare `SELECT`** — a result-returning `SELECT` in a proc body
+      needs `INTO`/a ref cursor; there is no direct PL/SQL equivalent → carrier.
+- [ ] **`PLS-00204` `IF EXISTS(subquery)`** — invalid in PL/SQL; needs the creative
+      rewrite (`FOR _ IN (SELECT 1 FROM (<subq>) WHERE ROWNUM = 1) LOOP … END
+      LOOP;`, or `COUNT(*) INTO v` for the ELSE case). *(Earlier "works on Oracle
+      23" was a false positive — the proc CREATE'd but was INVALID.)*
+- [ ] **`ORA-00900`** on a set-based-trigger carrier — the `-- UNIQUE:` block is
+      followed by an orphan `END IF`/`END` fragment (a statement-split bug).
+- [ ] **`ORA-00942` / `PLS-00111` / `PLS-00122`** — remaining smaller cases (some
+      may cascade from the above once the earlier ones are fixed).
+
+These are a **phased effort** (not a single change): the procedural -> Oracle path
+does not yet produce valid PL/SQL for complex real-world procedures. The
+validator + `xfail` now track progress objectively.
 
 ## 2. Packaging (P3)
 
