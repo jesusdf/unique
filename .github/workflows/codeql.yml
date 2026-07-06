@@ -1,0 +1,41 @@
+name: CodeQL
+
+# Static security analysis of our own code (complements Dependabot, which covers
+# dependency CVEs). Scoped to the security-sensitive packages via
+# .github/codeql/codeql-config.yml to keep findings signal-rich on a SQL tool.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Mondays 07:17 UTC — a periodic re-scan surfaces new-query hits in code that
+    # hasn't changed; off-peak and a distinct minute from the nightly job.
+    - cron: "17 7 * * 1"
+
+permissions:
+  contents: read
+  security-events: write # upload results to the Security tab
+  actions: read
+
+jobs:
+  analyze:
+    name: Analyze (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          config-file: ./.github/codeql/codeql-config.yml
+
+      # Python is interpreted — no autobuild step; analyze extracts the source.
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"
