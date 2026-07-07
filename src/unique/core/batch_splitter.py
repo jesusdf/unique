@@ -184,6 +184,56 @@ _ORACLE_ANON_BLOCK_PATTERN = re.compile(r"(?i)^\s*(?:BEGIN|DECLARE)\b")
 # A standalone stored-procedure call: CALL proc(...) (MySQL/PostgreSQL/Oracle).
 _CALL_PROC_PATTERN = re.compile(r"(?i)^\s*CALL\s+\w")
 
+# A ``GO`` batch terminator on its own line (case-insensitive, optional surrounding
+# horizontal whitespace). Matched only at true top level by _split_on_toplevel_go.
+_GO_LINE = re.compile(r"[ \t]*GO[ \t]*(?:\r?\n|\Z)", re.IGNORECASE)
+
+
+def _split_on_toplevel_go(sql: str) -> list[str]:
+    """Split T-SQL at ``GO`` separators, ignoring any ``GO`` that sits inside a
+    ``/* … */`` block comment, a ``--`` line comment, or a string literal — a naive
+    line split would break a multi-batch block comment and transpile its (commented
+    out) content as live code."""
+    parts: list[str] = []
+    start = i = 0
+    n = len(sql)
+    line_start = True
+    while i < n:
+        pair = sql[i : i + 2]
+        if pair == "/*":  # block comment: skip to the closing */
+            end = sql.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+            line_start = False
+            continue
+        if pair == "--":  # line comment: skip to the newline (kept for the split)
+            nl = sql.find("\n", i + 2)
+            i = n if nl == -1 else nl
+            line_start = False
+            continue
+        if sql[i] == "'":  # string literal: skip to the closing quote ('' escapes)
+            j = i + 1
+            while j < n:
+                if sql[j] == "'":
+                    if sql[j + 1 : j + 2] == "'":
+                        j += 2
+                        continue
+                    break
+                j += 1
+            i = j + 1
+            line_start = False
+            continue
+        if line_start:
+            m = _GO_LINE.match(sql, i)
+            if m:
+                parts.append(sql[start:i])
+                start = i = m.end()
+                line_start = True
+                continue
+        line_start = sql[i] == "\n"
+        i += 1
+    parts.append(sql[start:])
+    return parts
+
 
 def classify_batch(sql: str, dialect: str) -> BatchType:
     """Classify a batch's content type.
@@ -298,8 +348,9 @@ class BatchSplitter:
     def _split_tsql(sql: str) -> list[Batch]:
         """Split T-SQL on GO batch separators."""
         # GO is a case-insensitive batch terminator (``go`` is valid) and may
-        # carry leading whitespace; match it as the FE-harness splitter does.
-        parts = re.split(r"(?im)^\s*GO\s*$", sql)
+        # carry leading whitespace; split only at top-level GO (a GO inside a
+        # block/line comment or a string literal is not a separator).
+        parts = _split_on_toplevel_go(sql)
         batches = []
         line_offset = 0
         for part in parts:

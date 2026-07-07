@@ -20,6 +20,20 @@ class TestTSQLSplitting:
         batches = BatchSplitter.split(sql, "tsql")
         assert len(batches) == 1
 
+    def test_go_inside_block_comment_is_not_a_separator(self) -> None:
+        # A GO on its own line inside a /* … */ block comment must not split the
+        # batch — a naive line split would break the comment and transpile its
+        # (commented-out) content as live code.
+        sql = "/*\nGO\nCREATE TABLE t (a INT)\nGO\n*/\nSELECT 1"
+        batches = [b for b in BatchSplitter.split(sql, "tsql") if not b.is_empty]
+        assert len(batches) == 1
+        assert "/*" in batches[0].sql and "*/" in batches[0].sql
+
+    def test_go_inside_string_literal_is_not_a_separator(self) -> None:
+        sql = "SELECT 'x\nGO\ny'\nGO\nSELECT 2"
+        batches = [b for b in BatchSplitter.split(sql, "tsql") if not b.is_empty]
+        assert len(batches) == 2
+
     def test_empty_batches_dropped(self) -> None:
         sql = "SELECT 1;\nGO\n\nGO\nSELECT 2;"
         batches = BatchSplitter.split(sql, "tsql")
