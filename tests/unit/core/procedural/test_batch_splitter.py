@@ -229,6 +229,22 @@ class TestClassification:
         sql = "/*\nCREATE PROCEDURE p AS BEGIN SELECT 1 END\nGO\n*/"
         assert classify_batch(sql, "tsql") == BatchType.COMMENT
 
+    def test_leading_block_comment_does_not_hide_the_statement(self) -> None:
+        # A /* section header */ before a real statement must not be taken as the
+        # first "statement"; the batch is classified by what follows the comment.
+        assert (
+            classify_batch("/* header */\nSET ANSI_NULLS ON", "tsql")
+            == BatchType.SET_OPTION
+        )
+        assert (
+            classify_batch(
+                "/* header */\nIF OBJECT_ID('dbo.f', 'FN') IS NOT NULL\n"
+                "  DROP FUNCTION dbo.f",
+                "tsql",
+            )
+            == BatchType.SET_OPTION
+        )
+
 
 class TestBatchProperties:
     def test_is_empty_for_whitespace(self) -> None:

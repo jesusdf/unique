@@ -249,20 +249,17 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
     if not stripped:
         return BatchType.EMPTY
 
-    # A batch that is nothing but comments — including a ``/* … */`` block that may
-    # wrap commented-out code (even a CREATE PROCEDURE) — is a COMMENT; its content
-    # must not drive classification, or the whole block is emitted as mangled
-    # procedural code (a trailing ``*/;`` + carrier). Strip comments to check.
+    # Comments — a leading ``/* … */`` section header, a ``--`` line, or a whole
+    # commented-out block — must not drive classification, or a batch like
+    # ``/* header */ SET ANSI_NULLS ON`` or ``/* header */ IF OBJECT_ID(…) DROP``
+    # is mis-typed (its real statement isn't the first line) and emitted as mangled
+    # code. Classify against the comment-stripped text; the batch is emitted whole.
     without_comments = re.sub(r"/\*.*?\*/", " ", stripped, flags=re.S)
     without_comments = re.sub(r"(?m)^[ \t]*--.*$", "", without_comments)
     if not without_comments.strip():
         return BatchType.COMMENT
 
-    lines = [
-        line
-        for line in stripped.split("\n")
-        if line.strip() and not line.strip().startswith("--")
-    ]
+    lines = [line for line in without_comments.split("\n") if line.strip()]
     if not lines:
         return BatchType.COMMENT
 
@@ -278,8 +275,8 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
         # engine, which preserves it as a documented carrier + warning.
         if (
             dialect == "tsql"
-            and _TSQL_BEGIN_BLOCK_RE.search(stripped)
-            and not _CATALOG_REF_RE.search(stripped)
+            and _TSQL_BEGIN_BLOCK_RE.search(without_comments)
+            and not _CATALOG_REF_RE.search(without_comments)
         ):
             return BatchType.PROCEDURAL
         return BatchType.SET_OPTION
@@ -309,7 +306,7 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
         return BatchType.PROCEDURAL
 
     pattern = _PROCEDURAL_PATTERNS.get(dialect)
-    if pattern and pattern.search(stripped):
+    if pattern and pattern.search(without_comments):
         return BatchType.PROCEDURAL
 
     ddl_keywords = ("CREATE", "ALTER", "DROP", "TRUNCATE", "GRANT", "REVOKE")
