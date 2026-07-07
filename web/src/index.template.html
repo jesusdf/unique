@@ -347,6 +347,7 @@ function el(id) { return document.getElementById(id); }
 
 function showMessages(container, { warnings = [], unsupported = [], error = null, info = null }) {
   container.innerHTML = "";
+  container.dataset.kind = "";  // not syntax errors; live validation won't clear these
   const add = (cls, html) => {
     const div = document.createElement("div");
     div.className = "msg " + cls; div.innerHTML = html; container.appendChild(div);
@@ -397,6 +398,57 @@ async function autoDetect() {
   } catch (e) { /* detection is best-effort */ }
 }
 
+// Live source-syntax validation: while a script has syntax errors the Translate
+// button is disabled and the located errors are shown, so a malformed script is
+// never silently transpiled to garbage.
+async function validateSource() {
+  const sql = getInput();
+  let source = el("source").value;
+  if (source === "auto") source = lastDetected;
+  if (!sql.trim() || !source) { setRunBlocked(null); return; }
+  try {
+    const res = await fetch(API + "/api/v1/validate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sql, dialect: source }),
+    });
+    if (!res.ok) { setRunBlocked(null); return; }
+    const data = await res.json();
+    setRunBlocked(data.valid ? null : (data.issues || []));
+  } catch (e) { setRunBlocked(null); /* best-effort: never block on a network error */ }
+}
+
+function setRunBlocked(issues) {
+  const btn = el("run");
+  if (!issues || !issues.length) {
+    btn.disabled = false; btn.title = "";
+    const c = el("messages");
+    if (c.dataset.kind === "syntax") { c.innerHTML = ""; c.dataset.kind = ""; }
+    return;
+  }
+  btn.disabled = true;
+  btn.title = `Fix ${issues.length} syntax error${issues.length > 1 ? "s" : ""} first`;
+  renderSyntaxIssues(issues);
+}
+
+function renderSyntaxIssues(issues) {
+  const c = el("messages");
+  c.dataset.kind = "syntax";
+  c.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "msg err";
+  head.innerHTML = `<span class="k" style="color:var(--err)">Syntax</span>${issues.length} error${issues.length > 1 ? "s" : ""} in the source — fix them to translate.`;
+  c.appendChild(head);
+  for (const it of issues.slice(0, 20)) {
+    const div = document.createElement("div");
+    div.className = "msg err";
+    const snip = it.snippet ? ` — <code>${escapeHtml(it.snippet)}</code>` : "";
+    div.innerHTML = `<span class="k">line ${it.line}</span>${escapeHtml(it.message)}${snip}`;
+    c.appendChild(div);
+  }
+}
+
+async function onSourceChanged() { await autoDetect(); validateSource(); }
+
 async function translate() {
   const sql = getInput();
   let source = el("source").value;
@@ -425,7 +477,12 @@ async function translate() {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       setOutput("");
-      showMessages(el("messages"), { error: err.detail || "Request failed" });
+      const d = err.detail;
+      if (d && typeof d === "object" && Array.isArray(d.issues)) {
+        renderSyntaxIssues(d.issues);
+      } else {
+        showMessages(el("messages"), { error: (d && d.message) || (typeof d === "string" ? d : "Request failed") });
+      }
       return;
     }
     const data = await res.json();
@@ -504,7 +561,7 @@ async function translateFile() {
     // Re-detect dialect as the user types (debounced).
     cmInput.on("change", () => {
       clearTimeout(detectTimer);
-      detectTimer = setTimeout(autoDetect, 500);
+      detectTimer = setTimeout(onSourceChanged, 500);
     });
   }
 
@@ -590,6 +647,7 @@ async function translateFile() {
   el("source").addEventListener("change", () => {
     el("source").dataset.userSet = "1";
     setEditorMode(cmInput, el("source").value);
+    validateSource();
   });
   el("target").addEventListener("change", () => {
     setEditorMode(cmOutput, el("target").value);
@@ -597,7 +655,7 @@ async function translateFile() {
   el("input").addEventListener("input", () => {
     if (cmInput) return;  // CodeMirror handles detection via its change event
     clearTimeout(detectTimer);
-    detectTimer = setTimeout(autoDetect, 500);
+    detectTimer = setTimeout(onSourceChanged, 500);
   });
   // Ctrl/Cmd+Enter to translate (textarea fallback; CM uses extraKeys below).
   el("input").addEventListener("keydown", (e) => {
