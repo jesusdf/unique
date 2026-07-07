@@ -272,3 +272,16 @@ BEGIN
     END IF;
 END;
 $$;
+
+
+-- Scenario C — app_flag.
+DROP TABLE IF EXISTS app_flag CASCADE;
+CREATE TABLE app_flag (
+    id        INT          GENERATED ALWAYS AS IDENTITY,
+    flag_name VARCHAR(50)  NOT NULL,
+    enabled   BOOLEAN      NOT NULL,
+    CONSTRAINT pk_app_flag PRIMARY KEY (id),
+    CONSTRAINT uq_app_flag_name UNIQUE (flag_name)
+);
+
+ALTER TABLE app_flag ADD COLUMN note VARCHAR(20);

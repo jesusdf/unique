@@ -64,3 +64,9 @@ BEGIN
     flag_payment_status(2, 2);
 END;
 /
+
+
+-- Scenario C: seed app_flag (fresh table) + note backfill.
+INSERT INTO app_flag (flag_name, enabled) VALUES ('audit_log', 1);
+INSERT INTO app_flag (flag_name, enabled) VALUES ('beta_ui', 0);
+UPDATE app_flag SET note = 'on' WHERE flag_name = 'audit_log';

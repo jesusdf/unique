@@ -45,3 +45,9 @@ VALUES (2, '2024-02-05', 39.05);
 -- payment ('no payment'); customer 2 is paid ('paid').
 CALL flag_payment_status(1, 1);
 CALL flag_payment_status(2, 2);
+
+
+-- Scenario C: seed app_flag + note backfill.
+INSERT INTO app_flag (flag_name, enabled) VALUES ('audit_log', 1);
+INSERT INTO app_flag (flag_name, enabled) VALUES ('beta_ui', 0);
+UPDATE app_flag SET note = 'on' WHERE flag_name = 'audit_log';

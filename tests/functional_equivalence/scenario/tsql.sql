@@ -97,3 +97,12 @@ GO
 
 EXEC dbo.flag_payment_status 2, 2;
 GO
+
+
+-- ---- Scenario C: seed app_flag + note backfill -----------------------------
+INSERT INTO dbo.app_flag (flag_name, enabled) VALUES ('audit_log', 1);
+GO
+INSERT INTO dbo.app_flag (flag_name, enabled) VALUES ('beta_ui', 0);
+GO
+UPDATE dbo.app_flag SET note = 'on' WHERE flag_name = 'audit_log';
+GO

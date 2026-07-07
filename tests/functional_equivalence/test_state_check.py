@@ -42,6 +42,12 @@ class TestNormalize:
         assert normalize("true", True) is True
         assert normalize("f", False) is False
 
+    def test_bool_from_bit_bytes(self) -> None:
+        # MySQL / PostgreSQL return a BIT column as a raw byte.
+        assert normalize(b"\x01", True) is True
+        assert normalize(b"\x00", False) is False
+        assert normalize(bytearray(b"\x01"), True) is True
+
     def test_decimal_fixes_scale(self) -> None:
         # 61.05 from different engines: Decimal, float-ish str, trailing zeros.
         assert normalize(Decimal("61.05"), "61.05") == "61.05"
@@ -79,6 +85,7 @@ class TestLoadExpectedState:
             "invoice",
             "invoice_line",
             "payment",
+            "app_flag",
         }
         invoice = state.table("invoice")
         assert invoice.row_count == 2
@@ -227,6 +234,10 @@ class TestCheckState:
                     "paid_on": "2024-02-05",
                     "amount": Decimal("39.05"),
                 },
+            ],
+            "app_flag": [
+                {"id": 1, "flag_name": "audit_log", "enabled": True, "note": "on"},
+                {"id": 2, "flag_name": "beta_ui", "enabled": False, "note": None},
             ],
         }
         mismatches = check_state(state, lambda name: tables[name])

@@ -271,3 +271,15 @@ BEGIN
     END IF;
 END;
 /
+
+
+-- Scenario C — app_flag (the teardown block above drops it, so bare CREATE).
+CREATE TABLE app_flag (
+    id        NUMBER        GENERATED ALWAYS AS IDENTITY,
+    flag_name VARCHAR2(50)  NOT NULL,
+    enabled   NUMBER(1)     NOT NULL,
+    CONSTRAINT pk_app_flag PRIMARY KEY (id),
+    CONSTRAINT uq_app_flag_name UNIQUE (flag_name)
+);
+
+ALTER TABLE app_flag ADD note VARCHAR2(20);

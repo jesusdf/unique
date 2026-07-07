@@ -114,8 +114,11 @@ def normalize(actual: Any, expected: Any) -> Any:
     if actual is None:
         return NULL
 
-    # Boolean expected — accept 0/1, Decimal, bool, or 'true'/'false' text.
+    # Boolean expected — accept 0/1, Decimal, bool, 'true'/'false' text, or the
+    # raw byte a BIT column returns (MySQL/PostgreSQL give b'\x01' / b'\x00').
     if isinstance(expected, bool):
+        if isinstance(actual, (bytes, bytearray)):
+            return any(actual)
         if isinstance(actual, str):
             return actual.strip().lower() in ("1", "true", "t", "y", "yes")
         return bool(int(actual)) if not isinstance(actual, bool) else actual

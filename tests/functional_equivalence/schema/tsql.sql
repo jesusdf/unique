@@ -336,3 +336,24 @@ BEGIN
         UPDATE dbo.customer SET notes = 'paid' WHERE id = @customer_id;
 END
 GO
+
+
+-- ----------------------------------------------------------------------------
+-- Scenario C — idempotent guarded config: CREATE guard + ALTER-ADD guard.
+-- (IF OBJECT_ID -> per-engine idempotent CREATE; IF NOT EXISTS(syscolumns) ->
+-- Oracle's user_tab_columns block. Proves the guards Unique emits round-trip.)
+-- ----------------------------------------------------------------------------
+
+IF OBJECT_ID(N'dbo.app_flag', N'U') IS NULL
+CREATE TABLE dbo.app_flag (
+    id        INT          IDENTITY(1, 1) NOT NULL,
+    flag_name VARCHAR(50)  NOT NULL,
+    enabled   BIT          NOT NULL,
+    CONSTRAINT pk_app_flag PRIMARY KEY (id),
+    CONSTRAINT uq_app_flag_name UNIQUE (flag_name)
+)
+GO
+
+IF NOT EXISTS (SELECT * FROM syscolumns WHERE id = OBJECT_ID(N'dbo.app_flag') AND name = 'note')
+ALTER TABLE dbo.app_flag ADD note VARCHAR(20) NULL
+GO

@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from typing import Any
 
 # Tables read back, in FK-safe order (not required for reads, but stable).
-TABLES = ("customer", "product", "invoice", "invoice_line", "payment")
+TABLES = ("customer", "product", "invoice", "invoice_line", "payment", "app_flag")
 
 
 def split_statements(sql: str, dialect: str) -> list[str]:

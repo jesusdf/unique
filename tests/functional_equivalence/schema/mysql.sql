@@ -254,3 +254,16 @@ BEGIN
 END //
 
 DELIMITER ;
+
+
+-- Scenario C — app_flag.
+DROP TABLE IF EXISTS app_flag;
+CREATE TABLE app_flag (
+    id        INT          AUTO_INCREMENT,
+    flag_name VARCHAR(50)  NOT NULL,
+    enabled   TINYINT(1)   NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_app_flag_name (flag_name)
+);
+
+ALTER TABLE app_flag ADD COLUMN note VARCHAR(20);

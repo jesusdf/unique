@@ -141,6 +141,9 @@ class TestHarnessEndToEndSQLite:
             CREATE TABLE payment(id INTEGER PRIMARY KEY, invoice_id INT,
                 paid_on TEXT, amount NUMERIC);
             INSERT INTO payment VALUES (1,2,'2024-02-05',39.05);
+            CREATE TABLE app_flag(id INTEGER PRIMARY KEY, flag_name TEXT,
+                enabled INT, note TEXT);
+            INSERT INTO app_flag VALUES (1,'audit_log',1,'on'),(2,'beta_ui',0,NULL);
             """)
 
         def read_table(name: str) -> list[dict]:

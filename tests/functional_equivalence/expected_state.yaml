@@ -91,6 +91,17 @@ tables:
       # Pays invoice 2 in full (= its total 39.05); the payment path sets is_paid.
       - { id: 1, invoice_id: 2, paid_on: "2024-02-05", amount: "39.05" }
 
+  app_flag:
+    row_count: 2
+    # Scenario C — idempotent guarded config. Exercises the CREATE guard
+    # (IF OBJECT_ID -> per-engine idempotent create), the ALTER-ADD guard
+    # (IF NOT EXISTS(syscolumns) ADD note -> Oracle user_tab_columns block), and
+    # a guarded idempotent seed. 'audit_log' is enabled with note 'on';
+    # 'beta_ui' is disabled with note left NULL.
+    rows:
+      - { id: 1, flag_name: "audit_log", enabled: true, note: "on" }
+      - { id: 2, flag_name: "beta_ui", enabled: false, note: null }
+
 # Values maintained by the schema's triggers. When the *source* fixture's
 # set-based triggers are a documented divergence on the target (MySQL and
 # Oracle have no named transition tables; the transpiled trigger bodies are

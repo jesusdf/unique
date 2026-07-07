@@ -189,3 +189,40 @@ the variable observed no row, `'paid'` otherwise). Called for (1, 1) — invoice
   read with `SELECT MAX(amount) INTO ...` — an aggregate always returns one
   row, so the no-payment case yields NULL portably and natively (no engine
   raises). Only the T-SQL source exercises the S2-3 transform.
+
+---
+
+## Scenario C — idempotent migration guards (additive)
+
+Additive, like Scenario B: a new `app_flag` table with its own assertions, added
+to exercise the **idempotent guards Unique emits** — the creative constructions
+that keep a transpiled migration script re-runnable across engines.
+
+### New schema surface
+
+| Object / column | Kind | Purpose |
+|---|---|---|
+| `app_flag` | table | `id` PK identity, `flag_name` UNIQUE, `enabled` BIT/BOOLEAN |
+| `app_flag.note` | column added by `ALTER TABLE … ADD` | exercises the **ALTER-ADD guard** |
+
+### Guards exercised (and where they round-trip)
+
+| Guard | Source shape | Transpiles to | Asserted effect |
+|---|---|---|---|
+| **CREATE guard** | `IF OBJECT_ID(…) IS NULL CREATE TABLE app_flag` | Oracle `user_objects` block / PG-MySQL fresh CREATE | table + rows present on every engine |
+| **ALTER-ADD guard** | `IF NOT EXISTS(syscolumns…) ALTER TABLE app_flag ADD note` | Oracle idempotent `user_tab_columns` block (`EXECUTE IMMEDIATE`); PG/MySQL `ADD COLUMN` | `app_flag.note` present + backfilled (`'on'` on the enabled row, NULL on the other) |
+
+`enabled` is seeded `1`/`0` (BIT), read back per-engine (a BIT column returns
+`b'\x01'` on MySQL/PostgreSQL — normalized to a bool in `state_check.normalize`).
+The note backfill filters by `flag_name` (never `WHERE enabled = 1`, which has no
+`boolean = integer` operator on PostgreSQL).
+
+### Not exercised here (by design)
+
+- The **`FROM DUAL` guard FOR-loop → IF** round-trip (`FOR unique_guard IN
+  (SELECT 1 FROM DUAL WHERE …) LOOP …`, the exact shape Unique emits for Oracle)
+  is a **syntactic** transform covered by `tests/unit/core/procedural/
+  test_dual_guard.py`. It is *not* in this functional harness because a top-level
+  guarded block has no MySQL equivalent (it degrades to a carrier there), so
+  `oracle→mysql` could not assert its effect — the same reason lossy constructs
+  stay in the syntactic tests.
