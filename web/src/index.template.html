@@ -38,11 +38,13 @@
   header .fab-logo img { width: 25px; height: 25px; display: block; }
   header h1 { font-size: 22px; font-weight: 500; letter-spacing: .01em; margin: 0; }
   header h1 small { display: block; font-size: 12px; color: var(--on-surface-var); font-weight: 400; }
+  header .brand { display: inline-flex; align-items: center; gap: 14px; text-decoration: none; color: inherit; }
+  header .brand:hover { opacity: .82; }
   header .version { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--primary);
-    background: var(--primary-container); border-radius: 999px; padding: 3px 10px; }
+    background: var(--primary-container); border-radius: 999px; padding: 3px 10px; text-decoration: none; }
+  header .version:hover { filter: brightness(.96); }
   header .version:empty { display: none; }
   header .spacer { flex: 1; }
-  header a.docs { color: var(--secondary); text-decoration: none; font-size: 13px; font-weight: 600; }
   .filled { font-family: var(--sans); font-weight: 600; font-size: 14px; letter-spacing: .02em;
     color: var(--on-primary); background: var(--primary); border: 0; padding: 11px 24px;
     border-radius: 999px; cursor: pointer; box-shadow: var(--e1); display: inline-flex; gap: 8px; align-items: center; }
@@ -160,11 +162,12 @@
 </head>
 <body>
 <header>
-  <div class="fab-logo"><img src="/static/logo.svg" alt="Unique" width="25" height="25" /></div>
-  <h1>Unique <small>SQL transpiler</small></h1>
-  <span class="version" id="versionTag" title="Application version"></span>
+  <a class="brand" href="https://github.com/jesusdf/unique" target="_blank" rel="noopener" title="Unique on GitHub">
+    <span class="fab-logo"><img src="/static/logo.svg" alt="Unique" width="25" height="25" /></span>
+    <h1>Unique <small>SQL transpiler</small></h1>
+  </a>
+  <a class="version" id="versionTag" href="/docs" target="_blank" title="Open the API docs"></a>
   <div class="spacer"></div>
-  <a class="docs" href="/docs" target="_blank">API docs</a>
   <button class="filled" id="run">▶ Transpile</button>
   <button class="outlined" id="clear">Reset</button>
 </header>
