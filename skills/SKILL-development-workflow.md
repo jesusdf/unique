@@ -114,7 +114,17 @@ def test_transpile_select(fixture):
     assert result == fixture.expected_sql
 ```
 
-### Round-trip operator/function tests (A -> B -> A')
+### Round-trip validation (mandatory)
+
+**Every behavior-changing modification must be validated with a round-trip
+(A -> B -> A'), not only a one-way A -> B check.** A one-way assertion silently
+passes on a *no-op* or a *drop*: the change looks right going out, but the
+inverse pass reveals what was lost or mis-placed. This is exactly how the
+"comment before a routine" work surfaced its bug -- moving a T-SQL header comment
+*into* an Oracle procedure looked fine one-way, but Oracle -> T-SQL then dropped
+it entirely (the parser discarded declaration-section comments), so the round-trip
+lost it. Whenever you touch how a construct is emitted or parsed, transpile it
+back and assert A' preserves A (place, value, and presence) before you commit.
 
 For anything whose *spelling* differs between engines -- operators (string `+`
 vs `||` vs `CONCAT`, bitwise, compound assignment) and functions modeled
