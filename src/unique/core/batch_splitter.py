@@ -249,6 +249,15 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
     if not stripped:
         return BatchType.EMPTY
 
+    # A batch that is nothing but comments — including a ``/* … */`` block that may
+    # wrap commented-out code (even a CREATE PROCEDURE) — is a COMMENT; its content
+    # must not drive classification, or the whole block is emitted as mangled
+    # procedural code (a trailing ``*/;`` + carrier). Strip comments to check.
+    without_comments = re.sub(r"/\*.*?\*/", " ", stripped, flags=re.S)
+    without_comments = re.sub(r"(?m)^[ \t]*--.*$", "", without_comments)
+    if not without_comments.strip():
+        return BatchType.COMMENT
+
     lines = [
         line
         for line in stripped.split("\n")

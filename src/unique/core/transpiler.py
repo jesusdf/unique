@@ -1525,6 +1525,10 @@ class Transpiler:
         """
         if target == "tsql":
             return sql
+        if batch_type == BatchType.COMMENT:
+            # A comment batch (incl. a whole /* … */ block) carries no statement to
+            # terminate; appending ``;`` would corrupt it (``*/;``).
+            return sql
         stripped = sql.rstrip()
         if not stripped:
             return sql

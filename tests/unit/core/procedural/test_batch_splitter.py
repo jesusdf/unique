@@ -222,6 +222,13 @@ class TestClassification:
     def test_comment_only(self) -> None:
         assert classify_batch("-- just a comment", "tsql") == BatchType.COMMENT
 
+    def test_block_comment_wrapping_code_is_comment(self) -> None:
+        # A /* … */ block that wraps commented-out code (even a CREATE PROCEDURE)
+        # is a COMMENT, not procedural — otherwise the whole block is emitted as
+        # mangled procedural code (a trailing '*/;' + carrier).
+        sql = "/*\nCREATE PROCEDURE p AS BEGIN SELECT 1 END\nGO\n*/"
+        assert classify_batch(sql, "tsql") == BatchType.COMMENT
+
 
 class TestBatchProperties:
     def test_is_empty_for_whitespace(self) -> None:

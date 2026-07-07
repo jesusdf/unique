@@ -113,6 +113,17 @@ class TestTranspiler:
         assert "user_constraints" in out.lower()
         assert "CONSTRAINT_NAME = 'FK_X'" in out.upper()
 
+    def test_block_comment_with_code_emitted_verbatim(
+        self, transpiler: Transpiler
+    ) -> None:
+        # A /* … */ block wrapping (commented-out) procedural code is emitted
+        # verbatim — no trailing '*/;' and no could-not-translate carrier.
+        sql = "/*\nCREATE PROCEDURE p AS BEGIN SELECT 1 END\nGO\n*/"
+        out = transpiler.transpile(sql, source="tsql", target="oracle").sql
+        assert "*/;" not in out
+        assert "could not translate" not in out
+        assert out.strip().endswith("*/")
+
     def test_textimage_on_filegroup_stripped(self, transpiler: Transpiler) -> None:
         # TEXTIMAGE_ON <filegroup> (LOB storage placement) makes sqlglot fall back
         # to a Command, losing the whole CREATE TABLE; it is stripped pre-parse so
