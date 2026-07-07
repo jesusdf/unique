@@ -756,12 +756,18 @@ class CommentStatement(ASTNode):
     ``<dialect>``. A later transpilation whose target equals ``restore_dialect``
     restores ``<orig>`` instead of re-emitting the note (a faithful round-trip);
     any other target keeps the note. Both are ``None`` for ordinary comments.
+
+    ``header`` marks a comment re-homed from before a ``CREATE`` routine (SQL
+    Server keeps such comments in the stored module; Oracle/PostgreSQL/MySQL
+    store a routine from ``CREATE`` on): the emitter hoists it to the head of the
+    declaration section so it sits right after the CREATE, inside the routine.
     """
 
     text: str
     style: str = "line"  # "line" | "block"
     restore_sql: str | None = None
     restore_dialect: str | None = None
+    header: bool = False
 
 
 @dataclass(frozen=True)

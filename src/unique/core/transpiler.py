@@ -19,6 +19,12 @@ import logging
 import re
 from dataclasses import dataclass, field, replace
 
+from unique.core.ast_nodes import (
+    CommentStatement,
+    CreateFunctionStatement,
+    CreateProcedureStatement,
+    CreateTriggerStatement,
+)
 from unique.core.batch_splitter import _TSQL_SYSTEM_PROCS, BatchSplitter, BatchType
 from unique.core.converter import (
     DATE_COLUMNS,
@@ -565,6 +571,29 @@ def _is_comment_only(sql: str) -> bool:
     )
 
 
+# SQL Server keeps comments that precede a CREATE PROCEDURE/FUNCTION/TRIGGER as
+# part of the stored module text; Oracle, PostgreSQL and MySQL store a routine
+# only from the CREATE keyword on, so those leading comments are lost on load.
+# For these targets we re-home them inside the routine body (see
+# _transpile_procedural) instead of emitting them before the CREATE.
+_ROUTINE_COMMENT_TARGETS = ("oracle", "postgresql", "mysql")
+
+
+def _leading_comment_nodes(text: str) -> list[CommentStatement]:
+    """Parse a run of leading ``--`` / ``/* … */`` comments into IR nodes."""
+    nodes: list[CommentStatement] = []
+    for match in re.finditer(r"--[^\n]*|/\*.*?\*/", text, re.S):
+        raw = match.group(0)
+        nodes.append(
+            CommentStatement(
+                text=raw,
+                style="block" if raw.startswith("/*") else "line",
+                header=True,
+            )
+        )
+    return nodes
+
+
 _COMPOUND_ASSIGN_RE = re.compile(
     # column (optionally schema/table-qualified or [bracketed]) then one of the
     # T-SQL compound assignment operators, captured so we can expand it.
@@ -1033,6 +1062,28 @@ class Transpiler:
                     warnings.append(_warn(w, "procedural_transform", source, target))
             else:
                 node = parse_result.node
+
+            # Comments that preceded the routine are part of SQL Server's stored
+            # module but are dropped by Oracle/PostgreSQL/MySQL (they store a
+            # routine from CREATE on). Re-home them inside the body so they survive
+            # the round-trip instead of sitting outside the CREATE, where the
+            # engine discards them.
+            if (
+                leading_comments
+                and target in _ROUTINE_COMMENT_TARGETS
+                and isinstance(
+                    node,
+                    (
+                        CreateProcedureStatement,
+                        CreateFunctionStatement,
+                        CreateTriggerStatement,
+                    ),
+                )
+            ):
+                homed = _leading_comment_nodes(leading_comments)
+                if homed:
+                    node = replace(node, body=(*homed, *node.body))
+                    leading_comments = ""
 
             # Emit
             emitter = ProceduralEmitter(target)

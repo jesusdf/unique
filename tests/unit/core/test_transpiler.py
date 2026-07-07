@@ -147,6 +147,38 @@ class TestTranspiler:
         ).sql
         assert "Unhandled expression type" not in out
 
+    def test_leading_comments_rehomed_into_routine(
+        self, transpiler: Transpiler
+    ) -> None:
+        # SQL Server keeps comments before CREATE PROCEDURE as part of the stored
+        # module; Oracle/PostgreSQL/MySQL store a routine from CREATE on and drop
+        # them, so they move inside — right after the CREATE (the declaration
+        # section), before the body's declarations — to survive the round-trip.
+        src = (
+            "-- Autor: X\n-- Fecha: Y\n"
+            "CREATE PROCEDURE dbo.p @x INT AS BEGIN SET @x = @x + 1 END"
+        )
+        for target in ("oracle", "postgresql", "mysql"):
+            out = transpiler.transpile(src, source="tsql", target=target).sql
+            # Present, and moved inside — not left dangling before the CREATE.
+            assert "-- Autor: X" in out and "-- Fecha: Y" in out, target
+            assert not out.lstrip().startswith("--"), target
+        # On Oracle it lands in the declaration section (after the header, before
+        # BEGIN), i.e. right after the CREATE rather than down in the body.
+        oracle = transpiler.transpile(src, source="tsql", target="oracle").sql
+        assert oracle.index("-- Autor: X") < oracle.index("BEGIN")
+
+    def test_leading_comments_kept_before_create_for_tsql(
+        self, transpiler: Transpiler
+    ) -> None:
+        # T-SQL preserves the pre-CREATE comments as part of the module: keep them.
+        out = transpiler.transpile(
+            "-- Autor: X\nCREATE PROCEDURE dbo.p @x INT AS BEGIN SET @x = 1 END",
+            source="tsql",
+            target="tsql",
+        ).sql
+        assert out.lstrip().startswith("-- Autor: X")
+
     def test_textimage_on_filegroup_stripped(self, transpiler: Transpiler) -> None:
         # TEXTIMAGE_ON <filegroup> (LOB storage placement) makes sqlglot fall back
         # to a Command, losing the whole CREATE TABLE; it is stripped pre-parse so

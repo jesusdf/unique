@@ -312,6 +312,15 @@ class ProceduralEmitter:
         declarations: list[ASTNode] = []
         body_stmts: list[ASTNode] = []
         for stmt in body:
+            if isinstance(stmt, CommentStatement) and stmt.header:
+                # A header comment re-homed from before the CREATE (SQL Server
+                # keeps those in the stored module; Oracle/PostgreSQL/MySQL store
+                # a routine from CREATE on) belongs at the head of the declaration
+                # section, right after the CREATE — not below the declarations
+                # after BEGIN. Only these flagged comments are hoisted; an ordinary
+                # body comment (e.g. a UNIQUE restore note) stays in place.
+                declarations.append(stmt)
+                continue
             if isinstance(stmt, (DeclareStatement, CursorDeclaration)):
                 declarations.append(stmt)
             elif (
