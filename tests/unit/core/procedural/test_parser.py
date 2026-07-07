@@ -13,6 +13,7 @@ from unique.core.ast_nodes import (
     CreateTriggerStatement,
     DeclareStatement,
     IfStatement,
+    RawSQL,
     WhileStatement,
 )
 from unique.core.procedural.parser import ProceduralParser
@@ -20,6 +21,17 @@ from unique.core.procedural.parser import ProceduralParser
 
 def _parse(sql: str, dialect: str = "tsql"):
     return ProceduralParser(dialect).parse(sql)
+
+
+class TestFallback:
+    def test_unparseable_construct_carrier_keeps_line_breaks(self) -> None:
+        # A construct the parser cannot handle is preserved as a documented carrier
+        # (never a silent loss). The source line breaks are kept, so a large
+        # construct is multi-line rather than one enormous, editor-breaking line.
+        result = _parse("@@weird\n@@unparseable stuff\n@@more here")
+        assert isinstance(result.node, RawSQL)
+        assert result.node.reason == "Could not parse procedural construct"
+        assert result.node.sql.count("\n") == 2  # 3 source lines -> 2 line breaks
 
 
 class TestTSQLProcedure:

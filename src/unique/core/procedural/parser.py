@@ -2852,16 +2852,26 @@ class ProceduralParser:
 
     def _parse_fallback(self) -> ASTNode:
         """When we can't parse, capture everything as RawSQL (a documented
-        carrier) and register a warning so the loss is never silent."""
+        carrier) and register a warning so the loss is never silent. Keep a newline
+        between tokens that came from different source lines, so a large construct
+        is preserved as readable multi-line text instead of one enormous line that
+        breaks editors and diffs."""
         parts: list[str] = []
+        prev_line: int | None = None
         while not self._at_end():
-            parts.append(self._current().value)
+            tok = self._current()
+            if parts:
+                parts.append(
+                    " " if prev_line is None or tok.line == prev_line else "\n"
+                )
+            parts.append(tok.value)
+            prev_line = tok.line
             self._advance()
         self._warnings.append(
             "Could not parse procedural construct; preserved as a documented "
             "carrier for manual review"
         )
         return RawSQL(
-            sql=" ".join(parts).strip(),
+            sql="".join(parts).strip(),
             reason="Could not parse procedural construct",
         )
