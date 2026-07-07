@@ -111,6 +111,27 @@ _ORACLE_CREATE_OBJ_RE = re.compile(
     r'(?:"?\w+"?\s*\.\s*)?"?(?P<name>\w+)"?'
 )
 
+# ``ALTER TABLE t ADD <col> …`` — a guarded column add whose T-SQL guard checked
+# ``syscolumns``. Idempotent on Oracle via a ``user_tab_columns`` probe. Excludes
+# ADD CONSTRAINT/PRIMARY/… (those add no column, so the column probe is wrong).
+_ORACLE_ALTER_ADD_RE = re.compile(
+    r'(?is)^\s*ALTER\s+TABLE\s+(?:"?\w+"?\s*\.\s*)?"?(?P<table>\w+)"?\s+'
+    r"ADD\s+\(?\s*"
+    r"(?!CONSTRAINT\b|PRIMARY\b|FOREIGN\b|UNIQUE\b|CHECK\b)"
+    r'"?(?P<col>\w+)"?\b'
+)
+
+# ``ALTER TABLE t ADD CONSTRAINT c …`` — a guarded constraint add (FK/PK/UNIQUE);
+# idempotent on Oracle via a ``user_constraints`` probe on the constraint name.
+_ORACLE_ALTER_ADD_CONSTRAINT_RE = re.compile(
+    r'(?is)^\s*ALTER\s+TABLE\s+(?:"?\w+"?\s*\.\s*)?"?\w+"?\s+'
+    r'ADD\s+CONSTRAINT\s+"?(?P<name>\w+)"?\b'
+)
+
+# Leading blank / ``--`` comment lines (a section header often precedes the guarded
+# DDL); kept and re-attached so the idempotent wrapper does not swallow them.
+_ORACLE_LEADING_NOISE_RE = re.compile(r"(?s)^((?:[ \t]*(?:--[^\n]*)?\n)*)")
+
 
 def _oracle_q_quote(s: str) -> str:
     """Wrap *s* in an Oracle ``q'…'`` literal, picking a delimiter whose closing
@@ -122,21 +143,40 @@ def _oracle_q_quote(s: str) -> str:
 
 
 def _oracle_idempotent_create(ddl: str) -> str | None:
-    """Make a guarded ``CREATE`` idempotent on Oracle. Oracle DDL cannot be a
-    conditional (static) statement inside PL/SQL, so run it via ``EXECUTE
-    IMMEDIATE`` only when the object is absent — a catalog probe over
-    ``user_objects`` (covers every object type). Portable to every Oracle version
-    (unlike ``CREATE … IF NOT EXISTS``, 23ai+). Returns ``None`` if the object's
-    kind/name can't be identified (caller keeps the bare DDL)."""
-    m = _ORACLE_CREATE_OBJ_RE.match(ddl)
-    if not m:
-        return None
-    kind, name = m.group("kind").upper(), m.group("name").upper()
-    body = ddl.strip().rstrip(";").rstrip()
-    return (
+    """Make a guarded ``CREATE`` or ``ALTER TABLE … ADD`` idempotent on Oracle.
+    Oracle DDL cannot be a conditional (static) statement inside PL/SQL, so run it
+    via ``EXECUTE IMMEDIATE`` only when the target is absent — a catalog probe over
+    ``user_objects`` for a CREATE (covers every object type) or ``user_tab_columns``
+    for an added column. Portable to every Oracle version (unlike ``… IF NOT
+    EXISTS``, 23ai+). A leading section-header comment is preserved. Returns
+    ``None`` when neither shape is recognized (caller keeps the bare DDL)."""
+    lead = _ORACLE_LEADING_NOISE_RE.match(ddl)
+    prefix, stmt = (ddl[: lead.end()], ddl[lead.end() :]) if lead else ("", ddl)
+
+    create = _ORACLE_CREATE_OBJ_RE.match(stmt)
+    constraint = _ORACLE_ALTER_ADD_CONSTRAINT_RE.match(stmt)
+    if create:
+        name, kind = create.group("name").upper(), create.group("kind").upper()
+        probe = (
+            f"SELECT 1 FROM user_objects WHERE object_name = '{name}' "
+            f"AND object_type = '{kind}'"
+        )
+    elif constraint:
+        cname = constraint.group("name").upper()
+        probe = f"SELECT 1 FROM user_constraints WHERE constraint_name = '{cname}'"
+    else:
+        add = _ORACLE_ALTER_ADD_RE.match(stmt)
+        if not add:
+            return None
+        table, col = add.group("table").upper(), add.group("col").upper()
+        probe = (
+            f"SELECT 1 FROM user_tab_columns WHERE table_name = '{table}' "
+            f"AND column_name = '{col}'"
+        )
+    body = stmt.strip().rstrip(";").rstrip()
+    return prefix + (
         "BEGIN FOR unique_guard IN (SELECT 1 FROM DUAL WHERE NOT EXISTS (\n"
-        f"      SELECT 1 FROM user_objects WHERE object_name = '{name}' "
-        f"AND object_type = '{kind}')) LOOP\n"
+        f"      {probe})) LOOP\n"
         f"    EXECUTE IMMEDIATE {_oracle_q_quote(body)};\n"
         "  END LOOP; END;"
     )

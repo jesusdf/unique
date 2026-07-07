@@ -82,6 +82,37 @@ class TestTranspiler:
         assert "ALTER TABLE X ADD COLUMN c" in out
         assert "-- UNIQUE:" not in out
 
+    def test_oracle_alter_add_column_is_idempotent(
+        self, transpiler: Transpiler
+    ) -> None:
+        # A syscolumns-guarded ADD COLUMN must stay re-runnable on Oracle: add the
+        # column only when user_tab_columns shows it absent (Oracle DDL cannot be
+        # conditional, so via EXECUTE IMMEDIATE). Regression: the guard used to be
+        # dropped, leaving a bare ALTER that fails on re-run (ORA-01430).
+        sql = (
+            "IF NOT EXISTS (SELECT * FROM syscolumns WHERE id = OBJECT_ID('X') "
+            "AND name = 'c')\nALTER TABLE X ADD c INT"
+        )
+        out = transpiler.transpile(sql, source="tsql", target="oracle").sql
+        assert "unique_guard" in out
+        assert "user_tab_columns" in out.lower()
+        assert "TABLE_NAME = 'X'" in out.upper()
+        assert "COLUMN_NAME = 'C'" in out.upper()
+        assert "-- UNIQUE:" not in out
+
+    def test_oracle_alter_add_constraint_is_idempotent(
+        self, transpiler: Transpiler
+    ) -> None:
+        # A guarded ADD CONSTRAINT (FK/PK/UNIQUE) probes user_constraints by name.
+        sql = (
+            "IF NOT EXISTS (SELECT * FROM sys.objects WHERE name = 'fk_x')\n"
+            "ALTER TABLE X ADD CONSTRAINT fk_x FOREIGN KEY (a) REFERENCES Y (id)"
+        )
+        out = transpiler.transpile(sql, source="tsql", target="oracle").sql
+        assert "unique_guard" in out
+        assert "user_constraints" in out.lower()
+        assert "CONSTRAINT_NAME = 'FK_X'" in out.upper()
+
     def test_textimage_on_filegroup_stripped(self, transpiler: Transpiler) -> None:
         # TEXTIMAGE_ON <filegroup> (LOB storage placement) makes sqlglot fall back
         # to a Command, losing the whole CREATE TABLE; it is stripped pre-parse so
