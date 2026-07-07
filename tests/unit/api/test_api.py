@@ -228,6 +228,16 @@ class TestUI:
         assert "text/html" in resp.headers["content-type"]
         assert "<textarea" in resp.text
 
+    def test_ui_gates_translate_on_source_validation(
+        self, client: TestClient
+    ) -> None:
+        # The page validates the source live and disables Translate while it has
+        # syntax errors (setRunBlocked), showing the located issues.
+        body = client.get("/").text
+        assert "validateSource" in body
+        assert "/api/v1/validate" in body
+        assert "setRunBlocked" in body
+
     def test_ui_is_self_contained(self, client: TestClient) -> None:
         # The page must embed CodeMirror and load no external resources, so it
         # works behind a reverse proxy with no internet access.
