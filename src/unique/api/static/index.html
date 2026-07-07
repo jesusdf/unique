@@ -2471,7 +2471,7 @@ async function transpileFile() {
     let extra = "";
     if (source === "auto" && detected) extra += ` · detected ${ENGINE_LABELS[detected] || detected}`;
     if (warnCount) {
-      el("messages").appendChild(statusBar("warn", "KO",
+      el("messages").appendChild(statusBar("warn", "OK",
         `Downloaded <b>${escapeHtml(filename)}</b> — ${warnCount} warning${warnCount > 1 ? "s" : ""}${extra}.`));
     } else {
       el("messages").appendChild(statusBar("ok", "OK",
@@ -2498,7 +2498,7 @@ function showResult(warnings = [], unsupported = []) {
   clearStatus();
   const c = el("messages");
   if (!items.length) { c.appendChild(statusBar("ok", "OK", "Transpiled with no warnings.")); return; }
-  c.appendChild(statusBar("warn", "KO", `Transpiled with ${items.length} warning${items.length > 1 ? "s" : ""}.`));
+  c.appendChild(statusBar("warn", "OK", `Transpiled with ${items.length} warning${items.length > 1 ? "s" : ""}.`));
   for (const it of items) c.appendChild(detailRow(`<span class="k">${escapeHtml(it.t)}</span>${escapeHtml(it.m)}`));
 }
 
