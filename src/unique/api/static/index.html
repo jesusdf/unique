@@ -92,10 +92,10 @@
   .head .swap2 { align-self: center; width: 30px; height: 30px; border-radius: 8px; flex: none;
     border: 0; background: transparent; color: var(--secondary); font-size: 16px; cursor: pointer; }
   .head .swap2:hover { background: var(--surface-1); }
-  .head .load { margin-left: auto; align-self: center; font-family: var(--mono); font-size: 11.5px;
-    font-weight: 600; color: var(--secondary); background: #fff; border: 1px solid var(--outline);
-    padding: 6px 11px; border-radius: 8px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
-  .head .load:hover { border-color: var(--secondary); }
+  .head .load { margin-left: auto; align-self: center; color: var(--secondary); background: transparent;
+    border: 0; padding: 4px; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; }
+  .head .load svg { width: 19px; height: 19px; display: block; }
+  .head .load:hover { background: var(--surface-1); }
   .head .dl { margin-left: auto; align-self: center; font-family: var(--mono); font-size: 11.5px;
     color: var(--on-surface-var); display: inline-flex; gap: 6px; align-items: center; }
   .head .copy-btn { align-self: center; font-family: var(--mono); font-size: 11.5px; color: var(--secondary);
@@ -194,7 +194,7 @@
         <span class="role">source</span>
         <span class="detect" id="detectNote"></span>
         <button class="swap2" id="swap" title="Swap source and target">⇄</button>
-        <button class="load" id="loadBtn" title="Load a .sql file">⬆ Load .sql</button>
+        <button class="load" id="loadBtn" title="Load a .sql file" aria-label="Load a .sql file"><svg viewBox="0 0 24 24" role="img"><path fill="currentColor" d="M9,16V10H5L12,3L19,10H15V16H9M5,20V18H19V20H5Z"/></svg></button>
       </div>
       <div class="cm-host" id="srcHost">
         <textarea id="input" placeholder="Paste your SQL script here…" spellcheck="false"></textarea>
