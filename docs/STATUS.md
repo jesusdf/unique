@@ -1,6 +1,6 @@
 # Unique — Project Status
 
-## Current state: v0.22.1
+## Current state: v0.22.2
 
 The DML/DDL pipeline and the autonomous procedural engine are complete, and
 **functional equivalence** holds across the **full 4×4 matrix — all 16
