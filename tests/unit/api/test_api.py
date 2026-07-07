@@ -228,9 +228,7 @@ class TestUI:
         assert "text/html" in resp.headers["content-type"]
         assert "<textarea" in resp.text
 
-    def test_ui_gates_translate_on_source_validation(
-        self, client: TestClient
-    ) -> None:
+    def test_ui_gates_translate_on_source_validation(self, client: TestClient) -> None:
         # The page validates the source live and disables Translate while it has
         # syntax errors (setRunBlocked), showing the located issues.
         body = client.get("/").text
