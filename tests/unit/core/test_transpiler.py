@@ -124,6 +124,29 @@ class TestTranspiler:
         assert "could not translate" not in out
         assert out.strip().endswith("*/")
 
+    def test_cte_before_insert_is_preserved(self, transpiler: Transpiler) -> None:
+        # ``WITH cte AS (…) INSERT … SELECT … FROM cte`` (T-SQL's ;WITH idiom): the
+        # CTE parses onto the INSERT and used to be dropped, leaving a dangling
+        # ``FROM cte``. It must survive to every target.
+        sql = (
+            ";WITH mycte AS (SELECT 'x' AS k, 1 AS v)\n"
+            "INSERT INTO t (k, v) SELECT k, v FROM mycte"
+        )
+        for target in ("oracle", "postgresql", "mysql"):
+            out = transpiler.transpile(sql, source="tsql", target=target).sql
+            assert "mycte" in out and "WITH" in out.upper(), target
+            assert "INSERT INTO" in out.upper(), target
+
+    def test_leading_semicolon_with_comment_is_not_a_carrier(
+        self, transpiler: Transpiler
+    ) -> None:
+        # A comment before a ``;`` makes sqlglot yield an empty exp.Semicolon
+        # statement; it must be dropped, not emitted as an "unhandled" carrier.
+        out = transpiler.transpile(
+            "/* header */\n;\nSELECT 1", source="tsql", target="oracle"
+        ).sql
+        assert "Unhandled expression type" not in out
+
     def test_textimage_on_filegroup_stripped(self, transpiler: Transpiler) -> None:
         # TEXTIMAGE_ON <filegroup> (LOB storage placement) makes sqlglot fall back
         # to a Command, losing the whole CREATE TABLE; it is stripped pre-parse so

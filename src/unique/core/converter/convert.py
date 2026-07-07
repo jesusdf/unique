@@ -82,7 +82,10 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
 
     nodes: list[ASTNode] = []
     for expression in parsed:
-        if expression is None:
+        # An empty statement — a stray/leading ``;`` (e.g. the mandatory one in
+        # T-SQL's ``;WITH``). sqlglot yields None for it, or an exp.Semicolon when a
+        # comment precedes it; both are no-ops, not an "unhandled" construct.
+        if expression is None or isinstance(expression, exp.Semicolon):
             continue
         # Preserve the statement's leading comments (sqlglot attaches them to the
         # expression); our IR conversion would otherwise drop them. Re-emit them
@@ -522,6 +525,14 @@ def _convert_insert(expr: exp.Insert) -> InsertStatement:
     # SELECT
     select = None
     if isinstance(val_expr, exp.Select):
+        # A CTE that precedes the INSERT (``WITH cte AS (…) INSERT … SELECT …
+        # FROM cte``) is parsed onto the Insert, not the inner SELECT — move it
+        # onto the SELECT or the emitter drops it, leaving ``FROM cte`` dangling.
+        cte = expr.args.get("with") or expr.args.get("with_")
+        if cte is not None and not (
+            val_expr.args.get("with") or val_expr.args.get("with_")
+        ):
+            val_expr.set("with", cte)
         select = _convert_select(val_expr)
 
     return InsertStatement(
