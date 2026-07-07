@@ -146,6 +146,11 @@ class TSqlEmitter(ProceduralEmitter):
         assignments = ", ".join(pairs)
         return f"SELECT {assignments} {rest};"
 
+    def _emit_guard_if(self, cond: str, body_lines: list[str]) -> str | None:
+        # T-SQL's IF takes a SQL condition (incl. EXISTS), so the guard is a
+        # plain IF … BEGIN … END — no cursor, no FROM DUAL.
+        return "\n".join([f"IF ({cond})", "BEGIN", *body_lines, "END"])
+
     def _emit_for_loop_body(
         self, variable: str, cursor_str: str, body_lines: list[str]
     ) -> str:

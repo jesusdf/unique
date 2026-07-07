@@ -64,6 +64,50 @@ logger = logging.getLogger(__name__)
 #: contains one must be evaluated in SQL context (``SELECT … INTO v FROM DUAL``).
 _SQL_ONLY_IN_PLSQL = re.compile(r"(?i)\(\s*SELECT\b|\bCAST\s*\(")
 
+#: A guard idiom: ``FOR <var> IN (SELECT … FROM DUAL [WHERE <cond>]) LOOP … END``
+#: runs its body 0 or 1 times, gating on <cond>. On engines whose IF takes a SQL
+#: condition it round-trips to ``IF <cond> …`` rather than a scanned cursor. This
+#: is exactly the shape Unique emits for an idempotent guard, so it round-trips.
+_DUAL_GUARD_RE = re.compile(
+    r"(?is)^SELECT\b.+?\bFROM\s+DUAL\b\s*(?:WHERE\s+(?P<cond>.+))?$"
+)
+
+
+def _strip_wrapping_parens(s: str) -> str:
+    """Drop one balanced pair of parentheses that wraps the whole string."""
+    s = s.strip()
+    while len(s) >= 2 and s.startswith("(") and s.endswith(")"):
+        depth = 0
+        wraps_all = False
+        for pos, ch in enumerate(s):
+            depth += (ch == "(") - (ch == ")")
+            if depth == 0:
+                # A wrapper only if the opening "(" closes at the very end.
+                wraps_all = pos == len(s) - 1
+                break
+        if not wraps_all:
+            break
+        s = s[1:-1].strip()
+    return s
+
+
+def _dual_guard_condition(cursor_str: str) -> str | None:
+    """The WHERE condition of a ``SELECT … FROM DUAL [WHERE <cond>]`` guard cursor
+    (``1 = 1`` when there is no WHERE), or ``None`` when *cursor_str* is not that
+    shape (so the caller keeps a real cursor loop)."""
+    m = _DUAL_GUARD_RE.match(_strip_wrapping_parens(cursor_str))
+    if not m:
+        return None
+    return (m.group("cond") or "").strip() or "1 = 1"
+
+
+def _for_var_referenced(variable: str, body_lines: list[str]) -> bool:
+    """Whether the loop variable is used in the emitted body — if so the loop
+    binds real row data and must stay a cursor loop, not collapse to an IF."""
+    pat = re.compile(rf"\b{re.escape(variable)}\b")
+    return any(pat.search(line) for line in body_lines)
+
+
 #: Populated by the per-engine modules via ``register_emitter``.
 _EMITTER_REGISTRY: dict[str, type[ProceduralEmitter]] = {}
 
@@ -825,7 +869,21 @@ class ProceduralEmitter:
         body_lines = self._emit_indented_stmts(node.body)
         self._indent_level -= 1
 
+        # A ``FROM DUAL`` guard loop (runs 0/1 times, never binds a row) becomes an
+        # IF on engines that support it — no dead cursor, and no stray FROM DUAL.
+        cond = _dual_guard_condition(cursor_str)
+        if cond is not None and not _for_var_referenced(node.variable, body_lines):
+            guard = self._emit_guard_if(cond, body_lines)
+            if guard is not None:
+                return guard
+
         return self._emit_for_loop_body(node.variable, cursor_str, body_lines)
+
+    def _emit_guard_if(self, cond: str, body_lines: list[str]) -> str | None:
+        """Render a ``FROM DUAL`` guard FOR-loop as an ``IF``. Default returns
+        ``None`` — keep the native FOR-loop (Oracle, where the FOR-loop over DUAL
+        *is* how the guard is expressed). T-SQL/PostgreSQL/MySQL override."""
+        return None
 
     def _emit_for_loop_body(
         self, variable: str, cursor_str: str, body_lines: list[str]

@@ -72,6 +72,11 @@ class MySqlEmitter(ProceduralEmitter):
     def _assignment_form(self, target: str, val: str) -> str:
         return f"SET {target} = {val};"
 
+    def _emit_guard_if(self, cond: str, body_lines: list[str]) -> str | None:
+        # MySQL's IF accepts an EXISTS/subquery condition, so the guard is an
+        # IF … THEN … END IF; rather than a scanned cursor.
+        return "\n".join([f"IF {cond} THEN", *body_lines, "END IF;"])
+
     def _emit_for_loop_body(
         self, variable: str, cursor_str: str, body_lines: list[str]
     ) -> str:

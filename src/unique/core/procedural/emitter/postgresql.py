@@ -58,6 +58,11 @@ class PostgresEmitter(ProceduralEmitter):
     def _emit_print(self, node: PrintStatement) -> str:
         return f"RAISE NOTICE '%', {self._emit_node(node.expression)};"
 
+    def _emit_guard_if(self, cond: str, body_lines: list[str]) -> str | None:
+        # PL/pgSQL's IF takes a SQL condition (incl. EXISTS); the guard is an
+        # IF … THEN … END IF; rather than a FOR-loop over the (nonexistent) DUAL.
+        return "\n".join([f"IF {cond} THEN", *body_lines, "END IF;"])
+
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
         msg = self._emit_node(node.message) if node.message else "'Error'"
         # Keep the human-readable message, not the error number (audit
