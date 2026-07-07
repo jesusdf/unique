@@ -98,7 +98,13 @@ def _dual_guard_condition(cursor_str: str) -> str | None:
     m = _DUAL_GUARD_RE.match(_strip_wrapping_parens(cursor_str))
     if not m:
         return None
-    return (m.group("cond") or "").strip() or "1 = 1"
+    cond = (m.group("cond") or "").strip() or "1 = 1"
+    # A FROM-less subquery in the condition carries an Oracle-only ``FROM DUAL``
+    # (the forward pass adds it so ``EXISTS (SELECT NULL)`` is valid PL/SQL). This
+    # path only feeds engines whose ``IF`` takes a SQL condition (T-SQL/PostgreSQL/
+    # MySQL) — none needs DUAL there, and T-SQL/PostgreSQL have no such table — so
+    # drop it, keeping the round-trip faithful (``EXISTS (SELECT NULL)``).
+    return re.sub(r"(?i)\s+FROM\s+DUAL\b", "", cond)
 
 
 def _for_var_referenced(variable: str, body_lines: list[str]) -> bool:

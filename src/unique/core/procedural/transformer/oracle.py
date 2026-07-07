@@ -10,6 +10,9 @@ import dataclasses
 import re
 from typing import Any, TypeVar
 
+import sqlglot
+from sqlglot import expressions as exp
+
 from unique.core.ast_nodes import (
     AlterProcedureStatement,
     AssignmentStatement,
@@ -147,9 +150,33 @@ class OracleTransformer(ProceduralTransformer):
     ) -> ForLoopStatement:
         return ForLoopStatement(
             variable="unique_guard",
-            cursor=RawSQL(sql=f"(SELECT 1 FROM DUAL WHERE {where_sql.strip()})"),
+            cursor=RawSQL(sql=OracleTransformer._probe_cursor(where_sql)),
             body=body,
         )
+
+    @staticmethod
+    def _probe_cursor(where_sql: str) -> str:
+        """``(SELECT 1 FROM DUAL WHERE <cond>)`` — the one-row guard probe.
+
+        Every SELECT needs a FROM clause on Oracle, so a FROM-less subquery in the
+        condition (e.g. ``EXISTS (SELECT NULL)``, or ``SELECT 1`` with no source)
+        must get ``FROM DUAL`` too, not just the outer probe — otherwise the cursor
+        is invalid (ORA-00923). If the condition can't be parsed, fall back to the
+        raw wrap (the prior behaviour) so nothing is lost.
+        """
+        probe = f"SELECT 1 FROM DUAL WHERE {where_sql.strip()}"
+        try:
+            tree = sqlglot.parse_one(probe, read="oracle")
+        except Exception:
+            return f"({probe})"
+        fromless = [
+            s
+            for s in tree.find_all(exp.Select)
+            if not (s.args.get("from") or s.args.get("from_"))
+        ]
+        for select in fromless:
+            select.from_("DUAL", copy=False)
+        return f"({tree.sql(dialect='oracle')})"
 
     @staticmethod
     def _negate_exists(sql: str) -> str:

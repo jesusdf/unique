@@ -50,4 +50,39 @@ class TestDualGuardForLoop:
         )
         out = transpile(real, "oracle", "tsql").sql
         assert "CURSOR" in out
+
+
+class TestGuardConditionDual:
+    """Every SELECT needs a FROM on Oracle; a FROM-less subquery in the guard
+    condition gets FROM DUAL going in and loses it coming back."""
+
+    def test_fromless_exists_subquery_gets_dual(self) -> None:
+        # Not just the outer probe — the inner ``EXISTS (SELECT NULL)`` needs a
+        # FROM DUAL too, else the cursor is invalid PL/SQL (ORA-00923).
+        out = transpile(
+            "IF EXISTS (SELECT NULL)\nBEGIN\n  PRINT 'x'\nEND", "tsql", "oracle"
+        ).sql
+        assert "SELECT NULL FROM DUAL" in out.upper()
+
+    def test_subquery_with_real_from_is_untouched(self) -> None:
+        # A subquery that already has a source keeps it — DUAL must not replace it.
+        out = transpile(
+            "IF EXISTS (SELECT 1 FROM t WHERE id = 1)\nBEGIN\n  PRINT 'x'\nEND",
+            "tsql",
+            "oracle",
+        ).sql
+        assert "FROM t" in out and "SELECT 1 FROM DUAL WHERE" in out
+
+    def test_condition_dual_stripped_on_reverse(self) -> None:
+        # Round-trip: the inner FROM DUAL the forward pass added is dropped again
+        # on T-SQL/PostgreSQL (neither has a DUAL table).
+        guard = (
+            "BEGIN FOR unique_guard IN "
+            "(SELECT 1 FROM DUAL WHERE EXISTS (SELECT NULL FROM DUAL)) LOOP\n"
+            "  DBMS_OUTPUT.PUT_LINE('run');\nEND LOOP; END;\n/"
+        )
+        for target in ("tsql", "postgresql"):
+            out = transpile(guard, "oracle", target).sql
+            assert "DUAL" not in out.upper(), target
+            assert "EXISTS" in out.upper(), target
         assert not out.strip().startswith("IF (")
