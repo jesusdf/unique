@@ -28,6 +28,8 @@ class TestDialectsCommand:
 
 
 class TestTranspileCommand:
+    _MALFORMED = "INSERT INTO t VALUES (1)\nCREATE PROCEDURE p AS BEGIN SELECT 1 END"
+
     def test_transpile_from_stdin(self, runner: CliRunner) -> None:
         result = runner.invoke(
             cli,
@@ -36,6 +38,26 @@ class TestTranspileCommand:
         )
         assert result.exit_code == 0
         assert result.output.strip()
+
+    def test_refuses_malformed_source(self, runner: CliRunner) -> None:
+        # A CREATE PROCEDURE with no preceding GO is a source syntax error: refuse
+        # (exit 1) and report it, rather than silently transpile garbage.
+        result = runner.invoke(
+            cli,
+            ["transpile", "--from", "tsql", "--to", "oracle"],
+            input=self._MALFORMED,
+        )
+        assert result.exit_code == 1
+        assert "syntax error" in result.output.lower()
+        assert "line 2" in result.output
+
+    def test_ignore_syntax_errors_forces_transpile(self, runner: CliRunner) -> None:
+        result = runner.invoke(
+            cli,
+            ["transpile", "--from", "tsql", "--to", "oracle", "--ignore-syntax-errors"],
+            input=self._MALFORMED,
+        )
+        assert result.exit_code == 0
 
     def test_transpile_from_file(self, runner: CliRunner, tmp_path: Path) -> None:
         f = tmp_path / "in.sql"
@@ -104,6 +126,15 @@ class TestValidateCommand:
         result = runner.invoke(cli, ["validate", str(f), "--dialect", "tsql"])
         assert result.exit_code == 0
         assert "Valid" in result.output
+
+    def test_reports_located_syntax_error(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        f = tmp_path / "bad.sql"
+        f.write_text("SELECT * FROM (SELECT 1")
+        result = runner.invoke(cli, ["validate", str(f), "--dialect", "tsql"])
+        assert result.exit_code == 1
+        assert "Invalid" in result.output and "line 1" in result.output
 
 
 class TestHelp:

@@ -12,6 +12,7 @@ import click
 
 from unique.core.registry import DialectRegistry
 from unique.core.transpiler import TranspileOptions, Transpiler
+from unique.core.validation import validate_source
 
 
 @click.group()
@@ -38,6 +39,13 @@ def cli() -> None:
     "--output", "-o", type=click.Path(), help="Output file. Defaults to stdout."
 )
 @click.option(
+    "--ignore-syntax-errors",
+    "ignore_syntax_errors",
+    is_flag=True,
+    default=False,
+    help="Transpile even if the source has syntax errors (reported by default).",
+)
+@click.option(
     "--db-url",
     "db_url",
     default=None,
@@ -53,6 +61,7 @@ def transpile(
     source: str,
     target: str,
     output: str | None,
+    ignore_syntax_errors: bool,
     db_url: str | None,
 ) -> None:
     """Transpile SQL from one dialect to another.
@@ -69,6 +78,22 @@ def transpile(
     if not sql.strip():
         click.echo("Error: No SQL input provided.", err=True)
         sys.exit(1)
+
+    # Refuse a malformed source up front (unless told to transpile anyway).
+    if not ignore_syntax_errors:
+        try:
+            issues = validate_source(sql, source)
+        except Exception:
+            issues = []
+        if issues:
+            click.echo(
+                f"Error: {len(issues)} syntax error(s) in the source "
+                "(use --ignore-syntax-errors to transpile anyway):",
+                err=True,
+            )
+            for issue in issues:
+                click.echo(f"  {issue}", err=True)
+            sys.exit(1)
 
     # Transpile
     transpiler = Transpiler()
@@ -103,21 +128,24 @@ def transpile(
 @click.argument("input_file", type=click.Path(exists=True))
 @click.option("--dialect", "-d", required=True, help="Dialect to validate against.")
 def validate(input_file: str, dialect: str) -> None:
-    """Validate SQL syntax by parsing it without emitting.
-
-    Attempts to parse the SQL and reports any errors.
-    """
+    """Report source-SQL syntax errors, located by line, for the given dialect."""
     with open(input_file, encoding="utf-8") as f:
         sql = f.read()
 
-    transpiler = Transpiler()
     try:
-        dialect_impl = transpiler.registry.get(dialect)
-        nodes = dialect_impl.parse(sql)
-        click.echo(f"Valid: parsed {len(nodes)} statement(s).")
+        Transpiler().registry.get(dialect)  # reject an unknown dialect
     except Exception as e:
-        click.echo(f"Invalid: {e}", err=True)
+        click.echo(f"Error: {e}", err=True)
         sys.exit(1)
+
+    issues = validate_source(sql, dialect)
+    if not issues:
+        click.echo("Valid: no syntax errors.")
+        return
+    click.echo(f"Invalid: {len(issues)} syntax error(s):", err=True)
+    for issue in issues:
+        click.echo(f"  {issue}", err=True)
+    sys.exit(1)
 
 
 @cli.command(name="dialects")
