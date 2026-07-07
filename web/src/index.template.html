@@ -7,289 +7,217 @@
 <!-- CODEMIRROR_CSS -->
 <style>
   :root {
-    --bg: #0f1117;
-    --panel: #171a23;
-    --panel-2: #1d2130;
-    --border: #2a2f3e;
-    --text: #e6e8ee;
-    --muted: #9aa3b2;
-    --accent: #5b8cff;
-    --accent-2: #38bdf8;
-    --ok: #34d399;
-    --warn: #fbbf24;
-    --err: #f87171;
-    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-    --sans: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    /* palette unified around the logo red (#C9252C) + indigo, on cream */
+    --primary: #c9252c;
+    --on-primary: #ffffff;
+    --primary-container: #f7d8d3;
+    --on-primary-container: #5a1013;
+    --secondary: #3a2f66;          /* indigo (dark, reads navy) */
+    --surface: #f7f4ee;            /* page / combo background */
+    --surface-1: #f1ede3;
+    --surface-2: #ebe6da;
+    --outline: #cdc6b8;
+    --on-surface: #201b17;
+    --on-surface-var: #4f4639;
+    --ok: #2f7d46;
+    --warn: #ffc531;
+    --mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: "Roboto", ui-sans-serif, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif;
+    --display: "Fraunces", "Georgia", "Times New Roman", serif;
+    --e1: 0 1px 2px rgba(60,20,10,.10), 0 1px 3px 1px rgba(60,20,10,.06);
+    --e2: 0 1px 2px rgba(60,20,10,.10), 0 2px 6px 2px rgba(60,20,10,.07);
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font-family: var(--sans); line-height: 1.5;
-  }
-  header {
-    padding: 18px 24px; border-bottom: 1px solid var(--border);
-    display: flex; align-items: baseline; gap: 14px;
-  }
-  header .brand {
-    display: inline-flex; align-items: baseline; gap: 0;
-  }
-  header .brand .logo {
-    /* The logo is the capital "U"; size and seat it so it reads as the first
-       letter of the wordmark, sitting on the text baseline. */
-    width: 21px; height: 21px; flex: 0 0 auto;
-    transform: translateY(2px);
-    margin-right: 1px;
-  }
-  header h1 {
-    font-size: 21px; margin: 0; letter-spacing: .5px; font-weight: 600;
-  }
-  header .version {
-    font-size: 12px; font-weight: 600; color: var(--accent);
-    background: var(--panel-2); border: 1px solid var(--border);
-    border-radius: 999px; padding: 2px 9px; letter-spacing: .3px;
-  }
+  body { margin: 0; background: var(--surface); color: var(--on-surface);
+    font-family: var(--sans); line-height: 1.5; }
+
+  /* ---- top app bar ---- */
+  header { display: flex; align-items: center; gap: 14px; padding: 16px 26px; max-width: 1200px; margin: 0 auto; }
+  header .fab-logo { width: 42px; height: 42px; border-radius: 12px; background: #fff; flex: none;
+    display: grid; place-items: center; box-shadow: var(--e1); border: 1px solid var(--outline); }
+  header .fab-logo img { width: 25px; height: 25px; display: block; }
+  header h1 { font-size: 22px; font-weight: 500; letter-spacing: .01em; margin: 0; }
+  header h1 small { display: block; font-size: 12px; color: var(--on-surface-var); font-weight: 400; }
+  header .version { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--primary);
+    background: var(--primary-container); border-radius: 999px; padding: 3px 10px; }
   header .version:empty { display: none; }
-  header .tag { color: var(--muted); font-size: 13px; }
   header .spacer { flex: 1; }
-  .db-field {
-    margin: 0 0 16px; padding: 12px 14px;
-    background: var(--panel-2); border: 1px solid var(--border);
-    border-radius: 10px;
-  }
-  .db-field label {
-    display: block; font-size: 12px; color: var(--muted);
-    text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px;
-  }
+  header a.docs { color: var(--secondary); text-decoration: none; font-size: 13px; font-weight: 600; }
+  .filled { font-family: var(--sans); font-weight: 600; font-size: 14px; letter-spacing: .02em;
+    color: var(--on-primary); background: var(--primary); border: 0; padding: 11px 24px;
+    border-radius: 999px; cursor: pointer; box-shadow: var(--e1); display: inline-flex; gap: 8px; align-items: center; }
+  .filled:hover { filter: brightness(1.05); }
+  .filled:disabled { opacity: .5; cursor: default; filter: none; }
+  .outlined { font-family: var(--sans); font-weight: 600; font-size: 14px; color: var(--secondary);
+    background: transparent; border: 1.5px solid var(--outline); padding: 10px 20px; border-radius: 999px; cursor: pointer; }
+  .outlined:hover { border-color: var(--secondary); }
+
+  main { padding: 8px 26px 40px; max-width: 1200px; margin: 0 auto; }
+
+  /* ---- optional database field ---- */
+  .db-field { margin: 6px 0 18px; padding: 12px 14px; background: var(--surface-1);
+    border: 1px solid var(--outline); border-radius: 12px; }
+  .db-field label { display: block; font-size: 12px; color: var(--on-surface-var);
+    text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
   .db-field .db-optional { text-transform: none; letter-spacing: 0; opacity: .8; }
-  .db-input {
-    width: 100%; box-sizing: border-box;
-    background: var(--panel); color: var(--text);
-    border: 1px solid var(--border); border-radius: 8px;
-    padding: 9px 11px; font-family: var(--mono, monospace); font-size: 13px;
-  }
-  .db-input:focus { outline: none; border-color: var(--accent); }
-  .db-help { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
-  header a { color: var(--accent-2); text-decoration: none; font-size: 13px; }
-  main { padding: 24px; max-width: 1200px; margin: 0 auto; }
-  .toolbar {
-    display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end;
-    margin-bottom: 16px;
-  }
-  .field { display: flex; flex-direction: column; gap: 4px; }
-  .field label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
-  select, button, input[type=file]::file-selector-button {
-    font-family: var(--sans); font-size: 14px;
-  }
-  select {
-    background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 0 10px; min-width: 150px;
-    height: 40px; box-sizing: border-box;
-  }
-  .swap-btn {
-    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
-    border-radius: 8px; padding: 0 12px; cursor: pointer; font-size: 16px;
-    height: 40px; box-sizing: border-box;
-    display: inline-flex; align-items: center; justify-content: center;
-  }
-  .swap-btn:hover { border-color: var(--accent); }
-  .primary {
-    background: linear-gradient(180deg, var(--accent), #4072e6);
-    color: white; border: none; border-radius: 8px; padding: 0 18px;
-    font-weight: 600; cursor: pointer; height: 40px; box-sizing: border-box;
-    display: inline-flex; align-items: center; justify-content: center;
-  }
-  .primary:hover { filter: brightness(1.07); }
-  .primary:disabled { opacity: .5; cursor: default; }
-  .ghost {
-    background: transparent; color: var(--muted); border: 1px solid var(--border);
-    border-radius: 8px; padding: 9px 14px; cursor: pointer;
-  }
-  .ghost:hover { color: var(--text); border-color: var(--accent); }
+  .db-input { width: 100%; background: #fff; color: var(--on-surface); border: 1px solid var(--outline);
+    border-radius: 8px; padding: 9px 11px; font-family: var(--mono); font-size: 13px; }
+  .db-input:focus { outline: none; border-color: var(--secondary); }
+  .db-help { margin: 8px 0 0; color: var(--on-surface-var); font-size: 12px; line-height: 1.5; }
+  .db-help code, main code { font-family: var(--mono); font-size: .92em; }
+
+  /* ---- editors ---- */
   .editors { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   @media (max-width: 860px) { .editors { grid-template-columns: 1fr; } }
-  /* min-width:0 lets each grid column hold its track width instead of being
-     stretched by long, non-wrapping SQL lines; the editor then scrolls
-     horizontally inside its own box rather than overflowing the page. */
-  .editor { display: flex; flex-direction: column; min-width: 0; }
-  .editor .head {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
-    font-size: 13px; color: var(--muted);
-  }
-  .editor .head .badge {
-    margin-left: auto; font-size: 11px; padding: 2px 8px; border-radius: 999px;
-    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
-  }
-  textarea {
-    width: 100%; max-width: 100%; box-sizing: border-box;
-    min-height: 380px; resize: vertical; overflow: auto;
-    background: var(--panel); color: var(--text); border: 1px solid var(--border);
-    border-radius: 10px; padding: 14px; font-family: var(--mono); font-size: 13px;
-    line-height: 1.55; tab-size: 2; white-space: pre;
-  }
-  textarea:focus { outline: none; border-color: var(--accent); }
-  textarea[readonly] { background: #13161f; }
-  /* CodeMirror integration: match the panel look and textarea sizing. */
-  .CodeMirror {
-    height: 380px; max-width: 100%; border: 1px solid var(--border);
-    border-radius: 10px; font-family: var(--mono); font-size: 13px;
-    line-height: 1.55; background: var(--panel);
-  }
-  /* Keep CodeMirror's own horizontal scrollbar inside the box so a very long
-     line never widens the editor past its column. */
+  .card { background: #fff; border-radius: 16px; box-shadow: var(--e2); min-width: 0;
+    display: flex; flex-direction: column; }
+  .card .head { display: flex; align-items: baseline; gap: 11px; padding: 14px 18px 10px; }
+  .card .head .role { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+    letter-spacing: .16em; color: var(--on-surface-var); }
+  .card .head .detect { font-family: var(--mono); font-size: 11px; color: var(--secondary); }
+  .card .head .state { margin-left: auto; align-self: center; font-family: var(--mono); font-size: 12px; color: var(--ok); }
+
+  /* borderless dialect combo in the header */
+  .dialect { position: relative; display: inline-flex; }
+  .dialect select { appearance: none; -webkit-appearance: none; -moz-appearance: none;
+    font-family: var(--display); font-size: 21px; font-weight: 600; color: var(--on-surface);
+    background: transparent; border: 0; padding: 0 19px 0 0; margin: 0; cursor: pointer; line-height: 1.1; }
+  .dialect select:focus { outline: none; }
+  .dialect::after { content: "▾"; position: absolute; right: 1px; top: 54%; transform: translateY(-50%);
+    pointer-events: none; color: var(--on-surface-var); font-size: 11px; }
+  .head .swap2 { align-self: center; width: 30px; height: 30px; border-radius: 8px; flex: none;
+    border: 0; background: transparent; color: var(--secondary); font-size: 16px; cursor: pointer; }
+  .head .swap2:hover { background: var(--surface-1); }
+  .head .load { margin-left: auto; align-self: center; font-family: var(--mono); font-size: 11.5px;
+    font-weight: 600; color: var(--secondary); background: #fff; border: 1px solid var(--outline);
+    padding: 6px 11px; border-radius: 8px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+  .head .load:hover { border-color: var(--secondary); }
+  .head .dl { margin-left: auto; align-self: center; font-family: var(--mono); font-size: 11.5px;
+    color: var(--on-surface-var); display: inline-flex; gap: 6px; align-items: center; }
+  .head .copy-btn { align-self: center; font-family: var(--mono); font-size: 11.5px; color: var(--secondary);
+    background: #fff; border: 1px solid var(--outline); border-radius: 8px; padding: 6px 11px; cursor: pointer; }
+  .head .copy-btn:hover { border-color: var(--secondary); }
+
+  .cm-host { position: relative; padding: 0 6px 6px; }
+  textarea { width: 100%; min-height: 400px; resize: vertical; background: #fff; color: var(--on-surface);
+    border: 0; padding: 8px 12px 14px; font-family: var(--mono); font-size: 13px; line-height: 1.6;
+    tab-size: 2; white-space: pre; }
+  textarea:focus { outline: none; }
+
+  /* CodeMirror — light, matching the card; tokens recoloured to the palette */
+  .CodeMirror { height: 400px; max-width: 100%; font-family: var(--mono); font-size: 13px;
+    line-height: 1.6; background: #fff; color: #2c261f; border-radius: 0 0 12px 12px; }
   .CodeMirror-scroll { overflow-x: auto !important; }
-  .CodeMirror-focused { border-color: var(--accent); }
-  .editor .cm-wrap { resize: vertical; overflow: hidden; }
-  .CodeMirror-gutters { background: #13161f; border-right: 1px solid var(--border); }
-  .cm-s-dracula.CodeMirror { background: var(--panel); }
-  .result .CodeMirror { background: #13161f; }
-  .messages { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
-  .msg {
-    font-size: 13px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--panel);
-  }
-  .msg.warn { border-color: #5b4a14; }
-  .msg.err { border-color: #5b1d1d; color: #fecaca; }
-  .msg .k { color: var(--warn); font-weight: 600; margin-right: 6px; }
-  .copy-btn {
-    background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
-    border-radius: 6px; padding: 3px 9px; cursor: pointer; font-size: 12px;
-  }
-  .copy-btn:hover { color: var(--text); border-color: var(--accent); }
-  .detect-note { font-size: 12px; color: var(--accent-2); min-height: 16px; }
-  section.file {
-    margin-top: 28px; padding: 18px; background: var(--panel);
-    border: 1px solid var(--border); border-radius: 12px;
-  }
-  section.file h2 { margin: 0 0 4px; font-size: 15px; }
-  section.file p { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
-  /* Align every control on the same bottom edge; the swap button (no label)
-     and the file input get the same box height as the selects so the row reads
-     as one tidy line instead of staggered heights. */
-  .file-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
-  .file-row .field { gap: 6px; }
-  .file-row input[type=file] { height: 40px; box-sizing: border-box; }
-  /* The swap button has no label above it, so it already sits level with the
-     select boxes via align-items:flex-end; a tiny side margin separates it. */
-  .file-row .swap-btn { margin: 0 2px; }
-  input[type=file] {
-    color: var(--muted); font-size: 13px;
-    background: var(--panel-2); border: 1px solid var(--border);
-    border-radius: 8px; padding: 8px;
-    display: flex; align-items: center;
-  }
-  input[type=file]::file-selector-button {
-    background: var(--panel); color: var(--text); border: 1px solid var(--border);
-    border-radius: 6px; padding: 6px 10px; margin-right: 10px; cursor: pointer;
-  }
-  .spinner {
-    display: inline-block; width: 14px; height: 14px; border: 2px solid var(--muted);
-    border-top-color: transparent; border-radius: 50%; animation: spin .7s linear infinite;
-    vertical-align: -2px; margin-right: 6px;
-  }
+  .CodeMirror-gutters { background: #fff; border-right: 1px solid var(--surface-2); }
+  .CodeMirror-linenumber { color: #b9b1a2; }
+  .CodeMirror-cursor { border-left-color: var(--primary); }
+  .cm-keyword { color: #c9252c; font-weight: 600; }
+  .cm-string, .cm-string-2 { color: #2f7d46; }
+  .cm-comment { color: #9a9182; font-style: italic; }
+  .cm-number { color: #a4552b; }
+  .cm-builtin, .cm-def { color: #4b3f7a; }
+  .cm-type, .cm-variable-2, .cm-variable-3 { color: #2f5ca8; }
+  .cm-operator, .cm-punctuation, .cm-bracket { color: #4f4639; }
+  .cm-variable, .cm-property { color: #201b17; }
+  .CodeMirror-selected { background: #f0e7d8 !important; }
+
+  /* file-loaded (locked) state, shown over the source editor */
+  .filedrop { padding: 44px 22px 50px; text-align: center; display: none; flex-direction: column; align-items: center; }
+  .cm-host.has-file .CodeMirror, .cm-host.has-file textarea { display: none; }
+  .cm-host.has-file .filedrop { display: flex; }
+  .filedrop .fileicon { font-size: 36px; line-height: 1; }
+  .filedrop .filename { font-family: var(--mono); font-weight: 700; font-size: 15px; color: var(--on-surface); margin-top: 10px; word-break: break-all; }
+  .filedrop .filemeta { font-family: var(--mono); font-size: 12px; color: var(--on-surface-var); margin-top: 4px; }
+  .filedrop .lock { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; max-width: 36ch;
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.5; color: #7a5c00; background: #fff6d9;
+    border: 1px solid #f0dfa0; padding: 9px 13px; border-radius: 9px; text-align: left; }
+  .filedrop .use-editor { margin-top: 15px; font-family: var(--mono); font-size: 12px; color: var(--secondary);
+    background: transparent; border: 0; cursor: pointer; text-decoration: underline; }
+
+  /* ---- status bars ---- */
+  .statuses { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .status { display: flex; align-items: center; gap: 13px; background: #fff;
+    border: 1px solid var(--outline); border-radius: 12px; padding: 11px 14px; box-shadow: var(--e1); }
+  .status .tag { font-family: var(--mono); font-weight: 800; font-size: 12px; letter-spacing: .08em;
+    padding: 5px 12px; border-radius: 8px; flex: none; }
+  .status .tag.ok   { background: #1f9d63; color: #fff; }
+  .status .tag.warn { background: var(--warn); color: #3d2f00; }
+  .status .tag.err  { background: var(--primary); color: #fff; }
+  .status .txt { font-family: var(--mono); font-size: 12.5px; color: #2c261f; }
+  .status .txt b { font-weight: 700; }
+  .detail { font-family: var(--mono); font-size: 12px; color: var(--on-surface-var);
+    padding: 3px 14px 3px 16px; }
+  .detail b { color: var(--on-surface); font-weight: 700; }
+  .detail.err b { color: var(--primary); }
+  .detail code { color: var(--secondary); }
+  .detail .k { color: var(--on-surface); font-weight: 700; margin-right: 6px; }
+
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.5);
+    border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .hidden { display: none; }
+  .hidden { display: none !important; }
 </style>
 </head>
 <body>
 <header>
-  <span class="brand">
-    <img src="/static/logo.svg" alt="U" class="logo" width="30" height="30" />
-    <h1>nique</h1>
-  </span>
+  <div class="fab-logo"><img src="/static/logo.svg" alt="Unique" width="25" height="25" /></div>
+  <h1>Unique <small>SQL transpiler</small></h1>
   <span class="version" id="versionTag" title="Application version"></span>
-  <span class="tag">SQL transpiler — SQL&nbsp;Server · Oracle · PostgreSQL · MySQL</span>
-  <span class="spacer"></span>
-  <a href="/docs" target="_blank">API docs</a>
+  <div class="spacer"></div>
+  <a class="docs" href="/docs" target="_blank">API docs</a>
+  <button class="filled" id="run">▶ Transpile</button>
+  <button class="outlined" id="clear">Reset</button>
 </header>
 
 <main>
-  <div class="toolbar">
-    <div class="field">
-      <label for="source">Source engine</label>
-      <select id="source"></select>
-    </div>
-    <button class="swap-btn" id="swap" title="Swap source and target">⇄</button>
-    <div class="field">
-      <label for="target">Target engine</label>
-      <select id="target"></select>
-    </div>
-    <button class="primary" id="run">Translate</button>
-    <button class="ghost" id="clear">Clear</button>
-    <div class="field" style="flex:1; min-width: 180px;">
-      <label>&nbsp;</label>
-      <div class="detect-note" id="detectNote"></div>
-    </div>
-  </div>
-
   <div class="db-field" id="dbField" hidden>
-    <label for="dbName">
-      Database connection <span class="db-optional">(optional)</span>
-    </label>
+    <label for="dbName">Database connection <span class="db-optional">(optional)</span></label>
     <select id="dbName" class="db-input" hidden></select>
     <input type="text" id="dbUrl" class="db-input" spellcheck="false" hidden
            placeholder="e.g. oracle://user:pass@host:1521/service" />
     <p class="db-help">
       Used to resolve metadata-dependent constructs such as Oracle
       <code>%TYPE</code>/<code>%ROWTYPE</code>. Databases are configured
-      server-side (<code>UNIQUE_DSN_&lt;NAME&gt;</code>) and referenced by
-      name. Leave empty to skip.
+      server-side (<code>UNIQUE_DSN_&lt;NAME&gt;</code>) and referenced by name. Leave empty to skip.
     </p>
   </div>
 
   <div class="editors">
-    <div class="editor">
+    <div class="card">
       <div class="head">
-        <span>Source script</span>
-        <span class="badge" id="srcBadge">auto-detect on type</span>
+        <span class="dialect"><select id="source" aria-label="Source dialect"></select></span>
+        <span class="role">source</span>
+        <span class="detect" id="detectNote"></span>
+        <button class="swap2" id="swap" title="Swap source and target">⇄</button>
+        <button class="load" id="loadBtn" title="Load a .sql file">⬆ Load .sql</button>
       </div>
-      <textarea id="input" placeholder="Paste your SQL script here…" spellcheck="false"></textarea>
+      <div class="cm-host" id="srcHost">
+        <textarea id="input" placeholder="Paste your SQL script here…" spellcheck="false"></textarea>
+        <div class="filedrop" id="fileState">
+          <div class="fileicon">📄</div>
+          <div class="filename" id="fileName"></div>
+          <div class="filemeta" id="fileMeta"></div>
+          <div class="lock">🔒 Loaded from file — the editor is locked. Transpile downloads the converted file.</div>
+          <button class="use-editor" id="useEditor">Use the editor instead</button>
+        </div>
+      </div>
     </div>
-    <div class="editor result">
+
+    <div class="card">
       <div class="head">
-        <span>Result</span>
+        <span class="dialect"><select id="target" aria-label="Target dialect"></select></span>
+        <span class="role">target</span>
+        <span class="dl hidden" id="dlChip">⬇ <span id="dlName"></span></span>
         <button class="copy-btn" id="copy">Copy</button>
       </div>
-      <textarea id="output" readonly placeholder="Translation will appear here…" spellcheck="false"></textarea>
+      <div class="cm-host">
+        <textarea id="output" readonly placeholder="Translation will appear here…" spellcheck="false"></textarea>
+      </div>
     </div>
   </div>
 
-  <div class="messages" id="messages"></div>
-
-  <section class="file">
-    <h2>Translate a file</h2>
-    <p>Upload a <code>.sql</code> file and download it translated. Use “Auto-detect” to infer the source engine from the file.</p>
-    <div class="file-row">
-      <div class="field">
-        <label for="fileSource">Source engine</label>
-        <select id="fileSource"></select>
-      </div>
-      <button class="swap-btn" id="fileSwap" title="Swap source and target">⇄</button>
-      <div class="field">
-        <label for="fileTarget">Target engine</label>
-        <select id="fileTarget"></select>
-      </div>
-      <div class="field">
-        <label for="file">File</label>
-        <input type="file" id="file" accept=".sql,.txt,text/plain" />
-      </div>
-      <button class="primary" id="runFile">Translate &amp; download</button>
-    </div>
-    <div class="db-field" id="fileDbField" hidden>
-      <label for="fileDbName">
-        Database connection <span class="db-optional">(optional)</span>
-      </label>
-      <select id="fileDbName" class="db-input" hidden></select>
-      <input type="text" id="fileDbUrl" class="db-input" spellcheck="false"
-             hidden placeholder="e.g. oracle://user:pass@host:1521/service" />
-      <p class="db-help">
-        Used to resolve metadata-dependent constructs such as Oracle
-        <code>%TYPE</code>/<code>%ROWTYPE</code>. Databases are configured
-        server-side (<code>UNIQUE_DSN_&lt;NAME&gt;</code>) and referenced by
-        name. Leave empty to skip.
-      </p>
-    </div>
-    <div class="messages" id="fileMessages" style="margin-top:14px;"></div>
-  </section>
+  <input type="file" id="fileInput" accept=".sql,.txt,text/plain" class="hidden" />
+  <div class="statuses" id="messages"></div>
 </main>
 
 <!-- CODEMIRROR_JS -->
@@ -297,36 +225,32 @@
 const API = "";
 const ENGINE_LABELS = { tsql: "SQL Server (T-SQL)", oracle: "Oracle", postgresql: "PostgreSQL", mysql: "MySQL", sqlite: "SQLite" };
 
-// CodeMirror editor instances (created in init). Accessors below fall back to
-// the raw <textarea> if CodeMirror failed to load, so the UI still works.
 let cmInput = null, cmOutput = null;
 const CM_MODE = { tsql: "text/x-mssql", oracle: "text/x-plsql", postgresql: "text/x-pgsql", mysql: "text/x-mysql", sqlite: "text/x-sqlite" };
 
+function el(id) { return document.getElementById(id); }
 function getInput() { return cmInput ? cmInput.getValue() : el("input").value; }
 function setInput(v) { cmInput ? cmInput.setValue(v) : (el("input").value = v); }
 function getOutput() { return cmOutput ? cmOutput.getValue() : el("output").value; }
 function setOutput(v) { cmOutput ? cmOutput.setValue(v) : (el("output").value = v); }
 function setEditorMode(cm, dialect) { if (cm) cm.setOption("mode", CM_MODE[dialect] || "text/x-sql"); }
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 
 async function loadDialects() {
   try {
     const res = await fetch(API + "/api/v1/dialects");
     const data = await res.json();
     return { dialects: data.dialects, sourceOnly: data.source_only || [] };
-  } catch (e) {
-    return { dialects: ["tsql", "oracle", "postgresql", "mysql"], sourceOnly: [] };
-  }
+  } catch (e) { return { dialects: ["tsql", "oracle", "postgresql", "mysql"], sourceOnly: [] }; }
 }
 
 let dbEnabled = false;
 
 async function loadInfo() {
-  try {
-    const res = await fetch(API + "/api/v1/info");
-    return await res.json();
-  } catch (e) {
-    return { version: "", db_connection_enabled: false };
-  }
+  try { const res = await fetch(API + "/api/v1/info"); return await res.json(); }
+  catch (e) { return { version: "", db_connection_enabled: false }; }
 }
 
 function fillSelect(sel, dialects, { includeAuto = false } = {}) {
@@ -343,28 +267,21 @@ function fillSelect(sel, dialects, { includeAuto = false } = {}) {
   }
 }
 
-function el(id) { return document.getElementById(id); }
-
-function showMessages(container, { warnings = [], unsupported = [], error = null, info = null }) {
-  container.innerHTML = "";
-  container.dataset.kind = "";  // not syntax errors; live validation won't clear these
-  const add = (cls, html) => {
-    const div = document.createElement("div");
-    div.className = "msg " + cls; div.innerHTML = html; container.appendChild(div);
-  };
-  if (error) { add("err", `<span class="k" style="color:var(--err)">Error</span>${escapeHtml(error)}`); }
-  if (info) { add("", info); }
-  for (const w of warnings) {
-    add("warn", `<span class="k">${escapeHtml(w.feature || "warning")}</span>${escapeHtml(w.message)}`);
-  }
-  for (const u of unsupported) {
-    add("warn", `<span class="k">unsupported</span>${escapeHtml(u)}`);
-  }
+// ---- status bars ----
+function clearStatus() { const c = el("messages"); c.innerHTML = ""; c.dataset.kind = ""; }
+function statusBar(kind, tag, html) {
+  const row = document.createElement("div");
+  row.className = "status";
+  row.innerHTML = `<span class="tag ${kind}">${tag}</span><span class="txt">${html}</span>`;
+  return row;
 }
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function detailRow(html, kind) {
+  const row = document.createElement("div");
+  row.className = "detail" + (kind ? " " + kind : "");
+  row.innerHTML = html;
+  return row;
 }
+function showError(msg) { clearStatus(); el("messages").appendChild(statusBar("err", "KO", escapeHtml(msg))); }
 
 let detectTimer = null;
 let lastDetected = null;
@@ -372,8 +289,8 @@ let lastDetected = null;
 async function autoDetect() {
   const sql = getInput().trim();
   const note = el("detectNote");
-  const badge = el("srcBadge");
-  if (sql.length < 8) { note.textContent = ""; badge.textContent = "auto-detect on type"; return; }
+  if (el("source").value !== "auto") { note.textContent = ""; return; }
+  if (sql.length < 8) { note.textContent = ""; return; }
   try {
     const res = await fetch(API + "/api/v1/detect", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -384,24 +301,17 @@ async function autoDetect() {
       lastDetected = data.dialect;
       const pct = Math.round((data.confidence || 0) * 100);
       const label = ENGINE_LABELS[data.dialect] || data.dialect;
-      note.textContent = `Detected: ${label} (${pct}% confidence)`;
-      badge.textContent = `looks like ${label}`;
-      // Keep the combo on "Auto-detect" (the detected engine is used at
-      // translate time); just highlight the editor as the detected dialect.
-      if (el("source").value === "auto") {
-        setEditorMode(cmInput, data.dialect);
-      }
-    } else {
-      note.textContent = "Could not detect engine — pick one manually.";
-      badge.textContent = "unknown engine";
-    }
+      note.textContent = `· looks like ${label} (${pct}%)`;
+      setEditorMode(cmInput, data.dialect);
+    } else { note.textContent = "· unknown engine"; }
   } catch (e) { /* detection is best-effort */ }
 }
 
-// Live source-syntax validation: while a script has syntax errors the Translate
-// button is disabled and the located errors are shown, so a malformed script is
-// never silently transpiled to garbage.
+// Live source-syntax validation: while a script has syntax errors the Transpile
+// button is disabled and the located errors are shown. Skipped in file mode
+// (the file is validated server-side on transpile).
 async function validateSource() {
+  if (loadedFile) { setRunBlocked(null); return; }
   const sql = getInput();
   let source = el("source").value;
   if (source === "auto") source = lastDetected;
@@ -422,7 +332,7 @@ function setRunBlocked(issues) {
   if (!issues || !issues.length) {
     btn.disabled = false; btn.title = "";
     const c = el("messages");
-    if (c.dataset.kind === "syntax") { c.innerHTML = ""; c.dataset.kind = ""; }
+    if (c.dataset.kind === "syntax") clearStatus();
     return;
   }
   btn.disabled = true;
@@ -432,101 +342,100 @@ function setRunBlocked(issues) {
 
 function renderSyntaxIssues(issues) {
   const c = el("messages");
-  c.dataset.kind = "syntax";
-  c.innerHTML = "";
-  const head = document.createElement("div");
-  head.className = "msg err";
-  head.innerHTML = `<span class="k" style="color:var(--err)">Syntax</span>${issues.length} error${issues.length > 1 ? "s" : ""} in the source — fix them to translate.`;
-  c.appendChild(head);
+  c.innerHTML = ""; c.dataset.kind = "syntax";
+  c.appendChild(statusBar("err", "KO",
+    `${issues.length} syntax error${issues.length > 1 ? "s" : ""} in the source — fix them to transpile.`));
   for (const it of issues.slice(0, 20)) {
-    const div = document.createElement("div");
-    div.className = "msg err";
     const snip = it.snippet ? ` — <code>${escapeHtml(it.snippet)}</code>` : "";
-    div.innerHTML = `<span class="k">line ${it.line}</span>${escapeHtml(it.message)}${snip}`;
-    c.appendChild(div);
+    c.appendChild(detailRow(`<b>line ${it.line}</b> ${escapeHtml(it.message)}${snip}`, "err"));
   }
 }
 
 async function onSourceChanged() { await autoDetect(); validateSource(); }
 
-async function translate() {
-  const sql = getInput();
-  let source = el("source").value;
-  const target = el("target").value;
-  const btn = el("run");
-  if (!sql.trim()) { showMessages(el("messages"), { error: "Please enter a source script." }); return; }
-  // "Auto-detect" resolves to the detected engine (populated while typing).
-  if (source === "auto") {
-    if (!lastDetected) { await autoDetect(); }
-    source = lastDetected;
-    if (!source) { showMessages(el("messages"), { error: "Could not auto-detect the source engine — pick one from the list." }); return; }
+// ---- file mode (unified: a loaded file locks the editor; Transpile downloads) ----
+let loadedFile = null;
+
+function setFileMode(file) {
+  loadedFile = file;
+  const host = el("srcHost");
+  if (file) {
+    host.classList.add("has-file");
+    el("fileName").textContent = file.name;
+    el("fileMeta").textContent = `${(file.size / 1024).toFixed(0)} KB`;
+    el("loadBtn").classList.add("hidden");
+    clearStatus();
+  } else {
+    host.classList.remove("has-file");
+    el("loadBtn").classList.remove("hidden");
+    el("fileInput").value = "";
   }
-  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>Translating…`;
+  validateSource();
+}
+
+async function resolveSource() {
+  let source = el("source").value;
+  if (source === "auto") { if (!lastDetected) await autoDetect(); source = lastDetected; }
+  return source;
+}
+
+function withSpinner(label) { el("run").innerHTML = `<span class="spinner"></span>${label}`; }
+
+async function transpile() {
+  if (loadedFile) return transpileFile();
+  return transpileText();
+}
+
+async function transpileText() {
+  const sql = getInput();
+  if (!sql.trim()) { showError("Please enter a source script."); return; }
+  const source = await resolveSource();
+  if (!source) { showError("Could not auto-detect the source engine — pick one from the list."); return; }
+  const target = el("target").value;
+  const btn = el("run"); btn.disabled = true; withSpinner("Transpiling…");
+  el("dlChip").classList.add("hidden");
   try {
     const body = { sql, source, target };
-    if (dbEnabled) {
-      const dbName = el("dbName").value;
-      const dbUrl = el("dbUrl").value.trim();
-      if (dbName) body.db = dbName;
-      else if (dbUrl) body.db_url = dbUrl;
-    }
+    applyDb(body);
     const res = await fetch(API + "/api/v1/transpile", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
-      setOutput("");
-      const d = err.detail;
-      if (d && typeof d === "object" && Array.isArray(d.issues)) {
-        renderSyntaxIssues(d.issues);
-      } else {
-        showMessages(el("messages"), { error: (d && d.message) || (typeof d === "string" ? d : "Request failed") });
-      }
+      setOutput(""); const d = err.detail;
+      if (d && typeof d === "object" && Array.isArray(d.issues)) renderSyntaxIssues(d.issues);
+      else showError((d && d.message) || (typeof d === "string" ? d : "Request failed"));
       return;
     }
     const data = await res.json();
     setOutput(data.sql);
     setEditorMode(cmOutput, target);
-    const count = (data.warnings?.length || 0) + (data.unsupported?.length || 0);
-    showMessages(el("messages"), {
-      warnings: data.warnings, unsupported: data.unsupported,
-      info: count === 0 ? `<span class="k" style="color:var(--ok)">OK</span>Translated with no warnings.` : null,
-    });
-  } catch (e) {
-    showMessages(el("messages"), { error: String(e) });
-  } finally {
-    btn.disabled = false; btn.textContent = "Translate";
-  }
+    showResult(data.warnings, data.unsupported);
+  } catch (e) { showError(String(e)); }
+  finally { btn.disabled = false; btn.textContent = "▶ Transpile"; }
 }
 
-async function translateFile() {
-  const fileInput = el("file");
-  const source = el("fileSource").value;
-  const target = el("fileTarget").value;
-  const btn = el("runFile");
-  if (!fileInput.files.length) { showMessages(el("fileMessages"), { error: "Choose a file first." }); return; }
-  const form = new FormData();
-  form.append("file", fileInput.files[0]);
-  form.append("source", source);
-  form.append("target", target);
-  if (dbEnabled) {
-    const dbName = el("fileDbName").value;
-    const dbUrl = el("fileDbUrl").value.trim();
-    if (dbName) form.append("db", dbName);
-    else if (dbUrl) form.append("db_url", dbUrl);
-  }
-  btn.disabled = true; btn.innerHTML = `<span class="spinner"></span>Working…`;
+async function transpileFile() {
+  const source = el("source").value;
+  const target = el("target").value;
+  const btn = el("run"); btn.disabled = true; withSpinner("Transpiling…");
   try {
+    const form = new FormData();
+    form.append("file", loadedFile);
+    form.append("source", source);
+    form.append("target", target);
+    applyDb(form);
     const res = await fetch(API + "/api/v1/transpile/file", { method: "POST", body: form });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
-      showMessages(el("fileMessages"), { error: err.detail || "Request failed" });
+      const d = err.detail;
+      if (d && typeof d === "object" && Array.isArray(d.issues)) renderSyntaxIssues(d.issues);
+      else showError((d && d.message) || (typeof d === "string" ? d : "Request failed"));
       return;
     }
     const blob = await res.blob();
     const detected = res.headers.get("X-Unique-Source-Dialect");
-    const warnCount = res.headers.get("X-Unique-Warning-Count");
+    const warnCount = parseInt(res.headers.get("X-Unique-Warning-Count") || "0", 10);
     const dispo = res.headers.get("Content-Disposition") || "";
     const m = dispo.match(/filename="([^"]+)"/);
     const filename = m ? m[1] : "translated.sql";
@@ -534,58 +443,68 @@ async function translateFile() {
     const a = document.createElement("a");
     a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
-    let info = `<span class="k" style="color:var(--ok)">Downloaded</span>${escapeHtml(filename)}`;
-    if (source === "auto" && detected) info += ` — detected source: ${ENGINE_LABELS[detected] || detected}`;
-    if (warnCount && warnCount !== "0") info += ` · ${warnCount} warning(s)`;
-    showMessages(el("fileMessages"), { info });
-  } catch (e) {
-    showMessages(el("fileMessages"), { error: String(e) });
-  } finally {
-    btn.disabled = false; btn.textContent = "Translate & download";
-  }
+    el("dlName").textContent = filename; el("dlChip").classList.remove("hidden");
+    clearStatus();
+    let extra = "";
+    if (source === "auto" && detected) extra += ` · detected ${ENGINE_LABELS[detected] || detected}`;
+    if (warnCount) {
+      el("messages").appendChild(statusBar("warn", "KO",
+        `Downloaded <b>${escapeHtml(filename)}</b> — ${warnCount} warning${warnCount > 1 ? "s" : ""}${extra}.`));
+    } else {
+      el("messages").appendChild(statusBar("ok", "OK",
+        `Downloaded <b>${escapeHtml(filename)}</b> — no warnings${extra}.`));
+    }
+  } catch (e) { showError(String(e)); }
+  finally { btn.disabled = false; btn.textContent = "▶ Transpile"; }
+}
+
+function applyDb(container) {
+  if (!dbEnabled) return;
+  const dbName = el("dbName").value;
+  const dbUrl = el("dbUrl").value.trim();
+  const isForm = container instanceof FormData;
+  if (dbName) isForm ? container.append("db", dbName) : (container.db = dbName);
+  else if (dbUrl) isForm ? container.append("db_url", dbUrl) : (container.db_url = dbUrl);
+}
+
+function showResult(warnings = [], unsupported = []) {
+  const items = [
+    ...(warnings || []).map(w => ({ t: w.feature || "warning", m: w.message })),
+    ...(unsupported || []).map(u => ({ t: "unsupported", m: u })),
+  ];
+  clearStatus();
+  const c = el("messages");
+  if (!items.length) { c.appendChild(statusBar("ok", "OK", "Transpiled with no warnings.")); return; }
+  c.appendChild(statusBar("warn", "KO", `Transpiled with ${items.length} warning${items.length > 1 ? "s" : ""}.`));
+  for (const it of items) c.appendChild(detailRow(`<span class="k">${escapeHtml(it.t)}</span>${escapeHtml(it.m)}`));
 }
 
 (async function init() {
-  // Upgrade the plain textareas to CodeMirror editors when available.
   if (window.CodeMirror) {
     cmInput = CodeMirror.fromTextArea(el("input"), {
-      mode: "text/x-mssql", theme: "dracula", lineNumbers: true,
+      mode: "text/x-mssql", theme: "default", lineNumbers: true,
       lineWrapping: false, matchBrackets: true, autofocus: true,
     });
-    cmInput.setSize("100%", 380);
+    cmInput.setSize("100%", 400);
     cmOutput = CodeMirror.fromTextArea(el("output"), {
-      mode: "text/x-pgsql", theme: "dracula", lineNumbers: true,
+      mode: "text/x-pgsql", theme: "default", lineNumbers: true,
       lineWrapping: false, readOnly: true,
     });
-    cmOutput.setSize("100%", 380);
-    // Re-detect dialect as the user types (debounced).
-    cmInput.on("change", () => {
-      clearTimeout(detectTimer);
-      detectTimer = setTimeout(onSourceChanged, 500);
-    });
+    cmOutput.setSize("100%", 400);
+    cmInput.on("change", () => { clearTimeout(detectTimer); detectTimer = setTimeout(onSourceChanged, 500); });
   }
 
   const { dialects, sourceOnly } = await loadDialects();
-  // Import-only dialects (e.g. SQLite) may be a source but not a target.
   const targets = dialects.filter((d) => !sourceOnly.includes(d));
   fillSelect(el("source"), dialects, { includeAuto: true });
   fillSelect(el("target"), targets);
-  fillSelect(el("fileSource"), dialects, { includeAuto: true });
-  fillSelect(el("fileTarget"), targets);
-  // The source combos default to "Auto-detect"; the target defaults to the
-  // list's first (non-source-only) element rather than a hard-coded dialect.
   const firstSource = dialects[0];
   const firstTarget = targets.find((d) => d !== firstSource) ?? targets[0];
   el("source").value = "auto";
   el("target").value = firstTarget;
   setEditorMode(cmInput, firstSource);
   setEditorMode(cmOutput, firstTarget);
-  el("fileSource").value = "auto";
-  el("fileTarget").value = firstTarget;
 
-  // Version label + optional database-connection fields. Databases are
-  // referenced by server-configured DSN name; a raw URL input only appears
-  // when the deployment explicitly allows it (UNIQUE_ALLOW_RAW_DB_URL).
   const info = await loadInfo();
   if (info.version) el("versionTag").textContent = info.version;
   dbEnabled = !!info.db_connection_enabled;
@@ -593,79 +512,58 @@ async function translateFile() {
   const rawDbAllowed = !!info.raw_db_url_enabled;
   if (dbEnabled && (dbNames.length || rawDbAllowed)) {
     el("dbField").hidden = false;
-    el("fileDbField").hidden = false;
     if (dbNames.length) {
-      for (const sel of [el("dbName"), el("fileDbName")]) {
-        sel.hidden = false;
-        const none = document.createElement("option");
-        none.value = ""; none.textContent = "(no database)";
-        sel.appendChild(none);
-        for (const name of dbNames) {
-          const opt = document.createElement("option");
-          opt.value = name; opt.textContent = name;
-          sel.appendChild(opt);
-        }
+      const sel = el("dbName"); sel.hidden = false;
+      const none = document.createElement("option");
+      none.value = ""; none.textContent = "(no database)"; sel.appendChild(none);
+      for (const name of dbNames) {
+        const opt = document.createElement("option");
+        opt.value = name; opt.textContent = name; sel.appendChild(opt);
       }
     }
-    if (rawDbAllowed) {
-      el("dbUrl").hidden = false;
-      el("fileDbUrl").hidden = false;
-    }
+    if (rawDbAllowed) el("dbUrl").hidden = false;
   }
 
-  el("run").addEventListener("click", translate);
-  el("runFile").addEventListener("click", translateFile);
+  el("run").addEventListener("click", transpile);
   el("clear").addEventListener("click", () => {
-    setInput(""); setOutput("");
-    el("messages").innerHTML = ""; el("detectNote").textContent = "";
-    el("srcBadge").textContent = "auto-detect on type";
-    el("source").dataset.userSet = "";
+    setInput(""); setOutput(""); clearStatus();
+    el("detectNote").textContent = "";
+    el("dlChip").classList.add("hidden");
+    setFileMode(null);
   });
   el("copy").addEventListener("click", async () => {
-    const out = getOutput();
-    if (!out) return;
+    const out = getOutput(); if (!out) return;
     await navigator.clipboard.writeText(out);
     const b = el("copy"); const t = b.textContent; b.textContent = "Copied!";
     setTimeout(() => (b.textContent = t), 1200);
   });
   el("swap").addEventListener("click", () => {
     const s = el("source").value, t = el("target").value;
+    // A source-only dialect (e.g. SQLite) can't become the target.
+    if (![...el("target").options].some(o => o.value === s)) return;
     el("source").value = t; el("target").value = s;
-    // Also swap text if there is a result to iterate on.
+    setEditorMode(cmInput, t); setEditorMode(cmOutput, s);
     const inp = getInput(), outp = getOutput();
     if (outp) { setInput(outp); setOutput(inp); }
-  });
-  el("fileSwap").addEventListener("click", () => {
-    const srcSel = el("fileSource"), tgtSel = el("fileTarget");
-    const s = srcSel.value, t = tgtSel.value;
-    // The file source may be "auto" (not a valid target). Swapping moves the
-    // target into the source slot; the source goes to the target unless it was
-    // "auto", in which case the target keeps its value (nothing to put there).
-    srcSel.value = t;
-    tgtSel.value = s === "auto" ? t : s;
-  });
-  el("source").addEventListener("change", () => {
-    el("source").dataset.userSet = "1";
-    setEditorMode(cmInput, el("source").value);
     validateSource();
   });
-  el("target").addEventListener("change", () => {
-    setEditorMode(cmOutput, el("target").value);
+  el("source").addEventListener("change", () => {
+    setEditorMode(cmInput, el("source").value === "auto" ? (lastDetected || "tsql") : el("source").value);
+    el("detectNote").textContent = "";
+    validateSource();
   });
+  el("target").addEventListener("change", () => setEditorMode(cmOutput, el("target").value));
+  el("loadBtn").addEventListener("click", () => el("fileInput").click());
+  el("fileInput").addEventListener("change", (e) => { if (e.target.files.length) setFileMode(e.target.files[0]); });
+  el("useEditor").addEventListener("click", () => setFileMode(null));
   el("input").addEventListener("input", () => {
-    if (cmInput) return;  // CodeMirror handles detection via its change event
-    clearTimeout(detectTimer);
-    detectTimer = setTimeout(onSourceChanged, 500);
+    if (cmInput) return;
+    clearTimeout(detectTimer); detectTimer = setTimeout(onSourceChanged, 500);
   });
-  // Ctrl/Cmd+Enter to translate (textarea fallback; CM uses extraKeys below).
   el("input").addEventListener("keydown", (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); translate(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); transpile(); }
   });
-  if (cmInput) {
-    cmInput.setOption("extraKeys", {
-      "Ctrl-Enter": translate, "Cmd-Enter": translate,
-    });
-  }
+  if (cmInput) cmInput.setOption("extraKeys", { "Ctrl-Enter": transpile, "Cmd-Enter": transpile });
 })();
 </script>
 </body>
