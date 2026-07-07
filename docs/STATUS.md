@@ -1,6 +1,6 @@
 # Unique — Project Status
 
-## Current state: v0.20.0
+## Current state: v0.21.0
 
 The DML/DDL pipeline and the autonomous procedural engine are complete, and
 **functional equivalence** holds across the **full 4×4 matrix — all 16
@@ -16,7 +16,11 @@ procedural validity backlog is closed (26 → 0 INVALID; `docs/DONE.md` §33).
 Migration-script idioms translate too: a real-data `IF EXISTS(subquery)` guard is
 emulated with a cursor FOR loop (a THEN/ELSE pair over the negated probe), and a
 system-catalog `IF NOT EXISTS(…) CREATE` guard becomes an idempotent, portable
-`user_objects` probe + `EXECUTE IMMEDIATE` (re-runnable without `ORA-00955`). The
+`user_objects` probe + `EXECUTE IMMEDIATE` (re-runnable without `ORA-00955`).
+Most recently, **source-syntax validation** locates errors (by line) before
+transpiling — the API/CLI refuse a malformed script (overridable with
+`ignore_syntax_errors`) and the web UI disables Translate while it is invalid
+(`docs/DONE.md` §34). The
 version is single-sourced from `unique.__version__` and released via
 `scripts/release.py`. The detailed history lives in `docs/DONE.md`; the backlog
 (`docs/TODO.md`) is packaging-only.
