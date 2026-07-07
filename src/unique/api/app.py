@@ -20,6 +20,7 @@ from unique import __version__
 from unique.core.detection import detect_dialect
 from unique.core.errors import ParseError, UnknownDialectError
 from unique.core.transpiler import TranspileOptions, Transpiler
+from unique.core.validation import validate_source
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -178,6 +179,22 @@ class TranspileRequest(BaseModel):
             "(the 'db' field)."
         ),
     )
+    ignore_syntax_errors: bool = Field(
+        default=False,
+        description=(
+            "Transpile even when the source SQL has syntax errors. By default the "
+            "request is rejected (422) with the located errors."
+        ),
+    )
+
+
+class SyntaxIssueModel(BaseModel):
+    """A syntax error located in the source SQL."""
+
+    line: int
+    column: int
+    message: str
+    snippet: str = ""
 
 
 class TranspileWarning(BaseModel):
@@ -208,6 +225,7 @@ class ValidateResponse(BaseModel):
     valid: bool
     statement_count: int = 0
     errors: list[str] = []
+    issues: list[SyntaxIssueModel] = []
 
 
 class DialectsResponse(BaseModel):
@@ -251,10 +269,43 @@ class InfoResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _source_syntax_issues(sql: str, source: str) -> list[SyntaxIssueModel]:
+    """Locate syntax errors in the source SQL. ``auto`` is resolved by detection
+    first; an unknown/undetectable dialect yields no issues (the transpiler will
+    surface any problem), and validation never itself breaks the request."""
+    dialect = detect_dialect(sql).dialect if source == "auto" else source
+    if not dialect:
+        return []
+    try:
+        issues = validate_source(sql, dialect)
+    except Exception:  # pragma: no cover - validation must never 500 the request
+        return []
+    return [
+        SyntaxIssueModel(
+            line=i.line, column=i.column, message=i.message, snippet=i.snippet
+        )
+        for i in issues
+    ]
+
+
 @app.post("/api/v1/transpile", response_model=TranspileResponse)
 def transpile_sql(request: TranspileRequest) -> TranspileResponse:
     """Transpile SQL from one dialect to another."""
     db_url = _resolve_db_option(request.db, request.db_url)
+    if not request.ignore_syntax_errors:
+        issues = _source_syntax_issues(request.sql, request.source)
+        if issues:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "source_syntax_errors",
+                    "message": (
+                        "The source SQL has syntax errors; fix them or set "
+                        "ignore_syntax_errors=true to transpile anyway."
+                    ),
+                    "issues": [i.model_dump() for i in issues],
+                },
+            )
     try:
         result = _transpiler.transpile(
             sql=request.sql,
@@ -286,15 +337,17 @@ def transpile_sql(request: TranspileRequest) -> TranspileResponse:
 
 @app.post("/api/v1/validate", response_model=ValidateResponse)
 def validate_sql(request: ValidateRequest) -> ValidateResponse:
-    """Validate SQL syntax by parsing it."""
+    """Report source-SQL syntax errors, located by line, for the given dialect."""
     try:
-        dialect = _transpiler.registry.get(request.dialect)
-        nodes = dialect.parse(request.sql)
-        return ValidateResponse(valid=True, statement_count=len(nodes))
+        _transpiler.registry.get(request.dialect)  # reject an unknown dialect
     except UnknownDialectError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        return ValidateResponse(valid=False, errors=[str(e)])
+    issues = _source_syntax_issues(request.sql, request.dialect)
+    return ValidateResponse(
+        valid=not issues,
+        issues=issues,
+        errors=[str(i) for i in issues],
+    )
 
 
 @app.get("/api/v1/dialects", response_model=DialectsResponse)

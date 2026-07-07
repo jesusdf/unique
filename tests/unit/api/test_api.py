@@ -157,6 +157,51 @@ class TestValidate:
         )
         assert resp.status_code == 400
 
+    def test_reports_located_syntax_issue(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/validate",
+            json={"sql": "SELECT * FROM (SELECT 1", "dialect": "tsql"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["valid"] is False
+        assert body["issues"] and body["issues"][0]["line"] == 1
+
+
+class TestSourceValidationGate:
+    _MALFORMED = "INSERT INTO t VALUES (1)\nCREATE PROCEDURE p AS BEGIN SELECT 1 END"
+
+    def test_transpile_refuses_malformed_source(self, client: TestClient) -> None:
+        # A CREATE PROCEDURE with no preceding GO is a source syntax error: the
+        # request is rejected (422) with the located error, not silently mangled.
+        resp = client.post(
+            "/api/v1/transpile",
+            json={"sql": self._MALFORMED, "source": "tsql", "target": "oracle"},
+        )
+        assert resp.status_code == 422
+        detail = resp.json()["detail"]
+        assert detail["error"] == "source_syntax_errors"
+        assert detail["issues"][0]["line"] == 2
+
+    def test_ignore_syntax_errors_forces_transpile(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/transpile",
+            json={
+                "sql": self._MALFORMED,
+                "source": "tsql",
+                "target": "oracle",
+                "ignore_syntax_errors": True,
+            },
+        )
+        assert resp.status_code == 200
+
+    def test_valid_source_transpiles(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/transpile",
+            json={"sql": "SELECT 1", "source": "tsql", "target": "oracle"},
+        )
+        assert resp.status_code == 200
+
 
 class TestDetect:
     def test_detect_tsql(self, client: TestClient) -> None:
