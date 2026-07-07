@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from unique.core.ast_nodes import (
     AlterProcedureStatement,
@@ -1370,6 +1370,15 @@ class ProceduralParser:
     def _parse_plsql_body(self) -> list[ASTNode]:
         """Parse a PL/SQL procedure/function body (DECLARE...BEGIN...END)."""
         stmts: list[ASTNode] = []
+
+        # A run of comments right after IS/AS (before any declaration) is the
+        # routine's header comment. Oracle/PostgreSQL/MySQL keep such comments in
+        # the stored module; preserve them (flagged ``header``) so the emitter can
+        # place them idiomatically per target — inside the routine here, or back
+        # out before the CREATE for T-SQL, which keeps them in the module text.
+        for comment in self._take_comments():
+            if isinstance(comment, CommentStatement):
+                stmts.append(replace(comment, header=True))
 
         # Optional DECLARE section (before BEGIN)
         guard = 0

@@ -179,6 +179,20 @@ class TestTranspiler:
         ).sql
         assert out.lstrip().startswith("-- Autor: X")
 
+    def test_routine_header_comment_round_trips(self, transpiler: Transpiler) -> None:
+        # The reverse of re-homing: a header comment Oracle keeps inside the
+        # routine must come back out before the CREATE on T-SQL, so a
+        # T-SQL -> Oracle -> T-SQL round-trip preserves it in its original place.
+        tsql = (
+            "-- Autor: X\n-- Fecha: Y\n"
+            "CREATE PROCEDURE dbo.p @x INT AS BEGIN SET @x = @x + 1 END"
+        )
+        oracle = transpiler.transpile(tsql, source="tsql", target="oracle").sql
+        assert "-- Autor: X" in oracle and not oracle.lstrip().startswith("--")
+        back = transpiler.transpile(oracle, source="oracle", target="tsql").sql
+        assert back.lstrip().startswith("-- Autor: X")
+        assert "-- Fecha: Y" in back
+
     def test_textimage_on_filegroup_stripped(self, transpiler: Transpiler) -> None:
         # TEXTIMAGE_ON <filegroup> (LOB storage placement) makes sqlglot fall back
         # to a Command, losing the whole CREATE TABLE; it is stripped pre-parse so

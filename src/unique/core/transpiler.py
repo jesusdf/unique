@@ -1063,27 +1063,44 @@ class Transpiler:
             else:
                 node = parse_result.node
 
-            # Comments that preceded the routine are part of SQL Server's stored
-            # module but are dropped by Oracle/PostgreSQL/MySQL (they store a
-            # routine from CREATE on). Re-home them inside the body so they survive
-            # the round-trip instead of sitting outside the CREATE, where the
-            # engine discards them.
-            if (
-                leading_comments
-                and target in _ROUTINE_COMMENT_TARGETS
-                and isinstance(
-                    node,
-                    (
-                        CreateProcedureStatement,
-                        CreateFunctionStatement,
-                        CreateTriggerStatement,
-                    ),
-                )
+            # A routine's header comment lives where each engine stores it: SQL
+            # Server keeps comments that precede CREATE as part of the module;
+            # Oracle/PostgreSQL/MySQL store a routine only from CREATE on, so the
+            # comment must sit inside. Move it to the target's home so it survives
+            # the round-trip (T-SQL ⇄ Oracle) instead of being dropped.
+            if isinstance(
+                node,
+                (
+                    CreateProcedureStatement,
+                    CreateFunctionStatement,
+                    CreateTriggerStatement,
+                ),
             ):
-                homed = _leading_comment_nodes(leading_comments)
-                if homed:
-                    node = replace(node, body=(*homed, *node.body))
-                    leading_comments = ""
+                if target in _ROUTINE_COMMENT_TARGETS and leading_comments:
+                    # Forward: pull the pre-CREATE comments inside (flagged so the
+                    # emitter hoists them to the head of the declaration section).
+                    homed = _leading_comment_nodes(leading_comments)
+                    if homed:
+                        node = replace(node, body=(*homed, *node.body))
+                        leading_comments = ""
+                elif target == "tsql":
+                    # Reverse: a header comment the source kept inside the routine
+                    # belongs before the CREATE in the T-SQL module — pull it out.
+                    inside = [
+                        c
+                        for c in node.body
+                        if isinstance(c, CommentStatement) and c.header
+                    ]
+                    if inside:
+                        leading_comments += "".join(c.text + "\n" for c in inside)
+                        node = replace(
+                            node,
+                            body=tuple(
+                                c
+                                for c in node.body
+                                if not (isinstance(c, CommentStatement) and c.header)
+                            ),
+                        )
 
             # Emit
             emitter = ProceduralEmitter(target)
