@@ -60,6 +60,9 @@ doesn't, delegating the embedded DML/DQL to sqlglot. Concretely, Unique adds:
 - **AST + intermediate representation**: Parse → Transform → Emit
 - **Plugin architecture**: add new dialects via Python entry points
 - **CLI, REST API, Python library, and web UI**
+- **Source-syntax validation**: a malformed script is caught and located (by line)
+  before transpiling — the API/CLI refuse it (override with `ignore_syntax_errors`)
+  and the web UI disables Translate while it is invalid
 - **Anonymized procedural fixtures** for all four engines, validated live in CI
 
 ## Quick start

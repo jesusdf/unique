@@ -4,9 +4,9 @@ This document tracks **outstanding** work, ordered by priority. Completed work
 has been archived in [`docs/DONE.md`](DONE.md) (with the detailed why/how of
 each fix); `docs/STATUS.md` summarizes the project state at a higher level.
 
-Last reviewed: 2026-07-05. The functional-equivalence and audit-remediation
-backlogs are complete and archived in [`docs/DONE.md`](DONE.md) (§18); only
-packaging remains.
+Last reviewed: 2026-07-07. The functional-equivalence and audit-remediation
+backlogs are complete and archived in [`docs/DONE.md`](DONE.md) (§18); source-syntax
+validation across core/API/web/CLI shipped (§34); only packaging remains.
 
 ## Legend
 

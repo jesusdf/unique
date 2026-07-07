@@ -19,9 +19,14 @@ unique transpile app.db.sql --from sqlite --to postgresql -o output.sql
 # List available dialects
 unique dialects
 
-# Validate SQL syntax
-unique validate -d postgresql "SELECT * FROM users"
+# Validate a script's syntax (errors are located by line)
+unique validate script.sql -d postgresql
 ```
+
+`transpile` **validates the source syntax first** and refuses a malformed script
+(exit 1), listing each error by line — for example a `CREATE PROCEDURE` with no
+preceding `GO` (the batch it must start). Pass `--ignore-syntax-errors` to
+transpile anyway. `validate` reports the same located errors without emitting.
 
 The full command surface (flags, stdin/stdout usage) is documented in
 [02-architecture.md](02-architecture.md#33-cli-srcuniquecli).
@@ -61,10 +66,21 @@ curl -X POST http://localhost:8000/api/v1/detect \
   -H "Content-Type: application/json" \
   -d '{"sql": "SELECT TOP 5 * FROM t\nGO"}'
 
+# Validate source syntax (locates errors by line)
+curl -X POST http://localhost:8000/api/v1/validate \
+  -H "Content-Type: application/json" \
+  -d '{"sql": "SELECT * FROM (SELECT 1", "dialect": "tsql"}'
+
 # Translate a file (use source=auto to auto-detect), saving the result
 curl -X POST http://localhost:8000/api/v1/transpile/file \
   -F source=auto -F target=postgresql -F file=@script.sql -OJ
 ```
+
+`/api/v1/transpile` **rejects a malformed source with `422`**, returning the
+located errors (`{error, message, issues: [{line, column, message, snippet}]}`);
+set `"ignore_syntax_errors": true` in the body to transpile anyway. A `source` of
+`auto` is detected before validating. `/api/v1/validate` returns the same
+structured issues (`valid: false` with `issues`).
 
 ## Web UI
 
@@ -75,6 +91,9 @@ URL (e.g. <http://localhost:8000/>). It provides:
   in the page — no external CDN, so it works behind an offline reverse proxy);
 - automatic source-engine detection as you type (you can still override it),
   which also switches the highlighting dialect;
+- **live source-syntax validation**: while the script has syntax errors the
+  Translate button is disabled and the located errors are listed, so a malformed
+  script is never silently transpiled to garbage;
 - a file section to upload a `.sql` file and download it translated, with an
   "Auto-detect" option for the source engine.
 

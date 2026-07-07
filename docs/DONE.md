@@ -1511,3 +1511,34 @@ Test-harness: the functional-equivalence / real-world Oracle script splitter now
 separates a `;`-DDL prefix from a trailing PL/SQL DROP guard and finds a PL/SQL
 unit head *outside strings/comments* (so a `declare` inside a view's XML query
 can't trip it) — mimicking SQL*Plus for a programmatic client. Version 0.18.0.
+
+## 34. Source-syntax validation across core, API, web and CLI
+
+A malformed script is now caught and **located** before transpiling rather than
+silently mistranspiled. `unique.core.validation.validate_source(sql, dialect)`
+splits the input by `GO` and parses each batch with sqlglot in `RAISE` mode,
+returning `SyntaxIssue(line, column, message, snippet)` per problem. It flags
+genuine errors (an unclosed parenthesis; a `CREATE PROCEDURE` with no preceding
+`GO` — the batch it must start) while tolerating constructs sqlglot
+*Command-fallbacks* (which the transpiler preprocesses — TEXTIMAGE_ON, WITH
+NOCHECK, ALTER COLUMN, T-SQL procedures) and SQL\*Plus directives (`PROMPT`, …),
+so valid T-SQL does not false-positive (0 on the procedures fixture).
+
+Wired through every surface:
+
+- **API** — `/api/v1/transpile` refuses a malformed source with `422`
+  (`{error, message, issues}`) unless `ignore_syntax_errors: true`; a `source` of
+  `auto` is detected before validating. `/api/v1/validate` returns the structured,
+  line-located issues.
+- **Web** — the page validates live (debounced) and disables the Translate button
+  while the script is invalid, listing each error; the source-of-truth template
+  (`web/src/index.template.html`) carries the JS, rebuilt via `web/build.py`.
+- **CLI** — `unique transpile` refuses (exit 1, errors listed) unless
+  `--ignore-syntax-errors`; `unique validate` reports the located issues.
+
+Motivated by a real cumulative migration fixture with no `GO`s: the giant
+first batch (mixing DML with procedures) collapsed into one carrier — now the
+user is told exactly where the batch boundary is missing. (That fixture turned
+out to be predominantly **Oracle** — `/`-terminated, `CREATE OR REPLACE`,
+`PROMPT` — with historic non-Oracle patches, so it is transpiled as `oracle`,
+not `tsql`; "add a `GO`" did not apply.)
