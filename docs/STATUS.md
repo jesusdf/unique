@@ -1,6 +1,6 @@
 # Unique — Project Status
 
-## Current state: v0.21.0
+## Current state: v0.22.0
 
 The DML/DDL pipeline and the autonomous procedural engine are complete, and
 **functional equivalence** holds across the **full 4×4 matrix — all 16
@@ -20,7 +20,11 @@ system-catalog `IF NOT EXISTS(…) CREATE` guard becomes an idempotent, portable
 Most recently, **source-syntax validation** locates errors (by line) before
 transpiling — the API/CLI refuse a malformed script (overridable with
 `ignore_syntax_errors`) and the web UI disables Translate while it is invalid
-(`docs/DONE.md` §34). The
+(`docs/DONE.md` §34). Most recently, the **web UI was redesigned** with a bespoke
+identity (inline dialect combos, a unified paste/file mode, status bars), and the
+idempotent `FROM DUAL` guard-loop Unique emits now **round-trips back to an `IF`**
+on T-SQL/PostgreSQL/MySQL — exercised, with the `ALTER TABLE ADD` guard, by the
+functional-equivalence harness (Scenario C). The
 version is single-sourced from `unique.__version__` and released via
 `scripts/release.py`. The detailed history lives in `docs/DONE.md`; the backlog
 (`docs/TODO.md`) is packaging-only.
