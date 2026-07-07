@@ -236,6 +236,11 @@ class TestUI:
         assert "/api/v1/validate" in body
         assert "setRunBlocked" in body
 
+    def test_index_is_revalidated_not_cached(self, client: TestClient) -> None:
+        # ``no-cache`` makes the browser revalidate, so a UI update (new JS) is not
+        # masked by a stale cached page.
+        assert client.get("/").headers.get("cache-control") == "no-cache"
+
     def test_ui_is_self_contained(self, client: TestClient) -> None:
         # The page must embed CodeMirror and load no external resources, so it
         # works behind a reverse proxy with no internet access.

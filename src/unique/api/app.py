@@ -474,8 +474,15 @@ async def health() -> dict[str, str]:
 
 @app.get("/", include_in_schema=False)
 async def index() -> FileResponse:
-    """Serve the web UI."""
-    return FileResponse(_STATIC_DIR / "index.html")
+    """Serve the web UI.
+
+    ``no-cache`` forces the browser to revalidate (via ETag) rather than serve a
+    stale copy, so a UI update (e.g. new live-validation JS) is picked up on the
+    next load instead of being masked by an old cached page.
+    """
+    return FileResponse(
+        _STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"}
+    )
 
 
 # Serve static assets (the single-page UI lives under /static and at /).
