@@ -66,6 +66,13 @@ class TestValidateSource:
         sql = "SELECT a FROM t\nUPDATE t SET a = 1 WHERE a IS NULL"
         assert validate_source(sql, "tsql") == []
 
+    def test_garbage_is_flagged(self) -> None:
+        # sqlglot leniently parses a bare token as a Column and errors on multi-word
+        # junk; both are garbage, not valid SQL, and must be reported.
+        assert validate_source("asdfnjkasdjkasdjkasf", "tsql")
+        assert validate_source("asdf jkl qwer zxcv", "tsql")
+        assert validate_source("42", "tsql")
+
     def test_commented_out_procedure_not_flagged(self) -> None:
         # A CREATE PROCEDURE inside a block comment is not real code; the missing-GO
         # heuristic must see through the (unclosed-in-slice) comment.

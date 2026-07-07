@@ -15,6 +15,7 @@ import re
 from dataclasses import dataclass
 
 import sqlglot
+from sqlglot import expressions as exp
 from sqlglot.errors import ParseError
 
 from unique.core.batch_splitter import BatchSplitter, BatchType
@@ -60,6 +61,11 @@ _DML_START = re.compile(r"(?im)^[ \t]*(?:INSERT|UPDATE|DELETE|MERGE|SELECT)\b")
 # A line-starting statement keyword; more than one means several statements share
 # a batch (T-SQL allows no ``;`` between them), which sqlglot cannot parse as one.
 _STMT_START = re.compile(r"(?im)^[ \t]*(?:SELECT|INSERT|UPDATE|DELETE|MERGE|WITH)\b")
+# T-SQL control flow that classifies as UNKNOWN but is valid (sqlglot can't parse
+# it): leave it to the transpiler's engines rather than flag it as garbage.
+_CONTROL_FLOW_START = re.compile(
+    r"(?is)^\s*(?:BEGIN|IF|ELSE|WHILE|END|WAITFOR|GOTO|BREAK|CONTINUE|THROW|TRY|CATCH)\b"
+)
 
 
 def _strip_noise(sql: str) -> str:
@@ -115,17 +121,22 @@ def validate_source(sql: str, dialect: str) -> list[SyntaxIssue]:
             if issue:
                 issues.append(issue)
             continue
-        if batch.batch_type not in (BatchType.DML, BatchType.DDL):
-            # Only DML/DDL parse cleanly under sqlglot. Control-flow batches
-            # (BEGIN TRY, IF/ELSE, WHILE) classify as UNKNOWN/SET_OPTION and would
-            # false-positive, so they are left to the transpiler's engines.
+        if batch.batch_type not in (BatchType.DML, BatchType.DDL, BatchType.UNKNOWN):
+            # SET_OPTION / COMMENT / EMPTY carry no statement to syntax-check.
+            continue
+        if batch.batch_type == BatchType.UNKNOWN and _CONTROL_FLOW_START.match(
+            _strip_noise(batch.sql)
+        ):
+            # BEGIN TRY / IF-ELSE / WHILE classify as UNKNOWN but are valid T-SQL
+            # sqlglot can't parse; leave them (else false-positive). Other UNKNOWN
+            # batches (a bare garbage token) fall through and are checked.
             continue
         if len(_STMT_START.findall(_strip_noise(batch.sql))) > 1:
             # Several statements in one batch with no ``;`` between them — valid
             # T-SQL that sqlglot cannot parse as a unit; don't false-positive.
             continue
         try:
-            sqlglot.parse(
+            parsed = sqlglot.parse(
                 _neutralize_sqlplus(batch.sql),
                 dialect=sg,
                 error_level=sqlglot.ErrorLevel.RAISE,
@@ -151,4 +162,18 @@ def validate_source(sql: str, dialect: str) -> list[SyntaxIssue]:
                     snippet=snippet[:80],
                 )
             )
+        else:
+            # sqlglot is lenient: a bare token ("asdfx") parses to a Column, a
+            # number to a Literal — neither is a statement. Flag it as invalid.
+            bare = (exp.Column, exp.Identifier, exp.Literal, exp.Boolean, exp.Null)
+            if any(isinstance(stmt, bare) for stmt in parsed if stmt is not None):
+                first = next((ln for ln in batch.sql.splitlines() if ln.strip()), "")
+                issues.append(
+                    SyntaxIssue(
+                        line=batch.line_offset + 1,
+                        column=0,
+                        message="not a valid SQL statement",
+                        snippet=first.strip()[:80],
+                    )
+                )
     return issues
