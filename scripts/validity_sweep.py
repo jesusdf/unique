@@ -127,6 +127,14 @@ def classify_mysql(errno: int) -> str:
 
 
 def classify_oracle(message: str) -> str:
+    # ORA-06550 wraps ANY PL/SQL compile problem: a missing routine/table
+    # (empty-database noise) reports as PLS-00201 / a nested ORA-00942, while
+    # genuine malformed code reports structural PLS codes (e.g. PLS-00103).
+    # Check the expected-nested shapes first. Trade-off: an undeclared
+    # *variable* is also PLS-00201; a schema-less run cannot tell it from a
+    # missing procedure, so those land in "expected" too.
+    if re.search(r"PLS-00201\b|PL/SQL: ORA-00942\b|PLS-00905\b", message):
+        return "expected"
     m = re.search(r"(ORA|PLS)-(\d+)", message)
     if not m:
         return "other"
@@ -256,13 +264,37 @@ def sweep_oracle(url: str, statements: list[str], report: DirectionReport) -> No
             "objects the sweep creates will leak into the connected schema",
             file=sys.stderr,
         )
+    routine_re = re.compile(
+        r"(?is)^\s*CREATE\s+(?:OR\s+REPLACE\s+)?(?:(?:NON)?EDITIONABLE\s+)?"
+        r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE)\s+(?:\w+\.)?\"?(\w+)"
+    )
+    owner = (schema if isolated else user).upper()
     try:
         for st in statements:
             try:
                 cur.execute(st)
-                report.ok += 1
             except Exception as e:  # noqa: BLE001
                 report.record_failure(classify_oracle(str(e)), _error_group(str(e)), st)
+                continue
+            # Oracle compiles PL/SQL lazily: CREATE succeeds even for a broken
+            # body (the object is left INVALID). Query the compile errors so a
+            # broken routine is not counted as ok (same as the live validator).
+            routine = routine_re.match(st)
+            if routine:
+                cur.execute(
+                    "SELECT text FROM all_errors "
+                    "WHERE owner = :o AND name = :n AND attribute = 'ERROR' "
+                    "ORDER BY sequence",
+                    o=owner,
+                    n=routine.group(1).upper(),
+                )
+                errors = " ".join(row[0] for row in cur.fetchall())
+                if errors:
+                    report.record_failure(
+                        classify_oracle(errors), _error_group(errors), st
+                    )
+                    continue
+            report.ok += 1
         conn.rollback()
     finally:
         if isolated:

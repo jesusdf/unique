@@ -62,3 +62,21 @@ class TestClassifyOracle:
 
     def test_unclassified_is_other(self) -> None:
         assert validity_sweep.classify_oracle("ORA-12345: whatever") == "other"
+
+    def test_missing_identifier_inside_6550_is_expected(self) -> None:
+        # ORA-06550 wraps *any* PL/SQL compile problem. A call to a routine
+        # that is simply not loaded (PLS-00201) is empty-database noise, not a
+        # transpiler defect. (Trade-off: an undeclared *variable* is also
+        # PLS-00201 — schema-less runs cannot tell them apart.)
+        msg = (
+            "ORA-06550: line 2, column 5: PLS-00201: identifier "
+            "'MY_PROC' must be declared"
+        )
+        assert validity_sweep.classify_oracle(msg) == "expected"
+
+    def test_missing_table_inside_6550_is_expected(self) -> None:
+        msg = (
+            "ORA-06550: line 2, column 77: PL/SQL: ORA-00942: "
+            "table or view does not exist"
+        )
+        assert validity_sweep.classify_oracle(msg) == "expected"
