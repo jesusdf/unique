@@ -238,3 +238,20 @@ def _split_semicolons(
     if tail:
         statements.append(tail)
     return statements
+
+
+_LEADING_TRIVIA_RE = re.compile(r"(?s)\A(?:\s*(?:--[^\n]*(?:\n|\Z)|/\*.*?\*/))*\s*")
+
+
+def split_leading_trivia(sql: str) -> tuple[str, str]:
+    """Split leading comments/blank lines (trivia) from the code of a batch.
+
+    ONE implementation for every consumer (audit doc 04, P2 — comments are
+    trivia): classification, guard extraction and terminator decisions must
+    operate on the code, and emitters re-attach the trivia. Returns
+    ``(trivia, code)`` where ``trivia + code == sql``.
+    """
+    m = _LEADING_TRIVIA_RE.match(sql)
+    if not m or m.end() == 0:
+        return "", sql
+    return sql[: m.end()], sql[m.end() :]

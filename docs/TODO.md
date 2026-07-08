@@ -129,8 +129,20 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       fallback ("SET option commented out" on non-SET batches) — falls with
       the M2 guard unification; fragment-level desync (D9) is only caught
       when a leftover token appears in the fragment.
-- [ ] **M2 — P2 comment trivia + P3 unified AST guard path** (clears the
-      guard family: N1, N10, A1–A5).
+- [x] **M2 — P2 comment trivia + P3 unified guard path** — done (clears the
+      guard family: N1, N10, A1–A5). One shared `split_leading_trivia`
+      (`unique/core/sql_split.py`) feeds the classifier, the guard matchers,
+      `_oracle_needs_slash` and the fallback labels; the three per-spelling
+      guard regexes collapsed into ONE `_extract_catalog_guard` (polarity +
+      inner-trivia aware, BEGIN…END unwrap, OBJECT_ID arity-proof); non-catalog
+      IF guards route to the procedural engine with or without BEGIN (N1);
+      catalog CREATE-guards keep their idempotent intent per target
+      (`_guard_idempotent`: Oracle probe, PG/MySQL native IF NOT EXISTS, MySQL
+      index warned); NEWID/UUID maps per target inside procedural bodies via
+      the shared `UUID_FUNCTION` table (A4). Tests:
+      `tests/unit/core/test_guard_translation.py` (40, combinatorial neighbor
+      matrix). Measured: test.sql→PG **100.0%**, →Oracle 99.6% (rest = B1),
+      →MySQL 97.8%; remaining test2 failures are all C1 (M3).
 - [ ] **M3 — P4 embedded DML through the IR converter**; delete the
       text-level rewriters (clears D3, D4, D8, A4 by construction).
 - [ ] **M4 — Oracle-source bring-up** driven by the sweep frequency table
@@ -142,11 +154,11 @@ Found by transpiling the three `fixtures-private/` scripts across the matrix
 and executing the outputs on the real engines. Ordered by attack value; every
 fix needs an **anonymized** regression fixture (never a private name).
 
-- [ ] **A1/A2: guard batches with a leading comment, or `BEGIN…END`-wrapped
+- [x] **A1/A2: guard batches with a leading comment, or `BEGIN…END`-wrapped
       `IF OBJECT_ID` guards, are commented out wholesale** on every target
       (mislabeled `set_option` warning). Fix the guard extractor to tolerate
       leading comments and unwrap `BEGIN…END`; likely clears N1 too.
-- [ ] **A3: leading comment suppresses the `/` terminator** of the emitted
+- [x] **A3 (fixed in M2): leading comment suppresses the `/` terminator** of the emitted
       Oracle guard block — every following statement is swallowed in SQL*Plus.
 - [ ] **D3: `INSERT … SELECT … FROM DUAL WHERE NOT EXISTS(…)` keeps
       `FROM DUAL`** on PG/T-SQL (~6,000× in the real Oracle dump).
@@ -172,9 +184,9 @@ fix needs an **anonymized** regression fixture (never a private name).
       fragments (`v_x AS VARCHAR2`, `CURSOR AS cur1`) as top-level batches.
 - [ ] **D4: `ROWNUM` untranslated inside procedural embedded DML** (the DML
       pipeline maps it; the procedural one doesn't — asymmetry).
-- [ ] **A4: `NEWID()` inside a guard becomes `UUID()` on Oracle** (procedural
+- [x] **A4 (fixed in M2): `NEWID()` inside a guard becomes `UUID()` on Oracle** (procedural
       map not per-target; `SYS_GUID()` expected).
-- [ ] **A5: catalog CREATE-guard loses idempotency on PG/MySQL** (bare
+- [x] **A5 (fixed in M2): catalog CREATE-guard loses idempotency on PG/MySQL** (bare
       `CREATE TABLE`, no `IF NOT EXISTS`, no warning; Oracle keeps the guard).
 - [ ] **C2/C3/C4: MySQL routine bodies** — raw `BEGIN TRY` leaks; `WHILE …
       LOOP` (PL/SQL form) instead of `WHILE … DO`; cursor options spill as

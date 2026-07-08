@@ -2306,7 +2306,25 @@ class ProceduralTransformer:
         target_expr = self._NOW_EXPR.get(self._target)
         if not target_expr:
             return sql
-        return self._NOW_PATTERN.sub(target_expr, sql)
+        return self._map_uuid_in_sql(self._NOW_PATTERN.sub(target_expr, sql))
+
+    #: Any dialect's UUID-generator spelling; sqlglot canonicalizes them all to
+    #: ``UUID()``, which only exists on MySQL (audit 2026-07-08, A4).
+    _UUID_PATTERN = re.compile(
+        r"(?i)\b(?:NEWID|UUID|SYS_GUID|GEN_RANDOM_UUID)\s*\(\s*\)"
+    )
+
+    def _map_uuid_in_sql(self, sql: str) -> str:
+        """Replace any UUID-generator spelling with the target's (sourced from
+        the shared ``mappings.UUID_FUNCTION`` table — never a private copy).
+        A deterministic name-only rewrite; M3 subsumes it when embedded DML
+        goes through the IR converter."""
+        from unique.core.mappings import UUID_FUNCTION
+
+        target_fn = UUID_FUNCTION.get(self._target)
+        if not target_fn:
+            return sql
+        return self._UUID_PATTERN.sub(f"{target_fn}()", sql)
 
     def _transform_niladic_datetime(self, sql: str) -> str:
         """Translate current-timestamp expressions across dialects.

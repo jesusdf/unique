@@ -45,13 +45,15 @@ class TestTranspiler:
         self, transpiler: Transpiler
     ) -> None:
         # IF NOT EXISTS (<catalog query>) CREATE TABLE X: the catalog condition
-        # has no cross-engine form, so keep the intent — transpile the CREATE.
+        # has no cross-engine form, so keep the intent — transpile the CREATE
+        # and restore the re-runnable guard with the target's native clause
+        # (audit 2026-07-08, A5).
         sql = (
             "IF NOT EXISTS (SELECT * FROM sys.objects WHERE name = 'X')\n"
             "CREATE TABLE X (id INT)"
         )
         out = transpiler.transpile(sql, source="tsql", target="postgresql").sql
-        assert "CREATE TABLE X" in out
+        assert "CREATE TABLE IF NOT EXISTS X" in out
         assert "-- UNIQUE:" not in out
         assert "sys.objects" not in out
 
@@ -331,7 +333,12 @@ class TestTranspiler:
         for target in ("oracle", "postgresql", "mysql"):
             out = transpiler.transpile(sql, source="tsql", target=target).sql
             assert "-- CREACION DE LA TABLA t" in out, target
-            assert "CREATE TABLE t" in out
+            # PG/MySQL restore the guard's intent natively (A5); Oracle wraps
+            # the CREATE in the user_objects probe.
+            if target == "oracle":
+                assert "CREATE TABLE t" in out
+            else:
+                assert "CREATE TABLE IF NOT EXISTS t" in out, (target, out)
 
     def test_procedural_preserves_leading_comment_block(
         self, transpiler: Transpiler

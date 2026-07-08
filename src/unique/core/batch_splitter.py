@@ -269,15 +269,13 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
         return BatchType.SET_OPTION
 
     if _IF_OBJECT_PATTERN.match(first_meaningful):
-        # A non-catalog ``IF EXISTS(…) BEGIN … END`` is procedural control flow,
-        # not an idempotent-DDL guard: dropping its condition (as the guard path
-        # does) would silently change semantics. Route it to the procedural
-        # engine, which preserves it as a documented carrier + warning.
-        if (
-            dialect == "tsql"
-            and _TSQL_BEGIN_BLOCK_RE.search(without_comments)
-            and not _CATALOG_REF_RE.search(without_comments)
-        ):
+        # A non-catalog ``IF EXISTS(…) …`` is procedural control flow, not an
+        # idempotent-DDL guard: dropping its condition (as the guard path
+        # does) silently changes semantics — with OR without a ``BEGIN`` block
+        # (the unbracketed single-statement form is the common spelling in
+        # real migration scripts; audit 2026-07-08, N1). Route it to the
+        # procedural engine, which translates the IF faithfully per target.
+        if dialect == "tsql" and not _CATALOG_REF_RE.search(without_comments):
             return BatchType.PROCEDURAL
         return BatchType.SET_OPTION
 

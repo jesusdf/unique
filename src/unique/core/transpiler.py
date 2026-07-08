@@ -49,38 +49,20 @@ from unique.core.procedural.emitter import ProceduralEmitter
 from unique.core.procedural.parser import ProceduralParser
 from unique.core.procedural.transformer import ProceduralTransformer
 from unique.core.registry import DialectRegistry
+from unique.core.sql_split import split_leading_trivia
 from unique.core.transformer import Transformer, TransformWarning
 
 logger = logging.getLogger(__name__)
 
-# T-SQL DDL guard: "IF OBJECT_ID(...) IS NULL CREATE TABLE/INDEX ..."
-# The guard is T-SQL-only idiom; for other targets we drop it and emit
-# only the CREATE statement (CREATE TABLE IF NOT EXISTS is used where supported;
-# for Oracle pre-23c we just emit CREATE TABLE since the fixture starts fresh).
-_TSQL_DDL_GUARD_RE = re.compile(
-    r"(?s)^(?:--[^\n]*\n\s*)*"
-    r"IF\s+(?:OBJECT_ID|EXISTS)\s*\([^)]+\)\s*IS\s+NULL\s+"
-    r"(CREATE\s+(?:TABLE|(?:UNIQUE\s+)?INDEX)\b.*)",
-    re.IGNORECASE,
-)
-
-# The cleanup counterpart: IF OBJECT_ID(...) IS NOT NULL DROP <kind> <name>.
-# Maps to the target's own conditional form (DROP ... IF EXISTS, or a
-# tolerant PL/SQL block on Oracle) so a transpiled schema stays re-runnable.
-_TSQL_DROP_GUARD_RE = re.compile(
-    r"(?s)^(?:--[^\n]*\n\s*)*"
-    r"IF\s+(?:OBJECT_ID|EXISTS)\s*\([^)]+\)\s*IS\s+NOT\s+NULL\s+"
-    r"DROP\s+(?P<kind>TABLE|VIEW|SEQUENCE|PROCEDURE|FUNCTION|TRIGGER|INDEX)\s+"
-    r"(?P<name>[\w\[\]\".]+)\s*;?\s*$",
-    re.IGNORECASE,
-)
-
-# A re-runnable migration guard ``IF [NOT] EXISTS (<catalog query>) [BEGIN]
-# <stmt> [END]``. The condition queries T-SQL system catalogs (sys.objects /
-# syscolumns / sysindexes) that have no faithful cross-engine form, so only the
-# intent — run the guarded statement — is kept, matching the OBJECT_ID guards.
-_TSQL_EXISTS_GUARD_HEAD_RE = re.compile(
-    r"(?is)^\s*(?P<comments>(?:--[^\n]*\n\s*)*)IF\s+(?:NOT\s+)?EXISTS\s*\("
+# ONE recognizer for every T-SQL catalog migration-guard head (audit
+# 2026-07-08, M2/P3 — three per-spelling regexes each had their own holes):
+# ``IF [NOT] EXISTS (<catalog query>)`` and ``IF OBJECT_ID(…) IS [NOT] NULL``,
+# followed by a single statement or a ``BEGIN … END`` block. The condition
+# queries T-SQL system catalogs with no faithful cross-engine form, so the
+# *intent* is kept: guarded DROPs become the target's conditional drop and
+# guarded CREATEs the target's idempotent form (see ``_guard_idempotent``).
+_TSQL_GUARD_HEAD_RE = re.compile(
+    r"(?is)^\s*IF\s+(?:(?P<neg>NOT\s+)?EXISTS|(?P<objid>OBJECT_ID))\s*\("
 )
 _DROP_STMT_RE = re.compile(
     r"(?is)^\s*DROP\s+"
@@ -189,26 +171,28 @@ def _oracle_idempotent_create(ddl: str) -> str | None:
     )
 
 
-def _extract_exists_guard(sql: str) -> str | None:
-    """Return the guarded statement of a T-SQL ``IF [NOT] EXISTS (…) [BEGIN] …
-    [END]`` migration guard (a single ``BEGIN … END`` wrapper is unwrapped), or
-    ``None`` when *sql* is not that shape."""
-    head = _TSQL_EXISTS_GUARD_HEAD_RE.match(sql)
+def _extract_catalog_guard(code: str) -> tuple[str, str, str] | None:
+    """Parse a T-SQL catalog migration guard into ``(polarity, trivia, body)``.
+
+    ``polarity`` is ``"absent"`` (run the body when the object does NOT exist:
+    ``IF NOT EXISTS(…)`` / ``IF OBJECT_ID(…) IS NULL``) or ``"present"``
+    (``IF EXISTS(…)`` / ``IS NOT NULL``). ``body`` is the guarded statement —
+    a single ``BEGIN … END`` wrapper is unwrapped, a diagnostic ``ELSE``
+    branch is cut, and leading ``PRINT``/``SET`` noise is dropped. ``trivia``
+    is any comment found between the condition and the body (e.g. a trailing
+    ``-- old name`` on the guard line) — preserved by the caller, never left
+    in the body where it would defeat the DROP matcher (doc-04 P2). Returns
+    ``None`` when *code* (which must already be trivia-free) is not a guard.
+    """
+    head = _TSQL_GUARD_HEAD_RE.match(code)
     if not head:
         return None
-    # Preserve any comment lines that preceded the guard (e.g. a section header
-    # "-- CREACION DE LA TABLA x") — the head regex consumes them, so re-attach
-    # them to the guarded statement rather than dropping them.
-    leading_comments = "".join(
-        line + "\n"
-        for line in re.findall(r"(?m)^[ \t]*(--[^\n]*?)[ \t]*$", head.group("comments"))
-    )
-    # Skip the balanced-parens catalog condition (it may nest parentheses).
+    # Skip the balanced-parens condition (it may nest parentheses).
     depth = 0
     i = head.end() - 1
-    n = len(sql)
+    n = len(code)
     while i < n:
-        ch = sql[i]
+        ch = code[i]
         if ch == "(":
             depth += 1
         elif ch == ")":
@@ -218,7 +202,19 @@ def _extract_exists_guard(sql: str) -> str | None:
         i += 1
     if depth != 0:
         return None
-    rest = sql[i + 1 :].strip()
+    rest = code[i + 1 :]
+    if head.group("objid"):
+        is_clause = re.match(r"(?is)^\s*IS\s+(?P<not>NOT\s+)?NULL\b", rest)
+        if not is_clause:
+            return None
+        polarity = "present" if is_clause.group("not") else "absent"
+        rest = rest[is_clause.end() :]
+    else:
+        polarity = "absent" if head.group("neg") else "present"
+    # A trailing comment on the guard line (or between condition and body) is
+    # trivia: capture it for the caller and match on the code.
+    inner_trivia, rest = split_leading_trivia(rest.strip())
+    rest = rest.strip()
     # A guard commonly has an ELSE branch — usually a diagnostic ``PRINT '… already
     # exists'``. Keep only the THEN branch; cut at a line-starting ELSE (so an
     # ELSE inside a CASE expression is left intact).
@@ -228,6 +224,10 @@ def _extract_exists_guard(sql: str) -> str | None:
     unwrapped = re.match(r"(?is)^BEGIN\b(.*)\bEND\b\s*;?\s*$", rest)
     if unwrapped:
         rest = unwrapped.group(1).strip()
+        # Comments can also follow the BEGIN keyword itself.
+        block_trivia, rest = split_leading_trivia(rest)
+        if block_trivia.strip():
+            inner_trivia += block_trivia
     # A guard body often opens with a diagnostic ``PRINT 'Creating X'`` (or a
     # SET) before the DDL; drop those leading noise lines so the DDL is what gets
     # transpiled (the message is not worth carrying, and mixing it in would make
@@ -239,7 +239,7 @@ def _extract_exists_guard(sql: str) -> str | None:
         rest = rest[noise.end() :].lstrip()
     if not rest:
         return None
-    return leading_comments + rest
+    return polarity, inner_trivia, rest
 
 
 # A MySQL routine whose body contains ';' statement terminators must be wrapped
@@ -544,9 +544,15 @@ def _rewrite_tvf_callers(sql: str, names: set[str]) -> str:
 
 
 def _oracle_needs_slash(sql: str) -> bool:
-    """Whether an emitted Oracle statement is a PL/SQL block needing a ``/``."""
+    """Whether an emitted Oracle statement is a PL/SQL block needing a ``/``.
+
+    Leading trivia (line AND block comments) is stripped first — a section
+    header in front of a guard block must not suppress the terminator, or
+    every statement after it is swallowed into the block (audit 2026-07-08,
+    A3)."""
+    _, code = split_leading_trivia(sql)
     body = "\n".join(
-        line for line in sql.splitlines() if not line.lstrip().startswith("--")
+        line for line in code.splitlines() if not line.lstrip().startswith("--")
     ).strip()
     return bool(body) and (
         bool(_ORACLE_PLSQL_RE.match(body)) or bool(_ORACLE_PLSQL_UNIT_RE.search(body))
@@ -873,45 +879,31 @@ class Transpiler:
                         batch.sql, source, target, metadata_resolver
                     )
                 elif batch.batch_type == BatchType.SET_OPTION:
-                    # T-SQL DDL guards (IF OBJECT_ID() IS NULL CREATE TABLE ...)
-                    # are not SET options — extract the DDL and transpile it.
-                    ddl_match = (
-                        _TSQL_DDL_GUARD_RE.match(batch.sql)
+                    # T-SQL catalog migration guards (IF OBJECT_ID()/EXISTS()
+                    # …) are not SET options — extract and translate the intent.
+                    # Match on the trivia-free code (comments are trivia, doc-04
+                    # P2 — a section-header comment must never defeat a guard
+                    # recognizer) and re-attach the trivia to the result.
+                    trivia, code = split_leading_trivia(batch.sql)
+                    guard = (
+                        _extract_catalog_guard(code)
                         if source == "tsql" and target != "tsql"
                         else None
                     )
-                    drop_match = (
-                        _TSQL_DROP_GUARD_RE.match(batch.sql)
-                        if source == "tsql" and target != "tsql"
-                        else None
-                    )
-                    if ddl_match:
-                        result = self._transpile_dml(
-                            ddl_match.group(1),
-                            source,
-                            target,
-                            source_dialect,
-                            target_dialect,
+                    if guard is not None:
+                        polarity, inner_trivia, body = guard
+                        if inner_trivia.strip():
+                            trivia = (
+                                f"{trivia.rstrip()}\n{inner_trivia}"
+                                if trivia.strip()
+                                else inner_trivia
+                            )
+                        drop_stmt = (
+                            _DROP_STMT_RE.match(body) if polarity == "present" else None
                         )
-                        result = self._oracle_guard_idempotent(result, target)
-                    elif drop_match:
-                        result = self._transpile_drop_guard(
-                            drop_match.group("kind"),
-                            drop_match.group("name"),
-                            source,
-                            target,
-                        )
-                    elif (
-                        source == "tsql"
-                        and target != "tsql"
-                        and (guarded := _extract_exists_guard(batch.sql)) is not None
-                    ):
-                        # IF [NOT] EXISTS (<catalog query>) <guarded stmt>: keep
-                        # the intent — a guarded DROP becomes an idempotent
-                        # DROP ... IF EXISTS; any other guarded statement is just
-                        # transpiled (the catalog condition has no target form).
-                        drop_stmt = _DROP_STMT_RE.match(guarded)
                         if drop_stmt:
+                            # IF EXISTS/IS NOT NULL + DROP: the target's own
+                            # conditional drop keeps the re-runnable intent.
                             result = self._transpile_drop_guard(
                                 drop_stmt.group("kind"),
                                 drop_stmt.group("name"),
@@ -919,12 +911,24 @@ class Transpiler:
                                 target,
                             )
                         else:
+                            # Any other guarded statement: transpile the body
+                            # (the catalog condition has no target form) and
+                            # restore the idempotent intent where the target
+                            # has one (CREATE … IF NOT EXISTS / Oracle probe).
                             result = self._transpile_dml(
-                                guarded, source, target, source_dialect, target_dialect
+                                body, source, target, source_dialect, target_dialect
                             )
-                            result = self._oracle_guard_idempotent(result, target)
+                            if polarity == "absent":
+                                result = self._guard_idempotent(result, source, target)
                     else:
+                        trivia = ""  # the fallback keeps the whole batch text
                         result = self._transpile_set_option(batch.sql, source, target)
+                    if trivia.strip():
+                        result = TranspileResult(
+                            sql=f"{trivia.rstrip()}\n{result.sql}",
+                            warnings=result.warnings,
+                            unsupported=result.unsupported,
+                        )
                 elif batch.batch_type == BatchType.COMMENT:
                     # Comments carry no executable SQL; preserve them verbatim
                     # (already normalized to '-- ...' line comments).
@@ -1552,20 +1556,63 @@ class Transpiler:
                 unsupported=unsupported,
             )
 
-    def _oracle_guard_idempotent(
-        self, result: TranspileResult, target: str
+    def _guard_idempotent(
+        self, result: TranspileResult, source: str, target: str
     ) -> TranspileResult:
-        """For an Oracle target, wrap a guarded ``CREATE`` so it runs only if the
-        object is absent (idempotent + portable — see ``_oracle_idempotent_create``);
-        every other target keeps the bare DDL (the guard is T-SQL-only idiom)."""
-        if target != "oracle":
-            return result
-        wrapped = _oracle_idempotent_create(result.sql)
-        if wrapped is None:
-            return result
-        return TranspileResult(
-            sql=wrapped, warnings=result.warnings, unsupported=result.unsupported
-        )
+        """Restore a catalog CREATE-guard's re-runnable intent on the target.
+
+        Oracle wraps the DDL in the ``user_objects`` probe + ``EXECUTE
+        IMMEDIATE`` (see ``_oracle_idempotent_create``); PostgreSQL/MySQL use
+        their native ``CREATE TABLE/INDEX IF NOT EXISTS`` clause. Where the
+        target has no form (MySQL ``CREATE INDEX``), the guard is dropped
+        with an explicit warning — never silently (audit 2026-07-08, A5)."""
+        if target == "oracle":
+            wrapped = _oracle_idempotent_create(result.sql)
+            if wrapped is None:
+                return result
+            return TranspileResult(
+                sql=wrapped, warnings=result.warnings, unsupported=result.unsupported
+            )
+        if target in ("postgresql", "mysql"):
+            sql, n = re.subn(
+                r"(?i)^(\s*)CREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS)",
+                r"\1CREATE TABLE IF NOT EXISTS ",
+                result.sql,
+                count=1,
+            )
+            if n:
+                return TranspileResult(
+                    sql=sql, warnings=result.warnings, unsupported=result.unsupported
+                )
+            if target == "postgresql":
+                sql, n = re.subn(
+                    r"(?i)^(\s*)CREATE\s+(UNIQUE\s+)?INDEX\s+(?!IF\s+NOT\s+EXISTS)",
+                    r"\1CREATE \2INDEX IF NOT EXISTS ",
+                    result.sql,
+                    count=1,
+                )
+                if n:
+                    return TranspileResult(
+                        sql=sql,
+                        warnings=result.warnings,
+                        unsupported=result.unsupported,
+                    )
+            elif re.match(r"(?is)^\s*CREATE\s+(UNIQUE\s+)?INDEX\b", result.sql):
+                return TranspileResult(
+                    sql=result.sql,
+                    warnings=[
+                        *result.warnings,
+                        _warn(
+                            "existence guard dropped: MySQL has no CREATE INDEX "
+                            "IF NOT EXISTS, so a re-run of this statement errors",
+                            "guard_dropped",
+                            source,
+                            target,
+                        ),
+                    ],
+                    unsupported=result.unsupported,
+                )
+        return result
 
     def _transpile_drop_guard(
         self, kind: str, name: str, source: str, target: str
@@ -1615,22 +1662,40 @@ class Transpiler:
     def _transpile_set_option(
         self, sql: str, source: str, target: str
     ) -> TranspileResult:
-        """Handle SET options like SET NOCOUNT ON."""
+        """Handle SET options like SET NOCOUNT ON.
+
+        This is also the comment-out fallback for batches the guard
+        recognizers could not extract; those must be labelled honestly (an
+        unrecognized batch, not a "SET option") and registered as unsupported
+        — an executable statement reduced to a comment with a misleading
+        warning is a no-silent-loss violation (audit 2026-07-08, RC1/RC4).
+        """
         if source == "tsql" and target != "tsql":
             commented = "\n".join(
                 f"-- {line}" if line.strip() else ""
                 for line in sql.strip().splitlines()
             )
+            _, code = split_leading_trivia(sql)
+            head = " ".join(code.strip().split())[:60]
+            if re.match(r"(?i)^\s*SET\b", code):
+                return TranspileResult(
+                    sql=commented,
+                    warnings=[
+                        _warn(
+                            f"SET option commented out: {head}",
+                            "set_option",
+                            source,
+                            target,
+                        )
+                    ],
+                )
+            message = (
+                f"batch commented out (unrecognized migration-guard shape): {head}"
+            )
             return TranspileResult(
                 sql=commented,
-                warnings=[
-                    _warn(
-                        f"SET option commented out: {sql.strip()[:60]}",
-                        "set_option",
-                        source,
-                        target,
-                    )
-                ],
+                warnings=[_warn(message, "unhandled_batch", source, target)],
+                unsupported=[message],
             )
         return TranspileResult(sql=sql)
 
