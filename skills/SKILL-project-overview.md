@@ -32,7 +32,7 @@ from versions 2012 onward.
    factory — no `if dialect == …` dispatch in the base. Adding an engine there is
    one new emitter module + one new transformer module.
 
-3. **Python 3.12** — the single supported/CI version (ecosystem richness,
+3. **Python 3.13** — the single supported/CI version (ecosystem richness,
    readability, tooling). sqlglot does the per-statement parsing; Unique adds an
    autonomous procedural engine for the stored-routine shell sqlglot can't model.
 
@@ -61,9 +61,14 @@ unique/
 ├── src/unique/
 │   ├── core/
 │   │   ├── ast_nodes.py          # IR node definitions
-│   │   ├── converter.py          # sqlglot AST ↔ IR conversion + DML/DDL emit
-│   │   │                         #   (also hosts the sqlglot DML workarounds:
-│   │   │                         #   string +→concat, bitwise ops, fn args)
+│   │   ├── converter/            # sqlglot AST ↔ IR conversion + DML/DDL emit
+│   │   │   ├── _base.py          #   (hosts the sqlglot DML workarounds:
+│   │   │   ├── convert.py        #   string +→concat, bitwise ops, fn args)
+│   │   │   ├── emit.py
+│   │   │   └── harvest.py
+│   │   ├── mappings.py           # Shared dialect knowledge (functions/types/
+│   │   │                         #   literals) consumed by BOTH pipelines
+│   │   ├── validation.py         # Source-syntax validation (locate errors)
 │   │   ├── transformer.py        # DML/DDL transform passes
 │   │   ├── transpiler.py         # Orchestrator: split → classify → route → join
 │   │   ├── batch_splitter.py     # Dialect-aware batch splitting + classification
@@ -121,9 +126,21 @@ class Dialect(ABC):
 When resuming work, check `docs/STATUS.md` for the latest progress tracker.
 Each completed feature should have corresponding tests in the test suite.
 
-**Also check `audit/` for the latest audit** (first one: `audit/2026-07-02/`).
-Audits are ground truth about real defects and must not be contradicted by
-STATUS/README claims. Key standing lessons from 2026-07-02:
+**Also check `audit/` for the latest audit** (`audit/2026-07-02/`,
+`audit/2026-07-08/`). Audits are ground truth about real defects and must not
+be contradicted by STATUS/README claims.
+
+**The architecture direction is set by `audit/2026-07-08/04-architecture-analysis.md`
+(adopted).** Its five root causes and proposals P1–P6 govern all transpiler
+work until the M0–M4 milestones close. The binding rules derived from it live
+in `skills/SKILL-development-workflow.md` ("Architecture guardrails" and
+"Detect the wrong path"); read both before touching `transpiler.py`,
+`batch_splitter.py`, or the procedural engine. Headline: the failing 20% is
+everything that *bypasses* the AST core — regex classification of batches,
+raw-text transformation of embedded DML, ad-hoc comment handling, silent
+fallbacks — and fixes must close those bypasses, not add cases to them.
+
+Key standing lessons from 2026-07-02:
 
 - **Test assertions must fail under an identity transpiler.** 72% of the
   integration suite passed when `transpile` returned its input unchanged.

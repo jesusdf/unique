@@ -86,15 +86,34 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       guard back to the target catalog so A→B→A of a guarded migration stays
       executable (today it degrades to a carrier, warned).
 
-### P0 — architecture decision (audit doc 04)
+### P0 — architecture plan (audit doc 04 — ADOPTED 2026-07-08)
 
-- [ ] **Decide on the architecture proposals in
+- [x] **Decide on the architecture proposals in
       [`audit/2026-07-08/04-architecture-analysis.md`](../audit/2026-07-08/04-architecture-analysis.md)**
-      (P1 honesty gate, P2 comment trivia, P3 unified AST guard path, P4
-      embedded DML through the IR pipeline, P5 validity-ratchet process, P6
-      per-direction tiering; sequencing M0–M4). The item-level bugs below are
-      *instances* of those root causes — if the proposals are adopted, fix the
-      classes (P2/P3/P4), not the instances one by one.
+      — adopted as proposed (P1 honesty gate, P2 comment trivia, P3 unified
+      AST guard path, P4 embedded DML through the IR pipeline, P5
+      validity-ratchet process, P6 per-direction tiering; sequencing M0–M4).
+      Binding rules encoded in `skills/SKILL-development-workflow.md`
+      ("Architecture guardrails", "Detect the wrong path"). The item-level
+      bugs below are *instances* of those root causes — fix the classes
+      (P2/P3/P4), not the instances one by one.
+- [ ] **M0 — productize the validity sweep** (`scripts/validity_sweep.py`):
+      transpile a file/corpus, execute per-statement on the Docker engines,
+      classify syntax-vs-expected errors, report per-direction validity % and
+      a per-class frequency table. Includes fixing E1 (quote-aware statement
+      splitting in `tests/helpers/live_validation.py`). Baselines from the
+      audit: Oracle→T-SQL 71% valid, Oracle→PG 56% valid.
+- [ ] **M1 — honesty gate**: (a) DML/DDL outputs that don't parse in the
+      target dialect degrade to carrier + warning (never ship invalid text
+      silently); (b) procedural units failing structural checks (balanced
+      blocks, per-target leftover deny-list) degrade whole, never as
+      fragments; (c) warnings deduplicated/aggregated and correctly labeled.
+- [ ] **M2 — P2 comment trivia + P3 unified AST guard path** (clears the
+      guard family: N1, N10, A1–A5).
+- [ ] **M3 — P4 embedded DML through the IR converter**; delete the
+      text-level rewriters (clears D3, D4, D8, A4 by construction).
+- [ ] **M4 — Oracle-source bring-up** driven by the sweep frequency table
+      (doc 03 §D backlog).
 
 ### P1 — private-fixture live sweep (audit doc 03; anonymized repros there)
 

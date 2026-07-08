@@ -61,6 +61,102 @@ method over another `if/elif`, a correct transformation over a passthrough that
 solution is large, say so and propose it; don't quietly downgrade the goal to
 make the change easier.
 
+## Architecture guardrails (audit 2026-07-08 doc 04 — binding)
+
+The 2026-07-08 audit traced ~40 real-script defects to five root causes; these
+rules keep them from growing back. When one of them blocks the quick version
+of your fix, that is the rule working — do the structural version or escalate.
+
+1. **Moratorium on regex shape-patches in the script layer.** Do not add new
+   regex recognizers/extractors/special cases for SQL *constructs* to
+   `transpiler.py` or to `batch_splitter._classify`'s cascade. New or
+   mis-handled constructs (guards, IF forms, EXEC forms, …) are handled in the
+   **AST paths**: route the batch to the procedural engine or the IR
+   converter and decide there, on parsed structure. The regex cascade only
+   ever grew one hole per fix (guard + `BEGIN`, guard + leading comment,
+   `OBJECT_ID` with a type argument… each individually "fixed" while its
+   neighbors stayed broken).
+2. **Never transform SQL as text.** Function/type/literal/operator mappings go
+   in the IR converter + `core/mappings.py`, applied on the AST — never as an
+   `re.sub` over SQL text. Text-level rewriting is how `MAX(NVL(n,0)) + 1`
+   lost tokens on one target and turned `+` into `||` on another (silent
+   corruption, the worst defect class we ship). Embedded DML inside routine
+   bodies must go through the same IR pipeline as standalone DML (the
+   table-variable DDL path shows the pattern); raw `sqlglot.transpile` is a
+   *warned* fallback, never the primary path.
+3. **Comments are trivia.** No classification, matching, guard extraction, or
+   terminator decision may ever operate on text that can still contain
+   comments; comments attach to the following statement and are re-emitted.
+   If your code needs `strip the comment first`, the stripping belongs in ONE
+   shared place, not in your call site.
+4. **Never ship invalid output silently.** If an emitted DML/DDL unit does not
+   parse in the *target* dialect (sqlglot check), or a procedural unit fails
+   the structural checks (balanced blocks, no source-only leftovers), the unit
+   degrades to the documented carrier + warning/unsupported entry — the same
+   contract as any lossy conversion. A parser that loses sync fails the
+   **whole unit** into a carrier; it never emits fragments.
+5. **Warnings are part of correctness.** A warning must (a) describe what
+   actually happened ("SET option commented out" on a DROP-guard batch is a
+   bug), (b) fire exactly when it happened (a warning on a *successful*
+   conversion is a bug), and (c) be aggregated (one entry with a count, not
+   338 repeats). Treat a false or mislabeled warning like wrong SQL output.
+6. **Definition of done for transpilation work** is not "the fixture is
+   green". It is: fixture green **and** its combinatorial neighbors probed
+   (see the next section) **and** the round-trip holds **and** the validity
+   sweep (`scripts/validity_sweep.py`, once available — otherwise the live
+   corpus tests) does not regress for the affected direction **and** docs
+   updated. Direction maturity is stated as a measured validity %, never as
+   "complete".
+
+## Detect the wrong path: circuit breakers (mandatory)
+
+History shows the expensive failure mode here is not writing a bad fix — it is
+writing a *locally correct* fix that treats one instance of a class, then
+repeating it (guards were "fixed" at least four times, each time for exactly
+one spelling, while migration dumps kept failing). Before and during any fix,
+run these checks; when one fires, **stop patching and change altitude**.
+
+1. **Rule of three.** Before patching a function/regex/fallback, check
+   `git log --oneline -- <file>` and `docs/DONE.md` for earlier fixes to the
+   same mechanism. If you are about to write the **third** fix to the same
+   spot for the same *kind* of input, the mechanism is wrong, not the input.
+   Do the class fix, or stop and propose it. Never land patch #3 silently.
+2. **Neighbor test.** A shape bug is never alone. Before declaring a fix done,
+   enumerate its combinatorial neighbors — ± leading comment, ± `BEGIN…END`
+   wrapper, ± an extra argument, sibling statement kinds (INSERT/UPDATE/
+   DELETE/CREATE/DROP), and **all targets** — and probe them. If the neighbors
+   fail and each would need its own patch, you are patching a class one
+   instance at a time: circuit-break to the structural fix.
+3. **Green-but-unmoved metric.** If tests pass but the corpus/live/sweep
+   number that motivated the work doesn't move, the fix missed the mechanism.
+   Re-derive where the failing inputs actually flow (add a temporary trace if
+   needed) instead of trying the next variation.
+4. **The fallback smell.** If your fix routes yet another case into a path
+   that comments code out or passes it through — or adds an `if` to such a
+   fallback — treat it as a red flag: fallbacks only ever grow. The right fix
+   almost always *removes* traffic from the fallback.
+5. **The lying-warning smell.** If you cannot write a warning message that
+   truthfully describes what your code does to the user's SQL, the code is
+   doing the wrong thing.
+6. **Two-strikes rule.** After two failed attempts at the same fix, stop
+   trying variations. Read the full code path end-to-end (splitter →
+   classifier → parser/converter → transformer → emitter → join) for one
+   failing input and write down the mechanism before touching code again.
+   Blind iteration on a misunderstood mechanism is how sessions burn.
+7. **Test-shaping.** Weakening an assertion, widening a regex in a test, or
+   adding an xfail to make your change green is never a fix. If the expected
+   output genuinely changed, the assertion change must be *stronger*, and the
+   docs must change with it.
+
+**Escalation protocol when a breaker fires:** (1) stop; (2) write the root
+cause — the mechanism, not the symptom — as a class-level `docs/TODO.md` item,
+mapping it to its root cause in `audit/2026-07-08/04-architecture-analysis.md`
+if it fits one; (3) if the class fix is in scope, do that instead of the
+patch; (4) otherwise surface it explicitly in your response with a proposal
+and land nothing that hides the problem. Spending a session on the class fix
+beats spending five sessions on five instances — that trade has already been
+measured in this repo, in the wrong direction.
+
 ## TDD Cycle
 
 Every feature follows Red → Green → Refactor:
@@ -463,9 +559,11 @@ constructs into portable equivalents:
 - String concatenation: `+` <-> `||` <-> `CONCAT()`
 
 **Where the sqlglot workarounds live.** sqlglot does the per-statement parsing
-but has gaps we patch in `core/converter.py` for **standalone DML** (the
-procedural engine handles routine bodies separately, so a fix often needs doing
-in *both* places, or the DML form lags behind):
+but has gaps we patch in `core/converter/` for **standalone DML** (the
+procedural engine handles routine bodies separately — until doc-04 P4 lands,
+a fix often needs doing in *both* places, or the DML form lags behind; per the
+architecture guardrails, the procedural copy must be an AST transform, never a
+text rewrite):
 
 - T-SQL string `+` -> concat: `_rewrite_tsql_string_concat` rewrites an `Add`
   with a string-ish operand to `DPipe`; `col + col` without type info stays `+`.

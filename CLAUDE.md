@@ -12,9 +12,14 @@ at the start of every session; they override generic defaults.
   the functional-equivalence harness). **Load this first when resuming work.**
 - [`skills/SKILL-development-workflow.md`](skills/SKILL-development-workflow.md) —
   how to make changes here: analyze-before-changing (mandatory first step), the
-  TDD cycle and test-assertion quality bar, the no-silent-loss invariant, the
-  pre-commit verification gate, commit/push discipline, and performance rules
-  (e.g. never build a string with `+=` in an input-proportional loop).
+  **architecture guardrails** (no regex shape-patches in the script layer, no
+  text-level SQL transforms, comments are trivia, never ship invalid output
+  silently), the **wrong-path circuit breakers** (rule of three, neighbor
+  test, escalation protocol — detect when you are patching instances of a
+  class or going in circles), the TDD cycle and test-assertion quality bar,
+  the no-silent-loss invariant, the pre-commit verification gate, commit/push
+  discipline, and performance rules (e.g. never build a string with `+=` in an
+  input-proportional loop).
 
 If a Skill tool is available, invoke the matching skill rather than only reading
 the file. When guidance here and a skill disagree, the skill is authoritative.
