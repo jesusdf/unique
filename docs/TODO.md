@@ -4,9 +4,11 @@ This document tracks **outstanding** work, ordered by priority. Completed work
 has been archived in [`docs/DONE.md`](DONE.md) (with the detailed why/how of
 each fix); `docs/STATUS.md` summarizes the project state at a higher level.
 
-Last reviewed: 2026-07-07. The functional-equivalence and audit-remediation
-backlogs are complete and archived in [`docs/DONE.md`](DONE.md) (§18); source-syntax
-validation across core/API/web/CLI shipped (§34); only packaging remains.
+Last reviewed: 2026-07-08. The functional-equivalence and 2026-07-02
+audit-remediation backlogs are complete and archived in [`docs/DONE.md`](DONE.md)
+(§18); source-syntax validation across core/API/web/CLI shipped (§34). The
+**2026-07-08 follow-up audit** ([`audit/2026-07-08/`](../audit/2026-07-08/))
+verified all 14 previous functional bugs fixed and opened the backlog below.
 
 ## Legend
 
@@ -37,7 +39,69 @@ is archived in [`docs/DONE.md`](DONE.md); the arc, in brief:
 - **Rules:** OUT/IN OUT params take no DEFAULT; procedure/trigger RETURN carries no
   value; no `AS` before a table alias.
 
-## 2. Packaging (P3)
+## 2. Audit 2026-07-08 follow-ups
+
+Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new-findings.md)
+(reproductions and mechanism analysis there).
+
+### P1 — silent semantic changes (no-silent-loss violations)
+
+- [ ] **N1: unbracketed real-data `IF [NOT] EXISTS` guard dropped silently.**
+      `IF NOT EXISTS (SELECT 1 FROM cfg WHERE k='x') INSERT …` (no `BEGIN`)
+      loses the condition on every target with zero warnings — re-runs insert
+      duplicates. `batch_splitter._classify` (line ~278) only protects the
+      `BEGIN … END` form; drop the `_TSQL_BEGIN_BLOCK_RE` conjunct so any
+      non-catalog guard routes to the procedural engine. Add single-statement
+      INSERT/UPDATE/DELETE guard probes + an FE scenario running a guarded
+      INSERT twice.
+- [ ] **N2: PG → T-SQL temp-table rename not script-wide.**
+      `SELECT * INTO TEMPORARY tmp; SELECT a FROM tmp; DROP TABLE tmp` emits
+      `INTO #tmp` but leaves `FROM tmp`/`DROP tmp` — output creates one table
+      and reads another, silently. Propagate the rename across the script;
+      round-trip test PG→T-SQL→PG.
+
+### P2 — correctness of signals and validation
+
+- [ ] **N3: `validate_source` false negatives → silent garbage.**
+      `banana banana` (parses as `exp.Alias`) and `CREATE TALBE t (id INT)`
+      (`Command` fallback) validate clean on every dialect; the first then
+      transpiles to `banana AS banana;` with no warning. Extend the
+      bare-statement check (validation.py:168) to alias/expression-only
+      statements and unknown-verb Commands; warn when a batch parses to a bare
+      expression.
+- [ ] **N5: false-positive warning on a successful guard round-trip** — the
+      Oracle FOR-loop guard that *is* converted back to a T-SQL `IF` still
+      warns "FOR loop has no direct T-SQL equivalent"
+      (procedural/transformer/tsql.py:258). Suppress when the rewrite succeeds.
+- [ ] **N6: `/api/v1/validate` and `/api/v1/detect` lack `max_length`** on
+      their `sql` fields (A2 DoS cap applies only to `/transpile`).
+- [ ] **N8: near-duplicate `unsupported` entries** for one construct
+      (CREATE SCHEMA→Oracle, sp_rename): deduplicate at carrier↔result
+      reconciliation.
+- [ ] **N4/N9: docs drift** — STATUS.md claims the guard round-trip is
+      FE-exercised (coverage-matrix.md says the opposite); the
+      project-overview skill still says Python 3.12 (project is 3.13) and
+      shows `converter.py` as a file; README lacks the "`latest` publishes
+      only on tags" note. Also consider mapping Unique's own emitted catalog
+      guard back to the target catalog so A→B→A of a guarded migration stays
+      executable (today it degrades to a carrier, warned).
+
+### P3 — hardening carry-overs (from 2026-07-02, still open)
+
+- [ ] **CI: fail when fewer engines than expected were exercised** — a broken
+      ODBC install or Oracle startup timeout currently shrinks live validation
+      silently (waits are `continue-on-error`, tests skip on connect failure).
+- [ ] **Raise the identity-mutation floor** toward the measured 0.38 as
+      `test_cross_dialect.py` (291 survivors) / `test_comment_preservation.py`
+      assertions harden.
+- [ ] **Module growth**: `procedural/parser.py` 2886, `procedural/transformer/
+      base.py` 2813, `transpiler.py` 1713 lines — resume the split along the
+      seams named in audit 2026-07-02 doc 03.
+- [ ] **Docker digest pin + constraints file**; report the decode encoding in
+      a `/transpile/file` response header (A5 residue); sanitize the
+      `Content-Disposition` filename stem (N7).
+
+## 3. Packaging (P3)
 
 - [ ] **PyPI publication** — deferred until the tool has been used in real
       projects for a few months and proven stable. Not before then.
