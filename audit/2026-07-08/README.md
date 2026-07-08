@@ -11,6 +11,7 @@ state for new problems.
 |------|----------|
 | [01-remediation-verification.md](01-remediation-verification.md) | Item-by-item verification of every 2026-07-02 finding (functional, tests, code, API, docs) against v0.22.3 |
 | [02-new-findings.md](02-new-findings.md) | New defects found in this audit, with reproductions, plus improvement opportunities |
+| [03-private-fixture-sweep.md](03-private-fixture-sweep.md) | Live-engine validation of the (confidential, anonymized here) real-world scripts across the matrix: ~25 defect classes, 29–44% invalid output in the Oracle→X direction |
 
 ## Executive summary
 
@@ -46,6 +47,21 @@ Also notable: **source-syntax validation has easy false negatives**
 then transpiles to the garbage `banana AS banana;` with no warning), and
 **`docs/STATUS.md` claims the FE harness exercises the guard round-trip while
 `coverage-matrix.md` explicitly documents that it does not**.
+
+**Addendum (same day): the private-fixture live sweep**
+([03-private-fixture-sweep.md](03-private-fixture-sweep.md)) transpiled the
+three real-world confidential scripts across the matrix and executed the
+outputs on the real engines. It confirmed the guard family above at scale and
+surfaced **~25 defect classes**, headlined by: guards with a leading comment
+(or a `BEGIN…END` wrapper) commented out wholesale on every target; the
+Oracle→X direction emitting **29% invalid batches on SQL Server and 43.6%
+invalid statements on PostgreSQL** for a real 13 MB dump (`EXEC AS`, PL/SQL
+`DECLARE` skeletons, `FROM DUAL` in INSERT-guards ~6,000×, untranslated
+`ROWNUM`/`RENAME COLUMN`/`IF UPDATING`/`TRUNC`); **silent expression
+corruption** (`MAX(NVL(x,0)) + 1` losing arguments on T-SQL and turning `+`
+into `||` on PostgreSQL); mid-body `DECLARE` never hoisted (breaks whole
+routines on all three targets); and MySQL `CALL` emitted with unsupported
+named arguments.
 
 **Recommended priorities**
 

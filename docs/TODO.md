@@ -86,6 +86,62 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       guard back to the target catalog so A→B→A of a guarded migration stays
       executable (today it degrades to a carrier, warned).
 
+### P1 — private-fixture live sweep (audit doc 03; anonymized repros there)
+
+Found by transpiling the three `fixtures-private/` scripts across the matrix
+and executing the outputs on the real engines. Ordered by attack value; every
+fix needs an **anonymized** regression fixture (never a private name).
+
+- [ ] **A1/A2: guard batches with a leading comment, or `BEGIN…END`-wrapped
+      `IF OBJECT_ID` guards, are commented out wholesale** on every target
+      (mislabeled `set_option` warning). Fix the guard extractor to tolerate
+      leading comments and unwrap `BEGIN…END`; likely clears N1 too.
+- [ ] **A3: leading comment suppresses the `/` terminator** of the emitted
+      Oracle guard block — every following statement is swallowed in SQL*Plus.
+- [ ] **D3: `INSERT … SELECT … FROM DUAL WHERE NOT EXISTS(…)` keeps
+      `FROM DUAL`** on PG/T-SQL (~6,000× in the real Oracle dump).
+- [ ] **D1: Oracle `EXEC proc` → `EXEC AS proc`** on every target (T-SQL
+      impersonation syntax; PG/MySQL need `CALL`).
+- [ ] **D2: top-level `DECLARE…BEGIN…END` keeps its PL/SQL skeleton in
+      T-SQL** instead of flattening to `DECLARE @x…; <statements>`.
+- [ ] **D8: silent expression corruption in procedural embedded DML** —
+      `MAX(NVL(x,0)) + 1` loses `, 0))` and `+ 1` on T-SQL, and numeric `+`
+      becomes `||` on PG. Add these shapes to the operator round-trip suite.
+- [ ] **C1: mid-body scalar `DECLARE @x t = expr` is not hoisted** to the
+      declaration section (Oracle PLS-00103, MySQL invalid position and `=`
+      instead of `DEFAULT`, PG `CURSOR` without `FOR`). Reuse the
+      table-variable hoisting machinery.
+- [ ] **B1: `PRIMARY KEY CLUSTERED (col ASC)` → `PRIMARY KEY, CLUSTERED
+      (col ASC NULLS FIRST)`** — invalid on all four targets.
+- [ ] **B2: `DROP INDEX` untranslated across the matrix** (PG 3-part name,
+      MySQL missing `ON tbl`, table name dropped from the `ON` form).
+- [ ] **C5: MySQL `CALL` emitted with named arguments** (`name => v`),
+      unsupported by MySQL — emit positional.
+- [ ] **D9: `create or replace⏎PROCEDURE` (split lines + `-- <codegen>`
+      header comment) desyncs the procedural parser**, spilling declaration
+      fragments (`v_x AS VARCHAR2`, `CURSOR AS cur1`) as top-level batches.
+- [ ] **D4: `ROWNUM` untranslated inside procedural embedded DML** (the DML
+      pipeline maps it; the procedural one doesn't — asymmetry).
+- [ ] **A4: `NEWID()` inside a guard becomes `UUID()` on Oracle** (procedural
+      map not per-target; `SYS_GUID()` expected).
+- [ ] **A5: catalog CREATE-guard loses idempotency on PG/MySQL** (bare
+      `CREATE TABLE`, no `IF NOT EXISTS`, no warning; Oracle keeps the guard).
+- [ ] **C2/C3/C4: MySQL routine bodies** — raw `BEGIN TRY` leaks; `WHILE …
+      LOOP` (PL/SQL form) instead of `WHILE … DO`; cursor options spill as
+      `; LOCAL AS FAST_FORWARD;` fragments.
+- [ ] **D5/D6/D7: Oracle→T-SQL passthroughs** — `ALTER TABLE … RENAME COLUMN`
+      (needs `sp_rename`), trigger `IF UPDATING/INSERTING/DELETING` (needs
+      `UPDATE()` / inserted-deleted tests), `TRUNC(date)` → nonexistent
+      `DATE_TRUNC` (T-SQL 2022 `DATETRUNC(day,…)` or `CAST(… AS DATE)`).
+- [ ] **B3: MySQL `ADD COLUMN … CONSTRAINT name DEFAULT 0`** — drop the
+      named-DEFAULT constraint with a warning.
+- [ ] **B4: bare `RETURN` eats the next line's comment** (false "discarded
+      RETURN value" warning; comment lost on round-trip).
+- [ ] **D10: `DBMS_SCHEDULER.CREATE_JOB` → raw `CALL` on PG** — should be a
+      carrier + unsupported entry.
+- [ ] **E1 (harness): `_split_mysql_statements` splits on `;` inside string
+      literals** — quote-aware splitting needed (also `_split_semicolons`).
+
 ### P3 — hardening carry-overs (from 2026-07-02, still open)
 
 - [ ] **CI: fail when fewer engines than expected were exercised** — a broken
