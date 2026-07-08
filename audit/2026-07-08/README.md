@@ -12,6 +12,7 @@ state for new problems.
 | [01-remediation-verification.md](01-remediation-verification.md) | Item-by-item verification of every 2026-07-02 finding (functional, tests, code, API, docs) against v0.22.3 |
 | [02-new-findings.md](02-new-findings.md) | New defects found in this audit, with reproductions, plus improvement opportunities |
 | [03-private-fixture-sweep.md](03-private-fixture-sweep.md) | Live-engine validation of the (confidential, anonymized here) real-world scripts across the matrix: ~25 defect classes, 29–44% invalid output in the Oracle→X direction |
+| [04-architecture-analysis.md](04-architecture-analysis.md) | Root-cause analysis of the whack-a-mole loop (5 root causes) and the architecture/design/process changes proposed to reach a functional product (P1–P6, milestones M0–M4) |
 
 ## Executive summary
 

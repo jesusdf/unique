@@ -86,6 +86,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       guard back to the target catalog so A→B→A of a guarded migration stays
       executable (today it degrades to a carrier, warned).
 
+### P0 — architecture decision (audit doc 04)
+
+- [ ] **Decide on the architecture proposals in
+      [`audit/2026-07-08/04-architecture-analysis.md`](../audit/2026-07-08/04-architecture-analysis.md)**
+      (P1 honesty gate, P2 comment trivia, P3 unified AST guard path, P4
+      embedded DML through the IR pipeline, P5 validity-ratchet process, P6
+      per-direction tiering; sequencing M0–M4). The item-level bugs below are
+      *instances* of those root causes — if the proposals are adopted, fix the
+      classes (P2/P3/P4), not the instances one by one.
+
 ### P1 — private-fixture live sweep (audit doc 03; anonymized repros there)
 
 Found by transpiling the three `fixtures-private/` scripts across the matrix
