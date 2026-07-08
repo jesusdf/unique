@@ -1,124 +1,81 @@
 # Unique — Project Status
 
-## Current state: v0.22.3
+## Current state: v0.22.3 + audit-04 plan (M0/M1 shipped)
 
-The DML/DDL pipeline and the autonomous procedural engine are complete, and
-**functional equivalence** holds across the **full 4×4 matrix — all 16
-source×target pairs converge on the same final database state**, validated live
-against real engines (SQL Server via pymssql, PostgreSQL, MySQL/MariaDB, and
-Oracle via a local container). Since the functional-equivalence milestone the
-tool has been hardened extensively on **real migration dumps and real schemas**,
-and — most significantly — a **bug-detection infrastructure** now drives quality
-instead of hand-written examples. Most recently, the **T-SQL → Oracle procedures
-fixture (32 objects) transpiles to fully-valid PL/SQL** — the Oracle live
-validator queries `USER_ERRORS` (Oracle compiles PL/SQL lazily) and the whole
-procedural validity backlog is closed (26 → 0 INVALID; `docs/DONE.md` §33).
-Migration-script idioms translate too: a real-data `IF EXISTS(subquery)` guard is
-emulated with a cursor FOR loop (a THEN/ELSE pair over the negated probe), and a
-system-catalog `IF NOT EXISTS(…) CREATE` guard becomes an idempotent, portable
-`user_objects` probe + `EXECUTE IMMEDIATE` (re-runnable without `ORA-00955`).
-Most recently, **source-syntax validation** locates errors (by line) before
-transpiling — the API/CLI refuse a malformed script (overridable with
-`ignore_syntax_errors`) and the web UI disables Translate while it is invalid
-(`docs/DONE.md` §34). Most recently, the **web UI was redesigned** with a bespoke
-identity (inline dialect combos, a unified paste/file mode, status bars), and the
-idempotent `FROM DUAL` guard-loop Unique emits now **round-trips back to an `IF`**
-on T-SQL/PostgreSQL/MySQL — exercised, with the `ALTER TABLE ADD` guard, by the
-functional-equivalence harness (Scenario C). The
-version is single-sourced from `unique.__version__` and released via
-`scripts/release.py`. The detailed history lives in `docs/DONE.md`; the backlog
-(`docs/TODO.md`) is packaging-only.
+The project is executing the architecture plan adopted from the 2026-07-08
+audit ([`audit/2026-07-08/04-architecture-analysis.md`](../audit/2026-07-08/04-architecture-analysis.md)):
+close the paths that bypass the AST core, make every failure loud and honest,
+and replace "the fixture is green" with a **measured per-direction validity
+percentage** as the definition of done. Milestones **M0** (validity sweep) and
+**M1** (output honesty gate) are done; **M2** (comment trivia + unified AST
+guard path) and **M3** (embedded DML through the IR converter) are next
+(`docs/TODO.md`).
+
+### What holds today (measured, not asserted)
+
+- **Functional equivalence** holds across the full 4×4 matrix — all 16
+  source×target pairs converge on the same final database state on real
+  engines (curated scenario; CI-gating).
+- **Honesty invariant (M1)**: the transpiler never ships output it can detect
+  as invalid on the target. Plain DML/DDL is re-parsed in the target dialect
+  and all output is scanned for source-dialect leftovers; a failing batch
+  degrades to a carrier (original preserved) + `validity_gate` warning +
+  `unsupported` entry. Duplicate warnings aggregate with an `(xN)` count.
+- **Validity, per direction** (`scripts/validity_sweep.py`, M0 — transpile a
+  real script, execute every statement on the live engine, classify
+  transpiler defects vs empty-database noise). On the confidential real-world
+  corpora (see `audit/2026-07-08/03-private-fixture-sweep.md`):
+  - **T-SQL → PostgreSQL ≈ 99.9%**, **→ MySQL ≈ 98.6%**, **→ Oracle ≈ 99.6%**
+    on a 13k-line migration dump (remaining failures are single known classes,
+    e.g. `PRIMARY KEY CLUSTERED` inside a guard).
+  - A procedures-heavy file exposes the open **declaration-hoisting family**
+    (mid-body `DECLARE`) on all three targets — tracked P1.
+  - **Oracle → T-SQL/PostgreSQL/MySQL is Tier-2 (experimental)**: ~29–44% of a
+    real 13 MB dump fails on the target (`EXEC` handling, top-level `DECLARE`
+    blocks, `FROM DUAL` INSERT-guards, expression corruption — the M4 bring-up
+    backlog in `docs/TODO.md`).
+- **Test-assertion quality** is gated (identity-mutation floor 33%, currently
+  38%) and tracked nightly (mutation job with per-module floors).
+
+### Direction tiers (doc-04 P6)
+
+| Tier | Directions | Meaning |
+|---|---|---|
+| 1 — supported | T-SQL → PostgreSQL / MySQL / Oracle | ≥98% measured validity on real dumps; failures are enumerated classes with backlog entries |
+| 1 — supported | the 4 native identities + curated FE matrix | FE harness green |
+| 2 — experimental | Oracle → T-SQL / PostgreSQL / MySQL | large known defect classes; use behind the validity sweep |
+| 2 — experimental | PostgreSQL/MySQL sources beyond the FE scenario | not yet corpus-measured |
+
+### Recent milestones
+
+- **M1 — output honesty gate** (`unique/core/output_gate.py`): never ship
+  known-invalid output; degrade to carrier + warning instead.
+- **M0 — validity sweep** (`scripts/validity_sweep.py`) + one shared
+  string/comment-aware statement splitter (`unique/core/sql_split.py`) used by
+  the gate, the FE runner, the live validators and the sweep (fixes E1).
+- **2026-07-08 audit**: all 14 findings of the 2026-07-02 audit verified
+  fixed; ~25 new defect classes found by live-validating the private corpora;
+  architecture plan (5 root causes, P1–P6) adopted — see `audit/2026-07-08/`.
+- Earlier: T-SQL → Oracle procedures fixture fully valid (`USER_ERRORS`-aware
+  validator); source-syntax validation across core/API/web/CLI; web UI
+  redesign; guard round-trips covered by unit tests
+  (`test_dual_guard.py` — *not* by the FE harness; see its coverage-matrix).
 
 ### Bug-detection infrastructure (what replaced ad-hoc manual testing)
 
-Four complementary layers, all in CI:
+Five complementary layers:
 
-- **Corpus × live-execution sweep** (`test_corpus_live.py`,
-  `scripts/corpus-sweep.py`): a curated, self-contained SQL corpus is transpiled
-  to every valid target and the output is **executed against the real engine**
-  (a permissive parser accepts output a real engine rejects, so executing is what
-  actually catches bugs). Documented gaps are annotated `-- @xfail` in the corpus.
-- **Generative fuzzer + preservation invariants** (`tests/property/`,
-  `tests/helpers/sql_gen.py`): Hypothesis generates portable SELECTs and asserts
-  invariants on every transpile — output parses on the target, no Python `None`
-  or IR-node repr leaks, comments preserved, aliases conserved, round-trip valid
-  — shrinking any failure to a minimal reproducer.
-- **Differential result testing** (`test_corpus_results_live.py`): executes the
-  source statement on its engine and the transpiled output on each target,
-  comparing normalized result sets — catches **semantic** (wrong-answer) bugs
-  that syntactic validity cannot.
-- **Mutation testing** (`scripts/mutation_test.py`, nightly `mutation.yml`):
-  the objective test-assertion-quality metric; surviving mutants are lines a test
-  executes but does not verify. The nightly job fails on a score regression and
-  opens a tracking issue.
+- **Validity sweep** (`scripts/validity_sweep.py`): per-direction validity %
+  on real scripts against live engines — the definition of done.
+- **Corpus × live-execution sweep** (`test_corpus_live.py`): the curated
+  corpus transpiled to every target and executed for real; gaps are `@xfail`.
+- **Generative fuzzer + invariants** (`tests/property/`): Hypothesis-generated
+  SELECTs, invariants on every transpile, shrinking reproducers.
+- **Differential result testing** (`test_corpus_results_live.py`): source vs
+  transpiled result sets — catches wrong-answer bugs.
+- **Mutation testing** (nightly + identity-mutation CI gate): assertion
+  quality as a ratcheted number.
 
-These caught and fixed real bugs that "valid SQL that executes" would miss:
-a **UNION of 3+ arms dropping every middle arm**, dropped derived-table aliases
-and joined subqueries, `LIMIT None`, a table-less SELECT to Oracle missing
-`FROM DUAL`, an **IR-node repr leaking into SQL** for an `EXISTS` subquery, and a
-class of function/type mapping gaps.
-
-### Completed (high level)
-
-- [x] **Core engine (DML/DQL/DDL)** — IR nodes (`ast_nodes.py`), shared
-      sqlglot↔IR converter (the `converter/` package: `_base`/`harvest`/`convert`/
-      `emit`), transform passes (`transformer.py`), orchestrator
-      (`transpiler.py`), dialect registry, error hierarchy.
-- [x] **Autonomous procedural engine** — batch splitter, lexer, recursive-descent
-      parser, transformer, emitter (`core/procedural/`), plus a metadata resolver
-      (`metadata.py`) for `%TYPE`/`%ROWTYPE`.
-- [x] **Dialect plugins** — T-SQL, Oracle, PostgreSQL, MySQL (source and target),
-      plus SQLite as an **import-only source** (never a target).
-- [x] **Interfaces** — CLI, REST API (FastAPI), Python library, embedded web UI
-      (with source auto-detect and server-side named DSNs for `--db-url`).
-- [x] **Set operations** — `UNION`/`UNION ALL` (any number of arms) and
-      `EXCEPT`/`INTERSECT` (Oracle `MINUS`), subqueries in `FROM`/`JOIN`/`EXISTS`,
-      table-less SELECT (Oracle `FROM DUAL`), `OFFSET/FETCH`↔`LIMIT`↔`TOP`.
-- [x] **Type & function mappings** — binary/LOB families, unsigned integers/
-      floats, `NVL2`/`DECODE`→CASE, `IIF`→CASE, `NOW`/`CURDATE`/`CURRENT_DATE`,
-      `TO_CHAR`/`TO_DATE` format models, `DATEDIFF`/`DATEADD`, `CONVERT`→CAST,
-      per-dialect CAST types, `TRUNC`, string `+` chains → concat, and **bitwise
-      operators → Oracle via BITAND/POWER identities** (all validated live).
-- [x] **Cross-engine `%TYPE`/`%ROWTYPE`** — resolved through a `--db-url` pointing
-      at *any* of the five engines (SQL Server, Oracle, PostgreSQL, MySQL, SQLite).
-- [x] **Lossy conversions documented & reversible** — non-portable types lower to
-      a `/* UNIQUE: … */` carrier; a reverse/onward transpilation restores the
-      original where the target supports it.
-- [x] **Triggers** — firing modes/granularity; PostgreSQL trigger function; pure
-      set-based triggers → PostgreSQL statement-level with transition tables.
-- [x] **Comment preservation** — leading/section comments before `IF [NOT]
-      EXISTS` guards and before procedural `CREATE`s are kept (invariant-tested).
-- [x] **Real-schema validation** — the MediaWiki 1.46 schema (64 tables) executes
-      live: `mysql → {postgresql, oracle, tsql}` and `sqlite → postgresql` green.
-- [x] **Tooling & policy** — Docker, CI (lint/format, type check, test on 3.12,
-      live metadata, live syntax, nightly mutation, docker on tags), sqlglot
-      pinned, English-only by design, MIT licensed.
-
-### Test suite
-
-~1550 passing + the live-only tests that run in the CI live jobs (skipped
-without database URLs). Run `pytest tests/ -q`, or `scripts/test-parallel.sh`
-for a GNU-parallel run across cores.
-
-### Known limitations
-
-See `docs/03-unsupported.md` for the full list. Highlights (intentionally emitted
-as documented `-- UNIQUE:` comments / warnings, never silently dropped):
-
-- `%TYPE`/`%ROWTYPE` **without** `--db-url` → carrier type + comment (restored on
-  a round-trip back to a supporting engine); with `--db-url` it resolves.
-- `EXECUTE IMMEDIATE … USING` bind variables (T-SQL `sp_executesql`).
-- Mixed row-/set-level triggers, and set-based triggers on Oracle/MySQL.
-- `col + col` string concat with no type info (no `--db-url`) is left as `+`
-  (T-SQL resolves it by declared types the standalone-DML path lacks).
-- Indexing an **unbounded** `TEXT`/`BLOB` column on MySQL/SQL Server/Oracle
-  (intrinsic source-schema ↔ target-engine mismatch).
-- SQL Server system procedures, SQL*Plus directives, and engine-specific physical
-  features (partitioning, tablespaces, filegroups, index storage clauses).
-
-### Next steps
-
-The functional-equivalence, audit-remediation and test-quality backlogs are
-complete and archived in `docs/DONE.md`. `docs/TODO.md` holds only:
-
-- [ ] Publish to PyPI — **deferred (do not publish yet)**.
+The version is single-sourced from `unique.__version__` and released via
+`scripts/release.py`. History: `docs/DONE.md`. Backlog: `docs/TODO.md`
+(M2–M4 + the audit-03 P1 class list + packaging).
