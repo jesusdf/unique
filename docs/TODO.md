@@ -109,7 +109,9 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       (which split on `;` inside string literals) are gone. Tests:
       `tests/unit/helpers/test_sql_split.py`,
       `test_validity_sweep_classify.py`. Baselines (private corpus, empty
-      DBs): Oracle→T-SQL 71%, Oracle→PG 56% valid.
+      DBs): pre-gate Oracle→T-SQL 71%, Oracle→PG 56%; **post-M1**:
+      T-SQL→{PG 99.9%, MySQL 98.6%, Oracle 99.6%}, Oracle→{T-SQL 94.0%,
+      MySQL 75.0%, PG 73.1%}.
 - [x] **M1 — honesty gate** (`src/unique/core/output_gate.py`) — done:
       (a) plain DML/DDL output that doesn't parse under sqlglot in the target
       dialect degrades to a carrier (original source preserved) + a

@@ -30,10 +30,13 @@ guard path) and **M3** (embedded DML through the IR converter) are next
     e.g. `PRIMARY KEY CLUSTERED` inside a guard).
   - A procedures-heavy file exposes the open **declaration-hoisting family**
     (mid-body `DECLARE`) on all three targets — tracked P1.
-  - **Oracle → T-SQL/PostgreSQL/MySQL is Tier-2 (experimental)**: ~29–44% of a
-    real 13 MB dump fails on the target (`EXEC` handling, top-level `DECLARE`
-    blocks, `FROM DUAL` INSERT-guards, expression corruption — the M4 bring-up
-    backlog in `docs/TODO.md`).
+  - **Oracle → T-SQL/PostgreSQL/MySQL is Tier-2 (experimental)**. Post-M1 on
+    a real 13 MB dump: **T-SQL 94.0%, MySQL 75.0%, PostgreSQL 73.1%** validity
+    — the honesty gate now degrades most of what used to ship broken
+    (pre-gate: 71% / n.a. / 56%) into documented carriers; the remaining
+    shipped failures (`EXEC` handling, top-level `DECLARE` blocks, `FROM
+    DUAL` INSERT-guards, expression corruption, declaration hoisting) are the
+    M4 bring-up backlog in `docs/TODO.md`.
 - **Test-assertion quality** is gated (identity-mutation floor 33%, currently
   38%) and tracked nightly (mutation job with per-module floors).
 
