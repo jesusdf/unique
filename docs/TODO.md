@@ -46,7 +46,7 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
 
 ### P1 — silent semantic changes (no-silent-loss violations)
 
-- [ ] **N1: unbracketed real-data `IF [NOT] EXISTS` guard dropped silently.**
+- [x] **N1 (fixed in M2): unbracketed real-data `IF [NOT] EXISTS` guard dropped silently.**
       `IF NOT EXISTS (SELECT 1 FROM cfg WHERE k='x') INSERT …` (no `BEGIN`)
       loses the condition on every target with zero warnings — re-runs insert
       duplicates. `batch_splitter._classify` (line ~278) only protects the
@@ -125,10 +125,10 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       (`unique/core/sql_split.py`) to support the gate. Tests:
       `tests/unit/core/test_output_gate.py` (17); full suite green with the
       gate active — zero false degradations on the curated corpus.
-      *Still open (M1 residue):* honest re-labeling of the SET_OPTION
-      fallback ("SET option commented out" on non-SET batches) — falls with
-      the M2 guard unification; fragment-level desync (D9) is only caught
-      when a leftover token appears in the fragment.
+      *M1 residue resolved in M2:* the SET_OPTION fallback now labels
+      non-SET batches honestly (feature=unhandled_batch + unsupported).
+      Still open: fragment-level desync (D9) is only caught when a leftover
+      token appears in the fragment.
 - [x] **M2 — P2 comment trivia + P3 unified guard path** — done (clears the
       guard family: N1, N10, A1–A5). One shared `split_leading_trivia`
       (`unique/core/sql_split.py`) feeds the classifier, the guard matchers,
