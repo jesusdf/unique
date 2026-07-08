@@ -97,12 +97,19 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       ("Architecture guardrails", "Detect the wrong path"). The item-level
       bugs below are *instances* of those root causes — fix the classes
       (P2/P3/P4), not the instances one by one.
-- [ ] **M0 — productize the validity sweep** (`scripts/validity_sweep.py`):
-      transpile a file/corpus, execute per-statement on the Docker engines,
-      classify syntax-vs-expected errors, report per-direction validity % and
-      a per-class frequency table. Includes fixing E1 (quote-aware statement
-      splitting in `tests/helpers/live_validation.py`). Baselines from the
-      audit: Oracle→T-SQL 71% valid, Oracle→PG 56% valid.
+- [x] **M0 — productize the validity sweep** (`scripts/validity_sweep.py`) —
+      done: transpiles a file to each target, executes per-statement on the
+      live engines (PG savepoints, MySQL throwaway database, SQL Server
+      `SET PARSEONLY ON`, Oracle throwaway schema), classifies
+      syntax-vs-expected per engine error code, reports per-direction validity
+      % + top error groups with samples. E1 fixed on the way: the statement
+      splitters were consolidated into ONE shared string/comment-aware module
+      (`tests/helpers/sql_split.py`, 13 unit tests) used by the FE engine
+      runner, the live validators and the sweep — the old duplicated splitters
+      (which split on `;` inside string literals) are gone. Tests:
+      `tests/unit/helpers/test_sql_split.py`,
+      `test_validity_sweep_classify.py`. Baselines (private corpus, empty
+      DBs): Oracle→T-SQL 71%, Oracle→PG 56% valid.
 - [ ] **M1 — honesty gate**: (a) DML/DDL outputs that don't parse in the
       target dialect degrade to carrier + warning (never ship invalid text
       silently); (b) procedural units failing structural checks (balanced
@@ -168,8 +175,10 @@ fix needs an **anonymized** regression fixture (never a private name).
       RETURN value" warning; comment lost on round-trip).
 - [ ] **D10: `DBMS_SCHEDULER.CREATE_JOB` → raw `CALL` on PG** — should be a
       carrier + unsupported entry.
-- [ ] **E1 (harness): `_split_mysql_statements` splits on `;` inside string
-      literals** — quote-aware splitting needed (also `_split_semicolons`).
+- [x] **E1 (harness): `_split_mysql_statements` splits on `;` inside string
+      literals** — fixed via the shared `tests/helpers/sql_split.py` (see M0);
+      all live splitting is now string/comment-aware, incl. MySQL backslash
+      escapes and a BEGIN/END word-boundary fix.
 
 ### P3 — hardening carry-overs (from 2026-07-02, still open)
 

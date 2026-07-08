@@ -24,6 +24,8 @@ import contextlib
 import re
 from dataclasses import dataclass
 
+from .sql_split import is_executable, split_statements
+
 
 @dataclass(frozen=True)
 class ValidationResult:
@@ -339,105 +341,27 @@ def make_validator(dialect: str, url: str) -> SyntaxValidator:
 
 
 def _split_go(sql: str) -> list[str]:
-    """Split T-SQL on ``GO`` batch separators (line-only)."""
-    import re
-
-    return re.split(r"(?im)^\s*GO\s*$", sql)
+    """Split T-SQL on ``GO`` batch separators (shared splitter)."""
+    return split_statements(sql, "tsql")
 
 
 def _is_executable(stmt: str) -> bool:
     """Whether a statement has real SQL (not blank/comment-only).
 
-    A fragment that is only blank lines and ``--`` comments must not be sent
-    to the engine, which would reject it as a syntax error.
+    A fragment that is only blank lines and comments must not be sent to the
+    engine, which would reject it as a syntax error.
     """
-    for line in stmt.strip().splitlines():
-        s = line.strip()
-        if s and not s.startswith("--"):
-            return True
-    return False
-
-
-def _strip_line_comments(sql: str) -> str:
-    """Remove ``-- ...`` line comments (to end of line) from each line.
-
-    This prevents a ``;`` inside a comment from being treated as a statement
-    separator, and keeps comment text from reaching the engine.
-    """
-    out = []
-    for line in sql.splitlines():
-        idx = line.find("--")
-        out.append(line if idx == -1 else line[:idx])
-    return "\n".join(out)
-
-
-def _split_semicolons(sql: str) -> list[str]:
-    """Split on ';' for simple validation statements (no PL bodies).
-
-    Line comments are stripped first so a ';' inside a comment doesn't split a
-    statement.
-    """
-    return _strip_line_comments(sql).split(";")
+    return is_executable(stmt)
 
 
 def _split_mysql_statements(sql: str) -> list[str]:
-    """Split a MySQL script into executable statements, honoring DELIMITER.
+    """Split a MySQL script into executable statements (shared splitter).
 
-    A compound routine is wrapped as ``DELIMITER $$ <body>$$ DELIMITER ;`` so a
-    ``;`` inside the body doesn't terminate it. A driver (PyMySQL / mysql-
-    connector) executes one statement per call and does not understand the
-    client-side ``DELIMITER`` command, so we parse the blocks ourselves:
-
-    - Inside a ``DELIMITER $$`` block, the whole body up to the ``$$`` custom
-      delimiter is one statement (the ``DELIMITER`` lines and trailing ``$$``
-      are removed before execution).
-    - Outside a block, statements are split on ``;``.
+    Honors client-side ``DELIMITER`` blocks (a routine body is one statement)
+    and is string/comment-aware — a ``;`` inside a literal never splits
+    (audit 2026-07-08, E1).
     """
-    statements: list[str] = []
-    current_delim = ";"
-    buf: list[str] = []
-
-    def _flush_default(chunk: str) -> None:
-        # A default-delimiter section holds several statements separated by
-        # ';'. Split them (line comments stripped so a ';' in a comment does
-        # not split) and keep each non-empty piece as its own statement, since
-        # the driver executes one statement per call.
-        for part in _strip_line_comments(chunk).split(";"):
-            if part.strip():
-                statements.append(part)
-
-    for raw_line in sql.splitlines():
-        stripped = raw_line.strip()
-        # A "DELIMITER X" line switches the active terminator.
-        if stripped.upper().startswith("DELIMITER "):
-            # Flush anything pending under the previous delimiter. Under the
-            # default ';' delimiter that pending text is many statements, so it
-            # must be split; a custom-delimiter block is a single statement.
-            pending = "\n".join(buf)
-            if current_delim == ";":
-                _flush_default(pending)
-            elif pending.strip():
-                statements.append(pending.strip())
-            buf = []
-            current_delim = stripped.split(None, 1)[1].strip()
-            continue
-        buf.append(raw_line)
-        # When the active delimiter is custom ($$), a line ending with it
-        # closes the current statement.
-        if current_delim != ";" and stripped.endswith(current_delim):
-            joined = "\n".join(buf)
-            # Drop the trailing custom delimiter.
-            joined = joined.rstrip()[: -len(current_delim)]
-            if joined.strip():
-                statements.append(joined.strip())
-            buf = []
-    # Remaining buffer: split on ';' (default delimiter section).
-    tail = "\n".join(buf)
-    if current_delim == ";":
-        _flush_default(tail)
-    elif tail.strip():
-        statements.append(tail.strip())
-    return statements
+    return split_statements(sql, "mysql")
 
 
 _MYSQL_CREATE_RE = re.compile(
@@ -460,77 +384,15 @@ def _mysql_created_object(stmt: str) -> tuple[str, str] | None:
     return m.group(1).upper(), m.group(2)
 
 
-def _drop_leading_comment_lines(text: str) -> str:
-    """Drop leading blank and ``--`` comment lines from a chunk.
-
-    Used so a PL/SQL block preceded by degraded guard comments is still
-    recognized by its ``CREATE PROCEDURE`` / ``BEGIN`` head.
-    """
-    lines = text.splitlines()
-    i = 0
-    while i < len(lines) and (
-        not lines[i].strip() or lines[i].lstrip().startswith("--")
-    ):
-        i += 1
-    return "\n".join(lines[i:])
-
-
-_PLSQL_HEAD_RE = re.compile(
-    r"(?is)^\s*(?:CREATE\s+(?:OR\s+REPLACE\s+)?"
-    r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE|TYPE)\b|DECLARE\b|BEGIN\b)"
-)
-
-# The same head, but findable at any line start — used to locate a PL/SQL block
-# that follows plain SQL within one '/'-delimited chunk.
-_PLSQL_BLOCK_START = re.compile(
-    r"(?im)^[ \t]*(?:CREATE\s+(?:OR\s+REPLACE\s+)?"
-    r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE|TYPE)\b|DECLARE\b|BEGIN\b)"
-)
-
-
 def _split_oracle_statements(sql: str) -> list[str]:
-    """Split an Oracle script into statements, honoring the '/' terminator.
+    """Split an Oracle script into statements (shared splitter).
 
-    SQL*Plus terminates each statement with a line containing only ``/``. That
-    is the only reliable boundary for PL/SQL blocks (``CREATE PROCEDURE`` /
-    ``TRIGGER`` / anonymous ``BEGIN … END;``), whose bodies contain ``;``.
-    python-oracledb executes one statement per call and wants:
-
-    - no trailing ``/`` (it is not SQL), so the terminator lines are dropped;
-    - no trailing ``;`` on a plain SQL statement (ORA-00911), so it is stripped;
-    - the trailing ``;`` **kept** on a PL/SQL block (it closes ``END;``).
-
-    A chunk between terminators may still hold several ``;``-separated plain
-    statements (e.g. leading ``CREATE TABLE``s), so non-PL/SQL chunks are split
-    on ``;`` too.
+    Honors the SQL*Plus ``/`` terminator: a ``/``-delimited PL/SQL unit is one
+    statement (its ``END;`` kept, the ``/`` dropped — python-oracledb rejects
+    it); plain-SQL chunks split on top-level ``;`` (stripped, per ORA-00911),
+    string/comment-aware.
     """
-    chunks = re.split(r"(?m)^[ \t]*/[ \t]*$", sql)
-    statements: list[str] = []
-    for chunk in chunks:
-        if not chunk.strip():
-            continue
-        # A CREATE PROCEDURE/TRIGGER is often preceded by degraded ``--`` guard
-        # comments (e.g. the ``IF OBJECT_ID`` existence check). Skip leading
-        # blank/comment lines before deciding whether the chunk is PL/SQL.
-        body = _drop_leading_comment_lines(chunk)
-        if _PLSQL_HEAD_RE.match(body):
-            # A PL/SQL block: one statement, keep its terminating ';'.
-            statements.append(body.strip())
-        else:
-            # Plain SQL, possibly *followed by* a PL/SQL block in the same chunk:
-            # the transpiler ends a CREATE TABLE with ';' (no '/') and a
-            # procedure that follows has no '/' before it, so both land here.
-            # Split the plain-SQL prefix on ';', but once a PL/SQL block opens,
-            # everything to the chunk's end is that one block (its body ';' must
-            # not split it, and its block comments must stay intact).
-            head = _PLSQL_BLOCK_START.search(chunk)
-            prefix = chunk[: head.start()] if head else chunk
-            for part in _strip_line_comments(prefix).split(";"):
-                if part.strip():
-                    statements.append(part.strip())
-            if head and chunk[head.start() :].strip():
-                statements.append(chunk[head.start() :].strip())
-    return statements
+    return split_statements(sql, "oracle")
 
 
 def _normalize_pg_url(url: str) -> str:
