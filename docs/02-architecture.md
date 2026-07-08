@@ -241,6 +241,22 @@ class Transpiler:
         )
 ```
 
+#### output_gate.py — Output validity gate (never ship known-invalid SQL)
+
+Between emission and assembly, every non-comment batch passes an honesty
+check (audit 2026-07-08 doc 04, M1): plain DML/DDL output must parse under
+sqlglot in the **target** dialect, and all output is scanned (outside
+comments/strings) for source-dialect leftovers that can never be valid on the
+target (`ROWNUM` off Oracle, `GETDATE()` off T-SQL, backticks off MySQL, a
+stray `GO`/`/` terminator, …). A batch that fails degrades to the documented
+carrier comment — the **original source batch** preserved — plus a
+`validity_gate` warning and an `unsupported` entry, exactly like any other
+lossy conversion. The gate is deliberately conservative (procedural units are
+exempt from the sqlglot check, which cannot parse them) and it only *detects*;
+fixes belong in the AST paths. Duplicate warnings across a script are
+aggregated into one entry with an `(xN)` count so the signal stays readable
+on large migration dumps.
+
 #### transformer.py — Transformation Engine
 
 Transformations are organized as composable passes:

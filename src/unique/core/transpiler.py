@@ -44,6 +44,7 @@ from unique.core.converter import (
 )
 from unique.core.dialect import Dialect
 from unique.core.errors import UnsupportedFeatureError
+from unique.core.output_gate import degrade_to_carrier, gate_reason
 from unique.core.procedural.emitter import ProceduralEmitter
 from unique.core.procedural.parser import ProceduralParser
 from unique.core.procedural.transformer import ProceduralTransformer
@@ -259,6 +260,41 @@ def _warn(message: str, feature: str, source: str, target: str) -> TransformWarn
         source_dialect=source,
         target_dialect=target,
     )
+
+
+def _aggregate_warnings(warnings: list[TransformWarning]) -> list[TransformWarning]:
+    """Collapse duplicate warnings into one entry with a count (doc 04, M1c).
+
+    A real migration dump repeats the same lossy construct hundreds of times
+    (e.g. ``SET NOEXEC OFF`` per revision block); one warning per occurrence
+    buries the signal the no-silent-loss invariant depends on. Duplicates —
+    same feature and message — keep the first occurrence's position and gain
+    an ``(xN)`` suffix.
+    """
+    counts: dict[tuple[str, str], int] = {}
+    order: list[TransformWarning] = []
+    for warning in warnings:
+        key = (warning.feature, warning.message)
+        if key in counts:
+            counts[key] += 1
+        else:
+            counts[key] = 1
+            order.append(warning)
+    result: list[TransformWarning] = []
+    for warning in order:
+        count = counts[(warning.feature, warning.message)]
+        if count == 1:
+            result.append(warning)
+        else:
+            result.append(
+                TransformWarning(
+                    message=f"{warning.message} (x{count})",
+                    feature=warning.feature,
+                    source_dialect=warning.source_dialect,
+                    target_dialect=warning.target_dialect,
+                )
+            )
+    return result
 
 
 _QI_OFF_RE = re.compile(r"(?im)^\s*SET\s+QUOTED_IDENTIFIER\s+OFF\b")
@@ -898,6 +934,28 @@ class Transpiler:
                         batch.sql, source, target, source_dialect, target_dialect
                     )
 
+                # Output validity gate (doc 04, M1): never ship output we can
+                # tell is invalid on the target — degrade it to the documented
+                # carrier + warning + unsupported entry instead. The gate only
+                # detects; the fix belongs in the AST paths.
+                if batch.batch_type != BatchType.COMMENT and not _is_comment_only(
+                    result.sql
+                ):
+                    gate = gate_reason(result.sql, target)
+                    if gate is not None:
+                        message = (
+                            f"output failed the {target} validity check "
+                            f"({gate}); original {source} batch preserved"
+                        )
+                        result = TranspileResult(
+                            sql=degrade_to_carrier(batch.sql, gate, source, target),
+                            warnings=[
+                                *result.warnings,
+                                _warn(message, "validity_gate", source, target),
+                            ],
+                            unsupported=[*result.unsupported, message],
+                        )
+
                 terminated = self._ensure_terminated(
                     result.sql, target, batch.batch_type
                 )
@@ -949,7 +1007,7 @@ class Transpiler:
 
             return TranspileResult(
                 sql=output_sql,
-                warnings=all_warnings,
+                warnings=_aggregate_warnings(all_warnings),
                 unsupported=all_unsupported,
             )
         finally:

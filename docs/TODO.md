@@ -110,11 +110,23 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       `tests/unit/helpers/test_sql_split.py`,
       `test_validity_sweep_classify.py`. Baselines (private corpus, empty
       DBs): Oracle→T-SQL 71%, Oracle→PG 56% valid.
-- [ ] **M1 — honesty gate**: (a) DML/DDL outputs that don't parse in the
-      target dialect degrade to carrier + warning (never ship invalid text
-      silently); (b) procedural units failing structural checks (balanced
-      blocks, per-target leftover deny-list) degrade whole, never as
-      fragments; (c) warnings deduplicated/aggregated and correctly labeled.
+- [x] **M1 — honesty gate** (`src/unique/core/output_gate.py`) — done:
+      (a) plain DML/DDL output that doesn't parse under sqlglot in the target
+      dialect degrades to a carrier (original source preserved) + a
+      `validity_gate` warning + an `unsupported` entry; (b) ALL output is
+      scanned outside comments/strings for source-dialect leftovers
+      (ROWNUM/VARCHAR2/EXECUTE IMMEDIATE off Oracle, GETDATE/brackets off
+      T-SQL, backticks off MySQL, stray GO / `/` terminators) and degrades
+      whole on a hit — this catches invalid procedural units sqlglot can't
+      judge; (c) duplicate warnings aggregate into one entry with an `(xN)`
+      count. The splitter moved into the product
+      (`unique/core/sql_split.py`) to support the gate. Tests:
+      `tests/unit/core/test_output_gate.py` (17); full suite green with the
+      gate active — zero false degradations on the curated corpus.
+      *Still open (M1 residue):* honest re-labeling of the SET_OPTION
+      fallback ("SET option commented out" on non-SET batches) — falls with
+      the M2 guard unification; fragment-level desync (D9) is only caught
+      when a leftover token appears in the fragment.
 - [ ] **M2 — P2 comment trivia + P3 unified AST guard path** (clears the
       guard family: N1, N10, A1–A5).
 - [ ] **M3 — P4 embedded DML through the IR converter**; delete the
