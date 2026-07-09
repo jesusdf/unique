@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 
 from unique.core.ast_nodes import (
@@ -14,6 +15,7 @@ from unique.core.ast_nodes import (
     CallStatement,
     ContinueStatement,
     CursorDeclaration,
+    CursorOperation,
     ExitStatement,
     IfStatement,
     NullStatement,
@@ -29,10 +31,90 @@ from unique.core.ast_nodes import (
 from unique.core.procedural.emitter.base import ProceduralEmitter, register_emitter
 
 
+def _select_list_columns(select_text: str) -> list[str] | None:
+    """Column/alias names of a SELECT's top-level select list, or None.
+
+    Used to derive a cursor FOR-loop's FETCH INTO variables. Returns None
+    when any item has no derivable name (``*``, an expression without an
+    alias) or names collide — the caller then keeps the documented scaffold.
+    """
+    from unique.core.sql_split import split_top_level_commas
+
+    text = select_text.strip()
+    # Unwrap outer parens (the inline `FOR r IN (SELECT …)` form).
+    while text.startswith("(") and text.endswith(")"):
+        depth = 0
+        balanced = True
+        for i, ch in enumerate(text):
+            depth += (ch == "(") - (ch == ")")
+            if depth == 0 and i < len(text) - 1:
+                balanced = False
+                break
+        if not balanced:
+            break
+        text = text[1:-1].strip()
+    m = re.match(r"(?is)^\s*SELECT\s+(?:DISTINCT\s+)?(.*)$", text)
+    if not m:
+        return None
+    rest = m.group(1)
+    # Find the top-level FROM (outside parens/strings).
+    depth = 0
+    in_string = False
+    from_at = -1
+    i = 0
+    while i < len(rest):
+        ch = rest[i]
+        if in_string:
+            if ch == "'":
+                in_string = False
+            i += 1
+            continue
+        if ch == "'":
+            in_string = True
+        elif ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth = max(0, depth - 1)
+        elif depth == 0 and rest[i : i + 4].upper() == "FROM":
+            before_ok = i == 0 or not (rest[i - 1].isalnum() or rest[i - 1] == "_")
+            after = rest[i + 4 : i + 5]
+            if before_ok and (not after or not (after.isalnum() or after == "_")):
+                from_at = i
+                break
+        i += 1
+    select_list = rest[:from_at] if from_at >= 0 else rest
+    names: list[str] = []
+    for item in split_top_level_commas(select_list):
+        item = item.strip()
+        if not item or "*" in item.split(".")[-1]:
+            return None
+        plain = re.fullmatch(r"[\w.\[\]\"`]+", item)
+        if plain:
+            name = item.split(".")[-1].strip('[]"`')
+        else:
+            alias = re.search(r"(?is)\s(?:AS\s+)?([A-Za-z_]\w*)\s*$", item)
+            if not alias:
+                return None
+            name = alias.group(1)
+        if not re.fullmatch(r"[A-Za-z_]\w*", name):
+            return None
+        names.append(name.lower())
+    if not names or len(set(names)) != len(names):
+        return None
+    return names
+
+
 class TSqlEmitter(ProceduralEmitter):
     """T-SQL (SQL Server) procedural emitter."""
 
     dialect_name = "tsql"
+
+    def __init__(self, dialect: str) -> None:
+        super().__init__(dialect)
+        #: Declared-cursor queries by lowercase name, recorded as their
+        #: declarations emit, so a FOR loop over a named cursor can derive
+        #: its FETCH INTO variable list.
+        self._cursor_queries: dict[str, str] = {}
 
     def _emit_param(
         self,
@@ -119,11 +201,17 @@ class TSqlEmitter(ProceduralEmitter):
         return "DECLARE "
 
     def _emit_cursor_decl(self, node: CursorDeclaration) -> str:
+        # Classic T-SQL cursors are not variables: no '@' on the name (the
+        # generic variable rename adds one). Record the query so a FOR loop
+        # over this cursor can derive its FETCH INTO variable list.
+        name = node.name.lstrip("@")
         query_str = (
             self._emit_node(node.query).rstrip().rstrip(";") if node.query else ""
         )
-        body = f" FOR {query_str}" if query_str else ""
-        return f"DECLARE {node.name} CURSOR{body};"
+        if query_str:
+            self._cursor_queries[name.lower()] = query_str
+        body = f" LOCAL FAST_FORWARD FOR {query_str}" if query_str else ""
+        return f"DECLARE {name} CURSOR{body};"
 
     def _emit_print(self, node: PrintStatement) -> str:
         return f"PRINT {self._emit_node(node.expression)};"
@@ -174,29 +262,84 @@ class TSqlEmitter(ProceduralEmitter):
     def _emit_for_loop_body(
         self, variable: str, cursor_str: str, body_lines: list[str]
     ) -> str:
-        # T-SQL has no implicit cursor FOR loop. Emit an explicit cursor
-        # scaffold (structurally complete) so the developer only needs to fill
-        # the per-column fetch variables.
-        cur = f"{variable}_cur"
+        # T-SQL has no implicit cursor FOR loop: expand to an explicit cursor.
+        # When the select list is resolvable (a named cursor recorded at its
+        # declaration, or an inline query), the expansion is complete and
+        # valid: one @<var>_<col> per column, positional FETCH INTO, and the
+        # body's rec.col references rewritten. Otherwise the documented
+        # scaffold (developer completes the FETCH) remains.
+        named = re.fullmatch(r"@?[A-Za-z_]\w*", cursor_str.strip())
+        if named:
+            cur = cursor_str.strip().lstrip("@")
+            select_text = self._cursor_queries.get(cur.lower())
+            declares_cursor = False
+        else:
+            cur = f"{variable}_cur"
+            select_text = cursor_str
+            declares_cursor = True
+
+        cols = _select_list_columns(select_text) if select_text else None
+        if cols:
+            fields = {
+                m.group(1).lower()
+                for line in body_lines
+                for m in re.finditer(rf"(?i)\b{re.escape(variable)}\s*\.\s*(\w+)", line)
+            }
+            if not fields.issubset(set(cols)):
+                cols = None  # a referenced field the list doesn't expose
+
+        if not cols:
+            lines = [
+                "-- UNIQUE: Oracle implicit cursor FOR-loop expanded to an "
+                "explicit T-SQL cursor.",
+                "-- Declare one @var per selected column and complete the "
+                "FETCH INTO list.",
+                f"DECLARE {cur} CURSOR LOCAL FAST_FORWARD FOR",
+                f"{cursor_str};",
+                f"OPEN {cur};",
+                f"FETCH NEXT FROM {cur} INTO /* @col1, @col2, ... */;",
+                "WHILE @@FETCH_STATUS = 0",
+                "BEGIN",
+                *body_lines,
+                f"{self._indent()}FETCH NEXT FROM {cur} "
+                "INTO /* @col1, @col2, ... */;",
+                "END;",
+                f"CLOSE {cur};",
+                f"DEALLOCATE {cur};",
+            ]
+            return "\n".join(lines)
+
+        fetch_vars = ", ".join(f"@{variable}_{c}" for c in cols)
+        rewritten = [
+            re.sub(
+                rf"(?i)\b{re.escape(variable)}\s*\.\s*(\w+)",
+                lambda m: f"@{variable}_{str(m.group(1)).lower()}",
+                line,
+            )
+            for line in body_lines
+        ]
+        decls = ", ".join(f"@{variable}_{c} NVARCHAR(4000)" for c in cols)
         lines = [
-            "-- UNIQUE: Oracle implicit cursor FOR-loop expanded to an "
-            "explicit T-SQL cursor.",
-            "-- Declare one @var per selected column and complete the "
-            "FETCH INTO list.",
-            f"DECLARE {cur} CURSOR LOCAL FAST_FORWARD FOR",
-            f"{cursor_str};",
+            "-- UNIQUE: cursor FOR-loop expanded; loop variables are "
+            "NVARCHAR(4000) (exact column types need --db-url metadata).",
+            f"DECLARE {decls};",
+        ]
+        if declares_cursor:
+            lines += [
+                f"DECLARE {cur} CURSOR LOCAL FAST_FORWARD FOR",
+                f"{select_text};",
+            ]
+        lines += [
             f"OPEN {cur};",
-            f"FETCH NEXT FROM {cur} INTO /* @col1, @col2, ... */;",
+            f"FETCH NEXT FROM {cur} INTO {fetch_vars};",
             "WHILE @@FETCH_STATUS = 0",
             "BEGIN",
+            *rewritten,
+            f"{self._indent()}FETCH NEXT FROM {cur} INTO {fetch_vars};",
+            "END;",
+            f"CLOSE {cur};",
+            f"DEALLOCATE {cur};",
         ]
-        lines.extend(body_lines)
-        lines.append(
-            f"{self._indent()}FETCH NEXT FROM {cur} INTO /* @col1, @col2, ... */;"
-        )
-        lines.append("END;")
-        lines.append(f"CLOSE {cur};")
-        lines.append(f"DEALLOCATE {cur};")
         return "\n".join(lines)
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
@@ -227,6 +370,13 @@ class TSqlEmitter(ProceduralEmitter):
 
     def _emit_waitfor(self, node: WaitForStatement) -> str:
         return f"WAITFOR {node.kind} '{node.value}';"
+
+    def _emit_cursor_op(self, node: CursorOperation) -> str:
+        # Classic cursors are not variables: the generic '@' rename must not
+        # leak into OPEN/FETCH/CLOSE or the reference won't match DECLARE.
+        return super()._emit_cursor_op(
+            dataclasses.replace(node, cursor_name=node.cursor_name.lstrip("@"))
+        )
 
     def _emit_cursor_open(self, cursor_name: str, query_str: str) -> str:
         # In T-SQL the query lives on DECLARE CURSOR, so OPEN takes no query.

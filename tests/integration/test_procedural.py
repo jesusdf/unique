@@ -546,7 +546,12 @@ class TestCursorsAndLoops:
     def test_cursor_decl_tsql_no_double_semicolon(self) -> None:
         out = _transpile(self.SRC, "oracle", "tsql")
         assert ";;" not in out
-        assert "DECLARE @c CURSOR FOR" in out
+        # Classic (un-@) cursor declaration — 'DECLARE @c CURSOR FOR <select>'
+        # is invalid T-SQL (a cursor VARIABLE needs SET @c = CURSOR FOR …) —
+        # and the operations reference the same un-@ name.
+        assert "DECLARE c CURSOR LOCAL FAST_FORWARD FOR" in out
+        assert "OPEN c;" in out and "CLOSE c;" in out
+        assert "@c" not in out
 
     def test_cursor_decl_postgresql_syntax(self) -> None:
         out = _transpile(self.SRC, "oracle", "postgresql")
