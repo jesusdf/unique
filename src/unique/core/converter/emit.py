@@ -353,6 +353,15 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 result = _portable_types_in_sql(result, dialect)
             if node.kind == "CREATE SEQUENCE" and dialect == "oracle":
                 result = _oracle_sequence_drop_type(result)
+            if node.kind == "MERGE":
+                # sqlglot keeps the USING subquery's FROM DUAL on engines
+                # that have no dual relation, and T-SQL *requires* MERGE to
+                # end with ';' (error 10713) — the one statement where the
+                # no-';' T-SQL convention does not apply.
+                if dialect in ("tsql", "postgresql"):
+                    result = re.sub(r"(?i)\s+FROM\s+DUAL\b", "", result)
+                if dialect == "tsql" and not result.rstrip().endswith(";"):
+                    result = result.rstrip() + ";"
             if dialect == "tsql":
                 result = _portable_rename_column(result)
             if dialect != "oracle":
@@ -1567,6 +1576,16 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
                 r"(?i)^(?:INT|INTEGER|BIGINT)\b", "SIGNED", target_type
             )
         return f"CAST({value} AS {target_type})"
+
+    # Oracle's one-argument TO_CHAR(x) — a plain to-string conversion — exists
+    # nowhere else (PostgreSQL's TO_CHAR needs a format); spell it as a cast.
+    if fn_name == "TO_CHAR" and len(node.args) == 1 and dialect != "oracle":
+        value = _emit_expression(node.args[0], dialect)
+        if dialect == "tsql":
+            return f"CONVERT(VARCHAR(4000), {value})"
+        if dialect == "mysql":
+            return f"CAST({value} AS CHAR)"
+        return f"CAST({value} AS TEXT)"
 
     # Date <-> string formatting. sqlglot keeps TO_CHAR's Oracle format model but
     # normalizes the DATE_FORMAT/STR_TO_DATE ones to strftime; translate per
