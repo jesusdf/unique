@@ -240,6 +240,50 @@ def _split_semicolons(
     return statements
 
 
+def split_top_level_commas(text: str) -> list[str]:
+    """Split *text* on commas at parenthesis depth zero, outside strings.
+
+    ONE implementation for every list-shaped fragment (select lists, argument
+    lists): a naive ``split(",")`` cuts inside a function call
+    (``MAX(COALESCE(a, 0)) + 1`` — audit 2026-07-08, D8) and silently corrupts
+    the expression.
+    """
+    parts: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    in_string = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if in_string:
+            buf.append(ch)
+            if ch == "'":
+                if i + 1 < len(text) and text[i + 1] == "'":
+                    buf.append("'")
+                    i += 2
+                    continue
+                in_string = False
+            i += 1
+            continue
+        if ch == "'":
+            in_string = True
+        elif ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth = max(0, depth - 1)
+        elif ch == "," and depth == 0:
+            parts.append("".join(buf).strip())
+            buf = []
+            i += 1
+            continue
+        buf.append(ch)
+        i += 1
+    tail = "".join(buf).strip()
+    if tail or parts:
+        parts.append(tail)
+    return parts
+
+
 _LEADING_TRIVIA_RE = re.compile(r"(?s)\A(?:\s*(?:--[^\n]*(?:\n|\Z)|/\*.*?\*/))*\s*")
 
 

@@ -202,6 +202,59 @@ def test_tsql_desc_null_ordering_preserved_on_postgresql() -> None:
     _assert_parses(out, "postgresql")
 
 
+# ---------------------------------------------------------------------------
+# D8 — expression corruption in procedural raw-text tails
+# ---------------------------------------------------------------------------
+
+_ORACLE_PROC_D8 = """\
+CREATE OR REPLACE PROCEDURE next_id (p_out OUT NUMBER) AS
+BEGIN
+  SELECT MAX(NVL(col_a, 0)) + 1 INTO p_out FROM tbl_x;
+END;
+"""
+
+
+def test_d8_select_into_expression_survives_to_tsql() -> None:
+    # The balanced-call regex rewriters lost ", 0))" and "+ 1" on T-SQL.
+    out = _t(_ORACLE_PROC_D8, "oracle", "tsql")
+    up = _norm(out).upper()
+    assert "NVL" not in up
+    m = re.search(
+        r"MAX\s*\(\s*(?:COALESCE|ISNULL)\s*\(\s*COL_A\s*,\s*0\s*\)\s*\)\s*\+\s*1", up
+    )
+    assert m, out
+    assert up.count("(") == up.count(")")
+
+
+def test_d8_expression_round_trip_oracle_tsql_oracle() -> None:
+    # A -> B -> A': the aggregate + arithmetic must survive both directions
+    # (a one-way check can pass on a no-op; the round-trip caught the
+    # original token loss).
+    out_tsql = _t(_ORACLE_PROC_D8, "oracle", "tsql")
+    back = _t(out_tsql, "tsql", "oracle")
+    up = _norm(back).upper()
+    m = re.search(
+        r"MAX\s*\(\s*(?:NVL|COALESCE)\s*\(\s*COL_A\s*,\s*0\s*\)\s*\)\s*\+\s*1", up
+    )
+    assert m, back
+    assert up.count("(") == up.count(")")
+
+
+def test_d8_numeric_plus_stays_plus_on_postgresql() -> None:
+    # Numeric "+" must never become "||" (string concat) on PostgreSQL.
+    src = (
+        "CREATE PROCEDURE dbo.bump AS\n"
+        "BEGIN\n"
+        "  DECLARE @n INT = 0;\n"
+        "  SET @n = @n + 1;\n"
+        "  RETURN @n + 1;\n"
+        "END"
+    )
+    out = _t(src, "tsql", "postgresql")
+    assert "||" not in out
+    assert re.search(r"v_n\s*\+\s*1", out), out
+
+
 def test_procedural_inline_comment_does_not_eat_terminator() -> None:
     # An inline comment harvested from the statement is re-emitted as a line
     # comment; it must land BEFORE the statement, or the terminator the

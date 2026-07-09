@@ -137,7 +137,11 @@ class TSqlEmitter(ProceduralEmitter):
             first = node.columns[0]
             select_list = first.sql if isinstance(first, RawSQL) else ""
         rest = node.rest_sql.rstrip(";").strip()
-        cols = [c.strip() for c in select_list.split(",")]
+        # Top-level commas only: a plain split cuts inside a function call
+        # (``MAX(COALESCE(a, 0)) + 1`` — audit 2026-07-08, D8).
+        from unique.core.sql_split import split_top_level_commas
+
+        cols = split_top_level_commas(select_list)
         targets = list(node.into_vars)
         pairs = []
         for i, var in enumerate(targets):

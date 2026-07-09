@@ -161,6 +161,18 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       test_embedded_dml_ir.py` (20). Pending: M3b (SELECT INTO / cursor /
       condition raw-text tails → D8), M3c (delete the dead text rewriters),
       sweep re-measure.
+- [ ] **M3-prereq: move the procedural text-matchers onto structure before
+      routing scalar expressions through the IR.** A first attempt at IR-first
+      for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
+      reverted: downstream machinery pattern-matches on the *transformed
+      expression text* — the Oracle last-identity capture looks for a marker
+      string, the dual-guard→IF and DECLARE-init hoisting match query
+      spellings, `_rewrite_string_concat` uses declared-variable types the
+      standalone IR doesn't have, and the curated DATEADD/DATEDIFF handlers
+      produce live-validated forms the IR emitter doesn't. Those consumers
+      must consume nodes (or the IR must gain procedural context: var types,
+      PROCEDURAL_FUNC_MAPS) before the text rewriters can be deleted (P4's
+      final step). Until then the text path stays the expression engine.
 - [ ] **M4 — Oracle-source bring-up** driven by the sweep frequency table
       (doc 03 §D backlog).
 
@@ -186,9 +198,14 @@ fix needs an **anonymized** regression fixture (never a private name).
       impersonation syntax; PG/MySQL need `CALL`).
 - [ ] **D2: top-level `DECLARE…BEGIN…END` keeps its PL/SQL skeleton in
       T-SQL** instead of flattening to `DECLARE @x…; <statements>`.
-- [ ] **D8: silent expression corruption in procedural embedded DML** —
+- [x] **D8 (fixed in M3b): silent expression corruption in procedural embedded DML** —
       `MAX(NVL(x,0)) + 1` loses `, 0))` and `+ 1` on T-SQL, and numeric `+`
-      becomes `||` on PG. Add these shapes to the operator round-trip suite.
+      becomes `||` on PG. Mechanism: the T-SQL SELECT-INTO emitter split the
+      select list with a naive `split(",")`, cutting inside the function call.
+      Fixed with the shared paren/string-aware `split_top_level_commas`
+      (`unique/core/sql_split.py`); embedded-DML `+` now flows through the IR
+      (M3a). Probes + oracle→tsql→oracle round-trip in
+      `test_embedded_dml_ir.py`.
 - [ ] **C1: mid-body scalar `DECLARE @x t = expr` is not hoisted** to the
       declaration section (Oracle PLS-00103, MySQL invalid position and `=`
       instead of `DEFAULT`, PG `CURSOR` without `FOR`). Reuse the
