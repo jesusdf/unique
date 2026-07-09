@@ -606,7 +606,9 @@ def _convert_update(expr: exp.Update) -> UpdateStatement:
                 joins.append(_convert_join(join_expr))
 
     where = None
-    where_expr = expr.find(exp.Where)
+    # Direct arg, not find(): find() would descend into a subquery in SET/FROM
+    # and lift ITS where onto this UPDATE (same class as the SELECT bug).
+    where_expr = expr.args.get("where")
     if where_expr:
         where = convert_expression(where_expr.this)
 
@@ -621,10 +623,19 @@ def _convert_update(expr: exp.Update) -> UpdateStatement:
 
 def _convert_delete(expr: exp.Delete) -> DeleteStatement:
     """Convert a sqlglot Delete to DeleteStatement."""
-    table = _convert_table_ref(expr.this)
+    # Oracle's FROM-less ``DELETE t WHERE …`` parses with the table in
+    # ``tables`` and ``this=False`` — reading ``this`` blindly emitted the
+    # literal ``DELETE FROM False`` (silent corruption; audit sweep).
+    target = expr.this
+    if not isinstance(target, exp.Expression):
+        tables = expr.args.get("tables") or []
+        if not tables:
+            raise ValueError("DELETE without a target table")
+        target = tables[0]
+    table = _convert_table_ref(target)
 
     where = None
-    where_expr = expr.find(exp.Where)
+    where_expr = expr.args.get("where")
     if where_expr:
         where = convert_expression(where_expr.this)
 

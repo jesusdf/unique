@@ -286,3 +286,16 @@ def test_procedural_getdate_maps_inside_body_dml(target: str) -> None:
     assert "GETDATE" not in up
     assert "CURRENT_TIMESTAMP" in up or "NOW()" in up
     assert "UPDATE T SET" in up
+
+
+@pytest.mark.parametrize("target", ["postgresql", "tsql", "mysql"])
+def test_oracle_fromless_delete_keeps_its_table(target: str) -> None:
+    # Oracle allows DELETE without FROM; sqlglot parses the table into
+    # ``tables`` with ``this=False``, which shipped as the literal
+    # ``DELETE FROM False`` (silent corruption; 2026-07-09 sweep).
+    out = _t("delete my_tbl where k = 'x';", "oracle", target)
+    up = _norm(out).upper()
+    assert "FALSE" not in up
+    assert re.search(r"DELETE\s+FROM\s+MY_TBL", up)
+    assert "WHERE K = 'X'" in up
+    _assert_parses(out, target)
