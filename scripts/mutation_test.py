@@ -118,23 +118,45 @@ def _sites(tree: ast.Module) -> list[tuple[str, object, object]]:
     return sites
 
 
+#: A mutant that hangs a loop or balloons memory must die as a KILLED mutant,
+#: not take the runner down ("The hosted runner lost communication with the
+#: server", nightly 2026-07-09: a mutated character-scan loop starved the VM).
+_MUTANT_TIMEOUT_S = 300
+_MUTANT_MEM_BYTES = 4 * 1024**3
+
+
+def _limit_resources() -> None:  # pragma: no cover - runs in the child process
+    import resource
+
+    resource.setrlimit(resource.RLIMIT_AS, (_MUTANT_MEM_BYTES, _MUTANT_MEM_BYTES))
+
+
 def _run(tests: list[str]) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            *tests,
-            "-q",
-            "-x",
-            "--tb=no",
-            "-p",
-            "no:cacheprovider",
-            "--no-header",
-        ],
-        capture_output=True,
-        text=True,
-    )
+    cmd = [
+        sys.executable,
+        "-m",
+        "pytest",
+        *tests,
+        "-q",
+        "-x",
+        "--tb=no",
+        "-p",
+        "no:cacheprovider",
+        "--no-header",
+    ]
+    try:
+        return subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=_MUTANT_TIMEOUT_S,
+            preexec_fn=_limit_resources if sys.platform != "win32" else None,
+        )
+    except subprocess.TimeoutExpired:
+        # A hang is a detected (killed) mutant: the behavior change is fatal.
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=124, stdout="", stderr="mutant timed out"
+        )
 
 
 def mutate_module(path: Path, tests: list[str], limit: int | None) -> list[str]:
