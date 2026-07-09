@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import replace
 
 from unique.core.ast_nodes import (
     AlterProcedureStatement,
@@ -317,6 +318,25 @@ class ProceduralEmitter:
         """
         declarations: list[ASTNode] = []
         body_stmts: list[ASTNode] = []
+
+        def hoist_declare(decl: ASTNode) -> None:
+            # A mid-body declaration's initializer must stay an assignment at
+            # its original position: hoisting it to the section would run it
+            # BEFORE the statements that precede it in the source (e.g. a
+            # SUBSTRING over a variable a loop advances first) — silently
+            # wrong values.
+            if (
+                body_stmts
+                and isinstance(decl, DeclareStatement)
+                and decl.default is not None
+            ):
+                declarations.append(replace(decl, default=None))
+                body_stmts.append(
+                    AssignmentStatement(target=decl.name, value=decl.default)
+                )
+            else:
+                declarations.append(decl)
+
         for stmt in body:
             if isinstance(stmt, CommentStatement) and stmt.header:
                 # A header comment re-homed from before the CREATE (SQL Server
@@ -328,7 +348,7 @@ class ProceduralEmitter:
                 declarations.append(stmt)
                 continue
             if isinstance(stmt, (DeclareStatement, CursorDeclaration)):
-                declarations.append(stmt)
+                hoist_declare(stmt)
             elif (
                 isinstance(stmt, StatementList)
                 and stmt.statements
@@ -337,7 +357,8 @@ class ProceduralEmitter:
                     for s in stmt.statements
                 )
             ):
-                declarations.extend(stmt.statements)
+                for sub in stmt.statements:
+                    hoist_declare(sub)
             else:
                 body_stmts.append(stmt)
         return declarations, body_stmts

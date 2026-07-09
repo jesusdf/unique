@@ -1302,9 +1302,27 @@ class ProceduralParser:
         )
 
     def _parse_tsql_while(self) -> ASTNode:
-        """Parse T-SQL WHILE ... BEGIN...END."""
+        """Parse T-SQL WHILE ... BEGIN...END (or a single-statement body).
+
+        The condition stops at any statement-starting keyword, like IF's:
+        an unbracketed body without ';' (``WHILE cond\\n  SET @i += 1``)
+        otherwise swallows the following statements into the condition.
+        """
         self._expect_keyword("WHILE")
-        condition = self._parse_expression_until_keyword("BEGIN")
+        condition = self._parse_expression_until_keyword(
+            "BEGIN",
+            "SET",
+            "SELECT",
+            "INSERT",
+            "UPDATE",
+            "DELETE",
+            "EXEC",
+            "EXECUTE",
+            "RETURN",
+            "PRINT",
+            "RAISERROR",
+            "THROW",
+        )
 
         body: list[ASTNode] = []
         if self._current().is_keyword("BEGIN"):

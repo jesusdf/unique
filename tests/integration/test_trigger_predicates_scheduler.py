@@ -84,3 +84,44 @@ def test_dbms_scheduler_degrades_to_carrier(target: str) -> None:
     ]
     assert not any("DBMS_SCHEDULER" in ln.upper() for ln in executable), r.sql
     assert r.warnings or r.unsupported
+
+
+# ---------------------------------------------------------------------------
+# C1/C3 residue — unbracketed WHILE, hoisted initializer order, MySQL DO form
+# ---------------------------------------------------------------------------
+
+_UNBRACKETED_WHILE = """\
+CREATE FUNCTION dbo.f1(@json NVARCHAR(4000)) RETURNS INT
+AS
+BEGIN
+  DECLARE @i INT = 1
+  WHILE @i <= LEN(@json) AND SUBSTRING(@json, @i, 1) IN (N' ', CHAR(9))
+    SET @i = @i + 1
+
+  DECLARE @ch NCHAR(1) = SUBSTRING(@json, @i, 1)
+  IF @ch = N'"'
+  BEGIN
+    SET @i = @i + 1
+  END
+  RETURN @i
+END"""
+
+
+@pytest.mark.parametrize("target", ["postgresql", "oracle"])
+def test_unbracketed_while_body_does_not_swallow_statements(target: str) -> None:
+    r = _t(_UNBRACKETED_WHILE, "tsql", target)
+    up = " ".join(r.sql.split()).upper()
+    # The WHILE keeps only its condition; the loop closes properly.
+    assert re.search(r"(?i)WHILE .*CHR\(9\)\S*\s+LOOP", up), r.sql
+    assert "END LOOP" in up
+    # And the mid-body DECLARE's initializer runs AFTER the loop (an
+    # assignment at its original position), not hoisted before it.
+    assert re.search(r"(?i)END LOOP.*V_CH\s*:=", up), r.sql
+
+
+def test_mysql_while_uses_do_end_while() -> None:
+    r = _t(_UNBRACKETED_WHILE, "tsql", "mysql")
+    up = " ".join(r.sql.split()).upper()
+    assert re.search(r"WHILE .* DO ", up), r.sql
+    assert "END WHILE" in up
+    assert "END LOOP" not in up

@@ -18,6 +18,7 @@ from unique.core.ast_nodes import (
     ParameterDefinition,
     ReturnStatement,
     TryCatchBlock,
+    WhileStatement,
 )
 from unique.core.procedural.emitter.base import ProceduralEmitter, register_emitter
 
@@ -226,6 +227,17 @@ class MySqlEmitter(ProceduralEmitter):
 
     def _sleep_call(self, secs: str) -> str:
         return f"DO SLEEP({secs});"
+
+    def _emit_while(self, node: WhileStatement) -> str:
+        # MySQL spells it WHILE … DO … END WHILE; (the PL/SQL LOOP form is a
+        # syntax error here — audit 2026-07-08, C3).
+        cond = self._emit_node(node.condition)
+        lines = [f"WHILE {cond} DO"]
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(node.body))
+        self._indent_level -= 1
+        lines.append("END WHILE;")
+        return "\n".join(lines)
 
     def _emit_call(self, node: CallStatement) -> str:
         # MySQL has no schema layer, so any qualifier is dropped by name lookup.

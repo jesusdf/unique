@@ -36,6 +36,10 @@ _READ = {"tsql": "tsql", "postgresql": "postgres", "mysql": "mysql", "oracle": "
 _SETTINGS = settings(
     max_examples=100,
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
+    # No wall-clock deadline: under the parallel test runner a single example
+    # can take seconds of shared CPU, and DeadlineExceeded there is a flake,
+    # not a regression (hypothesis measures per-example time).
+    deadline=None,
 )
 
 
