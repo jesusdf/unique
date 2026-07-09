@@ -439,6 +439,9 @@ class DropStatement(ASTNode):
     name: TableRef
     if_exists: bool = False
     cascade: bool = False
+    # DROP INDEX only: the owning table (T-SQL ``ON tbl`` / legacy ``tbl.ix``;
+    # MySQL requires it, Oracle/PostgreSQL don't carry it).
+    on_table: str | None = None
 
 
 @dataclass(frozen=True)

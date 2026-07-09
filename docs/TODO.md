@@ -276,8 +276,13 @@ fix needs an **anonymized** regression fixture (never a private name).
       table-variable hoisting machinery.
 - [ ] **B1: `PRIMARY KEY CLUSTERED (col ASC)` → `PRIMARY KEY, CLUSTERED
       (col ASC NULLS FIRST)`** — invalid on all four targets.
-- [ ] **B2: `DROP INDEX` untranslated across the matrix** (PG 3-part name,
-      MySQL missing `ON tbl`, table name dropped from the `ON` form).
+- [x] **B2 (fixed 2026-07-09): `DROP INDEX` untranslated across the matrix** (PG
+      3-part name, MySQL missing `ON tbl`, table name dropped from the `ON`
+      form). `DropStatement` now carries `on_table` (from T-SQL's `ON tbl` or
+      the legacy `tbl.ix` qualifier); T-SQL/MySQL emit `… ON tbl` (MySQL
+      without `IF EXISTS`, which it lacks), Oracle/PG emit the bare index
+      name, and a required-but-unknown table degrades to a documented
+      carrier. Tests: `tests/integration/test_ddl_rename_dropindex.py`.
 - [x] **C5 (fixed in M4 bring-up, 2026-07-09): MySQL `CALL` emitted with named
       arguments** (`name => v`), unsupported by MySQL — now lowered to
       positional by the MySQL transformer with a warning (argument order must
@@ -299,10 +304,13 @@ fix needs an **anonymized** regression fixture (never a private name).
 - [ ] **C2/C3/C4: MySQL routine bodies** — raw `BEGIN TRY` leaks; `WHILE …
       LOOP` (PL/SQL form) instead of `WHILE … DO`; cursor options spill as
       `; LOCAL AS FAST_FORWARD;` fragments.
-- [ ] **D5/D6/D7: Oracle→T-SQL passthroughs** — `ALTER TABLE … RENAME COLUMN`
-      (needs `sp_rename`), trigger `IF UPDATING/INSERTING/DELETING` (needs
-      `UPDATE()` / inserted-deleted tests), `TRUNC(date)` → nonexistent
-      `DATE_TRUNC` (T-SQL 2022 `DATETRUNC(day,…)` or `CAST(… AS DATE)`).
+- [ ] **D5/D6/D7: Oracle→T-SQL passthroughs** — *D5 fixed 2026-07-09:*
+      `ALTER TABLE … RENAME COLUMN` → `EXEC sp_rename 'tbl.old', 'new',
+      'COLUMN'` (`_portable_rename_column`, T-SQL target only; PG/MySQL 8
+      keep the native clause). Still open: trigger `IF
+      UPDATING/INSERTING/DELETING` (needs `UPDATE()` / inserted-deleted
+      tests), `TRUNC(date)` → nonexistent `DATE_TRUNC` (T-SQL 2022
+      `DATETRUNC(day,…)` or `CAST(… AS DATE)`).
 - [ ] **B3: MySQL `ADD COLUMN … CONSTRAINT name DEFAULT 0`** — drop the
       named-DEFAULT constraint with a warning.
 - [ ] **B4: bare `RETURN` eats the next line's comment** (false "discarded

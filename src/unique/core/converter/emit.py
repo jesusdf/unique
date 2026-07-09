@@ -353,6 +353,8 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 result = _portable_types_in_sql(result, dialect)
             if node.kind == "CREATE SEQUENCE" and dialect == "oracle":
                 result = _oracle_sequence_drop_type(result)
+            if dialect == "tsql":
+                result = _portable_rename_column(result)
             if dialect != "oracle":
                 result = _portable_alter_add(result, dialect)
             if dialect in ("oracle", "mysql", "postgresql"):
@@ -361,6 +363,27 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     except Exception as e:  # noqa: BLE001 - report and fall back
         logger.warning("passthrough transpile error (%s): %s", node.kind, e)
     return f"-- UNIQUE: Unhandled {node.kind}\n{_comment_block(node.sql)}"
+
+
+_RENAME_COLUMN_RE = re.compile(
+    r"(?is)^\s*ALTER\s+TABLE\s+(?P<table>[\w.\[\]\"`]+)\s+"
+    r"RENAME\s+COLUMN\s+(?P<old>[\w\[\]\"`]+)\s+TO\s+(?P<new>[\w\[\]\"`]+)\s*;?\s*$"
+)
+
+
+def _portable_rename_column(sql: str) -> str:
+    """T-SQL has no ``ALTER TABLE … RENAME COLUMN``; it renames via
+    ``sp_rename 'tbl.old', 'new', 'COLUMN'`` (audit D5 — the clause used to
+    pass through verbatim and fail on every run)."""
+    m = _RENAME_COLUMN_RE.match(sql)
+    if not m:
+        return sql
+
+    def bare(s: str) -> str:
+        return s.strip('[]"`')
+
+    table, old, new = bare(m.group("table")), bare(m.group("old")), bare(m.group("new"))
+    return f"EXEC sp_rename '{table}.{old}', '{new}', 'COLUMN'"
 
 
 def _portable_alter_add(sql: str, dialect: str) -> str:
@@ -1125,10 +1148,34 @@ def _emit_create_view(node: CreateViewStatement, dialect: str) -> str:
 
 
 def _emit_drop(node: DropStatement, dialect: str) -> str:
-    """Emit a DROP statement."""
+    """Emit a DROP statement.
+
+    DROP INDEX differs per engine (audit B2): T-SQL and MySQL require the
+    owning table (``ON tbl``); Oracle/PostgreSQL take only the index name.
+    When the target requires a table the source did not carry, the statement
+    degrades to a documented carrier — never invalid SQL.
+    """
     name = _emit_table_ref(node.name)
     exists = "IF EXISTS " if node.if_exists else ""
     cascade = " CASCADE" if node.cascade else ""
+    if node.object_type == "INDEX":
+        if dialect in ("tsql", "mysql"):
+            if not node.on_table:
+                return (
+                    f"-- UNIQUE: {dialect} DROP INDEX requires the owning "
+                    "table, which the source statement does not carry; "
+                    "original preserved:\n"
+                    f"-- DROP INDEX {exists}{name}"
+                )
+            if dialect == "mysql":
+                # MySQL has no DROP INDEX IF EXISTS; emit the plain form
+                # (a re-run on a missing index errors — same as the source
+                # would without its guard machinery).
+                return f"DROP INDEX {name} ON {node.on_table}"
+            return f"DROP INDEX {exists}{name} ON {node.on_table}"
+        # Oracle/PostgreSQL: index names are schema-scoped; the T-SQL ON
+        # table (or legacy tbl. qualifier) is dropped.
+        return f"DROP INDEX {exists}{name}"
     return f"DROP {node.object_type} {exists}{name}{cascade}"
 
 
