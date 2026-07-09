@@ -539,3 +539,39 @@ class TestNamedDsns:
             data={"source": "tsql", "target": "oracle", "db": "hr-test"},
         )
         assert resp.status_code == 200
+
+
+class TestDbConnectionBuilderUI:
+    """The web UI's structured connection builder (engine/host/port/db/user/
+    password) must exist in the generated page and stay in sync with the
+    template (the generated file is built from web/src via web/build.py)."""
+
+    def test_builder_markup_present_in_generated_page(self) -> None:
+        from pathlib import Path
+
+        static = (
+            Path(__file__).resolve().parents[3] / "src/unique/api/static/index.html"
+        ).read_text(encoding="utf-8")
+        for element_id in (
+            "dbBuilder",
+            "dbEngine",
+            "dbHost",
+            "dbPort",
+            "dbBase",
+            "dbUser",
+            "dbPass",
+        ):
+            assert f'id="{element_id}"' in static, element_id
+        # The builder assembles the URL client-side and sends db_url.
+        assert "builtDbUrl" in static
+
+    def test_template_and_generated_page_agree(self) -> None:
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[3]
+        template = (root / "web/src/index.template.html").read_text(encoding="utf-8")
+        static = (root / "src/unique/api/static/index.html").read_text(encoding="utf-8")
+        for element_id in ("dbBuilder", "dbEngine"):
+            assert (f'id="{element_id}"' in template) == (
+                f'id="{element_id}"' in static
+            ), f"template/static drift on #{element_id} — rerun web/build.py"

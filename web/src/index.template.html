@@ -67,6 +67,14 @@
   .db-input:focus { outline: none; border-color: var(--secondary); }
   .db-help { margin: 8px 0 0; color: var(--on-surface-var); font-size: 12px; line-height: 1.5; }
   .db-help code, main code { font-family: var(--mono); font-size: .92em; }
+  /* structured connection builder (shown when raw db_url is allowed) */
+  .db-builder { display: grid; gap: 8px; margin-top: 8px;
+    grid-template-columns: minmax(150px, .9fr) minmax(140px, 1fr) 86px minmax(120px, .9fr) minmax(110px, .8fr) minmax(110px, .8fr); }
+  @media (max-width: 860px) { .db-builder { grid-template-columns: 1fr 1fr; } }
+  .db-builder .fld { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .db-builder .fld span { font-size: 10.5px; color: var(--on-surface-var);
+    text-transform: uppercase; letter-spacing: .4px; }
+  .db-builder select.db-input { appearance: auto; font-family: var(--sans); }
 
   /* ---- editors ---- */
   .editors { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -185,8 +193,27 @@
   <div class="db-field" id="dbField" hidden>
     <label for="dbName">Database connection <span class="db-optional">(optional)</span></label>
     <select id="dbName" class="db-input" hidden></select>
-    <input type="text" id="dbUrl" class="db-input" spellcheck="false" hidden
-           placeholder="e.g. oracle://user:pass@host:1521/service" />
+    <div class="db-builder" id="dbBuilder" hidden>
+      <div class="fld">
+        <span>Engine</span>
+        <select id="dbEngine" class="db-input" aria-label="Database engine">
+          <option value="mssql">SQL Server</option>
+          <option value="oracle">Oracle</option>
+          <option value="postgresql">PostgreSQL</option>
+          <option value="mysql">MySQL</option>
+        </select>
+      </div>
+      <div class="fld"><span>Host</span>
+        <input type="text" id="dbHost" class="db-input" spellcheck="false" placeholder="db.example.com" /></div>
+      <div class="fld"><span>Port</span>
+        <input type="text" id="dbPort" class="db-input" inputmode="numeric" placeholder="1433" /></div>
+      <div class="fld"><span>Database</span>
+        <input type="text" id="dbBase" class="db-input" spellcheck="false" placeholder="master" /></div>
+      <div class="fld"><span>User</span>
+        <input type="text" id="dbUser" class="db-input" spellcheck="false" autocomplete="off" /></div>
+      <div class="fld"><span>Password</span>
+        <input type="password" id="dbPass" class="db-input" autocomplete="new-password" /></div>
+    </div>
     <p class="db-help">
       Used to resolve metadata-dependent constructs such as Oracle
       <code>%TYPE</code>/<code>%ROWTYPE</code>. Databases are configured
@@ -470,10 +497,31 @@ async function transpileFile() {
   finally { btn.disabled = false; btn.textContent = "▶ Transpile"; }
 }
 
+// Per-engine connection defaults for the structured builder.
+const DB_ENGINE_DEFAULTS = {
+  mssql: { port: "1433", base: "master" },
+  oracle: { port: "1521", base: "service name" },
+  postgresql: { port: "5432", base: "postgres" },
+  mysql: { port: "3306", base: "mysql" },
+};
+
+function builtDbUrl() {
+  const host = el("dbHost").value.trim();
+  if (!host) return "";
+  const engine = el("dbEngine").value;
+  const port = el("dbPort").value.trim() || DB_ENGINE_DEFAULTS[engine].port;
+  const base = el("dbBase").value.trim();
+  const user = el("dbUser").value.trim();
+  const pass = el("dbPass").value;
+  let auth = "";
+  if (user) auth = encodeURIComponent(user) + (pass ? ":" + encodeURIComponent(pass) : "") + "@";
+  return `${engine}://${auth}${host}:${port}/${base}`;
+}
+
 function applyDb(container) {
   if (!dbEnabled) return;
   const dbName = el("dbName").value;
-  const dbUrl = el("dbUrl").value.trim();
+  const dbUrl = builtDbUrl();
   const isForm = container instanceof FormData;
   if (dbName) isForm ? container.append("db", dbName) : (container.db = dbName);
   else if (dbUrl) isForm ? container.append("db_url", dbUrl) : (container.db_url = dbUrl);
@@ -533,7 +581,16 @@ function showResult(warnings = [], unsupported = []) {
         opt.value = name; opt.textContent = name; sel.appendChild(opt);
       }
     }
-    if (rawDbAllowed) el("dbUrl").hidden = false;
+    if (rawDbAllowed) {
+      el("dbBuilder").hidden = false;
+      const syncPlaceholders = () => {
+        const d = DB_ENGINE_DEFAULTS[el("dbEngine").value];
+        el("dbPort").placeholder = d.port;
+        el("dbBase").placeholder = d.base;
+      };
+      el("dbEngine").addEventListener("change", syncPlaceholders);
+      syncPlaceholders();
+    }
   }
 
   el("run").addEventListener("click", transpile);
