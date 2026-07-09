@@ -399,7 +399,9 @@ class ProceduralEmitter:
                             # collapse to an empty (invalid) block.
                             new_items = (NullStatement(),)
                         changes[f.name] = new_items
-            return replace(node, **changes) if changes else node
+            if changes:
+                return replace(node, **changes)  # type: ignore[arg-type]
+            return node
 
         body_stmts = [y for x in body_stmts if (y := pull_nested(x)) is not None]
         return declarations, body_stmts
