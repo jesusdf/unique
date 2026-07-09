@@ -39,17 +39,18 @@ procedural text-matchers onto structure — tracked in `docs/TODO.md`.
   - A procedures-heavy file exposes the open **declaration-hoisting family**
     (mid-body `DECLARE`, cursor declarations, `WHILE`/`BEGIN TRY` structure —
     the C1/C2 classes) on all three targets — tracked P1.
-  - **Oracle → T-SQL/PostgreSQL/MySQL is Tier-2 (experimental), closing on
-    Tier-1**. On a real 13 MB dump (measured 2026-07-09, after M3 + the first
-    two M4 bring-up fixes): **T-SQL 98.0%, PostgreSQL 97.2%, MySQL 93.3%**
-    validity. The arc: post-M1 baseline 94.0 / 73.1 / 75.0 → M3 (embedded
-    DML through the IR; D3 `FROM DUAL` guards) 94.3 / 76.6 / 75.0 → D1
-    (SQL*Plus `EXEC` → per-target call, ~6.5k statements) + SQL*Plus `SET`
-    directives (~940/direction) landed the +18–20 point jump. Remaining
-    dominant classes (enumerated in `docs/TODO.md`): D2 top-level `DECLARE`
-    blocks (~500 on T-SQL), declaration-fragment desync (D9), named-arg
-    `CALL` emitted as `= >` on PG, B2 `DROP INDEX`, D5 `RENAME COLUMN`,
-    `TO_CHAR` on T-SQL.
+  - **Oracle → T-SQL/PostgreSQL/MySQL is Tier-2 (experimental), now at
+    Tier-1-grade numbers on the corpus**. On a real 13 MB dump (measured
+    2026-07-09 after the M4 bring-up wave): **T-SQL 98.8%, PostgreSQL 99.2%,
+    MySQL 95.4%** validity. The arc from the post-M1 baseline
+    (94.0 / 73.1 / 75.0): M3 embedded-DML-through-IR + D3 guards → D1
+    SQL*Plus `EXEC` (~6.5k statements) → SQL*Plus `SET` directives
+    (~940/direction) → `=>` named args (C5) → FROM-less `DELETE`
+    corruption → D2 anonymous-block flattening (~500 on T-SQL). Promotion
+    to Tier 1 stays pending a second corpus and the remaining classes
+    (`docs/TODO.md`): the D9 declaration-desync family (~170 on T-SQL),
+    D5 `RENAME`, B2 `DROP INDEX`, `TO_CHAR`→T-SQL, MERGE termination, and
+    ~1.6k unclassified MySQL failures (C2/C3/C4 family).
 - **Test-assertion quality** is gated (identity-mutation floor 33%, currently
   38%) and tracked nightly (mutation job with per-module floors).
 
