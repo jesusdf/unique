@@ -41,16 +41,19 @@ procedural text-matchers onto structure — tracked in `docs/TODO.md`.
     the C1/C2 classes) on all three targets — tracked P1.
   - **Oracle → T-SQL/PostgreSQL/MySQL is Tier-2 (experimental), now at
     Tier-1-grade numbers on the corpus**. On a real 13 MB dump (measured
-    2026-07-09 after the M4 bring-up wave): **T-SQL 98.8%, PostgreSQL 99.2%,
-    MySQL 95.4%** validity. The arc from the post-M1 baseline
-    (94.0 / 73.1 / 75.0): M3 embedded-DML-through-IR + D3 guards → D1
-    SQL*Plus `EXEC` (~6.5k statements) → SQL*Plus `SET` directives
-    (~940/direction) → `=>` named args (C5) → FROM-less `DELETE`
-    corruption → D2 anonymous-block flattening (~500 on T-SQL). Promotion
-    to Tier 1 stays pending a second corpus and the remaining classes
-    (`docs/TODO.md`): the D9 declaration-desync family (~170 on T-SQL),
-    D5 `RENAME`, B2 `DROP INDEX`, `TO_CHAR`→T-SQL, MERGE termination, and
-    ~1.6k unclassified MySQL failures (C2/C3/C4 family).
+    2026-07-09, after the M4 bring-up wave + the guard audit + D9/D5/B2):
+    **PostgreSQL 99.9%, T-SQL 98.5%, MySQL 95.9%** validity. The arc from
+    the post-M1 baseline (94.0 / 73.1 / 75.0): M3 embedded-DML-through-IR +
+    D3 guards → D1 SQL*Plus `EXEC` (~6.5k statements) → SQL*Plus `SET`
+    directives (~940/direction) → `=>` named args (C5) → FROM-less `DELETE`
+    corruption → D2 anonymous-block flattening → guard-audit fixes
+    (partial-parse trust, splitter comment desync, reason leak) → D9
+    split-line headers + DECLARE sections (PG syntax fails 268 → 39) →
+    D5 `sp_rename`, B2 `DROP INDEX`, single-arg `TO_CHAR`, MERGE `;`.
+    T-SQL's dominant remaining class is new visibility, not regression:
+    routines that used to fragment now parse whole and expose the
+    named-cursor FOR-loop scaffold (~350 statements, P1 item in
+    `docs/TODO.md`); MySQL keeps ~1.4k to classify (C2/C4 family).
 - **Test-assertion quality** is gated (identity-mutation floor 33%, currently
   38%) and tracked nightly (mutation job with per-module floors).
 

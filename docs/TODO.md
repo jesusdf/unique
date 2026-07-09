@@ -290,9 +290,27 @@ fix needs an **anonymized** regression fixture (never a private name).
       ONE token (it split into `= >`, breaking PG/Oracle output too), and the
       T-SQL emitter spells named association as `@name = value`. Tests:
       `test_exec_call_translation.py` (named-arg trio).
-- [ ] **D9: `create or replace⏎PROCEDURE` (split lines + `-- <codegen>`
-      header comment) desyncs the procedural parser**, spilling declaration
-      fragments (`v_x AS VARCHAR2`, `CURSOR AS cur1`) as top-level batches.
+- [x] **D9 (fixed 2026-07-09): `create or replace⏎PROCEDURE` (split lines +
+      `-- <codegen>` header comment) desyncs the procedural parser**,
+      spilling declaration fragments as top-level batches. Two mechanisms:
+      the splitter's PL/SQL-head regex was line-bound (now matches over a
+      3-line window), and a top-level anonymous block's `DECLARE` was parsed
+      as ONE declaration instead of a section up to `BEGIN` (now mirrors
+      `_parse_plsql_body`). Measured: Oracle→PG syntax failures 268 → **39**
+      (99.9% validity). Tests: `TestOracleSplitLineCreateHeader`,
+      `test_declare_section_with_multiple_declarations`.
+- [ ] **P1: faithful T-SQL expansion of named-cursor FOR loops.** Now the
+      dominant T-SQL class (~344 `near INTO` + 7 `||` + related): a PL/SQL
+      `FOR rec IN cur_name LOOP` emits a scaffold that is invalid by
+      construction — `DECLARE rec_cur CURSOR FOR cur_name;` (FOR needs a
+      SELECT), `FETCH … INTO /* @col1, … */;` (comment placeholder), body
+      references `rec.col` unrewritten, `||` leaking into assignments — and
+      the named cursor's own declaration (`CURSOR cur IS SELECT …`) is lost
+      from the flattened output entirely. Faithful fix: resolve the cursor's
+      select list from its declaration, declare one `@rec_<col>` per
+      selected column, `OPEN <cur>; FETCH NEXT FROM <cur> INTO @rec_…`, and
+      rewrite `rec.<col>` → `@rec_<col>` in the body (surfaced when D9's fix
+      let these routines parse whole — they used to fragment).
 - [x] **D4 (fixed in M3a): `ROWNUM` untranslated inside procedural embedded DML** (the DML
       pipeline maps it; the procedural one doesn't — asymmetry). Gone by
       construction: embedded DML now runs the same IR pipeline. Probe in
