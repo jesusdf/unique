@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 
 from unique.core.ast_nodes import (
+    AnonymousBlock,
     ASTNode,
     CallStatement,
     ContinueStatement,
@@ -84,6 +85,17 @@ class TSqlEmitter(ProceduralEmitter):
         return "\n".join(lines)
 
     _ANSI_DATE_LITERAL_RE = re.compile(r"(?i)\b(?:DATE|TIMESTAMP)\s+(?=')")
+
+    def _emit_anonymous_block(self, node: AnonymousBlock) -> str:
+        """A T-SQL batch *is* the anonymous block: emit declarations and
+        statements flattened, with no PL/SQL ``DECLARE``-header/``BEGIN``/
+        ``END`` shell (a bare ``DECLARE`` line and an unterminated block are
+        syntax errors — audit 2026-07-08, D2)."""
+        if node.degraded:
+            return self._emit_degraded_anonymous_block(node)
+        return "\n".join(
+            text for s in node.statements if (text := self._emit_node(s)).strip()
+        )
 
     def _emit_call(self, node: CallStatement) -> str:
         # An ANSI ``DATE '…'`` / ``TIMESTAMP '…'`` literal argument (from an

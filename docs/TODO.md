@@ -227,8 +227,12 @@ fix needs an **anonymized** regression fixture (never a private name).
       (it used to be misclassified as a session option). Tests:
       `test_batch_splitter.py::TestSqlPlusSetDirectives`,
       `tests/integration/test_sqlplus_directives.py`.
-- [ ] **D2: top-level `DECLARE…BEGIN…END` keeps its PL/SQL skeleton in
-      T-SQL** instead of flattening to `DECLARE @x…; <statements>`.
+- [x] **D2 (fixed in M4 bring-up, 2026-07-09): top-level `DECLARE…BEGIN…END` keeps
+      its PL/SQL skeleton in T-SQL** instead of flattening to `DECLARE @x…;
+      <statements>`. The T-SQL emitter inherited the base's Oracle-style
+      anonymous-block shell; it now overrides `_emit_anonymous_block` and
+      flattens (a T-SQL batch *is* the block; ~500 statements on the dump).
+      Tests: `tests/integration/test_anonymous_block_tsql.py`.
 - [x] **D8 (fixed in M3b): silent expression corruption in procedural embedded DML** —
       `MAX(NVL(x,0)) + 1` loses `, 0))` and `+ 1` on T-SQL, and numeric `+`
       becomes `||` on PG. Mechanism: the T-SQL SELECT-INTO emitter split the
