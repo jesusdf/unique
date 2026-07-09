@@ -48,12 +48,15 @@ class PostgresEmitter(ProceduralEmitter):
         return not (p.direction in ("OUT", "INOUT") or idx < pg_last_out)
 
     def _emit_cursor_decl(self, node: CursorDeclaration) -> str:
-        # PL/pgSQL: name CURSOR FOR <select>;
+        # PL/pgSQL: name CURSOR FOR <select>; a query-less cursor VARIABLE
+        # (T-SQL ``DECLARE @cur CURSOR;``) is a REFCURSOR (bare ``x CURSOR;``
+        # is a syntax error).
         query_str = (
             self._emit_node(node.query).rstrip().rstrip(";") if node.query else ""
         )
-        body = f" CURSOR FOR {query_str}" if query_str else " CURSOR"
-        return f"{node.name}{body};"
+        if not query_str:
+            return f"{node.name} REFCURSOR;"
+        return f"{node.name} CURSOR FOR {query_str};"
 
     def _emit_print(self, node: PrintStatement) -> str:
         return f"RAISE NOTICE '%', {self._emit_node(node.expression)};"

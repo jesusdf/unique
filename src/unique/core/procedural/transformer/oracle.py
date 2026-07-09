@@ -23,15 +23,12 @@ from unique.core.ast_nodes import (
     DataType,
     DeclareStatement,
     EmbeddedDML,
-    ExceptionBlock,
-    ExceptionHandler,
     ForLoopStatement,
     IfStatement,
     LoopStatement,
     ParameterDefinition,
     RawSQL,
     StatementList,
-    TryCatchBlock,
     WhileStatement,
 )
 from unique.core.procedural.transformer.base import (
@@ -359,16 +356,11 @@ class OracleTransformer(ProceduralTransformer):
     def _trigger_forces_or_replace(self) -> bool:
         return True
 
-    def _transform_try_catch(self, node: TryCatchBlock) -> ASTNode:
-        # Oracle expresses error handling as a PL/SQL EXCEPTION block.
-        return ExceptionBlock(
-            handlers=(
-                ExceptionHandler(
-                    exception_name="OTHERS",
-                    body=self._transform_body(node.catch_body),
-                ),
-            )
-        )
+    # No _transform_try_catch override: the old one rebuilt an ExceptionBlock
+    # from the CATCH body alone and silently DROPPED the TRY body (the node
+    # has no body slot). The base keeps the TryCatchBlock with transformed
+    # bodies; the Oracle emitter renders the nested
+    # ``BEGIN … EXCEPTION WHEN OTHERS THEN … END;`` block.
 
     def _fix_target_dml(self, sql: str) -> str:
         return self._fix_oracle_dml(sql)

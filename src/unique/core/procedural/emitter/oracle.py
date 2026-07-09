@@ -22,6 +22,7 @@ from unique.core.ast_nodes import (
     ReturnStatement,
     SelectIntoStatement,
     StatementList,
+    TryCatchBlock,
 )
 from unique.core.procedural.emitter.base import (
     _SQL_ONLY_IN_PLSQL,
@@ -73,6 +74,26 @@ class OracleEmitter(ProceduralEmitter):
     """Oracle PL/SQL procedural emitter."""
 
     dialect_name = "oracle"
+
+    def _emit_try_catch(self, node: TryCatchBlock) -> str:
+        # PL/SQL error handling is a nested block: BEGIN <try> EXCEPTION WHEN
+        # OTHERS THEN <catch> END;. (The old transformer-level rewrite kept
+        # only the handlers and silently dropped the TRY body.)
+        lines = ["BEGIN"]
+        self._indent_level += 1
+        lines.extend(self._emit_indented_stmts(node.try_body))
+        self._indent_level -= 1
+        lines.append("EXCEPTION")
+        self._indent_level += 1
+        lines.append(f"{self._indent()}WHEN OTHERS THEN")
+        self._indent_level += 1
+        if node.catch_body:
+            lines.extend(self._emit_indented_stmts(node.catch_body))
+        else:
+            lines.append(f"{self._indent()}NULL;")
+        self._indent_level -= 2
+        lines.append("END;")
+        return "\n".join(lines)
 
     def _procedure_header(self, name: str, or_replace: bool) -> str:
         prefix = "CREATE OR REPLACE " if or_replace else "CREATE "

@@ -2636,6 +2636,13 @@ class ProceduralParser:
         upper = tok.upper_value
         if upper in self._TSQL_STMT_BOUNDARY_KEYWORDS:
             return True
+        # ``BEGIN TRY`` / ``BEGIN TRAN[SACTION]`` unambiguously start a new
+        # statement: a semicolon-less ``SET @v = NULL`` used to absorb the
+        # following TRY block into the value. (A bare ``BEGIN`` is left
+        # alone — treating every BEGIN as a boundary broke DML conservation
+        # in block bodies.)
+        if upper == "BEGIN" and self._peek(1).is_keyword("TRY", "TRAN", "TRANSACTION"):
+            return True
         # A standalone SET statement — ``SET @var = …`` or a session option
         # (``SET NOEXEC ON``) — begins a statement; the SET clause of an
         # UPDATE/MERGE (target is a column identifier) does not.

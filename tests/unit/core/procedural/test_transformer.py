@@ -158,16 +158,18 @@ class TestStatementTransforms:
         result = t._transform_node(node)
         assert isinstance(result, SetVariableStatement)
 
-    def test_try_catch_to_oracle_exception(self) -> None:
-        from unique.core.ast_nodes import ExceptionBlock
-
+    def test_try_catch_to_oracle_keeps_both_bodies(self) -> None:
+        # The old transform rebuilt an ExceptionBlock from the CATCH alone and
+        # silently dropped the TRY body; the node now survives whole and the
+        # Oracle EMITTER renders BEGIN ... EXCEPTION WHEN OTHERS ... END;.
         t = ProceduralTransformer("tsql", "oracle")
         node = TryCatchBlock(
-            try_body=(),
+            try_body=(RawSQL(sql="INSERT INTO t (a) VALUES (1)", reason="x"),),
             catch_body=(RawSQL(sql="PRINT 1", reason="x"),),
         )
         result = t._transform_node(node)
-        assert isinstance(result, ExceptionBlock)
+        assert isinstance(result, TryCatchBlock)
+        assert result.try_body and result.catch_body
 
     def test_declare_transforms_name_and_type(self) -> None:
         t = ProceduralTransformer("tsql", "oracle")

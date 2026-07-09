@@ -125,3 +125,38 @@ def test_mysql_while_uses_do_end_while() -> None:
     assert re.search(r"WHILE .* DO ", up), r.sql
     assert "END WHILE" in up
     assert "END LOOP" not in up
+
+
+_TRY_CATCH_FN = """\
+CREATE FUNCTION dbo.trg_f() RETURNS INT
+AS
+BEGIN
+  DECLARE @cur CURSOR;
+  DECLARE @tipodoc VARCHAR(1)
+  SET @tipodoc = NULL
+
+  BEGIN TRY
+    INSERT INTO t1 (a) VALUES (1)
+  END TRY
+  BEGIN CATCH
+    RETURN 0
+  END CATCH
+  RETURN 1
+END"""
+
+
+@pytest.mark.parametrize(
+    ("target", "refcur"),
+    [("oracle", "SYS_REFCURSOR"), ("postgresql", "REFCURSOR")],
+)
+def test_try_body_survives_and_cursor_var_maps(target: str, refcur: str) -> None:
+    # The Oracle transform used to keep only the CATCH handlers and silently
+    # DROP the TRY body; and a query-less cursor VARIABLE emitted the invalid
+    # bare 'v_cur CURSOR;'. Also pins the 'SET @v = NULL' / 'BEGIN TRY'
+    # statement boundary (the value used to swallow the block).
+    r = _t(_TRY_CATCH_FN, "tsql", target)
+    up = " ".join(r.sql.split()).upper()
+    assert "INSERT INTO T1 (A) VALUES (1)" in up, r.sql  # TRY body survives
+    assert "EXCEPTION" in up and "WHEN OTHERS" in up
+    assert f"V_CUR {refcur};" in up, r.sql
+    assert re.search(r"V_TIPODOC\s*:=\s*NULL\s*;", up), r.sql

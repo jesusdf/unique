@@ -813,9 +813,12 @@ class ProceduralEmitter:
             # The query may be an EmbeddedDML that emits its own trailing
             # semicolon; strip it to avoid a double ';'.
             query_str = self._emit_node(node.query).rstrip().rstrip(";")
+        if not query_str:
+            # A query-less cursor VARIABLE (T-SQL ``DECLARE @cur CURSOR;``):
+            # PL/SQL's counterpart is a ref cursor (``CURSOR name;`` needs IS).
+            return f"{node.name} SYS_REFCURSOR;"
         # Default: Oracle PL/SQL: CURSOR name IS <select>;
-        body = f" IS {query_str}" if query_str else ""
-        return f"CURSOR {node.name}{body};"
+        return f"CURSOR {node.name} IS {query_str};"
 
     # ---------------------------------------------------------------
     # Variable operations
