@@ -190,6 +190,20 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       B2 `DROP INDEX` (23), `TO_CHAR`→T-SQL (14), MERGE termination (11);
       MySQL still has 1.6k syntax failures to classify (C2/C3/C4 family).
 
+- [ ] **Faithful conditional for unmappable catalog guards (P2).** A T-SQL
+      guard whose body has no native conditional form (e.g. `IF NOT EXISTS
+      (SELECT … FROM sys.columns … default_object_id <> 0) ALTER … ADD
+      DEFAULT`) currently drops the condition — since 2026-07-09 with an
+      explicit `guard_dropped` warning (user report; it was silent). The
+      emitted `SET DEFAULT`/`MODIFY` is re-runnable (the guard's main
+      purpose) but overwrites an existing different default that T-SQL would
+      have preserved. The faithful fix is translating the *condition* to the
+      target's catalog (`information_schema.columns.column_default` on
+      PG/MySQL, `user_tab_columns.data_default` on Oracle) wrapped in the
+      target's conditional block — needs careful identifier-case mapping,
+      so it must land with live-validated tests. Related to the N4/N9 note
+      about mapping Unique's own emitted guards back.
+
 ### P1 — private-fixture live sweep (audit doc 03; anonymized repros there)
 
 Found by transpiling the three `fixtures-private/` scripts across the matrix

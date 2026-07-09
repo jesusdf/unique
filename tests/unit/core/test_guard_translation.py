@@ -13,6 +13,8 @@ neighbors* of every fixed shape, not just the reproduced one.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from unique.core.transpiler import Transpiler
@@ -247,3 +249,40 @@ class TestTrailingCommentOnGuardLine:
     def test_comment_preserved(self) -> None:
         out = Transpiler().transpile(self.SRC, "tsql", "postgresql")
         assert "old name" in out.sql
+
+
+class TestUnmappableGuardBodyWarns:
+    """A catalog guard whose body has no native conditional form (e.g.
+    ``ALTER TABLE … ADD DEFAULT``) must never lose its guard silently
+    (no-silent-loss; user report 2026-07-09)."""
+
+    _SRC = (
+        "IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE [object_id] = "
+        "OBJECT_ID('s1.t1') AND [name] = 'c1' AND default_object_id <> 0)\n"
+        "BEGIN\n"
+        "ALTER TABLE [s1].[t1] ADD DEFAULT ((0)) FOR [c1]\n"
+        "END\nGO"
+    )
+
+    @pytest.mark.parametrize("target", ["postgresql", "mysql", "oracle"])
+    def test_add_default_guard_drop_is_warned(self, target: str) -> None:
+        result = Transpiler().transpile(self._SRC, source="tsql", target=target)
+        # The DDL itself survives, executable (not a carrier)...
+        assert "UNIQUE:" not in result.sql
+        assert re.search(r"(?i)ALTER TABLE", result.sql)
+        assert "DEFAULT" in result.sql.upper()
+        # ...and the dropped condition is reported, not silent.
+        assert any(
+            w.feature == "guard_dropped" for w in result.warnings
+        ), result.warnings
+
+    def test_present_polarity_non_drop_body_also_warned(self) -> None:
+        src = (
+            "IF EXISTS (SELECT 1 FROM sys.columns WHERE [object_id] = "
+            "OBJECT_ID('s1.t1') AND [name] = 'c1')\n"
+            "BEGIN\n"
+            "ALTER TABLE [s1].[t1] ALTER COLUMN [c1] INT NOT NULL\n"
+            "END\nGO"
+        )
+        result = Transpiler().transpile(src, source="tsql", target="postgresql")
+        assert any(w.feature == "guard_dropped" for w in result.warnings)

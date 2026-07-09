@@ -915,11 +915,17 @@ class Transpiler:
                             # (the catalog condition has no target form) and
                             # restore the idempotent intent where the target
                             # has one (CREATE … IF NOT EXISTS / Oracle probe).
+                            # A guard that cannot be restored is dropped WITH
+                            # a warning — never silently (no-silent-loss).
                             result = self._transpile_dml(
                                 body, source, target, source_dialect, target_dialect
                             )
                             if polarity == "absent":
                                 result = self._guard_idempotent(result, source, target)
+                            else:
+                                result = self._warn_guard_dropped(
+                                    result, source, target
+                                )
                     else:
                         trivia = ""  # the fallback keeps the whole batch text
                         result = self._transpile_set_option(batch.sql, source, target)
@@ -1564,12 +1570,14 @@ class Transpiler:
         Oracle wraps the DDL in the ``user_objects`` probe + ``EXECUTE
         IMMEDIATE`` (see ``_oracle_idempotent_create``); PostgreSQL/MySQL use
         their native ``CREATE TABLE/INDEX IF NOT EXISTS`` clause. Where the
-        target has no form (MySQL ``CREATE INDEX``), the guard is dropped
-        with an explicit warning — never silently (audit 2026-07-08, A5)."""
+        target has no conditional form (MySQL ``CREATE INDEX``, or any
+        non-CREATE body such as ``ALTER … ADD DEFAULT``), the guard is
+        dropped with an explicit warning — never silently (audit 2026-07-08
+        A5; user report 2026-07-09)."""
         if target == "oracle":
             wrapped = _oracle_idempotent_create(result.sql)
             if wrapped is None:
-                return result
+                return self._warn_guard_dropped(result, source, target)
             return TranspileResult(
                 sql=wrapped, warnings=result.warnings, unsupported=result.unsupported
             )
@@ -1612,7 +1620,36 @@ class Transpiler:
                     ],
                     unsupported=result.unsupported,
                 )
-        return result
+            return self._warn_guard_dropped(result, source, target)
+        return self._warn_guard_dropped(result, source, target)
+
+    @staticmethod
+    def _warn_guard_dropped(
+        result: TranspileResult, source: str, target: str
+    ) -> TranspileResult:
+        """Record that a catalog guard's condition was dropped.
+
+        The guarded statement itself is emitted (its {target} form is usually
+        re-runnable, which was the guard's main purpose), but the condition is
+        gone: a statement like ``SET DEFAULT`` now runs unconditionally and
+        would overwrite state the T-SQL guard preserved. That semantic
+        difference must be reported, never silent (no-silent-loss)."""
+        head = " ".join(result.sql.strip().split())[:60]
+        return TranspileResult(
+            sql=result.sql,
+            warnings=[
+                *result.warnings,
+                _warn(
+                    "existence guard dropped: the guarded statement has no "
+                    f"conditional form on {target} and now runs "
+                    f"unconditionally: {head}",
+                    "guard_dropped",
+                    source,
+                    target,
+                ),
+            ],
+            unsupported=result.unsupported,
+        )
 
     def _transpile_drop_guard(
         self, kind: str, name: str, source: str, target: str
