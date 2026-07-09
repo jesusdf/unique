@@ -21,6 +21,7 @@ from unique.core.ast_nodes import (
     RawSQL,
     ReturnStatement,
     SetVariableStatement,
+    StatementList,
     TryCatchBlock,
     WhileStatement,
 )
@@ -40,6 +41,11 @@ class TSqlTransformer(ProceduralTransformer):
     _SUBTRACT_RE = re.compile(r"(@?\w+)\s*-\s*(@?\w+)")
 
     def _fix_raw_sql_target(self, sql: str) -> str:
+        # PL/SQL event predicates inside a trigger body (audit D6): T-SQL
+        # tests the pseudo-tables instead.
+        if self._in_trigger:
+            for pattern, repl_text in self._EVENT_PREDICATES:
+                sql = pattern.sub(repl_text, sql)
         # T-SQL has no date ``-`` operator (error 8117 / 257). ``d2 - d1`` over
         # two DATE/DATETIME vars/params becomes ``DATEDIFF(DAY, d1, d2)`` (days
         # from d1 to d2), matching the source's date-difference semantics.
@@ -139,8 +145,73 @@ class TSqlTransformer(ProceduralTransformer):
 
     _NEW_ASSIGN_RE = re.compile(r"(?i)^\s*(NEW|OLD)\s*\.\s*(\w+)\s*$")
 
+    #: PL/SQL trigger event predicates -> the T-SQL inserted/deleted idiom.
+    _EVENT_PREDICATES = (
+        (
+            re.compile(r"(?i)\bUPDATING\s*\(\s*'(\w+)'\s*\)"),
+            r"UPDATE(\1)",
+        ),
+        (
+            re.compile(r"(?i)\bINSERTING\b"),
+            "(EXISTS (SELECT 1 FROM inserted) "
+            "AND NOT EXISTS (SELECT 1 FROM deleted))",
+        ),
+        (
+            re.compile(r"(?i)\bDELETING\b"),
+            "(EXISTS (SELECT 1 FROM deleted) "
+            "AND NOT EXISTS (SELECT 1 FROM inserted))",
+        ),
+        (
+            re.compile(r"(?i)\bUPDATING\b(?!\s*\()"),
+            "(EXISTS (SELECT 1 FROM inserted) " "AND EXISTS (SELECT 1 FROM deleted))",
+        ),
+    )
+
     def _rowlevel_body_to_tsql(self, node: ASTNode, table: str) -> ASTNode | None:
         bare_table = table.strip('[]"`').split(".")[-1]
+        # A per-row IF folds into the converted statements: a NEW/OLD-based
+        # condition scopes the inserted-rows subquery; an event predicate (or
+        # any other condition) wraps them in a statement-level IF.
+        if isinstance(node, IfStatement) and not node.else_body:
+            then_conv: list[ASTNode] = []
+            for child in node.then_body:
+                conv = self._rowlevel_body_to_tsql(child, table)
+                if conv is not None:
+                    then_conv.append(conv)
+            cond_text = (
+                node.condition.sql if isinstance(node.condition, RawSQL) else None
+            )
+            if (
+                cond_text
+                and re.search(r"(?i):?\s*\b(?:NEW|OLD)\s*\.", cond_text)
+                and then_conv
+                and all(
+                    isinstance(s, EmbeddedDML) and "FROM inserted)" in s.sql
+                    for s in then_conv
+                )
+            ):
+                clean = re.sub(r"(?i):\s*(?=(?:NEW|OLD)\s*\.)", "", cond_text)
+                clean = re.sub(r"(?i)\b(?:NEW|OLD)\s*\.\s*", "", clean).strip()
+                clean = clean.strip("()").strip() or "1=1"
+                folded = tuple(
+                    EmbeddedDML(
+                        sql=s.sql.replace(
+                            "FROM inserted)", f"FROM inserted WHERE {clean})"
+                        ),
+                        dialect=s.dialect,
+                    )
+                    for s in then_conv
+                    if isinstance(s, EmbeddedDML)
+                )
+                if len(folded) == 1:
+                    return folded[0]
+                return StatementList(statements=folded)
+            new_cond = self._transform_node(node.condition)
+            return IfStatement(
+                condition=new_cond,
+                then_body=self._ensure_non_empty_body(tuple(then_conv)),
+                else_body=(),
+            )
         # Pattern (a): ``SET NEW.col = expr`` (a per-row derived/stamped column).
         # T-SQL has no BEFORE trigger and cannot write ``inserted``, so update the
         # affected rows: ``UPDATE t SET col = <expr> WHERE <pk> IN (SELECT <pk>

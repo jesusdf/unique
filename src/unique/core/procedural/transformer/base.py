@@ -1186,10 +1186,37 @@ class ProceduralTransformer:
         (it has no procedural code outside a stored routine)."""
         return True
 
+    #: Oracle built-in package prefixes: calls into them have no counterpart
+    #: on other engines (DBMS_SCHEDULER.CREATE_JOB, UTL_FILE, …).
+    _ORACLE_PACKAGE_RE = re.compile(r"(?i)^(?:DBMS_|UTL_|CTX_|APEX_|OWA_)")
+
     def _transform_call(self, node: CallStatement) -> ASTNode:
         """Transform a stored-procedure call. The ``dbo`` default schema is
         meaningful only on T-SQL, so drop it for the other targets; the argument
         text gets the same niladic-now / string fixups as embedded DML."""
+        # An Oracle built-in package call shipped raw is a guaranteed runtime
+        # error off Oracle (audit D10: DBMS_SCHEDULER.CREATE_JOB became a raw
+        # CALL on PostgreSQL, unwarned). Preserve it as a documented carrier.
+        if (
+            self._source == "oracle"
+            and self._target != "oracle"
+            and node.schema
+            and self._ORACLE_PACKAGE_RE.match(node.schema)
+        ):
+            original = f"{node.schema}.{node.name}({node.args})"
+            self._warnings.append(
+                f"Oracle package call {node.schema}.{node.name} has no "
+                f"{self._target} equivalent; preserved as a comment"
+            )
+            commented = "\n".join(f"-- {ln}" for ln in original.splitlines())
+            return RawSQL(
+                sql=(
+                    "-- UNIQUE: Oracle package call has no "
+                    f"{self._target} equivalent; original:\n{commented}\n"
+                    f"{self._noop_sql()}"
+                ),
+                reason="oracle package call",
+            )
         schema = self._target_schema(node.schema)
         args = self._map_now_in_sql(node.args) if node.args else node.args
         return CallStatement(name=node.name, args=args, schema=schema)

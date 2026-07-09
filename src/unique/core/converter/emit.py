@@ -1656,6 +1656,61 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             )
         return f"CAST({value} AS {target_type})"
 
+    # Date truncation (Oracle TRUNC(date[, fmt]) arrives canonicalized as
+    # DATE_TRUNC): each engine spells it differently — audit D7: the Oracle
+    # part 'DD' leaked into T-SQL's nonexistent DATE_TRUNC, and PostgreSQL
+    # rejects 'DD' as a field too.
+    if (
+        fn_name == "DATE_TRUNC"
+        and len(node.args) == 2
+        and isinstance(node.args[0], (Literal, RawSQL))
+    ):
+        raw_part = (
+            str(node.args[0].value)
+            if isinstance(node.args[0], Literal)
+            else node.args[0].sql.strip("'")
+        )
+        trunc_part = {
+            "DD": "day",
+            "DAY": "day",
+            "DDD": "day",
+            "MM": "month",
+            "MON": "month",
+            "MONTH": "month",
+            "YYYY": "year",
+            "YY": "year",
+            "YEAR": "year",
+            "HH": "hour",
+            "HH24": "hour",
+            "MI": "minute",
+            "MINUTE": "minute",
+            "Q": "quarter",
+            "QUARTER": "quarter",
+            "WW": "week",
+            "WEEK": "week",
+        }.get(raw_part.upper())
+        if trunc_part is not None:
+            value = _emit_expression(node.args[1], dialect)
+            if dialect == "postgresql":
+                return f"DATE_TRUNC('{trunc_part}', {value})"
+            if dialect == "oracle":
+                if trunc_part == "day":
+                    return f"TRUNC({value})"
+                return f"TRUNC({value}, '{raw_part}')"
+            if dialect == "tsql":
+                # CAST AS DATE works on every supported version; DATETRUNC
+                # (2022+) covers the other parts.
+                if trunc_part == "day":
+                    return f"CAST({value} AS DATE)"
+                return f"DATETRUNC({trunc_part}, {value})"
+            if dialect == "mysql":
+                if trunc_part == "day":
+                    return f"DATE({value})"
+                if trunc_part == "month":
+                    return f"DATE_FORMAT({value}, '%Y-%m-01')"
+                if trunc_part == "year":
+                    return f"DATE_FORMAT({value}, '%Y-01-01')"
+
     # Oracle's one-argument TO_CHAR(x) — a plain to-string conversion — exists
     # nowhere else (PostgreSQL's TO_CHAR needs a format); spell it as a cast.
     if fn_name == "TO_CHAR" and len(node.args) == 1 and dialect != "oracle":
