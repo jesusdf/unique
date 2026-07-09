@@ -82,15 +82,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       bare-statement check (validation.py:168) to alias/expression-only
       statements and unknown-verb Commands; warn when a batch parses to a bare
       expression.
-- [ ] **N5: false-positive warning on a successful guard round-trip** — the
-      Oracle FOR-loop guard that *is* converted back to a T-SQL `IF` still
-      warns "FOR loop has no direct T-SQL equivalent"
-      (procedural/transformer/tsql.py:258). Suppress when the rewrite succeeds.
-- [ ] **N6: `/api/v1/validate` and `/api/v1/detect` lack `max_length`** on
-      their `sql` fields (A2 DoS cap applies only to `/transpile`).
-- [ ] **N8: near-duplicate `unsupported` entries** for one construct
-      (CREATE SCHEMA→Oracle, sp_rename): deduplicate at carrier↔result
-      reconciliation.
+- [x] **N5 (fixed 2026-07-09): false-positive warning on a successful guard
+      round-trip** — the blanket T-SQL FOR-loop warning is gone; degraded
+      paths carry `-- UNIQUE:` markers that the reconciliation surfaces
+      exactly when they fire. Test: `TestNoFalseGuardWarning`.
+- [x] **N6 (fixed 2026-07-09):** `/api/v1/validate` and `/api/v1/detect` now
+      enforce `MAX_SQL_BYTES` like `/transpile`. Test:
+      `TestValidateDetectSizeCap`.
+- [x] **N8 (fixed 2026-07-09): near-duplicate `unsupported` entries** — the
+      reconciliation now skips carrier fragments already covered by an
+      existing entry (3-word-shingle test). Test:
+      `TestUnsupportedDeduplication`.
 - [x] **N4/N9: docs drift (closed 2026-07-09)** — STATUS.md's guard-round-trip
       claim was corrected (unit tests, not FE); the project-overview skill
       says Python 3.13 and shows `converter/` as a package; README gained the
@@ -274,8 +276,11 @@ fix needs an **anonymized** regression fixture (never a private name).
       declaration section (Oracle PLS-00103, MySQL invalid position and `=`
       instead of `DEFAULT`, PG `CURSOR` without `FOR`). Reuse the
       table-variable hoisting machinery.
-- [ ] **B1: `PRIMARY KEY CLUSTERED (col ASC)` → `PRIMARY KEY, CLUSTERED
-      (col ASC NULLS FIRST)`** — invalid on all four targets.
+- [x] **B1 (fixed 2026-07-09): `PRIMARY KEY CLUSTERED (col ASC)`** — the
+      `ADD CONSTRAINT … PRIMARY KEY/UNIQUE CLUSTERED (…) WITH (…) ON [grp]`
+      shape is rebuilt directly per target (`_tsql_add_key_constraint`);
+      sqlglot mangled it into comma-joined actions that SHIPPED inside
+      Oracle guards. Tests: B1 pair in `test_ddl_rename_dropindex.py`.
 - [x] **B2 (fixed 2026-07-09): `DROP INDEX` untranslated across the matrix** (PG
       3-part name, MySQL missing `ON tbl`, table name dropped from the `ON`
       form). `DropStatement` now carries `on_table` (from T-SQL's `ON tbl` or
@@ -329,10 +334,11 @@ fix needs an **anonymized** regression fixture (never a private name).
       UPDATING/INSERTING/DELETING` (needs `UPDATE()` / inserted-deleted
       tests), `TRUNC(date)` → nonexistent `DATE_TRUNC` (T-SQL 2022
       `DATETRUNC(day,…)` or `CAST(… AS DATE)`).
-- [ ] **B3: MySQL `ADD COLUMN … CONSTRAINT name DEFAULT 0`** — drop the
-      named-DEFAULT constraint with a warning.
-- [ ] **B4: bare `RETURN` eats the next line's comment** (false "discarded
-      RETURN value" warning; comment lost on round-trip).
+- [x] **B3 (fixed 2026-07-09): named DEFAULT constraints** (T-SQL-only)
+      dropped on every other target with a per-name note/warning.
+- [x] **B4 (verified fixed 2026-07-09): bare `RETURN` eats the next line's
+      comment** — no longer reproduces; pinned by
+      `test_comment_after_bare_return_survives`.
 - [ ] **D10: `DBMS_SCHEDULER.CREATE_JOB` → raw `CALL` on PG** — should be a
       carrier + unsupported entry.
 - [x] **E1 (harness): `_split_mysql_statements` splits on `;` inside string
