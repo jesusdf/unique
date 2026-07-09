@@ -245,6 +245,20 @@ class MySqlEmitter(ProceduralEmitter):
         # (MySQL has no ``name => value`` association — audit 2026-07-08, C5).
         return f"CALL {node.name}({node.args});"
 
+    def _emit_execute_into(
+        self, expr: str, params: list[str], into_vars: list[str], immediate: bool
+    ) -> str:
+        # MySQL PREPARE/EXECUTE cannot capture a result into variables unless
+        # the dynamic string itself selects INTO session variables — which we
+        # cannot rewrite reliably. Document instead of shipping invalid SQL.
+        original = f"EXECUTE IMMEDIATE {expr} INTO {', '.join(into_vars)}"
+        commented = "\n".join(f"-- {ln}" for ln in original.splitlines())
+        return (
+            "-- UNIQUE: dynamic SELECT INTO variable has no direct MySQL "
+            "form (rewrite the dynamic string to select INTO @session "
+            f"variables); original:\n{commented}\nDO 0;"
+        )
+
     def _emit_execute_stmt(
         self, expr: str, params: list[str], immediate: bool = False
     ) -> str:

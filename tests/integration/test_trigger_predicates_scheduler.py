@@ -160,3 +160,37 @@ def test_try_body_survives_and_cursor_var_maps(target: str, refcur: str) -> None
     assert "EXCEPTION" in up and "WHEN OTHERS" in up
     assert f"V_CUR {refcur};" in up, r.sql
     assert re.search(r"V_TIPODOC\s*:=\s*NULL\s*;", up), r.sql
+
+
+_EXEC_IMMEDIATE_INTO = """\
+DECLARE
+  X NUMBER(9);
+  SQLSTMT    VARCHAR2(4000);
+BEGIN
+  SQLSTMT := 'SELECT COUNT(*) TOTAL FROM cfg WHERE k = ''a''';
+  EXECUTE IMMEDIATE SQLSTMT INTO X ;
+  IF X >= 1 THEN
+    EXECUTE IMMEDIATE 'update t1 set a = 1';
+  END IF;
+END;
+/"""
+
+
+def test_execute_immediate_into_tsql_capture() -> None:
+    # ~344 statements on the real dump: 'EXEC sp_executesql @s INTO @x' is
+    # not T-SQL — the capture is INSERT ... EXEC into a table variable.
+    r = _t(_EXEC_IMMEDIATE_INTO, "oracle", "tsql")
+    up = " ".join(r.sql.split())
+    assert "INSERT INTO @_dyn_result_1 EXEC sp_executesql @sqlstmt" in up, r.sql
+    assert re.search(r"SELECT TOP \(1\) @x = c1 FROM @_dyn_result_1", up), r.sql
+    assert "INTO @x;" not in up
+
+
+def test_execute_immediate_into_postgres_native() -> None:
+    r = _t(_EXEC_IMMEDIATE_INTO, "oracle", "postgresql")
+    assert re.search(r"(?i)EXECUTE SQLSTMT INTO X;", r.sql), r.sql
+
+
+def test_execute_immediate_into_oracle_identity() -> None:
+    r = _t(_EXEC_IMMEDIATE_INTO, "oracle", "oracle")
+    assert "EXECUTE IMMEDIATE SQLSTMT INTO X;" in r.sql, r.sql

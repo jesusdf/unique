@@ -1836,7 +1836,14 @@ class ProceduralParser:
         """
         self._expect_keyword("EXECUTE")
         self._expect_keyword("IMMEDIATE")
-        expr = self._parse_expression_until_keyword("USING")
+        expr = self._parse_expression_until_keyword("USING", "INTO")
+
+        into_vars: list[str] = []
+        if self._match_keyword("INTO"):
+            while not self._at_end():
+                into_vars.append(self._parse_identifier())
+                if not self._match_type(TokenType.COMMA):
+                    break
 
         params: list[ASTNode] = []
         if self._match_keyword("USING"):
@@ -1852,7 +1859,10 @@ class ProceduralParser:
 
         self._match_type(TokenType.SEMICOLON)
         return ExecuteStatement(
-            sql_expression=expr, params=tuple(params), immediate=True
+            sql_expression=expr,
+            params=tuple(params),
+            immediate=True,
+            into_vars=tuple(into_vars),
         )
 
     def _parse_plsql_exception(self) -> ASTNode:

@@ -636,6 +636,9 @@ class ExecuteStatement(ASTNode):
     sql_expression: ASTNode
     params: tuple[ASTNode, ...] = ()
     immediate: bool = False
+    # Oracle ``EXECUTE IMMEDIATE <expr> INTO v1, v2``: the dynamic SELECT's
+    # scalar capture targets (each engine spells the capture differently).
+    into_vars: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

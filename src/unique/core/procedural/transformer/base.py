@@ -1171,7 +1171,10 @@ class ProceduralTransformer:
         new_expr = self._transform_node(expr)
         new_params = tuple(self._transform_node(p) for p in node.params)
         return ExecuteStatement(
-            sql_expression=new_expr, params=new_params, immediate=node.immediate
+            sql_expression=new_expr,
+            params=new_params,
+            immediate=node.immediate,
+            into_vars=tuple(self._transform_var_name(v) for v in node.into_vars),
         )
 
     def _named_arg_op(self) -> str | None:

@@ -437,6 +437,29 @@ class TSqlEmitter(ProceduralEmitter):
 
         return "\n".join(lines)
 
+    def _emit_execute_into(
+        self, expr: str, params: list[str], into_vars: list[str], immediate: bool
+    ) -> str:
+        # T-SQL cannot capture a dynamic SELECT into variables directly;
+        # INSERT ... EXEC materializes the result set into a table variable
+        # and a SELECT TOP (1) assigns it (one column per INTO target).
+        self._dyn_capture_seq = getattr(self, "_dyn_capture_seq", 0) + 1
+        tbl = f"@_dyn_result_{self._dyn_capture_seq}"
+        cols = [f"c{i + 1}" for i in range(len(into_vars))]
+        col_defs = ", ".join(f"{c} NVARCHAR(4000)" for c in cols)
+        assigns = ", ".join(f"{v} = {c}" for v, c in zip(into_vars, cols, strict=True))
+        note = ""
+        if params:
+            note = (
+                "\n-- UNIQUE: EXECUTE IMMEDIATE USING bindings dropped; "
+                "inline them or use sp_executesql parameters: " + ", ".join(params)
+            )
+        return (
+            f"DECLARE {tbl} TABLE ({col_defs});\n"
+            f"INSERT INTO {tbl} EXEC sp_executesql {expr};\n"
+            f"SELECT TOP (1) {assigns} FROM {tbl};{note}"
+        )
+
     def _emit_execute_stmt(
         self, expr: str, params: list[str], immediate: bool = False
     ) -> str:
