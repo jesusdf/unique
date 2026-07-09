@@ -327,20 +327,23 @@ fix needs an **anonymized** regression fixture (never a private name).
 - [ ] **C2/C3/C4: MySQL routine bodies** — raw `BEGIN TRY` leaks; `WHILE …
       LOOP` (PL/SQL form) instead of `WHILE … DO`; cursor options spill as
       `; LOCAL AS FAST_FORWARD;` fragments.
-- [ ] **D5/D6/D7: Oracle→T-SQL passthroughs** — *D5 fixed 2026-07-09:*
-      `ALTER TABLE … RENAME COLUMN` → `EXEC sp_rename 'tbl.old', 'new',
-      'COLUMN'` (`_portable_rename_column`, T-SQL target only; PG/MySQL 8
-      keep the native clause). Still open: trigger `IF
-      UPDATING/INSERTING/DELETING` (needs `UPDATE()` / inserted-deleted
-      tests), `TRUNC(date)` → nonexistent `DATE_TRUNC` (T-SQL 2022
-      `DATETRUNC(day,…)` or `CAST(… AS DATE)`).
+- [x] **D5/D6/D7 (fixed 2026-07-09): Oracle→T-SQL passthroughs** — D5:
+      `RENAME COLUMN` → `EXEC sp_rename` (T-SQL only; PG/MySQL 8 native).
+      D6: `INSERTING`/`DELETING`/`UPDATING['(col)']` → the T-SQL
+      inserted/deleted EXISTS idiom / `UPDATE(col)`, and the row→statement
+      trigger conversion recurses into `IF` bodies (a NEW/OLD condition
+      folds into the inserted-rows subquery). D7: `TRUNC(date)` →
+      `CAST(x AS DATE)` (T-SQL), `DATE_TRUNC('day',…)` (PG), `DATE(x)`
+      (MySQL). Tests: `test_ddl_rename_dropindex.py`,
+      `test_trigger_predicates_scheduler.py`.
 - [x] **B3 (fixed 2026-07-09): named DEFAULT constraints** (T-SQL-only)
       dropped on every other target with a per-name note/warning.
 - [x] **B4 (verified fixed 2026-07-09): bare `RETURN` eats the next line's
       comment** — no longer reproduces; pinned by
       `test_comment_after_bare_return_survives`.
-- [ ] **D10: `DBMS_SCHEDULER.CREATE_JOB` → raw `CALL` on PG** — should be a
-      carrier + unsupported entry.
+- [x] **D10 (fixed 2026-07-09): `DBMS_SCHEDULER.CREATE_JOB` → raw `CALL` on
+      PG** — Oracle built-in package calls (`DBMS_*`, `UTL_*`, …) now degrade
+      to a documented carrier + warning + no-op off Oracle.
 - [x] **E1 (harness): `_split_mysql_statements` splits on `;` inside string
       literals** — fixed via the shared `tests/helpers/sql_split.py` (see M0);
       all live splitting is now string/comment-aware, incl. MySQL backslash
