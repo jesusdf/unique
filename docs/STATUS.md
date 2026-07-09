@@ -39,25 +39,18 @@ procedural text-matchers onto structure — tracked in `docs/TODO.md`.
   - A procedures-heavy file exposes the open **declaration-hoisting family**
     (mid-body `DECLARE`, cursor declarations, `WHILE`/`BEGIN TRY` structure —
     the C1/C2 classes) on all three targets — tracked P1.
-  - **Oracle → T-SQL/PostgreSQL/MySQL is Tier-2 (experimental), now at
-    Tier-1-grade numbers on the corpus**. On a real 13 MB dump (measured
-    2026-07-09, after the M4 bring-up wave + the guard audit + D9/D5/B2 +
-    the MySQL comment fix): **PostgreSQL 99.9%, MySQL 99.6%, T-SQL 98.5%**
-    validity. The arc from
-    the post-M1 baseline (94.0 / 73.1 / 75.0): M3 embedded-DML-through-IR +
-    D3 guards → D1 SQL*Plus `EXEC` (~6.5k statements) → SQL*Plus `SET`
-    directives (~940/direction) → `=>` named args (C5) → FROM-less `DELETE`
-    corruption → D2 anonymous-block flattening → guard-audit fixes
-    (partial-parse trust, splitter comment desync, reason leak) → D9
-    split-line headers + DECLARE sections (PG syntax fails 268 → 39) →
-    D5 `sp_rename`, B2 `DROP INDEX`, single-arg `TO_CHAR`, MERGE `;`.
-    T-SQL's dominant remaining class is new visibility, not regression:
-    routines that used to fragment now parse whole and expose the
-    named-cursor FOR-loop scaffold (~350 statements, P1 item in
-    `docs/TODO.md`). MySQL's ~1.4k turned out to be one mechanism — its
-    `--` comment style requires a trailing space, so `-----` divider lines
-    glued to the next statement; fixed (1431 → 125 failures, the rest being
-    ~115 unclassified 1064s + trigger `SELECT INTO NEW.col`).
+  - **Oracle → T-SQL/PostgreSQL/MySQL now measures at Tier-1-grade
+    validity**. On a real 13 MB dump (measured 2026-07-09, end of the
+    autonomous bring-up run): **PostgreSQL 99.9%, T-SQL 99.6%, MySQL
+    99.6%** (post-M1 baseline: 73.1 / 94.0 / 75.0). The closing wave:
+    EXECUTE IMMEDIATE … INTO captured per target (T-SQL INSERT…EXEC), `||`
+    → `+` in T-SQL raw expressions, faithful cursor FOR-loop expansion,
+    D9 split-line headers/DECLARE sections, MySQL `--`-comment spacing,
+    guard-audit fixes, D1/D2/D5–D7/D10, B1–B4, C1/C3, SQL*Plus directives,
+    plus a silent-loss fix (Oracle TRY bodies were dropped whole).
+    Remaining classes are enumerated in `docs/TODO.md` (T-SQL: 127 — TRY
+    fragments, subquery ORDER BY, ~21 near-')'; MySQL: 125; PG: 41).
+    Tier-1 promotion still wants a second corpus.
 - **Test-assertion quality** is gated (identity-mutation floor 33%, currently
   38%) and tracked nightly (mutation job with per-module floors).
 

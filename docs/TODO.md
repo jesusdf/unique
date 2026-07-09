@@ -304,26 +304,17 @@ fix needs an **anonymized** regression fixture (never a private name).
       `_parse_plsql_body`). Measured: Oracle→PG syntax failures 268 → **39**
       (99.9% validity). Tests: `TestOracleSplitLineCreateHeader`,
       `test_declare_section_with_multiple_declarations`.
-- [ ] **P1: faithful T-SQL expansion of named-cursor FOR loops.** Now the
-      dominant T-SQL class (~344 `near INTO` + 7 `||` + related): a PL/SQL
-      `FOR rec IN cur_name LOOP` emits a scaffold that is invalid by
-      construction — `DECLARE rec_cur CURSOR FOR cur_name;` (FOR needs a
-      SELECT), `FETCH … INTO /* @col1, … */;` (comment placeholder), body
-      references `rec.col` unrewritten, `||` leaking into assignments — and
-      the named cursor's own declaration (`CURSOR cur IS SELECT …`) is lost
-      from the flattened output entirely. Faithful fix: resolve the cursor's
-      select list from its declaration, declare one `@rec_<col>` per
-      selected column, `OPEN <cur>; FETCH NEXT FROM <cur> INTO @rec_…`, and
-      rewrite `rec.<col>` → `@rec_<col>` in the body (surfaced when D9's fix
-      let these routines parse whole — they used to fragment).
-- [x] **D4 (fixed in M3a): `ROWNUM` untranslated inside procedural embedded DML** (the DML
-      pipeline maps it; the procedural one doesn't — asymmetry). Gone by
-      construction: embedded DML now runs the same IR pipeline. Probe in
-      `test_embedded_dml_ir.py::test_procedural_rownum_translates_like_standalone`.
-- [x] **A4 (fixed in M2): `NEWID()` inside a guard becomes `UUID()` on Oracle** (procedural
-      map not per-target; `SYS_GUID()` expected).
-- [x] **A5 (fixed in M2): catalog CREATE-guard loses idempotency on PG/MySQL** (bare
-      `CREATE TABLE`, no `IF NOT EXISTS`, no warning; Oracle keeps the guard).
+- [x] **P1 (fixed 2026-07-09): faithful T-SQL expansion of named-cursor FOR
+      loops** — declarations emit the classic un-@ form and record their
+      query; a loop over a named cursor drives it directly with one
+      `@<var>_<col>` per resolvable select-list column, positional FETCH
+      INTO, and `rec.col` → `@rec_col` body rewriting (documented scaffold
+      only for unresolvable lists). Follow-ups landed the same day:
+      `EXECUTE IMMEDIATE … INTO` captured per target (T-SQL `INSERT … EXEC`
+      into a table variable) and `||` → `+` in T-SQL raw expressions.
+      Final dump measurement: **T-SQL 99.6% / PG 99.9% / MySQL 99.6%**.
+      Remaining T-SQL classes (127): TRY fragments in flattened blocks,
+      subquery ORDER BY (error 1033), ~21 near-`)`.
 - [ ] **C2/C3/C4: MySQL routine bodies** — raw `BEGIN TRY` leaks; `WHILE …
       LOOP` (PL/SQL form) instead of `WHILE … DO`; cursor options spill as
       `; LOCAL AS FAST_FORWARD;` fragments.
