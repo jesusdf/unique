@@ -1243,7 +1243,7 @@ def _emit_drop(node: DropStatement, dialect: str) -> str:
     When the target requires a table the source did not carry, the statement
     degrades to a documented carrier — never invalid SQL.
     """
-    name = _emit_table_ref(node.name)
+    name = _emit_table_ref(node.name, dialect)
     exists = "IF EXISTS " if node.if_exists else ""
     cascade = " CASCADE" if node.cascade else ""
     if node.object_type == "INDEX":
@@ -2043,7 +2043,14 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
         schema = None
     if schema:
         parts.append(_ident(schema, node.schema_quoted, dialect))
-    parts.append(_ident(node.name, node.quoted, dialect))
+    name = node.name
+    # A temp table declared anywhere in the script is ``#name`` on T-SQL —
+    # for EVERY reference, not only the creating statement (audit N2).
+    if dialect == "tsql" and not name.startswith("#"):
+        temp_tables = TEMP_TABLES.get()
+        if temp_tables and name.lower() in temp_tables:
+            name = f"#{name}"
+    parts.append(_ident(name, node.quoted, dialect))
     result = ".".join(parts)
 
     if node.alias:

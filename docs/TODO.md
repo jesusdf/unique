@@ -54,11 +54,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       non-catalog guard routes to the procedural engine. Add single-statement
       INSERT/UPDATE/DELETE guard probes + an FE scenario running a guarded
       INSERT twice.
-- [ ] **N2: PG → T-SQL temp-table rename not script-wide.**
-      `SELECT * INTO TEMPORARY tmp; SELECT a FROM tmp; DROP TABLE tmp` emits
-      `INTO #tmp` but leaves `FROM tmp`/`DROP tmp` — output creates one table
-      and reads another, silently. Propagate the rename across the script;
-      round-trip test PG→T-SQL→PG.
+- [x] **N2 (fixed 2026-07-10): PG → T-SQL temp-table rename not
+      script-wide.** Temp-table names are harvested once per transpile
+      (`harvest_temp_tables` → `TEMP_TABLES` ContextVar, same pattern as
+      `IDENTITY_COLUMNS`) and `_emit_table_ref` prefixes `#` on every
+      reference for the T-SQL target — FROM, INSERT, DROP included.
+      Tests: `tests/integration/test_temp_table_rename.py` (incl. the
+      PG→T-SQL→PG round-trip and a non-temp negative).
 
 ### P2 — correctness of signals and validation
 

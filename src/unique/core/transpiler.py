@@ -31,6 +31,7 @@ from unique.core.converter import (
     IDENTITY_COLUMNS,
     PG_TRIGGER_FN_BODIES,
     PROC_DATE_PARAMS,
+    TEMP_TABLES,
     TSQL_ALIAS_TYPES,
     TSQL_BIT_COLUMNS,
     USER_FUNCTIONS,
@@ -38,6 +39,7 @@ from unique.core.converter import (
     harvest_identity_columns,
     harvest_pg_trigger_functions,
     harvest_proc_date_params,
+    harvest_temp_tables,
     harvest_tsql_alias_types,
     harvest_tsql_bit_columns,
     harvest_user_functions,
@@ -838,6 +840,11 @@ class Transpiler:
             identity_columns = harvest_identity_columns(sql)
             if identity_columns:
                 identity_token = IDENTITY_COLUMNS.set(identity_columns)
+        temp_tables_token = None
+        if target == "tsql" and source in ("postgresql", "mysql"):
+            temp_tables = harvest_temp_tables(sql)
+            if temp_tables:
+                temp_tables_token = TEMP_TABLES.set(temp_tables)
         pg_trigger_fn_token = None
         if target == "tsql" and source != "tsql":
             user_functions = harvest_user_functions(sql)
@@ -1046,6 +1053,8 @@ class Transpiler:
                 DATE_COLUMNS.reset(date_token)
             if identity_token is not None:
                 IDENTITY_COLUMNS.reset(identity_token)
+            if temp_tables_token is not None:
+                TEMP_TABLES.reset(temp_tables_token)
             if proc_date_token is not None:
                 PROC_DATE_PARAMS.reset(proc_date_token)
             if func_token is not None:

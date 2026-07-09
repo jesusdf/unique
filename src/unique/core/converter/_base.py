@@ -160,6 +160,31 @@ IDENTITY_COLUMNS: contextvars.ContextVar[dict[str, str] | None] = (
 )
 
 
+# Temp tables declared in the script (PG/MySQL ``CREATE TEMPORARY TABLE`` /
+# ``SELECT … INTO TEMPORARY``): T-SQL spells a temp table ``#name``, and the
+# rename must apply to EVERY later reference, not only the creating statement
+# (audit 2026-07-08, N2 — the output used to create #tmp and read tmp).
+TEMP_TABLES: contextvars.ContextVar[frozenset[str] | None] = contextvars.ContextVar(
+    "temp_tables", default=None
+)
+
+_TEMP_TABLE_DECL_RE = re.compile(
+    r"(?i)\bINTO\s+TEMP(?:ORARY)?\s+([\w\"]+)"
+    r"|\bCREATE\s+(?:GLOBAL\s+|LOCAL\s+)?TEMP(?:ORARY)?\s+TABLE\s+"
+    r"(?:IF\s+NOT\s+EXISTS\s+)?([\w\"]+)"
+)
+
+
+def harvest_temp_tables(sql: str) -> frozenset[str]:
+    """Lowercased names of temp tables the script declares."""
+    names = {
+        (a or b).strip('"').lower()
+        for a, b in _TEMP_TABLE_DECL_RE.findall(sql)
+        if (a or b)
+    }
+    return frozenset(names)
+
+
 _COLUMN_NAME_RE = re.compile(r"^\s*(\[[^\]]+\]|`[^`]+`|\"[^\"]+\"|\w+)\b")
 
 
@@ -749,6 +774,8 @@ def _object_id_name(node: TableRef) -> str:
 __all__ = [
     "DATE_COLUMNS",
     "IDENTITY_COLUMNS",
+    "TEMP_TABLES",
+    "harvest_temp_tables",
     "PG_TRIGGER_FN_BODIES",
     "PROC_DATE_PARAMS",
     "TSQL_ALIAS_TYPES",
