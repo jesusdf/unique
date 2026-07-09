@@ -1,15 +1,22 @@
 # Unique — Project Status
 
-## Current state: v0.22.3 + audit-04 plan (M0/M1 shipped)
+## Current state: v0.22.3 + audit-04 plan (M0–M2 shipped; M3 core landed)
 
 The project is executing the architecture plan adopted from the 2026-07-08
 audit ([`audit/2026-07-08/04-architecture-analysis.md`](../audit/2026-07-08/04-architecture-analysis.md)):
 close the paths that bypass the AST core, make every failure loud and honest,
 and replace "the fixture is green" with a **measured per-direction validity
-percentage** as the definition of done. Milestones **M0** (validity sweep) and
-**M1** (output honesty gate) are done; **M2** (comment trivia + unified AST
-guard path) and **M3** (embedded DML through the IR converter) are next
-(`docs/TODO.md`).
+percentage** as the definition of done. Milestones **M0** (validity sweep),
+**M1** (output honesty gate) and **M2** (comment trivia + unified AST guard
+path) are done. **M3**'s core landed (2026-07-09): embedded DML in routine
+bodies now runs the same `parse → transform → emit` IR pipeline standalone
+DML uses (raw sqlglot only as a warned fallback) — one mapping engine, two
+callers. Routing that traffic exposed and fixed four IR-core bugs that also
+corrupted standalone DML (pass recursion stopped at top-level SELECTs; a
+derived table's WHERE duplicated onto the outer SELECT; parens/precedence
+dropped on emit; NULL-ordering not carried on ORDER BY). M3's final step
+(deleting the expression-level text rewriters) is blocked on moving the
+procedural text-matchers onto structure — tracked in `docs/TODO.md`.
 
 ### What holds today (measured, not asserted)
 
@@ -25,18 +32,21 @@ guard path) and **M3** (embedded DML through the IR converter) are next
   real script, execute every statement on the live engine, classify
   transpiler defects vs empty-database noise). On the confidential real-world
   corpora (see `audit/2026-07-08/03-private-fixture-sweep.md`):
-  - **T-SQL → PostgreSQL ≈ 99.9%**, **→ MySQL ≈ 98.6%**, **→ Oracle ≈ 99.6%**
-    on a 13k-line migration dump (remaining failures are single known classes,
-    e.g. `PRIMARY KEY CLUSTERED` inside a guard).
+  - **T-SQL → PostgreSQL 100.0%**, **→ Oracle 99.6%**, **→ MySQL 97.7%**
+    on a 13k-line migration dump (measured 2026-07-09 post-M3; remaining
+    failures are single known classes, e.g. `PRIMARY KEY CLUSTERED` inside a
+    guard on Oracle, comment-carrier batches on MySQL).
   - A procedures-heavy file exposes the open **declaration-hoisting family**
-    (mid-body `DECLARE`) on all three targets — tracked P1.
-  - **Oracle → T-SQL/PostgreSQL/MySQL is Tier-2 (experimental)**. Post-M1 on
-    a real 13 MB dump: **T-SQL 94.0%, MySQL 75.0%, PostgreSQL 73.1%** validity
-    — the honesty gate now degrades most of what used to ship broken
-    (pre-gate: 71% / n.a. / 56%) into documented carriers; the remaining
-    shipped failures (`EXEC` handling, top-level `DECLARE` blocks, `FROM
-    DUAL` INSERT-guards, expression corruption, declaration hoisting) are the
-    M4 bring-up backlog in `docs/TODO.md`.
+    (mid-body `DECLARE`, cursor declarations, `WHILE`/`BEGIN TRY` structure —
+    the C1/C2 classes) on all three targets — tracked P1.
+  - **Oracle → T-SQL/PostgreSQL/MySQL is Tier-2 (experimental)**. On a real
+    13 MB dump (measured 2026-07-09 post-M3): **T-SQL 94.3%, PostgreSQL
+    76.6%, MySQL 75.0%** validity (post-M1 baseline: 94.0 / 73.1 / 75.0 —
+    the PG gain is mostly D3, `FROM DUAL` INSERT-guards now translated). The
+    remaining shipped failures are enumerated classes in `docs/TODO.md`
+    (dominant: D1 `EXEC proc` → `EXEC AS`, ~6.5k statements on PG; `SET
+    SERVEROUTPUT`; D2 top-level `DECLARE` blocks; B2 `DROP INDEX`; D5
+    `RENAME COLUMN`; `TO_CHAR` on T-SQL) — the M4 bring-up backlog.
 - **Test-assertion quality** is gated (identity-mutation floor 33%, currently
   38%) and tracked nightly (mutation job with per-module floors).
 
@@ -51,6 +61,15 @@ guard path) and **M3** (embedded DML through the IR converter) are next
 
 ### Recent milestones
 
+- **M3 core (P4) — embedded DML through the shared IR pipeline** (2026-07-09):
+  `_transform_embedded_dml` routes through `parse_sql → Transformer →
+  emit_node`; raw sqlglot is a warned fallback. Cleared D3/D4/D8 and fixed
+  four IR-core bugs affecting standalone DML (recursion, derived-table WHERE
+  duplication, precedence parens, NULL ordering); `IN` and unstyled `CONVERT`
+  now modeled. Probes: `tests/integration/test_embedded_dml_ir.py`.
+- **M2 — comment trivia + unified AST guard path**: one shared
+  `split_leading_trivia`; the per-spelling guard regexes collapsed into one
+  polarity/trivia-aware extractor; per-target idempotent guard forms.
 - **M1 — output honesty gate** (`unique/core/output_gate.py`): never ship
   known-invalid output; degrade to carrier + warning instead.
 - **M0 — validity sweep** (`scripts/validity_sweep.py`) + one shared

@@ -1542,3 +1542,44 @@ user is told exactly where the batch boundary is missing. (That fixture turned
 out to be predominantly **Oracle** — `/`-terminated, `CREATE OR REPLACE`,
 `PROMPT` — with historic non-Oracle patches, so it is transpiled as `oracle`,
 not `tsql`; "add a `GO`" did not apply.)
+
+## 35. M3 core (audit doc-04 P4): embedded DML through the shared IR pipeline
+
+- [x] **Embedded DML in routine bodies runs the standalone IR pipeline**
+      (`parse_sql → Transformer → emit_node`); raw `sqlglot.transpile` +
+      target text-fixups remain only as an explicitly *warned* fallback
+      (unmodeled constructs, TVFs in FROM, parse failures). One mapping
+      engine, two callers: D3 (`FROM DUAL` INSERT-guards on PG/T-SQL) and D4
+      (`ROWNUM` in procedural DML) became impossible by construction.
+      Why it was the highest-value refactor: every "mapped in one pipeline,
+      not the other" bug came from the procedural engine owning a second,
+      regex-based copy of the dialect knowledge.
+- [x] **Four IR-core bugs surfaced by the new traffic — all also corrupted
+      standalone DML:** (1) transform-pass recursion stopped at top-level
+      SELECTs (INSERT source queries/subqueries never saw a pass) — replaced
+      with a generic dataclass-field walker; (2) `find(exp.Where/Having)`
+      duplicated a derived table's WHERE onto the outer SELECT; (3) the
+      emitter never re-parenthesized by precedence, silently re-associating
+      `a AND (b OR c)`; (4) `OrderByItem.nulls_first` was never carried, so
+      T-SQL `ORDER BY … DESC` changed row order on PostgreSQL. Also modeled:
+      `exp.In` (was a RawSQL passes could not see) and unstyled `exp.Convert`
+      (now a CastExpression sharing the CAST type maps: VARCHAR2 on Oracle,
+      CHAR on MySQL).
+- [x] **D8 expression corruption:** the T-SQL SELECT-INTO emitter split the
+      select list with a naive `split(",")`, cutting inside function calls
+      (`MAX(NVL(a,0)) + 1` lost `, 0))` and `+ 1`). Fixed with the shared
+      paren/string-aware `split_top_level_commas` (`unique/core/sql_split.py`).
+- [x] **Comment trivia hardening:** IR-harvested inline comments re-emit
+      *before* the statement (a trailing one commented out the terminator);
+      three head-anchored matchers (result-SELECT→refcursor, identity
+      capture, trigger set-based rewrite) now match on
+      `split_leading_trivia`'s code part.
+- [x] **Measured (2026-07-09, live engines):** test.sql→PG **100.0%** /
+      Oracle 99.6% / MySQL 97.7%; bigtest (Oracle source)→T-SQL **94.3%**,
+      PG **76.6%** (73.1 pre-M3), MySQL 75.0%; live-syntax suite green;
+      procedural fixtures regenerated. Tests:
+      `tests/integration/test_embedded_dml_ir.py` (22 probes incl. an
+      oracle→tsql→oracle round-trip). An IR-first route for *scalar
+      expressions* was attempted and reverted (18 tests: downstream matchers
+      consume expression text; the text path holds procedural context) —
+      recorded as the M3-prereq item in `docs/TODO.md`.

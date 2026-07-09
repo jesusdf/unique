@@ -157,10 +157,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       passthrough passes couldn't see; CONVERT now shares the CAST type maps).
       Three head-anchored matchers made trivia-aware via the shared
       `split_leading_trivia` (result-SELECT→refcursor, identity capture,
-      trigger set-based rewrite). Tests: `tests/integration/
-      test_embedded_dml_ir.py` (20). Pending: M3b (SELECT INTO / cursor /
-      condition raw-text tails → D8), M3c (delete the dead text rewriters),
-      sweep re-measure.
+      trigger set-based rewrite). *M3b:* D8's remaining corruption was the
+      T-SQL SELECT-INTO emitter's naive `split(",")` — fixed with the shared
+      `split_top_level_commas`. Tests: `tests/integration/
+      test_embedded_dml_ir.py` (22). **Measured (2026-07-09, live sweep):**
+      test.sql→PG **100.0%** / Oracle 99.6% / MySQL 97.7% (unchanged classes);
+      bigtest (Oracle source)→T-SQL **94.3%** / PG **76.6%** (was 73.1 — D3
+      cleared) / MySQL 75.0%; live-syntax suite 53 passed. Transpile of the
+      13 MB dump ~55 s (+22% vs pre-M3, linear). Still open: deleting the
+      expression-level text rewriters — blocked on the M3-prereq below.
 - [ ] **M3-prereq: move the procedural text-matchers onto structure before
       routing scalar expressions through the IR.** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was

@@ -10,9 +10,9 @@ means 100% of real-world procedural SQL passes through untransformed.
 ## Solution
 
 A dedicated **Procedural SQL Engine** built into Unique that handles the
-procedural layer independently of sqlglot. sqlglot continues to handle
-DML/DQL transpilation (SELECT, INSERT, UPDATE, DELETE); the procedural
-engine handles the surrounding control-flow scaffolding.
+procedural layer independently of sqlglot. The IR converter pipeline
+continues to handle DML/DQL transpilation (SELECT, INSERT, UPDATE, DELETE);
+the procedural engine handles the surrounding control-flow scaffolding.
 
 ## Architecture
 
@@ -62,7 +62,8 @@ engine handles the surrounding control-flow scaffolding.
 ┌─────────────────────────────────────────────────┐
 │           ProceduralEmitter                      │
 │  Emits target-dialect procedural code.           │
-│  Delegates embedded DML to sqlglot.transpile()   │
+│  Embedded DML goes through the shared IR         │
+│  pipeline (raw sqlglot only as warned fallback)  │
 └──────────────────────┬──────────────────────────┘
                        │
                        ▼
@@ -80,13 +81,15 @@ hand-written **tokenizer + recursive descent parser**, which:
 - Respects string literals (won't match keywords inside strings)
 - Handles comments (single-line and block)
 - Is extensible for new constructs
-- Delegates embedded DML (SELECT, INSERT, UPDATE, DELETE) to sqlglot
+- Delegates embedded DML (SELECT, INSERT, UPDATE, DELETE) to the shared IR
+  converter pipeline — the same one standalone DML uses (audit doc-04 P4);
+  raw `sqlglot.transpile` remains only as a warned fallback
 
 ### Why not a full grammar tool (ANTLR, PEG)?
 
 - Adds a heavy dependency and build step
 - We only need to parse the procedural *scaffolding*, not every SQL
-  expression. Embedded DML is delegated to sqlglot.
+  expression. Embedded DML is delegated to the shared IR pipeline.
 - Recursive descent is simpler to debug, test, and maintain
 
 ## Components
@@ -147,7 +150,7 @@ parse_body()
   ├── parse_print()
   ├── parse_set_statement()
   ├── parse_try_catch()
-  └── parse_embedded_dml()  → delegates to sqlglot
+  └── parse_embedded_dml()  → delegates to the shared IR pipeline
 ```
 
 ### 4. ProceduralTransformer (`core/procedural/transformer/`)
