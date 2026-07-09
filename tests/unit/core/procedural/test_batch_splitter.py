@@ -255,3 +255,39 @@ class TestBatchProperties:
         sql = "-- comment\n-- another"
         batches = BatchSplitter.split(sql, "tsql")
         assert all(b.is_empty for b in batches)
+
+
+class TestSqlPlusSetDirectives:
+    """SQL*Plus ``SET <option>`` directives (audit 2026-07-08 sweep: ~940
+    invalid statements per direction on the real Oracle dump)."""
+
+    def test_serveroutput_is_its_own_set_option_batch(self) -> None:
+        # The directive is line-oriented (no ';'); it must not glue to the
+        # following block and corrupt it.
+        sql = "SET SERVEROUTPUT ON\nBEGIN\n  NULL;\nEND;\n/"
+        batches = BatchSplitter.split(sql, "oracle")
+        assert batches[0].batch_type == BatchType.SET_OPTION
+        assert batches[0].sql.strip() == "SET SERVEROUTPUT ON"
+        assert batches[1].batch_type == BatchType.PROCEDURAL
+        assert batches[1].sql.lstrip().upper().startswith("BEGIN")
+
+    def test_directive_with_semicolon_also_peels(self) -> None:
+        batches = BatchSplitter.split("SET DEFINE OFF;\nSELECT 1 FROM DUAL;", "oracle")
+        assert batches[0].batch_type == BatchType.SET_OPTION
+        assert batches[1].batch_type == BatchType.DML
+
+    def test_update_set_clause_is_not_a_directive(self) -> None:
+        # A line starting with SET *inside* a statement is the UPDATE's SET
+        # clause, never a SQL*Plus directive.
+        sql = "UPDATE t\nSET col = 1\nWHERE id = 2;"
+        batches = BatchSplitter.split(sql, "oracle")
+        assert len(batches) == 1
+        assert batches[0].batch_type == BatchType.DML
+        assert "SET col = 1" in batches[0].sql
+
+    def test_set_transaction_is_real_sql_not_a_directive(self) -> None:
+        # SET TRANSACTION / SET CONSTRAINTS are Oracle SQL statements, not
+        # SQL*Plus options; they must not be commented out as directives.
+        batches = BatchSplitter.split("SET TRANSACTION READ ONLY;", "oracle")
+        assert len(batches) == 1
+        assert batches[0].batch_type != BatchType.SET_OPTION

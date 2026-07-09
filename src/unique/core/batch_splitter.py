@@ -77,6 +77,19 @@ _PROCEDURAL_PATTERNS = {
 # options has a cross-engine equivalent, so they are documented, not executed.
 _SET_PATTERN = re.compile(r"(?i)^\s*SET\s+(?!@)[A-Za-z_]\w*")
 
+# SQL*Plus session directives: ``SET <option> [value]`` lines a real Oracle
+# dump opens its blocks with. They are *client* commands (line-oriented, often
+# no ``;``) with no cross-engine meaning. ``SET TRANSACTION`` / ``SET
+# CONSTRAINTS`` are real Oracle SQL and deliberately NOT listed.
+_SQLPLUS_SET_RE = re.compile(
+    r"(?i)^\s*SET\s+(?:SERVEROUTPUT|DEFINE|ECHO|FEEDBACK|VERIFY|TERMOUT|TIMING|"
+    r"SQLBLANKLINES|LINESIZE|PAGESIZE|HEADING|TRIMSPOOL|TRIMOUT|SCAN|"
+    r"AUTOCOMMIT|WRAP|LONG|LONGCHUNKSIZE|APPINFO|ARRAYSIZE|COLSEP|COPYCOMMIT|"
+    r"ERRORLOGGING|EXITCOMMIT|FLUSH|NEWPAGE|NULL|NUMFORMAT|NUMWIDTH|PAUSE|"
+    r"RECSEP|SHOWMODE|SQLCASE|SQLCONTINUE|SQLNUMBER|SQLPROMPT|SUFFIX|TAB|"
+    r"UNDERLINE|XQUERY)\b"
+)
+
 # A migration guard: ``IF [NOT] EXISTS (…)`` / ``IF OBJECT_ID(…) IS [NOT] NULL``.
 # Routed to the SET_OPTION path, which extracts and transpiles the guarded DDL.
 _IF_OBJECT_PATTERN = re.compile(r"(?i)^\s*IF\s+(?:NOT\s+)?(?:OBJECT_ID|EXISTS)\b")
@@ -265,7 +278,12 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
 
     first_meaningful = lines[0].strip()
 
-    if _SET_PATTERN.match(first_meaningful):
+    # For Oracle, only the SQL*Plus client directives are "SET options";
+    # SET TRANSACTION / SET CONSTRAINTS are real SQL and flow to the DML
+    # path (the targets have their own spellings for them).
+    if _SET_PATTERN.match(first_meaningful) and (
+        dialect != "oracle" or _SQLPLUS_SET_RE.match(first_meaningful)
+    ):
         return BatchType.SET_OPTION
 
     if _IF_OBJECT_PATTERN.match(first_meaningful):
@@ -447,6 +465,26 @@ class BatchSplitter:
                 )
                 batch_start = i + 1
                 continue
+
+            # A SQL*Plus ``SET <option>`` directive is line-oriented (usually
+            # no ``;``): left inline it glues to the following statement and
+            # corrupts it on every target. Peel it into its own SET_OPTION
+            # batch — but only at a statement boundary (nothing but trivia
+            # accumulated), since a line starting with SET *inside* a
+            # statement is an UPDATE's SET clause.
+            if not in_plsql and _SQLPLUS_SET_RE.match(stripped):
+                from unique.core.sql_split import split_leading_trivia
+
+                accumulated = "\n".join(current)
+                if not split_leading_trivia(accumulated)[1].strip():
+                    batches.append(
+                        Batch(
+                            sql=stripped.rstrip(";").rstrip(),
+                            batch_type=BatchType.SET_OPTION,
+                            line_offset=i,
+                        )
+                    )
+                    continue
 
             # A lone slash terminates the current (PL/SQL) batch.
             if stripped == "/":

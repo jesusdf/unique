@@ -1697,6 +1697,28 @@ class Transpiler:
                 warnings=[_warn(message, "unhandled_batch", source, target)],
                 unsupported=[message],
             )
+        if source == "oracle" and target != "oracle":
+            # A SQL*Plus client directive (SET SERVEROUTPUT ON, SET DEFINE
+            # OFF, …): no server-side meaning anywhere, including Oracle
+            # itself. Document it instead of shipping it raw (it is a syntax
+            # error on every target — ~940 statements per direction on the
+            # real dump, audit 2026-07-08 sweep).
+            commented = "\n".join(
+                f"-- {line}" if line.strip() else ""
+                for line in sql.strip().splitlines()
+            )
+            head = " ".join(sql.strip().split())[:60]
+            return TranspileResult(
+                sql=commented,
+                warnings=[
+                    _warn(
+                        f"SQL*Plus directive commented out: {head}",
+                        "set_option",
+                        source,
+                        target,
+                    )
+                ],
+            )
         return TranspileResult(sql=sql)
 
     @staticmethod

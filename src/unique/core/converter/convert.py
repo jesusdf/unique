@@ -162,6 +162,16 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="USE",
         )
+    # A server-side SET statement (Oracle/PG SET TRANSACTION, PG SET
+    # search_path, …): sqlglot transpiles it directly. Client directives
+    # (SQL*Plus SET, T-SQL session options) never reach here — the batch
+    # classifier routes them to the SET_OPTION path.
+    if isinstance(expr, exp.Set):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="SET",
+        )
     if isinstance(expr, exp.Merge):
         return PassthroughSQL(
             sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),

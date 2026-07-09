@@ -209,6 +209,17 @@ fix needs an **anonymized** regression fixture (never a private name).
       target emits its call form. Probes:
       `tests/integration/test_exec_call_translation.py` (9, incl.
       args-never-dropped on all targets).
+- [x] **SQL*Plus `SET` directives shipped raw (fixed in M4 bring-up, 2026-07-09)** —
+      `SET SERVEROUTPUT ON` etc. (~940 invalid statements per direction on the
+      real dump) are line-oriented client commands with no `;`, so they also
+      glued to the following block and corrupted it. The Oracle splitter now
+      peels a known-option directive line into its own SET_OPTION batch (at a
+      statement boundary only — an UPDATE's `SET` clause is untouched), the
+      SET_OPTION path comments it with a warning for oracle→X, and real SQL
+      `SET TRANSACTION`/`SET CONSTRAINTS` now flows as `exp.Set` passthrough
+      (it used to be misclassified as a session option). Tests:
+      `test_batch_splitter.py::TestSqlPlusSetDirectives`,
+      `tests/integration/test_sqlplus_directives.py`.
 - [ ] **D2: top-level `DECLARE…BEGIN…END` keeps its PL/SQL skeleton in
       T-SQL** instead of flattening to `DECLARE @x…; <statements>`.
 - [x] **D8 (fixed in M3b): silent expression corruption in procedural embedded DML** —
