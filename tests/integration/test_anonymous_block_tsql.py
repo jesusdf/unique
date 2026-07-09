@@ -49,3 +49,33 @@ def test_block_without_declarations_flattens_too() -> None:
     out = Transpiler().transpile(src, "oracle", "tsql").sql
     assert "INSERT INTO t" in out
     sqlglot.parse(out, read="tsql", error_level=sqlglot.ErrorLevel.RAISE)
+
+
+_MULTI_DECL = """\
+DECLARE
+v_stamp DATE;
+v_webid NUMBER(9,0);
+BEGIN
+v_stamp := SYSDATE ;
+select COUNT(c1) into V_WEBID from t1 where c2 = 'x';
+if (v_webid=0) then
+INSERT INTO t1(c2, c3) SELECT 'x', v_stamp FROM DUAL;
+end if;
+END;
+/"""
+
+
+def test_declare_section_with_multiple_declarations() -> None:
+    # PL/SQL DECLARE opens a SECTION (every declaration until BEGIN); the
+    # parser used to take only the first one, leaking 'v_webid NUMBER(9,0)'
+    # as raw text and leaving later references unrenamed (audit D9 shape B,
+    # ~39 statements on the real dump).
+    out = Transpiler().transpile(_MULTI_DECL, "oracle", "tsql").sql
+    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+    decls = [ln for ln in lines if re.match(r"(?i)DECLARE\s+@", ln)]
+    assert len(decls) == 2, out
+    # Every reference renamed — no bare v_webid survives outside comments.
+    executable = " ".join(ln for ln in lines if not ln.startswith("--"))
+    assert "v_webid" not in executable.lower().replace("@webid", ""), out
+    assert "@webid" in executable or "@v_webid" in executable, out
+    sqlglot.parse(out, read="tsql", error_level=sqlglot.ErrorLevel.RAISE)

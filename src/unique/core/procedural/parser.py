@@ -330,9 +330,26 @@ class ProceduralParser:
             if self._is_tsql_source()
             else self._parse_plsql_statement
         )
+        statements: list[ASTNode] = []
+        if not self._is_tsql_source() and self._current().is_keyword("DECLARE"):
+            # A PL/SQL ``DECLARE`` opens a *section*: every declaration up to
+            # BEGIN belongs to it. Taking only one leaks the rest as raw text
+            # and leaves their references unrenamed (audit D9, shape B).
+            self._advance()
+            guard = 0
+            while not self._at_end() and not self._current().is_keyword("BEGIN"):
+                guard += 1
+                if guard > 100000:
+                    break
+                before = self._pos
+                decl = self._parse_plsql_declaration()
+                if decl:
+                    statements.append(decl)
+                if self._pos == before:
+                    self._advance()
         wrapped = self._match_keyword("BEGIN")
         stop = ("END",) if wrapped else ()
-        statements = self._run_body_loop(parse_stmt, stop)
+        statements += self._run_body_loop(parse_stmt, stop)
         if wrapped:
             self._match_keyword("END")
             self._match_type(TokenType.SEMICOLON)

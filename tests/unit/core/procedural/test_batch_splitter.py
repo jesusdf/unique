@@ -325,3 +325,35 @@ class TestOracleBlockCommentAwareness:
         sql = "/*\nSET SERVEROUTPUT ON\n*/\nSELECT 1 FROM DUAL;\n"
         batches = BatchSplitter.split(sql, "oracle")
         assert not any(b.batch_type == BatchType.SET_OPTION for b in batches)
+
+
+class TestOracleSplitLineCreateHeader:
+    """`create or replace\\nPROCEDURE …` (keywords on separate lines, common
+    in codegen'd scripts) must still enter PL/SQL mode — the line-bound head
+    regex missed it and the splitter cut the routine at each declaration ';'
+    (audit 2026-07-08 D9; ~170 statements on the real dump)."""
+
+    _SQL = (
+        "create or replace \n"
+        "PROCEDURE my_proc(\n"
+        "-- <codegen>\n"
+        "--   <nombre>x</nombre>\n"
+        "-- </codegen>\n"
+        "\tp_a  \tt1.c1%TYPE\n"
+        ")\n"
+        "AS\n"
+        "\tv_x  \tt1.c3%TYPE;\n"
+        "\tv_y  \tt1.c4%TYPE;\n"
+        "BEGIN\n"
+        "\tSELECT c3 INTO v_x FROM t1 WHERE c1 = p_a;\n"
+        "END my_proc;\n"
+        "/\n"
+    )
+
+    def test_whole_routine_is_one_procedural_batch(self) -> None:
+        batches = BatchSplitter.split(self._SQL, "oracle")
+        executable = [b for b in batches if b.batch_type != BatchType.COMMENT]
+        assert len(executable) == 1, [b.sql[:40] for b in executable]
+        b = executable[0]
+        assert b.batch_type == BatchType.PROCEDURAL
+        assert "v_y" in b.sql and "END my_proc" in b.sql

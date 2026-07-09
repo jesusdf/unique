@@ -539,7 +539,14 @@ class BatchSplitter:
             if in_comment:
                 continue
 
-            if not in_plsql and (plsql_start.search(line) or anon_start.match(line)):
+            # Match the PL/SQL head over a small window of accumulated lines:
+            # codegen'd scripts split ``create or replace`` and ``PROCEDURE``
+            # onto separate lines, which a per-line search misses — the
+            # routine then fragments at each declaration ';' (audit D9).
+            head_window = "\n".join(current[-3:])
+            if not in_plsql and (
+                plsql_start.search(head_window) or anon_start.match(line)
+            ):
                 in_plsql = True
                 begin_depth = 0
 
