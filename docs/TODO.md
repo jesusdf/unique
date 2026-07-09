@@ -179,7 +179,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       PROCEDURAL_FUNC_MAPS) before the text rewriters can be deleted (P4's
       final step). Until then the text path stays the expression engine.
 - [ ] **M4 — Oracle-source bring-up** driven by the sweep frequency table
-      (doc 03 §D backlog).
+      (doc 03 §D backlog). *Progress 2026-07-09:* D1 (SQL*Plus `EXEC`) + the
+      SQL*Plus `SET` directives moved the 13 MB-dump validity to
+      **T-SQL 98.0% / PG 97.2% / MySQL 93.3%** (from 94.0 / 73.1 / 75.0
+      post-M1). Next by frequency: D2 top-level `DECLARE` (~500 on T-SQL),
+      D9 declaration-fragment desync (~40 on PG), named-arg `CALL` emitted
+      with a broken `= >` token on PG (~30), `DELETE FROM False` corruption
+      (~16 on PG), B2 `DROP INDEX` (23), D5 `RENAME` (24), `TO_CHAR`→T-SQL
+      (14).
 
 ### P1 — private-fixture live sweep (audit doc 03; anonymized repros there)
 

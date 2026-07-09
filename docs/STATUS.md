@@ -39,14 +39,17 @@ procedural text-matchers onto structure — tracked in `docs/TODO.md`.
   - A procedures-heavy file exposes the open **declaration-hoisting family**
     (mid-body `DECLARE`, cursor declarations, `WHILE`/`BEGIN TRY` structure —
     the C1/C2 classes) on all three targets — tracked P1.
-  - **Oracle → T-SQL/PostgreSQL/MySQL is Tier-2 (experimental)**. On a real
-    13 MB dump (measured 2026-07-09 post-M3): **T-SQL 94.3%, PostgreSQL
-    76.6%, MySQL 75.0%** validity (post-M1 baseline: 94.0 / 73.1 / 75.0 —
-    the PG gain is mostly D3, `FROM DUAL` INSERT-guards now translated). The
-    remaining shipped failures are enumerated classes in `docs/TODO.md`
-    (dominant: D1 `EXEC proc` → `EXEC AS`, ~6.5k statements on PG; `SET
-    SERVEROUTPUT`; D2 top-level `DECLARE` blocks; B2 `DROP INDEX`; D5
-    `RENAME COLUMN`; `TO_CHAR` on T-SQL) — the M4 bring-up backlog.
+  - **Oracle → T-SQL/PostgreSQL/MySQL is Tier-2 (experimental), closing on
+    Tier-1**. On a real 13 MB dump (measured 2026-07-09, after M3 + the first
+    two M4 bring-up fixes): **T-SQL 98.0%, PostgreSQL 97.2%, MySQL 93.3%**
+    validity. The arc: post-M1 baseline 94.0 / 73.1 / 75.0 → M3 (embedded
+    DML through the IR; D3 `FROM DUAL` guards) 94.3 / 76.6 / 75.0 → D1
+    (SQL*Plus `EXEC` → per-target call, ~6.5k statements) + SQL*Plus `SET`
+    directives (~940/direction) landed the +18–20 point jump. Remaining
+    dominant classes (enumerated in `docs/TODO.md`): D2 top-level `DECLARE`
+    blocks (~500 on T-SQL), declaration-fragment desync (D9), named-arg
+    `CALL` emitted as `= >` on PG, B2 `DROP INDEX`, D5 `RENAME COLUMN`,
+    `TO_CHAR` on T-SQL.
 - **Test-assertion quality** is gated (identity-mutation floor 33%, currently
   38%) and tracked nightly (mutation job with per-module floors).
 
