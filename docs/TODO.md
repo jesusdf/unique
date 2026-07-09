@@ -62,6 +62,19 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
 
 ### P2 — correctness of signals and validation
 
+- [x] **Guard audit findings (2026-07-09, per-batch sweep of the private
+      corpora):** test.sql/test2.sql clean (531 guarded batches, 0 losses);
+      bigtest exposed three classes, all fixed: (1) `parse_sql` trusted
+      sqlglot WARN-mode partial trees — a table-qualified column in an INSERT
+      list shipped as `INSERT … DEFAULT VALUES` with the guarded SELECT gone;
+      now parses with RAISE and degrades to an honest carrier (also catches
+      mangled source fragments — N3 evidence). (2) The Oracle batch splitter
+      treated a lone `/` (and directives) as structural inside `/* */` block
+      comments, desyncing into orphan `*/ …` batches. (3) `emit_node(RawSQL)`
+      embedded multi-line sqlglot error text after `-- UNIQUE:`, leaking its
+      tail (unbalanced quote incl.) as executable output. Probes in
+      `test_embedded_dml_ir.py` + `test_batch_splitter.py`; re-audit: 0
+      losses on all 9 fixture×target pairs; test.sql→PG back at 100.0%.
 - [ ] **N3: `validate_source` false negatives → silent garbage.**
       `banana banana` (parses as `exp.Alias`) and `CREATE TALBE t (id INT)`
       (`Command` fallback) validate clean on every dialect; the first then

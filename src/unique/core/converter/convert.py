@@ -74,8 +74,13 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
     """
     sg_dialect = sqlglot_dialect_name(dialect)
     try:
+        # RAISE, not WARN: a partial tree from a lenient parse silently drops
+        # tokens — a real-corpus INSERT with a table-qualified column in its
+        # column list shipped as ``INSERT … DEFAULT VALUES`` (columns
+        # truncated, the guarded SELECT gone). A statement sqlglot cannot
+        # fully parse becomes an honest RawSQL carrier instead.
         parsed = sqlglot.parse(
-            sql, read=sg_dialect, error_level=sqlglot.ErrorLevel.WARN
+            sql, read=sg_dialect, error_level=sqlglot.ErrorLevel.RAISE
         )
     except Exception as e:
         logger.warning("sqlglot parse error: %s", e)

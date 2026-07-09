@@ -246,7 +246,13 @@ def emit_node(node: ASTNode, dialect: str) -> str:
     if isinstance(node, DropStatement):
         return _emit_drop(node, dialect)
     if isinstance(node, RawSQL):
-        return f"-- UNIQUE: {node.reason}\n{_comment_block(node.sql)}"
+        # The reason can be a multi-line sqlglot ParseError (source excerpt +
+        # ANSI highlighting); embedded raw it would leak its lines 2+ as
+        # executable text after the ``--`` prefix — flatten it to one clean
+        # line so the carrier stays a comment.
+        reason = re.sub(r"\x1b\[[0-9;]*m", "", node.reason)
+        reason = " ".join(reason.split())
+        return f"-- UNIQUE: {reason}\n{_comment_block(node.sql)}"
     if isinstance(node, PassthroughSQL):
         return _emit_passthrough(node, dialect)
     if isinstance(node, Script):

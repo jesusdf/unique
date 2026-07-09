@@ -291,3 +291,37 @@ class TestSqlPlusSetDirectives:
         batches = BatchSplitter.split("SET TRANSACTION READ ONLY;", "oracle")
         assert len(batches) == 1
         assert batches[0].batch_type != BatchType.SET_OPTION
+
+
+class TestOracleBlockCommentAwareness:
+    """A commented-out PL/SQL block (with '/' terminator lines INSIDE the
+    /* */ comment) must not desync the splitter (real-dump finding,
+    2026-07-09: an orphan '*/ INSERT ...' batch shipped as garbage)."""
+
+    _SQL = (
+        "/*\n"
+        "BEGIN\n"
+        "    NULL;\n"
+        "END;\n"
+        "/\n"
+        "*/\n"
+        "\n"
+        "INSERT INTO t (id) SELECT 1 FROM DUAL "
+        "WHERE NOT EXISTS (SELECT NULL FROM t WHERE id = 1);\n"
+    )
+
+    def test_slash_inside_block_comment_does_not_split(self) -> None:
+        batches = BatchSplitter.split(self._SQL, "oracle")
+        executable = [b for b in batches if b.batch_type != BatchType.COMMENT]
+        assert len(executable) == 1
+        b = executable[0]
+        assert b.batch_type == BatchType.DML
+        assert b.sql.lstrip().startswith(("/*", "INSERT"))
+        assert "NOT EXISTS" in b.sql
+        # No orphan '*/' fragment batch.
+        assert not any(x.sql.lstrip().startswith("*/") for x in batches)
+
+    def test_directive_inside_block_comment_ignored(self) -> None:
+        sql = "/*\nSET SERVEROUTPUT ON\n*/\nSELECT 1 FROM DUAL;\n"
+        batches = BatchSplitter.split(sql, "oracle")
+        assert not any(b.batch_type == BatchType.SET_OPTION for b in batches)

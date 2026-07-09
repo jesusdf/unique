@@ -411,6 +411,7 @@ class BatchSplitter:
         current: list[str] = []
         batch_start = 0
         in_plsql = False
+        in_comment = False
         begin_depth = 0
 
         plsql_start = re.compile(
@@ -420,6 +421,37 @@ class BatchSplitter:
         anon_start = re.compile(r"(?i)^\s*(DECLARE|BEGIN)\b")
         begin_re = re.compile(r"(?i)\bBEGIN\b")
         end_re = re.compile(r"(?i)\bEND\b")
+
+        def comment_state_after(line: str, state: bool) -> bool:
+            """Block-comment state after *line* (strings and ``--`` respected)."""
+            i = 0
+            in_string = False
+            while i < len(line):
+                two = line[i : i + 2]
+                if state:
+                    if two == "*/":
+                        state = False
+                        i += 2
+                        continue
+                    i += 1
+                    continue
+                if in_string:
+                    if line[i] == "'":
+                        in_string = False
+                    i += 1
+                    continue
+                if line[i] == "'":
+                    in_string = True
+                    i += 1
+                    continue
+                if two == "--":
+                    break
+                if two == "/*":
+                    state = True
+                    i += 2
+                    continue
+                i += 1
+            return state
 
         def flush(end_line: int) -> None:
             nonlocal current, batch_start
@@ -439,6 +471,15 @@ class BatchSplitter:
 
         for i, line in enumerate(sql.split("\n")):
             stripped = line.strip()
+
+            # Inside a /* */ block comment nothing is structural: not a lone
+            # '/', not a directive, not a PL/SQL head. A commented-out block
+            # with its '/' terminator inside the comment used to desync the
+            # splitter into orphan '*/ …' batches (real-dump finding).
+            if in_comment:
+                current.append(line)
+                in_comment = comment_state_after(line, True)
+                continue
 
             # SQL*Plus 'rem' (remark) and 'prompt' (echo) directives are not
             # SQL, but they carry useful information (copyright notices,
@@ -494,6 +535,9 @@ class BatchSplitter:
                 continue
 
             current.append(line)
+            in_comment = comment_state_after(line, False)
+            if in_comment:
+                continue
 
             if not in_plsql and (plsql_start.search(line) or anon_start.match(line)):
                 in_plsql = True

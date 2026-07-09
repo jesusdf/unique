@@ -327,3 +327,60 @@ def test_multijoin_cross_table_update_rewrites_for_oracle() -> None:
     assert "EXISTS (SELECT 1 FROM DETAIL D" in up
     assert "T.STATUS = 1" in up
     _assert_parses(out, "oracle")
+
+
+@pytest.mark.parametrize("target", ["postgresql", "tsql"])
+def test_partial_parse_never_ships_corrupted_tree(target: str) -> None:
+    # Oracle allows a table-qualified column in the INSERT column list;
+    # sqlglot cannot parse it, and its WARN-mode partial tree used to ship
+    # as `INSERT INTO t (colA, t) DEFAULT VALUES` — columns truncated and
+    # the guarded SELECT silently replaced (real-dump finding, 2026-07-09).
+    src = (
+        "INSERT INTO cfg_t(colA, cfg_t.colB, colC) "
+        "SELECT NULL, 'x', 'y' FROM DUAL "
+        "WHERE NOT EXISTS (SELECT NULL FROM cfg_t WHERE cfg_t.colB = 'x');"
+    )
+    r = Transpiler().transpile(src, source="oracle", target=target)
+    assert "DEFAULT VALUES" not in r.sql.upper()
+    ok = "NOT EXISTS" in r.sql.upper() and "colC" in r.sql
+    degraded = "UNIQUE:" in r.sql and (r.warnings or r.unsupported)
+    assert ok or degraded, r.sql
+
+
+def test_broken_source_fragment_degrades_not_ships() -> None:
+    # A mangled line in the source (a fragment, not a statement) must become
+    # a documented carrier, never executable garbage like `W;`.
+    src = "W FROM DUAL WHERE NOT EXISTS(SELECT NULL FROM t WHERE k = 1);"
+    r = Transpiler().transpile(src, source="oracle", target="postgresql")
+    stripped = "\n".join(
+        ln
+        for ln in r.sql.splitlines()
+        if ln.strip() and not ln.strip().startswith("--")
+    )
+    assert not stripped.strip() or "UNIQUE:" in r.sql, r.sql
+    assert r.warnings or r.unsupported
+
+
+def test_multiline_parse_error_reason_stays_a_comment() -> None:
+    # A sqlglot ParseError message spans lines (source excerpt + ANSI
+    # highlighting); embedded raw after '-- UNIQUE:' its tail leaked as
+    # executable text with an unbalanced quote, desyncing every later
+    # statement (real-dump finding, 2026-07-09).
+    src = (
+        "BEGIN TRANSACTION\n\nBEGIN TRY\n"
+        "  UPDATE t SET nombre = 'x', link = 'y' WHERE id = 1\n"
+        "  COMMIT TRANSACTION\nEND TRY\nBEGIN CATCH\n"
+        "  ROLLBACK TRANSACTION\nEND CATCH"
+    )
+    r = Transpiler().transpile(src, source="tsql", target="postgresql")
+    for ln in r.sql.splitlines():
+        s = ln.strip()
+        assert not s or s.startswith("--") or "\x1b" not in ln
+    # Every carrier line is commented — nothing executable leaks and no
+    # unbalanced quote survives outside comments.
+    executable = [
+        ln
+        for ln in r.sql.splitlines()
+        if ln.strip() and not ln.strip().startswith("--")
+    ]
+    assert all(ln.count("'") % 2 == 0 for ln in executable), executable
