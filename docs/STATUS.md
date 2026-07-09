@@ -1,6 +1,6 @@
 # Unique — Project Status
 
-## Current state: v0.22.3 + audit-04 plan (M0–M2 shipped; M3 core landed)
+## Current state: v0.23.0 (M0–M2 shipped; M3 core + first M4 wave landed)
 
 The project is executing the architecture plan adopted from the 2026-07-08
 audit ([`audit/2026-07-08/04-architecture-analysis.md`](../audit/2026-07-08/04-architecture-analysis.md)):
