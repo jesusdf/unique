@@ -147,6 +147,16 @@ transpilation needs no database.
   `UNIQUE_ALLOW_RAW_DB_URL=1`; this is discouraged outside single-user lab
   setups.
 
+- **Web UI:** when connections are enabled, the page shows a *Database
+  connection* panel driven by `GET /api/v1/info`: the server-side DSNs appear
+  in a combo (referenced by name — the URL never reaches the browser). If the
+  deployment also allows raw URLs (`UNIQUE_ALLOW_RAW_DB_URL=1`), a structured
+  builder appears instead of a bare URL box: an engine combo (SQL Server /
+  Oracle / PostgreSQL / MySQL), host, port (pre-filled with the engine's
+  default), database/service, user and password; the UI assembles the
+  connection URL from those fields. A selected named DSN always takes
+  precedence over the builder.
+
 ### Connection URL format
 
 `scheme://user:password@host:port/database_or_service`

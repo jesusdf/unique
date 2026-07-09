@@ -41,11 +41,19 @@ engines and indicates the transpilation support status for each.
 > **Note:** the rows below are kept in sync with reality, but a matrix always
 > lags the code. What keeps it honest is the **bug-detection infrastructure**
 > (corpus × live execution, generative fuzzing, differential result testing,
-> nightly mutation testing) — see `docs/STATUS.md`. Recent additions folded into
-> the rows: set operations of any arity incl. `EXCEPT`/`INTERSECT`→Oracle `MINUS`
-> (§1.7), bitwise operators → Oracle via `BITAND`/`POWER` identities (§1.2a),
-> cross-table `UPDATE … FROM … JOIN` per engine (§2), string-`+`/compound
-> assignment/named-slot function arguments, and reversible type carriers. All
+> nightly mutation testing) and the **per-direction validity sweep** — see
+> `docs/STATUS.md` for the measured percentages per direction. Recent
+> additions folded into the rows: set operations of any arity incl.
+> `EXCEPT`/`INTERSECT`→Oracle `MINUS` (§1.7), bitwise operators → Oracle via
+> `BITAND`/`POWER` identities (§1.2a), cross-table `UPDATE … FROM … JOIN` per
+> engine incl. multi-join sources → Oracle correlated subqueries (§2),
+> string-`+`/compound assignment/named-slot function arguments, reversible
+> type carriers, and — 2026-07-09 — embedded DML in routine bodies running
+> the same IR pipeline as standalone DML, SQL*Plus script support from an
+> Oracle source (`EXEC proc(args)` → each target's call form with `name =>
+> value` association mapped per target; `SET SERVEROUTPUT`-style client
+> directives documented, never shipped raw), Oracle FROM-less `DELETE`, and
+> top-level anonymous blocks flattening to a plain batch on T-SQL. All
 > four procedural fixtures validate **live** with 0 errors, so several
 > "⚠️ Partial" procedural rows are effectively full today. See `docs/DONE.md`
 > for the detailed history.
@@ -344,6 +352,9 @@ engines and indicates the transpilation support status for each.
 | CREATE FUNCTION (table-valued) | ✓ | ✓ (pipelined) | ✓ (RETURNS TABLE) | N/A | ⚠️ → a T-SQL string-split TVF becomes an Oracle `SYS.ODCIVARCHAR2LIST` function (`TABLE(fn(…))` callers); other shapes carrier |
 | IN / OUT / INOUT params | ✓ | ✓ | ✓ | ✓ | ✅ |
 | Default parameter values | ✓ | ✓ | ✓ | N/A | ⚠️ |
+| Procedure call (`CALL` / T-SQL `EXEC` / SQL*Plus `EXEC proc(args)`) | ✓ | ✓ | ✓ | ✓ | ✅ each target's call form; `name => value` association → T-SQL `@name = value`, MySQL positional (warned) |
+| Top-level anonymous block (`DECLARE…BEGIN…END`) | flattened batch | ✓ | ✓ (DO $$) | N/A | ✅ to T-SQL/Oracle/PG (T-SQL: flattened `DECLARE @x…; <stmts>`); MySQL documented carrier (no top-level procedural code) |
+| SQL*Plus client directives (`SET SERVEROUTPUT`, `PROMPT`, `REM`) | N/A | ✓ (client) | N/A | N/A | ⚠️ documented as comments + warning (client-side, no server equivalent) |
 | Overloading | N/A | ✓ | ✓ | N/A | ❌ |
 | Packages | N/A | ✓ | N/A | N/A | ⚠️ → separate procs/funcs |
 

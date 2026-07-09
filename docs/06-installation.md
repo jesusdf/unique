@@ -89,16 +89,22 @@ docker run -e UNIQUE_ALLOW_DB_CONNECTION=1 -p 8000:8000 jesusdf/unique:latest
 
 When enabled:
 
-- the web UI shows an optional **"Database connection"** field (in both the
-  script and the file sections) where the user can paste a connection URL such
-  as `oracle://user:pass@host:1521/service`; leaving it empty simply skips
-  metadata resolution;
-- the API accepts `db_url` on `POST /api/v1/transpile` and
-  `POST /api/v1/transpile/file`.
+- databases are configured **server-side** as named DSNs
+  (`UNIQUE_DSN_<NAME>=oracle://user:pass@host:1521/service`) and referenced
+  by name (`db: "<name>"` in the API, a combo in the web UI). The URLs never
+  leave the server.
+- the API additionally accepts a raw `db_url` on `POST /api/v1/transpile`
+  and `POST /api/v1/transpile/file` **only** when
+  `UNIQUE_ALLOW_RAW_DB_URL=1` is also set (discouraged outside single-user
+  lab setups — a raw URL from a client is an SSRF/credential-relay
+  primitive). With that flag on, the web UI shows a structured connection
+  builder (engine, host, port, database, user, password) that assembles the
+  URL; leaving it empty simply skips metadata resolution.
 
-When disabled (the default), any request carrying a `db_url` is rejected with
-HTTP 403, and the UI hides the field. The current state is reported by
-`GET /api/v1/info` as `db_connection_enabled`.
+When disabled (the default), any request carrying `db`/`db_url` is rejected
+with HTTP 403, and the UI hides the panel. The current state is reported by
+`GET /api/v1/info` as `db_connection_enabled`, `db_names` and
+`raw_db_url_enabled`.
 
 ## Build the image yourself (contributors)
 

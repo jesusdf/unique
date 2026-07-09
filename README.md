@@ -64,6 +64,10 @@ doesn't, delegating the embedded DML/DQL to sqlglot. Concretely, Unique adds:
   before transpiling — the API/CLI refuse it (override with `ignore_syntax_errors`)
   and the web UI disables Translate while it is invalid
 - **Anonymized procedural fixtures** for all four engines, validated live in CI
+- **Measured, per-direction maturity**: direction support is stated as a
+  validity percentage measured by executing transpiled real-world scripts on
+  live engines — see [`docs/STATUS.md`](docs/STATUS.md) for the current
+  numbers per direction
 
 ## Quick start
 
@@ -86,6 +90,9 @@ Or run the API + web UI with Docker:
 ```bash
 docker run --rm -p 8000:8000 jesusdf/unique:latest   # open http://localhost:8000/
 ```
+
+(The `jesusdf/unique:latest` image is published only on release tags
+(`v*`), so it tracks the latest release, not every commit.)
 
 See **[Installation & Deployment](docs/06-installation.md)** and
 **[Interfaces](docs/07-interfaces.md)** for the full CLI, Python, REST, web UI,

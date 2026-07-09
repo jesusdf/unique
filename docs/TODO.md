@@ -78,13 +78,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
 - [ ] **N8: near-duplicate `unsupported` entries** for one construct
       (CREATE SCHEMA→Oracle, sp_rename): deduplicate at carrier↔result
       reconciliation.
-- [ ] **N4/N9: docs drift** — STATUS.md claims the guard round-trip is
-      FE-exercised (coverage-matrix.md says the opposite); the
-      project-overview skill still says Python 3.12 (project is 3.13) and
-      shows `converter.py` as a file; README lacks the "`latest` publishes
-      only on tags" note. Also consider mapping Unique's own emitted catalog
-      guard back to the target catalog so A→B→A of a guarded migration stays
-      executable (today it degrades to a carrier, warned).
+- [x] **N4/N9: docs drift (closed 2026-07-09)** — STATUS.md's guard-round-trip
+      claim was corrected (unit tests, not FE); the project-overview skill
+      says Python 3.13 and shows `converter/` as a package; README gained the
+      "`latest` publishes only on release tags" note in the docs pass. The
+      "map Unique's own emitted catalog guard back to the target catalog"
+      idea moved into the *Faithful conditional for unmappable catalog
+      guards* P2 item above.
 
 ### P0 — architecture plan (audit doc 04 — ADOPTED 2026-07-08)
 
