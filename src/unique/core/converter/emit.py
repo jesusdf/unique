@@ -371,6 +371,8 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                     result = result.rstrip() + ";"
             if dialect == "tsql":
                 result = _portable_rename_column(result)
+            if dialect != "tsql" and node.kind == "ALTER":
+                result = _drop_named_default(result)
             if dialect != "oracle":
                 result = _portable_alter_add(result, dialect)
             if dialect in ("oracle", "mysql", "postgresql"):
@@ -447,6 +449,29 @@ def _portable_rename_column(sql: str) -> str:
 
     table, old, new = bare(m.group("table")), bare(m.group("old")), bare(m.group("new"))
     return f"EXEC sp_rename '{table}.{old}', '{new}', 'COLUMN'"
+
+
+_NAMED_DEFAULT_RE = re.compile(r"(?i)\bCONSTRAINT\s+([\w\[\]\"`]+)\s+(?=DEFAULT\b)")
+
+
+def _drop_named_default(sql: str) -> str:
+    """Drop a T-SQL named DEFAULT constraint's name (audit B3).
+
+    Only T-SQL names its DEFAULT constraints; everywhere else ``CONSTRAINT
+    <name> DEFAULT`` is a syntax error, and the default itself is anonymous.
+    The dropped name is documented with a carrier note (the reconciliation
+    layer turns it into a warning).
+    """
+    names = [m.group(1).strip('[]"`') for m in _NAMED_DEFAULT_RE.finditer(sql)]
+    if not names:
+        return sql
+    cleaned = _NAMED_DEFAULT_RE.sub("", sql)
+    notes = "\n".join(
+        f"-- UNIQUE: named DEFAULT constraint {n} dropped "
+        "(defaults are anonymous on this engine)"
+        for n in names
+    )
+    return f"{cleaned}\n{notes}"
 
 
 def _portable_alter_add(sql: str, dialect: str) -> str:

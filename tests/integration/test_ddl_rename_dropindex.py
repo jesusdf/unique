@@ -153,3 +153,39 @@ def test_add_pk_clustered_inside_guard_stays_valid_oracle() -> None:
     assert "PRIMARY KEY," not in up, r.sql  # the comma-mangled form
     assert "WITH (PAD_INDEX" not in up, r.sql
     assert "PRIMARY KEY (" in up
+
+
+# ---------------------------------------------------------------------------
+# B3 — named DEFAULT constraint (T-SQL-only) + B4 comment after bare RETURN
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("target", ["mysql", "postgresql", "oracle"])
+def test_named_default_constraint_dropped_with_note(target: str) -> None:
+    r = _t(
+        "ALTER TABLE t1 ADD col_x INT CONSTRAINT df_x DEFAULT 0 NOT NULL;",
+        "tsql",
+        target,
+    )
+    executable = " ".join(
+        ln
+        for ln in r.sql.splitlines()
+        if ln.strip() and not ln.strip().startswith("--")
+    ).upper()
+    assert "CONSTRAINT DF_X" not in executable, r.sql
+    assert re.search(r"DEFAULT 0", executable), r.sql
+    assert any("df_x" in w.message for w in r.warnings), [w.message for w in r.warnings]
+
+
+def test_comment_after_bare_return_survives() -> None:
+    # B4: the comment following a bare RETURN used to be swallowed (with a
+    # false 'discarded RETURN value' warning).
+    src = (
+        "CREATE OR REPLACE PROCEDURE p1 AS\nBEGIN\n"
+        "  IF 1 = 0 THEN\n    RETURN;\n  END IF;\n"
+        "  -- important note\n  INSERT INTO t (id) VALUES (1);\nEND;\n/"
+    )
+    r = _t(src, "oracle", "postgresql")
+    assert "important note" in r.sql
+    assert "INSERT INTO t" in r.sql
+    assert not any("RETURN" in w.message for w in r.warnings)
