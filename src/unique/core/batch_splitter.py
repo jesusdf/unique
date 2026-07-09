@@ -290,6 +290,14 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
         if _TSQL_SET_VAR_PATTERN.match(first_meaningful):
             return BatchType.PROCEDURAL
 
+    if dialect == "oracle" and _TSQL_EXEC_PROC_PATTERN.match(first_meaningful):
+        # SQL*Plus ``EXEC proc(args)`` — shorthand for ``BEGIN proc(args);
+        # END;``. sqlglot has no model for it (it parses as an *alias* and
+        # ships as T-SQL impersonation syntax, ``EXEC AS proc``, with the
+        # arguments dropped — audit 2026-07-08, D1). Route it to the
+        # procedural engine, which models the call per target.
+        return BatchType.PROCEDURAL
+
     if _CALL_PROC_PATTERN.match(first_meaningful):
         # A standalone stored-procedure call (MySQL/PostgreSQL/Oracle
         # ``CALL proc(args)``). Route it to the procedural engine so it becomes

@@ -199,8 +199,16 @@ fix needs an **anonymized** regression fixture (never a private name).
       recursion + the embedded-DML IR route fixed both pipelines. Probes in
       `test_embedded_dml_ir.py` (standalone + procedural, + scalar-subquery
       and IN-subquery neighbors).
-- [ ] **D1: Oracle `EXEC proc` → `EXEC AS proc`** on every target (T-SQL
-      impersonation syntax; PG/MySQL need `CALL`).
+- [x] **D1 (fixed in M4 bring-up, 2026-07-09): Oracle `EXEC proc` → `EXEC AS proc`**
+      on every target (T-SQL impersonation syntax; PG/MySQL need `CALL`).
+      Mechanism: SQL*Plus `EXEC` has no sqlglot model — it parsed as an
+      *alias* and shipped `EXEC AS proc` with the arguments dropped. The
+      classifier now routes Oracle `EXEC`/`EXECUTE` batches to the procedural
+      engine, whose parser models them as `CallStatement`
+      (`_parse_sqlplus_exec_call`; `EXECUTE IMMEDIATE` unaffected) and each
+      target emits its call form. Probes:
+      `tests/integration/test_exec_call_translation.py` (9, incl.
+      args-never-dropped on all targets).
 - [ ] **D2: top-level `DECLARE…BEGIN…END` keeps its PL/SQL skeleton in
       T-SQL** instead of flattening to `DECLARE @x…; <statements>`.
 - [x] **D8 (fixed in M3b): silent expression corruption in procedural embedded DML** —

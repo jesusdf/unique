@@ -1540,8 +1540,15 @@ class ProceduralParser:
             return self._parse_return()
         elif tok.is_keyword("RAISE") or tok.is_keyword("RAISE_APPLICATION_ERROR"):
             return self._parse_plsql_raise()
-        elif tok.is_keyword("EXECUTE"):
+        elif tok.is_keyword("EXECUTE") and self._peek(1).is_keyword("IMMEDIATE"):
             return self._parse_plsql_execute_immediate()
+        elif tok.is_keyword("EXEC", "EXECUTE"):
+            # SQL*Plus ``EXEC[UTE] proc[(args)]`` — shorthand for
+            # ``BEGIN proc(args); END;``. Model it as a CallStatement so each
+            # target emits its own call syntax; letting it fall to embedded
+            # DML ships T-SQL impersonation syntax (``EXEC AS proc``) with the
+            # arguments dropped (audit 2026-07-08, D1).
+            return self._parse_sqlplus_exec_call()
         elif tok.is_keyword("EXIT"):
             return self._parse_exit()
         elif tok.is_keyword("CONTINUE"):
@@ -1774,6 +1781,16 @@ class ProceduralParser:
         expr = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)
         return RaiseErrorStatement(message=expr)
+
+    def _parse_sqlplus_exec_call(self) -> ASTNode:
+        """Parse the SQL*Plus ``EXEC[UTE] proc[(args)]`` shorthand call."""
+        self._advance()  # EXEC/EXECUTE
+        name, schema = self._parse_qualified_name()
+        args = ""
+        if self._current().type == TokenType.LPAREN:
+            args = self._capture_call_args()
+        self._match_type(TokenType.SEMICOLON)
+        return CallStatement(name=name, args=args, schema=schema)
 
     def _parse_plsql_execute_immediate(self) -> ASTNode:
         """Parse EXECUTE IMMEDIATE expr [USING bind1, bind2, ...].
