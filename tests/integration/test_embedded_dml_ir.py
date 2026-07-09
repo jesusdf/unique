@@ -299,3 +299,31 @@ def test_oracle_fromless_delete_keeps_its_table(target: str) -> None:
     assert re.search(r"DELETE\s+FROM\s+MY_TBL", up)
     assert "WHERE K = 'X'" in up
     _assert_parses(out, target)
+
+
+def test_multijoin_cross_table_update_rewrites_for_oracle() -> None:
+    # Oracle has no UPDATE ... FROM; a MULTI-join source must become a
+    # correlated subquery (the single-join path already did) instead of
+    # degrading to a carrier comment.
+    src = (
+        "UPDATE t SET t.total = d.amount + c.fee "
+        "FROM t "
+        "JOIN detail d ON d.tid = t.id "
+        "JOIN charges c ON c.did = d.id "
+        "WHERE t.status = 1"
+    )
+    out = _t(src, "tsql", "oracle")
+    up = _norm(out).upper()
+    assert "UNIQUE:" not in out  # translated, not degraded
+    assert up.startswith("UPDATE T SET")
+    # The assigned value is a correlated subquery joining BOTH sources...
+    assert re.search(
+        r"TOTAL = \(SELECT .*D\.AMOUNT \+ C\.FEE.* FROM DETAIL D"
+        r".*JOIN CHARGES C ON C\.DID = D\.ID.*WHERE D\.TID = T\.ID\)",
+        up,
+    ), out
+    # ...guarded by EXISTS so unmatched rows keep their value, and the
+    # original outer WHERE survives.
+    assert "EXISTS (SELECT 1 FROM DETAIL D" in up
+    assert "T.STATUS = 1" in up
+    _assert_parses(out, "oracle")

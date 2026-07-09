@@ -727,26 +727,31 @@ def _emit_update_oracle_subquery(
 ) -> str:
     """Oracle has no UPDATE ... FROM; use a correlated-subquery UPDATE.
 
-    For a single source join with predicate, each assigned value is rewritten
-    as ``(SELECT <expr> FROM <source> WHERE <join pred>)`` and an EXISTS guard
-    limits the update to rows that have a match. Falls back to a documented
-    comment when the shape is too complex to rewrite safely (multiple joins).
+    Each assigned value is rewritten as ``(SELECT <expr> FROM <sources>
+    WHERE <first join pred>)`` and an EXISTS guard limits the update to rows
+    that have a match. The first join's ON is the predicate correlating the
+    sources to the update target; any further joins chain *between* sources,
+    so they move inside the subquery's FROM. Falls back to a documented
+    comment only for a join without an ON condition.
     """
     dialect = "oracle"
     target_sql = _emit_table_ref(target, dialect)
 
-    if len(node.joins) != 1 or node.joins[0].condition is None:
+    if not node.joins or any(j.condition is None for j in node.joins):
         original = _emit_update_tsql_from(node, assignments, dialect)
         commented = _comment_block(original)
         return (
-            "-- UNIQUE: Oracle has no UPDATE ... FROM with multiple joins; "
-            "rewrite as a MERGE or correlated subqueries. Original:\n" + commented
+            "-- UNIQUE: Oracle has no UPDATE ... FROM and this join shape "
+            "(no ON condition) cannot become a correlated subquery; rewrite "
+            "as a MERGE. Original:\n" + commented
         )
 
-    join = node.joins[0]
-    source_sql = _emit_join_table_ref(join.table, dialect)
-    assert join.condition is not None  # guarded by the check above
-    pred = _emit_expression(join.condition, dialect)
+    first, rest = node.joins[0], node.joins[1:]
+    source_sql = _emit_join_table_ref(first.table, dialect)
+    for j in rest:
+        source_sql += f" {_emit_join(j, dialect)}"
+    assert first.condition is not None  # guarded by the check above
+    pred = _emit_expression(first.condition, dialect)
 
     set_items = ", ".join(
         f"{col} = (SELECT {val} FROM {source_sql} WHERE {pred})"
