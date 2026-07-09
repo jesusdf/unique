@@ -194,3 +194,14 @@ def test_execute_immediate_into_postgres_native() -> None:
 def test_execute_immediate_into_oracle_identity() -> None:
     r = _t(_EXEC_IMMEDIATE_INTO, "oracle", "oracle")
     assert "EXECUTE IMMEDIATE SQLSTMT INTO X;" in r.sql, r.sql
+
+
+def test_pipe_concat_becomes_plus_in_tsql_assignments() -> None:
+    # 356 dynamic-SQL assignments on the dump leaked '||' into T-SQL.
+    src = (
+        "DECLARE\n  S VARCHAR2(100);\n  V VARCHAR2(30);\nBEGIN\n"
+        "  V := 'T1';\n  S := 'a||b: ' || V || ' done';\nEND;\n/"
+    )
+    r = _t(src, "oracle", "tsql")
+    up = " ".join(r.sql.split())
+    assert "'a||b: ' + @v + ' done'" in up, r.sql  # literal '||' preserved

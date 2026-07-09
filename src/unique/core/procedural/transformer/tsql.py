@@ -40,7 +40,42 @@ class TSqlTransformer(ProceduralTransformer):
     #: ``a - b`` between two identifiers (used to rewrite date subtraction).
     _SUBTRACT_RE = re.compile(r"(@?\w+)\s*-\s*(@?\w+)")
 
+    @staticmethod
+    def _pipes_to_plus(sql: str) -> str:
+        """Rewrite ``||`` concatenation to T-SQL ``+`` outside string literals
+        (356 dynamic-SQL assignments on the real dump leaked ``||``)."""
+        out: list[str] = []
+        in_string = False
+        i = 0
+        while i < len(sql):
+            ch = sql[i]
+            if in_string:
+                out.append(ch)
+                if ch == "'":
+                    if i + 1 < len(sql) and sql[i + 1] == "'":
+                        out.append("'")
+                        i += 2
+                        continue
+                    in_string = False
+                i += 1
+                continue
+            if ch == "'":
+                in_string = True
+                out.append(ch)
+                i += 1
+                continue
+            if ch == "|" and sql[i : i + 2] == "||":
+                out.append("+")
+                i += 2
+                continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
+
     def _fix_raw_sql_target(self, sql: str) -> str:
+        # PL/SQL string concatenation: T-SQL spells it ``+``.
+        if "||" in sql:
+            sql = self._pipes_to_plus(sql)
         # PL/SQL event predicates inside a trigger body (audit D6): T-SQL
         # tests the pseudo-tables instead.
         if self._in_trigger:
