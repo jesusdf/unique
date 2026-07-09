@@ -284,6 +284,13 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     read = sqlglot_dialect_name(node.source_dialect)
     write = sqlglot_dialect_name(dialect)
 
+    # T-SQL ADD CONSTRAINT ... PRIMARY KEY/UNIQUE with storage clauses:
+    # rebuilt directly (sqlglot mangles it into comma-joined actions).
+    if node.kind == "ALTER" and node.source_dialect == "tsql":
+        rebuilt = _tsql_add_key_constraint(node.sql, dialect)
+        if rebuilt is not None:
+            return rebuilt
+
     # MySQL has no CREATE SEQUENCE; sqlglot would emit invalid SQL.
     if dialect == "mysql" and node.kind == "CREATE SEQUENCE":
         return (
@@ -372,6 +379,53 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     except Exception as e:  # noqa: BLE001 - report and fall back
         logger.warning("passthrough transpile error (%s): %s", node.kind, e)
     return f"-- UNIQUE: Unhandled {node.kind}\n{_comment_block(node.sql)}"
+
+
+_TSQL_ADD_KEY_RE = re.compile(
+    r"(?isx)^\s*ALTER\s+TABLE\s+(?P<table>[\w.\[\]\"]+)\s+"
+    r"ADD\s+CONSTRAINT\s+(?P<name>[\w\[\]\"]+)\s+"
+    r"(?P<kind>PRIMARY\s+KEY|UNIQUE)\s*(?:CLUSTERED|NONCLUSTERED)?\s*"
+    r"\(\s*(?P<cols>[^()]*?)\s*\)"
+    r"(?P<tail>.*)$"
+)
+_TSQL_ADD_KEY_TAIL_RE = re.compile(
+    r"(?is)^\s*(?:WITH\s*\([^()]*\))?\s*(?:ON\s+[\w\[\]\"]+)?\s*;?\s*$"
+)
+
+
+def _tsql_add_key_constraint(sql: str, dialect: str) -> str | None:
+    """Normalize T-SQL ``ADD CONSTRAINT … PRIMARY KEY/UNIQUE CLUSTERED (col
+    ASC) WITH (…) ON [grp]`` for the other engines (audit B1).
+
+    sqlglot splits the storage clauses into comma-joined ALTER actions
+    (invalid everywhere) and injects ``NULLS FIRST`` into the key column
+    list, so this well-defined shape is rebuilt directly: the CLUSTERED
+    keyword, per-column sort order, WITH options and filegroup are
+    physical-storage details with no logical-schema impact.
+    """
+    from unique.core.sql_split import split_top_level_commas
+
+    m = _TSQL_ADD_KEY_RE.match(sql)
+    if not m or not _TSQL_ADD_KEY_TAIL_RE.match(m.group("tail")):
+        return None
+    cols: list[str] = []
+    for item in split_top_level_commas(m.group("cols")):
+        cm = re.fullmatch(r"(?is)\s*([\w\[\]\"]+)(?:\s+(?:ASC|DESC))?\s*", item)
+        if not cm:
+            return None
+        cols.append(_ident(cm.group(1).strip('[]"'), True, dialect))
+    if not cols:
+        return None
+    table_parts = [p.strip('[]"') for p in m.group("table").split(".")]
+    if dialect != "tsql" and table_parts and table_parts[0].lower() == "dbo":
+        table_parts = table_parts[1:]
+    table_sql = ".".join(_ident(p, True, dialect) for p in table_parts)
+    name_sql = _ident(m.group("name").strip('[]"'), True, dialect)
+    kind = " ".join(m.group("kind").upper().split())
+    return (
+        f"ALTER TABLE {table_sql} ADD CONSTRAINT {name_sql} "
+        f"{kind} ({', '.join(cols)})"
+    )
 
 
 _RENAME_COLUMN_RE = re.compile(

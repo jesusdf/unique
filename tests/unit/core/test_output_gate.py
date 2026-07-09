@@ -101,20 +101,21 @@ class TestLeftoverTokens:
 class TestGateEndToEnd:
     """Through the public API: invalid output degrades to carrier + signals."""
 
-    def test_invalid_pk_clustered_degrades_to_carrier(self) -> None:
+    def test_pk_clustered_now_translates_cleanly(self) -> None:
+        # This shape used to degrade to a carrier; since the B1 fix
+        # (2026-07-09) it translates outright — the gate must have nothing
+        # to catch and no false signals may fire.
         src = (
             "ALTER TABLE u ADD CONSTRAINT pk_u "
             "PRIMARY KEY CLUSTERED (codigo ASC);\nGO\n"
         )
         result = Transpiler().transpile(src, "tsql", "postgresql")
-        # Whatever remains executable must parse on the target...
         assert _parses(result.sql, "postgres")
-        # ...the original is preserved in a carrier...
-        assert "UNIQUE:" in result.sql
-        assert "PRIMARY KEY CLUSTERED" in result.sql  # inside the carrier
-        # ...and the loss is signalled programmatically.
-        assert any(w.feature == "validity_gate" for w in result.warnings)
-        assert result.unsupported
+        assert "UNIQUE:" not in result.sql
+        assert "CLUSTERED" not in result.sql.upper()
+        assert 'PRIMARY KEY ("codigo")' in result.sql
+        assert not any(w.feature == "validity_gate" for w in result.warnings)
+        assert not result.unsupported
 
     def test_rownum_leak_in_routine_degrades_to_carrier(self) -> None:
         src = (

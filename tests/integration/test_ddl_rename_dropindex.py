@@ -118,3 +118,38 @@ def test_merge_gets_tsql_terminator_and_no_dual() -> None:
     assert "DUAL" not in r.sql.upper()
     body = r.sql.strip()
     assert body.rstrip("GO").rstrip().endswith(";"), r.sql
+
+
+# ---------------------------------------------------------------------------
+# B1 — ALTER TABLE ADD CONSTRAINT ... PRIMARY KEY CLUSTERED (col ASC) WITH (...)
+# ---------------------------------------------------------------------------
+
+_B1 = (
+    "ALTER TABLE [dbo].[t1] ADD CONSTRAINT [PK_t1] PRIMARY KEY CLUSTERED \n"
+    "(\n\t[id] ASC,\n\t[rev] DESC\n"
+    ")WITH (PAD_INDEX = OFF, IGNORE_DUP_KEY = OFF) ON [PRIMARY]"
+)
+
+
+@pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
+def test_add_pk_clustered_normalizes(target: str) -> None:
+    r = _t(_B1, "tsql", target)
+    up = " ".join(r.sql.split()).upper()
+    assert "UNIQUE:" not in r.sql, r.sql
+    assert re.search(r"ADD CONSTRAINT \S*PK_T1\S* PRIMARY KEY", up), r.sql
+    # Storage clauses and per-column sort order are T-SQL-only.
+    for tok in ("CLUSTERED", "PAD_INDEX", "NULLS", " ASC", " DESC", "ON [PRIMARY]"):
+        assert tok not in up, (tok, r.sql)
+    assert re.search(r"PRIMARY KEY \(\S*ID\S*, \S*REV\S*\)", up), r.sql
+
+
+def test_add_pk_clustered_inside_guard_stays_valid_oracle() -> None:
+    src = (
+        "IF NOT EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'PK_t1')\n"
+        "BEGIN\n" + _B1 + "\nEND\nGO"
+    )
+    r = _t(src, "tsql", "oracle")
+    up = " ".join(r.sql.split()).upper()
+    assert "PRIMARY KEY," not in up, r.sql  # the comma-mangled form
+    assert "WITH (PAD_INDEX" not in up, r.sql
+    assert "PRIMARY KEY (" in up
