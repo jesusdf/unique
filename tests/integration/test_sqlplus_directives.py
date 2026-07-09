@@ -41,3 +41,22 @@ def test_set_transaction_not_treated_as_directive() -> None:
     r = Transpiler().transpile("SET TRANSACTION READ ONLY;", "oracle", "postgresql")
     assert "-- SET TRANSACTION" not in r.sql
     assert not any("SQL*Plus directive" in w.message for w in r.warnings)
+
+
+def test_mysql_dash_divider_lines_become_valid_comments() -> None:
+    # MySQL's '--' comment requires a following whitespace: a divider line of
+    # pure dashes ('-----') is NOT a comment there and glues to the next
+    # statement (~1.4k failures on the real dump's MySQL direction).
+    src = (
+        "-- header\n"
+        + "-" * 40
+        + "\n-- section\n"
+        + "-" * 40
+        + "\nEXEC my_proc('a');\n"
+    )
+    r = Transpiler().transpile(src, "oracle", "mysql")
+    for ln in r.sql.splitlines():
+        s = ln.strip()
+        if s.startswith("--"):
+            assert len(s) == 2 or s[2].isspace(), ln
+    assert "CALL my_proc('a')" in r.sql

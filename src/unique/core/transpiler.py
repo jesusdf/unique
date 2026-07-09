@@ -252,6 +252,17 @@ _MYSQL_ROUTINE_RE = re.compile(
 )
 
 
+# MySQL's '--' comment style requires the dashes to be followed by whitespace:
+# a divider line of pure dashes ('-----') is NOT a comment there and glues to
+# the next statement (~1.4k failures on the real dump's MySQL direction).
+_MYSQL_BAD_COMMENT_RE = re.compile(r"(?m)^(\s*)--(?=\S)")
+
+
+def _mysql_safe_comments(sql: str) -> str:
+    """Insert the space MySQL requires after a line-comment's ``--``."""
+    return _MYSQL_BAD_COMMENT_RE.sub(r"\1-- ", sql)
+
+
 def _warn(message: str, feature: str, source: str, target: str) -> TransformWarning:
     """Build a TransformWarning with dialect context."""
     return TransformWarning(
@@ -971,6 +982,7 @@ class Transpiler:
                 )
                 if target == "mysql":
                     terminated = self._wrap_mysql_routine(terminated)
+                    terminated = _mysql_safe_comments(terminated)
                 # Treat output that is *entirely* comments as a comment part,
                 # even if the batch wasn't classified as COMMENT (e.g. an
                 # unsupported SET we turned into a '-- ...' note). This avoids
