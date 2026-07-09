@@ -90,6 +90,10 @@ class TSqlEmitter(ProceduralEmitter):
         # Oracle/PG source) has no T-SQL form; pass the bare string, which T-SQL
         # implicitly converts to the parameter's date type.
         args = self._ANSI_DATE_LITERAL_RE.sub("", node.args) if node.args else node.args
+        # PL/SQL / PostgreSQL named association ``name => value`` is spelled
+        # ``@name = value`` in a T-SQL EXEC.
+        if args and "=>" in args:
+            args = re.sub(r"(\w+)\s*=>\s*", r"@\1 = ", args)
         name = self._qualified_name(node.schema, node.name)
         return f"EXEC {name} {args};" if args else f"EXEC {name};"
 

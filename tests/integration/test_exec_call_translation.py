@@ -72,3 +72,35 @@ def test_oracle_exec_arguments_never_dropped() -> None:
         out = _t("EXEC my_proc('alpha', 42, 'omega');", "oracle", target)
         for token in ("'alpha'", "42", "'omega'"):
             assert token in out, (target, out)
+
+
+# ---------------------------------------------------------------------------
+# Named-argument association (``name => value``)
+# ---------------------------------------------------------------------------
+
+
+def test_named_args_preserved_on_postgresql() -> None:
+    # PostgreSQL supports name => value natively; the lexer must keep '=>'
+    # as one token (it used to split into the invalid '= >').
+    out = _t("EXEC my_proc(V_a => 1, V_b => 'x');", "oracle", "postgresql")
+    assert "V_a => 1" in out and "V_b => 'x'" in out
+    assert "= >" not in out
+
+
+def test_named_args_become_tsql_at_param_form() -> None:
+    out = _t("EXEC my_proc(V_a => 1, V_b => 'x');", "oracle", "tsql")
+    up = _norm(out)
+    assert "@V_a = 1" in up and "@V_b = 'x'" in up
+    assert "=>" not in up
+    assert "UNIQUE:" not in out
+
+
+def test_named_args_become_positional_on_mysql_with_warning() -> None:
+    # MySQL has no named association (audit C5): positional, warned.
+    r = Transpiler().transpile(
+        "EXEC my_proc(V_a => 1, V_b => 'x');", source="oracle", target="mysql"
+    )
+    up = _norm(r.sql)
+    assert re.search(r"CALL my_proc\(\s*1\s*,\s*'x'\s*\)", up), r.sql
+    assert "=>" not in up
+    assert any("named arguments" in w.message for w in r.warnings)

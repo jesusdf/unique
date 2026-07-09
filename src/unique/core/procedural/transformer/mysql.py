@@ -6,7 +6,9 @@
 
 from __future__ import annotations
 
-from unique.core.ast_nodes import ASTNode, RawSQL
+import re
+
+from unique.core.ast_nodes import ASTNode, CallStatement, RawSQL
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
     register_transformer,
@@ -55,6 +57,22 @@ class MySqlTransformer(ProceduralTransformer):
         sql = self._mysql_fix_cast_max(sql)
         sql = self._mysql_string_split(sql)
         return sql
+
+    def _transform_call(self, node: CallStatement) -> ASTNode:
+        """MySQL CALL has no named-argument association (audit 2026-07-08,
+        C5): lower ``name => value`` arguments to positional, warned — the
+        values keep their order, which matches the declaration order in
+        generated migration scripts but is not guaranteed in hand-written
+        calls."""
+        out = super()._transform_call(node)
+        if isinstance(out, CallStatement) and out.args and "=>" in out.args:
+            self._warnings.append(
+                "MySQL CALL has no named arguments; passed positionally "
+                "(verify the argument order matches the declaration)"
+            )
+            args = re.sub(r"\w+\s*=>\s*", "", out.args)
+            return CallStatement(name=out.name, args=args, schema=out.schema)
+        return out
 
     def _update_predicate(self, col: str) -> str | None:
         return f"NOT (NEW.{col} <=> OLD.{col})"

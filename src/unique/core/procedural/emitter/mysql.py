@@ -229,6 +229,8 @@ class MySqlEmitter(ProceduralEmitter):
 
     def _emit_call(self, node: CallStatement) -> str:
         # MySQL has no schema layer, so any qualifier is dropped by name lookup.
+        # Named arguments were already lowered to positional by the transformer
+        # (MySQL has no ``name => value`` association — audit 2026-07-08, C5).
         return f"CALL {node.name}({node.args});"
 
     def _emit_execute_stmt(

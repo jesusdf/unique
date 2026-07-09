@@ -245,8 +245,13 @@ fix needs an **anonymized** regression fixture (never a private name).
       (col ASC NULLS FIRST)`** — invalid on all four targets.
 - [ ] **B2: `DROP INDEX` untranslated across the matrix** (PG 3-part name,
       MySQL missing `ON tbl`, table name dropped from the `ON` form).
-- [ ] **C5: MySQL `CALL` emitted with named arguments** (`name => v`),
-      unsupported by MySQL — emit positional.
+- [x] **C5 (fixed in M4 bring-up, 2026-07-09): MySQL `CALL` emitted with named
+      arguments** (`name => v`), unsupported by MySQL — now lowered to
+      positional by the MySQL transformer with a warning (argument order must
+      match the declaration). Same change wave: the lexer now emits `=>` as
+      ONE token (it split into `= >`, breaking PG/Oracle output too), and the
+      T-SQL emitter spells named association as `@name = value`. Tests:
+      `test_exec_call_translation.py` (named-arg trio).
 - [ ] **D9: `create or replace⏎PROCEDURE` (split lines + `-- <codegen>`
       header comment) desyncs the procedural parser**, spilling declaration
       fragments (`v_x AS VARCHAR2`, `CURSOR AS cur1`) as top-level batches.

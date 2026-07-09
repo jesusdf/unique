@@ -525,6 +525,14 @@ class Lexer:
             self._emit(TokenType.COMPARISON, ch, line, col)
             return
 
+        # => named-argument association (PL/SQL / PostgreSQL call syntax).
+        # One token: splitting it into '=' + '>' re-joins as the invalid
+        # ``name = > value`` in captured call-argument text.
+        if ch == "=" and self._peek(1) == ">":
+            self._advance(2)
+            self._emit(TokenType.OPERATOR, "=>", line, col)
+            return
+
         # = (assignment or comparison, context-dependent)
         if ch == "=":
             self._advance()
