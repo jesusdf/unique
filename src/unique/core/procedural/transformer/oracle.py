@@ -282,17 +282,27 @@ class OracleTransformer(ProceduralTransformer):
     ) -> tuple[ASTNode, ...]:
         """Replace each bare result ``SELECT`` with ``OPEN <cursor> FOR …``,
         recursing into control-flow blocks; append allocated cursor names."""
+        from unique.core.sql_split import split_leading_trivia
+
         out: list[ASTNode] = []
         for stmt in stmts:
-            if isinstance(stmt, EmbeddedDML) and self._is_result_select(stmt.sql):
+            # Match on the code, not the trivia: a leading comment must not
+            # hide a result SELECT (audit doc 04, P2).
+            trivia, code = (
+                split_leading_trivia(stmt.sql)
+                if isinstance(stmt, EmbeddedDML)
+                else ("", "")
+            )
+            if isinstance(stmt, EmbeddedDML) and self._is_result_select(code):
                 name = (
                     "RESULT_CURSOR"
                     if not cursors
                     else f"RESULT_CURSOR_{len(cursors) + 1}"
                 )
                 cursors.append(name)
-                query = stmt.sql.rstrip(";").strip()
-                out.append(RawSQL(sql=f"OPEN {name} FOR {query};"))
+                query = code.rstrip(";").strip()
+                prefix = f"{trivia.rstrip()}\n" if trivia.strip() else ""
+                out.append(RawSQL(sql=f"{prefix}OPEN {name} FOR {query};"))
             elif isinstance(stmt, IfStatement):
                 out.append(
                     dataclasses.replace(

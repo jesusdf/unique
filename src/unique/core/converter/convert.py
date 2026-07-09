@@ -34,6 +34,7 @@ from unique.core.ast_nodes import (
     DataType,
     DeleteStatement,
     DropStatement,
+    ExpressionList,
     FunctionCall,
     InsertStatement,
     JoinClause,
@@ -301,6 +302,20 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return _convert_case(expr)
     if isinstance(expr, exp.Cast):
         return _convert_cast(expr)
+    # T-SQL CONVERT(type, expr) without a style code is a plain CAST; modeling
+    # it as one applies the shared type mappings (VARCHAR2, CHAR for MySQL
+    # CAST, …). A styled CONVERT is caught earlier and passed through.
+    if isinstance(expr, exp.Convert) and not expr.args.get("style"):
+        type_expr, value_expr = expr.this, expr.expression
+        if not isinstance(type_expr, exp.DataType) and isinstance(
+            value_expr, exp.DataType
+        ):
+            type_expr, value_expr = value_expr, type_expr
+        if isinstance(type_expr, exp.DataType) and value_expr is not None:
+            return CastExpression(
+                expression=convert_expression(value_expr),
+                target_type=_convert_data_type(type_expr),
+            )
     # A schema-qualified function call (e.g. dbo.fn_tax(net)) parses as a Dot
     # (schema . func(...)). Fold it into a FunctionCall whose name keeps the
     # qualifier ("dbo.fn_tax"); the emitter strips dbo for non-T-SQL targets.
@@ -313,6 +328,14 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     # top-level "a AND b" would be emitted as the function call "AND(a, b)".
     if isinstance(expr, exp.Binary):
         return _convert_binary(expr)
+    # IN with a subquery or a value list. Modeling it (rather than the RawSQL
+    # fallback) lets the transform passes reach the nested query — e.g.
+    # ``WHERE id IN (SELECT … WHERE ROWNUM <= 10)`` must get its ROWNUM
+    # rewritten like any other SELECT (audit 2026-07-08, D3/D4 class).
+    if isinstance(expr, exp.In):
+        converted_in = _convert_in(expr)
+        if converted_in is not None:
+            return converted_in
     # EXISTS is a Func in sqlglot; convert its subquery to a SubqueryExpression
     # so it emits as SQL. Otherwise _convert_function keeps the raw SelectStatement
     # as an argument and the emitter leaks its Python repr into the output.
@@ -395,9 +418,10 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     # JOINs
     joins = tuple(_convert_join(j) for j in (expr.args.get("joins") or []))
 
-    # WHERE
+    # WHERE — the direct arg, like FROM: find() would descend into a derived
+    # table in FROM and duplicate ITS where onto this (outer) SELECT.
     where = None
-    where_expr = expr.find(exp.Where)
+    where_expr = expr.args.get("where")
     if where_expr:
         where = convert_expression(where_expr.this)
 
@@ -408,9 +432,9 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
         for g in (group_by_expr.expressions if group_by_expr else [])
     )
 
-    # HAVING
+    # HAVING — direct arg, for the same reason as WHERE.
     having = None
-    having_expr = expr.find(exp.Having)
+    having_expr = expr.args.get("having")
     if having_expr:
         having = convert_expression(having_expr.this)
 
@@ -940,6 +964,33 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
     return FunctionCall(name=name, args=tuple(args))
 
 
+def _convert_in(expr: exp.In) -> ASTNode | None:
+    """Convert ``x IN (subquery)`` / ``x IN (a, b, …)`` to a BinaryOp.
+
+    Returns None for the exotic forms (UNNEST, field access) so the caller
+    falls through to the RawSQL fallback.
+    """
+    left = convert_expression(expr.this)
+    query = expr.args.get("query")
+    if isinstance(query, exp.Subquery) and isinstance(
+        query.this, (exp.Select, exp.SetOperation)
+    ):
+        return BinaryOp(
+            operator=BinaryOperator.IN,
+            left=left,
+            right=SubqueryExpression(query=_convert_select(query.this)),
+        )
+    if expr.expressions:
+        return BinaryOp(
+            operator=BinaryOperator.IN,
+            left=left,
+            right=ExpressionList(
+                items=tuple(convert_expression(e) for e in expr.expressions)
+            ),
+        )
+    return None
+
+
 def _convert_binary(expr: exp.Binary) -> ASTNode:
     """Convert a binary operation.
 
@@ -1129,11 +1180,22 @@ def _convert_window(expr: exp.Window) -> WindowFunction:
 
 
 def _convert_ordered(expr: exp.Ordered) -> OrderByItem:
-    """Convert an ORDER BY item."""
+    """Convert an ORDER BY item.
+
+    sqlglot records the *source* NULL-ordering semantics in ``nulls_first``
+    (T-SQL/MySQL sort NULLs low, PostgreSQL/Oracle high), so carrying it lets
+    the emitter preserve the source's row order on targets whose default
+    differs.
+    """
     inner = convert_expression(expr.this)
     desc = expr.args.get("desc")
     direction = OrderDirection.DESC if desc else OrderDirection.ASC
-    return OrderByItem(expression=inner, direction=direction)
+    nulls_first = expr.args.get("nulls_first")
+    return OrderByItem(
+        expression=inner,
+        direction=direction,
+        nulls_first=nulls_first if isinstance(nulls_first, bool) else None,
+    )
 
 
 def _convert_cte(expr: exp.CTE) -> CTEDefinition:

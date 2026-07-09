@@ -66,6 +66,7 @@ from unique.core.mappings import (
     PROCEDURAL_FUNC_MAPS,
     PROCEDURAL_TYPE_MAPS,
 )
+from unique.core.sql_split import split_leading_trivia
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,41 @@ logger = logging.getLogger(__name__)
 _CHAR_CAST_TYPES = frozenset(
     {"VARCHAR2", "NVARCHAR2", "VARCHAR", "NVARCHAR", "CHAR", "NCHAR", "CLOB", "NCLOB"}
 )
+
+
+def _one_line_sql(sql: str) -> str:
+    """Collapse a statement's whitespace runs to single spaces, preserving
+    the content of string literals (a newline inside ``'…'`` is data)."""
+    out: list[str] = []
+    in_string = False
+    i = 0
+    n = len(sql)
+    while i < n:
+        ch = sql[i]
+        if in_string:
+            out.append(ch)
+            if ch == "'":
+                if i + 1 < n and sql[i + 1] == "'":
+                    out.append("'")
+                    i += 2
+                    continue
+                in_string = False
+            i += 1
+            continue
+        if ch == "'":
+            in_string = True
+            out.append(ch)
+            i += 1
+            continue
+        if ch in " \t\r\n":
+            while i < n and sql[i] in " \t\r\n":
+                i += 1
+            out.append(" ")
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out).strip()
+
 
 #: Populated by the per-engine modules via ``register_transformer``.
 _TRANSFORMER_REGISTRY: dict[str, type[ProceduralTransformer]] = {}
@@ -283,7 +319,9 @@ class ProceduralTransformer:
                     last_insert_idx = None
                     continue  # drop the assignment; the INSERT now captures it
             if isinstance(stmt, EmbeddedDML) and re.match(
-                r"(?is)\s*INSERT\s+INTO\b.*\bVALUES\b", stmt.sql
+                r"(?is)\s*INSERT\s+INTO\b.*\bVALUES\b",
+                # Match on the code: a leading comment must not hide the INSERT.
+                split_leading_trivia(stmt.sql)[1],
             ):
                 last_insert_idx = len(out)
             out.append(stmt)
@@ -1515,6 +1553,26 @@ class ProceduralTransformer:
             if self._in_trigger and self._rewrites_trigger_pseudotables():
                 sql = self._rewrite_trigger_pseudotables(sql)
             return EmbeddedDML(sql=sql + capture_suffix, dialect=self._target)
+        # Primary path (audit doc-04 P4 / M3): the same parse → transform →
+        # emit IR pipeline standalone DML uses, so both pipelines share ONE
+        # mapping engine. Raw sqlglot below remains only as a warned fallback
+        # for statements the IR cannot model yet.
+        ir_sql = self._ir_transpile_dml(sql)
+        if ir_sql is not None:
+            sql = ir_sql
+            if self._target == "oracle":
+                # A MySQL/PostgreSQL-source trigger's NEW./OLD. row reference
+                # must become Oracle's :NEW./:OLD. (as on the fallback path).
+                if self._in_trigger:
+                    sql = self._to_oracle_row_ref(sql)
+                sql = self._oracle_function_fixes(sql)
+            if self._in_trigger and self._rewrites_trigger_pseudotables():
+                sql = self._rewrite_trigger_pseudotables(sql)
+            return EmbeddedDML(sql=sql + capture_suffix, dialect=self._target)
+        self._warnings.append(
+            "Embedded DML not modeled by the IR converter; converted with raw "
+            "sqlglot (review the statement)"
+        )
         try:
             source_dialect = self._get_sqlglot_dialect(self._source)
             target_dialect = self._get_sqlglot_dialect(self._target)
@@ -1574,6 +1632,76 @@ class ProceduralTransformer:
         if self._target in ("oracle", "postgresql"):
             return base, f" RETURNING {cols} INTO {var}"
         return sql, ""
+
+    def _ir_transpile_dml(self, sql: str) -> str | None:
+        """Transpile one embedded DML statement through the shared IR pipeline.
+
+        This is the same ``parse_sql → Transformer → emit_node`` path that
+        standalone DML takes (audit doc-04 P4): one mapping engine, two
+        callers — so a mapping added for standalone DML applies inside routine
+        bodies by construction, and vice versa.
+
+        Returns None when the IR cannot faithfully model the statement (parse
+        failure, unmodeled construct, or emit error), so the caller falls back
+        to the warned raw-sqlglot path.
+        """
+        if self._source == self._target:
+            return None
+        from unique.core import converter as _conv
+        from unique.core.ast_nodes import CommentStatement as IRComment
+        from unique.core.ast_nodes import PassthroughSQL as IRPassthrough
+        from unique.core.ast_nodes import RawSQL as IRRawSQL
+        from unique.core.transformer import Transformer
+
+        # A function call in FROM/JOIN position (table-valued function) has
+        # curated per-target handling on the fallback path (JSON_TABLE
+        # rewrite, documented carrier); the IR does not model it.
+        if self._function_relation_names(sql, self._source):
+            return None
+        try:
+            nodes = _conv.parse_sql(sql, self._source)
+        except Exception as e:  # noqa: BLE001 - fall back to sqlglot path
+            logger.debug("IR parse failed for embedded DML: %s", e)
+            return None
+        statements = [n for n in nodes if not isinstance(n, IRComment)]
+        # An EmbeddedDML node holds exactly one statement; a RawSQL result is
+        # a parse failure and a PassthroughSQL an unmodeled construct — the IR
+        # would just re-run sqlglot on those, without the target fixups the
+        # fallback applies, so hand them back.
+        if len(statements) != 1 or any(
+            isinstance(n, (IRRawSQL, IRPassthrough)) for n in statements
+        ):
+            return None
+        try:
+            transformer = Transformer(self._source, self._target)
+            nodes = transformer.transform(nodes)
+            for warning in transformer.warnings:
+                self._warnings.append(warning.message)
+            # Comments first, the statement last: the procedural emitter
+            # appends the statement terminator to the *end* of this text, and
+            # a trailing ``-- comment`` line would comment the terminator out.
+            nodes.sort(key=lambda n: not isinstance(n, IRComment))
+            pieces = [_conv.emit_node(n, self._target) for n in nodes]
+        except Exception as e:  # noqa: BLE001 - fall back to sqlglot path
+            logger.debug("IR transform/emit failed for embedded DML: %s", e)
+            return None
+        # Short embedded DML reads best on one line inside a routine body (the
+        # emitter's multi-line layout is kept only for long statements — same
+        # heuristic as the previous sqlglot ``pretty=len > 200`` path).
+        if len(sql) <= 200:
+            pieces = [
+                p if p.lstrip().startswith(("--", "/*")) else _one_line_sql(p)
+                for p in pieces
+            ]
+        out = "\n".join(p for p in pieces if p)
+        if not out.strip():
+            return None
+        # The IR pipeline emits RawSQL fragments (an unconvertible expression
+        # deep in the tree) verbatim; a leaked carrier marker means the result
+        # is not a faithful conversion — use the fallback instead.
+        if "UNIQUE:" in out:
+            return None
+        return out
 
     def _transform_cross_table_update(self, sql: str) -> str | None:
         """Render a cross-table ``UPDATE ... FROM/JOIN`` via the IR emitter.
@@ -1715,13 +1843,18 @@ class ProceduralTransformer:
         table sources (``JSON_TABLE``) or are rewritten by a later pass into a
         valid one (``STRING_SPLIT`` -> ``JSON_TABLE``); those are allowed.
         """
+        allowed = {"JSON_TABLE", "STRING_SPLIT"}
+        return bool(self._function_relation_names(sql, "mysql") - allowed)
+
+    def _function_relation_names(self, sql: str, dialect: str) -> set[str]:
+        """Names of function calls used as a FROM/JOIN relation in *sql*
+        (table-valued functions), parsed in *dialect*. Empty set when there
+        are none or the text does not parse."""
         import sqlglot
         from sqlglot import exp
 
-        if "(" not in sql or not re.search(r"(?i)\bFROM\b", sql):
-            return False
-        # Functions MySQL accepts (or that we rewrite) in FROM position.
-        allowed = {"JSON_TABLE", "STRING_SPLIT"}
+        if "(" not in sql or not re.search(r"(?i)\bFROM\b|\bJOIN\b", sql):
+            return set()
 
         def func_name(node: object) -> str:
             if isinstance(node, exp.Anonymous):
@@ -1729,9 +1862,10 @@ class ProceduralTransformer:
             return type(node).__name__.upper()
 
         try:
-            trees = sqlglot.parse(sql, read="mysql")
+            trees = sqlglot.parse(sql, read=self._get_sqlglot_dialect(dialect))
         except Exception:
-            return False
+            return set()
+        names: set[str] = set()
         for tree in trees:
             if tree is None:
                 continue
@@ -1747,9 +1881,9 @@ class ProceduralTransformer:
                     inner = target.this
                     if isinstance(inner, (exp.Anonymous, exp.Func)):
                         candidate = inner
-                if candidate is not None and func_name(candidate) not in allowed:
-                    return True
-        return False
+                if candidate is not None:
+                    names.add(func_name(candidate))
+        return names
 
     def _mysql_clean_dml(self, sql: str) -> str:
         """Strip T-SQL leftovers sqlglot keeps but MySQL rejects.

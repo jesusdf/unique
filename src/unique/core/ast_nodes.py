@@ -233,6 +233,13 @@ class SubqueryExpression(ASTNode):
 
 
 @dataclass(frozen=True)
+class ExpressionList(ASTNode):
+    """A parenthesized expression list, e.g. the right side of ``x IN (a, b)``."""
+
+    items: tuple[ASTNode, ...] = ()
+
+
+@dataclass(frozen=True)
 class WindowSpec(ASTNode):
     """Window specification for window functions."""
 

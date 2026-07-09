@@ -452,34 +452,29 @@ class Transformer:
         return self._recurse(pass_, transformed)
 
     def _recurse(self, pass_: TransformPass, node: ASTNode) -> ASTNode:
-        """Recurse into composite node children.
+        """Recurse into every ASTNode-valued field of a composite node.
 
-        This handles the common case of nodes that contain other nodes
-        as fields. For simplicity, we handle the most important
-        composite types explicitly.
+        A pass must see a query (or expression) wherever it sits — an
+        INSERT's source SELECT, a scalar subquery in an UPDATE assignment,
+        an IN-subquery — not only at the top level. Recursion used to stop
+        at top-level SelectStatements, which is how ``FROM DUAL`` survived
+        inside an INSERT source query (audit 2026-07-08, D3).
         """
-        if isinstance(node, SelectStatement):
-            return self._recurse_select(pass_, node)
-        return node
+        changes: dict[str, object] = {}
+        for f in fields(node):
+            old = getattr(node, f.name)
+            new = self._recurse_value(pass_, old)
+            if new is not old:
+                changes[f.name] = new
+        return replace(node, **changes) if changes else node  # type: ignore[arg-type]
 
-    def _recurse_select(
-        self, pass_: TransformPass, node: SelectStatement
-    ) -> SelectStatement:
-        """Recurse into SelectStatement children."""
-        new_columns = tuple(self._apply_pass(pass_, col) for col in node.columns)
-        new_where = self._apply_pass(pass_, node.where) if node.where else None
-        return SelectStatement(
-            columns=new_columns,
-            from_clause=node.from_clause,
-            joins=node.joins,
-            where=new_where,
-            group_by=node.group_by,
-            having=node.having,
-            order_by=node.order_by,
-            limit=node.limit,
-            distinct=node.distinct,
-            ctes=node.ctes,
-            set_op=node.set_op,
-            set_query=node.set_query,
-            location=node.location,
-        )
+    def _recurse_value(self, pass_: TransformPass, value: object) -> object:
+        """Apply *pass_* to a field value: a node, or a (nested) tuple of them."""
+        if isinstance(value, ASTNode):
+            return self._apply_pass(pass_, value)
+        if isinstance(value, tuple):
+            items = tuple(self._recurse_value(pass_, v) for v in value)
+            if any(a is not b for a, b in zip(items, value, strict=True)):
+                return items
+            return value
+        return value

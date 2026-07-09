@@ -181,9 +181,14 @@ class TSqlTransformer(ProceduralTransformer):
     def _tsql_setbased_rewrite(self, sql: str, trigger_table: str) -> str:
         """Rewrite a row-level ``UPDATE <tgt> <alias> SET … WHERE <alias>.<key> =
         NEW.<fk>`` into a set-based T-SQL update scoped to ``inserted``."""
+        from unique.core.sql_split import split_leading_trivia
+
+        # Match on the code, re-attach the trivia: a leading comment must not
+        # hide the UPDATE (audit doc 04, P2).
+        trivia, sql = split_leading_trivia(sql)
         m = re.match(r"(?is)\s*UPDATE\s+([\w\[\]\"`.]+)(?:\s+AS)?\s+(\w+)\s+SET\b", sql)
         if not m:
-            return sql
+            return trivia + sql
         tgt, alias = m.group(1), m.group(2)
         bare = tgt.strip('[]"`').split(".")[-1]
         # Drop the target alias (T-SQL rejects ``UPDATE t AS a``); refer to the
@@ -212,7 +217,7 @@ class TSqlTransformer(ProceduralTransformer):
             sql = re.sub(
                 rf"(?i)\b(?:NEW|OLD)\s*\.\s*{re.escape(fk)}\b", f"{bare}.{key}", sql
             )
-        return sql
+        return trivia + sql
 
     def _tsql_pk(self, table: str) -> str:
         registry = IDENTITY_COLUMNS.get() or {}

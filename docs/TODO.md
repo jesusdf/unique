@@ -145,6 +145,22 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       →MySQL 97.8%; remaining test2 failures are all C1 (M3).
 - [ ] **M3 — P4 embedded DML through the IR converter**; delete the
       text-level rewriters (clears D3, D4, D8, A4 by construction).
+      *M3a landed:* `_transform_embedded_dml` now routes through the shared
+      `parse_sql → Transformer → emit_node` IR pipeline (raw sqlglot only as a
+      warned fallback), which cleared D3 and D4 and surfaced+fixed four IR
+      core bugs that also hit standalone DML: pass recursion stopped at
+      top-level SELECTs (generic dataclass-field walker now), `find(exp.Where/
+      Having)` duplicated a derived table's WHERE onto the outer SELECT,
+      dropped parens/precedence on emit (silent `AND`/`OR` re-association),
+      and `nulls_first` never carried (T-SQL DESC row order changed on PG).
+      `exp.In`/unstyled `exp.Convert` are now modeled (IN was a RawSQL
+      passthrough passes couldn't see; CONVERT now shares the CAST type maps).
+      Three head-anchored matchers made trivia-aware via the shared
+      `split_leading_trivia` (result-SELECT→refcursor, identity capture,
+      trigger set-based rewrite). Tests: `tests/integration/
+      test_embedded_dml_ir.py` (20). Pending: M3b (SELECT INTO / cursor /
+      condition raw-text tails → D8), M3c (delete the dead text rewriters),
+      sweep re-measure.
 - [ ] **M4 — Oracle-source bring-up** driven by the sweep frequency table
       (doc 03 §D backlog).
 
@@ -160,8 +176,12 @@ fix needs an **anonymized** regression fixture (never a private name).
       leading comments and unwrap `BEGIN…END`; likely clears N1 too.
 - [x] **A3 (fixed in M2): leading comment suppresses the `/` terminator** of the emitted
       Oracle guard block — every following statement is swallowed in SQL*Plus.
-- [ ] **D3: `INSERT … SELECT … FROM DUAL WHERE NOT EXISTS(…)` keeps
-      `FROM DUAL`** on PG/T-SQL (~6,000× in the real Oracle dump).
+- [x] **D3 (fixed in M3a): `INSERT … SELECT … FROM DUAL WHERE NOT EXISTS(…)` keeps
+      `FROM DUAL`** on PG/T-SQL (~6,000× in the real Oracle dump). Root cause
+      was transform-pass recursion stopping at top-level SELECTs; the generic
+      recursion + the embedded-DML IR route fixed both pipelines. Probes in
+      `test_embedded_dml_ir.py` (standalone + procedural, + scalar-subquery
+      and IN-subquery neighbors).
 - [ ] **D1: Oracle `EXEC proc` → `EXEC AS proc`** on every target (T-SQL
       impersonation syntax; PG/MySQL need `CALL`).
 - [ ] **D2: top-level `DECLARE…BEGIN…END` keeps its PL/SQL skeleton in
@@ -182,8 +202,10 @@ fix needs an **anonymized** regression fixture (never a private name).
 - [ ] **D9: `create or replace⏎PROCEDURE` (split lines + `-- <codegen>`
       header comment) desyncs the procedural parser**, spilling declaration
       fragments (`v_x AS VARCHAR2`, `CURSOR AS cur1`) as top-level batches.
-- [ ] **D4: `ROWNUM` untranslated inside procedural embedded DML** (the DML
-      pipeline maps it; the procedural one doesn't — asymmetry).
+- [x] **D4 (fixed in M3a): `ROWNUM` untranslated inside procedural embedded DML** (the DML
+      pipeline maps it; the procedural one doesn't — asymmetry). Gone by
+      construction: embedded DML now runs the same IR pipeline. Probe in
+      `test_embedded_dml_ir.py::test_procedural_rownum_translates_like_standalone`.
 - [x] **A4 (fixed in M2): `NEWID()` inside a guard becomes `UUID()` on Oracle** (procedural
       map not per-target; `SYS_GUID()` expected).
 - [x] **A5 (fixed in M2): catalog CREATE-guard loses idempotency on PG/MySQL** (bare

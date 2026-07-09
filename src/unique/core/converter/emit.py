@@ -30,6 +30,7 @@ from unique.core.ast_nodes import (
     CreateViewStatement,
     DeleteStatement,
     DropStatement,
+    ExpressionList,
     FunctionCall,
     InsertStatement,
     JoinClause,
@@ -76,6 +77,9 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         # T-SQL's precise datetime types -> MySQL's DATETIME.
         "DATETIME2": "DATETIME",
         "SMALLDATETIME": "DATETIME",
+        # MySQL CAST has no VARCHAR spelling — character casts use CHAR.
+        "VARCHAR": "CHAR",
+        "NVARCHAR": "CHAR",
     },
     "tsql": {"BOOLEAN": "BIT", "BOOL": "BIT"},
     # DATETIME/DATETIME2/SMALLDATETIME are T-SQL types; Oracle/PostgreSQL use
@@ -84,6 +88,8 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "DATETIME": "TIMESTAMP",
         "DATETIME2": "TIMESTAMP",
         "SMALLDATETIME": "TIMESTAMP",
+        "VARCHAR": "VARCHAR2",
+        "NVARCHAR": "NVARCHAR2",
     },
     "postgresql": {
         "DATETIME": "TIMESTAMP",
@@ -1181,12 +1187,21 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         mapped = _CAST_TYPE_MAP.get(dialect, {}).get(dtype.upper())
         if mapped:
             dtype = mapped
+            # A mapped character type keeps its length (Oracle rejects a
+            # lengthless character CAST, ORA-00906); the others (SIGNED,
+            # TIMESTAMP, BIT) take none.
+            if node.target_type.params and mapped in ("VARCHAR2", "NVARCHAR2", "CHAR"):
+                dtype += f"({', '.join(str(p) for p in node.target_type.params)})"
         elif node.target_type.params:
             dtype += f"({', '.join(str(p) for p in node.target_type.params)})"
         return f"CAST({inner} AS {dtype})"
 
     if isinstance(node, SubqueryExpression):
         return f"({_emit_select(node.query, dialect)})"
+
+    if isinstance(node, ExpressionList):
+        inner = ", ".join(_emit_expression(item, dialect) for item in node.items)
+        return f"({inner})"
 
     if isinstance(node, WindowFunction):
         return _emit_window(node, dialect)
@@ -1611,10 +1626,69 @@ _ORACLE_BITWISE = frozenset(
 )
 
 
+#: Binding strength of each binary operator (higher binds tighter). Used to
+#: re-parenthesize on emit: the converter drops explicit exp.Paren nodes, so
+#: ``a AND (b OR c)`` must regain its parens or it silently becomes
+#: ``(a AND b) OR c`` (audit 2026-07-08 D8 class: silent semantic corruption).
+_BIN_PRECEDENCE = {
+    BinaryOperator.OR: 1,
+    BinaryOperator.AND: 2,
+    BinaryOperator.EQ: 3,
+    BinaryOperator.NEQ: 3,
+    BinaryOperator.LT: 3,
+    BinaryOperator.GT: 3,
+    BinaryOperator.LTE: 3,
+    BinaryOperator.GTE: 3,
+    BinaryOperator.LIKE: 3,
+    BinaryOperator.ILIKE: 3,
+    BinaryOperator.IN: 3,
+    BinaryOperator.NOT_IN: 3,
+    BinaryOperator.BETWEEN: 3,
+    BinaryOperator.BIT_OR: 4,
+    BinaryOperator.BIT_XOR: 4,
+    BinaryOperator.BIT_AND: 4,
+    BinaryOperator.BIT_LSHIFT: 4,
+    BinaryOperator.BIT_RSHIFT: 4,
+    BinaryOperator.ADD: 5,
+    BinaryOperator.SUB: 5,
+    BinaryOperator.CONCAT: 5,
+    BinaryOperator.MUL: 6,
+    BinaryOperator.DIV: 6,
+    BinaryOperator.MOD: 6,
+}
+
+#: Operators where ``a op (b op c)`` differs from ``(a op b) op c`` — the
+#: right operand keeps its parens even at equal precedence.
+_NON_ASSOCIATIVE = frozenset(
+    {
+        BinaryOperator.SUB,
+        BinaryOperator.DIV,
+        BinaryOperator.MOD,
+        BinaryOperator.BIT_LSHIFT,
+        BinaryOperator.BIT_RSHIFT,
+    }
+)
+
+
+def _emit_operand(
+    child: ASTNode, parent: BinaryOperator, dialect: str, right: bool = False
+) -> str:
+    """Emit a binary operand, parenthesized when it binds weaker than *parent*."""
+    text = _emit_expression(child, dialect)
+    if isinstance(child, BinaryOp):
+        child_prec = _BIN_PRECEDENCE[child.operator]
+        parent_prec = _BIN_PRECEDENCE[parent]
+        if child_prec < parent_prec or (
+            right and child_prec == parent_prec and parent in _NON_ASSOCIATIVE
+        ):
+            return f"({text})"
+    return text
+
+
 def _emit_binary(node: BinaryOp, dialect: str) -> str:
     """Emit a binary operation."""
-    left = _emit_expression(node.left, dialect)
-    right = _emit_expression(node.right, dialect)
+    left = _emit_operand(node.left, node.operator, dialect)
+    right = _emit_operand(node.right, node.operator, dialect, right=True)
 
     op_map = {
         BinaryOperator.EQ: "=",
@@ -1680,6 +1754,13 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
 def _emit_unary(node: UnaryOp, dialect: str) -> str:
     """Emit a unary operation."""
     operand = _emit_expression(node.operand, dialect)
+    # NOT/negation bind tighter than any binary operator the operand could
+    # be — ``NOT a OR b`` would silently re-associate without the parens.
+    if isinstance(node.operand, BinaryOp) and node.operator in (
+        UnaryOperator.NOT,
+        UnaryOperator.NEGATIVE,
+    ):
+        operand = f"({operand})"
 
     if node.operator == UnaryOperator.NOT:
         return f"NOT {operand}"
@@ -1818,10 +1899,22 @@ def _emit_join(join: JoinClause, dialect: str, left_name: str | None = None) -> 
 
 
 def _emit_order_item(item: OrderByItem, dialect: str) -> str:
-    """Emit an ORDER BY item."""
+    """Emit an ORDER BY item.
+
+    PostgreSQL/Oracle default to NULLS LAST ascending and NULLS FIRST
+    descending; when the source's NULL ordering (carried in ``nulls_first``)
+    differs, it must be spelled out or the row order silently changes.
+    T-SQL/MySQL have no NULLS FIRST/LAST syntax, so it is omitted there
+    (same as a raw sqlglot transpile).
+    """
     expr = _emit_expression(item.expression, dialect)
     direction = "DESC" if item.direction == OrderDirection.DESC else "ASC"
-    return f"{expr} {direction}"
+    out = f"{expr} {direction}"
+    if item.nulls_first is not None and dialect in ("postgresql", "oracle"):
+        target_default_first = item.direction == OrderDirection.DESC
+        if item.nulls_first != target_default_first:
+            out += " NULLS FIRST" if item.nulls_first else " NULLS LAST"
+    return out
 
 
 def _emit_limit(limit: LimitClause, dialect: str) -> str:
