@@ -101,6 +101,58 @@ def _missing_go_issue(batch: object) -> SyntaxIssue | None:
     )
 
 
+_CREATE_OBJECT_KINDS = frozenset(
+    {
+        "TABLE",
+        "INDEX",
+        "UNIQUE",
+        "CLUSTERED",
+        "NONCLUSTERED",
+        "VIEW",
+        "PROCEDURE",
+        "PROC",
+        "FUNCTION",
+        "TRIGGER",
+        "SEQUENCE",
+        "SCHEMA",
+        "SYNONYM",
+        "TYPE",
+        "DATABASE",
+        "USER",
+        "ROLE",
+        "RULE",
+        "EXTENSION",
+        "DOMAIN",
+        "AGGREGATE",
+        "OPERATOR",
+        "COLLATION",
+        "PUBLICATION",
+        "SUBSCRIPTION",
+        "TABLESPACE",
+        "MATERIALIZED",
+        "TEMP",
+        "TEMPORARY",
+        "GLOBAL",
+        "LOCAL",
+        "PUBLIC",
+        "EVENT",
+        "SERVER",
+        "PACKAGE",
+        "LIBRARY",
+        "DIRECTORY",
+        "PROFILE",
+        "CONTEXT",
+        "CAST",
+        "LANGUAGE",
+        "POLICY",
+        "STATISTICS",
+        "FULLTEXT",
+        "SPATIAL",
+        "DEFINER",
+    }
+)
+
+
 def validate_source(sql: str, dialect: str) -> list[SyntaxIssue]:
     """Return the syntax errors in *sql* (parsed as *dialect*), per ``GO`` batch,
     with source line numbers.
@@ -164,8 +216,16 @@ def validate_source(sql: str, dialect: str) -> list[SyntaxIssue]:
             )
         else:
             # sqlglot is lenient: a bare token ("asdfx") parses to a Column, a
-            # number to a Literal — neither is a statement. Flag it as invalid.
-            bare = (exp.Column, exp.Identifier, exp.Literal, exp.Boolean, exp.Null)
+            # number to a Literal, and "banana banana" to an Alias — none is a
+            # statement. Flag them as invalid (audit 2026-07-08, N3).
+            bare = (
+                exp.Column,
+                exp.Identifier,
+                exp.Literal,
+                exp.Boolean,
+                exp.Null,
+                exp.Alias,
+            )
             if any(isinstance(stmt, bare) for stmt in parsed if stmt is not None):
                 first = next((ln for ln in batch.sql.splitlines() if ln.strip()), "")
                 issues.append(
@@ -176,4 +236,28 @@ def validate_source(sql: str, dialect: str) -> list[SyntaxIssue]:
                         snippet=first.strip()[:80],
                     )
                 )
+            # A CREATE that fell back to an opaque Command has an object kind
+            # sqlglot did not recognize — a typo like "CREATE TALBE" validates
+            # clean otherwise (N3). Real unmodeled kinds (SYNONYM, RULE, …)
+            # are allowlisted.
+            for stmt in parsed:
+                if not isinstance(stmt, exp.Command):
+                    continue
+                if str(stmt.this).upper() != "CREATE":
+                    continue
+                rest_node = stmt.expression
+                rest = str(
+                    getattr(rest_node, "this", rest_node) if rest_node else ""
+                ).strip()
+                m = re.match(r"(?i)(?:OR\s+(?:REPLACE|ALTER)\s+)?([A-Za-z_]+)", rest)
+                kind = (m.group(1) if m else "").upper()
+                if kind and kind not in _CREATE_OBJECT_KINDS:
+                    issues.append(
+                        SyntaxIssue(
+                            line=batch.line_offset + 1,
+                            column=0,
+                            message=f"unrecognized CREATE object kind '{kind}'",
+                            snippet=rest[:80],
+                        )
+                    )
     return issues

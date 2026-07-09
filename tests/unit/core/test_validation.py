@@ -78,3 +78,24 @@ class TestValidateSource:
         # heuristic must see through the (unclosed-in-slice) comment.
         sql = "/*\nSELECT 1\nCREATE PROCEDURE p AS BEGIN SELECT 1 END\n*/\nSELECT 2"
         assert validate_source(sql, "tsql") == []
+
+
+class TestBareAndTypoStatements:
+    """N3: lenient parses that are not statements must be flagged."""
+
+    def test_bare_alias_is_flagged(self) -> None:
+        issues = validate_source("banana banana", "tsql")
+        assert issues and "not a valid SQL statement" in issues[0].message
+
+    def test_create_typo_kind_is_flagged(self) -> None:
+        issues = validate_source("CREATE TALBE t (id INT)", "tsql")
+        assert issues and "TALBE" in issues[0].message
+
+    def test_unmodeled_but_real_kinds_stay_clean(self) -> None:
+        for sql in (
+            "CREATE SYNONYM s FOR t",
+            "CREATE TABLE t (id INT)",
+            "GRANT SELECT ON t TO u",
+            "SET NOCOUNT ON",
+        ):
+            assert not validate_source(sql, "tsql"), sql

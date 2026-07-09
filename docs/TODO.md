@@ -77,13 +77,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       tail (unbalanced quote incl.) as executable output. Probes in
       `test_embedded_dml_ir.py` + `test_batch_splitter.py`; re-audit: 0
       losses on all 9 fixture×target pairs; test.sql→PG back at 100.0%.
-- [ ] **N3: `validate_source` false negatives → silent garbage.**
-      `banana banana` (parses as `exp.Alias`) and `CREATE TALBE t (id INT)`
-      (`Command` fallback) validate clean on every dialect; the first then
-      transpiles to `banana AS banana;` with no warning. Extend the
-      bare-statement check (validation.py:168) to alias/expression-only
-      statements and unknown-verb Commands; warn when a batch parses to a bare
-      expression.
+- [x] **N3 (fixed 2026-07-10): `validate_source` false negatives → silent
+      garbage.** A bare top-level `exp.Alias` (`banana banana`) is now
+      flagged like the other non-statements, and a `CREATE` that fell back
+      to an opaque Command is checked against a known object-kind allowlist
+      (`CREATE TALBE` → "unrecognized CREATE object kind"; real unmodeled
+      kinds like SYNONYM stay clean). Transpile-side, the parse-RAISE change
+      (2026-07-09) already degrades such fragments to carriers. Tests:
+      `TestBareAndTypoStatements`.
 - [x] **N5 (fixed 2026-07-09): false-positive warning on a successful guard
       round-trip** — the blanket T-SQL FOR-loop warning is gone; degraded
       paths carry `-- UNIQUE:` markers that the reconciliation surfaces
