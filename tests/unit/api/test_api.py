@@ -575,3 +575,23 @@ class TestDbConnectionBuilderUI:
             assert (f'id="{element_id}"' in template) == (
                 f'id="{element_id}"' in static
             ), f"template/static drift on #{element_id} — rerun web/build.py"
+
+
+class TestValidateDetectSizeCap:
+    """N6: /validate and /detect enforce the same size cap as /transpile."""
+
+    def test_validate_rejects_oversized_sql(self) -> None:
+        import unique.api.app as app_module
+
+        big = "SELECT 1;" * (app_module.MAX_SQL_BYTES // 9 + 2)
+        client = TestClient(app)
+        resp = client.post("/api/v1/validate", json={"sql": big, "dialect": "tsql"})
+        assert resp.status_code == 422
+
+    def test_detect_rejects_oversized_sql(self) -> None:
+        import unique.api.app as app_module
+
+        big = "SELECT 1;" * (app_module.MAX_SQL_BYTES // 9 + 2)
+        client = TestClient(app)
+        resp = client.post("/api/v1/detect", json={"sql": big})
+        assert resp.status_code == 422

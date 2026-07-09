@@ -215,7 +215,11 @@ class TranspileResponse(BaseModel):
 class ValidateRequest(BaseModel):
     """Request body for the validate endpoint."""
 
-    sql: str = Field(..., description="SQL text to validate.")
+    sql: str = Field(
+        ...,
+        description="SQL text to validate.",
+        max_length=MAX_SQL_BYTES,
+    )
     dialect: str = Field(..., description="Dialect to validate against.")
 
 
@@ -373,7 +377,11 @@ def get_info() -> InfoResponse:
 class DetectRequest(BaseModel):
     """Request body for the detect endpoint."""
 
-    sql: str = Field(..., description="SQL text whose dialect to detect.")
+    sql: str = Field(
+        ...,
+        description="SQL text whose dialect to detect.",
+        max_length=MAX_SQL_BYTES,
+    )
 
 
 class DetectResponse(BaseModel):

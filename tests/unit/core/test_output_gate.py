@@ -161,3 +161,31 @@ class TestWarningAggregation:
         matching = [w for w in result.warnings if "SET NOEXEC OFF" in w.message]
         assert len(matching) == 1
         assert "x1" not in matching[0].message
+
+
+class TestUnsupportedDeduplication:
+    """N8: one construct must not register near-duplicate unsupported
+    entries (explicit entry + carrier-derived one)."""
+
+    def test_create_schema_registers_one_entry_per_statement(self) -> None:
+        result = Transpiler().transpile(
+            "CREATE SCHEMA app1;\nGO\nCREATE SCHEMA app2;\nGO", "tsql", "oracle"
+        )
+        app1 = [u for u in result.unsupported if "app1" in u]
+        app2 = [u for u in result.unsupported if "app2" in u]
+        assert len(app1) == 1 and len(app2) == 1, result.unsupported
+
+
+class TestNoFalseGuardWarning:
+    """N5: a guard FOR-loop that converts cleanly must not warn."""
+
+    def test_converted_guard_has_no_warnings(self) -> None:
+        src = (
+            "BEGIN FOR unique_guard IN (SELECT 1 FROM DUAL WHERE NOT EXISTS (\n"
+            "      SELECT 1 FROM cfg WHERE k = 'x')) LOOP\n"
+            "    INSERT INTO cfg (k, v) VALUES ('x', 1);\n"
+            "  END LOOP; END;\n/"
+        )
+        result = Transpiler().transpile(src, "oracle", "tsql")
+        assert "IF (NOT EXISTS" in result.sql
+        assert not result.warnings, [w.message for w in result.warnings]

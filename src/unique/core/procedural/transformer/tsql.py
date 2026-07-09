@@ -258,11 +258,11 @@ class TSqlTransformer(ProceduralTransformer):
         # T-SQL keeps inserted/deleted pseudo-tables as-is.
         return False
 
-    def _warn_for_loop_unsupported(self) -> None:
-        self._warnings.append(
-            "FOR loop has no direct T-SQL equivalent. "
-            "Manual conversion to WHILE loop required."
-        )
+    # No blanket FOR-loop warning (audit N5): a guard FOR-loop converts to a
+    # clean IF and a resolvable cursor loop expands completely — a warning on
+    # a successful conversion is a bug. The degraded paths carry their own
+    # ``-- UNIQUE:`` markers, which the carrier reconciliation turns into
+    # warnings exactly when they fire.
 
     def _transform_loop(self, node: LoopStatement) -> ASTNode:
         # T-SQL has no bare LOOP; express it as WHILE 1=1.

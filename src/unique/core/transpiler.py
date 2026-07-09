@@ -1013,7 +1013,12 @@ class Transpiler:
                                 existing.append(frag)
                     if is_comment:
                         for frag in frags:
-                            if frag not in unsupported_seen:
+                            if frag not in unsupported_seen and not _warning_covers(
+                                frag, all_unsupported
+                            ):
+                                # The same construct often registers an explicit
+                                # unsupported entry AND leaves a carrier; keep
+                                # one (audit 2026-07-08, N8).
                                 unsupported_seen.add(frag)
                                 all_unsupported.append(frag)
 
