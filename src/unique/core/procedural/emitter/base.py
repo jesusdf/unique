@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable
+from dataclasses import fields as dataclass_fields
 from dataclasses import replace
 
 from unique.core.ast_nodes import (
@@ -361,6 +362,46 @@ class ProceduralEmitter:
                     hoist_declare(sub)
             else:
                 body_stmts.append(stmt)
+
+        # Declarations NESTED in control-flow bodies (a DECLARE inside an IF)
+        # are invalid outside T-SQL: hoist the bare declaration to the section
+        # and leave the initializer as an assignment at its original,
+        # conditional position (audit C1 residue, 2026-07-10).
+        seen = {getattr(d, "name", None) for d in declarations}
+
+        def pull_nested(node: ASTNode) -> ASTNode | None:
+            if isinstance(node, DeclareStatement):
+                if node.name not in seen:
+                    seen.add(node.name)
+                    declarations.append(replace(node, default=None))
+                if node.default is not None:
+                    return AssignmentStatement(target=node.name, value=node.default)
+                return None
+            if isinstance(node, CursorDeclaration):
+                if node.name not in seen:
+                    seen.add(node.name)
+                    declarations.append(node)
+                return None
+            changes: dict[str, object] = {}
+            for f in dataclass_fields(node):
+                val = getattr(node, f.name)
+                if (
+                    isinstance(val, tuple)
+                    and val
+                    and all(isinstance(x, ASTNode) for x in val)
+                ):
+                    new_items = tuple(
+                        y for x in val if (y := pull_nested(x)) is not None
+                    )
+                    if new_items != val:
+                        if not new_items:
+                            # A body that held only declarations must not
+                            # collapse to an empty (invalid) block.
+                            new_items = (NullStatement(),)
+                        changes[f.name] = new_items
+            return replace(node, **changes) if changes else node
+
+        body_stmts = [y for x in body_stmts if (y := pull_nested(x)) is not None]
         return declarations, body_stmts
 
     def _emit_procedure(self, node: CreateProcedureStatement) -> str:

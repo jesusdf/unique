@@ -2767,8 +2767,16 @@ class ProceduralTransformer:
                 return (out + f", {start})") if start else (out + ")")
             # postgresql
             if start:
-                # STRPOS has no start arg; fall back to POSITION + offset note.
-                return f"STRPOS({haystack}, {needle})"
+                # STRPOS has no start argument: search the substring from
+                # ``start`` and re-offset the hit (0 stays 0 = not found).
+                # Dropping the start silently returned the wrong position.
+                inner = f"STRPOS(SUBSTRING({haystack} FROM {start}), {needle})"
+                # Spelled with '-' only: the later string-concat text pass
+                # rewrites a '+' near a string literal into '||'.
+                return (
+                    f"(CASE WHEN {inner} = 0 THEN 0 "
+                    f"ELSE {inner} - (1 - {start}) END)"
+                )
             return f"STRPOS({haystack}, {needle})"
 
         return self._rewrite_calls(sql, source_fn, build)

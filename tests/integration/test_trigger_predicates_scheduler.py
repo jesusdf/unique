@@ -205,3 +205,38 @@ def test_pipe_concat_becomes_plus_in_tsql_assignments() -> None:
     r = _t(src, "oracle", "tsql")
     up = " ".join(r.sql.split())
     assert "'a||b: ' + @v + ' done'" in up, r.sql  # literal '||' preserved
+
+
+def test_nested_declare_hoists_with_conditional_assignment() -> None:
+    # A DECLARE inside an IF body is invalid outside T-SQL; the declaration
+    # hoists bare and the initializer stays a conditional assignment.
+    src = (
+        "CREATE FUNCTION dbo.f2(@s NVARCHAR(100)) RETURNS INT AS BEGIN\n"
+        "  IF @s = N'x'\n  BEGIN\n"
+        "    DECLARE @e INT = LEN(@s)\n    RETURN @e\n  END\n"
+        "  RETURN 0\nEND"
+    )
+    for target, assign in (("postgresql", "v_e :="), ("mysql", "SET v_e =")):
+        out = Transpiler().transpile(src, "tsql", target).sql
+        up = " ".join(out.split())
+        body = up.split("BEGIN", 1)[1]
+        assert (
+            "DECLARE v_e" not in body
+            or target != "mysql"
+            or up.index("DECLARE v_e") < up.index("IF ")
+        ), out
+        assert assign in up, out
+
+
+def test_three_arg_charindex_keeps_start_on_postgresql() -> None:
+    # CHARINDEX(needle, s, start) -> STRPOS has no start argument; dropping
+    # it silently returned the wrong position.
+    src = (
+        "CREATE FUNCTION dbo.f3(@s NVARCHAR(100)) RETURNS INT AS BEGIN\n"
+        "  DECLARE @p INT = CHARINDEX(N'x', @s, 5)\n  RETURN @p\nEND"
+    )
+    out = Transpiler().transpile(src, "tsql", "postgresql").sql
+    up = " ".join(out.split())
+    assert "SUBSTRING(v_s FROM 5)" in up, out
+    assert re.search(r"WHEN STRPOS\(.*\) = 0 THEN 0", up), out
+    assert "||" not in up, out
