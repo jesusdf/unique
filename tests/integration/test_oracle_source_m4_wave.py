@@ -443,6 +443,60 @@ class TestWave11Classes:
         assert "EXECUTE COALESCE((SELECT format(" in pg, pg
 
 
+class TestWave12And13Classes:
+    def test_exec_expression_argument_hoisted(self) -> None:
+        # T-SQL EXEC arguments accept only literals/variables; a GETDATE()
+        # value (Oracle SYSDATE) made whole seeding batches invalid.
+        src = "BEGIN\n    SVP_MED_INS(V_ID=>1, V_fechamod=>SYSDATE);\nEND;\n/"
+        out = _flat(_t(src, "tsql"))
+        assert re.search(r"DECLARE @uq_now\d+ DATETIME = GETDATE\(\);", out), out
+        assert re.search(r"@V_fechamod = @uq_now\d+", out), out
+        assert "= GETDATE()" not in out.split("EXEC", 1)[1], out
+
+    def test_named_association_lhs_not_renamed(self) -> None:
+        # A local named like the callee's parameter turned 'V_ID => V_ID'
+        # into '@id => @id' and the T-SQL spelling into '@@id'.
+        src = (
+            "DECLARE\n   V_ID NUMBER(9,0);\nBEGIN\n    V_ID := -1;\n"
+            "    SVP_MED_INS(V_ID=>V_ID, V_tipo=>'LEU');\nEND;\n/"
+        )
+        out = _flat(_t(src, "tsql"))
+        assert "@V_ID = @id" in out, out
+        assert "@@" not in out, out
+
+    def test_rownum_derived_table_gets_alias(self) -> None:
+        src = (
+            "create or replace PROCEDURE p_ev(p_t IN VARCHAR2, p_o OUT NUMBER)"
+            " AS\n    v_s NUMBER(1);\nBEGIN\n"
+            "    SELECT st INTO v_s FROM (\n"
+            "        SELECT st FROM f_ev WHERE tipo = p_t ORDER BY idev DESC\n"
+            "    ) WHERE ROWNUM = 1;\n    p_o := v_s;\nEND;\n/"
+        )
+        out = _flat(_t(src, "tsql"))
+        assert re.search(r"ORDER BY idev DESC \) AS uq_top;", out), out
+
+    def test_derived_table_alias_synthesized(self) -> None:
+        # Only Oracle allows an alias-less derived table.
+        src = (
+            "INSERT INTO d_conf (a, b)\n"
+            "SELECT SEQ_d_conf.NEXTVAL, idc\n"
+            "FROM (select idc from d_conf group by idc order by idc);"
+        )
+        ts = _flat(_t(src, "tsql"))
+        assert ") uq_dt" in ts, ts
+        # ORDER BY without TOP drops inside the derived table on T-SQL.
+        assert "ORDER BY" not in ts.upper(), ts
+        pg = _flat(_t(src, "postgresql"))
+        assert ") uq_dt" in pg, pg
+        my = _flat(_t(src, "mysql"))
+        assert ") uq_dt" in my, my
+
+    def test_sequence_refs_per_target(self) -> None:
+        src = "INSERT INTO t_x (id) SELECT seq_x.NEXTVAL FROM t_y;"
+        assert "NEXT VALUE FOR seq_x" in _t(src, "tsql")
+        assert "nextval('seq_x')" in _t(src, "postgresql")
+
+
 class TestDynamicSqlAndRowcount:
     def test_constant_execute_immediate_unwraps(self) -> None:
         # PostgreSQL has no top-level EXECUTE '<sql>'; a constant dynamic
