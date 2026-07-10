@@ -60,6 +60,9 @@ services:
     # cache until the kernel OOM-kills it (exit 137, seen 2026-07-10 during
     # the 35k-statement validity sweep — even running alone on a 8 GB host).
     mem_limit: 2g
+    # SQL Server needs >10s to shut down cleanly; without this the compose
+    # stop SIGKILLs it after the default grace (cosmetic exit 137).
+    stop_grace_period: 30s
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "Unique_Strong!Pass1"
