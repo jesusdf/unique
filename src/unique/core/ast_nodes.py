@@ -566,10 +566,16 @@ class AnonymousBlock(ASTNode):
 
 @dataclass(frozen=True)
 class TryCatchBlock(ASTNode):
-    """TRY ... CATCH / EXCEPTION block."""
+    """TRY ... CATCH / EXCEPTION block.
+
+    ``catch_kind`` records the folded PL/SQL handler class when it is more
+    specific than "any error": MySQL declares ``NOT FOUND`` instead of
+    ``SQLEXCEPTION`` for a NO_DATA_FOUND-only handler.
+    """
 
     try_body: tuple[ASTNode, ...] = ()
     catch_body: tuple[ASTNode, ...] = ()
+    catch_kind: str = ""
 
 
 @dataclass(frozen=True)

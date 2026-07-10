@@ -56,6 +56,16 @@ class PostgresTransformer(ProceduralTransformer):
 
     def _fix_raw_sql_target(self, sql: str) -> str:
         sql = self._pg_string_concat(sql)
+        if self._in_trigger:
+            # PL/SQL trigger event predicates: plpgsql reads TG_OP.
+            sql = re.sub(
+                r"(?i)\bUPDATING\s*\(\s*'(\w+)'\s*\)",
+                r"(TG_OP = 'UPDATE' AND NEW.\1 IS DISTINCT FROM OLD.\1)",
+                sql,
+            )
+            sql = re.sub(r"(?i)\bINSERTING\b", "(TG_OP = 'INSERT')", sql)
+            sql = re.sub(r"(?i)\bUPDATING\b", "(TG_OP = 'UPDATE')", sql)
+            sql = re.sub(r"(?i)\bDELETING\b", "(TG_OP = 'DELETE')", sql)
         # T-SQL ERROR_MESSAGE() inside a CATCH -> SQLERRM in the EXCEPTION
         # handler (parameterless; the empty parens would not parse).
         sql = re.sub(r"(?i)\bERROR_MESSAGE\s*\(\s*\)", "SQLERRM", sql)

@@ -278,8 +278,34 @@ class ProceduralTransformer:
             return handler(node)
         return node
 
+    def _folds_exception_scope(self) -> bool:
+        """Whether a PL/SQL EXCEPTION section must physically wrap its block's
+        statements on this target (T-SQL TRY/CATCH, MySQL DECLARE ... HANDLER
+        blocks); Oracle/PostgreSQL keep the trailing EXCEPTION form."""
+        return False
+
+    @staticmethod
+    def _fold_exception_scope(stmts: tuple[ASTNode, ...]) -> tuple[ASTNode, ...]:
+        """Fold an EXCEPTION section's preceding siblings into a TryCatchBlock
+        (the handlers protect the whole block in PL/SQL)."""
+        for i, stmt in enumerate(stmts):
+            if isinstance(stmt, ExceptionBlock):
+                handlers_body: list[ASTNode] = []
+                for handler in stmt.handlers:
+                    handlers_body.extend(handler.body)
+                names = {h.exception_name.upper() for h in stmt.handlers}
+                folded = TryCatchBlock(
+                    try_body=tuple(stmts[:i]),
+                    catch_body=tuple(handlers_body),
+                    catch_kind=("NO_DATA_FOUND" if names == {"NO_DATA_FOUND"} else ""),
+                )
+                return (folded, *stmts[i + 1 :])
+        return stmts
+
     def _transform_body(self, stmts: tuple[ASTNode, ...]) -> tuple[ASTNode, ...]:
         """Transform a sequence of body statements."""
+        if self._folds_exception_scope():
+            stmts = self._fold_exception_scope(stmts)
         result: list[ASTNode] = []
         for stmt in stmts:
             # A dropped dialect-specific SET option is documented from its
@@ -1244,7 +1270,9 @@ class ProceduralTransformer:
         the emitter); Oracle overrides to a PL/SQL EXCEPTION block."""
         new_try = self._transform_body(node.try_body)
         new_catch = self._transform_body(node.catch_body)
-        return TryCatchBlock(try_body=new_try, catch_body=new_catch)
+        return TryCatchBlock(
+            try_body=new_try, catch_body=new_catch, catch_kind=node.catch_kind
+        )
 
     def _transform_exception_block(self, node: ExceptionBlock) -> ASTNode:
         """Default keeps an EXCEPTION block (Oracle/PostgreSQL); T-SQL overrides

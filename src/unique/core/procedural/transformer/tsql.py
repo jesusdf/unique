@@ -518,25 +518,8 @@ class TSqlTransformer(ProceduralTransformer):
     def _assignment_becomes_set(self) -> bool:
         return True
 
-    def _transform_body(self, stmts: tuple[ASTNode, ...]) -> tuple[ASTNode, ...]:
-        return super()._transform_body(self._fold_exception_scope(stmts))
-
-    @staticmethod
-    def _fold_exception_scope(stmts: tuple[ASTNode, ...]) -> tuple[ASTNode, ...]:
-        """A PL/SQL EXCEPTION section protects every statement of its block;
-        T-SQL's TRY/CATCH must physically contain them. Fold the preceding
-        siblings into the TRY body (an empty BEGIN TRY is a syntax error)."""
-        for i, stmt in enumerate(stmts):
-            if isinstance(stmt, ExceptionBlock):
-                handlers_body: list[ASTNode] = []
-                for handler in stmt.handlers:
-                    handlers_body.extend(handler.body)
-                folded = TryCatchBlock(
-                    try_body=tuple(stmts[:i]),
-                    catch_body=tuple(handlers_body),
-                )
-                return (folded, *stmts[i + 1 :])
-        return stmts
+    def _folds_exception_scope(self) -> bool:
+        return True
 
     def _transform_exception_block(self, node: ExceptionBlock) -> ASTNode:
         # Reached only when the EXCEPTION section had no preceding siblings

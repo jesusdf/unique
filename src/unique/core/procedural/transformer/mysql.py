@@ -19,9 +19,11 @@ from unique.core.ast_nodes import (
     CursorDeclaration,
     DataType,
     DeclareStatement,
+    ExceptionBlock,
     RawSQL,
     SetVariableStatement,
     StatementList,
+    TryCatchBlock,
 )
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
@@ -65,6 +67,20 @@ class MySqlTransformer(ProceduralTransformer):
         if replaced is not None:
             return replaced
         return super()._transform_assignment(node)
+
+    def _folds_exception_scope(self) -> bool:
+        return True
+
+    def _transform_exception_block(self, node: ExceptionBlock) -> ASTNode:
+        # Reached only when the EXCEPTION section had no preceding siblings
+        # (see _fold_exception_scope): flatten to a handler-only block.
+        body: list[ASTNode] = []
+        for handler in node.handlers:
+            body.extend(handler.body)
+        return TryCatchBlock(
+            try_body=(),
+            catch_body=self._transform_body(tuple(body)),
+        )
 
     def _fetch_status_forms(self) -> tuple[str, str] | None:
         # MySQL signals cursor exhaustion via a NOT FOUND handler: lower the

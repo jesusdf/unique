@@ -618,6 +618,28 @@ class ProceduralParser:
             else:
                 self._match_keyword("STATEMENT")
 
+        # Oracle/PG row-condition clause: ``FOR EACH ROW WHEN (cond)``. The
+        # condition references NEW/OLD without the colon sigil. Model it as
+        # an IF wrapping the body — every target's existing trigger
+        # machinery (PG plain IF, MySQL IF ... THEN, the T-SQL set-based
+        # fold) then applies.
+        when_cond = ""
+        if self._current().is_keyword("WHEN"):
+            self._advance()
+            if self._match_type(TokenType.LPAREN):
+                parts: list[str] = []
+                depth = 1
+                while not self._at_end() and depth > 0:
+                    tok = self._advance()
+                    if tok.type == TokenType.LPAREN:
+                        depth += 1
+                    elif tok.type == TokenType.RPAREN:
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    parts.append(tok.value)
+                when_cond = " ".join(parts)
+
         # PostgreSQL delegates the body to a trigger function:
         # ``EXECUTE {FUNCTION|PROCEDURE} fn(args)``. Capture the function name;
         # the body lives in that separate CREATE FUNCTION. Other dialects inline
@@ -635,6 +657,13 @@ class ProceduralParser:
             self._match_type(TokenType.SEMICOLON)
         else:
             body = self._parse_routine_body(with_pg_header=False)
+        if when_cond and body:
+            body = [
+                IfStatement(
+                    condition=RawSQL(sql=when_cond, reason="trigger WHEN clause"),
+                    then_body=tuple(body),
+                )
+            ]
 
         return CreateTriggerStatement(
             name=name,

@@ -51,16 +51,46 @@ class MySqlEmitter(ProceduralEmitter):
         # shell outright).
         events = tuple(node.events) if node.events else ()
         if len(events) <= 1:
-            return super()._emit_trigger(node)
+            out = super()._emit_trigger(node)
+            return self._resolve_event_predicates(out, events[0] if events else "")
         parts = [
-            super()._emit_trigger(
-                dataclasses.replace(
-                    node, name=f"{node.name}_{ev[:3].lower()}", events=(ev,)
-                )
+            self._resolve_event_predicates(
+                super()._emit_trigger(
+                    dataclasses.replace(
+                        node, name=f"{node.name}_{ev[:3].lower()}", events=(ev,)
+                    )
+                ),
+                ev,
             )
             for ev in events
         ]
         return "\n\n".join(parts)
+
+    @staticmethod
+    def _resolve_event_predicates(sql: str, event: str) -> str:
+        """Resolve PL/SQL INSERTING/UPDATING/DELETING inside a (split,
+        single-event) MySQL trigger: the event is statically known, so the
+        predicates become constants — except ``UPDATING('col')`` in an
+        UPDATE trigger, which tests the column change null-safely."""
+        if not event or not re.search(r"(?i)\b(?:INSERTING|UPDATING|DELETING)\b", sql):
+            return sql
+        event = event.upper()
+        sql = re.sub(
+            r"(?i)\bUPDATING\s*\(\s*'(\w+)'\s*\)",
+            r"(NOT (NEW.\1 <=> OLD.\1))" if event == "UPDATE" else "(1 = 0)",
+            sql,
+        )
+        for pred, ev in (
+            ("INSERTING", "INSERT"),
+            ("UPDATING", "UPDATE"),
+            ("DELETING", "DELETE"),
+        ):
+            sql = re.sub(
+                rf"(?i)\b{pred}\b",
+                "(1 = 1)" if event == ev else "(1 = 0)",
+                sql,
+            )
+        return sql
 
     def _tvf_unsupported_note(self) -> str:
         return (
@@ -206,7 +236,10 @@ class MySqlEmitter(ProceduralEmitter):
         # protected (try) statements.
         lines = ["BEGIN"]
         self._indent_level += 1
-        lines.append(f"{self._indent()}DECLARE EXIT HANDLER FOR SQLEXCEPTION")
+        condition = (
+            "NOT FOUND" if node.catch_kind == "NO_DATA_FOUND" else "SQLEXCEPTION"
+        )
+        lines.append(f"{self._indent()}DECLARE EXIT HANDLER FOR {condition}")
         lines.append(f"{self._indent()}BEGIN")
         self._indent_level += 1
         lines.extend(self._emit_indented_stmts(node.catch_body))
