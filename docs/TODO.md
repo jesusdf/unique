@@ -479,9 +479,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         committing into this MIT repo) and written in the mysqltest DSL
         (`--source`, `if` blocks, per-connection commands) interleaved with
         the SQL, so it would need a real parser, not a curation pass.
-      - Next step: a `scripts/fetch_pg_corpus.py` (download + strip +
-        attribution header) feeding `validity_sweep.py --from postgresql`;
-        decide commit-vs-download-on-demand by size after curation.
+      - *Fetcher shipped 2026-07-11:* `scripts/fetch_pg_corpus.py` downloads
+        the 15-file portable core at a pinned tag (default `REL_17_5`),
+        strips psql meta-commands + COPY-stdin blocks, prepends the license
+        header, writes to the gitignored `fixtures-corpus/pg/`
+        (download-on-demand). Tests: `test_fetch_pg_corpus.py` (8).
+      - Next step: run `validity_sweep.py --from postgresql` over the
+        corpus (needs the tsql/mysql/oracle engines — sequence it with the
+        engine-at-a-time discipline) and open a PG-source baseline +
+        frequency table like M4's.
 
 ## 4. Packaging (P3)
 
