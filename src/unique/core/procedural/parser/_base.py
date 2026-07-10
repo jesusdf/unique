@@ -656,7 +656,7 @@ class ParserBase:
                         depth -= 1
                         if depth == 0:
                             break
-                    parts.append(tok.value)
+                    parts.append(self._flat_value(tok))
                 when_cond = " ".join(parts)
 
         # PostgreSQL delegates the body to a trigger function:
@@ -888,10 +888,10 @@ class ParserBase:
                 elif tok.type == TokenType.RPAREN:
                     depth -= 1
                     if depth == 0:
-                        cols.append(tok.value)
+                        cols.append(self._flat_value(tok))
                         self._advance()
                         break
-                cols.append(tok.value)
+                cols.append(self._flat_value(tok))
                 self._advance()
             return DataType(name="TABLE " + " ".join(cols))
 
@@ -1156,7 +1156,7 @@ class ParserBase:
                 if depth == 0:
                     self._advance()
                     break
-            arg_tokens.append(self._advance().value)
+            arg_tokens.append(self._flat_value(self._advance()))
         joined = " ".join(arg_tokens)
         joined = re.sub(r"\s+([,)])", r"\1", joined)
         return re.sub(r"\(\s+", "(", joined).strip()
@@ -1318,15 +1318,7 @@ class ParserBase:
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            # A line comment inside a captured expression would, once the
-            # multi-line expression is flattened to a single line, comment out
-            # everything after it (including the rest of the expression and the
-            # statement terminator). Convert it to a block comment so the text
-            # is preserved without swallowing the rest of the line.
-            if tok.type == TokenType.LINE_COMMENT:
-                parts.append(self._line_comment_to_block(tok.value))
-            else:
-                parts.append(tok.value)
+            parts.append(self._flat_value(tok))
             prev_line = tok.line
             first = False
             self._advance()
@@ -1345,6 +1337,19 @@ class ParserBase:
         # Avoid nested block-comment terminators.
         body = body.replace("*/", "* /")
         return f"/* {body} */" if body else "/* */"
+
+    def _flat_value(self, tok: Token) -> str:
+        """Token text safe for a capture that is later flattened to one line.
+
+        A line comment relies on its newline to terminate; once the capture
+        is ``" ".join``-ed the comment would swallow everything after it —
+        including the rest of the expression (``IF v --note`` lost
+        ``= 'U' THEN``). Comments are trivia: convert to an inline block
+        comment so the text is preserved without eating the line. Every
+        capture loop that flattens MUST append via this helper."""
+        if tok.type == TokenType.LINE_COMMENT:
+            return self._line_comment_to_block(tok.value)
+        return tok.value
 
     def _parse_expression_until_keyword(self, *keywords: str) -> ASTNode:
         """Capture tokens as raw SQL until a keyword, semicolon, or END.
@@ -1377,14 +1382,7 @@ class ParserBase:
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            # A line comment inside the (later flattened) expression would
-            # swallow everything after it — including the rest of the
-            # condition (``IF x --note`` lost ``= 'U' THEN``). Keep it as an
-            # inline block comment instead.
-            if tok.type == TokenType.LINE_COMMENT:
-                parts.append(self._line_comment_to_block(tok.value))
-            else:
-                parts.append(tok.value)
+            parts.append(self._flat_value(tok))
             self._advance()
             first = False
         return RawSQL(sql=" ".join(parts).strip(), reason="expression")
@@ -1406,10 +1404,7 @@ class ParserBase:
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            if tok.type == TokenType.LINE_COMMENT:
-                parts.append(self._line_comment_to_block(tok.value))
-            else:
-                parts.append(tok.value)
+            parts.append(self._flat_value(tok))
             self._advance()
         return RawSQL(sql=" ".join(parts).strip(), reason="bind argument")
 
@@ -1469,10 +1464,7 @@ class ParserBase:
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            if tok.type == TokenType.LINE_COMMENT:
-                parts.append(self._line_comment_to_block(tok.value))
-            else:
-                parts.append(tok.value)
+            parts.append(self._flat_value(tok))
             self._advance()
             first = False
         return RawSQL(sql=" ".join(parts).strip(), reason="default value")
@@ -1509,10 +1501,7 @@ class ParserBase:
                 if paren_depth == 0:
                     break
                 paren_depth -= 1
-            if tok.type == TokenType.LINE_COMMENT:
-                parts.append(self._line_comment_to_block(tok.value))
-            else:
-                parts.append(tok.value)
+            parts.append(self._flat_value(tok))
             self._advance()
         raw = " ".join(parts).strip()
         if raw.upper() == "NULL":
@@ -1553,10 +1542,7 @@ class ParserBase:
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            if tok.type == TokenType.LINE_COMMENT:
-                parts.append(self._line_comment_to_block(tok.value))
-            else:
-                parts.append(tok.value)
+            parts.append(self._flat_value(tok))
             self._advance()
             first = False
         return RawSQL(sql=" ".join(parts).strip(), reason="captured expression")
@@ -1667,20 +1653,7 @@ class ParserBase:
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
 
-            # The captured tokens are re-joined with spaces, losing newlines.
-            # A line comment (-- ...) relies on a newline to terminate, so
-            # without one it would swallow the rest of the statement. Convert
-            # it to an equivalent block comment so the surrounding SQL stays
-            # intact and the comment is still preserved in place.
-            if tok.type == TokenType.LINE_COMMENT:
-                body = tok.value[2:].strip()
-                parts.append(f"/* {body} */" if body else "/* */")
-                prev_tok = tok
-                self._advance()
-                first = False
-                continue
-
-            parts.append(tok.value)
+            parts.append(self._flat_value(tok))
             prev_tok = tok
             self._advance()
             first = False

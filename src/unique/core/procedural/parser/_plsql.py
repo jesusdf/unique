@@ -162,7 +162,7 @@ class PlsqlStatementsMixin(ParserBase):
             self._advance()
             parts: list[str] = []
             while not self._at_end() and self._current().type != TokenType.SEMICOLON:
-                parts.append(self._current().value)
+                parts.append(self._flat_value(self._current()))
                 self._advance()
             self._match_type(TokenType.SEMICOLON)
             return PragmaDeclaration(name=" ".join(parts))
@@ -359,7 +359,7 @@ class PlsqlStatementsMixin(ParserBase):
         # Selector (empty for the searched form: CASE WHEN cond THEN ...).
         selector_parts: list[str] = []
         while not self._at_end() and not self._current().is_keyword("WHEN"):
-            selector_parts.append(self._advance().value)
+            selector_parts.append(self._flat_value(self._advance()))
         selector = " ".join(selector_parts).strip()
 
         def parse_branch_body() -> tuple[ASTNode, ...]:
@@ -384,7 +384,7 @@ class PlsqlStatementsMixin(ParserBase):
         while self._match_keyword("WHEN"):
             cond_parts: list[str] = []
             while not self._at_end() and not self._current().is_keyword("THEN"):
-                cond_parts.append(self._advance().value)
+                cond_parts.append(self._flat_value(self._advance()))
             self._match_keyword("THEN")
             when_value = " ".join(cond_parts).strip()
             condition = f"{selector} = {when_value}" if selector else when_value
@@ -675,7 +675,7 @@ class PlsqlStatementsMixin(ParserBase):
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            select_parts.append(tok.value)
+            select_parts.append(self._flat_value(tok))
             self._advance()
 
         if not has_into:
@@ -700,7 +700,7 @@ class PlsqlStatementsMixin(ParserBase):
                         paren_depth2 += 1
                     elif tok.type == TokenType.RPAREN:
                         paren_depth2 -= 1
-                    rest_parts2.append(tok.value)
+                    rest_parts2.append(self._flat_value(tok))
                     self._advance()
                 rest_sql2 = " ".join(rest_parts2).strip()
                 from unique.core.ast_nodes import RawSQL as _RawSQL2
@@ -757,7 +757,7 @@ class PlsqlStatementsMixin(ParserBase):
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            rest_parts.append(tok.value)
+            rest_parts.append(self._flat_value(tok))
             self._advance()
 
         from unique.core.ast_nodes import RawSQL as _RawSQL

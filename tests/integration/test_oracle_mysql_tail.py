@@ -617,3 +617,39 @@ class TestPackageRefCursorType:
         result = Transpiler().transpile(self._SRC, "oracle", "mysql")
         assert "pkg_ret" not in result.sql, result.sql
         assert any("ref-cursor" in w.message for w in result.warnings), result.warnings
+
+
+class TestCommentInsideCaseStatement:
+    """The PL/SQL CASE *statement* → IF chain rewrite joins ``selector =
+    when_value`` onto one line; line comments captured between the CASE
+    selector and ``WHEN`` (or inside the WHEN value) swallowed the rest of
+    the built condition (``IF v --note = 'U' THEN``) — silent semantic
+    corruption on T-SQL (error 4145 live) and a parse error on PG/MySQL.
+    Same trivia class as TestCommentInsideIfCondition, CASE path."""
+
+    _SRC = (
+        "create or replace PROCEDURE p_cs(m_tipo IN VARCHAR2) AS\n"
+        "BEGIN\n"
+        "  CASE m_tipo\n"
+        "    --si es de urgencias\n"
+        "    --se calcula por el sub\n"
+        "    WHEN 'U' THEN\n"
+        "      INSERT INTO t_log (a) VALUES (1);\n"
+        "    WHEN 'C' --consultas\n"
+        "         THEN\n"
+        "      INSERT INTO t_log (a) VALUES (2);\n"
+        "  END CASE;\n"
+        "END;\n/"
+    )
+
+    def test_selector_comparison_survives_on_all_targets(self) -> None:
+        for target in ("mysql", "postgresql", "tsql", "oracle"):
+            out = _flat(_t(self._SRC, target))
+            assert "= 'U'" in out, (target, out)
+            assert "= 'C'" in out, (target, out)
+            assert not re.search(r"--[^\n]*= '[UC]'", out), (target, out)
+
+    def test_comment_text_is_preserved(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        assert "si es de urgencias" in out, out
+        assert "consultas" in out, out

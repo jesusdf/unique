@@ -418,7 +418,7 @@ class TsqlStatementsMixin(ParserBase):
                 depth += 1
             elif tok.type == TokenType.RPAREN:
                 depth -= 1
-            parts.append(tok.value)
+            parts.append(self._flat_value(tok))
             self._advance()
         if self._at_end() or not self._current().is_keyword("SELECT"):
             self._pos = start
@@ -458,7 +458,7 @@ class TsqlStatementsMixin(ParserBase):
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            select_parts.append(tok.value)
+            select_parts.append(self._flat_value(tok))
             self._advance()
 
         assign = self._parse_tsql_assignment_select(select_parts)
@@ -537,7 +537,7 @@ class TsqlStatementsMixin(ParserBase):
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            rest_parts.append(tok.value)
+            rest_parts.append(self._flat_value(tok))
             prev_line = tok.line
             first_rest = False
             self._advance()
