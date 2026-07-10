@@ -1371,7 +1371,14 @@ class ParserBase:
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            parts.append(tok.value)
+            # A line comment inside the (later flattened) expression would
+            # swallow everything after it — including the rest of the
+            # condition (``IF x --note`` lost ``= 'U' THEN``). Keep it as an
+            # inline block comment instead.
+            if tok.type == TokenType.LINE_COMMENT:
+                parts.append(self._line_comment_to_block(tok.value))
+            else:
+                parts.append(tok.value)
             self._advance()
             first = False
         return RawSQL(sql=" ".join(parts).strip(), reason="expression")
@@ -1393,7 +1400,10 @@ class ParserBase:
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            parts.append(tok.value)
+            if tok.type == TokenType.LINE_COMMENT:
+                parts.append(self._line_comment_to_block(tok.value))
+            else:
+                parts.append(tok.value)
             self._advance()
         return RawSQL(sql=" ".join(parts).strip(), reason="bind argument")
 
@@ -1453,7 +1463,10 @@ class ParserBase:
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            parts.append(tok.value)
+            if tok.type == TokenType.LINE_COMMENT:
+                parts.append(self._line_comment_to_block(tok.value))
+            else:
+                parts.append(tok.value)
             self._advance()
             first = False
         return RawSQL(sql=" ".join(parts).strip(), reason="default value")
@@ -1490,7 +1503,10 @@ class ParserBase:
                 if paren_depth == 0:
                     break
                 paren_depth -= 1
-            parts.append(tok.value)
+            if tok.type == TokenType.LINE_COMMENT:
+                parts.append(self._line_comment_to_block(tok.value))
+            else:
+                parts.append(tok.value)
             self._advance()
         raw = " ".join(parts).strip()
         if raw.upper() == "NULL":
@@ -1531,7 +1547,10 @@ class ParserBase:
                 paren_depth += 1
             elif tok.type == TokenType.RPAREN:
                 paren_depth -= 1
-            parts.append(tok.value)
+            if tok.type == TokenType.LINE_COMMENT:
+                parts.append(self._line_comment_to_block(tok.value))
+            else:
+                parts.append(tok.value)
             self._advance()
             first = False
         return RawSQL(sql=" ".join(parts).strip(), reason="captured expression")

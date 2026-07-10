@@ -332,6 +332,34 @@ class TestDottedFunctionReturnType:
         ), result.warnings
 
 
+class TestCommentInsideIfCondition:
+    """A line comment inside a multi-line IF condition, once the expression is
+    flattened, used to swallow the rest of the condition (``IF m_tipo --x
+    = 'U' THEN`` lost ``= 'U'`` — silent semantic corruption on T-SQL, a
+    parse error on PG/MySQL). Comments are trivia: converted to an inline
+    block comment, the condition survives on every target."""
+
+    _SRC = (
+        "create or replace PROCEDURE p_c(m_tipo IN VARCHAR2) AS\n"
+        "BEGIN\n"
+        "  IF m_tipo --Si el episodio es de urgencias\n"
+        "     = 'U' THEN\n"
+        "    INSERT INTO t_log (a) VALUES (1);\n"
+        "  END IF;\n"
+        "END;\n/"
+    )
+
+    def test_condition_survives_on_all_targets(self) -> None:
+        for target in ("mysql", "postgresql", "tsql", "oracle"):
+            out = _flat(_t(self._SRC, target))
+            assert "= 'U'" in out, (target, out)
+            assert not re.search(r"--[^\n]*= 'U'", out), (target, out)
+
+    def test_comment_text_is_preserved_inline(self) -> None:
+        out = _t(self._SRC, "mysql")
+        assert "/* Si el episodio es de urgencias */" in out, out
+
+
 class TestRoutineNamedAsMySqlBuiltin:
     _SRC = (
         "create or replace FUNCTION now RETURN DATE AS\n"
