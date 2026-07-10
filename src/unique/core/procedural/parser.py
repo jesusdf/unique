@@ -1056,6 +1056,24 @@ class ProceduralParser:
             return self._parse_raiserror()
         elif tok.is_keyword("TRY"):
             return self._parse_tsql_try_catch()
+        elif tok.is_keyword("OPEN") and self._peek(1).type in (
+            TokenType.IDENTIFIER,
+            TokenType.VARIABLE,
+        ):
+            # Cursor OPEN. Exclude OPEN SYMMETRIC/MASTER KEY (falls through to
+            # embedded DML like any other opaque statement).
+            if self._peek(1).upper_value not in ("SYMMETRIC", "MASTER"):
+                return self._parse_plsql_open()
+            return self._parse_embedded_dml()
+        elif tok.is_keyword("FETCH"):
+            return self._parse_tsql_fetch()
+        elif tok.is_keyword("CLOSE") and self._peek(1).type in (
+            TokenType.IDENTIFIER,
+            TokenType.VARIABLE,
+        ):
+            return self._parse_plsql_close()
+        elif tok.is_keyword("DEALLOCATE"):
+            return self._parse_tsql_deallocate()
         elif tok.is_keyword("SELECT"):
             # A T-SQL assignment-select (SELECT @v = expr) must become a
             # SELECT ... INTO, not embedded DML (where sqlglot would turn the
@@ -1768,6 +1786,40 @@ class ProceduralParser:
         cursor_name = self._parse_identifier()
         self._match_type(TokenType.SEMICOLON)
         return CursorOperation(operation="CLOSE", cursor_name=cursor_name)
+
+    def _parse_tsql_fetch(self) -> ASTNode:
+        """Parse T-SQL ``FETCH [NEXT|PRIOR|FIRST|LAST] FROM c [INTO @v, ...]``.
+
+        The direction keyword is dropped (NEXT is both the T-SQL default and
+        the only portable behaviour); ABSOLUTE/RELATIVE fetches have no
+        counterpart in the targets and fall through as embedded DML.
+        """
+        if self._peek(1).upper_value in ("ABSOLUTE", "RELATIVE"):
+            return self._parse_embedded_dml()
+        self._expect_keyword("FETCH")
+        self._match_keyword("NEXT", "PRIOR", "FIRST", "LAST")
+        self._match_keyword("FROM")
+        cursor_name = self._parse_identifier()
+        into_vars: list[str] = []
+        if self._match_keyword("INTO"):
+            while not self._at_end() and self._current().type != TokenType.SEMICOLON:
+                into_vars.append(self._parse_identifier())
+                if not self._match_type(TokenType.COMMA):
+                    break
+        self._match_type(TokenType.SEMICOLON)
+        return CursorOperation(
+            operation="FETCH",
+            cursor_name=cursor_name,
+            into_vars=tuple(into_vars),
+        )
+
+    def _parse_tsql_deallocate(self) -> ASTNode:
+        """Parse T-SQL ``DEALLOCATE [GLOBAL] c``."""
+        self._expect_keyword("DEALLOCATE")
+        self._match_keyword("GLOBAL")
+        cursor_name = self._parse_identifier()
+        self._match_type(TokenType.SEMICOLON)
+        return CursorOperation(operation="DEALLOCATE", cursor_name=cursor_name)
 
     def _parse_mysql_set(self) -> ASTNode:
         """Parse a MySQL SET assignment: SET var = expr;

@@ -230,10 +230,33 @@ class ProceduralEmitter:
                 lines.append(text)
         return separator.join(lines)
 
+    #: Mapped types that take no length/precision modifier: a source length
+    #: carried through the map (VARBINARY(MAX) -> BYTEA) is invalid there.
+    _PARAMLESS_TYPES = frozenset(
+        {
+            "BYTEA",
+            "TEXT",
+            "LONGTEXT",
+            "MEDIUMTEXT",
+            "CLOB",
+            "NCLOB",
+            "BLOB",
+            "LONGBLOB",
+            "XML",
+            "XMLTYPE",
+            "JSON",
+            "JSONB",
+            "UUID",
+            "SYS_REFCURSOR",
+            "REFCURSOR",
+            "BOOLEAN",
+        }
+    )
+
     def _emit_data_type(self, dt: DataType) -> str:
         """Emit a data type, appending a /* UNIQUE */ marker when the original
         source type was preserved for documentation/round-tripping."""
-        if dt.params:
+        if dt.params and dt.name.upper() not in self._PARAMLESS_TYPES:
             params = ", ".join("MAX" if p == -1 else str(p) for p in dt.params)
             base = f"{dt.name}({params})"
         else:
@@ -404,6 +427,24 @@ class ProceduralEmitter:
             return node
 
         body_stmts = [y for x in body_stmts if (y := pull_nested(x)) is not None]
+        # A cursor-variable binding (``SET @c = CURSOR ... FOR q``) merged into
+        # a declaration supersedes the query-less ``DECLARE @c CURSOR`` that
+        # preceded it (MySQL path: cursors have no variable form there).
+        bound = {
+            d.name
+            for d in declarations
+            if isinstance(d, CursorDeclaration) and d.query is not None
+        }
+        if bound:
+            declarations = [
+                d
+                for d in declarations
+                if not (
+                    isinstance(d, CursorDeclaration)
+                    and d.query is None
+                    and d.name in bound
+                )
+            ]
         return declarations, body_stmts
 
     def _emit_procedure(self, node: CreateProcedureStatement) -> str:
@@ -1484,7 +1525,7 @@ class ProceduralEmitter:
     def _emit_cursor_open(self, cursor_name: str, query_str: str) -> str:
         """OPEN a cursor with an inline query. Default (PL/SQL/PL-pgSQL) binds
         the query with FOR; T-SQL overrides (the query is on DECLARE CURSOR)."""
-        return f"OPEN {cursor_name} FOR\n{query_str};"
+        return f"OPEN {cursor_name} FOR\n{query_str.rstrip().rstrip(';')};"
 
     def _emit_cursor_fetch(self, cursor_name: str, into_str: str) -> str:
         """FETCH a row INTO variables. Default standard form; T-SQL overrides

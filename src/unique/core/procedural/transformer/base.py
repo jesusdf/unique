@@ -162,6 +162,10 @@ class ProceduralTransformer:
         self._target = target
         self._metadata = metadata_resolver
         self._warnings: list[str] = []
+        # Cursor variables bound via ``SET @c = CURSOR … FOR <q>`` and
+        # rewritten to ``OPEN c FOR <q>``: the later bare ``OPEN @c`` must
+        # then drop (the OPEN already happened at the binding site).
+        self._cursor_bound_opens: set[str] = set()
         self._var_map: dict[str, str] = {}
         # Names (transformed form) of variables/parameters declared with a
         # string type. Used to disambiguate T-SQL '+' as concatenation when no
@@ -630,6 +634,17 @@ class ProceduralTransformer:
             if mapped is not None:
                 return DataType(name=mapped)
 
+        # VARBINARY(MAX) has no sized equivalent outside T-SQL: the plain
+        # name map would ship RAW(MAX) / VARBINARY(MAX), both invalid.
+        if type_name == "VARBINARY" and dt.params == (-1,):
+            mapped = {
+                "oracle": "BLOB",
+                "mysql": "LONGBLOB",
+                "postgresql": "BYTEA",
+            }.get(self._target)
+            if mapped is not None:
+                return DataType(name=mapped)
+
         # Lookup in mapping table
         type_map = self._get_type_map()
         base_type = type_name.split("(")[0].strip()
@@ -1067,7 +1082,39 @@ class ProceduralTransformer:
         )
         return RawSQL(sql=sql, reason="table variable -> temporary table")
 
+    _CURSOR_BINDING_RE = re.compile(r"(?is)^\s*CURSOR\b(?:\s+[A-Z_]+)*?\s+FOR\s+(.+)$")
+
+    def _cursor_binding_to_open(self, name: str, value: ASTNode) -> ASTNode | None:
+        """Rewrite a T-SQL cursor-variable binding (``SET @c = CURSOR [opts]
+        FOR <q>``) into the target's ``OPEN c FOR <q>`` (PL/pgSQL and PL/SQL
+        open a ref cursor with its query; the T-SQL cursor options are
+        client/storage hints with no counterpart)."""
+        if self._target not in ("postgresql", "oracle", "mysql") or not isinstance(
+            value, RawSQL
+        ):
+            return None
+        m = self._CURSOR_BINDING_RE.match(value.sql)
+        if not m:
+            return None
+        query = EmbeddedDML(sql=m.group(1).strip(), dialect=self._source)
+        if self._target == "mysql":
+            # MySQL has no cursor variables: the query belongs on the cursor
+            # declaration (hoisted to the DECLARE section; _split_declarations
+            # drops the earlier query-less declaration of the same name) and
+            # the original bare OPEN stays where it is.
+            return self._transform_cursor_decl(
+                CursorDeclaration(name=name, query=query)
+            )
+        bare = self._transform_var_name(name)
+        self._cursor_bound_opens.add(bare.lower())
+        return self._transform_cursor_op(
+            CursorOperation(operation="OPEN", cursor_name=name, query=query)
+        )
+
     def _transform_set_variable(self, node: SetVariableStatement) -> ASTNode:
+        bound = self._cursor_binding_to_open(node.name, node.value)
+        if bound is not None:
+            return bound
         new_name = self._transform_var_name(node.name)
         new_value = self._transform_node(node.value)
         # SET keeps a SET statement on engines that have one (T-SQL, MySQL);
@@ -1077,6 +1124,9 @@ class ProceduralTransformer:
         return AssignmentStatement(target=new_name, value=new_value)
 
     def _transform_assignment(self, node: AssignmentStatement) -> ASTNode:
+        bound = self._cursor_binding_to_open(node.target, node.value)
+        if bound is not None:
+            return bound
         new_name = self._transform_var_name(node.target)
         new_value = self._transform_node(node.value)
         # A T-SQL target re-expresses an assignment as SET; the others keep an
@@ -1300,8 +1350,16 @@ class ProceduralTransformer:
         new_query = self._transform_node(node.query) if node.query else None
         return CursorDeclaration(name=new_name, query=new_query)
 
-    def _transform_cursor_op(self, node: CursorOperation) -> CursorOperation:
+    def _transform_cursor_op(self, node: CursorOperation) -> ASTNode:
         new_name = self._transform_var_name(node.cursor_name)
+        if (
+            node.operation.upper() == "OPEN"
+            and node.query is None
+            and new_name.lower().lstrip("@")
+            in {n.lstrip("@") for n in self._cursor_bound_opens}
+        ):
+            # Already opened at the binding site (SET @c = CURSOR ... FOR).
+            return NullStatement()
         new_into = tuple(self._transform_var_name(v) for v in node.into_vars)
         new_query = self._transform_node(node.query) if node.query else None
         return CursorOperation(

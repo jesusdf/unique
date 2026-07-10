@@ -115,6 +115,25 @@ class TestDataTypeMapping:
         result = t._transform_data_type(DataType(name="VARCHAR", params=(-1,)))
         assert result.name == "LONGTEXT"
 
+    def test_varbinary_max_maps_to_lob_types(self) -> None:
+        # The plain name map would carry the MAX through: RAW(MAX) and
+        # VARBINARY(MAX) are invalid on Oracle/MySQL, BYTEA takes no size.
+        for target, expected in (
+            ("oracle", "BLOB"),
+            ("mysql", "LONGBLOB"),
+            ("postgresql", "BYTEA"),
+        ):
+            t = ProceduralTransformer("tsql", target)
+            result = t._transform_data_type(DataType(name="VARBINARY", params=(-1,)))
+            assert result.name == expected, target
+            assert result.params == (), target
+
+    def test_varbinary_sized_keeps_size_where_valid(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        result = t._transform_data_type(DataType(name="VARBINARY", params=(200,)))
+        assert result.name == "RAW"
+        assert result.params == (200,)
+
     def test_oracle_number_to_postgresql(self) -> None:
         t = ProceduralTransformer("oracle", "postgresql")
         assert t._transform_data_type(DataType(name="NUMBER")).name == "NUMERIC"

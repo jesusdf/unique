@@ -115,6 +115,9 @@ class TSqlEmitter(ProceduralEmitter):
         #: declarations emit, so a FOR loop over a named cursor can derive
         #: its FETCH INTO variable list.
         self._cursor_queries: dict[str, str] = {}
+        # Cursor *variables* (``DECLARE @c CURSOR;`` — no query): unlike
+        # classic cursors these keep their '@' on OPEN/FETCH/CLOSE.
+        self._cursor_variables: set[str] = set()
 
     def _emit_param(
         self,
@@ -204,6 +207,11 @@ class TSqlEmitter(ProceduralEmitter):
         # Classic T-SQL cursors are not variables: no '@' on the name (the
         # generic variable rename adds one). Record the query so a FOR loop
         # over this cursor can derive its FETCH INTO variable list.
+        if node.query is None and node.name.startswith("@"):
+            # A cursor variable: the classic un-@ form would be invalid
+            # without a FOR query (and the SET binding references @name).
+            self._cursor_variables.add(node.name.lstrip("@").lower())
+            return f"DECLARE {node.name} CURSOR;"
         name = node.name.lstrip("@")
         query_str = (
             self._emit_node(node.query).rstrip().rstrip(";") if node.query else ""
@@ -374,9 +382,9 @@ class TSqlEmitter(ProceduralEmitter):
     def _emit_cursor_op(self, node: CursorOperation) -> str:
         # Classic cursors are not variables: the generic '@' rename must not
         # leak into OPEN/FETCH/CLOSE or the reference won't match DECLARE.
-        return super()._emit_cursor_op(
-            dataclasses.replace(node, cursor_name=node.cursor_name.lstrip("@"))
-        )
+        bare = node.cursor_name.lstrip("@")
+        name = "@" + bare if bare.lower() in self._cursor_variables else bare
+        return super()._emit_cursor_op(dataclasses.replace(node, cursor_name=name))
 
     def _emit_cursor_open(self, cursor_name: str, query_str: str) -> str:
         # In T-SQL the query lives on DECLARE CURSOR, so OPEN takes no query.
