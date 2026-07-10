@@ -17,6 +17,7 @@ services:
       POSTGRES_USER: unique
       POSTGRES_PASSWORD: unique
       POSTGRES_DB: unique
+    mem_limit: 512m
     ports:
       - "5433:5432"
     healthcheck:
@@ -39,6 +40,7 @@ services:
       MYSQL_USER: unique
       MYSQL_PASSWORD: unique
       MYSQL_DATABASE: unique
+    mem_limit: 1g
     ports:
       - "3307:3306"
     healthcheck:
@@ -54,10 +56,15 @@ services:
   # CREATE TABLE IF NOT EXISTS or stray ';' before GO.
   mssql:
     image: mcr.microsoft.com/mssql/server:2022-latest
+    # Without a cap SQL Server assumes ~80% of HOST RAM and balloons its plan
+    # cache until the kernel OOM-kills it (exit 137, seen 2026-07-10 during
+    # the 35k-statement validity sweep — even running alone on a 8 GB host).
+    mem_limit: 2g
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_SA_PASSWORD: "Unique_Strong!Pass1"
       MSSQL_PID: Developer
+      MSSQL_MEMORY_LIMIT_MB: "1536"
     ports:
       - "1433:1433"
     healthcheck:
@@ -77,6 +84,7 @@ services:
     image: gvenzl/oracle-free:23-slim
     environment:
       ORACLE_PASSWORD: oracle
+    mem_limit: 2g
     ports:
       - "1521:1521"
     healthcheck:
