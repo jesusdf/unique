@@ -208,6 +208,95 @@ class TestOracleBuiltinsOnTsql:
         assert "'v_codigo = ' + @codigo" in out, out
 
 
+class TestCaseStatement:
+    _SRC = (
+        "create or replace FUNCTION f_ex(m_tipo IN VARCHAR2) RETURN NUMBER IS\n"
+        "    m_cnt NUMBER(9);\nBEGIN\n"
+        "    CASE m_tipo\n"
+        "        WHEN 'E' THEN RETURN 1;\n"
+        "        WHEN 'P' THEN\n"
+        "            SELECT COUNT(*) INTO m_cnt FROM f_tax WHERE t = m_tipo;\n"
+        "            RETURN m_cnt;\n"
+        "        ELSE\n            RETURN 0;\n"
+        "    END CASE;\nEND f_ex;\n/"
+    )
+
+    def test_case_statement_becomes_if_chain(self) -> None:
+        # The PL/SQL CASE *statement* used to desync the whole routine
+        # (sqlglot: 'Expected END after CASE').
+        tsql = _flat(_t(self._SRC, "tsql"))
+        assert "IF @m_tipo = 'E'" in tsql, tsql
+        assert "ELSE IF @m_tipo = 'P'" in tsql, tsql
+        assert "END CASE" not in tsql.upper(), tsql
+        pg = _flat(_t(self._SRC, "postgresql"))
+        assert "IF m_tipo = 'E' THEN" in pg, pg
+        assert "ELSIF m_tipo = 'P' THEN" in pg, pg
+        my = _flat(_t(self._SRC, "mysql"))
+        assert "ELSEIF m_tipo = 'P' THEN" in my, my
+
+    def test_searched_case_statement(self) -> None:
+        src = (
+            "BEGIN\n    CASE\n        WHEN 1 = 1 THEN\n"
+            "            UPDATE t_z SET x = 1;\n"
+            "        ELSE\n            UPDATE t_z SET x = 2;\n"
+            "    END CASE;\nEND;\n/"
+        )
+        out = _flat(_t(src, "postgresql"))
+        assert "IF 1 = 1 THEN" in out, out
+        assert re.search(r"(?i)ELSE\s+UPDATE t_z SET x = 2", out), out
+
+
+class TestOracleCatalogOnTsql:
+    def test_table_less_drop_index_resolves_table(self) -> None:
+        # Oracle's DROP INDEX names only the index; T-SQL requires the
+        # table (error 159) — resolved from sys.indexes at run time.
+        # Live-validated on MSSQL (executes and is idempotent), 2026-07-10.
+        src = (
+            "DECLARE v_exists NUMBER;\nBEGIN\n"
+            "    SELECT count(*) INTO v_exists FROM user_indexes"
+            " WHERE index_name = 'IX_H_F10';\n"
+            "    IF v_exists = 1 THEN\n"
+            "        execute immediate 'DROP INDEX IX_H_F10';\n"
+            "    END IF;\nEND;\n/"
+        )
+        out = _flat(_t(src, "tsql"))
+        assert "FROM sys.indexes WHERE name = 'IX_H_F10'" in out, out
+        assert "OBJECT_NAME(object_id)" in out, out
+        assert "EXEC(N'DROP INDEX [IX_H_F10] ON [' + @uq_ixtbl" in out, out
+        assert "user_indexes" not in out, out
+
+    def test_unsized_varchar_parameters(self) -> None:
+        src = (
+            "create or replace FUNCTION f_id(m_t IN VARCHAR2) RETURN VARCHAR2"
+            " IS\nBEGIN\n    RETURN m_t;\nEND;\n/"
+        )
+        tsql = _t(src, "tsql")
+        # Bare NVARCHAR silently truncates to length 1.
+        assert "@m_t NVARCHAR(4000)" in tsql, tsql
+        assert "RETURNS NVARCHAR(4000)" in tsql, tsql
+        my = _t(src, "mysql")
+        # Bare VARCHAR is a MySQL syntax error.
+        assert "m_t TEXT" in my, my
+        assert "RETURNS TEXT" in my, my
+
+
+class TestPgRowLoopDeclaration:
+    def test_implicit_loop_variable_gets_record_declaration(self) -> None:
+        # plpgsql requires the row-loop variable to be declared (PL/SQL
+        # declares it implicitly). Live-validated idempotent, 2026-07-10.
+        src = (
+            "BEGIN FOR X IN (SELECT COUNT(*) TOTAL FROM h_wc WHERE l='x')"
+            " LOOP\n    IF X.TOTAL = 0 THEN\n"
+            "        INSERT INTO h_wc(l) VALUES ('x');\n"
+            "    END IF;\nEND LOOP; END;\n/"
+        )
+        out = _t(src, "postgresql")
+        flat = _flat(out)
+        assert "DO $$" in flat, out
+        assert re.search(r"(?i)DECLARE\s+X record;", flat), out
+        assert flat.index("X record;") < flat.index("FOR X IN"), out
+
+
 class TestDynamicSqlAndRowcount:
     def test_constant_execute_immediate_unwraps(self) -> None:
         # PostgreSQL has no top-level EXECUTE '<sql>'; a constant dynamic
