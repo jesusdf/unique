@@ -22,7 +22,12 @@ from unique.core.ast_nodes import (
     TryCatchBlock,
     WhileStatement,
 )
-from unique.core.procedural.emitter.base import ProceduralEmitter, register_emitter
+from unique.core.procedural.emitter.base import (
+    ProceduralEmitter,
+    _select_list_columns,
+    _strip_outer_parens,
+    register_emitter,
+)
 
 
 class MySqlEmitter(ProceduralEmitter):
@@ -180,26 +185,81 @@ class MySqlEmitter(ProceduralEmitter):
     def _emit_for_loop_body(
         self, variable: str, cursor_str: str, body_lines: list[str]
     ) -> str:
-        # MySQL: explicit cursor inside a BEGIN ... END with a NOT FOUND handler
-        # driving a loop.
-        cur = f"{variable}_cur"
+        # MySQL: explicit cursor with a NOT FOUND handler driving a loop. When
+        # the select list is resolvable (a named cursor recorded at its
+        # declaration, or an inline query) the expansion is complete and lives
+        # in its own BEGIN ... END so the DECLAREs sit at a block start.
+        # Otherwise the documented scaffold remains (developer completes it).
+        named = re.fullmatch(r"[A-Za-z_]\w*", cursor_str.strip())
+        if named:
+            cur = cursor_str.strip()
+            select_text = self._cursor_queries.get(cur.lower())
+            declares_cursor = False
+        else:
+            cur = f"{variable}_cur"
+            select_text = _strip_outer_parens(cursor_str)
+            declares_cursor = True
+
+        cols = _select_list_columns(select_text) if select_text else None
+        if cols:
+            fields = {
+                m.group(1).lower()
+                for line in body_lines
+                for m in re.finditer(rf"(?i)\b{re.escape(variable)}\s*\.\s*(\w+)", line)
+            }
+            if not fields.issubset(set(cols)):
+                cols = None  # a referenced field the list doesn't expose
+
         done = f"{variable}_done"
-        lines = [
-            "-- UNIQUE: Oracle implicit cursor FOR-loop expanded to an "
-            "explicit MySQL cursor.",
-            "-- Declare one variable per selected column and complete the "
-            "FETCH INTO list.",
-            f"DECLARE {done} INT DEFAULT FALSE;",
-            f"DECLARE {cur} CURSOR FOR {cursor_str};",
-            f"DECLARE CONTINUE HANDLER FOR NOT FOUND SET {done} = TRUE;",
-            f"OPEN {cur};",
-            f"{variable}_loop: LOOP",
-            f"{self._indent()}FETCH {cur} INTO /* col1, col2, ... */;",
-            f"{self._indent()}IF {done} THEN LEAVE {variable}_loop; END IF;",
+        if not cols:
+            lines = [
+                "-- UNIQUE: Oracle implicit cursor FOR-loop expanded to an "
+                "explicit MySQL cursor.",
+                "-- Declare one variable per selected column and complete the "
+                "FETCH INTO list.",
+                f"DECLARE {done} INT DEFAULT FALSE;",
+                f"DECLARE {cur} CURSOR FOR {cursor_str};",
+                f"DECLARE CONTINUE HANDLER FOR NOT FOUND SET {done} = TRUE;",
+                f"OPEN {cur};",
+                f"{variable}_loop: LOOP",
+                f"{self._indent()}FETCH {cur} INTO /* col1, col2, ... */;",
+                f"{self._indent()}IF {done} THEN LEAVE {variable}_loop; END IF;",
+                *body_lines,
+                "END LOOP;",
+                f"CLOSE {cur};",
+            ]
+            return "\n".join(lines)
+
+        fetch_vars = ", ".join(f"{variable}_{c}" for c in cols)
+        rewritten = [
+            re.sub(
+                rf"(?i)\b{re.escape(variable)}\s*\.\s*(\w+)",
+                lambda m: f"{variable}_{str(m.group(1)).lower()}",
+                line,
+            )
+            for line in body_lines
         ]
-        lines.extend(body_lines)
-        lines.append("END LOOP;")
-        lines.append(f"CLOSE {cur};")
+        indent = self._indent()
+        lines = [
+            "-- UNIQUE: cursor FOR-loop expanded; loop variables are TEXT "
+            "(exact column types need --db-url metadata).",
+            "BEGIN",
+            *(f"{indent}DECLARE {variable}_{c} TEXT;" for c in cols),
+            f"{indent}DECLARE {done} INT DEFAULT FALSE;",
+        ]
+        if declares_cursor:
+            lines.append(f"{indent}DECLARE {cur} CURSOR FOR {select_text};")
+        lines += [
+            f"{indent}DECLARE CONTINUE HANDLER FOR NOT FOUND SET {done} = TRUE;",
+            f"{indent}OPEN {cur};",
+            f"{indent}{variable}_loop: LOOP",
+            f"{indent}{indent}FETCH {cur} INTO {fetch_vars};",
+            f"{indent}{indent}IF {done} THEN LEAVE {variable}_loop; END IF;",
+            *rewritten,
+            f"{indent}END LOOP;",
+            f"{indent}CLOSE {cur};",
+            "END;",
+        ]
         return "\n".join(lines)
 
     def _emit_param(
@@ -242,6 +302,8 @@ class MySqlEmitter(ProceduralEmitter):
         query_str = (
             self._emit_node(node.query).rstrip().rstrip(";") if node.query else ""
         )
+        if query_str:
+            self._cursor_queries[node.name.lower()] = query_str
         body = f" FOR {query_str}" if query_str else ""
         return f"DECLARE {node.name} CURSOR{body};"
 

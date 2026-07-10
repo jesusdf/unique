@@ -227,6 +227,64 @@ class TestNumericRangeForLoop:
         assert "SET i = i - 1;" in out, out
 
 
+class TestMySqlCursorForLoopExpansion:
+    """The MySQL cursor FOR-loop expansion used to emit a scaffold that never
+    parses: ``DECLARE r_cur CURSOR FOR curES`` (a cursor cannot alias another
+    cursor), an empty ``FETCH INTO /* col1, ... */`` and DECLAREs mid-block.
+    When the select list is resolvable the expansion must be complete."""
+
+    _NAMED = (
+        "create or replace PROCEDURE p_cur AS\n"
+        "  CURSOR curES IS SELECT accion, codigo AS codpostal FROM t_dir;\n"
+        "BEGIN\n"
+        "  FOR r IN curES LOOP\n"
+        "    INSERT INTO t_out (a, b) VALUES (r.accion, r.codpostal);\n"
+        "  END LOOP;\n"
+        "END;\n/"
+    )
+
+    def test_named_cursor_drives_directly(self) -> None:
+        out = _flat(_t(self._NAMED, "mysql"))
+        assert "FETCH curES INTO r_accion, r_codpostal;" in out, out
+        assert "VALUES (r_accion, r_codpostal)" in out, out
+        assert "OPEN curES;" in out, out
+        assert "CLOSE curES;" in out, out
+        # No second cursor aliasing the named one, no empty FETCH.
+        assert "CURSOR FOR curES" not in out, out
+        assert "/* col1" not in out, out
+
+    def test_named_cursor_declares_vars_at_block_start(self) -> None:
+        out = _t(self._NAMED, "mysql")
+        # The expansion opens its own block so its DECLAREs are legal.
+        m = re.search(
+            r"BEGIN\s*\n\s*DECLARE r_accion TEXT;\s*\n\s*DECLARE r_codpostal TEXT;",
+            out,
+        )
+        assert m, out
+
+    _INLINE = (
+        "create or replace PROCEDURE p_cur2 AS\n"
+        "BEGIN\n"
+        "  FOR r IN (SELECT accion FROM t_dir) LOOP\n"
+        "    INSERT INTO t_out (a) VALUES (r.accion);\n"
+        "  END LOOP;\n"
+        "END;\n/"
+    )
+
+    def test_inline_query_expands_completely(self) -> None:
+        out = _flat(_t(self._INLINE, "mysql"))
+        assert "DECLARE r_cur CURSOR FOR SELECT accion FROM t_dir;" in out, out
+        assert "FETCH r_cur INTO r_accion;" in out, out
+        assert "VALUES (r_accion)" in out, out
+        assert "/* col1" not in out, out
+
+    def test_unresolvable_list_keeps_documented_scaffold(self) -> None:
+        src = self._INLINE.replace("SELECT accion", "SELECT *")
+        result = Transpiler().transpile(src, "oracle", "mysql")
+        assert "-- UNIQUE:" in result.sql, result.sql
+        assert result.warnings, result.warnings
+
+
 class TestDottedFunctionReturnType:
     """``RETURN tbl.col%TYPE`` / ``RETURN pkg.type`` in a function header used
     to desync the parser: the leftover ``.col%TYPE`` shattered the declaration

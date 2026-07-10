@@ -29,100 +29,12 @@ from unique.core.ast_nodes import (
     WaitForStatement,
     WhileStatement,
 )
-from unique.core.procedural.emitter.base import ProceduralEmitter, register_emitter
-
-
-def _strip_outer_parens(text: str) -> str:
-    """Remove balanced outer parentheses wrapping the whole text."""
-    text = text.strip()
-    while text.startswith("(") and text.endswith(")"):
-        depth = 0
-        balanced = True
-        for i, ch in enumerate(text):
-            depth += (ch == "(") - (ch == ")")
-            if depth == 0 and i < len(text) - 1:
-                balanced = False
-                break
-        if not balanced:
-            break
-        text = text[1:-1].strip()
-    return text
-
-
-def _select_list_columns(select_text: str) -> list[str] | None:
-    """Column/alias names of a SELECT's top-level select list, or None.
-
-    Used to derive a cursor FOR-loop's FETCH INTO variables. Returns None
-    when any item has no derivable name (``*``, an expression without an
-    alias) or names collide — the caller then keeps the documented scaffold.
-    """
-    from unique.core.sql_split import split_top_level_commas
-
-    text = select_text.strip()
-    # Unwrap outer parens (the inline `FOR r IN (SELECT …)` form).
-    while text.startswith("(") and text.endswith(")"):
-        depth = 0
-        balanced = True
-        for i, ch in enumerate(text):
-            depth += (ch == "(") - (ch == ")")
-            if depth == 0 and i < len(text) - 1:
-                balanced = False
-                break
-        if not balanced:
-            break
-        text = text[1:-1].strip()
-    m = re.match(r"(?is)^\s*SELECT\s+(?:DISTINCT\s+)?(.*)$", text)
-    if not m:
-        return None
-    rest = m.group(1)
-    # Find the top-level FROM (outside parens/strings).
-    depth = 0
-    in_string = False
-    from_at = -1
-    i = 0
-    while i < len(rest):
-        ch = rest[i]
-        if in_string:
-            if ch == "'":
-                in_string = False
-            i += 1
-            continue
-        if ch == "'":
-            in_string = True
-        elif ch in "([":
-            depth += 1
-        elif ch in ")]":
-            depth = max(0, depth - 1)
-        elif depth == 0 and rest[i : i + 4].upper() == "FROM":
-            before_ok = i == 0 or not (rest[i - 1].isalnum() or rest[i - 1] == "_")
-            after = rest[i + 4 : i + 5]
-            if before_ok and (not after or not (after.isalnum() or after == "_")):
-                from_at = i
-                break
-        i += 1
-    select_list = rest[:from_at] if from_at >= 0 else rest
-    names: list[str] = []
-    for item in split_top_level_commas(select_list):
-        item = item.strip()
-        if not item or re.fullmatch(r"(?:[\w\[\]\"`]+\.)?\*", item):
-            # A bare star (or t.*) has no derivable column list; an
-            # aliased expression that merely CONTAINS one (COUNT(*) TOTAL)
-            # resolves through its alias below.
-            return None
-        plain = re.fullmatch(r"[\w.\[\]\"`]+", item)
-        if plain:
-            name = item.split(".")[-1].strip('[]"`')
-        else:
-            alias = re.search(r"(?is)\s(?:AS\s+)?([A-Za-z_]\w*)\s*$", item)
-            if not alias:
-                return None
-            name = alias.group(1)
-        if not re.fullmatch(r"[A-Za-z_]\w*", name):
-            return None
-        names.append(name.lower())
-    if not names or len(set(names)) != len(names):
-        return None
-    return names
+from unique.core.procedural.emitter.base import (
+    ProceduralEmitter,
+    _select_list_columns,
+    _strip_outer_parens,
+    register_emitter,
+)
 
 
 class TSqlEmitter(ProceduralEmitter):
@@ -132,10 +44,6 @@ class TSqlEmitter(ProceduralEmitter):
 
     def __init__(self, dialect: str) -> None:
         super().__init__(dialect)
-        #: Declared-cursor queries by lowercase name, recorded as their
-        #: declarations emit, so a FOR loop over a named cursor can derive
-        #: its FETCH INTO variable list.
-        self._cursor_queries: dict[str, str] = {}
         # Names RAISERROR message variables uniquely across the script.
         self._raise_msg_n = 0
         # Cursor *variables* (``DECLARE @c CURSOR;`` — no query): unlike
