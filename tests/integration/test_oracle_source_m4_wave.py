@@ -392,6 +392,57 @@ class TestWave10Classes:
         assert not body, out2
 
 
+class TestWave11Classes:
+    def test_alter_modify_per_target(self) -> None:
+        # Neither Oracle MODIFY form parses in sqlglot; the shared rewriter
+        # owns the per-target spelling (both pipelines).
+        src = "ALTER TABLE d_tb MODIFY r1 NUMBER(9) NULL;"
+        ts = _flat(_t(src, "tsql"))
+        assert "ALTER COLUMN r1 NUMERIC(9) NULL" in ts, ts
+        pg = _flat(_t(src, "postgresql"))
+        assert "ALTER COLUMN r1 TYPE NUMERIC(9)" in pg, pg
+        assert "ALTER COLUMN r1 DROP NOT NULL" in pg, pg
+        my = _flat(_t(src, "mysql"))
+        assert "MODIFY COLUMN r1 DECIMAL(9) NULL" in my, my
+
+    def test_alter_modify_inside_guard(self) -> None:
+        src = (
+            "DECLARE v_e NUMBER;\nBEGIN\n"
+            "    SELECT count(*) INTO v_e FROM user_tab_cols"
+            " WHERE table_name = 'D_TB' AND column_name = 'R1';\n"
+            "    IF v_e = 1 THEN\n"
+            "        execute immediate"
+            " 'ALTER TABLE D_TB MODIFY R1 NUMBER(9) NULL';\n"
+            "    END IF;\nEND;\n/"
+        )
+        ts = _flat(_t(src, "tsql"))
+        assert "ALTER COLUMN R1 NUMERIC(9) NULL" in ts, ts
+        # The probe reads the native catalog with matching semantics.
+        assert (
+            "FROM sys.columns WHERE OBJECT_NAME(object_id) = 'D_TB'"
+            " AND name = 'R1'" in ts
+        ), ts
+        pg = _flat(_t(src, "postgresql"))
+        assert "ALTER COLUMN R1 TYPE NUMERIC(9)" in pg, pg
+        assert (
+            "FROM information_schema.columns WHERE table_name = lower('D_TB')"
+            " AND column_name = lower('R1')" in pg
+        ), pg
+
+    def test_alter_trigger_enable_per_target(self) -> None:
+        src = (
+            "BEGIN\n    IF 1 = 1 THEN\n"
+            "        ALTER TRIGGER tri_ref_upd ENABLE;\n"
+            "    END IF;\nEND;\n/"
+        )
+        ts = _flat(_t(src, "tsql"))
+        assert "FROM sys.triggers WHERE name = 'tri_ref_upd'" in ts, ts
+        assert "ENABLE TRIGGER [tri_ref_upd]" in ts, ts
+        pg = _flat(_t(src, "postgresql"))
+        assert "FROM pg_trigger WHERE tgname = lower('tri_ref_upd')" in pg, pg
+        assert "EXECUTE COALESCE((SELECT format(" in pg, pg
+
+
 class TestDynamicSqlAndRowcount:
     def test_constant_execute_immediate_unwraps(self) -> None:
         # PostgreSQL has no top-level EXECUTE '<sql>'; a constant dynamic
