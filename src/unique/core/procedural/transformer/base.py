@@ -744,7 +744,10 @@ class ProceduralTransformer:
                 if match:
                     name = match.group(1)
                     params_str = match.group(2).split(",")
-                    params = tuple(int(p.strip()) for p in params_str)
+                    params = tuple(
+                        -1 if p.strip().upper() == "MAX" else int(p.strip())
+                        for p in params_str
+                    )
                     return DataType(name=name, params=params, origin_comment=origin)
                 return DataType(name=new_name, origin_comment=origin)
             return DataType(name=new_name, params=dt.params, origin_comment=origin)

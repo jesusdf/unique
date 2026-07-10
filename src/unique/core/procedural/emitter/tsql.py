@@ -32,6 +32,23 @@ from unique.core.ast_nodes import (
 from unique.core.procedural.emitter.base import ProceduralEmitter, register_emitter
 
 
+def _strip_outer_parens(text: str) -> str:
+    """Remove balanced outer parentheses wrapping the whole text."""
+    text = text.strip()
+    while text.startswith("(") and text.endswith(")"):
+        depth = 0
+        balanced = True
+        for i, ch in enumerate(text):
+            depth += (ch == "(") - (ch == ")")
+            if depth == 0 and i < len(text) - 1:
+                balanced = False
+                break
+        if not balanced:
+            break
+        text = text[1:-1].strip()
+    return text
+
+
 def _select_list_columns(select_text: str) -> list[str] | None:
     """Column/alias names of a SELECT's top-level select list, or None.
 
@@ -87,7 +104,10 @@ def _select_list_columns(select_text: str) -> list[str] | None:
     names: list[str] = []
     for item in split_top_level_commas(select_list):
         item = item.strip()
-        if not item or "*" in item.split(".")[-1]:
+        if not item or re.fullmatch(r"(?:[\w\[\]\"`]+\.)?\*", item):
+            # A bare star (or t.*) has no derivable column list; an
+            # aliased expression that merely CONTAINS one (COUNT(*) TOTAL)
+            # resolves through its alias below.
             return None
         plain = re.fullmatch(r"[\w.\[\]\"`]+", item)
         if plain:
@@ -229,6 +249,17 @@ class TSqlEmitter(ProceduralEmitter):
         # unbounded; 4000 is the widest non-MAX form.
         if not dt.params and out.upper() in ("NVARCHAR", "VARCHAR"):
             return f"{out}(4000)"
+        # A size beyond T-SQL's row limits (NVARCHAR > 4000, VARCHAR > 8000
+        # — Oracle's extended VARCHAR2(20000)) only exists as MAX.
+        if dt.params and len(dt.params) == 1:
+            name = re.match(r"(?i)^(NVARCHAR|VARCHAR|VARBINARY)\b", out)
+            limit = {"NVARCHAR": 4000, "VARCHAR": 8000, "VARBINARY": 8000}
+            if (
+                name
+                and isinstance(dt.params[0], int)
+                and dt.params[0] > limit[name.group(1).upper()]
+            ):
+                return f"{name.group(1)}(MAX)"
         return out
 
     def _emit_cursor_decl(self, node: CursorDeclaration) -> str:
@@ -312,7 +343,9 @@ class TSqlEmitter(ProceduralEmitter):
             declares_cursor = False
         else:
             cur = f"{variable}_cur"
-            select_text = cursor_str
+            # The inline ``FOR r IN (SELECT ...)`` form arrives with its
+            # parens; T-SQL's DECLARE CURSOR FOR takes a bare select.
+            select_text = _strip_outer_parens(cursor_str)
             declares_cursor = True
 
         cols = _select_list_columns(select_text) if select_text else None
