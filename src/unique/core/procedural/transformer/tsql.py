@@ -100,6 +100,15 @@ class TSqlTransformer(ProceduralTransformer):
             return sql
         # The implicit-cursor row count reads from @@ROWCOUNT.
         sql = re.sub(r"(?i)\bSQL\s*%\s*ROWCOUNT\b", "@@ROWCOUNT", sql)
+        # MONTHS_BETWEEN(a, b) -> DATEDIFF(MONTH, b, a). Whole months only
+        # (T-SQL has no fractional form); the boundary-counting difference
+        # is the standard accepted approximation.
+        arg = r"((?:[^(),]|\([^()]*\))+?)"
+        sql = re.sub(
+            rf"(?is)\bMONTHS_BETWEEN\s*\(\s*{arg}\s*,\s*{arg}\s*\)",
+            r"DATEDIFF(MONTH, \2, \1)",
+            sql,
+        )
         # Exception context: T-SQL reads it from the ERROR_* functions.
         sql = re.sub(r"(?i)\bSQLERRM\b", "ERROR_MESSAGE()", sql)
         # CAST keeps the ubiquitous ``SQLCODE || ' ' || SQLERRM`` concat
@@ -522,6 +531,11 @@ class TSqlTransformer(ProceduralTransformer):
 
     def _folds_exception_scope(self) -> bool:
         return True
+
+    def _noop_sql(self) -> str:
+        # T-SQL has no NULL statement; SET NOCOUNT ON is the canonical
+        # side-effect-free filler for a carrier's block position.
+        return "SET NOCOUNT ON;"
 
     def _transform_exception_block(self, node: ExceptionBlock) -> ASTNode:
         # Reached only when the EXCEPTION section had no preceding siblings
