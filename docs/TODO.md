@@ -241,9 +241,38 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       real target DB they resolve), PL/SQL collections (ARRAYTIPOALTA),
       and 2x edges (4145 non-boolean IF, 128, @dosis1, date literal,
       TO_NUMBER-in-raw). PG 10 — RETURN edges, ADD COLUMNS(...),
-      2x bytea/uuid defaults. MySQL 18x 1064 tail. Diminishing returns:
-      next pass should classify the MySQL 18 via the SWEEP_DUMP_FILE
-      hook (scripts/_sweep_dump_tmp.py pattern, git-excluded).
+      2x bytea/uuid defaults. **MySQL 18 classified 2026-07-10** (dump hook +
+      per-statement re-run against MySQL 8.4 for exact near-tokens):
+      (a) 3x `MANUAL` is a *new reserved word in MySQL 8.4* — plain INSERT
+      column lists need backtick-quoting (same class as the wave-10 PG
+      reserved-column fix, MySQL table was stale); (b) 2x space between a
+      special-grammar function and `(` — `EXTRACT ( YEAR FROM x)` does not
+      parse (empirically: `SUM ( x )` fine, `EXTRACT ( … )` 1064) — raw-token
+      join must not pad the paren; (c) 2x named-cursor FOR loop expansion:
+      `DECLARE rowX_cur CURSOR FOR curES` is invalid (a MySQL cursor cannot
+      alias another cursor — drive the named cursor directly), the scaffold
+      `FETCH INTO /* col1… */` stays unresolved though every select-list item
+      is aliased, and the DECLAREs land mid-body (MySQL wants them at block
+      head — wrap the expansion in a nested BEGIN…END); (d) 2x bare `RETURN;`
+      inside procedure/trigger handlers (only functions may RETURN — needs a
+      labeled block + LEAVE); (e) 4x parser token-soup on unmappable PL/SQL
+      declarations (`TYPE t IS VARRAY(n) OF …`, `RETURN pkg.col%TYPE`, REF
+      CURSOR-returning functions) emitted as `DECLARE . LONGTEXT;` fragments —
+      violates "a desynced unit degrades whole"; (f) 1x `DECLARE PRAGMA
+      AUTONOMOUS_TRANSACTION` leak + `GROUP_CONCAT(… SEPARATOR CHR(13)||…)
+      WITHIN GROUP (…)` (LISTAGG lowering must fold a constant separator to a
+      literal and move ORDER BY inside); (g) 1x `EXECUTE … USING V_LOCAL` —
+      MySQL prepared statements only bind session `@vars` (hoist args), and
+      the constant `'BEGIN p(:1…); END;'` should unwrap to a direct CALL;
+      (h) 1x `DROP SEQUENCE IF EXISTS` shipped raw (no MySQL sequences);
+      (i) 1x `CREATE FUNCTION NOW()` — collides with the built-in, unmappable
+      without renaming call sites. Silent-corruption findings from the same
+      dump (parse-valid, wrong semantics — no-silent-loss violations to fix
+      with the wave): Oracle `||` reaching MySQL raw expressions parses as
+      logical OR (loop bodies, RETURN concat, SET assignments); numeric
+      `+ 1` emitted as `CONCAT(…, 1)` / `|| 1`; `TRUNC(date)` emitted as
+      1-arg `TRUNCATE` (grammar error) instead of `DATE()`; 3-arg
+      `DATEDIFF('S',…)` instead of `TIMESTAMPDIFF`.
       Note: the compose `stop_grace_period: 30s` for mssql applies on the
       next `up -d` (containers keep their creation-time config).
 
@@ -430,7 +459,22 @@ fix needs an **anonymized** regression fixture (never a private name).
       build verified locally. A5 (`X-Unique-Decoded-As`) and N7 (filename
       stem sanitize) shipped the same day.
 
-## 3. Packaging (P3)
+## 3. Test-corpus expansion (P3)
+
+- [ ] **Evaluate importing the upstream PostgreSQL regression fixtures (and
+      MySQL's, if usable) as a transpiler test corpus** (user request,
+      2026-07-10). The PostgreSQL project ships its regression suite under
+      `src/test/regress/sql/` (with expected outputs) — a large, permissively
+      licensed body of real, engine-validated SQL that could feed the validity
+      sweep / corpus tests with PG as the *source* dialect (today's private
+      corpora only cover T-SQL and Oracle sources). MySQL's
+      `mysql-test/` suite could play the same role for MySQL-source
+      directions. Scope the evaluation: license/attribution, how much of each
+      suite is engine-internal noise (catalog/plan tests) vs. portable
+      SQL, and whether they slot into `scripts/validity_sweep.py` unchanged or
+      need a curation pass.
+
+## 4. Packaging (P3)
 
 - [ ] **PyPI publication** — deferred until the tool has been used in real
       projects for a few months and proven stable. Not before then.
