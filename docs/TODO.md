@@ -218,7 +218,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       date-literal + @dosis1 + misc 102s. **PG 10:** 2x ADD COLUMNS (a,b)
       → per-column ADD, 2x RAW(16) DEFAULT SYS_GUID() → `BYTEA DEFAULT
       gen_random_uuid()` type mismatch, missing-THEN edge, `X record`
-      placement edge. *Earlier waves:* Waves 13–14: derived-table aliases synthesized
+      placement edge. *Wave 16 landed 2026-07-11 (re-measure pending):*
+      the trivia class fix (`_flat_value` — every flattening capture, CASE
+      selector/WHEN included), the parenthesized/UNION INSERT-body drop
+      (silent DEFAULT VALUES corruption), structural `dbo.` qualification
+      of scalar-UDF calls (error 195 — the "resolves on the real DB"
+      assumption was wrong), and the scalar wave (EXTRACT→DATEPART,
+      TRUNC(n,d), LPAD/RPAD via exp.Pad, EMPTY_BLOB/CLOB, TO_NUMBER /
+      1-arg TO_CHAR/TO_DATE argument-aware — the old name renames emitted
+      CONVERT/CAST missing the type argument). *Earlier waves:* Waves 13–14: derived-table aliases synthesized
       for every non-Oracle target (a shared cause across all three) +
       T-SQL's no-TOP ORDER BY dropped inside them; seq.NEXTVAL/CURRVAL;
       the cursor FOR-loop expansion completes for aliased expressions
