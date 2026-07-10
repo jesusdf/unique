@@ -208,6 +208,21 @@ class MySqlTransformer(ProceduralTransformer):
         return f"NOT (NEW.{col} <=> OLD.{col})"
 
     def _fix_raw_sql_target(self, sql: str) -> str:
+        mt = re.match(
+            r"(?is)^\s*ALTER\s+TRIGGER\s+(\w+)\s+(ENABLE|DISABLE)\s*;?\s*$",
+            sql,
+        )
+        if mt:
+            # MySQL cannot enable/disable triggers (only DROP/recreate).
+            self._warnings.append(
+                f"ALTER TRIGGER {mt.group(1)} {mt.group(2).upper()} has no "
+                "MySQL equivalent (triggers cannot be disabled); preserved "
+                "as a comment"
+            )
+            return (
+                f"-- UNIQUE: no MySQL equivalent: ALTER TRIGGER "
+                f"{mt.group(1)} {mt.group(2).upper()}\nDO 0;"
+            )
         sql = self._mysql_normalize_funcs(sql)
         sql = self._mysql_string_concat(sql)
         sql = self._mysql_clean_dml(sql)

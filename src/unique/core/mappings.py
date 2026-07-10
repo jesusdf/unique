@@ -193,6 +193,13 @@ PROCEDURAL_FUNC_MAPS: dict[tuple[str, str], dict[str, str]] = {
 #: (PostgreSQL/Oracle/MySQL store text as unicode by default).
 EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
     "postgresql": {
+        # Oracle-source names (the passthrough/MODIFY rewriters feed these).
+        "NUMBER": "NUMERIC",
+        "VARCHAR2": "VARCHAR",
+        "NVARCHAR2": "VARCHAR",
+        "CLOB": "TEXT",
+        "NCLOB": "TEXT",
+        "RAW": "BYTEA",
         "NVARCHAR": "VARCHAR",
         "NCHAR": "CHAR",
         "NTEXT": "TEXT",
@@ -229,6 +236,12 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "YEAR": "SMALLINT",
     },
     "mysql": {
+        # Oracle-source names (the passthrough/MODIFY rewriters feed these).
+        "NUMBER": "DECIMAL",
+        "VARCHAR2": "VARCHAR",
+        "NVARCHAR2": "VARCHAR",
+        "CLOB": "LONGTEXT",
+        "NCLOB": "LONGTEXT",
         "NVARCHAR": "VARCHAR",
         "NCHAR": "CHAR",
         # NTEXT holds up to 2^30 chars; MySQL TEXT caps at 64 KB, so the

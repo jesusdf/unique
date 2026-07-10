@@ -1956,6 +1956,13 @@ class ProceduralTransformer:
         if self._source == self._target:
             return None
         from unique.core import converter as _conv
+
+        if self._source == "oracle":
+            # Oracle's ALTER ... MODIFY parses as an opaque Command in
+            # sqlglot; the shared rewriter owns the per-target form.
+            modified = _conv.rewrite_oracle_modify(sql.strip(), self._target)
+            if modified is not None:
+                return modified
         from unique.core.ast_nodes import CommentStatement as IRComment
         from unique.core.ast_nodes import PassthroughSQL as IRPassthrough
         from unique.core.ast_nodes import RawSQL as IRRawSQL

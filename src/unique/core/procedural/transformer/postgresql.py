@@ -132,6 +132,8 @@ class PostgresTransformer(ProceduralTransformer):
         return True
 
     def _fix_target_dml(self, sql: str) -> str:
+        sql = self._rewrite_alter_trigger(sql)
+        sql = self._map_oracle_catalogs(sql)
         sql = self._pg_string_concat(sql)
         sql = self._pg_clean_dml(sql)
         return sql
@@ -139,7 +141,50 @@ class PostgresTransformer(ProceduralTransformer):
     def _update_predicate(self, col: str) -> str | None:
         return f"(NEW.{col} IS DISTINCT FROM OLD.{col})"
 
+    def _map_oracle_catalogs(self, sql: str) -> str:
+        """Oracle user_* catalog probes -> information_schema (found live:
+        column-existence guards). Unquoted Oracle identifiers are stored
+        uppercase but PostgreSQL folds to lowercase — compare case-folded."""
+        if self._source != "oracle" or not re.search(
+            r"(?i)\buser_tab_col(?:umn)?s\b|\buser_tables\b", sql
+        ):
+            return sql
+        sql = re.sub(
+            r"(?i)\buser_tab_col(?:umn)?s\b", "information_schema.columns", sql
+        )
+        sql = re.sub(r"(?i)\buser_tables\b", "information_schema.tables", sql)
+        sql = re.sub(
+            r"(?i)\b(table_name|column_name)\s*=\s*('(?:[^']|'')*')",
+            lambda m: f"{m.group(1)} = lower({m.group(2)})",
+            sql,
+        )
+        return sql
+
+    _ALTER_TRIGGER_RE = re.compile(
+        r"(?is)^\s*ALTER\s+TRIGGER\s+([\w\"]+)\s+(ENABLE|DISABLE)\s*;?\s*$"
+    )
+
+    def _rewrite_alter_trigger(self, sql: str) -> str:
+        """Oracle's ALTER TRIGGER x ENABLE names only the trigger; PostgreSQL
+        needs the table (ALTER TABLE t ENABLE TRIGGER x) — resolved from
+        pg_trigger at run time; a missing trigger degrades to a no-op."""
+        m = self._ALTER_TRIGGER_RE.match(sql)
+        if not m or self._source == self._target:
+            return sql
+        name, action = m.group(1).strip('"'), m.group(2).upper()
+        return (
+            "EXECUTE COALESCE((SELECT format("
+            f"'ALTER TABLE %s {action} TRIGGER %I', tgrelid::regclass, tgname)"
+            f" FROM pg_trigger WHERE tgname = lower('{name}')"
+            " AND NOT tgisinternal LIMIT 1), 'SELECT 1');"
+        )
+
+    def _fix_select_into_rest(self, sql: str) -> str:
+        return self._map_oracle_catalogs(sql)
+
     def _fix_raw_sql_target(self, sql: str) -> str:
+        sql = self._rewrite_alter_trigger(sql)
+        sql = self._map_oracle_catalogs(sql)
         sql = self._pg_string_concat(sql)
         if self._in_trigger:
             # PL/SQL trigger event predicates: plpgsql reads TG_OP.

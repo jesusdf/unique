@@ -43,6 +43,7 @@ from unique.core.converter import (
     harvest_tsql_alias_types,
     harvest_tsql_bit_columns,
     harvest_user_functions,
+    rewrite_oracle_modify,
 )
 from unique.core.dialect import Dialect
 from unique.core.errors import UnsupportedFeatureError
@@ -1457,6 +1458,12 @@ class Transpiler:
             # normalize to the DROP COLUMN list every engine reads. T-SQL
             # additionally wants one DROP COLUMN with a comma list.
             sql = _normalize_oracle_multicolumn_drop(sql, target)
+            # Same story for ALTER TABLE ... MODIFY (neither form parses).
+            modified = rewrite_oracle_modify(sql, target)
+            if modified is not None:
+                return TranspileResult(
+                    sql=modified, warnings=warnings, unsupported=unsupported
+                )
 
         if source == "tsql" and target != "tsql":
             altered = self._transpile_alter_column(

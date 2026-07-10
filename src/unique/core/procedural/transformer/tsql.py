@@ -100,6 +100,25 @@ class TSqlTransformer(ProceduralTransformer):
         raw-expression path (found live in the 13 MB corpus, 2026-07-10)."""
         if self._source != "oracle":
             return sql
+        # Oracle's ALTER TRIGGER x ENABLE names only the trigger; T-SQL
+        # needs the table (resolved from sys.triggers at run time).
+        mt = re.match(
+            r"(?is)^\s*ALTER\s+TRIGGER\s+([\w\[\]]+)\s+(ENABLE|DISABLE)" r"\s*;?\s*$",
+            sql,
+        )
+        if mt:
+            trg = mt.group(1).strip("[]")
+            action = mt.group(2).upper()
+            self._drop_index_n += 1
+            var = f"@uq_trgtbl{self._drop_index_n}"
+            return (
+                f"DECLARE {var} sysname = (SELECT TOP (1) "
+                f"OBJECT_NAME(parent_id) FROM sys.triggers "
+                f"WHERE name = '{trg}');\n"
+                f"IF {var} IS NOT NULL "
+                f"EXEC(N'ALTER TABLE [' + {var} + '] {action} "
+                f"TRIGGER [{trg}]');"
+            )
         # Oracle's DROP INDEX names only the index; T-SQL requires the table
         # (error 159). Resolve it from sys.indexes at run time.
         m = re.match(r"(?is)^\s*DROP\s+INDEX\s+([A-Za-z_]\w*)\s*;?\s*$", sql)
@@ -126,6 +145,10 @@ class TSqlTransformer(ProceduralTransformer):
         # Oracle user_* catalog probes -> the sys.* equivalents (the column
         # renames are gated on the catalog's presence in the same text so a
         # user column named index_name is never touched).
+        if re.search(r"(?i)\buser_tab_col(?:umn)?s\b", sql):
+            sql = re.sub(r"(?i)\buser_tab_col(?:umn)?s\b", "sys.columns", sql)
+            sql = re.sub(r"(?i)\btable_name\b", "OBJECT_NAME(object_id)", sql)
+            sql = re.sub(r"(?i)\bcolumn_name\b", "name", sql)
         if re.search(r"(?i)\buser_indexes\b", sql):
             sql = re.sub(r"(?i)\buser_indexes\b", "sys.indexes", sql)
             sql = re.sub(r"(?i)\bindex_name\b", "name", sql)

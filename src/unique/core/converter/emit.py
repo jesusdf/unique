@@ -264,6 +264,70 @@ def _cte_dml_unsupported(sql: str, read: str, dialect: str) -> str | None:
     return None
 
 
+_ORACLE_MODIFY_RE = re.compile(
+    r"(?is)^\s*ALTER\s+TABLE\s+(?P<table>[\w.\"]+)\s+MODIFY\s+"
+    r"(?:\((?P<parenspec>.+)\)|(?P<spec>[^;]+?))\s*;?\s*$"
+)
+_MODIFY_COL_RE = re.compile(
+    r"(?is)^(?P<col>[\w\"]+)\s*(?P<type>[A-Za-z]\w*(?:\s*\(\s*\d+"
+    r"(?:\s*,\s*\d+)?\s*\))?)?\s*(?P<null>NOT\s+NULL|NULL)?$"
+)
+
+
+def rewrite_oracle_modify(sql: str, dialect: str) -> str | None:
+    """Rewrite Oracle's ``ALTER TABLE t MODIFY [(]col type [NULL]...[)]`` for
+    *dialect* (sqlglot parses neither form — the statement leaked verbatim).
+
+    Returns None when the statement is not that shape or a column spec is
+    more complex than ``col [type] [NOT NULL|NULL]`` (defaults, constraints).
+    """
+    if dialect == "oracle":
+        return None
+    m = _ORACLE_MODIFY_RE.match(sql)
+    if not m:
+        return None
+    table = m.group("table")
+    spec_text = m.group("parenspec") or m.group("spec") or ""
+    actions: list[str] = []
+    for spec in _split_top_level_commas(spec_text):
+        cm = _MODIFY_COL_RE.match(spec.strip())
+        if not cm:
+            return None
+        col = cm.group("col")
+        ctype = cm.group("type") or ""
+        if ctype:
+            ctype = _portable_types_in_sql(ctype, dialect)
+        nullability = (cm.group("null") or "").upper()
+        nullability = re.sub(r"\s+", " ", nullability)
+        if not ctype and not nullability:
+            return None
+        if dialect == "tsql":
+            if not ctype:
+                # T-SQL's ALTER COLUMN requires the type for a nullability
+                # change; without it there is no faithful single statement.
+                return None
+            suffix = f" {nullability}" if nullability else ""
+            actions.append(f"ALTER COLUMN {col} {ctype}{suffix}")
+        elif dialect == "postgresql":
+            if ctype:
+                actions.append(f"ALTER COLUMN {col} TYPE {ctype}")
+            if nullability == "NOT NULL":
+                actions.append(f"ALTER COLUMN {col} SET NOT NULL")
+            elif nullability == "NULL":
+                actions.append(f"ALTER COLUMN {col} DROP NOT NULL")
+        else:  # mysql keeps MODIFY but needs the full definition
+            if not ctype:
+                return None
+            suffix = f" {nullability}" if nullability else ""
+            actions.append(f"MODIFY COLUMN {col} {ctype}{suffix}")
+    if not actions:
+        return None
+    if dialect == "tsql":
+        # One action per statement (T-SQL allows a single ALTER COLUMN).
+        return ";\n".join(f"ALTER TABLE {table} {a}" for a in actions) + ";"
+    return f"ALTER TABLE {table} " + ", ".join(actions) + ";"
+
+
 def _oracle_merge_paren_on(sql: str) -> str:
     """Wrap a MERGE's ON condition in the parentheses Oracle requires.
 
