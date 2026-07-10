@@ -321,8 +321,9 @@ class PostgresEmitter(ProceduralEmitter):
                 statements.extend(stmt.statements)
             else:
                 statements.append(stmt)
-        decls = [s for s in statements if isinstance(s, DeclareStatement)]
-        body = [s for s in statements if not isinstance(s, DeclareStatement)]
+        decl_types = (DeclareStatement, CursorDeclaration)
+        decls = [s for s in statements if isinstance(s, decl_types)]
+        body = [s for s in statements if not isinstance(s, decl_types)]
         # A PRINT becomes ``RAISE NOTICE``, which is PL/pgSQL-only and needs the
         # DO wrapper even though it is not "control flow" (so MySQL, where PRINT
         # is a standalone SELECT, still emits it bare).
