@@ -269,7 +269,8 @@ _ORACLE_MODIFY_RE = re.compile(
     r"(?:\((?P<parenspec>.+)\)|(?P<spec>[^;]+?))\s*;?\s*$"
 )
 _MODIFY_COL_RE = re.compile(
-    r"(?is)^(?P<col>[\w\"]+)\s*(?P<type>[A-Za-z]\w*(?:\s*\(\s*\d+"
+    r"(?is)^(?P<col>[\w\"]+)\s*"
+    r"(?P<type>(?!NOT\b|NULL\b)[A-Za-z]\w*(?:\s*\(\s*\d+"
     r"(?:\s*,\s*\d+)?\s*\))?)?\s*(?P<null>NOT\s+NULL|NULL)?$"
 )
 
