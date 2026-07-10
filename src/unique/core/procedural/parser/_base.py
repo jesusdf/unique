@@ -10,50 +10,34 @@ Delegates embedded DML/DQL statements to sqlglot for transpilation.
 
 from __future__ import annotations
 
-import dataclasses
 import logging
 import re
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
 from unique.core.ast_nodes import (
     AlterProcedureStatement,
     AnonymousBlock,
-    AssignmentStatement,
     ASTNode,
-    BeginEndBlock,
     CallStatement,
     CommentStatement,
     ContinueStatement,
     CreateFunctionStatement,
     CreateProcedureStatement,
     CreateTriggerStatement,
-    CursorDeclaration,
-    CursorOperation,
     DataType,
-    DeclareStatement,
     EmbeddedDML,
-    ExceptionBlock,
-    ExceptionHandler,
-    ExecuteStatement,
     ExitStatement,
-    ForLoopStatement,
     IfStatement,
     Literal,
-    LoopStatement,
-    NullStatement,
     ParameterDefinition,
     PrintStatement,
     RaiseErrorStatement,
     RawSQL,
     ReturnStatement,
-    SelectIntoStatement,
     SetVariableStatement,
-    StatementList,
     TransactionAction,
     TransactionStatement,
-    TryCatchBlock,
     WaitForStatement,
-    WhileStatement,
 )
 from unique.core.procedural.lexer import Lexer, Token, TokenType
 
@@ -78,12 +62,53 @@ class ParseResult:
     warnings: list[str] = field(default_factory=list)
 
 
-class ProceduralParser:
+class ParserBase:
     """Recursive descent parser for procedural SQL constructs.
 
     Handles T-SQL, Oracle PL/SQL, PostgreSQL PL/pgSQL, and MySQL
     procedural syntax.
     """
+
+    # ------------------------------------------------------------------
+    # Cross-family contract: the statement-family mixins (_tsql/_plsql)
+    # provide these; the base dispatch and shared capture loops call them.
+    # ------------------------------------------------------------------
+
+    def _is_tsql_source(self) -> bool:
+        """Whether the source dialect uses T-SQL procedural syntax."""
+        return self._dialect == "tsql"
+
+    def _at_tsql_stmt_boundary(self) -> bool:
+        raise NotImplementedError  # TsqlStatementsMixin
+
+    def _parse_tsql_body(self) -> list[ASTNode]:
+        raise NotImplementedError  # TsqlStatementsMixin
+
+    def _parse_tsql_statement(self) -> ASTNode | None:
+        raise NotImplementedError  # TsqlStatementsMixin
+
+    def _parse_tsql_assignment_select(
+        self, select_parts: list[str]
+    ) -> tuple[list[str], list[str]] | None:
+        raise NotImplementedError  # TsqlStatementsMixin
+
+    def _parse_plsql_body(self) -> list[ASTNode]:
+        raise NotImplementedError  # PlsqlStatementsMixin
+
+    def _parse_plsql_statement(self) -> ASTNode | None:
+        raise NotImplementedError  # PlsqlStatementsMixin
+
+    def _parse_plsql_declaration(self) -> ASTNode | None:
+        raise NotImplementedError  # PlsqlStatementsMixin
+
+    def _parse_plsql_open(self) -> ASTNode:
+        raise NotImplementedError  # PlsqlStatementsMixin
+
+    def _parse_plsql_close(self) -> ASTNode:
+        raise NotImplementedError  # PlsqlStatementsMixin
+
+    def _compound_row_body(self, raw: str) -> tuple[ASTNode, ...]:
+        raise NotImplementedError  # PlsqlStatementsMixin
 
     def __init__(self, dialect: str) -> None:
         self._dialect = dialect
@@ -91,19 +116,6 @@ class ProceduralParser:
         self._pos = 0
         self._errors: list[ParseError] = []
         self._warnings: list[str] = []
-
-    # ------------------------------------------------------------------
-    # Source-family helpers
-    #
-    # The parser dispatches on the *source* dialect, of which there are only
-    # two syntactic families: T-SQL and PL/SQL (Oracle/PostgreSQL/MySQL). These
-    # helpers name that distinction so the family checks read intentionally
-    # rather than as scattered ``self._dialect == "tsql"`` tests.
-    # ------------------------------------------------------------------
-
-    def _is_tsql_source(self) -> bool:
-        """Whether the source dialect uses T-SQL procedural syntax."""
-        return self._dialect == "tsql"
 
     def _parse_routine_body(self, with_pg_header: bool = True) -> list[ASTNode]:
         """Consume a routine header and parse its body for the source family.
@@ -151,10 +163,6 @@ class ProceduralParser:
                 warnings=self._warnings,
             )
 
-    # ---------------------------------------------------------------
-    # Token navigation
-    # ---------------------------------------------------------------
-
     def _current(self) -> Token:
         """Return current token."""
         if self._pos < len(self._tokens):
@@ -182,9 +190,6 @@ class ProceduralParser:
         ):
             self._advance()
 
-    # A forward pass that dropped a source-only construct leaves a note like
-    # "/* UNIQUE: <orig> -- <dialect>-only, no <target> equivalent */". Capture
-    # <orig> and <dialect> so a transpilation back to <dialect> can restore it.
     _RESTORABLE_NOTE_RE = re.compile(
         r"(?is)^/\*\s*UNIQUE:\s*(.+?)\s*--\s*([a-z0-9_]+)-only,.*?\*/$"
     )
@@ -272,10 +277,6 @@ class ProceduralParser:
                 f"got {tok.value!r} ({tok.type.name})"
             )
         return self._advance()
-
-    # ---------------------------------------------------------------
-    # Top-level dispatch
-    # ---------------------------------------------------------------
 
     def _parse_top_level(self) -> ASTNode:
         """Parse the top-level construct."""
@@ -386,10 +387,6 @@ class ProceduralParser:
             return self._parse_function(or_replace=True, is_alter=True)
         else:
             return self._parse_fallback()
-
-    # ---------------------------------------------------------------
-    # Procedure parsing
-    # ---------------------------------------------------------------
 
     def _consume_pg_routine_header(self) -> None:
         """Consume PostgreSQL routine header clauses before the body.
@@ -679,48 +676,6 @@ class ProceduralParser:
             referencing=referencing,
         )
 
-    # The common Oracle COMPOUND TRIGGER aggregation idiom: a collection filled
-    # from ``:NEW.<fk>`` (or ``:OLD.``) once per row in AFTER EACH ROW, then
-    # re-read in an AFTER STATEMENT ``FOR <v> IN 1 .. <n> LOOP`` that
-    # re-aggregates the parent. Matched over the space-joined body tokens, so the
-    # patterns tolerate the whitespace the lexer leaves around ``.``/``:``/``:=``.
-    _COMPOUND_COLLECT_RE = re.compile(
-        r"(?is)AFTER\s+EACH\s+ROW\b.*?"
-        r"(\w+)\s*\(\s*\w+\s*\)\s*:=\s*(:\s*(?:NEW|OLD)\s*\.\s*\w+)\s*;"
-    )
-    _COMPOUND_STMT_LOOP_RE = re.compile(
-        r"(?is)AFTER\s+STATEMENT\b.*?\bBEGIN\b.*?"
-        r"\bFOR\s+(\w+)\s+IN\b.*?\bLOOP\b(.*?)\bEND\s+LOOP\b"
-    )
-
-    def _compound_row_body(self, raw: str) -> tuple[ASTNode, ...]:
-        """Extract a row-level equivalent of a COMPOUND TRIGGER's AFTER STATEMENT
-        aggregation, or ``()`` when the body does not match the recognized idiom.
-
-        The collection re-read (``<coll>(<loop_var>)``) is rewritten to the
-        collected per-row key (``:NEW.<fk>``), so the aggregating statement is
-        keyed on the current row — exactly what a plain row-level AFTER trigger
-        needs on an engine (PostgreSQL) that lets a trigger re-read its table."""
-        collect = self._COMPOUND_COLLECT_RE.search(raw)
-        loop = self._COMPOUND_STMT_LOOP_RE.search(raw)
-        if not collect or not loop:
-            return ()
-        coll_name, key_ref = collect.group(1), collect.group(2)
-        loop_var, loop_body = loop.group(1), loop.group(2)
-        # ": NEW . invoice_id" -> ":NEW.invoice_id"
-        key_ref = re.sub(r"\s+", "", key_ref)
-        rewritten = re.sub(
-            rf"(?is)\b{re.escape(coll_name)}\s*\(\s*{re.escape(loop_var)}\s*\)",
-            key_ref,
-            loop_body,
-        )
-        stmts = [s.strip() for s in rewritten.split(";") if s.strip()]
-        return tuple(EmbeddedDML(sql=s, dialect=self._dialect) for s in stmts)
-
-    # ---------------------------------------------------------------
-    # Identifiers and names
-    # ---------------------------------------------------------------
-
     def _parse_qualified_name(self) -> tuple[str, str | None]:
         """Parse a potentially qualified name (schema.name)."""
         self._skip_comments()
@@ -741,10 +696,6 @@ class ProceduralParser:
         if tok.type in (TokenType.IDENTIFIER, TokenType.KEYWORD, TokenType.VARIABLE):
             return self._advance().value
         return self._advance().value
-
-    # ---------------------------------------------------------------
-    # Parameters
-    # ---------------------------------------------------------------
 
     def _parse_parameter_list(self) -> list[ParameterDefinition]:
         """Parse procedure/function parameter list.
@@ -865,17 +816,7 @@ class ProceduralParser:
             name=name, data_type=data_type, direction=direction, default=default
         )
 
-    # ---------------------------------------------------------------
-    # Data types
-    # ---------------------------------------------------------------
-
-    # A type-carrier marker left by a forward transpilation when a non-portable
-    # type was lowered to a permissive carrier, e.g. "TEXT /* UNIQUE: SQL_VARIANT
-    # */" or "SQL_VARIANT /* UNIQUE: H_X.Y%TYPE */". The captured group is the
-    # original type text (no "-- ..." suffix, which marks a non-type UNIQUE note).
     _CARRIER_TYPE_RE = re.compile(r"(?is)^/\*\s*UNIQUE:\s*(?!.*--)(.+?)\s*\*/$")
-    # The restored original must look like a type: a (possibly qualified or
-    # %TYPE/%ROWTYPE) name with an optional parenthesized parameter list.
     _CARRIER_TYPEISH_RE = re.compile(
         r"(?i)^([\w.]+(?:%\w+)?)\s*(?:\(\s*([\w, ]+)\s*\))?$"
     )
@@ -1003,10 +944,6 @@ class ProceduralParser:
 
         return DataType(name=type_name, params=tuple(params), origin_comment=origin)
 
-    # ---------------------------------------------------------------
-    # Body parsing — T-SQL
-    # ---------------------------------------------------------------
-
     def _run_body_loop(
         self,
         parse_stmt: object,
@@ -1037,112 +974,6 @@ class ProceduralParser:
                 # No progress — force advance to avoid infinite loop
                 self._advance()
         return stmts
-
-    def _parse_tsql_body(self) -> list[ASTNode]:
-        """Parse a T-SQL procedure/function body."""
-        if self._match_keyword("BEGIN"):
-            stmts = self._run_body_loop(self._parse_tsql_statement, ("END",))
-            self._match_keyword("END")
-            return stmts
-        return self._run_body_loop(self._parse_tsql_statement, ())
-
-    def _parse_tsql_statement(self) -> ASTNode | None:
-        """Parse a single T-SQL statement, guaranteeing token progress."""
-        before = self._pos
-        node = self._parse_tsql_statement_inner()
-        if self._pos == before and not self._at_end():
-            # Dispatch consumed nothing; force progress to avoid stalls.
-            self._advance()
-        return node
-
-    def _parse_tsql_statement_inner(self) -> ASTNode | None:
-        """Parse a single T-SQL statement inside a body."""
-        # Preserve a comment that occupies its own statement position: emit it
-        # as a CommentStatement (one per call; the body loop calls again for
-        # the next token) instead of discarding it.
-        if self._current().type in (
-            TokenType.LINE_COMMENT,
-            TokenType.BLOCK_COMMENT,
-        ):
-            tok = self._current()
-            self._advance()
-            return self._normalize_comment(tok.value, tok.type)
-
-        if self._at_end():
-            return None
-
-        tok = self._current()
-
-        if tok.is_keyword("SET"):
-            return self._parse_set_statement()
-        elif tok.is_keyword("DECLARE"):
-            return self._parse_tsql_declare()
-        elif tok.is_keyword("IF"):
-            return self._parse_tsql_if()
-        elif tok.is_keyword("WHILE"):
-            return self._parse_tsql_while()
-        elif tok.is_keyword("WAITFOR"):
-            return self._parse_waitfor()
-        elif (
-            tok.is_keyword("COMMIT", "ROLLBACK", "SAVE")
-            or tok.is_keyword("BEGIN")
-            and self._peek_is_transaction()
-        ):
-            return self._parse_transaction()
-        elif tok.is_keyword("BEGIN"):
-            return self._parse_tsql_begin_block()
-        elif tok.is_keyword("RETURN"):
-            return self._parse_return()
-        elif tok.is_keyword("EXEC", "EXECUTE"):
-            return self._parse_tsql_exec()
-        elif tok.is_keyword("PRINT"):
-            return self._parse_print()
-        elif tok.is_keyword("RAISERROR", "THROW"):
-            return self._parse_raiserror()
-        elif tok.is_keyword("TRY"):
-            return self._parse_tsql_try_catch()
-        elif tok.is_keyword("OPEN") and self._peek(1).type in (
-            TokenType.IDENTIFIER,
-            TokenType.VARIABLE,
-        ):
-            # Cursor OPEN. Exclude OPEN SYMMETRIC/MASTER KEY (falls through to
-            # embedded DML like any other opaque statement).
-            if self._peek(1).upper_value not in ("SYMMETRIC", "MASTER"):
-                return self._parse_plsql_open()
-            return self._parse_embedded_dml()
-        elif tok.is_keyword("FETCH"):
-            return self._parse_tsql_fetch()
-        elif tok.is_keyword("CLOSE") and self._peek(1).type in (
-            TokenType.IDENTIFIER,
-            TokenType.VARIABLE,
-        ):
-            return self._parse_plsql_close()
-        elif tok.is_keyword("DEALLOCATE"):
-            return self._parse_tsql_deallocate()
-        elif tok.is_keyword("SELECT"):
-            # A T-SQL assignment-select (SELECT @v = expr) must become a
-            # SELECT ... INTO, not embedded DML (where sqlglot would turn the
-            # '=' into a column alias and drop the assignment).
-            assign_stmt = self._try_parse_tsql_assignment_select()
-            if assign_stmt is not None:
-                return assign_stmt
-            return self._parse_embedded_dml()
-        elif tok.is_keyword("WITH"):
-            # A CTE feeding an assignment-select (WITH x AS (...) SELECT
-            # @v = ...) must become SELECT ... INTO like the plain form —
-            # sqlglot would turn the '=' into an alias and drop the
-            # assignment.
-            cte_stmt = self._try_parse_tsql_cte_assignment_select()
-            if cte_stmt is not None:
-                return cte_stmt
-            return self._parse_embedded_dml()
-        elif tok.is_keyword("INSERT", "UPDATE", "DELETE", "MERGE"):
-            return self._parse_embedded_dml()
-        elif tok.type == TokenType.SEMICOLON:
-            self._advance()
-            return None
-        else:
-            return self._parse_embedded_dml()
 
     def _parse_set_statement(self) -> ASTNode | None:
         """Parse SET @var = expr or SET NOCOUNT ON."""
@@ -1275,321 +1106,6 @@ class ProceduralParser:
                 seconds = None
         return WaitForStatement(kind=kind, value=literal, seconds=seconds)
 
-    def _parse_tsql_declare(self) -> ASTNode:
-        """Parse DECLARE @var type [= value] [, @var2 type [= value] ...].
-
-        T-SQL allows several comma-separated variable declarations in a
-        single DECLARE; they expand to one DeclareStatement each.
-        """
-        self._expect_keyword("DECLARE")
-
-        declarations: list[ASTNode] = []
-        while True:
-            tok = self._current()
-            if tok.type == TokenType.VARIABLE:
-                var_name = self._advance().value
-            else:
-                var_name = self._parse_identifier()
-
-            # CURSOR declaration (always single).
-            if self._current().is_keyword("CURSOR"):
-                self._advance()
-                # T-SQL cursor options (LOCAL FAST_FORWARD ...) sit between
-                # CURSOR and FOR; they are scope/perf hints with no portable
-                # meaning — consume them so the FOR query is still captured.
-                while (
-                    self._current().type in (TokenType.IDENTIFIER, TokenType.KEYWORD)
-                    and self._current().upper_value in self._TSQL_CURSOR_OPTIONS
-                ):
-                    self._advance()
-                query: ASTNode | None = None
-                if self._match_keyword("FOR"):
-                    query = self._parse_embedded_dml()
-                return CursorDeclaration(name=var_name, query=query)
-
-            data_type = self._parse_data_type()
-            default: ASTNode | None = None
-            if self._match_type(TokenType.OPERATOR):  # =
-                default = self._parse_declare_default()
-
-            declarations.append(
-                DeclareStatement(name=var_name, data_type=data_type, default=default)
-            )
-
-            # Another variable in the same DECLARE?
-            if not self._match_type(TokenType.COMMA):
-                break
-
-        self._match_type(TokenType.SEMICOLON)
-        if len(declarations) == 1:
-            return declarations[0]
-        return StatementList(statements=tuple(declarations))
-
-    def _parse_tsql_if(self) -> ASTNode:
-        """Parse T-SQL IF ... BEGIN...END [ELSE BEGIN...END]."""
-        self._expect_keyword("IF")
-        condition = self._parse_expression_until_keyword(
-            "BEGIN",
-            "SET",
-            "SELECT",
-            "INSERT",
-            "UPDATE",
-            "DELETE",
-            "EXEC",
-            "EXECUTE",
-            "RETURN",
-            "PRINT",
-            "RAISERROR",
-            "THROW",
-            # Statement verbs that can never continue a boolean expression:
-            # ``IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION`` used to swallow the
-            # ROLLBACK (and everything after) into the condition.
-            "COMMIT",
-            "ROLLBACK",
-            "SAVE",
-            "DECLARE",
-            "WAITFOR",
-            "BREAK",
-            "CONTINUE",
-        )
-
-        then_body: list[ASTNode] = []
-        if self._current().is_keyword("BEGIN"):
-            node = self._parse_tsql_begin_block()
-            if isinstance(node, BeginEndBlock):
-                then_body = list(node.statements)
-            else:
-                then_body = [node]
-        else:
-            stmt = self._parse_tsql_statement()
-            if stmt:
-                then_body = [stmt]
-
-        else_body: list[ASTNode] = []
-        # Do not skip comments when probing for ELSE: a standalone comment
-        # after the THEN block (before END) must be preserved by the body loop,
-        # not silently consumed while looking for an optional ELSE.
-        if self._current().is_keyword("ELSE"):
-            self._advance()
-            if self._current().is_keyword("BEGIN"):
-                node = self._parse_tsql_begin_block()
-                if isinstance(node, BeginEndBlock):
-                    else_body = list(node.statements)
-                else:
-                    else_body = [node]
-            elif self._current().is_keyword("IF"):
-                nested_if = self._parse_tsql_if()
-                else_body = [nested_if]
-            else:
-                stmt = self._parse_tsql_statement()
-                if stmt:
-                    else_body = [stmt]
-
-        return IfStatement(
-            condition=condition,
-            then_body=tuple(then_body),
-            else_body=tuple(else_body),
-        )
-
-    def _parse_tsql_while(self) -> ASTNode:
-        """Parse T-SQL WHILE ... BEGIN...END (or a single-statement body).
-
-        The condition stops at any statement-starting keyword, like IF's:
-        an unbracketed body without ';' (``WHILE cond\\n  SET @i += 1``)
-        otherwise swallows the following statements into the condition.
-        """
-        self._expect_keyword("WHILE")
-        condition = self._parse_expression_until_keyword(
-            "BEGIN",
-            "SET",
-            "SELECT",
-            "INSERT",
-            "UPDATE",
-            "DELETE",
-            "EXEC",
-            "EXECUTE",
-            "RETURN",
-            "PRINT",
-            "RAISERROR",
-            "THROW",
-            # Statement verbs that can never continue a boolean expression:
-            # ``IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION`` used to swallow the
-            # ROLLBACK (and everything after) into the condition.
-            "COMMIT",
-            "ROLLBACK",
-            "SAVE",
-            "DECLARE",
-            "WAITFOR",
-            "BREAK",
-            "CONTINUE",
-        )
-
-        body: list[ASTNode] = []
-        if self._current().is_keyword("BEGIN"):
-            node = self._parse_tsql_begin_block()
-            if isinstance(node, BeginEndBlock):
-                body = list(node.statements)
-        else:
-            stmt = self._parse_tsql_statement()
-            if stmt:
-                body = [stmt]
-
-        return WhileStatement(condition=condition, body=tuple(body))
-
-    def _parse_tsql_begin_block(self) -> ASTNode:
-        """Parse BEGIN...END block."""
-        self._expect_keyword("BEGIN")
-
-        # Check for BEGIN TRY
-        if self._current().is_keyword("TRY"):
-            self._advance()
-            return self._parse_tsql_try_catch_inner()
-
-        stmts: list[ASTNode] = []
-        while not self._at_end() and not self._current().is_keyword("END"):
-            stmt = self._parse_tsql_statement()
-            if stmt:
-                stmts.append(stmt)
-
-        self._match_keyword("END")
-        # Consume a trailing semicolon only if it is the next token; do not
-        # skip comments here, which would discard a comment following the
-        # block (e.g. before the enclosing END).
-        if self._current().type == TokenType.SEMICOLON:
-            self._advance()
-        return BeginEndBlock(statements=tuple(stmts))
-
-    def _parse_tsql_try_catch(self) -> ASTNode:
-        """Parse BEGIN TRY...END TRY BEGIN CATCH...END CATCH."""
-        self._expect_keyword("BEGIN")
-        self._expect_keyword("TRY")
-        return self._parse_tsql_try_catch_inner()
-
-    def _parse_tsql_try_catch_inner(self) -> ASTNode:
-        """Parse the internals of TRY...CATCH after BEGIN TRY consumed."""
-        try_body: list[ASTNode] = []
-        while not self._at_end():
-            if self._current().is_keyword("END"):
-                self._advance()
-                if self._match_keyword("TRY"):
-                    break
-            stmt = self._parse_tsql_statement()
-            if stmt:
-                try_body.append(stmt)
-
-        catch_body: list[ASTNode] = []
-        if self._match_keyword("BEGIN"):
-            self._expect_keyword("CATCH")
-            while not self._at_end():
-                if self._current().is_keyword("END"):
-                    self._advance()
-                    if self._match_keyword("CATCH"):
-                        break
-                stmt = self._parse_tsql_statement()
-                if stmt:
-                    catch_body.append(stmt)
-
-        return TryCatchBlock(try_body=tuple(try_body), catch_body=tuple(catch_body))
-
-    def _parse_tsql_exec(self) -> ASTNode:
-        """Parse EXEC/EXECUTE statement."""
-        self._advance()  # EXEC/EXECUTE
-        expr = self._parse_expression_until_semicolon()
-        self._match_type(TokenType.SEMICOLON)
-        return ExecuteStatement(sql_expression=expr)
-
-    # ---------------------------------------------------------------
-    # Body parsing — PL/SQL (Oracle) and PL/pgSQL
-    # ---------------------------------------------------------------
-
-    def _parse_plsql_body(self) -> list[ASTNode]:
-        """Parse a PL/SQL procedure/function body (DECLARE...BEGIN...END)."""
-        stmts: list[ASTNode] = []
-
-        # A run of comments right after IS/AS (before any declaration) is the
-        # routine's header comment. Oracle/PostgreSQL/MySQL keep such comments in
-        # the stored module; preserve them (flagged ``header``) so the emitter can
-        # place them idiomatically per target — inside the routine here, or back
-        # out before the CREATE for T-SQL, which keeps them in the module text.
-        for comment in self._take_comments():
-            if isinstance(comment, CommentStatement):
-                stmts.append(replace(comment, header=True))
-
-        # Optional DECLARE section (before BEGIN)
-        guard = 0
-        while not self._at_end() and not self._current().is_keyword("BEGIN"):
-            guard += 1
-            if guard > 100000:
-                break
-            if self._current().is_keyword("DECLARE"):
-                self._advance()
-                continue
-            before = self._pos
-            decl = self._parse_plsql_declaration()
-            if decl:
-                stmts.append(decl)
-            if self._pos == before:
-                self._advance()
-
-        # BEGIN ... END block
-        if self._match_keyword("BEGIN"):
-            guard = 0
-            while not self._at_end() and not self._current().is_keyword("END"):
-                guard += 1
-                if guard > 100000:
-                    break
-                if self._current().is_keyword("EXCEPTION"):
-                    stmts.append(self._parse_plsql_exception())
-                    continue
-                before = self._pos
-                stmt = self._parse_plsql_statement()
-                if stmt:
-                    stmts.append(stmt)
-                if self._pos == before:
-                    self._advance()
-
-            self._match_keyword("END")
-            # Optional procedure/function name after END
-            if self._current().type in (
-                TokenType.IDENTIFIER,
-                TokenType.KEYWORD,
-            ) and not self._current().is_keyword("IF", "LOOP", "CASE"):
-                self._advance()
-            self._match_type(TokenType.SEMICOLON)
-
-        return stmts
-
-    def _parse_plsql_declaration(self) -> ASTNode | None:
-        """Parse a PL/SQL declaration (variable, cursor, etc.)."""
-        self._skip_comments()
-        if self._at_end() or self._current().is_keyword("BEGIN"):
-            return None
-
-        tok = self._current()
-
-        # CURSOR name IS SELECT ...
-        if tok.is_keyword("CURSOR"):
-            self._advance()
-            cursor_name = self._parse_identifier()
-            query: ASTNode | None = None
-            if self._match_keyword("IS") or self._match_keyword("FOR"):
-                query = self._parse_embedded_dml()
-            self._match_type(TokenType.SEMICOLON)
-            return CursorDeclaration(name=cursor_name, query=query)
-
-        # Variable: name type [:= value];
-        name = self._parse_identifier()
-
-        # Check for type_reference (%TYPE, %ROWTYPE)
-        data_type = self._parse_data_type_or_reference()
-
-        default: ASTNode | None = None
-        if self._match_type(TokenType.ASSIGN) or self._match_keyword("DEFAULT"):
-            default = self._parse_expression_until_semicolon()
-
-        self._match_type(TokenType.SEMICOLON)
-        return DeclareStatement(name=name, data_type=data_type, default=default)
-
     def _parse_call_statement(self) -> ASTNode:
         """Parse a stored-procedure call: ``CALL name(args)`` (MySQL/PG/Oracle).
         ``CALL`` lexes as an identifier, so the caller matches it by value."""
@@ -1621,810 +1137,6 @@ class ProceduralParser:
         joined = re.sub(r"\s+([,)])", r"\1", joined)
         return re.sub(r"\(\s+", "(", joined).strip()
 
-    def _parse_plsql_statement(self) -> ASTNode | None:
-        """Parse a single PL/SQL statement, guaranteeing token progress."""
-        before = self._pos
-        node = self._parse_plsql_statement_inner()
-        if self._pos == before and not self._at_end():
-            self._advance()
-        return node
-
-    def _parse_plsql_statement_inner(self) -> ASTNode | None:
-        """Parse a single PL/SQL statement."""
-        # Preserve a comment that occupies its own statement position (emit it
-        # as a CommentStatement, one per call) instead of discarding it, so a
-        # restorable "/* UNIQUE: … */" note survives onward transpilation — the
-        # same way the T-SQL body does.
-        if self._current().type in (
-            TokenType.LINE_COMMENT,
-            TokenType.BLOCK_COMMENT,
-        ):
-            tok = self._current()
-            self._advance()
-            return self._normalize_comment(tok.value, tok.type)
-
-        if self._at_end():
-            return None
-
-        tok = self._current()
-
-        if tok.upper_value == "CALL" and tok.type != TokenType.KEYWORD:
-            return self._parse_call_statement()
-        if tok.is_keyword("DECLARE"):
-            # MySQL places variable declarations inside BEGIN ... END.
-            self._advance()
-            return self._parse_plsql_declaration()
-        if tok.is_keyword("SET"):
-            # MySQL assignment: SET var = expr;
-            return self._parse_mysql_set()
-        if tok.is_keyword("IF"):
-            return self._parse_plsql_if()
-        elif tok.is_keyword("CASE") and self._plsql_case_is_statement():
-            return self._parse_plsql_case_statement()
-        elif tok.is_keyword("WHILE"):
-            return self._parse_plsql_while()
-        elif tok.is_keyword("FOR"):
-            return self._parse_plsql_for()
-        elif tok.is_keyword("LOOP"):
-            return self._parse_plsql_loop()
-        elif tok.is_keyword("OPEN"):
-            return self._parse_plsql_open()
-        elif tok.is_keyword("FETCH"):
-            return self._parse_plsql_fetch()
-        elif tok.is_keyword("CLOSE"):
-            return self._parse_plsql_close()
-        elif tok.is_keyword("RETURN"):
-            return self._parse_return()
-        elif tok.is_keyword("RAISE") or tok.is_keyword("RAISE_APPLICATION_ERROR"):
-            return self._parse_plsql_raise()
-        elif tok.is_keyword("EXECUTE") and self._peek(1).is_keyword("IMMEDIATE"):
-            return self._parse_plsql_execute_immediate()
-        elif tok.is_keyword("EXEC", "EXECUTE"):
-            # SQL*Plus ``EXEC[UTE] proc[(args)]`` — shorthand for
-            # ``BEGIN proc(args); END;``. Model it as a CallStatement so each
-            # target emits its own call syntax; letting it fall to embedded
-            # DML ships T-SQL impersonation syntax (``EXEC AS proc``) with the
-            # arguments dropped (audit 2026-07-08, D1).
-            return self._parse_sqlplus_exec_call()
-        elif tok.is_keyword("EXIT"):
-            return self._parse_exit()
-        elif tok.is_keyword("CONTINUE"):
-            return self._parse_continue()
-        elif tok.is_keyword("NULL"):
-            self._advance()
-            self._match_type(TokenType.SEMICOLON)
-            return NullStatement()
-        elif tok.is_keyword("BEGIN"):
-            return self._parse_plsql_nested_begin()
-        elif tok.is_keyword("SELECT"):
-            return self._parse_plsql_select_or_dml()
-        elif tok.is_keyword("INSERT", "UPDATE", "DELETE", "MERGE"):
-            return self._parse_embedded_dml()
-        elif tok.is_keyword("DBMS_OUTPUT"):
-            return self._parse_dbms_output()
-        elif tok.type == TokenType.COLON and self._starts_row_ref_assignment():
-            # Oracle row-level trigger assignment ``:NEW.col := expr``. The lexer
-            # emits ``:`` as a bare COLON, so drop it here and parse the rest as a
-            # ``NEW.col := expr`` assignment (the leading ``:`` is re-applied per
-            # target). Without this the statement would fall to embedded DML and
-            # the Oracle ``:=`` operator would leak to MySQL, which rejects it.
-            self._advance()  # consume the ':' of :NEW./:OLD.
-            return self._parse_plsql_assignment_or_call()
-        elif tok.type in (TokenType.IDENTIFIER, TokenType.KEYWORD):
-            # Could be assignment: name := expr; or procedure call
-            return self._parse_plsql_assignment_or_call()
-        elif tok.type == TokenType.SEMICOLON:
-            self._advance()
-            return None
-        else:
-            return self._parse_embedded_dml()
-
-    def _parse_plsql_if(self) -> ASTNode:
-        """Parse PL/SQL IF ... THEN ... [ELSIF ... THEN ...] [ELSE ...] END IF."""
-        self._expect_keyword("IF")
-        condition = self._parse_expression_until_keyword("THEN")
-        self._expect_keyword("THEN")
-
-        then_body: list[ASTNode] = []
-        while not self._at_end() and not self._current().is_keyword(
-            "ELSIF", "ELSEIF", "ELSE", "END"
-        ):
-            stmt = self._parse_plsql_statement()
-            if stmt:
-                then_body.append(stmt)
-
-        # Handle ELSIF chains
-        else_body: list[ASTNode] = []
-        if self._current().is_keyword("ELSIF", "ELSEIF"):
-            nested_if = self._parse_plsql_if_no_end()
-            else_body = [nested_if]
-        elif self._match_keyword("ELSE"):
-            while not self._at_end() and not self._current().is_keyword("END"):
-                stmt = self._parse_plsql_statement()
-                if stmt:
-                    else_body.append(stmt)
-
-        if self._match_keyword("END"):
-            self._match_keyword("IF")
-            self._match_type(TokenType.SEMICOLON)
-
-        return IfStatement(
-            condition=condition,
-            then_body=tuple(then_body),
-            else_body=tuple(else_body),
-        )
-
-    def _parse_plsql_if_no_end(self) -> ASTNode:
-        """Parse ELSIF/ELSEIF ... THEN without consuming final END IF."""
-        self._advance()  # ELSIF/ELSEIF
-        condition = self._parse_expression_until_keyword("THEN")
-        self._expect_keyword("THEN")
-
-        then_body: list[ASTNode] = []
-        while not self._at_end() and not self._current().is_keyword(
-            "ELSIF", "ELSEIF", "ELSE", "END"
-        ):
-            stmt = self._parse_plsql_statement()
-            if stmt:
-                then_body.append(stmt)
-
-        else_body: list[ASTNode] = []
-        if self._current().is_keyword("ELSIF", "ELSEIF"):
-            nested_if = self._parse_plsql_if_no_end()
-            else_body = [nested_if]
-        elif self._match_keyword("ELSE"):
-            while not self._at_end() and not self._current().is_keyword("END"):
-                stmt = self._parse_plsql_statement()
-                if stmt:
-                    else_body.append(stmt)
-
-        return IfStatement(
-            condition=condition,
-            then_body=tuple(then_body),
-            else_body=tuple(else_body),
-        )
-
-    def _plsql_case_is_statement(self) -> bool:
-        """Whether a leading CASE is the PL/SQL CASE *statement* (branches
-        hold statements, terminated by END CASE) rather than a CASE
-        expression starting an assignment/scalar context. At statement
-        position a CASE expression cannot stand alone, so a bare CASE here
-        is always the statement form."""
-        return True
-
-    def _parse_plsql_case_statement(self) -> ASTNode:
-        """Parse ``CASE [selector] WHEN v THEN stmts ... [ELSE stmts] END
-        CASE;`` into an IF/ELSIF chain — the portable model (T-SQL has no
-        CASE statement; PG/MySQL emit their native chained IF forms)."""
-        self._expect_keyword("CASE")
-        # Selector (empty for the searched form: CASE WHEN cond THEN ...).
-        selector_parts: list[str] = []
-        while not self._at_end() and not self._current().is_keyword("WHEN"):
-            selector_parts.append(self._advance().value)
-        selector = " ".join(selector_parts).strip()
-
-        def parse_branch_body() -> tuple[ASTNode, ...]:
-            stmts: list[ASTNode] = []
-            guard = 0
-            while not self._at_end() and not self._current().is_keyword(
-                "WHEN", "ELSE", "END"
-            ):
-                guard += 1
-                if guard > 100000:
-                    break
-                before = self._pos
-                stmt = self._parse_plsql_statement()
-                if stmt:
-                    stmts.append(stmt)
-                if self._pos == before:
-                    self._advance()
-            return tuple(stmts)
-
-        branches: list[tuple[str, tuple[ASTNode, ...]]] = []
-        else_body: tuple[ASTNode, ...] = ()
-        while self._match_keyword("WHEN"):
-            cond_parts: list[str] = []
-            while not self._at_end() and not self._current().is_keyword("THEN"):
-                cond_parts.append(self._advance().value)
-            self._match_keyword("THEN")
-            when_value = " ".join(cond_parts).strip()
-            condition = f"{selector} = {when_value}" if selector else when_value
-            branches.append((condition, parse_branch_body()))
-        if self._match_keyword("ELSE"):
-            else_body = parse_branch_body()
-        self._match_keyword("END")
-        self._match_keyword("CASE")
-        self._match_type(TokenType.SEMICOLON)
-
-        if not branches:
-            return NullStatement()
-        node: ASTNode | None = None
-        for condition, body in reversed(branches):
-            wrapped: tuple[ASTNode, ...] = else_body if node is None else (node,)
-            node = IfStatement(
-                condition=RawSQL(sql=condition, reason="CASE statement branch"),
-                then_body=body or (NullStatement(),),
-                else_body=wrapped,
-            )
-        assert node is not None
-        return node
-
-    def _parse_plsql_while(self) -> ASTNode:
-        """Parse PL/SQL WHILE ... LOOP ... END LOOP."""
-        self._expect_keyword("WHILE")
-        condition = self._parse_expression_until_keyword("LOOP")
-        self._expect_keyword("LOOP")
-
-        body: list[ASTNode] = []
-        while not self._at_end() and not self._current().is_keyword("END"):
-            stmt = self._parse_plsql_statement()
-            if stmt:
-                body.append(stmt)
-
-        self._match_keyword("END")
-        self._match_keyword("LOOP")
-        self._match_type(TokenType.SEMICOLON)
-
-        return WhileStatement(condition=condition, body=tuple(body))
-
-    def _parse_plsql_for(self) -> ASTNode:
-        """Parse PL/SQL FOR ... IN ... LOOP ... END LOOP."""
-        self._expect_keyword("FOR")
-        var_name = self._parse_identifier()
-        self._expect_keyword("IN")
-
-        cursor = self._parse_expression_until_keyword("LOOP")
-        self._expect_keyword("LOOP")
-
-        body: list[ASTNode] = []
-        while not self._at_end() and not self._current().is_keyword("END"):
-            stmt = self._parse_plsql_statement()
-            if stmt:
-                body.append(stmt)
-
-        self._match_keyword("END")
-        self._match_keyword("LOOP")
-        self._match_type(TokenType.SEMICOLON)
-
-        return ForLoopStatement(variable=var_name, cursor=cursor, body=tuple(body))
-
-    def _parse_plsql_loop(self) -> ASTNode:
-        """Parse PL/SQL LOOP ... END LOOP."""
-        self._expect_keyword("LOOP")
-        body: list[ASTNode] = []
-        while not self._at_end() and not self._current().is_keyword("END"):
-            stmt = self._parse_plsql_statement()
-            if stmt:
-                body.append(stmt)
-        self._match_keyword("END")
-        self._match_keyword("LOOP")
-        self._match_type(TokenType.SEMICOLON)
-        return LoopStatement(body=tuple(body))
-
-    def _parse_plsql_open(self) -> ASTNode:
-        """Parse OPEN cursor [FOR select]."""
-        self._expect_keyword("OPEN")
-        cursor_name = self._parse_identifier()
-        query: ASTNode | None = None
-        if self._match_keyword("FOR"):
-            query = self._parse_embedded_dml()
-        else:
-            self._match_type(TokenType.SEMICOLON)
-        return CursorOperation(operation="OPEN", cursor_name=cursor_name, query=query)
-
-    def _parse_plsql_fetch(self) -> ASTNode:
-        """Parse FETCH cursor INTO vars."""
-        self._expect_keyword("FETCH")
-        cursor_name = self._parse_identifier()
-        into_vars: list[str] = []
-        if self._match_keyword("INTO"):
-            while not self._at_end() and self._current().type != TokenType.SEMICOLON:
-                into_vars.append(self._parse_identifier())
-                if not self._match_type(TokenType.COMMA):
-                    break
-        self._match_type(TokenType.SEMICOLON)
-        return CursorOperation(
-            operation="FETCH",
-            cursor_name=cursor_name,
-            into_vars=tuple(into_vars),
-        )
-
-    def _parse_plsql_close(self) -> ASTNode:
-        """Parse CLOSE cursor."""
-        self._expect_keyword("CLOSE")
-        cursor_name = self._parse_identifier()
-        self._match_type(TokenType.SEMICOLON)
-        return CursorOperation(operation="CLOSE", cursor_name=cursor_name)
-
-    def _parse_tsql_fetch(self) -> ASTNode:
-        """Parse T-SQL ``FETCH [NEXT|PRIOR|FIRST|LAST] FROM c [INTO @v, ...]``.
-
-        The direction keyword is dropped (NEXT is both the T-SQL default and
-        the only portable behaviour); ABSOLUTE/RELATIVE fetches have no
-        counterpart in the targets and fall through as embedded DML.
-        """
-        if self._peek(1).upper_value in ("ABSOLUTE", "RELATIVE"):
-            return self._parse_embedded_dml()
-        self._expect_keyword("FETCH")
-        self._match_keyword("NEXT", "PRIOR", "FIRST", "LAST")
-        self._match_keyword("FROM")
-        cursor_name = self._parse_identifier()
-        into_vars: list[str] = []
-        if self._match_keyword("INTO"):
-            while not self._at_end() and self._current().type != TokenType.SEMICOLON:
-                into_vars.append(self._parse_identifier())
-                if not self._match_type(TokenType.COMMA):
-                    break
-        self._match_type(TokenType.SEMICOLON)
-        return CursorOperation(
-            operation="FETCH",
-            cursor_name=cursor_name,
-            into_vars=tuple(into_vars),
-        )
-
-    def _parse_tsql_deallocate(self) -> ASTNode:
-        """Parse T-SQL ``DEALLOCATE [GLOBAL] c``."""
-        self._expect_keyword("DEALLOCATE")
-        self._match_keyword("GLOBAL")
-        cursor_name = self._parse_identifier()
-        self._match_type(TokenType.SEMICOLON)
-        return CursorOperation(operation="DEALLOCATE", cursor_name=cursor_name)
-
-    def _parse_mysql_set(self) -> ASTNode:
-        """Parse a MySQL SET assignment: SET var = expr;
-
-        The target may be dotted — a BEFORE trigger assigns the pseudo-row
-        column ``SET NEW.col = expr`` — so collect the whole ``a.b`` name
-        before the ``=`` instead of stopping at the first identifier.
-        """
-        self._expect_keyword("SET")
-        name_parts = [self._parse_identifier()]
-        while self._current().type == TokenType.DOT:
-            self._advance()
-            name_parts.append(self._parse_identifier())
-        target = ".".join(name_parts)
-        self._match_type(TokenType.OPERATOR)  # =
-        value = self._parse_expression_until_semicolon()
-        self._match_type(TokenType.SEMICOLON)
-        return AssignmentStatement(target=target, value=value)
-
-    def _parse_plsql_raise(self) -> ASTNode:
-        """Parse RAISE / RAISE_APPLICATION_ERROR / PostgreSQL RAISE level.
-
-        PostgreSQL: RAISE NOTICE|INFO|LOG|DEBUG 'msg' -> informational
-        (mapped to a PrintStatement); RAISE EXCEPTION|WARNING 'msg' or a
-        bare RAISE -> RaiseErrorStatement.
-        """
-        tok = self._advance()
-        if tok.upper_value == "RAISE_APPLICATION_ERROR":
-            expr = self._parse_expression_until_semicolon()
-            self._match_type(TokenType.SEMICOLON)
-            return RaiseErrorStatement(message=expr)
-
-        # PostgreSQL RAISE with a level keyword
-        level = self._current()
-        if level.type in (TokenType.KEYWORD, TokenType.IDENTIFIER) and (
-            level.upper_value
-            in ("NOTICE", "INFO", "LOG", "DEBUG", "WARNING", "EXCEPTION")
-        ):
-            self._advance()
-            expr = self._parse_expression_until_semicolon()
-            self._match_type(TokenType.SEMICOLON)
-            if level.upper_value in ("NOTICE", "INFO", "LOG", "DEBUG"):
-                return PrintStatement(expression=expr)
-            return RaiseErrorStatement(message=expr)
-
-        expr = self._parse_expression_until_semicolon()
-        self._match_type(TokenType.SEMICOLON)
-        return RaiseErrorStatement(message=expr)
-
-    def _parse_sqlplus_exec_call(self) -> ASTNode:
-        """Parse the SQL*Plus ``EXEC[UTE] proc[(args)]`` shorthand call."""
-        self._advance()  # EXEC/EXECUTE
-        name, schema = self._parse_qualified_name()
-        args = ""
-        if self._current().type == TokenType.LPAREN:
-            args = self._capture_call_args()
-        self._match_type(TokenType.SEMICOLON)
-        return CallStatement(name=name, args=args, schema=schema)
-
-    def _parse_plsql_execute_immediate(self) -> ASTNode:
-        """Parse EXECUTE IMMEDIATE expr [USING bind1, bind2, ...].
-
-        The optional USING clause supplies bind variables for the dynamic
-        statement (Oracle). They are captured separately so each target can
-        emit the appropriate form (PG keeps USING; T-SQL uses sp_executesql).
-        """
-        self._expect_keyword("EXECUTE")
-        self._expect_keyword("IMMEDIATE")
-        expr = self._parse_expression_until_keyword("USING", "INTO")
-
-        into_vars: list[str] = []
-        if self._match_keyword("INTO"):
-            while not self._at_end():
-                into_vars.append(self._parse_identifier())
-                if not self._match_type(TokenType.COMMA):
-                    break
-
-        params: list[ASTNode] = []
-        if self._match_keyword("USING"):
-            while not self._at_end():
-                # Oracle allows IN/OUT markers on bind args; skip them.
-                self._match_keyword("IN")
-                self._match_keyword("OUT")
-                param = self._parse_expression_until_comma_or_semicolon()
-                if isinstance(param, RawSQL) and param.sql:
-                    params.append(param)
-                if not self._match_type(TokenType.COMMA):
-                    break
-
-        self._match_type(TokenType.SEMICOLON)
-        return ExecuteStatement(
-            sql_expression=expr,
-            params=tuple(params),
-            immediate=True,
-            into_vars=tuple(into_vars),
-        )
-
-    def _parse_plsql_exception(self) -> ASTNode:
-        """Parse EXCEPTION block."""
-        self._expect_keyword("EXCEPTION")
-        handlers: list[ExceptionHandler] = []
-
-        while not self._at_end() and self._current().is_keyword("WHEN"):
-            self._advance()
-            exception_name = self._parse_identifier()
-            self._expect_keyword("THEN")
-            body: list[ASTNode] = []
-            while not self._at_end() and not self._current().is_keyword("WHEN", "END"):
-                stmt = self._parse_plsql_statement()
-                if stmt:
-                    body.append(stmt)
-            handlers.append(
-                ExceptionHandler(exception_name=exception_name, body=tuple(body))
-            )
-
-        return ExceptionBlock(handlers=tuple(handlers))
-
-    def _parse_plsql_nested_begin(self) -> ASTNode:
-        """Parse nested BEGIN...END block within PL/SQL."""
-        self._expect_keyword("BEGIN")
-        stmts: list[ASTNode] = []
-        while not self._at_end() and not self._current().is_keyword("END"):
-            if self._current().is_keyword("EXCEPTION"):
-                stmts.append(self._parse_plsql_exception())
-                continue
-            stmt = self._parse_plsql_statement()
-            if stmt:
-                stmts.append(stmt)
-        self._match_keyword("END")
-        # Consume a trailing semicolon only if it is the next token; do not
-        # skip comments here, which would discard a comment following the
-        # block (e.g. before the enclosing END).
-        if self._current().type == TokenType.SEMICOLON:
-            self._advance()
-        return BeginEndBlock(statements=tuple(stmts))
-
-    def _try_parse_tsql_cte_assignment_select(self) -> ASTNode | None:
-        """Capture ``WITH <ctes> SELECT @v = ...`` as a SelectIntoStatement
-        carrying the CTE prefix; None (position restored) when the main
-        statement is not an assignment-select."""
-        start = self._pos
-        self._expect_keyword("WITH")
-        parts: list[str] = ["WITH"]
-        depth = 0
-        while not self._at_end():
-            tok = self._current()
-            if depth == 0 and (
-                tok.is_keyword("SELECT") or tok.type == TokenType.SEMICOLON
-            ):
-                break
-            if tok.type == TokenType.LPAREN:
-                depth += 1
-            elif tok.type == TokenType.RPAREN:
-                depth -= 1
-            parts.append(tok.value)
-            self._advance()
-        if self._at_end() or not self._current().is_keyword("SELECT"):
-            self._pos = start
-            return None
-        assign = self._try_parse_tsql_assignment_select()
-        if not isinstance(assign, SelectIntoStatement):
-            self._pos = start
-            return None
-        return dataclasses.replace(assign, with_sql=" ".join(parts))
-
-    def _try_parse_tsql_assignment_select(self) -> ASTNode | None:
-        """If the upcoming SELECT is ``SELECT @v = expr [, ...] [FROM ...]``,
-        parse it into a SelectIntoStatement and return it; otherwise restore the
-        position and return None so the caller parses it as embedded DML."""
-        start = self._pos
-        self._expect_keyword("SELECT")
-        select_parts: list[str] = []
-        paren_depth = 0
-        case_depth = 0
-        while not self._at_end():
-            tok = self._current()
-            if paren_depth == 0 and (
-                tok.is_keyword("FROM") or tok.type == TokenType.SEMICOLON
-            ):
-                break
-            if tok.is_keyword("CASE"):
-                case_depth += 1
-            if paren_depth == 0 and tok.is_keyword("END"):
-                if case_depth == 0:
-                    break
-                case_depth -= 1
-            # ELSE outside a CASE belongs to the enclosing IF, never to the
-            # select list (semicolon-less T-SQL: IF ... SELECT @v=... ELSE).
-            if paren_depth == 0 and case_depth == 0 and tok.is_keyword("ELSE"):
-                break
-            if tok.type == TokenType.LPAREN:
-                paren_depth += 1
-            elif tok.type == TokenType.RPAREN:
-                paren_depth -= 1
-            select_parts.append(tok.value)
-            self._advance()
-
-        assign = self._parse_tsql_assignment_select(select_parts)
-        if assign is None:
-            self._pos = start
-            return None
-
-        into_vars, exprs = assign
-        # Capture the remainder (FROM onward) up to the statement end. Stop at a
-        # statement boundary so the following statements (SET/INSERT/IF/...) and
-        # any own-line comment are not absorbed into this one. T-SQL omits the
-        # ';' terminator, so we rely on the same boundary detection used for
-        # embedded DML.
-        rest_parts: list[str] = []
-        paren_depth = 0
-        case_depth = 0
-        prev_line: int | None = None
-        first_rest = True
-        while not self._at_end():
-            tok = self._current()
-            if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
-                self._advance()
-                break
-            if tok.is_keyword("CASE"):
-                case_depth += 1
-            if paren_depth == 0 and tok.is_keyword("END"):
-                if case_depth == 0:
-                    break
-                case_depth -= 1
-            if paren_depth == 0 and case_depth == 0 and tok.is_keyword("ELSE"):
-                break
-            # An own-line comment ends this statement (it belongs between
-            # statements, like in the body loop).
-            if (
-                paren_depth == 0
-                and not first_rest
-                and tok.type in (TokenType.LINE_COMMENT, TokenType.BLOCK_COMMENT)
-                and prev_line is not None
-                and tok.line is not None
-                and tok.line != prev_line
-            ):
-                break
-            # A new statement keyword on a new line ends this one.
-            if (
-                paren_depth == 0
-                and not first_rest
-                and tok.type == TokenType.KEYWORD
-                and tok.upper_value
-                in (
-                    "SET",
-                    "INSERT",
-                    "UPDATE",
-                    "DELETE",
-                    "MERGE",
-                    "SELECT",
-                    "IF",
-                    "WHILE",
-                    "RETURN",
-                    "EXEC",
-                    "EXECUTE",
-                    "DECLARE",
-                    "BEGIN",
-                    "PRINT",
-                    "RAISERROR",
-                    "THROW",
-                    "FETCH",
-                    "OPEN",
-                    "CLOSE",
-                )
-                and prev_line is not None
-                and tok.line is not None
-                and tok.line != prev_line
-            ):
-                break
-            if tok.type == TokenType.LPAREN:
-                paren_depth += 1
-            elif tok.type == TokenType.RPAREN:
-                paren_depth -= 1
-            rest_parts.append(tok.value)
-            prev_line = tok.line
-            first_rest = False
-            self._advance()
-
-        from unique.core.ast_nodes import RawSQL as _RawSQL
-
-        return SelectIntoStatement(
-            columns=(_RawSQL(sql=", ".join(exprs), reason="select list"),),
-            into_vars=tuple(into_vars),
-            rest_sql=" ".join(rest_parts).strip(),
-            tsql_assignment=True,
-        )
-
-    def _parse_tsql_assignment_select(
-        self, select_parts: list[str]
-    ) -> tuple[list[str], list[str]] | None:
-        """Detect a T-SQL assignment-select list (``@v = expr, ...``).
-
-        Returns ``(into_vars, exprs)`` when every comma-separated item has the
-        shape ``@var = expression``; otherwise ``None`` (it's an ordinary
-        select list). Splits on top-level commas so expressions containing
-        commas (function calls) are handled.
-        """
-        text = " ".join(select_parts).strip()
-        if "=" not in text or "@" not in text:
-            return None
-        # Split on top-level commas.
-        items: list[str] = []
-        depth = 0
-        buf: list[str] = []
-        for ch in text:
-            if ch in "([":
-                depth += 1
-            elif ch in ")]":
-                depth -= 1
-            if ch == "," and depth == 0:
-                items.append("".join(buf))
-                buf = []
-            else:
-                buf.append(ch)
-        if buf:
-            items.append("".join(buf))
-
-        into_vars: list[str] = []
-        exprs: list[str] = []
-        for item in items:
-            # Each item must be "@var = expr" with a single '=' assignment, not
-            # a comparison (>=, <=, <>) or equality test.
-            m = re.match(r"^\s*(@\w+)\s*=\s*(.+)$", item, re.DOTALL)
-            if not m:
-                return None
-            expr = m.group(2).strip()
-            if not expr or expr[0] in "=<>!":
-                return None
-            into_vars.append(m.group(1))
-            exprs.append(expr)
-        if not into_vars:
-            return None
-        return into_vars, exprs
-
-    def _parse_plsql_select_or_dml(self) -> ASTNode:
-        """Parse SELECT that might have INTO (PL/SQL SELECT INTO).
-
-        PL/SQL: SELECT col1, col2 INTO var1, var2 FROM ...
-        We capture the select-list, the INTO targets, and the remainder
-        (FROM onward) so the emitter can produce the right target syntax.
-        """
-        start = self._pos
-        self._expect_keyword("SELECT")
-
-        # Capture select list up to INTO or FROM
-        select_parts: list[str] = []
-        paren_depth = 0
-        has_into = False
-        while not self._at_end():
-            tok = self._current()
-            if paren_depth == 0 and tok.is_keyword("INTO"):
-                has_into = True
-                break
-            if paren_depth == 0 and tok.is_keyword("FROM"):
-                break
-            if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
-                break
-            if tok.type == TokenType.LPAREN:
-                paren_depth += 1
-            elif tok.type == TokenType.RPAREN:
-                paren_depth -= 1
-            select_parts.append(tok.value)
-            self._advance()
-
-        if not has_into:
-            # T-SQL assignment-select: SELECT @v1 = expr1, @v2 = expr2 [FROM ...]
-            # assigns expressions to variables. sqlglot would mistranslate the
-            # '=' as a column alias, silently dropping the assignment, so detect
-            # it here and turn it into a SELECT ... INTO so the emitter produces
-            # the correct target form.
-            assign = self._parse_tsql_assignment_select(select_parts)
-            if assign is not None:
-                into_vars_a, exprs_a = assign
-                rest_parts2: list[str] = []
-                paren_depth2 = 0
-                while not self._at_end():
-                    tok = self._current()
-                    if paren_depth2 == 0 and tok.type == TokenType.SEMICOLON:
-                        self._advance()
-                        break
-                    if paren_depth2 == 0 and tok.is_keyword("END"):
-                        break
-                    if tok.type == TokenType.LPAREN:
-                        paren_depth2 += 1
-                    elif tok.type == TokenType.RPAREN:
-                        paren_depth2 -= 1
-                    rest_parts2.append(tok.value)
-                    self._advance()
-                rest_sql2 = " ".join(rest_parts2).strip()
-                from unique.core.ast_nodes import RawSQL as _RawSQL2
-
-                return SelectIntoStatement(
-                    columns=(_RawSQL2(sql=", ".join(exprs_a), reason="select list"),),
-                    into_vars=tuple(into_vars_a),
-                    rest_sql=rest_sql2,
-                    tsql_assignment=True,
-                )
-            # Not a SELECT INTO and not an assignment — reparse as embedded DML
-            self._pos = start
-            return self._parse_embedded_dml()
-
-        # Consume INTO and capture target variables. A target may be a
-        # trigger pseudo-row field (``:NEW.col`` — lexed as ':' 'NEW' '.'
-        # 'col') or any dotted name; collect the whole reference, or the tail
-        # leaks into the FROM remainder.
-        self._expect_keyword("INTO")
-        into_vars: list[str] = []
-        while not self._at_end():
-            tok = self._current()
-            if tok.is_keyword("FROM") or tok.type == TokenType.SEMICOLON:
-                break
-            if tok.value == ":":
-                self._advance()
-                tok = self._current()
-            if tok.type in (
-                TokenType.IDENTIFIER,
-                TokenType.KEYWORD,
-                TokenType.VARIABLE,
-            ):
-                name = self._advance().value
-                while self._current().type == TokenType.DOT:
-                    self._advance()
-                    name += "." + self._advance().value
-                into_vars.append(name)
-                if not self._match_type(TokenType.COMMA):
-                    break
-            else:
-                self._advance()
-
-        # Capture remainder (FROM onward) as raw SQL
-        rest_parts: list[str] = []
-        paren_depth = 0
-        while not self._at_end():
-            tok = self._current()
-            if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
-                self._advance()
-                break
-            if paren_depth == 0 and tok.is_keyword("END"):
-                break
-            if tok.type == TokenType.LPAREN:
-                paren_depth += 1
-            elif tok.type == TokenType.RPAREN:
-                paren_depth -= 1
-            rest_parts.append(tok.value)
-            self._advance()
-
-        from unique.core.ast_nodes import RawSQL as _RawSQL
-
-        select_list = " ".join(select_parts).strip()
-        rest_sql = " ".join(rest_parts).strip()
-        return SelectIntoStatement(
-            columns=(_RawSQL(sql=select_list, reason="select list"),),
-            into_vars=tuple(into_vars),
-            rest_sql=rest_sql,
-        )
-
     def _starts_row_ref_assignment(self) -> bool:
         """Whether the cursor sits on the ``:`` of an Oracle row-level trigger
         assignment ``:NEW.col := …`` / ``:OLD.col := …``.
@@ -2447,51 +1159,6 @@ class ProceduralParser:
             i += 1
         return False
 
-    def _parse_plsql_assignment_or_call(self) -> ASTNode:
-        """Parse name := expr; or procedure_call(args);"""
-        self._skip_comments()
-        name_parts: list[str] = [self._parse_identifier()]
-
-        while self._current().type == TokenType.DOT:
-            self._advance()
-            name_parts.append(self._parse_identifier())
-
-        full_name = ".".join(name_parts)
-
-        # Assignment: name := expr;
-        if self._current().type == TokenType.ASSIGN:
-            self._advance()
-            expr = self._parse_expression_until_semicolon()
-            self._match_type(TokenType.SEMICOLON)
-            return AssignmentStatement(target=full_name, value=expr)
-
-        # DBMS_OUTPUT.PUT_LINE(...)
-        if full_name.upper() == "DBMS_OUTPUT" and self._current().type == TokenType.DOT:
-            self._advance()
-            method = self._parse_identifier()
-            if method.upper() == "PUT_LINE":
-                expr = self._parse_expression_until_semicolon()
-                self._match_type(TokenType.SEMICOLON)
-                return PrintStatement(expression=expr)
-
-        # A bare ``name(args);`` statement in PL/SQL is a procedure call (a
-        # function call only appears inside an expression). Capture it as a
-        # CallStatement so the target emits its own call syntax (PG/MySQL
-        # ``CALL name(args)``), rather than letting it fall through to
-        # EmbeddedDML where sqlglot mangles it into a bare ``NAME(args)``.
-        if self._current().type == TokenType.LPAREN:
-            args = self._capture_call_args()
-            self._match_type(TokenType.SEMICOLON)
-            schema = ".".join(name_parts[:-1]) or None
-            return CallStatement(name=name_parts[-1], args=args, schema=schema)
-
-        # Procedure call or other statement
-        expr = self._parse_expression_until_semicolon()
-        self._match_type(TokenType.SEMICOLON)
-        return EmbeddedDML(
-            sql=f"{full_name} {expr.sql if isinstance(expr, RawSQL) else ''}"
-        )
-
     def _parse_dbms_output(self) -> ASTNode:
         """Parse DBMS_OUTPUT.PUT_LINE(expr)."""
         self._advance()  # DBMS_OUTPUT
@@ -2500,10 +1167,6 @@ class ProceduralParser:
         expr = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)
         return PrintStatement(expression=expr)
-
-    # ---------------------------------------------------------------
-    # Shared statement parsers
-    # ---------------------------------------------------------------
 
     def _parse_return(self) -> ASTNode:
         """Parse RETURN [expression].
@@ -2581,10 +1244,6 @@ class ProceduralParser:
             condition = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)
         return ContinueStatement(condition=condition)
-
-    # ---------------------------------------------------------------
-    # Expression parsing (simplified — captures raw SQL)
-    # ---------------------------------------------------------------
 
     def _parse_expression_until_semicolon(self) -> ASTNode:
         """Capture a scalar assignment value as raw SQL until a boundary.
@@ -2720,9 +1379,6 @@ class ProceduralParser:
             self._advance()
         return RawSQL(sql=" ".join(parts).strip(), reason="bind argument")
 
-    # DML verbs that can start a standalone statement after a DECLARE default
-    # (no semicolon separator). These are NOT in _TSQL_STMT_BOUNDARY_KEYWORDS
-    # (which excludes DML) but must terminate a DECLARE = <expr> context.
     _DECLARE_DML_BOUNDARY = frozenset(
         {"SELECT", "UPDATE", "DELETE", "INSERT", "MERGE", "WITH"}
     )
@@ -2784,8 +1440,6 @@ class ProceduralParser:
             first = False
         return RawSQL(sql=" ".join(parts).strip(), reason="default value")
 
-    # Keywords that cannot appear in a parameter default value expression
-    # (only at paren_depth == 0 — AS inside CAST(x AS INT) is fine).
     _EXPR_SIMPLE_STOP_KEYWORDS = frozenset(
         {"AS", "IS", "OUTPUT", "OUT", "READONLY", "VARYING"}
     )
@@ -2863,99 +1517,6 @@ class ProceduralParser:
             self._advance()
             first = False
         return RawSQL(sql=" ".join(parts).strip(), reason="captured expression")
-
-    # Control-flow keywords that unambiguously begin a new T-SQL statement
-    # at depth 0. DML keywords (SELECT/INSERT/UPDATE/DELETE/MERGE) are
-    # excluded because they chain (e.g. INSERT ... SELECT). SET is handled
-    # separately: "SET @var" is an assignment, "SET col" is an UPDATE clause.
-    #: T-SQL DECLARE CURSOR options (between CURSOR and FOR) — scope and
-    #: performance hints with no counterpart in the targets.
-    _TSQL_CURSOR_OPTIONS = frozenset(
-        {
-            "LOCAL",
-            "GLOBAL",
-            "FORWARD_ONLY",
-            "SCROLL",
-            "STATIC",
-            "KEYSET",
-            "DYNAMIC",
-            "FAST_FORWARD",
-            "READ_ONLY",
-            "SCROLL_LOCKS",
-            "OPTIMISTIC",
-            "TYPE_WARNING",
-        }
-    )
-
-    _TSQL_STMT_BOUNDARY_KEYWORDS = frozenset(
-        {
-            "IF",
-            "WHILE",
-            "DECLARE",
-            "PRINT",
-            "RETURN",
-            "RAISERROR",
-            "THROW",
-            "ELSE",
-            "EXEC",
-            "EXECUTE",
-            "WAITFOR",
-            "COMMIT",
-            "ROLLBACK",
-            "SAVE",
-        }
-    )
-
-    def _at_tsql_stmt_boundary(self) -> bool:
-        """Whether the current token begins a new T-SQL statement.
-
-        Used to delimit statements that omit the trailing semicolon. Only
-        active for the T-SQL dialect; Oracle/PG/MySQL rely on semicolons.
-        """
-        if not self._is_tsql_source():
-            return False
-        tok = self._current()
-        if tok.type != TokenType.KEYWORD:
-            return False
-        upper = tok.upper_value
-        if upper in self._TSQL_STMT_BOUNDARY_KEYWORDS:
-            return True
-        # ``BEGIN TRY`` / ``BEGIN TRAN[SACTION]`` unambiguously start a new
-        # statement: a semicolon-less ``SET @v = NULL`` used to absorb the
-        # following TRY block into the value. (A bare ``BEGIN`` is left
-        # alone — treating every BEGIN as a boundary broke DML conservation
-        # in block bodies.)
-        if upper == "BEGIN" and self._peek(1).is_keyword("TRY", "TRAN", "TRANSACTION"):
-            return True
-        # Cursor operations start statements (semicolon-less bodies used to
-        # absorb ``OPEN c`` / ``FETCH NEXT FROM c`` into the previous DML or
-        # EXEC argument list). OPEN/CLOSE SYMMETRIC|MASTER KEY are not cursor
-        # ops, and FETCH is only a boundary in its cursor form — never the
-        # ``OFFSET … FETCH NEXT n ROWS`` clause of a SELECT.
-        if (
-            upper in ("OPEN", "CLOSE")
-            and self._peek(1).type in (TokenType.IDENTIFIER, TokenType.VARIABLE)
-            and self._peek(1).upper_value not in ("SYMMETRIC", "MASTER")
-        ):
-            return True
-        if upper == "DEALLOCATE":
-            return True
-        if upper == "FETCH" and (
-            self._peek(1).is_keyword("FROM")
-            or (
-                self._peek(1).is_keyword("NEXT", "PRIOR", "FIRST", "LAST")
-                and self._peek(2).is_keyword("FROM")
-            )
-        ):
-            return True
-        # A standalone SET statement — ``SET @var = …`` or a session option
-        # (``SET NOEXEC ON``) — begins a statement; the SET clause of an
-        # UPDATE/MERGE (target is a column identifier) does not.
-        return upper == "SET" and self._set_starts_statement(self._peek(1))
-
-    # ---------------------------------------------------------------
-    # Embedded DML (delegated to sqlglot later)
-    # ---------------------------------------------------------------
 
     def _parse_embedded_dml(self) -> ASTNode:
         """Capture a DML statement for later sqlglot transpilation.
@@ -3084,9 +1645,7 @@ class ProceduralParser:
         sql = " ".join(parts).strip()
         return EmbeddedDML(sql=sql, dialect=self._dialect)
 
-    # DML verbs that can start a standalone statement.
     _DML_START_KEYWORDS = frozenset({"SELECT", "INSERT", "UPDATE", "DELETE", "MERGE"})
-    # Tokens after which a DML verb is a continuation, not a new statement.
     _DML_CHAINING_KEYWORDS = frozenset(
         {
             "UNION",
@@ -3147,8 +1706,6 @@ class ProceduralParser:
             "ELSE",
         }
 
-    # Keywords that, following SET, mark a statement-level SET (not an
-    # UPDATE/MERGE "SET <column> = ..." clause).
     _SET_OPTION_KEYWORDS = frozenset(
         {
             "NOCOUNT",
@@ -3227,10 +1784,6 @@ class ProceduralParser:
             prev_tok.type == TokenType.KEYWORD
             and prev_tok.upper_value in self._DML_CHAINING_KEYWORDS
         )
-
-    # ---------------------------------------------------------------
-    # Fallback
-    # ---------------------------------------------------------------
 
     def _parse_fallback(self) -> ASTNode:
         """When we can't parse, capture everything as RawSQL (a documented
