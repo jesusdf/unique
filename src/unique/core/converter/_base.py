@@ -441,7 +441,15 @@ def _merge_to_mysql_upsert(sql: str, read: str) -> str | None:
         else:
             return None
 
-    target_sql = merge.this.sql(dialect="mysql")
+    # MySQL's INSERT target takes no alias (MERGE's ``t_l AS t`` would be a
+    # syntax error); the rewritten statement never references it anyway
+    # (assignments use the VALUES(col) form).
+    target = merge.this.copy()
+    if isinstance(target, exp.Alias):
+        target = target.this
+    if isinstance(target, exp.Table) and target.args.get("alias"):
+        target.set("alias", None)
+    target_sql = target.sql(dialect="mysql")
     source_sql = merge.args["using"].sql(dialect="mysql")
     cols_sql = ", ".join(insert_cols)
     vals_sql = ", ".join(v.sql(dialect="mysql") for v in insert_vals)

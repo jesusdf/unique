@@ -10,6 +10,7 @@ Delegates embedded DML/DQL statements to sqlglot for transpilation.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import re
 from dataclasses import dataclass, field, replace
@@ -1082,7 +1083,16 @@ class ProceduralParser:
             if assign_stmt is not None:
                 return assign_stmt
             return self._parse_embedded_dml()
-        elif tok.is_keyword("INSERT", "UPDATE", "DELETE", "MERGE", "WITH"):
+        elif tok.is_keyword("WITH"):
+            # A CTE feeding an assignment-select (WITH x AS (...) SELECT
+            # @v = ...) must become SELECT ... INTO like the plain form —
+            # sqlglot would turn the '=' into an alias and drop the
+            # assignment.
+            cte_stmt = self._try_parse_tsql_cte_assignment_select()
+            if cte_stmt is not None:
+                return cte_stmt
+            return self._parse_embedded_dml()
+        elif tok.is_keyword("INSERT", "UPDATE", "DELETE", "MERGE"):
             return self._parse_embedded_dml()
         elif tok.type == TokenType.SEMICOLON:
             self._advance()
@@ -1240,6 +1250,14 @@ class ProceduralParser:
             # CURSOR declaration (always single).
             if self._current().is_keyword("CURSOR"):
                 self._advance()
+                # T-SQL cursor options (LOCAL FAST_FORWARD ...) sit between
+                # CURSOR and FOR; they are scope/perf hints with no portable
+                # meaning — consume them so the FOR query is still captured.
+                while (
+                    self._current().type in (TokenType.IDENTIFIER, TokenType.KEYWORD)
+                    and self._current().upper_value in self._TSQL_CURSOR_OPTIONS
+                ):
+                    self._advance()
                 query: ASTNode | None = None
                 if self._match_keyword("FOR"):
                     query = self._parse_embedded_dml()
@@ -1279,6 +1297,16 @@ class ProceduralParser:
             "PRINT",
             "RAISERROR",
             "THROW",
+            # Statement verbs that can never continue a boolean expression:
+            # ``IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION`` used to swallow the
+            # ROLLBACK (and everything after) into the condition.
+            "COMMIT",
+            "ROLLBACK",
+            "SAVE",
+            "DECLARE",
+            "WAITFOR",
+            "BREAK",
+            "CONTINUE",
         )
 
         then_body: list[ASTNode] = []
@@ -1340,6 +1368,16 @@ class ProceduralParser:
             "PRINT",
             "RAISERROR",
             "THROW",
+            # Statement verbs that can never continue a boolean expression:
+            # ``IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION`` used to swallow the
+            # ROLLBACK (and everything after) into the condition.
+            "COMMIT",
+            "ROLLBACK",
+            "SAVE",
+            "DECLARE",
+            "WAITFOR",
+            "BREAK",
+            "CONTINUE",
         )
 
         body: list[ASTNode] = []
@@ -1956,6 +1994,35 @@ class ProceduralParser:
             self._advance()
         return BeginEndBlock(statements=tuple(stmts))
 
+    def _try_parse_tsql_cte_assignment_select(self) -> ASTNode | None:
+        """Capture ``WITH <ctes> SELECT @v = ...`` as a SelectIntoStatement
+        carrying the CTE prefix; None (position restored) when the main
+        statement is not an assignment-select."""
+        start = self._pos
+        self._expect_keyword("WITH")
+        parts: list[str] = ["WITH"]
+        depth = 0
+        while not self._at_end():
+            tok = self._current()
+            if depth == 0 and (
+                tok.is_keyword("SELECT") or tok.type == TokenType.SEMICOLON
+            ):
+                break
+            if tok.type == TokenType.LPAREN:
+                depth += 1
+            elif tok.type == TokenType.RPAREN:
+                depth -= 1
+            parts.append(tok.value)
+            self._advance()
+        if self._at_end() or not self._current().is_keyword("SELECT"):
+            self._pos = start
+            return None
+        assign = self._try_parse_tsql_assignment_select()
+        if not isinstance(assign, SelectIntoStatement):
+            self._pos = start
+            return None
+        return dataclasses.replace(assign, with_sql=" ".join(parts))
+
     def _try_parse_tsql_assignment_select(self) -> ASTNode | None:
         """If the upcoming SELECT is ``SELECT @v = expr [, ...] [FROM ...]``,
         parse it into a SelectIntoStatement and return it; otherwise restore the
@@ -1964,13 +2031,22 @@ class ProceduralParser:
         self._expect_keyword("SELECT")
         select_parts: list[str] = []
         paren_depth = 0
+        case_depth = 0
         while not self._at_end():
             tok = self._current()
             if paren_depth == 0 and (
                 tok.is_keyword("FROM") or tok.type == TokenType.SEMICOLON
             ):
                 break
+            if tok.is_keyword("CASE"):
+                case_depth += 1
             if paren_depth == 0 and tok.is_keyword("END"):
+                if case_depth == 0:
+                    break
+                case_depth -= 1
+            # ELSE outside a CASE belongs to the enclosing IF, never to the
+            # select list (semicolon-less T-SQL: IF ... SELECT @v=... ELSE).
+            if paren_depth == 0 and case_depth == 0 and tok.is_keyword("ELSE"):
                 break
             if tok.type == TokenType.LPAREN:
                 paren_depth += 1
@@ -1992,6 +2068,7 @@ class ProceduralParser:
         # embedded DML.
         rest_parts: list[str] = []
         paren_depth = 0
+        case_depth = 0
         prev_line: int | None = None
         first_rest = True
         while not self._at_end():
@@ -1999,7 +2076,13 @@ class ProceduralParser:
             if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
                 self._advance()
                 break
+            if tok.is_keyword("CASE"):
+                case_depth += 1
             if paren_depth == 0 and tok.is_keyword("END"):
+                if case_depth == 0:
+                    break
+                case_depth -= 1
+            if paren_depth == 0 and case_depth == 0 and tok.is_keyword("ELSE"):
                 break
             # An own-line comment ends this statement (it belongs between
             # statements, like in the body loop).
@@ -2665,6 +2748,25 @@ class ProceduralParser:
     # at depth 0. DML keywords (SELECT/INSERT/UPDATE/DELETE/MERGE) are
     # excluded because they chain (e.g. INSERT ... SELECT). SET is handled
     # separately: "SET @var" is an assignment, "SET col" is an UPDATE clause.
+    #: T-SQL DECLARE CURSOR options (between CURSOR and FOR) — scope and
+    #: performance hints with no counterpart in the targets.
+    _TSQL_CURSOR_OPTIONS = frozenset(
+        {
+            "LOCAL",
+            "GLOBAL",
+            "FORWARD_ONLY",
+            "SCROLL",
+            "STATIC",
+            "KEYSET",
+            "DYNAMIC",
+            "FAST_FORWARD",
+            "READ_ONLY",
+            "SCROLL_LOCKS",
+            "OPTIMISTIC",
+            "TYPE_WARNING",
+        }
+    )
+
     _TSQL_STMT_BOUNDARY_KEYWORDS = frozenset(
         {
             "IF",
@@ -2704,6 +2806,27 @@ class ProceduralParser:
         # alone — treating every BEGIN as a boundary broke DML conservation
         # in block bodies.)
         if upper == "BEGIN" and self._peek(1).is_keyword("TRY", "TRAN", "TRANSACTION"):
+            return True
+        # Cursor operations start statements (semicolon-less bodies used to
+        # absorb ``OPEN c`` / ``FETCH NEXT FROM c`` into the previous DML or
+        # EXEC argument list). OPEN/CLOSE SYMMETRIC|MASTER KEY are not cursor
+        # ops, and FETCH is only a boundary in its cursor form — never the
+        # ``OFFSET … FETCH NEXT n ROWS`` clause of a SELECT.
+        if (
+            upper in ("OPEN", "CLOSE")
+            and self._peek(1).type in (TokenType.IDENTIFIER, TokenType.VARIABLE)
+            and self._peek(1).upper_value not in ("SYMMETRIC", "MASTER")
+        ):
+            return True
+        if upper == "DEALLOCATE":
+            return True
+        if upper == "FETCH" and (
+            self._peek(1).is_keyword("FROM")
+            or (
+                self._peek(1).is_keyword("NEXT", "PRIOR", "FIRST", "LAST")
+                and self._peek(2).is_keyword("FROM")
+            )
+        ):
             return True
         # A standalone SET statement — ``SET @var = …`` or a session option
         # (``SET NOEXEC ON``) — begins a statement; the SET clause of an
@@ -2856,6 +2979,10 @@ class ProceduralParser:
             "FROM",
             "RETURNING",
             "WITH",
+            # A MERGE action clause: WHEN [NOT] MATCHED THEN UPDATE/INSERT/
+            # DELETE stays inside the MERGE (T-SQL requires the terminating
+            # ';' on MERGE, so a real next statement is never absorbed).
+            "THEN",
             "ALL",
             "EXISTS",
             "IN",
@@ -2962,6 +3089,11 @@ class ProceduralParser:
         ):
             return True
         if tok.line == prev_tok.line:
+            return False
+        # A CTE's main statement: ``WITH x AS (...)`` is followed by its
+        # SELECT/INSERT/UPDATE/DELETE after the closing paren — that verb
+        # belongs to the WITH, not to a new statement.
+        if lead_verb == "WITH" and prev_tok.type == TokenType.RPAREN:
             return False
         # Previous token chains into this verb → not a boundary.
         if prev_tok.type in (

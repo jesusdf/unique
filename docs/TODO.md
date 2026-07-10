@@ -159,8 +159,8 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       index warned); NEWID/UUID maps per target inside procedural bodies via
       the shared `UUID_FUNCTION` table (A4). Tests:
       `tests/unit/core/test_guard_translation.py` (40, combinatorial neighbor
-      matrix). Measured: test.sql→PG **100.0%**, →Oracle 99.6% (rest = B1),
-      →MySQL 97.8%; remaining test2 failures are all C1 (M3).
+      matrix). Measured 2026-07-10 (post C1–C4 wave): **test.sql AND
+      test2.sql at 100.0% on PG, MySQL and Oracle**.
 - [ ] **M3 — P4 embedded DML through the IR converter**; delete the
       text-level rewriters (clears D3, D4, D8, A4 by construction).
       *M3a landed:* `_transform_embedded_dml` now routes through the shared
@@ -275,10 +275,10 @@ fix needs an **anonymized** regression fixture (never a private name).
       (`unique/core/sql_split.py`); embedded-DML `+` now flows through the IR
       (M3a). Probes + oracle→tsql→oracle round-trip in
       `test_embedded_dml_ir.py`.
-- [ ] **C1: mid-body scalar `DECLARE @x t = expr` is not hoisted** to the
-      declaration section (Oracle PLS-00103, MySQL invalid position and `=`
-      instead of `DEFAULT`, PG `CURSOR` without `FOR`). Reuse the
-      table-variable hoisting machinery.
+- [x] **C1 (verified closed 2026-07-10): mid-body scalar `DECLARE @x t =
+      expr`** — hoisted recursively (nested blocks included) with the
+      initializer left in place as an assignment; covered by
+      `_split_declarations`' pull_nested pass.
 - [x] **B1 (fixed 2026-07-09): `PRIMARY KEY CLUSTERED (col ASC)`** — the
       `ADD CONSTRAINT … PRIMARY KEY/UNIQUE CLUSTERED (…) WITH (…) ON [grp]`
       shape is rebuilt directly per target (`_tsql_add_key_constraint`);
@@ -318,9 +318,24 @@ fix needs an **anonymized** regression fixture (never a private name).
       Final dump measurement: **T-SQL 99.6% / PG 99.9% / MySQL 99.6%**.
       Remaining T-SQL classes (127): TRY fragments in flattened blocks,
       subquery ORDER BY (error 1033), ~21 near-`)`.
-- [ ] **C2/C3/C4: MySQL routine bodies** — raw `BEGIN TRY` leaks; `WHILE …
-      LOOP` (PL/SQL form) instead of `WHILE … DO`; cursor options spill as
-      `; LOCAL AS FAST_FORWARD;` fragments.
+- [x] **C2/C3/C4 (closed 2026-07-10, sweep-closing wave): MySQL routine
+      bodies** — the whole class fell out of the semicolon-less boundary
+      fixes plus per-target lowering: cursor options consumed on DECLARE
+      CURSOR; OPEN/FETCH/CLOSE/DEALLOCATE parsed as cursor ops (were sqlglot
+      `OPEN AS c` aliases); `@@FETCH_STATUS` loops per target (PG FOUND,
+      Oracle `%FOUND`, MySQL done-flag + NOT FOUND handler); assignment-select
+      stops at bare `ELSE`; IF conditions stop at statement verbs
+      (ROLLBACK/COMMIT/DECLARE/…); MERGE actions chain after `THEN` and route
+      through the IR (mysql upsert, Oracle `ON (…)`, non-canonical → warned
+      carrier); CTE assignment-select → `WITH … SELECT INTO`; updatable-CTE
+      DML → warned carrier (was silent CTE drop); parenthesized FROM join
+      trees passthrough (were a silent whole-FROM loss); base64-XML idiom,
+      ERROR_MESSAGE()/RAISERROR(@var), VARBINARY(MAX), table hints in raw
+      conditions, DROP INDEX guard per target, nested table-variable GTT
+      hoist, MySQL `NULL;`→`DO 0;`. **Measured 2026-07-10: test.sql AND
+      test2.sql at 100.0% validity on all three targets.** Tests:
+      `tests/integration/test_test2_residue_wave.py` (28) +
+      `test_cursor_variable_binding.py` (6).
 - [x] **D5/D6/D7 (fixed 2026-07-09): Oracle→T-SQL passthroughs** — D5:
       `RENAME COLUMN` → `EXEC sp_rename` (T-SQL only; PG/MySQL 8 native).
       D6: `INSERTING`/`DELETING`/`UPDATING['(col)']` → the T-SQL

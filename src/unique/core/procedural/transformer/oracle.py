@@ -26,6 +26,7 @@ from unique.core.ast_nodes import (
     ForLoopStatement,
     IfStatement,
     LoopStatement,
+    NullStatement,
     ParameterDefinition,
     RawSQL,
     StatementList,
@@ -75,21 +76,43 @@ class OracleTransformer(ProceduralTransformer):
         a per-procedure-unique name (the same ``@t`` in two procedures would
         clash), and rename the body references."""
         gtts: list[tuple[str, str, str]] = []  # (var, gtt_name, columns)
-        kept: list[ASTNode] = []
-        for stmt in proc.body:
+
+        def strip(node: ASTNode) -> ASTNode | None:
+            # The declaration may sit inside an IF/WHILE/TRY block (T-SQL
+            # scopes DECLARE to the batch, not the block): recurse.
             if (
-                isinstance(stmt, RawSQL)
-                and stmt.reason == "table variable -> temporary table"
+                isinstance(node, RawSQL)
+                and node.reason == "table variable -> temporary table"
             ):
                 m = re.match(
                     r"(?is)\s*CREATE\s+TEMPORARY\s+TABLE\s+(\w+)\s*(\(.*\))\s*;",
-                    stmt.sql,
+                    node.sql,
                 )
                 if m:
                     var, cols = m.group(1), m.group(2).strip()
                     gtts.append((var, f"{proc.name}_{var}"[:120], cols))
-                    continue  # drop the in-body CREATE
-            kept.append(stmt)
+                    return None  # drop the in-body CREATE
+                return node
+            changes: dict[str, object] = {}
+            for f in dataclasses.fields(node):
+                val = getattr(node, f.name)
+                if (
+                    isinstance(val, tuple)
+                    and val
+                    and all(isinstance(x, ASTNode) for x in val)
+                ):
+                    new_items = tuple(y for x in val if (y := strip(x)) is not None)
+                    if new_items != val:
+                        if not new_items:
+                            # A block that held only the declaration must not
+                            # collapse to an empty (invalid) body.
+                            new_items = (NullStatement(),)
+                        changes[f.name] = new_items
+            if changes:
+                return dataclasses.replace(node, **changes)  # type: ignore[arg-type]
+            return node
+
+        kept = [y for stmt in proc.body if (y := strip(stmt)) is not None]
         if not gtts:
             return proc
 
@@ -333,6 +356,14 @@ class OracleTransformer(ProceduralTransformer):
         s = sql.strip()
         return bool(re.match(r"(?i)^SELECT\b", s)) and not re.search(r"(?i)\bINTO\b", s)
 
+    def _fetch_status_forms(self) -> tuple[str, str] | None:
+        # %FOUND/%NOTFOUND need the cursor's name: use the one from the most
+        # recent FETCH (the T-SQL idiom checks the fetch that just ran).
+        cur = self._last_fetch_cursor
+        if cur is None:
+            return None
+        return (f"{cur}%FOUND", f"{cur}%NOTFOUND")
+
     def _system_var_map(self) -> dict[str, str]:
         return {
             "@@ROWCOUNT": "SQL%ROWCOUNT",
@@ -396,6 +427,10 @@ class OracleTransformer(ProceduralTransformer):
         # named "top"; fall back to the original on any parse failure.
         if re.search(r"(?i)\bTOP\s*\(?\s*\d", sql):
             sql = self._top_to_oracle(sql)
+
+        # T-SQL ERROR_MESSAGE() inside a CATCH -> SQLERRM in the EXCEPTION
+        # handler (parameterless; the empty parens would not parse).
+        sql = re.sub(r"(?i)\bERROR_MESSAGE\s*\(\s*\)", "SQLERRM", sql)
 
         # dbo doesn't exist in Oracle; drop a dbo. qualifier on calls within
         # expressions (e.g. dbo.func1() in an assignment, RETURN or COALESCE).

@@ -260,7 +260,8 @@ class TSqlEmitter(ProceduralEmitter):
             col = cols[i] if i < len(cols) else (cols[-1] if cols else "")
             pairs.append(f"{var} = {col}")
         assignments = ", ".join(pairs)
-        return f"SELECT {assignments} {rest};"
+        prefix = f"{node.with_sql}\n" if node.with_sql else ""
+        return f"{prefix}SELECT {assignments} {rest};"
 
     def _emit_guard_if(self, cond: str, body_lines: list[str]) -> str | None:
         # T-SQL's IF takes a SQL condition (incl. EXISTS), so the guard is a

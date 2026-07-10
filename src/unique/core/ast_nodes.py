@@ -875,6 +875,8 @@ class SelectIntoStatement(ASTNode):
     where: ASTNode | None = None
     rest_sql: str = ""
     tsql_assignment: bool = False
+    #: A leading CTE clause (``WITH x AS (...)``) the SELECT draws from.
+    with_sql: str = ""
 
 
 @dataclass(frozen=True)

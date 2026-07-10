@@ -31,6 +31,10 @@ class PostgresTransformer(ProceduralTransformer):
             ),
         }
 
+    def _fetch_status_forms(self) -> tuple[str, str] | None:
+        # plpgsql sets FOUND after every FETCH.
+        return ("FOUND", "NOT FOUND")
+
     def _varchar_max_type(self, is_unicode: bool) -> str | None:
         return "TEXT"
 
@@ -52,6 +56,9 @@ class PostgresTransformer(ProceduralTransformer):
 
     def _fix_raw_sql_target(self, sql: str) -> str:
         sql = self._pg_string_concat(sql)
+        # T-SQL ERROR_MESSAGE() inside a CATCH -> SQLERRM in the EXCEPTION
+        # handler (parameterless; the empty parens would not parse).
+        sql = re.sub(r"(?i)\bERROR_MESSAGE\s*\(\s*\)", "SQLERRM", sql)
         # dbo doesn't exist in PostgreSQL; drop a dbo. qualifier on calls.
         return re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
 

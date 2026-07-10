@@ -7,8 +7,22 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
-from unique.core.ast_nodes import ASTNode, CallStatement, RawSQL
+from unique.core.ast_nodes import (
+    AssignmentStatement,
+    ASTNode,
+    CallStatement,
+    CreateFunctionStatement,
+    CreateProcedureStatement,
+    CreateTriggerStatement,
+    CursorDeclaration,
+    DataType,
+    DeclareStatement,
+    RawSQL,
+    SetVariableStatement,
+    StatementList,
+)
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
     register_transformer,
@@ -25,6 +39,82 @@ class MySqlTransformer(ProceduralTransformer):
         # cursor) outside a stored routine, so a control-flow anonymous block
         # cannot run at the top level; it is documented instead.
         return False
+
+    _ERROR_MESSAGE_RE = re.compile(r"(?i)^\s*ERROR_MESSAGE\s*\(\s*\)\s*$")
+
+    def _error_message_assignment(self, name: str, value: ASTNode) -> ASTNode | None:
+        """T-SQL ``SET @msg = ERROR_MESSAGE()`` inside a CATCH: MySQL reads
+        the handler's condition via GET DIAGNOSTICS (a statement, not a
+        function)."""
+        if not isinstance(value, RawSQL) or not self._ERROR_MESSAGE_RE.match(value.sql):
+            return None
+        new_name = self._transform_var_name(name)
+        return RawSQL(
+            sql=f"GET DIAGNOSTICS CONDITION 1 {new_name} = MESSAGE_TEXT;",
+            reason="ERROR_MESSAGE() capture",
+        )
+
+    def _transform_set_variable(self, node: SetVariableStatement) -> ASTNode:
+        replaced = self._error_message_assignment(node.name, node.value)
+        if replaced is not None:
+            return replaced
+        return super()._transform_set_variable(node)
+
+    def _transform_assignment(self, node: AssignmentStatement) -> ASTNode:
+        replaced = self._error_message_assignment(node.target, node.value)
+        if replaced is not None:
+            return replaced
+        return super()._transform_assignment(node)
+
+    def _fetch_status_forms(self) -> tuple[str, str] | None:
+        # MySQL signals cursor exhaustion via a NOT FOUND handler: lower the
+        # check to a flag; _inject_fetch_done adds the flag + handler.
+        self._used_fetch_done = True
+        return ("NOT v_fetch_done", "v_fetch_done")
+
+    def _inject_fetch_done(self, result: ASTNode) -> ASTNode:
+        """Insert ``v_fetch_done`` and its CONTINUE HANDLER after the last
+        top-level declaration of a routine whose body checks the flag
+        (handlers must follow variable/cursor declarations in MySQL)."""
+        used, self._used_fetch_done = self._used_fetch_done, False
+        body = getattr(result, "body", None)
+        if not used or not isinstance(body, tuple):
+            return result
+
+        def is_decl(stmt: ASTNode) -> bool:
+            return isinstance(stmt, (DeclareStatement, CursorDeclaration)) or (
+                isinstance(stmt, StatementList)
+                and all(
+                    isinstance(x, (DeclareStatement, CursorDeclaration))
+                    for x in stmt.statements
+                )
+            )
+
+        # MySQL declaration order: variables, then cursors, then handlers —
+        # the flag goes before the first declaration (safely ahead of any
+        # cursor) and the handler after the last one.
+        first = next((i for i, x in enumerate(body) if is_decl(x)), 0)
+        last = max((i + 1 for i, x in enumerate(body) if is_decl(x)), default=0)
+        flag = DeclareStatement(
+            name="v_fetch_done",
+            data_type=DataType(name="INT"),
+            default=RawSQL(sql="FALSE", reason="cursor end-of-data flag"),
+        )
+        handler = RawSQL(
+            sql="DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_fetch_done = TRUE;",
+            reason="cursor end-of-data handler",
+        )
+        new_body = body[:first] + (flag,) + body[first:last] + (handler,) + body[last:]
+        return replace(result, body=new_body)  # type: ignore[call-arg]
+
+    def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
+        return self._inject_fetch_done(super()._transform_procedure(node))
+
+    def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
+        return self._inject_fetch_done(super()._transform_function(node))
+
+    def _transform_trigger(self, node: CreateTriggerStatement) -> ASTNode:
+        return self._inject_fetch_done(super()._transform_trigger(node))
 
     def _system_var_map(self) -> dict[str, str]:
         return {

@@ -190,8 +190,20 @@ class PostgresEmitter(ProceduralEmitter):
         body_lines = self._emit_indented_stmts(trg_body)
         self._indent_level = 0
         body_text = "\n".join(body_lines)
-        refs_inserted = re.search(r"\binserted\b", body_text) is not None
-        refs_deleted = re.search(r"\bdeleted\b", body_text) is not None
+        # A cursor over the transition table lives in the DECLARE section
+        # (``v_cur CURSOR FOR SELECT ... FROM inserted``) — scan it too, or
+        # the REFERENCING clause is omitted and the reference is unbound.
+        scan_text = (
+            body_text
+            + "\n"
+            + "\n".join(
+                fn_lines[fn_lines.index("DECLARE") + 1 :]
+                if "DECLARE" in fn_lines
+                else []
+            )
+        )
+        refs_inserted = re.search(r"\binserted\b", scan_text) is not None
+        refs_deleted = re.search(r"\bdeleted\b", scan_text) is not None
         referencing: list[str] = []
         preamble: list[str] = []
         if node.set_based_transition:
@@ -243,7 +255,9 @@ class PostgresEmitter(ProceduralEmitter):
         elif node.for_each == "ROW":
             trg_lines.append("FOR EACH ROW")
         trg_lines.append(f"EXECUTE FUNCTION {qfunc}();")
-        return "\n".join(fn_lines) + "\n\n" + "\n".join(trg_lines)
+        return self._degrade_pseudo_table_trigger(
+            "\n".join(fn_lines) + "\n\n" + "\n".join(trg_lines)
+        )
 
     def _emit_return(self, node: ReturnStatement) -> str:
         # A PostgreSQL procedure cannot RETURN a value; emit a bare RETURN and

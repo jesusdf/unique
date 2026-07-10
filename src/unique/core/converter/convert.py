@@ -194,6 +194,32 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="RETURNING",
         )
+    # UPDATE/DELETE with a leading CTE: the IR models neither's ``with`` arg
+    # (the clause silently vanished), so pass through to sqlglot whole.
+    if isinstance(expr, (exp.Update, exp.Delete)) and (
+        expr.args.get("with") or expr.args.get("with_")
+    ):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="CTE DML",
+        )
+    # A parenthesized join tree in FROM (the Access-style
+    # ``FROM ((a JOIN b ON ...) JOIN c ON ...)``) parses as nested Subquery
+    # nodes that are not derived tables; the IR would silently lose the whole
+    # FROM clause, so hand the statement to sqlglot whole.
+    if isinstance(expr, exp.Select):
+        _from = expr.args.get("from_") or expr.args.get("from")
+        if (
+            _from is not None
+            and isinstance(_from.this, exp.Subquery)
+            and not isinstance(_from.this.this, (exp.Select, exp.SetOperation))
+        ):
+            return PassthroughSQL(
+                sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+                source_dialect=source_dialect,
+                kind="PAREN JOIN",
+            )
     # Oracle hierarchical queries (START WITH / CONNECT BY) have no faithful
     # automatic rewrite; emit a documented comment instead of silently
     # dropping the clause (which would change results).

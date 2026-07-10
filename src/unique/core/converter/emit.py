@@ -225,6 +225,76 @@ def _comment_block(sql: str) -> str:
     return "\n".join(f"-- {ln}" if ln.strip() else "--" for ln in sql.splitlines())
 
 
+def _cte_dml_unsupported(sql: str, read: str, dialect: str) -> str | None:
+    """Why a WITH-clause UPDATE/DELETE cannot run on *dialect* (None = it can).
+
+    T-SQL lets a statement update through its CTE (``WITH x AS (SELECT ...)
+    UPDATE x SET ...``); nothing else does. Oracle additionally has no WITH
+    clause on UPDATE/DELETE at all.
+    """
+    if dialect == "tsql":
+        return None
+    try:
+        expr = sqlglot.parse_one(sql, read=read)
+    except Exception:  # noqa: BLE001 - let the generic path handle it
+        return None
+    with_clause = expr.args.get("with") or expr.args.get("with_")
+    if with_clause is None:
+        return None
+    cte_names = {c.alias_or_name.lower() for c in with_clause.expressions}
+    target = expr.this
+    target_name = target.name.lower() if isinstance(target, exp.Table) else ""
+    if target_name in cte_names:
+        return (
+            f"{dialect} cannot update through a CTE; rewrite as a MERGE or a "
+            "correlated UPDATE joined on the table's key."
+        )
+    if dialect == "oracle":
+        return (
+            "Oracle has no WITH clause on UPDATE/DELETE; inline the CTE as a "
+            "subquery or rewrite as a MERGE."
+        )
+    return None
+
+
+def _oracle_merge_paren_on(sql: str) -> str:
+    """Wrap a MERGE's ON condition in the parentheses Oracle requires.
+
+    Scans at paren depth 0 (quote-aware) for the ``ON`` that follows USING and
+    the ``WHEN`` that ends the condition, so an ON inside the USING subquery
+    (a JOIN) is never touched.
+    """
+    depth = 0
+    in_str = False
+    on_at = when_at = None
+    i = 0
+    upper = sql.upper()
+    while i < len(sql):
+        ch = sql[i]
+        if in_str:
+            if ch == "'":
+                in_str = False
+        elif ch == "'":
+            in_str = True
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        elif depth == 0 and upper.startswith(" ON ", i):
+            if on_at is None:
+                on_at = i
+        elif depth == 0 and on_at is not None and upper.startswith(" WHEN ", i):
+            when_at = i
+            break
+        i += 1
+    if on_at is None or when_at is None:
+        return sql
+    cond = sql[on_at + 4 : when_at].strip()
+    if cond.startswith("(") and cond.endswith(")"):
+        return sql
+    return f"{sql[:on_at]} ON ({cond}){sql[when_at:]}"
+
+
 def emit_node(node: ASTNode, dialect: str) -> str:
     """Emit a single IR node as SQL text."""
     if isinstance(node, CommentStatement):
@@ -322,6 +392,14 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             "INSERT ... ON DUPLICATE KEY UPDATE. Original:\n" + commented
         )
 
+    # A CTE on UPDATE/DELETE: no engine besides T-SQL can update *through*
+    # the CTE, and Oracle rejects the WITH clause on DML entirely — emit a
+    # documented carrier instead of invalid (or silently re-targeted) SQL.
+    if node.kind == "CTE DML":
+        reason = _cte_dml_unsupported(node.sql, read, dialect)
+        if reason is not None:
+            return f"-- UNIQUE: {reason} Original:\n{_comment_block(node.sql)}"
+
     # Oracle hierarchical query: keep as-is for Oracle; for others there is
     # no faithful automatic rewrite, so emit a documented comment.
     if node.kind == "CONNECT BY" and dialect != "oracle":
@@ -367,6 +445,10 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 # no-';' T-SQL convention does not apply.
                 if dialect in ("tsql", "postgresql"):
                     result = re.sub(r"(?i)\s+FROM\s+DUAL\b", "", result)
+                if dialect == "oracle":
+                    # Oracle requires MERGE ... ON (<condition>) — the parens
+                    # are mandatory (ORA-00969 without them).
+                    result = _oracle_merge_paren_on(result)
                 if dialect == "tsql" and not result.rstrip().endswith(";"):
                     result = result.rstrip() + ";"
             if dialect == "tsql":

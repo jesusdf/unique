@@ -166,6 +166,13 @@ class ProceduralTransformer:
         # rewritten to ``OPEN c FOR <q>``: the later bare ``OPEN @c`` must
         # then drop (the OPEN already happened at the binding site).
         self._cursor_bound_opens: set[str] = set()
+        # The cursor named by the most recent FETCH (already transformed):
+        # Oracle rewrites ``@@FETCH_STATUS`` checks to ``<cursor>%FOUND``.
+        self._last_fetch_cursor: str | None = None
+        # Whether a ``@@FETCH_STATUS`` check was lowered to the MySQL
+        # ``v_fetch_done`` flag (the routine then needs the flag declaration
+        # and its CONTINUE HANDLER injected).
+        self._used_fetch_done = False
         self._var_map: dict[str, str] = {}
         # Names (transformed form) of variables/parameters declared with a
         # string type. Used to disambiguate T-SQL '+' as concatenation when no
@@ -1005,6 +1012,11 @@ class ProceduralTransformer:
             cond = getattr(node, "condition", None)
             if isinstance(cond, ASTNode):
                 walk(cond)
+            # A cursor's query (DECLARE c CURSOR FOR SELECT ... FROM inserted)
+            # is where a set-based pseudo-table read typically lives.
+            query = getattr(node, "query", None)
+            if isinstance(query, ASTNode):
+                walk(query)
             for attr in ("body", "statements", "then_body", "else_body"):
                 for child in getattr(node, attr, ()) or ():
                     if isinstance(child, ASTNode):
@@ -1352,6 +1364,8 @@ class ProceduralTransformer:
 
     def _transform_cursor_op(self, node: CursorOperation) -> ASTNode:
         new_name = self._transform_var_name(node.cursor_name)
+        if node.operation.upper() == "FETCH":
+            self._last_fetch_cursor = new_name
         if (
             node.operation.upper() == "OPEN"
             and node.query is None
@@ -1405,6 +1419,11 @@ class ProceduralTransformer:
         new_cols = tuple(self._transform_node(c) for c in node.columns)
         rest = self._transform_var_in_sql(node.rest_sql)
         rest = self._transform_functions_in_sql(rest)
+        with_sql = node.with_sql
+        if with_sql:
+            with_sql = self._transpile_cte_prefix(self._transform_var_in_sql(with_sql))
+            if self._target != "tsql":
+                with_sql = self._strip_tsql_table_hints(with_sql)
         return SelectIntoStatement(
             columns=new_cols,
             into_vars=new_into,
@@ -1412,7 +1431,48 @@ class ProceduralTransformer:
             where=node.where,
             rest_sql=rest,
             tsql_assignment=node.tsql_assignment,
+            with_sql=with_sql,
         )
+
+    _TSQL_TABLE_HINT_RE = re.compile(
+        r"(?i)\s+WITH\s*\(\s*(?:NOLOCK|UPDLOCK|HOLDLOCK|ROWLOCK|READPAST|"
+        r"TABLOCKX?|XLOCK|PAGLOCK|READUNCOMMITTED|READCOMMITTED(?:LOCK)?|"
+        r"REPEATABLEREAD|SERIALIZABLE|SNAPSHOT|FORCESEEK|FORCESCAN|NOWAIT|"
+        r"INDEX\s*\([^)]*\))(?:\s*,\s*(?:NOLOCK|UPDLOCK|HOLDLOCK|ROWLOCK|"
+        r"READPAST|TABLOCKX?|XLOCK|PAGLOCK|READUNCOMMITTED|"
+        r"READCOMMITTED(?:LOCK)?|REPEATABLEREAD|SERIALIZABLE|SNAPSHOT|"
+        r"FORCESEEK|FORCESCAN|NOWAIT|INDEX\s*\([^)]*\)))*\s*\)"
+    )
+
+    def _strip_tsql_table_hints(self, sql: str) -> str:
+        """Drop T-SQL table hints (``WITH (UPDLOCK, HOLDLOCK)``) that sqlglot
+        writers other than PG/Oracle leave in place — locking hints have no
+        cross-engine equivalent (each engine locks via its own isolation)."""
+        return self._TSQL_TABLE_HINT_RE.sub("", sql)
+
+    def _transpile_cte_prefix(self, with_sql: str) -> str:
+        """Translate a captured CTE clause to the target dialect by giving
+        sqlglot a complete statement (``<ctes> SELECT 1``) and stripping the
+        probe back off — table hints, T-SQL aliases (``n = expr``), CONVERT
+        and string ``+`` inside the CTE bodies are all handled there."""
+        if self._source == self._target:
+            return with_sql
+        probe = f"{with_sql} SELECT 1"
+        try:
+            out = sqlglot.transpile(
+                probe,
+                read=self._get_sqlglot_dialect(self._source),
+                write=self._get_sqlglot_dialect(self._target),
+                error_level=sqlglot.ErrorLevel.RAISE,
+            )[0]
+        except Exception:  # noqa: BLE001 - keep the original on any failure
+            return with_sql
+        # The per-target expression fixups (string '+', dbo., TOP) parse their
+        # input as a full statement — run them while the probe still makes
+        # this one, then strip the probe.
+        out = self._fix_raw_sql_target(out)
+        m = re.search(r"(?is)\s*SELECT\s+1\s*;?\s*$", out)
+        return out[: m.start()].strip() if m else with_sql
 
     _DATE_ADD_START_RE = re.compile(r"DATE_ADD\s*\(", re.IGNORECASE)
 
@@ -1755,9 +1815,17 @@ class ProceduralTransformer:
         # An EmbeddedDML node holds exactly one statement; a RawSQL result is
         # a parse failure and a PassthroughSQL an unmodeled construct — the IR
         # would just re-run sqlglot on those, without the target fixups the
-        # fallback applies, so hand them back.
-        if len(statements) != 1 or any(
-            isinstance(n, (IRRawSQL, IRPassthrough)) for n in statements
+        # fallback applies, so hand them back. Exception: MERGE and CTE-DML,
+        # where the IR emitter owns the target fixes raw sqlglot lacks
+        # (MySQL's upsert rewrite, Oracle's mandatory ON parens, the
+        # updatable-CTE carrier, the DUAL/';' cleanups).
+        merge_stmt = bool(statements) and all(
+            isinstance(n, IRPassthrough) and n.kind in ("MERGE", "CTE DML")
+            for n in statements
+        )
+        if len(statements) != 1 or (
+            not merge_stmt
+            and any(isinstance(n, (IRRawSQL, IRPassthrough)) for n in statements)
         ):
             return None
         try:
@@ -1784,6 +1852,30 @@ class ProceduralTransformer:
         out = "\n".join(p for p in pieces if p)
         if not out.strip():
             return None
+        if merge_stmt:
+            lines = out.splitlines()
+            body = [x for x in lines if x.strip() and not x.lstrip().startswith("--")]
+            if not body:
+                # Comment-only carrier (an unexpressible MERGE or updatable
+                # CTE): keep it — the sqlglot fallback would ship invalid
+                # SQL — plus a no-op so an enclosing block does not end up
+                # empty, and surface the carrier's note as the warning.
+                note = next(
+                    (
+                        x.lstrip("- ").removeprefix("UNIQUE:").strip()
+                        for x in lines
+                        if x.lstrip().startswith("-- UNIQUE:")
+                    ),
+                    "statement preserved as a comment for manual rewrite",
+                )
+                self._warnings.append(note)
+                return out + "\n" + self._noop_sql()
+            # A documentation note trailing the statement would swallow the
+            # terminator the routine emitter appends — move it ahead.
+            trailing: list[str] = []
+            while lines and lines[-1].lstrip().startswith("--"):
+                trailing.insert(0, lines.pop())
+            return "\n".join(trailing + lines)
         # The IR pipeline emits RawSQL fragments (an unconvertible expression
         # deep in the tree) verbatim; a leaked carrier marker means the result
         # is not a faithful conversion — use the fallback instead.
@@ -2155,8 +2247,53 @@ class ProceduralTransformer:
         overrides to a comment (it has no NULL statement)."""
         return node
 
+    _FETCH_STATUS_OK_RE = re.compile(r"(?i)@@FETCH_STATUS\s*=\s*0\b")
+    _FETCH_STATUS_FAIL_RE = re.compile(
+        r"(?i)@@FETCH_STATUS\s*(?:<>|!=)\s*0\b|@@FETCH_STATUS\s*=\s*-\s*[12]\b"
+    )
+
+    def _fetch_status_forms(self) -> tuple[str, str] | None:
+        """(success, failure) target expressions for the T-SQL
+        ``@@FETCH_STATUS = 0`` / ``<> 0`` cursor-loop idiom. None (the base)
+        leaves it to the generic system-var handling."""
+        return None
+
+    def _fix_fetch_status(self, sql: str) -> str:
+        if "@@FETCH_STATUS" not in sql.upper():
+            return sql
+        forms = self._fetch_status_forms()
+        if forms is None:
+            return sql
+        ok, fail = forms
+        sql = self._FETCH_STATUS_FAIL_RE.sub(fail, sql)
+        return self._FETCH_STATUS_OK_RE.sub(ok, sql)
+
+    # The T-SQL base64-decode idiom: an empty XML document's ``value()``
+    # evaluating ``xs:base64Binary(sql:variable("@v"))``. Each target has a
+    # native base64 decoder.
+    _BASE64_XML_RE = re.compile(
+        r"(?is)CAST\s*\(\s*N?''\s*AS\s+XML\s*\)\s*\.\s*value\s*\(\s*"
+        r"'xs:base64Binary\(sql:variable\(\"(@?\w+)\"\)\)'\s*,\s*'[^']*'\s*\)"
+    )
+
+    def _fix_base64_xml_idiom(self, sql: str) -> str:
+        if self._target == "tsql" or ":base64Binary" not in sql:
+            return sql
+        template = {
+            "postgresql": "DECODE({v}, 'base64')",
+            "mysql": "FROM_BASE64({v})",
+            # BASE64_DECODE takes/returns RAW (32k PL/SQL cap) — enough for
+            # the typical use and it assigns implicitly to a BLOB.
+            "oracle": "UTL_ENCODE.BASE64_DECODE(UTL_RAW.CAST_TO_RAW({v}))",
+        }.get(self._target)
+        if template is None:
+            return sql
+        return self._BASE64_XML_RE.sub(lambda m: template.format(v=m.group(1)), sql)
+
     def _transform_raw_sql(self, node: RawSQL) -> RawSQL:
-        sql = self._transform_var_in_sql(node.sql)
+        sql = self._fix_fetch_status(node.sql)
+        sql = self._fix_base64_xml_idiom(sql)
+        sql = self._transform_var_in_sql(sql)
         # An Oracle trigger body's assignment value carries ``:NEW.``/``:OLD.``
         # row references; map them to the target's row qualifier (a no-op for the
         # Oracle target). Mirrors _transform_embedded_dml so a value captured as a
@@ -2207,6 +2344,11 @@ class ProceduralTransformer:
                 pass
         sql = self._rewrite_trigger_update_predicate(sql)
         sql = self._fix_raw_sql_target(sql)
+        if self._source == "tsql" and self._target != "tsql":
+            # Locking hints inside a captured condition (IF EXISTS (SELECT 1
+            # FROM t WITH (UPDLOCK)) ...) survive the sqlglot attempt when it
+            # bails; they have no cross-engine form.
+            sql = self._strip_tsql_table_hints(sql)
         return RawSQL(sql=sql, reason=node.reason)
 
     def _fix_raw_sql_target(self, sql: str) -> str:

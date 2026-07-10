@@ -15,6 +15,7 @@ from unique.core.ast_nodes import (
     CreateTriggerStatement,
     CursorDeclaration,
     ExitStatement,
+    NullStatement,
     ParameterDefinition,
     ReturnStatement,
     TryCatchBlock,
@@ -71,7 +72,18 @@ class MySqlEmitter(ProceduralEmitter):
         return "\n".join(["loop_lbl: LOOP", *body_lines, "END LOOP loop_lbl;"])
 
     def _assignment_form(self, target: str, val: str) -> str:
+        # A hoisted DECLARE default of ERROR_MESSAGE() (T-SQL CATCH): MySQL
+        # reads the handler's condition via GET DIAGNOSTICS, not a function.
+        # (The plain SET form is rewritten by the transformer; this covers
+        # the assignment the emitter itself synthesizes when it splits a
+        # mid-body DECLARE @v = <default>.)
+        if re.fullmatch(r"(?is)\s*ERROR_MESSAGE\s*\(\s*\)\s*", val):
+            return f"GET DIAGNOSTICS CONDITION 1 {target} = MESSAGE_TEXT;"
         return f"SET {target} = {val};"
+
+    def _emit_null(self, _node: NullStatement) -> str:
+        # MySQL has no PL/SQL-style NULL statement; DO 0 is its no-op.
+        return "DO 0;"
 
     def _emit_guard_if(self, cond: str, body_lines: list[str]) -> str | None:
         # MySQL's IF accepts an EXISTS/subquery condition, so the guard is an

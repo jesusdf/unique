@@ -291,12 +291,15 @@ class OracleEmitter(ProceduralEmitter):
         header_lines = [ln for ln in header_lines if ln != "BEGIN"]
         declarations, body_stmts = self._split_declarations(node.body)
         self._in_oracle_procedure = True  # a trigger RETURN cannot carry a value
-        return note + self._emit_oracle_procedure_body(
-            "\n".join(header_lines),
-            declarations,
-            body_stmts,
-            decl_keyword="DECLARE",
-            no_decl_keyword="",
+        return self._degrade_pseudo_table_trigger(
+            note
+            + self._emit_oracle_procedure_body(
+                "\n".join(header_lines),
+                declarations,
+                body_stmts,
+                decl_keyword="DECLARE",
+                no_decl_keyword="",
+            )
         )
 
     def _body_reads_table(self, body_text: str, table: str) -> bool:

@@ -32,13 +32,13 @@ procedural text-matchers onto structure — tracked in `docs/TODO.md`.
   real script, execute every statement on the live engine, classify
   transpiler defects vs empty-database noise). On the confidential real-world
   corpora (see `audit/2026-07-08/03-private-fixture-sweep.md`):
-  - **T-SQL → PostgreSQL 100.0%**, **→ Oracle 99.6%**, **→ MySQL 97.7%**
-    on a 13k-line migration dump (measured 2026-07-09 post-M3; remaining
-    failures are single known classes, e.g. `PRIMARY KEY CLUSTERED` inside a
-    guard on Oracle, comment-carrier batches on MySQL).
-  - A procedures-heavy file exposes the open **declaration-hoisting family**
-    (mid-body `DECLARE`, cursor declarations, `WHILE`/`BEGIN TRY` structure —
-    the C1/C2 classes) on all three targets — tracked P1.
+  - **T-SQL → PostgreSQL / Oracle / MySQL: 100.0%** on both confidential
+    corpora (the 13k-line migration dump *and* the procedures-heavy file),
+    measured 2026-07-10 after the sweep-closing wave: the C1–C4
+    declaration/boundary family is closed (cursor variables and options,
+    `@@FETCH_STATUS` loops per target, semicolon-less ELSE/statement-verb/
+    MERGE/CTE boundaries, updatable-CTE and paren-join silent losses,
+    base64-XML idiom, CATCH-block content, per-target DROP INDEX guards).
   - **Oracle → T-SQL/PostgreSQL/MySQL now measures at Tier-1-grade
     validity**. On a real 13 MB dump (measured 2026-07-09, end of the
     autonomous bring-up run): **PostgreSQL 99.9%, T-SQL 99.6%, MySQL

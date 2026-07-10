@@ -803,7 +803,29 @@ class ProceduralEmitter:
         lines.extend(self._emit_indented_stmts(node.body))
         self._indent_level = 0
         lines.append(self._trigger_end())
-        return note + "\n".join(lines)
+        return self._degrade_pseudo_table_trigger(note + "\n".join(lines))
+
+    #: Left by the transformer inside a trigger whose body reads the T-SQL
+    #: inserted/deleted pseudo-tables in a set-based way the target cannot
+    #: express (see _rewrite_trigger_pseudotables).
+    _PSEUDO_TABLE_CARRIER_MARKER = "set-based inserted/deleted"
+
+    def _degrade_pseudo_table_trigger(self, text: str) -> str:
+        """A trigger carrying the set-based pseudo-table note is not runnable
+        (its cursor/DML source was replaced by the documentation carrier):
+        shipping it partially executable would run a half-empty body per row.
+        Preserve the WHOLE trigger commented out for a manual rewrite."""
+        if self._PSEUDO_TABLE_CARRIER_MARKER not in text:
+            return text
+        note = (
+            "-- UNIQUE: trigger reads the T-SQL inserted/deleted pseudo-tables "
+            f"in a set-based way {self.dialect_name} cannot express; the "
+            "translation is preserved commented out for a manual rewrite:\n"
+        )
+        commented = "\n".join(
+            f"-- {line}" if line.strip() else "--" for line in text.split("\n")
+        )
+        return note + commented
 
     def _emit_compound_trigger_unsupported(self, node: CreateTriggerStatement) -> str:
         """Document an Oracle COMPOUND TRIGGER, which has no mechanical
@@ -1407,6 +1429,11 @@ class ProceduralEmitter:
             args.append(first)
         text = next((a for a in args if a.startswith("'") or a.startswith('"')), None)
         number = next((a for a in args if re.fullmatch(r"\d+", a)), None)
+        if text is None:
+            # RAISERROR(@msg, severity, state): the message is a variable or
+            # expression, not a literal — using the severity number as the
+            # message would discard the operator-facing text.
+            text = next((a for a in args if not re.fullmatch(r"\d+", a)), None)
         rest = [a for a in args if a is not text and a is not number]
         return text, number, ", ".join(rest)
 
@@ -1591,7 +1618,8 @@ class ProceduralEmitter:
             select_list = first.sql if isinstance(first, RawSQL) else ""
         rest = node.rest_sql.rstrip(";").strip()
         into_clause = ", ".join(node.into_vars)
-        return f"SELECT {select_list} INTO {into_clause} {rest};"
+        prefix = f"{node.with_sql}\n" if node.with_sql else ""
+        return f"{prefix}SELECT {select_list} INTO {into_clause} {rest};"
 
     def _emit_raw_sql(self, node: RawSQL) -> str:
         # A construct the parser could not understand is preserved as a documented

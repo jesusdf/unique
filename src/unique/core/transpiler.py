@@ -1685,6 +1685,22 @@ class Transpiler:
         # Bare object name: brackets/quotes and the dbo qualifier are T-SQL-only.
         clean = re.sub(r'[\[\]"]', "", name)
         clean = re.sub(r"(?i)^dbo\.", "", clean)
+        # T-SQL's DROP INDEX names the index as <table>.<index>; every other
+        # engine wants the bare index name (MySQL takes the table in an ON
+        # clause instead).
+        index_table = ""
+        if kind == "INDEX" and "." in clean:
+            index_table, _, clean = clean.rpartition(".")
+        if target == "mysql" and kind == "INDEX":
+            # MySQL has no DROP INDEX IF EXISTS: emit the unconditional form
+            # with the guard-dropped warning (same policy as its CREATE INDEX
+            # guard).
+            on_clause = f" ON {index_table}" if index_table else ""
+            return self._warn_guard_dropped(
+                TranspileResult(sql=f"DROP INDEX {clean}{on_clause};"),
+                source,
+                target,
+            )
         if target == "mysql" and kind == "SEQUENCE":
             # MySQL has no sequences; keep the documented degradation the
             # CREATE SEQUENCE counterpart also emits.
