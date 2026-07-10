@@ -986,7 +986,7 @@ class ProceduralEmitter:
             if len(else_body) == 1 and isinstance(else_body[0], IfStatement):
                 nested = else_body[0]
                 nested_cond = self._emit_node(nested.condition)
-                lines.append(f"ELSIF {nested_cond} THEN")
+                lines.append(f"{self._elsif_keyword()} {nested_cond} THEN")
                 self._indent_level += 1
                 lines.extend(self._emit_indented_stmts(nested.then_body))
                 self._indent_level -= 1
@@ -1003,6 +1003,11 @@ class ProceduralEmitter:
 
         lines.append("END IF;")
         return "\n".join(lines)
+
+    def _elsif_keyword(self) -> str:
+        """The chained-ELSE-IF keyword: PL/SQL and plpgsql spell it ELSIF;
+        MySQL overrides with ELSEIF."""
+        return "ELSIF"
 
     def _emit_while(self, node: WhileStatement) -> str:
         """Default (PL/SQL/MySQL) ``WHILE cond LOOP … END LOOP;``. T-SQL

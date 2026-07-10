@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from dataclasses import replace
 
@@ -21,6 +22,7 @@ from unique.core.ast_nodes import (
     DeclareStatement,
     ExceptionBlock,
     RawSQL,
+    SelectIntoStatement,
     SetVariableStatement,
     StatementList,
     TryCatchBlock,
@@ -81,6 +83,28 @@ class MySqlTransformer(ProceduralTransformer):
             try_body=(),
             catch_body=self._transform_body(tuple(body)),
         )
+
+    def _transform_select_into(self, node: SelectIntoStatement) -> ASTNode:
+        result = super()._transform_select_into(node)
+        if not isinstance(result, SelectIntoStatement):
+            return result
+        if not any(re.match(r"(?i)^(?:NEW|OLD)\s*\.", v) for v in result.into_vars):
+            return result
+        # MySQL's SELECT ... INTO cannot target the trigger pseudo-row:
+        # route through session variables, then SET NEW.col = @var.
+        tmp_vars = [f"@uq_sel{i}" for i in range(len(result.into_vars))]
+        assigns = tuple(
+            RawSQL(sql=f"SET {target} = {tmp};", reason="pseudo-row INTO")
+            for target, tmp in zip(result.into_vars, tmp_vars, strict=True)
+            if re.match(r"(?i)^(?:NEW|OLD)\s*\.", target)
+        )
+        keeps = tuple(
+            RawSQL(sql=f"SET {target} = {tmp};", reason="pseudo-row INTO")
+            for target, tmp in zip(result.into_vars, tmp_vars, strict=True)
+            if not re.match(r"(?i)^(?:NEW|OLD)\s*\.", target)
+        )
+        select_stmt = dataclasses.replace(result, into_vars=tuple(tmp_vars))
+        return StatementList(statements=(select_stmt, *assigns, *keeps))
 
     def _fetch_status_forms(self) -> tuple[str, str] | None:
         # MySQL signals cursor exhaustion via a NOT FOUND handler: lower the

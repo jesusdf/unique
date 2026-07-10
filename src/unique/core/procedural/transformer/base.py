@@ -1357,6 +1357,10 @@ class ProceduralTransformer:
         schema = self._target_schema(node.schema)
         args = node.args
         if args:
+            if self._source == "oracle" and self._in_trigger:
+                # :NEW./:OLD. row references in the argument list map to the
+                # target's row qualifier like everywhere else in the body.
+                args = self._normalize_oracle_pseudorecords(args)
             args = self._transform_var_in_sql(args)
             args = self._map_now_in_sql(args)
         return CallStatement(name=node.name, args=args, schema=schema)
@@ -1489,10 +1493,23 @@ class ProceduralTransformer:
 
     def _transform_select_into(self, node: SelectIntoStatement) -> ASTNode:
         """Transform SELECT INTO, adjusting variables and the embedded SQL."""
-        new_into = tuple(self._transform_var_name(v) for v in node.into_vars)
+        into_vars = node.into_vars
+        if self._source == "oracle" and self._in_trigger:
+            # :NEW./:OLD. row references (in the INTO targets and the
+            # FROM/WHERE tail) map to the target's row qualifier.
+            into_vars = tuple(
+                self._normalize_oracle_pseudorecords(v) for v in into_vars
+            )
+        new_into = tuple(
+            v if re.match(r"(?i)^(?:NEW|OLD)\s*\.", v) else self._transform_var_name(v)
+            for v in into_vars
+        )
         # Transform the select list and rest via variable + function mapping
         new_cols = tuple(self._transform_node(c) for c in node.columns)
-        rest = self._transform_var_in_sql(node.rest_sql)
+        rest_src = node.rest_sql
+        if self._source == "oracle" and self._in_trigger:
+            rest_src = self._normalize_oracle_pseudorecords(rest_src)
+        rest = self._transform_var_in_sql(rest_src)
         rest = self._transform_functions_in_sql(rest)
         rest = self._fix_select_into_rest(rest)
         with_sql = node.with_sql

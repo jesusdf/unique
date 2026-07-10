@@ -111,6 +111,9 @@ class MySqlEmitter(ProceduralEmitter):
             return f"GET DIAGNOSTICS CONDITION 1 {target} = MESSAGE_TEXT;"
         return f"SET {target} = {val};"
 
+    def _elsif_keyword(self) -> str:
+        return "ELSEIF"
+
     def _emit_null(self, _node: NullStatement) -> str:
         # MySQL has no PL/SQL-style NULL statement; DO 0 is its no-op.
         return "DO 0;"

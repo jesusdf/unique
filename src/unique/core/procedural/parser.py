@@ -2303,20 +2303,29 @@ class ProceduralParser:
             self._pos = start
             return self._parse_embedded_dml()
 
-        # Consume INTO and capture target variables
+        # Consume INTO and capture target variables. A target may be a
+        # trigger pseudo-row field (``:NEW.col`` — lexed as ':' 'NEW' '.'
+        # 'col') or any dotted name; collect the whole reference, or the tail
+        # leaks into the FROM remainder.
         self._expect_keyword("INTO")
         into_vars: list[str] = []
         while not self._at_end():
             tok = self._current()
             if tok.is_keyword("FROM") or tok.type == TokenType.SEMICOLON:
                 break
+            if tok.value == ":":
+                self._advance()
+                tok = self._current()
             if tok.type in (
                 TokenType.IDENTIFIER,
                 TokenType.KEYWORD,
                 TokenType.VARIABLE,
             ):
-                into_vars.append(tok.value)
-                self._advance()
+                name = self._advance().value
+                while self._current().type == TokenType.DOT:
+                    self._advance()
+                    name += "." + self._advance().value
+                into_vars.append(name)
                 if not self._match_type(TokenType.COMMA):
                     break
             else:
