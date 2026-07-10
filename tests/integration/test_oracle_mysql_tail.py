@@ -513,3 +513,76 @@ class TestTruncOnMySql:
         assert "TRUNCATE(d_fecha" not in line, line
         assert "365.25" in line, line
         assert "+ 1" in line, line
+
+
+class TestListaggWithinGroup:
+    """LISTAGG(x, sep) WITHIN GROUP (ORDER BY y) used to be half-rewritten:
+    GROUP_CONCAT(... SEPARATOR ...) with the WITHIN GROUP suffix left dangling
+    (a 1064) and a CHR(13)||CHR(10) separator MySQL cannot accept (SEPARATOR
+    takes only a literal)."""
+
+    _SRC = (
+        "create or replace PROCEDURE p_agg AS\n"
+        "  v_all VARCHAR2(4000);\n"
+        "BEGIN\n"
+        "  SELECT LISTAGG('X ' || nombre || ';', CHR(13) || CHR(10)) "
+        "WITHIN GROUP(ORDER BY nombre) INTO v_all FROM t_trg;\n"
+        "END;\n/"
+    )
+
+    def test_mysql_group_concat_with_order_and_literal_separator(self) -> None:
+        out = _flat(_t(self._SRC, "mysql"))
+        assert "WITHIN GROUP" not in out.upper(), out
+        m = re.search(r"GROUP_CONCAT\((.+?) SEPARATOR ('[^']*')\)", out)
+        assert m, out
+        assert "ORDER BY nombre" in m.group(1), out
+        assert m.group(2) == r"'\r\n'", out
+
+    def test_postgresql_string_agg_with_order(self) -> None:
+        out = _flat(_t(self._SRC, "postgresql"))
+        assert "WITHIN GROUP" not in out.upper(), out
+        assert re.search(r"(?i)STRING_AGG\(.+ORDER BY nombre\)", out), out
+
+    def test_tsql_keeps_within_group(self) -> None:
+        out = _flat(_t(self._SRC, "tsql"))
+        assert re.search(
+            r"(?i)STRING_AGG\(.+\)\s*WITHIN GROUP \(ORDER BY nombre\)", out
+        ), out
+        assert "LISTAGG" not in out.upper(), out
+
+    def test_non_literal_separator_on_mysql_warns(self) -> None:
+        src = self._SRC.replace("CHR(13) || CHR(10)", "v_all")
+        result = Transpiler().transpile(src, "oracle", "mysql")
+        assert any("SEPARATOR" in w.message for w in result.warnings), result.warnings
+
+
+class TestOraclePipesConcatOnMySql:
+    """Oracle '||' reaching MySQL is logical OR — the assignment and
+    SELECT INTO paths leaked it (the DML paths already converted), so
+    v := 'a' || b shipped as SET v = 'a' || b and evaluated to 0/1."""
+
+    def test_assignment_becomes_concat(self) -> None:
+        src = (
+            "create or replace PROCEDURE p1 AS v VARCHAR2(10);\n"
+            "BEGIN\n  v := 'a' || v || 'b';\nEND;\n/"
+        )
+        out = _flat(_t(src, "mysql"))
+        assert "CONCAT('a', v, 'b')" in out, out
+        assert "||" not in out, out
+
+    def test_select_into_column_becomes_concat(self) -> None:
+        src = (
+            "create or replace PROCEDURE p2 AS v VARCHAR2(99);\n"
+            "BEGIN\n  SELECT 'x' || nombre INTO v FROM t;\nEND;\n/"
+        )
+        out = _flat(_t(src, "mysql"))
+        assert "CONCAT('x', nombre)" in out, out
+        assert "||" not in out, out
+
+    def test_pipes_inside_string_literal_untouched(self) -> None:
+        src = (
+            "create or replace PROCEDURE p3 AS v VARCHAR2(10);\n"
+            "BEGIN\n  v := 'a || b';\nEND;\n/"
+        )
+        out = _t(src, "mysql")
+        assert "'a || b'" in out, out

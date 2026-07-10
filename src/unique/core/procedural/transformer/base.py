@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import Counter
 from collections.abc import Callable
 from typing import cast
 
@@ -2719,6 +2720,81 @@ class ProceduralTransformer:
     # only when one of its operands is a string literal (the unambiguous
     # signal), rewriting the whole chain to ``CONCAT(...)`` and dropping any
     # ``N`` prefixes. Pure arithmetic (``a + b``, ``x + 1``) is left intact.
+    def _mysql_pipes_to_concat(self, sql: str) -> str:
+        """Oracle/PG ``||`` concatenation for the MySQL target, where ``||``
+        is logical OR — leaking it was *silent semantic corruption* (the
+        chain evaluated to 0/1). Round-trips the fragment through sqlglot's
+        postgres reader, whose DPipe emits as CONCAT under the mysql writer;
+        conservatively skipped when the fragment does not survive (every
+        input word/number atom must still be present in the output)."""
+        if self._source not in ("oracle", "postgresql") or "||" not in sql:
+            return sql
+        # Only act on a || outside string literals.
+        blanked = re.sub(r"'(?:[^']|'')*'", "''", sql)
+        if "||" not in blanked:
+            return sql
+        # The postgres reader turns SELECT ... INTO into CREATE TABLE AS.
+        if re.search(r"(?i)\bINTO\b", sql):
+            return sql
+        import sqlglot
+
+        wrapped = False
+        tree = None
+        try:
+            tree = sqlglot.parse_one(
+                sql, read="postgres", error_level=sqlglot.ErrorLevel.RAISE
+            )
+        except Exception:  # noqa: BLE001 - fall through to the wrapped form
+            try:
+                tree = sqlglot.parse_one(
+                    f"SELECT {sql}",
+                    read="postgres",
+                    error_level=sqlglot.ErrorLevel.RAISE,
+                )
+                wrapped = True
+            except Exception:  # noqa: BLE001 - not an expression; keep as-is
+                return sql
+        try:
+            out = tree.sql(dialect="mysql")
+        except Exception:  # noqa: BLE001 - keep the original on any failure
+            return sql
+        if wrapped:
+            if not out.upper().startswith("SELECT "):
+                return sql
+            out = out[len("SELECT ") :].rstrip().rstrip(";")
+
+        def atoms(s: str) -> Counter[str]:
+            return Counter(re.findall(r"[A-Za-z_]\w*|\d+", s.lower()))
+
+        # No input atom may be lost (a lossy re-parse drops arguments —
+        # audit D8); additions (CONCAT itself) are fine.
+        lost = atoms(sql) - atoms(out)
+        if lost:
+            return sql
+        return out
+
+    def _mysql_trunc(self, sql: str) -> str:
+        """Oracle TRUNC for MySQL (mirrors the T-SQL target's heuristic):
+        two-arg TRUNC is numeric truncation (TRUNCATE); one-arg TRUNC is the
+        strip-the-time date idiom (DATE) when the argument looks like a date
+        (a known date variable or a fecha/date-named expression), numeric
+        truncation otherwise."""
+        sql = re.sub(
+            r"(?is)\bTRUNC\s*\(\s*([^(),]+?)\s*,\s*([^(),]+?)\s*\)",
+            r"TRUNCATE(\1, \2)",
+            sql,
+        )
+
+        def trunc1(m: re.Match[str]) -> str:
+            arg = m.group(1).strip()
+            if arg in self._date_vars or re.search(
+                r"(?i)\b(?:fecha|date|fec|sysdate|now|current_timestamp)", arg
+            ):
+                return f"DATE({arg})"
+            return f"TRUNCATE({arg}, 0)"
+
+        return re.sub(r"(?is)\bTRUNC\s*\(\s*([^(),]+?)\s*\)", trunc1, sql)
+
     def _mysql_string_concat(self, sql: str) -> str:
         return self._rewrite_string_concat(sql, "mysql")
 
@@ -2993,6 +3069,7 @@ class ProceduralTransformer:
         sql = self._transform_datediff(sql)
         sql = self._transform_substring_position(sql)
         sql = self._transform_decode(sql)
+        sql = self._transform_listagg_within_group(sql)
         sql = self._transform_string_agg(sql)
         sql = self._transform_last_identity(sql)
         sql = self._transform_nvl2(sql)
@@ -3143,6 +3220,106 @@ class ProceduralTransformer:
             sql = re.sub(rf"\b{func}\s*\(\s*\)", replacement, sql, flags=re.IGNORECASE)
         return sql
 
+    @staticmethod
+    def _fold_string_literal(expr: str) -> str | None:
+        """Fold a constant string expression (``'x'``, ``CHR(n)``, and ``||``
+        chains of those) into ONE quoted literal, or None if any piece is not
+        constant. MySQL's GROUP_CONCAT SEPARATOR accepts only a literal."""
+        escapes = {9: "\\t", 10: "\\n", 13: "\\r"}
+        pieces: list[str] = []
+        for part in re.split(r"\|\|", expr):
+            part = part.strip()
+            m = re.fullmatch(r"(?is)CHR\s*\(\s*(\d+)\s*\)", part)
+            if m:
+                esc = escapes.get(int(m.group(1)))
+                if esc is None:
+                    return None
+                pieces.append(esc)
+                continue
+            if len(part) >= 2 and part.startswith("'") and part.endswith("'"):
+                pieces.append(part[1:-1].replace("\\", "\\\\"))
+                continue
+            return None
+        return "'" + "".join(pieces) + "'"
+
+    def _transform_listagg_within_group(self, sql: str) -> str:
+        """Translate the full Oracle ``LISTAGG(col, sep) WITHIN GROUP (ORDER
+        BY ...)`` form per target. The basic-form handler below rewrote only
+        the call and left the WITHIN GROUP suffix dangling — invalid on
+        MySQL/PostgreSQL."""
+        if self._source != "oracle" or self._target == "oracle":
+            return sql
+        from unique.core.sql_split import split_top_level_commas
+
+        pat = re.compile(r"(?i)\bLISTAGG\s*\(")
+        out: list[str] = []
+        i = 0
+        while True:
+            m = pat.search(sql, i)
+            if not m:
+                break
+
+            def scan_parens(start: int) -> int:
+                """Index just past the paren that closes depth 1 at start."""
+                depth, in_str, j = 1, False, start
+                while j < len(sql) and depth:
+                    ch = sql[j]
+                    if in_str:
+                        in_str = ch != "'"
+                    elif ch == "'":
+                        in_str = True
+                    elif ch == "(":
+                        depth += 1
+                    elif ch == ")":
+                        depth -= 1
+                    j += 1
+                return j
+
+            close = scan_parens(m.end())
+            args = split_top_level_commas(sql[m.end() : close - 1])
+            wg = re.match(r"(?is)\s*WITHIN\s+GROUP\s*\(\s*ORDER\s+BY\s+", sql[close:])
+            order: str | None = None
+            end = close
+            if wg:
+                wg_close = scan_parens(close + wg.end())
+                order = sql[close + wg.end() : wg_close - 1].strip()
+                end = wg_close
+            rep = self._string_agg_with_order(args, order)
+            if rep is None:
+                out.append(sql[i:end])
+            else:
+                out.append(sql[i : m.start()])
+                out.append(rep)
+            i = end
+        out.append(sql[i:])
+        return "".join(out)
+
+    def _string_agg_with_order(self, args: list[str], order: str | None) -> str | None:
+        if len(args) != 2:
+            return None
+        col, sep = args[0].strip(), args[1].strip()
+        if self._target == "mysql":
+            lit = self._fold_string_literal(sep)
+            if lit is None:
+                self._warnings.append(
+                    "GROUP_CONCAT's SEPARATOR accepts only a string literal; "
+                    f"the LISTAGG separator '{sep}' is not constant — left "
+                    "for manual review"
+                )
+                return None
+            # Convert the aggregated expression's || now: once SEPARATOR
+            # syntax wraps it, the pipes pass can no longer parse it.
+            col = self._mysql_pipes_to_concat(col)
+            ob = f" ORDER BY {order}" if order else ""
+            return f"GROUP_CONCAT({col}{ob} SEPARATOR {lit})"
+        if self._target == "postgresql":
+            ob = f" ORDER BY {order}" if order else ""
+            return f"STRING_AGG({col}, {sep}{ob})"
+        if self._target == "tsql":
+            wg = f" WITHIN GROUP (ORDER BY {order})" if order else ""
+            return f"STRING_AGG({col}, {sep}){wg}"
+        return None
+
     def _transform_string_agg(self, sql: str) -> str:
         """Translate string-aggregation functions across dialects.
 
@@ -3150,9 +3327,9 @@ class ProceduralTransformer:
         - Oracle:             LISTAGG(col, sep)
         - MySQL:              GROUP_CONCAT(col SEPARATOR sep)
 
-        Only the basic ``(col, sep)`` form is handled; an Oracle/T-SQL
-        ``WITHIN GROUP (ORDER BY ...)`` suffix or MySQL ``ORDER BY`` inside
-        the call is left for manual review.
+        The full Oracle ``WITHIN GROUP`` form is handled by
+        ``_transform_listagg_within_group`` (which must run first); this
+        covers the remaining basic ``(col, sep)`` calls.
         """
         source_fn = {
             "tsql": "STRING_AGG",

@@ -224,34 +224,13 @@ class MySqlTransformer(ProceduralTransformer):
                 f"{mt.group(1)} {mt.group(2).upper()}\nDO 0;"
             )
         sql = self._mysql_trunc(sql)
+        sql = self._mysql_pipes_to_concat(sql)
         sql = self._mysql_normalize_funcs(sql)
         sql = self._mysql_string_concat(sql)
         sql = self._mysql_clean_dml(sql)
         sql = self._mysql_fix_cast_max(sql)
         sql = self._mysql_string_split(sql)
         return sql
-
-    def _mysql_trunc(self, sql: str) -> str:
-        """Oracle TRUNC for MySQL (mirrors the T-SQL target's heuristic):
-        two-arg TRUNC is numeric truncation (TRUNCATE); one-arg TRUNC is the
-        strip-the-time date idiom (DATE) when the argument looks like a date
-        (a known date variable or a fecha/date-named expression), numeric
-        truncation otherwise."""
-        sql = re.sub(
-            r"(?is)\bTRUNC\s*\(\s*([^(),]+?)\s*,\s*([^(),]+?)\s*\)",
-            r"TRUNCATE(\1, \2)",
-            sql,
-        )
-
-        def trunc1(m: re.Match[str]) -> str:
-            arg = m.group(1).strip()
-            if arg in self._date_vars or re.search(
-                r"(?i)\b(?:fecha|date|fec|sysdate|now|current_timestamp)", arg
-            ):
-                return f"DATE({arg})"
-            return f"TRUNCATE({arg}, 0)"
-
-        return re.sub(r"(?is)\bTRUNC\s*\(\s*([^(),]+?)\s*\)", trunc1, sql)
 
 
 register_transformer(MySqlTransformer.target_name, MySqlTransformer)
