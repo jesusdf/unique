@@ -785,6 +785,10 @@ def _emit_insert(node: InsertStatement, dialect: str) -> str:
         select = _emit_select(node.select, dialect)
         return f"INSERT INTO {table}{cols}\n{select}"
 
+    if dialect == "mysql":
+        # MySQL has no DEFAULT VALUES clause; the all-defaults row is
+        # spelled with empty lists.
+        return f"INSERT INTO {table} () VALUES ()"
     return f"INSERT INTO {table}{cols}\nDEFAULT VALUES"
 
 

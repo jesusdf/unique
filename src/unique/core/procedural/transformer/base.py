@@ -162,6 +162,9 @@ class ProceduralTransformer:
         self._target = target
         self._metadata = metadata_resolver
         self._warnings: list[str] = []
+        # Ref-cursor parameters dropped on result-set targets: OPEN ... FOR
+        # on these names becomes the procedure's result-set SELECT.
+        self._dropped_cursor_params: set[str] = set()
         # Cursor variables bound via ``SET @c = CURSOR … FOR <q>`` and
         # rewritten to ``OPEN c FOR <q>``: the later bare ``OPEN @c`` must
         # then drop (the OPEN already happened at the binding site).
@@ -435,12 +438,35 @@ class ProceduralTransformer:
             )
         return node
 
+    _REFCURSOR_TYPE_RE = re.compile(r"(?i)(?:^|\.)\w*(?:REF)?CURSOR$|^SYS_REFCURSOR$")
+
+    def _returns_result_sets_directly(self) -> bool:
+        """Whether the target's procedures return result sets by SELECTing
+        (T-SQL, MySQL) — a ref-cursor OUT parameter then has no place and its
+        OPEN ... FOR query becomes the procedure's result set."""
+        return self._target in ("tsql", "mysql")
+
     def _transform_params(
         self, params: tuple[ParameterDefinition, ...]
     ) -> tuple[ParameterDefinition, ...]:
         """Transform parameter definitions between dialects."""
         result: list[ParameterDefinition] = []
         for p in params:
+            if self._returns_result_sets_directly() and self._REFCURSOR_TYPE_RE.search(
+                p.data_type.name.strip()
+            ):
+                # OPEN <p> FOR <q> in the body becomes a plain result-set
+                # SELECT (see _transform_cursor_op); the parameter itself has
+                # no target form.
+                self._dropped_cursor_params.add(
+                    self._transform_var_name(p.name).lower().lstrip("@")
+                )
+                self._warnings.append(
+                    f"ref-cursor parameter {p.name!r} dropped: {self._target} "
+                    "procedures return the result set directly (callers read "
+                    "it instead of fetching from the cursor)"
+                )
+                continue
             new_name = self._transform_var_name(p.name)
             new_type = self._transform_data_type(p.data_type)
             new_default = self._transform_node(p.default) if p.default else None
@@ -1463,6 +1489,13 @@ class ProceduralTransformer:
 
     def _transform_cursor_op(self, node: CursorOperation) -> ASTNode:
         new_name = self._transform_var_name(node.cursor_name)
+        bare = new_name.lower().lstrip("@").lstrip(":")
+        if bare in self._dropped_cursor_params:
+            if node.operation.upper() == "OPEN" and node.query is not None:
+                # The ref-cursor's query IS the procedure's result set.
+                return self._transform_node(node.query)
+            # CLOSE/FETCH on a dropped cursor have nothing to act on.
+            return NullStatement()
         if node.operation.upper() == "FETCH":
             self._last_fetch_cursor = new_name
         if (
@@ -1849,8 +1882,22 @@ class ProceduralTransformer:
                 error_level=sqlglot.ErrorLevel.WARN,
                 pretty=len(sql) > 200,
             )
+            # WARN keeps partially-parsed trees usable (a hard RAISE leaves
+            # source-dialect text in the output), but a partial tree can
+            # CORRUPT the statement: an INSERT whose SELECT failed to parse
+            # re-emits as INSERT ... DEFAULT VALUES. Detect that signature
+            # and keep the original text (warned) instead.
             if results:
-                sql = results[0]
+                corrupted = re.search(
+                    r"(?i)\bDEFAULT\s+VALUES\s*;?\s*$", results[0]
+                ) and not re.search(r"(?i)\bDEFAULT\s+VALUES\b", sql)
+                if corrupted:
+                    self._warnings.append(
+                        "embedded INSERT lost its source rows in a partial "
+                        "parse; original statement preserved (review)"
+                    )
+                else:
+                    sql = results[0]
         except Exception as e:
             logger.debug("sqlglot transpile failed for DML: %s", e)
             self._warnings.append(f"Could not transpile DML: {e}")
