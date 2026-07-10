@@ -39,17 +39,16 @@ procedural text-matchers onto structure — tracked in `docs/TODO.md`.
     `@@FETCH_STATUS` loops per target, semicolon-less ELSE/statement-verb/
     MERGE/CTE boundaries, updatable-CTE and paren-join silent losses,
     base64-XML idiom, CATCH-block content, per-target DROP INDEX guards).
-  - **Oracle → T-SQL/PostgreSQL/MySQL now measures at Tier-1-grade
-    validity**. On a real 13 MB dump (measured 2026-07-09, end of the
-    autonomous bring-up run): **PostgreSQL 99.9%, T-SQL 99.6%, MySQL
-    99.6%** (post-M1 baseline: 73.1 / 94.0 / 75.0). The closing wave:
-    EXECUTE IMMEDIATE … INTO captured per target (T-SQL INSERT…EXEC), `||`
-    → `+` in T-SQL raw expressions, faithful cursor FOR-loop expansion,
-    D9 split-line headers/DECLARE sections, MySQL `--`-comment spacing,
-    guard-audit fixes, D1/D2/D5–D7/D10, B1–B4, C1/C3, SQL*Plus directives,
-    plus a silent-loss fix (Oracle TRY bodies were dropped whole).
-    Remaining classes are enumerated in `docs/TODO.md` (T-SQL: 127 — TRY
-    fragments, subquery ORDER BY, ~21 near-')'; MySQL: 125; PG: 41).
+  - **Oracle → T-SQL/PostgreSQL/MySQL at Tier-1-grade validity**. On the
+    real 13 MB dump (official sweep 2026-07-10, after nine M4 closing
+    waves): **PostgreSQL 99.9% (18 fails), MySQL 99.8% (54), T-SQL 99.6%
+    (131)** — post-M1 baseline was 73.1 / 75.0 / 94.0. The waves closed
+    the exception-scope, trigger-header (UPDATE OF / WHEN / event
+    predicates), CASE-statement, pseudo-row, dynamic-SQL and Oracle-builtin
+    families (see `docs/TODO.md` M4 for the full list and the remaining
+    classes). The T-SQL count is flat vs. the morning but *more honest*:
+    unwrapping constant EXECUTE IMMEDIATE strings surfaced failures that
+    previously hid as runtime noise inside opaque EXEC() calls.
     Tier-1 promotion still wants a second corpus.
 - **Test-assertion quality** is gated (identity-mutation floor 33%, currently
   38%) and tracked nightly (mutation job with per-module floors).

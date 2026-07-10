@@ -197,16 +197,29 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       PROCEDURAL_FUNC_MAPS) before the text rewriters can be deleted (P4's
       final step). Until then the text path stays the expression engine.
 - [ ] **M4 — Oracle-source bring-up** driven by the sweep frequency table
-      (doc 03 §D backlog). *Progress 2026-07-09 (measured after each fix):*
-      D1 (SQL*Plus `EXEC` → per-target call), SQL*Plus `SET` directives,
-      `=>` named args (one token + per-target spelling, closes C5), Oracle
-      FROM-less `DELETE` (`DELETE FROM False` corruption) and D2 (anonymous
-      blocks flatten on T-SQL) moved the 13 MB-dump validity from
-      94.0 / 73.1 / 75.0 (post-M1) to **T-SQL 98.8% / PG 99.2% /
-      MySQL 95.4%**. Next by frequency (T-SQL direction): 129x `near AS` +
-      39x declaration fragments (the D9 desync family), D5 `RENAME` (24),
-      B2 `DROP INDEX` (23), `TO_CHAR`→T-SQL (14), MERGE termination (11);
-      MySQL still has 1.6k syntax failures to classify (C2/C3/C4 family).
+      (doc 03 §D backlog). *2026-07-10, nine closing waves (official
+      validity_sweep on the 13 MB dump, waves 1–9):* **T-SQL 99.6% (131
+      syntax fails), PostgreSQL 99.9% (18), MySQL 99.8% (54)** — from
+      475/41-as-of-morning/121. The waves: exception-scope folding (T-SQL
+      TRY / MySQL handler blocks, NOT FOUND for NO_DATA_FOUND), trigger
+      `UPDATE OF`/`WHEN` headers, event predicates (TG_OP / per-variant
+      constants / ELSEIF), pseudo-row `INTO :NEW.col` targets, the PL/SQL
+      CASE *statement* → IF chain, constant `EXECUTE IMMEDIATE` unwrap,
+      Oracle-style `DROP INDEX` via a sys.indexes lookup, `user_*` catalog
+      probes → `sys.*`, `SQL%ROWCOUNT`/`MONTHS_BETWEEN`/CHR/TRUNC/base
+      builtins on T-SQL, unsized VARCHAR sizing, ref-cursor OUT params →
+      direct result sets on T-SQL/MySQL, PG row-loop record declarations
+      (+ shadowed-name rename), CALL-arg renames/pseudo-records, and the
+      partial-parse corruption guard (INSERT → DEFAULT VALUES signature).
+      Probes: `tests/integration/test_oracle_source_m4_wave.py` (23).
+      Note: the T-SQL count is *flat vs. the morning's 127 but far more
+      honest* — unwrapping constant dynamic SQL surfaced ~30 failures that
+      previously hid as runtime missing-object noise inside EXEC() strings.
+      *Remaining classes (tsql 131):* 25x a second CASE family, 22x near
+      ')', 16x near ';', client-DB-resident UDFs (SVF_*, ~10 — unresolvable
+      without --db-url), PL/SQL collection types (ARRAYTIPOALTA), row-level
+      trigger residue (@new); MySQL 54x 1064 to re-classify; PG 18 (ALTER
+      TRIGGER ENABLE, ADD COLUMNS(...), DROP (cols), stray NULL;).
 
 - [x] **Faithful conditional for unmappable catalog guards (P2)** (done
       2026-07-10 for the sys.columns/syscolumns column-probe family, both
@@ -376,9 +389,11 @@ fix needs an **anonymized** regression fixture (never a private name).
 - [x] **Identity-mutation floor raised 0.33 → 0.40** (2026-07-10; measured
       0.44 after the sweep-closing wave's shape-asserting tests). Next
       ratchet as `test_cross_dialect.py` survivors harden.
-- [ ] **Module growth**: `procedural/parser.py` 2886, `procedural/transformer/
-      base.py` 2813, `transpiler.py` 1713 lines — resume the split along the
-      seams named in audit 2026-07-02 doc 03.
+- [ ] **Module growth** — *parser done 2026-07-10:* `procedural/parser` is
+      now a package (_base 1.7k + _tsql 0.7k + _plsql 0.8k, explicit
+      cross-family contract). Still to split: `procedural/transformer/
+      base.py` (~3.5k) and `transpiler.py` (~2.2k) along the same doc-03
+      seams.
 - [x] **Docker digest pin + constraints file** (done 2026-07-10): both
       Dockerfiles pin `python:3.13-slim` by sha256 digest and the runtime
       install applies `constraints.txt` (full dependency closure) — image
