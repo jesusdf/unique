@@ -713,6 +713,23 @@ class ProceduralTransformer:
             carrier = self._unknown_type_carrier()
             return DataType(name=carrier, origin_comment=dt.name)
 
+        # A package/schema-qualified type (``pkg.ref_cursor_type``): only
+        # Oracle can reference it. Elsewhere lower it to the carrier like
+        # %TYPE — leaving it dotted shipped ``DECLARE x pkg.type;``, a hard
+        # parse error on every other engine. Only a clean identifier chain
+        # qualifies — mangled fragments (URLs from shredded string content)
+        # must keep their old shape rather than gain a lying carrier.
+        if re.fullmatch(r"\w+(?:\.\w+)+", dt.name):
+            if self._supports_type_reference():
+                return DataType(name=dt.name, params=dt.params)
+            self._warnings.append(
+                f"qualified type '{dt.name}' has no {self._target} "
+                "equivalent; emitted as a carrier type with the original "
+                "preserved in a /* UNIQUE */ comment."
+            )
+            carrier = self._unknown_type_carrier()
+            return DataType(name=carrier, origin_comment=dt.name)
+
         # Handle VARCHAR(MAX) → CLOB/TEXT/LONGTEXT (per target)
         if type_name in ("VARCHAR", "NVARCHAR") and dt.params == (-1,):
             mapped = self._varchar_max_type(type_name == "NVARCHAR")
@@ -1554,6 +1571,7 @@ class ProceduralTransformer:
             range_end=node.range_end,
             cursor=new_cursor,
             body=new_body,
+            reverse=node.reverse,
         )
 
     def _warn_for_loop_unsupported(self) -> None:

@@ -327,6 +327,32 @@ class TSqlEmitter(ProceduralEmitter):
         # plain IF … BEGIN … END — no cursor, no FROM DUAL.
         return "\n".join([f"IF ({cond})", "BEGIN", *body_lines, "END"])
 
+    def _emit_numeric_for_loop(
+        self, variable: str, start: str, end: str, reverse: bool, body_lines: list[str]
+    ) -> str:
+        # T-SQL has no counting FOR; expand to DECLARE @v + WHILE. Bare
+        # loop-variable references in the body are rewritten to @v (they were
+        # never a declared variable, so the transformer's rename missed them).
+        var = f"@{variable.lstrip('@')}"
+        rewritten = [
+            re.sub(rf"(?<!@)\b{re.escape(variable.lstrip('@'))}\b", var, line)
+            for line in body_lines
+        ]
+        init, cond, step = (
+            (end, f"{var} >= {start}", f"SET {var} = {var} - 1;")
+            if reverse
+            else (start, f"{var} <= {end}", f"SET {var} = {var} + 1;")
+        )
+        lines = [
+            f"DECLARE {var} INT = {init};",
+            f"WHILE {cond}",
+            "BEGIN",
+            *rewritten,
+            f"{self._indent()}{step}",
+            "END;",
+        ]
+        return "\n".join(lines)
+
     def _emit_for_loop_body(
         self, variable: str, cursor_str: str, body_lines: list[str]
     ) -> str:

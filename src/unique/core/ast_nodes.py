@@ -730,6 +730,7 @@ class ForLoopStatement(ASTNode):
     range_end: ASTNode | None = None
     cursor: ASTNode | None = None
     body: tuple[ASTNode, ...] = ()
+    reverse: bool = False
 
 
 @dataclass(frozen=True)

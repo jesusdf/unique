@@ -426,6 +426,9 @@ class PlsqlStatementsMixin(ParserBase):
 
         return WhileStatement(condition=condition, body=tuple(body))
 
+    #: ``[REVERSE] <start> .. <end>`` — a counting loop, not a cursor loop.
+    _NUMERIC_RANGE_RE = re.compile(r"(?is)^\s*(REVERSE\s+)?(.+?)\s*\.\.\s*(.+?)\s*$")
+
     def _parse_plsql_for(self) -> ASTNode:
         """Parse PL/SQL FOR ... IN ... LOOP ... END LOOP."""
         self._expect_keyword("FOR")
@@ -445,6 +448,21 @@ class PlsqlStatementsMixin(ParserBase):
         self._match_keyword("LOOP")
         self._match_type(TokenType.SEMICOLON)
 
+        # ``FOR i IN [REVERSE] 1..13`` counts; feeding the range into the
+        # cursor slot shipped ``DECLARE i_cur CURSOR FOR 1..13`` on MySQL.
+        range_m = (
+            self._NUMERIC_RANGE_RE.match(cursor.sql)
+            if isinstance(cursor, RawSQL)
+            else None
+        )
+        if range_m and isinstance(cursor, RawSQL) and "(" not in cursor.sql:
+            return ForLoopStatement(
+                variable=var_name,
+                range_start=RawSQL(sql=range_m.group(2)),
+                range_end=RawSQL(sql=range_m.group(3)),
+                body=tuple(body),
+                reverse=bool(range_m.group(1)),
+            )
         return ForLoopStatement(variable=var_name, cursor=cursor, body=tuple(body))
 
     def _parse_plsql_loop(self) -> ASTNode:

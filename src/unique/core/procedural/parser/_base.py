@@ -499,7 +499,13 @@ class ParserBase:
         params = self._parse_parameter_list()
 
         return_type: DataType | None = None
-        if self._match_keyword("RETURN") or self._match_keyword("RETURNS"):
+        if self._match_keyword("RETURN"):
+            # Oracle's RETURN type may be dotted and/or a %TYPE reference
+            # (``RETURN tbl.col%TYPE``, ``RETURN pkg.type``); the plain type
+            # parser left ``.col%TYPE`` unconsumed and shattered the
+            # declaration section that follows.
+            return_type = self._parse_data_type_or_reference()
+        elif self._match_keyword("RETURNS"):
             return_type = self._parse_data_type()
 
         # An Oracle PIPELINED table function streams rows of a package

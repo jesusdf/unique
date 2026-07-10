@@ -184,6 +184,96 @@ class TestMySqlExecuteUsingSessionVars:
         assert re.search(r"SET @\w+ = v_b;", out), out
 
 
+class TestNumericRangeForLoop:
+    """``FOR i IN 1..13 LOOP`` is a counting loop, not a cursor loop; MySQL
+    used to receive ``DECLARE i_cur CURSOR FOR 1..13`` (a 1064 error)."""
+
+    _SRC = (
+        "create or replace PROCEDURE p_rng AS\nBEGIN\n"
+        "  FOR i IN 1..13 LOOP\n"
+        "    INSERT INTO t (a) VALUES (i);\n"
+        "  END LOOP;\n"
+        "END;\n/"
+    )
+
+    def test_mysql_expands_to_while(self) -> None:
+        out = _flat(_t(self._SRC, "mysql"))
+        assert "WHILE i <= 13 DO" in out, out
+        assert "SET i = i + 1;" in out, out
+        assert "DECLARE i INT DEFAULT 1;" in out, out
+        assert "CURSOR" not in out.upper(), out
+        assert ".." not in out, out
+
+    def test_tsql_expands_to_while(self) -> None:
+        out = _flat(_t(self._SRC, "tsql"))
+        assert "WHILE @i <= 13" in out, out
+        assert re.search(r"DECLARE @i INT = 1", out), out
+        assert "VALUES (@i)" in out, out
+        assert "CURSOR" not in out.upper(), out
+
+    def test_postgresql_keeps_native_range_loop(self) -> None:
+        out = _flat(_t(self._SRC, "postgresql"))
+        assert re.search(r"(?i)FOR i IN 1\s*\.\.\s*13 LOOP", out), out
+
+    def test_oracle_identity_keeps_range_loop(self) -> None:
+        out = _flat(_t(self._SRC, "oracle"))
+        assert re.search(r"(?i)FOR i IN 1\s*\.\.\s*13 LOOP", out), out
+
+    def test_reverse_range_mysql_counts_down(self) -> None:
+        src = self._SRC.replace("IN 1..13", "IN REVERSE 1..13")
+        out = _flat(_t(src, "mysql"))
+        assert "DECLARE i INT DEFAULT 13;" in out, out
+        assert "WHILE i >= 1 DO" in out, out
+        assert "SET i = i - 1;" in out, out
+
+
+class TestDottedFunctionReturnType:
+    """``RETURN tbl.col%TYPE`` / ``RETURN pkg.type`` in a function header used
+    to desync the parser: the leftover ``.col%TYPE`` shattered the declaration
+    section into garbage (``DECLARE . LONGTEXT;``, ``DECLARE AS v;``)."""
+
+    _TYPE_SRC = (
+        "create or replace FUNCTION f_lookup(v_a IN NUMBER)\n"
+        "RETURN t_ident.id_col%TYPE\nAS\n"
+        "  v_id t_ident.id_col%TYPE;\n"
+        "BEGIN\n"
+        "  SELECT id_col INTO v_id FROM t_ident WHERE a = v_a;\n"
+        "  RETURN v_id;\n"
+        "END;\n/"
+    )
+
+    def test_mysql_return_type_lowered_to_carrier(self) -> None:
+        result = Transpiler().transpile(self._TYPE_SRC, "oracle", "mysql")
+        out = result.sql
+        assert re.search(r"(?i)RETURNS LONGTEXT /\* UNIQUE: t_ident", out), out
+        # No shattered declarations.
+        assert not re.search(r"(?im)^\s*DECLARE (\.|AS|TYPE)\b", out), out
+        assert "DECLARE v_id LONGTEXT" in out, out
+
+    def test_oracle_identity_keeps_type_reference(self) -> None:
+        out = _t(self._TYPE_SRC, "oracle")
+        assert re.search(r"(?i)RETURN t_ident\.id_col%TYPE", out), out
+
+    _PKG_SRC = (
+        "create or replace FUNCTION f_pkg(v_a IN NUMBER)\n"
+        "RETURN pkg_ret.my_type\nAS\n"
+        "  v_r pkg_ret.my_type;\n"
+        "BEGIN\n"
+        "  RETURN v_r;\n"
+        "END;\n/"
+    )
+
+    def test_mysql_package_type_lowered_to_carrier(self) -> None:
+        result = Transpiler().transpile(self._PKG_SRC, "oracle", "mysql")
+        out = result.sql
+        assert re.search(r"(?i)RETURNS LONGTEXT /\* UNIQUE: pkg_ret\.my_type", out), out
+        assert "DECLARE v_r LONGTEXT" in out, out
+        assert not re.search(r"(?im)^\s*DECLARE pkg_ret\b", out), out
+        assert any(
+            "pkg_ret.my_type" in w.message for w in result.warnings
+        ), result.warnings
+
+
 class TestRoutineNamedAsMySqlBuiltin:
     _SRC = (
         "create or replace FUNCTION now RETURN DATE AS\n"

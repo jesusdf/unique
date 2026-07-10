@@ -30,6 +30,15 @@ class PostgresEmitter(ProceduralEmitter):
 
     dialect_name = "postgresql"
 
+    def _emit_numeric_for_loop(
+        self, variable: str, start: str, end: str, reverse: bool, body_lines: list[str]
+    ) -> str:
+        # PL/pgSQL spells the descending loop with the bounds swapped:
+        # Oracle ``REVERSE low..high`` is PostgreSQL ``REVERSE high..low``.
+        if reverse:
+            start, end = end, start
+        return super()._emit_numeric_for_loop(variable, start, end, reverse, body_lines)
+
     def _keep_default(
         self,
         p: ParameterDefinition,

@@ -113,6 +113,7 @@ class PostgresTransformer(ProceduralTransformer):
                 range_end=result.range_end,
                 cursor=rename(result.cursor) if result.cursor else None,
                 body=tuple(rename(x) for x in result.body),
+                reverse=result.reverse,
             )
         return result
 

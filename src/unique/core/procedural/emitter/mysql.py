@@ -155,6 +155,28 @@ class MySqlEmitter(ProceduralEmitter):
         # IF … THEN … END IF; rather than a scanned cursor.
         return "\n".join([f"IF {cond} THEN", *body_lines, "END IF;"])
 
+    def _emit_numeric_for_loop(
+        self, variable: str, start: str, end: str, reverse: bool, body_lines: list[str]
+    ) -> str:
+        # MySQL has no counting FOR; expand to WHILE inside a nested block so
+        # the counter's DECLARE sits at a block start (required placement).
+        init, cond, step = (
+            (end, f"{variable} >= {start}", f"SET {variable} = {variable} - 1;")
+            if reverse
+            else (start, f"{variable} <= {end}", f"SET {variable} = {variable} + 1;")
+        )
+        indent = self._indent()
+        lines = [
+            "BEGIN",
+            f"{indent}DECLARE {variable} INT DEFAULT {init};",
+            f"{indent}WHILE {cond} DO",
+            *body_lines,
+            f"{indent}{indent}{step}",
+            f"{indent}END WHILE;",
+            "END;",
+        ]
+        return "\n".join(lines)
+
     def _emit_for_loop_body(
         self, variable: str, cursor_str: str, body_lines: list[str]
     ) -> str:

@@ -1045,6 +1045,15 @@ class ProceduralEmitter:
         body_lines = self._emit_indented_stmts(node.body)
         self._indent_level -= 1
 
+        if node.range_start is not None and node.range_end is not None:
+            return self._emit_numeric_for_loop(
+                node.variable,
+                self._emit_node(node.range_start).strip(),
+                self._emit_node(node.range_end).strip(),
+                node.reverse,
+                body_lines,
+            )
+
         # A ``FROM DUAL`` guard loop (runs 0/1 times, never binds a row) becomes an
         # IF on engines that support it — no dead cursor, and no stray FROM DUAL.
         cond = _dual_guard_condition(cursor_str)
@@ -1054,6 +1063,17 @@ class ProceduralEmitter:
                 return guard
 
         return self._emit_for_loop_body(node.variable, cursor_str, body_lines)
+
+    def _emit_numeric_for_loop(
+        self, variable: str, start: str, end: str, reverse: bool, body_lines: list[str]
+    ) -> str:
+        """Emit a counting ``FOR v IN [REVERSE] a..b`` loop. Default is the
+        native PL/SQL / PL-pgSQL form; T-SQL and MySQL expand to WHILE."""
+        rev = "REVERSE " if reverse else ""
+        lines = [f"FOR {variable} IN {rev}{start}..{end} LOOP"]
+        lines.extend(body_lines)
+        lines.append("END LOOP;")
+        return "\n".join(lines)
 
     def _emit_guard_if(self, cond: str, body_lines: list[str]) -> str | None:
         """Render a ``FROM DUAL`` guard FOR-loop as an ``IF``. Default returns
