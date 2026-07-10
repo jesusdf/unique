@@ -174,6 +174,32 @@ class TSqlTransformer(ProceduralTransformer):
             r"DATEDIFF(MONTH, \2, \1)",
             sql,
         )
+        # EXTRACT(part FROM x): T-SQL has no EXTRACT (error 195) — DATEPART.
+        sql = re.sub(
+            r"(?is)\bEXTRACT\s*\(\s*(YEAR|MONTH|DAY|HOUR|MINUTE|SECOND)\s+FROM\s+"
+            rf"{arg}\s*\)",
+            r"DATEPART(\1, \2)",
+            sql,
+        )
+        # TO_NUMBER(x) -> CAST(x AS DECIMAL(38, 10)) (the project's NUMBER
+        # carrier). A bare name rename would produce ``CAST(x)`` without AS.
+        sql = re.sub(
+            rf"(?is)\bTO_NUMBER\s*\(\s*{arg}\s*\)",
+            r"CAST(\1 AS DECIMAL(38, 10))",
+            sql,
+        )
+        # One-argument TO_CHAR/TO_DATE: plain conversions. The formatted
+        # two-argument forms stay visible (format models differ per engine).
+        sql = re.sub(
+            rf"(?is)\bTO_CHAR\s*\(\s*{arg}\s*\)",
+            r"CONVERT(VARCHAR(4000), \1)",
+            sql,
+        )
+        sql = re.sub(
+            rf"(?is)\bTO_DATE\s*\(\s*{arg}\s*\)",
+            r"CONVERT(DATETIME, \1)",
+            sql,
+        )
         # Exception context: T-SQL reads it from the ERROR_* functions.
         sql = re.sub(r"(?i)\bSQLERRM\b", "ERROR_MESSAGE()", sql)
         # CAST keeps the ubiquitous ``SQLCODE || ' ' || SQLERRM`` concat

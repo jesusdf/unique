@@ -122,9 +122,14 @@ PROCEDURAL_FUNC_MAPS: dict[tuple[str, str], dict[str, str]] = {
         "SYS_GUID": "NEWID",
         "SUBSTR": "SUBSTRING",
         "CEIL": "CEILING",
-        "TO_CHAR": "CONVERT",
-        "TO_DATE": "CONVERT",
-        "TO_NUMBER": "CAST",
+        # TO_CHAR/TO_DATE/TO_NUMBER need a type argument on T-SQL — a name
+        # rename would emit CONVERT(x)/CAST(x) without one (error 156). The
+        # T-SQL transformer rewrites them argument-aware
+        # (_map_oracle_builtins); the placeholders document the gap for the
+        # forms it does not cover.
+        "TO_CHAR": "-- TO_CHAR(x, fmt) requires manual conversion",
+        "TO_DATE": "-- TO_DATE(x, fmt) requires manual conversion",
+        "TO_NUMBER": "-- TO_NUMBER -> CAST(x AS DECIMAL(38, 10))",
         "TRUNC": "-- TRUNC requires manual conversion",
     },
     ("tsql", "postgresql"): {

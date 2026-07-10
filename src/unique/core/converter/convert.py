@@ -993,6 +993,21 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
             sp_args.append(convert_expression(start))
         return FunctionCall(name="CHARINDEX", args=tuple(sp_args))
 
+    # sqlglot canonicalizes LPAD/RPAD to one Pad node whose direction lives in
+    # the ``is_left`` arg — the generic path would emit a nonexistent PAD().
+    # Recover the concrete name; the emitter spells T-SQL's expansion.
+    if isinstance(expr, exp.Pad):
+        pad_args = [convert_expression(expr.this)]
+        if expr.expression is not None:
+            pad_args.append(convert_expression(expr.expression))
+        fill = expr.args.get("fill_pattern")
+        if fill is not None:
+            pad_args.append(convert_expression(fill))
+        return FunctionCall(
+            name="LPAD" if expr.args.get("is_left") else "RPAD",
+            args=tuple(pad_args),
+        )
+
     # exp.Anonymous is an unrecognized function: its real name is in `this`
     # (a string), not in sql_name() which returns "ANONYMOUS". Its arguments
     # live in `expressions`.

@@ -534,3 +534,69 @@ class TestPgLoopVarShadowing:
         assert "X_rec.TOTAL" in out, out
         # The declared scalar keeps its own uses.
         assert "X := 5;" in out, out
+
+
+class TestOracleScalarsOnTsqlWave16:
+    """Scalar leaks measured in the 2026-07-11 sweep (error 195/156 on the
+    live engine): EXTRACT reaching T-SQL (no such builtin — DATEPART),
+    numeric 2-arg TRUNC, RPAD/LPAD (sqlglot canonicalizes to Pad, which
+    emitted as a phantom PAD()), EMPTY_BLOB/EMPTY_CLOB initializers, and
+    TO_NUMBER inside procedural raw expressions."""
+
+    def test_extract_standalone_becomes_datepart(self) -> None:
+        out = _t("UPDATE t SET a = EXTRACT(YEAR FROM d);", "tsql")
+        assert re.search(r"(?i)DATEPART\s*\(\s*YEAR\s*,", out), out
+        assert "EXTRACT" not in out.upper(), out
+
+    def test_extract_procedural_becomes_datepart(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_x(m_out OUT NUMBER) AS\n"
+            "BEGIN\n"
+            "  m_out := EXTRACT(YEAR FROM SYSDATE) - EXTRACT(MONTH FROM SYSDATE);\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert re.search(r"(?i)DATEPART\s*\(\s*YEAR\s*,", out), out
+        assert re.search(r"(?i)DATEPART\s*\(\s*MONTH\s*,", out), out
+        assert "EXTRACT" not in out.upper(), out
+
+    def test_trunc_two_arg_numeric(self) -> None:
+        out = _t("SELECT TRUNC(m / 60, 0) FROM t;", "tsql")
+        assert re.search(r"(?i)ROUND\s*\(.*,\s*0\s*,\s*1\s*\)", out), out
+        assert "TRUNC" not in out.upper(), out
+        out_my = _t("SELECT TRUNC(m / 60, 0) FROM t;", "mysql")
+        assert re.search(r"(?i)TRUNCATE\s*\(.*,\s*0\s*\)", out_my), out_my
+
+    def test_rpad_lpad(self) -> None:
+        out = _t("SELECT RPAD(c, 5, 'x') FROM t;", "tsql")
+        assert re.search(r"(?i)LEFT\s*\(", out), out
+        assert re.search(r"(?i)REPLICATE\s*\(", out), out
+        assert "PAD" not in re.sub(r"(?i)REPLICATE", "", out).upper(), out
+        out_l = _t("SELECT LPAD(c, 5, '0') FROM t;", "tsql")
+        assert re.search(r"(?i)RIGHT\s*\(", out_l), out_l
+        # PG/MySQL keep the native spelling — never the canonical PAD().
+        out_pg = _t("SELECT RPAD(c, 5, 'x') FROM t;", "postgresql")
+        assert re.search(r"(?i)RPAD\s*\(", out_pg), out_pg
+        out_my = _t("SELECT LPAD(c, 5, '0') FROM t;", "mysql")
+        assert re.search(r"(?i)LPAD\s*\(", out_my), out_my
+
+    def test_empty_blob_clob(self) -> None:
+        out = _t("UPDATE t SET a = EMPTY_BLOB(), b = EMPTY_CLOB();", "tsql")
+        assert "EMPTY_BLOB" not in out.upper(), out
+        assert "EMPTY_CLOB" not in out.upper(), out
+        assert "0x" in out, out
+
+    def test_to_number_in_procedural_raw(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_n(m_out OUT NUMBER, m_c IN VARCHAR2) AS\n"
+            "BEGIN\n"
+            "  IF TO_NUMBER(m_c) > 5 THEN\n"
+            "    m_out := TO_NUMBER(m_c);\n"
+            "  END IF;\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert "TO_NUMBER" not in out.upper(), out
+        assert re.search(r"(?i)CAST\s*\(\s*@m_c\s+AS\s+DECIMAL", out), out
+        # And never the broken bare-CAST rename: CAST(x) without AS.
+        assert not re.search(r"(?i)CAST\s*\(\s*@m_c\s*\)", out), out

@@ -1818,10 +1818,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
 
     # EXTRACT(part FROM x): the standard spelling. sqlglot parses DATEPART/EXTRACT
     # to exp.Extract; the generic path would emit EXTRACT(part, x) (comma), which
-    # Oracle/PostgreSQL/MySQL all reject. The FROM form is valid on all three.
+    # Oracle/PostgreSQL/MySQL all reject. The FROM form is valid on all three;
+    # T-SQL has no EXTRACT at all (error 195) — its spelling is DATEPART.
     if fn_name == "EXTRACT" and len(node.args) == 2:
         part = _emit_expression(node.args[0], dialect).strip("'\"").upper()
         value = _emit_expression(node.args[1], dialect)
+        if dialect == "tsql":
+            return f"DATEPART({part}, {value})"
         return f"EXTRACT({part} FROM {value})"
 
     # Oracle NVL2(a, b, c): b when a is not null, else c. Only Oracle has it.
@@ -1862,6 +1865,44 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"ROUND({x}, 0, 1)"  # 3rd arg truncates instead of rounding
         if dialect == "mysql":
             return f"TRUNCATE({x}, 0)"
+
+    # Two-argument numeric TRUNC(x, d): the second argument being an integer
+    # literal is decisive — Oracle's *date* TRUNC takes a format STRING there.
+    if (
+        fn_name == "TRUNC"
+        and len(node.args) == 2
+        and isinstance(node.args[1], Literal)
+        and str(node.args[1].dtype) in ("integer", "number")
+    ):
+        x = _emit_expression(node.args[0], dialect)
+        d = _emit_expression(node.args[1], dialect)
+        if dialect == "tsql":
+            return f"ROUND({x}, {d}, 1)"
+        if dialect == "mysql":
+            return f"TRUNCATE({x}, {d})"
+        return f"TRUNC({x}, {d})"
+
+    # Oracle LOB initializers. T-SQL/PG/MySQL spell "empty" as an empty
+    # binary/character literal.
+    if fn_name in ("EMPTY_BLOB", "EMPTY_CLOB") and not node.args:
+        if dialect == "oracle":
+            return f"{fn_name}()"
+        if fn_name == "EMPTY_BLOB":
+            return {"tsql": "0x", "postgresql": "''::BYTEA", "mysql": "x''"}[dialect]
+        return "''"
+
+    # LPAD/RPAD: native on Oracle/PG/MySQL; T-SQL builds them from
+    # REPLICATE (LEFT/RIGHT truncate to the target length, matching the
+    # source semantics when the input is longer than the pad length).
+    if fn_name in ("LPAD", "RPAD") and len(node.args) in (2, 3):
+        s = _emit_expression(node.args[0], dialect)
+        length = _emit_expression(node.args[1], dialect)
+        pad = _emit_expression(node.args[2], dialect) if len(node.args) == 3 else "' '"
+        if dialect == "tsql":
+            if fn_name == "RPAD":
+                return f"LEFT({s} + REPLICATE({pad}, {length}), {length})"
+            return f"RIGHT(REPLICATE({pad}, {length}) + {s}, {length})"
+        return f"{fn_name}({s}, {length}, {pad})"
 
     # T-SQL CONVERT(type, expr): sqlglot keeps the type as raw SQL in arg 0.
     # Everywhere else this is a plain CAST.
