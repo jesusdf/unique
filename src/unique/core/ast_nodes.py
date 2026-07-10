@@ -836,6 +836,9 @@ class CreateTriggerStatement(ASTNode):
     set_based_transition: bool = False
     execute_function: str | None = None
     referencing: str = ""
+    #: Column list of an ``UPDATE OF c1, c2`` event (Oracle/PG): the trigger
+    #: fires only when one of these columns is updated.
+    update_of: tuple[str, ...] = ()
     #: An Oracle COMPOUND TRIGGER (AFTER EACH ROW + AFTER STATEMENT sections
     #: over a PL/SQL collection). On a target with a mutating-table restriction
     #: (Oracle) or no equivalent (MySQL) it is emitted as a documented

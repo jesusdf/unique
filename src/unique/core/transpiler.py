@@ -173,6 +173,23 @@ def _oracle_idempotent_create(ddl: str) -> str | None:
     )
 
 
+def _qualify_tsql_udfs_in_sql(sql: str) -> str:
+    """Qualify bare scalar-UDF calls as ``dbo.fn(`` using the harvested
+    USER_FUNCTIONS registry (mirror of the procedural transformer's
+    ``_qualify_tsql_udfs``; T-SQL error 195 otherwise)."""
+    funcs = USER_FUNCTIONS.get()
+    if not funcs:
+        return sql
+
+    def repl(m: re.Match[str]) -> str:
+        name = m.group(1)
+        if name.lower() in funcs:
+            return f"dbo.{name}("
+        return m.group(0)
+
+    return re.sub(r"(?i)(?<![.\w])(\w+)\s*\(", repl, sql)
+
+
 def _extract_catalog_guard(code: str) -> tuple[str, str, str, str] | None:
     """Parse a T-SQL catalog migration guard into ``(polarity, trivia, body,
     condition)``.
@@ -1363,6 +1380,31 @@ class Transpiler:
         target_dialect: Dialect,
     ) -> TranspileResult:
         """Transpile a DML/DDL batch through the sqlglot pipeline."""
+        result = self._transpile_dml_inner(
+            sql, source, target, source_dialect, target_dialect
+        )
+        if target == "tsql" and source != "tsql":
+            # T-SQL rejects an unqualified scalar-UDF call as an unknown
+            # built-in (error 195); the procedural paths already qualify —
+            # standalone DML must too.
+            qualified = _qualify_tsql_udfs_in_sql(result.sql)
+            if qualified != result.sql:
+                result = TranspileResult(
+                    sql=qualified,
+                    warnings=result.warnings,
+                    unsupported=result.unsupported,
+                )
+        return result
+
+    def _transpile_dml_inner(
+        self,
+        sql: str,
+        source: str,
+        target: str,
+        source_dialect: Dialect,
+        target_dialect: Dialect,
+    ) -> TranspileResult:
+        """The sqlglot pipeline proper (see ``_transpile_dml``)."""
         warnings: list[TransformWarning] = []
         unsupported: list[str] = []
 

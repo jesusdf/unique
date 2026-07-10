@@ -244,9 +244,14 @@ class PostgresEmitter(ProceduralEmitter):
         )
         fn_lines.append("END;")
         fn_lines.append("$$;")
+        joined_events = " OR ".join(events)
+        if node.update_of:
+            joined_events = self._events_with_update_of(
+                joined_events, node.update_of
+            )
         trg_lines = [
             f"CREATE OR REPLACE TRIGGER {name}",
-            f"{node.timing} {' OR '.join(events)} ON {node.table}",
+            f"{node.timing} {joined_events} ON {node.table}",
         ]
         if node.set_based_transition:
             if referencing:

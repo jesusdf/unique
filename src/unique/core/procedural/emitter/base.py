@@ -794,6 +794,8 @@ class ProceduralEmitter:
             return self._emit_delegating_trigger_unsupported(node)
         name = self._qualified_name(node.schema, node.name)
         events = self._join_trigger_events(node.events)
+        if node.update_of:
+            events = self._events_with_update_of(events, node.update_of)
         timing = node.timing
 
         note, timing = self._adjust_trigger_timing(timing)
@@ -864,6 +866,13 @@ class ProceduralEmitter:
         """Return (note, timing). Engines that can't honor the requested timing
         (MySQL has no INSTEAD OF) override to document and rewrite it."""
         return "", timing
+
+    @staticmethod
+    def _events_with_update_of(events: str, columns: tuple[str, ...]) -> str:
+        """Attach an ``UPDATE OF c1, c2`` column list to the joined events."""
+        return re.sub(
+            r"(?i)\bUPDATE\b", f"UPDATE OF {', '.join(columns)}", events, count=1
+        )
 
     def _join_trigger_events(self, events: tuple[str, ...]) -> str:
         """Join a trigger's DML events. T-SQL and MySQL use a comma list;

@@ -286,6 +286,8 @@ class OracleEmitter(ProceduralEmitter):
         # declarations are hoisted to SELECT … INTO the same way).
         name = self._qualified_name(node.schema, node.name)
         events = self._join_trigger_events(node.events)
+        if node.update_of:
+            events = self._events_with_update_of(events, node.update_of)
         note, timing = self._adjust_trigger_timing(node.timing)
         header_lines = self._trigger_header(name, node, events, timing)
         header_lines = [ln for ln in header_lines if ln != "BEGIN"]

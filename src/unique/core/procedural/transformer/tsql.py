@@ -117,6 +117,65 @@ class TSqlTransformer(ProceduralTransformer):
             sql,
         )
         sql = re.sub(r"(?is)\bDBMS_LOB\s*\.\s*GETLENGTH\s*\(", "DATALENGTH(", sql)
+        # CHR(n) -> CHAR(n)
+        sql = re.sub(r"(?i)\bCHR\s*\(", "CHAR(", sql)
+        # TRUNC(a, b) -> ROUND(a, b, 1) (truncate toward zero); TRUNC(x) is
+        # the Oracle strip-the-time idiom on dates -> CAST(x AS DATE) when
+        # the argument looks like a date (a known date variable or a
+        # fecha/date-named expression), numeric truncation otherwise.
+        sql = re.sub(
+            r"(?is)\bTRUNC\s*\(\s*([^(),]+?)\s*,\s*([^(),]+?)\s*\)",
+            r"ROUND(\1, \2, 1)",
+            sql,
+        )
+
+        def trunc1(m: re.Match[str]) -> str:
+            arg = m.group(1).strip()
+            bare = arg.lstrip("@")
+            if arg in self._date_vars or re.search(r"(?i)\b(?:fecha|date|fec)", bare):
+                return f"CAST({arg} AS DATE)"
+            return f"ROUND({arg}, 0, 1)"
+
+        sql = re.sub(r"(?is)\bTRUNC\s*\(\s*([^(),]+?)\s*\)", trunc1, sql)
+        sql = self._rownum_to_top(sql)
+        return sql
+
+    _ROWNUM_TAIL_RE = re.compile(
+        r"(?is)\s+(?:WHERE|AND)\s+ROWNUM\s*(=|<=|<)\s*(\d+)\s*(\)?)\s*$"
+    )
+
+    def _rownum_to_top(self, sql: str) -> str:
+        """Rewrite the Oracle top-n idiom for T-SQL.
+
+        ``SELECT ... FROM (SELECT ... ORDER BY ...) WHERE ROWNUM = 1`` puts
+        ``TOP (1)`` on the *inner* select (whose ORDER BY is otherwise
+        illegal in a derived table — error 1033); the flat
+        ``... WHERE ROWNUM <= n`` form gets TOP on its own head."""
+        if "ROWNUM" not in sql.upper():
+            return sql
+        m = self._ROWNUM_TAIL_RE.search(sql)
+        if not m:
+            return sql
+        op, n_txt, closing = m.group(1), m.group(2), m.group(3)
+        n = int(n_txt) - 1 if op == "<" else int(n_txt)
+        if n < 1:
+            return sql
+        head = sql[: m.start()] + closing
+        derived = re.search(r"(?is)\bFROM\s*\(\s*SELECT\b(?!\s+TOP\b)", head)
+        if derived:
+            # The ROWNUM filtered an (ordered) derived table: the limit
+            # belongs inside, with the ORDER BY (a derived table may not
+            # carry ORDER BY without TOP — error 1033).
+            insert_at = derived.end()
+            return f"{head[:insert_at]} TOP ({n}){head[insert_at:]}"
+        sel = re.match(r"(?is)^(\s*SELECT\b)(?!\s+TOP\b)", head)
+        if sel:
+            return f"{head[:sel.end(1)]} TOP ({n}){head[sel.end(1):]}"
+        if n == 1:
+            # A FROM/WHERE fragment (a SELECT INTO's tail): with a 1-row
+            # limit and no ordering, dropping the predicate matches the
+            # assignment semantics (both pick an arbitrary single row).
+            return head
         return sql
 
     def _fix_target_dml(self, sql: str) -> str:
@@ -125,6 +184,9 @@ class TSqlTransformer(ProceduralTransformer):
         return self._map_oracle_builtins(sql)
 
     def _fix_ir_dml(self, sql: str) -> str:
+        return self._map_oracle_builtins(sql)
+
+    def _fix_select_into_rest(self, sql: str) -> str:
         return self._map_oracle_builtins(sql)
 
     def _fix_raw_sql_target(self, sql: str) -> str:
@@ -223,6 +285,16 @@ class TSqlTransformer(ProceduralTransformer):
         kept = [s for s in stmts if s is not None]
         if not kept:
             return None
+        if node.update_of:
+            # T-SQL has no UPDATE OF event list; the same firing condition is
+            # an IF UPDATE(c1) OR UPDATE(c2) ... wrapper around the body.
+            cond = " OR ".join(f"UPDATE({c})" for c in node.update_of)
+            kept = [
+                IfStatement(
+                    condition=RawSQL(sql=cond, reason="UPDATE OF columns"),
+                    then_body=tuple(kept),
+                )
+            ]
         return CreateTriggerStatement(
             name=self._translate_ident_quoting(node.name) or node.name,
             table=self._translate_ident_quoting(node.table) or node.table,

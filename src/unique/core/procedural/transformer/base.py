@@ -912,6 +912,19 @@ class ProceduralTransformer:
                 f"{node.execute_function}() and has no {self._target} equivalent "
                 "(no statement-level transition-table trigger); documented."
             )
+        update_of = node.update_of
+        if update_of and not self._supports_update_of_columns():
+            update_of = ()
+            if self._target == "tsql":
+                # T-SQL has no UPDATE OF event; the emitter wraps the body in
+                # IF UPDATE(c1) OR ... instead (same firing condition).
+                update_of = node.update_of
+            else:
+                self._warnings.append(
+                    f"trigger {node.name!r}: UPDATE OF "
+                    f"({', '.join(node.update_of)}) has no {self._target} "
+                    "form; the trigger now fires on every UPDATE"
+                )
         return CreateTriggerStatement(
             name=self._translate_ident_quoting(node.name) or node.name,
             table=self._translate_ident_quoting(node.table) or node.table,
@@ -924,7 +937,13 @@ class ProceduralTransformer:
             set_based_transition=set_based,
             execute_function=node.execute_function,
             referencing=node.referencing,
+            update_of=update_of,
         )
+
+    def _supports_update_of_columns(self) -> bool:
+        """Whether the target's CREATE TRIGGER takes ``UPDATE OF c1, c2``
+        natively (Oracle and PostgreSQL do)."""
+        return self._target in ("oracle", "postgresql")
 
     def _rowlevel_trigger_override(
         self, node: CreateTriggerStatement
@@ -1442,6 +1461,7 @@ class ProceduralTransformer:
         new_cols = tuple(self._transform_node(c) for c in node.columns)
         rest = self._transform_var_in_sql(node.rest_sql)
         rest = self._transform_functions_in_sql(rest)
+        rest = self._fix_select_into_rest(rest)
         with_sql = node.with_sql
         if with_sql:
             with_sql = self._transpile_cte_prefix(self._transform_var_in_sql(with_sql))
@@ -1947,6 +1967,12 @@ class ProceduralTransformer:
     def _fix_target_dml(self, sql: str) -> str:
         """Apply target-specific cleanups to sqlglot-transpiled DML. The base
         (T-SQL) needs none; each target subclass overrides with its fixups."""
+        return sql
+
+    def _fix_select_into_rest(self, sql: str) -> str:
+        """Target-specific cleanups for a SELECT INTO's FROM/WHERE tail.
+        The base is a no-op; T-SQL maps the Oracle leftovers (ROWNUM,
+        TRUNC, ...)."""
         return sql
 
     def _fix_ir_dml(self, sql: str) -> str:

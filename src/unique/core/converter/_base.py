@@ -662,7 +662,22 @@ _RESERVED_IDENTIFIERS: dict[str, frozenset[str]] = {
     ),
     "mysql": _RESERVED_COMMON | frozenset({"COLLATION", "LIMIT", "USAGE", "READ"}),
     "tsql": _RESERVED_COMMON
-    | frozenset({"USER", "PERCENT", "IDENTITY", "FILE", "PLAN", "KEY", "READTEXT"}),
+    | frozenset(
+        {
+            "USER",
+            "PERCENT",
+            "IDENTITY",
+            "FILE",
+            "PLAN",
+            "KEY",
+            "READTEXT",
+            # Niladic-function keywords: valid as column names only bracketed.
+            "SESSION_USER",
+            "SYSTEM_USER",
+            "CURRENT_USER",
+            "CURRENT_TIMESTAMP",
+        }
+    ),
 }
 
 

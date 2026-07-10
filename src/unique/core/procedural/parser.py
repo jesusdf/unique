@@ -544,10 +544,23 @@ class ProceduralParser:
         # (``AFTER INSERT, UPDATE``); Oracle/PostgreSQL with ``OR``
         # (``BEFORE INSERT OR UPDATE``). Accept either separator.
         events = []
+        update_of: list[str] = []
         while True:
             tok = self._current()
             if tok.is_keyword("INSERT", "UPDATE", "DELETE"):
-                events.append(self._advance().upper_value)
+                event = self._advance().upper_value
+                events.append(event)
+                # Oracle/PG ``UPDATE OF c1, c2``: the trigger fires only for
+                # those columns. Capture the list (dropping it silently would
+                # widen the trigger to every UPDATE).
+                if event == "UPDATE" and self._match_keyword("OF"):
+                    while self._current().type in (
+                        TokenType.IDENTIFIER,
+                        TokenType.KEYWORD,
+                    ) and not self._current().is_keyword("ON", "OR", "FOR"):
+                        update_of.append(self._advance().value)
+                        if not self._match_type(TokenType.COMMA):
+                            break
                 if self._match_type(TokenType.COMMA) or self._match_keyword("OR"):
                     continue
                 break
@@ -578,6 +591,7 @@ class ProceduralParser:
                 table=table_name,
                 timing=timing,
                 events=tuple(events),
+                update_of=tuple(update_of),
                 or_replace=or_replace,
                 schema=schema,
                 compound=True,
@@ -627,6 +641,7 @@ class ProceduralParser:
             table=table_name,
             timing=timing,
             events=tuple(events),
+            update_of=tuple(update_of),
             for_each=for_each,
             body=tuple(body),
             or_replace=or_replace,
