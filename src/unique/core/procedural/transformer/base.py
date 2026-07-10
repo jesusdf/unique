@@ -48,6 +48,7 @@ from unique.core.ast_nodes import (
     LoopStatement,
     NullStatement,
     ParameterDefinition,
+    PragmaDeclaration,
     PrintStatement,
     RaiseErrorStatement,
     RawSQL,
@@ -254,6 +255,7 @@ class ProceduralTransformer:
             CreateFunctionStatement: self._transform_function,
             CreateTriggerStatement: self._transform_trigger,
             DeclareStatement: self._transform_declare,
+            PragmaDeclaration: self._transform_pragma,
             SetVariableStatement: self._transform_set_variable,
             AssignmentStatement: self._transform_assignment,
             IfStatement: self._transform_if,
@@ -1128,6 +1130,14 @@ class ProceduralTransformer:
         """Whether a CREATE TRIGGER is forced to OR REPLACE on this target. Only
         Oracle does; others keep the source flag."""
         return False
+
+    def _transform_pragma(self, node: PragmaDeclaration) -> ASTNode:
+        if self._target != "oracle":
+            self._warnings.append(
+                f"PRAGMA {node.name} has no {self._target} equivalent; "
+                "dropped (documented in a comment)"
+            )
+        return node
 
     def _transform_declare(self, node: DeclareStatement) -> ASTNode:
         new_name = self._transform_var_name(node.name)

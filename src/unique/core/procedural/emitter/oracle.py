@@ -17,6 +17,7 @@ from unique.core.ast_nodes import (
     DeclareStatement,
     ForLoopStatement,
     ParameterDefinition,
+    PragmaDeclaration,
     PrintStatement,
     RaiseErrorStatement,
     ReturnStatement,
@@ -74,6 +75,9 @@ class OracleEmitter(ProceduralEmitter):
     """Oracle PL/SQL procedural emitter."""
 
     dialect_name = "oracle"
+
+    def _emit_pragma(self, node: PragmaDeclaration) -> str:
+        return f"PRAGMA {node.name};"
 
     def _emit_try_catch(self, node: TryCatchBlock) -> str:
         # PL/SQL error handling is a nested block: BEGIN <try> EXCEPTION WHEN

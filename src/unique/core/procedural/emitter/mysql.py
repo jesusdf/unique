@@ -33,20 +33,51 @@ class MySqlEmitter(ProceduralEmitter):
     # Built-in function names MySQL/MariaDB only recognize when the opening
     # parenthesis follows immediately (default sql_mode, no IGNORE_SPACE).
     # Token-joined expression text ("CAST ( x AS ... )") must be collapsed.
+    # The second alternation is MySQL's documented space-sensitive keyword
+    # functions (EXTRACT ( YEAR FROM x ) is a hard 1064 — sweep wave 15).
     _NO_SPACE_FUNCS = re.compile(
         r"(?i)\b(CAST|CONVERT|COUNT|SUM|MIN|MAX|AVG|COALESCE|IFNULL|NULLIF|"
         r"CONCAT|SUBSTRING|SUBSTR|TRIM|UPPER|LOWER|ABS|ROUND|NOW|CURDATE|"
-        r"CURTIME|LENGTH|CHAR_LENGTH|GROUP_CONCAT|LAST_INSERT_ID)\s+\("
+        r"CURTIME|LENGTH|CHAR_LENGTH|GROUP_CONCAT|LAST_INSERT_ID|"
+        r"EXTRACT|POSITION|ADDDATE|SUBDATE|DATE_ADD|DATE_SUB|BIT_AND|BIT_OR|"
+        r"BIT_XOR|STD|STDDEV|STDDEV_POP|STDDEV_SAMP|VARIANCE|VAR_POP|"
+        r"VAR_SAMP|MID|SYSDATE)\s+\("
     )
 
     def emit(self, node: ASTNode) -> str:
         return self._NO_SPACE_FUNCS.sub(lambda m: f"{m.group(1)}(", super().emit(node))
 
+    #: Builtin names MySQL's parser claims at a routine-definition site:
+    #: ``CREATE FUNCTION NOW()`` is a 1064 unless the name is backticked
+    #: (an Oracle compatibility shim named ``now`` exists in real schemas).
+    _BUILTIN_NAMES = frozenset(
+        {"NOW", "SYSDATE", "CURDATE", "CURTIME", "POSITION", "TRIM", "REPLACE"}
+    )
+
     def _keep_schema(self, schema: str) -> bool:
         # MySQL has no schema layer (a schema is a database); drop all.
         return False
 
+    def _qualified_name(self, schema: str | None, name: str) -> str:
+        out = super()._qualified_name(schema, name)
+        if out.upper() in self._BUILTIN_NAMES:
+            return f"`{out}`"
+        return out
+
     def _emit_trigger(self, node: CreateTriggerStatement) -> str:
+        # RETURN is illegal anywhere in a MySQL trigger; label the body block
+        # so _emit_return can translate it to LEAVE (same as procedures).
+        prev_label = self._proc_leave_label
+        if self._body_has_any_return(list(node.body)):
+            self._proc_leave_label = "trg_exit"
+        else:
+            self._proc_leave_label = None
+        try:
+            return self._emit_trigger_events(node)
+        finally:
+            self._proc_leave_label = prev_label
+
+    def _emit_trigger_events(self, node: CreateTriggerStatement) -> str:
         # MySQL allows exactly one event per trigger; split AFTER INSERT,
         # UPDATE into one trigger per event (MariaDB rejects the multi-event
         # shell outright).
@@ -235,11 +266,14 @@ class MySqlEmitter(ProceduralEmitter):
         events: str,
         timing: str,
     ) -> list[str]:
+        begin = (
+            f"{self._proc_leave_label}: BEGIN" if self._proc_leave_label else "BEGIN"
+        )
         return [
             f"CREATE TRIGGER {name}",
             f"{timing} {events} ON {node.table}",
             "FOR EACH ROW",
-            "BEGIN",
+            begin,
         ]
 
     def _emit_try_catch(self, node: TryCatchBlock) -> str:

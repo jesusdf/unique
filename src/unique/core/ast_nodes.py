@@ -499,6 +499,15 @@ class DeclareStatement(ASTNode):
 
 
 @dataclass(frozen=True)
+class PragmaDeclaration(ASTNode):
+    """A PL/SQL compiler directive in a declaration section (e.g. ``PRAGMA
+    AUTONOMOUS_TRANSACTION``). Oracle re-emits it verbatim; other targets
+    have no equivalent and degrade it to a documented comment + warning."""
+
+    name: str
+
+
+@dataclass(frozen=True)
 class SetVariableStatement(ASTNode):
     """Variable assignment."""
 

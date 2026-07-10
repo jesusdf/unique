@@ -45,6 +45,7 @@ from unique.core.ast_nodes import (
     LoopStatement,
     NullStatement,
     ParameterDefinition,
+    PragmaDeclaration,
     PrintStatement,
     RaiseErrorStatement,
     RawSQL,
@@ -186,6 +187,7 @@ class ProceduralEmitter:
             CreateFunctionStatement: self._emit_function,
             CreateTriggerStatement: self._emit_trigger,
             DeclareStatement: self._emit_declare,
+            PragmaDeclaration: self._emit_pragma,
             SetVariableStatement: self._emit_set_variable,
             AssignmentStatement: self._emit_assignment,
             IfStatement: self._emit_if,
@@ -646,14 +648,20 @@ class ProceduralEmitter:
 
     def _body_has_any_return(self, stmts: list[ASTNode]) -> bool:
         """Whether any statement (recursively) is a RETURN (with or without a
-        value). In a MySQL procedure even ``RETURN <value>`` is invalid."""
+        value). In a MySQL procedure even ``RETURN <value>`` is invalid.
+
+        Walks every dataclass field holding nodes — an attribute-name list
+        missed ``BeginEndBlock.statements``, so a RETURN inside a nested
+        block/handler shipped as a bare ``RETURN;`` (a 1064 parse error)."""
         for s in stmts:
             if isinstance(s, ReturnStatement):
                 return True
-            for attr in ("body", "then_body", "else_body", "try_body", "catch_body"):
-                child = getattr(s, attr, None)
-                if child and self._body_has_any_return(list(child)):
-                    return True
+            for f in dataclass_fields(s):
+                child = getattr(s, f.name, None)
+                if isinstance(child, tuple):
+                    nodes = [c for c in child if isinstance(c, ASTNode)]
+                    if nodes and self._body_has_any_return(nodes):
+                        return True
         return False
 
     def _emit_alter_procedure(self, node: AlterProcedureStatement) -> str:
@@ -911,6 +919,15 @@ class ProceduralEmitter:
             val = self._emit_node(node.default)
             default_str = f" {self._declare_default_op()} {val}"
         return f"{self._declare_prefix()}{node.name} {dt}{default_str};"
+
+    def _emit_pragma(self, node: PragmaDeclaration) -> str:
+        """A PL/SQL compiler directive. Only Oracle can execute it (its emitter
+        overrides); everywhere else it is documented, never shipped executable
+        (``DECLARE PRAGMA AUTONOMOUS_TRANSACTION;`` was a hard parse error)."""
+        return (
+            f"-- UNIQUE: PRAGMA {node.name} has no {self.dialect_name} "
+            "equivalent; dropped."
+        )
 
     def _declare_default_op(self) -> str:
         """Operator that introduces a variable's default. Default PL/SQL ``:=``;
@@ -1278,10 +1295,10 @@ class ProceduralEmitter:
         # record field like r.cmd must not be read as a named-proc CALL). Any
         # USING binds carry over to the EXECUTE.
         if immediate:
-            using = f" USING {', '.join(params)}" if params else ""
+            copies, using = self._mysql_using_binds(params)
             return (
                 f"SET @_stmt = {expr}; PREPARE _dyn FROM @_stmt; "
-                f"EXECUTE _dyn{using}; DEALLOCATE PREPARE _dyn;"
+                f"{copies}EXECUTE _dyn{using}; DEALLOCATE PREPARE _dyn;"
             )
 
         # Case 1: sp_executesql. The first comma-separated argument is the SQL
@@ -1306,15 +1323,10 @@ class ProceduralEmitter:
 
         # Case 3: a bare variable or string literal is genuine dynamic SQL.
         if stripped.startswith(("@", "v_", "'", "(", "N'")):
-            if params:
-                using = ", ".join(params)
-                return (
-                    f"SET @_stmt = {expr}; PREPARE _dyn FROM @_stmt; "
-                    f"EXECUTE _dyn USING {using}; DEALLOCATE PREPARE _dyn;"
-                )
+            copies, using = self._mysql_using_binds(params)
             return (
                 f"SET @_stmt = {expr}; PREPARE _dyn FROM @_stmt; "
-                f"EXECUTE _dyn; DEALLOCATE PREPARE _dyn;"
+                f"{copies}EXECUTE _dyn{using}; DEALLOCATE PREPARE _dyn;"
             )
 
         # Case 2: a named stored-procedure call. MySQL invokes procedures with
@@ -1338,6 +1350,24 @@ class ProceduralEmitter:
             f"SET @_stmt = {expr}; PREPARE _dyn FROM @_stmt; "
             f"EXECUTE _dyn; DEALLOCATE PREPARE _dyn;"
         )
+
+    @staticmethod
+    def _mysql_using_binds(params: list[str]) -> tuple[str, str]:
+        """Bindings for MySQL's ``EXECUTE ... USING``, which accepts only
+        session (``@``) variables: each routine local/parameter is copied into
+        an ``@_b<n>`` session variable first. Returns ``(copies, using)`` —
+        ``copies`` is the ``SET @_b1 = v; `` prefix, ``using`` the clause."""
+        if not params:
+            return "", ""
+        copies: list[str] = []
+        binds: list[str] = []
+        for i, p in enumerate(params, start=1):
+            if p.strip().startswith("@"):
+                binds.append(p.strip())
+                continue
+            binds.append(f"@_b{i}")
+            copies.append(f"SET @_b{i} = {p.strip()}; ")
+        return "".join(copies), f" USING {', '.join(binds)}"
 
     @staticmethod
     def _first_arg(text: str) -> str:

@@ -31,6 +31,7 @@ from unique.core.ast_nodes import (
     IfStatement,
     LoopStatement,
     NullStatement,
+    PragmaDeclaration,
     PrintStatement,
     RaiseErrorStatement,
     RawSQL,
@@ -154,6 +155,17 @@ class PlsqlStatementsMixin(ParserBase):
                 query = self._parse_embedded_dml()
             self._match_type(TokenType.SEMICOLON)
             return CursorDeclaration(name=cursor_name, query=query)
+
+        # PRAGMA <directive>[(args)]; — a compiler directive, not a variable
+        # (parsing it as one shipped ``DECLARE PRAGMA AUTONOMOUS_TRANSACTION;``).
+        if tok.upper_value == "PRAGMA":
+            self._advance()
+            parts: list[str] = []
+            while not self._at_end() and self._current().type != TokenType.SEMICOLON:
+                parts.append(self._current().value)
+                self._advance()
+            self._match_type(TokenType.SEMICOLON)
+            return PragmaDeclaration(name=" ".join(parts))
 
         # Variable: name type [:= value];
         name = self._parse_identifier()

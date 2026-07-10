@@ -424,6 +424,15 @@ def emit_node(node: ASTNode, dialect: str) -> str:
     return _emit_expression(node, dialect)
 
 
+def _ident_if_plain(name: str, dialect: str) -> str:
+    """Quote a bare column name when it is a reserved word in *dialect*
+    (``INSERT INTO t (a, manual)`` is a 1064 on MySQL 8.4). Dotted/quoted
+    forms pass through untouched."""
+    if re.fullmatch(r"\w+", name):
+        return _ident(name, False, dialect)
+    return name
+
+
 def _quote_reserved_identifiers(expr: exp.Expression, dialect: str) -> exp.Expression:
     """Mark identifiers that are reserved words in *dialect* as quoted, so a
     passthrough CREATE INDEX / ALTER on a reserved name emits valid SQL."""
@@ -883,7 +892,8 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
 def _emit_insert(node: InsertStatement, dialect: str) -> str:
     """Emit an INSERT statement."""
     table = _emit_table_ref(node.table, dialect)
-    cols = f" ({', '.join(node.columns)})" if node.columns else ""
+    col_names = [_ident_if_plain(c, dialect) for c in node.columns]
+    cols = f" ({', '.join(col_names)})" if node.columns else ""
 
     if node.values:
         rows = []
@@ -927,7 +937,9 @@ def _emit_update(node: UpdateStatement, dialect: str) -> str:
     for col, val in node.assignments:
         val = _coerce_bit_literal(node.table, col, val, dialect)
         val = _coerce_date_literal(node.table, col, val, dialect)
-        set_parts.append(f"{col} = {_emit_expression(val, dialect)}")
+        set_parts.append(
+            f"{_ident_if_plain(col, dialect)} = {_emit_expression(val, dialect)}"
+        )
     sets = ", ".join(set_parts)
     result = f"UPDATE {table}\nSET {sets}"
 
@@ -1449,6 +1461,13 @@ def _emit_drop(node: DropStatement, dialect: str) -> str:
     name = _emit_table_ref(node.name, dialect)
     exists = "IF EXISTS " if node.if_exists else ""
     cascade = " CASCADE" if node.cascade else ""
+    if node.object_type == "SEQUENCE" and dialect == "mysql":
+        # Mirrors the CREATE SEQUENCE carrier: MySQL has no sequences.
+        return (
+            "-- UNIQUE: MySQL has no sequences (use an AUTO_INCREMENT "
+            "column); original preserved:\n"
+            f"-- DROP SEQUENCE {exists}{name}"
+        )
     if node.object_type == "INDEX":
         if dialect in ("tsql", "mysql"):
             if not node.on_table:

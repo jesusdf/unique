@@ -675,7 +675,42 @@ _RESERVED_IDENTIFIERS: dict[str, frozenset[str]] = {
             "VALIDATE",
         }
     ),
-    "mysql": _RESERVED_COMMON | frozenset({"COLLATION", "LIMIT", "USAGE", "READ"}),
+    "mysql": _RESERVED_COMMON
+    | frozenset(
+        {
+            "COLLATION",
+            "LIMIT",
+            "USAGE",
+            "READ",
+            # Reserved since MySQL 8.0–8.4 (MANUAL/PARALLEL/QUALIFY are 8.2+;
+            # unquoted they are a hard 1064 on a modern server).
+            "MANUAL",
+            "PARALLEL",
+            "QUALIFY",
+            "TABLESAMPLE",
+            "LATERAL",
+            "RECURSIVE",
+            "CUBE",
+            "FUNCTION",
+            "GROUPING",
+            "GROUPS",
+            "JSON_TABLE",
+            "LAG",
+            "LEAD",
+            "FIRST_VALUE",
+            "LAST_VALUE",
+            "NTH_VALUE",
+            "NTILE",
+            "OF",
+            "OVER",
+            "PERCENT_RANK",
+            "RANK",
+            "DENSE_RANK",
+            "ROW_NUMBER",
+            "WINDOW",
+            "INTERSECT",
+        }
+    ),
     "tsql": _RESERVED_COMMON
     | frozenset(
         {
