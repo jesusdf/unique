@@ -197,10 +197,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       PROCEDURAL_FUNC_MAPS) before the text rewriters can be deleted (P4's
       final step). Until then the text path stays the expression engine.
 - [ ] **M4 — Oracle-source bring-up** driven by the sweep frequency table
-      (doc 03 §D backlog). *2026-07-10, TWELVE closing waves (official
-      validity_sweep on the 13 MB dump):* **T-SQL 99.8% (84 syntax fails),
+      (doc 03 §D backlog). *2026-07-10, THIRTEEN closing waves (official
+      validity_sweep on the 13 MB dump):* **T-SQL 99.8% (64 syntax fails),
       PostgreSQL 100.0% (10), MySQL 99.9% (18)** — from 475 / 41 / 121 at
-      the start of the day. Waves 11–12 added: the shared ALTER ... MODIFY
+      the start of the day. Wave 13: derived-table aliases synthesized for
+      every non-Oracle target (uq_dt — a shared cause across all three) +
+      T-SQL's no-TOP ORDER BY dropped inside them; seq.NEXTVAL/CURRVAL →
+      NEXT VALUE FOR / nextval(). Waves 11–12 added: the shared ALTER ... MODIFY
       rewriter (neither Oracle form parses in sqlglot), user_tab_cols →
       sys.columns / information_schema probes (case-folded on PG — a
       semantic fix, the guards never fired), ALTER TRIGGER ENABLE via
@@ -229,12 +232,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       Note: the T-SQL count is *flat vs. the morning's 127 but far more
       honest* — unwrapping constant dynamic SQL surfaced ~30 failures that
       previously hid as runtime missing-object noise inside EXEC() strings.
-      *Remaining classes:* tsql 84 — 17x near ')' + 9x near ';' (D9 desync
-      sub-shapes still to classify), ~10 client-DB-resident UDFs (SVF_* —
-      unresolvable without --db-url), PL/SQL collections (ARRAYTIPOALTA),
-      4145/128/@dosis1/date-literal edges (2x each); PG 10 — RETURN
-      edges, PERFILES_CURSOR, ADD COLUMNS(...), 2x bytea/uuid defaults;
-      MySQL 18x 1064 tail.
+      *Remaining classes:* tsql 64 — residual near-')'/';' sub-shapes,
+      ~10 client-DB-resident UDFs (SVF_* — unresolvable without --db-url),
+      PL/SQL collections (ARRAYTIPOALTA), 4145/128/@dosis1/date-literal
+      edges (2x each); PG 10 — RETURN edges, PERFILES_CURSOR,
+      ADD COLUMNS(...), 2x bytea/uuid defaults; MySQL 18x 1064 tail.
+      Note: the compose `stop_grace_period: 30s` for mssql applies on the
+      next `up -d` (containers keep their creation-time config).
 
 - [x] **Faithful conditional for unmappable catalog guards (P2)** (done
       2026-07-10 for the sys.columns/syscolumns column-probe family, both

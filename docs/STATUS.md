@@ -40,9 +40,9 @@ procedural text-matchers onto structure — tracked in `docs/TODO.md`.
     MERGE/CTE boundaries, updatable-CTE and paren-join silent losses,
     base64-XML idiom, CATCH-block content, per-target DROP INDEX guards).
   - **Oracle → T-SQL/PostgreSQL/MySQL at Tier-1-grade validity**. On the
-    real 13 MB dump (official sweep 2026-07-10, after TWELVE M4 closing
+    real 13 MB dump (official sweep 2026-07-10, after THIRTEEN M4 closing
     waves): **PostgreSQL 100.0% (10 fails), MySQL 99.9% (18), T-SQL 99.8%
-    (84)** — post-M1 baseline was 73.1 / 75.0 / 94.0. The waves closed
+    (64)** — post-M1 baseline was 73.1 / 75.0 / 94.0. The waves closed
     the exception-scope, trigger-header (UPDATE OF / WHEN / event
     predicates), CASE-statement, pseudo-row, dynamic-SQL and Oracle-builtin
     families (see `docs/TODO.md` M4 for the full list and the remaining
