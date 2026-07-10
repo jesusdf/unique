@@ -297,6 +297,101 @@ class TestPgRowLoopDeclaration:
         assert flat.index("X record;") < flat.index("FOR X IN"), out
 
 
+class TestWave10Classes:
+    def test_index_nulls_emulation_stripped(self) -> None:
+        # sqlglot pairs Oracle index keys with CASE WHEN col IS NULL
+        # ordering emulation; a T-SQL index key cannot be an expression.
+        src = "CREATE INDEX ix1 ON h_log (accion, tipo);"
+        out = _flat(_t(src, "tsql"))
+        assert "CASE" not in out.upper(), out
+        assert re.search(r"(?i)ON h_log\s*\(accion, tipo\)", out), out
+        # The guarded/embedded path strips it too.
+        guarded = (
+            "DECLARE v_e NUMBER;\nBEGIN\n"
+            "    SELECT count(*) INTO v_e FROM user_indexes"
+            " WHERE index_name = 'IX1';\n"
+            "    IF v_e = 0 THEN\n"
+            "        execute immediate 'CREATE INDEX ix1 ON h_log (accion, tipo)';\n"
+            "    END IF;\nEND;\n/"
+        )
+        out2 = _flat(_t(guarded, "tsql"))
+        assert "CASE" not in out2.upper(), out2
+
+    def test_multicolumn_drop(self) -> None:
+        src = "ALTER TABLE d_idi DROP (descripcion, textoplano);"
+        pg = _flat(_t(src, "postgresql"))
+        assert "DROP COLUMN descripcion, DROP COLUMN textoplano" in pg, pg
+        my = _flat(_t(src, "mysql"))
+        assert "DROP COLUMN descripcion, DROP COLUMN textoplano" in my, my
+        ts = _flat(_t(src, "tsql"))
+        assert "DROP COLUMN descripcion, textoplano" in ts, ts
+
+    def test_mysql_errno_magnitude(self) -> None:
+        src = (
+            "create or replace PROCEDURE p_e AS\nBEGIN\n"
+            "    UPDATE t_z SET x = 1;\n"
+            "EXCEPTION WHEN OTHERS THEN\n"
+            "    RAISE_APPLICATION_ERROR(-20001, 'boom');\nEND;\n/"
+        )
+        out = _flat(_t(src, "mysql"))
+        assert "MYSQL_ERRNO = 20001" in out, out
+        assert "MYSQL_ERRNO = - " not in out, out
+
+    def test_pipelined_function_becomes_carrier(self) -> None:
+        src = (
+            "CREATE OR REPLACE FUNCTION f_pipe (v_e IN VARCHAR2)\n"
+            "RETURN pkg_t.t_tab PIPELINED\nAS\n    newrow pkg_t.t_row;\n"
+            "BEGIN\n    PIPE ROW (newrow);\n    RETURN;\nEND;\n/"
+        )
+        for target in ("mysql", "tsql", "postgresql"):
+            result = Transpiler().transpile(src, "oracle", target)
+            body = [
+                line
+                for line in result.sql.splitlines()
+                if line.strip() and not line.lstrip().startswith("--")
+            ]
+            assert not body, (target, result.sql)
+            assert any(
+                "carrier" in w.message or "preserved" in w.message
+                for w in result.warnings
+            ), (target, result.warnings)
+
+    def test_blob_column_add_sizes_varbinary(self) -> None:
+        src = "ALTER TABLE d_diar ADD firma BLOB NULL;"
+        assert "LONGBLOB" in _t(src, "mysql")
+        assert "VARBINARY(MAX)" in _t(src, "tsql")
+        assert "BYTEA" in _t(src, "postgresql")
+
+    def test_standalone_scalars_on_tsql(self) -> None:
+        pairs = (
+            ("SELECT 'a' || CHR(38) || 'b' FROM t_l;", "CHAR(38)"),
+            (
+                "SELECT s FROM t_s ORDER BY TO_NUMBER(ser_id) ASC;",
+                "CAST(ser_id AS DECIMAL(38, 10))",
+            ),
+            (
+                "SELECT MONTHS_BETWEEN(f1, f2) FROM t_h;",
+                "DATEDIFF(MONTH, f2, f1)",
+            ),
+        )
+        for src, expected in pairs:
+            out = _flat(_t(src, "tsql"))
+            assert expected in out, (src, out)
+
+    def test_pg_reserved_column_and_toplevel_noop(self) -> None:
+        src = "CREATE TABLE t_tx (data_ep DATE, session_user VARCHAR2(100));"
+        out = _t(src, "postgresql")
+        assert '"session_user"' in out, out
+        carrier = "BEGIN\n    DBMS_SCHEDULER.ENABLE(NAME => 'J1');\nEND;\n/"
+        out2 = _t(carrier, "postgresql")
+        body = [
+            line
+            for line in out2.splitlines()
+            if line.strip() and not line.lstrip().startswith("--")
+        ]
+        assert not body, out2
+
+
 class TestDynamicSqlAndRowcount:
     def test_constant_execute_immediate_unwraps(self) -> None:
         # PostgreSQL has no top-level EXECUTE '<sql>'; a constant dynamic
