@@ -392,8 +392,12 @@ fix needs an **anonymized** regression fixture (never a private name).
 - [ ] **Module growth** — *parser done 2026-07-10:* `procedural/parser` is
       now a package (_base 1.7k + _tsql 0.7k + _plsql 0.8k, explicit
       cross-family contract). Still to split: `procedural/transformer/
-      base.py` (~3.5k) and `transpiler.py` (~2.2k) along the same doc-03
-      seams.
+      base.py` (~3.5k) and `transpiler.py` (~2.2k). *Finding (2026-07-10):*
+      the parser's name-based mixin cut does NOT transfer to the
+      transformer — its shared/node-transform/expression-rewrite families
+      cross-call heavily (an attempted split needed a dozen-plus stub
+      contract and was reverted). Design the interface first (likely:
+      expression rewrites behind one named seam object, not a mixin).
 - [x] **Docker digest pin + constraints file** (done 2026-07-10): both
       Dockerfiles pin `python:3.13-slim` by sha256 digest and the runtime
       install applies `constraints.txt` (full dependency closure) — image
