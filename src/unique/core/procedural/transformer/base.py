@@ -500,10 +500,30 @@ class ProceduralTransformer:
         ):
             # Prefix known variable/parameter names with T-SQL's ``@`` (the map
             # holds source-name → transformed ``@name``); a bare column of the
-            # same name is not in the map, so it is left alone.
-            for old_name, new_name in self._var_map.items():
-                sql = re.sub(rf"\b{re.escape(old_name)}\b", new_name, sql)
+            # same name is not in the map, so it is left alone. Only outside
+            # string literals — a message text mentioning the variable must
+            # stay verbatim.
+            def rename_names(segment: str) -> str:
+                for old_name, new_name in self._var_map.items():
+                    segment = re.sub(rf"\b{re.escape(old_name)}\b", new_name, segment)
+                return segment
+
+            sql = self._map_outside_strings(sql, rename_names)
         return sql
+
+    _STRING_LITERAL_RE = re.compile(r"'(?:[^']|'')*'")
+
+    @classmethod
+    def _map_outside_strings(cls, sql: str, fn: Callable[[str], str]) -> str:
+        """Apply *fn* to the parts of *sql* outside string literals."""
+        parts: list[str] = []
+        last = 0
+        for m in cls._STRING_LITERAL_RE.finditer(sql):
+            parts.append(fn(sql[last : m.start()]))
+            parts.append(m.group(0))
+            last = m.end()
+        parts.append(fn(sql[last:]))
+        return "".join(parts)
 
     def _transform_system_var(self, var: str) -> str:
         """Transform system variables like @@ROWCOUNT, @@IDENTITY, @@ERROR.
@@ -1283,7 +1303,10 @@ class ProceduralTransformer:
                 reason="oracle package call",
             )
         schema = self._target_schema(node.schema)
-        args = self._map_now_in_sql(node.args) if node.args else node.args
+        args = node.args
+        if args:
+            args = self._transform_var_in_sql(args)
+            args = self._map_now_in_sql(args)
         return CallStatement(name=node.name, args=args, schema=schema)
 
     #: Oracle data-dictionary views (USER_*/ALL_*/DBA_*). A block querying them
@@ -1707,7 +1730,7 @@ class ProceduralTransformer:
         # for statements the IR cannot model yet.
         ir_sql = self._ir_transpile_dml(sql)
         if ir_sql is not None:
-            sql = ir_sql
+            sql = self._fix_ir_dml(ir_sql)
             if self._target == "oracle":
                 # A MySQL/PostgreSQL-source trigger's NEW./OLD. row reference
                 # must become Oracle's :NEW./:OLD. (as on the fallback path).
@@ -1924,6 +1947,12 @@ class ProceduralTransformer:
     def _fix_target_dml(self, sql: str) -> str:
         """Apply target-specific cleanups to sqlglot-transpiled DML. The base
         (T-SQL) needs none; each target subclass overrides with its fixups."""
+        return sql
+
+    def _fix_ir_dml(self, sql: str) -> str:
+        """Cleanups applied to IR-emitted embedded DML. Unlike
+        ``_fix_target_dml`` (whose sqlglot re-runs assume raw fallback text),
+        this must be cheap and idempotent; the base is a no-op."""
         return sql
 
     def _rewrites_trigger_pseudotables(self) -> bool:

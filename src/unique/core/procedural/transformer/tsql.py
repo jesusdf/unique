@@ -72,7 +72,63 @@ class TSqlTransformer(ProceduralTransformer):
             i += 1
         return "".join(out)
 
+    #: SYS_CONTEXT('USERENV', '<attr>') attributes with a direct T-SQL form.
+    _SYS_CONTEXT_MAP = {
+        "HOST": "HOST_NAME()",
+        "OS_USER": "SUSER_SNAME()",
+        "SESSION_USER": "SYSTEM_USER",
+        "CURRENT_USER": "CURRENT_USER",
+        "SID": "@@SPID",
+        "DB_NAME": "DB_NAME()",
+    }
+    _SYS_CONTEXT_RE = re.compile(
+        r"(?is)\bSYS_CONTEXT\s*\(\s*'USERENV'\s*,\s*'(\w+)'\s*\)"
+    )
+    _DBMS_LOB_SUBSTR3_RE = re.compile(
+        r"(?is)\bDBMS_LOB\s*\.\s*SUBSTR(?:ING)?\s*\(\s*([^(),]+?)\s*,"
+        r"\s*([^(),]+?)\s*,\s*([^(),]+?)\s*\)"
+    )
+    _DBMS_LOB_SUBSTR2_RE = re.compile(
+        r"(?is)\bDBMS_LOB\s*\.\s*SUBSTR(?:ING)?\s*\(\s*([^(),]+?)\s*,"
+        r"\s*([^(),]+?)\s*\)"
+    )
+
+    def _map_oracle_builtins(self, sql: str) -> str:
+        """Oracle built-ins with a direct T-SQL form that leak through the
+        raw-expression path (found live in the 13 MB corpus, 2026-07-10)."""
+        if self._source != "oracle":
+            return sql
+        # Exception context: T-SQL reads it from the ERROR_* functions.
+        sql = re.sub(r"(?i)\bSQLERRM\b", "ERROR_MESSAGE()", sql)
+        # CAST keeps the ubiquitous ``SQLCODE || ' ' || SQLERRM`` concat
+        # working (INT + varchar raises 245 at runtime); a numeric context
+        # converts the string back implicitly.
+        sql = re.sub(r"(?i)\bSQLCODE\b", "CAST(ERROR_NUMBER() AS NVARCHAR(20))", sql)
+        sql = self._SYS_CONTEXT_RE.sub(
+            lambda m: self._SYS_CONTEXT_MAP.get(m.group(1).upper(), m.group(0)),
+            sql,
+        )
+        # DBMS_LOB.SUBSTR(lob, amount, offset) -> SUBSTRING(lob, offset, amount)
+        sql = self._DBMS_LOB_SUBSTR3_RE.sub(r"SUBSTRING(\1, \3, \2)", sql)
+        sql = self._DBMS_LOB_SUBSTR2_RE.sub(r"SUBSTRING(\1, 1, \2)", sql)
+        sql = re.sub(
+            r"(?is)\bUTL_RAW\s*\.\s*CAST_TO_VARCHAR2\s*\(",
+            "CONVERT(VARCHAR(MAX), ",
+            sql,
+        )
+        sql = re.sub(r"(?is)\bDBMS_LOB\s*\.\s*GETLENGTH\s*\(", "DATALENGTH(", sql)
+        return sql
+
+    def _fix_target_dml(self, sql: str) -> str:
+        # Embedded DML shares the raw-expression leaks (a DBMS_LOB.SUBSTR in
+        # a WHERE clause, SQLERRM in a SELECT list).
+        return self._map_oracle_builtins(sql)
+
+    def _fix_ir_dml(self, sql: str) -> str:
+        return self._map_oracle_builtins(sql)
+
     def _fix_raw_sql_target(self, sql: str) -> str:
+        sql = self._map_oracle_builtins(sql)
         # PL/SQL string concatenation: T-SQL spells it ``+``.
         if "||" in sql:
             sql = self._pipes_to_plus(sql)
@@ -390,9 +446,30 @@ class TSqlTransformer(ProceduralTransformer):
     def _assignment_becomes_set(self) -> bool:
         return True
 
+    def _transform_body(self, stmts: tuple[ASTNode, ...]) -> tuple[ASTNode, ...]:
+        return super()._transform_body(self._fold_exception_scope(stmts))
+
+    @staticmethod
+    def _fold_exception_scope(stmts: tuple[ASTNode, ...]) -> tuple[ASTNode, ...]:
+        """A PL/SQL EXCEPTION section protects every statement of its block;
+        T-SQL's TRY/CATCH must physically contain them. Fold the preceding
+        siblings into the TRY body (an empty BEGIN TRY is a syntax error)."""
+        for i, stmt in enumerate(stmts):
+            if isinstance(stmt, ExceptionBlock):
+                handlers_body: list[ASTNode] = []
+                for handler in stmt.handlers:
+                    handlers_body.extend(handler.body)
+                folded = TryCatchBlock(
+                    try_body=tuple(stmts[:i]),
+                    catch_body=tuple(handlers_body),
+                )
+                return (folded, *stmts[i + 1 :])
+        return stmts
+
     def _transform_exception_block(self, node: ExceptionBlock) -> ASTNode:
-        # T-SQL's only structured-handler form is TRY/CATCH; flatten the
-        # EXCEPTION handlers' bodies into the CATCH block.
+        # Reached only when the EXCEPTION section had no preceding siblings
+        # to protect (see _fold_exception_scope); flatten the handlers into
+        # the CATCH block — the emitter backfills the empty TRY.
         body: list[ASTNode] = []
         for handler in node.handlers:
             body.extend(handler.body)

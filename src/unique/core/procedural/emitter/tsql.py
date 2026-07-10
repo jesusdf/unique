@@ -115,6 +115,8 @@ class TSqlEmitter(ProceduralEmitter):
         #: declarations emit, so a FOR loop over a named cursor can derive
         #: its FETCH INTO variable list.
         self._cursor_queries: dict[str, str] = {}
+        # Names RAISERROR message variables uniquely across the script.
+        self._raise_msg_n = 0
         # Cursor *variables* (``DECLARE @c CURSOR;`` — no query): unlike
         # classic cursors these keep their '@' on OPEN/FETCH/CLOSE.
         self._cursor_variables: set[str] = set()
@@ -353,12 +355,38 @@ class TSqlEmitter(ProceduralEmitter):
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
         msg = self._emit_node(node.message) if node.message else "'Error'"
-        return f"RAISERROR({msg}, 16, 1);"
+        # An Oracle RAISE_APPLICATION_ERROR(-20xxx, <msg>) arrives as one
+        # argument blob; RAISERROR takes the message text alone (a tuple in
+        # its place is a syntax error). Keep the human-readable part.
+        text, number, _rest = self._raise_parts(msg)
+        payload = (text or number or msg).strip()
+        # RAISERROR's message accepts only a literal, a variable or a msg id
+        # — an expression (ERROR_NUMBER() + ' ' + ...) must go through a
+        # variable. The counter keeps names unique across the script (T-SQL
+        # variables are batch-scoped; two DECLAREs of one name collide).
+        is_direct = (
+            payload.startswith(("'", "@"))
+            or re.fullmatch(r"-?\s*\d+", payload) is not None
+        )
+        if is_direct:
+            return f"RAISERROR({payload}, 16, 1);"
+        self._raise_msg_n += 1
+        var = f"@unique_errmsg{self._raise_msg_n}"
+        return (
+            f"DECLARE {var} NVARCHAR(2048) = {payload};\n" f"RAISERROR({var}, 16, 1);"
+        )
 
     def _emit_try_catch(self, node: TryCatchBlock) -> str:
         lines = ["BEGIN TRY"]
         self._indent_level += 1
-        lines.extend(self._emit_indented_stmts(node.try_body))
+        body_lines = self._emit_indented_stmts(node.try_body)
+        if not any(
+            line.strip() and not line.lstrip().startswith("--") for line in body_lines
+        ):
+            # An empty BEGIN TRY is a syntax error; SET NOCOUNT ON is the
+            # canonical side-effect-free filler.
+            body_lines.append(f"{self._indent()}SET NOCOUNT ON;")
+        lines.extend(body_lines)
         self._indent_level -= 1
         lines.append("END TRY")
         lines.append("BEGIN CATCH")

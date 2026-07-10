@@ -1428,12 +1428,13 @@ class ProceduralEmitter:
             first, remaining = cls._split_raise_args(remaining)
             args.append(first)
         text = next((a for a in args if a.startswith("'") or a.startswith('"')), None)
-        number = next((a for a in args if re.fullmatch(r"\d+", a)), None)
+        number = next((a for a in args if re.fullmatch(r"-?\s*\d+", a)), None)
         if text is None:
             # RAISERROR(@msg, severity, state): the message is a variable or
             # expression, not a literal — using the severity number as the
-            # message would discard the operator-facing text.
-            text = next((a for a in args if not re.fullmatch(r"\d+", a)), None)
+            # message would discard the operator-facing text. A (possibly
+            # negative) error code is never the message.
+            text = next((a for a in args if not re.fullmatch(r"-?\s*\d+", a)), None)
         rest = [a for a in args if a is not text and a is not number]
         return text, number, ", ".join(rest)
 
