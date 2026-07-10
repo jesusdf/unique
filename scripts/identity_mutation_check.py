@@ -17,10 +17,13 @@ import subprocess
 import sys
 
 # Minimum fraction of integration tests that must FAIL under the mutation.
+# Raised 0.33 -> 0.40 with the 2026-07-10 sweep-closing wave (measured
+# 0.44: test_test2_residue_wave.py / test_cursor_variable_binding.py assert
+# transformed shapes, which a no-op transpiler cannot satisfy).
 # Raised 0.30 -> 0.33 when test_real_world.py gained the hardened
 # TestOutputValidity gates (per-statement target-dialect parsing, foreign
 # quoting, per-fixture idiom checks); measured kill rate after: 36%.
-KILL_RATE_FLOOR = 0.33
+KILL_RATE_FLOOR = 0.40
 
 
 def main() -> int:

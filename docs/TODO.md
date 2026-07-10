@@ -360,18 +360,20 @@ fix needs an **anonymized** regression fixture (never a private name).
 
 ### P3 — hardening carry-overs (from 2026-07-02, still open)
 
-- [ ] **CI: fail when fewer engines than expected were exercised** — a broken
-      ODBC install or Oracle startup timeout currently shrinks live validation
-      silently (waits are `continue-on-error`, tests skip on connect failure).
-- [ ] **Raise the identity-mutation floor** toward the measured 0.38 as
-      `test_cross_dialect.py` (291 survivors) / `test_comment_preservation.py`
-      assertions harden.
+- [x] **CI: fail when fewer engines than expected were exercised** (done
+      2026-07-10) — a gating "all four engines reachable" step in
+      `syntax-live` fails the job before the live suites run; the waits stay
+      `continue-on-error` for readable logs but can no longer shrink the
+      validation silently.
+- [x] **Identity-mutation floor raised 0.33 → 0.40** (2026-07-10; measured
+      0.44 after the sweep-closing wave's shape-asserting tests). Next
+      ratchet as `test_cross_dialect.py` survivors harden.
 - [ ] **Module growth**: `procedural/parser.py` 2886, `procedural/transformer/
       base.py` 2813, `transpiler.py` 1713 lines — resume the split along the
       seams named in audit 2026-07-02 doc 03.
-- [ ] **Docker digest pin + constraints file**; report the decode encoding in
-      a `/transpile/file` response header (A5 residue); sanitize the
-      `Content-Disposition` filename stem (N7).
+- [ ] **Docker digest pin + constraints file**. *(The other two thirds of
+      this bullet shipped 2026-07-10: `X-Unique-Decoded-As` header (A5) and
+      the Content-Disposition stem sanitize (N7) — `tests/unit/api`.)*
 
 ## 3. Packaging (P3)
 

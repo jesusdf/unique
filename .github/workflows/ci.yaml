@@ -301,6 +301,67 @@ jobs:
           ENC="${ENC//$'\n'/'%0A'}"
           echo "::error title=oracle-logs (startup failed)::${ENC}"
 
+      - name: Gate — all four engines must be reachable
+        # The waits above are continue-on-error so their logs stay readable,
+        # but a missing engine must FAIL the job, not silently shrink the
+        # live validation to whatever happened to come up (audit P3).
+        run: |
+          python - <<'PY'
+          import sys
+
+          failures = []
+
+          def check(name, fn):
+              try:
+                  fn()
+                  print(f"{name} OK")
+              except Exception as e:  # noqa: BLE001
+                  failures.append(f"{name}: {e}")
+
+          def pg():
+              import psycopg
+
+              psycopg.connect(
+                  "postgresql://unique:unique@localhost:5433/unique",
+                  connect_timeout=10,
+              ).close()
+
+          def my():
+              import mysql.connector
+
+              mysql.connector.connect(
+                  host="127.0.0.1", port=3307, user="root",
+                  password="UniqueStrongPass1", database="unique",
+                  connection_timeout=10,
+              ).close()
+
+          def ora():
+              import oracledb
+
+              oracledb.connect(
+                  user="unique", password="UniqueStrongPass1",
+                  dsn="localhost:1521/FREEPDB1",
+              ).close()
+
+          def ms():
+              import pymssql
+
+              pymssql.connect(
+                  server="127.0.0.1", port=1433, user="sa",
+                  password="Unique_Strong!Pass1", database="master",
+                  login_timeout=10,
+              ).close()
+
+          check("postgresql", pg)
+          check("mysql", my)
+          check("oracle", ora)
+          check("mssql", ms)
+          if failures:
+              for f in failures:
+                  print(f"::error title=engine unreachable::{f}")
+              sys.exit(1)
+          PY
+
       - name: Run live syntax validation
         env:
           # All four engines are validated here. oracle-free's default PDB is
