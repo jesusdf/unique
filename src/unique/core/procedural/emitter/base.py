@@ -1403,6 +1403,12 @@ class ProceduralEmitter:
         # state)" is invalid there. Keep the human-readable message AND the
         # error number when both exist (audit 2026-07-02, S2-2).
         text, number, rest = self._raise_parts(msg)
+        if number is not None:
+            # MYSQL_ERRNO takes an unsigned 1..65535 literal; Oracle's
+            # RAISE_APPLICATION_ERROR codes are negative (-20000..-20999) —
+            # keep their magnitude.
+            magnitude = abs(int(re.sub(r"\s+", "", number)))
+            number = str(magnitude) if 1 <= magnitude <= 65535 else None
         if text is not None:
             errno = f", MYSQL_ERRNO = {number}" if number is not None else ""
             sig = f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = {text}{errno}"

@@ -330,7 +330,19 @@ class PostgresEmitter(ProceduralEmitter):
             isinstance(s, PrintStatement) for s in node.statements
         )
         if not needs_wrapper:
-            return "\n".join(self._emit_node(s) for s in body)
+            # The block-level NULL; no-op (a degraded carrier's filler) has
+            # no top-level form in PostgreSQL; the comment carries the intent.
+            emitted = []
+            for stmt in body:
+                text = self._emit_node(stmt)
+                kept = [
+                    line
+                    for line in text.splitlines()
+                    if line.strip().rstrip(";").upper() != "NULL"
+                ]
+                if kept:
+                    emitted.append("\n".join(kept))
+            return "\n".join(emitted)
 
         lines = ["DO $$"]
         if decls:

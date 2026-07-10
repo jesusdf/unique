@@ -633,7 +633,22 @@ _RESERVED_COMMON = frozenset(
 )
 _RESERVED_IDENTIFIERS: dict[str, frozenset[str]] = {
     "postgresql": _RESERVED_COMMON
-    | frozenset({"COLLATION", "LIMIT", "OFFSET", "USING", "DO", "ARRAY", "ANY"}),
+    | frozenset(
+        {
+            "COLLATION",
+            "LIMIT",
+            "OFFSET",
+            "USING",
+            "DO",
+            "ARRAY",
+            "ANY",
+            # Reserved niladic names: valid as column names only quoted.
+            "SESSION_USER",
+            "CURRENT_USER",
+            "CURRENT_TIMESTAMP",
+            "CURRENT_DATE",
+        }
+    ),
     "oracle": _RESERVED_COMMON
     | frozenset(
         {

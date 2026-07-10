@@ -173,6 +173,39 @@ def _oracle_idempotent_create(ddl: str) -> str | None:
     )
 
 
+def _normalize_oracle_multicolumn_drop(sql: str, target: str) -> str:
+    """Rewrite ``ALTER TABLE t DROP (a, b)`` to the target's DROP COLUMN form."""
+    m = re.match(r"(?is)^\s*(ALTER\s+TABLE\s+\S+\s+)DROP\s*\(([^)]+)\)\s*;?\s*$", sql)
+    if not m:
+        return sql
+    cols = [c.strip() for c in m.group(2).split(",") if c.strip()]
+    if not cols:
+        return sql
+    dropped = ", ".join(f"DROP COLUMN {c}" for c in cols)
+    return f"{m.group(1)}{dropped}"
+
+
+_SCALAR_ARG = r"((?:[^(),]|\([^()]*\))+?)"
+
+
+def _map_oracle_scalars_for_tsql(sql: str) -> str:
+    """Oracle scalar builtins with a direct T-SQL spelling that sqlglot
+    passes through untranslated in plain DML (found live in the 13 MB
+    corpus): CHR, TO_NUMBER, MONTHS_BETWEEN."""
+    sql = re.sub(r"(?i)\bCHR\s*\(", "CHAR(", sql)
+    sql = re.sub(
+        rf"(?is)\bTO_NUMBER\s*\(\s*{_SCALAR_ARG}\s*\)",
+        r"CAST(\1 AS DECIMAL(38, 10))",
+        sql,
+    )
+    sql = re.sub(
+        rf"(?is)\bMONTHS_BETWEEN\s*\(\s*{_SCALAR_ARG}\s*,\s*{_SCALAR_ARG}\s*\)",
+        r"DATEDIFF(MONTH, \2, \1)",
+        sql,
+    )
+    return sql
+
+
 def _qualify_tsql_udfs_in_sql(sql: str) -> str:
     """Qualify bare scalar-UDF calls as ``dbo.fn(`` using the harvested
     USER_FUNCTIONS registry (mirror of the procedural transformer's
@@ -1383,6 +1416,16 @@ class Transpiler:
         result = self._transpile_dml_inner(
             sql, source, target, source_dialect, target_dialect
         )
+        if target == "tsql" and source == "oracle":
+            # Oracle scalar builtins that sqlglot leaves untranslated in
+            # plain DML (the procedural paths map them via the transformer).
+            mapped = _map_oracle_scalars_for_tsql(result.sql)
+            if mapped != result.sql:
+                result = TranspileResult(
+                    sql=mapped,
+                    warnings=result.warnings,
+                    unsupported=result.unsupported,
+                )
         if target == "tsql" and source != "tsql":
             # T-SQL rejects an unqualified scalar-UDF call as an unknown
             # built-in (error 195); the procedural paths already qualify —
@@ -1407,6 +1450,13 @@ class Transpiler:
         """The sqlglot pipeline proper (see ``_transpile_dml``)."""
         warnings: list[TransformWarning] = []
         unsupported: list[str] = []
+
+        if source == "oracle" and target != "oracle":
+            # Oracle's multi-column ``ALTER TABLE t DROP (a, b)`` parses as an
+            # opaque Command (the whole statement then leaks verbatim);
+            # normalize to the DROP COLUMN list every engine reads. T-SQL
+            # additionally wants one DROP COLUMN with a comma list.
+            sql = _normalize_oracle_multicolumn_drop(sql, target)
 
         if source == "tsql" and target != "tsql":
             altered = self._transpile_alter_column(

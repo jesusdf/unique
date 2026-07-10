@@ -171,6 +171,13 @@ def _portable_types_in_sql(sql: str, dialect: str) -> str:
     ``(n)`` after it would be left — acceptable since those source types
     (UNIQUEIDENTIFIER/UUID) don't take a user length.
     """
+    # A bare VARBINARY (Oracle LONG RAW / unsized RAW through the name map)
+    # needs a length on MySQL and silently defaults tiny elsewhere; the
+    # unsized source form is unbounded, so the LOB type is faithful.
+    if dialect == "mysql":
+        sql = re.sub(r"(?i)\bVARBINARY\b(?!\s*\()", "LONGBLOB", sql)
+    elif dialect == "tsql":
+        sql = re.sub(r"(?i)\bVARBINARY\b(?!\s*\()", "VARBINARY(MAX)", sql)
     mapping = _TYPE_NAME_MAP.get(dialect, {})
     if not mapping:
         return sql
@@ -453,6 +460,9 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                     result = result.rstrip() + ";"
             if dialect == "tsql":
                 result = _portable_rename_column(result)
+                # T-SQL's multi-column drop is ONE DROP COLUMN with a comma
+                # list (each engine's normalized form repeats the keyword).
+                result = re.sub(r"(?i),\s*DROP\s+COLUMN\s+", ", ", result)
             if dialect != "tsql" and node.kind == "ALTER":
                 result = _drop_named_default(result)
             if dialect != "oracle":
@@ -584,6 +594,17 @@ def _portable_index(sql: str, dialect: str) -> str:
       index) but not MySQL/Oracle; flag it for those.
     """
     if dialect == "tsql":
+        # sqlglot emulates Oracle's default NULLS index ordering by pairing
+        # every key with a ``CASE WHEN col IS NULL...`` expression — but a
+        # T-SQL index key cannot be an expression (error 156 near CASE), and
+        # T-SQL's NULLS-low default matches Oracle's b-tree behaviour for
+        # the ASC case anyway. Strip the emulation pairs.
+        sql = re.sub(
+            r"(?is)CASE\s+WHEN\s+.+?\s+IS\s+NULL\s+THEN\s+1\s+ELSE\s+0"
+            r"\s+END(?:\s+(?:ASC|DESC))?\s*,\s*",
+            "",
+            sql,
+        )
         # Round-trip: restore physical index clauses this tool stripped on a
         # forward pass, recorded in a ``/* UNIQUE: … -- tsql-only … (physical
         # index clause) */`` note — CLUSTERED is positional (after CREATE

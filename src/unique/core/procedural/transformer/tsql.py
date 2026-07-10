@@ -114,6 +114,15 @@ class TSqlTransformer(ProceduralTransformer):
                 f"IF {var} IS NOT NULL "
                 f"EXEC(N'DROP INDEX [{ix}] ON [' + {var} + ']');"
             )
+        # sqlglot pairs Oracle index keys with a NULLS-ordering CASE
+        # emulation; a T-SQL index key cannot be an expression (error 156).
+        if re.search(r"(?i)\bCREATE\s+(?:UNIQUE\s+)?INDEX\b", sql):
+            sql = re.sub(
+                r"(?is)CASE\s+WHEN\s+.+?\s+IS\s+NULL\s+THEN\s+1\s+ELSE\s+0"
+                r"\s+END(?:\s+(?:ASC|DESC))?\s*,\s*",
+                "",
+                sql,
+            )
         # Oracle user_* catalog probes -> the sys.* equivalents (the column
         # renames are gated on the catalog's presence in the same text so a
         # user column named index_name is never touched).

@@ -502,6 +502,18 @@ class ParserBase:
         if self._match_keyword("RETURN") or self._match_keyword("RETURNS"):
             return_type = self._parse_data_type()
 
+        # An Oracle PIPELINED table function streams rows of a package
+        # collection type via PIPE ROW — no mechanical form on any other
+        # engine; preserve the whole definition as a documented carrier
+        # instead of shredding its body. The keyword sits between the (often
+        # dotted package) return type and AS/IS, so scan a short window.
+        for offset in range(6):
+            peeked = self._peek(offset)
+            if peeked.is_keyword("AS", "IS") or peeked.type == TokenType.EOF:
+                break
+            if peeked.upper_value == "PIPELINED":
+                return self._parse_fallback()
+
         body = self._parse_routine_body()
 
         return CreateFunctionStatement(
