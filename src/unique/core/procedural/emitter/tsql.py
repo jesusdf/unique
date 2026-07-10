@@ -16,6 +16,7 @@ from unique.core.ast_nodes import (
     ContinueStatement,
     CursorDeclaration,
     CursorOperation,
+    DataType,
     ExitStatement,
     IfStatement,
     NullStatement,
@@ -204,6 +205,15 @@ class TSqlEmitter(ProceduralEmitter):
 
     def _declare_prefix(self) -> str:
         return "DECLARE "
+
+    def _emit_data_type(self, dt: DataType) -> str:
+        out = super()._emit_data_type(dt)
+        # A bare (N)VARCHAR defaults to length 1 in declarations and 30 in
+        # casts — silent truncation. Oracle's unsized VARCHAR2 parameters are
+        # unbounded; 4000 is the widest non-MAX form.
+        if not dt.params and out.upper() in ("NVARCHAR", "VARCHAR"):
+            return f"{out}(4000)"
+        return out
 
     def _emit_cursor_decl(self, node: CursorDeclaration) -> str:
         # Classic T-SQL cursors are not variables: no '@' on the name (the

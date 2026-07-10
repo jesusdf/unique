@@ -1659,6 +1659,8 @@ class ProceduralParser:
             return self._parse_mysql_set()
         if tok.is_keyword("IF"):
             return self._parse_plsql_if()
+        elif tok.is_keyword("CASE") and self._plsql_case_is_statement():
+            return self._parse_plsql_case_statement()
         elif tok.is_keyword("WHILE"):
             return self._parse_plsql_while()
         elif tok.is_keyword("FOR"):
@@ -1781,6 +1783,73 @@ class ProceduralParser:
             then_body=tuple(then_body),
             else_body=tuple(else_body),
         )
+
+    def _plsql_case_is_statement(self) -> bool:
+        """Whether a leading CASE is the PL/SQL CASE *statement* (branches
+        hold statements, terminated by END CASE) rather than a CASE
+        expression starting an assignment/scalar context. At statement
+        position a CASE expression cannot stand alone, so a bare CASE here
+        is always the statement form."""
+        return True
+
+    def _parse_plsql_case_statement(self) -> ASTNode:
+        """Parse ``CASE [selector] WHEN v THEN stmts ... [ELSE stmts] END
+        CASE;`` into an IF/ELSIF chain — the portable model (T-SQL has no
+        CASE statement; PG/MySQL emit their native chained IF forms)."""
+        self._expect_keyword("CASE")
+        # Selector (empty for the searched form: CASE WHEN cond THEN ...).
+        selector_parts: list[str] = []
+        while not self._at_end() and not self._current().is_keyword("WHEN"):
+            selector_parts.append(self._advance().value)
+        selector = " ".join(selector_parts).strip()
+
+        def parse_branch_body() -> tuple[ASTNode, ...]:
+            stmts: list[ASTNode] = []
+            guard = 0
+            while not self._at_end() and not self._current().is_keyword(
+                "WHEN", "ELSE", "END"
+            ):
+                guard += 1
+                if guard > 100000:
+                    break
+                before = self._pos
+                stmt = self._parse_plsql_statement()
+                if stmt:
+                    stmts.append(stmt)
+                if self._pos == before:
+                    self._advance()
+            return tuple(stmts)
+
+        branches: list[tuple[str, tuple[ASTNode, ...]]] = []
+        else_body: tuple[ASTNode, ...] = ()
+        while self._match_keyword("WHEN"):
+            cond_parts: list[str] = []
+            while not self._at_end() and not self._current().is_keyword("THEN"):
+                cond_parts.append(self._advance().value)
+            self._match_keyword("THEN")
+            when_value = " ".join(cond_parts).strip()
+            condition = f"{selector} = {when_value}" if selector else when_value
+            branches.append((condition, parse_branch_body()))
+        if self._match_keyword("ELSE"):
+            else_body = parse_branch_body()
+        self._match_keyword("END")
+        self._match_keyword("CASE")
+        self._match_type(TokenType.SEMICOLON)
+
+        if not branches:
+            return NullStatement()
+        node: ASTNode | None = None
+        for condition, body in reversed(branches):
+            wrapped: tuple[ASTNode, ...] = (
+                else_body if node is None else (node,)
+            )
+            node = IfStatement(
+                condition=RawSQL(sql=condition, reason="CASE statement branch"),
+                then_body=body or (NullStatement(),),
+                else_body=wrapped,
+            )
+        assert node is not None
+        return node
 
     def _parse_plsql_while(self) -> ASTNode:
         """Parse PL/SQL WHILE ... LOOP ... END LOOP."""

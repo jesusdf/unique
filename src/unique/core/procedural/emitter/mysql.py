@@ -14,6 +14,7 @@ from unique.core.ast_nodes import (
     CallStatement,
     CreateTriggerStatement,
     CursorDeclaration,
+    DataType,
     ExitStatement,
     NullStatement,
     ParameterDefinition,
@@ -174,6 +175,14 @@ class MySqlEmitter(ProceduralEmitter):
 
     def _declare_prefix(self) -> str:
         return "DECLARE "
+
+    def _emit_data_type(self, dt: DataType) -> str:
+        out = super()._emit_data_type(dt)
+        # MySQL rejects VARCHAR without a length; the unsized source form
+        # (an Oracle VARCHAR2 parameter) is unbounded, so TEXT is faithful.
+        if not dt.params and out.upper() in ("VARCHAR", "NVARCHAR"):
+            return "TEXT"
+        return out
 
     def _emit_cursor_decl(self, node: CursorDeclaration) -> str:
         # MySQL: DECLARE name CURSOR FOR <select>;
