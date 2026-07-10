@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -309,6 +311,54 @@ class TestTranspileFile:
             files={"file": ("x.sql", content, "text/plain")},
         )
         assert resp.status_code == 422
+
+    def test_file_decoded_as_header_utf8(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/transpile/file",
+            data={"source": "tsql", "target": "postgresql"},
+            files={"file": ("q.sql", "SELECT 'café'".encode(), "text/plain")},
+        )
+        assert resp.status_code == 200
+        assert resp.headers["x-unique-decoded-as"] == "utf-8"
+
+    def test_file_decoded_as_header_utf16(self, client: TestClient) -> None:
+        content = "SELECT 'café'".encode("utf-16")  # BOM-prefixed
+        resp = client.post(
+            "/api/v1/transpile/file",
+            data={"source": "tsql", "target": "postgresql"},
+            files={"file": ("q.sql", content, "text/plain")},
+        )
+        assert resp.status_code == 200
+        assert resp.headers["x-unique-decoded-as"] == "utf-16"
+        assert "café" in resp.text
+
+    def test_file_decoded_as_header_latin1_last_resort(
+        self, client: TestClient
+    ) -> None:
+        content = "SELECT 'café'".encode("latin-1")  # invalid as UTF-8
+        resp = client.post(
+            "/api/v1/transpile/file",
+            data={"source": "tsql", "target": "postgresql"},
+            files={"file": ("q.sql", content, "text/plain")},
+        )
+        assert resp.status_code == 200
+        assert resp.headers["x-unique-decoded-as"] == "latin-1"
+
+    def test_file_output_filename_sanitized(self, client: TestClient) -> None:
+        # A hostile client filename must not inject quotes/CRLF or path
+        # separators into the Content-Disposition header (N7).
+        resp = client.post(
+            "/api/v1/transpile/file",
+            data={"source": "tsql", "target": "postgresql"},
+            files={"file": ('a"; x="/etc/passwd.sql', b"SELECT 1", "text/plain")},
+        )
+        assert resp.status_code == 200
+        disposition = resp.headers["content-disposition"]
+        # Whatever the multipart client did to the name, the emitted header
+        # must stay a single quoted token over a safe character set.
+        assert re.fullmatch(
+            r'attachment; filename="[\w.\- ]+\.postgresql\.sql"', disposition
+        ), disposition
 
     def test_file_unknown_dialect(self, client: TestClient) -> None:
         resp = client.post(

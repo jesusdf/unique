@@ -9,6 +9,7 @@ from __future__ import annotations
 import io
 import logging
 import os
+import re
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -429,11 +430,14 @@ def transpile_file(
     # (audit 2026-07-02, A5). latin-1 stays as the never-failing last resort.
     if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
         sql = raw.decode("utf-16")
+        decoded_as = "utf-16"
     else:
         try:
             sql = raw.decode("utf-8-sig")
+            decoded_as = "utf-8"
         except UnicodeDecodeError:
             sql = raw.decode("latin-1")
+            decoded_as = "latin-1"
 
     resolved_source = source
     if source == "auto":
@@ -462,13 +466,20 @@ def transpile_file(
             status_code=500, detail="Transpilation failed; see server logs."
         ) from e
 
-    # Build an output filename: <stem>.<target>.sql
+    # Build an output filename: <stem>.<target>.sql. The stem is sanitized
+    # to a safe character set (N7): a client-supplied name must not inject
+    # header syntax (quotes, CR/LF) or path separators into the
+    # Content-Disposition header.
     stem = (file.filename or "script").rsplit(".", 1)[0]
+    stem = re.sub(r"[^\w.\- ]", "_", stem).strip() or "script"
     out_name = f"{stem}.{target}.sql"
     buffer = io.BytesIO(result.sql.encode("utf-8"))
     headers = {
         "Content-Disposition": f'attachment; filename="{out_name}"',
         "X-Unique-Source-Dialect": resolved_source,
+        # How the uploaded bytes were decoded (A5 residue): lets a client
+        # tell when the latin-1 last resort kicked in on a mis-encoded file.
+        "X-Unique-Decoded-As": decoded_as,
         "X-Unique-Warning-Count": str(len(result.warnings)),
     }
     return StreamingResponse(buffer, media_type="application/sql", headers=headers)
