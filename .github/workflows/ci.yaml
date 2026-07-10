@@ -189,10 +189,14 @@ jobs:
         run: |
           # Started as a plain container (not a service) so we can give it a
           # long, observable startup window and read its logs on failure.
+          # APP_USER must not be an Oracle reserved word: the image's setup
+          # runs an unquoted CREATE USER, which folds 'unique' to the
+          # reserved UNIQUE (ORA-01935) and kills the entrypoint — found by
+          # the engine-reachability gate, 2026-07-10.
           docker run -d --name oracle \
             -p 1521:1521 \
             -e ORACLE_PASSWORD=UniqueStrongPass1 \
-            -e APP_USER=unique \
+            -e APP_USER=uniqueapp \
             -e APP_USER_PASSWORD=UniqueStrongPass1 \
             gvenzl/oracle-free:23-slim-faststart
           echo "Oracle container started; it will initialize while deps install."
@@ -271,7 +275,7 @@ jobs:
           for attempt in range(60):  # up to ~5 min
               try:
                   oracledb.connect(
-                      user="unique",
+                      user="uniqueapp",
                       password="UniqueStrongPass1",
                       dsn="localhost:1521/FREEPDB1",
                   ).close()
@@ -339,7 +343,7 @@ jobs:
               import oracledb
 
               oracledb.connect(
-                  user="unique", password="UniqueStrongPass1",
+                  user="uniqueapp", password="UniqueStrongPass1",
                   dsn="localhost:1521/FREEPDB1",
               ).close()
 
@@ -367,7 +371,7 @@ jobs:
           # All four engines are validated here. oracle-free's default PDB is
           # FREEPDB1.
           UNIQUE_TEST_MSSQL_URL: mssql://sa:Unique_Strong!Pass1@localhost:1433/master
-          UNIQUE_TEST_ORACLE_URL: oracle://unique:UniqueStrongPass1@localhost:1521/FREEPDB1
+          UNIQUE_TEST_ORACLE_URL: oracle://uniqueapp:UniqueStrongPass1@localhost:1521/FREEPDB1
           UNIQUE_TEST_MYSQL_URL: mysql://root:UniqueStrongPass1@localhost:3307/unique
           UNIQUE_TEST_PG_URL: postgresql://unique:unique@localhost:5433/unique
         run: |
@@ -415,7 +419,7 @@ jobs:
           # target) or the on-the-fly transpiled one, and asserts each reaches
           # the engine-agnostic expected_state.yaml.
           UNIQUE_TEST_MSSQL_URL: mssql://sa:Unique_Strong!Pass1@localhost:1433/master
-          UNIQUE_TEST_ORACLE_URL: oracle://unique:UniqueStrongPass1@localhost:1521/FREEPDB1
+          UNIQUE_TEST_ORACLE_URL: oracle://uniqueapp:UniqueStrongPass1@localhost:1521/FREEPDB1
           UNIQUE_TEST_MYSQL_URL: mysql://root:UniqueStrongPass1@localhost:3307/unique
           UNIQUE_TEST_PG_URL: postgresql://unique:unique@localhost:5433/unique
         run: |
