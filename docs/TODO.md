@@ -197,10 +197,28 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       PROCEDURAL_FUNC_MAPS) before the text rewriters can be deleted (P4's
       final step). Until then the text path stays the expression engine.
 - [ ] **M4 — Oracle-source bring-up** driven by the sweep frequency table
-      (doc 03 §D backlog). *2026-07-10, FOURTEEN closing waves (official
-      validity_sweep on the 13 MB dump):* **T-SQL 99.8% (54 syntax fails),
-      PostgreSQL 100.0% (10), MySQL 99.9% (18)** — from 475 / 41 / 121 at
-      the start of the day. Waves 13–14: derived-table aliases synthesized
+      (doc 03 §D backlog). ***Official sweep 2026-07-11 at `8f6e4a0` (post
+      waves 15a–15f): T-SQL 99.9% (48), PostgreSQL 100.0% (10), MySQL
+      100.0% (0 — the whole 18-class residue cleared).*** Residue
+      classification (2026-07-11, from the sweep dumps): **(P1, silent
+      corruption, all targets)** the PL/SQL CASE-*statement*→IF-chain
+      rewrite joins the condition onto one line WITH inline `--` comments
+      that sat between the CASE selector and `WHEN`, so the comment
+      swallows `= 'x' THEN` (`IF v --comment = 'U' THEN`) — same trivia
+      class as commit 9474f55 but in the CASE→IF path; accounts for the
+      2x tsql-4145 and at least 1 PG fail. **(P1)** 2x PG `INSERT …
+      (cols) DEFAULT VALUES` — the partial-parse corruption signature
+      shipped (guard leak). **tsql 48:** ~15x error 195 — unqualified
+      scalar-UDF calls; T-SQL *requires* `dbo.fn()` (the old "resolves on
+      the real DB" assumption was wrong — error 195 fires even when the
+      function exists), so qualify unknown functions with `dbo.`; plus
+      unmapped scalars in raw/procedural contexts (EXTRACT→DATEPART,
+      2-arg TRUNC→ROUND(x,d,1), TO_NUMBER, RPAD, EMPTY_BLOB); 2x
+      duplicate `@x` declarations (134), 2x `@new` / `@@…` variable edges,
+      date-literal + @dosis1 + misc 102s. **PG 10:** 2x ADD COLUMNS (a,b)
+      → per-column ADD, 2x RAW(16) DEFAULT SYS_GUID() → `BYTEA DEFAULT
+      gen_random_uuid()` type mismatch, missing-THEN edge, `X record`
+      placement edge. *Earlier waves:* Waves 13–14: derived-table aliases synthesized
       for every non-Oracle target (a shared cause across all three) +
       T-SQL's no-TOP ORDER BY dropped inside them; seq.NEXTVAL/CURRVAL;
       the cursor FOR-loop expansion completes for aliased expressions
