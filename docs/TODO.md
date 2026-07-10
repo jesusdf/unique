@@ -218,7 +218,18 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       date-literal + @dosis1 + misc 102s. **PG 10:** 2x ADD COLUMNS (a,b)
       → per-column ADD, 2x RAW(16) DEFAULT SYS_GUID() → `BYTEA DEFAULT
       gen_random_uuid()` type mismatch, missing-THEN edge, `X record`
-      placement edge. *Wave 16 landed 2026-07-11 (re-measure pending):*
+      placement edge. ***Official sweep 2026-07-11 at `f0c6d40` (post wave
+      16): T-SQL 99.9% (30, was 48), PostgreSQL 100.0% (6, was 10), MySQL
+      100.0% (0)** — memory stayed healthy throughout (sequential engines,
+      mssql capped at 2g). Remaining tsql 30: 5x formatted TO_DATE/TO_CHAR
+      (2-arg — deliberately left visible; needs the format-model
+      translation the DML path already has), 2x 4145 (NOT the old
+      comment-swallow — a bare `IF @v` boolean-context edge), 2x 128
+      v_tipoepisodio, 2x near-'.', singles (DATEVALUE, @@C_SERIES_serie,
+      @new in trigger, RENAME, RETURNS, DATEDIFF param). Remaining PG 6:
+      2x RAW(16) DEFAULT SYS_GUID()→bytea/uuid mismatch, RETURN edge,
+      ADD COLUMNS (a,b), near-AS, `X record` placement.* *Wave 16 landed
+      2026-07-11:*
       the trivia class fix (`_flat_value` — every flattening capture, CASE
       selector/WHEN included), the parenthesized/UNION INSERT-body drop
       (silent DEFAULT VALUES corruption), structural `dbo.` qualification
