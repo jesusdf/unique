@@ -173,8 +173,9 @@ def _oracle_idempotent_create(ddl: str) -> str | None:
     )
 
 
-def _extract_catalog_guard(code: str) -> tuple[str, str, str] | None:
-    """Parse a T-SQL catalog migration guard into ``(polarity, trivia, body)``.
+def _extract_catalog_guard(code: str) -> tuple[str, str, str, str] | None:
+    """Parse a T-SQL catalog migration guard into ``(polarity, trivia, body,
+    condition)``.
 
     ``polarity`` is ``"absent"`` (run the body when the object does NOT exist:
     ``IF NOT EXISTS(…)`` / ``IF OBJECT_ID(…) IS NULL``) or ``"present"``
@@ -204,6 +205,7 @@ def _extract_catalog_guard(code: str) -> tuple[str, str, str] | None:
         i += 1
     if depth != 0:
         return None
+    condition = code[head.end() - 1 : i + 1]
     rest = code[i + 1 :]
     if head.group("objid"):
         is_clause = re.match(r"(?is)^\s*IS\s+(?P<not>NOT\s+)?NULL\b", rest)
@@ -241,7 +243,7 @@ def _extract_catalog_guard(code: str) -> tuple[str, str, str] | None:
         rest = rest[noise.end() :].lstrip()
     if not rest:
         return None
-    return polarity, inner_trivia, rest
+    return polarity, inner_trivia, rest, condition
 
 
 # A MySQL routine whose body contains ';' statement terminators must be wrapped
@@ -909,7 +911,7 @@ class Transpiler:
                         else None
                     )
                     if guard is not None:
-                        polarity, inner_trivia, body = guard
+                        polarity, inner_trivia, body, condition = guard
                         if inner_trivia.strip():
                             trivia = (
                                 f"{trivia.rstrip()}\n{inner_trivia}"
@@ -939,11 +941,13 @@ class Transpiler:
                                 body, source, target, source_dialect, target_dialect
                             )
                             if polarity == "absent":
-                                result = self._guard_idempotent(result, source, target)
-                            else:
-                                result = self._warn_guard_dropped(
-                                    result, source, target
+                                result = self._guard_idempotent(
+                                    result, source, target, condition, polarity
                                 )
+                            else:
+                                result = self._faithful_catalog_guard(
+                                    result, condition, polarity, source, target
+                                ) or self._warn_guard_dropped(result, source, target)
                     else:
                         trivia = ""  # the fallback keeps the whole batch text
                         result = self._transpile_set_option(batch.sql, source, target)
@@ -1589,7 +1593,12 @@ class Transpiler:
             )
 
     def _guard_idempotent(
-        self, result: TranspileResult, source: str, target: str
+        self,
+        result: TranspileResult,
+        source: str,
+        target: str,
+        condition: str = "",
+        polarity: str = "absent",
     ) -> TranspileResult:
         """Restore a catalog CREATE-guard's re-runnable intent on the target.
 
@@ -1603,7 +1612,9 @@ class Transpiler:
         if target == "oracle":
             wrapped = _oracle_idempotent_create(result.sql)
             if wrapped is None:
-                return self._warn_guard_dropped(result, source, target)
+                return self._faithful_catalog_guard(
+                    result, condition, polarity, source, target
+                ) or self._warn_guard_dropped(result, source, target)
             return TranspileResult(
                 sql=wrapped, warnings=result.warnings, unsupported=result.unsupported
             )
@@ -1646,8 +1657,132 @@ class Transpiler:
                     ],
                     unsupported=result.unsupported,
                 )
-            return self._warn_guard_dropped(result, source, target)
-        return self._warn_guard_dropped(result, source, target)
+            return self._faithful_catalog_guard(
+                result, condition, polarity, source, target
+            ) or self._warn_guard_dropped(result, source, target)
+        return self._faithful_catalog_guard(
+            result, condition, polarity, source, target
+        ) or self._warn_guard_dropped(result, source, target)
+
+    _COLUMN_PROBE_TABLE_RE = re.compile(
+        r"(?is)^(?:object_)?id\s*=\s*OBJECT_ID\s*\(\s*N?'(?P<t>[^']+)'\s*\)$"
+    )
+    _COLUMN_PROBE_NAME_RE = re.compile(r"(?is)^name\s*=\s*N?'(?P<c>[^']+)'$")
+    _COLUMN_PROBE_DEFAULT_RE = re.compile(r"(?is)^default_object_id\s*(?:<>|!=)\s*0$")
+
+    @classmethod
+    def _parse_column_probe(cls, condition: str) -> dict[str, object] | None:
+        """Recognize a T-SQL sys.columns/syscolumns existence probe.
+
+        Returns ``{"table", "column", "has_default"}`` for conditions of the
+        shape ``SELECT … FROM sys.columns WHERE object_id = OBJECT_ID('t')
+        AND name = 'c' [AND default_object_id <> 0]``; None when any
+        predicate falls outside that set (never guess a catalog mapping).
+        """
+        cond = re.sub(r"[\[\]]", "", condition).strip()
+        if cond.startswith("(") and cond.endswith(")"):
+            cond = cond[1:-1].strip()
+        m = re.search(
+            r"(?is)\bFROM\s+(?:sys\s*\.\s*columns|syscolumns)\b\s*"
+            r"(?:AS\s+\w+\s*)?WHERE\b(?P<preds>.*)$",
+            cond,
+        )
+        if m is None:
+            return None
+        table = column = None
+        has_default = False
+        for pred in re.split(r"(?i)\bAND\b", m.group("preds")):
+            pred = pred.strip()
+            if not pred:
+                continue
+            if t := cls._COLUMN_PROBE_TABLE_RE.match(pred):
+                table = t.group("t").rpartition(".")[2]
+            elif c := cls._COLUMN_PROBE_NAME_RE.match(pred):
+                column = c.group("c")
+            elif cls._COLUMN_PROBE_DEFAULT_RE.match(pred):
+                has_default = True
+            else:
+                return None  # unrecognized predicate: no faithful mapping
+        if not table or not column:
+            return None
+        return {"table": table, "column": column, "has_default": has_default}
+
+    def _faithful_catalog_guard(
+        self,
+        result: TranspileResult,
+        condition: str,
+        polarity: str,
+        source: str,
+        target: str,
+    ) -> TranspileResult | None:
+        """Translate a recognized catalog probe to the target's catalog and
+        wrap the transpiled body in the target's conditional block (doc-04
+        P2: the guard's *condition* survives, not just its idempotent
+        intent). Returns None when the condition or body has no faithful
+        form (the caller then warns the guard as dropped)."""
+        if target not in ("postgresql", "oracle") or not condition:
+            return None
+        probe = self._parse_column_probe(condition)
+        if probe is None:
+            return None
+        body = result.sql.strip()
+        # Plain statements only: a body that is itself a block cannot be
+        # nested mechanically. Oracle additionally allows just one statement
+        # (it goes through a single EXECUTE IMMEDIATE).
+        if not body or "$$" in body or body.startswith("--"):
+            return None
+        if target == "oracle" and body.count(";") > 1:
+            return None
+        table, column = str(probe["table"]), str(probe["column"])
+        default_pred = bool(probe["has_default"])
+        if target == "postgresql":
+            probe_sql = (
+                "SELECT 1 FROM information_schema.columns\n"
+                f"        WHERE table_name = lower('{table}') "
+                f"AND column_name = lower('{column}')"
+            )
+            if default_pred:
+                probe_sql += "\n          AND column_default IS NOT NULL"
+            exists = "EXISTS" if polarity == "present" else "NOT EXISTS"
+            body_stmt = body if body.endswith(";") else body + ";"
+            body_block = "\n".join(
+                f"        {line.strip()}" for line in body_stmt.splitlines()
+            )
+            sql = (
+                "DO $$\n"
+                "BEGIN\n"
+                f"    IF {exists} (\n"
+                f"        {probe_sql}\n"
+                "    ) THEN\n"
+                f"{body_block}\n"
+                "    END IF;\n"
+                "END $$;"
+            )
+        else:
+            probe_sql = (
+                "SELECT COUNT(*) INTO unique_guard_n FROM user_tab_columns\n"
+                f"    WHERE table_name = UPPER('{table}') "
+                f"AND column_name = UPPER('{column}')"
+            )
+            if default_pred:
+                # data_default is a LONG (unusable in WHERE); default_length
+                # is its NUMBER shadow.
+                probe_sql += "\n      AND default_length IS NOT NULL"
+            check = "> 0" if polarity == "present" else "= 0"
+            stmt = body.rstrip(";").replace("'", "''")
+            sql = (
+                "DECLARE\n"
+                "    unique_guard_n NUMBER;\n"
+                "BEGIN\n"
+                f"    {probe_sql};\n"
+                f"    IF unique_guard_n {check} THEN\n"
+                f"        EXECUTE IMMEDIATE '{stmt}';\n"
+                "    END IF;\n"
+                "END;"
+            )
+        return TranspileResult(
+            sql=sql, warnings=result.warnings, unsupported=result.unsupported
+        )
 
     @staticmethod
     def _warn_guard_dropped(

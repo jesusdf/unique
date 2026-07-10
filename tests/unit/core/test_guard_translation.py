@@ -251,10 +251,12 @@ class TestTrailingCommentOnGuardLine:
         assert "old name" in out.sql
 
 
-class TestUnmappableGuardBodyWarns:
-    """A catalog guard whose body has no native conditional form (e.g.
-    ``ALTER TABLE … ADD DEFAULT``) must never lose its guard silently
-    (no-silent-loss; user report 2026-07-09)."""
+class TestFaithfulColumnProbeGuard:
+    """A sys.columns/syscolumns guard translates to the target catalog and
+    keeps its *condition* (doc-04 P2) on PG/Oracle — live-validated
+    idempotent on both, 2026-07-10. MySQL (no anonymous blocks) keeps the
+    explicit guard-dropped warning (no-silent-loss; user report
+    2026-07-09)."""
 
     _SRC = (
         "IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE [object_id] = "
@@ -264,24 +266,58 @@ class TestUnmappableGuardBodyWarns:
         "END\nGO"
     )
 
-    @pytest.mark.parametrize("target", ["postgresql", "mysql", "oracle"])
-    def test_add_default_guard_drop_is_warned(self, target: str) -> None:
-        result = Transpiler().transpile(self._SRC, source="tsql", target=target)
-        # The DDL itself survives, executable (not a carrier)...
+    def test_postgresql_probe_in_do_block(self) -> None:
+        result = Transpiler().transpile(self._SRC, source="tsql", target="postgresql")
+        assert "DO $$" in result.sql
+        assert "IF NOT EXISTS (" in result.sql
+        assert "information_schema.columns" in result.sql
+        assert "table_name = lower('t1')" in result.sql
+        assert "column_name = lower('c1')" in result.sql
+        assert "column_default IS NOT NULL" in result.sql
+        assert re.search(r"(?i)ALTER TABLE .* SET DEFAULT", result.sql)
+        assert not any(w.feature == "guard_dropped" for w in result.warnings)
+
+    def test_oracle_probe_with_execute_immediate(self) -> None:
+        result = Transpiler().transpile(self._SRC, source="tsql", target="oracle")
+        assert "user_tab_columns" in result.sql
+        assert "table_name = UPPER('t1')" in result.sql
+        assert "column_name = UPPER('c1')" in result.sql
+        # data_default is a LONG (unusable in WHERE); its NUMBER shadow works.
+        assert "default_length IS NOT NULL" in result.sql
+        assert "IF unique_guard_n = 0 THEN" in result.sql
+        assert "EXECUTE IMMEDIATE 'ALTER TABLE" in result.sql
+        assert result.sql.rstrip().endswith("/"), result.sql
+        assert not any(w.feature == "guard_dropped" for w in result.warnings)
+
+    def test_mysql_still_warns_guard_dropped(self) -> None:
+        result = Transpiler().transpile(self._SRC, source="tsql", target="mysql")
         assert "UNIQUE:" not in result.sql
         assert re.search(r"(?i)ALTER TABLE", result.sql)
-        assert "DEFAULT" in result.sql.upper()
-        # ...and the dropped condition is reported, not silent.
         assert any(
             w.feature == "guard_dropped" for w in result.warnings
         ), result.warnings
 
-    def test_present_polarity_non_drop_body_also_warned(self) -> None:
+    def test_present_polarity_maps_to_exists(self) -> None:
         src = (
             "IF EXISTS (SELECT 1 FROM sys.columns WHERE [object_id] = "
             "OBJECT_ID('s1.t1') AND [name] = 'c1')\n"
             "BEGIN\n"
             "ALTER TABLE [s1].[t1] ALTER COLUMN [c1] INT NOT NULL\n"
+            "END\nGO"
+        )
+        result = Transpiler().transpile(src, source="tsql", target="postgresql")
+        assert re.search(r"IF EXISTS \(", result.sql), result.sql
+        assert "column_default" not in result.sql
+        assert not any(w.feature == "guard_dropped" for w in result.warnings)
+
+    def test_unrecognized_predicate_still_warns(self) -> None:
+        # A predicate outside the known set must not be guessed at: the
+        # guard falls back to the explicit warned drop.
+        src = (
+            "IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE [object_id] = "
+            "OBJECT_ID('s1.t1') AND [name] = 'c1' AND is_identity = 1)\n"
+            "BEGIN\n"
+            "ALTER TABLE [s1].[t1] ADD DEFAULT ((0)) FOR [c1]\n"
             "END\nGO"
         )
         result = Transpiler().transpile(src, source="tsql", target="postgresql")

@@ -208,7 +208,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       B2 `DROP INDEX` (23), `TO_CHAR`→T-SQL (14), MERGE termination (11);
       MySQL still has 1.6k syntax failures to classify (C2/C3/C4 family).
 
-- [ ] **Faithful conditional for unmappable catalog guards (P2).** A T-SQL
+- [x] **Faithful conditional for unmappable catalog guards (P2)** (done
+      2026-07-10 for the sys.columns/syscolumns column-probe family, both
+      polarities, `default_object_id <> 0` included): PG gets a `DO $$ IF
+      [NOT] EXISTS(information_schema.columns …)` block, Oracle a
+      `user_tab_columns` COUNT probe (+ `default_length` for the default
+      predicate — `data_default` is a LONG) with EXECUTE IMMEDIATE;
+      live-validated idempotent on both engines. Unrecognized predicates and
+      MySQL (no anonymous blocks) keep the explicit `guard_dropped` warning.
+      Tests: `TestFaithfulColumnProbeGuard`. Original text:** A T-SQL
       guard whose body has no native conditional form (e.g. `IF NOT EXISTS
       (SELECT … FROM sys.columns … default_object_id <> 0) ALTER … ADD
       DEFAULT`) currently drops the condition — since 2026-07-09 with an
