@@ -461,18 +461,27 @@ fix needs an **anonymized** regression fixture (never a private name).
 
 ## 3. Test-corpus expansion (P3)
 
-- [ ] **Evaluate importing the upstream PostgreSQL regression fixtures (and
-      MySQL's, if usable) as a transpiler test corpus** (user request,
-      2026-07-10). The PostgreSQL project ships its regression suite under
-      `src/test/regress/sql/` (with expected outputs) — a large, permissively
-      licensed body of real, engine-validated SQL that could feed the validity
-      sweep / corpus tests with PG as the *source* dialect (today's private
-      corpora only cover T-SQL and Oracle sources). MySQL's
-      `mysql-test/` suite could play the same role for MySQL-source
-      directions. Scope the evaluation: license/attribution, how much of each
-      suite is engine-internal noise (catalog/plan tests) vs. portable
-      SQL, and whether they slot into `scripts/validity_sweep.py` unchanged or
-      need a curation pass.
+- [ ] **Import the upstream PostgreSQL regression fixtures as a PG-source
+      test corpus** (user request, 2026-07-10; **evaluation done 2026-07-10**,
+      import pending). Findings: **PG yes, MySQL no.**
+      - *PostgreSQL* (`src/test/regress/sql/`, 247 files / ~4.9 MB): plain
+        `.sql`, license is the permissive PostgreSQL License (BSD-like —
+        committable with the COPYRIGHT notice reproduced). Probe: today's
+        pipeline transpiles `insert.sql` PG→T-SQL in 0.2 s with honest
+        warnings and no crash. Noise is tractable: sparse psql
+        meta-commands (`\d+`, `\set`, …) and `COPY … FROM stdin` data blocks
+        need a line-oriented strip (same class as the SQL*Plus directive
+        peel); engine-internal suites (stats_import, rowsecurity,
+        privileges, GUC tests) should simply not be selected. Start set:
+        the portable core — insert/update/delete/join/select*/aggregates/
+        window/case/union/subselect/with/triggers/plpgsql.
+      - *MySQL* (`mysql-test/`): **rejected** — GPLv2 (incompatible with
+        committing into this MIT repo) and written in the mysqltest DSL
+        (`--source`, `if` blocks, per-connection commands) interleaved with
+        the SQL, so it would need a real parser, not a curation pass.
+      - Next step: a `scripts/fetch_pg_corpus.py` (download + strip +
+        attribution header) feeding `validity_sweep.py --from postgresql`;
+        decide commit-vs-download-on-demand by size after curation.
 
 ## 4. Packaging (P3)
 
