@@ -158,6 +158,9 @@ class TSqlTransformer(ProceduralTransformer):
         if re.search(r"(?i)\buser_objects\b", sql):
             sql = re.sub(r"(?i)\buser_objects\b", "sys.objects", sql)
             sql = re.sub(r"(?i)\bobject_name\b(?!\s*\()", "name", sql)
+        from unique.core.converter import map_sequence_refs
+
+        sql = map_sequence_refs(sql, "tsql")
         # The implicit-cursor row count reads from @@ROWCOUNT.
         sql = re.sub(r"(?i)\bSQL\s*%\s*ROWCOUNT\b", "@@ROWCOUNT", sql)
         # MONTHS_BETWEEN(a, b) -> DATEDIFF(MONTH, b, a). Whole months only

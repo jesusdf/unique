@@ -329,6 +329,25 @@ def rewrite_oracle_modify(sql: str, dialect: str) -> str | None:
     return f"ALTER TABLE {table} " + ", ".join(actions) + ";"
 
 
+_SEQ_NEXTVAL_RE = re.compile(r"(?i)\b([A-Za-z_]\w*)\s*\.\s*NEXTVAL\b")
+_SEQ_CURRVAL_RE = re.compile(r"(?i)\b([A-Za-z_]\w*)\s*\.\s*CURRVAL\b")
+
+
+def map_sequence_refs(sql: str, dialect: str) -> str:
+    """Map Oracle ``seq.NEXTVAL``/``seq.CURRVAL`` to the target's spelling.
+
+    T-SQL: NEXT VALUE FOR seq (no CURRVAL equivalent — left for the
+    honesty gate); PostgreSQL: nextval('seq')/currval('seq'). MySQL has no
+    sequences at all — left untouched for the existing degradation paths.
+    """
+    if dialect == "tsql":
+        sql = _SEQ_NEXTVAL_RE.sub(r"NEXT VALUE FOR \1", sql)
+    elif dialect == "postgresql":
+        sql = _SEQ_NEXTVAL_RE.sub(lambda m: f"nextval('{m.group(1).lower()}')", sql)
+        sql = _SEQ_CURRVAL_RE.sub(lambda m: f"currval('{m.group(1).lower()}')", sql)
+    return sql
+
+
 def _oracle_merge_paren_on(sql: str) -> str:
     """Wrap a MERGE's ON condition in the parentheses Oracle requires.
 
@@ -789,11 +808,23 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
     if node.from_clause:
         if isinstance(node.from_clause, SubqueryExpression):
             # A derived table needs its alias, or references to it (and, on
-            # MySQL, the derived table itself) are invalid.
-            sub_alias = f" {node.from_clause.alias}" if node.from_clause.alias else ""
-            parts.append(
-                f"FROM ({_emit_select(node.from_clause.query, dialect)}){sub_alias}"
-            )
+            # MySQL, the derived table itself) are invalid. Oracle is the
+            # only engine where the alias is optional — synthesize one for
+            # everyone else when the source (Oracle) omitted it.
+            alias = node.from_clause.alias
+            if not alias and dialect != "oracle":
+                alias = "uq_dt"
+            sub_alias = f" {alias}" if alias else ""
+            inner_sql = _emit_select(node.from_clause.query, dialect)
+            if dialect == "tsql":
+                # A derived table may not carry ORDER BY without TOP
+                # (error 1033); without a limit the ordering is meaningless.
+                inner_sql = (
+                    re.sub(r"(?is)\s+ORDER\s+BY\s+[^()]*$", "", inner_sql)
+                    if not re.search(r"(?i)\bTOP\b", inner_sql)
+                    else inner_sql
+                )
+            parts.append(f"FROM ({inner_sql}){sub_alias}")
         else:
             parts.append(f"FROM {_emit_table_ref(node.from_clause, dialect)}")
     elif dialect == "oracle":

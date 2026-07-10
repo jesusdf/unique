@@ -43,6 +43,7 @@ from unique.core.converter import (
     harvest_tsql_alias_types,
     harvest_tsql_bit_columns,
     harvest_user_functions,
+    map_sequence_refs,
     rewrite_oracle_modify,
 )
 from unique.core.dialect import Dialect
@@ -1417,6 +1418,14 @@ class Transpiler:
         result = self._transpile_dml_inner(
             sql, source, target, source_dialect, target_dialect
         )
+        if source == "oracle" and target in ("tsql", "postgresql"):
+            seq_mapped = map_sequence_refs(result.sql, target)
+            if seq_mapped != result.sql:
+                result = TranspileResult(
+                    sql=seq_mapped,
+                    warnings=result.warnings,
+                    unsupported=result.unsupported,
+                )
         if target == "tsql" and source == "oracle":
             # Oracle scalar builtins that sqlglot leaves untranslated in
             # plain DML (the procedural paths map them via the transformer).

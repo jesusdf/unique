@@ -183,6 +183,9 @@ class PostgresTransformer(ProceduralTransformer):
         return self._map_oracle_catalogs(sql)
 
     def _fix_raw_sql_target(self, sql: str) -> str:
+        from unique.core.converter import map_sequence_refs
+
+        sql = map_sequence_refs(sql, "postgresql")
         sql = self._rewrite_alter_trigger(sql)
         sql = self._map_oracle_catalogs(sql)
         sql = self._pg_string_concat(sql)
