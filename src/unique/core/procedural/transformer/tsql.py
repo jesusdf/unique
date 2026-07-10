@@ -236,9 +236,13 @@ class TSqlTransformer(ProceduralTransformer):
         if derived:
             # The ROWNUM filtered an (ordered) derived table: the limit
             # belongs inside, with the ORDER BY (a derived table may not
-            # carry ORDER BY without TOP — error 1033).
+            # carry ORDER BY without TOP — error 1033). Oracle needs no
+            # derived-table alias but T-SQL does — add one if missing.
             insert_at = derived.end()
-            return f"{head[:insert_at]} TOP ({n}){head[insert_at:]}"
+            out = f"{head[:insert_at]} TOP ({n}){head[insert_at:]}"
+            if out.rstrip().endswith(")"):
+                out = out.rstrip() + " AS uq_top"
+            return out
         sel = re.match(r"(?is)^(\s*SELECT\b)(?!\s+TOP\b)", head)
         if sel:
             return f"{head[:sel.end(1)]} TOP ({n}){head[sel.end(1):]}"

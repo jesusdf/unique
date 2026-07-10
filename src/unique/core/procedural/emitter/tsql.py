@@ -185,6 +185,13 @@ class TSqlEmitter(ProceduralEmitter):
             text for s in node.statements if (text := self._emit_node(s)).strip()
         )
 
+    #: EXEC argument values that are expressions must be hoisted: T-SQL
+    #: accepts only literals/variables there (error 102 at the call's
+    #: parens otherwise). GETDATE()/SYSDATETIME() dominate the corpus.
+    _EXEC_NOW_ARG_RE = re.compile(
+        r"(?i)\b(GETDATE|SYSDATETIME|SYSUTCDATETIME)\s*\(\s*\)"
+    )
+
     def _emit_call(self, node: CallStatement) -> str:
         # An ANSI ``DATE '…'`` / ``TIMESTAMP '…'`` literal argument (from an
         # Oracle/PG source) has no T-SQL form; pass the bare string, which T-SQL
@@ -194,8 +201,17 @@ class TSqlEmitter(ProceduralEmitter):
         # ``@name = value`` in a T-SQL EXEC.
         if args and "=>" in args:
             args = re.sub(r"(\w+)\s*=>\s*", r"@\1 = ", args)
+        prelude = ""
+        now_call = self._EXEC_NOW_ARG_RE.search(args) if args else None
+        if args and now_call:
+            # EXEC arguments take no expressions — hoist the now() call.
+            self._raise_msg_n += 1
+            var = f"@uq_now{self._raise_msg_n}"
+            args = self._EXEC_NOW_ARG_RE.sub(var, args)
+            prelude = f"DECLARE {var} DATETIME = {now_call.group(0)};\n"
         name = self._qualified_name(node.schema, node.name)
-        return f"EXEC {name} {args};" if args else f"EXEC {name};"
+        call = f"EXEC {name} {args};" if args else f"EXEC {name};"
+        return prelude + call
 
     def _supports_table_valued_function(self) -> bool:
         return True
