@@ -61,7 +61,11 @@ from unique.core.converter.harvest import (  # noqa: F401
     _coerce_date_literal,
     _oracle_date_literal,
 )
-from unique.core.mappings import CURRENT_DATE_EXPR, CURRENT_TIMESTAMP_EXPR
+from unique.core.mappings import (
+    CURRENT_DATE_EXPR,
+    CURRENT_TIMESTAMP_EXPR,
+    tsql_call_needs_schema,
+)
 
 # Per-dialect CAST target-type overrides: MySQL CAST accepts only a fixed set
 # (SIGNED/UNSIGNED/CHAR/DATE/…), not INT/BOOLEAN; T-SQL has no BOOLEAN (it is BIT).
@@ -2042,6 +2046,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
 
     # Map canonical function names to dialect-specific names
     name = _map_function_name(node.name, dialect)
+
+    # T-SQL rejects an unqualified scalar-UDF call as an unknown built-in
+    # (error 195) — even when the function exists in the database. A name
+    # that is neither a T-SQL builtin nor a known foreign builtin (an
+    # unmapped one must stay a visible gap) is a user function: qualify it.
+    if dialect == "tsql" and tsql_call_needs_schema(name):
+        name = f"dbo.{name}"
 
     distinct = "DISTINCT " if node.distinct else ""
     args = ", ".join(_emit_expression(a, dialect) for a in node.args)

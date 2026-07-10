@@ -53,7 +53,7 @@ from unique.core.procedural.emitter import ProceduralEmitter
 from unique.core.procedural.parser import ProceduralParser
 from unique.core.procedural.transformer import ProceduralTransformer
 from unique.core.registry import DialectRegistry
-from unique.core.sql_split import split_leading_trivia
+from unique.core.sql_split import qualify_function_calls, split_leading_trivia
 from unique.core.transformer import Transformer, TransformWarning
 
 logger = logging.getLogger(__name__)
@@ -211,18 +211,20 @@ def _map_oracle_scalars_for_tsql(sql: str) -> str:
 def _qualify_tsql_udfs_in_sql(sql: str) -> str:
     """Qualify bare scalar-UDF calls as ``dbo.fn(`` using the harvested
     USER_FUNCTIONS registry (mirror of the procedural transformer's
-    ``_qualify_tsql_udfs``; T-SQL error 195 otherwise)."""
+    ``_qualify_tsql_udfs``; T-SQL error 195 otherwise). Registry names only:
+    this runs over the whole final script, where the broad structural
+    decision would have to reason about every DDL context — the expression
+    paths (IR emitter, procedural raw expressions) carry that decision.
+    String/comment-aware via the shared walker."""
     funcs = USER_FUNCTIONS.get()
     if not funcs:
         return sql
 
-    def repl(m: re.Match[str]) -> str:
-        name = m.group(1)
-        if name.lower() in funcs:
-            return f"dbo.{name}("
-        return m.group(0)
+    def decide(name: str, prev_word: str | None) -> str | None:
+        del prev_word
+        return "dbo." if name.lower() in funcs else None
 
-    return re.sub(r"(?i)(?<![.\w])(\w+)\s*\(", repl, sql)
+    return qualify_function_calls(sql, decide)
 
 
 def _extract_catalog_guard(code: str) -> tuple[str, str, str, str] | None:

@@ -26,10 +26,12 @@ from unique.core.ast_nodes import (
     WhileStatement,
 )
 from unique.core.converter import IDENTITY_COLUMNS, PG_TRIGGER_FN_BODIES, USER_FUNCTIONS
+from unique.core.mappings import TSQL_OBJECT_CONTEXT_WORDS, tsql_call_needs_schema
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
     register_transformer,
 )
+from unique.core.sql_split import qualify_function_calls
 
 
 class TSqlTransformer(ProceduralTransformer):
@@ -272,6 +274,10 @@ class TSqlTransformer(ProceduralTransformer):
         # PL/SQL string concatenation: T-SQL spells it ``+``.
         if "||" in sql:
             sql = self._pipes_to_plus(sql)
+        # Scalar-UDF calls must be schema-qualified on T-SQL (error 195).
+        # Runs after the builtin mapping so anything still bare and unknown
+        # is a user function (a client-DB-resident one included).
+        sql = self._qualify_tsql_udfs(sql)
         # PL/SQL event predicates inside a trigger body (audit D6): T-SQL
         # tests the pseudo-tables instead.
         if self._in_trigger:
@@ -536,19 +542,24 @@ class TSqlTransformer(ProceduralTransformer):
         return registry.get(table.lower(), "id")
 
     def _qualify_tsql_udfs(self, sql: str) -> str:
-        """Qualify a bare scalar-UDF call ``fn(…)`` as ``dbo.fn(…)`` (T-SQL rejects
-        an unqualified scalar UDF as an unknown built-in)."""
-        funcs = USER_FUNCTIONS.get()
-        if not funcs:
-            return sql
+        """Qualify a bare scalar-UDF call ``fn(…)`` as ``dbo.fn(…)`` (T-SQL
+        rejects an unqualified scalar UDF as an unknown built-in, error 195,
+        even when the function exists). A name in the harvested
+        USER_FUNCTIONS registry is qualified outright; otherwise the shared
+        structural decision applies — neither a T-SQL builtin (callable
+        bare) nor a known foreign builtin (an unmapped one stays a visible
+        gap) means user function. String/comment-aware; object-name
+        positions (``INSERT INTO t (``) are not calls."""
+        funcs = USER_FUNCTIONS.get() or frozenset()
 
-        def repl(m: re.Match[str]) -> str:
-            name = m.group(1)
-            if name.lower() in funcs:
-                return f"dbo.{name}("
-            return m.group(0)
+        def decide(name: str, prev_word: str | None) -> str | None:
+            if prev_word and prev_word.upper() in TSQL_OBJECT_CONTEXT_WORDS:
+                return None
+            if name.lower() in funcs or tsql_call_needs_schema(name):
+                return "dbo."
+            return None
 
-        return re.sub(r"(?i)(?<![.\w])(\w+)\s*\(", repl, sql)
+        return qualify_function_calls(sql, decide)
 
     def _lit(self, value: ASTNode) -> str:
         if isinstance(value, Literal):

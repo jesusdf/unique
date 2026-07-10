@@ -32,6 +32,7 @@ parser.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 _ORACLE_PLSQL_HEAD_RE = re.compile(
     r"(?is)^\s*(?:DECLARE\b|BEGIN\b|CREATE\s+(?:OR\s+REPLACE\s+)?"
@@ -299,3 +300,93 @@ def split_leading_trivia(sql: str) -> tuple[str, str]:
     if not m or m.end() == 0:
         return "", sql
     return sql[: m.end()], sql[m.end() :]
+
+
+def qualify_function_calls(
+    sql: str, decide: Callable[[str, str | None], str | None]
+) -> str:
+    """Insert a schema prefix before selected function-call names in ``sql``.
+
+    Walks the text outside string literals, comments and bracket/quote-
+    delimited identifiers; for every bare identifier directly followed by
+    ``(`` (whitespace allowed) it calls ``decide(name, prev_word)`` — the
+    previous bare word, or ``None`` — and, when that returns a prefix string
+    (e.g. ``"dbo."``), inserts it before the name. A name preceded by ``.``
+    (already qualified) or ``@`` (a variable) is never offered.
+
+    This replaces regex substitution over SQL text, which rewrote matches
+    inside string literals (``'CALL (555)'``).
+    """
+    out: list[str] = []
+    i = 0
+    n = len(sql)
+    prev_word: str | None = None
+    while i < n:
+        ch = sql[i]
+        # Comments.
+        if ch == "-" and sql.startswith("--", i):
+            j = sql.find("\n", i)
+            j = n if j == -1 else j
+            out.append(sql[i:j])
+            i = j
+            continue
+        if ch == "/" and sql.startswith("/*", i):
+            j = sql.find("*/", i + 2)
+            j = n if j == -1 else j + 2
+            out.append(sql[i:j])
+            i = j
+            continue
+        # String literals / quoted identifiers (doubled-quote escapes).
+        if ch in ("'", '"', "`"):
+            j = i + 1
+            while j < n:
+                if sql[j] == ch:
+                    if j + 1 < n and sql[j + 1] == ch:
+                        j += 2
+                        continue
+                    j += 1
+                    break
+                j += 1
+            out.append(sql[i:j])
+            i = j
+            prev_word = None
+            continue
+        if ch == "[":  # T-SQL bracketed identifier
+            j = sql.find("]", i + 1)
+            j = n if j == -1 else j + 1
+            out.append(sql[i:j])
+            i = j
+            prev_word = None
+            continue
+        # Identifier run.
+        if ch.isalpha() or ch == "_":
+            j = i
+            while j < n and (sql[j].isalnum() or sql[j] in "_$#"):
+                j += 1
+            word = sql[i:j]
+            # Directly qualified (x.fn) or a variable (@fn)?
+            preceded = sql[i - 1] if i > 0 else " "
+            k = j
+            while k < n and sql[k] in " \t":
+                k += 1
+            if k < n and sql[k] == "(" and preceded not in ".@:":
+                prefix = decide(word, prev_word)
+                if prefix:
+                    out.append(prefix)
+            out.append(word)
+            i = j
+            prev_word = word
+            continue
+        if ch.isdigit():  # a number (incl. trailing idents) — not a call
+            j = i
+            while j < n and (sql[j].isalnum() or sql[j] in "._"):
+                j += 1
+            out.append(sql[i:j])
+            i = j
+            prev_word = None
+            continue
+        out.append(ch)
+        if ch not in " \t\r\n":
+            prev_word = None
+        i += 1
+    return "".join(out)
