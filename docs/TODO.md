@@ -197,10 +197,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       PROCEDURAL_FUNC_MAPS) before the text rewriters can be deleted (P4's
       final step). Until then the text path stays the expression engine.
 - [ ] **M4 — Oracle-source bring-up** driven by the sweep frequency table
-      (doc 03 §D backlog). *2026-07-10, TEN closing waves (official
-      validity_sweep on the 13 MB dump):* **T-SQL 99.7% (97 syntax fails),
-      PostgreSQL 100.0% (12), MySQL 99.9% (18)** — from 475 / 41 / 121 at
-      the start of the day. Wave 10 added: the sqlglot index NULLS-ordering
+      (doc 03 §D backlog). *2026-07-10, TWELVE closing waves (official
+      validity_sweep on the 13 MB dump):* **T-SQL 99.8% (84 syntax fails),
+      PostgreSQL 100.0% (10), MySQL 99.9% (18)** — from 475 / 41 / 121 at
+      the start of the day. Waves 11–12 added: the shared ALTER ... MODIFY
+      rewriter (neither Oracle form parses in sqlglot), user_tab_cols →
+      sys.columns / information_schema probes (case-folded on PG — a
+      semantic fix, the guards never fired), ALTER TRIGGER ENABLE via
+      catalog lookups, named-association LHS protected from the variable
+      rename (EXEC p @@id = @id), EXEC expression-arguments hoisted
+      (GETDATE() is not a valid EXEC argument — whole seeding batches), and
+      the ROWNUM→TOP derived table aliased (T-SQL requires it). Wave 10 added: the sqlglot index NULLS-ordering
       CASE emulation stripped (25x — a T-SQL index key cannot be an
       expression), multi-column `ALTER ... DROP (a, b)` normalized per
       target, MYSQL_ERRNO magnitudes (Oracle's -20xxx codes, 20x),
@@ -222,12 +229,12 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       Note: the T-SQL count is *flat vs. the morning's 127 but far more
       honest* — unwrapping constant dynamic SQL surfaced ~30 failures that
       previously hid as runtime missing-object noise inside EXEC() strings.
-      *Remaining classes:* tsql 97 — 22x near ')', 16x near ';' (both in
-      the D9 desync tail), client-DB-resident UDFs (SVF_*, ~10 —
+      *Remaining classes:* tsql 84 — 17x near ')' + 9x near ';' (D9 desync
+      sub-shapes still to classify), ~10 client-DB-resident UDFs (SVF_* —
       unresolvable without --db-url), PL/SQL collections (ARRAYTIPOALTA),
-      ALTER MODIFY leaks, a date-literal class; PG 12 — ALTER TRIGGER
-      ENABLE (needs the table), ADD COLUMNS(...) shape, one X-record edge,
-      MODIFY leaks; MySQL 18x 1064 tail.
+      4145/128/@dosis1/date-literal edges (2x each); PG 10 — RETURN
+      edges, PERFILES_CURSOR, ADD COLUMNS(...), 2x bytea/uuid defaults;
+      MySQL 18x 1064 tail.
 
 - [x] **Faithful conditional for unmappable catalog guards (P2)** (done
       2026-07-10 for the sys.columns/syscolumns column-probe family, both
