@@ -231,3 +231,6 @@ Thumbs.db
 procedures.sql
 *.private.sql
 /fixtures-private/
+
+# Downloaded PG regression corpus (fetched on demand by scripts/fetch_pg_corpus.py)
+/fixtures-corpus/
