@@ -208,6 +208,29 @@ class TestOracleBuiltinsOnTsql:
         assert "'v_codigo = ' + @codigo" in out, out
 
 
+class TestDynamicSqlAndRowcount:
+    def test_constant_execute_immediate_unwraps(self) -> None:
+        # PostgreSQL has no top-level EXECUTE '<sql>'; a constant dynamic
+        # statement is just that statement on every target.
+        src = (
+            "BEGIN\n    EXECUTE IMMEDIATE 'DELETE FROM E_CONF WHERE D LIKE "
+            "''tipo%'' OR D LIKE ''ordenf''';\nEND;\n/"
+        )
+        for target in ("postgresql", "tsql", "mysql"):
+            out = _flat(_t(src, target))
+            assert "DELETE FROM E_CONF WHERE D LIKE 'tipo%'" in out, (target, out)
+            assert "EXECUTE" not in out.upper(), (target, out)
+
+    def test_sql_rowcount_maps_to_at_at_rowcount(self) -> None:
+        src = (
+            "BEGIN\n    LOOP\n        DELETE FROM e_c WHERE x = 1;\n"
+            "        IF SQL%ROWCOUNT = 0 THEN\n            EXIT;\n"
+            "        END IF;\n    END LOOP;\nEND;\n/"
+        )
+        out = _flat(_t(src, "tsql"))
+        assert "IF @@ROWCOUNT = 0" in out, out
+
+
 class TestPgLoopVarShadowing:
     def test_shadowed_row_loop_variable_renamed(self) -> None:
         src = (

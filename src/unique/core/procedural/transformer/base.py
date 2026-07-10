@@ -1291,8 +1291,28 @@ class ProceduralTransformer:
         )
         return ExceptionBlock(handlers=handlers)
 
+    _CONSTANT_SQL_STRING_RE = re.compile(r"(?s)^\s*N?'((?:[^']|'')*)'\s*$")
+
     def _transform_execute(self, node: ExecuteStatement) -> ASTNode:
         expr = node.sql_expression
+        # EXECUTE IMMEDIATE of a *constant* string is just that statement:
+        # unwrap it and route it through the normal DML pipeline (dynamic
+        # SQL leaks the source dialect verbatim otherwise, and PostgreSQL
+        # has no top-level EXECUTE '<sql>' form at all).
+        if (
+            self._source != self._target
+            and node.immediate
+            and not node.into_vars
+            and not node.params
+            and isinstance(expr, RawSQL)
+        ):
+            m = self._CONSTANT_SQL_STRING_RE.match(expr.sql)
+            if m:
+                inner = m.group(1).replace("''", "'").strip()
+                if inner:
+                    return self._transform_node(
+                        EmbeddedDML(sql=inner, dialect=self._source)
+                    )
         op = self._named_arg_op()
         if op and isinstance(expr, RawSQL):
             # A T-SQL ``EXEC proc @param = value`` uses named-parameter syntax;

@@ -98,6 +98,8 @@ class TSqlTransformer(ProceduralTransformer):
         raw-expression path (found live in the 13 MB corpus, 2026-07-10)."""
         if self._source != "oracle":
             return sql
+        # The implicit-cursor row count reads from @@ROWCOUNT.
+        sql = re.sub(r"(?i)\bSQL\s*%\s*ROWCOUNT\b", "@@ROWCOUNT", sql)
         # Exception context: T-SQL reads it from the ERROR_* functions.
         sql = re.sub(r"(?i)\bSQLERRM\b", "ERROR_MESSAGE()", sql)
         # CAST keeps the ubiquitous ``SQLCODE || ' ' || SQLERRM`` concat
