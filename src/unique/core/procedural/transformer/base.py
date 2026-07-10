@@ -2766,17 +2766,81 @@ class ProceduralTransformer:
                 return n.name in self._string_vars
             return False
 
-        def has_string_operand(parts: list[exp.Expression]) -> bool:
-            for p in parts:
-                if is_string_atom(p) or p.find(exp.National):
+        # Functions whose result is numeric or temporal: a string literal
+        # among their arguments says nothing about the '+' chain's type.
+        # Without this, INSTR(x, ',') + 1 shipped as CONCAT(LOCATE(...), 1)
+        # — which compiles and silently yields '31' instead of 4.
+        non_string_funcs = frozenset(
+            {
+                "DATEDIFF",
+                "TIMESTAMPDIFF",
+                "DATEADD",
+                "DATE_ADD",
+                "DATE_SUB",
+                "ADDDATE",
+                "SUBDATE",
+                "INSTR",
+                "LOCATE",
+                "POSITION",
+                "STRPOS",
+                "STR_POSITION",  # sqlglot's canonical name for LOCATE/INSTR
+                "CHARINDEX",
+                "TO_NUMBER",
+                "TO_DATE",
+                "STR_TO_DATE",
+                "EXTRACT",
+                "LENGTH",
+                "CHAR_LENGTH",
+                "DATALENGTH",
+                "LEN",
+                "ROUND",
+                "TRUNC",
+                "TRUNCATE",
+                "MOD",
+                "FLOOR",
+                "CEIL",
+                "CEILING",
+                "ABS",
+                "SIGN",
+                "MONTHS_BETWEEN",
+                "YEAR",
+                "MONTH",
+                "DAY",
+                "UNIX_TIMESTAMP",
+                "COUNT",
+            }
+        )
+
+        def func_name(n: exp.Expression) -> str:
+            if isinstance(n, exp.Anonymous):
+                return str(n.this).upper()
+            if isinstance(n, exp.Func):
+                return n.sql_name().upper()
+            return ""
+
+        def literal_neutralized(lit: exp.Expression, root: exp.Expression) -> bool:
+            node = lit.parent
+            while isinstance(node, exp.Expression):
+                if func_name(node) in non_string_funcs:
                     return True
-                if is_known_string_var(p):
-                    return True
-                if any(
-                    isinstance(lit, exp.Literal) and lit.args.get("is_string")
-                    for lit in p.find_all(exp.Literal)
+                if isinstance(node, exp.Cast) and not node.to.is_type(
+                    *exp.DataType.TEXT_TYPES
                 ):
                     return True
+                if node is root:
+                    break
+                node = node.parent
+            return False
+
+        def has_string_operand(parts: list[exp.Expression]) -> bool:
+            for p in parts:
+                if is_string_atom(p) or is_known_string_var(p):
+                    return True
+                for lit in p.find_all(exp.Literal, exp.National):
+                    if isinstance(lit, exp.Literal) and not lit.args.get("is_string"):
+                        continue
+                    if not literal_neutralized(lit, p):
+                        return True
             return False
 
         def build_concat(parts: list[exp.Expression]) -> exp.Expression:
@@ -3353,19 +3417,27 @@ class ProceduralTransformer:
         def build_tsql(args: list[str]) -> str | None:
             if len(args) != 3:
                 return None
+
             # T-SQL DATEDIFF(part, start, end) = end - start. A sqlglot re-pass
             # rewrites it to its canonical DATEDIFF(end, start, part) (part last),
             # wrapping the operands in TIME_STR_TO_TIME — accept either layout.
-            if self._DATEPART_UNITS.get(args[0].strip().lower()):
+            # An Oracle-source shim quotes the part ('D'); accept that too.
+            def unit_of(arg: str) -> str | None:
+                return self._DATEPART_UNITS.get(arg.strip().strip("'").lower())
+
+            if unit_of(args[0]):
                 part, start, end = args
-            elif self._DATEPART_UNITS.get(args[2].strip().lower()):
+            elif unit_of(args[2]):
                 end, start, part = args
             else:
                 return None
-            unit = self._DATEPART_UNITS.get(part.strip().lower())
+            unit = unit_of(part)
             if not unit:
                 return None
             start, end = self._unwrap_time_str(start), self._unwrap_time_str(end)
+            if self._target == "tsql":
+                # The T-SQL part is a bare keyword; a quoted 'D' is invalid.
+                return f"DATEDIFF({unit}, {start}, {end})"
             if self._target == "oracle":
                 if unit == "DAY":
                     return f"({end} - {start})"
@@ -3400,7 +3472,14 @@ class ProceduralTransformer:
                 return f"DATEDIFF(DAY, {start}, {end})"
             return None
 
-        if self._source == "tsql" and self._target in ("oracle", "postgresql", "mysql"):
+        # Oracle has no DATEDIFF builtin, so a DATEDIFF in Oracle source is a
+        # client-defined T-SQL-style shim — translate it like the T-SQL form.
+        if self._source in ("tsql", "oracle") and self._target in (
+            "oracle",
+            "postgresql",
+            "mysql",
+            "tsql",
+        ):
             return self._rewrite_calls(sql, "DATEDIFF", build_tsql)
         if self._source == "mysql" and self._target in ("oracle", "postgresql", "tsql"):
             return self._rewrite_calls(sql, "DATEDIFF", build_mysql)

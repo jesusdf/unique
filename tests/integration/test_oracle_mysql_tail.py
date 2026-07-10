@@ -426,3 +426,90 @@ class TestRoutineNamedAsMySqlBuiltin:
     def test_definition_is_backtick_quoted(self) -> None:
         out = _t(self._SRC, "mysql")
         assert re.search(r"(?i)CREATE FUNCTION `now`", out), out
+
+
+class TestNumericPlusIsNotConcat:
+    """A string literal nested inside a numeric/date function argument
+    (DATEDIFF('D', ...), INSTR(x, ','), TO_NUMBER('42')) used to mark the
+    whole ``+`` chain as string concatenation: INSTR(x, ',') + 1 shipped as
+    CONCAT(LOCATE(',', x), 1) — which compiles and silently yields 31
+    instead of 4. Literals neutralized by such functions must not trigger
+    the concat rewrite."""
+
+    @staticmethod
+    def _fn(expr: str, target: str = "mysql") -> str:
+        src = (
+            "create or replace FUNCTION f_x(v_txt VARCHAR2, d_a DATE, d_b DATE) "
+            "RETURN NUMBER AS\n  v NUMBER;\nBEGIN\n"
+            f"  v := {expr};\n  RETURN v;\nEND;\n/"
+        )
+        out = Transpiler().transpile(src, "oracle", target).sql
+        lines = [ln for ln in out.splitlines() if "SET v =" in ln or "v :=" in ln]
+        return lines[0].strip() if lines else out
+
+    def test_instr_plus_stays_arithmetic(self) -> None:
+        line = self._fn("INSTR(v_txt, ',') + 1")
+        assert "CONCAT" not in line.upper(), line
+        assert re.search(r"(?i)LOCATE\(',', v_txt\) \+ 1", line), line
+
+    def test_oracle_source_datediff_maps_to_two_arg(self) -> None:
+        line = self._fn("DATEDIFF('D', d_a, d_b) + 1")
+        assert "CONCAT" not in line.upper(), line
+        # T-SQL-style DATEDIFF(part, start, end) = end - start -> MySQL
+        # DATEDIFF(end, start).
+        assert "DATEDIFF(d_b, d_a) + 1" in line, line
+
+    def test_oracle_source_datediff_to_tsql_unquotes_part(self) -> None:
+        line = self._fn("DATEDIFF('D', d_a, d_b) + 1", target="tsql")
+        assert "DATEDIFF(DAY, @d_a, @d_b)" in line, line
+        assert "'D'" not in line, line
+
+    def test_to_number_plus_stays_arithmetic(self) -> None:
+        line = self._fn("TO_NUMBER('42') + 1")
+        assert "CONCAT" not in line.upper(), line
+
+    def test_string_concat_still_rewrites(self) -> None:
+        src = (
+            "create or replace FUNCTION f_s(v_a VARCHAR2) RETURN VARCHAR2 AS\n"
+            "  v VARCHAR2(100);\nBEGIN\n"
+            "  v := 'pre' + v_a;\n  RETURN v;\nEND;\n/"
+        )
+        out = Transpiler().transpile(src, "oracle", "mysql").sql
+        line = [ln for ln in out.splitlines() if "SET v =" in ln][0]
+        assert "CONCAT('pre', v_a)" in line, line
+
+
+class TestTruncOnMySql:
+    """Oracle TRUNC in raw expressions leaked verbatim to MySQL (an unknown
+    function at runtime); the T-SQL target already had the date-vs-numeric
+    heuristic — MySQL now mirrors it."""
+
+    @staticmethod
+    def _fn(expr: str) -> str:
+        src = (
+            "create or replace FUNCTION f_t(d_fecha DATE, v_num NUMBER) "
+            "RETURN NUMBER AS\n  v NUMBER;\nBEGIN\n"
+            f"  v := {expr};\n  RETURN v;\nEND;\n/"
+        )
+        out = Transpiler().transpile(src, "oracle", "mysql").sql
+        return [ln for ln in out.splitlines() if "SET v =" in ln][0].strip()
+
+    def test_trunc_date_becomes_date(self) -> None:
+        line = self._fn("TRUNC(d_fecha)")
+        assert "DATE(d_fecha)" in line, line
+        assert "TRUNC(" not in line.replace("DATE(", ""), line
+
+    def test_trunc_numeric_becomes_truncate(self) -> None:
+        line = self._fn("TRUNC(v_num)")
+        assert "TRUNCATE(v_num, 0)" in line, line
+
+    def test_trunc_two_args_becomes_truncate(self) -> None:
+        line = self._fn("TRUNC(v_num, 2)")
+        assert "TRUNCATE(v_num, 2)" in line, line
+
+    def test_full_age_expression_survives(self) -> None:
+        line = self._fn("(DATEDIFF('D', TRUNC(d_fecha), TRUNC(SYSDATE)) + 1) / 365.25")
+        assert "CONCAT" not in line.upper(), line
+        assert "TRUNCATE(d_fecha" not in line, line
+        assert "365.25" in line, line
+        assert "+ 1" in line, line
