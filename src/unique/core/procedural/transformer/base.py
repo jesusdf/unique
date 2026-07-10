@@ -1407,9 +1407,25 @@ class ProceduralTransformer:
                 # :NEW./:OLD. row references in the argument list map to the
                 # target's row qualifier like everywhere else in the body.
                 args = self._normalize_oracle_pseudorecords(args)
-            args = self._transform_var_in_sql(args)
+            args = self._transform_call_args(args)
             args = self._map_now_in_sql(args)
         return CallStatement(name=node.name, args=args, schema=schema)
+
+    def _transform_call_args(self, args: str) -> str:
+        """Rename variables in a call's argument list — but never the LHS of
+        a named association (``V_ID => value``): that is the callee's
+        parameter name, not a local (a same-named local otherwise turned
+        ``V_ID =>`` into ``@id =>`` and the T-SQL spelling into ``@@id``)."""
+        from unique.core.sql_split import split_top_level_commas
+
+        parts = []
+        for part in split_top_level_commas(args):
+            m = re.match(r"(?s)^(\s*\w+\s*=>\s*)(.*)$", part)
+            if m:
+                parts.append(m.group(1) + self._transform_var_in_sql(m.group(2)))
+            else:
+                parts.append(self._transform_var_in_sql(part))
+        return ", ".join(p.strip() for p in parts)
 
     #: Oracle data-dictionary views (USER_*/ALL_*/DBA_*). A block querying them
     #: (a catalog-driven re-runnable DROP guard) has no portable equivalent —
