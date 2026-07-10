@@ -19,6 +19,7 @@ from unique.core.ast_nodes import (
     PrintStatement,
     RaiseErrorStatement,
     ReturnStatement,
+    StatementList,
     needs_procedural_wrapper,
 )
 from unique.core.procedural.emitter.base import ProceduralEmitter, register_emitter
@@ -311,8 +312,17 @@ class PostgresEmitter(ProceduralEmitter):
         """
         if node.degraded:
             return self._emit_degraded_anonymous_block(node)
-        decls = [s for s in node.statements if isinstance(s, DeclareStatement)]
-        body = [s for s in node.statements if not isinstance(s, DeclareStatement)]
+        # A transform may bundle a declaration with its statement in a
+        # StatementList (e.g. the auto-declared row-loop record): unwrap the
+        # transparent lists so the declaration reaches the DECLARE section.
+        statements: list[ASTNode] = []
+        for stmt in node.statements:
+            if isinstance(stmt, StatementList):
+                statements.extend(stmt.statements)
+            else:
+                statements.append(stmt)
+        decls = [s for s in statements if isinstance(s, DeclareStatement)]
+        body = [s for s in statements if not isinstance(s, DeclareStatement)]
         # A PRINT becomes ``RAISE NOTICE``, which is PL/pgSQL-only and needs the
         # DO wrapper even though it is not "control flow" (so MySQL, where PRINT
         # is a standalone SELECT, still emits it bare).

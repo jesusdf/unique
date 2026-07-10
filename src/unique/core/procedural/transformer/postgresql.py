@@ -9,7 +9,15 @@ from __future__ import annotations
 import dataclasses
 import re
 
-from unique.core.ast_nodes import ASTNode, EmbeddedDML, ForLoopStatement, RawSQL
+from unique.core.ast_nodes import (
+    ASTNode,
+    DataType,
+    DeclareStatement,
+    EmbeddedDML,
+    ForLoopStatement,
+    RawSQL,
+    StatementList,
+)
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
     register_transformer,
@@ -35,6 +43,34 @@ class PostgresTransformer(ProceduralTransformer):
 
     def _transform_for_loop(self, node: ForLoopStatement) -> ASTNode:
         result = super()._transform_for_loop(node)
+        result = self._rename_shadowed_loop_var(result)
+        if (
+            isinstance(result, ForLoopStatement)
+            and result.cursor is not None
+            and result.variable.lower() not in self._declared_loop_records
+        ):
+            # plpgsql requires the row-loop variable to be *declared* (only
+            # integer range loops auto-declare); PL/SQL declares it
+            # implicitly. Emit a record declaration — the emitter hoists it
+            # into the DECLARE section.
+            self._declared_loop_records.add(result.variable.lower())
+            return StatementList(
+                statements=(
+                    DeclareStatement(
+                        name=result.variable, data_type=DataType(name="record")
+                    ),
+                    result,
+                )
+            )
+        return result
+
+    @property
+    def _declared_loop_records(self) -> set[str]:
+        if not hasattr(self, "_declared_loop_records_"):
+            self._declared_loop_records_: set[str] = set()
+        return self._declared_loop_records_
+
+    def _rename_shadowed_loop_var(self, result: ASTNode) -> ASTNode:
         if (
             isinstance(result, ForLoopStatement)
             and result.cursor is not None

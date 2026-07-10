@@ -1840,9 +1840,7 @@ class ProceduralParser:
             return NullStatement()
         node: ASTNode | None = None
         for condition, body in reversed(branches):
-            wrapped: tuple[ASTNode, ...] = (
-                else_body if node is None else (node,)
-            )
+            wrapped: tuple[ASTNode, ...] = else_body if node is None else (node,)
             node = IfStatement(
                 condition=RawSQL(sql=condition, reason="CASE statement branch"),
                 then_body=body or (NullStatement(),),

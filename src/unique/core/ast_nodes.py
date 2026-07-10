@@ -964,5 +964,13 @@ PROCEDURAL_WRAPPER_NODES: tuple[type[ASTNode], ...] = (
 
 
 def needs_procedural_wrapper(statements: tuple[ASTNode, ...]) -> bool:
-    """Whether any statement requires a procedural wrapper to run."""
-    return any(isinstance(s, PROCEDURAL_WRAPPER_NODES) for s in statements)
+    """Whether any statement requires a procedural wrapper to run.
+
+    Recurses into StatementList containers (a transform may bundle a
+    declaration with its loop) — the list itself is transparent."""
+    for s in statements:
+        if isinstance(s, PROCEDURAL_WRAPPER_NODES):
+            return True
+        if isinstance(s, StatementList) and needs_procedural_wrapper(s.statements):
+            return True
+    return False
