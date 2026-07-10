@@ -3,7 +3,9 @@
 # ---------------------------------------------------------------------------
 
 # --- Stage 1: build ---
-FROM python:3.13-slim AS builder
+# python:3.13-slim, pinned by digest (P3: reproducible, tamper-evident
+# builds; bump deliberately when refreshing the base).
+FROM python@sha256:eb43ff125d8d58d7449dcba7d336c23bcac412f526d861db493b9994d8010280 AS builder
 
 WORKDIR /build
 COPY pyproject.toml README.md ./
@@ -13,16 +15,20 @@ RUN pip install --no-cache-dir build \
     && python -m build --wheel --outdir /build/dist
 
 # --- Stage 2: runtime ---
-FROM python:3.13-slim
+FROM python@sha256:eb43ff125d8d58d7449dcba7d336c23bcac412f526d861db493b9994d8010280
 
 LABEL maintainer="Jesús Diéguez Fernández" \
       description="SQL transpiler: translate scripts between SQL Server, Oracle, PostgreSQL, and MySQL"
 
 WORKDIR /app
 
-# Install the wheel built in the previous stage
+# Install the wheel built in the previous stage. The constraints file pins
+# the full runtime dependency closure so two builds of the same commit
+# install identical versions (P3).
 COPY --from=builder /build/dist/*.whl /tmp/
-RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
+COPY constraints.txt /tmp/constraints.txt
+RUN pip install --no-cache-dir -c /tmp/constraints.txt /tmp/*.whl \
+    && rm /tmp/*.whl /tmp/constraints.txt
 
 # Non-root user for security
 RUN useradd --create-home appuser

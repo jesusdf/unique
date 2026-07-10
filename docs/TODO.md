@@ -371,9 +371,11 @@ fix needs an **anonymized** regression fixture (never a private name).
 - [ ] **Module growth**: `procedural/parser.py` 2886, `procedural/transformer/
       base.py` 2813, `transpiler.py` 1713 lines — resume the split along the
       seams named in audit 2026-07-02 doc 03.
-- [ ] **Docker digest pin + constraints file**. *(The other two thirds of
-      this bullet shipped 2026-07-10: `X-Unique-Decoded-As` header (A5) and
-      the Content-Disposition stem sanitize (N7) — `tests/unit/api`.)*
+- [x] **Docker digest pin + constraints file** (done 2026-07-10): both
+      Dockerfiles pin `python:3.13-slim` by sha256 digest and the runtime
+      install applies `constraints.txt` (full dependency closure) — image
+      build verified locally. A5 (`X-Unique-Decoded-As`) and N7 (filename
+      stem sanitize) shipped the same day.
 
 ## 3. Packaging (P3)
 
