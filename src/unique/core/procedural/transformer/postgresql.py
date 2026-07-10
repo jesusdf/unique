@@ -6,8 +6,10 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 
+from unique.core.ast_nodes import ASTNode, EmbeddedDML, ForLoopStatement, RawSQL
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
     register_transformer,
@@ -30,6 +32,53 @@ class PostgresTransformer(ProceduralTransformer):
                 "@@TRANCOUNT", "the routine manages its transaction"
             ),
         }
+
+    def _transform_for_loop(self, node: ForLoopStatement) -> ASTNode:
+        result = super()._transform_for_loop(node)
+        if (
+            isinstance(result, ForLoopStatement)
+            and result.cursor is not None
+            and result.variable.lower() in self._declared_scalar_names
+        ):
+            # PL/SQL lets a row FOR-loop shadow a declared scalar; plpgsql
+            # rejects a scalar loop variable over rows — rename the loop
+            # variable and its row references (the declared scalar keeps its
+            # meaning outside the loop, exactly as in Oracle).
+            new_var = f"{result.variable}_rec"
+            ref = re.compile(rf"(?i)\b{re.escape(result.variable)}\s*\.\s*")
+
+            def rename(stmt: ASTNode) -> ASTNode:
+                if isinstance(stmt, RawSQL):
+                    return RawSQL(
+                        sql=ref.sub(f"{new_var}.", stmt.sql), reason=stmt.reason
+                    )
+                if isinstance(stmt, EmbeddedDML):
+                    return EmbeddedDML(
+                        sql=ref.sub(f"{new_var}.", stmt.sql), dialect=stmt.dialect
+                    )
+                changes: dict[str, object] = {}
+                for f in dataclasses.fields(stmt):
+                    val = getattr(stmt, f.name)
+                    if isinstance(val, ASTNode):
+                        changes[f.name] = rename(val)
+                    elif (
+                        isinstance(val, tuple)
+                        and val
+                        and all(isinstance(x, ASTNode) for x in val)
+                    ):
+                        changes[f.name] = tuple(rename(x) for x in val)
+                if changes:
+                    return dataclasses.replace(stmt, **changes)  # type: ignore[arg-type]
+                return stmt
+
+            return ForLoopStatement(
+                variable=new_var,
+                range_start=result.range_start,
+                range_end=result.range_end,
+                cursor=rename(result.cursor) if result.cursor else None,
+                body=tuple(rename(x) for x in result.body),
+            )
+        return result
 
     def _fetch_status_forms(self) -> tuple[str, str] | None:
         # plpgsql sets FOUND after every FETCH.

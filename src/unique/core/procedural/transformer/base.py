@@ -169,6 +169,10 @@ class ProceduralTransformer:
         # The cursor named by the most recent FETCH (already transformed):
         # Oracle rewrites ``@@FETCH_STATUS`` checks to ``<cursor>%FOUND``.
         self._last_fetch_cursor: str | None = None
+        # Names of scalar variables seen in declarations (lowercased): a
+        # PL/SQL row FOR-loop may shadow one; plpgsql refuses a scalar loop
+        # variable over rows, so PG renames the loop variable instead.
+        self._declared_scalar_names: set[str] = set()
         # Whether a ``@@FETCH_STATUS`` check was lowered to the MySQL
         # ``v_fetch_done`` flag (the routine then needs the flag declaration
         # and its CONTINUE HANDLER injected).
@@ -1098,6 +1102,7 @@ class ProceduralTransformer:
 
     def _transform_declare(self, node: DeclareStatement) -> ASTNode:
         new_name = self._transform_var_name(node.name)
+        self._declared_scalar_names.add(new_name.lower().lstrip("@"))
         # T-SQL table variables (DECLARE @t TABLE (cols)) have no equivalent
         # declaration in MySQL/Oracle/PostgreSQL. Rewrite to a CREATE TEMPORARY
         # TABLE in the executable body (returning a non-Declare node moves it
