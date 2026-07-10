@@ -473,6 +473,8 @@ class ParserBase:
         name, schema = self._parse_qualified_name()
         params = self._parse_parameter_list()
 
+        if self._plsql_collection_type_ahead():
+            return self._parse_fallback()
         body = self._parse_routine_body()
 
         if is_alter and self._is_tsql_source():
@@ -520,6 +522,8 @@ class ParserBase:
             if peeked.upper_value == "PIPELINED":
                 return self._parse_fallback()
 
+        if self._plsql_collection_type_ahead():
+            return self._parse_fallback()
         body = self._parse_routine_body()
 
         return CreateFunctionStatement(
@@ -671,6 +675,8 @@ class ParserBase:
                 self._match_type(TokenType.RPAREN)
             self._match_type(TokenType.SEMICOLON)
         else:
+            if self._plsql_collection_type_ahead():
+                return self._parse_fallback()
             body = self._parse_routine_body(with_pg_header=False)
         if when_cond and body:
             body = [
@@ -1822,12 +1828,40 @@ class ParserBase:
             and prev_tok.upper_value in self._DML_CHAINING_KEYWORDS
         )
 
+    def _plsql_collection_type_ahead(self) -> bool:
+        """Whether the declaration section ahead defines a PL/SQL collection or
+        record type (``TYPE name IS VARRAY/TABLE/RECORD/REF CURSOR``). Such a
+        unit has no mechanical off-Oracle equivalent; parsing it shredded the
+        declaration into garbage (``DECLARE IS VARRAY(13);``). Scans only up to
+        the first top-level BEGIN (the executable body may mention TYPE in
+        other roles)."""
+        if self._is_tsql_source():
+            return False
+        offset = 0
+        while True:
+            tok = self._peek(offset)
+            if tok.type == TokenType.EOF or tok.is_keyword("BEGIN"):
+                return False
+            if (
+                tok.upper_value == "TYPE"
+                and self._peek(offset + 1).type == TokenType.IDENTIFIER
+                and self._peek(offset + 2).is_keyword("IS")
+            ):
+                return True
+            offset += 1
+
     def _parse_fallback(self) -> ASTNode:
         """When we can't parse, capture everything as RawSQL (a documented
         carrier) and register a warning so the loss is never silent. Keep a newline
         between tokens that came from different source lines, so a large construct
         is preserved as readable multi-line text instead of one enormous line that
-        breaks editors and diffs."""
+        breaks editors and diffs.
+
+        The capture always restarts at the unit's first token — a parse() call
+        holds exactly one batch, and starting at the *current* position silently
+        lost everything already consumed (the PIPELINED carrier dropped its
+        whole CREATE FUNCTION header)."""
+        self._pos = 0
         parts: list[str] = []
         prev_line: int | None = None
         while not self._at_end():

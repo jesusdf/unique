@@ -332,6 +332,61 @@ class TestDottedFunctionReturnType:
         ), result.warnings
 
 
+class TestCollectionTypeDeclarations:
+    """A PL/SQL collection/record TYPE declaration (``TYPE t IS VARRAY(13) OF
+    VARCHAR2(2)``) has no mechanical equivalent off Oracle. It used to shred
+    into garbage declarations (``DECLARE IS VARRAY(13);``, ``DECLARE OF
+    VARCHAR(2);``); the whole unit must degrade to a documented carrier."""
+
+    _SRC = (
+        "create or replace TRIGGER trg_col AFTER UPDATE ON t_ing FOR EACH ROW\n"
+        "DECLARE\n"
+        "  TYPE arr_t IS VARRAY(3) OF VARCHAR2(2);\n"
+        "  v_vals arr_t := arr_t('a', 'b', 'c');\n"
+        "BEGIN\n"
+        "  INSERT INTO t_log (a) VALUES (:NEW.a);\n"
+        "END;\n/"
+    )
+
+    def test_mysql_degrades_whole_unit_with_header(self) -> None:
+        result = Transpiler().transpile(self._SRC, "oracle", "mysql")
+        # Every line is a comment (no executable fragments of the shred).
+        sql_lines = [ln for ln in result.sql.splitlines() if ln.strip()]
+        assert all(ln.lstrip().startswith("--") for ln in sql_lines), result.sql
+        # The carrier keeps the WHOLE unit, header included.
+        assert "trg_col" in result.sql, result.sql
+        assert "VARRAY" in result.sql, result.sql
+        assert result.warnings, result.warnings
+
+    def test_procedure_form_also_degrades(self) -> None:
+        src = (
+            "create or replace PROCEDURE p_col AS\n"
+            "  TYPE num_tab IS TABLE OF NUMBER;\n"
+            "  v num_tab;\n"
+            "BEGIN\n"
+            "  NULL;\n"
+            "END;\n/"
+        )
+        result = Transpiler().transpile(src, "oracle", "mysql")
+        assert "p_col" in result.sql, result.sql
+        assert not re.search(r"(?im)^\s*DECLARE (IS|OF)\b", result.sql), result.sql
+        assert result.warnings, result.warnings
+
+
+class TestPipelinedCarrierKeepsHeader:
+    """The PIPELINED fallback used to start the carrier at the PIPELINED
+    keyword, silently losing the CREATE FUNCTION header."""
+
+    def test_carrier_contains_full_header(self) -> None:
+        src = (
+            "create or replace FUNCTION f_pipe RETURN num_tab PIPELINED AS\n"
+            "BEGIN\n  PIPE ROW (1);\n  RETURN;\nEND;\n/"
+        )
+        result = Transpiler().transpile(src, "oracle", "mysql")
+        assert "f_pipe" in result.sql, result.sql
+        assert "PIPELINED" in result.sql, result.sql
+
+
 class TestCommentInsideIfCondition:
     """A line comment inside a multi-line IF condition, once the expression is
     flattened, used to swallow the rest of the condition (``IF m_tipo --x
