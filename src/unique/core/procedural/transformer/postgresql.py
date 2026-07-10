@@ -117,6 +117,9 @@ class PostgresTransformer(ProceduralTransformer):
             )
         return result
 
+    def _package_refcursor_type(self) -> str | None:
+        return "REFCURSOR"
+
     def _fetch_status_forms(self) -> tuple[str, str] | None:
         # plpgsql sets FOUND after every FETCH.
         return ("FOUND", "NOT FOUND")

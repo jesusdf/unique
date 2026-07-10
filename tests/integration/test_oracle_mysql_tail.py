@@ -586,3 +586,34 @@ class TestOraclePipesConcatOnMySql:
         )
         out = _t(src, "mysql")
         assert "'a || b'" in out, out
+
+
+class TestPackageRefCursorType:
+    """A package-qualified ref-cursor type (pkg.my_cursor) must become the
+    target's ref-cursor type, not the generic TEXT carrier — TEXT turned the
+    later ``OPEN v FOR`` into a 42804 on PostgreSQL (wave-15 regression:
+    those units previously failed as expected-missing, not syntax)."""
+
+    _SRC = (
+        "create or replace PROCEDURE p_rc(v_id IN NUMBER, "
+        "v_cur OUT pkg_ret.my_cursor) AS\n"
+        "BEGIN\n"
+        "  OPEN v_cur FOR SELECT a FROM t WHERE id = v_id;\n"
+        "END;\n/"
+    )
+
+    def test_postgresql_uses_refcursor(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        assert re.search(r"(?i)v_cur\s+(?:IN)?OUT\s+REFCURSOR", out) or re.search(
+            r"(?i)OUT\s+REFCURSOR", out
+        ), out
+        assert "OUT TEXT" not in out, out
+
+    def test_oracle_identity_keeps_package_type(self) -> None:
+        out = _t(self._SRC, "oracle")
+        assert "pkg_ret.my_cursor" in out, out
+
+    def test_mysql_still_drops_to_direct_result_set(self) -> None:
+        result = Transpiler().transpile(self._SRC, "oracle", "mysql")
+        assert "pkg_ret" not in result.sql, result.sql
+        assert any("ref-cursor" in w.message for w in result.warnings), result.warnings

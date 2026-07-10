@@ -443,6 +443,12 @@ class ProceduralTransformer:
 
     _REFCURSOR_TYPE_RE = re.compile(r"(?i)(?:^|\.)\w*(?:REF)?CURSOR$|^SYS_REFCURSOR$")
 
+    def _package_refcursor_type(self) -> str | None:
+        """The target type standing in for a package-qualified ref-cursor
+        type. Default None (fall through to the generic carrier); PostgreSQL
+        overrides with REFCURSOR."""
+        return None
+
     def _returns_result_sets_directly(self) -> bool:
         """Whether the target's procedures return result sets by SELECTing
         (T-SQL, MySQL) — a ref-cursor OUT parameter then has no place and its
@@ -723,6 +729,13 @@ class ProceduralTransformer:
         if re.fullmatch(r"\w+(?:\.\w+)+", dt.name):
             if self._supports_type_reference():
                 return DataType(name=dt.name, params=dt.params)
+            # A package ref-cursor type (pkg.my_cursor): the target's own
+            # ref-cursor type is faithful — the generic carrier turned the
+            # later ``OPEN v FOR`` into a type error (42804 on PG).
+            if self._REFCURSOR_TYPE_RE.search(dt.name.strip()):
+                refcur = self._package_refcursor_type()
+                if refcur:
+                    return DataType(name=refcur, origin_comment=dt.name)
             self._warnings.append(
                 f"qualified type '{dt.name}' has no {self._target} "
                 "equivalent; emitted as a carrier type with the original "
