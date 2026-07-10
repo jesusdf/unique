@@ -384,3 +384,52 @@ def test_multiline_parse_error_reason_stays_a_comment() -> None:
         if ln.strip() and not ln.strip().startswith("--")
     ]
     assert all(ln.count("'") % 2 == 0 for ln in executable), executable
+
+
+class TestParenthesizedInsertBody:
+    """Oracle allows ``INSERT INTO t (cols) (SELECT …)`` — the query wrapped
+    in parens. sqlglot models the body as a Subquery, which the IR converter
+    matched as neither Values nor Select: the whole SELECT silently dropped
+    and the emitter's no-body fallback shipped ``INSERT … DEFAULT VALUES``
+    (parse-valid, so the honesty gate never fired — live 2x on PG). The same
+    hole ate ``INSERT … SELECT … UNION …`` (a SetOperation body)."""
+
+    _PAREN = (
+        "INSERT INTO t_menu (id, name)\n"
+        "(SELECT 1, 'x' FROM t_src\n"
+        " WHERE NOT EXISTS (SELECT NULL FROM t_menu WHERE id = 1));"
+    )
+
+    @pytest.mark.parametrize("target", ["postgresql", "tsql", "mysql"])
+    def test_parenthesized_select_body_survives_standalone(self, target: str) -> None:
+        out = _t(self._PAREN, "oracle", target)
+        assert "DEFAULT VALUES" not in out.upper(), out
+        assert re.search(r"(?i)SELECT 1", out), out
+        assert re.search(r"(?i)NOT EXISTS", out), out
+        sqlglot.parse(out, read=_SQLGLOT_DIALECT[target])
+
+    def test_parenthesized_select_body_survives_in_plsql_block(self) -> None:
+        src = (
+            "DECLARE\n"
+            "  v_id NUMBER(9,0);\n"
+            "BEGIN\n"
+            "  v_id := 7;\n"
+            "  INSERT INTO t_menu (id, name)\n"
+            "  (SELECT v_id, 'x' FROM t_src WHERE id = v_id);\n"
+            "END;\n/"
+        )
+        out = _t(src, "oracle", "postgresql")
+        assert "DEFAULT VALUES" not in out.upper(), out
+        assert re.search(r"(?i)SELECT v_id", out), out
+
+    def test_union_body_survives(self) -> None:
+        src = "INSERT INTO t_menu (id) SELECT 1 FROM DUAL UNION SELECT 2 FROM DUAL;"
+        out = _t(src, "oracle", "postgresql")
+        assert "DEFAULT VALUES" not in out.upper(), out
+        assert re.search(r"(?i)UNION", out), out
+        assert re.search(r"(?i)SELECT 2", out), out
+        assert "DUAL" not in out.upper(), out
+
+    def test_genuine_default_values_still_emitted(self) -> None:
+        out = _t("INSERT INTO t_menu DEFAULT VALUES;", "tsql", "postgresql")
+        assert "DEFAULT VALUES" in out.upper(), out

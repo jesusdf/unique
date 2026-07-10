@@ -562,7 +562,7 @@ def _convert_union(expr: exp.SetOperation) -> SelectStatement:
     return result
 
 
-def _convert_insert(expr: exp.Insert) -> InsertStatement:
+def _convert_insert(expr: exp.Insert) -> InsertStatement | RawSQL:
     """Convert a sqlglot Insert to InsertStatement."""
     table = _convert_table_ref(expr.this)
 
@@ -578,27 +578,41 @@ def _convert_insert(expr: exp.Insert) -> InsertStatement:
         if col_expr:
             columns = tuple(c.name if hasattr(c, "name") else str(c) for c in col_expr)
 
+    # The body may be wrapped in parens — Oracle/PG allow ``INSERT INTO t
+    # (cols) (SELECT …)`` — which sqlglot models as a Subquery; unwrap it
+    # (the unparenthesized form is valid on every target).
+    val_expr = expr.args.get("expression")
+    body = val_expr.unnest() if isinstance(val_expr, exp.Subquery) else val_expr
+
     # VALUES
     values: tuple[tuple[ASTNode, ...], ...] = ()
-    val_expr = expr.args.get("expression")
-    if isinstance(val_expr, exp.Values):
+    if isinstance(body, exp.Values):
         values = tuple(
             tuple(convert_expression(v) for v in row.expressions)
-            for row in val_expr.expressions
+            for row in body.expressions
         )
 
-    # SELECT
+    # SELECT (or a set operation: SELECT … UNION SELECT …)
     select = None
-    if isinstance(val_expr, exp.Select):
+    if isinstance(body, (exp.Select, exp.SetOperation)):
         # A CTE that precedes the INSERT (``WITH cte AS (…) INSERT … SELECT …
         # FROM cte``) is parsed onto the Insert, not the inner SELECT — move it
         # onto the SELECT or the emitter drops it, leaving ``FROM cte`` dangling.
         cte = expr.args.get("with") or expr.args.get("with_")
-        if cte is not None and not (
-            val_expr.args.get("with") or val_expr.args.get("with_")
-        ):
-            val_expr.set("with", cte)
-        select = _convert_select(val_expr)
+        if cte is not None and not (body.args.get("with") or body.args.get("with_")):
+            body.set("with", cte)
+        select = _convert_select(body)
+
+    if val_expr is not None and not values and select is None:
+        # The source has a body we could not model. Emitting the bare INSERT
+        # would ship ``DEFAULT VALUES`` — parse-valid on the target, so the
+        # honesty gate cannot catch it: silent data loss (live 2x on PG,
+        # 2026-07-11). Degrade to a passthrough instead; the target-dialect
+        # parse check downstream decides whether it must become a carrier.
+        return RawSQL(
+            sql=expr.sql(),
+            reason=f"Unmodeled INSERT body: {type(val_expr).__name__}",
+        )
 
     return InsertStatement(
         table=table,
