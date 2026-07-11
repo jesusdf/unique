@@ -96,3 +96,11 @@ class TestDefaultFileSet:
         # Engine-internal suites must not be in the default set.
         for internal in ("stats_import", "rowsecurity", "privileges"):
             assert internal not in names
+
+
+class TestPsqlVariableStatements:
+    def test_psql_variable_line_is_dropped(self) -> None:
+        src = "select 1;\nCOPY aggtest FROM :'filename';\nselect 2;\n"
+        out = strip_psql_noise(src)
+        assert ":'filename'" not in out
+        assert "select 1;" in out and "select 2;" in out

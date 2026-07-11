@@ -563,3 +563,20 @@ class TestDatediffBoundarySemantics:
         assert re.search(
             r"(?i)EXTRACT\s*\(\s*YEAR\s+FROM\s+v_b\s*\)\s*\*\s*12", out
         ), out
+
+
+class TestPsqlVariableSubstitutionGuard:
+    """sqlglot's COPY-parameter parser loops unboundedly on psql's
+    client-side variable substitution (``COPY t FROM :'filename'``) until
+    MemoryError — 30 bytes of input exhausted the host (found running the
+    PG regression corpus). ``:'var'`` is never server-side SQL: the parse
+    guard degrades the statement to an honest carrier before sqlglot."""
+
+    def test_copy_from_psql_variable_degrades(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        r = Transpiler().transpile(
+            "COPY aggtest FROM :'filename';", "postgresql", "mysql"
+        )
+        assert "UNIQUE:" in r.sql, r.sql
+        assert r.warnings or r.unsupported, r.warnings

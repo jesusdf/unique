@@ -54,6 +54,7 @@ DEFAULT_FILES = (
 )
 
 _COPY_STDIN_RE = re.compile(r"^\s*copy\b.*\bfrom\s+stdin\b", re.IGNORECASE)
+_PSQL_VAR_RE = re.compile(r":'\w+'|:\"\w+\"")
 
 _HEADER = """\
 -- Curated from the PostgreSQL regression suite ({ref}), file {name}.sql:
@@ -87,6 +88,9 @@ def strip_psql_noise(sql: str) -> str:
             in_copy_data = True
             continue
         if line.lstrip().startswith("\\"):
+            continue
+        if _PSQL_VAR_RE.search(line):
+            # psql client-side variable substitution — never server SQL.
             continue
         kept.append(line)
     return "".join(kept)

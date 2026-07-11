@@ -74,6 +74,23 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
         A list of IR ASTNode instances.
     """
     sg_dialect = sqlglot_dialect_name(dialect)
+    if dialect == "postgresql" and re.search(r":'\w+'|:\"\w+\"", sql):
+        from unique.core.output_gate import scrub
+
+        # scrub() empties string contents, so on scrubbed text the
+        # signature is a colon directly before a string start (a PG cast
+        # is ``::type`` — excluded by the lookbehind).
+        if re.search(r"(?<!:):\s*''", scrub(sql)):
+            # psql client-side variable substitution (:'var') is never
+            # server SQL — and sqlglot's COPY-parameter parser loops
+            # unboundedly on it until MemoryError (30 bytes of input
+            # exhausted the host running the PG regression corpus).
+            return [
+                RawSQL(
+                    sql=sql,
+                    reason="psql client-side variable substitution (:'var')",
+                )
+            ]
     try:
         # RAISE, not WARN: a partial tree from a lenient parse silently drops
         # tokens — a real-corpus INSERT with a table-qualified column in its
