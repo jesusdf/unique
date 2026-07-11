@@ -235,14 +235,20 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       alias` form + the trigger rewriter renormalizes it), ROWNUM = 1 →
       TOP 1, ROWNUM added to the tsql gate deny-list, quoted dateparts
       (`DATEDIFF('Y',…)`), parameterless CREATE FUNCTION parens.
-      ***T-SQL now 100.0% (7 — 0.02%)*** — the remaining 7 are unique
-      singles: 4145 non-boolean IF, DATEVALUE + REGEXP_LIKE inside one
-      MERGE passthrough (the dbo./builtin decisions don't reach
-      sqlglot-emitted MERGE text), 174 SUBSTRING-2-arg with negative
-      position (Oracle SUBSTR(s,-n) — needs a CASE/RIGHT rewrite), 134
-      @p_papepat double-declare (not the loop class), 156 near-distinct,
-      near-'[' (a CREATE PROCEDURE inside an EXEC'd string literal).
-      Diminishing-returns tail; each needs individual investigation.* *Wave 16 landed
+      ***Waves 20–21 (2026-07-11, official sweep at `b19e03a`): T-SQL
+      100.0% (3), PostgreSQL 0, MySQL 0.*** Closed: boolean-var IF/WHILE
+      conditions (`= 1`), param-shadowing locals dropped, DISTINCT hoist
+      in assignment-selects, **Oracle q-quoted literals** (`q'[…]'` —
+      lexer feature; exposed that constant-EXECUTE-IMMEDIATE routine DDL
+      must STAY dynamic, now warned), 2-arg SUBSTR with sign-aware start
+      (balanced-paren scanner), and the `p_x`/`v_p_x` prefix-strip rename
+      collision (error 134 + a silent aliasing risk). **The final 3 are
+      ONE class:** scalar calls inside sqlglot-emitted MERGE passthrough
+      text (DATEVALUE→dbo., 1-arg TO_CHAR, REGEXP_LIKE) — the shared
+      function decisions (mappings + qualifier) never see passthrough
+      output; run the tsql scalar pass + string-aware qualifier over
+      MERGE passthrough text for the tsql target (REGEXP_LIKE itself has
+      no SQL Server 2022 form — document as a visible limitation).* *Wave 16 landed
       2026-07-11:*
       the trivia class fix (`_flat_value` — every flattening capture, CASE
       selector/WHEN included), the parenthesized/UNION INSERT-body drop
