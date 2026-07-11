@@ -218,17 +218,22 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       date-literal + @dosis1 + misc 102s. **PG 10:** 2x ADD COLUMNS (a,b)
       → per-column ADD, 2x RAW(16) DEFAULT SYS_GUID() → `BYTEA DEFAULT
       gen_random_uuid()` type mismatch, missing-THEN edge, `X record`
-      placement edge. ***Official sweep 2026-07-11 at `f0c6d40` (post wave
-      16): T-SQL 99.9% (30, was 48), PostgreSQL 100.0% (6, was 10), MySQL
-      100.0% (0)** — memory stayed healthy throughout (sequential engines,
-      mssql capped at 2g). Remaining tsql 30: 5x formatted TO_DATE/TO_CHAR
-      (2-arg — deliberately left visible; needs the format-model
-      translation the DML path already has), 2x 4145 (NOT the old
-      comment-swallow — a bare `IF @v` boolean-context edge), 2x 128
-      v_tipoepisodio, 2x near-'.', singles (DATEVALUE, @@C_SERIES_serie,
-      @new in trigger, RENAME, RETURNS, DATEDIFF param). Remaining PG 6:
-      2x RAW(16) DEFAULT SYS_GUID()→bytea/uuid mismatch, RETURN edge,
-      ADD COLUMNS (a,b), near-AS, `X record` placement.* *Wave 16 landed
+      placement edge. ***Official sweep 2026-07-11 at `857b515` (post
+      waves 16–18b): PostgreSQL 100.0% (0 — ZERO), MySQL 100.0% (0),
+      T-SQL 100.0% (13 — 0.04%)*** — from 475/41/121 when M4 started.
+      Waves 17a–18b closed: formatted TO_DATE/TO_CHAR (style table +
+      FORMAT via the shared token model), RAW(16) GUID defaults on PG,
+      embedded ALTER through the IR passthrough (`ADD COLUMNS` fixed),
+      nested-block loop-record hoisting (shared _split_declarations),
+      SYSDATE() empty-parens retry, case-insensitive var rename,
+      cursor %FOUND/%NOTFOUND on T-SQL, %ROWTYPE loop-var double-@,
+      loop-DECLARE dedupe per batch, raw RPAD/LPAD, bare RETURN in PG
+      trigger functions → NEW/NULL, and incomplete T-SQL trigger
+      conversions (NEW./OLD. leftovers) now degrade honestly via the
+      gate. **Remaining tsql 13 — all unique singles** (near-M/W/ep/e/d,
+      RETURNS, 156 TABLE/distinct, DATEVALUE-in-MERGE, 1023 datediff,
+      174 substring-2-arg, 134 @p_papepat, near-'[' EXEC-string proc):
+      diminishing-returns tail, each needs individual investigation.* *Wave 16 landed
       2026-07-11:*
       the trivia class fix (`_flat_value` — every flattening capture, CASE
       selector/WHEN included), the parenthesized/UNION INSERT-body drop
