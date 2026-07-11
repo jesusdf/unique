@@ -2043,16 +2043,18 @@ class ProceduralTransformer:
         # An EmbeddedDML node holds exactly one statement; a RawSQL result is
         # a parse failure and a PassthroughSQL an unmodeled construct — the IR
         # would just re-run sqlglot on those, without the target fixups the
-        # fallback applies, so hand them back. Exception: MERGE and CTE-DML,
-        # where the IR emitter owns the target fixes raw sqlglot lacks
+        # fallback applies, so hand them back. Exception: MERGE, CTE-DML and
+        # ALTER, where the IR emitter owns the target fixes raw sqlglot lacks
         # (MySQL's upsert rewrite, Oracle's mandatory ON parens, the
-        # updatable-CTE carrier, the DUAL/';' cleanups).
-        merge_stmt = bool(statements) and all(
-            isinstance(n, IRPassthrough) and n.kind in ("MERGE", "CTE DML")
+        # updatable-CTE carrier, the DUAL/';' cleanups, and
+        # _portable_alter_add — raw sqlglot spells Oracle's multi-column ADD
+        # as the invalid ``ADD COLUMNS (…)`` on every other engine).
+        owned_passthrough = bool(statements) and all(
+            isinstance(n, IRPassthrough) and n.kind in ("MERGE", "CTE DML", "ALTER")
             for n in statements
         )
         if len(statements) != 1 or (
-            not merge_stmt
+            not owned_passthrough
             and any(isinstance(n, (IRRawSQL, IRPassthrough)) for n in statements)
         ):
             return None
@@ -2080,7 +2082,7 @@ class ProceduralTransformer:
         out = "\n".join(p for p in pieces if p)
         if not out.strip():
             return None
-        if merge_stmt:
+        if owned_passthrough:
             lines = out.splitlines()
             body = [x for x in lines if x.strip() and not x.lstrip().startswith("--")]
             if not body:

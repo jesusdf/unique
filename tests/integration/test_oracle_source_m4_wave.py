@@ -600,3 +600,128 @@ class TestOracleScalarsOnTsqlWave16:
         assert re.search(r"(?i)CAST\s*\(\s*@m_c\s+AS\s+DECIMAL", out), out
         # And never the broken bare-CAST rename: CAST(x) without AS.
         assert not re.search(r"(?i)CAST\s*\(\s*@m_c\s*\)", out), out
+
+
+class TestFormattedToDateToCharWave17:
+    """Formatted TO_CHAR/TO_DATE in procedural raw expressions (5x live,
+    2026-07-11): TO_CHAR(x, 'fmt') has a faithful T-SQL spelling via FORMAT
+    with the .NET model (the DML pipeline already owns the token
+    translation); TO_DATE(x, 'fmt') maps to CONVERT(DATETIME, x, style) for
+    the common unambiguous formats. Unknown formats stay visible."""
+
+    def test_to_char_with_date_format(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_f(m_out OUT VARCHAR2, m_d IN DATE) AS\n"
+            "BEGIN\n"
+            "  m_out := to_char(m_d, 'DD/MM/YYYY HH24:MI:SS');\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert re.search(
+            r"(?i)FORMAT\s*\(\s*@m_d\s*,\s*'dd/MM/yyyy HH:mm:ss'", out
+        ), out
+        assert "TO_CHAR" not in out.upper(), out
+
+    def test_to_date_literal_with_format(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_f2(m_ok OUT NUMBER, m_d IN DATE) AS\n"
+            "BEGIN\n"
+            "  IF m_d >= TO_DATE('01/01/2017 00:00:00', 'DD/MM/YYYY HH24:MI:SS') THEN\n"
+            "    m_ok := 1;\n"
+            "  END IF;\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert "TO_DATE" not in out.upper(), out
+        assert re.search(
+            r"(?i)CONVERT\s*\(\s*DATETIME\s*,\s*'01/01/2017 00:00:00'\s*,\s*103\s*\)",
+            out,
+        ), out
+
+    def test_to_date_iso_format(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_f3(m_out OUT NUMBER, m_c IN VARCHAR2) AS\n"
+            "BEGIN\n"
+            "  m_out := DATEPART(YEAR, TO_DATE(m_c, 'YYYY-MM-DD'));\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert "TO_DATE" not in out.upper(), out
+        assert re.search(
+            r"(?i)CONVERT\s*\(\s*DATETIME\s*,\s*@m_c\s*,\s*120\s*\)", out
+        ), out
+
+    def test_unknown_format_stays_visible(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_f4(m_out OUT DATE, m_c IN VARCHAR2) AS\n"
+            "BEGIN\n"
+            "  m_out := TO_DATE(m_c, 'J');\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert "TO_DATE" in out.upper(), out
+
+    def test_numeric_to_char_mask_is_not_formatted_as_date(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_f5(m_out OUT VARCHAR2, m_n IN NUMBER) AS\n"
+            "BEGIN\n"
+            "  m_out := TO_CHAR(m_n, '99999');\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        # A numeric mask through the date-token table would be garbage;
+        # it must not become FORMAT(x, '<date tokens>').
+        assert not re.search(r"(?i)FORMAT\s*\(\s*@m_n\s*,\s*'[^']*[dMyHms]", out), out
+
+
+class TestRawGuidDefaultOnPg:
+    """Oracle ``RAW(16) DEFAULT SYS_GUID()`` maps types to BYTEA but the
+    default to gen_random_uuid() — a uuid, which PostgreSQL rejects against
+    a bytea column (42804, live 2x). The default must produce bytea."""
+
+    def test_bytea_column_gets_bytea_default(self) -> None:
+        out = _t(
+            "CREATE TABLE h_x (IDL RAW(16) DEFAULT SYS_GUID() NOT NULL, "
+            "LANG VARCHAR2(5));",
+            "postgresql",
+        )
+        assert "BYTEA" in out.upper(), out
+        assert re.search(
+            r"(?i)DEFAULT\s+DECODE\s*\(\s*REPLACE\s*\(\s*gen_random_uuid\(\)::TEXT",
+            out,
+        ), out
+
+    def test_non_bytea_uuid_default_untouched(self) -> None:
+        # A VARCHAR2(36) guid column keeps a text-typed default instead.
+        out = _t(
+            "CREATE TABLE h_y (IDL VARCHAR2(40) DEFAULT SYS_GUID());",
+            "postgresql",
+        )
+        assert "DECODE" not in out.upper(), out
+
+
+class TestEmbeddedAlterAddColumns:
+    """An ALTER unwrapped from a constant EXECUTE IMMEDIATE (or written
+    directly in a block) took the raw-sqlglot fallback, whose oracle→pg
+    output spells Oracle's multi-column ADD as ``ADD COLUMNS (…)`` —
+    invalid everywhere (42601 live). Routed through the IR passthrough
+    emitter, which owns _portable_alter_add."""
+
+    _SRC = (
+        "DECLARE\n"
+        "  V_X VARCHAR2(100);\n"
+        "BEGIN\n"
+        "  EXECUTE IMMEDIATE 'ALTER TABLE a_pre ADD (OBS CLOB, NUM NUMBER(9))';\n"
+        "END;\n/"
+    )
+
+    def test_add_columns_never_reaches_pg(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        assert "ADD COLUMNS" not in out.upper(), out
+        assert re.search(r"(?i)ADD\s+OBS\s+TEXT", out), out
+        assert re.search(r"(?i)ADD\s+NUM\s+", out), out
+
+    def test_add_columns_never_reaches_mysql_or_tsql(self) -> None:
+        for target in ("mysql", "tsql"):
+            out = _t(self._SRC, target)
+            assert "ADD COLUMNS" not in out.upper(), (target, out)

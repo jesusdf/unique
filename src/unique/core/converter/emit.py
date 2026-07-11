@@ -1266,6 +1266,19 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                         "CURRENT_TIMESTAMP",
                         default_sql,
                     )
+                if (
+                    dialect == "postgresql"
+                    and dtype.upper().split("(")[0] == "BYTEA"
+                    and re.search(r"(?i)\bgen_random_uuid\s*\(\s*\)", default_sql)
+                ):
+                    # Oracle RAW(16) DEFAULT SYS_GUID(): the column mapped to
+                    # BYTEA but gen_random_uuid() is a uuid (42804). Render
+                    # the same 16 random bytes as bytea.
+                    default_sql = re.sub(
+                        r"(?i)\bgen_random_uuid\s*\(\s*\)",
+                        "DECODE(REPLACE(gen_random_uuid()::TEXT, '-', ''), 'hex')",
+                        default_sql,
+                    )
                 if dialect == "postgresql" and dtype.upper() == "BOOLEAN":
                     # A source BIT column arrives with a 0/1 default;
                     # PostgreSQL rejects an integer default on BOOLEAN.

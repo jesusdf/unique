@@ -26,6 +26,7 @@ from unique.core.ast_nodes import (
     WhileStatement,
 )
 from unique.core.converter import IDENTITY_COLUMNS, PG_TRIGGER_FN_BODIES, USER_FUNCTIONS
+from unique.core.converter.emit import _convert_date_format
 from unique.core.mappings import TSQL_OBJECT_CONTEXT_WORDS, tsql_call_needs_schema
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
@@ -75,6 +76,18 @@ class TSqlTransformer(ProceduralTransformer):
             out.append(ch)
             i += 1
         return "".join(out)
+
+    #: Common unambiguous Oracle TO_DATE formats -> T-SQL CONVERT style
+    #: (a trailing HH24:MI:SS is stripped before lookup; the datetime styles
+    #: parse an appended time-of-day).
+    _TO_DATE_STYLES = {
+        "DD/MM/YYYY": 103,
+        "MM/DD/YYYY": 101,
+        "YYYY-MM-DD": 120,
+        "YYYYMMDD": 112,
+        "DD-MM-YYYY": 105,
+        "DD.MM.YYYY": 104,
+    }
 
     #: SYS_CONTEXT('USERENV', '<attr>') attributes with a direct T-SQL form.
     _SYS_CONTEXT_MAP = {
@@ -186,6 +199,36 @@ class TSqlTransformer(ProceduralTransformer):
         sql = re.sub(
             rf"(?is)\bTO_NUMBER\s*\(\s*{arg}\s*\)",
             r"CAST(\1 AS DECIMAL(38, 10))",
+            sql,
+        )
+
+        # Formatted TO_DATE(x, 'fmt'): the common unambiguous Oracle formats
+        # map to a fixed T-SQL CONVERT style; anything else stays visible.
+        def _to_date_style(m: re.Match[str]) -> str:
+            fmt = m.group(2).strip().upper()
+            style = self._TO_DATE_STYLES.get(re.sub(r"\s*HH24:MI:SS$", "", fmt))
+            if style is None:
+                return m.group(0)
+            return f"CONVERT(DATETIME, {m.group(1).strip()}, {style})"
+
+        sql = re.sub(
+            rf"(?is)\bTO_DATE\s*\(\s*{arg}\s*,\s*'([^']*)'\s*\)",
+            _to_date_style,
+            sql,
+        )
+
+        # Formatted TO_CHAR(x, '<date fmt>') -> FORMAT(x, '<.NET fmt>') via
+        # the shared token table; numeric masks (no date tokens) stay put.
+        def _to_char_format(m: re.Match[str]) -> str:
+            fmt = m.group(2)
+            if not re.search(r"(?i)YY|MM|DD|HH|MI|SS", fmt):
+                return m.group(0)
+            net = _convert_date_format(fmt, "oracle", "tsql")
+            return f"FORMAT({m.group(1).strip()}, '{net}')"
+
+        sql = re.sub(
+            rf"(?is)\bTO_CHAR\s*\(\s*{arg}\s*,\s*'([^']*)'\s*\)",
+            _to_char_format,
             sql,
         )
         # One-argument TO_CHAR/TO_DATE: plain conversions. The formatted
