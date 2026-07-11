@@ -3736,13 +3736,28 @@ class ProceduralTransformer:
             if self._target == "tsql":
                 # The T-SQL part is a bare keyword; a quoted 'D' is invalid.
                 return f"DATEDIFF({unit}, {start}, {end})"
+            # T-SQL DATEDIFF counts calendar BOUNDARIES crossed (integer):
+            # Jan-31 -> Feb-1 is MONTH = 1; 23:00 -> 01:00 next day is
+            # DAY = 1. Oracle's raw subtraction / MONTHS_BETWEEN are
+            # fractional — a silent numeric divergence — so both targets
+            # use the boundary-counting forms the IR emitter live-validates.
             if self._target == "oracle":
                 if unit == "DAY":
-                    return f"({end} - {start})"
+                    return (
+                        f"(TRUNC(CAST({end} AS DATE)) - "
+                        f"TRUNC(CAST({start} AS DATE)))"
+                    )
                 if unit == "MONTH":
-                    return f"MONTHS_BETWEEN({end}, {start})"
+                    return (
+                        f"((EXTRACT(YEAR FROM {end}) * 12 + "
+                        f"EXTRACT(MONTH FROM {end})) - "
+                        f"(EXTRACT(YEAR FROM {start}) * 12 + "
+                        f"EXTRACT(MONTH FROM {start})))"
+                    )
                 if unit == "YEAR":
-                    return f"(MONTHS_BETWEEN({end}, {start}) / 12)"
+                    return (
+                        f"(EXTRACT(YEAR FROM {end}) - " f"EXTRACT(YEAR FROM {start}))"
+                    )
                 # A sub-day unit is a fraction of the (end - start) day count.
                 factor = {"HOUR": 24, "MINUTE": 1440, "SECOND": 86400}.get(unit)
                 if factor:
@@ -3751,6 +3766,17 @@ class ProceduralTransformer:
             if self._target == "postgresql":
                 if unit == "DAY":
                     return f"({end}::date - {start}::date)"
+                if unit == "MONTH":
+                    return (
+                        f"((EXTRACT(YEAR FROM {end}) * 12 + "
+                        f"EXTRACT(MONTH FROM {end})) - "
+                        f"(EXTRACT(YEAR FROM {start}) * 12 + "
+                        f"EXTRACT(MONTH FROM {start})))"
+                    )
+                if unit == "YEAR":
+                    return (
+                        f"(EXTRACT(YEAR FROM {end}) - " f"EXTRACT(YEAR FROM {start}))"
+                    )
                 return None
             # mysql
             if unit == "DAY":

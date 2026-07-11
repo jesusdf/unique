@@ -526,3 +526,40 @@ class TestDateaddIntervalNotConcat:
         # A variable inside the INTERVAL string would be garbage.
         assert not re.search(r"(?i)INTERVAL\s*'[^']*v_n", out), out
         assert re.search(r"(?i)\(\s*v_n\s*\)\s*\*\s*INTERVAL\s*'1 DAY'", out), out
+
+
+class TestDatediffBoundarySemantics:
+    """M3-prereq increment 2b: T-SQL DATEDIFF counts calendar BOUNDARIES
+    (integer). The curated text handlers returned Oracle's fractional
+    forms — (end - start) is fractional days for timestamps,
+    MONTHS_BETWEEN fractional months — a silent numeric divergence (e.g.
+    23:00 → 01:00 next day: T-SQL DAY = 1, subtraction = 0.08). They now
+    emit the boundary-counting forms the IR emitter already uses."""
+
+    _SRC = (
+        "CREATE PROCEDURE p_dd @a DATETIME, @b DATETIME AS\n"
+        "BEGIN\n"
+        "  DECLARE @n INT;\n"
+        "  SET @n = DATEDIFF(DAY, @a, @b);\n"
+        "  SET @n = DATEDIFF(MONTH, @a, @b);\n"
+        "  SET @n = DATEDIFF(YEAR, @a, @b);\n"
+        "END\n"
+        "GO"
+    )
+
+    def test_oracle_counts_boundaries(self) -> None:
+        out = _t(self._SRC, "tsql", "oracle")
+        assert "MONTHS_BETWEEN" not in out.upper(), out
+        assert re.search(
+            r"(?i)TRUNC\s*\(\s*CAST\s*\(\s*V_B\s+AS\s+DATE\s*\)\s*\)", out
+        ), out
+        assert re.search(
+            r"(?i)EXTRACT\s*\(\s*YEAR\s+FROM\s+V_B\s*\)\s*\*\s*12", out
+        ), out
+
+    def test_pg_counts_boundaries(self) -> None:
+        out = _t(self._SRC, "tsql", "postgresql")
+        assert "AGE(" not in out.upper(), out
+        assert re.search(
+            r"(?i)EXTRACT\s*\(\s*YEAR\s+FROM\s+v_b\s*\)\s*\*\s*12", out
+        ), out

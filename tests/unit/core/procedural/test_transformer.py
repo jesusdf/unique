@@ -499,14 +499,21 @@ class TestDateAdd:
 
 class TestDateDiff:
     def test_datediff_day_to_oracle(self) -> None:
+        # T-SQL DATEDIFF counts day BOUNDARIES (23:00 -> 01:00 next day is
+        # 1); Oracle's raw (b - a) is fractional for timestamps.
         t = ProceduralTransformer("tsql", "oracle")
         out = t._transform_node(RawSQL(sql="DATEDIFF(day, a, b)", reason="x"))
-        assert out.sql == "(b - a)"
+        assert out.sql == "(TRUNC(CAST(b AS DATE)) - TRUNC(CAST(a AS DATE)))"
 
     def test_datediff_month_to_oracle(self) -> None:
+        # Month-boundary count, not fractional MONTHS_BETWEEN.
         t = ProceduralTransformer("tsql", "oracle")
         out = t._transform_node(RawSQL(sql="DATEDIFF(month, a, b)", reason="x"))
-        assert "MONTHS_BETWEEN(b, a)" in out.sql
+        assert "MONTHS_BETWEEN" not in out.sql
+        assert (
+            "((EXTRACT(YEAR FROM b) * 12 + EXTRACT(MONTH FROM b)) - "
+            "(EXTRACT(YEAR FROM a) * 12 + EXTRACT(MONTH FROM a)))" in out.sql
+        )
 
     def test_datediff_day_to_postgresql(self) -> None:
         t = ProceduralTransformer("tsql", "postgresql")
@@ -528,7 +535,7 @@ class TestDateDiff:
         out = t._transform_node(
             RawSQL(sql="DATEADD(day, 1, DATEDIFF(day, x, y))", reason="x")
         )
-        assert out.sql == "((y - x) + 1)"
+        assert out.sql == ("((TRUNC(CAST(y AS DATE)) - TRUNC(CAST(x AS DATE))) + 1)")
 
 
 class TestMySQLStringConcat:
