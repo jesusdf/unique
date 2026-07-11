@@ -1994,6 +1994,37 @@ class Transpiler:
         — an executable statement reduced to a comment with a misleading
         warning is a no-silent-loss violation (audit 2026-07-08, RC1/RC4).
         """
+        if source == "postgresql" and target != "postgresql":
+            # PostgreSQL session GUCs (SET name = v / TO v, RESET name):
+            # engine-local knobs with no meaning elsewhere — the largest
+            # class of the pg-source baseline (they error on every engine).
+            _, code = split_leading_trivia(sql)
+            if re.match(
+                r"(?is)^\s*(?:SET\s+(?:LOCAL\s+|SESSION\s+(?!AUTHORIZATION\b))?"
+                r"(?!TRANSACTION\b|CONSTRAINTS\b|ROLE\b|TIME\s+ZONE\b)"
+                r"[A-Za-z_][\w.]*\s*(?:=|\bTO\b)|RESET\s+[A-Za-z_])",
+                code,
+            ):
+                commented = "\n".join(
+                    f"-- {line}" if line.strip() else ""
+                    for line in sql.strip().splitlines()
+                )
+                head = " ".join(code.strip().split())[:60]
+                return TranspileResult(
+                    sql=(
+                        f"-- UNIQUE: PostgreSQL session setting has no "
+                        f"{target} equivalent; configure the session "
+                        f"natively.\n{commented}"
+                    ),
+                    warnings=[
+                        _warn(
+                            f"PostgreSQL session setting commented out: {head}",
+                            "set_option",
+                            source,
+                            target,
+                        )
+                    ],
+                )
         if source == "tsql" and target != "tsql":
             commented = "\n".join(
                 f"-- {line}" if line.strip() else ""

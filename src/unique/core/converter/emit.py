@@ -475,6 +475,28 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             + _comment_block(_strip_dbo_schema_qualifier(node.sql))
         )
 
+    # PostgreSQL session GUCs (SET name = v / SET name TO v, optionally
+    # LOCAL/SESSION) are engine-local knobs with no meaning elsewhere — the
+    # largest class of the pg-source baseline (they error on every other
+    # engine). Real SQL SET forms (TRANSACTION, CONSTRAINTS, ROLE, SESSION
+    # AUTHORIZATION) keep their path.
+    if (
+        node.kind == "SET"
+        and node.source_dialect == "postgresql"
+        and dialect != "postgresql"
+        and re.match(
+            r"(?is)^\s*SET\s+(?:LOCAL\s+|SESSION\s+(?!AUTHORIZATION\b))?"
+            r"(?!TRANSACTION\b|CONSTRAINTS\b|ROLE\b|TIME\s+ZONE\b)"
+            r"[A-Za-z_][\w.]*\s*(?:=|\bTO\b)",
+            node.sql,
+        )
+    ):
+        return (
+            f"-- UNIQUE: PostgreSQL session setting has no {dialect} "
+            f"equivalent; configure the session natively.\n"
+            f"{_comment_block(node.sql)}"
+        )
+
     # USE <db> switches the active database. Valid in MySQL and T-SQL only;
     # PostgreSQL (\\c is a psql meta-command) and Oracle have no SQL form.
     if node.kind == "USE" and dialect in ("postgresql", "oracle"):
