@@ -57,6 +57,10 @@ class TSqlEmitter(ProceduralEmitter):
         self._loop_vars_emitted = set()
         return super().emit(node)
 
+    def _wants_empty_parens_function(self) -> bool:
+        # T-SQL functions require the parentheses even with no parameters.
+        return True
+
     def _emit_param(
         self,
         p: ParameterDefinition,

@@ -575,6 +575,12 @@ class ProceduralEmitter:
         engines that require it (MySQL, PostgreSQL)."""
         return False
 
+    def _wants_empty_parens_function(self) -> bool:
+        """Like ``_wants_empty_parens`` but for functions, where T-SQL also
+        requires the parentheses (CREATE FUNCTION f() … — error 102 without
+        them) although its procedures stay paren-less."""
+        return self._wants_empty_parens()
+
     def _emit_procedure_body(
         self,
         header: str,
@@ -854,9 +860,9 @@ class ProceduralEmitter:
 
         if params_str:
             header += f"\n(\n{params_str}\n)"
-        elif self._wants_empty_parens():
-            # MySQL and PostgreSQL require the parameter parentheses even when
-            # empty (CREATE FUNCTION f() ...). Oracle allows omitting them.
+        elif self._wants_empty_parens_function():
+            # MySQL, PostgreSQL and T-SQL require the parameter parentheses
+            # on a function even when empty. Oracle allows omitting them.
             header += "()"
 
         header += self._returns_clause(ret_type)

@@ -77,6 +77,26 @@ class TSqlTransformer(ProceduralTransformer):
             i += 1
         return "".join(out)
 
+    #: Oracle/VB-style datepart spellings -> the T-SQL keyword.
+    _QUOTED_DATEPARTS = {
+        "Y": "YEAR",
+        "YY": "YEAR",
+        "YYYY": "YEAR",
+        "Q": "QUARTER",
+        "M": "MONTH",
+        "MM": "MONTH",
+        "D": "DAY",
+        "DD": "DAY",
+        "W": "WEEK",
+        "WW": "WEEK",
+        "H": "HOUR",
+        "HH": "HOUR",
+        "N": "MINUTE",
+        "MI": "MINUTE",
+        "S": "SECOND",
+        "SS": "SECOND",
+    }
+
     #: Common unambiguous Oracle TO_DATE formats -> T-SQL CONVERT style
     #: (a trailing HH24:MI:SS is stripped before lookup; the datetime styles
     #: parse an appended time-of-day).
@@ -194,6 +214,18 @@ class TSqlTransformer(ProceduralTransformer):
             rf"(?is)\bMONTHS_BETWEEN\s*\(\s*{arg}\s*,\s*{arg}\s*\)",
             r"DATEDIFF(MONTH, \2, \1)",
             sql,
+        )
+
+        # Oracle-style QUOTED dateparts in DATEDIFF/DATEADD (live 1023:
+        # DATEDIFF('Y', a, b)): T-SQL takes a bare keyword.
+        def _bare_datepart(m: re.Match[str]) -> str:
+            part = self._QUOTED_DATEPARTS.get(m.group(2).upper())
+            if part is None:
+                return m.group(0)
+            return f"{m.group(1).upper()}({part}, "
+
+        sql = re.sub(
+            r"(?is)\b(DATEDIFF|DATEADD)\s*\(\s*'(\w+)'\s*,", _bare_datepart, sql
         )
         # EXTRACT(part FROM x): T-SQL has no EXTRACT (error 195) — DATEPART.
         sql = re.sub(

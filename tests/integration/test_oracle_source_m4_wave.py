@@ -1003,3 +1003,41 @@ class TestAliasedSingleTableUpdateOnTsql:
         out = _t(self._SRC, "postgresql")
         assert "ROWNUM" not in out.upper(), out
         sqlglot.parse(out, read="postgres")
+
+
+class TestTsqlFunctionEmptyParens:
+    """T-SQL requires the parameter parentheses on CREATE FUNCTION even
+    with no parameters (live: CREATE FUNCTION NOW / RETURNS DATETIME —
+    error 102 near RETURNS). Procedures stay paren-less."""
+
+    def test_parameterless_function_gets_parens(self) -> None:
+        src = (
+            "CREATE OR REPLACE FUNCTION f_now RETURN DATE AS\n"
+            "BEGIN\n"
+            "  RETURN SYSDATE;\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert re.search(r"(?i)CREATE\s+FUNCTION\s+f_now\s*\(\s*\)", out), out
+
+    def test_parameterless_procedure_stays_bare(self) -> None:
+        src = "CREATE OR REPLACE PROCEDURE p_now AS\n" "BEGIN\n" "  NULL;\n" "END;\n/"
+        out = _t(src, "tsql")
+        assert not re.search(r"(?i)CREATE\s+PROCEDURE\s+p_now\s*\(", out), out
+
+
+class TestQuotedDatepartOnTsql:
+    """Oracle-style quoted dateparts reaching T-SQL DATEDIFF/DATEADD
+    (live 1023: DATEDIFF('Y', a, b)) — T-SQL takes bare keywords."""
+
+    def test_quoted_year_part(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_dd(m_e OUT NUMBER, m_a IN DATE,"
+            " m_b IN DATE) AS\n"
+            "BEGIN\n"
+            "  m_e := DATEDIFF('Y', m_a, m_b);\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert re.search(r"(?i)DATEDIFF\s*\(\s*YEAR\s*,", out), out
+        assert not re.search(r"(?i)DATEDIFF\s*\(\s*'", out), out
