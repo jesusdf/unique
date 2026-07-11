@@ -588,7 +588,20 @@ fix needs an **anonymized** regression fixture (never a private name).
         mechanism dropping a FROM table). oracle — 133x ORA-00922, 61x
         ORA-00936, 54x ORA-00900, 68x PLS-00103. mysql — 576x generic
         1064 (needs the near-token dump classification M4 used). Work the
-        classes from the sweep dumps, M4-style. Getting here surfaced and
+        classes from the sweep dumps, M4-style. **Waves 1–3b (2026-07-11,
+        official re-measure at `ed9fa7e`): pg→Oracle 90.4% (351, was 454),
+        pg→T-SQL 74.5% (973, was 1090), pg→MySQL 83.7% (589)** — session
+        GUC SETs/RESETs degrade to carriers, VALUES relations lower to
+        UNION ALL row-SELECTs on all four engines (they converted to
+        NOTHING — empty FROM), ranking/offset window functions gain
+        T-SQL's required ORDER BY (SELECT NULL), and joined derived
+        tables keep their alias. **Remaining mysql residue classified:**
+        dominated by plpgsql FUNCTION bodies spilling fragments
+        (34x `AS LANGUAGE;`, 18x `RETURN AS NEW`, per-function CREATE
+        heads) — the pg-source PROCEDURAL bring-up, an M4-scale
+        workstream; first step is honesty (a desynced plpgsql unit must
+        degrade WHOLE, doc-04 rule 4), then the function→routine
+        conversion classes. Getting here surfaced and
         fixed THREE product bugs: the sqlglot COPY DoS (`:'var'`,
         `3aa55b4`), the transactional-BEGIN splitter glue (also under the
         output gate), and the oracle first-boot healthcheck wait.
