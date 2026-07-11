@@ -185,7 +185,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       13 MB dump ~55 s (+22% vs pre-M3, linear). Still open: deleting the
       expression-level text rewriters — blocked on the M3-prereq below.
 - [ ] **M3-prereq: move the procedural text-matchers onto structure before
-      routing scalar expressions through the IR.** A first attempt at IR-first
+      routing scalar expressions through the IR.** *Increment 1 landed
+      2026-07-11 (`e8196ee`): the IR gains procedural variable types — a
+      STRING_VARIABLES ContextVar published around every IR call lets the
+      shared `_looks_like_string` classify `@a + @b` over declared string
+      variables (fixed a live runtime bug: embedded UPDATE shipped
+      `v_a + v_b` on PG). Remaining increments, in order: (2) DATEADD/
+      DATEDIFF parity — differential-test the curated text handlers
+      against the IR emitters and close the gaps; (3) the last-identity
+      capture consumes a node, not a marker string; (4) dual-guard→IF and
+      DECLARE-init hoisting consume nodes; then the text rewriters can
+      shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed
       expression text* — the Oracle last-identity capture looks for a marker
