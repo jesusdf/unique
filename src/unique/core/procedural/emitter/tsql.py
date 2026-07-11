@@ -314,9 +314,12 @@ class TSqlEmitter(ProceduralEmitter):
             return "\n".join(lines)
 
         fetch_vars = ", ".join(f"@{variable}_{c}" for c in cols)
+        # ``@?``: the loop variable may also be DECLAREd (``<cur>%ROWTYPE``),
+        # in which case the var rename already @-prefixed the record ref —
+        # consume that @ or the rewrite would emit ``@@var_col``.
         rewritten = [
             re.sub(
-                rf"(?i)\b{re.escape(variable)}\s*\.\s*(\w+)",
+                rf"(?i)@?\b{re.escape(variable)}\s*\.\s*(\w+)",
                 lambda m: f"@{variable}_{str(m.group(1)).lower()}",
                 line,
             )

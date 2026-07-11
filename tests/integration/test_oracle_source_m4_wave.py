@@ -866,3 +866,29 @@ class TestCursorAttributesOnTsql:
         out = _t(src, "tsql")
         assert "SQL%" not in out.upper().replace(" ", ""), out
         assert re.search(r"(?i)@@ROWCOUNT\s*=\s*0", out), out
+
+
+class TestRowtypeLoopVarDoubleAt:
+    """The cursor FOR-loop variable may ALSO be declared explicitly as
+    ``<cur>%ROWTYPE`` (real dump). The var rename then turns ``C.X`` into
+    ``@C.X`` before the loop expansion rewrites record refs, which
+    prefixed a second ``@`` (live 137: '@@C_SERIES_serie'). The expansion
+    now consumes an existing ``@``."""
+
+    _SRC = (
+        "CREATE OR REPLACE PROCEDURE p_rt(m_td IN VARCHAR2, m_out OUT VARCHAR2) AS\n"
+        "  CURSOR CUR_S IS SELECT SERIE, ACTIVO FROM f_serie WHERE TD = m_td;\n"
+        "  C_S CUR_S%ROWTYPE;\n"
+        "  STR_S VARCHAR2(2000);\n"
+        "BEGIN\n"
+        "  FOR C_S IN CUR_S LOOP\n"
+        "    STR_S := STR_S || '''' || C_S.SERIE || '''';\n"
+        "  END LOOP;\n"
+        "  m_out := STR_S;\n"
+        "END;\n/"
+    )
+
+    def test_no_double_at_variable(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert "@@C_S_serie" not in out, out
+        assert re.search(r"(?<!@)@C_S_serie\b", out), out
