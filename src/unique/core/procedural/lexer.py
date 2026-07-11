@@ -420,6 +420,26 @@ class Lexer:
             self._tokenize_string(line, col, prefix="N")
             return
 
+        # Oracle q-quoted literal: q'[…]' / q'{…}' / q'(…)' / q'<…>' /
+        # q'!…!' — the content is raw (no '' escaping) up to the closing
+        # delimiter + quote. Emitted normalized to a standard single-quoted
+        # string (content quotes doubled) so every consumer/target sees
+        # plain quoting.
+        if ch in ("Q", "q") and self._peek(1) == "'":
+            open_delim = self._peek(2)
+            if open_delim:
+                close_delim = {"[": "]", "{": "}", "(": ")", "<": ">"}.get(
+                    open_delim, open_delim
+                )
+                end = self._sql.find(close_delim + "'", self._pos + 3)
+                if end != -1:
+                    content = self._sql[self._pos + 3 : end]
+                    # _advance keeps the line/column counters correct.
+                    self._advance(end + 2 - self._pos)
+                    normalized = "'" + content.replace("'", "''") + "'"
+                    self._emit(TokenType.STRING, normalized, line, col)
+                    return
+
         # Quoted identifier [brackets] (T-SQL)
         if ch == "[":
             start = self._pos

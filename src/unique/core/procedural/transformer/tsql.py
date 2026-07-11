@@ -130,6 +130,54 @@ class TSqlTransformer(ProceduralTransformer):
         r"\s*([^(),]+?)\s*\)"
     )
 
+    @staticmethod
+    def _three_arg_substring(sql: str) -> str:
+        """Give every 2-argument SUBSTRING an explicit length and a
+        sign-aware start (Oracle SUBSTR(s, -n) reads from the end)."""
+        from unique.core.sql_split import split_top_level_commas
+
+        out: list[str] = []
+        i = 0
+        pat = re.compile(r"(?is)\bSUBSTRING\s*\(")
+        while True:
+            m = pat.search(sql, i)
+            if not m:
+                out.append(sql[i:])
+                break
+            depth, j = 1, m.end()
+            while j < len(sql) and depth:
+                c = sql[j]
+                if c == "'":
+                    j += 1
+                    while j < len(sql):
+                        if sql[j] == "'":
+                            if j + 1 < len(sql) and sql[j + 1] == "'":
+                                j += 2
+                                continue
+                            break
+                        j += 1
+                elif c == "(":
+                    depth += 1
+                elif c == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            inner = sql[m.end() : j]
+            args = split_top_level_commas(inner)
+            out.append(sql[i : m.start()])
+            if len(args) == 2:
+                s, pos = args[0].strip(), args[1].strip()
+                start = (
+                    f"CASE WHEN ({pos}) < 0 THEN LEN({s}) + ({pos}) + 1 "
+                    f"ELSE ({pos}) END"
+                )
+                out.append(f"SUBSTRING({s}, {start}, LEN({s}))")
+            else:
+                out.append(sql[m.start() : j + 1])
+            i = j + 1
+        return "".join(out)
+
     def _map_oracle_builtins(self, sql: str) -> str:
         """Oracle built-ins with a direct T-SQL form that leak through the
         raw-expression path (found live in the 13 MB corpus, 2026-07-10)."""
@@ -271,6 +319,11 @@ class TSqlTransformer(ProceduralTransformer):
             _to_char_format,
             sql,
         )
+        # Two-argument SUBSTRING (Oracle SUBSTR(s, p): from p to the end;
+        # negative p counts from the end): T-SQL requires 3 arguments
+        # (error 174). Balanced-paren scan — the arguments may nest calls
+        # deeper than the one-level {arg} regex tolerates.
+        sql = self._three_arg_substring(sql)
         # RPAD/LPAD have no T-SQL builtin: build from REPLICATE (LEFT/RIGHT
         # truncate to the target length, matching Oracle when the input is
         # longer than the pad length). Mirrors the IR emitter's expansion.

@@ -1107,3 +1107,74 @@ class TestDistinctInAssignmentSelect:
         out = _t(self._SRC, "tsql")
         assert re.search(r"(?i)SELECT\s+DISTINCT\s+@m_a\s*=", out), out
         assert not re.search(r"(?i)=\s*distinct\b", out), out
+
+
+class TestOracleQQuotedLiterals:
+    """Oracle q-quoted literals (q'[…]', q'{…}', …) must lex as ONE string
+    and convert to standard quoting (live: EXEC sp_executesql q '[ … ]' —
+    error 102). The content's single quotes are doubled."""
+
+    def test_q_bracket_literal(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_q5(m_out OUT VARCHAR2) AS\n"
+            "BEGIN\n"
+            "  m_out := q'[it's a test]';\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert "q'" not in out.lower(), out
+        assert "'it''s a test'" in out, out
+
+    def test_q_brace_literal_in_condition(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_q6(m_a IN VARCHAR2, m_o OUT NUMBER) AS\n"
+            "BEGIN\n"
+            "  IF m_a = q'{x}' THEN\n"
+            "    m_o := 1;\n"
+            "  END IF;\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert "q'" not in out.lower(), out
+        assert "'x'" in out, out
+
+
+class TestTwoArgSubstringOnTsql:
+    """Oracle SUBSTR(s, p) means "from p to the end" (negative p counts
+    from the end); T-SQL SUBSTRING requires 3 arguments (live 174). The
+    2-arg form gains an explicit length and a sign-aware start."""
+
+    def test_positive_start(self) -> None:
+        src = (
+            "CREATE OR REPLACE FUNCTION f_ss(p_c IN VARCHAR2) RETURN VARCHAR2 AS\n"
+            "BEGIN\n"
+            "  RETURN SUBSTR(p_c, 3);\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert not re.search(r"(?i)SUBSTRING\s*\(\s*@p_c\s*,\s*3\s*\)", out), out
+        assert re.search(r"(?i)LEN\s*\(", out), out
+
+    def test_nested_call_argument(self) -> None:
+        src = (
+            "CREATE OR REPLACE FUNCTION f_ss2(p_c IN VARCHAR2, p_n IN NUMBER)\n"
+            "RETURN VARCHAR2 AS\n"
+            "BEGIN\n"
+            "  RETURN SUBSTR(RPAD(p_c, 10, 'x') || p_c,"
+            " GREATEST(-LENGTH(p_c), -p_n));\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        # No 2-arg SUBSTRING may remain (T-SQL requires 3 args).
+        for m in re.finditer(r"(?is)\bSUBSTRING\s*\(", out):
+            depth, args, i = 1, 1, m.end()
+            while i < len(out) and depth:
+                c = out[i]
+                if c == "(":
+                    depth += 1
+                elif c == ")":
+                    depth -= 1
+                elif c == "," and depth == 1:
+                    args += 1
+                i += 1
+            assert args >= 3, out
