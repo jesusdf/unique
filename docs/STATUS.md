@@ -1,6 +1,12 @@
 # Unique — Project Status
 
-## Current state: v0.24.0 (M0–M2 shipped; M3 core + M4 bring-up landed)
+## Current state: v0.24.0 (M0–M2 shipped; M3 core landed; **M4 complete**)
+
+**M4 milestone reached 2026-07-11:** the Oracle-source bring-up closed at
+**0 syntax failures on all three directions** over the real 13 MB migration
+dump (35k+ statements per direction, live engines): oracle→T-SQL 100.0%,
+oracle→PostgreSQL 100.0%, oracle→MySQL 100.0% — from 475/41/121 failures at
+the start of the bring-up (official `validity_sweep` at `7c1cea7`).
 
 The project is executing the architecture plan adopted from the 2026-07-08
 audit ([`audit/2026-07-08/04-architecture-analysis.md`](../audit/2026-07-08/04-architecture-analysis.md)):

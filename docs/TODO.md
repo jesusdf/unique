@@ -196,7 +196,11 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       must consume nodes (or the IR must gain procedural context: var types,
       PROCEDURAL_FUNC_MAPS) before the text rewriters can be deleted (P4's
       final step). Until then the text path stays the expression engine.
-- [ ] **M4 — Oracle-source bring-up** driven by the sweep frequency table
+- [x] **M4 — Oracle-source bring-up — ✅ COMPLETE 2026-07-11.** Official
+      validity_sweep at `7c1cea7` on the 13 MB dump (35k+ statements per
+      direction): **oracle→T-SQL 0 syntax failures, oracle→PostgreSQL 0,
+      oracle→MySQL 0 — 100.0% on all three** (from 475/41/121 at the
+      start of the bring-up). Driven by the sweep frequency table
       (doc 03 §D backlog). ***Official sweep 2026-07-11 at `8f6e4a0` (post
       waves 15a–15f): T-SQL 99.9% (48), PostgreSQL 100.0% (10), MySQL
       100.0% (0 — the whole 18-class residue cleared).*** Residue
