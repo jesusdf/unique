@@ -945,3 +945,32 @@ class TestRpadLpadInRawExpressions:
         out = _t(src, "tsql")
         assert "LPAD" not in out.upper(), out
         assert re.search(r"(?i)RIGHT\s*\(\s*REPLICATE\s*\(\s*' '", out), out
+
+
+class TestBareReturnInPgTriggerFunction:
+    """Oracle's bare ``RETURN;`` (leave the trigger) inside a trigger body:
+    a plpgsql trigger function must return NEW/OLD/NULL — bare RETURN is
+    'missing expression' (42601 live). It now returns what the function's
+    trailing default returns (NEW row-level, NULL set-based)."""
+
+    _SRC = (
+        "CREATE OR REPLACE TRIGGER trg_r\n"
+        "AFTER UPDATE ON t_e FOR EACH ROW\n"
+        "DECLARE\n"
+        "  v_x NUMBER;\n"
+        "BEGIN\n"
+        "  BEGIN\n"
+        "    SELECT a INTO v_x FROM t2 WHERE b = :NEW.id;\n"
+        "  EXCEPTION\n"
+        "    WHEN NO_DATA_FOUND THEN\n"
+        "      RETURN;\n"
+        "  END;\n"
+        "  UPDATE t3 SET c = v_x WHERE id = :NEW.id;\n"
+        "END;\n/"
+    )
+
+    def test_bare_return_returns_new(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        fn_body = out[out.index("$$") : out.rindex("$$")]
+        assert not re.search(r"(?im)^\s*RETURN\s*;", fn_body), out
+        assert len(re.findall(r"(?i)RETURN NEW\s*;", fn_body)) >= 2, out

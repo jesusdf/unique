@@ -189,3 +189,52 @@ class TestNoFalseGuardWarning:
         result = Transpiler().transpile(src, "oracle", "tsql")
         assert "IF (NOT EXISTS" in result.sql
         assert not result.warnings, [w.message for w in result.warnings]
+
+
+class TestTriggerRowRefLeftovers:
+    """A T-SQL trigger body referencing NEW./OLD. rows is an incomplete
+    row→statement conversion (T-SQL only has inserted/deleted) — live 4x
+    error 102 'near .'. The pattern is trigger-scoped so a table alias
+    named NEW outside a trigger is never flagged."""
+
+    def test_new_ref_inside_trigger_is_flagged(self) -> None:
+        sql = (
+            "CREATE TRIGGER trg_x ON t AFTER UPDATE AS\n"
+            "BEGIN\n"
+            "  UPDATE t2 SET c = 1 WHERE id = NEW.id;\n"
+            "END"
+        )
+        assert find_leftover_tokens(sql, "tsql")
+
+    def test_old_ref_inside_trigger_is_flagged(self) -> None:
+        sql = (
+            "CREATE TRIGGER trg_x ON t AFTER DELETE AS\n"
+            "BEGIN\n"
+            "  DELETE FROM t2 WHERE id = OLD.id;\n"
+            "END"
+        )
+        assert find_leftover_tokens(sql, "tsql")
+
+    def test_inserted_based_trigger_is_clean(self) -> None:
+        sql = (
+            "CREATE TRIGGER trg_x ON t AFTER UPDATE AS\n"
+            "BEGIN\n"
+            "  UPDATE t2 SET c = 1 WHERE id IN (SELECT id FROM inserted);\n"
+            "END"
+        )
+        assert not find_leftover_tokens(sql, "tsql")
+
+    def test_new_alias_outside_trigger_is_clean(self) -> None:
+        assert not find_leftover_tokens(
+            "SELECT NEW.id FROM t AS NEW WHERE NEW.id = 1", "tsql"
+        )
+
+    def test_commented_new_ref_is_clean(self) -> None:
+        sql = (
+            "CREATE TRIGGER trg_x ON t AFTER UPDATE AS\n"
+            "BEGIN\n"
+            "  -- old body: WHERE id = NEW.id\n"
+            "  UPDATE t2 SET c = 1 WHERE id IN (SELECT id FROM inserted);\n"
+            "END"
+        )
+        assert not find_leftover_tokens(sql, "tsql")

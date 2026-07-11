@@ -29,6 +29,10 @@ class PostgresEmitter(ProceduralEmitter):
 
     dialect_name = "postgresql"
 
+    #: While emitting a trigger-function body: what a bare RETURN must
+    #: return there (NEW row-level, NULL set-based); None elsewhere.
+    _trigger_return_value: str | None = None
+
     def _emit_numeric_for_loop(
         self, variable: str, start: str, end: str, reverse: bool, body_lines: list[str]
     ) -> str:
@@ -196,7 +200,11 @@ class PostgresEmitter(ProceduralEmitter):
             self._indent_level = 0
         fn_lines.append("BEGIN")
         self._indent_level = 1
-        body_lines = self._emit_indented_stmts(trg_body)
+        self._trigger_return_value = "NULL" if node.set_based_transition else "NEW"
+        try:
+            body_lines = self._emit_indented_stmts(trg_body)
+        finally:
+            self._trigger_return_value = None
         self._indent_level = 0
         body_text = "\n".join(body_lines)
         # A cursor over the transition table lives in the DECLARE section
@@ -280,6 +288,10 @@ class PostgresEmitter(ProceduralEmitter):
         if node.value:
             val = self._emit_node(node.value)
             return f"RETURN {val};"
+        # Inside a trigger function a bare RETURN is 'missing expression':
+        # return what the function's trailing default returns.
+        if self._trigger_return_value:
+            return f"RETURN {self._trigger_return_value};"
         return "RETURN;"
 
     def _emit_begin_transaction(self, name: str | None) -> str:

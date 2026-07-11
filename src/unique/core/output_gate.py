@@ -77,6 +77,13 @@ _LEFTOVERS: dict[str, list[tuple[re.Pattern[str], str]]] = {
         (re.compile(r"(?i)\bFROM\s+DUAL\b"), "FROM DUAL"),
         (re.compile(r"`\w+`"), "backtick identifier"),
         (re.compile(r"(?m)^\s*/\s*$"), "slash terminator"),
+        # NEW./OLD. row references inside a trigger are an incomplete
+        # row→statement conversion (T-SQL only has inserted/deleted).
+        # Trigger-scoped so a table alias named NEW elsewhere never trips.
+        (
+            re.compile(r"(?is)\bCREATE\s+TRIGGER\b.*\b(?:NEW|OLD)\s*\.\s*\w"),
+            "NEW./OLD. row reference",
+        ),
     ],
     "oracle": [
         (re.compile(r"(?i)\bGETDATE\s*\("), "GETDATE()"),
