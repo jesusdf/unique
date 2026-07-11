@@ -116,3 +116,27 @@ class TestDialectShapes:
         sql = "SELECT trend FROM t;\nUPDATE t SET xbegin = 1;\nSELECT 2;"
         stmts = split_statements(sql, "postgresql")
         assert len(stmts) == 3
+
+
+class TestTransactionalBegin:
+    """PostgreSQL's transactional ``BEGIN;`` / ``BEGIN TRANSACTION;`` is not
+    a block opener: treating it as BEGIN…END depth glued 78% of the PG
+    regression corpus into one 475k-char pseudo-statement (2026-07-11)."""
+
+    def test_bare_begin_semicolon_does_not_open_a_block(self) -> None:
+        out = split_statements("begin;\nselect 1;\n-- don't\nselect 2;", "postgresql")
+        assert len(out) == 3, out
+
+    def test_begin_transaction_and_work(self) -> None:
+        out = split_statements(
+            "BEGIN TRANSACTION;\nselect 1;\nCOMMIT;\nBEGIN WORK;\nselect 2;\nCOMMIT;",
+            "postgresql",
+        )
+        assert len(out) == 6, out
+
+    def test_do_block_begin_still_tracks_depth(self) -> None:
+        out = split_statements(
+            "DO $$\nBEGIN\n  UPDATE t SET a = 1;\nEND $$;\nselect 9;",
+            "postgresql",
+        )
+        assert len(out) == 2, out

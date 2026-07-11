@@ -223,7 +223,16 @@ def _split_semicolons(
             if word:
                 kw = word.group(1).upper()
                 if kw == "BEGIN":
-                    depth_begin += 1
+                    # Transactional BEGIN (bare ``BEGIN;`` / ``BEGIN
+                    # TRANSACTION|WORK|ISOLATION …``) opens no block: counting
+                    # it glued 78% of the PG regression corpus into one
+                    # 475k-char pseudo-statement (its COMMIT never matched).
+                    after = text[i + word.end(1) :]
+                    m_next = re.match(
+                        r"(?is)\s*(;|TRANSACTION\b|WORK\b|ISOLATION\b)", after
+                    )
+                    if not m_next:
+                        depth_begin += 1
                 elif kw == "END" and depth_begin > 0:
                     depth_begin -= 1
         if ch == ";" and not in_dollar and not in_string and depth_begin == 0:
