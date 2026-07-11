@@ -575,24 +575,23 @@ fix needs an **anonymized** regression fixture (never a private name).
         strips psql meta-commands + COPY-stdin blocks, prepends the license
         header, writes to the gitignored `fixtures-corpus/pg/`
         (download-on-demand). Tests: `test_fetch_pg_corpus.py` (8).
-      - **Baseline measured 2026-07-11 at `3aa55b4`** (first PG-source
-        numbers in the project's history; 15-file corpus, ~3.6k statements
-        per direction): **pg→MySQL 83.4% (591 syntax fails, 588 of them
-        errno 1064), pg→T-SQL 71.0% (1100)**. The tsql residue is heavily
-        classed: 150x near-',', 111x near-'=', 60x near-')' + 60x
-        near-AS — the dominant samples are gate degradations reading
-        "Expected table name but got CROSS/ON/GROUP_BY", i.e. ONE emit
-        mechanism dropping a FROM table; 59x FIRST_VALUE needs OVER
-        (ORDER BY); 29x near-'to'; 29x plpgsql trigger bodies. Discovery
-        state, exactly like M4's 475-failure start — work the classes from
-        the sweep dumps. (pg→oracle: measured partially — 49 fails
-        collected, 42x ORA-00922, before a corpus statement KILLED the
-        server session mid-run, DPY-1001; the sweep's oracle runner needs
-        reconnect-and-continue resilience, and first boot needs a
-        healthcheck wait, not a fixed sleep.)
-        On the way the baseline caught a REAL DoS-class bug: sqlglot's
-        COPY-parameter parser loops unboundedly on psql's ``:'var'``
-        substitution until MemoryError (guarded in parse_sql, `3aa55b4`).
+      - **HONEST baseline 2026-07-11 at `9176813`** (source-validated
+        corpus: `filter_valid_source.py` keeps only the 5,196 statements
+        live PostgreSQL itself accepts — the regression suite deliberately
+        contains invalid SQL — and the shared splitter no longer counts
+        transactional `BEGIN;` as block depth, which had glued 78% of the
+        corpus into one pseudo-statement): **pg→Oracle 87.5% (454),
+        pg→MySQL 83.9% (579), pg→T-SQL 71.3% (1090)**. Classes: tsql —
+        149x near-',', 111x near-'=', 59x near-AS, 59x FIRST_VALUE needs
+        OVER(ORDER BY), 58x near-')'; the dominant gate samples read
+        "Expected table name but got CROSS/ON/GROUP_BY" (likely ONE emit
+        mechanism dropping a FROM table). oracle — 133x ORA-00922, 61x
+        ORA-00936, 54x ORA-00900, 68x PLS-00103. mysql — 576x generic
+        1064 (needs the near-token dump classification M4 used). Work the
+        classes from the sweep dumps, M4-style. Getting here surfaced and
+        fixed THREE product bugs: the sqlglot COPY DoS (`:'var'`,
+        `3aa55b4`), the transactional-BEGIN splitter glue (also under the
+        output gate), and the oracle first-boot healthcheck wait.
 
 ## 4. Packaging (P3)
 
