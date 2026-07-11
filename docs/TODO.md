@@ -519,8 +519,8 @@ fix needs an **anonymized** regression fixture (never a private name).
       `syntax-live` fails the job before the live suites run; the waits stay
       `continue-on-error` for readable logs but can no longer shrink the
       validation silently.
-- [x] **Identity-mutation floor raised 0.33 → 0.40** (2026-07-10; measured
-      0.44 after the sweep-closing wave's shape-asserting tests). Next
+- [x] **Identity-mutation floor raised 0.33 → 0.40 → 0.45** (2026-07-11;
+      measured 0.49 after the M4-closing and M3-prereq waves). Next
       ratchet as `test_cross_dialect.py` survivors harden.
 - [ ] **Module growth** — *parser done 2026-07-10:* `procedural/parser` is
       now a package (_base 1.7k + _tsql 0.7k + _plsql 0.8k, explicit
@@ -585,8 +585,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         mechanism dropping a FROM table; 59x FIRST_VALUE needs OVER
         (ORDER BY); 29x near-'to'; 29x plpgsql trigger bodies. Discovery
         state, exactly like M4's 475-failure start — work the classes from
-        the sweep dumps. (pg→oracle direction: first boot needs a
-        healthcheck wait, not a fixed sleep; measured separately.)
+        the sweep dumps. (pg→oracle: measured partially — 49 fails
+        collected, 42x ORA-00922, before a corpus statement KILLED the
+        server session mid-run, DPY-1001; the sweep's oracle runner needs
+        reconnect-and-continue resilience, and first boot needs a
+        healthcheck wait, not a fixed sleep.)
         On the way the baseline caught a REAL DoS-class bug: sqlglot's
         COPY-parameter parser loops unboundedly on psql's ``:'var'``
         substitution until MemoryError (guarded in parse_sql, `3aa55b4`).
