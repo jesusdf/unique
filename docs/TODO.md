@@ -190,9 +190,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       STRING_VARIABLES ContextVar published around every IR call lets the
       shared `_looks_like_string` classify `@a + @b` over declared string
       variables (fixed a live runtime bug: embedded UPDATE shipped
-      `v_a + v_b` on PG). Remaining increments, in order: (2) DATEADD/
-      DATEDIFF parity — differential-test the curated text handlers
-      against the IR emitters and close the gaps; (3) the last-identity
+      `v_a + v_b` on PG). *Increment 2 landed 2026-07-11
+      (`35c2155`, `33034ab`): the differential text-vs-IR audit found and
+      fixed THREE live semantic bugs in the curated text handlers —
+      DATEADD's '+' turned into '||' by the concat classifier (intervals
+      now neutralize their literals), a token-joined '- 1' losing its
+      sign inside the INTERVAL string (DATEADD(MONTH,-1) silently ADDED a
+      month; literal counts compact, expression counts multiply a unit
+      interval), and DATEDIFF DAY/MONTH/YEAR emitting Oracle-fractional /
+      PG-AGE forms instead of T-SQL's boundary counts (both pipelines now
+      share the boundary-counting forms).* Remaining increments: (3) the last-identity
       capture consumes a node, not a marker string; (4) dual-guard→IF and
       DECLARE-init hoisting consume nodes; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
