@@ -481,3 +481,48 @@ class TestStringVarConcatInEmbeddedDml:
         out = _t(src, "tsql", "postgresql")
         assert re.search(r"(?i)v_a\s*\+\s*v_b", out), out
         assert "||" not in out, out
+
+
+class TestDateaddIntervalNotConcat:
+    """M3-prereq increment 2 finding (differential text-vs-IR audit): the
+    string-concat classifier saw the literal inside INTERVAL '-1 MONTH' /
+    NUMTODSINTERVAL(30, 'SECOND') and turned the date '+' into '||' —
+    runtime-invalid on PG/Oracle — and the re-emit then DROPPED the minus
+    sign (silently adding a month instead of subtracting). Intervals are
+    temporal arithmetic: they neutralize their literals."""
+
+    _SRC = (
+        "CREATE PROCEDURE p_da @d DATETIME AS\n"
+        "BEGIN\n"
+        "  DECLARE @r DATETIME;\n"
+        "  SET @r = DATEADD(DAY, 7, @d);\n"
+        "  SET @r = DATEADD(MONTH, -1, @d);\n"
+        "  SET @r = DATEADD(SECOND, 30, @d);\n"
+        "END\n"
+        "GO"
+    )
+
+    def test_pg_keeps_plus_and_sign(self) -> None:
+        out = _t(self._SRC, "tsql", "postgresql")
+        assert "||" not in out, out
+        assert re.search(r"(?i)v_d\s*\+\s*INTERVAL\s*'7 DAY'", out), out
+        assert re.search(r"(?i)v_d\s*\+\s*INTERVAL\s*'-1 MONTH'", out), out
+
+    def test_oracle_keeps_plus(self) -> None:
+        out = _t(self._SRC, "tsql", "oracle")
+        assert "||" not in out, out
+        assert re.search(r"(?i)NUMTODSINTERVAL\s*\(\s*30", out), out
+
+    def test_pg_variable_count_multiplies_unit_interval(self) -> None:
+        src = (
+            "CREATE PROCEDURE p_dv @d DATETIME, @n INT AS\n"
+            "BEGIN\n"
+            "  DECLARE @r DATETIME;\n"
+            "  SET @r = DATEADD(DAY, @n, @d);\n"
+            "END\n"
+            "GO"
+        )
+        out = _t(src, "tsql", "postgresql")
+        # A variable inside the INTERVAL string would be garbage.
+        assert not re.search(r"(?i)INTERVAL\s*'[^']*v_n", out), out
+        assert re.search(r"(?i)\(\s*v_n\s*\)\s*\*\s*INTERVAL\s*'1 DAY'", out), out

@@ -2967,6 +2967,8 @@ class ProceduralTransformer:
                 "TO_NUMBER",
                 "TO_DATE",
                 "STR_TO_DATE",
+                "NUMTODSINTERVAL",
+                "NUMTOYMINTERVAL",
                 "EXTRACT",
                 "LENGTH",
                 "CHAR_LENGTH",
@@ -3000,6 +3002,13 @@ class ProceduralTransformer:
         def literal_neutralized(lit: exp.Expression, root: exp.Expression) -> bool:
             node = lit.parent
             while isinstance(node, exp.Expression):
+                # INTERVAL '7 DAY' / NUMTODSINTERVAL(n, 'SECOND'): temporal
+                # arithmetic — the quoted payload says nothing about the
+                # '+' chain's type. Without this, DATEADD output turned
+                # into '||' and the re-emit dropped a negative sign
+                # (silently ADDING a month instead of subtracting).
+                if isinstance(node, exp.Interval):
+                    return True
                 if func_name(node) in non_string_funcs:
                     return True
                 if isinstance(node, exp.Cast) and not node.to.is_type(
@@ -3676,7 +3685,14 @@ class ProceduralTransformer:
                     return f"({date} + NUMTODSINTERVAL({num}, '{unit}'))"
                 return None
             if self._target == "postgresql":
-                return f"({date} + INTERVAL '{num} {unit}')"
+                # Only a literal count may live inside the INTERVAL string —
+                # compacted: token-joined ``- 1`` re-parses as ``1`` (sqlglot
+                # silently drops the sign; live: DATEADD(MONTH, -1, d) ADDED
+                # a month). An expression count multiplies a unit interval.
+                compact = re.sub(r"\s+", "", num)
+                if re.fullmatch(r"[+-]?\d+", compact):
+                    return f"({date} + INTERVAL '{compact} {unit}')"
+                return f"({date} + ({num}) * INTERVAL '1 {unit}')"
             return f"DATE_ADD({date}, INTERVAL {num} {unit})"
 
         return self._rewrite_calls(sql, "DATEADD", build)
