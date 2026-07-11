@@ -945,6 +945,17 @@ def _emit_update(node: UpdateStatement, dialect: str) -> str:
             f"{_ident_if_plain(col, dialect)} = {_emit_expression(val, dialect)}"
         )
     sets = ", ".join(set_parts)
+
+    # T-SQL rejects an alias after the UPDATE target (``UPDATE t ep SET``,
+    # error 102); its aliased spelling is ``UPDATE ep SET … FROM t ep``
+    # (correlated subqueries keep resolving against the alias).
+    alias = getattr(node.table, "alias", None)
+    if dialect == "tsql" and alias:
+        result = f"UPDATE {alias}\nSET {sets}\nFROM {table}"
+        if node.where:
+            result += f"\nWHERE {_emit_expression(node.where, dialect)}"
+        return result
+
     result = f"UPDATE {table}\nSET {sets}"
 
     if node.where:

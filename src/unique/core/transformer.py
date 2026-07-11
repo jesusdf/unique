@@ -349,6 +349,9 @@ class SyntaxNormalizer(TransformPass):
         if isinstance(where, BinaryOp) and where.operator in (
             BinaryOperator.LTE,
             BinaryOperator.LT,
+            # ROWNUM = 1 is the common "first row" idiom (equivalent to
+            # <= 1; ROWNUM = n for n > 1 never matches and stays warned).
+            BinaryOperator.EQ,
         ):
             if self._is_rownum(where.left):
                 return where, None
@@ -368,7 +371,7 @@ class SyntaxNormalizer(TransformPass):
 
     @staticmethod
     def _rownum_limit_value(comparison: BinaryOp) -> int | None:
-        """ROWNUM <= n -> n; ROWNUM < n -> n - 1 (integer literals only)."""
+        """ROWNUM <= n -> n; ROWNUM < n -> n - 1; ROWNUM = 1 -> 1."""
         right = comparison.right
         if not isinstance(right, Literal):
             return None
@@ -376,6 +379,8 @@ class SyntaxNormalizer(TransformPass):
             n = int(str(right.value))
         except (TypeError, ValueError):
             return None
+        if comparison.operator == BinaryOperator.EQ:
+            return 1 if n == 1 else None
         return n if comparison.operator == BinaryOperator.LTE else n - 1
 
     def _contains_rownum(self, node: ASTNode | None) -> bool:

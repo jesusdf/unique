@@ -604,6 +604,19 @@ class TSqlTransformer(ProceduralTransformer):
         # Match on the code, re-attach the trivia: a leading comment must not
         # hide the UPDATE (audit doc 04, P2).
         trivia, sql = split_leading_trivia(sql)
+        # The IR emitter spells an aliased single-table update as
+        # ``UPDATE alias SET … FROM tgt alias`` (the only alias form T-SQL
+        # accepts); normalize the trigger table's own updates back to the
+        # classic shape this rewriter matches on. Greedy ``.*`` binds to the
+        # LAST matching FROM, so a subquery's FROM inside SET is skipped.
+        m2 = re.match(
+            r"(?is)^\s*UPDATE\s+(\w+)\s+SET\b(.*)\bFROM\s+"
+            r"([\w\[\]\"`.]+)(?:\s+AS)?\s+\1(\s+WHERE\b.*|\s*;?\s*)$",
+            sql,
+        )
+        if m2:
+            alias2, sets2, tgt2, tail2 = m2.groups()
+            sql = f"UPDATE {tgt2} {alias2} SET{sets2.rstrip()}{tail2}"
         m = re.match(r"(?is)\s*UPDATE\s+([\w\[\]\"`.]+)(?:\s+AS)?\s+(\w+)\s+SET\b", sql)
         if not m:
             return trivia + sql

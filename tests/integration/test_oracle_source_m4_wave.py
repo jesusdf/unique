@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import re
 
+import sqlglot
+
 from unique.core.transpiler import Transpiler
 
 
@@ -974,3 +976,30 @@ class TestBareReturnInPgTriggerFunction:
         fn_body = out[out.index("$$") : out.rindex("$$")]
         assert not re.search(r"(?im)^\s*RETURN\s*;", fn_body), out
         assert len(re.findall(r"(?i)RETURN NEW\s*;", fn_body)) >= 2, out
+
+
+class TestAliasedSingleTableUpdateOnTsql:
+    """Oracle ``UPDATE t alias SET … WHERE alias.col`` (3x live): T-SQL
+    rejects a bare alias after the target table — the aliased form is
+    ``UPDATE alias SET … FROM t alias``. The correlated ROWNUM=1 subquery
+    must also become TOP 1 on the way."""
+
+    _SRC = (
+        "UPDATE t_pue ep\n"
+        "SET idimp = (SELECT i.idimp FROM t_imp i\n"
+        "             WHERE i.imp = ep.imp AND ROWNUM = 1)\n"
+        "WHERE EXISTS (SELECT 1 FROM t_imp i WHERE i.imp = ep.imp);"
+    )
+
+    def test_tsql_uses_update_from_form(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert not re.search(r"(?i)UPDATE\s+t_pue\s+(AS\s+)?ep\b", out), out
+        assert re.search(r"(?i)FROM\s+t_pue\s+(AS\s+)?ep\b", out), out
+        assert "ROWNUM" not in out.upper(), out
+        assert re.search(r"(?i)TOP\s*\(?\s*1", out), out
+        sqlglot.parse(out, read="tsql")
+
+    def test_pg_keeps_valid_aliased_update(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        assert "ROWNUM" not in out.upper(), out
+        sqlglot.parse(out, read="postgres")

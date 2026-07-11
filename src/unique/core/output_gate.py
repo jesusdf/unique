@@ -70,6 +70,7 @@ _LEFTOVERS: dict[str, list[tuple[re.Pattern[str], str]]] = {
         (re.compile(r"(?m)^\s*/\s*$"), "slash terminator"),
     ],
     "tsql": [
+        (re.compile(r"(?i)\bROWNUM\b"), "ROWNUM"),
         (re.compile(r"(?i)\bN?VARCHAR2\b"), "VARCHAR2"),
         (re.compile(r"(?i)\bEXECUTE\s+IMMEDIATE\b"), "EXECUTE IMMEDIATE"),
         (re.compile(r"(?i)\bSYSDATE\b"), "SYSDATE"),
