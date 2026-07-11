@@ -2352,6 +2352,15 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
     if node.window.order_by:
         order = ", ".join(_emit_order_item(o, dialect) for o in node.window.order_by)
         spec_parts.append(f"ORDER BY {order}")
+    elif dialect == "tsql" and re.match(
+        r"(?i)\s*(FIRST_VALUE|LAST_VALUE|LAG|LEAD|NTILE|ROW_NUMBER|RANK|"
+        r"DENSE_RANK|PERCENT_RANK|CUME_DIST)\s*\(",
+        func,
+    ):
+        # T-SQL requires ORDER BY in these functions' OVER clause (error
+        # 4112); PostgreSQL allows an empty/partition-only spec. The
+        # standard neutral idiom preserves "no meaningful order".
+        spec_parts.append("ORDER BY (SELECT NULL)")
 
     spec = " ".join(spec_parts)
     return f"{func} OVER ({spec})"

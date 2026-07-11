@@ -87,3 +87,24 @@ class TestValuesRelation:
         out = _t("select string_agg(a, ',') from (values ('aa'),('bb')) g(a);", "tsql")
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)STRING_AGG", out), out
+
+
+class TestWindowOrderByRequiredOnTsql:
+    """T-SQL requires ORDER BY inside OVER for ranking/offset window
+    functions (live 4112, 59x); PostgreSQL allows a partition-only or
+    empty spec. The neutral ORDER BY (SELECT NULL) preserves the intent."""
+
+    def test_first_value_gains_neutral_order(self) -> None:
+        out = _t("select first_value(a) over (partition by b) from t;", "tsql")
+        assert re.search(
+            r"(?i)OVER\s*\(PARTITION BY b ORDER BY \(SELECT NULL\)\)", out
+        ), out
+
+    def test_existing_order_is_kept(self) -> None:
+        out = _t("select first_value(a) over (order by c) from t;", "tsql")
+        assert re.search(r"(?i)ORDER BY c", out), out
+        assert "SELECT NULL" not in out.upper(), out
+
+    def test_aggregate_over_needs_no_order(self) -> None:
+        out = _t("select sum(a) over (partition by b) from t;", "tsql")
+        assert "SELECT NULL" not in out.upper(), out
