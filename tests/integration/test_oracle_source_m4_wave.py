@@ -1178,3 +1178,64 @@ class TestTwoArgSubstringOnTsql:
                     args += 1
                 i += 1
             assert args >= 3, out
+
+
+class TestDynamicRoutineDdlStaysDynamic:
+    """A constant EXECUTE IMMEDIATE whose statement is routine DDL
+    (CREATE PROCEDURE/FUNCTION/TRIGGER) must NOT unwrap inline: neither
+    PG nor T-SQL allows routine DDL inside a block (live: a q-quoted
+    CREATE PROCEDURE guarded by a count probe — 42601 on PG, 156 on
+    T-SQL). It stays dynamic, with a warning that the routine text needs
+    manual conversion."""
+
+    _SRC = (
+        "DECLARE\n"
+        "  v_count NUMBER;\n"
+        "BEGIN\n"
+        "  SELECT COUNT(*) INTO v_count FROM all_objects WHERE object_name = 'P_X';\n"
+        "  IF v_count = 0 THEN\n"
+        "    EXECUTE IMMEDIATE q'[CREATE PROCEDURE p_x (p_a OUT NUMBER) AS\n"
+        "      BEGIN p_a := NULL; END]';\n"
+        "  END IF;\n"
+        "END;\n/"
+    )
+
+    def test_pg_keeps_execute(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        body = out[out.index("$$") :] if "$$" in out else out
+        assert not re.search(r"(?im)^\s*CREATE\s+PROCEDURE", body), out
+        assert re.search(r"(?i)EXECUTE\s+'", out) or "-- UNIQUE:" in out, out
+
+    def test_tsql_keeps_dynamic_exec(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert not re.search(r"(?im)^\s*CREATE\s+PROCEDURE\s+p_x", out), out
+        assert re.search(r"(?i)EXEC|sp_executesql", out) or "-- UNIQUE:" in out, out
+
+    def test_warning_is_raised(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        r = Transpiler().transpile(self._SRC, "oracle", "postgresql")
+        assert any("routine DDL" in str(w) for w in r.warnings), r.warnings
+
+
+class TestPrefixStripCollision:
+    """Oracle param ``p_x`` + local ``v_p_x``: stripping the local's
+    ``v_`` prefix collided both onto ``@p_x`` (live 134 — and a silent
+    aliasing risk). On collision the local keeps its full source name."""
+
+    _SRC = (
+        "CREATE OR REPLACE FUNCTION f_cc(p_pat VARCHAR2) RETURN VARCHAR2 IS\n"
+        "  v_p_pat VARCHAR2(100);\n"
+        "BEGIN\n"
+        "  v_p_pat := RTRIM(LTRIM(p_pat));\n"
+        "  RETURN v_p_pat;\n"
+        "END;\n/"
+    )
+
+    def test_local_keeps_distinct_name(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert len(re.findall(r"(?i)DECLARE\s+@", out)) == 1, out
+        assert re.search(r"(?i)DECLARE\s+@v_p_pat\b", out), out
+        assert re.search(
+            r"(?i)@v_p_pat\s*=\s*RTRIM\s*\(\s*LTRIM\s*\(\s*@p_pat", out
+        ), out

@@ -524,7 +524,16 @@ class ProceduralTransformer:
             clean = name
             if clean.upper().startswith("V_"):
                 clean = clean[2:]
-            return f"@{clean.lower()}"
+            candidate = f"@{clean.lower()}"
+            # Prefix-stripping may collide with another variable (param p_x
+            # vs local v_p_x — live error 134, and a silent aliasing risk):
+            # on collision the name keeps its full source spelling.
+            taken = {
+                v.lower() for k, v in self._var_map.items() if k.lower() != name.lower()
+            }
+            if candidate.lower() in taken:
+                candidate = f"@{name.lower()}"
+            return candidate
         elif self._source == "mysql" and self._target == "tsql":
             # MySQL local variables/params have no sigil; T-SQL requires ``@``.
             return name if name.startswith("@") else f"@{name}"
@@ -1428,7 +1437,22 @@ class ProceduralTransformer:
             m = self._CONSTANT_SQL_STRING_RE.match(expr.sql)
             if m:
                 inner = m.group(1).replace("''", "'").strip()
-                if inner:
+                if inner and re.match(
+                    r"(?is)\s*CREATE\s+(?:OR\s+REPLACE\s+)?"
+                    r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE)\b",
+                    inner,
+                ):
+                    # Routine DDL cannot be inlined: neither PG nor T-SQL
+                    # allows CREATE PROCEDURE/FUNCTION inside a block — it
+                    # must STAY dynamic. The string still holds the source
+                    # dialect's routine text; converting a whole routine
+                    # through the string layer is manual work.
+                    self._warnings.append(
+                        "dynamic routine DDL (EXECUTE of a constant CREATE "
+                        "PROCEDURE/FUNCTION/TRIGGER string) kept verbatim; "
+                        "convert the routine text manually"
+                    )
+                elif inner:
                     return self._transform_node(
                         EmbeddedDML(sql=inner, dialect=self._source)
                     )
