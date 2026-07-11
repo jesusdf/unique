@@ -964,6 +964,29 @@ def _convert_table_or_subquery(expr: exp.Expression) -> TableRef | SubqueryExpre
             return SubqueryExpression(
                 query=_convert_select(inner), alias=expr.alias or None
             )
+    if isinstance(expr, exp.Values):
+        # A VALUES relation — ``FROM (VALUES (1,'x'),(2,'y')) v(a,b)`` —
+        # previously converted to NOTHING (the FROM emitted empty; the
+        # gate degraded the batch). Lower it to the UNION ALL chain of
+        # row-SELECTs, valid on all four engines (Oracle gets FROM DUAL
+        # from the emitter; the alias list names the first arm's columns).
+        cols = expr.alias_column_names or []
+        selects: list[SelectStatement] = []
+        for ri, row in enumerate(expr.expressions):
+            cells = getattr(row, "expressions", None) or [row]
+            items: list[ASTNode] = []
+            for ci, cell in enumerate(cells):
+                item = convert_expression(cell)
+                if ri == 0 and ci < len(cols):
+                    item = Alias(expression=item, name=cols[ci])
+                items.append(item)
+            selects.append(SelectStatement(columns=tuple(items)))
+        query = selects[-1]
+        for i in range(len(selects) - 2, -1, -1):
+            query = dataclasses.replace(
+                selects[i], set_op=SetOperationType.UNION_ALL, set_query=query
+            )
+        return SubqueryExpression(query=query, alias=expr.alias or None)
     return _convert_table_ref(expr)
 
 
