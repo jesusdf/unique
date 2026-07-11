@@ -108,3 +108,18 @@ class TestWindowOrderByRequiredOnTsql:
     def test_aggregate_over_needs_no_order(self) -> None:
         out = _t("select sum(a) over (partition by b) from t;", "tsql")
         assert "SELECT NULL" not in out.upper(), out
+
+
+class TestJoinedDerivedTableAlias:
+    """A joined derived table's alias was dropped on emit
+    (``JOIN (SELECT 1 AS a) ON t.x = v.a`` — unreferencable, and MySQL
+    requires the alias)."""
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle", "postgresql"])
+    def test_join_values_keeps_alias(self, target: str) -> None:
+        out = _t("select * from t join (values (1)) v(a) on t.x = v.a;", target)
+        assert re.search(r"(?i)\)\s*v\s+ON\b", out), out
+
+    def test_join_select_keeps_alias(self) -> None:
+        out = _t("select * from t join (select 1 as a) s on t.x = s.a;", "mysql")
+        assert re.search(r"(?i)\)\s*s\s+ON\b", out), out

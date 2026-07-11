@@ -1000,7 +1000,10 @@ def _emit_update(node: UpdateStatement, dialect: str) -> str:
 def _emit_join_table_ref(table: TableRef | SubqueryExpression, dialect: str) -> str:
     """Emit a join's source table, whether a plain table or a subquery."""
     if isinstance(table, SubqueryExpression):
-        return f"({_emit_select(table.query, dialect)})"
+        # The derived table's alias must survive (references break without
+        # it, and MySQL requires every derived table to be aliased).
+        alias = f" {table.alias}" if table.alias else ""
+        return f"({_emit_select(table.query, dialect)}){alias}"
     return _emit_table_ref(table, dialect)
 
 
@@ -2419,9 +2422,12 @@ def _emit_join(join: JoinClause, dialect: str, left_name: str | None = None) -> 
 
     if isinstance(join.table, SubqueryExpression):
         table = f"({_emit_select(join.table.query, dialect)})"
-        # A subquery has no TableRef to carry the alias, so add it here.
-        if join.alias:
-            table += f" {join.alias}"
+        # A subquery has no TableRef to carry the alias, so add it here
+        # (the SubqueryExpression's own alias — e.g. a VALUES relation's —
+        # when the JoinClause carries none).
+        alias = join.alias or join.table.alias
+        if alias:
+            table += f" {alias}"
     else:
         # _emit_table_ref already renders the table's own alias; adding
         # join.alias again would duplicate it ("t2 b b").
