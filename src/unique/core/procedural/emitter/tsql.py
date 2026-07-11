@@ -202,8 +202,17 @@ class TSqlEmitter(ProceduralEmitter):
     def _emit_print(self, node: PrintStatement) -> str:
         return f"PRINT {self._emit_node(node.expression)};"
 
+    @staticmethod
+    def _boolean_var_condition(cond: str) -> str:
+        """A condition that is just ``[NOT] @var`` (an Oracle BOOLEAN
+        variable used directly): T-SQL BIT needs a comparison — append
+        ``= 1`` (NOT binds the comparison)."""
+        if re.fullmatch(r"(?is)\s*(NOT\s+)?@\w+\s*", cond):
+            return f"{cond.strip()} = 1"
+        return cond
+
     def _emit_while(self, node: WhileStatement) -> str:
-        cond = self._emit_node(node.condition)
+        cond = self._boolean_var_condition(self._emit_node(node.condition))
         lines = [f"WHILE {cond}", "BEGIN"]
         self._indent_level += 1
         lines.extend(self._emit_indented_stmts(node.body))
@@ -232,6 +241,12 @@ class TSqlEmitter(ProceduralEmitter):
         from unique.core.sql_split import split_top_level_commas
 
         cols = split_top_level_commas(select_list)
+        # DISTINCT belongs to the whole select list: hoist it ahead of the
+        # first assignment (``SELECT @v = DISTINCT c`` is error 156).
+        distinct = ""
+        if cols and re.match(r"(?is)^\s*DISTINCT\b", cols[0]):
+            distinct = "DISTINCT "
+            cols[0] = re.sub(r"(?is)^\s*DISTINCT\s+", "", cols[0], count=1)
         targets = list(node.into_vars)
         pairs = []
         for i, var in enumerate(targets):
@@ -239,7 +254,7 @@ class TSqlEmitter(ProceduralEmitter):
             pairs.append(f"{var} = {col}")
         assignments = ", ".join(pairs)
         prefix = f"{node.with_sql}\n" if node.with_sql else ""
-        return f"{prefix}SELECT {assignments} {rest};"
+        return f"{prefix}SELECT {distinct}{assignments} {rest};"
 
     def _emit_guard_if(self, cond: str, body_lines: list[str]) -> str | None:
         # T-SQL's IF takes a SQL condition (incl. EXISTS), so the guard is a
@@ -469,6 +484,7 @@ class TSqlEmitter(ProceduralEmitter):
         then_body: tuple[ASTNode, ...],
         else_body: tuple[ASTNode, ...],
     ) -> str:
+        cond = self._boolean_var_condition(cond)
         lines = [f"IF {cond}", "BEGIN"]
         self._indent_level += 1
         lines.extend(self._emit_indented_stmts(then_body))

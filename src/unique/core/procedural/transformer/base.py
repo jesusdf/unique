@@ -868,9 +868,51 @@ class ProceduralTransformer:
         keep; Oracle overrides to strip."""
         return False
 
+    def _drop_param_shadowing_locals(
+        self,
+        body: tuple[ASTNode, ...],
+        params: tuple[ParameterDefinition, ...],
+    ) -> tuple[ASTNode, ...]:
+        """Drop local declarations that shadow a same-named parameter.
+
+        Oracle allows a local variable shadowing a parameter; T-SQL forbids
+        the re-DECLARE (error 134). T-SQL parameters are assignable local
+        copies, so the parameter itself plays the shadowed local's role.
+        """
+        if self._target != "tsql" or not params:
+            return body
+        param_names = {p.name.lstrip("@").lower() for p in params}
+
+        def keep(stmt: ASTNode) -> bool:
+            if (
+                isinstance(stmt, DeclareStatement)
+                and stmt.name.lstrip("@").lower() in param_names
+            ):
+                self._warnings.append(
+                    f"local variable {stmt.name} shadowed parameter; "
+                    "the T-SQL parameter (an assignable copy) is reused"
+                )
+                return False
+            return True
+
+        out: list[ASTNode] = []
+        for stmt in body:
+            if isinstance(stmt, StatementList) and any(
+                not keep(s) for s in stmt.statements
+            ):
+                kept = tuple(s for s in stmt.statements if keep(s))
+                if kept:
+                    out.append(StatementList(statements=kept))
+                continue
+            if keep(stmt):
+                out.append(stmt)
+        return tuple(out)
+
     def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
         new_params = self._transform_params(node.parameters)
-        new_body = self._transform_body(node.body)
+        new_body = self._transform_body(
+            self._drop_param_shadowing_locals(node.body, node.parameters)
+        )
         or_replace = node.or_replace
         if self._source == "tsql" and self._target in ("oracle", "postgresql"):
             or_replace = True
@@ -909,7 +951,9 @@ class ProceduralTransformer:
 
     def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
         new_params = self._transform_params(node.parameters)
-        new_body = self._transform_body(node.body)
+        new_body = self._transform_body(
+            self._drop_param_shadowing_locals(node.body, node.parameters)
+        )
         new_return = (
             self._transform_data_type(node.return_type) if node.return_type else None
         )

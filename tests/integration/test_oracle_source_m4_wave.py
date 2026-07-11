@@ -1041,3 +1041,69 @@ class TestQuotedDatepartOnTsql:
         out = _t(src, "tsql")
         assert re.search(r"(?i)DATEDIFF\s*\(\s*YEAR\s*,", out), out
         assert not re.search(r"(?i)DATEDIFF\s*\(\s*'", out), out
+
+
+class TestBooleanVarCondition:
+    """Oracle PL/SQL BOOLEAN variables are used directly as conditions;
+    T-SQL BIT needs a comparison (live 4145: IF NOT @b). A condition that
+    is just ``[NOT] @var`` gains ``= 1`` (NOT binds the comparison)."""
+
+    _SRC = (
+        "CREATE OR REPLACE PROCEDURE p_b(m_out OUT NUMBER) AS\n"
+        "  bexc BOOLEAN;\n"
+        "BEGIN\n"
+        "  bexc := TRUE;\n"
+        "  IF NOT bexc THEN\n"
+        "    m_out := 0;\n"
+        "  END IF;\n"
+        "  WHILE bexc LOOP\n"
+        "    m_out := 1;\n"
+        "  END LOOP;\n"
+        "END;\n/"
+    )
+
+    def test_bare_boolean_conditions_compare_to_1(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert re.search(r"(?i)IF\s+NOT\s+@bexc\s*=\s*1", out), out
+        assert re.search(r"(?i)WHILE\s+@bexc\s*=\s*1", out), out
+
+
+class TestLocalShadowingParameter:
+    """Oracle allows a local variable shadowing a same-named parameter;
+    T-SQL forbids the re-DECLARE (live 134). T-SQL parameters are
+    assignable local copies, so the parameter itself plays the local's
+    role: the duplicate DECLARE is dropped with a note."""
+
+    _SRC = (
+        "CREATE OR REPLACE PROCEDURE p_sh(P_PAT IN VARCHAR2, m_out OUT VARCHAR2) AS\n"
+        "  P_PAT VARCHAR2(100);\n"
+        "BEGIN\n"
+        "  P_PAT := 'x';\n"
+        "  m_out := P_PAT;\n"
+        "END;\n/"
+    )
+
+    def test_duplicate_declare_is_dropped(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert len(re.findall(r"(?i)DECLARE\s+@p_pat\b", out)) == 0, out
+        assert re.search(r"(?i)@p_pat\s*=\s*'x'", out), out
+
+
+class TestDistinctInAssignmentSelect:
+    """Oracle ``SELECT DISTINCT a, b INTO v1, v2`` became
+    ``SELECT @v1 = distinct a, @v2 = b`` (live 156) — DISTINCT must hoist
+    ahead of the first assignment."""
+
+    _SRC = (
+        "CREATE OR REPLACE PROCEDURE p_d(m_a OUT NUMBER, m_b OUT VARCHAR2) AS\n"
+        "BEGIN\n"
+        "  SELECT DISTINCT mov.orden, his.nif INTO m_a, m_b\n"
+        "  FROM f_mov mov INNER JOIN a_his his ON his.n = mov.n\n"
+        "  WHERE mov.x = 1;\n"
+        "END;\n/"
+    )
+
+    def test_distinct_hoisted(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert re.search(r"(?i)SELECT\s+DISTINCT\s+@m_a\s*=", out), out
+        assert not re.search(r"(?i)=\s*distinct\b", out), out
