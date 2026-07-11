@@ -23,7 +23,9 @@ import sys
 # Raised 0.30 -> 0.33 when test_real_world.py gained the hardened
 # TestOutputValidity gates (per-statement target-dialect parsing, foreign
 # quoting, per-fixture idiom checks); measured kill rate after: 36%.
-KILL_RATE_FLOOR = 0.40
+# Raised 0.40 -> 0.45 on 2026-07-11 (measured 0.49 after the M4-closing
+# and M3-prereq waves' shape-asserting tests).
+KILL_RATE_FLOOR = 0.45
 
 
 def main() -> int:
