@@ -575,10 +575,21 @@ fix needs an **anonymized** regression fixture (never a private name).
         strips psql meta-commands + COPY-stdin blocks, prepends the license
         header, writes to the gitignored `fixtures-corpus/pg/`
         (download-on-demand). Tests: `test_fetch_pg_corpus.py` (8).
-      - Next step: run `validity_sweep.py --from postgresql` over the
-        corpus (needs the tsql/mysql/oracle engines — sequence it with the
-        engine-at-a-time discipline) and open a PG-source baseline +
-        frequency table like M4's.
+      - **Baseline measured 2026-07-11 at `3aa55b4`** (first PG-source
+        numbers in the project's history; 15-file corpus, ~3.6k statements
+        per direction): **pg→MySQL 83.4% (591 syntax fails, 588 of them
+        errno 1064), pg→T-SQL 71.0% (1100)**. The tsql residue is heavily
+        classed: 150x near-',', 111x near-'=', 60x near-')' + 60x
+        near-AS — the dominant samples are gate degradations reading
+        "Expected table name but got CROSS/ON/GROUP_BY", i.e. ONE emit
+        mechanism dropping a FROM table; 59x FIRST_VALUE needs OVER
+        (ORDER BY); 29x near-'to'; 29x plpgsql trigger bodies. Discovery
+        state, exactly like M4's 475-failure start — work the classes from
+        the sweep dumps. (pg→oracle direction: first boot needs a
+        healthcheck wait, not a fixed sleep; measured separately.)
+        On the way the baseline caught a REAL DoS-class bug: sqlglot's
+        COPY-parameter parser loops unboundedly on psql's ``:'var'``
+        substitution until MemoryError (guarded in parse_sql, `3aa55b4`).
 
 ## 4. Packaging (P3)
 
