@@ -2097,16 +2097,31 @@ class ProceduralTransformer:
             modified = _conv.rewrite_oracle_modify(sql.strip(), self._target)
             if modified is not None:
                 return modified
-        from unique.core.ast_nodes import CommentStatement as IRComment
-        from unique.core.ast_nodes import PassthroughSQL as IRPassthrough
-        from unique.core.ast_nodes import RawSQL as IRRawSQL
-        from unique.core.transformer import Transformer
 
         # A function call in FROM/JOIN position (table-valued function) has
         # curated per-target handling on the fallback path (JSON_TABLE
         # rewrite, documented carrier); the IR does not model it.
         if self._function_relation_names(sql, self._source):
             return None
+        # Publish the routine's declared variable types so the shared
+        # converter can classify a T-SQL ``+`` over bare variables (the raw
+        # path reads self._string_vars; the IR needs the same knowledge —
+        # M3-prereq: the IR gains procedural context). Covers every exit.
+        str_token = _conv.STRING_VARIABLES.set(
+            frozenset(v.lstrip("@").lower() for v in self._string_vars)
+        )
+        try:
+            return self._ir_transpile_dml_inner(sql)
+        finally:
+            _conv.STRING_VARIABLES.reset(str_token)
+
+    def _ir_transpile_dml_inner(self, sql: str) -> str | None:
+        from unique.core import converter as _conv
+        from unique.core.ast_nodes import CommentStatement as IRComment
+        from unique.core.ast_nodes import PassthroughSQL as IRPassthrough
+        from unique.core.ast_nodes import RawSQL as IRRawSQL
+        from unique.core.transformer import Transformer
+
         try:
             nodes = _conv.parse_sql(sql, self._source)
         except Exception as e:  # noqa: BLE001 - fall back to sqlglot path

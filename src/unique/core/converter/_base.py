@@ -201,6 +201,15 @@ USER_FUNCTIONS: contextvars.ContextVar[frozenset[str] | None] = contextvars.Cont
     "user_functions", default=None
 )
 
+# Names (lowercased) of procedural variables/parameters known to be string-
+# typed from their DECLARE/parameter declarations. Set by the procedural
+# transformer around IR calls so the shared converter can decide that a
+# T-SQL ``+`` over two bare variables is concatenation (M3-prereq: the IR
+# gains procedural context instead of the text path keeping the knowledge).
+STRING_VARIABLES: contextvars.ContextVar[frozenset[str] | None] = (
+    contextvars.ContextVar("string_variables", default=None)
+)
+
 
 _CREATE_FUNCTION_NAME_RE = re.compile(
     r"(?im)^\s*CREATE\s+(?:OR\s+(?:REPLACE|ALTER)\s+)?FUNCTION\s+" r"([\w\[\]\"`.]+)"
@@ -290,6 +299,12 @@ def _looks_like_string(node: exp.Expression) -> bool:
         return bool(node.args.get("is_string"))
     if isinstance(node, (exp.DPipe, exp.Concat)):
         return True
+    if isinstance(node, exp.Column) and not node.table:
+        # A bare identifier declared as a string variable/parameter (the
+        # procedural transformer publishes the registry around IR calls).
+        known = STRING_VARIABLES.get()
+        if known and node.name.lstrip("@").lower() in known:
+            return True
     if isinstance(node, exp.Cast):
         to = node.args.get("to")
         if isinstance(to, exp.DataType):
@@ -854,6 +869,7 @@ __all__ = [
     "TSQL_ALIAS_TYPES",
     "TSQL_BIT_COLUMNS",
     "USER_FUNCTIONS",
+    "STRING_VARIABLES",
     "_BARE_CHAR_BIGTEXT",
     "_BIT_COLUMN_RE",
     "_COLUMN_NAME_RE",

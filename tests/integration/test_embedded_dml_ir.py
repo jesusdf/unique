@@ -433,3 +433,51 @@ class TestParenthesizedInsertBody:
     def test_genuine_default_values_still_emitted(self) -> None:
         out = _t("INSERT INTO t_menu DEFAULT VALUES;", "tsql", "postgresql")
         assert "DEFAULT VALUES" in out.upper(), out
+
+
+class TestStringVarConcatInEmbeddedDml:
+    """M3-prereq first increment: the IR gains procedural variable-type
+    context. Embedded DML routed through the IR (M3a) lost the raw path's
+    declared-type knowledge: ``UPDATE t SET col = @a + @b`` over two
+    VARCHAR variables shipped ``v_a + v_b`` on PostgreSQL (runtime error:
+    varchar + varchar does not exist) while the SELECT-assignment path
+    concatenated correctly. A STRING_VARIABLES ContextVar (same pattern
+    as IDENTITY_COLUMNS/USER_FUNCTIONS) now carries the types."""
+
+    _SRC = (
+        "CREATE PROCEDURE p_cc\n"
+        "    @a VARCHAR(50),\n"
+        "    @b VARCHAR(50)\n"
+        "AS\n"
+        "BEGIN\n"
+        "    DECLARE @c VARCHAR(200);\n"
+        "    SELECT @c = @a + @b FROM t WHERE x = 1;\n"
+        "    UPDATE t2 SET col = @a + @b WHERE id = 1;\n"
+        "END\n"
+        "GO"
+    )
+
+    def test_embedded_update_concatenates_on_pg(self) -> None:
+        out = _t(self._SRC, "tsql", "postgresql")
+        assert re.search(r"(?i)SET\s+col\s*=\s*v_a\s*\|\|\s*v_b", out), out
+        assert not re.search(r"(?i)v_a\s*\+\s*v_b", out), out
+
+    def test_embedded_update_concatenates_on_mysql(self) -> None:
+        out = _t(self._SRC, "tsql", "mysql")
+        assert not re.search(r"(?i)v_a\s*\+\s*v_b", out), out
+        assert re.search(r"(?i)CONCAT\s*\(", out), out
+
+    def test_numeric_vars_keep_plus(self) -> None:
+        src = (
+            "CREATE PROCEDURE p_nn\n"
+            "    @a INT,\n"
+            "    @b INT\n"
+            "AS\n"
+            "BEGIN\n"
+            "    UPDATE t2 SET col = @a + @b WHERE id = 1;\n"
+            "END\n"
+            "GO"
+        )
+        out = _t(src, "tsql", "postgresql")
+        assert re.search(r"(?i)v_a\s*\+\s*v_b", out), out
+        assert "||" not in out, out
