@@ -239,6 +239,29 @@ class TSqlTransformer(ProceduralTransformer):
             _to_char_format,
             sql,
         )
+        # RPAD/LPAD have no T-SQL builtin: build from REPLICATE (LEFT/RIGHT
+        # truncate to the target length, matching Oracle when the input is
+        # longer than the pad length). Mirrors the IR emitter's expansion.
+        sql = re.sub(
+            rf"(?is)\bRPAD\s*\(\s*{arg}\s*,\s*{arg}\s*,\s*{arg}\s*\)",
+            r"LEFT(\1 + REPLICATE(\3, \2), \2)",
+            sql,
+        )
+        sql = re.sub(
+            rf"(?is)\bLPAD\s*\(\s*{arg}\s*,\s*{arg}\s*,\s*{arg}\s*\)",
+            r"RIGHT(REPLICATE(\3, \2) + \1, \2)",
+            sql,
+        )
+        sql = re.sub(
+            rf"(?is)\bRPAD\s*\(\s*{arg}\s*,\s*{arg}\s*\)",
+            r"LEFT(\1 + REPLICATE(' ', \2), \2)",
+            sql,
+        )
+        sql = re.sub(
+            rf"(?is)\bLPAD\s*\(\s*{arg}\s*,\s*{arg}\s*\)",
+            r"RIGHT(REPLICATE(' ', \2) + \1, \2)",
+            sql,
+        )
         # One-argument TO_CHAR/TO_DATE: plain conversions. The formatted
         # two-argument forms stay visible (format models differ per engine).
         sql = re.sub(

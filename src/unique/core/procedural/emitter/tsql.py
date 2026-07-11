@@ -49,6 +49,13 @@ class TSqlEmitter(ProceduralEmitter):
         # Cursor *variables* (``DECLARE @c CURSOR;`` — no query): unlike
         # classic cursors these keep their '@' on OPEN/FETCH/CLOSE.
         self._cursor_variables: set[str] = set()
+        # Loop variables already DECLAREd in the current unit (T-SQL DECLARE
+        # is batch-scoped; a re-declaration is error 134). Reset per emit().
+        self._loop_vars_emitted: set[str] = set()
+
+    def emit(self, node: ASTNode) -> str:
+        self._loop_vars_emitted = set()
+        return super().emit(node)
 
     def _emit_param(
         self,
@@ -325,12 +332,19 @@ class TSqlEmitter(ProceduralEmitter):
             )
             for line in body_lines
         ]
-        decls = ", ".join(f"@{variable}_{c} NVARCHAR(4000)" for c in cols)
+        # T-SQL DECLARE is batch-scoped: several loops reusing one record
+        # name must declare each @var_col ONCE (error 134 otherwise).
+        new_vars = [
+            c for c in cols if f"@{variable}_{c}".lower() not in self._loop_vars_emitted
+        ]
+        self._loop_vars_emitted.update(f"@{variable}_{c}".lower() for c in cols)
         lines = [
             "-- UNIQUE: cursor FOR-loop expanded; loop variables are "
             "NVARCHAR(4000) (exact column types need --db-url metadata).",
-            f"DECLARE {decls};",
         ]
+        if new_vars:
+            decls = ", ".join(f"@{variable}_{c} NVARCHAR(4000)" for c in new_vars)
+            lines.append(f"DECLARE {decls};")
         if declares_cursor:
             lines += [
                 f"DECLARE {cur} CURSOR LOCAL FAST_FORWARD FOR",

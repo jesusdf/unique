@@ -892,3 +892,56 @@ class TestRowtypeLoopVarDoubleAt:
         out = _t(self._SRC, "tsql")
         assert "@@C_S_serie" not in out, out
         assert re.search(r"(?<!@)@C_S_serie\b", out), out
+
+
+class TestRepeatedLoopVarSingleDeclare:
+    """Several cursor FOR loops reusing the same record name in one routine
+    each emitted their own ``DECLARE @X_col`` — T-SQL DECLARE is
+    batch-scoped, so the second is error 134 (live: 5x @X_total). Only the
+    first loop declares; later loops reuse the variable."""
+
+    _SRC = (
+        "CREATE OR REPLACE PROCEDURE p_2l(m_a IN VARCHAR2) AS\n"
+        "BEGIN\n"
+        "  FOR X IN (SELECT COUNT(*) TOTAL FROM t1 WHERE a = m_a) LOOP\n"
+        "    IF X.TOTAL = 0 THEN NULL; END IF;\n"
+        "  END LOOP;\n"
+        "  FOR X IN (SELECT COUNT(*) TOTAL FROM t2 WHERE a = m_a) LOOP\n"
+        "    IF X.TOTAL = 0 THEN NULL; END IF;\n"
+        "  END LOOP;\n"
+        "END;\n/"
+    )
+
+    def test_single_declare_per_variable(self) -> None:
+        out = _t(self._SRC, "tsql")
+        declares = re.findall(r"(?i)DECLARE\s+@X_total\b", out)
+        assert len(declares) == 1, out
+        # Both loops still fetch into it.
+        assert len(re.findall(r"(?i)INTO\s+@X_total\b", out)) >= 2, out
+
+
+class TestRpadLpadInRawExpressions:
+    """RPAD/LPAD in a procedural raw expression (a RETURN value live) has
+    no T-SQL builtin; build it from REPLICATE like the IR emitter does."""
+
+    def test_rpad_three_arg(self) -> None:
+        src = (
+            "CREATE OR REPLACE FUNCTION f_rp(p_c IN VARCHAR2) RETURN VARCHAR2 AS\n"
+            "BEGIN\n"
+            "  RETURN RPAD(p_c, 10, 'x');\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert "RPAD" not in out.upper(), out
+        assert re.search(r"(?i)LEFT\s*\(.*REPLICATE", out), out
+
+    def test_lpad_two_arg_pads_spaces(self) -> None:
+        src = (
+            "CREATE OR REPLACE FUNCTION f_lp(p_c IN VARCHAR2) RETURN VARCHAR2 AS\n"
+            "BEGIN\n"
+            "  RETURN LPAD(p_c, 10);\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert "LPAD" not in out.upper(), out
+        assert re.search(r"(?i)RIGHT\s*\(\s*REPLICATE\s*\(\s*' '", out), out
