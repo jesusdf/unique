@@ -1239,3 +1239,45 @@ class TestPrefixStripCollision:
         assert re.search(
             r"(?i)@v_p_pat\s*=\s*RTRIM\s*\(\s*LTRIM\s*\(\s*@p_pat", out
         ), out
+
+
+class TestFinalMergeScalarsWave22:
+    """The last three live failures (2026-07-11): a numeric-style TO_CHAR
+    (client code ported FROM T-SQL: TO_CHAR(x, 112) means CONVERT style
+    112), a client UDF inside sqlglot-emitted MERGE passthrough text
+    (which the shared dbo. decision never saw), and REGEXP_LIKE — no SQL
+    Server 2022 form, so it degrades honestly via the gate."""
+
+    def test_numeric_style_to_char(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_ns(p_fn IN DATE, m_o OUT VARCHAR2) AS\n"
+            "BEGIN\n"
+            "  m_o := TO_CHAR(p_fn, 112);\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert "TO_CHAR" not in out.upper(), out
+        assert re.search(
+            r"(?i)CONVERT\s*\(\s*VARCHAR\(4000\)\s*,\s*@p_fn\s*,\s*112\s*\)", out
+        ), out
+
+    def test_udf_inside_merge_is_qualified(self) -> None:
+        src = (
+            "MERGE INTO t_dst USING (SELECT a, my_datefn(b) AS fv FROM t_src) s\n"
+            "ON (t_dst.a = s.a)\n"
+            "WHEN MATCHED THEN UPDATE SET t_dst.fv = s.fv;"
+        )
+        out = _t(src, "tsql")
+        assert re.search(r"(?i)dbo\.my_datefn\s*\(", out), out
+
+    def test_regexp_like_degrades_honestly(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "INSERT INTO t_cfg (k)\n"
+            "SELECT 'x' FROM DUAL WHERE NOT EXISTS (\n"
+            "  SELECT 1 FROM t_h h WHERE REGEXP_LIKE(h.valor, '^\\d+$'));"
+        )
+        r = Transpiler().transpile(src, "oracle", "tsql")
+        assert not re.search(r"(?im)^\s*[^-].*REGEXP_LIKE", r.sql), r.sql
+        assert r.warnings or r.unsupported, (r.sql, r.warnings)

@@ -828,6 +828,16 @@ TSQL_NEVER_QUALIFY: frozenset[str] = frozenset(
         "ORDER",
         "WITHIN",
         "FILTER",
+        "USING",
+        "MATCHED",
+        "OUTPUT",
+        # DML verbs: ``WHEN NOT MATCHED THEN INSERT (…)`` puts them right
+        # before a parenthesis.
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "MERGE",
+        "INTO",
         # Types (CAST targets / DECLAREs inside captured expressions)
         "VARCHAR",
         "NVARCHAR",

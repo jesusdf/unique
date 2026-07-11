@@ -99,6 +99,7 @@ transpilation target:
 | T-SQL OPENROWSET / OPENQUERY | T-SQL | Linked server queries |
 | Oracle CONNECT BY | Oracle | ⚠️ Partially supported → Recursive CTE |
 | T-SQL PIVOT/UNPIVOT | T-SQL | ⚠️ Partially supported → CASE/UNION |
+| REGEXP_LIKE/REGEXP_REPLACE/… → T-SQL | Oracle/PG/MySQL | SQL Server gained REGEXP_* only in 2025; targeting 2012+, a statement using them degrades to a documented carrier + warning (rewrite with LIKE/PATINDEX manually) |
 
 ---
 

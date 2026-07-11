@@ -71,6 +71,12 @@ _LEFTOVERS: dict[str, list[tuple[re.Pattern[str], str]]] = {
     ],
     "tsql": [
         (re.compile(r"(?i)\bROWNUM\b"), "ROWNUM"),
+        # No REGEXP_* functions before SQL Server 2025; the project targets
+        # 2012+ (live validation runs 2022).
+        (
+            re.compile(r"(?i)\bREGEXP_(?:LIKE|REPLACE|SUBSTR|INSTR|COUNT)\s*\("),
+            "REGEXP_* function",
+        ),
         (re.compile(r"(?i)\bN?VARCHAR2\b"), "VARCHAR2"),
         (re.compile(r"(?i)\bEXECUTE\s+IMMEDIATE\b"), "EXECUTE IMMEDIATE"),
         (re.compile(r"(?i)\bSYSDATE\b"), "SYSDATE"),

@@ -64,8 +64,10 @@ from unique.core.converter.harvest import (  # noqa: F401
 from unique.core.mappings import (
     CURRENT_DATE_EXPR,
     CURRENT_TIMESTAMP_EXPR,
+    TSQL_OBJECT_CONTEXT_WORDS,
     tsql_call_needs_schema,
 )
+from unique.core.sql_split import qualify_function_calls
 
 # Per-dialect CAST target-type overrides: MySQL CAST accepts only a fixed set
 # (SIGNED/UNSIGNED/CHAR/DATE/…), not INT/BOOLEAN; T-SQL has no BOOLEAN (it is BIT).
@@ -555,6 +557,15 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                     result = _oracle_merge_paren_on(result)
                 if dialect == "tsql" and not result.rstrip().endswith(";"):
                     result = result.rstrip() + ";"
+                if dialect == "tsql":
+                    # Scalar-UDF calls inside the sqlglot-emitted MERGE text
+                    # never met the shared dbo. decision (error 195 live).
+                    def _decide(name: str, prev_word: str | None) -> str | None:
+                        if prev_word and prev_word.upper() in TSQL_OBJECT_CONTEXT_WORDS:
+                            return None
+                        return "dbo." if tsql_call_needs_schema(name) else None
+
+                    result = qualify_function_calls(result, _decide)
             if dialect == "tsql":
                 result = _portable_rename_column(result)
                 # T-SQL's multi-column drop is ONE DROP COLUMN with a comma

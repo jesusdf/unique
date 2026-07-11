@@ -347,6 +347,13 @@ class TSqlTransformer(ProceduralTransformer):
             r"RIGHT(REPLICATE(' ', \2) + \1, \2)",
             sql,
         )
+        # TO_CHAR(x, <int>) — a numeric CONVERT style in Oracle spelling
+        # (client code ported FROM T-SQL): restore the CONVERT form.
+        sql = re.sub(
+            rf"(?is)\bTO_CHAR\s*\(\s*{arg}\s*,\s*(\d+)\s*\)",
+            r"CONVERT(VARCHAR(4000), \1, \2)",
+            sql,
+        )
         # One-argument TO_CHAR/TO_DATE: plain conversions. The formatted
         # two-argument forms stay visible (format models differ per engine).
         sql = re.sub(
