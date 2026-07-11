@@ -795,3 +795,74 @@ class TestSysdateWithEmptyParens:
         out = _t("insert into t values(1, SYSDATE(), 0);", "postgresql")
         assert "AS ()" not in out, out
         assert "SYSDATE" not in out.upper(), out
+
+
+class TestCaseInsensitiveVarRename:
+    """Oracle identifiers are case-insensitive; the oracle→tsql variable
+    rename map matched case-sensitively, so a body reference written in a
+    different case than its declaration kept the bare name (error 128
+    live: PRINT inside CATCH referencing v_x while the map holds V_X)."""
+
+    def test_lowercase_reference_is_renamed(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_ci(V_TIPO IN VARCHAR2) AS\n"
+            "BEGIN\n"
+            "  BEGIN\n"
+            "    UPDATE t SET c = 1 WHERE x = V_TIPO;\n"
+            "  EXCEPTION\n"
+            "    WHEN NO_DATA_FOUND THEN\n"
+            "      dbms_output.put_line('No existe ' || v_tipo);\n"
+            "  END;\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert not re.search(r"(?<![@\w])v_tipo\b", out), out
+        assert out.count("@tipo") >= 2, out
+
+    def test_string_literal_mentioning_the_name_is_untouched(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_ci2(V_TIPO IN VARCHAR2) AS\n"
+            "BEGIN\n"
+            "  dbms_output.put_line('el valor de v_tipo es ' || v_tipo);\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert "'el valor de v_tipo es '" in out, out
+
+
+class TestCursorAttributesOnTsql:
+    """Oracle cursor attributes leaking raw into T-SQL (4145 live:
+    ``WHILE C_X % FOUND``). Named-cursor %FOUND/%NOTFOUND read
+    @@FETCH_STATUS; the implicit SQL%FOUND/%NOTFOUND read @@ROWCOUNT."""
+
+    def test_named_cursor_found(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_cf AS\n"
+            "  CURSOR c_t IS SELECT a FROM t;\n"
+            "  v_a NUMBER;\n"
+            "BEGIN\n"
+            "  OPEN c_t;\n"
+            "  FETCH c_t INTO v_a;\n"
+            "  WHILE c_t%FOUND LOOP\n"
+            "    FETCH c_t INTO v_a;\n"
+            "  END LOOP;\n"
+            "  CLOSE c_t;\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert "%" not in out.replace("%TYPE", ""), out
+        assert re.search(r"(?i)@@FETCH_STATUS\s*=\s*0", out), out
+
+    def test_implicit_sql_found(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_sf(m_ok OUT NUMBER) AS\n"
+            "BEGIN\n"
+            "  UPDATE t SET a = 1 WHERE b = 2;\n"
+            "  IF SQL%NOTFOUND THEN\n"
+            "    m_ok := 0;\n"
+            "  END IF;\n"
+            "END;\n/"
+        )
+        out = _t(src, "tsql")
+        assert "SQL%" not in out.upper().replace(" ", ""), out
+        assert re.search(r"(?i)@@ROWCOUNT\s*=\s*0", out), out

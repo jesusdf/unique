@@ -570,7 +570,12 @@ class ProceduralTransformer:
             # stay verbatim.
             def rename_names(segment: str) -> str:
                 for old_name, new_name in self._var_map.items():
-                    segment = re.sub(rf"\b{re.escape(old_name)}\b", new_name, segment)
+                    # Case-insensitive: Oracle/PG identifiers fold case, so a
+                    # body reference may be spelled differently than its
+                    # declaration (live: PRINT referencing v_x vs V_X).
+                    segment = re.sub(
+                        rf"(?i)\b{re.escape(old_name)}\b", new_name, segment
+                    )
                 return segment
 
             sql = self._map_outside_strings(sql, rename_names)

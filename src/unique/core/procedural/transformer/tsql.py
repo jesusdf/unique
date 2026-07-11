@@ -178,6 +178,14 @@ class TSqlTransformer(ProceduralTransformer):
         sql = map_sequence_refs(sql, "tsql")
         # The implicit-cursor row count reads from @@ROWCOUNT.
         sql = re.sub(r"(?i)\bSQL\s*%\s*ROWCOUNT\b", "@@ROWCOUNT", sql)
+        # Implicit-cursor success attributes read the affected-row count;
+        # named-cursor %FOUND/%NOTFOUND read the last FETCH's status (T-SQL
+        # has ONE global @@FETCH_STATUS — correct right after that cursor's
+        # FETCH, the shape these loops take).
+        sql = re.sub(r"(?i)\bSQL\s*%\s*NOTFOUND\b", "@@ROWCOUNT = 0", sql)
+        sql = re.sub(r"(?i)\bSQL\s*%\s*FOUND\b", "@@ROWCOUNT > 0", sql)
+        sql = re.sub(r"(?i)\b\w+\s*%\s*NOTFOUND\b", "@@FETCH_STATUS <> 0", sql)
+        sql = re.sub(r"(?i)\b\w+\s*%\s*FOUND\b", "@@FETCH_STATUS = 0", sql)
         # MONTHS_BETWEEN(a, b) -> DATEDIFF(MONTH, b, a). Whole months only
         # (T-SQL has no fractional form); the boundary-counting difference
         # is the standard accepted approximation.
