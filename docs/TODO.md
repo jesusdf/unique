@@ -529,8 +529,21 @@ fix needs an **anonymized** regression fixture (never a private name).
       the parser's name-based mixin cut does NOT transfer to the
       transformer — its shared/node-transform/expression-rewrite families
       cross-call heavily (an attempted split needed a dozen-plus stub
-      contract and was reverted). Design the interface first (likely:
-      expression rewrites behind one named seam object, not a mixin).
+      contract and was reverted). **Seam DESIGNED 2026-07-11 (measured):**
+      the expression-rewrite family is 24 methods / ~751 lines with 33
+      node→expr call edges; its instance state is small (class-constant
+      regex/maps + `_source`, `_in_trigger`, `_string_vars`,
+      `_get_func_map`). Design: a composed **`ExpressionRewriter`**
+      object (`transformer/_expr.py`), constructed per transform with a
+      narrow `RewriteContext` protocol (`source`, `target`, `in_trigger`,
+      `string_vars`, `date_vars`, `warn()`, `func_map()`, and ONE
+      `target_fixups(sql)` hook through which the per-target transformer
+      classes keep their overrides — `_fix_raw_sql_target`,
+      `_map_oracle_builtins`, …). The 33 call edges rewire mechanically
+      to `self._expr.X(...)`. Implement as one mechanical commit with the
+      full suite as the net; per-target subclassing of the rewriter can
+      come later. This also unblocks M3-prereq's final step (the rewriter
+      object is what IR-first expressions will eventually replace).
 - [x] **Docker digest pin + constraints file** (done 2026-07-10): both
       Dockerfiles pin `python:3.13-slim` by sha256 digest and the runtime
       install applies `constraints.txt` (full dependency closure) — image
