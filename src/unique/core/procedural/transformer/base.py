@@ -3040,7 +3040,9 @@ class ProceduralTransformer:
     #: SYSTIMESTAMP is listed before SYSDATE so the longer name matches first.
     _NOW_PATTERN = re.compile(
         r"\b(GETDATE\s*\(\s*\)|SYSTIMESTAMP\b(?:\s*\(\s*\))?"
-        r"|SYSDATE\b(?!\s*\()|NOW\s*\(\s*\))",
+        # SYSDATE with EMPTY parens is the same niladic call (an invalid but
+        # real client-dump spelling); SYSDATE(<arg>) stays a user function.
+        r"|SYSDATE\s*\(\s*\)|SYSDATE\b(?!\s*\()|NOW\s*\(\s*\))",
         flags=re.IGNORECASE,
     )
 

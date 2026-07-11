@@ -725,3 +725,73 @@ class TestEmbeddedAlterAddColumns:
         for target in ("mysql", "tsql"):
             out = _t(self._SRC, target)
             assert "ADD COLUMNS" not in out.upper(), (target, out)
+
+
+class TestNestedBlockLoopRecordOnPg:
+    """A cursor FOR loop inside a NESTED begin/end block: the auto-declared
+    plpgsql record landed inside the nested block's body as a bare
+    ``X record;`` statement (42601 live) — the PG anonymous-block emitter
+    did its own shallow declaration split instead of the shared
+    _split_declarations (whose pull_nested hoists from nested bodies)."""
+
+    _SRC = (
+        "DECLARE\n"
+        "  V_PL VARCHAR2(10);\n"
+        "BEGIN\n"
+        "  V_PL := 'A';\n"
+        "  BEGIN\n"
+        "    FOR X IN (SELECT COUNT(*) TOTAL FROM t WHERE c = V_PL) LOOP\n"
+        "      IF X.TOTAL = 0 THEN\n"
+        "        NULL;\n"
+        "      END IF;\n"
+        "    END LOOP;\n"
+        "  END;\n"
+        "END;\n/"
+    )
+
+    def test_record_declaration_hoists_to_declare_section(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        head, _, body = out.partition("BEGIN")
+        assert re.search(r"(?i)\bX record;", head), out
+        assert not re.search(r"(?i)\bX record;", body), out
+
+
+class TestSysdateWithEmptyParens:
+    """Real dumps carry ``SYSDATE()`` — invalid even on Oracle (a client
+    code generator emitted it), so sqlglot's RAISE parse fails and the WARN
+    fallback built ``CURRENT_TIMESTAMP AS ()`` (42601 live). parse_sql now
+    retries a failed oracle parse with the niladic spelling normalized, and
+    the procedural now-pattern accepts the empty parens."""
+
+    def test_embedded_insert_value(self) -> None:
+        src = (
+            "DECLARE\n"
+            "  v_n NUMERIC;\n"
+            "BEGIN\n"
+            "  insert into t values(1, SYSDATE(), 0);\n"
+            "END;\n/"
+        )
+        out = _t(src, "postgresql")
+        assert "AS ()" not in out, out
+        assert "SYSDATE" not in out.upper(), out
+        assert re.search(r"(?i)CURRENT_TIMESTAMP", out), out
+
+    def test_procedural_assignment(self) -> None:
+        src = (
+            "CREATE OR REPLACE PROCEDURE p_sd(m_out OUT DATE) AS\n"
+            "BEGIN\n"
+            "  m_out := SYSDATE();\n"
+            "END;\n/"
+        )
+        for target, idiom in (
+            ("postgresql", "CURRENT_TIMESTAMP"),
+            ("tsql", "GETDATE()"),
+        ):
+            out = _t(src, target)
+            assert "SYSDATE" not in out.upper(), (target, out)
+            assert idiom in out.upper(), (target, out)
+
+    def test_standalone_insert(self) -> None:
+        out = _t("insert into t values(1, SYSDATE(), 0);", "postgresql")
+        assert "AS ()" not in out, out
+        assert "SYSDATE" not in out.upper(), out

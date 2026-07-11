@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import re
 from typing import cast
 
 import sqlglot
@@ -83,6 +84,17 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
             sql, read=sg_dialect, error_level=sqlglot.ErrorLevel.RAISE
         )
     except Exception as e:
+        # Real Oracle dumps carry ``SYSDATE()`` — empty parens, invalid even
+        # on Oracle (a client code generator emitted it) — which breaks the
+        # parse (and the WARN fallback would mangle it into ``… AS ()``).
+        # Retry once with the niladic spelling normalized; doing this only
+        # AFTER a failure means statements whose string literals mention
+        # SYSDATE() are never touched (they parse fine the first time).
+        if dialect == "oracle":
+            normalized = re.sub(r"(?i)\b(SYSDATE|SYSTIMESTAMP)\s*\(\s*\)", r"\1", sql)
+            if normalized != sql:
+                with contextlib.suppress(Exception):
+                    return parse_sql(normalized, dialect)
         logger.warning("sqlglot parse error: %s", e)
         return [RawSQL(sql=sql, reason=str(e))]
 

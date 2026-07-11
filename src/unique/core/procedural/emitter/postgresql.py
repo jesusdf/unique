@@ -14,7 +14,6 @@ from unique.core.ast_nodes import (
     CallStatement,
     CreateTriggerStatement,
     CursorDeclaration,
-    DeclareStatement,
     ParameterDefinition,
     PrintStatement,
     RaiseErrorStatement,
@@ -330,9 +329,11 @@ class PostgresEmitter(ProceduralEmitter):
                 statements.extend(stmt.statements)
             else:
                 statements.append(stmt)
-        decl_types = (DeclareStatement, CursorDeclaration)
-        decls = [s for s in statements if isinstance(s, decl_types)]
-        body = [s for s in statements if not isinstance(s, decl_types)]
+        # The shared split (not a shallow filter): its pull_nested pass also
+        # hoists declarations sitting inside nested blocks/control flow —
+        # plpgsql has no inline DECLARE, so a record declaration left inside
+        # a nested BEGIN body is a syntax error (live 2026-07-11).
+        decls, body = self._split_declarations(tuple(statements))
         # A PRINT becomes ``RAISE NOTICE``, which is PL/pgSQL-only and needs the
         # DO wrapper even though it is not "control flow" (so MySQL, where PRINT
         # is a standalone SELECT, still emits it bare).
