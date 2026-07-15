@@ -800,6 +800,17 @@ fix needs an **anonymized** regression fixture (never a private name).
         T-SQL 615→590 (−25), Oracle 215→202 (−13). Cumulative from the
         honest baseline: T-SQL 1090→590 (83.1%), MySQL 579→363
         (88.7%), Oracle 454→202 (93.9%).**
+        *Wave 15 (2026-07-15):* PG `CREATE INDEX` → T-SQL rebuilt from
+        the parsed tree (`_pg_index_to_tsql`): PG's nameless form gets
+        a synthesized `<table>_<cols>_idx` name (T-SQL requires one),
+        sqlglot's write-side CASE-WHEN NULLs emulation never reaches
+        the column list, a filtered index's `NOT x IS NULL` spells
+        `x IS NOT NULL` (the only form CREATE INDEX…WHERE accepts),
+        unique indexes without a filter carry the NULLs-distinct
+        semantics note, and the physical-clause round-trip carrier
+        (CLUSTERED/WITH/ON fg) is re-injected — the cross-dialect
+        round-trip suite caught the rebuild dropping it. Tests:
+        TestPgIndexToTsql. Sweep re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

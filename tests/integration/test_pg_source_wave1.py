@@ -792,3 +792,30 @@ class TestSetofReturnsDegrade:
         assert not code, r.sql
         assert "setof" in r.sql.lower(), r.sql
         assert r.warnings or r.unsupported, r.sql
+
+
+class TestPgIndexToTsql:
+    """PG CREATE INDEX → T-SQL had two stacked failures: PG's nameless
+    form (T-SQL requires a name) and sqlglot's write-side NULLs-distinct
+    emulation wrapping unique-index columns in CASE WHEN expressions —
+    invalid in a T-SQL index column list. The statement is rebuilt from
+    the parsed tree; a filtered index's ``NOT x IS NULL`` renders as
+    ``x IS NOT NULL`` (the only spelling T-SQL accepts there)."""
+
+    def test_nameless_index_gets_a_name(self) -> None:
+        out = _t("create unique index on fkest(x, x10);", "tsql")
+        assert re.search(r"(?i)CREATE UNIQUE INDEX \w+ ON fkest", out), out
+        assert "CASE WHEN" not in out.upper(), out
+
+    def test_filtered_index_predicate_spelling(self) -> None:
+        out = _t(
+            "create unique index j1_id2_idx on j1(id2) where not id2 is null;",
+            "tsql",
+        )
+        assert re.search(r"(?i)WHERE id2 IS NOT NULL", out), out
+        assert "NOT id2 IS NULL" not in out.upper(), out
+        assert "CASE WHEN" not in out.upper(), out
+
+    def test_named_plain_index_unchanged_shape(self) -> None:
+        out = _t("create index i2 on t2(a desc, b);", "tsql")
+        assert re.search(r"(?i)CREATE INDEX i2 ON t2 \(a DESC, b\)", out), out

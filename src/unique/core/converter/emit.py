@@ -474,6 +474,107 @@ def _quote_reserved_identifiers(expr: exp.Expression, dialect: str) -> exp.Expre
     return expr
 
 
+def _tsql_index_predicate(pred: exp.Expression) -> str | None:
+    """Render a filtered-index predicate in T-SQL's restricted grammar.
+
+    ``NOT x IS NULL`` (sqlglot's model of IS NOT NULL) must spell
+    ``x IS NOT NULL`` — the only form CREATE INDEX ... WHERE accepts.
+    Returns None for shapes outside that grammar (caller falls back)."""
+    if (
+        isinstance(pred, exp.Not)
+        and isinstance(pred.this, exp.Is)
+        and isinstance(pred.this.expression, exp.Null)
+    ):
+        return f"{pred.this.this.sql(dialect='tsql')} IS NOT NULL"
+    if isinstance(pred, exp.Is) and isinstance(pred.expression, exp.Null):
+        return f"{pred.this.sql(dialect='tsql')} IS NULL"
+    if isinstance(pred, exp.And):
+        left = _tsql_index_predicate(pred.this)
+        right = _tsql_index_predicate(pred.expression)
+        if left and right:
+            return f"{left} AND {right}"
+        return None
+    if isinstance(pred, (exp.EQ, exp.GT, exp.GTE, exp.LT, exp.LTE, exp.NEQ)):
+        return str(pred.sql(dialect="tsql"))
+    return None
+
+
+def _pg_index_to_tsql(sql: str, read: str) -> str | None:
+    """Rebuild a PostgreSQL CREATE INDEX as valid T-SQL, or None to let
+    the generic sqlglot path try (expression indexes, exotic shapes)."""
+    # A physical-clause note from a prior T-SQL->PG pass (CLUSTERED /
+    # WITH (...) / ON <fg>) must survive the rebuild: extract it before
+    # parsing and re-inject its pieces below (round-trip contract).
+    physical_kw = ""
+    trailing = ""
+    note = re.search(
+        r"(?is)\s*/\*\s*UNIQUE:\s*(?P<clauses>.+?)\s*--\s*tsql-only,"
+        r"[^*]*?physical index clause[^*]*?\*/",
+        sql,
+    )
+    if note:
+        sql = (sql[: note.start()] + sql[note.end() :]).strip()
+        clauses = note.group("clauses").strip()
+        lead = re.match(r"(?i)(?P<kw>(?:NON)?CLUSTERED)\b\s*(?P<rest>.*)$", clauses)
+        if lead:
+            physical_kw = lead.group("kw") + " "
+            trailing = lead.group("rest").strip()
+        else:
+            trailing = clauses
+    try:
+        tree = sqlglot.parse_one(sql, read=read)
+    except Exception:
+        return None
+    if not isinstance(tree, exp.Create):
+        return None
+    index = tree.this
+    if not isinstance(index, exp.Index):
+        return None
+    params = index.args.get("params")
+    ordered = list(params.args.get("columns") or []) if params else []
+    cols: list[str] = []
+    for o in ordered:
+        inner = o.this
+        if not isinstance(inner, exp.Column):
+            return None  # expression index: generic path
+        col = str(inner.sql(dialect="tsql"))
+        if o.args.get("desc"):
+            col += " DESC"
+        cols.append(col)
+    if not cols:
+        return None
+    table = index.args.get("table")
+    if table is None:
+        return None
+    table_sql = str(table.sql(dialect="tsql"))
+    name = str(index.this.sql(dialect="tsql")) if index.this else ""
+    if not name:
+        pieces = [re.sub(r"\W+", "", table_sql)] + [
+            re.sub(r"\W+", "", c) for c in cols[:3]
+        ]
+        name = "_".join(p for p in pieces if p) + "_idx"
+    unique = "UNIQUE " if tree.args.get("unique") else ""
+    where = params.args.get("where") if params else None
+    where_sql = ""
+    if where is not None:
+        rendered = _tsql_index_predicate(where.this)
+        if rendered is None:
+            return None
+        where_sql = f" WHERE {rendered}"
+    stmt = (
+        f"CREATE {unique}{physical_kw}INDEX {name} ON {table_sql} "
+        f"({', '.join(cols)}){where_sql}"
+    )
+    if trailing:
+        stmt += f" {trailing}"
+    if unique and not where_sql:
+        return (
+            f"{stmt};\n-- UNIQUE: PostgreSQL unique indexes treat NULLs as "
+            "distinct; T-SQL allows a single NULL per unique index"
+        )
+    return stmt
+
+
 def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     """Re-transpile a passthrough statement to the target dialect.
 
@@ -488,6 +589,19 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     # rebuilt directly (sqlglot mangles it into comma-joined actions).
     if node.kind == "ALTER" and node.source_dialect == "tsql":
         rebuilt = _tsql_add_key_constraint(node.sql, dialect)
+        if rebuilt is not None:
+            return rebuilt
+
+    # PostgreSQL CREATE INDEX -> T-SQL: sqlglot's write-side NULLs-distinct
+    # emulation wraps unique-index columns in CASE WHEN expressions
+    # (invalid in a T-SQL index column list) and keeps PG's nameless form
+    # (T-SQL requires a name). Rebuild from the parsed tree.
+    if (
+        node.kind == "CREATE INDEX"
+        and node.source_dialect == "postgresql"
+        and dialect == "tsql"
+    ):
+        rebuilt = _pg_index_to_tsql(node.sql, read)
         if rebuilt is not None:
             return rebuilt
 
