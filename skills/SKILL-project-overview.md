@@ -130,6 +130,21 @@ Each completed feature should have corresponding tests in the test suite.
 `audit/2026-07-08/`). Audits are ground truth about real defects and must not
 be contradicted by STATUS/README claims.
 
+**Active workstream (since 2026-07-11): the pg-source validity waves.** The
+upstream PostgreSQL regression corpus (source-validated) is swept against the
+live engines per direction; every wave fixes ONE mechanism and re-measures
+(the full log with per-wave numbers and the measured commit hash lives in
+`docs/TODO.md` §3). Method in the development-workflow skill ("validity-wave
+cadence"). Architecture facts added by those waves worth knowing before
+touching the code: the procedural lexer tokenizes PG dollar-quotes as STRING
+tokens (normalized to single-quote form) and `$n` positional params as one
+token; the parser aliases `$n` to parameter names at token level and splices
+string bodies (old-style quoted and dollar-quoted) through one canonical
+path; `SOURCE_DIALECT` is a converter ContextVar (set per transpile, like
+`TEMP_TABLES`) for source-dependent normalizations; and
+`Transformer.transform` runs statement-level whole-degrade gates for
+constructs with no target equivalent (arrays, PG catalog internals).
+
 **The architecture direction is set by `audit/2026-07-08/04-architecture-analysis.md`
 (adopted).** Its five root causes and proposals P1–P6 govern all transpiler
 work until the M0–M4 milestones close. The binding rules derived from it live

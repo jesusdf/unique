@@ -28,6 +28,13 @@ identifier. Keep the real names in the working conversation only. If a real name
 has already been committed, fix the files **and rewrite git history**
 (`git filter-repo --replace-text --replace-message`, then force-push) to purge it.
 
+The same contract covers **license-restricted local corpora** under the
+gitignored `fixtures-corpus/`: some tuning material there may not be
+redistributed, and its **provenance must never be named in committed
+artifacts** (tests, comments, commit messages, docs, or sweep numbers
+attributed to a named corpus). Findings from such material are committed only
+as synthetic anonymized reproductions, exactly like the client-SQL rule above.
+
 ## Analyze before changing (mandatory first step)
 
 Before writing or modifying any code, **read the code you are about to touch
@@ -107,6 +114,39 @@ of your fix, that is the rule working — do the structural version or escalate.
    corpus tests) does not regress for the affected direction **and** docs
    updated. Direction maturity is stated as a measured validity %, never as
    "complete".
+
+## The validity-wave cadence (proven 2026-07-15, waves 4-19)
+
+Corpus-driven direction work follows a measured loop; each wave is one
+mechanism (never one spelling — see the circuit breakers):
+
+1. **Classify** the sweep's own failure dumps (`SWEEP_DUMP_FILE` hook): group
+   by the first NON-comment code line's leading tokens; sample real blocks
+   before naming the mechanism.
+2. **Red tests** for the class in the direction's wave test module (e.g.
+   `tests/integration/test_pg_source_wave1.py`), meeting the assertion bar
+   below (target idiom present, source idiom absent, identity-proof).
+3. **Fix the mechanism** at the right layer (lexer/parser/transformer/emit —
+   never a text patch); probe combinatorial neighbors.
+4. Full **pre-commit gate**, commit, push.
+5. **Relaunch the sweep cycle** and record the numbers in `docs/TODO.md`
+   **with the measured commit hash**. Record honest negatives too: a class
+   fix that un-carriers units often exposes the NEXT blocker in a chain
+   (plpgsql routines are blocker CHAINS — expect small deltas per wave).
+
+When adding a NEW test module in this loop, **add it to the `--tests`
+selections in `.github/workflows/mutation.yml`** — the nightly mutation
+floors sank for seven nights (2026-07-09..15) because the wave module that
+kills the new code's mutants was not in the selections, so every new-path
+mutant survived by construction.
+
+**Whole-unit degrade contract:** a statement/routine with no mechanical
+equivalent degrades WHOLE — carrier + warning + `unsupported` entry, never a
+fragment. In the DML path use the statement-level gates in
+`Transformer.transform` (`_gate_pg_internals`, `_gate_array_constructs`); in
+the procedural path return a `RawSQL` whose reason contains **"preserved as a
+comment"** — the procedural emitter renders exactly those as comment carriers
+(plus the parse-fallback reason); any other RawSQL reason ships verbatim.
 
 ## Detect the wrong path: circuit breakers (mandatory)
 
