@@ -1110,7 +1110,9 @@ fix needs an **anonymized** regression fixture (never a private name).
         `GET STACKED DIAGNOSTICS` itself (mysql native; oracle→SQLERRM/
         FORMAT_ERROR_BACKTRACE; tsql→ERROR_*()) — classified for the
         next deep wave. Tests: TestOracleUnderscoreLocals. Sweep
-        re-measure pending.
+        re-measure done: **flat at `22f63f4` — necessary but not
+        sufficient (the family's next blocker is GET STACKED
+        DIAGNOSTICS itself; wave-8 pattern, honestly recorded).**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
