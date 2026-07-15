@@ -1050,7 +1050,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         degrade whole via a transformer gate driven by the TEMP_TABLES
         harvest. Left classified: `CREATE TABLE t LIKE t1` clones
         (26x) drop their LIKE — next wave. Tests:
-        TestTsqlCtasBecomesSelectInto. Sweep re-measure pending.
+        TestTsqlCtasBecomesSelectInto. **Measured at `051cc8d`
+        (2026-07-15): mysql→T-SQL 754→572 (−182, 90.6% — the biggest
+        mysql-source wave; ok +94). All three mysql-source directions
+        now above 90%: →T-SQL 572 (90.6%), →PG 403 (93.7%), →Oracle
+        323 (94.8%).**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
