@@ -819,7 +819,21 @@ fix needs an **anonymized** regression fixture (never a private name).
         ``ON 1`` (error 4145, 12x): `_emit_condition` renders a bare
         boolean literal in WHERE/HAVING/ON position as a real
         predicate (`1 = 1` / `1 = 0`). Tests:
-        TestBooleanLiteralConditionsTsql. Sweep re-measure pending.
+        TestBooleanLiteralConditionsTsql. **Measured at `7fa6c60`
+        (2026-07-15): T-SQL 582→573 (−9); MySQL 363 / Oracle 202 flat.
+        Session cumulative from the honest baseline: T-SQL 1090→573
+        (83.5%), MySQL 579→363 (88.7%), Oracle 454→202 (93.9%).**
+        Next classes (fresh dumps at `7fa6c60`): tsql — 23x `SELECT
+        dbo.…` array-construct calls (`dbo.ARRAY`, `ARRAY_AGG`,
+        `dbo.EXPLODE`: no arrays on T-SQL/MySQL → honest whole-
+        statement carriers + unsupported entries), 18x triggers with
+        transition tables (`EXECUTE FUNCTION` bindings), 13x remaining
+        index shapes (expression indexes fall back to the generic
+        path), 12x `CREATE OR ALTER VIEW` with aggregate ORDER BY
+        args; mysql — 15x FOREACH…IN ARRAY (array emulation needed or
+        honest degrade), 12x `f1()` polymorphic call sites, 8x
+        `float8 'nan'` special values (`'nan'`/`'inf'` literals have
+        no MySQL FLOAT spelling).
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
