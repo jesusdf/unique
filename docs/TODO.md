@@ -1171,6 +1171,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         `62c078b` (2026-07-16): T-SQL 408→402 (−6, 87.8%); MySQL/Oracle
         syntax flat, ok +1 each. Cumulative: T-SQL 1090→402, MySQL
         579→193, Oracle 454→149.**
+        *Wave 40 (2026-07-16):* plpgsql's TG_* context variables are
+        compile-time CONSTANTS once the trigger function inlines into a
+        named trigger — TG_NAME/TG_TABLE_NAME/TG_OP/TG_WHEN/TG_LEVEL
+        substitute as literals from the trigger node (18x error 128).
+        Next link classified: whole-row `inserted::text` stringification
+        (no T-SQL form). Tests: TestTgContextConstants. Sweep
+        re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

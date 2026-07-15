@@ -1802,3 +1802,25 @@ class TestPlpgsqlFoundFlag:
     def test_found_oracle(self) -> None:
         out = _t(self._SRC, "oracle")
         assert re.search(r"(?i)IF SQL%FOUND", out), out
+
+
+class TestTgContextConstants:
+    """plpgsql's TG_* context variables are compile-time CONSTANTS once
+    the function is inlined into a named trigger: TG_NAME/TG_TABLE_NAME/
+    TG_OP/TG_WHEN/TG_LEVEL substitute as literals (18x error 128)."""
+
+    _SRC = (
+        "create function cf() returns trigger as $$\n"
+        "begin\n"
+        "  insert into log values (TG_NAME, TG_OP, TG_LEVEL);\n"
+        "  return null;\nend$$ language plpgsql;\n"
+        "create trigger child1_ins after insert on child1 "
+        "for each statement execute function cf();"
+    )
+
+    def test_tg_constants_substitute_tsql(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert "'child1_ins'" in out, out
+        assert "'INSERT'" in out, out
+        assert "'STATEMENT'" in out, out
+        assert "TG_NAME" not in out.upper(), out

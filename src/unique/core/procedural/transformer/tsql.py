@@ -570,7 +570,29 @@ class TSqlTransformer(ProceduralTransformer):
             original = ProceduralEmitter("postgresql").emit(node)
             return RawSQL(sql=original, reason=reason)
         kept = self._rename_transition_aliases(kept, node.referencing)
+        kept = self._substitute_tg_constants(kept, node)
         return self._tsql_statement_trigger(node, kept)
+
+    def _substitute_tg_constants(
+        self, body: tuple[ASTNode, ...], node: CreateTriggerStatement
+    ) -> tuple[ASTNode, ...]:
+        """plpgsql's TG_* context variables are compile-time constants
+        once the function is inlined into a NAMED trigger."""
+        event = node.events[0] if node.events else "INSERT"
+        consts = {
+            "TG_NAME": f"'{node.name}'",
+            "TG_TABLE_NAME": f"'{node.table}'",
+            "TG_OP": f"'{event.upper()}'",
+            "TG_WHEN": f"'{node.timing.upper()}'",
+            "TG_LEVEL": f"'{node.for_each.upper()}'",
+        }
+
+        def sub(segment: str) -> str:
+            for k, v in consts.items():
+                segment = re.sub(rf"(?i)\b{k}\b", v, segment)
+            return segment
+
+        return tuple(self._rewrite_raw_text_fields(b, sub) for b in body)
 
     _REF_NEW_RE = re.compile(r"(?i)\bNEW\s+TABLE\s+AS\s+(\w+)")
     _REF_OLD_RE = re.compile(r"(?i)\bOLD\s+TABLE\s+AS\s+(\w+)")
