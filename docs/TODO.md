@@ -769,8 +769,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         anywhere) now degrades the routine WHOLE to a carrier +
         warning; the procedural emitter's carrier contract generalized
         beyond the parse-fallback reason string. Tests:
-        TestReturnsVoid, TestRecordDeclarationDegrades. Sweep
-        re-measure pending.
+        TestReturnsVoid, TestRecordDeclarationDegrades. **Measured at
+        `640788e` (2026-07-15): MySQL 464→417 (−47), T-SQL 677→643
+        (−34), Oracle 262→237 (−25) — the biggest chain-wave gain.
+        Cumulative from the honest baseline: T-SQL 1090→643, MySQL
+        579→417, Oracle 454→237.**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
