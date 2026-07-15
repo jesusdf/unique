@@ -795,8 +795,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         parses as ONE type unit (the inner name had leaked into the
         header as garbage) and degrades the routine WHOLE (RETURN
         NEXT protocol has no equivalent). Tests:
-        TestPlpgsqlEqualsAssignment, TestSetofReturnsDegrade. Sweep
-        re-measure pending.
+        TestPlpgsqlEqualsAssignment, TestSetofReturnsDegrade.
+        **Measured at `7a1a1e2` (2026-07-15): MySQL 389→363 (−26),
+        T-SQL 615→590 (−25), Oracle 215→202 (−13). Cumulative from the
+        honest baseline: T-SQL 1090→590 (83.1%), MySQL 579→363
+        (88.7%), Oracle 454→202 (93.9%).**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
