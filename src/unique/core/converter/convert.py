@@ -627,14 +627,63 @@ def _convert_union(expr: exp.SetOperation) -> SelectStatement:
     dropped every middle arm) into a base statement whose ``set_query`` links
     each subsequent arm in left-to-right order.
     """
+
+    def _convert_arm(e: exp.Expression) -> SelectStatement:
+        # A parenthesized arm ``(SELECT …)`` is a Subquery; reading it as
+        # a Select shipped an empty ``SELECT *`` with FROM and columns
+        # dropped.
+        if isinstance(e, exp.Subquery):
+            e = cast(exp.Expression, e.unnest())
+        sel = _convert_select(e)
+        if sel.set_query is not None:
+            return sel  # nested chain — handled by its own conversion
+        if sel.limit is not None:
+            # An arm-local ORDER BY/LIMIT loses its scope once the parens
+            # go (trailing position re-reads it as the whole union's);
+            # shield it as a derived table, valid on every target.
+            return SelectStatement(
+                columns=(Star(),),
+                from_clause=SubqueryExpression(query=sel, alias="uq_setarm"),
+            )
+        if sel.order_by:
+            # ORDER BY without LIMIT in a set-op arm has no observable
+            # effect (arm order is never guaranteed); drop it.
+            sel = dataclasses.replace(sel, order_by=())
+        return sel
+
     ops: list[tuple[SetOperationType, SelectStatement]] = []
     node: exp.Expression = expr
     while isinstance(node, exp.SetOperation):
-        ops.append((_set_op_type(node), _convert_select(node.expression)))
+        ops.append((_set_op_type(node), _convert_arm(node.expression)))
         node = node.this
     ops.reverse()  # first..last set operation, left to right
 
-    selects = [_convert_select(node), *(s for _, s in ops)]
+    selects = [_convert_arm(node), *(s for _, s in ops)]
+
+    # The union's OUTER ORDER BY/LIMIT parse onto the SetOperation node;
+    # trailing position on the last arm is read as whole-union by every
+    # engine.
+    order_expr = expr.args.get("order")
+    if order_expr:
+        selects[-1] = dataclasses.replace(
+            selects[-1],
+            order_by=tuple(_convert_ordered(o) for o in order_expr.expressions),
+        )
+    limit_expr = expr.args.get("limit")
+    offset_expr = expr.args.get("offset")
+    if limit_expr is not None or offset_expr is not None:
+        count_node = None
+        if limit_expr is not None:
+            count_node = limit_expr.args.get("count") or limit_expr.expression
+        selects[-1] = dataclasses.replace(
+            selects[-1],
+            limit=LimitClause(
+                limit=convert_expression(count_node) if count_node else None,
+                offset=(
+                    convert_expression(offset_expr.expression) if offset_expr else None
+                ),
+            ),
+        )
     set_ops = [op for op, _ in ops]
     result = selects[-1]
     for i in range(len(set_ops) - 1, -1, -1):

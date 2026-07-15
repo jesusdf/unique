@@ -1256,7 +1256,22 @@ fix needs an **anonymized** regression fixture (never a private name).
         `NATURAL INNER JOIN`), whole-degrade on T-SQL (no NATURAL in
         any spelling, ON not synthesizable without column knowledge);
         mysql's FULL gate already catches NATURAL FULL there. Tests:
-        TestNaturalJoins. *Measurement pending next pg-corpus cycle.*
+        TestNaturalJoins. **Measured at `6be4e8c` (2026-07-16):
+        pg→T-SQL 380→374 (88.6%), pg→MySQL 183→180 (94.2%),
+        pg→Oracle 149 flat. Standing: pg-source {374/180/149},
+        mysql-source {419/327/296}.**
+        *Wave 48 (2026-07-16):* parenthesized set-operation arms
+        (`(SELECT …) UNION ALL (SELECT …)`) arrive as exp.Subquery;
+        _convert_select read them as EMPTY selects — `SELECT * UNION
+        ALL SELECT *`, every FROM and column dropped (62x of
+        mysql→pg). Arms now unwrap; an arm with its own LIMIT is
+        shielded as a derived table (trailing position would re-scope
+        it to the whole union); arm-local ORDER BY without LIMIT drops
+        (no observable effect in a set op); the union's OUTER
+        order/limit (parsed onto the SetOperation node, previously
+        ignored) attaches to the last arm. Tests:
+        TestParenthesizedUnionArms. *Measurement pending next
+        mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

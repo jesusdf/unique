@@ -2016,3 +2016,42 @@ class TestNaturalJoins:
         ]
         assert not code, r.sql
         assert re.search(r"(?i)natural", r.sql), r.sql
+
+
+class TestParenthesizedUnionArms:
+    """wave 48: parenthesized set-operation arms (``(SELECT …) UNION
+    ALL (SELECT …)``) arrive as exp.Subquery; _convert_select read
+    them as empty selects, shipping ``SELECT * UNION ALL SELECT *``
+    with every FROM/column dropped. Arms unwrap; an arm carrying its
+    own ORDER BY+LIMIT is shielded as a derived table (the
+    unparenthesized trailing position would re-scope it to the whole
+    union); the union's OUTER order/limit attaches to the last arm."""
+
+    def test_paren_union_arms_keep_from(self) -> None:
+        out = _t2(
+            "(select * from t1) union all (select * from t2);",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?is)FROM t1\s+UNION ALL\s+SELECT \*\s+FROM t2", out), out
+
+    def test_paren_arm_with_limit_shields(self) -> None:
+        out = _t2(
+            "select a from t1 union all " "(select a from t2 order by a limit 1);",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(
+            r"(?is)UNION ALL\s+SELECT \*\s+FROM \(SELECT a\s+FROM t2\s+"
+            r"ORDER BY a[^)]*LIMIT 1\)",
+            out,
+        ), out
+
+    def test_outer_order_by_survives(self) -> None:
+        out = _t2(
+            "(select a from t1 limit 2) union all (select a from t2) " "order by a;",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?is)LIMIT 2", out), out
+        assert re.search(r"(?is)FROM t2\s+ORDER BY a\b[^;]*;?\s*$", out), out
