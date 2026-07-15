@@ -608,6 +608,7 @@ def _pg_index_rebuild(sql: str, read: str, dialect: str) -> str | None:
 
 _COMPARISON_OPS = frozenset(
     {
+        BinaryOperator.IS,
         BinaryOperator.EQ,
         BinaryOperator.NEQ,
         BinaryOperator.LT,
@@ -621,6 +622,7 @@ _COMPARISON_OPS = frozenset(
 )
 
 _COMPARISON_NEGATION = {
+    BinaryOperator.IS: "IS NOT",
     BinaryOperator.EQ: "<>",
     BinaryOperator.NEQ: "=",
     BinaryOperator.LT: ">=",
@@ -1236,7 +1238,8 @@ def _emit_insert(node: InsertStatement, dialect: str) -> str:
     col_names = [_ident_if_plain(c, dialect) for c in node.columns]
     cols = f" ({', '.join(col_names)})" if node.columns else ""
 
-    if node.values:
+    all_empty = bool(node.values) and all(len(row) == 0 for row in node.values)
+    if node.values and not all_empty:
         rows = []
         for row in node.values:
             cells = []
@@ -1257,6 +1260,14 @@ def _emit_insert(node: InsertStatement, dialect: str) -> str:
         # MySQL has no DEFAULT VALUES clause; the all-defaults row is
         # spelled with empty lists.
         return f"INSERT INTO {table} () VALUES ()"
+    if dialect == "oracle" and (all_empty or not node.columns):
+        # Oracle has no DEFAULT VALUES and the all-defaults row cannot
+        # be spelled without the column list.
+        return (
+            "-- UNIQUE: all-defaults INSERT has no Oracle spelling "
+            "without the column list; original preserved:\n"
+            f"-- INSERT INTO {table} VALUES ()"
+        )
     return f"INSERT INTO {table}{cols}\nDEFAULT VALUES"
 
 
@@ -2571,6 +2582,9 @@ _BIN_PRECEDENCE = {
     BinaryOperator.IN: 3,
     BinaryOperator.NOT_IN: 3,
     BinaryOperator.BETWEEN: 3,
+    BinaryOperator.IS: 3,
+    BinaryOperator.NULLSAFE_EQ: 3,
+    BinaryOperator.NULLSAFE_NEQ: 3,
     BinaryOperator.BIT_OR: 4,
     BinaryOperator.BIT_XOR: 4,
     BinaryOperator.BIT_AND: 4,
@@ -2650,6 +2664,7 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         BinaryOperator.MUL: "*",
         BinaryOperator.DIV: "/",
         BinaryOperator.MOD: "%",
+        BinaryOperator.IS: "IS",
         BinaryOperator.LIKE: "LIKE",
         BinaryOperator.ILIKE: "ILIKE",
         BinaryOperator.IN: "IN",

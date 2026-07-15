@@ -1946,3 +1946,34 @@ class TestBareCreateResidue:
         )
         assert re.search(r"(?i)CREATE TABLE t3 AS", out), out
         assert re.search(r"(?i)UNION ALL", out), out
+
+
+class TestEmptyValuesAndIsNullValue:
+    """wave 46: MySQL's all-defaults ``INSERT INTO t VALUES ()`` maps
+    to ``DEFAULT VALUES`` on T-SQL/PG (Oracle degrades — no spelling
+    without the column list); and an ``IS NULL`` in VALUE position
+    (an unmapped-Is RawSQL) wraps tri-state like wave 43's
+    comparisons."""
+
+    def test_empty_values_tsql(self) -> None:
+        out = _t2("insert into t1 () values ();", "mysql", "tsql")
+        assert re.search(r"(?is)INSERT INTO t1\s+DEFAULT VALUES", out), out
+
+    def test_empty_values_pg(self) -> None:
+        out = _t2("insert into t1 values ();", "mysql", "postgresql")
+        assert re.search(r"(?is)INSERT INTO t1\s+DEFAULT VALUES", out), out
+
+    def test_empty_values_oracle_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "insert into t1 values ();", source="mysql", target="oracle"
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_is_null_value_wraps_tsql(self) -> None:
+        out = _t2("select cast(null as date) is null as x;", "mysql", "tsql")
+        assert re.search(r"(?is)CASE WHEN CAST\(NULL AS DATE\) IS NULL", out), out

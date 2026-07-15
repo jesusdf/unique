@@ -233,6 +233,12 @@ def sweep_tsql(url: str, statements: list[str], report: DirectionReport) -> None
             cur.execute(st)
             report.ok += 1
         except Exception as e:  # noqa: BLE001 - under PARSEONLY every error is syntax
+            # ...except 911 (USE of a database that doesn't exist), which is
+            # environmental: the statement parsed, the target DB is absent.
+            code = e.args[0] if e.args and isinstance(e.args[0], int) else None
+            if code == 911:
+                report.expected += 1
+                continue
             report.record_failure("SYNTAX", _error_group(str(e)), st)
     cur.execute("SET PARSEONLY OFF")
     conn.close()

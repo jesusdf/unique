@@ -104,6 +104,8 @@ class BinaryOperator(Enum):
     #: null-safe comparisons (PG IS [NOT] DISTINCT FROM, MySQL <=>)
     NULLSAFE_EQ = auto()
     NULLSAFE_NEQ = auto()
+    #: IS (NULL/TRUE/FALSE tests)
+    IS = auto()
 
 
 class TransactionAction(Enum):
