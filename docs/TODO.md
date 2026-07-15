@@ -661,7 +661,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         → FLOAT (T-SQL) / BINARY_DOUBLE (Oracle) in `_CAST_TYPE_MAP`
         (55x `AS DOUBLE` in the tsql residue). Round-trip tests incl.
         the MySQL population-semantics preservation. Tests:
-        `test_pg_source_wave1.py` (13 new). Sweep re-measure pending.
+        `test_pg_source_wave1.py` (13 new). **Measured at `493565b`
+        (2026-07-15): pg→T-SQL 77.0% (859, was 905), pg→MySQL 86.5%
+        (468, was 474), pg→Oracle 92.4% (269 syntax unchanged — its
+        aggregate wins show as ok 1698→1731, since ORA-00904 unknown
+        function classifies as "other", not syntax).** Cumulative from
+        the honest baseline: T-SQL 1090→859, MySQL 579→468, Oracle
+        454→269.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
