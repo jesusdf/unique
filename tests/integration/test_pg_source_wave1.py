@@ -1693,3 +1693,31 @@ class TestForExecuteLiteralInlines:
         ]
         assert not code, r.sql
         assert any("dynamic" in w.message.lower() for w in r.warnings), r.warnings
+
+
+class TestTransitionTableAliases:
+    """PG statement triggers name their transition tables
+    (``REFERENCING NEW TABLE AS newtab``); T-SQL's are the fixed
+    ``inserted``/``deleted`` pseudo-tables. The inlined body's alias
+    references rename (18x, the largest remaining tsql class)."""
+
+    _SRC = (
+        "create function ttf() returns trigger as $$\n"
+        "begin\n"
+        "  insert into log select a from newtab where a <> 'newtab';\n"
+        "  return null;\nend$$ language plpgsql;\n"
+        "create trigger tg after insert on d "
+        "referencing new table as newtab "
+        "for each statement execute function ttf();"
+    )
+
+    def test_new_table_alias_becomes_inserted(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert re.search(r"(?i)FROM inserted\b", out), out
+        assert not re.search(r"(?i)FROM newtab\b", out), out
+        # the string literal naming the alias stays untouched
+        assert "'newtab'" in out, out
+
+    def test_pg_keeps_referencing(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        assert re.search(r"(?i)REFERENCING new TABLE AS newtab", out), out

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 from unique.core.ast_nodes import (
     AssignmentStatement,
@@ -551,7 +552,61 @@ class TSqlTransformer(ProceduralTransformer):
         fn_node = ProceduralParser(self._source).parse(src).node
         body = tuple(getattr(fn_node, "body", ()) or ())
         kept = tuple(b for b in body if not self._is_pg_trigger_noise(b))
+        kept = self._rename_transition_aliases(kept, node.referencing)
         return self._tsql_statement_trigger(node, kept)
+
+    _REF_NEW_RE = re.compile(r"(?i)\bNEW\s+TABLE\s+AS\s+(\w+)")
+    _REF_OLD_RE = re.compile(r"(?i)\bOLD\s+TABLE\s+AS\s+(\w+)")
+
+    def _rename_transition_aliases(
+        self, body: tuple[ASTNode, ...], referencing: str
+    ) -> tuple[ASTNode, ...]:
+        """PG transition-table aliases map to T-SQL's fixed
+        inserted/deleted pseudo-tables (outside string literals)."""
+        if not referencing:
+            return body
+        renames: dict[str, str] = {}
+        m = self._REF_NEW_RE.search(referencing)
+        if m:
+            renames[m.group(1)] = "inserted"
+        m = self._REF_OLD_RE.search(referencing)
+        if m:
+            renames[m.group(1)] = "deleted"
+        if not renames:
+            return body
+
+        def rn(segment: str) -> str:
+            for old_name, new_name in renames.items():
+                segment = re.sub(rf"(?i)\b{re.escape(old_name)}\b", new_name, segment)
+            return segment
+
+        return tuple(self._rewrite_raw_text_fields(b, rn) for b in body)
+
+    def _rewrite_raw_text_fields(
+        self, node: ASTNode, fn: Callable[[str], str]
+    ) -> ASTNode:
+        """Apply *fn* (outside string literals) to every raw-SQL text
+        field reachable from *node*."""
+        import dataclasses as _dc
+
+        changes: dict[str, object] = {}
+        for f in _dc.fields(node):
+            val = getattr(node, f.name)
+            if f.name == "sql" and isinstance(val, str) and val:
+                new_text = self._map_outside_strings(val, fn)
+                if new_text != val:
+                    changes[f.name] = new_text
+            elif isinstance(val, ASTNode):
+                new_node = self._rewrite_raw_text_fields(val, fn)
+                if new_node is not val:
+                    changes[f.name] = new_node
+            elif isinstance(val, tuple) and val and isinstance(val[0], ASTNode):
+                new_items = tuple(self._rewrite_raw_text_fields(v, fn) for v in val)
+                if any(a is not b for a, b in zip(new_items, val, strict=True)):
+                    changes[f.name] = new_items
+        if not changes:
+            return node
+        return _dc.replace(node, **changes)  # type: ignore[arg-type]
 
     def _trigger_function_is_inlined(self, name: str) -> bool:
         bodies = PG_TRIGGER_FN_BODIES.get() or {}

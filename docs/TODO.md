@@ -1142,6 +1142,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         when the loop var is scalar and the SELECT has exactly one
         output column — next link classified). Cumulative: T-SQL
         1090→411, MySQL 579→193, Oracle 454→149.**
+        *Wave 36 (2026-07-15, deep chains):* transition-table aliases —
+        PG statement triggers name them (`REFERENCING NEW TABLE AS
+        newtab`); T-SQL's are the fixed `inserted`/`deleted`. The
+        inlined trigger body's alias references now rename (outside
+        string literals, via a generic raw-text-field walker); PG keeps
+        REFERENCING verbatim. Tests: TestTransitionTableAliases. Sweep
+        re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
