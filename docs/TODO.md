@@ -854,7 +854,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         precedent), which routes outer bodies AND nested literals
         through the same wave-5 splice path. All prior dollar-quote
         tests keep passing. Tests: TestNestedDollarQuotedLiterals.
-        Sweep re-measure pending.
+        **Measured at `4a09dc2` (2026-07-15): slightly NEGATIVE —
+        T-SQL 550→551, MySQL 321→323, Oracle 202→204 (+5 total).
+        Honest read: units that used to desync into whole carriers now
+        parse and emit near-correct SQL that trips the NEXT chain
+        blocker (e.g. `DECLARE CURSOR FOR EXECUTE` on T-SQL — dynamic
+        FOR loops still need a target-side story). The class fix
+        stands: one canonical dollar-quote path, all prior tests
+        green, and the trigger/EXECUTE chains are now parseable for
+        the next wave.**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
