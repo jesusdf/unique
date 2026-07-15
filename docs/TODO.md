@@ -1135,8 +1135,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         trigger family shipped `CURSOR FOR execute '…'`, invalid
         T-SQL). A NON-literal EXECUTE source (real dynamic SQL) joins
         the whole-routine degrade scan — no cursor-over-dynamic form
-        off PG. Tests: TestForExecuteLiteralInlines. Sweep re-measure
-        pending.
+        off PG. Tests: TestForExecuteLiteralInlines. **Measured at
+        `f5691aa`: −1/−1/−1 — the inlined loops now hit the NEXT link:
+        the T-SQL cursor expansion's `FETCH INTO /* @col1… */`
+        placeholder (column vars underivable in general; derivable
+        when the loop var is scalar and the SELECT has exactly one
+        output column — next link classified). Cumulative: T-SQL
+        1090→411, MySQL 579→193, Oracle 454→149.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
