@@ -1079,7 +1079,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         family). A retry-after-failure pre-parse normalization (the
         Oracle SYSDATE() pattern) drops the redundant qualifier inside
         the identifier-only list region. Tests:
-        TestInsertQualifiedColumns. Sweep re-measure pending.
+        TestInsertQualifiedColumns. **Measured at `3e2f165`
+        (2026-07-15): →PG 397→396, →T-SQL 566→565, →Oracle flat —
+        honest small yield; the bug* routines carry further chain
+        blockers. Day-one mysql-source close: →T-SQL 988→565 (90.7%),
+        →PG 648→396 (93.8%), →Oracle 555→323 (94.8%). The residue on
+        all six directions is now long-tail multi-blocker chains
+        (M4-scale deep dives, diminishing per-wave yields).**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
