@@ -174,7 +174,16 @@ class PlsqlStatementsMixin(ParserBase):
         data_type = self._parse_data_type_or_reference()
 
         default: ASTNode | None = None
-        if self._match_type(TokenType.ASSIGN) or self._match_keyword("DEFAULT"):
+        if (
+            self._match_type(TokenType.ASSIGN)
+            or self._match_keyword("DEFAULT")
+            or (
+                self._dialect == "postgresql"
+                and self._current().type == TokenType.OPERATOR
+                and self._current().value == "="
+                and self._advance() is not None
+            )
+        ):
             default = self._parse_expression_until_semicolon()
 
         self._match_type(TokenType.SEMICOLON)

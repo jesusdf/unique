@@ -1075,3 +1075,34 @@ class TestUserAggregateCallsDegrade:
         out = _t("select count(*) from t;", "tsql")
         assert re.search(r"(?i)COUNT\(\*\)", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestOracleUnderscoreIdentifiers:
+    """Oracle rejects identifiers starting with ``_`` unless quoted
+    (ORA-00911) — PG's suite aliases VALUES relations as ``_(x)`` (15x)
+    and declares ``_sqlstate``-style locals. Leading-underscore
+    identifiers emit quoted on the Oracle target."""
+
+    def test_underscore_alias_quoted(self) -> None:
+        out = _t("select x from (values ('a'), ('b')) _(x);", "oracle")
+        assert '"_"' in out, out
+        assert not re.search(r'(?<!")\b_\s*$', out), out
+
+    def test_normal_alias_unquoted(self) -> None:
+        out = _t("select x from (values ('a')) v(x);", "oracle")
+        assert '"v"' not in out, out
+
+
+class TestPlpgsqlDeclareEqualsDefault:
+    """plpgsql accepts ``DECLARE v type = expr`` (bare ``=``, synonym of
+    ``:=``) — wave 14 covered statements but not declarations; the
+    default shipped unconsumed (`PLS-00103: =`)."""
+
+    def test_declare_equals_default(self) -> None:
+        src = (
+            "create function de() returns int as $$\n"
+            "declare n int = 5;\n"
+            "begin\n  return n;\nend$$ language plpgsql;"
+        )
+        out = _t(src, "oracle")
+        assert re.search(r"(?i)n\s+(int|number)\w*\s*:=\s*5", out), out

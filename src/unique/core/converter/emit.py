@@ -1009,7 +1009,7 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
             alias = node.from_clause.alias
             if not alias and dialect != "oracle":
                 alias = "uq_dt"
-            sub_alias = f" {alias}" if alias else ""
+            sub_alias = f" {_ident(alias, False, dialect)}" if alias else ""
             inner_sql = _emit_select(node.from_clause.query, dialect)
             if dialect == "tsql":
                 # A derived table may not carry ORDER BY without TOP
@@ -2634,13 +2634,13 @@ def _emit_join(
         # when the JoinClause carries none).
         alias = join.alias or join.table.alias
         if alias:
-            table += f" {alias}"
+            table += f" {_ident(alias, False, dialect)}"
     else:
         # _emit_table_ref already renders the table's own alias; adding
         # join.alias again would duplicate it ("t2 b b").
         table = _emit_table_ref(join.table, dialect)
         if join.alias and not join.table.alias:
-            table += f" {join.alias}"
+            table += f" {_ident(join.alias, False, dialect)}"
 
     # A comma join parses as a bare Join with neither kind nor condition.
     # "INNER JOIN b" without ON is a syntax error on PostgreSQL/Oracle; the

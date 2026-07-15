@@ -758,11 +758,14 @@ _RESERVED_IDENTIFIERS: dict[str, frozenset[str]] = {
 
 def _ident(name: str, quoted: bool, dialect: str | None) -> str:
     """Emit an identifier, quoting it when the source quoted it *or* when it is a
-    reserved word in the target dialect (else it is invalid unquoted DDL)."""
+    reserved word in the target dialect (else it is invalid unquoted DDL).
+    Oracle additionally rejects a leading underscore unquoted (ORA-00911)."""
     if quoted or (
         dialect is not None
         and name.upper() in _RESERVED_IDENTIFIERS.get(dialect, frozenset())
     ):
+        return _quote_ident(name, dialect)
+    if dialect == "oracle" and name.startswith("_"):
         return _quote_ident(name, dialect)
     return name
 

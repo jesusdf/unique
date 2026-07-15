@@ -904,6 +904,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         (2026-07-15): T-SQL 519→499 (−20, 85.0% — under 500), MySQL
         266→247 (−19, 92.0%), Oracle 182 flat. Cumulative: T-SQL
         1090→499, MySQL 579→247, Oracle 454→182.**
+        *Wave 23 (2026-07-15):* Oracle leading-underscore identifiers
+        quote (`_ident` + the derived-table/join alias sites that
+        bypassed it — PG's suite aliases VALUES relations `_(x)`, 15x
+        ORA-00911, and declares `_sqlstate` locals); plpgsql DECLARE
+        defaults accept the bare `=` (wave 14 covered statements only
+        — 6x PLS-00103 '='). Tests: TestOracleUnderscoreIdentifiers,
+        TestPlpgsqlDeclareEqualsDefault. Sweep re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
