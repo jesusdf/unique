@@ -1310,3 +1310,39 @@ class TestRaiseResidue:
         joined = " ".join(w.message for w in r.warnings)
         assert "RAISERROR" not in joined, r.warnings
         assert "folded into the message" in joined, r.warnings
+
+
+class TestTsqlRaiserrorExpressionHoist:
+    """RAISERROR's message argument accepts only a literal or a
+    variable; an expression payload starting with a quote
+    (``'a' + '…'`` from the wave-10 fold) fooled the is_direct
+    heuristic and shipped inline (error 102 near '+'). Expression
+    payloads hoist through the @unique_errmsgN variable. PG's
+    ``sqlerrm``/``sqlstate`` diagnostics map to ERROR_MESSAGE() /
+    ERROR_STATE() inside the CATCH (state domain differs — warned)."""
+
+    def test_concat_payload_hoists(self) -> None:
+        out = _t(
+            "create function rt3() returns int as $$\n"
+            "begin\n"
+            "  raise exception 'bad %', 'x' using hint = 'h';\n"
+            "  return 1;\nend$$ language plpgsql;",
+            "tsql",
+        )
+        m = re.search(r"(?is)RAISERROR\((.+?),\s*16,\s*1\)", out)
+        assert m, out
+        payload = m.group(1).strip()
+        assert payload.startswith("@") or re.fullmatch(r"'(?:[^']|'')*'", payload), out
+
+    def test_sqlerrm_maps_to_error_message(self) -> None:
+        out = _t(
+            "create function rt4() returns int as $$\n"
+            "begin\n"
+            "  begin\n    perform 1;\n"
+            "  exception when others then\n"
+            "    raise notice 'E: %', sqlerrm;\n"
+            "  end;\n  return 1;\nend$$ language plpgsql;",
+            "tsql",
+        )
+        assert re.search(r"(?i)ERROR_MESSAGE\(\)", out), out
+        assert not re.search(r"(?i)\bsqlerrm\b", out), out

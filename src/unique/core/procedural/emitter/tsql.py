@@ -396,8 +396,12 @@ class TSqlEmitter(ProceduralEmitter):
         # — an expression (ERROR_NUMBER() + ' ' + ...) must go through a
         # variable. The counter keeps names unique across the script (T-SQL
         # variables are batch-scoped; two DECLAREs of one name collide).
+        # Only a SINGLE literal, variable or msg id may go inline — an
+        # expression that merely STARTS with a quote ('a' + 'b', the
+        # wave-10 fold) is error 102 and must hoist through a variable.
         is_direct = (
-            payload.startswith(("'", "@"))
+            re.fullmatch(r"'(?:[^']|'')*'", payload) is not None
+            or re.fullmatch(r"@\w+", payload) is not None
             or re.fullmatch(r"-?\s*\d+", payload) is not None
         )
         if is_direct:

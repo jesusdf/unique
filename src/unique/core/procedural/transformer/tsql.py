@@ -179,9 +179,10 @@ class TSqlTransformer(ProceduralTransformer):
         return "".join(out)
 
     def _map_oracle_builtins(self, sql: str) -> str:
-        """Oracle built-ins with a direct T-SQL form that leak through the
-        raw-expression path (found live in the 13 MB corpus, 2026-07-10)."""
-        if self._source != "oracle":
+        """Oracle/PG built-ins with a direct T-SQL form that leak through
+        the raw-expression path (found live in the 13 MB corpus,
+        2026-07-10; plpgsql shares SQLERRM and adds SQLSTATE)."""
+        if self._source not in ("oracle", "postgresql"):
             return sql
         # Oracle's ALTER TRIGGER x ENABLE names only the trigger; T-SQL
         # needs the table (resolved from sys.triggers at run time).
@@ -366,12 +367,30 @@ class TSqlTransformer(ProceduralTransformer):
             r"CONVERT(DATETIME, \1)",
             sql,
         )
+
         # Exception context: T-SQL reads it from the ERROR_* functions.
-        sql = re.sub(r"(?i)\bSQLERRM\b", "ERROR_MESSAGE()", sql)
-        # CAST keeps the ubiquitous ``SQLCODE || ' ' || SQLERRM`` concat
-        # working (INT + varchar raises 245 at runtime); a numeric context
-        # converts the string back implicitly.
-        sql = re.sub(r"(?i)\bSQLCODE\b", "CAST(ERROR_NUMBER() AS NVARCHAR(20))", sql)
+        # String-safe: a literal like 'SQLSTATE: ' must never be rewritten.
+        def _diagnostics(seg: str) -> str:
+            seg = re.sub(r"(?i)\bSQLERRM\b", "ERROR_MESSAGE()", seg)
+            # CAST keeps the ubiquitous ``SQLCODE || ' ' || SQLERRM`` concat
+            # working (INT + varchar raises 245 at runtime); a numeric
+            # context converts the string back implicitly.
+            seg = re.sub(
+                r"(?i)\bSQLCODE\b", "CAST(ERROR_NUMBER() AS NVARCHAR(20))", seg
+            )
+            return re.sub(
+                r"(?i)\bSQLSTATE\b",
+                "CAST(ERROR_STATE() AS NVARCHAR(5))",
+                seg,
+            )
+
+        before = sql
+        sql = self._map_outside_strings(sql, _diagnostics)
+        if "ERROR_STATE()" in sql and "ERROR_STATE()" not in before:
+            self._warnings.append(
+                "SQLSTATE (5-char class code) mapped to T-SQL ERROR_STATE() "
+                "(an integer state) — different value domain"
+            )
         sql = self._SYS_CONTEXT_RE.sub(
             lambda m: self._SYS_CONTEXT_MAP.get(m.group(1).upper(), m.group(0)),
             sql,

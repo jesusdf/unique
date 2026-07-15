@@ -961,6 +961,23 @@ fix needs an **anonymized** regression fixture (never a private name).
         (CI caught it red); restored byte-for-byte in f156123, full
         gate + CI green. Rule: full mutation runs happen in CI, or
         locally only with gates/sweeps/commits quiesced.**
+        *Wave 30 (2026-07-15):* the tsql raise_test twin —
+        RAISERROR's is_direct heuristic was fooled by an expression
+        payload STARTING with a quote (`'a' + 'b'` from the wave-10
+        fold; error 102 near '+'): only a single literal/variable/
+        msg-id goes inline now, expressions hoist through
+        `@unique_errmsgN`. And the SQLERRM/SQLCODE→ERROR_* mapping
+        widened to PG sources (plpgsql shares the names) plus
+        SQLSTATE→CAST(ERROR_STATE() AS NVARCHAR(5)) with a
+        domain-difference warning — all via `_map_outside_strings`
+        (a literal 'SQLSTATE: ' label must never rewrite; the old
+        plain re.sub was a latent string-corruption hazard on the
+        Oracle path too). PERFORM mangling (`perform 1`→`perform;`)
+        classified for the next wave. Also this block: the mysql-source
+        private corpus filtered live — 10,352 statements kept, 39
+        rejected (`filter_valid_source.py --dialect mysql`, throwaway
+        database, DELIMITER-block aware). Tests:
+        TestTsqlRaiserrorExpressionHoist. Sweep re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
