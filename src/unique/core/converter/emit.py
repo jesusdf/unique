@@ -647,6 +647,40 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         if rebuilt is not None:
             return rebuilt
 
+    if (
+        node.kind in ("SET", "COMMAND")
+        and node.source_dialect == "mysql"
+        and dialect != "mysql"
+        and (
+            re.match(
+                r"(?is)^\s*SET\s+(?:@@|(?:GLOBAL|SESSION|LOCAL|PERSIST)\b)",
+                node.sql,
+            )
+            or (re.match(r"(?is)^\s*SET\b", node.sql) and "@@" in node.sql)
+        )
+    ):
+        return (
+            f"-- UNIQUE: MySQL session setting has no {dialect} equivalent; "
+            f"configure the session natively.\n{_comment_block(node.sql)}"
+        )
+
+    # MySQL admin commands (FLUSH/ANALYZE/OPTIMIZE/REPAIR/LOCK TABLES…)
+    # are engine-local; sqlglot mangles them (``FLUSH AS STATUS``).
+    if (
+        node.source_dialect == "mysql"
+        and dialect != "mysql"
+        and re.match(
+            r"(?is)^\s*(?:FLUSH|ANALYZE\s+TABLE|OPTIMIZE\s+TABLE|"
+            r"REPAIR\s+TABLE|LOCK\s+TABLES|UNLOCK\s+TABLES|"
+            r"CHECK\s+TABLE|CHECKSUM\s+TABLE)\b",
+            node.sql,
+        )
+    ):
+        return (
+            f"-- UNIQUE: MySQL admin command has no {dialect} equivalent; "
+            f"run the target's own maintenance.\n{_comment_block(node.sql)}"
+        )
+
     # MySQL has no CREATE SEQUENCE; sqlglot would emit invalid SQL.
     if dialect == "mysql" and node.kind == "CREATE SEQUENCE":
         return (

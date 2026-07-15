@@ -2049,6 +2049,47 @@ class Transpiler:
                         )
                     ],
                 )
+        if source == "mysql" and target != "mysql":
+            # MySQL session knobs: SET @@var / SET GLOBAL|SESSION|PERSIST /
+            # bare SET name = (system variables — user vars need '@'), and
+            # any SET whose value reads an @@ system variable (the
+            # save/restore pattern). Engine-local; no meaning elsewhere.
+            _, code = split_leading_trivia(sql)
+            is_knob = bool(
+                re.match(
+                    r"(?is)^\s*SET\s+(?:@@|(?:GLOBAL|SESSION|LOCAL|PERSIST)\b)",
+                    code,
+                )
+                or re.match(r"(?is)^\s*SET\s+[A-Za-z_][\w.]*\s*=", code)
+                or (re.match(r"(?is)^\s*SET\b", code) and "@@" in code)
+                or re.match(
+                    r"(?is)^(?:FLUSH|LOCK\s+TABLES|UNLOCK\s+TABLES|"
+                    r"ANALYZE\s+TABLE|OPTIMIZE\s+TABLE|REPAIR\s+TABLE|"
+                    r"CHECK\s+TABLE|CHECKSUM\s+TABLE)\b",
+                    code,
+                )
+            )
+            if is_knob:
+                commented = "\n".join(
+                    f"-- {line}" if line.strip() else ""
+                    for line in sql.strip().splitlines()
+                )
+                head = " ".join(code.strip().split())[:60]
+                return TranspileResult(
+                    sql=(
+                        f"-- UNIQUE: MySQL session setting has no {target} "
+                        f"equivalent; configure the session natively.\n"
+                        f"{commented}"
+                    ),
+                    warnings=[
+                        _warn(
+                            f"MySQL session setting commented out: {head}",
+                            "set_option",
+                            source,
+                            target,
+                        )
+                    ],
+                )
         if source == "tsql" and target != "tsql":
             commented = "\n".join(
                 f"-- {line}" if line.strip() else ""

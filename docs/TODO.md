@@ -1004,6 +1004,18 @@ fix needs an **anonymized** regression fixture (never a private name).
         91.3% (555/6,412 — 1,604 'other' includes the session-killers,
         honestly counted), mysql→T-SQL 84.6% (988/6,422). The
         mysql-source direction now joins the wave cadence.**
+        *Wave M1 (mysql-source, 2026-07-15):* the mirror of pg wave 1 —
+        MySQL session knobs (`SET [@@]sql_mode`, `SET GLOBAL/SESSION/
+        PERSIST`, bare `SET name =` system vars, and any SET whose
+        value reads an `@@` variable — the save/restore pattern) plus
+        admin commands (`FLUSH`, `LOCK/UNLOCK TABLES`, `ANALYZE/
+        OPTIMIZE/REPAIR/CHECK/CHECKSUM TABLE` — sqlglot mis-parses
+        FLUSH as an alias) degrade to documented carriers off MySQL,
+        across all three routing paths (SET-option batch, passthrough,
+        admin classified with the option statements — SQL*Plus
+        precedent). Largest baseline classes: 68–124x per direction.
+        Tests: TestMysqlSessionKnobsDegrade (13). Sweep re-measure
+        pending (mysql-source cycle).
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

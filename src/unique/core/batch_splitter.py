@@ -281,6 +281,16 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
     # For Oracle, only the SQL*Plus client directives are "SET options";
     # SET TRANSACTION / SET CONSTRAINTS are real SQL and flow to the DML
     # path (the targets have their own spellings for them).
+    # MySQL admin/maintenance commands are engine-local directives the
+    # AST paths cannot help with (sqlglot mis-parses FLUSH as an alias);
+    # route them with the option statements (SQL*Plus precedent).
+    if dialect == "mysql" and re.match(
+        r"(?is)^(?:FLUSH|LOCK\s+TABLES|UNLOCK\s+TABLES|ANALYZE\s+TABLE|"
+        r"OPTIMIZE\s+TABLE|REPAIR\s+TABLE|CHECK\s+TABLE|CHECKSUM\s+TABLE)\b",
+        first_meaningful,
+    ):
+        return BatchType.SET_OPTION
+
     if _SET_PATTERN.match(first_meaningful) and (
         dialect != "oracle" or _SQLPLUS_SET_RE.match(first_meaningful)
     ):

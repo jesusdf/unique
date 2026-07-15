@@ -1367,3 +1367,38 @@ class TestPerformDiscard:
         out = _t(self._SRC, target)
         assert "perform" not in out.lower(), out
         assert re.search(r"(?i)log_call\s*\(\s*1\s*,\s*'x'\s*\)", out), out
+
+
+class TestMysqlSessionKnobsDegrade:
+    """mysql-source wave M1 — the mirror of pg wave 1: ``SET
+    [@@]sql_mode = …`` (and any SET whose value reads an ``@@`` system
+    variable, e.g. the save/restore pattern) plus admin commands
+    (``FLUSH STATUS``) are engine-local session knobs; off MySQL they
+    degrade to the documented carrier (they were the largest
+    mysql-source baseline classes: 68–124x per direction)."""
+
+    @pytest.mark.parametrize("target", ["postgresql", "oracle", "tsql"])
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "SET sql_mode = 'NO_ENGINE_SUBSTITUTION';",
+            "SET @@sql_mode = concat(@@sql_mode, ',STRICT_ALL_TABLES');",
+            "SET @prev_mode = @@SESSION.sql_mode;",
+            "FLUSH STATUS;",
+        ],
+    )
+    def test_knob_degrades(self, sql: str, target: str) -> None:
+        r = Transpiler().transpile(sql, source="mysql", target=target)
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_plain_user_var_not_gated(self) -> None:
+        r = Transpiler().transpile("SET @n = 5;", source="mysql", target="postgresql")
+        assert "@@" not in r.sql, r.sql
+        # a plain user-variable SET is NOT a session knob; whatever its
+        # translation, it must not get the session-setting carrier
+        assert "session setting" not in r.sql.lower(), r.sql
