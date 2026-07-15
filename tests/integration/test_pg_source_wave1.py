@@ -1004,3 +1004,34 @@ class TestOrderedSetAggregatesDegrade:
         ]
         assert not code, r.sql
         assert r.warnings or r.unsupported, r.sql
+
+
+class TestMysqlFullOuterJoinDegrades:
+    """MySQL has no FULL OUTER JOIN in any spelling; the statement
+    shipped raw (1064, the bulk of the remaining SELECT * class). It
+    degrades WHOLE with a warning naming the manual rewrite (LEFT JOIN
+    UNION ALL right anti-join)."""
+
+    def test_full_join_degrades_mysql(self) -> None:
+        r = Transpiler().transpile(
+            "select * from a full outer join b using (i);",
+            source="postgresql",
+            target="mysql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert any("FULL" in str(w.message).upper() for w in r.warnings), r.warnings
+
+    def test_full_join_kept_on_tsql(self) -> None:
+        out = _t("select * from a full outer join b on a.i = b.i;", "tsql")
+        assert re.search(r"(?i)FULL OUTER JOIN", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_left_join_untouched_mysql(self) -> None:
+        out = _t("select * from a left join b on a.i = b.i;", "mysql")
+        assert re.search(r"(?i)LEFT JOIN", out), out
+        assert "UNIQUE:" not in out, out

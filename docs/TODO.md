@@ -884,6 +884,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         `4bcc1d9` (2026-07-15): MySQL 323→285 (−38, 90.9%), T-SQL
         549→519 (−30, 84.5%), Oracle 182 flat (native WITHIN GROUP).
         Cumulative: T-SQL 1090→519, MySQL 579→285, Oracle 454→182.**
+        *Wave 21 (2026-07-15):* FULL OUTER JOIN on MySQL — no spelling
+        exists there and it shipped raw (1064, the bulk of the
+        remaining `SELECT *` class). Statement-level degrade with a
+        warning naming the manual rewrite (LEFT JOIN UNION ALL right
+        anti-join); T-SQL/Oracle/PG keep their native FULL JOIN.
+        Classified for later: the raise_test residue is now SQLSTATE/
+        SQLERRM pseudo-variables inside converted EXIT HANDLERs.
+        Tests: TestMysqlFullOuterJoinDegrades. Sweep re-measure
+        pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

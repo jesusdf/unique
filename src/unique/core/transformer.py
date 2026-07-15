@@ -578,6 +578,8 @@ class Transformer:
             result = [self._gate_pg_internals(node) for node in result]
         if self.context.target in ("tsql", "mysql"):
             result = [self._gate_array_constructs(node) for node in result]
+        if self.context.target == "mysql":
+            result = [self._gate_mysql_full_join(node) for node in result]
         for pass_ in self._passes:
             result = [self._apply_pass(pass_, node) for node in result]
         return result
@@ -627,6 +629,38 @@ class Transformer:
                 if found is not None:
                     return found
         return None
+
+    def _gate_mysql_full_join(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement using FULL OUTER JOIN — WHOLE, on MySQL.
+
+        MySQL has no FULL join in any spelling; it shipped raw (1064).
+        The faithful manual rewrite is LEFT JOIN UNION ALL the right
+        anti-join, which changes the statement's shape too much to do
+        mechanically without column knowledge."""
+        if not self._contains_full_join(node):
+            return node
+        reason = (
+            "MySQL has no FULL OUTER JOIN; rewrite as LEFT JOIN UNION ALL "
+            "right anti-join. Statement preserved as a comment"
+        )
+        self.context.warn(reason, "full_outer_join")
+        self.context.mark_unsupported("FULL OUTER JOIN (MySQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _contains_full_join(self, value: object) -> bool:
+        from unique.core.ast_nodes import JoinClause, JoinType
+
+        if isinstance(value, JoinClause) and value.join_type == JoinType.FULL:
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_full_join(getattr(value, f.name)) for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_full_join(item) for item in value)
+        return False
 
     def _gate_array_constructs(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using PG array constructs — WHOLE.
