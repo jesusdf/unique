@@ -937,8 +937,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         nameless) and has NO filtered indexes at all — any WHERE drops
         with a broader-index note on plain indexes and degrades WHOLE
         on unique ones; opclass strip and name synthesis shared with
-        the T-SQL path. Tests: TestPgIndexToMysql. Sweep re-measure
-        pending.
+        the T-SQL path. Tests: TestPgIndexToMysql. **Measured at
+        `4843e14` (2026-07-15): MySQL 219→210 (93.2%); T-SQL 467 /
+        Oracle 162 flat. Cumulative: T-SQL 1090→467, MySQL 579→210,
+        Oracle 454→162.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
