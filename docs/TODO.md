@@ -682,7 +682,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         "deferrable" is untouched); Oracle keeps them. Tests:
         `test_pg_source_wave1.py` (11 new). Left open: the partition
         PARENT (`PARTITION BY RANGE …`, 17x mcrparted) and column-LEVEL
-        constraint attributes. Sweep re-measure pending.
+        constraint attributes. **Measured at `3a54e36` (2026-07-15):
+        pg→T-SQL 80.5% — syntax failures 859→696 (−163, the biggest
+        single-wave drop); pg→MySQL 467 (−1); pg→Oracle 269 (flat).
+        Denominators shrank (tsql 3732→3569 stmts) because the degraded
+        INHERITS/PARTITION tables are now comment-only carriers — the
+        honest ratchet is the absolute syntax count, not the %.**
+        Cumulative from the honest baseline: T-SQL 1090→696, MySQL
+        579→467, Oracle 454→269.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
