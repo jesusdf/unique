@@ -1543,8 +1543,16 @@ class ProceduralEmitter:
 
     def _emit_print(self, node: PrintStatement) -> str:
         """Default print is MySQL's ``SELECT <expr>;`` (no PRINT statement).
-        T-SQL, Oracle and PostgreSQL override."""
+        Inside a MySQL FUNCTION a bare SELECT is invalid (functions cannot
+        return result sets, error 1415), so the message diverts to a user
+        variable with a documented carrier. T-SQL, Oracle and PostgreSQL
+        override."""
         expr = self._emit_node(node.expression)
+        if self._in_mysql_function:
+            return (
+                f"SET @uq_notice = {expr};  -- UNIQUE: notice has no output "
+                "channel inside a MySQL function; message kept in @uq_notice"
+            )
         return f"SELECT {expr};"
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:

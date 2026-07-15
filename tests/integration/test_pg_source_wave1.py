@@ -595,3 +595,32 @@ class TestPlpgsqlRaiseFormat:
         assert "give nonzero" in r.sql, r.sql
         joined = " ".join(w.message for w in r.warnings)
         assert "USING" in joined and "RAISERROR" not in joined, r.warnings
+
+
+class TestMysqlFunctionNotice:
+    """A bare ``SELECT <msg>`` is invalid inside a MySQL FUNCTION
+    (functions cannot return result sets — error 1415), which kept the
+    whole RAISE NOTICE function class red after wave 10. The message
+    diverts to ``@uq_notice`` with a documented carrier; procedures
+    keep the visible SELECT channel."""
+
+    def test_notice_in_function_diverts(self) -> None:
+        r = Transpiler().transpile(
+            "create function nf(a int) returns int as $$\n"
+            "begin\n  raise notice 'v %', a;\n  return a;\nend$$ "
+            "language plpgsql;",
+            source="postgresql",
+            target="mysql",
+        )
+        assert re.search(r"(?i)SET @uq_notice = CONCAT\('v ',\s*a\)", r.sql), r.sql
+        assert not re.search(r"(?im)^\s*SELECT CONCAT", r.sql), r.sql
+        assert "UNIQUE:" in r.sql, r.sql
+
+    def test_notice_in_procedure_keeps_select(self) -> None:
+        out = _t(
+            "create procedure np() language plpgsql as $$\n"
+            "begin\n  raise notice 'hello';\nend$$;",
+            "mysql",
+        )
+        assert re.search(r"(?i)SELECT 'hello'", out), out
+        assert "@uq_notice" not in out, out

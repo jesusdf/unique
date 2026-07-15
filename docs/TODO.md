@@ -750,6 +750,12 @@ fix needs an **anonymized** regression fixture (never a private name).
         the predicted chain effect: MySQL's RAISE functions stay
         blocked on the notice-in-FUNCTION SELECT. Cumulative: T-SQL
         1090→677, MySQL 579→464, Oracle 454→262.**
+        *Wave 11 (2026-07-15):* that notice channel — a bare `SELECT
+        <msg>` is invalid inside a MySQL FUNCTION (error 1415); the
+        base `_emit_print` now diverts to `SET @uq_notice = …` with a
+        documented carrier when `_in_mysql_function` (procedures keep
+        the visible SELECT). Tests: TestMysqlFunctionNotice. Sweep
+        re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
