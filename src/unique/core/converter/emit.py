@@ -875,6 +875,18 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         # Parse → quote reserved-word identifiers → generate, so a passthrough
         # CREATE INDEX / ALTER on a reserved name (e.g. ``collation``) is valid.
         parsed = [e for e in sqlglot.parse(node.sql, read=read) if e is not None]
+        if (
+            node.kind == "RETURNING"
+            and dialect != "postgresql"
+            and any(e.find(exp.OnConflict) for e in parsed)
+        ):
+            # RETURNING + ON CONFLICT in one statement: the RETURNING
+            # passthrough would ship ON CONFLICT raw after OUTPUT.
+            return (
+                "-- UNIQUE: INSERT combines RETURNING and ON CONFLICT; "
+                f"rewrite as MERGE with OUTPUT on {dialect}. Original:\n"
+                + _comment_block(node.sql)
+            )
         if node.kind == "RETURNING" and dialect == "tsql":
             # T-SQL OUTPUT items must carry the INSERTED./DELETED. prefix;
             # sqlglot renders RETURNING's items bare.
@@ -2858,6 +2870,15 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
             name = f"#{name}"
     parts.append(_ident(name, node.quoted, dialect))
     result = ".".join(parts)
+
+    if node.column_aliases and node.alias:
+        # PG's column-renaming alias has no direct T-SQL spelling on a base
+        # table; the derived-table rewrite is faithful. (PG keeps native;
+        # MySQL/Oracle statements degrade whole in the transformer.)
+        cols = ", ".join(node.column_aliases)
+        if dialect == "tsql":
+            return f"(SELECT * FROM {result}) AS {node.alias}({cols})"
+        return f"{result} AS {node.alias}({cols})"
 
     if node.alias:
         result += f" {node.alias}"

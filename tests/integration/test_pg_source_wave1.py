@@ -2170,3 +2170,81 @@ class TestParseFallbackDegradesCrossDialect:
         ]
         assert not code, out
         assert "UNIQUE:" in out, out
+
+
+class TestTableColumnAliases:
+    """wave 53: PG's column-aliased table refs (``x AS xx(xx1, xx2)``)
+    silently DROPPED the column list everywhere (7x pg→tsql: the list
+    shipped raw inside joins, and plain refs lost the renames). T-SQL
+    gets the faithful derived-table rewrite ``(SELECT * FROM x) AS
+    xx(xx1, xx2)``; MySQL/Oracle have no spelling without column
+    knowledge — whole-degrade."""
+
+    def test_plain_ref_tsql_derived(self) -> None:
+        out = _t("select xx1 from x as xx(xx1, xx2);", "tsql")
+        assert re.search(
+            r"(?is)FROM \(SELECT \* FROM x\) (AS )?xx\s*\(xx1, xx2\)", out
+        ), out
+
+    def test_joined_ref_tsql_derived(self) -> None:
+        out = _t(
+            "select * from y left join x as xx(xx1, xx2) on y1 = xx1;",
+            "tsql",
+        )
+        assert re.search(
+            r"(?is)LEFT JOIN \(SELECT \* FROM x\) (AS )?xx\s*\(xx1, xx2\)", out
+        ), out
+
+    def test_mysql_degrades_whole(self) -> None:
+        r = Transpiler().transpile(
+            "select xx1 from x as xx(xx1, xx2);",
+            source="postgresql",
+            target="mysql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+
+class TestTsqlInvalidShapesDegrade:
+    """wave 54: two shapes shipped invalid T-SQL instead of degrading:
+    NTH_VALUE mapped to a fictitious ``dbo.NTH_VALUE(...) OVER`` (a
+    scalar UDF cannot take OVER — 4x), and an INSERT carrying BOTH
+    RETURNING and ON CONFLICT took the RETURNING passthrough, which
+    left ``ON CONFLICT`` raw after OUTPUT (4x)."""
+
+    def test_nth_value_tsql_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "select nth_value(salary, 2) over (order by salary) from emp;",
+            source="postgresql",
+            target="tsql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_returning_with_on_conflict_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "insert into t (a, b) values (1, 'x') "
+            "on conflict (a) do update set b = 'y' returning *;",
+            source="postgresql",
+            target="tsql",
+        )
+        out = r.sql
+        assert "ON CONFLICT" not in [
+            ln for ln in out.splitlines() if not ln.strip().startswith("--")
+        ], out
+        code = [
+            ln
+            for ln in out.splitlines()
+            if ln.strip()
+            and not ln.strip().startswith("--")
+            and "ON CONFLICT" in ln.upper()
+        ]
+        assert not code, out

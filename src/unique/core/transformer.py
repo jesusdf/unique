@@ -581,9 +581,12 @@ class Transformer:
             result = [self._gate_array_constructs(node) for node in result]
         if self.context.target == "mysql":
             result = [self._gate_mysql_full_join(node) for node in result]
+        if self.context.target in ("mysql", "oracle"):
+            result = [self._gate_column_alias_ref(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_temp_view(node) for node in result]
             result = [self._gate_tsql_natural_join(node) for node in result]
+            result = [self._gate_tsql_nth_value(node) for node in result]
         for pass_ in self._passes:
             result = [self._apply_pass(pass_, node) for node in result]
         return result
@@ -663,6 +666,74 @@ class Transformer:
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _gate_tsql_nth_value(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement using NTH_VALUE — WHOLE, on T-SQL.
+
+        T-SQL has no NTH_VALUE; the generic UDF qualification shipped a
+        fictitious ``dbo.NTH_VALUE(...) OVER`` (a scalar UDF cannot take
+        OVER — error near ORDER)."""
+        if not self._contains_nth_value(node):
+            return node
+        reason = (
+            "T-SQL has no NTH_VALUE window function; emulate with "
+            "ROW_NUMBER over the window. Statement preserved as a comment"
+        )
+        self.context.warn(reason, "nth_value")
+        self.context.mark_unsupported("NTH_VALUE (T-SQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _contains_nth_value(self, value: object) -> bool:
+        from unique.core.ast_nodes import WindowFunction
+
+        if (
+            isinstance(value, WindowFunction)
+            and value.function.name.upper() == "NTH_VALUE"
+        ):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_nth_value(getattr(value, f.name)) for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_nth_value(item) for item in value)
+        return False
+
+    def _gate_column_alias_ref(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement whose base-table ref renames columns via
+        an alias list (``x AS xx(c1, c2)``) — WHOLE, on MySQL/Oracle.
+
+        Neither engine has the spelling, and the derived-table rewrite
+        T-SQL gets needs no column knowledge only because T-SQL accepts
+        the alias list on the derived table; MySQL/Oracle do not."""
+        if not self._contains_column_alias_ref(node):
+            return node
+        reason = (
+            f"{self.context.target} has no column-renaming table alias "
+            "(x AS xx(c1, c2)); rewrite with explicit column aliases in a "
+            "derived table. Statement preserved as a comment"
+        )
+        self.context.warn(reason, "column_alias_ref")
+        self.context.mark_unsupported("column-renaming table alias")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _contains_column_alias_ref(self, value: object) -> bool:
+        from unique.core.ast_nodes import TableRef
+
+        if isinstance(value, TableRef) and value.column_aliases:
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_column_alias_ref(getattr(value, f.name))
+                for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_column_alias_ref(item) for item in value)
+        return False
 
     def _gate_tsql_natural_join(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using a NATURAL join — WHOLE, on T-SQL.

@@ -1314,8 +1314,28 @@ fix needs an **anonymized** regression fixture (never a private name).
         to the carrier contract (source==target still passes through
         untouched). Follow-up chain: parse DECLARE …HANDLER properly
         (EXIT→EXCEPTION is faithful; CONTINUE has no plpgsql map).
-        Tests: TestParseFallbackDegradesCrossDialect. *Measurement
-        pending next cycles.*
+        Tests: TestParseFallbackDegradesCrossDialect. **Wave 52
+        measured at `c92a5ab` (2026-07-16): −212 across the direction
+        — mysql→PG 256→156 (97.5%), mysql→T-SQL 416→359 (94.0%),
+        mysql→Oracle 301→246 (96.0%). Standing: pg-source
+        {344/186/149}, mysql-source {359/156/246}; wave 51's pg-corpus
+        measure pending.**
+        *Wave 53 (2026-07-16):* PG's column-renaming table alias
+        (`x AS xx(xx1, xx2)`) silently DROPPED its column list on
+        every target (7x pg→tsql shipped it raw inside joins).
+        TableRef gained `column_aliases`: T-SQL rewrites faithfully to
+        `(SELECT * FROM x) AS xx(xx1, xx2)` (alias lists are legal on
+        derived tables), PG keeps native, MySQL/Oracle whole-degrade
+        (no spelling without column knowledge). Tests:
+        TestTableColumnAliases.
+        *Wave 54 (2026-07-16):* two invalid-shipping shapes on T-SQL —
+        NTH_VALUE mapped to a fictitious `dbo.NTH_VALUE(...) OVER`
+        (4x; now whole-degrades with the ROW_NUMBER emulation hint),
+        and INSERT combining RETURNING with ON CONFLICT took the
+        RETURNING passthrough leaving `ON CONFLICT` raw after OUTPUT
+        (4x; now a MERGE-hint carrier off PG). Tests:
+        TestTsqlInvalidShapesDegrade. *Measurement pending next
+        pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

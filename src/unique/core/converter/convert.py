@@ -1067,6 +1067,11 @@ def _convert_table_ref(expr: exp.Expression) -> TableRef:
                 alias=alias,
                 quoted=_identifier_quoted(expr.args.get("db")),
             )
+        column_aliases: tuple[str, ...] = ()
+        if alias_expr is not None:
+            column_aliases = tuple(
+                c.name for c in (alias_expr.args.get("columns") or [])
+            )
         return TableRef(
             name=expr.name,
             schema=expr.db if expr.db else None,
@@ -1076,6 +1081,7 @@ def _convert_table_ref(expr: exp.Expression) -> TableRef:
             ),
             quoted=_identifier_quoted(expr.this),
             schema_quoted=_identifier_quoted(expr.args.get("db")),
+            column_aliases=column_aliases,
         )
     if isinstance(expr, exp.Schema):
         return _convert_table_ref(expr.this)

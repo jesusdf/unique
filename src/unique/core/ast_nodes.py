@@ -158,6 +158,9 @@ class TableRef(ASTNode):
     database: str | None = None
     quoted: bool = False
     schema_quoted: bool = False
+    #: PG ``x AS xx(c1, c2)`` column renames; T-SQL rewrites to a derived
+    #: table, MySQL/Oracle degrade (no spelling without column knowledge).
+    column_aliases: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
