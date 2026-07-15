@@ -984,9 +984,18 @@ fix needs an **anonymized** regression fixture (never a private name).
   the nightly's `--tests` selections did NOT include — every mutant in
   the new paths survived by construction. Fixed the selection (wave
   file added to BOTH mutation steps, 2026-07-15; local 60-mutant sample
-  on emit.py: 53%→58%). If the next nightly still misses a floor, work
-  the survivor list from its run summary (targeted assertions), not the
-  floor numbers.
+  on emit.py: 53%→58%). Validation dispatch (2026-07-15 evening):
+  convert.py recovered its floor; emit.py 56% and procedural base.py 51%
+  still short → survivor-targeted assertions added
+  (`test_emit_mutation_survivors.py`: CTE-DML gate branches, index-
+  rebuild decisions, per-target DEFAULT rewrites;
+  `test_transformer_survivors.py`: trigger timing/delegation/UPDATE-OF
+  decisions). Local 80–100-mutant samples after: emit.py 65% (floor
+  60), base.py 61% (floor 52). Second validation dispatch pending —
+  possible live-check item spotted on the way: MySQL `DEFAULT UUID()`
+  emits WITHOUT the parens MySQL requires for function defaults
+  (verify against live MySQL; the `(UUID())` rewrite exists but a
+  different path emits).
 - **Test-assertion quality** is measured by the nightly mutation job
   (`mutation.yml` / `scripts/mutation_test.py`) rather than a static to-do list:
   surviving mutants in its run summary are the live map of weakest assertions.
