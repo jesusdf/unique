@@ -914,6 +914,12 @@ fix needs an **anonymized** regression fixture (never a private name).
         (2026-07-15): Oracle 182→170 (−12, 94.8%); MySQL 247 / T-SQL
         499 flat. Cumulative: T-SQL 1090→499, MySQL 579→247, Oracle
         454→170.**
+        *Wave 24 (2026-07-15):* aggregate `FILTER (WHERE p)` — PG-only
+        spelling with a FAITHFUL universal rewrite instead of a
+        degrade: `agg(CASE WHEN p THEN x END)` (`COUNT(*)` counts 1),
+        applied at IR conversion for every target (the `SELECT
+        (SELECT` class, error 102). Tests: TestAggregateFilterRewrite.
+        Sweep re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

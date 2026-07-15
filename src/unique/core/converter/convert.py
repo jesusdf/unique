@@ -430,6 +430,29 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
                 convert_expression(expr.expression),
             ),
         )
+    # Aggregate FILTER (WHERE p): PG-only spelling with a faithful
+    # universal rewrite — agg(CASE WHEN p THEN x END); COUNT(*) counts 1.
+    if isinstance(expr, exp.Filter):
+        agg = _convert_function(expr.this)
+        cond = convert_expression(expr.expression.this)
+        from unique.core.ast_nodes import CaseExpression
+
+        if agg.args and isinstance(agg.args[0], Star):
+            wrapped: ASTNode = CaseExpression(
+                whens=((cond, Literal(value=1, dtype="integer")),), else_expr=None
+            )
+        elif agg.args:
+            wrapped = CaseExpression(whens=((cond, agg.args[0]),), else_expr=None)
+        else:
+            wrapped = CaseExpression(
+                whens=((cond, Literal(value=1, dtype="integer")),), else_expr=None
+            )
+        return FunctionCall(
+            name=agg.name,
+            args=(wrapped, *agg.args[1:]),
+            distinct=agg.distinct,
+        )
+
     if isinstance(expr, exp.Func):
         return _convert_function(expr)
     if isinstance(expr, exp.Not):

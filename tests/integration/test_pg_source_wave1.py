@@ -1106,3 +1106,21 @@ class TestPlpgsqlDeclareEqualsDefault:
         )
         out = _t(src, "oracle")
         assert re.search(r"(?i)n\s+(int|number)\w*\s*:=\s*5", out), out
+
+
+class TestAggregateFilterRewrite:
+    """PG's ``agg(x) FILTER (WHERE p)`` has no T-SQL/MySQL/Oracle
+    spelling but a faithful universal rewrite: ``agg(CASE WHEN p THEN
+    x END)`` (``COUNT(*)`` counts ``1``); it shipped verbatim (error
+    102, the ``SELECT (SELECT`` class)."""
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_count_star_filter(self, target: str) -> None:
+        out = _t("select count(*) filter (where c <> 0) from t;", target)
+        assert "FILTER" not in out.upper(), out
+        assert re.search(r"(?is)COUNT\(CASE\s+WHEN c <> 0 THEN 1\s+END\)", out), out
+
+    def test_agg_arg_filter(self) -> None:
+        out = _t("select sum(x) filter (where y > 5) from t;", "tsql")
+        assert "FILTER" not in out.upper(), out
+        assert re.search(r"(?is)SUM\(CASE\s+WHEN y > 5 THEN x\s+END\)", out), out
