@@ -1647,3 +1647,49 @@ class TestGetDiagnostics:
     def test_native_kept_on_pg(self) -> None:
         out = _t(self._ROWS, "postgresql")
         assert re.search(r"(?i)GET DIAGNOSTICS n = ROW_COUNT", out), out
+
+
+class TestForExecuteLiteralInlines:
+    """``FOR v IN EXECUTE '<literal>' LOOP`` — after wave 18 the
+    dynamic string is a plain literal, so the EXECUTE is unnecessary:
+    the query inlines (faithful on every target; the transition-table
+    trigger family shipped ``CURSOR FOR execute '…'``, invalid T-SQL).
+    A non-literal EXECUTE (variable SQL) degrades whole."""
+
+    _SRC = (
+        "create function fe() returns int as $$\n"
+        "declare l int;\n"
+        "begin\n"
+        "  for l in execute $q$ select a from d $q$ loop\n"
+        "    null;\n"
+        "  end loop;\n"
+        "  return 1;\n"
+        "end$$ language plpgsql;"
+    )
+
+    def test_literal_execute_inlines_tsql(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert "execute '" not in out.lower(), out
+        assert re.search(r"(?i)CURSOR .*FOR\s+select a from d", out), out
+
+    def test_literal_execute_inlines_oracle(self) -> None:
+        out = _t(self._SRC, "oracle")
+        assert "execute '" not in out.lower(), out
+        assert re.search(r"(?i)select a from d", out), out
+
+    def test_variable_execute_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "create function fv(q text) returns int as $$\n"
+            "declare l int;\n"
+            "begin\n  for l in execute q loop\n    null;\n  end loop;\n"
+            "  return 1;\nend$$ language plpgsql;",
+            source="postgresql",
+            target="tsql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert any("dynamic" in w.message.lower() for w in r.warnings), r.warnings

@@ -16,6 +16,7 @@ registry the engine modules populate on import.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import re
 from collections import Counter
@@ -1024,6 +1025,8 @@ class ProceduralTransformer:
             isinstance(s, CursorDeclaration) and s.parameters for s in node.body
         ):
             culprit = "parameterized cursor"
+        elif self._target != "postgresql" and self._has_dynamic_for(node.body):
+            culprit = "FOR loop over dynamic EXECUTE"
         elif any(
             p.data_type.name.upper() in self._PG_PSEUDO_TYPES for p in node.parameters
         ):
@@ -1044,6 +1047,26 @@ class ProceduralTransformer:
         )
         self._warnings.append(reason)
         return RawSQL(sql=original, reason=reason)
+
+    def _has_dynamic_for(self, value: object) -> bool:
+        """A FOR loop whose source is EXECUTE of a NON-literal (real
+        dynamic SQL) — no cursor-over-dynamic form off PostgreSQL."""
+        if isinstance(value, ForLoopStatement):
+            raw = getattr(value.cursor, "sql", "") if value.cursor else ""
+            if (
+                raw
+                and re.match(r"(?is)^\s*execute\b", raw)
+                and not self._FOR_EXECUTE_LITERAL_RE.match(raw)
+            ):
+                return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._has_dynamic_for(getattr(value, f.name))
+                for f in dataclasses.fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._has_dynamic_for(v) for v in value)
+        return False
 
     def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
         degraded = self._degrade_record_function(node)
@@ -1870,8 +1893,31 @@ class ProceduralTransformer:
             args=new_args,
         )
 
+    _FOR_EXECUTE_LITERAL_RE = re.compile(r"(?is)^\s*execute\s+('(?:[^']|'')*')\s*$")
+
     def _transform_for_loop(self, node: ForLoopStatement) -> ASTNode:
         self._warn_for_loop_unsupported()
+        # FOR v IN EXECUTE <source>: with a LITERAL string the EXECUTE is
+        # unnecessary (the dollar-quote lexing already made it a plain
+        # literal) — inline the query, faithful everywhere. A variable
+        # source is real dynamic SQL: no cursor-over-dynamic form off PG.
+        cursor = node.cursor
+        raw = getattr(cursor, "sql", "") if cursor is not None else ""
+        if raw and self._target != "postgresql":
+            m = self._FOR_EXECUTE_LITERAL_RE.match(raw)
+            if m:
+                inner = m.group(1)[1:-1].replace("''", "'").strip()
+                cursor = RawSQL(sql=inner, reason="expression")
+            # a variable EXECUTE source is caught by the whole-routine
+            # degrade scan before the transform reaches this point
+        node = ForLoopStatement(
+            variable=node.variable,
+            range_start=node.range_start,
+            range_end=node.range_end,
+            cursor=cursor,
+            body=node.body,
+            reverse=node.reverse,
+        )
         new_body = self._ensure_non_empty_body(self._transform_body(node.body))
         new_cursor = self._transform_node(node.cursor) if node.cursor else None
         return ForLoopStatement(

@@ -1128,6 +1128,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         stacked_diagnostics chain (waves 30→33→34) is unblocked
         end-to-end. Cumulative: T-SQL 1090→412, MySQL 579→194, Oracle
         454→150.**
+        *Wave 35 (2026-07-15, deep chains):* `FOR v IN EXECUTE
+        '<literal>'` — after wave 18 the dollar-quoted dynamic string
+        is a plain literal, so the EXECUTE is unnecessary: the query
+        INLINES (faithful on every target; the transition-table
+        trigger family shipped `CURSOR FOR execute '…'`, invalid
+        T-SQL). A NON-literal EXECUTE source (real dynamic SQL) joins
+        the whole-routine degrade scan — no cursor-over-dynamic form
+        off PG. Tests: TestForExecuteLiteralInlines. Sweep re-measure
+        pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
