@@ -150,3 +150,129 @@ class TestGluedDollarQuoteClose:
         src = self._SRC.replace("$$", "$body$")
         out = _t(src, "mysql")
         assert "AS language" not in out, out
+
+
+class TestTypeOnlyParameters:
+    """PG declares parameters with only a type — ``create function
+    add2(int, int)`` — and plpgsql bodies reference them as ``$1``/``$2``.
+    The signature parser took the first type word as the parameter NAME,
+    desynced on the comma, and swallowed the whole function into the
+    parameter list: garbage signatures (``$ $,``, ``plpgsql ;`` as
+    parameters) with ZERO warnings. Type-only parameters get synthesized
+    names (``p1``…) and ``$n`` references rewrite to them."""
+
+    _SRC = (
+        "create function add2(int, int) returns int as $$\n"
+        "begin\n"
+        "  return $1 + $2;\n"
+        "end$$ language plpgsql;"
+    )
+
+    def test_two_synthesized_params_mysql(self) -> None:
+        out = _t(self._SRC, "mysql")
+        assert re.search(r"(?i)p1\s+int\s*,\s*p2\s+int", out), out
+        assert re.search(r"(?i)RETURNS\s+int", out), out
+        assert not re.search(r"\$\s*\d", out), out
+        assert "$ $" not in out, out
+
+    def test_body_references_rewritten_mysql(self) -> None:
+        out = _t(self._SRC, "mysql")
+        assert re.search(r"(?i)RETURN\s+p1\s*\+\s*p2", out), out
+
+    def test_two_synthesized_params_oracle(self) -> None:
+        out = _t(self._SRC, "oracle")
+        assert re.search(r"(?i)p1\b", out) and re.search(r"(?i)p2\b", out), out
+        assert not re.search(r"\$\s*\d", out), out
+        assert re.search(r"(?i)RETURN\s+p1\s*\+\s*p2", out), out
+
+
+class TestPositionalParamReference:
+    """plpgsql allows ``$1`` references even when the parameter IS named;
+    the lexer split ``$1`` into ``$`` + ``1`` and shipped ``RETURN $ 1``
+    with no warning. ``$n`` maps to the n-th parameter's name."""
+
+    def test_dollar_ref_maps_to_declared_name(self) -> None:
+        src = (
+            "create function np(a int) returns int as $$\n"
+            "begin\n"
+            "  return $1 + 1;\n"
+            "end$$ language plpgsql;"
+        )
+        out = _t(src, "mysql")
+        assert re.search(r"(?i)RETURN\s+a\s*\+\s*1", out), out
+        assert not re.search(r"\$\s*\d", out), out
+
+
+class TestSingleQuotedBody:
+    """Old-style plpgsql bodies are single-quoted strings — ``as '
+    begin … end; ' language plpgsql`` — and the batch splitter broke the
+    unit at semicolons INSIDE the multi-line literal: the inner ``end;``
+    shipped as ``COMMIT;`` and the closing ``' language plpgsql;`` went
+    alone to sqlglot (tokenize-error carrier). The unit must stay whole
+    and convert like its dollar-quoted equivalent."""
+
+    _SRC = (
+        "create function sq(int) returns int as '\n"
+        "begin\n"
+        "  return $1 + 1;\n"
+        "end;\n"
+        "' language plpgsql;"
+    )
+
+    def test_unit_stays_whole_mysql(self) -> None:
+        out = _t(self._SRC, "mysql")
+        assert "COMMIT" not in out.upper(), out
+        assert "Error tokenizing" not in out, out
+        assert "language plpgsql" not in out, out
+
+    def test_quoted_body_converts_mysql(self) -> None:
+        out = _t(self._SRC, "mysql")
+        assert re.search(r"(?i)RETURN\s+p1\s*\+\s*1", out), out
+        assert not re.search(r"\$\s*\d", out), out
+
+
+class TestPgArgmodeFirstParameters:
+    """PG puts the argmode BEFORE the name — ``(out x int)`` — the
+    reverse of Oracle's ``(x out int)``; the shared name-first parse
+    desynced and swallowed the function. Same for a type-only
+    parameter carrying DEFAULT (``int default 0``)."""
+
+    _OUT_SRC = (
+        "create function f1(out x int) returns int as $$\n"
+        "begin\n  x := 1;\nend$$ language plpgsql;"
+    )
+
+    def test_out_mode_first_no_desync(self) -> None:
+        # MySQL functions cannot declare OUT parameters; the emitter drops
+        # the mode (pre-existing behavior for every source). This asserts
+        # the wave-5 class only: the signature parses, nothing desyncs.
+        out = _t(self._OUT_SRC, "mysql")
+        assert re.search(r"(?i)x\s+int", out), out
+        assert "plpgsql" not in out, out
+        assert "$ $" not in out, out
+        assert re.search(r"(?i)SET\s+x\s*=\s*1", out), out
+
+    def test_out_mode_first_kept_on_oracle(self) -> None:
+        out = _t(self._OUT_SRC, "oracle")
+        assert re.search(r"(?i)x\s+OUT\s+", out), out
+        assert "plpgsql" not in out, out
+
+    def test_inout_mode_first(self) -> None:
+        src = (
+            "create function f2(inout x int) returns int as $$\n"
+            "begin\n  x := x + 1;\nend$$ language plpgsql;"
+        )
+        out = _t(src, "mysql")
+        assert re.search(r"(?i)x\s+int", out), out
+        assert re.search(r"(?i)SET\s+x\s*=\s*x\s*\+\s*1", out), out
+        assert "plpgsql" not in out, out
+
+    def test_type_only_with_default(self) -> None:
+        src = (
+            "create function f4(int default 0) returns int as $$\n"
+            "begin\n  return $1;\nend$$ language plpgsql;"
+        )
+        out = _t(src, "mysql")
+        assert re.search(r"(?i)p1\s+int", out), out
+        assert re.search(r"(?i)RETURN\s+p1", out), out
+        assert "plpgsql" not in out, out

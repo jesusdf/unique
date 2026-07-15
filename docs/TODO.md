@@ -616,15 +616,28 @@ fix needs an **anonymized** regression fixture (never a private name).
         sweep run `docker update --memory 3g --memory-swap 3g
         unique-oracle-1` (runtime-only override; the committed 2 g cap
         keeps the full four-engine stack bootable on the 8 GB host).
-        Next classified classes (red tests already in
-        `test_pg_source_wave1.py`): PG signature grammar in the
-        procedural parser — type-only params `(int, int)`, argmode-first
-        `(out x int)`, `int default 0` — all currently DESYNC and swallow
-        the function into the parameter list with ZERO warnings (silent
-        corruption); `$n` positional references emit as `$ n`; and
-        `BatchSplitter._split_postgresql` splits inside multi-line
-        single-quoted bodies (old-style plpgsql `as '…'`), turning the
-        inner `end;` into `COMMIT;`. Getting here surfaced and
+        *Wave 5 (2026-07-15):* the PG signature grammar landed in the
+        procedural parser — a dedicated postgresql branch of
+        `_parse_parameter` (`[argmode] [argname] argtype [DEFAULT v]`,
+        mode-first, name optional): type-only params `(int, int)`,
+        argmode-first `(out x int)`, `int default 0` no longer desync
+        (they had swallowed the whole function into the parameter list
+        with ZERO warnings); unnamed params get synthesized `p1…pn`
+        names and `$n` positional references rewrite to parameter names
+        at token level (the lexer now emits `$1` as ONE token for a PG
+        source); `BatchSplitter._split_postgresql` was rebuilt as a
+        char-scanner (dollar-quotes, multi-line `'…'`/`E'…'` strings,
+        `"…"` idents, comments) so old-style single-quoted plpgsql
+        bodies stay whole, and `_consume_pg_routine_header` re-lexes a
+        string body in place so `as '…' language plpgsql` converts like
+        its `$$` twin. Tests: `test_pg_source_wave1.py` (TestTypeOnly…,
+        TestPositionalParamReference, TestSingleQuotedBody,
+        TestPgArgmodeFirstParameters). Sweep re-measure pending.
+        Known gaps left open (P2): **MySQL FUNCTION emitter drops
+        OUT/INOUT modes silently** for every source (MySQL functions
+        can't declare them — needs a warning per no-silent-loss);
+        **VARIADIC** parameters still desync (no consume, no carrier);
+        array subscripts (`p1[1]`) degrade honestly via the output gate. Getting here surfaced and
         fixed THREE product bugs: the sqlglot COPY DoS (`:'var'`,
         `3aa55b4`), the transactional-BEGIN splitter glue (also under the
         output gate), and the oracle first-boot healthcheck wait.

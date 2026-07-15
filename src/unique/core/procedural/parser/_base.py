@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from unique.core.ast_nodes import (
     AlterProcedureStatement,
@@ -116,6 +116,10 @@ class ParserBase:
         self._pos = 0
         self._errors: list[ParseError] = []
         self._warnings: list[str] = []
+        #: position ("1") → parameter name, set per PG routine so bodies
+        #: spliced in later (old-style quoted bodies) get the same $n
+        #: rewrite as tokens present at signature-parse time.
+        self._pg_positional_names: dict[str, str] = {}
 
     def _parse_routine_body(self, with_pg_header: bool = True) -> list[ASTNode]:
         """Consume a routine header and parse its body for the source family.
@@ -146,6 +150,7 @@ class ParserBase:
         """
         self._errors = []
         self._warnings = []
+        self._pg_positional_names = {}
 
         lexer = Lexer(sql, self._dialect)
         self._tokens = lexer.tokens
@@ -462,6 +467,19 @@ class ParserBase:
                 self._advance()
                 continue
 
+            # Old-style plpgsql body: ``AS '…begin … end;…'`` — the whole
+            # body is ONE string literal. Unquote and re-lex it in place
+            # so the routine parses exactly like its dollar-quoted twin.
+            if tok.type == TokenType.STRING and self._dialect == "postgresql":
+                inner = tok.value[1:-1].replace("''", "'")
+                body_tokens = [
+                    self._alias_positional_token(t)
+                    for t in Lexer(inner, self._dialect).tokens
+                    if t.type != TokenType.EOF
+                ]
+                self._tokens[self._pos : self._pos + 1] = body_tokens
+                continue
+
             # Reached DECLARE/BEGIN (or anything else): header is done.
             break
 
@@ -472,6 +490,8 @@ class ParserBase:
         self._expect_keyword("PROCEDURE")
         name, schema = self._parse_qualified_name()
         params = self._parse_parameter_list()
+        if self._dialect == "postgresql":
+            params = self._alias_pg_positional_params(params)
 
         if self._plsql_collection_type_ahead():
             return self._parse_fallback()
@@ -499,6 +519,8 @@ class ParserBase:
         self._expect_keyword("FUNCTION")
         name, schema = self._parse_qualified_name()
         params = self._parse_parameter_list()
+        if self._dialect == "postgresql":
+            params = self._alias_pg_positional_params(params)
 
         return_type: DataType | None = None
         if self._match_keyword("RETURN"):
@@ -721,6 +743,110 @@ class ParserBase:
             return self._advance().value
         return self._advance().value
 
+    #: Words that can only start a TYPE in a PG parameter position — they
+    #: decide type-only parameters like ``varchar(10)`` where the token
+    #: after the first word (a paren) doesn't end the parameter.
+    _PG_TYPE_KEYWORDS = frozenset(
+        {
+            "VARCHAR",
+            "NVARCHAR",
+            "CHAR",
+            "NCHAR",
+            "INT",
+            "INTEGER",
+            "SMALLINT",
+            "BIGINT",
+            "NUMERIC",
+            "DECIMAL",
+            "FLOAT",
+            "REAL",
+            "DOUBLE",
+            "DATE",
+            "TIMESTAMP",
+            "TIME",
+            "BOOLEAN",
+            "BOOL",
+            "BIT",
+            "TEXT",
+            "UUID",
+            "XML",
+            "JSON",
+            "JSONB",
+            "INTERVAL",
+        }
+    )
+
+    _ARRAY_SUFFIX_RE = re.compile(r"\[\s*\]\Z")
+
+    def _parse_pg_data_type(self) -> DataType:
+        """Parse a PG parameter type: the shared dotted/parenned parse
+        plus PG spellings — ``DOUBLE PRECISION``, ``TIMESTAMP/TIME
+        [WITH|WITHOUT] TIME ZONE`` and ``int[]`` array suffixes (the
+        lexer folds ``[]`` into one bracket token)."""
+        dtype = self._parse_data_type_or_reference()
+        upper = dtype.name.upper()
+        cur = self._current()
+        if upper == "DOUBLE" and cur.value.upper() == "PRECISION":
+            dtype = replace(dtype, name=f"{dtype.name} {self._advance().value}")
+        elif upper in ("TIMESTAMP", "TIME") and cur.value.upper() in (
+            "WITH",
+            "WITHOUT",
+        ):
+            words = [self._advance().value]
+            while words and self._current().value.upper() in ("TIME", "ZONE"):
+                words.append(self._advance().value)
+            dtype = replace(dtype, name=" ".join([dtype.name, *words]))
+        while (
+            self._current().type == TokenType.IDENTIFIER
+            and self._ARRAY_SUFFIX_RE.fullmatch(self._current().value) is not None
+        ):
+            self._advance()
+            dtype = replace(dtype, name=dtype.name + "[]")
+        return dtype
+
+    def _alias_pg_positional_params(
+        self, params: list[ParameterDefinition]
+    ) -> list[ParameterDefinition]:
+        """Name PG positional parameters and re-point ``$n`` references.
+
+        plpgsql addresses parameters positionally (``$1``) whether or not
+        they are named; no target engine can. Unnamed (type-only)
+        parameters get synthesized names (``p1``…), and every remaining
+        ``$n`` VARIABLE token in the unit's body is rewritten to the
+        n-th parameter's name — the token-level equivalent of plpgsql's
+        own ``ALIAS FOR $n``, applied before the body parses so every
+        downstream consumer sees a real identifier. String literals are
+        untouched (they are single STRING tokens)."""
+        taken = {p.name.lower() for p in params if p.name}
+        named: list[ParameterDefinition] = []
+        for i, param in enumerate(params, start=1):
+            if param.name:
+                named.append(param)
+                continue
+            candidate = f"p{i}"
+            while candidate.lower() in taken:
+                candidate += "_"
+            taken.add(candidate.lower())
+            named.append(replace(param, name=candidate))
+
+        by_position = {str(i): p.name for i, p in enumerate(named, start=1)}
+        self._pg_positional_names = by_position
+        self._tokens[self._pos :] = [
+            self._alias_positional_token(t) for t in self._tokens[self._pos :]
+        ]
+        return named
+
+    def _alias_positional_token(self, tok: Token) -> Token:
+        """Map a ``$n`` VARIABLE token to its parameter-name IDENTIFIER."""
+        if tok.type != TokenType.VARIABLE or not tok.value.startswith("$"):
+            return tok
+        name = self._pg_positional_names.get(tok.value[1:])
+        if not name:
+            return tok
+        return Token(
+            type=TokenType.IDENTIFIER, value=name, line=tok.line, column=tok.column
+        )
+
     def _parse_parameter_list(self) -> list[ParameterDefinition]:
         """Parse procedure/function parameter list.
 
@@ -817,8 +943,42 @@ class ParserBase:
 
             if self._match_keyword("DEFAULT") or self._match_type(TokenType.ASSIGN):
                 default = self._parse_expression_simple()
+        elif self._dialect == "postgresql":
+            # PG: [argmode] [argname] argtype [{DEFAULT | =} value] — the
+            # argmode comes FIRST (the reverse of Oracle's name-first
+            # order) and the name is optional: ``(int, int)`` declares two
+            # positional parameters the body references as $1/$2.
+            if self._match_keyword("INOUT"):
+                direction = "INOUT"
+            elif self._match_keyword("OUT"):
+                direction = "OUT"
+            elif self._match_keyword("IN"):
+                direction = "IN"
+
+            tok = self._current()
+            nxt = self._peek(1)
+            type_only = tok.upper_value in self._PG_TYPE_KEYWORDS or (
+                nxt.type in (TokenType.COMMA, TokenType.RPAREN)
+                or nxt.is_keyword("DEFAULT")
+                or nxt.type == TokenType.ASSIGN
+                or (nxt.type == TokenType.OPERATOR and nxt.value == "=")
+            )
+            if not type_only:
+                name = self._parse_identifier()
+            data_type = self._parse_pg_data_type()
+
+            if (
+                self._match_keyword("DEFAULT")
+                or self._match_type(TokenType.ASSIGN)
+                or (
+                    self._current().type == TokenType.OPERATOR
+                    and self._current().value == "="
+                    and self._advance()
+                )
+            ):
+                default = self._parse_expression_simple()
         else:
-            # Oracle/PG: name [IN|OUT|INOUT] type [DEFAULT value]
+            # Oracle: name [IN|OUT|INOUT] type [DEFAULT value]
             name = self._parse_identifier()
 
             if self._match_keyword("IN"):

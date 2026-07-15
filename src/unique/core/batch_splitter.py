@@ -577,65 +577,106 @@ class BatchSplitter:
             )
         return batches
 
+    _PG_DOLLAR_OPEN = re.compile(r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$")
+
     @staticmethod
     def _split_postgresql(sql: str) -> list[Batch]:
-        """Split PostgreSQL respecting $$ dollar-quoting.
+        """Split PostgreSQL at semicolons that end their line at top level.
 
-        Procedural blocks are wrapped in $$ ... $$ and use CREATE FUNCTION
-        with LANGUAGE plpgsql. We split on semicolons outside dollar-quoted
-        strings.
+        Top level means outside ``$$``/``$tag$`` dollar-quotes,
+        single-quoted strings (multi-line, ``''`` escapes, ``E'…'``
+        backslash escapes), double-quoted identifiers, and ``--`` /
+        ``/* … */`` comments. The previous line-oriented scan tracked
+        only dollar-quote state, so an old-style plpgsql body in a
+        single-quoted string was split at the semicolons INSIDE the
+        literal (its ``end;`` shipped as a standalone statement).
         """
         batches: list[Batch] = []
-        current: list[str] = []
-        in_dollar_quote = False
-        dollar_tag = ""
-        batch_start = 0
+        n = len(sql)
+        i = 0
+        line_no = 0
+        start_pos = 0
+        start_line = 0
 
-        for i, line in enumerate(sql.split("\n")):
-            current.append(line)
-
-            if in_dollar_quote:
-                if dollar_tag in line:
-                    # The closing $$ may be followed by "LANGUAGE plpgsql;" that
-                    # ends the statement, so fall through to the ;-split check
-                    # instead of swallowing the next statement into this batch.
-                    in_dollar_quote = False
-                else:
-                    continue
-            else:
-                dollar_match = re.search(r"\$([a-zA-Z_]*)\$", line)
-                if dollar_match:
-                    dollar_tag = dollar_match.group(0)
-                    rest = line[dollar_match.end() :]
-                    if dollar_tag not in rest:
-                        # Body opens here and continues on later lines.
-                        in_dollar_quote = True
-                        continue
-
-            stripped_line = line.rstrip()
-            if stripped_line.endswith(";") and not in_dollar_quote:
-                text = "\n".join(current).strip()
-                if text:
-                    batches.append(
-                        Batch(
-                            sql=text,
-                            batch_type=classify_batch(text, "postgresql"),
-                            line_offset=batch_start,
-                        )
+        def emit(end: int, next_start: int, next_line: int) -> None:
+            nonlocal start_pos, start_line
+            text = sql[start_pos:end].strip()
+            if text:
+                batches.append(
+                    Batch(
+                        sql=text,
+                        batch_type=classify_batch(text, "postgresql"),
+                        line_offset=start_line,
                     )
-                current = []
-                batch_start = i + 1
-
-        remaining = "\n".join(current).strip()
-        if remaining:
-            batches.append(
-                Batch(
-                    sql=remaining,
-                    batch_type=classify_batch(remaining, "postgresql"),
-                    line_offset=batch_start,
                 )
-            )
+            start_pos = next_start
+            start_line = next_line
 
+        while i < n:
+            ch = sql[i]
+            if ch == "\n":
+                line_no += 1
+                i += 1
+                continue
+            if sql.startswith("--", i):
+                nl = sql.find("\n", i + 2)
+                i = n if nl == -1 else nl  # the newline branch counts it
+                continue
+            if sql.startswith("/*", i):
+                end = sql.find("*/", i + 2)
+                end = n if end == -1 else end + 2
+                line_no += sql.count("\n", i, end)
+                i = end
+                continue
+            if ch == "'":
+                escapes = (
+                    i > 0
+                    and sql[i - 1] in "Ee"
+                    and (i == 1 or not (sql[i - 2].isalnum() or sql[i - 2] == "_"))
+                )
+                j = i + 1
+                while j < n:
+                    if escapes and sql[j] == "\\":
+                        j += 2
+                        continue
+                    if sql[j] == "'":
+                        if sql[j + 1 : j + 2] == "'":
+                            j += 2
+                            continue
+                        break
+                    j += 1
+                end = min(j + 1, n)
+                line_no += sql.count("\n", i, end)
+                i = end
+                continue
+            if ch == '"':
+                j = sql.find('"', i + 1)
+                end = n if j == -1 else j + 1
+                line_no += sql.count("\n", i, end)
+                i = end
+                continue
+            if ch == "$":
+                m = BatchSplitter._PG_DOLLAR_OPEN.match(sql, i)
+                if m:
+                    tag = m.group(0)
+                    close = sql.find(tag, m.end())
+                    end = n if close == -1 else close + len(tag)
+                    line_no += sql.count("\n", i, end)
+                    i = end
+                    continue
+                i += 1
+                continue
+            if ch == ";":
+                j = i + 1
+                while j < n and sql[j] in " \t\r":
+                    j += 1
+                if j >= n or sql[j] == "\n":
+                    emit(i + 1, i + 1, line_no + 1)
+                i += 1
+                continue
+            i += 1
+
+        emit(n, n, line_no)
         return batches
 
     @staticmethod

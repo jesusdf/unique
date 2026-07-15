@@ -505,6 +505,16 @@ class Lexer:
             self._emit(TokenType.VARIABLE, self._sql[start : self._pos], line, col)
             return
 
+        # $n positional parameter reference (PostgreSQL). Never a
+        # dollar-quote: a $tag$ tag cannot start with a digit.
+        if ch == "$" and self._dialect == "postgresql" and self._peek(1).isdigit():
+            start = self._pos
+            self._advance()
+            while not self._at_end() and self._peek().isdigit():
+                self._advance()
+            self._emit(TokenType.VARIABLE, self._sql[start : self._pos], line, col)
+            return
+
         # := assignment
         if ch == ":" and self._peek(1) == "=":
             self._advance(2)
