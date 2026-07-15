@@ -383,6 +383,9 @@ class TSqlEmitter(ProceduralEmitter):
         ]
         return "\n".join(lines)
 
+    def _empty_block_filler(self) -> str | None:
+        return "SET NOCOUNT ON;"
+
     def _emit_perform(self, node: PerformStatement) -> str:
         # Evaluate-and-discard via a throwaway inline DECLARE (valid
         # mid-body; SQL_VARIANT holds any scalar). Unique name per use.

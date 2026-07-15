@@ -1432,3 +1432,27 @@ class TestMysqlCtasAndTypes:
     def test_dollar_table_name_quoted_pg(self) -> None:
         out = _t2("create table $a as select 1 as x;", "mysql", "postgresql")
         assert '"$a"' in out, out
+
+
+class TestTsqlEmptyBeginBlock:
+    """A nested ``BEGIN … END`` whose body is only comments (mysql's
+    ``BEGIN NULL; END`` style scopes) is a T-SQL syntax error (156 near
+    END); it gets the canonical no-op filler, same as empty BEGIN TRY."""
+
+    def test_comment_only_block_gets_filler(self) -> None:
+        out = _t2(
+            "delimiter //\ncreate procedure scope_p(a int)\nbegin\n"
+            "  begin\n    -- just a scope\n  end;\nend//\ndelimiter ;",
+            "mysql",
+            "tsql",
+        )
+        inner = re.findall(r"(?is)BEGIN\s*(.*?)\s*END", out)
+        assert all(
+            any(
+                ln.strip() and not ln.strip().startswith("--")
+                for ln in seg.splitlines()
+            )
+            or "NOCOUNT" in seg
+            for seg in inner
+            if seg is not None
+        ), out

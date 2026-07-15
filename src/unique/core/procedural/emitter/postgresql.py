@@ -72,6 +72,9 @@ class PostgresEmitter(ProceduralEmitter):
             return f"{node.name} REFCURSOR;"
         return f"{node.name} CURSOR FOR {query_str};"
 
+    def _empty_block_filler(self) -> str | None:
+        return "NULL;"
+
     def _emit_perform(self, node: PerformStatement) -> str:
         expr = self._emit_node(node.expression) if node.expression else "0"
         return f"PERFORM {expr};"

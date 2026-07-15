@@ -213,6 +213,9 @@ class OracleEmitter(ProceduralEmitter):
     def _emit_print(self, node: PrintStatement) -> str:
         return f"DBMS_OUTPUT.PUT_LINE({self._emit_node(node.expression)});"
 
+    def _empty_block_filler(self) -> str | None:
+        return "NULL;"
+
     def _emit_perform(self, node: PerformStatement) -> str:
         # PL/SQL cannot call a function as a statement: a nested block
         # with its own discard local keeps evaluate-and-discard exact.

@@ -1211,10 +1211,23 @@ class ProceduralEmitter:
     def _emit_begin_end(self, node: BeginEndBlock) -> str:
         lines = ["BEGIN"]
         self._indent_level += 1
-        lines.extend(self._emit_indented_stmts(node.statements))
+        body = self._emit_indented_stmts(node.statements)
+        filler = self._empty_block_filler()
+        if filler and not any(
+            ln.strip() and not ln.lstrip().startswith("--") for ln in body
+        ):
+            # A comment-only block is a syntax error on targets that
+            # require at least one statement (T-SQL 156, PLS-00103).
+            body.append(f"{self._indent()}{filler}")
+        lines.extend(body)
         self._indent_level -= 1
         lines.append(self._block_end())
         return "\n".join(lines)
+
+    def _empty_block_filler(self) -> str | None:
+        """No-op statement for a comment-only block; None = block may be
+        empty on this target (MySQL)."""
+        return None
 
     def _block_end(self) -> str:
         """The closing keyword of a BEGIN…END block. Default ``END;``; T-SQL

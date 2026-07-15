@@ -1029,6 +1029,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         mysql→PG 503→403 (−100, 93.7% — the CTAS class); mysql→Oracle
         323 syntax flat with ok +20 / expected-missing +63 (CTAS
         tables now exist, dependencies resolve); mysql→T-SQL 756→755.**
+        *Wave M3 (mysql-source, 2026-07-15):* comment-only nested
+        `BEGIN … END` blocks (MySQL scope idiom) are a syntax error on
+        targets requiring at least one statement: the block emitter
+        gains an `_empty_block_filler` hook — `SET NOCOUNT ON;` on
+        T-SQL (the BEGIN TRY precedent), `NULL;` on Oracle/PG, none on
+        MySQL where the empty block is legal. Tests:
+        TestTsqlEmptyBeginBlock. Sweep re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
