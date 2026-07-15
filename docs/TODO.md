@@ -910,7 +910,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         ORA-00911, and declares `_sqlstate` locals); plpgsql DECLARE
         defaults accept the bare `=` (wave 14 covered statements only
         — 6x PLS-00103 '='). Tests: TestOracleUnderscoreIdentifiers,
-        TestPlpgsqlDeclareEqualsDefault. Sweep re-measure pending.
+        TestPlpgsqlDeclareEqualsDefault. **Measured at `437a5c3`
+        (2026-07-15): Oracle 182→170 (−12, 94.8%); MySQL 247 / T-SQL
+        499 flat. Cumulative: T-SQL 1090→499, MySQL 579→247, Oracle
+        454→170.**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
