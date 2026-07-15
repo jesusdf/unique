@@ -882,6 +882,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         `3aa55b4`), the transactional-BEGIN splitter glue (also under the
         output gate), and the oracle first-boot healthcheck wait.
 
+- [ ] **MySQL-source validity sweep over the private local corpus** (P2,
+      2026-07-15). A privately-prepared mysql-source corpus now exists under
+      the gitignored `fixtures-corpus/` (local-only material; per policy its
+      provenance is not documented here — see the private prep script next to
+      it). Pending: a mysql variant of `scripts/filter_valid_source.py` (the
+      current one is PG-only) to get an honest denominator, then per-direction
+      sweeps mysql→{pg,oracle,tsql} joining the wave cadence.
+
 ## 4. Packaging (P3)
 
 - [ ] **PyPI publication** — deferred until the tool has been used in real
