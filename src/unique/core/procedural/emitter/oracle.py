@@ -17,6 +17,7 @@ from unique.core.ast_nodes import (
     DeclareStatement,
     ForLoopStatement,
     ParameterDefinition,
+    PerformStatement,
     PragmaDeclaration,
     PrintStatement,
     RaiseErrorStatement,
@@ -211,6 +212,15 @@ class OracleEmitter(ProceduralEmitter):
 
     def _emit_print(self, node: PrintStatement) -> str:
         return f"DBMS_OUTPUT.PUT_LINE({self._emit_node(node.expression)});"
+
+    def _emit_perform(self, node: PerformStatement) -> str:
+        # PL/SQL cannot call a function as a statement: a nested block
+        # with its own discard local keeps evaluate-and-discard exact.
+        expr = self._emit_node(node.expression) if node.expression else "0"
+        return (
+            "DECLARE\n    uq_discard VARCHAR2(4000);\nBEGIN\n"
+            f"    SELECT TO_CHAR({expr}) INTO uq_discard FROM DUAL;\nEND;"
+        )
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
         msg = self._emit_node(node.message) if node.message else "'Error'"

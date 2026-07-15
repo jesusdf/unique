@@ -21,6 +21,7 @@ from unique.core.ast_nodes import (
     IfStatement,
     NullStatement,
     ParameterDefinition,
+    PerformStatement,
     PrintStatement,
     RaiseErrorStatement,
     RawSQL,
@@ -381,6 +382,13 @@ class TSqlEmitter(ProceduralEmitter):
             f"DEALLOCATE {cur};",
         ]
         return "\n".join(lines)
+
+    def _emit_perform(self, node: PerformStatement) -> str:
+        # Evaluate-and-discard via a throwaway inline DECLARE (valid
+        # mid-body; SQL_VARIANT holds any scalar). Unique name per use.
+        expr = self._emit_node(node.expression) if node.expression else "0"
+        self._raise_msg_n += 1
+        return f"DECLARE @uq_discard{self._raise_msg_n} SQL_VARIANT = ({expr});"
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
         msg = self._emit_node(node.message) if node.message else ""

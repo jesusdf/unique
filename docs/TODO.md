@@ -977,7 +977,20 @@ fix needs an **anonymized** regression fixture (never a private name).
         private corpus filtered live — 10,352 statements kept, 39
         rejected (`filter_valid_source.py --dialect mysql`, throwaway
         database, DELIMITER-block aware). Tests:
-        TestTsqlRaiserrorExpressionHoist. Sweep re-measure pending.
+        TestTsqlRaiserrorExpressionHoist. **Measured at `eed51dc`
+        (2026-07-15): T-SQL 467→461 (86.1%); MySQL 206 / Oracle 162
+        flat. Cumulative: T-SQL 1090→461, MySQL 579→206, Oracle
+        454→162.**
+        *Wave 31 (2026-07-15):* plpgsql ``PERFORM`` (evaluate and
+        discard) reached sqlglot as raw text and mangled to
+        ``perform;``. New `PerformStatement` IR node: MySQL emits
+        ``DO expr;`` (exact semantics), T-SQL a throwaway inline
+        ``DECLARE @uq_discardN SQL_VARIANT = (expr);``, Oracle a
+        nested SELECT-INTO-discard block, PG keeps PERFORM; the
+        FROM-tail form (multi-row discard) degrades with a warning in
+        the transformer. Mutation floors: per user, measured by the
+        NIGHTLY run only from now on (no local/dispatch runs). Tests:
+        TestPerformDiscard. Sweep re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

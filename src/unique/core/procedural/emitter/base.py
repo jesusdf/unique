@@ -45,6 +45,7 @@ from unique.core.ast_nodes import (
     LoopStatement,
     NullStatement,
     ParameterDefinition,
+    PerformStatement,
     PragmaDeclaration,
     PrintStatement,
     RaiseErrorStatement,
@@ -298,6 +299,7 @@ class ProceduralEmitter:
             ExceptionBlock: self._emit_exception_block,
             ExecuteStatement: self._emit_execute,
             CallStatement: self._emit_call,
+            PerformStatement: self._emit_perform,
             PrintStatement: self._emit_print,
             RaiseErrorStatement: self._emit_raise_error,
             ReturnStatement: self._emit_return,
@@ -1540,6 +1542,13 @@ class ProceduralEmitter:
             if a:
                 cleaned.append(a)
         return cleaned
+
+    def _emit_perform(self, node: PerformStatement) -> str:
+        """Default (MySQL): ``DO <expr>;`` evaluates and discards —
+        plpgsql PERFORM's exact semantics for an expression. T-SQL,
+        Oracle and PostgreSQL override."""
+        expr = self._emit_node(node.expression) if node.expression else "0"
+        return f"DO {expr};"
 
     def _emit_print(self, node: PrintStatement) -> str:
         """Default print is MySQL's ``SELECT <expr>;`` (no PRINT statement).

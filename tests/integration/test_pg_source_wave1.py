@@ -1346,3 +1346,24 @@ class TestTsqlRaiserrorExpressionHoist:
         )
         assert re.search(r"(?i)ERROR_MESSAGE\(\)", out), out
         assert not re.search(r"(?i)\bsqlerrm\b", out), out
+
+
+class TestPerformDiscard:
+    """plpgsql ``PERFORM …`` (evaluate and discard) reached sqlglot as
+    raw text and mangled to ``perform;``. It converts to the target's
+    discard idiom (a discard-variable SELECT INTO / DO); the word
+    ``perform`` must never survive."""
+
+    _SRC = (
+        "create function pd() returns int as $$\n"
+        "begin\n"
+        "  perform log_call(1, 'x');\n"
+        "  return 1;\n"
+        "end$$ language plpgsql;"
+    )
+
+    @pytest.mark.parametrize("target", ["mysql", "tsql", "oracle"])
+    def test_perform_converts(self, target: str) -> None:
+        out = _t(self._SRC, target)
+        assert "perform" not in out.lower(), out
+        assert re.search(r"(?i)log_call\s*\(\s*1\s*,\s*'x'\s*\)", out), out

@@ -595,6 +595,19 @@ class TryCatchBlock(ASTNode):
 
 
 @dataclass(frozen=True)
+class PerformStatement(ASTNode):
+    """plpgsql ``PERFORM <expr|select-tail>`` — evaluate and discard.
+
+    ``expression`` holds the raw tail. Targets render their discard
+    idiom (MySQL ``DO``, T-SQL a discard-variable DECLARE, Oracle a
+    nested SELECT INTO block); a tail with a FROM clause degrades in
+    the transformer (multi-row discard has no mechanical equivalent).
+    """
+
+    expression: ASTNode | None = None
+
+
+@dataclass(frozen=True)
 class ReturnStatement(ASTNode):
     """RETURN [value]."""
 

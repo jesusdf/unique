@@ -31,6 +31,7 @@ from unique.core.ast_nodes import (
     IfStatement,
     LoopStatement,
     NullStatement,
+    PerformStatement,
     PragmaDeclaration,
     PrintStatement,
     RaiseErrorStatement,
@@ -245,6 +246,8 @@ class PlsqlStatementsMixin(ParserBase):
             return self._parse_return()
         elif tok.is_keyword("RAISE") or tok.is_keyword("RAISE_APPLICATION_ERROR"):
             return self._parse_plsql_raise()
+        elif self._dialect == "postgresql" and tok.upper_value == "PERFORM":
+            return self._parse_plsql_perform()
         elif tok.is_keyword("EXECUTE") and self._peek(1).is_keyword("IMMEDIATE"):
             return self._parse_plsql_execute_immediate()
         elif tok.is_keyword("EXEC", "EXECUTE"):
@@ -539,6 +542,13 @@ class PlsqlStatementsMixin(ParserBase):
         value = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)
         return AssignmentStatement(target=target, value=value)
+
+    def _parse_plsql_perform(self) -> ASTNode:
+        """plpgsql PERFORM: evaluate and discard (PG-only spelling)."""
+        self._advance()  # PERFORM
+        expr = self._parse_expression_until_semicolon()
+        self._match_type(TokenType.SEMICOLON)
+        return PerformStatement(expression=expr)
 
     def _parse_plsql_raise(self) -> ASTNode:
         """Parse RAISE / RAISE_APPLICATION_ERROR / PostgreSQL RAISE level.

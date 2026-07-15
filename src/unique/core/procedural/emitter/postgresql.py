@@ -15,6 +15,7 @@ from unique.core.ast_nodes import (
     CreateTriggerStatement,
     CursorDeclaration,
     ParameterDefinition,
+    PerformStatement,
     PrintStatement,
     RaiseErrorStatement,
     ReturnStatement,
@@ -70,6 +71,10 @@ class PostgresEmitter(ProceduralEmitter):
         if not query_str:
             return f"{node.name} REFCURSOR;"
         return f"{node.name} CURSOR FOR {query_str};"
+
+    def _emit_perform(self, node: PerformStatement) -> str:
+        expr = self._emit_node(node.expression) if node.expression else "0"
+        return f"PERFORM {expr};"
 
     def _emit_print(self, node: PrintStatement) -> str:
         return f"RAISE NOTICE '%', {self._emit_node(node.expression)};"

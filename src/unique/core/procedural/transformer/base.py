@@ -49,6 +49,7 @@ from unique.core.ast_nodes import (
     LoopStatement,
     NullStatement,
     ParameterDefinition,
+    PerformStatement,
     PragmaDeclaration,
     PrintStatement,
     RaiseErrorStatement,
@@ -268,6 +269,7 @@ class ProceduralTransformer:
             ExecuteStatement: self._transform_execute,
             PrintStatement: self._transform_print,
             RaiseErrorStatement: self._transform_raise_error,
+            PerformStatement: self._transform_perform,
             ReturnStatement: self._transform_return,
             CursorDeclaration: self._transform_cursor_decl,
             CursorOperation: self._transform_cursor_op,
@@ -1705,6 +1707,28 @@ class ProceduralTransformer:
         return RaiseErrorStatement(
             message=new_msg, severity=node.severity, state=node.state
         )
+
+    def _transform_perform(self, node: PerformStatement) -> ASTNode:
+        """PERFORM with a FROM tail (multi-row discard, side-effect
+        scans) has no mechanical equivalent off PG — degrade with a
+        warning; the expression form flows to the emitters' discard
+        idiom."""
+        expr = self._transform_node(node.expression) if node.expression else None
+        raw = getattr(expr, "sql", "") if expr is not None else ""
+        if self._target != "postgresql" and re.search(
+            r"(?is)\bFROM\b", self._strip_strings(raw)
+        ):
+            reason = (
+                f"PERFORM over a FROM clause has no {self._target} "
+                "equivalent (multi-row discard); preserved as a comment"
+            )
+            self._warnings.append(reason)
+            return RawSQL(sql=f"PERFORM {raw};", reason=reason)
+        return PerformStatement(expression=expr)
+
+    @staticmethod
+    def _strip_strings(sql: str) -> str:
+        return re.sub(r"'(?:[^']|'')*'", "''", sql)
 
     def _transform_return(self, node: ReturnStatement) -> ReturnStatement:
         new_value = self._transform_node(node.value) if node.value else None
