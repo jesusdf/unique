@@ -745,7 +745,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         open: notices inside MySQL FUNCTIONs still emit a bare SELECT
         (invalid there — needs routine-kind context in the emitter);
         T-SQL `+` on non-string args is a runtime cast risk (M3
-        string-typing). Sweep re-measure pending.
+        string-typing). **Measured at `a1360c9` (2026-07-15): T-SQL
+        687→677 (−10), Oracle 266→262 (−4), MySQL 464 flat — exactly
+        the predicted chain effect: MySQL's RAISE functions stay
+        blocked on the notice-in-FUNCTION SELECT. Cumulative: T-SQL
+        1090→677, MySQL 579→464, Oracle 454→262.**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
