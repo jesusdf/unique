@@ -919,7 +919,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         degrade: `agg(CASE WHEN p THEN x END)` (`COUNT(*)` counts 1),
         applied at IR conversion for every target (the `SELECT
         (SELECT` class, error 102). Tests: TestAggregateFilterRewrite.
-        Sweep re-measure pending.
+        **Measured at `a71020f` (2026-07-15): MySQL 247→233 (92.5%),
+        T-SQL 499→490 (85.3%), Oracle 170→168 — all three moved (a
+        universal rewrite). Cumulative: T-SQL 1090→490, MySQL 579→233,
+        Oracle 454→168.**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
