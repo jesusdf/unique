@@ -1061,7 +1061,16 @@ fix needs an **anonymized** regression fixture (never a private name).
         PG native `(LIKE t1 INCLUDING ALL)`, T-SQL `SELECT * INTO …
         WHERE 1 = 0`, Oracle empty CTAS, both with the
         indexes-not-cloned note; MySQL keeps its native form. Tests:
-        TestCreateTableLikeClone. Sweep re-measure pending.
+        TestCreateTableLikeClone. **Measured at `5eb75bf`
+        (2026-07-15): mysql→T-SQL 572→566 (90.7%), mysql→PG 403→397
+        (93.7%), mysql→Oracle 323 flat (LIKE tables now exist —
+        expected-missing +6). mysql-source day-one cumulative: →T-SQL
+        988→566 (−43%), →PG 648→397 (−39%), →Oracle 555→323 (−42%).
+        Next tranche (heavy): the bug*/proc_* procedural chains
+        (64-86x per direction — multi-blocker plpgsql-style bring-up
+        for mysql routine bodies), and the dynamic PREPARE/EXECUTE
+        trio's faithful mysql→PG conversion (native there; currently
+        honest carriers).**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
