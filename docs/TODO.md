@@ -1096,7 +1096,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         whole. The analysis-before-change pass caught a LATENT silent
         loss on the way: `_transform_cursor_decl` rebuilt the node
         without its `parameters` field — fixed. Tests:
-        TestParameterizedCursors. Sweep re-measure pending.
+        TestParameterizedCursors. **Measured at `18aee57`
+        (2026-07-15): T-SQL 455→418 (−37, 87.3% — the shredded-declare
+        routines), Oracle 159→155 (95.2%), MySQL 200→198. Cumulative:
+        T-SQL 1090→418, MySQL 579→198, Oracle 454→155.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
