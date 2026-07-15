@@ -1205,7 +1205,17 @@ fix needs an **anonymized** regression fixture (never a private name).
         implicit — MySQL's NULL semantics; the negation flips the
         operator when possible). Condition positions and PG boolean
         values untouched. Tests: TestSelectListComparisonsWrap. Sweep
-        re-measure pending (both corpora).
+        re-measure done: **at `53020a8` — mysql→T-SQL 565→536 (−29,
+        91.2%), pg→T-SQL 385→380 (incl. the parked wave-42 case);
+        mysql→Oracle +4 traced NOT to the wrap but to a distinct
+        class:**
+        *Wave 44 (2026-07-16):* MySQL routine bodies may be a SINGLE
+        statement without BEGIN (`CREATE PROCEDURE g(..) CASE … END
+        CASE;`); the declare-section parser shredded them into garbage
+        declarations. A statement-keyword body now parses as one
+        statement (the CASE statement legitimately converts to
+        IF/ELSE). Tests: TestMysqlSingleStatementBody. Sweep
+        re-measure pending (mysql-source).
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

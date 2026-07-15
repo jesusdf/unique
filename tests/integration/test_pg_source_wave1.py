@@ -1890,3 +1890,32 @@ class TestSelectListComparisonsWrap:
         out = _t2("select a > b as c from t;", "mysql", "postgresql")
         assert re.search(r"(?i)a > b", out), out
         assert "CASE" not in out.upper(), out
+
+
+class TestMysqlSingleStatementBody:
+    """MySQL routine bodies may be a SINGLE statement without BEGIN
+    (``CREATE PROCEDURE g(..) CASE … END CASE;``); the declare-section
+    parser shredded them into garbage declarations."""
+
+    def test_case_body_parses(self) -> None:
+        out = _t2(
+            "delimiter //\ncreate procedure g(x int)\n"
+            "case when x < 0 then insert into t1 values (0);\n"
+            "else insert into t1 values (2);\nend case//\ndelimiter ;",
+            "mysql",
+            "postgresql",
+        )
+        assert "case when;" not in out.lower(), out
+        # the CASE statement legitimately converts to IF/ELSE
+        assert re.search(r"(?is)(?:CASE\s+WHEN|IF) x < 0", out), out
+        assert out.upper().count("INSERT INTO t1".upper()) == 2, out
+
+    def test_single_insert_body_parses(self) -> None:
+        out = _t2(
+            "delimiter //\ncreate procedure h()\n"
+            "insert into t1 values (1)//\ndelimiter ;",
+            "mysql",
+            "oracle",
+        )
+        assert re.search(r"(?i)INSERT INTO t1 VALUES \(1\)", out), out
+        assert "insert into;" not in out.lower(), out

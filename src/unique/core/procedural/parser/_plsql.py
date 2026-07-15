@@ -97,6 +97,32 @@ class PlsqlStatementsMixin(ParserBase):
             if isinstance(comment, CommentStatement):
                 stmts.append(replace(comment, header=True))
 
+        # A MySQL routine body may be a SINGLE statement with no BEGIN
+        # (``CREATE PROCEDURE g(..) CASE … END CASE``); the declare loop
+        # below would shred it into garbage declarations.
+        if (
+            self._dialect == "mysql"
+            and not self._current().is_keyword("BEGIN", "DECLARE")
+            and (
+                self._current().is_keyword(
+                    "CASE",
+                    "IF",
+                    "INSERT",
+                    "UPDATE",
+                    "DELETE",
+                    "SELECT",
+                    "SET",
+                    "WHILE",
+                    "CALL",
+                    "RETURN",
+                )
+            )
+        ):
+            stmt = self._parse_plsql_statement()
+            if stmt is not None:
+                stmts.append(stmt)
+            return stmts
+
         # Optional DECLARE section (before BEGIN)
         guard = 0
         while not self._at_end() and not self._current().is_keyword("BEGIN"):
