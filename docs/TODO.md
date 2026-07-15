@@ -840,8 +840,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         engine errors) with ZERO warnings on T-SQL/MySQL. A statement-
         level gate in `Transformer.transform` degrades them WHOLE to a
         carrier + warning + unsupported entry (PG/Oracle keep their
-        paths). Tests: TestArrayConstructsDegrade. Sweep re-measure
-        pending.
+        paths). Tests: TestArrayConstructsDegrade. **Measured at
+        `0223762` (2026-07-15): MySQL 363→321 (−42), T-SQL 573→550
+        (−23), Oracle 202 flat (kept its path). Session cumulative
+        from the honest baseline: T-SQL 1090→550 (84.0%), MySQL
+        579→321 (89.9%), Oracle 454→202 (93.9%).**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
