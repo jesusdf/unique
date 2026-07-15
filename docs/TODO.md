@@ -783,8 +783,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         params/returns, the `anyelement`/`anyarray` polymorphic
         family) generalize the wave-12 record degrade: the routine
         degrades WHOLE with a warning naming the culprit. Tests:
-        TestLanguageSqlBody, TestPolymorphicPseudoTypes. Sweep
-        re-measure pending.
+        TestLanguageSqlBody, TestPolymorphicPseudoTypes. **Measured at
+        `2792430` (2026-07-15): MySQL 417→389 (−28), T-SQL 643→615
+        (−28), Oracle 237→215 (−22). Cumulative from the honest
+        baseline: T-SQL 1090→615 (82.4%), MySQL 579→389 (88.0%),
+        Oracle 454→215 (93.5%).**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
