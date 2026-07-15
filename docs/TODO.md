@@ -1014,8 +1014,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         across all three routing paths (SET-option batch, passthrough,
         admin classified with the option statements — SQL*Plus
         precedent). Largest baseline classes: 68–124x per direction.
-        Tests: TestMysqlSessionKnobsDegrade (13). Sweep re-measure
-        pending (mysql-source cycle).
+        Tests: TestMysqlSessionKnobsDegrade (13). **Measured at
+        `351751c` (2026-07-15): mysql→T-SQL 988→756 (−232, 87.8%),
+        mysql→PG 648→503 (−145, 92.1%), mysql→Oracle 555→323 (−232,
+        94.8%).**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
