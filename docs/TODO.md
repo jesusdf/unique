@@ -1035,7 +1035,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         gains an `_empty_block_filler` hook — `SET NOCOUNT ON;` on
         T-SQL (the BEGIN TRY precedent), `NULL;` on Oracle/PG, none on
         MySQL where the empty block is legal. Tests:
-        TestTsqlEmptyBeginBlock. Sweep re-measure pending.
+        TestTsqlEmptyBeginBlock. **Measured at `dc8a027`
+        (2026-07-15): mysql→T-SQL 755→754 (−1); PG/Oracle flat —
+        honest small yield, the class was thinner than sampled and
+        those routines carry further chain blockers. The mysql-source
+        residue is now the long tail: PREPARE/EXECUTE dynamic SQL and
+        the bug* procedural chains (→T-SQL 754, →PG 403, →Oracle
+        323).**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
