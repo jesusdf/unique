@@ -608,7 +608,23 @@ fix needs an **anonymized** regression fixture (never a private name).
         leaked into the body. For a postgresql source `$` now ends the
         identifier (dollar-quotes win, matching PG's own lexing) —
         `lexer.py`, tests in `test_pg_source_wave1.py::
-        TestGluedDollarQuoteClose`. Sweep re-measure pending. Getting here surfaced and
+        TestGluedDollarQuoteClose`. **Measured at `145551f` (2026-07-15):
+        pg→Oracle 90.7% (341, was 351), pg→MySQL 84.9% (539, was 589),
+        pg→T-SQL 74.7% (967, was 973).** Operational note: the pg-source
+        sweep pushes Oracle to ~2.2 GiB — above its 2 g compose cap
+        (cgroup OOM-killed it mid-sweep, `oom=true`); before an Oracle
+        sweep run `docker update --memory 3g --memory-swap 3g
+        unique-oracle-1` (runtime-only override; the committed 2 g cap
+        keeps the full four-engine stack bootable on the 8 GB host).
+        Next classified classes (red tests already in
+        `test_pg_source_wave1.py`): PG signature grammar in the
+        procedural parser — type-only params `(int, int)`, argmode-first
+        `(out x int)`, `int default 0` — all currently DESYNC and swallow
+        the function into the parameter list with ZERO warnings (silent
+        corruption); `$n` positional references emit as `$ n`; and
+        `BatchSplitter._split_postgresql` splits inside multi-line
+        single-quoted bodies (old-style plpgsql `as '…'`), turning the
+        inner `end;` into `COMMIT;`. Getting here surfaced and
         fixed THREE product bugs: the sqlglot COPY DoS (`:'var'`,
         `3aa55b4`), the transactional-BEGIN splitter glue (also under the
         output gate), and the oracle first-boot healthcheck wait.
