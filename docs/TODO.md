@@ -931,7 +931,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         on UNIQUE ones (a broader unique index would reject rows the
         partial one allowed); the predicate renderer now accepts only
         column-vs-constant comparisons. Tests:
-        TestIndexRebuildRefinements. Sweep re-measure pending.
+        TestIndexRebuildRefinements. **Measured at `6e74f3f`
+        (2026-07-15): T-SQL 490→477 (−13, 85.6%); MySQL 233 / Oracle
+        168 flat. Cumulative: T-SQL 1090→477, MySQL 579→233, Oracle
+        454→168.**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
