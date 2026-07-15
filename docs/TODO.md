@@ -754,8 +754,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         <msg>` is invalid inside a MySQL FUNCTION (error 1415); the
         base `_emit_print` now diverts to `SET @uq_notice = …` with a
         documented carrier when `_in_mysql_function` (procedures keep
-        the visible SELECT). Tests: TestMysqlFunctionNotice. Sweep
-        re-measure pending.
+        the visible SELECT). Tests: TestMysqlFunctionNotice.
+        **Measured at `6adf580` (2026-07-15): MySQL syntax 464 flat but
+        ok 1741→1757 (+16) with expected-missing −16 — the fixed
+        functions now create AND run, resolving their dependent calls.
+        T-SQL 677 / Oracle 262 unchanged.**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
