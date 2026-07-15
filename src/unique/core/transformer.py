@@ -545,6 +545,25 @@ class Transformer:
     #: there in any spelling.
     _ARRAY_CONSTRUCTS = frozenset({"ARRAY", "ARRAY_AGG", "UNNEST", "EXPLODE"})
 
+    #: PG catalog internals: object-identifier cast types and system
+    #: columns. Engine-internal on EVERY other target.
+    _PG_CATALOG_TYPES = frozenset(
+        {
+            "REGCLASS",
+            "REGTYPE",
+            "REGPROC",
+            "REGPROCEDURE",
+            "REGOPER",
+            "REGOPERATOR",
+            "REGNAMESPACE",
+            "REGROLE",
+            "REGCONFIG",
+            "REGDICTIONARY",
+            "REGCOLLATION",
+        }
+    )
+    _PG_SYSTEM_COLUMNS = frozenset({"TABLEOID", "CTID", "XMIN", "XMAX", "CMIN", "CMAX"})
+
     def transform(self, nodes: list[ASTNode]) -> list[ASTNode]:
         """Apply all transformation passes to a list of IR nodes.
 
@@ -555,11 +574,59 @@ class Transformer:
             The transformed IR nodes.
         """
         result = nodes
+        if self.context.target != "postgresql":
+            result = [self._gate_pg_internals(node) for node in result]
         if self.context.target in ("tsql", "mysql"):
             result = [self._gate_array_constructs(node) for node in result]
         for pass_ in self._passes:
             result = [self._apply_pass(pass_, node) for node in result]
         return result
+
+    def _gate_pg_internals(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement touching PG catalog internals — WHOLE.
+
+        ``CAST(x AS regclass)`` / system columns like ``ctid`` are
+        engine internals; they shipped raw (ORA-00936 & friends, 22x)
+        with zero warnings."""
+        found = self._find_pg_internal(node)
+        if found is None:
+            return node
+        reason = (
+            f"PostgreSQL catalog internal {found} has no "
+            f"{self.context.target} equivalent; statement preserved as a comment"
+        )
+        self.context.warn(reason, "pg_catalog_internal")
+        self.context.mark_unsupported(f"{found} (PG catalog internal)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _find_pg_internal(self, value: object) -> str | None:
+        """First PG catalog-internal construct reachable from *value*."""
+        if (
+            isinstance(value, CastExpression)
+            and value.target_type.name.upper() in self._PG_CATALOG_TYPES
+        ):
+            return f"cast to {value.target_type.name}"
+        if isinstance(value, DataType) and value.name.upper() in self._PG_CATALOG_TYPES:
+            return f"type {value.name}"
+        if (
+            isinstance(value, ColumnRef)
+            and value.name.upper() in self._PG_SYSTEM_COLUMNS
+        ):
+            return f"system column {value.name}"
+        if isinstance(value, ASTNode):
+            for f in fields(value):
+                found = self._find_pg_internal(getattr(value, f.name))
+                if found is not None:
+                    return found
+            return None
+        if isinstance(value, tuple):
+            for item in value:
+                found = self._find_pg_internal(item)
+                if found is not None:
+                    return found
+        return None
 
     def _gate_array_constructs(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using PG array constructs — WHOLE.

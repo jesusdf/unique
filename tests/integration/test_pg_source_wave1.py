@@ -918,3 +918,42 @@ class TestNestedDollarQuotedLiterals:
         )
         out = _t(src, "postgresql")
         assert re.search(r"it''s here", out), out
+
+
+class TestPgCatalogInternalsDegrade:
+    """PG catalog casts (``regclass``/``regtype``/…) and system columns
+    (``tableoid``, ``ctid``, ``xmin``…) are engine internals with no
+    equivalent anywhere (22x ORA-00936 as ``CAST(tableoid AS
+    REGCLASS)``); the statement degrades WHOLE on every non-PG
+    target."""
+
+    @pytest.mark.parametrize("target", ["oracle", "tsql", "mysql"])
+    def test_regclass_cast_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "select cast(tableoid as regclass), id from t;",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_ctid_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "select ctid from t;", source="postgresql", target="oracle"
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_plain_cast_kept(self) -> None:
+        out = _t("select cast(id as text) from t;", "oracle")
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)CAST\(id AS", out), out

@@ -863,6 +863,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         stands: one canonical dollar-quote path, all prior tests
         green, and the trigger/EXECUTE chains are now parseable for
         the next wave.**
+        *Wave 19 (2026-07-15):* PG catalog internals — `CAST(x AS
+        regclass)` (and the whole `reg*` OID-type family) plus system
+        columns (`tableoid`, `ctid`, `xmin`…) shipped raw with zero
+        warnings (22x ORA-00936). The wave-17 statement gate
+        generalizes: `_gate_pg_internals` degrades such statements
+        WHOLE on every non-PG target. Tests:
+        TestPgCatalogInternalsDegrade. Sweep re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
