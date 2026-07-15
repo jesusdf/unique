@@ -929,7 +929,9 @@ fix needs an **anonymized** regression fixture (never a private name).
         AND the passthrough; `DROP TYPE` on MySQL (no user-defined
         types in any form, 5x) mirrors the sequence carrier. Tests:
         TestSessionAuthorizationDegrades, TestMysqlUserTypesDegrade.
-        Sweep re-measure pending.
+        **Measured at `9394e9c` (2026-07-15): Oracle 168→162 (95.0%),
+        MySQL 233→222 (92.8%), T-SQL 477→471 (85.8%). Cumulative:
+        T-SQL 1090→471, MySQL 579→222, Oracle 454→162.**
         *Wave 25 (2026-07-15):* index-rebuild refinements — PG
         opclasses (`roomno bpchar_ops`, error 35336) strip to the bare
         column; a filtered-index predicate outside T-SQL's restricted
