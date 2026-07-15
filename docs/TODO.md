@@ -1122,8 +1122,12 @@ fix needs an **anonymized** regression fixture (never a private name).
         domain-difference warning); MySQL keeps ROW_COUNT() and the
         native CONDITION-1 form for condition items; PG verbatim.
         Unmappable items (pg_routine_oid) degrade per-item with a
-        warning. Tests: TestGetDiagnostics (4). Sweep re-measure
-        pending.
+        warning. Tests: TestGetDiagnostics (4). **Measured at
+        `d50a058` (2026-07-15): Oracle 155→150 (95.4%), T-SQL 418→412
+        (87.5%), MySQL 198→194 (93.7%) — all three moved; the
+        stacked_diagnostics chain (waves 30→33→34) is unblocked
+        end-to-end. Cumulative: T-SQL 1090→412, MySQL 579→194, Oracle
+        454→150.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
