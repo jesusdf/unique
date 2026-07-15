@@ -82,7 +82,10 @@ class TestPgIndexRebuildDecisions:
 class TestCreateTableDefaultRewrites:
     """Per-target DEFAULT rewrites in _emit_create_table."""
 
-    _SRC = "CREATE TABLE d1 (id UNIQUEIDENTIFIER DEFAULT NEWID(), ts DATETIME2 DEFAULT CURRENT_TIMESTAMP())"
+    _SRC = (
+        "CREATE TABLE d1 (id UNIQUEIDENTIFIER DEFAULT NEWID(), "
+        "ts DATETIME2 DEFAULT CURRENT_TIMESTAMP())"
+    )
 
     def test_oracle_newid_becomes_sys_guid(self) -> None:
         r = _t(self._SRC, "tsql", "oracle")

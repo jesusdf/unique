@@ -938,7 +938,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         star argument (IR: ColumnRef `*` with a table) degrades the
         statement whole on every non-PG target; plain `COUNT(*)`
         untouched. Tests: TestQualifiedStarCountDegrades. Sweep
-        re-measure pending.
+        re-measure done: **measured at `14b1600` (2026-07-15): MySQL
+        222→219 (92.9%), T-SQL 471→467 (85.9%), Oracle 162 flat
+        (95.0%). Cumulative: T-SQL 1090→467, MySQL 579→219, Oracle
+        454→162.**
         *Wave 25 (2026-07-15):* index-rebuild refinements — PG
         opclasses (`roomno bpchar_ops`, error 35336) strip to the bare
         column; a filtered-index predicate outside T-SQL's restricted
