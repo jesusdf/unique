@@ -1167,8 +1167,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         on plpgsql's `FOUND` flag (error 4145): per-target predicates
         now map it — `(@@ROWCOUNT > 0)` on T-SQL, `(ROW_COUNT() > 0)`
         on MySQL, native `SQL%FOUND` on Oracle (string-safe,
-        pg-source only). Tests: TestPlpgsqlFoundFlag. Sweep re-measure
-        pending.
+        pg-source only). Tests: TestPlpgsqlFoundFlag. **Measured at
+        `62c078b` (2026-07-16): T-SQL 408→402 (−6, 87.8%); MySQL/Oracle
+        syntax flat, ok +1 each. Cumulative: T-SQL 1090→402, MySQL
+        579→193, Oracle 454→149.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
