@@ -1214,8 +1214,12 @@ fix needs an **anonymized** regression fixture (never a private name).
         CASE;`); the declare-section parser shredded them into garbage
         declarations. A statement-keyword body now parses as one
         statement (the CASE statement legitimately converts to
-        IF/ELSE). Tests: TestMysqlSingleStatementBody. Sweep
-        re-measure pending (mysql-source).
+        IF/ELSE). Tests: TestMysqlSingleStatementBody. **Measured at
+        `c7dba03` (2026-07-16): −46 across the direction — mysql→Oracle
+        327→308 (95.0%, the +4 reversed and beaten), mysql→T-SQL
+        536→516 (91.5%), mysql→PG 396→389 (93.9%). Standing: pg-source
+        {380/183/149}, mysql-source {516/389/308} — all six directions
+        ≥88.5%.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
