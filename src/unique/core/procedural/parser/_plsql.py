@@ -573,6 +573,12 @@ class PlsqlStatementsMixin(ParserBase):
                 return PrintStatement(expression=expr)
             return RaiseErrorStatement(message=expr)
 
+        # Level-less ``RAISE 'msg' [, args] [USING …]`` defaults to
+        # EXCEPTION in plpgsql — same format path as the leveled form.
+        if self._dialect == "postgresql" and self._current().type == TokenType.STRING:
+            formatted = self._parse_pg_raise_format()
+            if formatted is not None:
+                return RaiseErrorStatement(message=formatted)
         expr = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)
         return RaiseErrorStatement(message=expr)

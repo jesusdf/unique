@@ -1265,3 +1265,48 @@ class TestPgIndexToMysql:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, r.sql
+
+
+class TestRaiseResidue:
+    """raise_test's remaining blockers: a bare re-``RAISE;`` inside an
+    exception handler emitted ``SET MESSAGE_TEXT = ;`` (empty — broken
+    re-raise AND a syntax error); the faithful MySQL form is
+    ``RESIGNAL;`` (T-SQL: ``THROW;``). And a level-less ``RAISE 'msg'
+    USING …`` (defaults to EXCEPTION) skipped the wave-10 format
+    parser, shipping the USING tail raw with the old mislabeled
+    warning."""
+
+    _RERAISE = (
+        "create function rr2() returns int as $$\n"
+        "begin\n"
+        "  begin\n"
+        "    perform 1/0;\n"
+        "  exception when others then\n"
+        "    raise;\n"
+        "  end;\n"
+        "  return 1;\n"
+        "end$$ language plpgsql;"
+    )
+
+    def test_bare_reraise_mysql_resignal(self) -> None:
+        out = _t(self._RERAISE, "mysql")
+        assert "MESSAGE_TEXT = ;" not in out, out
+        assert re.search(r"(?i)\bRESIGNAL\s*;", out), out
+
+    def test_levelless_raise_using_folds(self) -> None:
+        r = Transpiler().transpile(
+            "create function rl() returns int as $$\n"
+            "begin\n"
+            "  raise 'check me' using errcode = 'division_by_zero';\n"
+            "  return 1;\nend$$ language plpgsql;",
+            source="postgresql",
+            target="mysql",
+        )
+        # the USING options fold INTO the message string; they must not
+        # remain as a raw clause after the SIGNAL statement
+        assert not re.search(r"(?i)MESSAGE_TEXT\s*=\s*'[^']*'\s+using", r.sql), r.sql
+        assert re.search(r"(?i)MESSAGE_TEXT\s*=\s*@uq_errmsg", r.sql), r.sql
+        assert "check me" in r.sql, r.sql
+        joined = " ".join(w.message for w in r.warnings)
+        assert "RAISERROR" not in joined, r.warnings
+        assert "folded into the message" in joined, r.warnings

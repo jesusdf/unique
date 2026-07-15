@@ -941,6 +941,17 @@ fix needs an **anonymized** regression fixture (never a private name).
         `4843e14` (2026-07-15): MySQL 219→210 (93.2%); T-SQL 467 /
         Oracle 162 flat. Cumulative: T-SQL 1090→467, MySQL 579→210,
         Oracle 454→162.**
+        *Wave 29 (2026-07-15):* the raise_test residue — a bare
+        re-``RAISE;`` inside a handler emitted ``SET MESSAGE_TEXT = ;``
+        (empty: a syntax error AND a broken re-raise): the faithful
+        spellings are MySQL ``RESIGNAL;`` and T-SQL ``THROW;`` (Oracle
+        keeps ``RAISE;``). And the level-less ``RAISE 'msg' USING …``
+        (defaults to EXCEPTION) now routes through the wave-10 format
+        parser instead of shipping the USING tail raw with the old
+        mislabeled warning. Tests: TestRaiseResidue. Sweep re-measure
+        pending. Mutation validation #2: convert.py and procedural
+        base.py both at/above floor; emit.py 57% (<60) — full local
+        survivor run underway for the last targeted assertions.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

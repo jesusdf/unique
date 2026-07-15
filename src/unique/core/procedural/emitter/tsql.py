@@ -383,7 +383,10 @@ class TSqlEmitter(ProceduralEmitter):
         return "\n".join(lines)
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
-        msg = self._emit_node(node.message) if node.message else "'Error'"
+        msg = self._emit_node(node.message) if node.message else ""
+        if not msg.strip():
+            # Bare re-RAISE inside a CATCH: T-SQL's spelling is THROW;
+            return "THROW;"
         # An Oracle RAISE_APPLICATION_ERROR(-20xxx, <msg>) arrives as one
         # argument blob; RAISERROR takes the message text alone (a tuple in
         # its place is a syntax error). Keep the human-readable part.

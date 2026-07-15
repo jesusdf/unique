@@ -1558,7 +1558,12 @@ class ProceduralEmitter:
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
         """Default raise is MySQL's SIGNAL. T-SQL, Oracle and PostgreSQL
         override with their own raise form."""
-        msg = self._emit_node(node.message) if node.message else "'Error'"
+        msg = self._emit_node(node.message) if node.message else ""
+        if not msg.strip():
+            # A bare re-RAISE inside a handler: MySQL's spelling is
+            # RESIGNAL (an empty MESSAGE_TEXT was a syntax error AND a
+            # broken re-raise).
+            return "RESIGNAL;"
         # MySQL SIGNAL requires MESSAGE_TEXT to be a string and the error number
         # in MYSQL_ERRNO; the raw T-SQL argument tuple "(msg_or_id, severity,
         # state)" is invalid there. Keep the human-readable message AND the
