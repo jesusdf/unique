@@ -632,7 +632,20 @@ fix needs an **anonymized** regression fixture (never a private name).
         string body in place so `as '…' language plpgsql` converts like
         its `$$` twin. Tests: `test_pg_source_wave1.py` (TestTypeOnly…,
         TestPositionalParamReference, TestSingleQuotedBody,
-        TestPgArgmodeFirstParameters). Sweep re-measure pending.
+        TestPgArgmodeFirstParameters). **Measured at `9a7263d`
+        (2026-07-15): pg→Oracle 92.4% (269, was 341), pg→MySQL 86.3%
+        (474, was 539), pg→T-SQL 75.8% (905, was 967)** — from the
+        honest baseline that is Oracle 454→269, MySQL 579→474, T-SQL
+        1090→905. The `RETURN AS NEW/OLD/x` fragment classes are gone
+        from the residue. Next classes (fresh dumps, first-code-line
+        shapes): mysql — plpgsql body *content* now that units hold
+        together (19x stricttest = STRICT/INTO semantics, 12x
+        raise_test = RAISE USING/level forms, 15x foreach_test =
+        FOREACH…IN ARRAY, 10x compos = composite-type returns), 8x
+        `float8 '…'` type-prefixed literals, 9x ARRAY_AGG; tsql — 60x
+        `SELECT dbo.…` (qualified scalar-function calls in plain
+        SELECTs, likely ONE emit shape), 30x `CREATE TABLE #…` temp
+        tables, 18x trigger DDL, 17x partitioned CREATE TABLE.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
