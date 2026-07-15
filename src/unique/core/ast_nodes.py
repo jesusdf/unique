@@ -436,6 +436,9 @@ class CreateTableStatement(ASTNode):
     # them silently loses the table's defining structure).
     inherits_clause: str | None = None
     partition_of_clause: str | None = None
+    # MySQL's CREATE TABLE t2 LIKE t1 / PG's (LIKE t1): the source table
+    # whose structure is cloned.
+    like_source: str | None = None
 
 
 @dataclass(frozen=True)

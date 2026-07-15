@@ -1454,6 +1454,30 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             inline_exists = "IF NOT EXISTS "
     exists = inline_exists
 
+    if node.like_source:
+        # Structure clone. PG spells it natively; T-SQL/Oracle use an
+        # empty CTAS (column structure only — indexes/keys don't clone).
+        if dialect == "postgresql":
+            return (
+                f"{tsql_guard}CREATE {temp}TABLE {exists}{table} "
+                f"(LIKE {node.like_source} INCLUDING ALL)"
+            )
+        if dialect == "tsql":
+            return (
+                f"SELECT *\nINTO {table}\nFROM {node.like_source}\n"
+                "WHERE 1 = 0\n"
+                "-- UNIQUE: LIKE clone copies column structure only here; "
+                "the source's indexes/keys are not cloned"
+            )
+        if dialect == "oracle":
+            return (
+                f"CREATE {temp}TABLE {exists}{table} AS\n"
+                f"SELECT *\nFROM {node.like_source}\nWHERE 1 = 0\n"
+                "-- UNIQUE: LIKE clone copies column structure only here; "
+                "the source's indexes/keys are not cloned"
+            )
+        return f"CREATE {temp}TABLE {exists}{table} LIKE {node.like_source}"
+
     if node.as_select:
         if dialect == "tsql":
             # T-SQL has no CREATE TABLE AS; the faithful idiom is

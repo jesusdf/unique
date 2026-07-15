@@ -1492,3 +1492,30 @@ class TestTsqlCtasBecomesSelectInto:
         ]
         assert not view_lines, r.sql
         assert any("temporary tables" in w.message for w in r.warnings), r.warnings
+
+
+class TestCreateTableLikeClone:
+    """MySQL's ``CREATE TABLE t2 LIKE t1`` (structure clone) silently
+    dropped its LIKE everywhere (bare ``CREATE TABLE t2``, 0 warnings,
+    26x). PG has the native ``(LIKE t1)``; T-SQL/Oracle clone via an
+    empty CTAS (``WHERE 1 = 0``) with a note that indexes/keys are not
+    cloned."""
+
+    def test_like_native_pg(self) -> None:
+        out = _t2("create table t2 like t1;", "mysql", "postgresql")
+        assert re.search(r"(?i)CREATE TABLE t2 \(LIKE t1", out), out
+
+    def test_like_tsql_empty_select_into(self) -> None:
+        r = Transpiler().transpile(
+            "create table t2 like t1;", source="mysql", target="tsql"
+        )
+        assert re.search(
+            r"(?is)SELECT \*\s+INTO t2\s+FROM t1\s+WHERE 1 = 0", r.sql
+        ), r.sql
+        assert any("not cloned" in w.message for w in r.warnings), r.warnings
+
+    def test_like_oracle_empty_ctas(self) -> None:
+        out = _t2("create table t2 like t1;", "mysql", "oracle")
+        assert re.search(
+            r"(?is)CREATE TABLE t2 AS\s+SELECT \*\s+FROM t1\s+WHERE 1 = 0", out
+        ), out

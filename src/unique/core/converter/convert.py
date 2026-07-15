@@ -877,6 +877,7 @@ def _convert_create_table(
     # column-less CREATE TABLE). The transformer decides per target.
     inherits_clause: str | None = None
     partition_of_clause: str | None = None
+    like_source: str | None = None
     props = expr.args.get("properties")
     if props is not None:
         sg = sqlglot_dialect_name(source_dialect)
@@ -885,6 +886,8 @@ def _convert_create_table(
                 inherits_clause = prop.sql(dialect=sg)
             elif isinstance(prop, exp.PartitionedOfProperty):
                 partition_of_clause = prop.sql(dialect=sg)
+            elif isinstance(prop, exp.LikeProperty):
+                like_source = prop.this.sql(dialect=sg)
 
     # CREATE TABLE … [AS] SELECT: sqlglot parks the query in
     # ``expression``; never reading it silently dropped the whole CTAS
@@ -901,6 +904,7 @@ def _convert_create_table(
         table_constraints=tuple(constraints),
         inherits_clause=inherits_clause,
         partition_of_clause=partition_of_clause,
+        like_source=like_source,
         as_select=as_select,
     )
 

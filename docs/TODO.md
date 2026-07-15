@@ -1055,6 +1055,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         mysql-source wave; ok +94). All three mysql-source directions
         now above 90%: →T-SQL 572 (90.6%), →PG 403 (93.7%), →Oracle
         323 (94.8%).**
+        *Wave M5 (mysql-source, 2026-07-15):* `CREATE TABLE t2 LIKE
+        t1` structure clones silently dropped their LIKE everywhere
+        (bare CREATE, 0 warnings, 26x): now `like_source` on the IR —
+        PG native `(LIKE t1 INCLUDING ALL)`, T-SQL `SELECT * INTO …
+        WHERE 1 = 0`, Oracle empty CTAS, both with the
+        indexes-not-cloned note; MySQL keeps its native form. Tests:
+        TestCreateTableLikeClone. Sweep re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
