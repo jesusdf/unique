@@ -1220,6 +1220,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         536→516 (91.5%), mysql→PG 396→389 (93.9%). Standing: pg-source
         {380/183/149}, mysql-source {516/389/308} — all six directions
         ≥88.5%.**
+        *Wave 45 (2026-07-16):* two more dropped-definition shapes
+        behind the 54x bare `CREATE TABLE` (mysql→pg): a table whose
+        columns are ALL generated (passthrough fragments; `columns`
+        empty → the emit skipped the whole parenthesized branch,
+        constraints included — now triggers on constraints too), and
+        CTAS whose query is a UNION (the M2 extraction accepted only
+        exp.Select; now any SetOperation). Tests:
+        TestBareCreateResidue. Sweep re-measure pending
+        (mysql-source).
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

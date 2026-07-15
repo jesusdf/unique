@@ -1919,3 +1919,30 @@ class TestMysqlSingleStatementBody:
         )
         assert re.search(r"(?i)INSERT INTO t1 VALUES \(1\)", out), out
         assert "insert into;" not in out.lower(), out
+
+
+class TestBareCreateResidue:
+    """Two more dropped-definition shapes (54x bare `CREATE TABLE` in
+    mysql→pg): a table whose columns are ALL generated (they route to
+    passthrough fragments, `columns` is empty and the emit skipped the
+    whole parenthesized branch — constraints included); and CTAS whose
+    query is a UNION (the M2 extraction accepted only exp.Select)."""
+
+    def test_all_generated_columns_survive(self) -> None:
+        out = _t2(
+            "create table tg1 (a int generated always as (1) virtual, "
+            "b int generated always as (a) virtual);",
+            "mysql",
+            "postgresql",
+        )
+        assert "(" in out.split("\n")[0] or "GENERATED" in out.upper(), out
+        assert re.search(r"(?i)GENERATED ALWAYS AS", out), out
+
+    def test_union_ctas_survives(self) -> None:
+        out = _t2(
+            "create table t3 select a from t1 union all select a from t2;",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?i)CREATE TABLE t3 AS", out), out
+        assert re.search(r"(?i)UNION ALL", out), out

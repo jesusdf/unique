@@ -1550,7 +1550,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
         select = _emit_select(node.as_select, dialect)
         return f"{tsql_guard}CREATE {temp}TABLE {exists}{table} AS\n{select}"
 
-    if node.columns:
+    if node.columns or node.table_constraints:
         col_defs = []
         set_type_notes: list[str] = []
         for col in node.columns:

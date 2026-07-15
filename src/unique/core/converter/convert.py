@@ -922,7 +922,7 @@ def _convert_create_table(
     # body (MySQL's no-AS spelling included).
     as_select = None
     select_expr = expr.args.get("expression")
-    if isinstance(select_expr, exp.Select):
+    if isinstance(select_expr, (exp.Select, exp.SetOperation)):
         as_select = _convert_select(select_expr)
 
     return CreateTableStatement(
