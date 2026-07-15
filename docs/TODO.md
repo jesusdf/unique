@@ -668,6 +668,21 @@ fix needs an **anonymized** regression fixture (never a private name).
         function classifies as "other", not syntax).** Cumulative from
         the honest baseline: T-SQL 1090→859, MySQL 579→468, Oracle
         454→269.
+        *Wave 7 (2026-07-15):* PG table-binding honesty. `INHERITS (…)`
+        and `PARTITION OF … FOR VALUES …` were dropped SILENTLY by the
+        IR conversion (a partition child shipped as a bare column-less
+        `CREATE TABLE` — 30x `CREATE TABLE #…` in the tsql residue, 0
+        warnings). Now modeled on `CreateTableStatement`
+        (`inherits_clause`/`partition_of_clause`), the PG target renders
+        them, and `SyntaxNormalizer._degrade_pg_table_binding` degrades
+        the WHOLE statement to a carrier + warning + unsupported entry
+        everywhere else. `DEFERRABLE`/`INITIALLY …` constraint
+        attributes strip with a warning on T-SQL/MySQL via sqlglot-AST
+        surgery on the constraint fragment (a column literally named
+        "deferrable" is untouched); Oracle keeps them. Tests:
+        `test_pg_source_wave1.py` (11 new). Left open: the partition
+        PARENT (`PARTITION BY RANGE …`, 17x mcrparted) and column-LEVEL
+        constraint attributes. Sweep re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

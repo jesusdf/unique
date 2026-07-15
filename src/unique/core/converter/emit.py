@@ -1430,11 +1430,23 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 col_defs.append(f"  {emitted}")
         cols = ",\n".join(col_defs)
         result = f"{tsql_guard}CREATE {temp}TABLE {exists}{table} (\n{cols}\n)"
+        # Emitted unconditionally: the transformer degrades the whole
+        # statement on targets without the concept, so only PostgreSQL
+        # normally reaches here — and if anything slips through, emitting
+        # the clause beats losing the table's defining structure.
+        if node.inherits_clause:
+            result += f"\n{node.inherits_clause}"
         if trailing_comments:
             result += "\n" + "\n".join(trailing_comments)
         return result
 
-    return f"{tsql_guard}CREATE {temp}TABLE {exists}{table}"
+    bare = f"{tsql_guard}CREATE {temp}TABLE {exists}{table}"
+    if node.partition_of_clause:
+        return f"{bare} {node.partition_of_clause}"
+    if node.inherits_clause:
+        # PG requires the empty column list when INHERITS supplies them all.
+        return f"{bare} () {node.inherits_clause}"
+    return bare
 
 
 def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:

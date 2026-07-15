@@ -848,11 +848,28 @@ def _convert_create_table(
     # so "is not None" would wrongly set if_not_exists=True for every table.
     if_not_exists = bool(expr.args.get("exists"))
 
+    # PostgreSQL table-binding clauses (INHERITS / PARTITION OF … FOR
+    # VALUES …): keep them verbatim on the node — dropping them loses the
+    # table's defining structure (a partition child shipped as a bare
+    # column-less CREATE TABLE). The transformer decides per target.
+    inherits_clause: str | None = None
+    partition_of_clause: str | None = None
+    props = expr.args.get("properties")
+    if props is not None:
+        sg = sqlglot_dialect_name(source_dialect)
+        for prop in props.expressions:
+            if isinstance(prop, exp.InheritsProperty):
+                inherits_clause = prop.sql(dialect=sg)
+            elif isinstance(prop, exp.PartitionedOfProperty):
+                partition_of_clause = prop.sql(dialect=sg)
+
     return CreateTableStatement(
         table=table,
         columns=tuple(columns),
         if_not_exists=if_not_exists,
         table_constraints=tuple(constraints),
+        inherits_clause=inherits_clause,
+        partition_of_clause=partition_of_clause,
     )
 
 

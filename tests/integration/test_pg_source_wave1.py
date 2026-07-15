@@ -368,3 +368,72 @@ class TestStatAggregateRoundTrip:
         assert re.search(r"(?i)\bSTDDEV_POP\(", mid), mid
         back = Transpiler().transpile(mid, source="postgresql", target="mysql").sql
         assert re.search(r"(?i)\bSTDDEV_POP\(", back), back
+
+
+class TestPgTableInheritance:
+    """``CREATE TABLE kid (…) INHERITS (parent)`` and ``CREATE TABLE c
+    PARTITION OF p FOR VALUES …`` lost their defining clause SILENTLY
+    (the partition child shipped as a bare column-less ``CREATE TABLE
+    c`` — 30x ``CREATE TABLE #…`` in the tsql residue, 0 warnings).
+    No mechanical equivalent off PostgreSQL: the whole statement must
+    degrade to a carrier with a warning; the PG target keeps it."""
+
+    _INH = "create table kid (extra int) inherits (parent);"
+    _PART = "create temp table c1 partition of p for values in (1);"
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_inherits_degrades_whole(self, target: str) -> None:
+        r = Transpiler().transpile(self._INH, source="postgresql", target=target)
+        assert "UNIQUE:" in r.sql, r.sql
+        assert "INHERITS" in r.sql.upper(), r.sql
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_partition_of_degrades_whole(self, target: str) -> None:
+        r = Transpiler().transpile(self._PART, source="postgresql", target=target)
+        assert "UNIQUE:" in r.sql, r.sql
+        assert "PARTITION OF" in r.sql.upper(), r.sql
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_inherits_kept_on_pg(self) -> None:
+        out = _t(self._INH, "postgresql")
+        assert re.search(r"(?i)INHERITS\s*\(parent\)", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_partition_of_kept_on_pg(self) -> None:
+        out = _t(self._PART, "postgresql")
+        assert re.search(r"(?i)PARTITION OF p FOR VALUES IN \(1\)", out), out
+        assert "UNIQUE:" not in out, out
+
+
+class TestDeferrableConstraintAttribute:
+    """PG constraint attributes (DEFERRABLE / INITIALLY DEFERRED) have no
+    T-SQL/MySQL spelling and shipped verbatim (syntax error near ')').
+    Oracle supports them and keeps them."""
+
+    _SRC = "create table t3 (a int, b int, primary key (a, b) deferrable);"
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql"])
+    def test_deferrable_stripped_with_warning(self, target: str) -> None:
+        r = Transpiler().transpile(self._SRC, source="postgresql", target=target)
+        assert "DEFERRABLE" not in r.sql.upper(), r.sql
+        assert re.search(r"(?i)PRIMARY KEY\s*\(a,?\s*b\)", r.sql), r.sql
+        assert any(
+            "DEFERRABLE" in str(w.message).upper() for w in r.warnings
+        ), r.warnings
+
+    def test_deferrable_kept_on_oracle(self) -> None:
+        out = _t(self._SRC, "oracle")
+        assert "DEFERRABLE" in out.upper(), out

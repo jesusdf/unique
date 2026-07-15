@@ -20,10 +20,13 @@ from unique.core.ast_nodes import (
     BinaryOperator,
     CastExpression,
     ColumnRef,
+    CreateTableStatement,
     DataType,
     FunctionCall,
     LimitClause,
     Literal,
+    PassthroughSQL,
+    RawSQL,
     SelectStatement,
     TableRef,
 )
@@ -249,7 +252,109 @@ class SyntaxNormalizer(TransformPass):
         if isinstance(node, SelectStatement):
             node = self._drop_dual(node, ctx)
             node = self._rownum_to_limit(node, ctx)
+        if isinstance(node, CreateTableStatement):
+            degraded = self._degrade_pg_table_binding(node, ctx)
+            if not isinstance(degraded, CreateTableStatement):
+                return degraded
+            node = self._strip_constraint_attributes(degraded, ctx)
         return node
+
+    @staticmethod
+    def _degrade_pg_table_binding(
+        node: CreateTableStatement, ctx: TransformContext
+    ) -> ASTNode:
+        """Degrade INHERITS / PARTITION OF tables whole off PostgreSQL.
+
+        Neither clause has a mechanical equivalent elsewhere, and dropping
+        it silently loses the table's defining structure (a partition
+        child shipped as a bare column-less CREATE TABLE)."""
+        if ctx.target == "postgresql":
+            return node
+        if not (node.inherits_clause or node.partition_of_clause):
+            return node
+        kind = "PARTITION OF" if node.partition_of_clause else "INHERITS"
+        from unique.core.converter.emit import emit_node
+
+        original = emit_node(node, "postgresql")
+        reason = (
+            f"PostgreSQL {kind} table binding has no {ctx.target} equivalent; "
+            "the CREATE TABLE is preserved as a comment"
+        )
+        ctx.warn(reason, "table_inheritance")
+        ctx.mark_unsupported(f"{kind} (PostgreSQL table binding)")
+        return RawSQL(sql=original, reason=reason)
+
+    #: cheap containment gate only — the actual removal is sqlglot-AST
+    #: surgery, so a column literally named "deferrable" is never touched.
+    _CONSTRAINT_ATTR_HINTS = ("DEFERRABLE", "INITIALLY")
+
+    @classmethod
+    def _strip_constraint_attributes(
+        cls, node: CreateTableStatement, ctx: TransformContext
+    ) -> CreateTableStatement:
+        """Drop PG constraint attributes (DEFERRABLE / INITIALLY …) for
+        targets whose constraints are always immediate (T-SQL, MySQL)."""
+        if ctx.target not in ("tsql", "mysql"):
+            return node
+        changed: list[PassthroughSQL] = []
+        dirty = False
+        for frag in node.table_constraints:
+            upper = frag.sql.upper()
+            if not any(h in upper for h in cls._CONSTRAINT_ATTR_HINTS):
+                changed.append(frag)
+                continue
+            stripped = cls._strip_options_via_sqlglot(frag)
+            if stripped is None or stripped == frag.sql:
+                changed.append(frag)
+                continue
+            ctx.warn(
+                "constraint attribute (DEFERRABLE / INITIALLY …) dropped: "
+                f"{ctx.target} constraints are always immediate",
+                "constraint_attribute",
+            )
+            changed.append(replace(frag, sql=stripped))
+            dirty = True
+        if not dirty:
+            return node
+        return replace(node, table_constraints=tuple(changed))
+
+    @staticmethod
+    def _strip_options_via_sqlglot(frag: PassthroughSQL) -> str | None:
+        """Remove DEFERRABLE-family options from a constraint fragment at
+        the sqlglot-AST level (wrapped in a scratch CREATE so the bare
+        fragment parses). Returns None when the surgery isn't possible —
+        the caller keeps the fragment untouched (honest passthrough)."""
+        import sqlglot
+
+        from unique.core.converter import sqlglot_dialect_name
+
+        read = sqlglot_dialect_name(frag.source_dialect)
+        try:
+            wrapped = sqlglot.parse_one(f"CREATE TABLE _x ({frag.sql})", read=read)
+            dirty = False
+            for n in wrapped.walk():
+                opts = n.args.get("options")
+                if not opts:
+                    continue
+                kept = [
+                    o
+                    for o in opts
+                    if not (
+                        isinstance(o, str)
+                        and ("DEFERRABLE" in o.upper() or "INITIALLY" in o.upper())
+                    )
+                ]
+                if len(kept) != len(opts):
+                    n.set("options", kept)
+                    dirty = True
+            if not dirty:
+                return frag.sql
+            exprs = wrapped.this.expressions
+            if len(exprs) != 1:
+                return None
+            return str(exprs[0].sql(dialect=read))
+        except Exception:
+            return None
 
     @staticmethod
     def _normalize_ilike(node: BinaryOp, ctx: TransformContext) -> ASTNode:

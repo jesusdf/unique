@@ -429,6 +429,13 @@ class CreateTableStatement(ASTNode):
     # outside a single column), kept as raw SQL fragments and re-transpiled
     # per dialect via sqlglot.
     table_constraints: tuple[PassthroughSQL, ...] = ()
+    # PostgreSQL table-binding clauses with no mechanical equivalent
+    # elsewhere: ``INHERITS (parent, …)`` and ``PARTITION OF parent FOR
+    # VALUES …``. Kept verbatim; the transformer degrades the whole
+    # statement to a carrier on targets without the concept (dropping
+    # them silently loses the table's defining structure).
+    inherits_clause: str | None = None
+    partition_of_clause: str | None = None
 
 
 @dataclass(frozen=True)
