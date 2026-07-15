@@ -923,6 +923,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         T-SQL 499→490 (85.3%), Oracle 170→168 — all three moved (a
         universal rewrite). Cumulative: T-SQL 1090→490, MySQL 579→233,
         Oracle 454→168.**
+        *Wave 26 (2026-07-15):* `SET SESSION AUTHORIZATION` (kept as
+        a "real SQL SET" in wave 1, but only PG has it — 6x MySQL + 6x
+        Oracle) degrades with its own carrier in the SET-option path
+        AND the passthrough; `DROP TYPE` on MySQL (no user-defined
+        types in any form, 5x) mirrors the sequence carrier. Tests:
+        TestSessionAuthorizationDegrades, TestMysqlUserTypesDegrade.
+        Sweep re-measure pending.
         *Wave 25 (2026-07-15):* index-rebuild refinements — PG
         opclasses (`roomno bpchar_ops`, error 35336) strip to the bare
         column; a filtered-index predicate outside T-SQL's restricted
