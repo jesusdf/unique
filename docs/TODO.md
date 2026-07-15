@@ -845,6 +845,16 @@ fix needs an **anonymized** regression fixture (never a private name).
         (−23), Oracle 202 flat (kept its path). Session cumulative
         from the honest baseline: T-SQL 1090→550 (84.0%), MySQL
         579→321 (89.9%), Oracle 454→202 (93.9%).**
+        *Wave 18 (2026-07-15):* dollar-quoted STRINGS in the PG lexer —
+        the class fix behind the wave-4/5 patches (rule of three). A
+        dollar-quoted literal NESTED in a body (`EXECUTE $q$…$q$`, the
+        18x transition-table trigger class) shredded into `$ q $`
+        token soup; the lexer now tokenizes `$$…$$`/`$tag$…$tag$` as
+        ONE STRING normalized to single-quote form (the Oracle q'…'
+        precedent), which routes outer bodies AND nested literals
+        through the same wave-5 splice path. All prior dollar-quote
+        tests keep passing. Tests: TestNestedDollarQuotedLiterals.
+        Sweep re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

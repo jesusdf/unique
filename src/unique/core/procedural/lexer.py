@@ -10,6 +10,7 @@ string literals, comments, keywords, identifiers, and operators.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -514,6 +515,23 @@ class Lexer:
                 self._advance()
             self._emit(TokenType.VARIABLE, self._sql[start : self._pos], line, col)
             return
+
+        # PostgreSQL dollar-quoted string: $$…$$ / $tag$…$tag$ — ONE
+        # STRING token, normalized to single-quote form (content quotes
+        # doubled) like the Oracle q'…' handler, so routine bodies and
+        # nested literals (EXECUTE $q$…$q$) share the same string path.
+        # No closing delimiter -> fall through (an UNKNOWN '$').
+        if ch == "$" and self._dialect == "postgresql":
+            m = re.match(r"\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$", self._sql[self._pos :])
+            if m:
+                delim = m.group(0)
+                end = self._sql.find(delim, self._pos + len(delim))
+                if end != -1:
+                    content = self._sql[self._pos + len(delim) : end]
+                    self._advance(end + len(delim) - self._pos)
+                    normalized = "'" + content.replace("'", "''") + "'"
+                    self._emit(TokenType.STRING, normalized, line, col)
+                    return
 
         # := assignment
         if ch == ":" and self._peek(1) == "=":

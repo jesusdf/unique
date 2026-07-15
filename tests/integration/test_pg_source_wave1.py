@@ -876,3 +876,45 @@ class TestArrayConstructsDegrade:
         out = _t("select array_agg(x) from t;", "postgresql")
         assert re.search(r"(?i)ARRAY_AGG\(x\)", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestNestedDollarQuotedLiterals:
+    """A dollar-quoted string INSIDE a plpgsql body (``EXECUTE
+    $q$…$q$``) is a literal, but the lexer shredded it into ``$ q $``
+    token soup (third dollar-quote patch — class fix: the PG lexer
+    tokenizes ``$tag$…$tag$`` as ONE STRING, normalized to
+    single-quote form like Oracle's q'…' handler, which also unifies
+    outer bodies with the wave-5 splice path)."""
+
+    def test_execute_dollar_string(self) -> None:
+        src = (
+            "create function dyn() returns int as $$\n"
+            "declare n int;\n"
+            "begin\n"
+            "  execute $q$ select count(*) from t $q$ into n;\n"
+            "  return n;\n"
+            "end$$ language plpgsql;"
+        )
+        out = _t(src, "oracle")
+        assert "$ q $" not in out, out
+        assert "$q$" not in out, out
+        assert re.search(r"(?i)'\s*select count\(\*\) from t\s*'", out), out
+
+    def test_outer_body_still_parses(self) -> None:
+        out = _t(
+            "create function ob(a int) returns int as $$\n"
+            "begin\n  return a + 1;\nend$$ language plpgsql;",
+            "mysql",
+        )
+        assert re.search(r"(?i)RETURN a \+ 1", out), out
+        assert "$" not in out.replace("DELIMITER $$", "").replace("END$$", ""), out
+
+    def test_nested_quotes_escape(self) -> None:
+        src = (
+            "create function nq() returns text as $$\n"
+            "begin\n"
+            "  return $x$it's here$x$;\n"
+            "end$$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"it''s here", out), out
