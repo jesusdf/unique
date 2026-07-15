@@ -505,9 +505,11 @@ def _tsql_index_predicate(pred: exp.Expression) -> str | None:
     return None
 
 
-def _pg_index_to_tsql(sql: str, read: str) -> str | None:
-    """Rebuild a PostgreSQL CREATE INDEX as valid T-SQL, or None to let
-    the generic sqlglot path try (expression indexes, exotic shapes)."""
+def _pg_index_rebuild(sql: str, read: str, dialect: str) -> str | None:
+    """Rebuild a PostgreSQL CREATE INDEX as valid T-SQL/MySQL, or None
+    to let the generic sqlglot path try (expression indexes, exotic
+    shapes). Both targets require an index NAME; MySQL has no filtered
+    indexes at all, T-SQL only a restricted predicate grammar."""
     # A physical-clause note from a prior T-SQL->PG pass (CLUSTERED /
     # WITH (...) / ON <fg>) must survive the rebuild: extract it before
     # parsing and re-inject its pieces below (round-trip contract).
@@ -547,7 +549,7 @@ def _pg_index_to_tsql(sql: str, read: str) -> str | None:
             inner = inner.this
         if not isinstance(inner, exp.Column):
             return None  # expression index: generic path
-        col = str(inner.sql(dialect="tsql"))
+        col = str(inner.sql(dialect="mysql" if dialect == "mysql" else "tsql"))
         if o.args.get("desc"):
             col += " DESC"
         cols.append(col)
@@ -556,8 +558,9 @@ def _pg_index_to_tsql(sql: str, read: str) -> str | None:
     table = index.args.get("table")
     if table is None:
         return None
-    table_sql = str(table.sql(dialect="tsql"))
-    name = str(index.this.sql(dialect="tsql")) if index.this else ""
+    write = "mysql" if dialect == "mysql" else "tsql"
+    table_sql = str(table.sql(dialect=write))
+    name = str(index.this.sql(dialect=write)) if index.this else ""
     if not name:
         pieces = [re.sub(r"\W+", "", table_sql)] + [
             re.sub(r"\W+", "", c) for c in cols[:3]
@@ -568,22 +571,22 @@ def _pg_index_to_tsql(sql: str, read: str) -> str | None:
     where_sql = ""
     dropped_where = ""
     if where is not None:
-        rendered = _tsql_index_predicate(where.this)
+        rendered = _tsql_index_predicate(where.this) if dialect == "tsql" else None
         if rendered is None:
             # Outside T-SQL's filtered-index grammar (error 10735). A
             # broader UNIQUE index would reject rows the partial one
             # allowed — degrade whole; a plain index just gets bigger.
             if tree.args.get("unique"):
                 reason = (
-                    "partial UNIQUE index predicate has no T-SQL filtered-"
-                    "index form; statement preserved as a comment"
+                    f"partial UNIQUE index predicate has no {dialect} "
+                    "filtered-index form; statement preserved as a comment"
                 )
                 body = "\n".join(f"-- {line}" for line in sql.strip().splitlines())
                 return f"-- UNIQUE: {reason}\n{body}"
             dropped_where = (
-                "\n-- UNIQUE: partial-index predicate dropped (outside "
-                "T-SQL's filtered-index grammar); the index is broader "
-                f"than the source's: {where.this.sql(dialect='tsql')}"
+                "\n-- UNIQUE: partial-index predicate dropped (no "
+                f"{dialect} filtered-index form); the index is broader "
+                f"than the source's: {where.this.sql(dialect=write)}"
             )
         else:
             where_sql = f" WHERE {rendered}"
@@ -595,7 +598,7 @@ def _pg_index_to_tsql(sql: str, read: str) -> str | None:
         stmt += f" {trailing}"
     if dropped_where:
         stmt += dropped_where
-    if unique and not where_sql:
+    if unique and not where_sql and dialect == "tsql":
         return (
             f"{stmt};\n-- UNIQUE: PostgreSQL unique indexes treat NULLs as "
             "distinct; T-SQL allows a single NULL per unique index"
@@ -638,9 +641,9 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     if (
         node.kind == "CREATE INDEX"
         and node.source_dialect == "postgresql"
-        and dialect == "tsql"
+        and dialect in ("tsql", "mysql")
     ):
-        rebuilt = _pg_index_to_tsql(node.sql, read)
+        rebuilt = _pg_index_rebuild(node.sql, read, dialect)
         if rebuilt is not None:
             return rebuilt
 

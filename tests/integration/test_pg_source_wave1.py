@@ -1235,3 +1235,33 @@ class TestQualifiedStarCountDegrades:
         out = _t("select count(*) from t;", "mysql")
         assert re.search(r"(?i)COUNT\(\*\)", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestPgIndexToMysql:
+    """MySQL also requires an index name (4x nameless) and has NO
+    filtered indexes at all: the wave-15 rebuild generalizes — name
+    synthesis and opclass strip apply, any WHERE drops with a note on
+    plain indexes and degrades WHOLE on unique ones."""
+
+    def test_nameless_index_named_mysql(self) -> None:
+        out = _t("create index on fkest(x, x10);", "mysql")
+        assert re.search(r"(?i)CREATE INDEX \w+ ON fkest", out), out
+
+    def test_partial_index_where_dropped_mysql(self) -> None:
+        out = _t("create index i1 on j1(id1) where id1 is not null;", "mysql")
+        assert "WHERE" not in out.upper(), out
+        assert re.search(r"(?i)CREATE INDEX i1 ON j1 \(id1\)", out), out
+        assert "UNIQUE:" in out, out
+
+    def test_partial_unique_degrades_mysql(self) -> None:
+        r = Transpiler().transpile(
+            "create unique index u1 on j1(id1) where id1 is not null;",
+            source="postgresql",
+            target="mysql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
