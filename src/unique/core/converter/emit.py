@@ -495,7 +495,13 @@ def _tsql_index_predicate(pred: exp.Expression) -> str | None:
             return f"{left} AND {right}"
         return None
     if isinstance(pred, (exp.EQ, exp.GT, exp.GTE, exp.LT, exp.LTE, exp.NEQ)):
-        return str(pred.sql(dialect="tsql"))
+        # Only plain column-vs-constant comparisons are legal there —
+        # arithmetic left sides are error 10735.
+        if isinstance(pred.this, exp.Column) and isinstance(
+            pred.expression, (exp.Literal, exp.Null, exp.Boolean)
+        ):
+            return str(pred.sql(dialect="tsql"))
+        return None
     return None
 
 
@@ -535,6 +541,10 @@ def _pg_index_to_tsql(sql: str, read: str) -> str | None:
     cols: list[str] = []
     for o in ordered:
         inner = o.this
+        # A PG operator class (roomno bpchar_ops) is a PG-only concept:
+        # keep the column, drop the opclass.
+        if isinstance(inner, exp.Opclass):
+            inner = inner.this
         if not isinstance(inner, exp.Column):
             return None  # expression index: generic path
         col = str(inner.sql(dialect="tsql"))
@@ -556,17 +566,35 @@ def _pg_index_to_tsql(sql: str, read: str) -> str | None:
     unique = "UNIQUE " if tree.args.get("unique") else ""
     where = params.args.get("where") if params else None
     where_sql = ""
+    dropped_where = ""
     if where is not None:
         rendered = _tsql_index_predicate(where.this)
         if rendered is None:
-            return None
-        where_sql = f" WHERE {rendered}"
+            # Outside T-SQL's filtered-index grammar (error 10735). A
+            # broader UNIQUE index would reject rows the partial one
+            # allowed — degrade whole; a plain index just gets bigger.
+            if tree.args.get("unique"):
+                reason = (
+                    "partial UNIQUE index predicate has no T-SQL filtered-"
+                    "index form; statement preserved as a comment"
+                )
+                body = "\n".join(f"-- {line}" for line in sql.strip().splitlines())
+                return f"-- UNIQUE: {reason}\n{body}"
+            dropped_where = (
+                "\n-- UNIQUE: partial-index predicate dropped (outside "
+                "T-SQL's filtered-index grammar); the index is broader "
+                f"than the source's: {where.this.sql(dialect='tsql')}"
+            )
+        else:
+            where_sql = f" WHERE {rendered}"
     stmt = (
         f"CREATE {unique}{physical_kw}INDEX {name} ON {table_sql} "
         f"({', '.join(cols)}){where_sql}"
     )
     if trailing:
         stmt += f" {trailing}"
+    if dropped_where:
+        stmt += dropped_where
     if unique and not where_sql:
         return (
             f"{stmt};\n-- UNIQUE: PostgreSQL unique indexes treat NULLs as "

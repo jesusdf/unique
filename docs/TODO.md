@@ -923,6 +923,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         T-SQL 499→490 (85.3%), Oracle 170→168 — all three moved (a
         universal rewrite). Cumulative: T-SQL 1090→490, MySQL 579→233,
         Oracle 454→168.**
+        *Wave 25 (2026-07-15):* index-rebuild refinements — PG
+        opclasses (`roomno bpchar_ops`, error 35336) strip to the bare
+        column; a filtered-index predicate outside T-SQL's restricted
+        grammar (arithmetic left sides, error 10735) drops the WHERE
+        with a broader-index note on plain indexes and degrades WHOLE
+        on UNIQUE ones (a broader unique index would reject rows the
+        partial one allowed); the predicate renderer now accepts only
+        column-vs-constant comparisons. Tests:
+        TestIndexRebuildRefinements. Sweep re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

@@ -1124,3 +1124,39 @@ class TestAggregateFilterRewrite:
         out = _t("select sum(x) filter (where y > 5) from t;", "tsql")
         assert "FILTER" not in out.upper(), out
         assert re.search(r"(?is)SUM\(CASE\s+WHEN y > 5 THEN x\s+END\)", out), out
+
+
+class TestIndexRebuildRefinements:
+    """Residual index shapes: a PG opclass (``roomno bpchar_ops``) is a
+    PG-only concept — strip it and keep the column (error 35336); a
+    filtered-index predicate outside T-SQL's restricted grammar
+    (``id1 % 1000 = 1``, error 10735) drops the WHERE with a note on a
+    non-unique index and degrades WHOLE on a unique one (a broader
+    UNIQUE index would change semantics)."""
+
+    def test_opclass_stripped(self) -> None:
+        out = _t(
+            "create unique index r_no on room using btree(roomno bpchar_ops);",
+            "tsql",
+        )
+        assert "bpchar_ops" not in out, out
+        assert re.search(r"(?i)CREATE UNIQUE INDEX r_no ON room \(roomno\)", out), out
+
+    def test_complex_predicate_nonunique_drops_where(self) -> None:
+        out = _t("create index i1 on j1(id1) where id1 % 1000 = 1;", "tsql")
+        assert "WHERE" not in out.upper(), out
+        assert re.search(r"(?i)CREATE INDEX i1 ON j1 \(id1\)", out), out
+        assert "UNIQUE:" in out, out
+
+    def test_complex_predicate_unique_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "create unique index u1 on j1(id1) where id1 % 1000 = 1;",
+            source="postgresql",
+            target="tsql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
