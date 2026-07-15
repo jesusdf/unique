@@ -1160,3 +1160,50 @@ class TestIndexRebuildRefinements:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, r.sql
+
+
+class TestSessionAuthorizationDegrades:
+    """``SET SESSION AUTHORIZATION`` kept its path in wave 1 as a
+    "real SQL SET", but only PostgreSQL has it (6x on MySQL + 6x on
+    Oracle); off PG it degrades to the documented carrier."""
+
+    @pytest.mark.parametrize("target", ["mysql", "oracle", "tsql"])
+    def test_session_authorization_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "SET SESSION AUTHORIZATION regress_user;",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_kept_on_pg(self) -> None:
+        out = _t("SET SESSION AUTHORIZATION regress_user;", "postgresql")
+        assert re.search(r"(?i)SET SESSION AUTHORIZATION", out), out
+        assert "UNIQUE:" not in out, out
+
+
+class TestMysqlUserTypesDegrade:
+    """MySQL has no user-defined types in any form; ``DROP TYPE IF
+    EXISTS t`` shipped raw (1064, 5x). Degrades with a warning on
+    MySQL; Oracle/T-SQL keep their native DROP TYPE."""
+
+    def test_drop_type_degrades_mysql(self) -> None:
+        r = Transpiler().transpile(
+            "drop type if exists compos;", source="postgresql", target="mysql"
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_drop_type_kept_on_oracle(self) -> None:
+        out = _t("drop type if exists compos;", "oracle")
+        assert re.search(r"(?i)DROP TYPE", out), out

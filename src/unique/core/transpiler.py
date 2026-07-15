@@ -2002,6 +2002,27 @@ class Transpiler:
             # engine-local knobs with no meaning elsewhere — the largest
             # class of the pg-source baseline (they error on every engine).
             _, code = split_leading_trivia(sql)
+            if re.match(r"(?is)^\s*SET\s+SESSION\s+AUTHORIZATION\b", code):
+                commented = "\n".join(
+                    f"-- {line}" if line.strip() else ""
+                    for line in sql.strip().splitlines()
+                )
+                return TranspileResult(
+                    sql=(
+                        f"-- UNIQUE: SET SESSION AUTHORIZATION has no "
+                        f"{target} equivalent; switch users natively.\n"
+                        f"{commented}"
+                    ),
+                    warnings=[
+                        _warn(
+                            "SET SESSION AUTHORIZATION commented out "
+                            f"(no {target} equivalent)",
+                            "set_option",
+                            source,
+                            target,
+                        )
+                    ],
+                )
             if re.match(
                 r"(?is)^\s*(?:SET\s+(?:LOCAL\s+|SESSION\s+(?!AUTHORIZATION\b))?"
                 r"(?!TRANSACTION\b|CONSTRAINTS\b|ROLE\b|TIME\s+ZONE\b)"

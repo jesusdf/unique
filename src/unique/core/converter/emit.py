@@ -658,6 +658,17 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     # engine). Real SQL SET forms (TRANSACTION, CONSTRAINTS, ROLE, SESSION
     # AUTHORIZATION) keep their path.
     if (
+        node.kind in ("SET", "COMMAND")
+        and node.source_dialect == "postgresql"
+        and dialect != "postgresql"
+        and re.match(r"(?is)^\s*SET\s+SESSION\s+AUTHORIZATION\b", node.sql)
+    ):
+        return (
+            f"-- UNIQUE: SET SESSION AUTHORIZATION has no {dialect} "
+            f"equivalent; switch users natively.\n{_comment_block(node.sql)}"
+        )
+
+    if (
         node.kind == "SET"
         and node.source_dialect == "postgresql"
         and dialect != "postgresql"
@@ -1728,6 +1739,12 @@ def _emit_drop(node: DropStatement, dialect: str) -> str:
             "-- UNIQUE: MySQL has no sequences (use an AUTO_INCREMENT "
             "column); original preserved:\n"
             f"-- DROP SEQUENCE {exists}{name}"
+        )
+    if node.object_type == "TYPE" and dialect == "mysql":
+        # MySQL has no user-defined types in any form.
+        return (
+            "-- UNIQUE: MySQL has no user-defined types; original "
+            f"preserved:\n-- DROP TYPE {exists}{name}"
         )
     if node.object_type == "INDEX":
         if dialect in ("tsql", "mysql"):
