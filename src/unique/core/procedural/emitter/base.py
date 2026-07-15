@@ -40,6 +40,7 @@ from unique.core.ast_nodes import (
     ExecuteStatement,
     ExitStatement,
     ForLoopStatement,
+    GetDiagnosticsStatement,
     IfStatement,
     Literal,
     LoopStatement,
@@ -299,6 +300,7 @@ class ProceduralEmitter:
             ExceptionBlock: self._emit_exception_block,
             ExecuteStatement: self._emit_execute,
             CallStatement: self._emit_call,
+            GetDiagnosticsStatement: self._emit_get_diagnostics,
             PerformStatement: self._emit_perform,
             PrintStatement: self._emit_print,
             RaiseErrorStatement: self._emit_raise_error,
@@ -1561,6 +1563,14 @@ class ProceduralEmitter:
             if a:
                 cleaned.append(a)
         return cleaned
+
+    def _emit_get_diagnostics(self, node: GetDiagnosticsStatement) -> str:
+        """MySQL native form (condition items need CONDITION 1); the PG
+        emitter overrides with its own spelling."""
+        pairs = ", ".join(f"{v} = {item}" for v, item in node.items)
+        cond = "CONDITION 1 " if node.stacked else ""
+        stacked = "STACKED " if node.stacked else ""
+        return f"GET {stacked}DIAGNOSTICS {cond}{pairs};"
 
     def _emit_perform(self, node: PerformStatement) -> str:
         """Default (MySQL): ``DO <expr>;`` evaluates and discards —

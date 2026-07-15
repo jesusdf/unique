@@ -28,6 +28,7 @@ from unique.core.ast_nodes import (
     ExceptionHandler,
     ExecuteStatement,
     ForLoopStatement,
+    GetDiagnosticsStatement,
     IfStatement,
     LoopStatement,
     NullStatement,
@@ -263,6 +264,12 @@ class PlsqlStatementsMixin(ParserBase):
             return self._parse_plsql_raise()
         elif self._dialect == "postgresql" and tok.upper_value == "PERFORM":
             return self._parse_plsql_perform()
+        elif tok.upper_value == "GET" and self._peek(1).upper_value in (
+            "DIAGNOSTICS",
+            "STACKED",
+            "CURRENT",
+        ):
+            return self._parse_get_diagnostics()
         elif tok.is_keyword("EXECUTE") and self._peek(1).is_keyword("IMMEDIATE"):
             return self._parse_plsql_execute_immediate()
         elif tok.is_keyword("EXEC", "EXECUTE"):
@@ -564,6 +571,34 @@ class PlsqlStatementsMixin(ParserBase):
         value = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)
         return AssignmentStatement(target=target, value=value)
+
+    def _parse_get_diagnostics(self) -> ASTNode:
+        """GET [STACKED|CURRENT] DIAGNOSTICS v = ITEM[, …];"""
+        self._advance()  # GET
+        stacked = False
+        if self._current().upper_value == "STACKED":
+            stacked = True
+            self._advance()
+        elif self._current().upper_value == "CURRENT":
+            self._advance()
+        self._advance()  # DIAGNOSTICS
+        items: list[tuple[str, str]] = []
+        guard = 0
+        while not self._at_end() and self._current().type != TokenType.SEMICOLON:
+            guard += 1
+            if guard > 50:
+                break
+            var = self._parse_identifier()
+            if self._current().type == TokenType.OPERATOR or (
+                self._current().type == TokenType.ASSIGN
+            ):
+                self._advance()  # = or :=
+            item = self._parse_identifier()
+            items.append((var, item.upper()))
+            if not self._match_type(TokenType.COMMA):
+                break
+        self._match_type(TokenType.SEMICOLON)
+        return GetDiagnosticsStatement(items=tuple(items), stacked=stacked)
 
     def _parse_plsql_perform(self) -> ASTNode:
         """plpgsql PERFORM: evaluate and discard (PG-only spelling)."""

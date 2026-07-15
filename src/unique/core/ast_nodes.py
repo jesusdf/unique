@@ -598,6 +598,18 @@ class TryCatchBlock(ASTNode):
 
 
 @dataclass(frozen=True)
+class GetDiagnosticsStatement(ASTNode):
+    """``GET [STACKED] DIAGNOSTICS v = ITEM, …`` (plpgsql/MySQL).
+
+    ``items`` holds (variable, ITEM) pairs. PG/MySQL keep native forms;
+    Oracle/T-SQL convert to plain assignments in the transformer.
+    """
+
+    items: tuple[tuple[str, str], ...] = ()
+    stacked: bool = False
+
+
+@dataclass(frozen=True)
 class PerformStatement(ASTNode):
     """plpgsql ``PERFORM <expr|select-tail>`` — evaluate and discard.
 

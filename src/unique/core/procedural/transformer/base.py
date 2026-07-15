@@ -45,6 +45,7 @@ from unique.core.ast_nodes import (
     ExecuteStatement,
     ExitStatement,
     ForLoopStatement,
+    GetDiagnosticsStatement,
     IfStatement,
     LoopStatement,
     NullStatement,
@@ -269,6 +270,7 @@ class ProceduralTransformer:
             ExecuteStatement: self._transform_execute,
             PrintStatement: self._transform_print,
             RaiseErrorStatement: self._transform_raise_error,
+            GetDiagnosticsStatement: self._transform_get_diagnostics,
             PerformStatement: self._transform_perform,
             ReturnStatement: self._transform_return,
             CursorDeclaration: self._transform_cursor_decl,
@@ -1718,6 +1720,79 @@ class ProceduralTransformer:
         return RaiseErrorStatement(
             message=new_msg, severity=node.severity, state=node.state
         )
+
+    #: GET DIAGNOSTICS item -> target expression (None = no equivalent,
+    #: the item degrades to a carrier line). MySQL keeps condition items
+    #: native (GET STACKED DIAGNOSTICS CONDITION 1 …).
+    _DIAG_ITEMS: dict[str, dict[str, str | None]] = {
+        "oracle": {
+            "ROW_COUNT": "SQL%ROWCOUNT",
+            "MESSAGE_TEXT": "SQLERRM",
+            "RETURNED_SQLSTATE": "TO_CHAR(SQLCODE)",
+            "PG_EXCEPTION_CONTEXT": "DBMS_UTILITY.FORMAT_ERROR_BACKTRACE",
+            "PG_CONTEXT": "DBMS_UTILITY.FORMAT_ERROR_BACKTRACE",
+        },
+        "tsql": {
+            "ROW_COUNT": "@@ROWCOUNT",
+            "MESSAGE_TEXT": "ERROR_MESSAGE()",
+            "RETURNED_SQLSTATE": "CAST(ERROR_STATE() AS NVARCHAR(5))",
+            "PG_EXCEPTION_CONTEXT": (
+                "CONCAT(ERROR_PROCEDURE(), ' line ', ERROR_LINE())"
+            ),
+            "PG_CONTEXT": "CONCAT(ERROR_PROCEDURE(), ' line ', ERROR_LINE())",
+        },
+        "mysql": {
+            "ROW_COUNT": "ROW_COUNT()",
+        },
+    }
+
+    def _transform_get_diagnostics(self, node: GetDiagnosticsStatement) -> ASTNode:
+        """PG/MySQL keep the native GET DIAGNOSTICS; Oracle/T-SQL become
+        plain assignments through the existing emitters. Items with no
+        equivalent degrade to a carrier line with a warning."""
+        if self._target == "postgresql":
+            return node
+        table = self._DIAG_ITEMS.get(self._target, {})
+        out: list[ASTNode] = []
+        native_items: list[tuple[str, str]] = []
+        for var, item in node.items:
+            new_var = self._transform_var_name(var)
+            expr = table.get(item)
+            if expr is not None:
+                if item == "RETURNED_SQLSTATE":
+                    self._warnings.append(
+                        "RETURNED_SQLSTATE mapped to the target's error "
+                        "code/state — different value domain"
+                    )
+                out.append(
+                    AssignmentStatement(
+                        target=new_var,
+                        value=RawSQL(sql=expr, reason="expression"),
+                    )
+                )
+            elif self._target == "mysql" and item in (
+                "MESSAGE_TEXT",
+                "RETURNED_SQLSTATE",
+                "CLASS_ORIGIN",
+                "SUBCLASS_ORIGIN",
+            ):
+                native_items.append((new_var, item))
+            else:
+                reason = (
+                    f"GET DIAGNOSTICS item {item} has no {self._target} "
+                    "equivalent; preserved as a comment"
+                )
+                self._warnings.append(reason)
+                out.append(
+                    RawSQL(sql=f"GET DIAGNOSTICS {var} = {item};", reason=reason)
+                )
+        if native_items:
+            out.append(GetDiagnosticsStatement(items=tuple(native_items), stacked=True))
+        if len(out) == 1:
+            return out[0]
+        from unique.core.ast_nodes import StatementList
+
+        return StatementList(statements=tuple(out))
 
     def _transform_perform(self, node: PerformStatement) -> ASTNode:
         """PERFORM with a FROM tail (multi-row discard, side-effect

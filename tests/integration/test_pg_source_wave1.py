@@ -1600,3 +1600,50 @@ class TestOracleUnderscoreLocals:
         assert re.search(r"(?i)uq_msg text", out), out
         assert re.search(r"(?i)uq_msg := 'x'", out), out
         assert re.search(r"'_msg: ' \|\| uq_msg", out), out
+
+
+class TestGetDiagnostics:
+    """plpgsql ``GET [STACKED] DIAGNOSTICS v = ITEM, …`` (15x) mangled
+    to ``get AS stacked;``. It converts to plain per-target
+    assignments — Oracle SQLERRM/SQL%ROWCOUNT/FORMAT_ERROR_BACKTRACE,
+    T-SQL ERROR_*()/@@ROWCOUNT — via the existing assignment emitters;
+    PG keeps the native form."""
+
+    _ROWS = (
+        "create function gd1() returns int as $$\n"
+        "declare n int;\n"
+        "begin\n"
+        "  update t set a = 1;\n"
+        "  get diagnostics n = row_count;\n"
+        "  return n;\n"
+        "end$$ language plpgsql;"
+    )
+    _STACKED = (
+        "create function gd2() returns text as $$\n"
+        "declare m text;\n"
+        "begin\n"
+        "  begin\n    perform 1;\n"
+        "  exception when others then\n"
+        "    get stacked diagnostics m = message_text;\n"
+        "  end;\n"
+        "  return m;\n"
+        "end$$ language plpgsql;"
+    )
+
+    def test_row_count_oracle(self) -> None:
+        out = _t(self._ROWS, "oracle")
+        assert re.search(r"(?i)n := SQL%ROWCOUNT", out), out
+        assert "diagnostics" not in out.lower(), out
+
+    def test_row_count_tsql(self) -> None:
+        out = _t(self._ROWS, "tsql")
+        assert re.search(r"(?i)SET @n = @@ROWCOUNT", out), out
+        assert "diagnostics" not in out.lower(), out
+
+    def test_message_text_oracle(self) -> None:
+        out = _t(self._STACKED, "oracle")
+        assert re.search(r"(?i)m := SQLERRM", out), out
+
+    def test_native_kept_on_pg(self) -> None:
+        out = _t(self._ROWS, "postgresql")
+        assert re.search(r"(?i)GET DIAGNOSTICS n = ROW_COUNT", out), out

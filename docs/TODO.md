@@ -1113,6 +1113,17 @@ fix needs an **anonymized** regression fixture (never a private name).
         re-measure done: **flat at `22f63f4` — necessary but not
         sufficient (the family's next blocker is GET STACKED
         DIAGNOSTICS itself; wave-8 pattern, honestly recorded).**
+        *Wave 34 (2026-07-15, deep chains):* `GET [STACKED] DIAGNOSTICS
+        v = ITEM, …` (15x, mangled to `get AS stacked;`) — new IR node;
+        Oracle/T-SQL convert to plain assignments through the EXISTING
+        emitters (ROW_COUNT→SQL%ROWCOUNT/@@ROWCOUNT, MESSAGE_TEXT→
+        SQLERRM/ERROR_MESSAGE(), PG_CONTEXT→FORMAT_ERROR_BACKTRACE/
+        ERROR_PROCEDURE+LINE; RETURNED_SQLSTATE maps with a
+        domain-difference warning); MySQL keeps ROW_COUNT() and the
+        native CONDITION-1 form for condition items; PG verbatim.
+        Unmappable items (pg_routine_oid) degrade per-item with a
+        warning. Tests: TestGetDiagnostics (4). Sweep re-measure
+        pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

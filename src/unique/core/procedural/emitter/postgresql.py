@@ -14,6 +14,7 @@ from unique.core.ast_nodes import (
     CallStatement,
     CreateTriggerStatement,
     CursorDeclaration,
+    GetDiagnosticsStatement,
     ParameterDefinition,
     PerformStatement,
     PrintStatement,
@@ -80,6 +81,11 @@ class PostgresEmitter(ProceduralEmitter):
 
     def _empty_block_filler(self) -> str | None:
         return "NULL;"
+
+    def _emit_get_diagnostics(self, node: GetDiagnosticsStatement) -> str:
+        pairs = ", ".join(f"{v} = {item}" for v, item in node.items)
+        stacked = "STACKED " if node.stacked else ""
+        return f"GET {stacked}DIAGNOSTICS {pairs};"
 
     def _emit_perform(self, node: PerformStatement) -> str:
         expr = self._emit_node(node.expression) if node.expression else "0"
