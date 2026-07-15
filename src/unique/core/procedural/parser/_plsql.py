@@ -31,6 +31,7 @@ from unique.core.ast_nodes import (
     IfStatement,
     LoopStatement,
     NullStatement,
+    ParameterDefinition,
     PerformStatement,
     PragmaDeclaration,
     PrintStatement,
@@ -170,6 +171,20 @@ class PlsqlStatementsMixin(ParserBase):
 
         # Variable: name type [:= value];
         name = self._parse_identifier()
+
+        # PG's name-first cursor: ``c1 CURSOR [(params)] FOR <select>``
+        # (the keyword-first Oracle form is handled above); unparsed it
+        # shredded the whole declare section.
+        if self._dialect == "postgresql" and self._current().is_keyword("CURSOR"):
+            self._advance()
+            cparams: list[ParameterDefinition] = []
+            if self._current().type == TokenType.LPAREN:
+                cparams = self._parse_parameter_list()
+            cquery: ASTNode | None = None
+            if self._match_keyword("FOR") or self._match_keyword("IS"):
+                cquery = self._parse_embedded_dml()
+            self._match_type(TokenType.SEMICOLON)
+            return CursorDeclaration(name=name, query=cquery, parameters=tuple(cparams))
 
         # Check for type_reference (%TYPE, %ROWTYPE)
         data_type = self._parse_data_type_or_reference()
@@ -494,12 +509,19 @@ class PlsqlStatementsMixin(ParserBase):
         """Parse OPEN cursor [FOR select]."""
         self._expect_keyword("OPEN")
         cursor_name = self._parse_identifier()
+        args = ""
+        if self._current().type == TokenType.LPAREN:
+            args = self._capture_call_args().strip()
+            if args.startswith("(") and args.endswith(")"):
+                args = args[1:-1].strip()
         query: ASTNode | None = None
         if self._match_keyword("FOR"):
             query = self._parse_embedded_dml()
         else:
             self._match_type(TokenType.SEMICOLON)
-        return CursorOperation(operation="OPEN", cursor_name=cursor_name, query=query)
+        return CursorOperation(
+            operation="OPEN", cursor_name=cursor_name, query=query, args=args
+        )
 
     def _parse_plsql_fetch(self) -> ASTNode:
         """Parse FETCH cursor INTO vars."""

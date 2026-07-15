@@ -1543,3 +1543,40 @@ class TestInsertQualifiedColumns:
         )
         assert re.search(r"(?i)INSERT INTO t5 \(a\)", out), out
         assert re.search(r"(?i)VALUES\s*\(9\)", out), out
+
+
+class TestParameterizedCursors:
+    """PG's name-first ``c1 CURSOR (p1 int) FOR …`` shredded the declare
+    section (``c1 cursor; for select; …`` garbage) and ``OPEN c1(5)``
+    dropped its argument as a stray statement. Oracle/PG have native
+    parameterized cursors; T-SQL/MySQL do not — the routine degrades
+    whole there."""
+
+    _SRC = (
+        "create function pc() returns int as $$\n"
+        "declare c1 cursor (p1 int) for select a from t where a > p1;\n"
+        "begin\n  open c1(5);\n  close c1;\n  return 1;\nend$$ "
+        "language plpgsql;"
+    )
+
+    def test_oracle_native(self) -> None:
+        out = _t(self._SRC, "oracle")
+        assert re.search(r"(?is)CURSOR c1\s*\(p1 .*?\)\s*IS\s*SELECT", out), out
+        assert re.search(r"(?i)OPEN c1\s*\(5\)", out), out
+        assert "for select;" not in out.lower(), out
+
+    def test_pg_native(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        assert re.search(r"(?is)c1 CURSOR \(p1 int\) FOR\s+SELECT", out), out
+        assert re.search(r"(?i)OPEN c1\s*\(5\)", out), out
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql"])
+    def test_degrades_elsewhere(self, target: str) -> None:
+        r = Transpiler().transpile(self._SRC, source="postgresql", target=target)
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert any("cursor" in w.message.lower() for w in r.warnings), r.warnings

@@ -1054,8 +1054,14 @@ class ProceduralEmitter:
             # A query-less cursor VARIABLE (T-SQL ``DECLARE @cur CURSOR;``):
             # PL/SQL's counterpart is a ref cursor (``CURSOR name;`` needs IS).
             return f"{node.name} SYS_REFCURSOR;"
-        # Default: Oracle PL/SQL: CURSOR name IS <select>;
-        return f"CURSOR {node.name} IS {query_str};"
+        # Default: Oracle PL/SQL: CURSOR name[(params)] IS <select>;
+        params = ""
+        if node.parameters:
+            rendered = ", ".join(
+                f"{p.name} {self._emit_data_type(p.data_type)}" for p in node.parameters
+            )
+            params = f"({rendered})"
+        return f"CURSOR {node.name}{params} IS {query_str};"
 
     # ---------------------------------------------------------------
     # Variable operations
@@ -1756,6 +1762,8 @@ class ProceduralEmitter:
             if node.query:
                 query_str = self._emit_node(node.query)
                 return self._emit_cursor_open(node.cursor_name, query_str)
+            if node.args:
+                return f"OPEN {node.cursor_name}({node.args});"
             return f"OPEN {node.cursor_name};"
         elif op == "FETCH":
             into_str = ", ".join(node.into_vars)

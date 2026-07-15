@@ -1011,6 +1011,10 @@ class ProceduralTransformer:
             for s in node.body
         ):
             culprit = "'record' variable"
+        elif self._target in ("tsql", "mysql") and any(
+            isinstance(s, CursorDeclaration) and s.parameters for s in node.body
+        ):
+            culprit = "parameterized cursor"
         elif any(
             p.data_type.name.upper() in self._PG_PSEUDO_TYPES for p in node.parameters
         ):
@@ -1741,10 +1745,22 @@ class ProceduralTransformer:
     def _transform_cursor_decl(self, node: CursorDeclaration) -> CursorDeclaration:
         new_name = self._transform_var_name(node.name)
         new_query = self._transform_node(node.query) if node.query else None
-        return CursorDeclaration(name=new_name, query=new_query)
+        # parameters must ride along (the field existed but was dropped
+        # here — latent silent loss found by the wave-32 analysis pass).
+        new_params = tuple(
+            ParameterDefinition(
+                name=p.name,
+                data_type=self._transform_data_type(p.data_type),
+                direction=p.direction,
+                default=p.default,
+            )
+            for p in node.parameters
+        )
+        return CursorDeclaration(name=new_name, query=new_query, parameters=new_params)
 
     def _transform_cursor_op(self, node: CursorOperation) -> ASTNode:
         new_name = self._transform_var_name(node.cursor_name)
+        new_args = self._transform_var_in_sql(node.args) if node.args else ""
         bare = new_name.lower().lstrip("@").lstrip(":")
         if bare in self._dropped_cursor_params:
             if node.operation.upper() == "OPEN" and node.query is not None:
@@ -1769,6 +1785,7 @@ class ProceduralTransformer:
             cursor_name=new_name,
             into_vars=new_into,
             query=new_query,
+            args=new_args,
         )
 
     def _transform_for_loop(self, node: ForLoopStatement) -> ASTNode:

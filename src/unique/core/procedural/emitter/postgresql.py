@@ -70,7 +70,13 @@ class PostgresEmitter(ProceduralEmitter):
         )
         if not query_str:
             return f"{node.name} REFCURSOR;"
-        return f"{node.name} CURSOR FOR {query_str};"
+        params = ""
+        if node.parameters:
+            rendered = ", ".join(
+                f"{p.name} {self._emit_data_type(p.data_type)}" for p in node.parameters
+            )
+            params = f" ({rendered})"
+        return f"{node.name} CURSOR{params} FOR {query_str};"
 
     def _empty_block_filler(self) -> str | None:
         return "NULL;"

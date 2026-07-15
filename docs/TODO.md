@@ -1086,6 +1086,17 @@ fix needs an **anonymized** regression fixture (never a private name).
         →PG 648→396 (93.8%), →Oracle 555→323 (94.8%). The residue on
         all six directions is now long-tail multi-blocker chains
         (M4-scale deep dives, diminishing per-wave yields).**
+        *Wave 32 (2026-07-15, deep chains):* parameterized cursors —
+        PG's name-first `c1 CURSOR (p1 int) FOR …` shredded the whole
+        declare section and `OPEN c1(5)` dropped its argument as a
+        stray statement. Parsed properly now (name-first path +
+        `CursorOperation.args`); Oracle renders its native
+        `CURSOR c1(p1 t) IS …`, PG keeps `c1 CURSOR (p1 int) FOR …`;
+        T-SQL/MySQL (no parameterized cursors) degrade the routine
+        whole. The analysis-before-change pass caught a LATENT silent
+        loss on the way: `_transform_cursor_decl` rebuilt the node
+        without its `parameters` field — fixed. Tests:
+        TestParameterizedCursors. Sweep re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

@@ -742,6 +742,8 @@ class CursorOperation(ASTNode):
     cursor_name: str
     into_vars: tuple[str, ...] = ()
     query: ASTNode | None = None
+    #: OPEN c(args) — a parameterized cursor's actual arguments (raw text).
+    args: str = ""
 
 
 @dataclass(frozen=True)
