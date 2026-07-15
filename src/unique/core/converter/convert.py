@@ -886,6 +886,14 @@ def _convert_create_table(
             elif isinstance(prop, exp.PartitionedOfProperty):
                 partition_of_clause = prop.sql(dialect=sg)
 
+    # CREATE TABLE … [AS] SELECT: sqlglot parks the query in
+    # ``expression``; never reading it silently dropped the whole CTAS
+    # body (MySQL's no-AS spelling included).
+    as_select = None
+    select_expr = expr.args.get("expression")
+    if isinstance(select_expr, exp.Select):
+        as_select = _convert_select(select_expr)
+
     return CreateTableStatement(
         table=table,
         columns=tuple(columns),
@@ -893,6 +901,7 @@ def _convert_create_table(
         table_constraints=tuple(constraints),
         inherits_clause=inherits_clause,
         partition_of_clause=partition_of_clause,
+        as_select=as_select,
     )
 
 

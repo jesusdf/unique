@@ -25,6 +25,10 @@ def _t(sql: str, target: str) -> str:
     return Transpiler().transpile(sql, source="postgresql", target=target).sql
 
 
+def _t2(sql: str, source: str, target: str) -> str:
+    return Transpiler().transpile(sql, source=source, target=target).sql
+
+
 class TestPgGucSettings:
     @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
     def test_guc_assignment_degrades(self, target: str) -> None:
@@ -1402,3 +1406,29 @@ class TestMysqlSessionKnobsDegrade:
         # a plain user-variable SET is NOT a session knob; whatever its
         # translation, it must not get the session-setting carrier
         assert "session setting" not in r.sql.lower(), r.sql
+
+
+class TestMysqlCtasAndTypes:
+    """mysql-source wave M2: `CREATE TABLE t [AS] SELECT …` silently
+    LOST its query (the converter never read sqlglot's `expression` —
+    0 warnings, the worst class); MySQL `DOUBLE(11,0)` maps to PG
+    `DOUBLE PRECISION` which takes no params; and `$a` is a legal
+    MySQL table name that PG needs quoted."""
+
+    def test_ctas_keeps_query_pg(self) -> None:
+        out = _t2("create table tmp select 1+2 as s, 'a' as c;", "mysql", "postgresql")
+        assert re.search(r"(?i)CREATE TABLE tmp AS", out), out
+        assert re.search(r"(?i)SELECT 1 \+ 2 AS s", out), out
+
+    def test_ctas_keeps_query_tsql(self) -> None:
+        out = _t2("create table tmp as select 1 as x;", "mysql", "tsql")
+        assert re.search(r"(?i)SELECT 1 AS x", out), out
+
+    def test_double_precision_params_dropped_pg(self) -> None:
+        out = _t2("create table d2 (price double(11,0));", "mysql", "postgresql")
+        assert re.search(r"(?i)DOUBLE PRECISION\s*(?!\()", out), out
+        assert "DOUBLE PRECISION(" not in out.upper(), out
+
+    def test_dollar_table_name_quoted_pg(self) -> None:
+        out = _t2("create table $a as select 1 as x;", "mysql", "postgresql")
+        assert '"$a"' in out, out

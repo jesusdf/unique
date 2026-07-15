@@ -1018,6 +1018,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         `351751c` (2026-07-15): mysql→T-SQL 988→756 (−232, 87.8%),
         mysql→PG 648→503 (−145, 92.1%), mysql→Oracle 555→323 (−232,
         94.8%).**
+        *Wave M2 (mysql-source, 2026-07-15):* `CREATE TABLE t [AS]
+        SELECT …` silently LOST its query on every source — the
+        converter never read sqlglot's `expression` slot (0 warnings,
+        worst class; MySQL's no-AS spelling was the 161x `CREATE
+        TABLE` block in →PG). Also: MySQL `DOUBLE(11,0)` display
+        widths drop for PG's parameterless `DOUBLE PRECISION`, and
+        leading-`$` identifiers (legal in MySQL) quote on PG. Tests:
+        TestMysqlCtasAndTypes. Sweep re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

@@ -1476,9 +1476,11 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     )
                     or (
                         # PostgreSQL BYTEA / BLOB take no length (a MySQL
-                        # VARBINARY(64) maps to BYTEA, not BYTEA(64)).
+                        # VARBINARY(64) maps to BYTEA, not BYTEA(64)); and
+                        # DOUBLE PRECISION takes no display width (MySQL's
+                        # DOUBLE(11,0) is a display hint, not a precision).
                         dialect == "postgresql"
-                        and dtype.upper() in ("BYTEA", "BLOB")
+                        and dtype.upper() in ("BYTEA", "BLOB", "DOUBLE PRECISION")
                     )
                     or (
                         # Oracle LOB types take no length (BLOB/CLOB, not BLOB(255)).

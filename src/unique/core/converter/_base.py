@@ -767,6 +767,9 @@ def _ident(name: str, quoted: bool, dialect: str | None) -> str:
         return _quote_ident(name, dialect)
     if dialect == "oracle" and name.startswith("_"):
         return _quote_ident(name, dialect)
+    if dialect == "postgresql" and name.startswith("$"):
+        # A legal MySQL identifier; PG can't start one with '$' unquoted.
+        return _quote_ident(name, dialect)
     return name
 
 
