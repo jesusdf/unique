@@ -2076,3 +2076,26 @@ class TestNullsafeValuePosition:
     def test_predicate_position_still_bare(self) -> None:
         out = _t("select a from t1 where b is distinct from c;", "tsql")
         assert re.search(r"(?is)WHERE NOT EXISTS \(SELECT", out), out
+
+
+class TestReturningOutputPrefix:
+    """wave 50: PG RETURNING lowers to T-SQL OUTPUT, but T-SQL
+    requires every OUTPUT item to carry the INSERTED./DELETED.
+    prefix — bare ``OUTPUT *`` / ``OUTPUT a, b`` shipped invalid
+    (13x of pg→tsql)."""
+
+    def test_update_returning_star(self) -> None:
+        out = _t("update t1 set a = 1 where b = 2 returning *;", "tsql")
+        assert re.search(r"(?i)OUTPUT INSERTED\.\*", out), out
+
+    def test_insert_returning_star(self) -> None:
+        out = _t("insert into t1 (a) values (1) returning *;", "tsql")
+        assert re.search(r"(?i)OUTPUT INSERTED\.\*", out), out
+
+    def test_delete_returning_star(self) -> None:
+        out = _t("delete from t1 where a = 1 returning *;", "tsql")
+        assert re.search(r"(?i)OUTPUT DELETED\.\*", out), out
+
+    def test_update_returning_columns(self) -> None:
+        out = _t("update t1 set a = 1 returning a, b;", "tsql")
+        assert re.search(r"(?i)OUTPUT INSERTED\.a, INSERTED\.b", out), out

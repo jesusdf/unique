@@ -158,6 +158,12 @@ def find_leftover_tokens(sql: str, target: str) -> list[str]:
     return found
 
 
+_TSQL_OUTPUT_CLAUSE_RE = re.compile(
+    r"(?i)\bOUTPUT\s+(?:INSERTED|DELETED)\.(?:\*|\w+)"
+    r"(?:\s*,\s*(?:INSERTED|DELETED)\.(?:\*|\w+))*"
+)
+
+
 def gate_reason(sql: str, target: str) -> str | None:
     """Why *sql* must not ship as ``target`` output, or None if it may.
 
@@ -178,6 +184,10 @@ def gate_reason(sql: str, target: str) -> str | None:
     for stmt in split_statements(sql, target):
         if not is_executable(stmt):
             continue
+        if target == "tsql":
+            # sqlglot's tsql reader cannot parse a (valid) OUTPUT clause
+            # followed by WHERE; drop it for the parse check only.
+            stmt = _TSQL_OUTPUT_CLAUSE_RE.sub(" ", stmt)
         try:
             sqlglot.parse(stmt, read=dialect, error_level=sqlglot.ErrorLevel.RAISE)
         except Exception as e:

@@ -1277,8 +1277,23 @@ fix needs an **anonymized** regression fixture (never a private name).
         `CASE … END = 1` (12x of pg→tsql — the trailing `= 1` is not
         a value there); the value position now keeps just the CASE
         (never NULL, so the two-armed form is exact). Tests:
-        TestNullsafeValuePosition. *Measurement pending next pg-corpus
-        cycle.*
+        TestNullsafeValuePosition. **Waves 48+49 measured at `825d8cf`
+        (2026-07-16, clean relaunch — the first cycle caught wave 49
+        landing mid-measure): mysql→PG 327→256 (96.0%), mysql→T-SQL
+        419→416 (93.2%), mysql→Oracle 296→301 (95.1%, honest +5 —
+        un-carriered union arms now reach the next Oracle blocker).
+        Standing: pg-source {374/180/149} at 6be4e8c, mysql-source
+        {416/256/301}.**
+        *Wave 50 (2026-07-16):* PG RETURNING lowered to T-SQL OUTPUT
+        with BARE items — T-SQL requires the INSERTED./DELETED. prefix
+        on every one (13x of pg→tsql: `OUTPUT *`, `OUTPUT a, b`).
+        Items now qualify on the sqlglot AST (DELETE→DELETED, else
+        INSERTED — PG returns the new row); DELETE's OUTPUT moves
+        after the table (sqlglot renders it before FROM, which not
+        even its reader accepts); the output gate drops the (valid)
+        OUTPUT clause before its tsql reparse — a sqlglot reader gap,
+        not an output defect. Tests: TestReturningOutputPrefix.
+        *Measurement pending next pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

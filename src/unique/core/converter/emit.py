@@ -697,6 +697,24 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
     return _emit_expression(node, dialect)
 
 
+def _prefix_tsql_output_items(e: exp.Expression) -> None:
+    """Qualify RETURNING/OUTPUT items with INSERTED./DELETED. in place.
+
+    DELETE exposes only DELETED; INSERT/UPDATE return the new row, so
+    INSERTED matches PG's RETURNING semantics."""
+    returning = e.find(exp.Returning)
+    if returning is None:
+        return
+    prefix = "DELETED" if isinstance(e, exp.Delete) else "INSERTED"
+    for item in list(returning.expressions):
+        target = item.this if isinstance(item, exp.Alias) else item
+        if isinstance(target, exp.Star):
+            # exp.column("*") would make a quotable identifier ([*]).
+            target.replace(exp.Column(this=exp.Star(), table=exp.to_identifier(prefix)))
+        elif isinstance(target, exp.Column) and not target.args.get("table"):
+            target.set("table", exp.to_identifier(prefix))
+
+
 def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     """Re-transpile a passthrough statement to the target dialect.
 
@@ -856,15 +874,30 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     try:
         # Parse → quote reserved-word identifiers → generate, so a passthrough
         # CREATE INDEX / ALTER on a reserved name (e.g. ``collation``) is valid.
+        parsed = [e for e in sqlglot.parse(node.sql, read=read) if e is not None]
+        if node.kind == "RETURNING" and dialect == "tsql":
+            # T-SQL OUTPUT items must carry the INSERTED./DELETED. prefix;
+            # sqlglot renders RETURNING's items bare.
+            for e in parsed:
+                _prefix_tsql_output_items(cast(exp.Expression, e))
         out = [
             _quote_reserved_identifiers(cast(exp.Expression, e), dialect).sql(
                 dialect=write
             )
-            for e in sqlglot.parse(node.sql, read=read)
-            if e is not None
+            for e in parsed
         ]
         if out and out[0].strip():
             result = out[0]
+            if node.kind == "RETURNING" and dialect == "tsql":
+                # sqlglot renders DELETE's OUTPUT before FROM, which not
+                # even its own tsql reader accepts; T-SQL wants it after
+                # the table.
+                result = re.sub(
+                    r"(?is)^DELETE\s+(OUTPUT\s.*?)\s+FROM\s+(\S+)",
+                    r"DELETE FROM \2 \1",
+                    result,
+                    count=1,
+                )
             if node.kind == "CREATE INDEX":
                 result = _portable_index(result, dialect)
             else:
