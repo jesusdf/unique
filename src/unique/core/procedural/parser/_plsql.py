@@ -888,8 +888,14 @@ class PlsqlStatementsMixin(ParserBase):
 
         full_name = ".".join(name_parts)
 
-        # Assignment: name := expr;
-        if self._current().type == TokenType.ASSIGN:
+        # Assignment: name := expr; — plpgsql also accepts a bare ``=``
+        # as the assignment operator (a statement cannot start with a
+        # comparison, so the form is unambiguous here).
+        if self._current().type == TokenType.ASSIGN or (
+            self._dialect == "postgresql"
+            and self._current().type == TokenType.OPERATOR
+            and self._current().value == "="
+        ):
             self._advance()
             expr = self._parse_expression_until_semicolon()
             self._match_type(TokenType.SEMICOLON)

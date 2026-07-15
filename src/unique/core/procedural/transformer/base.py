@@ -1013,9 +1013,9 @@ class ProceduralTransformer:
             p.data_type.name.upper() in self._PG_PSEUDO_TYPES for p in node.parameters
         ):
             culprit = "polymorphic parameter type"
-        elif (
-            node.return_type is not None
-            and node.return_type.name.upper() in self._PG_PSEUDO_TYPES
+        elif node.return_type is not None and (
+            node.return_type.name.upper() in self._PG_PSEUDO_TYPES
+            or node.return_type.name.upper().startswith("SETOF")
         ):
             culprit = f"'{node.return_type.name}' return type"
         if culprit is None:

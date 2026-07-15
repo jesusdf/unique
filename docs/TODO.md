@@ -788,6 +788,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         (−28), Oracle 237→215 (−22). Cumulative from the honest
         baseline: T-SQL 1090→615 (82.4%), MySQL 579→389 (88.0%),
         Oracle 454→215 (93.5%).**
+        *Wave 14 (2026-07-15):* plpgsql's bare-``=`` assignment
+        (synonym of ``:=``, unambiguous at statement start) parses as
+        an assignment for a PG source — it shipped raw (PLS-00103,
+        8x+ direct plus chain blockers); and ``RETURNS setof <t>``
+        parses as ONE type unit (the inner name had leaked into the
+        header as garbage) and degrades the routine WHOLE (RETURN
+        NEXT protocol has no equivalent). Tests:
+        TestPlpgsqlEqualsAssignment, TestSetofReturnsDegrade. Sweep
+        re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

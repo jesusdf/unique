@@ -737,3 +737,58 @@ class TestPolymorphicPseudoTypes:
         assert not code, r.sql
         assert "anyelement" in r.sql.lower(), r.sql
         assert r.warnings or r.unsupported, r.sql
+
+
+class TestPlpgsqlEqualsAssignment:
+    """plpgsql accepts ``v = expr;`` as assignment (synonym of ``:=``);
+    the statement parser only recognized ``:=``, so bare-``=``
+    assignments shipped raw (PLS-00103 on Oracle, 8x+ direct plus
+    chain blockers everywhere)."""
+
+    _SRC = (
+        "create function ea(a int) returns text as $$\n"
+        "declare r text;\n"
+        "begin\n"
+        "  r = 'v' || a;\n"
+        "  return r;\n"
+        "end$$ language plpgsql;"
+    )
+
+    def test_equals_assignment_oracle(self) -> None:
+        out = _t(self._SRC, "oracle")
+        assert re.search(r"(?i)r\s*:=\s*'v'\s*\|\|\s*a", out), out
+
+    def test_equals_assignment_mysql(self) -> None:
+        out = _t(self._SRC, "mysql")
+        assert re.search(r"(?i)SET r\s*=\s*CONCAT\('v',\s*a\)", out), out
+
+
+class TestSetofReturnsDegrade:
+    """``RETURNS setof tbl`` desynced the signature parse (two-word
+    type: ``setof`` consumed, the table name leaked into the body).
+    Set-returning functions (RETURN NEXT protocol) have no mechanical
+    equivalent off PostgreSQL: parse the type as a unit and degrade the
+    routine WHOLE."""
+
+    _SRC = (
+        "create function sr() returns setof t1 as $$\n"
+        "declare rec record;\n"
+        "begin\n"
+        "  for rec in select * from t1 loop\n"
+        "    return next rec;\n"
+        "  end loop;\n"
+        "  return;\n"
+        "end$$ language plpgsql;"
+    )
+
+    @pytest.mark.parametrize("target", ["oracle", "mysql"])
+    def test_setof_degrades_whole(self, target: str) -> None:
+        r = Transpiler().transpile(self._SRC, source="postgresql", target=target)
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert "setof" in r.sql.lower(), r.sql
+        assert r.warnings or r.unsupported, r.sql
