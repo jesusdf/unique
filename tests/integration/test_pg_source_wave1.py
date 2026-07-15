@@ -2099,3 +2099,74 @@ class TestReturningOutputPrefix:
     def test_update_returning_columns(self) -> None:
         out = _t("update t1 set a = 1 returning a, b;", "tsql")
         assert re.search(r"(?i)OUTPUT INSERTED\.a, INSERTED\.b", out), out
+
+
+class TestTgArgvSubstitution:
+    """wave 51: TG_ARGV[n] is a compile-time constant once the
+    function is inlined into a named trigger — the CREATE TRIGGER's
+    EXECUTE FUNCTION argument list supplies the values (8x error 128:
+    bare TG_ARGV leaked into the T-SQL trigger). A TG_ARGV whose
+    index can't be resolved degrades the trigger whole."""
+
+    _SRC = (
+        "create function tf() returns trigger as $$\n"
+        "begin\n"
+        "  insert into log values (TG_ARGV[0], TG_NARGS);\n"
+        "  return null;\nend$$ language plpgsql;\n"
+        "create trigger t1_ins after insert on t1 "
+        "for each statement execute function tf('hello', 'world');"
+    )
+
+    def test_tg_argv_substitutes_tsql(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert "'hello'" in out, out
+        assert "TG_ARGV" not in out.upper(), out
+        assert re.search(r"\b2\b", out), out  # TG_NARGS
+
+    def test_tg_argv_out_of_range_degrades(self) -> None:
+        src = (
+            "create function tf2() returns trigger as $$\n"
+            "begin\n"
+            "  insert into log values (TG_ARGV[3]);\n"
+            "  return null;\nend$$ language plpgsql;\n"
+            "create trigger t2_ins after insert on t2 "
+            "for each statement execute function tf2('only');"
+        )
+        out = _t(src, "tsql")
+        offenders = [
+            ln
+            for ln in out.splitlines()
+            if "TG_ARGV" in ln.upper() and not ln.strip().startswith("--")
+        ]
+        assert not offenders, out
+
+
+class TestParseFallbackDegradesCrossDialect:
+    """wave 52: a routine the procedural parser could not parse falls
+    back to RawSQL(reason='Parse error: …') — and shipped RAW to a
+    DIFFERENT dialect (~43x of mysql→pg: handler-declaring procedure
+    bodies leaked as top-level fragments). Cross-dialect, the parse
+    fallback must degrade whole to a documented carrier."""
+
+    _SRC = (
+        "DELIMITER //\n"
+        "create procedure bug14498_1()\n"
+        "begin\n"
+        "  declare continue handler for sqlexception select 'error' as 'h';\n"
+        "  if v then\n"
+        "    select 'yes' as 'v';\n"
+        "  end if;\n"
+        "  select 'done' as 'e';\n"
+        "end//\n"
+        "DELIMITER ;\n"
+    )
+
+    def test_unparsed_routine_degrades_pg(self) -> None:
+        out = _t2(self._SRC, "mysql", "postgresql")
+        code = [
+            ln
+            for ln in out.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, out
+        assert "UNIQUE:" in out, out

@@ -1293,7 +1293,29 @@ fix needs an **anonymized** regression fixture (never a private name).
         even its reader accepts); the output gate drops the (valid)
         OUTPUT clause before its tsql reparse — a sqlglot reader gap,
         not an output defect. Tests: TestReturningOutputPrefix.
-        *Measurement pending next pg-corpus cycle.*
+        **Waves 49+50 measured at `c1002d4` (2026-07-16): pg→T-SQL
+        374→344 (89.5%), pg→Oracle 149 flat, pg→MySQL 180→186 (honest
+        +6 — wave 48's un-carriered union arms reach the next MySQL
+        blocker). Standing: pg-source {344/186/149}, mysql-source
+        {416/256/301}.**
+        *Wave 51 (2026-07-16):* TG_ARGV/TG_NARGS are compile-time
+        constants once the trigger function is inlined — the CREATE
+        TRIGGER's `EXECUTE FUNCTION fn('a','b')` argument list (which
+        the parser used to SKIP; now captured as `execute_args`)
+        supplies TG_ARGV[n]; an unresolvable index degrades the
+        trigger whole (8x pg→tsql error 128). Tests:
+        TestTgArgvSubstitution.
+        *Wave 52 (2026-07-16):* a routine the procedural parser cannot
+        parse falls back to RawSQL('Parse error…') — and shipped RAW
+        cross-dialect: mysql handler-declaring procedure bodies leaked
+        as top-level fragments on pg (~43x of mysql→pg: `declare
+        continue/exit handler`, `end if/while`, quoted-alias SELECTs
+        …). The procedural transformer now rewrites the parse fallback
+        to the carrier contract (source==target still passes through
+        untouched). Follow-up chain: parse DECLARE …HANDLER properly
+        (EXIT→EXCEPTION is faithful; CONTINUE has no plpgsql map).
+        Tests: TestParseFallbackDegradesCrossDialect. *Measurement
+        pending next cycles.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

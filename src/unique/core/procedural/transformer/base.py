@@ -2894,6 +2894,16 @@ class ProceduralTransformer:
         return self._BASE64_XML_RE.sub(lambda m: template.format(v=m.group(1)), sql)
 
     def _transform_raw_sql(self, node: RawSQL) -> RawSQL:
+        # A whole-unit parse fallback must not ship raw across dialects:
+        # the source-dialect body would leak as top-level fragments on the
+        # target. Rewrite to the carrier contract the emitter comments out.
+        if node.reason.startswith("Parse error"):
+            reason = (
+                f"{self._source} routine could not be parsed "
+                f"({node.reason}); statement preserved as a comment"
+            )
+            self._warnings.append(reason)
+            return RawSQL(sql=node.sql, reason=reason)
         sql = self._fix_fetch_status(node.sql)
         sql = self._fix_base64_xml_idiom(sql)
         sql = self._transform_var_in_sql(sql)

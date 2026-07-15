@@ -571,7 +571,33 @@ class TSqlTransformer(ProceduralTransformer):
             return RawSQL(sql=original, reason=reason)
         kept = self._rename_transition_aliases(kept, node.referencing)
         kept = self._substitute_tg_constants(kept, node)
+        if self._contains_raw_text(kept, "TG_ARGV"):
+            # An argument reference the substitution could not resolve
+            # (non-literal index, out of range) — degrade whole, never
+            # inline a bare TG_ARGV.
+            reason = (
+                "trigger function references TG_ARGV with an unresolvable "
+                "index; trigger preserved as a comment"
+            )
+            self._warnings.append(reason)
+            from unique.core.procedural.emitter import ProceduralEmitter
+
+            original = ProceduralEmitter("postgresql").emit(node)
+            return RawSQL(sql=original, reason=reason)
         return self._tsql_statement_trigger(node, kept)
+
+    def _contains_raw_text(self, body: tuple[ASTNode, ...], needle: str) -> bool:
+        found = False
+
+        def scan(segment: str) -> str:
+            nonlocal found
+            if needle.upper() in segment.upper():
+                found = True
+            return segment
+
+        for b in body:
+            self._rewrite_raw_text_fields(b, scan)
+        return found
 
     def _substitute_tg_constants(
         self, body: tuple[ASTNode, ...], node: CreateTriggerStatement
@@ -585,9 +611,16 @@ class TSqlTransformer(ProceduralTransformer):
             "TG_OP": f"'{event.upper()}'",
             "TG_WHEN": f"'{node.timing.upper()}'",
             "TG_LEVEL": f"'{node.for_each.upper()}'",
+            "TG_NARGS": str(len(node.execute_args)),
         }
+        args = node.execute_args
 
         def sub(segment: str) -> str:
+            def argv(m: re.Match[str]) -> str:
+                idx = int(m.group(1))
+                return args[idx] if idx < len(args) else m.group(0)
+
+            segment = re.sub(r"(?i)\bTG_ARGV\s*\[\s*(\d+)\s*\]", argv, segment)
             for k, v in consts.items():
                 segment = re.sub(rf"(?i)\b{k}\b", v, segment)
             return segment

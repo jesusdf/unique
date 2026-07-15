@@ -737,15 +737,32 @@ class ParserBase:
         # the body lives in that separate CREATE FUNCTION. Other dialects inline
         # the body after FOR EACH, parsed below.
         execute_function: str | None = None
+        execute_args: list[str] = []
         body: list[ASTNode] = []
         if self._match_keyword("EXECUTE"):
             if not self._match_keyword("FUNCTION"):
                 self._match_keyword("PROCEDURE")
             execute_function, _ = self._parse_qualified_name()
             if self._match_type(TokenType.LPAREN):
-                while not self._at_end() and self._current().type != TokenType.RPAREN:
+                depth = 1
+                current: list[str] = []
+                while not self._at_end() and depth > 0:
+                    tok = self._current()
+                    if tok.type == TokenType.LPAREN:
+                        depth += 1
+                    elif tok.type == TokenType.RPAREN:
+                        depth -= 1
+                        if depth == 0:
+                            self._advance()
+                            break
+                    if tok.type == TokenType.COMMA and depth == 1:
+                        execute_args.append(" ".join(current))
+                        current = []
+                    else:
+                        current.append(str(tok.value))
                     self._advance()
-                self._match_type(TokenType.RPAREN)
+                if current:
+                    execute_args.append(" ".join(current))
             self._match_type(TokenType.SEMICOLON)
         else:
             if self._plsql_collection_type_ahead():
@@ -770,6 +787,7 @@ class ParserBase:
             or_replace=or_replace,
             schema=schema,
             execute_function=execute_function,
+            execute_args=tuple(execute_args),
             referencing=referencing,
         )
 

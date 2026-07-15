@@ -895,6 +895,9 @@ class CreateTriggerStatement(ASTNode):
     condition: ASTNode | None = None
     set_based_transition: bool = False
     execute_function: str | None = None
+    #: Literal argument tokens of ``EXECUTE FUNCTION fn(args)`` — they become
+    #: TG_ARGV[n] constants when the function body is inlined.
+    execute_args: tuple[str, ...] = ()
     referencing: str = ""
     #: Column list of an ``UPDATE OF c1, c2`` event (Oracle/PG): the trigger
     #: fires only when one of these columns is updated.
