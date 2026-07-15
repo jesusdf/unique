@@ -1035,3 +1035,43 @@ class TestMysqlFullOuterJoinDegrades:
         out = _t("select * from a left join b on a.i = b.i;", "mysql")
         assert re.search(r"(?i)LEFT JOIN", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestUserAggregateCallsDegrade:
+    """PG custom-aggregate CALLS — ``fn(*)`` and ``fn(DISTINCT … ORDER
+    BY …)`` — have no T-SQL/MySQL spelling (UDFs cannot be aggregates
+    there); they shipped raw (errors 102/156, the remaining ``SELECT
+    dbo.…`` class). A non-COUNT star argument or an unhandled inner
+    ORDER BY degrades the statement WHOLE."""
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql"])
+    def test_star_call_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "select newcnt(*) as c from t;", source="postgresql", target=target
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql"])
+    def test_inner_order_call_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "select aggfns(distinct a, b, c order by b nulls last) from t;",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_count_star_untouched(self) -> None:
+        out = _t("select count(*) from t;", "tsql")
+        assert re.search(r"(?i)COUNT\(\*\)", out), out
+        assert "UNIQUE:" not in out, out

@@ -28,6 +28,7 @@ from unique.core.ast_nodes import (
     PassthroughSQL,
     RawSQL,
     SelectStatement,
+    Star,
     TableRef,
 )
 from unique.core.mappings import CANONICAL_FUNCTION_NAMES
@@ -695,6 +696,18 @@ class Transformer:
             return "CAST(… AS ARRAY)"
         if isinstance(value, RawSQL) and "WithinGroup" in value.reason:
             return "WITHIN GROUP (ordered-set aggregate)"
+        if isinstance(value, FunctionCall):
+            # Custom-aggregate call syntax: fn(*) on a non-COUNT function,
+            # or an inner ORDER BY captured as an unhandled-Order arg.
+            if value.name.upper() not in ("COUNT", "COUNT_BIG") and any(
+                isinstance(a, Star) for a in value.args
+            ):
+                return f"aggregate star call {value.name}(*)"
+            if any(
+                isinstance(a, RawSQL) and "Unhandled expression type: Order" in a.reason
+                for a in value.args
+            ):
+                return f"aggregate ORDER BY inside {value.name}(…)"
         if isinstance(value, ASTNode):
             for f in fields(value):
                 found = self._find_array_construct(getattr(value, f.name))

@@ -895,6 +895,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         (2026-07-15): MySQL 285→266 (−19, 91.5%); T-SQL 519 / Oracle
         182 flat. Cumulative: T-SQL 1090→519, MySQL 579→266, Oracle
         454→182.**
+        *Wave 22 (2026-07-15):* custom-aggregate CALL syntax — `fn(*)`
+        on a non-COUNT function and `fn(DISTINCT … ORDER BY …)` (an
+        unhandled-Order RawSQL argument) have no T-SQL/MySQL spelling
+        (UDFs cannot be aggregates); the statement gate degrades them
+        WHOLE (errors 102/156, the remaining `SELECT dbo.…` class).
+        Tests: TestUserAggregateCallsDegrade. Sweep re-measure
+        pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
