@@ -1176,8 +1176,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         named trigger — TG_NAME/TG_TABLE_NAME/TG_OP/TG_WHEN/TG_LEVEL
         substitute as literals from the trigger node (18x error 128).
         Next link classified: whole-row `inserted::text` stringification
-        (no T-SQL form). Tests: TestTgContextConstants. Sweep
-        re-measure pending.
+        (no T-SQL form). Tests: TestTgContextConstants. **Measured at
+        `54255e8` (2026-07-16): T-SQL 402→384 (−18, 88.3% — the whole
+        child-trigger family in one stroke); MySQL/Oracle flat.
+        Cumulative: T-SQL 1090→384, MySQL 579→193, Oracle 454→149.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
