@@ -601,7 +601,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         heads) — the pg-source PROCEDURAL bring-up, an M4-scale
         workstream; first step is honesty (a desynced plpgsql unit must
         degrade WHOLE, doc-04 rule 4), then the function→routine
-        conversion classes. Getting here surfaced and
+        conversion classes. *Wave 4 (2026-07-15):* the 34x `AS LANGUAGE;`
+        class was the glued dollar-quote close (`end$$ language plpgsql`,
+        no space): the lexer let `$` continue identifiers (Oracle
+        `V$SESSION`), so `end$$` lexed as ONE identifier and the tail
+        leaked into the body. For a postgresql source `$` now ends the
+        identifier (dollar-quotes win, matching PG's own lexing) —
+        `lexer.py`, tests in `test_pg_source_wave1.py::
+        TestGluedDollarQuoteClose`. Sweep re-measure pending. Getting here surfaced and
         fixed THREE product bugs: the sqlglot COPY DoS (`:'var'`,
         `3aa55b4`), the transactional-BEGIN splitter glue (also under the
         output gate), and the oracle first-boot healthcheck wait.

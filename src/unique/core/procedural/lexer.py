@@ -594,8 +594,12 @@ class Lexer:
         # Identifiers / keywords
         if ch.isalpha() or ch == "_" or ch == "#":
             start = self._pos
+            # ``$`` continues an identifier (Oracle V$SESSION, T-SQL), but a
+            # PostgreSQL source lexes dollar-quotes first: ``end$$`` must be
+            # END followed by the ``$$`` close, never one identifier.
+            cont = ("_", "#") if self._dialect == "postgresql" else ("_", "#", "$")
             while not self._at_end() and (
-                self._peek().isalnum() or self._peek() in ("_", "#", "$")
+                self._peek().isalnum() or self._peek() in cont
             ):
                 self._advance()
             word = self._sql[start : self._pos]

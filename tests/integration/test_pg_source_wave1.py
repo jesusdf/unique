@@ -123,3 +123,30 @@ class TestJoinedDerivedTableAlias:
     def test_join_select_keeps_alias(self) -> None:
         out = _t("select * from t join (select 1 as a) s on t.x = s.a;", "mysql")
         assert re.search(r"(?i)\)\s*s\s+ON\b", out), out
+
+
+class TestGluedDollarQuoteClose:
+    """``end$$ language plpgsql`` (no space — ubiquitous in real plpgsql)
+    lexed as ONE identifier ``end$$`` because ``$`` continues identifiers
+    (needed for Oracle V$SESSION): the parser never saw END, and the tail
+    leaked into the body as an ``end$$ AS language;`` statement (34x in
+    the pg-source baseline). For a postgresql SOURCE, ``$`` ends the
+    identifier — matching PG's own lexing, where dollar-quotes win."""
+
+    _SRC = (
+        "create function f_g() returns void as $$\n"
+        "begin\n"
+        "  insert into foo values(1);\n"
+        "end$$ language plpgsql;"
+    )
+
+    def test_no_language_fragment_on_mysql(self) -> None:
+        out = _t(self._SRC, "mysql")
+        assert "AS language" not in out, out
+        assert "end$$" not in out, out
+        assert re.search(r"(?i)INSERT INTO foo", out), out
+
+    def test_tagged_close_unaffected_shape(self) -> None:
+        src = self._SRC.replace("$$", "$body$")
+        out = _t(src, "mysql")
+        assert "AS language" not in out, out
