@@ -819,3 +819,28 @@ class TestPgIndexToTsql:
     def test_named_plain_index_unchanged_shape(self) -> None:
         out = _t("create index i2 on t2(a desc, b);", "tsql")
         assert re.search(r"(?i)CREATE INDEX i2 ON t2 \(a DESC, b\)", out), out
+
+
+class TestBooleanLiteralConditionsTsql:
+    """PG allows a bare boolean literal as a join/where condition
+    (``JOIN b ON true``); the TRUE→1 mapping produced ``ON 1``, which
+    T-SQL rejects (error 4145: non-boolean type where a condition is
+    expected — 12x). A boolean literal in condition position emits as
+    a real predicate."""
+
+    def test_on_true_tsql(self) -> None:
+        out = _t("select * from a full outer join b on true;", "tsql")
+        assert re.search(r"(?i)ON 1 = 1", out), out
+
+    def test_on_false_tsql(self) -> None:
+        out = _t("select * from a full outer join b on false;", "tsql")
+        assert re.search(r"(?i)ON 1 = 0", out), out
+
+    def test_where_true_tsql(self) -> None:
+        out = _t("select * from t where true;", "tsql")
+        assert re.search(r"(?i)WHERE 1 = 1", out), out
+
+    def test_real_condition_untouched(self) -> None:
+        out = _t("select * from a join b on a.x = b.x;", "tsql")
+        assert re.search(r"(?i)ON a\.x = b\.x", out), out
+        assert "1 = 1" not in out, out

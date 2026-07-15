@@ -814,6 +814,12 @@ fix needs an **anonymized** regression fixture (never a private name).
         T-SQL 590→582 (−8, ok +8); MySQL/Oracle flat (tsql-only wave).
         Cumulative from the honest baseline: T-SQL 1090→582 (83.3%),
         MySQL 579→363 (88.7%), Oracle 454→202 (93.9%).**
+        *Wave 16 (2026-07-15):* boolean-literal conditions on T-SQL —
+        PG's ``JOIN b ON true`` / ``WHERE false`` mapped via TRUE→1 to
+        ``ON 1`` (error 4145, 12x): `_emit_condition` renders a bare
+        boolean literal in WHERE/HAVING/ON position as a real
+        predicate (`1 = 1` / `1 = 0`). Tests:
+        TestBooleanLiteralConditionsTsql. Sweep re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

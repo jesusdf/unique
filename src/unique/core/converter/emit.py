@@ -575,6 +575,17 @@ def _pg_index_to_tsql(sql: str, read: str) -> str | None:
     return stmt
 
 
+def _emit_condition(node: ASTNode, dialect: str) -> str:
+    """Emit an expression in condition position.
+
+    T-SQL has no boolean type in predicates: PG's bare boolean literal
+    condition (``JOIN b ON true``, ``WHERE false``) mapped to ``ON 1``,
+    which is error 4145 — it must be a real comparison."""
+    if dialect == "tsql" and isinstance(node, Literal) and node.dtype == "boolean":
+        return "1 = 1" if node.value else "1 = 0"
+    return _emit_expression(node, dialect)
+
+
 def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     """Re-transpile a passthrough statement to the target dialect.
 
@@ -1033,7 +1044,7 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
 
     # WHERE
     if node.where:
-        parts.append(f"WHERE {_emit_expression(node.where, dialect)}")
+        parts.append(f"WHERE {_emit_condition(node.where, dialect)}")
 
     # GROUP BY
     if node.group_by:
@@ -1042,7 +1053,7 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
 
     # HAVING
     if node.having:
-        parts.append(f"HAVING {_emit_expression(node.having, dialect)}")
+        parts.append(f"HAVING {_emit_condition(node.having, dialect)}")
 
     # ORDER BY
     if node.order_by:
@@ -2647,7 +2658,7 @@ def _emit_join(
     )
 
     if join.condition:
-        result += f" ON {_emit_expression(join.condition, dialect)}"
+        result += f" ON {_emit_condition(join.condition, dialect)}"
     elif join.using:
         if dialect == "tsql" and left_name and right:
             # T-SQL has no USING; expand to the equivalent ON predicate
