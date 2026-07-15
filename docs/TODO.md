@@ -880,8 +880,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         `CAST(x AS ARRAY)` (the aggregate-transition-function class,
         8x) was invisible to the wave-17 array finder. Both degrade
         WHOLE on T-SQL/MySQL; Oracle keeps WITHIN GROUP (native).
-        Tests: TestOrderedSetAggregatesDegrade. Sweep re-measure
-        pending.
+        Tests: TestOrderedSetAggregatesDegrade. **Measured at
+        `4bcc1d9` (2026-07-15): MySQL 323→285 (−38, 90.9%), T-SQL
+        549→519 (−30, 84.5%), Oracle 182 flat (native WITHIN GROUP).
+        Cumulative: T-SQL 1090→519, MySQL 579→285, Oracle 454→182.**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
