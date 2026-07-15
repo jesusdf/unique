@@ -552,6 +552,20 @@ class TSqlTransformer(ProceduralTransformer):
         fn_node = ProceduralParser(self._source).parse(src).node
         body = tuple(getattr(fn_node, "body", ()) or ())
         kept = tuple(b for b in body if not self._is_pg_trigger_noise(b))
+        # The inline path bypasses the routine-level degrade scan: an
+        # unconvertible body (dynamic FOR/EXECUTE, record vars …) must
+        # degrade the TRIGGER whole, not inline garbage.
+        if self._has_dynamic_for(kept):
+            reason = (
+                "trigger function body iterates dynamic EXECUTE (engine "
+                "introspection); no tsql equivalent — trigger preserved "
+                "as a comment"
+            )
+            self._warnings.append(reason)
+            from unique.core.procedural.emitter import ProceduralEmitter
+
+            original = ProceduralEmitter("postgresql").emit(node)
+            return RawSQL(sql=original, reason=reason)
         kept = self._rename_transition_aliases(kept, node.referencing)
         return self._tsql_statement_trigger(node, kept)
 

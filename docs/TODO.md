@@ -1155,6 +1155,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         (SELECT/VALUES/WITH) inline; non-query literals join the
         whole-routine degrade. Tests:
         TestForExecuteNonQueryDegrades.**
+        *Wave 38 (2026-07-16):* wave 37 ALSO measured flat — the
+        two-strikes rule fired and the end-to-end trace found the real
+        hole: the trigger-INLINE path (PG_TRIGGER_FN_BODIES) re-parses
+        the harvested body and expands it BYPASSING the routine-level
+        degrade scan. The inline now runs the same scan and degrades
+        the TRIGGER whole when the body is unconvertible. Tests:
+        TestTriggerInlineDegradeGate. Sweep re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

@@ -1747,3 +1747,29 @@ class TestForExecuteNonQueryDegrades:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, r.sql
+
+
+class TestTriggerInlineDegradeGate:
+    """The trigger-inline path bypassed the routine-level degrade scan
+    (two flat waves before the end-to-end trace found it): an
+    unconvertible inlined body must degrade the TRIGGER whole."""
+
+    def test_dynamic_explain_trigger_degrades_whole(self) -> None:
+        src = (
+            "CREATE FUNCTION tfn() RETURNS trigger LANGUAGE plpgsql AS $$\n"
+            "DECLARE l text;\n"
+            "BEGIN\n"
+            "  FOR l IN EXECUTE $q$ EXPLAIN (COSTS off) SELECT 1 $q$ LOOP\n"
+            "    NULL;\n  END LOOP;\n  RETURN NULL;\nEND; $$;\n"
+            "CREATE TRIGGER ttr AFTER INSERT ON bt "
+            "REFERENCING NEW TABLE AS nt FOR EACH STATEMENT "
+            "EXECUTE PROCEDURE tfn();"
+        )
+        r = Transpiler().transpile(src, source="postgresql", target="tsql")
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert any("introspection" in w.message for w in r.warnings), r.warnings
