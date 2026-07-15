@@ -275,14 +275,14 @@ def sweep_oracle(url: str, statements: list[str], report: DirectionReport) -> No
         r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE)\s+(?:\w+\.)?\"?(\w+)"
     )
     owner = (schema if isolated else user).upper()
-    _CONN_LOST = ("DPY-1001", "DPY-4011", "ORA-03113", "ORA-03114", "ORA-03135")
+    conn_lost = ("DPY-1001", "DPY-4011", "ORA-03113", "ORA-03114", "ORA-03135")
     try:
         for st in statements:
             try:
                 cur.execute(st)
             except Exception as e:  # noqa: BLE001
                 msg = str(e)
-                if any(code in msg for code in _CONN_LOST):
+                if any(code in msg for code in conn_lost):
                     # A wild statement killed the server session: reconnect,
                     # count it as OTHER (not the statement's syntax), go on.
                     with contextlib.suppress(Exception):
