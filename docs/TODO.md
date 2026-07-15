@@ -1161,7 +1161,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         the harvested body and expands it BYPASSING the routine-level
         degrade scan. The inline now runs the same scan and degrades
         the TRIGGER whole when the body is unconvertible. Tests:
-        TestTriggerInlineDegradeGate. Sweep re-measure pending.
+        TestTriggerInlineDegradeGate. **Measured at `da454df`: T-SQL
+        411→408 (−3, the dynamic-EXPLAIN subset).**
+        *Wave 39 (2026-07-16):* the rest of the trigger family blocks
+        on plpgsql's `FOUND` flag (error 4145): per-target predicates
+        now map it — `(@@ROWCOUNT > 0)` on T-SQL, `(ROW_COUNT() > 0)`
+        on MySQL, native `SQL%FOUND` on Oracle (string-safe,
+        pg-source only). Tests: TestPlpgsqlFoundFlag. Sweep re-measure
+        pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

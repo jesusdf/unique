@@ -1773,3 +1773,32 @@ class TestTriggerInlineDegradeGate:
         ]
         assert not code, r.sql
         assert any("introspection" in w.message for w in r.warnings), r.warnings
+
+
+class TestPlpgsqlFoundFlag:
+    """plpgsql's ``FOUND`` flag (set by the last DML) shipped bare —
+    error 4145 on T-SQL. Per-target predicates: ``(@@ROWCOUNT > 0)``,
+    ``(ROW_COUNT() > 0)``, Oracle's native ``SQL%FOUND``."""
+
+    _SRC = (
+        "create function ff() returns int as $$\n"
+        "begin\n"
+        "  update t set a = 1;\n"
+        "  if found then\n    return 1;\n  end if;\n"
+        "  if not found then\n    return 2;\n  end if;\n"
+        "  return 0;\n"
+        "end$$ language plpgsql;"
+    )
+
+    def test_found_tsql(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert re.search(r"(?i)IF \(@@ROWCOUNT > 0\)", out), out
+        assert not re.search(r"(?i)\bIF FOUND\b", out), out
+
+    def test_found_mysql(self) -> None:
+        out = _t(self._SRC, "mysql")
+        assert re.search(r"(?i)IF \(ROW_COUNT\(\) > 0\)", out), out
+
+    def test_found_oracle(self) -> None:
+        out = _t(self._SRC, "oracle")
+        assert re.search(r"(?i)IF SQL%FOUND", out), out

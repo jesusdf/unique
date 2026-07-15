@@ -429,6 +429,13 @@ class OracleTransformer(ProceduralTransformer):
     )
 
     def _fix_raw_sql_target(self, sql: str) -> str:
+        if self._source == "postgresql":
+            # plpgsql's FOUND flag (set by the last DML): this
+            # target's row-count predicate, outside string literals.
+            sql = self._map_outside_strings(
+                sql,
+                lambda seg: re.sub(r"(?i)\bFOUND\b", "SQL%FOUND", seg),
+            )
         # T-SQL ``TOP (n)`` has no Oracle keyword; sqlglot rewrites the enclosing
         # SELECT to ``FETCH FIRST n ROWS ONLY`` (ORA-00907 otherwise). Only pay
         # the round-trip on a real row limit (``TOP <digits>``), not a column

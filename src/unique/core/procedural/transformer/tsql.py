@@ -372,6 +372,9 @@ class TSqlTransformer(ProceduralTransformer):
         # Exception context: T-SQL reads it from the ERROR_* functions.
         # String-safe: a literal like 'SQLSTATE: ' must never be rewritten.
         def _diagnostics(seg: str) -> str:
+            if self._source == "postgresql":
+                # plpgsql's FOUND flag -> T-SQL's row-count predicate.
+                seg = re.sub(r"(?i)\bFOUND\b", "(@@ROWCOUNT > 0)", seg)
             seg = re.sub(r"(?i)\bSQLERRM\b", "ERROR_MESSAGE()", seg)
             # CAST keeps the ubiquitous ``SQLCODE || ' ' || SQLERRM`` concat
             # working (INT + varchar raises 245 at runtime); a numeric

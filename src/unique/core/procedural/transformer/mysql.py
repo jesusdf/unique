@@ -208,6 +208,13 @@ class MySqlTransformer(ProceduralTransformer):
         return f"NOT (NEW.{col} <=> OLD.{col})"
 
     def _fix_raw_sql_target(self, sql: str) -> str:
+        if self._source == "postgresql":
+            # plpgsql's FOUND flag (set by the last DML): this
+            # target's row-count predicate, outside string literals.
+            sql = self._map_outside_strings(
+                sql,
+                lambda seg: re.sub(r"(?i)\bFOUND\b", "(ROW_COUNT() > 0)", seg),
+            )
         mt = re.match(
             r"(?is)^\s*ALTER\s+TRIGGER\s+(\w+)\s+(ENABLE|DISABLE)\s*;?\s*$",
             sql,
