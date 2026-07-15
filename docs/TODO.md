@@ -900,8 +900,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         unhandled-Order RawSQL argument) have no T-SQL/MySQL spelling
         (UDFs cannot be aggregates); the statement gate degrades them
         WHOLE (errors 102/156, the remaining `SELECT dbo.…` class).
-        Tests: TestUserAggregateCallsDegrade. Sweep re-measure
-        pending.
+        Tests: TestUserAggregateCallsDegrade. **Measured at `7e7dee2`
+        (2026-07-15): T-SQL 519→499 (−20, 85.0% — under 500), MySQL
+        266→247 (−19, 92.0%), Oracle 182 flat. Cumulative: T-SQL
+        1090→499, MySQL 579→247, Oracle 454→182.**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
