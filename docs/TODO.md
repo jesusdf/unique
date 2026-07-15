@@ -1071,6 +1071,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         for mysql routine bodies), and the dynamic PREPARE/EXECUTE
         trio's faithful mysql→PG conversion (native there; currently
         honest carriers).**
+        *Wave M6 (mysql-source, 2026-07-15):* table-qualified INSERT
+        column lists (`INSERT INTO t (t.a, t.b) …`, legal MySQL) —
+        sqlglot cannot parse them and lenient paths truncated to
+        `INSERT INTO t (t)` with the body GONE (the 2026-07-09 audit
+        class, still alive in embedded routine bodies; the bug8849
+        family). A retry-after-failure pre-parse normalization (the
+        Oracle SYSDATE() pattern) drops the redundant qualifier inside
+        the identifier-only list region. Tests:
+        TestInsertQualifiedColumns. Sweep re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

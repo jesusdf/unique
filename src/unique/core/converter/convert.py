@@ -62,6 +62,24 @@ from unique.core.ast_nodes import (
 from unique.core.converter._base import *  # noqa: F401,F403
 from unique.core.converter.harvest import _resolve_tsql_alias_type  # noqa: F401
 
+_INSERT_COLS_RE = re.compile(
+    r"(?is)\b(INSERT\s+(?:IGNORE\s+)?INTO\s+`?(\w+)`?\s*\()([^)]*)(\))"
+)
+
+
+def _strip_insert_column_qualifiers(sql: str) -> str:
+    """Drop redundant ``tbl.`` prefixes inside an INSERT's column list.
+
+    The list region is an identifier list (no string literals can
+    legally appear there), so the scoped substitution is safe."""
+
+    def _fix(m: re.Match[str]) -> str:
+        table = m.group(2)
+        cols = re.sub(rf"(?i)\b{re.escape(table)}\s*\.\s*", "", m.group(3))
+        return f"{m.group(1)}{cols}{m.group(4)}"
+
+    return _INSERT_COLS_RE.sub(_fix, sql)
+
 
 def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
     """Parse SQL text using sqlglot and convert to IR nodes.
@@ -109,6 +127,16 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
         # SYSDATE() are never touched (they parse fine the first time).
         if dialect == "oracle":
             normalized = re.sub(r"(?i)\b(SYSDATE|SYSTIMESTAMP)\s*\(\s*\)", r"\1", sql)
+            if normalized != sql:
+                with contextlib.suppress(Exception):
+                    return parse_sql(normalized, dialect)
+        if dialect == "mysql":
+            # MySQL allows table-qualified INSERT column lists
+            # (INSERT INTO t (t.a, t.b) …) which sqlglot cannot parse;
+            # the qualifier is redundant by definition (the columns
+            # belong to the INSERT's table). Same retry-after-failure
+            # pattern as the Oracle SYSDATE() normalization.
+            normalized = _strip_insert_column_qualifiers(sql)
             if normalized != sql:
                 with contextlib.suppress(Exception):
                     return parse_sql(normalized, dialect)

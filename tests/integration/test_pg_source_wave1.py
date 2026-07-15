@@ -1519,3 +1519,27 @@ class TestCreateTableLikeClone:
         assert re.search(
             r"(?is)CREATE TABLE t2 AS\s+SELECT \*\s+FROM t1\s+WHERE 1 = 0", out
         ), out
+
+
+class TestInsertQualifiedColumns:
+    """``INSERT INTO t5 (t5.a, t5.b) VALUES …`` (table-qualified column
+    lists, legal in MySQL) truncated to ``INSERT INTO t5 (t5)`` with the
+    body gone — the 2026-07-09 audit class still alive in the embedded
+    procedural path. The qualifier drops (the columns belong to the
+    INSERT's table by definition — valid and exact everywhere)."""
+
+    @pytest.mark.parametrize("target", ["postgresql", "tsql", "oracle"])
+    def test_qualifier_drops(self, target: str) -> None:
+        out = _t2("insert into t5 (t5.a, t5.b) values (1, 2);", "mysql", target)
+        assert re.search(r"(?i)INSERT INTO t5 \(a, b\)", out), out
+        assert re.search(r"(?i)VALUES\s*\(1,\s*2\)", out), out
+
+    def test_inside_procedure_body(self) -> None:
+        out = _t2(
+            "delimiter //\ncreate procedure bp()\nbegin\n"
+            "  insert into t5 (t5.a) values (9);\nend//\ndelimiter ;",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?i)INSERT INTO t5 \(a\)", out), out
+        assert re.search(r"(?i)VALUES\s*\(9\)", out), out
