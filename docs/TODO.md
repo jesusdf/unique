@@ -699,7 +699,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         PLS-00103 'AS', and the whole stricttest class on MySQL/T-SQL).
         Consumed now, both before AND after the `$$` body. Tests:
         `test_pg_source_wave1.py::TestPgRoutineHeaderAttributes`.
-        Sweep re-measure pending.
+        **Measured at `e30a7e9` (2026-07-15): T-SQL 696→693, MySQL
+        467→464, Oracle 269→266 (−3 each).** Honest read: the garbage
+        declarations are gone (error-group composition changed) but the
+        affected plpgsql functions still fail on their NEXT body
+        blocker — RAISE forms, FOREACH, STRICT INTO — so the syntax
+        counts barely move until those body features land. The
+        remaining function classes are blocker CHAINS, not single
+        shapes.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
