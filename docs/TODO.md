@@ -1227,8 +1227,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         constraints included — now triggers on constraints too), and
         CTAS whose query is a UNION (the M2 extraction accepted only
         exp.Select; now any SetOperation). Tests:
-        TestBareCreateResidue. Sweep re-measure pending
-        (mysql-source).
+        TestBareCreateResidue. **Measured at `dc6eda1` (2026-07-16):
+        −110 across the direction — mysql→PG 389→338 (94.7%),
+        mysql→T-SQL 516→457 (92.5%), mysql→Oracle 308→307 with ok +13.
+        Standing: pg-source {380/183/149}, mysql-source {457/338/307}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
