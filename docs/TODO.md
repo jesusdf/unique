@@ -891,8 +891,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         anti-join); T-SQL/Oracle/PG keep their native FULL JOIN.
         Classified for later: the raise_test residue is now SQLSTATE/
         SQLERRM pseudo-variables inside converted EXIT HANDLERs.
-        Tests: TestMysqlFullOuterJoinDegrades. Sweep re-measure
-        pending.
+        Tests: TestMysqlFullOuterJoinDegrades. **Measured at `cdb86a0`
+        (2026-07-15): MySQL 285→266 (−19, 91.5%); T-SQL 519 / Oracle
+        182 flat. Cumulative: T-SQL 1090→519, MySQL 579→266, Oracle
+        454→182.**
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
