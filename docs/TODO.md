@@ -707,6 +707,19 @@ fix needs an **anonymized** regression fixture (never a private name).
         counts barely move until those body features land. The
         remaining function classes are blocker CHAINS, not single
         shapes.
+        *Wave 9 (2026-07-15):* `JOIN … USING (c)` → ON for T-SQL across
+        the whole join CHAIN (27x+ errors 102/321): `_emit_join` now
+        shares a per-SELECT `merged_cols` map tracking the chain's
+        merged-column expression (LEFT/INNER keep the left carrier,
+        RIGHT replaces it, FULL merges via COALESCE — PG's USING
+        semantics), and derived-table left sides supply their alias.
+        Left open: the parenthesized-join FROM item (`(j1 JOIN j2 USING
+        (i)) AS x`, ~7x) flows outside the IR SELECT model and keeps
+        USING; `SELECT *` projection still duplicates the join column
+        (USING merges it in PG) — same caveat as the pre-existing
+        single-join rewrite. Tests:
+        `test_pg_source_wave1.py::TestJoinUsingOnTsql`. Sweep
+        re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

@@ -902,12 +902,20 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
         # ``SELECT SYSDATE``) reads from the DUAL pseudo-table, else ORA-00923.
         parts.append("FROM DUAL")
 
-    # JOINs
-    left_name = None
-    if isinstance(node.from_clause, TableRef) and len(node.joins) == 1:
-        left_name = node.from_clause.alias or node.from_clause.name
+    # JOINs. For the T-SQL USING->ON rewrite, track per USING column the
+    # expression that denotes the chain's MERGED column so far: LEFT/INNER
+    # joins keep the left carrier, a RIGHT join replaces it with its right
+    # side, and a FULL join merges both (COALESCE) — PG's USING semantics.
+    from_name = None
+    if isinstance(node.from_clause, TableRef):
+        from_name = node.from_clause.alias or node.from_clause.name
+    elif isinstance(node.from_clause, SubqueryExpression):
+        from_name = node.from_clause.alias or ("uq_dt" if dialect != "oracle" else None)
+    merged_cols: dict[str, str] = {}
     for join in node.joins:
-        parts.append(_emit_join(join, dialect, left_name=left_name))
+        parts.append(
+            _emit_join(join, dialect, left_name=from_name, merged_cols=merged_cols)
+        )
 
     # WHERE
     if node.where:
@@ -2468,12 +2476,20 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
     return result
 
 
-def _emit_join(join: JoinClause, dialect: str, left_name: str | None = None) -> str:
+def _emit_join(
+    join: JoinClause,
+    dialect: str,
+    left_name: str | None = None,
+    merged_cols: dict[str, str] | None = None,
+) -> str:
     """Emit a JOIN clause.
 
-    ``left_name`` is the FROM relation's name/alias, supplied only for
-    single-join SELECTs; it lets a ``USING (...)`` join be rewritten as an
-    explicit ``ON`` for T-SQL, which has no USING syntax.
+    ``left_name`` is the FROM relation's name/alias; with ``merged_cols``
+    (shared across a SELECT's join chain, mapping USING column ->
+    merged-column expression) it lets a ``USING (...)`` join be rewritten
+    as an explicit ``ON`` for T-SQL, which has no USING syntax — chained
+    joins included, where a later USING references the chain's MERGED
+    column (COALESCE over the arms once a FULL join is involved).
     """
     type_map = {
         JoinType.INNER: "INNER JOIN",
@@ -2510,18 +2526,30 @@ def _emit_join(join: JoinClause, dialect: str, left_name: str | None = None) -> 
 
     result = f"{join_type} {table}"
 
+    right = join.alias or (
+        (join.table.alias or join.table.name)
+        if isinstance(join.table, TableRef)
+        else join.table.alias if isinstance(join.table, SubqueryExpression) else None
+    )
+
     if join.condition:
         result += f" ON {_emit_expression(join.condition, dialect)}"
     elif join.using:
-        right = join.alias or (
-            join.table.alias or join.table.name
-            if isinstance(join.table, TableRef)
-            else None
-        )
         if dialect == "tsql" and left_name and right:
-            # T-SQL has no USING; expand to the equivalent ON predicate.
-            on = " AND ".join(f"{left_name}.{c} = {right}.{c}" for c in join.using)
-            result += f" ON {on}"
+            # T-SQL has no USING; expand to the equivalent ON predicate
+            # against the chain's merged column so far.
+            merged = merged_cols if merged_cols is not None else {}
+            on_parts = []
+            for c in join.using:
+                left_expr = merged.get(c.lower(), f"{left_name}.{c}")
+                on_parts.append(f"{left_expr} = {right}.{c}")
+                if join.join_type == JoinType.FULL:
+                    merged[c.lower()] = f"COALESCE({left_expr}, {right}.{c})"
+                elif join.join_type == JoinType.RIGHT:
+                    merged[c.lower()] = f"{right}.{c}"
+                else:
+                    merged[c.lower()] = left_expr
+            result += f" ON {' AND '.join(on_parts)}"
         else:
             result += f" USING ({', '.join(join.using)})"
 

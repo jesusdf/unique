@@ -484,3 +484,44 @@ class TestPgRoutineHeaderAttributes:
         assert "LEAKPROOF" not in out.upper(), out
         assert "NULL INPUT" not in out.upper(), out
         assert re.search(r"(?i)RETURN\s+a\b", out), out
+
+
+class TestJoinUsingOnTsql:
+    """T-SQL has no ``JOIN … USING (c)``. The single-join TableRef case
+    already rewrote to ON; chained joins and derived-table left sides
+    fell back to emitting USING (errors 102/321 — 27x+ in the tsql
+    residue). After a FULL join, a later USING references the MERGED
+    column, so its ON needs COALESCE over the prior arms."""
+
+    def test_derived_table_left_side(self) -> None:
+        out = _t(
+            "select * from (select * from t2) s2 "
+            "inner join (select * from t3) s3 using (name);",
+            "tsql",
+        )
+        assert "USING" not in out.upper(), out
+        assert re.search(r"(?i)ON\s+s2\.name\s*=\s*s3\.name", out), out
+
+    def test_chained_joins(self) -> None:
+        out = _t(
+            "select * from t1 inner join t2 using (a) inner join t3 using (a);",
+            "tsql",
+        )
+        assert "USING" not in out.upper(), out
+        assert re.search(r"(?i)ON\s+t1\.a\s*=\s*t2\.a", out), out
+        assert re.search(r"(?i)ON\s+\S*t\d?\.?a?.*=\s*t3\.a", out), out
+
+    def test_full_join_chain_coalesces(self) -> None:
+        out = _t(
+            "select * from t1 full outer join t2 using (name) "
+            "full outer join t3 using (name);",
+            "tsql",
+        )
+        assert "USING" not in out.upper(), out
+        assert re.search(
+            r"(?i)ON\s+COALESCE\(t1\.name,\s*t2\.name\)\s*=\s*t3\.name", out
+        ), out
+
+    def test_using_kept_on_pg(self) -> None:
+        out = _t("select * from t1 inner join t2 using (a);", "postgresql")
+        assert re.search(r"(?i)USING\s*\(a\)", out), out
