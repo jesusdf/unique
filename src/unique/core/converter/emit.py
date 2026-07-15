@@ -2843,6 +2843,12 @@ def _emit_join(
         JoinType.LATERAL: "LATERAL JOIN",
     }
     join_type = type_map.get(join.join_type, "JOIN")
+    if join.natural and join.join_type != JoinType.NATURAL:
+        # MySQL rejects "NATURAL INNER JOIN"; the bare spelling is
+        # valid on every engine that has NATURAL at all.
+        join_type = (
+            "NATURAL JOIN" if join_type == "INNER JOIN" else f"NATURAL {join_type}"
+        )
 
     if isinstance(join.table, SubqueryExpression):
         table = f"({_emit_select(join.table.query, dialect)})"
@@ -2863,7 +2869,12 @@ def _emit_join(
     # "INNER JOIN b" without ON is a syntax error on PostgreSQL/Oracle; the
     # faithful spelling of a comma join is CROSS JOIN (the WHERE clause
     # still applies the predicates). (audit 2026-07-02, S1-2)
-    if join.condition is None and not join.using and join.join_type == JoinType.INNER:
+    if (
+        join.condition is None
+        and not join.using
+        and not join.natural
+        and join.join_type == JoinType.INNER
+    ):
         join_type = "CROSS JOIN"
 
     result = f"{join_type} {table}"

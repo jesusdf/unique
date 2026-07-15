@@ -583,6 +583,7 @@ class Transformer:
             result = [self._gate_mysql_full_join(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_temp_view(node) for node in result]
+            result = [self._gate_tsql_natural_join(node) for node in result]
         for pass_ in self._passes:
             result = [self._apply_pass(pass_, node) for node in result]
         return result
@@ -662,6 +663,40 @@ class Transformer:
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _gate_tsql_natural_join(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement using a NATURAL join — WHOLE, on T-SQL.
+
+        T-SQL has no NATURAL in any spelling, and synthesizing the ON
+        needs column knowledge we don't have; dropping the modifier
+        shipped JOINs with no condition at all."""
+        if not self._contains_natural_join(node):
+            return node
+        reason = (
+            "T-SQL has no NATURAL join; rewrite with an explicit ON over "
+            "the common columns. Statement preserved as a comment"
+        )
+        self.context.warn(reason, "natural_join")
+        self.context.mark_unsupported("NATURAL join (T-SQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _contains_natural_join(self, value: object) -> bool:
+        from unique.core.ast_nodes import JoinClause, JoinType
+
+        if isinstance(value, JoinClause) and (
+            value.natural or value.join_type == JoinType.NATURAL
+        ):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_natural_join(getattr(value, f.name))
+                for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_natural_join(item) for item in value)
+        return False
 
     def _contains_full_join(self, value: object) -> bool:
         from unique.core.ast_nodes import JoinClause, JoinType

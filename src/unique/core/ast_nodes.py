@@ -290,6 +290,8 @@ class JoinClause(ASTNode):
     alias: str | None = None
     condition: ASTNode | None = None
     using: tuple[str, ...] = ()
+    #: NATURAL join modifier (PG/MySQL/Oracle); T-SQL must degrade.
+    natural: bool = False
 
 
 @dataclass(frozen=True)

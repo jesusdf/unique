@@ -1231,6 +1231,32 @@ fix needs an **anonymized** regression fixture (never a private name).
         −110 across the direction — mysql→PG 389→338 (94.7%),
         mysql→T-SQL 516→457 (92.5%), mysql→Oracle 308→307 with ok +13.
         Standing: pg-source {380/183/149}, mysql-source {457/338/307}.**
+        *Wave 46 (2026-07-16):* three residue classes — the
+        all-defaults `INSERT … VALUES ()` (every row empty) emitted a
+        bare `VALUES ()` (invalid off MySQL); the existing DEFAULT
+        VALUES fallback only fired when the values list was absent, so
+        it now also routes the all-empty-rows shape (T-SQL/PG `DEFAULT
+        VALUES`, Oracle degrades — no spelling without the column
+        list). `IS` became a first-class BinaryOperator (was RawSQL
+        'unmapped operator Is'), so `x IS NULL` in VALUE position gets
+        wave 43's tri-state CASE wrap; IS/NULLSAFE joined
+        _BIN_PRECEDENCE (the embedded-DML path KeyError'd). Sweep-side:
+        tsql error 911 (USE of an absent database) reclassified as
+        environmental, not syntax. Tests: TestEmptyValuesAndIsNullValue.
+        **Measured at `faeef75` (2026-07-16): mysql→T-SQL 457→419
+        (93.1%), mysql→PG 338→327 (94.8%), mysql→Oracle 307→296
+        (95.2%). Standing: pg-source {380/183/149}, mysql-source
+        {419/327/296}.**
+        *Wave 47 (2026-07-16):* NATURAL join modifiers were silently
+        DROPPED (sqlglot carries them in `method`, the converter read
+        only side/kind): `NATURAL FULL JOIN` shipped as `FULL JOIN`
+        with no ON at all (26x of the pg→tsql residue). JoinClause
+        gained a `natural` flag: preserved on PG/MySQL/Oracle
+        (`NATURAL JOIN` bare spelling for inner — MySQL rejects
+        `NATURAL INNER JOIN`), whole-degrade on T-SQL (no NATURAL in
+        any spelling, ON not synthesizable without column knowledge);
+        mysql's FULL gate already catches NATURAL FULL there. Tests:
+        TestNaturalJoins. *Measurement pending next pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

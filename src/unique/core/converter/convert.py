@@ -1409,6 +1409,7 @@ def _convert_join(expr: exp.Join) -> JoinClause:
         alias=alias,
         condition=condition,
         using=using,
+        natural=(expr.args.get("method") or "").upper() == "NATURAL",
     )
 
 

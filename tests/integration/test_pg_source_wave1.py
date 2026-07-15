@@ -1977,3 +1977,42 @@ class TestEmptyValuesAndIsNullValue:
     def test_is_null_value_wraps_tsql(self) -> None:
         out = _t2("select cast(null as date) is null as x;", "mysql", "tsql")
         assert re.search(r"(?is)CASE WHEN CAST\(NULL AS DATE\) IS NULL", out), out
+
+
+class TestNaturalJoins:
+    """wave 47: NATURAL join modifiers survive to engines that speak
+    them (PG/MySQL/Oracle) instead of silently dropping — the residue
+    emitted ``FULL JOIN`` with no ON at all. T-SQL has no NATURAL in
+    any spelling and cannot synthesize the ON without column
+    knowledge, so the statement whole-degrades."""
+
+    def test_natural_join_to_mysql(self) -> None:
+        out = _t("select * from t1 natural join t2;", "mysql")
+        assert re.search(r"(?i)NATURAL JOIN t2", out), out
+
+    def test_natural_full_join_to_oracle(self) -> None:
+        out = _t("select * from t1 natural full join t2;", "oracle")
+        assert re.search(r"(?i)NATURAL FULL OUTER JOIN t2", out), out
+
+    def test_natural_left_join_derived_to_pg(self) -> None:
+        out = _t2(
+            "select * from (select a from t1) s1 "
+            "natural left join (select a from t2) s2;",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?is)NATURAL LEFT JOIN \(SELECT", out), out
+
+    def test_natural_join_tsql_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "select * from t1 natural full join t2;",
+            source="postgresql",
+            target="tsql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert re.search(r"(?i)natural", r.sql), r.sql
