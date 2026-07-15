@@ -1194,8 +1194,9 @@ fix needs an **anonymized** regression fixture (never a private name).
         on T-SQL/Oracle: the null-safe forms wrap in `CASE WHEN … THEN
         1 ELSE 0 END` in value position, and `_emit_condition`
         (WHERE/HAVING/ON) unwraps to the bare predicate. Tests
-        strengthened (value + condition positions). Sweep re-measure
-        pending.
+        strengthened (value + condition positions). **Measured at
+        `f06d57d`: flat — the one select-list corpus case needs its own
+        trace (single statement; parked).**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
