@@ -974,25 +974,57 @@ class ProceduralTransformer:
             return isinstance(stmt, ReturnStatement)
         return False
 
-    def _degrade_record_function(self, node: CreateFunctionStatement) -> ASTNode | None:
-        """Degrade a routine declaring a ``record`` variable — WHOLE.
+    #: PG pseudo-types a routine cannot carry anywhere else: ``record``
+    #: (row shape unknown until runtime) and the polymorphic family
+    #: (un-instantiable outside PG's type system).
+    _PG_PSEUDO_TYPES = frozenset(
+        {
+            "RECORD",
+            "ANYELEMENT",
+            "ANYARRAY",
+            "ANYNONARRAY",
+            "ANYENUM",
+            "ANYRANGE",
+            "ANYMULTIRANGE",
+            "ANYCOMPATIBLE",
+            "ANYCOMPATIBLEARRAY",
+            "ANYCOMPATIBLENONARRAY",
+            "ANYCOMPATIBLERANGE",
+        }
+    )
 
-        PG's ``record`` type has no mechanical equivalent (the row shape
-        is unknown until runtime); shipping ``DECLARE x record`` is a
-        guaranteed engine error and its field accesses would follow."""
+    def _degrade_record_function(self, node: CreateFunctionStatement) -> ASTNode | None:
+        """Degrade a routine using a PG pseudo-type — WHOLE.
+
+        ``record`` variables (row shape unknown until runtime) and
+        polymorphic parameter/return types (``anyelement`` …) have no
+        mechanical equivalent; shipping them is a guaranteed engine
+        error, and fragments would follow."""
         if self._target == "postgresql":
             return None
-        has_record = any(
-            isinstance(s, DeclareStatement) and s.data_type.name.upper() == "RECORD"
+        culprit: str | None = None
+        if any(
+            isinstance(s, DeclareStatement)
+            and s.data_type.name.upper() in self._PG_PSEUDO_TYPES
             for s in node.body
-        )
-        if not has_record:
+        ):
+            culprit = "'record' variable"
+        elif any(
+            p.data_type.name.upper() in self._PG_PSEUDO_TYPES for p in node.parameters
+        ):
+            culprit = "polymorphic parameter type"
+        elif (
+            node.return_type is not None
+            and node.return_type.name.upper() in self._PG_PSEUDO_TYPES
+        ):
+            culprit = f"'{node.return_type.name}' return type"
+        if culprit is None:
             return None
         from unique.core.procedural.emitter import ProceduralEmitter
 
         original = ProceduralEmitter("postgresql").emit(node)
         reason = (
-            f"PostgreSQL 'record' variable has no {self._target} equivalent; "
+            f"PostgreSQL {culprit} has no {self._target} equivalent; "
             "the routine is preserved as a comment"
         )
         self._warnings.append(reason)

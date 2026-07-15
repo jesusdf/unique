@@ -688,3 +688,52 @@ class TestRecordDeclarationDegrades:
         assert not code, r.sql
         assert "record" in r.sql.lower(), r.sql
         assert r.warnings or r.unsupported, r.sql
+
+
+class TestLanguageSqlBody:
+    """A ``LANGUAGE sql`` function body is a bare statement list (no
+    BEGIN/DECLARE); the declare-section parser consumed it as garbage
+    declarations (``DECLARE select LONGTEXT; DECLARE $ $;``). The body
+    parses as statements and, for a non-void function, the trailing
+    SELECT becomes the RETURN."""
+
+    def test_scalar_select_body_mysql(self) -> None:
+        out = _t(
+            "create function fs(a int) returns int as " "'select $1 + 1' language sql;",
+            "mysql",
+        )
+        assert "DECLARE select" not in out, out
+        assert re.search(r"(?i)RETURN\s*\(?\s*SELECT\s+a\s*\+\s*1", out), out
+
+    def test_void_dml_body_mysql(self) -> None:
+        out = _t(
+            "create function fv() returns void as "
+            "'insert into t values (1)' language sql;",
+            "mysql",
+        )
+        assert re.search(r"(?i)INSERT INTO t VALUES \(1\)", out), out
+        assert re.search(r"(?i)RETURN 0", out), out
+        assert "DECLARE insert" not in out, out
+
+
+class TestPolymorphicPseudoTypes:
+    """``anyelement``/``anyarray`` parameters or returns are
+    un-instantiable outside PostgreSQL; the routine degrades WHOLE
+    with a warning (previously shipped as an invalid type name)."""
+
+    _SRC = (
+        "create function pf(x anyelement) returns anyelement as $$\n"
+        "begin\n  return x;\nend$$ language plpgsql;"
+    )
+
+    @pytest.mark.parametrize("target", ["mysql", "tsql", "oracle"])
+    def test_polymorphic_degrades_whole(self, target: str) -> None:
+        r = Transpiler().transpile(self._SRC, source="postgresql", target=target)
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert "anyelement" in r.sql.lower(), r.sql
+        assert r.warnings or r.unsupported, r.sql

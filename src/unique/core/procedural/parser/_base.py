@@ -120,6 +120,10 @@ class ParserBase:
         #: spliced in later (old-style quoted bodies) get the same $n
         #: rewrite as tokens present at signature-parse time.
         self._pg_positional_names: dict[str, str] = {}
+        #: uppercased RETURNS type of the PG routine being parsed — a
+        #: LANGUAGE sql body needs it to decide whether its trailing
+        #: SELECT is the function result (becomes the RETURN).
+        self._pg_fn_return_type = ""
 
     def _parse_routine_body(self, with_pg_header: bool = True) -> list[ASTNode]:
         """Consume a routine header and parse its body for the source family.
@@ -134,6 +138,10 @@ class ParserBase:
             return list(self._parse_tsql_body())
         if with_pg_header and self._dialect in ("postgresql", "mysql"):
             self._consume_pg_routine_header()
+            if self._dialect == "postgresql" and self._current().is_keyword(
+                "SELECT", "VALUES", "WITH", "INSERT", "UPDATE", "DELETE"
+            ):
+                return self._parse_pg_sql_function_body()
             return list(self._parse_plsql_body())
         if self._match_keyword("AS") or self._match_keyword("IS"):
             pass
@@ -579,6 +587,8 @@ class ParserBase:
                 break
             if peeked.upper_value == "PIPELINED":
                 return self._parse_fallback()
+
+        self._pg_fn_return_type = return_type.name.upper() if return_type else ""
 
         if self._plsql_collection_type_ahead():
             return self._parse_fallback()
@@ -1742,6 +1752,36 @@ class ParserBase:
             self._advance()
             first = False
         return RawSQL(sql=" ".join(parts).strip(), reason="captured expression")
+
+    def _parse_pg_sql_function_body(self) -> list[ASTNode]:
+        """Parse a ``LANGUAGE sql`` body: a bare statement list, no
+        BEGIN/DECLARE (the declare-section parser used to shred it into
+        garbage declarations). The trailing SELECT/VALUES of a non-void
+        function is the function result and becomes its RETURN."""
+        stmts: list[ASTNode] = []
+        guard = 0
+        while not self._at_end():
+            guard += 1
+            if guard > 500:
+                break
+            tok = self._current()
+            if tok.type == TokenType.UNKNOWN and tok.value == "$":
+                break
+            if not tok.is_keyword(
+                "SELECT", "VALUES", "WITH", "INSERT", "UPDATE", "DELETE"
+            ):
+                break
+            stmts.append(self._parse_embedded_dml())
+        returns_result = self._pg_fn_return_type not in ("", "VOID", "TRIGGER")
+        if returns_result and stmts:
+            last = stmts[-1]
+            if isinstance(last, EmbeddedDML) and last.sql.lstrip().upper().startswith(
+                ("SELECT", "VALUES", "WITH")
+            ):
+                stmts[-1] = ReturnStatement(
+                    value=RawSQL(sql=f"({last.sql.strip()})", reason="expression")
+                )
+        return stmts
 
     def _parse_embedded_dml(self) -> ASTNode:
         """Capture a DML statement for later sqlglot transpilation.

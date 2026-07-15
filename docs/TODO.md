@@ -774,6 +774,17 @@ fix needs an **anonymized** regression fixture (never a private name).
         (−34), Oracle 262→237 (−25) — the biggest chain-wave gain.
         Cumulative from the honest baseline: T-SQL 1090→643, MySQL
         579→417, Oracle 454→237.**
+        *Wave 13 (2026-07-15):* `LANGUAGE sql` bodies (bare statement
+        list, no BEGIN/DECLARE) were shredded by the declare-section
+        parser into garbage declarations (`DECLARE select LONGTEXT;
+        DECLARE $ $;`) — they now parse as statements and a non-void
+        function's trailing SELECT/VALUES becomes its RETURN
+        (`_parse_pg_sql_function_body`). PG pseudo-types (`record` in
+        params/returns, the `anyelement`/`anyarray` polymorphic
+        family) generalize the wave-12 record degrade: the routine
+        degrades WHOLE with a warning naming the culprit. Tests:
+        TestLanguageSqlBody, TestPolymorphicPseudoTypes. Sweep
+        re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
