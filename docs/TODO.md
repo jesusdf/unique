@@ -759,6 +759,18 @@ fix needs an **anonymized** regression fixture (never a private name).
         ok 1741→1757 (+16) with expected-missing −16 — the fixed
         functions now create AND run, resolving their dependent calls.
         T-SQL 677 / Oracle 262 unchanged.**
+        *Wave 12 (2026-07-15):* `RETURNS void` (62x in the corpus — the
+        most common plpgsql test-function type) emitted verbatim and is
+        invalid on every target. Mapped to the neutral scalar (INT on
+        MySQL/T-SQL, NUMBER on Oracle) with a guaranteed trailing
+        RETURN and bare `RETURN;` statements gaining the neutral value
+        (nested included, via an `_in_void_function` flag). `DECLARE x
+        record` (row shape unknown until runtime, no equivalent
+        anywhere) now degrades the routine WHOLE to a carrier +
+        warning; the procedural emitter's carrier contract generalized
+        beyond the parse-fallback reason string. Tests:
+        TestReturnsVoid, TestRecordDeclarationDegrades. Sweep
+        re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

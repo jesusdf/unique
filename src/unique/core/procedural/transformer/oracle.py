@@ -47,6 +47,14 @@ class OracleTransformer(ProceduralTransformer):
 
     target_name = "oracle"
 
+    def _void_return_type(self) -> DataType:
+        """Oracle's neutral scalar for PG's ``void`` (NUMBER is callable
+        from SQL and its value is ignorable)."""
+        return DataType(name="NUMBER")
+
+    def _void_return_value(self) -> ASTNode:
+        return RawSQL(sql="NULL", reason="expression")
+
     def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
         # A T-SQL procedure returns a result set with a bare ``SELECT``. Oracle
         # has no equivalent inside PL/SQL, so give the procedure a ``SYS_REFCURSOR``

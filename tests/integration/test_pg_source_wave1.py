@@ -624,3 +624,67 @@ class TestMysqlFunctionNotice:
         )
         assert re.search(r"(?i)SELECT 'hello'", out), out
         assert "@uq_notice" not in out, out
+
+
+class TestReturnsVoid:
+    """``RETURNS void`` (62x in the corpus — the most common plpgsql
+    test-function type) emitted verbatim on every target, where it is
+    invalid: MySQL/T-SQL/Oracle functions must declare AND return a
+    real value. Map to the target's neutral scalar and guarantee a
+    trailing RETURN."""
+
+    _SRC = (
+        "create function vf(a int) returns void as $$\n"
+        "begin\n  insert into t values(a);\nend$$ language plpgsql;"
+    )
+
+    def test_void_mysql(self) -> None:
+        out = _t(self._SRC, "mysql")
+        assert "void" not in out.lower(), out
+        assert re.search(r"(?i)RETURNS\s+INT", out), out
+        assert re.search(r"(?i)RETURN 0;\s*\nEND", out), out
+
+    def test_void_tsql(self) -> None:
+        out = _t(self._SRC, "tsql")
+        assert "void" not in out.lower(), out
+        assert re.search(r"(?i)RETURNS\s+INT", out), out
+        assert re.search(r"(?i)RETURN 0", out), out
+
+    def test_void_oracle(self) -> None:
+        out = _t(self._SRC, "oracle")
+        assert "void" not in out.lower(), out
+        assert re.search(r"(?i)RETURN\s+NUMBER", out), out
+        assert re.search(r"(?i)RETURN NULL;", out), out
+
+    def test_existing_trailing_return_not_duplicated(self) -> None:
+        src = (
+            "create function vg() returns void as $$\n"
+            "begin\n  return;\nend$$ language plpgsql;"
+        )
+        out = _t(src, "mysql")
+        assert out.upper().count("RETURN 0") == 1, out
+
+
+class TestRecordDeclarationDegrades:
+    """``DECLARE x record`` has no mechanical equivalent off PostgreSQL
+    (row shape unknown until runtime); the unit must degrade WHOLE with
+    a warning, never ship ``DECLARE x record;`` (1064/PLS-00201)."""
+
+    _SRC = (
+        "create function rr() returns int as $$\n"
+        "declare x record;\n"
+        "begin\n  select 1 as f1 into x;\n  return x.f1;\nend$$ "
+        "language plpgsql;"
+    )
+
+    @pytest.mark.parametrize("target", ["mysql", "tsql"])
+    def test_record_degrades_whole(self, target: str) -> None:
+        r = Transpiler().transpile(self._SRC, source="postgresql", target=target)
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert "record" in r.sql.lower(), r.sql
+        assert r.warnings or r.unsupported, r.sql

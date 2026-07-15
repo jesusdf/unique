@@ -1818,6 +1818,10 @@ class ProceduralEmitter:
         if node.reason == "Could not parse procedural construct":
             body = "\n".join(f"-- {line}" for line in node.sql.splitlines() or [""])
             return f"-- UNIQUE: could not translate; preserved for review\n{body}"
+        # Transformer-degraded whole units share the same carrier contract.
+        if "preserved as a comment" in node.reason:
+            body = "\n".join(f"-- {line}" for line in node.sql.splitlines() or [""])
+            return f"-- UNIQUE: {node.reason}\n{body}"
         return node.sql
 
     def _emit_literal(self, node: Literal) -> str:

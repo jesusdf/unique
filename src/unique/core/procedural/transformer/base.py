@@ -958,14 +958,77 @@ class ProceduralTransformer:
         ALTER."""
         return True
 
-    def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
-        new_params = self._transform_params(node.parameters)
-        new_body = self._transform_body(
-            self._drop_param_shadowing_locals(node.body, node.parameters)
+    def _void_return_type(self) -> DataType:
+        """Neutral scalar replacing PG's ``void`` (Oracle overrides)."""
+        return DataType(name="INT")
+
+    def _void_return_value(self) -> ASTNode:
+        """Value for the guaranteed trailing RETURN of a void function."""
+        return RawSQL(sql="0", reason="expression")
+
+    @staticmethod
+    def _ends_with_return(body: tuple[ASTNode, ...]) -> bool:
+        for stmt in reversed(body):
+            if isinstance(stmt, CommentStatement):
+                continue
+            return isinstance(stmt, ReturnStatement)
+        return False
+
+    def _degrade_record_function(self, node: CreateFunctionStatement) -> ASTNode | None:
+        """Degrade a routine declaring a ``record`` variable — WHOLE.
+
+        PG's ``record`` type has no mechanical equivalent (the row shape
+        is unknown until runtime); shipping ``DECLARE x record`` is a
+        guaranteed engine error and its field accesses would follow."""
+        if self._target == "postgresql":
+            return None
+        has_record = any(
+            isinstance(s, DeclareStatement) and s.data_type.name.upper() == "RECORD"
+            for s in node.body
         )
+        if not has_record:
+            return None
+        from unique.core.procedural.emitter import ProceduralEmitter
+
+        original = ProceduralEmitter("postgresql").emit(node)
+        reason = (
+            f"PostgreSQL 'record' variable has no {self._target} equivalent; "
+            "the routine is preserved as a comment"
+        )
+        self._warnings.append(reason)
+        return RawSQL(sql=original, reason=reason)
+
+    def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
+        degraded = self._degrade_record_function(node)
+        if degraded is not None:
+            return degraded
+        is_void = (
+            node.return_type is not None
+            and node.return_type.name.upper() == "VOID"
+            and self._target != "postgresql"
+        )
+        new_params = self._transform_params(node.parameters)
+        prev_void = getattr(self, "_in_void_function", False)
+        self._in_void_function = is_void
+        try:
+            new_body = self._transform_body(
+                self._drop_param_shadowing_locals(node.body, node.parameters)
+            )
+        finally:
+            self._in_void_function = prev_void
         new_return = (
             self._transform_data_type(node.return_type) if node.return_type else None
         )
+        # PG's ``RETURNS void`` has no equivalent: MySQL/T-SQL/Oracle
+        # functions must declare AND return a real value. Map to the
+        # target's neutral scalar and guarantee a trailing RETURN.
+        if is_void:
+            new_return = self._void_return_type()
+            if not self._ends_with_return(new_body):
+                new_body = (
+                    *new_body,
+                    ReturnStatement(value=self._void_return_value()),
+                )
         # A PostgreSQL trigger function (``RETURNS TRIGGER``) is not a
         # general-purpose function; without a trigger-function concept the target
         # can't run it (the emitter documents it). Record the loss.
@@ -1613,6 +1676,10 @@ class ProceduralTransformer:
 
     def _transform_return(self, node: ReturnStatement) -> ReturnStatement:
         new_value = self._transform_node(node.value) if node.value else None
+        if new_value is None and getattr(self, "_in_void_function", False):
+            # A bare ``RETURN;`` is invalid in a MySQL/T-SQL/Oracle
+            # function; the void mapping gives it the neutral value.
+            new_value = self._void_return_value()
         return ReturnStatement(value=new_value)
 
     def _transform_cursor_decl(self, node: CursorDeclaration) -> CursorDeclaration:
