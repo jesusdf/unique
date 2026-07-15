@@ -87,7 +87,10 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "VARCHAR": "CHAR",
         "NVARCHAR": "CHAR",
     },
-    "tsql": {"BOOLEAN": "BIT", "BOOL": "BIT"},
+    # PG float8 casts parse to DOUBLE — T-SQL's 64-bit float is FLOAT
+    # (bare DOUBLE is a syntax error) and Oracle's is BINARY_DOUBLE
+    # (ORA-00902).
+    "tsql": {"BOOLEAN": "BIT", "BOOL": "BIT", "DOUBLE": "FLOAT"},
     # DATETIME/DATETIME2/SMALLDATETIME are T-SQL types; Oracle/PostgreSQL use
     # TIMESTAMP. Passing DATETIME through fails (ORA-00902 / invalid pg type).
     "oracle": {
@@ -96,12 +99,33 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "SMALLDATETIME": "TIMESTAMP",
         "VARCHAR": "VARCHAR2",
         "NVARCHAR": "NVARCHAR2",
+        "DOUBLE": "BINARY_DOUBLE",
     },
     "postgresql": {
         "DATETIME": "TIMESTAMP",
         "DATETIME2": "TIMESTAMP",
         "SMALLDATETIME": "TIMESTAMP",
     },
+}
+
+# Statistical-aggregate spellings per target. Keys are the canonical names
+# the IR carries (sqlglot: var_pop -> VARIANCE_POP, variance -> VARIANCE);
+# an absent target means the canonical name is already that engine's
+# spelling. VARIANCE/STDDEV are SAMPLE variants in PG/Oracle/T-SQL(VAR/
+# STDEV) but POPULATION in MySQL — hence the explicit *_SAMP mappings.
+_STAT_AGGREGATE_MAP: dict[str, dict[str, str]] = {
+    "VARIANCE_POP": {
+        "tsql": "VARP",
+        "mysql": "VAR_POP",
+        "oracle": "VAR_POP",
+        "postgresql": "VAR_POP",
+    },
+    "VAR_POP": {"tsql": "VARP"},
+    "VARIANCE": {"tsql": "VAR", "mysql": "VAR_SAMP", "oracle": "VAR_SAMP"},
+    "VAR_SAMP": {"tsql": "VAR"},
+    "STDDEV_POP": {"tsql": "STDEVP"},
+    "STDDEV_SAMP": {"tsql": "STDEV"},
+    "STDDEV": {"tsql": "STDEV", "mysql": "STDDEV_SAMP", "oracle": "STDDEV_SAMP"},
 }
 
 # Date format-model tokens across the four conventions this tool bridges:
@@ -1865,6 +1889,36 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         emitted = _emit_group_concat(node, dialect)
         if emitted is not None:
             return emitted
+
+    # Statistical aggregates: sqlglot canonicalizes var_pop -> VARIANCE_POP
+    # (accepted by NO engine) and keeps VARIANCE/STDDEV, whose PG semantics
+    # are SAMPLE while MySQL's identically-named builtins are POPULATION —
+    # passing the name through silently changes the math. T-SQL spells the
+    # family VARP/VAR/STDEVP/STDEV (anything else gets dbo.-qualified as a
+    # UDF and fails). Absent entries mean the canonical name is already the
+    # engine's spelling.
+    stat_map = _STAT_AGGREGATE_MAP.get(fn_name)
+    if stat_map is not None and len(node.args) == 1:
+        arg = _emit_expression(node.args[0], dialect)
+        return f"{stat_map.get(dialect, fn_name)}({arg})"
+
+    # Boolean aggregates: PG bool_or/bool_and/every canonicalize to
+    # LOGICAL_OR/LOGICAL_AND (or stay verbatim) — no other engine has
+    # them. MySQL booleans are 0/1, so MAX/MIN aggregate them directly;
+    # T-SQL's bit is not a valid MAX operand and needs CAST(… AS INT);
+    # Oracle SQL (23ai+) aggregates a CASE over the boolean.
+    if fn_name in ("LOGICAL_OR", "BOOL_OR", "LOGICAL_AND", "BOOL_AND", "EVERY") and (
+        len(node.args) == 1
+    ):
+        arg = _emit_expression(node.args[0], dialect)
+        agg = "MAX" if fn_name in ("LOGICAL_OR", "BOOL_OR") else "MIN"
+        if dialect == "tsql":
+            return f"{agg}(CAST({arg} AS INT))"
+        if dialect == "mysql":
+            return f"{agg}({arg})"
+        if dialect == "oracle":
+            return f"{agg}(CASE WHEN {arg} THEN 1 ELSE 0 END)"
+        return f"{'BOOL_OR' if agg == 'MAX' else 'BOOL_AND'}({arg})"
 
     # Conditional shorthand: MySQL IF() / T-SQL IIF(). Neither exists on
     # PostgreSQL/Oracle, whose spelling is a searched CASE.

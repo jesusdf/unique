@@ -646,6 +646,22 @@ fix needs an **anonymized** regression fixture (never a private name).
         `SELECT dbo.…` (qualified scalar-function calls in plain
         SELECTs, likely ONE emit shape), 30x `CREATE TABLE #…` temp
         tables, 18x trigger DDL, 17x partitioned CREATE TABLE.
+        *Wave 6 (2026-07-15):* statistical/boolean aggregates + float8
+        casts, in BOTH pipelines' shared paths. sqlglot canonicalizes
+        `var_pop`→VARIANCE_POP (no engine accepts it; T-SQL dbo.-
+        qualified it as a UDF → error 195) and mislabels MySQL's
+        POPULATION-semantics VARIANCE/STDDEV with the sample-semantics
+        canonical names. Landed: `_STAT_AGGREGATE_MAP` (canonical→per-
+        target: VARP/VAR/STDEVP/STDEV on T-SQL, explicit `*_SAMP` on
+        MySQL) + source-side `_SOURCE_STAT_NORMALIZATION` reading the
+        new `SOURCE_DIALECT` ContextVar (mysql VARIANCE→VARIANCE_POP,
+        tsql VARP/VAR/STDEVP canonicalized — covers aliased/nested
+        args through the whole recursion); bool_or/bool_and/every →
+        MAX/MIN (CAST(… AS INT) on T-SQL, CASE on Oracle); CAST DOUBLE
+        → FLOAT (T-SQL) / BINARY_DOUBLE (Oracle) in `_CAST_TYPE_MAP`
+        (55x `AS DOUBLE` in the tsql residue). Round-trip tests incl.
+        the MySQL population-semantics preservation. Tests:
+        `test_pg_source_wave1.py` (13 new). Sweep re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

@@ -1025,6 +1025,35 @@ def _convert_qualified_function(expr: exp.Dot) -> FunctionCall | None:
     return dataclasses.replace(func, name=f"{qualifier_name}.{func.name}")
 
 
+#: Source-side statistical-aggregate normalization. MySQL's VARIANCE/
+#: STDDEV/STD are POPULATION aggregates, but sqlglot canonicalizes the
+#: first two to the names the IR treats as SAMPLE semantics — mapping by
+#: name alone would silently change the math. T-SQL's VARP/VAR/STDEVP
+#: stay Anonymous in sqlglot; canonicalize them so the emitter's
+#: per-target map applies uniformly (its STDEV parses to Stddev = sample,
+#: which is already correct).
+_SOURCE_STAT_NORMALIZATION: dict[str, dict[str, str]] = {
+    "mysql": {
+        "VARIANCE": "VARIANCE_POP",
+        "STDDEV": "STDDEV_POP",
+        "STD": "STDDEV_POP",
+    },
+    "tsql": {
+        "VARP": "VARIANCE_POP",
+        "VAR": "VARIANCE",
+        "STDEVP": "STDDEV_POP",
+    },
+}
+
+
+def _normalize_stat_aggregate(name: str) -> str:
+    """Return the semantics-true canonical name for the run's source dialect."""
+    source = SOURCE_DIALECT.get()
+    if source is None:
+        return name
+    return _SOURCE_STAT_NORMALIZATION.get(source, {}).get(name.upper(), name)
+
+
 def _convert_function(expr: exp.Expression) -> FunctionCall:
     """Convert a function call."""
     # StrPosition (T-SQL CHARINDEX, MySQL LOCATE, ...) keeps its arguments in
@@ -1065,11 +1094,12 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
     # live in `expressions`.
     if isinstance(expr, exp.Anonymous):
         return FunctionCall(
-            name=str(expr.name),
+            name=_normalize_stat_aggregate(str(expr.name)),
             args=tuple(convert_expression(a) for a in expr.expressions),
         )
 
     name = expr.sql_name() if hasattr(expr, "sql_name") else type(expr).__name__.upper()
+    name = _normalize_stat_aggregate(name)
 
     # Generic argument collection. sqlglot models most specialized functions
     # with their arguments in *named slots* (Substring -> this/start/length,

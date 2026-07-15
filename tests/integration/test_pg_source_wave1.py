@@ -276,3 +276,95 @@ class TestPgArgmodeFirstParameters:
         assert re.search(r"(?i)p1\s+int", out), out
         assert re.search(r"(?i)RETURN\s+p1", out), out
         assert "plpgsql" not in out, out
+
+
+class TestStatisticalAggregates:
+    """sqlglot canonicalizes ``var_pop``→VARIANCE_POP and keeps VARIANCE/
+    STDDEV; no engine accepts VARIANCE_POP, T-SQL spells the family
+    VARP/VAR/STDEVP/STDEV (unknown names get ``dbo.``-qualified → error
+    195/207), and MySQL's own VARIANCE/STDDEV are POPULATION variants
+    while PG's are SAMPLE — passing the name through silently changes
+    the math."""
+
+    def test_variance_family_tsql(self) -> None:
+        out = _t("select var_pop(x), variance(x) from t;", "tsql")
+        assert re.search(r"\bVARP\(", out), out
+        assert re.search(r"\bVAR\(", out), out
+        assert "dbo." not in out and "VARIANCE" not in out.upper(), out
+
+    def test_stddev_family_tsql(self) -> None:
+        out = _t("select stddev_pop(x), stddev_samp(x), stddev(x) from t;", "tsql")
+        assert re.search(r"\bSTDEVP\(", out), out
+        assert re.search(r"\bSTDEV\(", out), out
+        assert "dbo." not in out and "STDDEV" not in out.upper(), out
+
+    def test_sample_semantics_mysql(self) -> None:
+        out = _t("select variance(x), stddev(x) from t;", "mysql")
+        assert re.search(r"(?i)\bVAR_SAMP\(", out), out
+        assert re.search(r"(?i)\bSTDDEV_SAMP\(", out), out
+        assert not re.search(r"(?i)\bVARIANCE\(", out), out
+        assert not re.search(r"(?i)\bSTDDEV\(", out), out
+
+    def test_variance_family_oracle(self) -> None:
+        out = _t("select var_pop(x), variance(x) from t;", "oracle")
+        assert re.search(r"(?i)\bVAR_POP\(", out), out
+        assert re.search(r"(?i)\bVAR_SAMP\(", out), out
+        assert "VARIANCE_POP" not in out.upper(), out
+
+
+class TestBooleanAggregates:
+    """PG ``bool_or``/``bool_and``/``every`` canonicalize to LOGICAL_OR/
+    LOGICAL_AND (or stay verbatim) — no other engine has them. MySQL:
+    MAX/MIN over the 0/1 boolean. T-SQL: MAX/MIN over CAST(b AS INT)
+    (bit is not a valid MAX operand)."""
+
+    def test_bool_aggs_mysql(self) -> None:
+        out = _t("select bool_or(b), bool_and(b), every(b) from t;", "mysql")
+        assert re.search(r"(?i)MAX\(b\)", out), out
+        assert re.search(r"(?i)MIN\(b\)", out), out
+        assert "LOGICAL" not in out.upper() and "BOOL_OR" not in out.upper(), out
+
+    def test_bool_aggs_tsql(self) -> None:
+        out = _t("select bool_or(b), bool_and(b) from t;", "tsql")
+        assert re.search(r"(?i)MAX\(CAST\(b AS INT\)\)", out), out
+        assert re.search(r"(?i)MIN\(CAST\(b AS INT\)\)", out), out
+        assert "dbo." not in out and "LOGICAL" not in out.upper(), out
+
+
+class TestFloat8Cast:
+    """``1.0::float8`` / ``float8 'nan'`` parse to CAST(… AS DOUBLE);
+    T-SQL has no DOUBLE (error near ')') and Oracle needs BINARY_DOUBLE
+    (ORA-00902). 55x in the pg→tsql residue."""
+
+    def test_double_cast_tsql(self) -> None:
+        out = _t("select 1.0::float8;", "tsql")
+        assert re.search(r"(?i)CAST\(1\.0 AS FLOAT\)", out), out
+        assert "DOUBLE" not in out.upper(), out
+
+    def test_double_cast_oracle(self) -> None:
+        out = _t("select 1.0::float8;", "oracle")
+        assert re.search(r"(?i)AS BINARY_DOUBLE\)", out), out
+
+    def test_prefixed_literal_tsql(self) -> None:
+        out = _t("select float8 '1.5';", "tsql")
+        assert re.search(r"(?i)CAST\('1\.5' AS FLOAT\)", out), out
+
+
+class TestStatAggregateRoundTrip:
+    """Spelling differs per engine — round-trip so a no-op cannot pass."""
+
+    def test_var_pop_pg_tsql_pg(self) -> None:
+        mid = _t("select var_pop(x) from t;", "tsql")
+        assert re.search(r"(?i)\bVARP\(", mid), mid
+        back = Transpiler().transpile(mid, source="tsql", target="postgresql").sql
+        assert re.search(r"(?i)\bVAR_POP\(", back), back
+
+    def test_mysql_population_survives_to_pg_and_back(self) -> None:
+        mid = (
+            Transpiler()
+            .transpile("SELECT STDDEV(x) FROM t;", source="mysql", target="postgresql")
+            .sql
+        )
+        assert re.search(r"(?i)\bSTDDEV_POP\(", mid), mid
+        back = Transpiler().transpile(mid, source="postgresql", target="mysql").sql
+        assert re.search(r"(?i)\bSTDDEV_POP\(", back), back

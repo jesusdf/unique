@@ -31,6 +31,7 @@ from unique.core.converter import (
     IDENTITY_COLUMNS,
     PG_TRIGGER_FN_BODIES,
     PROC_DATE_PARAMS,
+    SOURCE_DIALECT,
     TEMP_TABLES,
     TSQL_ALIAS_TYPES,
     TSQL_BIT_COLUMNS,
@@ -901,6 +902,7 @@ class Transpiler:
             temp_tables = harvest_temp_tables(sql)
             if temp_tables:
                 temp_tables_token = TEMP_TABLES.set(temp_tables)
+        source_dialect_token = SOURCE_DIALECT.set(source)
         pg_trigger_fn_token = None
         if target == "tsql" and source != "tsql":
             user_functions = harvest_user_functions(sql)
@@ -1119,6 +1121,7 @@ class Transpiler:
                 USER_FUNCTIONS.reset(func_token)
             if pg_trigger_fn_token is not None:
                 PG_TRIGGER_FN_BODIES.reset(pg_trigger_fn_token)
+            SOURCE_DIALECT.reset(source_dialect_token)
             if metadata_resolver:
                 metadata_resolver.close()
 

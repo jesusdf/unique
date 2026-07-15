@@ -210,6 +210,16 @@ STRING_VARIABLES: contextvars.ContextVar[frozenset[str] | None] = (
     contextvars.ContextVar("string_variables", default=None)
 )
 
+# The transpile's SOURCE dialect, set for the whole run by the transpiler.
+# Conversion decisions that depend on where the SQL came from (e.g. MySQL's
+# VARIANCE/STDDEV are population aggregates while the canonical names carry
+# sample semantics) read this instead of threading a parameter through the
+# whole expression recursion. None = unknown source, no source-specific
+# normalization.
+SOURCE_DIALECT: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "source_dialect", default=None
+)
+
 
 _CREATE_FUNCTION_NAME_RE = re.compile(
     r"(?im)^\s*CREATE\s+(?:OR\s+(?:REPLACE|ALTER)\s+)?FUNCTION\s+" r"([\w\[\]\"`.]+)"
@@ -870,6 +880,7 @@ __all__ = [
     "TSQL_BIT_COLUMNS",
     "USER_FUNCTIONS",
     "STRING_VARIABLES",
+    "SOURCE_DIALECT",
     "_BARE_CHAR_BIGTEXT",
     "_BIT_COLUMN_RE",
     "_COLUMN_NAME_RE",
