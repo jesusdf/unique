@@ -539,6 +539,12 @@ class ProceduralTransformer:
         elif self._source == "mysql" and self._target == "tsql":
             # MySQL local variables/params have no sigil; T-SQL requires ``@``.
             return name if name.startswith("@") else f"@{name}"
+        if self._target == "oracle" and name.startswith("_"):
+            # Oracle rejects a leading underscore unquoted (ORA-00911 /
+            # PLS-00103); quoting would have to reach every raw-text
+            # reference, so rename instead (the _var_map rewrite keeps
+            # references consistent).
+            return f"uq{name}"
         return name
 
     def _transform_var_in_sql(self, sql: str) -> str:
@@ -571,8 +577,9 @@ class ProceduralTransformer:
                 return f"v_{clean.lower()}"
 
             sql = re.sub(r"@@?\w+", replace_var_mysql, sql)
-        elif self._source in ("oracle", "postgresql", "mysql") and self._target == (
-            "tsql"
+        elif self._source in ("oracle", "postgresql", "mysql") and self._target in (
+            "tsql",
+            "oracle",
         ):
             # Prefix known variable/parameter names with T-SQL's ``@`` (the map
             # holds source-name → transformed ``@name``); a bare column of the

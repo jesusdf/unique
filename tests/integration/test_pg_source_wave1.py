@@ -1580,3 +1580,23 @@ class TestParameterizedCursors:
         ]
         assert not code, r.sql
         assert any("cursor" in w.message.lower() for w in r.warnings), r.warnings
+
+
+class TestOracleUnderscoreLocals:
+    """Leading-underscore locals (`_sqlstate text`) are illegal unquoted
+    in PL/SQL; quoting would have to reach every raw-text reference, so
+    they RENAME (`uq_sqlstate`) via the _var_map rewrite — declare,
+    assignments and expression references stay consistent; string
+    literals untouched."""
+
+    def test_underscore_local_renamed(self) -> None:
+        out = _t(
+            "create function sdx() returns text as $$\n"
+            "declare _msg text;\n"
+            "begin\n  _msg = 'x';\n  return '_msg: ' || _msg;\nend$$ "
+            "language plpgsql;",
+            "oracle",
+        )
+        assert re.search(r"(?i)uq_msg text", out), out
+        assert re.search(r"(?i)uq_msg := 'x'", out), out
+        assert re.search(r"'_msg: ' \|\| uq_msg", out), out

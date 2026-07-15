@@ -1100,6 +1100,17 @@ fix needs an **anonymized** regression fixture (never a private name).
         (2026-07-15): T-SQL 455→418 (−37, 87.3% — the shredded-declare
         routines), Oracle 159→155 (95.2%), MySQL 200→198. Cumulative:
         T-SQL 1090→418, MySQL 579→198, Oracle 454→155.**
+        *Wave 33 (2026-07-15, deep chains):* leading-underscore locals
+        (`_sqlstate text` — the stacked_diagnostics family) are illegal
+        unquoted in PL/SQL; they RENAME to `uq_*` through the existing
+        `_var_map` rewrite (declare + assignments + raw-text references
+        consistent, string literals untouched; quoting could not reach
+        the raw references). The `_var_map` outside-strings application
+        now also runs for the Oracle target. Remaining in that family:
+        `GET STACKED DIAGNOSTICS` itself (mysql native; oracle→SQLERRM/
+        FORMAT_ERROR_BACKTRACE; tsql→ERROR_*()) — classified for the
+        next deep wave. Tests: TestOracleUnderscoreLocals. Sweep
+        re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
