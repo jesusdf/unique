@@ -247,10 +247,16 @@ def sweep_oracle(url: str, statements: list[str], report: DirectionReport) -> No
     if not m:
         raise ValueError(f"Unparseable Oracle URL: {url!r}")
     user, password, host, port, service = m.groups()
-    conn = oracledb.connect(
-        user=user, password=password, dsn=f"{host}:{int(port or 1521)}/{service}"
-    )
-    cur = conn.cursor()
+
+    def _connect():  # noqa: ANN202 - reconnect helper (session kills)
+        c = oracledb.connect(
+            user=user,
+            password=password,
+            dsn=f"{host}:{int(port or 1521)}/{service}",
+        )
+        return c, c.cursor()
+
+    conn, cur = _connect()
     schema = f"UNIQUE_SWEEP_{uuid.uuid4().hex[:8].upper()}"
     isolated = False
     try:
@@ -269,12 +275,25 @@ def sweep_oracle(url: str, statements: list[str], report: DirectionReport) -> No
         r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE)\s+(?:\w+\.)?\"?(\w+)"
     )
     owner = (schema if isolated else user).upper()
+    _CONN_LOST = ("DPY-1001", "DPY-4011", "ORA-03113", "ORA-03114", "ORA-03135")
     try:
         for st in statements:
             try:
                 cur.execute(st)
             except Exception as e:  # noqa: BLE001
-                report.record_failure(classify_oracle(str(e)), _error_group(str(e)), st)
+                msg = str(e)
+                if any(code in msg for code in _CONN_LOST):
+                    # A wild statement killed the server session: reconnect,
+                    # count it as OTHER (not the statement's syntax), go on.
+                    with contextlib.suppress(Exception):
+                        conn.close()
+                    conn, cur = _connect()
+                    if isolated:
+                        with contextlib.suppress(Exception):
+                            cur.execute(f"ALTER SESSION SET CURRENT_SCHEMA = {schema}")
+                    report.other += 1
+                    continue
+                report.record_failure(classify_oracle(msg), _error_group(msg), st)
                 continue
             # Oracle compiles PL/SQL lazily: CREATE succeeds even for a broken
             # body (the object is left INVALID). Query the compile errors so a

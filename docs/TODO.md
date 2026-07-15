@@ -991,6 +991,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         the transformer. Mutation floors: per user, measured by the
         NIGHTLY run only from now on (no local/dispatch runs). Tests:
         TestPerformDiscard. Sweep re-measure pending.
+        **mysql-source baseline #1 (private local corpus, 2026-07-15,
+        at `801ed0e`): mysql→PG 90.2% (648 syntax / 6,580 stmts),
+        mysql→T-SQL 84.6% (988 / 6,422); mysql→Oracle failed mid-sweep
+        on the long-TODO'd DPY-1001 session-kill — the sweep's Oracle
+        runner now RECONNECTS and counts the killer statement as
+        'other' (fixed in `scripts/validity_sweep.py`; re-run
+        pending).**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
