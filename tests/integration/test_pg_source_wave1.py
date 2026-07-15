@@ -2248,3 +2248,32 @@ class TestTsqlInvalidShapesDegrade:
             and "ON CONFLICT" in ln.upper()
         ]
         assert not code, out
+
+
+class TestTsqlBooleanLiteralsAndScalarOrder:
+    """wave 55: two mechanical mysql→tsql classes — MySQL treats any
+    nonzero numeric as TRUE, so a literal operand of AND/OR in
+    condition position must become a real comparison on T-SQL (15x
+    error 4145: ``HAVING f1 = 'a' OR 1``); and a scalar subquery's
+    ORDER BY without LIMIT is illegal on T-SQL (7x error 1033) and
+    meaningless anyway — strip it."""
+
+    def test_or_literal_becomes_comparison(self) -> None:
+        out = _t2(
+            "select a from t1 having a = 'a' or 1;",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)OR 1 <> 0", out), out
+
+    def test_and_zero_literal(self) -> None:
+        out = _t2("select a from t1 where a = 1 and 0;", "mysql", "tsql")
+        assert re.search(r"(?i)AND 0 <> 0", out), out
+
+    def test_scalar_subquery_order_by_strips(self) -> None:
+        out = _t2(
+            "select (select 1 as foo order by foo) as x from t1;",
+            "mysql",
+            "tsql",
+        )
+        assert "ORDER BY" not in out.upper(), out

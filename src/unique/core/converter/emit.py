@@ -10,6 +10,7 @@ converting sqlglot's expression tree into our engine-agnostic IR.
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from typing import cast
 
@@ -674,6 +675,28 @@ def _emit_value_expression(node: ASTNode, dialect: str) -> str:
     return _emit_expression(node, dialect)
 
 
+def _comparisonize_literals(node: ASTNode) -> ASTNode:
+    """MySQL/PG treat a numeric operand of AND/OR as a truth value;
+    T-SQL/Oracle need a real comparison — rewrite the literal to
+    ``lit <> 0`` throughout the boolean tree."""
+    if not (
+        isinstance(node, BinaryOp)
+        and node.operator in (BinaryOperator.AND, BinaryOperator.OR)
+    ):
+        return node
+
+    def fix(side: ASTNode) -> ASTNode:
+        if isinstance(side, Literal) and side.dtype in ("integer", "number"):
+            return BinaryOp(
+                operator=BinaryOperator.NEQ,
+                left=side,
+                right=Literal(value=0, dtype="integer"),
+            )
+        return _comparisonize_literals(side)
+
+    return dataclasses.replace(node, left=fix(node.left), right=fix(node.right))
+
+
 def _emit_condition(node: ASTNode, dialect: str) -> str:
     """Emit an expression in condition position.
 
@@ -684,6 +707,8 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
     wraps them in CASE)."""
     if dialect == "tsql" and isinstance(node, Literal) and node.dtype == "boolean":
         return "1 = 1" if node.value else "1 = 0"
+    if dialect in ("tsql", "oracle"):
+        node = _comparisonize_literals(node)
     if (
         dialect in ("tsql", "oracle")
         and isinstance(node, BinaryOp)
@@ -2051,7 +2076,12 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         return f"CAST({inner} AS {dtype})"
 
     if isinstance(node, SubqueryExpression):
-        return f"({_emit_select(node.query, dialect)})"
+        query = node.query
+        if dialect == "tsql" and query.order_by and not query.limit:
+            # Illegal in a T-SQL subquery without TOP/OFFSET, and with no
+            # LIMIT it cannot change the (single-row) result anyway.
+            query = dataclasses.replace(query, order_by=())
+        return f"({_emit_select(query, dialect)})"
 
     if isinstance(node, ExpressionList):
         inner = ", ".join(_emit_expression(item, dialect) for item in node.items)

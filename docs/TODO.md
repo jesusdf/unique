@@ -1334,8 +1334,23 @@ fix needs an **anonymized** regression fixture (never a private name).
         and INSERT combining RETURNING with ON CONFLICT took the
         RETURNING passthrough leaving `ON CONFLICT` raw after OUTPUT
         (4x; now a MERGE-hint carrier off PG). Tests:
-        TestTsqlInvalidShapesDegrade. *Measurement pending next
-        pg-corpus cycle.*
+        TestTsqlInvalidShapesDegrade. **Waves 51+53+54 measured at
+        `5997002` (2026-07-16): pg→T-SQL 344→266 (91.8%), pg→MySQL
+        186→180 (94.1%), pg→Oracle 149→140 (95.6%). Standing:
+        pg-source {266/180/140}, mysql-source {359/156/246} — all six
+        ≥91.8%.**
+        *Wave 55 (2026-07-16):* two mechanical mysql→tsql classes — a
+        numeric literal operand of AND/OR in condition position (MySQL
+        truthiness) becomes `lit <> 0` on T-SQL/Oracle (15x error
+        4145: `HAVING f1 = 'a' OR 1`); and a scalar subquery's ORDER
+        BY without LIMIT (illegal on T-SQL, no observable effect)
+        strips (7x error 1033). Tests:
+        TestTsqlBooleanLiteralsAndScalarOrder. *Measurement pending
+        next mysql-corpus cycle. Remaining mysql→tsql chains
+        classified: 32x `SELECT … INTO @var` (needs the T-SQL
+        `SELECT @a = expr` assignment form), 11x USING inside
+        parenthesized join relations, 12x mysql `@@sysvar` references
+        (degrade candidates), 6x RAND(seed).*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
