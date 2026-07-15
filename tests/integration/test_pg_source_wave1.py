@@ -2055,3 +2055,24 @@ class TestParenthesizedUnionArms:
         )
         assert re.search(r"(?is)LIMIT 2", out), out
         assert re.search(r"(?is)FROM t2\s+ORDER BY a\b[^;]*;?\s*$", out), out
+
+
+class TestNullsafeValuePosition:
+    """wave 49: null-safe comparisons in VALUE position on
+    T-SQL/Oracle shipped the predicate spelling ``CASE … END = 1``
+    (trailing ``= 1`` is not a value there — 12x of pg→tsql). The
+    value position keeps just the CASE."""
+
+    def test_is_distinct_select_list_tsql(self) -> None:
+        out = _t('select 1 is distinct from 2 as "yes";', "tsql")
+        assert "END = 1" not in out, out
+        assert re.search(r"(?is)CASE WHEN NOT EXISTS.*END AS \[yes\]", out), out
+
+    def test_is_not_distinct_select_list_oracle(self) -> None:
+        out = _t('select 1 is not distinct from 2 as "no";', "oracle")
+        assert "END = 1" not in out, out
+        assert re.search(r"(?is)CASE WHEN EXISTS.*END AS \"no\"", out), out
+
+    def test_predicate_position_still_bare(self) -> None:
+        out = _t("select a from t1 where b is distinct from c;", "tsql")
+        assert re.search(r"(?is)WHERE NOT EXISTS \(SELECT", out), out

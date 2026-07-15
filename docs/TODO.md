@@ -1272,6 +1272,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         ignored) attaches to the last arm. Tests:
         TestParenthesizedUnionArms. *Measurement pending next
         mysql-corpus cycle.*
+        *Wave 49 (2026-07-16):* null-safe comparisons in VALUE
+        position on T-SQL/Oracle shipped the predicate spelling
+        `CASE … END = 1` (12x of pg→tsql — the trailing `= 1` is not
+        a value there); the value position now keeps just the CASE
+        (never NULL, so the two-armed form is exact). Tests:
+        TestNullsafeValuePosition. *Measurement pending next pg-corpus
+        cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

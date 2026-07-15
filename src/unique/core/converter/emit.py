@@ -642,6 +642,20 @@ def _emit_value_expression(node: ASTNode, dialect: str) -> str:
     if (
         dialect in ("tsql", "oracle")
         and isinstance(inner, BinaryOp)
+        and inner.operator in (BinaryOperator.NULLSAFE_EQ, BinaryOperator.NULLSAFE_NEQ)
+    ):
+        # _emit_binary returns the predicate spelling "CASE … END = 1";
+        # the value position keeps just the CASE (never NULL, so the
+        # two-armed form is already exact).
+        wrapped = _emit_binary(inner, dialect)
+        m = re.fullmatch(r"(CASE WHEN .+ THEN 1 ELSE 0 END) = 1", wrapped, re.S)
+        value = m.group(1) if m else wrapped
+        if isinstance(node, Alias):
+            return f"{value} AS {_ident(node.name, node.quoted, dialect)}"
+        return value
+    if (
+        dialect in ("tsql", "oracle")
+        and isinstance(inner, BinaryOp)
         and inner.operator in _COMPARISON_OPS
     ):
         pred = _emit_binary(inner, dialect)
