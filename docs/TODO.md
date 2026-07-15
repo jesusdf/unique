@@ -990,7 +990,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         FROM-tail form (multi-row discard) degrades with a warning in
         the transformer. Mutation floors: per user, measured by the
         NIGHTLY run only from now on (no local/dispatch runs). Tests:
-        TestPerformDiscard. Sweep re-measure pending.
+        TestPerformDiscard. **Measured at `3b48991` (2026-07-15):
+        MySQL 206→200 (93.5%), Oracle 162→159 (95.1%), T-SQL 461→455
+        (86.3%) — all three moved. Cumulative: T-SQL 1090→455, MySQL
+        579→200, Oracle 454→159.**
         **mysql-source baseline #1 (private local corpus, 2026-07-15,
         at `801ed0e`): mysql→PG 90.2% (648 syntax / 6,580 stmts),
         mysql→T-SQL 84.6% (988 / 6,422); mysql→Oracle failed mid-sweep
