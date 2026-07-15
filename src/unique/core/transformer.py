@@ -540,6 +540,11 @@ class Transformer:
         """Unsupported features encountered during transformation."""
         return self.context.unsupported
 
+    #: Array-construct function names (IR canonical): PostgreSQL arrays
+    #: have no T-SQL/MySQL equivalent; a statement using them cannot run
+    #: there in any spelling.
+    _ARRAY_CONSTRUCTS = frozenset({"ARRAY", "ARRAY_AGG", "UNNEST", "EXPLODE"})
+
     def transform(self, nodes: list[ASTNode]) -> list[ASTNode]:
         """Apply all transformation passes to a list of IR nodes.
 
@@ -550,9 +555,50 @@ class Transformer:
             The transformed IR nodes.
         """
         result = nodes
+        if self.context.target in ("tsql", "mysql"):
+            result = [self._gate_array_constructs(node) for node in result]
         for pass_ in self._passes:
             result = [self._apply_pass(pass_, node) for node in result]
         return result
+
+    def _gate_array_constructs(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement using PG array constructs — WHOLE.
+
+        They shipped as fake calls (``dbo.ARRAY(1,2)``, unqualified
+        ``ARRAY_AGG(x)``) with zero warnings; there is no spelling of
+        arrays on these targets."""
+        found = self._find_array_construct(node)
+        if found is None:
+            return node
+        reason = (
+            f"PostgreSQL array construct {found}(…) has no "
+            f"{self.context.target} equivalent; statement preserved as a comment"
+        )
+        self.context.warn(reason, "array_construct")
+        self.context.mark_unsupported(f"{found} (array construct)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _find_array_construct(self, value: object) -> str | None:
+        """First array-construct function name reachable from *value*."""
+        if (
+            isinstance(value, FunctionCall)
+            and value.name.upper() in self._ARRAY_CONSTRUCTS
+        ):
+            return value.name.upper()
+        if isinstance(value, ASTNode):
+            for f in fields(value):
+                found = self._find_array_construct(getattr(value, f.name))
+                if found is not None:
+                    return found
+            return None
+        if isinstance(value, tuple):
+            for item in value:
+                found = self._find_array_construct(item)
+                if found is not None:
+                    return found
+        return None
 
     def _apply_pass(self, pass_: TransformPass, node: ASTNode) -> ASTNode:
         """Apply a single pass to a node, recursing into children."""

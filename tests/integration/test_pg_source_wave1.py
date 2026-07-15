@@ -844,3 +844,35 @@ class TestBooleanLiteralConditionsTsql:
         out = _t("select * from a join b on a.x = b.x;", "tsql")
         assert re.search(r"(?i)ON a\.x = b\.x", out), out
         assert "1 = 1" not in out, out
+
+
+class TestArrayConstructsDegrade:
+    """PG array constructs (``ARRAY[…]``, ``array_agg``, ``unnest``)
+    shipped as fake function calls on T-SQL/MySQL (``dbo.ARRAY(1,2)``,
+    unqualified ``ARRAY_AGG(x)`` — guaranteed engine errors) with ZERO
+    warnings. Neither engine has arrays: the statement degrades WHOLE
+    with a warning and an unsupported entry."""
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql"])
+    @pytest.mark.parametrize(
+        "sql",
+        [
+            "select array[1,2,3];",
+            "select array_agg(x) from t;",
+            "select unnest(array[1,2]);",
+        ],
+    )
+    def test_array_construct_degrades(self, sql: str, target: str) -> None:
+        r = Transpiler().transpile(sql, source="postgresql", target=target)
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_array_agg_kept_on_pg(self) -> None:
+        out = _t("select array_agg(x) from t;", "postgresql")
+        assert re.search(r"(?i)ARRAY_AGG\(x\)", out), out
+        assert "UNIQUE:" not in out, out

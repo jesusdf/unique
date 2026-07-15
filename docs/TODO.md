@@ -834,6 +834,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         honest degrade), 12x `f1()` polymorphic call sites, 8x
         `float8 'nan'` special values (`'nan'`/`'inf'` literals have
         no MySQL FLOAT spelling).
+        *Wave 17 (2026-07-15):* array-construct honesty — statements
+        using `ARRAY[…]`/`array_agg`/`unnest` shipped as fake calls
+        (`dbo.ARRAY(1,2)`, unqualified `ARRAY_AGG(x)` — guaranteed
+        engine errors) with ZERO warnings on T-SQL/MySQL. A statement-
+        level gate in `Transformer.transform` degrades them WHOLE to a
+        carrier + warning + unsupported entry (PG/Oracle keep their
+        paths). Tests: TestArrayConstructsDegrade. Sweep re-measure
+        pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
