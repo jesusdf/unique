@@ -525,3 +525,73 @@ class TestJoinUsingOnTsql:
     def test_using_kept_on_pg(self) -> None:
         out = _t("select * from t1 inner join t2 using (a);", "postgresql")
         assert re.search(r"(?i)USING\s*\(a\)", out), out
+
+
+class TestPlpgsqlRaiseFormat:
+    """plpgsql ``RAISE level 'fmt %', args [USING opt = v]``: the raw
+    argument tuple was pasted into single-argument carriers on every
+    target (``PRINT 'x', @a`` — error 102; ``PUT_LINE('x', a)`` —
+    PLS-00306; a bare ``SELECT 'x', a`` inside a MySQL function), and
+    the USING warning mislabeled plpgsql options as RAISERROR args.
+    The ``%`` placeholders interleave into a source-dialect ``||``
+    concatenation the existing operator machinery then maps per
+    target."""
+
+    _SRC = (
+        "create function rf(a int) returns int as $$\n"
+        "begin\n"
+        "  raise notice 'value is %', a;\n"
+        "  if a = 0 then\n"
+        "    raise exception 'bad % here', a;\n"
+        "  end if;\n"
+        "  return a;\n"
+        "end$$ language plpgsql;"
+    )
+
+    def test_notice_interleaves_mysql(self) -> None:
+        out = _t(self._SRC, "mysql")
+        assert re.search(r"(?i)CONCAT\('value is ',\s*a\)", out), out
+        assert not re.search(r"(?i)'value is %'\s*,", out), out
+
+    def test_notice_single_argument_oracle(self) -> None:
+        out = _t(self._SRC, "oracle")
+        assert re.search(r"(?i)PUT_LINE\('value is '\s*\|\|\s*a\)", out), out
+
+    def test_exception_message_formatted_oracle(self) -> None:
+        out = _t(self._SRC, "oracle")
+        pat = (
+            r"(?i)RAISE_APPLICATION_ERROR\(-20001,"
+            r"\s*'bad '\s*\|\|\s*a\s*\|\|\s*' here'\)"
+        )
+        assert re.search(pat, out), out
+
+    def test_exception_message_formatted_mysql(self) -> None:
+        # SIGNAL's MESSAGE_TEXT only accepts a literal or a variable, so
+        # the formatted message is hoisted through a user variable.
+        out = _t(self._SRC, "mysql")
+        assert re.search(
+            r"(?i)SET @uq_errmsg = CONCAT\('bad ',\s*a,\s*' here'\)", out
+        ), out
+        assert re.search(r"(?i)MESSAGE_TEXT\s*=\s*@uq_errmsg", out), out
+
+    def test_double_percent_is_literal(self) -> None:
+        out = _t(
+            "create function rg() returns void as $$\n"
+            "begin\n  raise notice '100%% done';\nend$$ language plpgsql;",
+            "oracle",
+        )
+        assert "100% done" in out, out
+
+    def test_using_options_folded_with_truthful_warning(self) -> None:
+        r = Transpiler().transpile(
+            "create function rh(a int) returns int as $$\n"
+            "begin\n"
+            "  raise exception 'bad %', a using hint = 'give nonzero';\n"
+            "  return a;\n"
+            "end$$ language plpgsql;",
+            source="postgresql",
+            target="mysql",
+        )
+        assert "give nonzero" in r.sql, r.sql
+        joined = " ".join(w.message for w in r.warnings)
+        assert "USING" in joined and "RAISERROR" not in joined, r.warnings

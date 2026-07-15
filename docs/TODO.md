@@ -729,6 +729,23 @@ fix needs an **anonymized** regression fixture (never a private name).
         bring-up chains (RAISE forms ~12x/direction, FOREACH 15x,
         STRICT INTO 19x, composite returns 10x) — the M4-scale
         workstream; single-shape DML waves are close to exhausted.
+        *Wave 10 (2026-07-15):* plpgsql `RAISE level 'fmt %', args
+        [USING …]` formatting — the first body-chain blocker. The raw
+        argument tuple was pasted into single-argument carriers on
+        every target (`PUT_LINE('x', a)` PLS-00306, `PRINT 'x', @a`
+        error 102, bare `SELECT 'x', a` in MySQL functions), and the
+        USING warning mislabeled plpgsql options as RAISERROR args.
+        The parser now interleaves `%` placeholders (incl. `%%`) into
+        ONE `||` concatenation in source spelling — the operator
+        machinery maps it per target (CONCAT on MySQL, `+` on T-SQL,
+        `||` on Oracle) — and folds USING options into the message
+        with a truthful warning; MySQL SIGNAL hoists non-literal
+        messages through `@uq_errmsg` (MESSAGE_TEXT accepts only
+        literals/variables). Tests: TestPlpgsqlRaiseFormat (7). Left
+        open: notices inside MySQL FUNCTIONs still emit a bare SELECT
+        (invalid there — needs routine-kind context in the emitter);
+        T-SQL `+` on non-string args is a runtime cast risk (M3
+        string-typing). Sweep re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

@@ -551,15 +551,122 @@ class PlsqlStatementsMixin(ParserBase):
             in ("NOTICE", "INFO", "LOG", "DEBUG", "WARNING", "EXCEPTION")
         ):
             self._advance()
+            informational = level.upper_value in ("NOTICE", "INFO", "LOG", "DEBUG")
+            if self._current().type == TokenType.STRING:
+                formatted = self._parse_pg_raise_format()
+                if formatted is not None:
+                    if informational:
+                        return PrintStatement(expression=formatted)
+                    return RaiseErrorStatement(message=formatted)
             expr = self._parse_expression_until_semicolon()
             self._match_type(TokenType.SEMICOLON)
-            if level.upper_value in ("NOTICE", "INFO", "LOG", "DEBUG"):
+            if informational:
                 return PrintStatement(expression=expr)
             return RaiseErrorStatement(message=expr)
 
         expr = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)
         return RaiseErrorStatement(message=expr)
+
+    def _parse_pg_raise_format(self) -> ASTNode | None:
+        """Parse PG's ``'fmt %', args [USING opt = v, …]`` RAISE tail.
+
+        Each ``%`` placeholder consumes one argument (``%%`` is a literal
+        percent); the result is ONE ``||`` concatenation in the source
+        spelling, which the existing operator machinery maps per target —
+        the raw tuple pasted into single-argument carriers was invalid
+        everywhere (``PUT_LINE('x', a)``, ``PRINT 'x', @a``). USING
+        options have no separate channel off PostgreSQL and fold into the
+        message text, with a warning saying exactly that. Returns None
+        (position restored) when the shape doesn't match, so the caller
+        keeps the raw capture — never a corrupted message.
+        """
+        start_pos = self._pos
+        fmt = self._advance().value  # STRING token, quotes included
+
+        args: list[str] = []
+        while self._match_type(TokenType.COMMA):
+            arg_parts: list[str] = []
+            depth = 0
+            while not self._at_end():
+                tok = self._current()
+                if depth == 0 and (
+                    tok.type in (TokenType.COMMA, TokenType.SEMICOLON)
+                    or tok.is_keyword("USING")
+                ):
+                    break
+                if tok.type == TokenType.LPAREN:
+                    depth += 1
+                elif tok.type == TokenType.RPAREN:
+                    if depth == 0:
+                        break
+                    depth -= 1
+                arg_parts.append(self._flat_value(tok))
+                self._advance()
+            if not arg_parts:
+                self._pos = start_pos
+                return None
+            args.append(" ".join(arg_parts))
+
+        using_text: str | None = None
+        if self._current().is_keyword("USING"):
+            self._advance()
+            using_parts: list[str] = []
+            while not self._at_end() and self._current().type != TokenType.SEMICOLON:
+                using_parts.append(self._flat_value(self._advance()))
+            using_text = " ".join(using_parts)
+
+        pieces = self._interleave_raise_format(fmt, args)
+        if pieces is None:
+            self._pos = start_pos
+            return None
+        self._match_type(TokenType.SEMICOLON)
+
+        if using_text:
+            folded = using_text.replace("'", "''")
+            pieces.append(f"' [USING {folded}]'")
+            self._warnings.append(
+                "RAISE USING options folded into the message text "
+                f"(no separate channel on the target): {using_text[:80]}"
+            )
+        return RawSQL(sql=" || ".join(pieces), reason="expression")
+
+    @staticmethod
+    def _interleave_raise_format(fmt: str, args: list[str]) -> list[str] | None:
+        """Interleave a plpgsql format string with its arguments.
+
+        Returns the ``||`` operand list, or None when the placeholder and
+        argument counts disagree (the caller falls back to raw capture).
+        """
+        content = fmt[1:-1]
+        pieces: list[str] = []
+        lit: list[str] = []
+        arg_index = 0
+        i = 0
+        while i < len(content):
+            ch = content[i]
+            if ch == "%":
+                if content[i + 1 : i + 2] == "%":
+                    lit.append("%")
+                    i += 2
+                    continue
+                if arg_index >= len(args):
+                    return None
+                if lit:
+                    pieces.append("'" + "".join(lit) + "'")
+                    lit = []
+                arg = args[arg_index]
+                pieces.append(arg if len(arg.split()) == 1 else f"({arg})")
+                arg_index += 1
+                i += 1
+                continue
+            lit.append(ch)
+            i += 1
+        if lit:
+            pieces.append("'" + "".join(lit) + "'")
+        if arg_index != len(args):
+            return None
+        return pieces or ["''"]
 
     def _parse_sqlplus_exec_call(self) -> ASTNode:
         """Parse the SQL*Plus ``EXEC[UTE] proc[(args)]`` shorthand call."""

@@ -1564,6 +1564,14 @@ class ProceduralEmitter:
             number = str(magnitude) if 1 <= magnitude <= 65535 else None
         if text is not None:
             errno = f", MYSQL_ERRNO = {number}" if number is not None else ""
+            # SIGNAL's MESSAGE_TEXT accepts only a literal or a variable —
+            # an expression (a formatted CONCAT(...) message) must be
+            # hoisted through a user variable first.
+            if not (text.startswith(("'", '"', "@")) or re.fullmatch(r"\w+", text)):
+                return (
+                    f"SET @uq_errmsg = {text};\n"
+                    f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = @uq_errmsg{errno};"
+                )
             sig = f"SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = {text}{errno}"
         elif number is not None:
             # A numeric message id only — MySQL can't resolve a message-id to
