@@ -581,6 +581,8 @@ class Transformer:
             result = [self._gate_array_constructs(node) for node in result]
         if self.context.target == "mysql":
             result = [self._gate_mysql_full_join(node) for node in result]
+        if self.context.target == "tsql":
+            result = [self._gate_tsql_temp_view(node) for node in result]
         for pass_ in self._passes:
             result = [self._apply_pass(pass_, node) for node in result]
         return result
@@ -672,6 +674,41 @@ class Transformer:
             )
         if isinstance(value, tuple):
             return any(self._contains_full_join(item) for item in value)
+        return False
+
+    def _gate_tsql_temp_view(self, node: ASTNode) -> ASTNode:
+        """T-SQL forbids views over temporary tables (error 4508);
+        degrade the CREATE VIEW whole with a warning."""
+        from unique.core.ast_nodes import CreateViewStatement
+        from unique.core.converter import TEMP_TABLES
+
+        if not isinstance(node, CreateViewStatement):
+            return node
+        temps = TEMP_TABLES.get() or frozenset()
+        if not temps:
+            return node
+        if not self._references_table(node.query, temps):
+            return node
+        reason = (
+            "T-SQL does not allow views over temporary tables (4508); "
+            "statement preserved as a comment"
+        )
+        self.context.warn(reason, "temp_view")
+        self.context.mark_unsupported("VIEW over temporary table (T-SQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _references_table(self, value: object, names: frozenset[str]) -> bool:
+        if isinstance(value, TableRef) and value.name.lower().lstrip("#") in names:
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._references_table(getattr(value, f.name), names)
+                for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._references_table(item, names) for item in value)
         return False
 
     def _gate_array_constructs(self, node: ASTNode) -> ASTNode:

@@ -1045,8 +1045,12 @@ def _portable_index(sql: str, dialect: str) -> str:
     return sql
 
 
-def _emit_select(node: SelectStatement, dialect: str) -> str:
-    """Emit a SELECT statement."""
+def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -> str:
+    """Emit a SELECT statement.
+
+    ``into`` renders T-SQL's ``SELECT … INTO <table> FROM …`` (the
+    faithful CTAS form there); placed right before the FROM clause.
+    """
     parts: list[str] = []
 
     # CTEs
@@ -1074,6 +1078,9 @@ def _emit_select(node: SelectStatement, dialect: str) -> str:
     distinct = "DISTINCT " if node.distinct else ""
     cols = ", ".join(_emit_expression(c, dialect) for c in node.columns) or "*"
     parts.append(f"SELECT {distinct}{top}{cols}")
+
+    if into:
+        parts.append(f"INTO {into}")
 
     # FROM
     if node.from_clause:
@@ -1448,6 +1455,10 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     exists = inline_exists
 
     if node.as_select:
+        if dialect == "tsql":
+            # T-SQL has no CREATE TABLE AS; the faithful idiom is
+            # SELECT … INTO <table> FROM … (a temp name keeps its #).
+            return _emit_select(node.as_select, dialect, into=table)
         select = _emit_select(node.as_select, dialect)
         return f"{tsql_guard}CREATE {temp}TABLE {exists}{table} AS\n{select}"
 

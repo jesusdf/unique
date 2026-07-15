@@ -1456,3 +1456,39 @@ class TestTsqlEmptyBeginBlock:
             for seg in inner
             if seg is not None
         ), out
+
+
+class TestTsqlCtasBecomesSelectInto:
+    """T-SQL has no CREATE TABLE AS: the faithful idiom is
+    ``SELECT … INTO <table> FROM …`` (133x after wave M2 made CTAS
+    queries survive). Views over temp tables (error 4508) degrade
+    whole; other targets keep their CTAS."""
+
+    def test_ctas_select_into_tsql(self) -> None:
+        out = _t2(
+            "create temporary table tmp as select a, b from t3;",
+            "mysql",
+            "tsql",
+        )
+        assert "CREATE TABLE" not in out.upper(), out
+        assert re.search(r"(?is)SELECT a, b\s+INTO #tmp\s+FROM t3", out), out
+
+    def test_ctas_kept_on_oracle(self) -> None:
+        out = _t2("create table tmp2 as select 1 as x;", "mysql", "oracle")
+        assert re.search(r"(?i)CREATE TABLE tmp2 AS", out), out
+
+    def test_view_on_temp_table_degrades_tsql(self) -> None:
+        r = Transpiler().transpile(
+            "create temporary table t1x (a int);\n"
+            "create view v1 as select * from t1x;",
+            source="mysql",
+            target="tsql",
+        )
+        # the view must not ship executable; the carrier explains why
+        view_lines = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--") and "VIEW" in ln.upper()
+        ]
+        assert not view_lines, r.sql
+        assert any("temporary tables" in w.message for w in r.warnings), r.warnings

@@ -1042,6 +1042,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         residue is now the long tail: PREPARE/EXECUTE dynamic SQL and
         the bug* procedural chains (→T-SQL 754, →PG 403, →Oracle
         323).**
+        *Wave M4 (mysql-source, 2026-07-15):* T-SQL CTAS — no `CREATE
+        TABLE AS` exists there; the faithful idiom `SELECT … INTO
+        <#table> FROM …` now renders (an `into=` hook in
+        `_emit_select`, 133x — the class wave M2's CTAS rescue made
+        visible); and views over temporary tables (T-SQL 4508, 91x)
+        degrade whole via a transformer gate driven by the TEMP_TABLES
+        harvest. Left classified: `CREATE TABLE t LIKE t1` clones
+        (26x) drop their LIKE — next wave. Tests:
+        TestTsqlCtasBecomesSelectInto. Sweep re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
