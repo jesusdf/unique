@@ -1280,6 +1280,8 @@ def _convert_binary(expr: exp.Binary) -> ASTNode:
         exp.BitwiseXor: BinaryOperator.BIT_XOR,
         exp.BitwiseLeftShift: BinaryOperator.BIT_LSHIFT,
         exp.BitwiseRightShift: BinaryOperator.BIT_RSHIFT,
+        exp.NullSafeEQ: BinaryOperator.NULLSAFE_EQ,
+        exp.NullSafeNEQ: BinaryOperator.NULLSAFE_NEQ,
     }
 
     operator = op_map.get(type(expr))

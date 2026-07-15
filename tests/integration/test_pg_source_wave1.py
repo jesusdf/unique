@@ -1824,3 +1824,31 @@ class TestTgContextConstants:
         assert "'INSERT'" in out, out
         assert "'STATEMENT'" in out, out
         assert "TG_NAME" not in out.upper(), out
+
+
+class TestNullSafeComparison:
+    """PG's ``IS [NOT] DISTINCT FROM`` (null-safe comparison) shipped
+    raw as an unmapped operator (1064 on MySQL). Per-target: MySQL's
+    ``<=>``, the version-safe EXISTS-INTERSECT form on T-SQL/Oracle,
+    PG native."""
+
+    def test_mysql_spaceship(self) -> None:
+        out = _t2("select 2 is not distinct from null as x;", "postgresql", "mysql")
+        assert re.search(r"2 <=> NULL", out), out
+        out2 = _t2("select 2 is distinct from 3 as x;", "postgresql", "mysql")
+        assert re.search(r"(?i)NOT \(2 <=> 3\)", out2), out2
+
+    def test_tsql_intersect_form(self) -> None:
+        out = _t2("select a is distinct from b from t;", "postgresql", "tsql")
+        assert re.search(r"(?i)NOT EXISTS \(SELECT a INTERSECT SELECT b\)", out), out
+
+    def test_oracle_intersect_form(self) -> None:
+        out = _t2("select a is not distinct from b from t;", "postgresql", "oracle")
+        assert re.search(
+            r"(?i)EXISTS \(SELECT a FROM DUAL INTERSECT SELECT b FROM DUAL\)",
+            out,
+        ), out
+
+    def test_pg_native(self) -> None:
+        out = _t2("select a is distinct from b from t;", "postgresql", "postgresql")
+        assert re.search(r"(?i)a IS DISTINCT FROM b", out), out

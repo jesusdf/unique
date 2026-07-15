@@ -1180,6 +1180,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         `54255e8` (2026-07-16): T-SQL 402→384 (−18, 88.3% — the whole
         child-trigger family in one stroke); MySQL/Oracle flat.
         Cumulative: T-SQL 1090→384, MySQL 579→193, Oracle 454→149.**
+        *Wave 41 (2026-07-16):* null-safe comparison — PG's `IS [NOT]
+        DISTINCT FROM` shipped raw as an unmapped operator (1064 on
+        MySQL). Proper IR operators (NULLSAFE_EQ/NEQ) with per-dialect
+        emission: MySQL `<=>` / `NOT (a <=> b)`, the version-safe
+        EXISTS-INTERSECT form on T-SQL and Oracle (INTERSECT compares
+        null-safely everywhere; Oracle arms take FROM DUAL), PG native.
+        Tests: TestNullSafeComparison. Sweep re-measure pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

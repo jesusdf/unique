@@ -101,6 +101,9 @@ class BinaryOperator(Enum):
     BIT_XOR = auto()
     BIT_LSHIFT = auto()
     BIT_RSHIFT = auto()
+    #: null-safe comparisons (PG IS [NOT] DISTINCT FROM, MySQL <=>)
+    NULLSAFE_EQ = auto()
+    NULLSAFE_NEQ = auto()
 
 
 class TransactionAction(Enum):

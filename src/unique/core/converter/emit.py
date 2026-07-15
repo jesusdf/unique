@@ -2553,6 +2553,21 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
     left = _emit_operand(node.left, node.operator, dialect)
     right = _emit_operand(node.right, node.operator, dialect, right=True)
 
+    # Null-safe comparison: PG spells IS [NOT] DISTINCT FROM, MySQL <=>;
+    # T-SQL/Oracle use the version-safe EXISTS-INTERSECT form (INTERSECT
+    # compares rows with null-safe semantics on every engine).
+    if node.operator in (BinaryOperator.NULLSAFE_EQ, BinaryOperator.NULLSAFE_NEQ):
+        equal = node.operator == BinaryOperator.NULLSAFE_EQ
+        if dialect == "mysql":
+            core = f"{left} <=> {right}"
+            return core if equal else f"NOT ({core})"
+        if dialect in ("tsql", "oracle"):
+            dual = " FROM DUAL" if dialect == "oracle" else ""
+            core = f"EXISTS (SELECT {left}{dual} INTERSECT SELECT {right}{dual})"
+            return core if equal else f"NOT {core}"
+        keyword = "IS NOT DISTINCT FROM" if equal else "IS DISTINCT FROM"
+        return f"{left} {keyword} {right}"
+
     op_map = {
         BinaryOperator.EQ: "=",
         BinaryOperator.NEQ: "<>",
