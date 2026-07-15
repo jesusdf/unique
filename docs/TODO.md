@@ -949,9 +949,18 @@ fix needs an **anonymized** regression fixture (never a private name).
         (defaults to EXCEPTION) now routes through the wave-10 format
         parser instead of shipping the USING tail raw with the old
         mislabeled warning. Tests: TestRaiseResidue. Sweep re-measure
-        pending. Mutation validation #2: convert.py and procedural
-        base.py both at/above floor; emit.py 57% (<60) — full local
-        survivor run underway for the last targeted assertions.
+        **Measured at `f156123` (2026-07-15): MySQL 210→206 (93.3%);
+        T-SQL 467 / Oracle 162 flat. Cumulative: T-SQL 1090→467, MySQL
+        579→206, Oracle 454→162.** Mutation validation #2: convert.py
+        and procedural base.py both at/above floor; emit.py 57% (<60)
+        — the remaining survivor work must run where nothing snapshots
+        the tree (see the incident note below). **Incident 2026-07-15
+        evening: `scripts/mutation_test.py` mutates sources IN PLACE;
+        a background full-emit.py run was mid-mutant when wave 29's
+        commit snapshotted the tree — 99e0ba4 pushed a mutated emit.py
+        (CI caught it red); restored byte-for-byte in f156123, full
+        gate + CI green. Rule: full mutation runs happen in CI, or
+        locally only with gates/sweeps/commits quiesced.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
