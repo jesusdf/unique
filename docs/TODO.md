@@ -1186,7 +1186,16 @@ fix needs an **anonymized** regression fixture (never a private name).
         emission: MySQL `<=>` / `NOT (a <=> b)`, the version-safe
         EXISTS-INTERSECT form on T-SQL and Oracle (INTERSECT compares
         null-safely everywhere; Oracle arms take FROM DUAL), PG native.
-        Tests: TestNullSafeComparison. Sweep re-measure pending.
+        Tests: TestNullSafeComparison. **Measured at `3b41e16`:
+        MySQL 193→183 (−10, 94.1%), Oracle ok +11 (INTERSECT forms
+        run), T-SQL +1 — a select-list case exposed the
+        value-vs-predicate gap.**
+        *Wave 42 (2026-07-16):* that gap — a predicate is not a value
+        on T-SQL/Oracle: the null-safe forms wrap in `CASE WHEN … THEN
+        1 ELSE 0 END` in value position, and `_emit_condition`
+        (WHERE/HAVING/ON) unwraps to the bare predicate. Tests
+        strengthened (value + condition positions). Sweep re-measure
+        pending.
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

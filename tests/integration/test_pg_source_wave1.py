@@ -1838,9 +1838,21 @@ class TestNullSafeComparison:
         out2 = _t2("select 2 is distinct from 3 as x;", "postgresql", "mysql")
         assert re.search(r"(?i)NOT \(2 <=> 3\)", out2), out2
 
-    def test_tsql_intersect_form(self) -> None:
+    def test_tsql_intersect_form_value_position(self) -> None:
+        # a predicate is not a value on T-SQL: select-list wraps in CASE
         out = _t2("select a is distinct from b from t;", "postgresql", "tsql")
-        assert re.search(r"(?i)NOT EXISTS \(SELECT a INTERSECT SELECT b\)", out), out
+        assert re.search(
+            r"(?is)CASE WHEN NOT EXISTS \(SELECT a INTERSECT SELECT b\)"
+            r"\s+THEN 1 ELSE 0 END",
+            out,
+        ), out
+
+    def test_tsql_condition_position_bare(self) -> None:
+        out = _t2("select 1 from t where a is distinct from b;", "postgresql", "tsql")
+        assert re.search(
+            r"(?i)WHERE NOT EXISTS \(SELECT a INTERSECT SELECT b\)", out
+        ), out
+        assert "CASE WHEN NOT EXISTS" not in out.upper(), out
 
     def test_oracle_intersect_form(self) -> None:
         out = _t2("select a is not distinct from b from t;", "postgresql", "oracle")

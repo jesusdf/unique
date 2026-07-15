@@ -611,9 +611,21 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
 
     T-SQL has no boolean type in predicates: PG's bare boolean literal
     condition (``JOIN b ON true``, ``WHERE false``) mapped to ``ON 1``,
-    which is error 4145 — it must be a real comparison."""
+    which is error 4145 — it must be a real comparison. Null-safe
+    comparisons emit their bare predicate here (the value position
+    wraps them in CASE)."""
     if dialect == "tsql" and isinstance(node, Literal) and node.dtype == "boolean":
         return "1 = 1" if node.value else "1 = 0"
+    if (
+        dialect in ("tsql", "oracle")
+        and isinstance(node, BinaryOp)
+        and node.operator in (BinaryOperator.NULLSAFE_EQ, BinaryOperator.NULLSAFE_NEQ)
+    ):
+        wrapped = _emit_binary(node, dialect)
+        m = re.fullmatch(r"CASE WHEN (.+) THEN 1 ELSE 0 END = 1", wrapped, re.S)
+        if m:
+            return m.group(1)
+        return wrapped
     return _emit_expression(node, dialect)
 
 
@@ -2564,7 +2576,11 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         if dialect in ("tsql", "oracle"):
             dual = " FROM DUAL" if dialect == "oracle" else ""
             core = f"EXISTS (SELECT {left}{dual} INTERSECT SELECT {right}{dual})"
-            return core if equal else f"NOT {core}"
+            pred = core if equal else f"NOT {core}"
+            # A predicate is not a value expression on these engines; the
+            # generic (value) position wraps in CASE. _emit_condition
+            # unwraps it for WHERE/HAVING/ON.
+            return f"CASE WHEN {pred} THEN 1 ELSE 0 END = 1"
         keyword = "IS NOT DISTINCT FROM" if equal else "IS DISTINCT FROM"
         return f"{left} {keyword} {right}"
 
