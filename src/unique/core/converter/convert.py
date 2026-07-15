@@ -181,6 +181,22 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
             expression = _rewrite_tsql_string_concat(
                 expression  # type: ignore[arg-type]
             )
+        if (
+            isinstance(expression, exp.Select)
+            and isinstance(expression.args.get("into"), exp.Into)
+            and expression.args["into"].find(exp.Parameter) is not None
+            and len(parsed) == 1
+        ):
+            # Keep the ORIGINAL text — re-rendering the mangled parse
+            # would preserve garbage in the carrier.
+            nodes.append(
+                PassthroughSQL(
+                    sql=sql.strip().rstrip(";"),
+                    source_dialect=dialect,
+                    kind="SELECT INTO VAR",
+                )
+            )
+            continue
         node = convert_expression(expression, dialect)  # type: ignore[arg-type]
         nodes.append(node)
         # Trailing / inline comments attach to child nodes, not the statement;
@@ -272,11 +288,23 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             and isinstance(_from.this, exp.Subquery)
             and not isinstance(_from.this.this, (exp.Select, exp.SetOperation))
         ):
-            return PassthroughSQL(
-                sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
-                source_dialect=source_dialect,
-                kind="PAREN JOIN",
+            # The single-level group — Subquery wrapping a Table whose
+            # joins have plain operands — converts via the hoist in
+            # _convert_select; only deeper nesting stays passthrough.
+            _inner = _from.this.this
+            _single_level = isinstance(_inner, exp.Table) and all(
+                not (
+                    isinstance(j.this, exp.Subquery)
+                    and not isinstance(j.this.this, (exp.Select, exp.SetOperation))
+                )
+                for j in (_inner.args.get("joins") or [])
             )
+            if not _single_level:
+                return PassthroughSQL(
+                    sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+                    source_dialect=source_dialect,
+                    kind="PAREN JOIN",
+                )
     # Oracle hierarchical queries (START WITH / CONNECT BY) have no faithful
     # automatic rewrite; emit a documented comment instead of silently
     # dropping the clause (which would change results).
@@ -290,6 +318,17 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
     # correctly per dialect (CREATE TABLE AS for MySQL, SELECT INTO for
     # PG/Oracle); our SELECT converter would drop the INTO, so pass through.
     if isinstance(expr, exp.Select) and isinstance(expr.args.get("into"), exp.Into):
+        if expr.args["into"].find(exp.Parameter) is not None:
+            # MySQL ``SELECT … INTO @var[, @var2]`` captures into session
+            # variables; sqlglot mangles the multi-var parse (extra vars
+            # absorb into the select list), so no faithful rebuild exists.
+            # parse_sql intercepts the single-statement case with the
+            # ORIGINAL text; this fallback covers embedded occurrences.
+            return PassthroughSQL(
+                sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+                source_dialect=source_dialect,
+                kind="SELECT INTO VAR",
+            )
         return PassthroughSQL(
             sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
             source_dialect=source_dialect,
@@ -531,13 +570,30 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     # FROM — use the direct arg, not find(), which recurses into a subquery in
     # the WHERE (e.g. NOT EXISTS (SELECT … FROM t)) and would pull that table
     # into this SELECT's FROM. sqlglot keys it "from_" (older versions "from").
-    from_clause = None
+    from_clause: TableRef | SubqueryExpression | None = None
+    hoisted_joins: tuple[JoinClause, ...] = ()
     from_expr = expr.args.get("from_") or expr.args.get("from")
     if from_expr and from_expr.this:
-        from_clause = _convert_table_or_subquery(from_expr.this)
+        from_item = from_expr.this
+        # A parenthesized join relation — ``FROM (a JOIN b ON …), c`` — is a
+        # Subquery wrapping a Table that carries the group's joins; parens
+        # around joins are semantically transparent, so unwrap and hoist
+        # (emission order keeps the comma-join grouping).
+        if (
+            isinstance(from_item, exp.Subquery)
+            and isinstance(from_item.this, exp.Table)
+            and from_item.this.args.get("joins")
+        ):
+            inner_table = from_item.this
+            hoisted_joins = tuple(_convert_join(j) for j in inner_table.args["joins"])
+            from_clause = _convert_table_ref(inner_table)
+        else:
+            from_clause = _convert_table_or_subquery(from_item)
 
     # JOINs
-    joins = tuple(_convert_join(j) for j in (expr.args.get("joins") or []))
+    joins = hoisted_joins + tuple(
+        _convert_join(j) for j in (expr.args.get("joins") or [])
+    )
 
     # WHERE — the direct arg, like FROM: find() would descend into a derived
     # table in FROM and duplicate ITS where onto this (outer) SELECT.

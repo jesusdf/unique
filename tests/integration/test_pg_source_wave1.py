@@ -2277,3 +2277,63 @@ class TestTsqlBooleanLiteralsAndScalarOrder:
             "tsql",
         )
         assert "ORDER BY" not in out.upper(), out
+
+
+class TestSelectIntoUserVariable:
+    """wave 56: MySQL's ``SELECT … INTO @var[, @var2]`` (session-
+    variable capture) has no faithful cross-dialect conversion —
+    sqlglot's parse mangles it (extra vars absorb into the select
+    list), and the CTAS path shipped garbage like ``CREATE TABLE $a
+    AS …`` (32x mysql→tsql). Off MySQL it degrades whole with the
+    assignment-form hint."""
+
+    def test_select_into_var_degrades_tsql(self) -> None:
+        r = Transpiler().transpile(
+            "select 1, 2 into @a, @b;", source="mysql", target="tsql"
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_select_into_var_degrades_pg(self) -> None:
+        r = Transpiler().transpile(
+            "select count(*) into @cnt from t1;",
+            source="mysql",
+            target="postgresql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+
+class TestParenthesizedJoinRelations:
+    """wave 57: a parenthesized join relation in FROM —
+    ``FROM (t1 AS t2 LEFT JOIN t1 AS t3 USING (a)), t1`` — arrives as
+    a Subquery wrapping a Table whose ``joins`` arg the converter
+    never read: the whole group shipped raw, USING and all (11x
+    mysql→tsql). The group unwraps: inner table + joins hoist into
+    the select (parens around joins are semantically transparent;
+    emission order preserves the comma-join grouping)."""
+
+    def test_paren_join_using_converts(self) -> None:
+        out = _t2(
+            "select * from (t1 as x left join t2 as y using (a)), t3;",
+            "mysql",
+            "tsql",
+        )
+        assert "USING" not in out.upper(), out
+        assert re.search(r"(?is)LEFT JOIN t2 y\s+ON x\.a = y\.a", out), out
+
+    def test_paren_join_on_converts(self) -> None:
+        out = _t2(
+            "select * from (t1 left join t2 on t1.a = t2.a);",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?is)FROM t1\s+LEFT JOIN t2 ON t1\.a = t2\.a", out), out

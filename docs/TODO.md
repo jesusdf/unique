@@ -1345,12 +1345,31 @@ fix needs an **anonymized** regression fixture (never a private name).
         4145: `HAVING f1 = 'a' OR 1`); and a scalar subquery's ORDER
         BY without LIMIT (illegal on T-SQL, no observable effect)
         strips (7x error 1033). Tests:
-        TestTsqlBooleanLiteralsAndScalarOrder. *Measurement pending
-        next mysql-corpus cycle. Remaining mysql→tsql chains
-        classified: 32x `SELECT … INTO @var` (needs the T-SQL
-        `SELECT @a = expr` assignment form), 11x USING inside
-        parenthesized join relations, 12x mysql `@@sysvar` references
-        (degrade candidates), 6x RAND(seed).*
+        TestTsqlBooleanLiteralsAndScalarOrder. **Measured at `e999409`
+        (2026-07-16): mysql→T-SQL 359→347 (94.2%), →PG 156 and →Oracle
+        246 flat. Standing: pg-source {266/180/140}, mysql-source
+        {347/156/246}. Remaining mysql→tsql chains classified: 32x
+        `SELECT … INTO @var` (sqlglot mangles the multi-var parse —
+        degrade), 11x USING inside parenthesized join relations (the
+        joins live on the inner Table's `joins` arg, never read), 12x
+        mysql `@@sysvar` references, 6x RAND(seed).**
+        *Wave 56 (2026-07-16):* MySQL's session-variable `SELECT …
+        INTO @var[, @var2]` — sqlglot mangles the multi-var parse
+        (extra vars absorb into the select list), and the CTAS path
+        shipped `CREATE TABLE $a AS …` garbage (32x mysql→tsql). Now a
+        `SELECT INTO VAR` passthrough: native on the source engine
+        (identity keeps the ORIGINAL text, intercepted in parse_sql
+        before the mangle), assignment-form-hint carrier elsewhere.
+        Tests: TestSelectIntoUserVariable.
+        *Wave 57 (2026-07-16):* single-level parenthesized join
+        relations (`FROM (t1 LEFT JOIN t2 USING (a)), t3`) shipped raw
+        through the PAREN JOIN passthrough — sqlglot keeps USING on
+        tsql (11x). The group now unwraps: inner table + its `joins`
+        arg hoist into the select (parens around joins are
+        semantically transparent; comma-join order preserved); only
+        deeper nesting stays passthrough. Tests:
+        TestParenthesizedJoinRelations. *Measurement pending next
+        mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

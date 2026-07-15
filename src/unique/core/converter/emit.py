@@ -886,6 +886,17 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             "Original:\n" + commented
         )
 
+    # Session-variable SELECT INTO: native on the source engine, no
+    # cross-dialect equivalent (T-SQL's form is SELECT @a = expr).
+    if node.kind == "SELECT INTO VAR":
+        if dialect == node.source_dialect:
+            return node.sql
+        return (
+            "-- UNIQUE: session-variable SELECT INTO has no cross-dialect "
+            "equivalent; rewrite as the target's assignment form. Original:\n"
+            + _comment_block(node.sql)
+        )
+
     # MySQL has no RETURNING/OUTPUT; comment it rather than emit invalid SQL.
     if node.kind == "RETURNING" and dialect == "mysql":
         m = re.search(r"(?i)\bRETURNING\b\s+(.*?)\s*;?\s*$", node.sql)
