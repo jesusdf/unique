@@ -606,6 +606,58 @@ def _pg_index_rebuild(sql: str, read: str, dialect: str) -> str | None:
     return stmt
 
 
+_COMPARISON_OPS = frozenset(
+    {
+        BinaryOperator.EQ,
+        BinaryOperator.NEQ,
+        BinaryOperator.LT,
+        BinaryOperator.GT,
+        BinaryOperator.LTE,
+        BinaryOperator.GTE,
+        BinaryOperator.LIKE,
+        BinaryOperator.AND,
+        BinaryOperator.OR,
+    }
+)
+
+_COMPARISON_NEGATION = {
+    BinaryOperator.EQ: "<>",
+    BinaryOperator.NEQ: "=",
+    BinaryOperator.LT: ">=",
+    BinaryOperator.GT: "<=",
+    BinaryOperator.LTE: ">",
+    BinaryOperator.GTE: "<",
+}
+
+
+def _emit_value_expression(node: ASTNode, dialect: str) -> str:
+    """Emit a select-list item; predicates become tri-state values.
+
+    MySQL comparisons ARE values (1/0/NULL); T-SQL/Oracle reject a
+    predicate in value position. ``CASE WHEN p THEN 1 WHEN not-p THEN 0
+    END`` reproduces the tri-state exactly (ELSE NULL implicit)."""
+    inner = node.expression if isinstance(node, Alias) else node
+    if (
+        dialect in ("tsql", "oracle")
+        and isinstance(inner, BinaryOp)
+        and inner.operator in _COMPARISON_OPS
+    ):
+        pred = _emit_binary(inner, dialect)
+        neg_op = _COMPARISON_NEGATION.get(inner.operator)
+        if neg_op is not None:
+            left = _emit_expression(inner.left, dialect)
+            right = _emit_expression(inner.right, dialect)
+            not_pred = f"{left} {neg_op} {right}"
+        else:
+            not_pred = f"NOT ({pred})"
+        wrapped = f"CASE WHEN {pred} THEN 1 WHEN {not_pred} THEN 0 END"
+        if isinstance(node, Alias):
+            alias = _ident(node.name, node.quoted, dialect)
+            return f"{wrapped} AS {alias}"
+        return wrapped
+    return _emit_expression(node, dialect)
+
+
 def _emit_condition(node: ASTNode, dialect: str) -> str:
     """Emit an expression in condition position.
 
@@ -1088,7 +1140,7 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         pct = " PERCENT" if node.limit.percent else ""
         top = f"TOP {_emit_expression(node.limit.limit, dialect)}{pct} "
     distinct = "DISTINCT " if node.distinct else ""
-    cols = ", ".join(_emit_expression(c, dialect) for c in node.columns) or "*"
+    cols = ", ".join(_emit_value_expression(c, dialect) for c in node.columns) or "*"
     parts.append(f"SELECT {distinct}{top}{cols}")
 
     if into:

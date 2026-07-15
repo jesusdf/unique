@@ -1197,6 +1197,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         strengthened (value + condition positions). **Measured at
         `f06d57d`: flat — the one select-list corpus case needs its own
         trace (single statement; parked).**
+        *Wave 43 (2026-07-16):* select-list PREDICATES from MySQL
+        sources — comparisons are VALUES there (1/0/NULL) but T-SQL/
+        Oracle reject a predicate in value position (38x error 102 in
+        mysql→tsql). `_emit_value_expression` wraps them tri-state
+        exactly: `CASE WHEN p THEN 1 WHEN not-p THEN 0 END` (ELSE NULL
+        implicit — MySQL's NULL semantics; the negation flips the
+        operator when possible). Condition positions and PG boolean
+        values untouched. Tests: TestSelectListComparisonsWrap. Sweep
+        re-measure pending (both corpora).
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

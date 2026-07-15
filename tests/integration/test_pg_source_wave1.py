@@ -1864,3 +1864,29 @@ class TestNullSafeComparison:
     def test_pg_native(self) -> None:
         out = _t2("select a is distinct from b from t;", "postgresql", "postgresql")
         assert re.search(r"(?i)a IS DISTINCT FROM b", out), out
+
+
+class TestSelectListComparisonsWrap:
+    """MySQL comparisons are VALUES (1/0/NULL); T-SQL/Oracle reject a
+    predicate in the select list (38x error 102). The tri-state CASE
+    wrap is exact: WHEN p THEN 1 WHEN NOT-p THEN 0 (ELSE NULL implicit
+    — MySQL's NULL comparison semantics)."""
+
+    def test_comparison_wraps_tsql(self) -> None:
+        out = _t2(
+            "select cast('2007-10-09' as date) > '2007-10-01' as c;", "mysql", "tsql"
+        )
+        assert re.search(
+            r"(?is)CASE WHEN .* > .* THEN 1 WHEN .* <= .*", out
+        ) or re.search(r"(?is)CASE WHEN .* THEN 1 WHEN NOT", out), out
+        assert not re.search(r"(?im)^\s*SELECT CAST\([^)]*\) >", out), out
+
+    def test_condition_position_untouched(self) -> None:
+        out = _t2("select 1 from t where a > b;", "mysql", "tsql")
+        assert re.search(r"(?i)WHERE a > b", out), out
+        assert "CASE" not in out.upper(), out
+
+    def test_pg_target_keeps_boolean_value(self) -> None:
+        out = _t2("select a > b as c from t;", "mysql", "postgresql")
+        assert re.search(r"(?i)a > b", out), out
+        assert "CASE" not in out.upper(), out
