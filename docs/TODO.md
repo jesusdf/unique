@@ -996,8 +996,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         mysql→T-SQL 84.6% (988 / 6,422); mysql→Oracle failed mid-sweep
         on the long-TODO'd DPY-1001 session-kill — the sweep's Oracle
         runner now RECONNECTS and counts the killer statement as
-        'other' (fixed in `scripts/validity_sweep.py`; re-run
-        pending).**
+        'other' (fixed in `scripts/validity_sweep.py`). **Complete
+        baseline at `070c60f`: mysql→PG 90.2% (648/6,580), mysql→Oracle
+        91.3% (555/6,412 — 1,604 'other' includes the session-killers,
+        honestly counted), mysql→T-SQL 84.6% (988/6,422). The
+        mysql-source direction now joins the wave cadence.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
