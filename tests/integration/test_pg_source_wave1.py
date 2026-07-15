@@ -1207,3 +1207,31 @@ class TestMysqlUserTypesDegrade:
     def test_drop_type_kept_on_oracle(self) -> None:
         out = _t("drop type if exists compos;", "oracle")
         assert re.search(r"(?i)DROP TYPE", out), out
+
+
+class TestQualifiedStarCountDegrades:
+    """PG's whole-row ``COUNT(t2.*)`` (counts non-NULL rows after an
+    outer join) has no spelling on any other engine and no mechanical
+    rewrite without schema knowledge (9x 1064). COUNT with a QUALIFIED
+    star degrades whole; plain ``COUNT(*)`` is untouched."""
+
+    @pytest.mark.parametrize("target", ["mysql", "tsql", "oracle"])
+    def test_qualified_star_count_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "select t1.q2, count(t2.*) from t1 left join t2 on t1.a = t2.a "
+            "group by t1.q2;",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_plain_count_star_untouched(self) -> None:
+        out = _t("select count(*) from t;", "mysql")
+        assert re.search(r"(?i)COUNT\(\*\)", out), out
+        assert "UNIQUE:" not in out, out

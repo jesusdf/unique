@@ -618,6 +618,17 @@ class Transformer:
             and value.name.upper() in self._PG_SYSTEM_COLUMNS
         ):
             return f"system column {value.name}"
+        if isinstance(value, FunctionCall):
+            for a in value.args:
+                qualified_star = (
+                    isinstance(a, ColumnRef) and a.name == "*" and a.table
+                ) or (isinstance(a, Star) and getattr(a, "table", None))
+                if qualified_star:
+                    # Whole-row COUNT(t.*): counts non-NULL rows after an
+                    # outer join; no spelling elsewhere, no rewrite
+                    # without the schema.
+                    table = a.table if hasattr(a, "table") else ""
+                    return f"whole-row {value.name}({table}.*)"
         if isinstance(value, ASTNode):
             for f in fields(value):
                 found = self._find_pg_internal(getattr(value, f.name))
