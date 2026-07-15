@@ -463,6 +463,42 @@ class ParserBase:
                     self._advance()  # the comment string literal
                 continue
 
+            # Remaining PG routine attributes; unconsumed they spill into
+            # the body as garbage declarations (``STRICT LANGUAGE;``).
+            if upper in ("STRICT", "LEAKPROOF", "WINDOW"):
+                self._advance()
+                continue
+            if upper == "PARALLEL":
+                self._advance()
+                if not self._at_end():
+                    self._advance()  # SAFE / UNSAFE / RESTRICTED
+                continue
+            if upper in ("COST", "SUPPORT") or (
+                upper == "ROWS" and self._peek(1).type == TokenType.NUMBER
+            ):
+                self._advance()
+                if not self._at_end():
+                    self._advance()  # the number / support function
+                continue
+            if upper == "CALLED":
+                self._advance()  # CALLED ON NULL INPUT
+                while not self._at_end() and self._current().upper_value in (
+                    "ON",
+                    "NULL",
+                    "INPUT",
+                ):
+                    self._advance()
+                continue
+            if upper == "RETURNS" and self._peek(1).is_keyword("NULL"):
+                self._advance()  # RETURNS NULL ON NULL INPUT
+                while not self._at_end() and self._current().upper_value in (
+                    "NULL",
+                    "ON",
+                    "INPUT",
+                ):
+                    self._advance()
+                continue
+
             if tok.is_keyword("AS"):
                 self._advance()
                 continue

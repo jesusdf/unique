@@ -437,3 +437,50 @@ class TestDeferrableConstraintAttribute:
     def test_deferrable_kept_on_oracle(self) -> None:
         out = _t(self._SRC, "oracle")
         assert "DEFERRABLE" in out.upper(), out
+
+
+class TestPgRoutineHeaderAttributes:
+    """PG routine-header attributes (STRICT, PARALLEL SAFE, COST n,
+    ROWS n, LEAKPROOF, CALLED/RETURNS NULL ON NULL INPUT) were not
+    consumed by the header parser and spilled into the routine body as
+    garbage declarations (``STRICT LANGUAGE; plpgsql AS; $ $;`` inside
+    the Oracle IS-section — 24x+ PLS-00103, and the whole stricttest
+    class on MySQL/T-SQL)."""
+
+    _BEFORE = (
+        "create function sf(a int) returns int\n"
+        "strict parallel safe cost 100 language plpgsql as $$\n"
+        "begin\n  return a;\nend$$;"
+    )
+    _AFTER = (
+        "create function sg(a int) returns int as $$\n"
+        "begin\n  return a;\nend$$ language plpgsql strict parallel safe;"
+    )
+    _NULLCALL = (
+        "create function sh(a int) returns int\n"
+        "returns null on null input leakproof language plpgsql as $$\n"
+        "begin\n  return a;\nend$$;"
+    )
+
+    @pytest.mark.parametrize("target", ["mysql", "oracle", "tsql"])
+    def test_attributes_before_body(self, target: str) -> None:
+        out = _t(self._BEFORE, target)
+        assert "STRICT" not in out.upper(), out
+        assert "PARALLEL" not in out.upper(), out
+        assert "plpgsql" not in out, out
+        assert "$ $" not in out, out
+        # T-SQL parameters gain their @ prefix
+        assert re.search(r"(?i)RETURN\s+@?a\b", out), out
+
+    @pytest.mark.parametrize("target", ["mysql", "oracle"])
+    def test_attributes_after_body(self, target: str) -> None:
+        out = _t(self._AFTER, target)
+        assert "STRICT" not in out.upper(), out
+        assert "PARALLEL" not in out.upper(), out
+        assert re.search(r"(?i)RETURN\s+a\b", out), out
+
+    def test_null_input_and_leakproof(self) -> None:
+        out = _t(self._NULLCALL, "mysql")
+        assert "LEAKPROOF" not in out.upper(), out
+        assert "NULL INPUT" not in out.upper(), out
+        assert re.search(r"(?i)RETURN\s+a\b", out), out

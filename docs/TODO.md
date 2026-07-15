@@ -690,6 +690,16 @@ fix needs an **anonymized** regression fixture (never a private name).
         honest ratchet is the absolute syntax count, not the %.**
         Cumulative from the honest baseline: T-SQL 1090→696, MySQL
         579→467, Oracle 454→269.
+        *Wave 8 (2026-07-15):* PG routine-header attributes (STRICT,
+        PARALLEL SAFE/UNSAFE/RESTRICTED, COST n, ROWS n, LEAKPROOF,
+        WINDOW, SUPPORT fn, CALLED/RETURNS NULL ON NULL INPUT) were not
+        consumed by `_consume_pg_routine_header` and spilled into the
+        routine body as garbage declarations (`STRICT LANGUAGE;
+        plpgsql AS; $ $;` inside the Oracle IS-section — 24x+
+        PLS-00103 'AS', and the whole stricttest class on MySQL/T-SQL).
+        Consumed now, both before AND after the `$$` body. Tests:
+        `test_pg_source_wave1.py::TestPgRoutineHeaderAttributes`.
+        Sweep re-measure pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
