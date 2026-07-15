@@ -718,8 +718,17 @@ fix needs an **anonymized** regression fixture (never a private name).
         USING; `SELECT *` projection still duplicates the join column
         (USING merges it in PG) — same caveat as the pre-existing
         single-join rewrite. Tests:
-        `test_pg_source_wave1.py::TestJoinUsingOnTsql`. Sweep
-        re-measure pending.
+        `test_pg_source_wave1.py::TestJoinUsingOnTsql`. **Measured at
+        `ca03ff9` (2026-07-15): T-SQL 693→687 (−6); MySQL 464 and
+        Oracle 266 flat (USING is native there).** Less than the 27x
+        class size: the paren-join FROM shape (~7x) stayed open and
+        12x of the `SELECT *` group are bare-boolean WHERE clauses
+        (error 4145, needs type knowledge). **Cumulative from the
+        honest baseline: T-SQL 1090→687, MySQL 579→464, Oracle
+        454→266.** The residue is now dominated by the plpgsql body
+        bring-up chains (RAISE forms ~12x/direction, FOREACH 15x,
+        STRICT INTO 19x, composite returns 10x) — the M4-scale
+        workstream; single-shape DML waves are close to exhausted.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);
