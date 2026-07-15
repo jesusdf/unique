@@ -1053,12 +1053,13 @@ class ProceduralTransformer:
         dynamic SQL) — no cursor-over-dynamic form off PostgreSQL."""
         if isinstance(value, ForLoopStatement):
             raw = getattr(value.cursor, "sql", "") if value.cursor else ""
-            if (
-                raw
-                and re.match(r"(?is)^\s*execute\b", raw)
-                and not self._FOR_EXECUTE_LITERAL_RE.match(raw)
-            ):
-                return True
+            if raw and re.match(r"(?is)^\s*execute\b", raw):
+                m = self._FOR_EXECUTE_LITERAL_RE.match(raw)
+                if m is None:
+                    return True  # variable source: real dynamic SQL
+                inner = m.group(1)[1:-1].replace("''", "'").strip()
+                if not re.match(r"(?is)^(?:SELECT|VALUES|WITH)\b", inner):
+                    return True  # non-query literal (dynamic EXPLAIN …)
         if isinstance(value, ASTNode):
             return any(
                 self._has_dynamic_for(getattr(value, f.name))
@@ -1907,7 +1908,11 @@ class ProceduralTransformer:
             m = self._FOR_EXECUTE_LITERAL_RE.match(raw)
             if m:
                 inner = m.group(1)[1:-1].replace("''", "'").strip()
-                cursor = RawSQL(sql=inner, reason="expression")
+                # only a QUERY literal can inline as a cursor source; a
+                # non-query (dynamic EXPLAIN — engine introspection) is
+                # caught by the whole-routine degrade scan.
+                if re.match(r"(?is)^(?:SELECT|VALUES|WITH)\b", inner):
+                    cursor = RawSQL(sql=inner, reason="expression")
             # a variable EXECUTE source is caught by the whole-routine
             # degrade scan before the transform reaches this point
         node = ForLoopStatement(

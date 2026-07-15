@@ -1721,3 +1721,29 @@ class TestTransitionTableAliases:
     def test_pg_keeps_referencing(self) -> None:
         out = _t(self._SRC, "postgresql")
         assert re.search(r"(?i)REFERENCING new TABLE AS newtab", out), out
+
+
+class TestForExecuteNonQueryDegrades:
+    """A FOR-EXECUTE literal that is NOT a query (the transition-table
+    tests iterate dynamic EXPLAIN output — engine introspection) has no
+    conversion anywhere: the routine degrades whole instead of shipping
+    ``dbo.EXPLAIN (…)`` as a cursor source."""
+
+    def test_explain_literal_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "create function fx() returns int as $$\n"
+            "declare l text;\n"
+            "begin\n"
+            "  for l in execute $q$ explain (costs off) select 1 $q$ loop\n"
+            "    null;\n"
+            "  end loop;\n"
+            "  return 1;\nend$$ language plpgsql;",
+            source="postgresql",
+            target="tsql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql

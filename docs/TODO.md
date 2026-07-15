@@ -1148,7 +1148,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         inlined trigger body's alias references now rename (outside
         string literals, via a generic raw-text-field walker); PG keeps
         REFERENCING verbatim. Tests: TestTransitionTableAliases. Sweep
-        re-measure pending.
+        re-measure done: **flat at `bbbacd7` — the real blocker was one
+        deeper: those triggers iterate DYNAMIC EXPLAIN output (engine
+        introspection, `dbo.EXPLAIN (…)` as a cursor source). Wave 37
+        refines the wave-35 inlining: only QUERY literals
+        (SELECT/VALUES/WITH) inline; non-query literals join the
+        whole-routine degrade. Tests:
+        TestForExecuteNonQueryDegrades.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
