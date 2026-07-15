@@ -36,6 +36,7 @@ jobs:
             src/unique/core/converter/_base.py \
             src/unique/core/converter/harvest.py \
             --tests tests/unit/core tests/integration/test_cross_dialect.py \
+                    tests/integration/test_pg_source_wave1.py \
             | tee /tmp/mut_dml.txt || true
 
       - name: Mutate the procedural transformer
@@ -44,6 +45,7 @@ jobs:
             src/unique/core/procedural/transformer/base.py \
             src/unique/core/procedural/transformer/oracle.py \
             --tests tests/unit/core/procedural tests/integration/test_procedural.py \
+                    tests/integration/test_pg_source_wave1.py \
             | tee /tmp/mut_proc.txt || true
 
       - name: Publish scores + survivors to the summary

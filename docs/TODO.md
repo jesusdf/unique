@@ -881,6 +881,16 @@ fix needs an **anonymized** regression fixture (never a private name).
 
 ## Continuously tracked (not a discrete backlog)
 
+- [ ] **Nightly mutation floors under water since 2026-07-09** (P2; user
+  flagged 2026-07-15): convert.py 60% < 65, emit.py 53% < 60,
+  procedural base.py 51% < 52. Root cause: the M-era + wave code landed
+  with its tests in `tests/integration/test_pg_source_wave1.py`, which
+  the nightly's `--tests` selections did NOT include — every mutant in
+  the new paths survived by construction. Fixed the selection (wave
+  file added to BOTH mutation steps, 2026-07-15; local 60-mutant sample
+  on emit.py: 53%→58%). If the next nightly still misses a floor, work
+  the survivor list from its run summary (targeted assertions), not the
+  floor numbers.
 - **Test-assertion quality** is measured by the nightly mutation job
   (`mutation.yml` / `scripts/mutation_test.py`) rather than a static to-do list:
   surviving mutants in its run summary are the live map of weakest assertions.
