@@ -873,6 +873,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         (2026-07-15): Oracle 204→182 (94.4% — the whole regclass
         class), T-SQL 551→549, MySQL 323 flat. Cumulative: T-SQL
         1090→549, MySQL 579→323, Oracle 454→182.**
+        *Wave 20 (2026-07-15):* ordered-set aggregates and ARRAY casts
+        join the statement gate — `RANK(x) WITHIN GROUP (ORDER BY …)`
+        reaches the IR as an unhandled-WithinGroup RawSQL and shipped
+        verbatim (9x 1064 on MySQL, plus the T-SQL twin, 0 warnings);
+        `CAST(x AS ARRAY)` (the aggregate-transition-function class,
+        8x) was invisible to the wave-17 array finder. Both degrade
+        WHOLE on T-SQL/MySQL; Oracle keeps WITHIN GROUP (native).
+        Tests: TestOrderedSetAggregatesDegrade. Sweep re-measure
+        pending.
         Known gaps left open (P2): **MySQL FUNCTION emitter drops
         OUT/INOUT modes silently** for every source (MySQL functions
         can't declare them — needs a warning per no-silent-loss);

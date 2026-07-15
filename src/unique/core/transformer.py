@@ -638,11 +638,11 @@ class Transformer:
         if found is None:
             return node
         reason = (
-            f"PostgreSQL array construct {found}(…) has no "
+            f"PostgreSQL construct {found} has no "
             f"{self.context.target} equivalent; statement preserved as a comment"
         )
         self.context.warn(reason, "array_construct")
-        self.context.mark_unsupported(f"{found} (array construct)")
+        self.context.mark_unsupported(found)
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
@@ -654,6 +654,13 @@ class Transformer:
             and value.name.upper() in self._ARRAY_CONSTRUCTS
         ):
             return value.name.upper()
+        if (
+            isinstance(value, CastExpression)
+            and value.target_type.name.upper() == "ARRAY"
+        ):
+            return "CAST(… AS ARRAY)"
+        if isinstance(value, RawSQL) and "WithinGroup" in value.reason:
+            return "WITHIN GROUP (ordered-set aggregate)"
         if isinstance(value, ASTNode):
             for f in fields(value):
                 found = self._find_array_construct(getattr(value, f.name))

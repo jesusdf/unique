@@ -957,3 +957,50 @@ class TestPgCatalogInternalsDegrade:
         out = _t("select cast(id as text) from t;", "oracle")
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)CAST\(id AS", out), out
+
+
+class TestOrderedSetAggregatesDegrade:
+    """Hypothetical/ordered-set aggregates (``RANK(x) WITHIN GROUP
+    (ORDER BY …)``) reach the IR as an unhandled-WithinGroup RawSQL and
+    shipped verbatim (9x 1064 on MySQL, error 195/156 on T-SQL, zero
+    warnings). Neither engine has them: degrade WHOLE. Also:
+    ``CAST(x AS ARRAY)`` joins the wave-17 array gate (the
+    aggregate-transition-function class, 8x)."""
+
+    @pytest.mark.parametrize("target", ["mysql", "tsql"])
+    def test_within_group_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "select rank(3) within group (order by x nulls last) from g;",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_within_group_kept_on_oracle(self) -> None:
+        out = _t(
+            "select rank(3) within group (order by x nulls last) from g;",
+            "oracle",
+        )
+        assert re.search(r"(?i)WITHIN GROUP", out), out
+        assert "UNIQUE:" not in out, out
+
+    @pytest.mark.parametrize("target", ["mysql", "tsql"])
+    def test_array_cast_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "select f(cast('{4,140}' as array), 100);",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
