@@ -5404,3 +5404,49 @@ class TestEStringsInBodies:
         out = _t(src, "tsql")
         assert not re.search(r"(?i)\bE\s+'", out), out
         assert "foo\\bar" in out, out
+
+
+class TestWave144TupleColumnAndTempFn:
+    """wave 144: a row tuple AS a select column (lateral ``SELECT (a,
+    b)``) joins the composite gate; and a T-SQL FUNCTION cannot access
+    temporary tables (2772) — a body creating one degrades whole."""
+
+    @pytest.mark.parametrize("target", ["tsql", "oracle"])
+    def test_tuple_select_column_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "select * from x cross join lateral (select (x.q1, x.q2)) v;",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_temp_table_in_function_degrades_tsql(self) -> None:
+        src = (
+            "create function tf() returns int as $$\n"
+            "begin\n"
+            "  create temp table tt(a int);\n"
+            "  return 1;\n"
+            "end $$ language plpgsql;"
+        )
+        r = Transpiler().transpile(src, source="postgresql", target="tsql")
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_plain_function_unaffected_tsql(self) -> None:
+        src = (
+            "create function tf2() returns int as $$\n"
+            "begin return 1; end $$ language plpgsql;"
+        )
+        out = _t(src, "tsql")
+        assert re.search(r"(?i)CREATE FUNCTION tf2", out), out

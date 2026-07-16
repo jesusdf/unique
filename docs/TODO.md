@@ -518,7 +518,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          understands. (Also: a ruff failure hidden by a `| tail`
          pipe — the masked-rc lesson again.) Measured: pg→tsql
          **74 → 71** (97.8%), discovery HOLDS 0. Tests:
-         TestEStringsInBodies.**
+         TestEStringsInBodies.* Wave 144 (2026-07-16): a row
+         tuple AS a select COLUMN (lateral `SELECT (a, b)`) joins
+         the composite gate; and a T-SQL FUNCTION cannot access temp
+         tables (2772) — a body creating one degrades whole (the
+         wave-138 scan recipe). Measured: pg→tsql **71 → 68**
+         (97.9%), discovery HOLDS 0. Tests:
+         TestWave144TupleColumnAndTempFn (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

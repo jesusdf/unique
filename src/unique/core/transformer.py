@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
 
 from unique.core.ast_nodes import (
+    Alias,
     ArrayLiteral,
     ASTNode,
     BinaryOp,
@@ -720,6 +721,13 @@ class Transformer:
             arms = [w[1] for w in value.whens] + [value.else_expr]
             if any(is_tuple_raw(a) for a in arms):
                 return "row constructor"
+        if isinstance(value, SelectStatement) and any(
+            is_tuple_raw(c) or (isinstance(c, Alias) and is_tuple_raw(c.expression))
+            for c in value.columns
+        ):
+            # A row tuple AS a select column (``SELECT (a, b, c)`` in a
+            # lateral) — same composite class (wave 144).
+            return "row constructor"
         if isinstance(value, FunctionCall) and any(is_tuple_raw(a) for a in value.args):
             return "row constructor"
         if isinstance(value, FunctionCall) and any(

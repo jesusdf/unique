@@ -1262,6 +1262,21 @@ class ProceduralTransformer:
         degraded_uv = self._degrade_mysql_uservar(node)
         if degraded_uv is not None:
             return degraded_uv
+        # T-SQL functions cannot access temporary tables (error 2772);
+        # a routine creating one inside its body degrades whole (wave 144).
+        if self._target == "tsql" and self._source == "postgresql":
+            from unique.core.output_gate import scrub
+            from unique.core.procedural.emitter import ProceduralEmitter
+
+            original = ProceduralEmitter(self._source).emit(node)
+            if re.search(r"(?is)\bcreate\s+temp(?:orary)?\s+table\b", scrub(original)):
+                reason = (
+                    "T-SQL functions cannot access temporary tables (2772); "
+                    "routine preserved as a comment"
+                )
+                self._warnings.append(reason)
+                self._register_degraded_routine(getattr(node, "name", None))
+                return RawSQL(sql=original, reason=reason)
         degraded = self._degrade_record_function(node)
         if degraded is not None:
             return degraded
