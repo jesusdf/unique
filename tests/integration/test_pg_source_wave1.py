@@ -6660,3 +6660,39 @@ class TestWave180AlterViewLimitOracle:
             "postgresql",
         )
         assert re.search(r"(?i)LIMIT 1", out), out
+
+
+class TestWave181OracleShadowedParam:
+    """wave 181 (mysql-corpus): Oracle forbids a local variable
+    shadowing a parameter (PLS-00410); MySQL allows it — the local
+    renames to uq_<name>, its default still sees the parameter, body
+    references follow the local."""
+
+    def test_shadowed_local_renamed(self) -> None:
+        out = _t2(
+            "create procedure bug14376(x int) begin"
+            " declare x int default x;"
+            " select x; end",
+            "mysql",
+            "oracle",
+        )
+        assert re.search(r"(?i)uq_x NUMBER\(10\) := x;", out), out
+
+    def test_non_shadowing_untouched(self) -> None:
+        out = _t2(
+            "create procedure p(a int) begin"
+            " declare b int default a;"
+            " select b; end",
+            "mysql",
+            "oracle",
+        )
+        assert "uq_" not in out, out
+        assert re.search(r"(?i)b NUMBER\(10\) := a;", out), out
+
+    def test_shadowing_kept_mysql(self) -> None:
+        out = _t2(
+            "create procedure p(x int) begin" " declare x int default x; select x; end",
+            "mysql",
+            "mysql",
+        )
+        assert "uq_" not in out, out

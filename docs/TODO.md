@@ -819,7 +819,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          OFFSET/FETCH on Oracle (no ORDER BY needed there, unlike
          T-SQL). Measured: mysql→oracle **46 → 41** (−5, validity
          99.3%). Discovery HOLDS 0. Tests:
-         TestWave180AlterViewLimitOracle (4).**
+         TestWave180AlterViewLimitOracle (4).* Wave 181 (2026-07-17):
+         Oracle forbids a local variable shadowing a parameter
+         (PLS-00410); MySQL allows it. The colliding local renames to
+         ``uq_<name>`` via the var-map (its default still sees the
+         parameter — transformed before the rename registers — and
+         body references follow the local, matching MySQL's shadowing
+         semantics). Measured: mysql→oracle **41 → 39** (−2).
+         Discovery HOLDS 0. Tests: TestWave181OracleShadowedParam
+         (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

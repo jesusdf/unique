@@ -188,6 +188,10 @@ class ProceduralTransformer:
         # and its CONTINUE HANDLER injected).
         self._used_fetch_done = False
         self._var_map: dict[str, str] = {}
+        # Parameter names (transformed, lowercase) of the routine being
+        # transformed — Oracle forbids a local shadowing a parameter
+        # (PLS-00410; wave 181), so colliding declares rename.
+        self._param_names: set[str] = set()
         # Names (transformed form) of variables/parameters declared with a
         # string type. Used to disambiguate T-SQL '+' as concatenation when no
         # string literal is present (e.g. SHA2(@a + @b) over two text vars).
@@ -477,6 +481,7 @@ class ProceduralTransformer:
             new_type = self._transform_data_type(p.data_type)
             new_default = self._transform_node(p.default) if p.default else None
             self._var_map[p.name] = new_name
+            self._param_names.add(new_name.lower().lstrip("@"))
             if self._is_string_type(p.data_type):
                 self._string_vars.add(new_name)
             if self._is_date_type(p.data_type):
@@ -1785,6 +1790,28 @@ class ProceduralTransformer:
 
     def _transform_declare(self, node: DeclareStatement) -> ASTNode:
         new_name = self._transform_var_name(node.name)
+        if (
+            self._target == "oracle"
+            and new_name.lower().lstrip("@") in self._param_names
+        ):
+            # Oracle forbids a local shadowing a parameter (PLS-00410).
+            # MySQL's shadowing semantics: the default still sees the
+            # parameter; body references after the declare mean the
+            # local — the rename preserves both (wave 181).
+            new_default_shadow = (
+                self._transform_node(node.default) if node.default else None
+            )
+            renamed = f"uq_{new_name.lstrip('@')}"
+            self._var_map[node.name] = renamed
+            self._declared_scalar_names.add(renamed.lower())
+            new_type_shadow = self._transform_data_type(node.data_type)
+            if self._is_string_type(node.data_type):
+                self._string_vars.add(renamed)
+            return DeclareStatement(
+                name=renamed,
+                data_type=new_type_shadow,
+                default=new_default_shadow,
+            )
         self._declared_scalar_names.add(new_name.lower().lstrip("@"))
         # T-SQL table variables (DECLARE @t TABLE (cols)) have no equivalent
         # declaration in MySQL/Oracle/PostgreSQL. Rewrite to a CREATE TEMPORARY
