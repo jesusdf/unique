@@ -252,7 +252,8 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       (wave 98): the differential found a live IR bug — DATEADD over
       a DATEDIFF base added an INTERVAL to a NUMBER (invalid Oracle /
       wrongly typed PG); the IR now matches the text path's numeric
-      addition. Tests: TestIrNestedDateaddOverDatediff.*; then the text rewriters can
+      addition. Tests: TestIrNestedDateaddOverDatediff; verification cycle at
+      `6be5038` identical {163/131/89}.*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed
