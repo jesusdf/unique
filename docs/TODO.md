@@ -1803,8 +1803,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         parentheses around expression DEFAULTs — the column emitter
         shipped `DEFAULT UUID()` bare (1064). Function-call defaults
         now parenthesize (CURRENT_TIMESTAMP exempt). Tests:
-        TestMysqlFunctionDefaultParens. *Measurement pending next
-        pg-corpus cycle.*
+        TestMysqlFunctionDefaultParens. **Measured at `d9ac96d`
+        (2026-07-17): flat {163/131/89} — correctness fix (the pg
+        corpus barely exercises uuid defaults). Standing: pg-source
+        {163/131/89}, mysql-source {166/107/129}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
