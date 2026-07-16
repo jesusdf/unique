@@ -2891,3 +2891,473 @@ family-migration survey) remain recorded in the open §2 M3 item of
       current one is PG-only) to get an honest denominator, then per-direction
       sweeps mysql→{pg,oracle,tsql} joining the wave cadence.
 
+
+---
+
+## Items archived from TODO on 2026-07-17 (completed checkboxes)
+
+### From: P1 — silent semantic changes (no-silent-loss violations)
+
+- [x] **N1 (fixed in M2): unbracketed real-data `IF [NOT] EXISTS` guard dropped silently.**
+      `IF NOT EXISTS (SELECT 1 FROM cfg WHERE k='x') INSERT …` (no `BEGIN`)
+      loses the condition on every target with zero warnings — re-runs insert
+      duplicates. `batch_splitter._classify` (line ~278) only protects the
+      `BEGIN … END` form; drop the `_TSQL_BEGIN_BLOCK_RE` conjunct so any
+      non-catalog guard routes to the procedural engine. Add single-statement
+      INSERT/UPDATE/DELETE guard probes + an FE scenario running a guarded
+      INSERT twice.
+- [x] **N2 (fixed 2026-07-10): PG → T-SQL temp-table rename not
+      script-wide.** Temp-table names are harvested once per transpile
+      (`harvest_temp_tables` → `TEMP_TABLES` ContextVar, same pattern as
+      `IDENTITY_COLUMNS`) and `_emit_table_ref` prefixes `#` on every
+      reference for the T-SQL target — FROM, INSERT, DROP included.
+      Tests: `tests/integration/test_temp_table_rename.py` (incl. the
+      PG→T-SQL→PG round-trip and a non-temp negative).
+
+
+### From: P2 — correctness of signals and validation
+
+- [x] **Guard audit findings (2026-07-09, per-batch sweep of the private
+      corpora):** test.sql/test2.sql clean (531 guarded batches, 0 losses);
+      bigtest exposed three classes, all fixed: (1) `parse_sql` trusted
+      sqlglot WARN-mode partial trees — a table-qualified column in an INSERT
+      list shipped as `INSERT … DEFAULT VALUES` with the guarded SELECT gone;
+      now parses with RAISE and degrades to an honest carrier (also catches
+      mangled source fragments — N3 evidence). (2) The Oracle batch splitter
+      treated a lone `/` (and directives) as structural inside `/* */` block
+      comments, desyncing into orphan `*/ …` batches. (3) `emit_node(RawSQL)`
+      embedded multi-line sqlglot error text after `-- UNIQUE:`, leaking its
+      tail (unbalanced quote incl.) as executable output. Probes in
+      `test_embedded_dml_ir.py` + `test_batch_splitter.py`; re-audit: 0
+      losses on all 9 fixture×target pairs; test.sql→PG back at 100.0%.
+- [x] **N3 (fixed 2026-07-10): `validate_source` false negatives → silent
+      garbage.** A bare top-level `exp.Alias` (`banana banana`) is now
+      flagged like the other non-statements, and a `CREATE` that fell back
+      to an opaque Command is checked against a known object-kind allowlist
+      (`CREATE TALBE` → "unrecognized CREATE object kind"; real unmodeled
+      kinds like SYNONYM stay clean). Transpile-side, the parse-RAISE change
+      (2026-07-09) already degrades such fragments to carriers. Tests:
+      `TestBareAndTypoStatements`.
+- [x] **N5 (fixed 2026-07-09): false-positive warning on a successful guard
+      round-trip** — the blanket T-SQL FOR-loop warning is gone; degraded
+      paths carry `-- UNIQUE:` markers that the reconciliation surfaces
+      exactly when they fire. Test: `TestNoFalseGuardWarning`.
+- [x] **N6 (fixed 2026-07-09):** `/api/v1/validate` and `/api/v1/detect` now
+      enforce `MAX_SQL_BYTES` like `/transpile`. Test:
+      `TestValidateDetectSizeCap`.
+- [x] **N8 (fixed 2026-07-09): near-duplicate `unsupported` entries** — the
+      reconciliation now skips carrier fragments already covered by an
+      existing entry (3-word-shingle test). Test:
+      `TestUnsupportedDeduplication`.
+- [x] **N4/N9: docs drift (closed 2026-07-09)** — STATUS.md's guard-round-trip
+      claim was corrected (unit tests, not FE); the project-overview skill
+      says Python 3.13 and shows `converter/` as a package; README gained the
+      "`latest` publishes only on release tags" note in the docs pass. The
+      "map Unique's own emitted catalog guard back to the target catalog"
+      idea moved into the *Faithful conditional for unmappable catalog
+      guards* P2 item above.
+
+
+### From: P0 — architecture plan (audit doc 04 — ADOPTED 2026-07-08)
+
+- [x] **Decide on the architecture proposals in
+      [`audit/2026-07-08/04-architecture-analysis.md`](../audit/2026-07-08/04-architecture-analysis.md)**
+      — adopted as proposed (P1 honesty gate, P2 comment trivia, P3 unified
+      AST guard path, P4 embedded DML through the IR pipeline, P5
+      validity-ratchet process, P6 per-direction tiering; sequencing M0–M4).
+      Binding rules encoded in `skills/SKILL-development-workflow.md`
+      ("Architecture guardrails", "Detect the wrong path"). The item-level
+      bugs below are *instances* of those root causes — fix the classes
+      (P2/P3/P4), not the instances one by one.
+- [x] **M0 — productize the validity sweep** (`scripts/validity_sweep.py`) —
+      done: transpiles a file to each target, executes per-statement on the
+      live engines (PG savepoints, MySQL throwaway database, SQL Server
+      `SET PARSEONLY ON`, Oracle throwaway schema), classifies
+      syntax-vs-expected per engine error code, reports per-direction validity
+      % + top error groups with samples. E1 fixed on the way: the statement
+      splitters were consolidated into ONE shared string/comment-aware module
+      (`tests/helpers/sql_split.py`, 13 unit tests) used by the FE engine
+      runner, the live validators and the sweep — the old duplicated splitters
+      (which split on `;` inside string literals) are gone. Tests:
+      `tests/unit/helpers/test_sql_split.py`,
+      `test_validity_sweep_classify.py`. Baselines (private corpus, empty
+      DBs): pre-gate Oracle→T-SQL 71%, Oracle→PG 56%; **post-M1**:
+      T-SQL→{PG 99.9%, MySQL 98.6%, Oracle 99.6%}, Oracle→{T-SQL 94.0%,
+      MySQL 75.0%, PG 73.1%}.
+- [x] **M1 — honesty gate** (`src/unique/core/output_gate.py`) — done:
+      (a) plain DML/DDL output that doesn't parse under sqlglot in the target
+      dialect degrades to a carrier (original source preserved) + a
+      `validity_gate` warning + an `unsupported` entry; (b) ALL output is
+      scanned outside comments/strings for source-dialect leftovers
+      (ROWNUM/VARCHAR2/EXECUTE IMMEDIATE off Oracle, GETDATE/brackets off
+      T-SQL, backticks off MySQL, stray GO / `/` terminators) and degrades
+      whole on a hit — this catches invalid procedural units sqlglot can't
+      judge; (c) duplicate warnings aggregate into one entry with an `(xN)`
+      count. The splitter moved into the product
+      (`unique/core/sql_split.py`) to support the gate. Tests:
+      `tests/unit/core/test_output_gate.py` (17); full suite green with the
+      gate active — zero false degradations on the curated corpus.
+      *M1 residue resolved in M2:* the SET_OPTION fallback now labels
+      non-SET batches honestly (feature=unhandled_batch + unsupported).
+      Still open: fragment-level desync (D9) is only caught when a leftover
+      token appears in the fragment.
+- [x] **M2 — P2 comment trivia + P3 unified guard path** — done (clears the
+      guard family: N1, N10, A1–A5). One shared `split_leading_trivia`
+      (`unique/core/sql_split.py`) feeds the classifier, the guard matchers,
+      `_oracle_needs_slash` and the fallback labels; the three per-spelling
+      guard regexes collapsed into ONE `_extract_catalog_guard` (polarity +
+      inner-trivia aware, BEGIN…END unwrap, OBJECT_ID arity-proof); non-catalog
+      IF guards route to the procedural engine with or without BEGIN (N1);
+      catalog CREATE-guards keep their idempotent intent per target
+      (`_guard_idempotent`: Oracle probe, PG/MySQL native IF NOT EXISTS, MySQL
+      index warned); NEWID/UUID maps per target inside procedural bodies via
+      the shared `UUID_FUNCTION` table (A4). Tests:
+      `tests/unit/core/test_guard_translation.py` (40, combinatorial neighbor
+      matrix). Measured 2026-07-10 (post C1–C4 wave): **test.sql AND
+      test2.sql at 100.0% on PG, MySQL and Oracle**.
+- [x] **M4 — Oracle-source bring-up — ✅ COMPLETE 2026-07-11.** Official
+      validity_sweep at `7c1cea7` on the 13 MB dump (35k+ statements per
+      direction): **oracle→T-SQL 0 syntax failures, oracle→PostgreSQL 0,
+      oracle→MySQL 0 — 100.0% on all three** (from 475/41/121 at the
+      start of the bring-up). Driven by the sweep frequency table
+      (doc 03 §D backlog). ***Official sweep 2026-07-11 at `8f6e4a0` (post
+      waves 15a–15f): T-SQL 99.9% (48), PostgreSQL 100.0% (10), MySQL
+      100.0% (0 — the whole 18-class residue cleared).*** Residue
+      classification (2026-07-11, from the sweep dumps): **(P1, silent
+      corruption, all targets)** the PL/SQL CASE-*statement*→IF-chain
+      rewrite joins the condition onto one line WITH inline `--` comments
+      that sat between the CASE selector and `WHEN`, so the comment
+      swallows `= 'x' THEN` (`IF v --comment = 'U' THEN`) — same trivia
+      class as commit 9474f55 but in the CASE→IF path; accounts for the
+      2x tsql-4145 and at least 1 PG fail. **(P1)** 2x PG `INSERT …
+      (cols) DEFAULT VALUES` — the partial-parse corruption signature
+      shipped (guard leak). **tsql 48:** ~15x error 195 — unqualified
+      scalar-UDF calls; T-SQL *requires* `dbo.fn()` (the old "resolves on
+      the real DB" assumption was wrong — error 195 fires even when the
+      function exists), so qualify unknown functions with `dbo.`; plus
+      unmapped scalars in raw/procedural contexts (EXTRACT→DATEPART,
+      2-arg TRUNC→ROUND(x,d,1), TO_NUMBER, RPAD, EMPTY_BLOB); 2x
+      duplicate `@x` declarations (134), 2x `@new` / `@@…` variable edges,
+      date-literal + @dosis1 + misc 102s. **PG 10:** 2x ADD COLUMNS (a,b)
+      → per-column ADD, 2x RAW(16) DEFAULT SYS_GUID() → `BYTEA DEFAULT
+      gen_random_uuid()` type mismatch, missing-THEN edge, `X record`
+      placement edge. ***Official sweep 2026-07-11 at `857b515` (post
+      waves 16–18b): PostgreSQL 100.0% (0 — ZERO), MySQL 100.0% (0),
+      T-SQL 100.0% (13 — 0.04%)*** — from 475/41/121 when M4 started.
+      Waves 17a–18b closed: formatted TO_DATE/TO_CHAR (style table +
+      FORMAT via the shared token model), RAW(16) GUID defaults on PG,
+      embedded ALTER through the IR passthrough (`ADD COLUMNS` fixed),
+      nested-block loop-record hoisting (shared _split_declarations),
+      SYSDATE() empty-parens retry, case-insensitive var rename,
+      cursor %FOUND/%NOTFOUND on T-SQL, %ROWTYPE loop-var double-@,
+      loop-DECLARE dedupe per batch, raw RPAD/LPAD, bare RETURN in PG
+      trigger functions → NEW/NULL, and incomplete T-SQL trigger
+      conversions (NEW./OLD. leftovers) now degrade honestly via the
+      gate. **2026-07-11 waves 19–19b** (official sweep at `638231e`):
+      aliased single-table UPDATEs (5x — T-SQL's `UPDATE alias … FROM t
+      alias` form + the trigger rewriter renormalizes it), ROWNUM = 1 →
+      TOP 1, ROWNUM added to the tsql gate deny-list, quoted dateparts
+      (`DATEDIFF('Y',…)`), parameterless CREATE FUNCTION parens.
+      ***Waves 20–21 (2026-07-11, official sweep at `b19e03a`): T-SQL
+      100.0% (3), PostgreSQL 0, MySQL 0.*** Closed: boolean-var IF/WHILE
+      conditions (`= 1`), param-shadowing locals dropped, DISTINCT hoist
+      in assignment-selects, **Oracle q-quoted literals** (`q'[…]'` —
+      lexer feature; exposed that constant-EXECUTE-IMMEDIATE routine DDL
+      must STAY dynamic, now warned), 2-arg SUBSTR with sign-aware start
+      (balanced-paren scanner), and the `p_x`/`v_p_x` prefix-strip rename
+      collision (error 134 + a silent aliasing risk). **The final 3 are
+      ONE class:** scalar calls inside sqlglot-emitted MERGE passthrough
+      text (DATEVALUE→dbo., 1-arg TO_CHAR, REGEXP_LIKE) — the shared
+      function decisions (mappings + qualifier) never see passthrough
+      output; run the tsql scalar pass + string-aware qualifier over
+      MERGE passthrough text for the tsql target (REGEXP_LIKE itself has
+      no SQL Server 2022 form — document as a visible limitation).* *Wave 16 landed
+      2026-07-11:*
+      the trivia class fix (`_flat_value` — every flattening capture, CASE
+      selector/WHEN included), the parenthesized/UNION INSERT-body drop
+      (silent DEFAULT VALUES corruption), structural `dbo.` qualification
+      of scalar-UDF calls (error 195 — the "resolves on the real DB"
+      assumption was wrong), and the scalar wave (EXTRACT→DATEPART,
+      TRUNC(n,d), LPAD/RPAD via exp.Pad, EMPTY_BLOB/CLOB, TO_NUMBER /
+      1-arg TO_CHAR/TO_DATE argument-aware — the old name renames emitted
+      CONVERT/CAST missing the type argument). *Earlier waves:* Waves 13–14: derived-table aliases synthesized
+      for every non-Oracle target (a shared cause across all three) +
+      T-SQL's no-TOP ORDER BY dropped inside them; seq.NEXTVAL/CURRVAL;
+      the cursor FOR-loop expansion completes for aliased expressions
+      (COUNT(*) TOTAL) with the inline form's parens stripped
+      (live-validated idempotent); anonymous-block CURSOR declarations
+      hoisted into the DO $$ DECLARE section; the CLOB→VARCHAR(MAX) map no
+      longer crashes the batch; oversized (N)VARCHAR caps to (MAX). Waves 11–12 added: the shared ALTER ... MODIFY
+      rewriter (neither Oracle form parses in sqlglot), user_tab_cols →
+      sys.columns / information_schema probes (case-folded on PG — a
+      semantic fix, the guards never fired), ALTER TRIGGER ENABLE via
+      catalog lookups, named-association LHS protected from the variable
+      rename (EXEC p @@id = @id), EXEC expression-arguments hoisted
+      (GETDATE() is not a valid EXEC argument — whole seeding batches), and
+      the ROWNUM→TOP derived table aliased (T-SQL requires it). Wave 10 added: the sqlglot index NULLS-ordering
+      CASE emulation stripped (25x — a T-SQL index key cannot be an
+      expression), multi-column `ALTER ... DROP (a, b)` normalized per
+      target, MYSQL_ERRNO magnitudes (Oracle's -20xxx codes, 20x),
+      PIPELINED table functions preserved as documented carriers, bare
+      VARBINARY sized in passthrough DDL, standalone-DML scalars on T-SQL
+      (CHR/TO_NUMBER/MONTHS_BETWEEN), PG reserved column names and the
+      top-level no-op leak. The waves: exception-scope folding (T-SQL
+      TRY / MySQL handler blocks, NOT FOUND for NO_DATA_FOUND), trigger
+      `UPDATE OF`/`WHEN` headers, event predicates (TG_OP / per-variant
+      constants / ELSEIF), pseudo-row `INTO :NEW.col` targets, the PL/SQL
+      CASE *statement* → IF chain, constant `EXECUTE IMMEDIATE` unwrap,
+      Oracle-style `DROP INDEX` via a sys.indexes lookup, `user_*` catalog
+      probes → `sys.*`, `SQL%ROWCOUNT`/`MONTHS_BETWEEN`/CHR/TRUNC/base
+      builtins on T-SQL, unsized VARCHAR sizing, ref-cursor OUT params →
+      direct result sets on T-SQL/MySQL, PG row-loop record declarations
+      (+ shadowed-name rename), CALL-arg renames/pseudo-records, and the
+      partial-parse corruption guard (INSERT → DEFAULT VALUES signature).
+      Probes: `tests/integration/test_oracle_source_m4_wave.py` (23).
+      Note: the T-SQL count is *flat vs. the morning's 127 but far more
+      honest* — unwrapping constant dynamic SQL surfaced ~30 failures that
+      previously hid as runtime missing-object noise inside EXEC() strings.
+      *Remaining (tsql 54):* dominated by ~12 client-DB-resident UDFs
+      (SVF_* — genuinely unresolvable without --db-url metadata; on the
+      real target DB they resolve), PL/SQL collections (ARRAYTIPOALTA),
+      and 2x edges (4145 non-boolean IF, 128, @dosis1, date literal,
+      TO_NUMBER-in-raw). PG 10 — RETURN edges, ADD COLUMNS(...),
+      2x bytea/uuid defaults. **MySQL 18 classified 2026-07-10** (dump hook +
+      per-statement re-run against MySQL 8.4 for exact near-tokens):
+      (a) 3x `MANUAL` is a *new reserved word in MySQL 8.4* — plain INSERT
+      column lists need backtick-quoting (same class as the wave-10 PG
+      reserved-column fix, MySQL table was stale); (b) 2x space between a
+      special-grammar function and `(` — `EXTRACT ( YEAR FROM x)` does not
+      parse (empirically: `SUM ( x )` fine, `EXTRACT ( … )` 1064) — raw-token
+      join must not pad the paren; (c) 2x named-cursor FOR loop expansion:
+      `DECLARE rowX_cur CURSOR FOR curES` is invalid (a MySQL cursor cannot
+      alias another cursor — drive the named cursor directly), the scaffold
+      `FETCH INTO /* col1… */` stays unresolved though every select-list item
+      is aliased, and the DECLAREs land mid-body (MySQL wants them at block
+      head — wrap the expansion in a nested BEGIN…END); (d) 2x bare `RETURN;`
+      inside procedure/trigger handlers (only functions may RETURN — needs a
+      labeled block + LEAVE); (e) 4x parser token-soup on unmappable PL/SQL
+      declarations (`TYPE t IS VARRAY(n) OF …`, `RETURN pkg.col%TYPE`, REF
+      CURSOR-returning functions) emitted as `DECLARE . LONGTEXT;` fragments —
+      violates "a desynced unit degrades whole"; (f) 1x `DECLARE PRAGMA
+      AUTONOMOUS_TRANSACTION` leak + `GROUP_CONCAT(… SEPARATOR CHR(13)||…)
+      WITHIN GROUP (…)` (LISTAGG lowering must fold a constant separator to a
+      literal and move ORDER BY inside); (g) 1x `EXECUTE … USING V_LOCAL` —
+      MySQL prepared statements only bind session `@vars` (hoist args), and
+      the constant `'BEGIN p(:1…); END;'` should unwrap to a direct CALL;
+      (h) 1x `DROP SEQUENCE IF EXISTS` shipped raw (no MySQL sequences);
+      (i) 1x `CREATE FUNCTION NOW()` — collides with the built-in, unmappable
+      without renaming call sites. Silent-corruption findings from the same
+      dump (parse-valid, wrong semantics — no-silent-loss violations to fix
+      with the wave): Oracle `||` reaching MySQL raw expressions parses as
+      logical OR (loop bodies, RETURN concat, SET assignments); numeric
+      `+ 1` emitted as `CONCAT(…, 1)` / `|| 1`; `TRUNC(date)` emitted as
+      1-arg `TRUNCATE` (grammar error) instead of `DATE()`; 3-arg
+      `DATEDIFF('S',…)` instead of `TIMESTAMPDIFF`.
+      Note: the compose `stop_grace_period: 30s` for mssql applies on the
+      next `up -d` (containers keep their creation-time config).
+
+- [x] **Faithful conditional for unmappable catalog guards (P2)** (done
+      2026-07-10 for the sys.columns/syscolumns column-probe family, both
+      polarities, `default_object_id <> 0` included): PG gets a `DO $$ IF
+      [NOT] EXISTS(information_schema.columns …)` block, Oracle a
+      `user_tab_columns` COUNT probe (+ `default_length` for the default
+      predicate — `data_default` is a LONG) with EXECUTE IMMEDIATE;
+      live-validated idempotent on both engines. Unrecognized predicates and
+      MySQL (no anonymous blocks) keep the explicit `guard_dropped` warning.
+      Tests: `TestFaithfulColumnProbeGuard`. Original text:** A T-SQL
+      guard whose body has no native conditional form (e.g. `IF NOT EXISTS
+      (SELECT … FROM sys.columns … default_object_id <> 0) ALTER … ADD
+      DEFAULT`) currently drops the condition — since 2026-07-09 with an
+      explicit `guard_dropped` warning (user report; it was silent). The
+      emitted `SET DEFAULT`/`MODIFY` is re-runnable (the guard's main
+      purpose) but overwrites an existing different default that T-SQL would
+      have preserved. The faithful fix is translating the *condition* to the
+      target's catalog (`information_schema.columns.column_default` on
+      PG/MySQL, `user_tab_columns.data_default` on Oracle) wrapped in the
+      target's conditional block — needs careful identifier-case mapping,
+      so it must land with live-validated tests. Related to the N4/N9 note
+      about mapping Unique's own emitted guards back.
+
+
+### From: P1 — private-fixture live sweep (audit doc 03; anonymized repros there)
+
+- [x] **A1/A2: guard batches with a leading comment, or `BEGIN…END`-wrapped
+      `IF OBJECT_ID` guards, are commented out wholesale** on every target
+      (mislabeled `set_option` warning). Fix the guard extractor to tolerate
+      leading comments and unwrap `BEGIN…END`; likely clears N1 too.
+- [x] **A3 (fixed in M2): leading comment suppresses the `/` terminator** of the emitted
+      Oracle guard block — every following statement is swallowed in SQL*Plus.
+- [x] **D3 (fixed in M3a): `INSERT … SELECT … FROM DUAL WHERE NOT EXISTS(…)` keeps
+      `FROM DUAL`** on PG/T-SQL (~6,000× in the real Oracle dump). Root cause
+      was transform-pass recursion stopping at top-level SELECTs; the generic
+      recursion + the embedded-DML IR route fixed both pipelines. Probes in
+      `test_embedded_dml_ir.py` (standalone + procedural, + scalar-subquery
+      and IN-subquery neighbors).
+- [x] **D1 (fixed in M4 bring-up, 2026-07-09): Oracle `EXEC proc` → `EXEC AS proc`**
+      on every target (T-SQL impersonation syntax; PG/MySQL need `CALL`).
+      Mechanism: SQL*Plus `EXEC` has no sqlglot model — it parsed as an
+      *alias* and shipped `EXEC AS proc` with the arguments dropped. The
+      classifier now routes Oracle `EXEC`/`EXECUTE` batches to the procedural
+      engine, whose parser models them as `CallStatement`
+      (`_parse_sqlplus_exec_call`; `EXECUTE IMMEDIATE` unaffected) and each
+      target emits its call form. Probes:
+      `tests/integration/test_exec_call_translation.py` (9, incl.
+      args-never-dropped on all targets).
+- [x] **SQL*Plus `SET` directives shipped raw (fixed in M4 bring-up, 2026-07-09)** —
+      `SET SERVEROUTPUT ON` etc. (~940 invalid statements per direction on the
+      real dump) are line-oriented client commands with no `;`, so they also
+      glued to the following block and corrupted it. The Oracle splitter now
+      peels a known-option directive line into its own SET_OPTION batch (at a
+      statement boundary only — an UPDATE's `SET` clause is untouched), the
+      SET_OPTION path comments it with a warning for oracle→X, and real SQL
+      `SET TRANSACTION`/`SET CONSTRAINTS` now flows as `exp.Set` passthrough
+      (it used to be misclassified as a session option). Tests:
+      `test_batch_splitter.py::TestSqlPlusSetDirectives`,
+      `tests/integration/test_sqlplus_directives.py`.
+- [x] **D2 (fixed in M4 bring-up, 2026-07-09): top-level `DECLARE…BEGIN…END` keeps
+      its PL/SQL skeleton in T-SQL** instead of flattening to `DECLARE @x…;
+      <statements>`. The T-SQL emitter inherited the base's Oracle-style
+      anonymous-block shell; it now overrides `_emit_anonymous_block` and
+      flattens (a T-SQL batch *is* the block; ~500 statements on the dump).
+      Tests: `tests/integration/test_anonymous_block_tsql.py`.
+- [x] **D8 (fixed in M3b): silent expression corruption in procedural embedded DML** —
+      `MAX(NVL(x,0)) + 1` loses `, 0))` and `+ 1` on T-SQL, and numeric `+`
+      becomes `||` on PG. Mechanism: the T-SQL SELECT-INTO emitter split the
+      select list with a naive `split(",")`, cutting inside the function call.
+      Fixed with the shared paren/string-aware `split_top_level_commas`
+      (`unique/core/sql_split.py`); embedded-DML `+` now flows through the IR
+      (M3a). Probes + oracle→tsql→oracle round-trip in
+      `test_embedded_dml_ir.py`.
+- [x] **C1 (verified closed 2026-07-10): mid-body scalar `DECLARE @x t =
+      expr`** — hoisted recursively (nested blocks included) with the
+      initializer left in place as an assignment; covered by
+      `_split_declarations`' pull_nested pass.
+- [x] **B1 (fixed 2026-07-09): `PRIMARY KEY CLUSTERED (col ASC)`** — the
+      `ADD CONSTRAINT … PRIMARY KEY/UNIQUE CLUSTERED (…) WITH (…) ON [grp]`
+      shape is rebuilt directly per target (`_tsql_add_key_constraint`);
+      sqlglot mangled it into comma-joined actions that SHIPPED inside
+      Oracle guards. Tests: B1 pair in `test_ddl_rename_dropindex.py`.
+- [x] **B2 (fixed 2026-07-09): `DROP INDEX` untranslated across the matrix** (PG
+      3-part name, MySQL missing `ON tbl`, table name dropped from the `ON`
+      form). `DropStatement` now carries `on_table` (from T-SQL's `ON tbl` or
+      the legacy `tbl.ix` qualifier); T-SQL/MySQL emit `… ON tbl` (MySQL
+      without `IF EXISTS`, which it lacks), Oracle/PG emit the bare index
+      name, and a required-but-unknown table degrades to a documented
+      carrier. Tests: `tests/integration/test_ddl_rename_dropindex.py`.
+- [x] **C5 (fixed in M4 bring-up, 2026-07-09): MySQL `CALL` emitted with named
+      arguments** (`name => v`), unsupported by MySQL — now lowered to
+      positional by the MySQL transformer with a warning (argument order must
+      match the declaration). Same change wave: the lexer now emits `=>` as
+      ONE token (it split into `= >`, breaking PG/Oracle output too), and the
+      T-SQL emitter spells named association as `@name = value`. Tests:
+      `test_exec_call_translation.py` (named-arg trio).
+- [x] **D9 (fixed 2026-07-09): `create or replace⏎PROCEDURE` (split lines +
+      `-- <codegen>` header comment) desyncs the procedural parser**,
+      spilling declaration fragments as top-level batches. Two mechanisms:
+      the splitter's PL/SQL-head regex was line-bound (now matches over a
+      3-line window), and a top-level anonymous block's `DECLARE` was parsed
+      as ONE declaration instead of a section up to `BEGIN` (now mirrors
+      `_parse_plsql_body`). Measured: Oracle→PG syntax failures 268 → **39**
+      (99.9% validity). Tests: `TestOracleSplitLineCreateHeader`,
+      `test_declare_section_with_multiple_declarations`.
+- [x] **P1 (fixed 2026-07-09): faithful T-SQL expansion of named-cursor FOR
+      loops** — declarations emit the classic un-@ form and record their
+      query; a loop over a named cursor drives it directly with one
+      `@<var>_<col>` per resolvable select-list column, positional FETCH
+      INTO, and `rec.col` → `@rec_col` body rewriting (documented scaffold
+      only for unresolvable lists). Follow-ups landed the same day:
+      `EXECUTE IMMEDIATE … INTO` captured per target (T-SQL `INSERT … EXEC`
+      into a table variable) and `||` → `+` in T-SQL raw expressions.
+      Final dump measurement: **T-SQL 99.6% / PG 99.9% / MySQL 99.6%**.
+      Remaining T-SQL classes (127): TRY fragments in flattened blocks,
+      subquery ORDER BY (error 1033), ~21 near-`)`.
+- [x] **C2/C3/C4 (closed 2026-07-10, sweep-closing wave): MySQL routine
+      bodies** — the whole class fell out of the semicolon-less boundary
+      fixes plus per-target lowering: cursor options consumed on DECLARE
+      CURSOR; OPEN/FETCH/CLOSE/DEALLOCATE parsed as cursor ops (were sqlglot
+      `OPEN AS c` aliases); `@@FETCH_STATUS` loops per target (PG FOUND,
+      Oracle `%FOUND`, MySQL done-flag + NOT FOUND handler); assignment-select
+      stops at bare `ELSE`; IF conditions stop at statement verbs
+      (ROLLBACK/COMMIT/DECLARE/…); MERGE actions chain after `THEN` and route
+      through the IR (mysql upsert, Oracle `ON (…)`, non-canonical → warned
+      carrier); CTE assignment-select → `WITH … SELECT INTO`; updatable-CTE
+      DML → warned carrier (was silent CTE drop); parenthesized FROM join
+      trees passthrough (were a silent whole-FROM loss); base64-XML idiom,
+      ERROR_MESSAGE()/RAISERROR(@var), VARBINARY(MAX), table hints in raw
+      conditions, DROP INDEX guard per target, nested table-variable GTT
+      hoist, MySQL `NULL;`→`DO 0;`. **Measured 2026-07-10: test.sql AND
+      test2.sql at 100.0% validity on all three targets.** Tests:
+      `tests/integration/test_test2_residue_wave.py` (28) +
+      `test_cursor_variable_binding.py` (6).
+- [x] **D5/D6/D7 (fixed 2026-07-09): Oracle→T-SQL passthroughs** — D5:
+      `RENAME COLUMN` → `EXEC sp_rename` (T-SQL only; PG/MySQL 8 native).
+      D6: `INSERTING`/`DELETING`/`UPDATING['(col)']` → the T-SQL
+      inserted/deleted EXISTS idiom / `UPDATE(col)`, and the row→statement
+      trigger conversion recurses into `IF` bodies (a NEW/OLD condition
+      folds into the inserted-rows subquery). D7: `TRUNC(date)` →
+      `CAST(x AS DATE)` (T-SQL), `DATE_TRUNC('day',…)` (PG), `DATE(x)`
+      (MySQL). Tests: `test_ddl_rename_dropindex.py`,
+      `test_trigger_predicates_scheduler.py`.
+- [x] **B3 (fixed 2026-07-09): named DEFAULT constraints** (T-SQL-only)
+      dropped on every other target with a per-name note/warning.
+- [x] **B4 (verified fixed 2026-07-09): bare `RETURN` eats the next line's
+      comment** — no longer reproduces; pinned by
+      `test_comment_after_bare_return_survives`.
+- [x] **D10 (fixed 2026-07-09): `DBMS_SCHEDULER.CREATE_JOB` → raw `CALL` on
+      PG** — Oracle built-in package calls (`DBMS_*`, `UTL_*`, …) now degrade
+      to a documented carrier + warning + no-op off Oracle.
+- [x] **E1 (harness): `_split_mysql_statements` splits on `;` inside string
+      literals** — fixed via the shared `tests/helpers/sql_split.py` (see M0);
+      all live splitting is now string/comment-aware, incl. MySQL backslash
+      escapes and a BEGIN/END word-boundary fix.
+
+
+### From: P3 — hardening carry-overs (from 2026-07-02, still open)
+
+- [x] **CI: fail when fewer engines than expected were exercised** (done
+      2026-07-10) — a gating "all four engines reachable" step in
+      `syntax-live` fails the job before the live suites run; the waits stay
+      `continue-on-error` for readable logs but can no longer shrink the
+      validation silently.
+- [x] **Identity-mutation floor raised 0.33 → 0.40 → 0.45** (2026-07-11;
+      measured 0.49 after the M4-closing and M3-prereq waves). Next
+      ratchet as `test_cross_dialect.py` survivors harden.
+- [x] **Docker digest pin + constraints file** (done 2026-07-10): both
+      Dockerfiles pin `python:3.13-slim` by sha256 digest and the runtime
+      install applies `constraints.txt` (full dependency closure) — image
+      build verified locally. A5 (`X-Unique-Decoded-As`) and N7 (filename
+      stem sanitize) shipped the same day.
+
+
+### From: Continuously tracked (not a discrete backlog)
+
+- [x] **Nightly mutation floors under water since 2026-07-09 — RECOVERED
+  2026-07-16** (nightly run at `17de248` green: all floors passing with
+  the wave-file selections + survivor-targeted assertions). Original
+  finding (P2; user flagged 2026-07-15): convert.py 60% < 65, emit.py 53% < 60,
+  procedural base.py 51% < 52. Root cause: the M-era + wave code landed
+  with its tests in `tests/integration/test_pg_source_wave1.py`, which
+  the nightly's `--tests` selections did NOT include — every mutant in
+  the new paths survived by construction. Fixed the selection (wave
+  file added to BOTH mutation steps, 2026-07-15; local 60-mutant sample
+  on emit.py: 53%→58%). Validation dispatch (2026-07-15 evening):
+  convert.py recovered its floor; emit.py 56% and procedural base.py 51%
+  still short → survivor-targeted assertions added
+  (`test_emit_mutation_survivors.py`: CTE-DML gate branches, index-
+  rebuild decisions, per-target DEFAULT rewrites;
+  `test_transformer_survivors.py`: trigger timing/delegation/UPDATE-OF
+  decisions). Local 80–100-mutant samples after: emit.py 65% (floor
+  60), base.py 61% (floor 52). Second validation dispatch pending —
+  possible live-check item spotted on the way: MySQL `DEFAULT UUID()`
+  emits WITHOUT the parens MySQL requires for function defaults
+  (verify against live MySQL; the `(UUID())` rewrite exists but a
+  different path emits).
+- **Test-assertion quality** is measured by the nightly mutation job
+  (`mutation.yml` / `scripts/mutation_test.py`) rather than a static to-do list:
+  surviving mutants in its run summary are the live map of weakest assertions.
+  Strengthen them opportunistically (the biggest foci at last measure were
+  `emit._emit_function`/`_emit_date_diff` and `transformer._replace_oracle_date_add`).
+  Differential result testing (`test_corpus_results_live.py`) guards against
+  semantic regressions on every syntax-live CI run.
+
+
