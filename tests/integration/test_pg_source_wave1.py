@@ -5522,3 +5522,32 @@ class TestMysqlProceduralCastTypes:
         )
         out = _t(src, "mysql")
         assert re.search(r"(?i)CAST\(\s*x AS SIGNED\s*\)", out), out
+
+
+class TestMysqlNonConstLag:
+    """wave 147: MySQL requires a CONSTANT LAG/LEAD offset — a column
+    offset (``LAG(ten, four)``) raises 1327 (3x). Degrades whole on
+    mysql; constant offsets and other targets keep their path."""
+
+    def test_column_offset_degrades_mysql(self) -> None:
+        r = Transpiler().transpile(
+            "select lag(ten, four) over (order by ten) from t;",
+            source="postgresql",
+            target="mysql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_constant_offset_kept_mysql(self) -> None:
+        out = _t("select lag(ten, 2) over (order by ten) from t;", "mysql")
+        assert re.search(r"(?i)LAG\(ten, 2\)", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_column_offset_kept_pg(self) -> None:
+        out = _t("select lag(ten, four) over (order by ten) from t;", "postgresql")
+        assert re.search(r"(?i)LAG\(ten, four\)", out), out

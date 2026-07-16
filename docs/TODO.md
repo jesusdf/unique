@@ -545,7 +545,12 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          the real sweep transpiles the WHOLE file; classify from the
          sweep's own e.g. lines. Measured: pg→mysql **94 → 87**
          (97.0%), discovery HOLDS 0. Tests:
-         TestMysqlProceduralCastTypes (2).**
+         TestMysqlProceduralCastTypes (2).* Wave 147 (2026-07-16): MySQL
+         requires a CONSTANT LAG/LEAD offset — a column offset
+         (`LAG(ten, four)`) raises 1327 and has no MySQL spelling;
+         degrades whole there. Measured: pg→mysql **87 → 83**
+         (97.2%), discovery HOLDS 0. Tests: TestMysqlNonConstLag
+         (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

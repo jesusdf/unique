@@ -589,6 +589,7 @@ class Transformer:
             result = [self._gate_mysql_full_join(node) for node in result]
             result = [self._gate_mysql_function_relation(node) for node in result]
             result = [self._gate_mysql_agg_forms(node) for node in result]
+            result = [self._gate_mysql_nonconst_lag(node) for node in result]
         if self.context.target in ("mysql", "oracle"):
             result = [self._gate_column_alias_ref(node) for node in result]
         if self.context.target != "mysql":
@@ -973,6 +974,38 @@ class Transformer:
                 if found is not None:
                     return found
         return None
+
+    def _gate_mysql_nonconst_lag(self, node: ASTNode) -> ASTNode:
+        """LAG/LEAD with a NON-CONSTANT offset — MySQL requires a constant
+        (a column offset raises 1327 'Undeclared variable') — wave 147."""
+        found = self._find_nonconst_lag(node)
+        if not found:
+            return node
+        reason = (
+            "MySQL requires a constant LAG/LEAD offset (a column offset "
+            "has no MySQL spelling); statement preserved as a comment"
+        )
+        self.context.warn(reason, "nonconst_lag_offset")
+        self.context.mark_unsupported("non-constant LAG/LEAD offset (MySQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _find_nonconst_lag(self, value: object) -> bool:
+        if (
+            isinstance(value, FunctionCall)
+            and value.name.upper() in ("LAG", "LEAD")
+            and len(value.args) >= 2
+            and not isinstance(value.args[1], Literal)
+        ):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._find_nonconst_lag(getattr(value, f.name)) for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._find_nonconst_lag(item) for item in value)
+        return False
 
     def _gate_mysql_function_relation(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using a function as a relation — WHOLE, on MySQL.
