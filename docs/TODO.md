@@ -552,9 +552,11 @@ fix needs an **anonymized** regression fixture (never a private name).
 
 ## 3. Test-corpus expansion (P3)
 
-- [ ] **Import the upstream PostgreSQL regression fixtures as a PG-source
-      test corpus** (user request, 2026-07-10; **evaluation done 2026-07-10**,
-      import pending). Findings: **PG yes, MySQL no.**
+- [x] **Import the upstream PostgreSQL regression fixtures as a PG-source
+      test corpus — DONE** (fetcher shipped 2026-07-11; the corpus is the
+      daily driver of the §3 wave loop, standing pg→{tsql 163, mysql 131,
+      oracle 89}). Original (user request, 2026-07-10; evaluation done
+      2026-07-10): Findings: **PG yes, MySQL no.**
       - *PostgreSQL* (`src/test/regress/sql/`, 247 files / ~4.9 MB): plain
         `.sql`, license is the permissive PostgreSQL License (BSD-like —
         committable with the COPYRIGHT notice reproduced). Probe: today's
@@ -1825,8 +1827,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         `3aa55b4`), the transactional-BEGIN splitter glue (also under the
         output gate), and the oracle first-boot healthcheck wait.
 
-- [ ] **MySQL-source validity sweep over the private local corpus** (P2,
-      2026-07-15). A privately-prepared mysql-source corpus now exists under
+- [x] **MySQL-source validity sweep over the private local corpus — DONE
+      2026-07-15/17** (M1–M6 plus waves through 91; standing in §3:
+      mysql→{tsql 166, pg 107, oracle 129}, all ≥97.2%). Original (P2,
+      2026-07-15): A privately-prepared mysql-source corpus now exists under
       the gitignored `fixtures-corpus/` (local-only material; per policy its
       provenance is not documented here — see the private prep script next to
       it). Pending: a mysql variant of `scripts/filter_valid_source.py` (the
@@ -1842,8 +1846,10 @@ fix needs an **anonymized** regression fixture (never a private name).
 
 ## Continuously tracked (not a discrete backlog)
 
-- [ ] **Nightly mutation floors under water since 2026-07-09** (P2; user
-  flagged 2026-07-15): convert.py 60% < 65, emit.py 53% < 60,
+- [x] **Nightly mutation floors under water since 2026-07-09 — RECOVERED
+  2026-07-16** (nightly run at `17de248` green: all floors passing with
+  the wave-file selections + survivor-targeted assertions). Original
+  finding (P2; user flagged 2026-07-15): convert.py 60% < 65, emit.py 53% < 60,
   procedural base.py 51% < 52. Root cause: the M-era + wave code landed
   with its tests in `tests/integration/test_pg_source_wave1.py`, which
   the nightly's `--tests` selections did NOT include — every mutant in
