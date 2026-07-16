@@ -578,7 +578,7 @@ class Transformer:
         result = nodes
         if self.context.target != "postgresql":
             result = [self._gate_pg_internals(node) for node in result]
-        if self.context.target in ("tsql", "mysql"):
+        if self.context.target in ("tsql", "mysql", "oracle"):
             result = [self._gate_array_constructs(node) for node in result]
         if self.context.target == "mysql":
             result = [self._gate_mysql_full_join(node) for node in result]
@@ -1101,6 +1101,13 @@ class Transformer:
         found = self._find_array_construct(node)
         if found is None:
             return node
+        # Oracle DOES have WITHIN GROUP ordered-set aggregates and
+        # aggregate-star calls; only the genuine array constructs
+        # (ARRAY[…], ARRAY_AGG, UNNEST, array casts) lack a spelling.
+        if self.context.target == "oracle" and found in (
+            "WITHIN GROUP (ordered-set aggregate)",
+        ):
+            return node
         reason = (
             f"PostgreSQL construct {found} has no "
             f"{self.context.target} equivalent; statement preserved as a comment"
@@ -1118,9 +1125,9 @@ class Transformer:
             and value.name.upper() in self._ARRAY_CONSTRUCTS
         ):
             return value.name.upper()
-        if (
-            isinstance(value, CastExpression)
-            and value.target_type.name.upper() == "ARRAY"
+        if isinstance(value, CastExpression) and (
+            value.target_type.name.upper() == "ARRAY"
+            or value.target_type.name.rstrip().endswith("[]")
         ):
             return "CAST(… AS ARRAY)"
         if isinstance(value, RawSQL) and "WithinGroup" in value.reason:

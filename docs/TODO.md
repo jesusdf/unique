@@ -99,7 +99,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          PASSES (wave 85 class). It is NEVER the sole check; it
          complements the no-silent-loss gates, differential audits,
          and review of what each degrade drops.** Tests:
-         TestLiveOutputValidation (env-gated). **Scope decision
+         TestLiveOutputValidation (env-gated). **Live-in-sweep gap
+         discovery (user, 2026-07-17): a discovery script ran the
+         corpus through the Transpiler + live PG validation, keeping
+         only statements the ENGINE rejects that shipped with NO
+         carrier/warning — 58 silent gaps. Top: `CAST(… AS ARRAY)`
+         (11x — a PG array-type cast `'{…}'::float8[]` collapsed to
+         a bare ARRAY, invalid even PG→PG; wave 106 preserves the
+         array type and widens the array gate to Oracle, excluding
+         WITHIN GROUP which Oracle supports). Remaining discovered
+         gaps: `RETURN`-in-body fragments, EXPLAIN carriers — the
+         known deep-single tail.** **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
          gaps. It is deliberately NOT exposed in the CLI or the API

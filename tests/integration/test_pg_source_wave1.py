@@ -3789,3 +3789,29 @@ class TestLiveOutputValidation:
         assert any(w.feature == "live_validation" for w in r.warnings) or not [
             ln for ln in r.sql.splitlines() if "UNIQUE: live" in ln
         ], r.sql
+
+
+class TestArrayCastFaithful:
+    """wave 106 (live-validation discovery): a PG array-type cast
+    `'{…}'::float8[]` collapsed to `CAST(… AS ARRAY)` — invalid even
+    on PG→PG (the element type was lost, 11x silent gap found by live
+    validation). The array type is preserved on PG; on T-SQL/MySQL/
+    Oracle (no PG arrays) the statement whole-degrades."""
+
+    def test_array_cast_faithful_pg(self) -> None:
+        out = _t2("SELECT '{4,140}'::float8[] AS v;", "postgresql", "postgresql")
+        assert "AS ARRAY" not in out.upper(), out
+        assert re.search(r"(?i)DOUBLE PRECISION\[\]|FLOAT8\[\]", out), out
+
+    def test_array_cast_degrades_oracle(self) -> None:
+        r = Transpiler().transpile(
+            "SELECT '{4,140}'::float8[] AS v;",
+            source="postgresql",
+            target="oracle",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql

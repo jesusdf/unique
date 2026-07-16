@@ -1499,6 +1499,13 @@ def _convert_data_type(expr: exp.Expression) -> DataType:
                 if isinstance(p, exp.Literal) and p.is_string
             )
             return DataType(name=name.upper(), values=values)
+        # A PG array type (``float8[]``): sqlglot models it as an ARRAY
+        # DataType nesting the element type. Collapsing to a bare "ARRAY"
+        # loses the element type and emits invalid ``CAST(… AS ARRAY)``
+        # even on PG. Keep the source spelling; non-PG targets degrade
+        # the whole statement (the array gate).
+        if name.upper() == "ARRAY":
+            return DataType(name=expr.sql(dialect="postgres"))
         params: list[int] = []
         for p in expr.expressions:
             if isinstance(p, exp.DataTypeParam):
