@@ -5494,3 +5494,31 @@ class TestWave145MysqlAggForms:
     def test_literal_separator_untouched_mysql(self) -> None:
         out = _t("select string_agg(v, ',') from t;", "mysql")
         assert re.search(r"(?i)GROUP_CONCAT\(v SEPARATOR ','\)", out), out
+
+
+class TestMysqlProceduralCastTypes:
+    """wave 146: MySQL CAST accepts a fixed target set — the DML pipeline
+    maps foreign spellings via _CAST_TYPE_MAP, but the procedural
+    expression text shipped them raw (``RETURN CAST(p1 AS text)`` — hard
+    1064). Dual-pipeline mirror."""
+
+    def test_cast_text_in_body(self) -> None:
+        src = (
+            "create function volfoo(p1 text) returns text as $$\n"
+            "begin\n"
+            "  return cast(p1 as text);\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "mysql")
+        assert not re.search(r"(?i)AS\s+text\s*\)", out), out
+        assert re.search(r"(?i)CAST\(\s*p1 AS CHAR\s*\)", out), out
+
+    def test_cast_int_in_body(self) -> None:
+        src = (
+            "create function f(x text) returns int as $$\n"
+            "begin\n"
+            "  return cast(x as integer) + 1;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "mysql")
+        assert re.search(r"(?i)CAST\(\s*x AS SIGNED\s*\)", out), out

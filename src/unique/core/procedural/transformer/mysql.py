@@ -185,6 +185,7 @@ class MySqlTransformer(ProceduralTransformer):
         sql = self._mysql_string_concat(sql)
         sql = self._mysql_clean_dml(sql)
         sql = self._mysql_fix_cast_max(sql)
+        sql = self._mysql_cast_types(sql)
         sql = self._mysql_string_split(sql)
         return sql
 
@@ -206,6 +207,39 @@ class MySqlTransformer(ProceduralTransformer):
 
     def _update_predicate(self, col: str) -> str | None:
         return f"NOT (NEW.{col} <=> OLD.{col})"
+
+    #: MySQL CAST accepts a fixed target set (SIGNED/CHAR/…); foreign
+    #: spellings in procedural expression text (the DML pipeline maps
+    #: them via _CAST_TYPE_MAP — this is its dual-pipeline mirror,
+    #: wave 146: ``RETURN CAST(p1 AS text)`` was a hard 1064).
+    _MYSQL_CAST_TYPE_MAP = {
+        "text": "CHAR",
+        "varchar": "CHAR",
+        "int": "SIGNED",
+        "integer": "SIGNED",
+        "bigint": "SIGNED",
+        "smallint": "SIGNED",
+        "tinyint": "SIGNED",
+        "boolean": "SIGNED",
+        "bool": "SIGNED",
+    }
+
+    _MYSQL_CAST_RE = re.compile(
+        r"(?i)(\bCAST\s*\([^()]*?\bAS\s+)"
+        r"(text|varchar|int|integer|bigint|smallint|tinyint|boolean|bool)"
+        r"(\s*[\)\(])"
+    )
+
+    def _mysql_cast_types(self, sql: str) -> str:
+        def fix(seg: str) -> str:
+            return self._MYSQL_CAST_RE.sub(
+                lambda m: m.group(1)
+                + self._MYSQL_CAST_TYPE_MAP[m.group(2).lower()]
+                + m.group(3),
+                seg,
+            )
+
+        return self._map_outside_strings(sql, fix)
 
     def _fix_raw_sql_target(self, sql: str) -> str:
         if self._source == "postgresql":
@@ -236,6 +270,7 @@ class MySqlTransformer(ProceduralTransformer):
         sql = self._mysql_string_concat(sql)
         sql = self._mysql_clean_dml(sql)
         sql = self._mysql_fix_cast_max(sql)
+        sql = self._mysql_cast_types(sql)
         sql = self._mysql_string_split(sql)
         return sql
 

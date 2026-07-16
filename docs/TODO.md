@@ -534,7 +534,18 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          RawSQL arg). Both degrade whole on mysql. Measured:
          pg→mysql **97 → 94**, oracle already at **51** (98.4%,
          waves 141-144 side effects), discovery HOLDS 0. Tests:
-         TestWave145MysqlAggForms (4).**
+         TestWave145MysqlAggForms (4).* Wave 146 (2026-07-16): MySQL's
+         CAST target set — the DML pipeline maps foreign spellings
+         (`_CAST_TYPE_MAP`) but PROCEDURAL expression text shipped
+         them raw (`RETURN CAST(p1 AS text)` = hard 1064; the
+         dual-pipeline asymmetry classic): `_mysql_cast_types`
+         mirror in the mysql fixup family (both sites), outside
+         strings. NOTE: per-statement samplers give MISLEADING
+         shapes for registry-dependent classes (composite types) —
+         the real sweep transpiles the WHOLE file; classify from the
+         sweep's own e.g. lines. Measured: pg→mysql **94 → 87**
+         (97.0%), discovery HOLDS 0. Tests:
+         TestMysqlProceduralCastTypes (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
