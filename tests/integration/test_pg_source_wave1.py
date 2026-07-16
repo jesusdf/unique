@@ -3451,3 +3451,22 @@ class TestIgnoreInvisibleOffsetOrder:
     def test_offset_without_order_gains_null_order(self) -> None:
         out = _t2("select count(*) from t1 limit 3 offset 2;", "mysql", "tsql")
         assert re.search(r"(?is)ORDER BY \(SELECT NULL\)\s+OFFSET 2 ROWS", out), out
+
+
+class TestCharsetIntroducersAndRowOracle:
+    """wave 91: MySQL charset introducers and COLLATE survive to
+    Oracle (`SELECT _latin1 'test' COLLATE latin1_bin`, ORA-00911,
+    3x) — both are engine-local and strip off MySQL. And ROW-tuple
+    comparisons expand pairwise on Oracle too (wave 61 was
+    tsql-only; 3x)."""
+
+    def test_introducer_and_collate_strip(self) -> None:
+        out = _t2("select _latin1'test' collate latin1_bin;", "mysql", "oracle")
+        assert "_latin1" not in out.lower(), out
+        assert "collate" not in out.lower(), out
+        assert "'test'" in out, out
+
+    def test_row_tuple_expands_oracle(self) -> None:
+        out = _t2("select row(b,a) <> row(a,a) as x from t1;", "mysql", "oracle")
+        assert "row(" not in out.lower(), out
+        assert re.search(r"(?i)b <> a OR a <> a", out), out

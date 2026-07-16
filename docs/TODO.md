@@ -1758,6 +1758,16 @@ fix needs an **anonymized** regression fixture (never a private name).
         (2026-07-17): mysql→T-SQL 177→165 (97.2%), mysql→PG 107→106
         (98.2%), oracle flat. Standing: pg-source {172/135/94},
         mysql-source {165/106/141}.**
+        *Wave 91 (2026-07-17):* three mysql→oracle classes — charset
+        introducers and COLLATE clauses (engine-local) strip from
+        RawSQL fragments off MySQL (`_latin1 'test' COLLATE …`,
+        ORA-00911, 3x); ROW-tuple comparisons expand pairwise on
+        Oracle too (wave 61 was tsql-only, incl. the tri-state wrap's
+        negated arm, 3x); and PLS-00049 (trigger :NEW field on a
+        table whose CREATE degraded) joins the sweep's expected
+        bucket (6x cascade). Tests:
+        TestCharsetIntroducersAndRowOracle. *Measurement pending next
+        mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

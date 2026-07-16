@@ -136,7 +136,10 @@ def classify_oracle(message: str) -> str:
     # PLS-00221: a call to a procedure that EXISTS but compiled invalid
     # (its body references schemas/tables absent on the empty database) —
     # an environmental cascade, not transpiler output.
-    if re.search(r"PLS-00201\b|PL/SQL: ORA-00942\b|PLS-00905\b|PLS-00221\b", message):
+    if re.search(
+        r"PLS-00201\b|PL/SQL: ORA-00942\b|PLS-00905\b|PLS-00221\b|PLS-00049\b",
+        message,
+    ):
         return "expected"
     m = re.search(r"(ORA|PLS)-(\d+)", message)
     if not m:

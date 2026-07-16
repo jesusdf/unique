@@ -590,6 +590,7 @@ class Transformer:
             result = [self._gate_tsql_unknown_sysvar(node) for node in result]
         if self.context.source == "mysql" and self.context.target != "mysql":
             result = [self._gate_mysql_user_var(node) for node in result]
+            result = [self._strip_mysql_charset_marks(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_temp_view(node) for node in result]
             result = [self._gate_tsql_natural_join(node) for node in result]
@@ -764,6 +765,42 @@ class Transformer:
             "@@LANGUAGE",
         }
     )
+
+    _CHARSET_INTRO_RE = re.compile(r"_\w+\s*(?=')")
+    _COLLATE_RE = re.compile(r"(?i)\s+COLLATE\s+\w+")
+
+    def _strip_mysql_charset_marks(self, node: ASTNode) -> ASTNode:
+        """Charset introducers (``_latin1'x'``) and COLLATE clauses are
+        engine-local; embedded in RawSQL fragments they ship raw off
+        MySQL (ORA-00911 & friends)."""
+
+        def rewrite(value: object) -> object:
+            if isinstance(value, RawSQL):
+                sql = self._CHARSET_INTRO_RE.sub("", value.sql)
+                sql = self._COLLATE_RE.sub("", sql)
+                if sql != value.sql:
+                    return replace(value, sql=sql)
+                return value
+            if isinstance(value, ASTNode):
+                changes = {}
+                for f in fields(value):
+                    v = getattr(value, f.name)
+                    nv = rewrite(v)
+                    if nv is not v:
+                        changes[f.name] = nv
+                if changes:
+                    return replace(value, **changes)  # type: ignore[arg-type]
+                return value
+            if isinstance(value, tuple):
+                items = tuple(rewrite(i) for i in value)
+                if any(a is not b for a, b in zip(items, value, strict=True)):
+                    return items
+                return value
+            return value
+
+        out = rewrite(node)
+        assert isinstance(out, ASTNode)
+        return out
 
     _USER_VAR_RE = re.compile(r"(?<!@)@(\w+)")
 

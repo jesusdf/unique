@@ -661,11 +661,12 @@ def _emit_value_expression(node: ASTNode, dialect: str) -> str:
     ):
         pred = _emit_binary(inner, dialect)
         neg_op = _COMPARISON_NEGATION.get(inner.operator)
-        if neg_op is not None:
-            left = _emit_expression(inner.left, dialect)
-            right = _emit_expression(inner.right, dialect)
+        left = _emit_expression(inner.left, dialect)
+        right = _emit_expression(inner.right, dialect)
+        if neg_op is not None and _tuple_items(inner.left, left) is None:
             not_pred = f"{left} {neg_op} {right}"
         else:
+            # Row-tuple operands must go through the pairwise expansion.
             not_pred = f"NOT ({pred})"
         wrapped = f"CASE WHEN {pred} THEN 1 WHEN {not_pred} THEN 0 END"
         if isinstance(node, Alias):
@@ -680,6 +681,11 @@ def _tuple_items(side: ASTNode, emitted: str) -> list[str] | None:
     if isinstance(side, ExpressionList):
         return [_emit_expression(i, "tsql") for i in side.items]
     text = emitted.strip()
+    m = re.match(r"(?is)^ROW\s*\((.*)\)$", text)
+    if isinstance(side, (RawSQL, FunctionCall)) and m:
+        inner = m.group(1)
+        if "(" not in inner and "," in inner:
+            return [p.strip() for p in inner.split(",")]
     if isinstance(side, RawSQL) and text.startswith("(") and text.endswith(")"):
         inner = text[1:-1]
         if "(" not in inner and "," in inner:
@@ -2936,9 +2942,10 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         keyword = "IS NOT DISTINCT FROM" if equal else "IS DISTINCT FROM"
         return f"{left} {keyword} {right}"
 
-    # Row-tuple comparison: T-SQL has no row constructors — expand
-    # ``(a, b) = (x, y)`` pairwise (AND for =, OR for <>).
-    if dialect == "tsql" and node.operator in (
+    # Row-tuple comparison: T-SQL and Oracle have no row constructors
+    # in comparisons — expand ``(a, b) = (x, y)`` pairwise (AND for =,
+    # OR for <>).
+    if dialect in ("tsql", "oracle") and node.operator in (
         BinaryOperator.EQ,
         BinaryOperator.NEQ,
     ):
