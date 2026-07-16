@@ -3184,3 +3184,31 @@ class TestPgDomainTypes:
         ]
         assert not offenders, out
         assert re.search(r"(?i)RETURNS text", out), out
+
+
+class TestLanguageSqlTailStrip:
+    """wave 81: a LANGUAGE-sql single-expression body captured past
+    its closing $$ — `language sql` (and neighbors like STRICT/
+    IMMUTABLE) leaked into the RETURN expression (part of the 65x
+    chain). The tail attributes now strip from the captured
+    statement."""
+
+    def test_language_tail_stripped(self) -> None:
+        src = (
+            "create function ie(p1 text, p2 text) returns int as $$\n"
+            "  select case p2::text when p1::text then 1 else 0 end\n"
+            "$$ language sql;"
+        )
+        out = _t(src, "tsql")
+        assert "language sql" not in out.lower(), out
+        assert re.search(r"(?is)RETURN \(select case", out), out
+
+    def test_strict_immutable_tail_stripped(self) -> None:
+        src = (
+            "create function ie2(a int) returns int as $$\n"
+            "  select a + 1\n"
+            "$$ language sql immutable strict;"
+        )
+        out = _t(src, "tsql")
+        assert "immutable" not in out.lower(), out
+        assert "language" not in out.lower().replace("language plpgsql", ""), out

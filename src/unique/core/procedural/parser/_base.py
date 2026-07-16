@@ -1832,8 +1832,17 @@ class ParserBase:
             if isinstance(last, EmbeddedDML) and last.sql.lstrip().upper().startswith(
                 ("SELECT", "VALUES", "WITH")
             ):
+                # The capture may run past the closing $$ and swallow the
+                # header's tail attributes — strip them from the result.
+                body_sql = re.sub(
+                    r"(?is)(?:\s+(?:language\s+\w+|immutable|stable|volatile"
+                    r"|strict|parallel\s+\w+|cost\s+\d+(?:\.\d+)?"
+                    r"|rows\s+\d+))+\s*$",
+                    "",
+                    last.sql.strip(),
+                )
                 stmts[-1] = ReturnStatement(
-                    value=RawSQL(sql=f"({last.sql.strip()})", reason="expression")
+                    value=RawSQL(sql=f"({body_sql})", reason="expression")
                 )
         return stmts
 
