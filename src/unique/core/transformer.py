@@ -594,6 +594,7 @@ class Transformer:
             result = [self._gate_tsql_temp_view(node) for node in result]
             result = [self._gate_tsql_natural_join(node) for node in result]
             result = [self._gate_tsql_nth_value(node) for node in result]
+            result = [self._gate_tsql_tuple_subquery(node) for node in result]
         for pass_ in self._passes:
             result = [self._apply_pass(pass_, node) for node in result]
         return result
@@ -833,6 +834,67 @@ class Transformer:
                 if found is not None:
                     return found
         return None
+
+    def _gate_tsql_tuple_subquery(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement comparing a row tuple to a SUBQUERY —
+        WHOLE, on T-SQL (no row constructors, and the pairwise
+        expansion cannot reference a subquery twice)."""
+        if not self._contains_tuple_subquery_cmp(node):
+            return node
+        reason = (
+            "T-SQL has no row-tuple comparison against a subquery; rewrite "
+            "with a join or EXISTS. Statement preserved as a comment"
+        )
+        self.context.warn(reason, "tuple_subquery")
+        self.context.mark_unsupported("row tuple = (subquery) (T-SQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _contains_tuple_subquery_cmp(self, value: object) -> bool:
+        from unique.core.ast_nodes import (
+            BinaryOp,
+            BinaryOperator,
+            ExpressionList,
+            SubqueryExpression,
+        )
+
+        def is_tuple(side: object) -> bool:
+            if isinstance(side, ExpressionList) and len(side.items) > 1:
+                return True
+            return (
+                isinstance(side, RawSQL)
+                and side.sql.strip().startswith("(")
+                and "," in side.sql
+                and "SELECT" not in side.sql.upper()
+            )
+
+        if (
+            isinstance(value, BinaryOp)
+            and value.operator in (BinaryOperator.EQ, BinaryOperator.NEQ)
+            and (
+                (is_tuple(value.left) and isinstance(value.right, SubqueryExpression))
+                or (
+                    is_tuple(value.right) and isinstance(value.left, SubqueryExpression)
+                )
+            )
+        ):
+            # Only multi-column subqueries make this a ROW comparison.
+            sq = (
+                value.right
+                if isinstance(value.right, SubqueryExpression)
+                else value.left
+            )
+            if isinstance(sq, SubqueryExpression) and len(sq.query.columns) > 1:
+                return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_tuple_subquery_cmp(getattr(value, f.name))
+                for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_tuple_subquery_cmp(item) for item in value)
+        return False
 
     def _gate_tsql_nth_value(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using NTH_VALUE — WHOLE, on T-SQL.

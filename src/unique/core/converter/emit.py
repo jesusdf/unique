@@ -727,6 +727,10 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
     if dialect == "tsql" and isinstance(node, Literal) and node.dtype == "boolean":
         return "1 = 1" if node.value else "1 = 0"
     if dialect in ("tsql", "oracle"):
+        if isinstance(node, SubqueryExpression):
+            # MySQL truthiness: a bare scalar subquery as a condition is
+            # nonzero-is-true; T-SQL/Oracle need the comparison.
+            return f"({_emit_select(node.query, dialect)}) <> 0"
         node = _comparisonize_literals(node)
     if (
         dialect in ("tsql", "oracle")
@@ -1729,8 +1733,16 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                         and dtype.upper() in ("BLOB", "CLOB", "NCLOB")
                     )
                 )
-                if col.data_type.params and "(" not in dtype and not skip_params:
-                    dtype += f"({', '.join(str(p) for p in col.data_type.params)})"
+                params = col.data_type.params
+                if (
+                    dialect != "mysql"
+                    and params == (0,)
+                    and _tn in ("CHAR", "VARCHAR", "BINARY", "VARBINARY", "NCHAR")
+                ):
+                    # Zero-length character columns are MySQL-only.
+                    params = (1,)
+                if params and "(" not in dtype and not skip_params:
+                    dtype += f"({', '.join(str(p) for p in params)})"
                 # A character type with no length is invalid DDL in most engines
                 # (MySQL/Oracle reject it; PostgreSQL treats bare VARCHAR as
                 # unlimited but that is not what was meant). It originates from a
@@ -1998,7 +2010,12 @@ def _emit_create_view(node: CreateViewStatement, dialect: str) -> str:
         replace = "OR ALTER " if dialect == "tsql" else "OR REPLACE "
     else:
         replace = ""
-    query = _emit_select(node.query, dialect)
+    view_query = node.query
+    if dialect == "tsql" and view_query.order_by and not view_query.limit:
+        # Illegal in a T-SQL view without TOP/OFFSET, and advisory on the
+        # engines that accept it — a view has no guaranteed order anyway.
+        view_query = dataclasses.replace(view_query, order_by=())
+    query = _emit_select(view_query, dialect)
     return f"CREATE {replace}VIEW {name} AS\n{query}"
 
 

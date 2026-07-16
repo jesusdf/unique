@@ -1432,8 +1432,19 @@ fix needs an **anonymized** regression fixture (never a private name).
         shipped `DECLARE @v compostype` (6x pg→tsql): new
         PG_COMPOSITE_TYPES harvest + composite culprit in
         _degrade_record_function. Tests:
-        TestStrToDateAndCompositeTypes. *Measurement pending next
-        cycles.*
+        TestStrToDateAndCompositeTypes. **pg-corpus measured at
+        `2b943f6` (2026-07-16): pg→T-SQL 270→265 (91.9%), pg→MySQL
+        173→163 (94.7%), pg→Oracle 144→142 (95.6%). Standing:
+        pg-source {265/163/142}, mysql-source {252/140/202}.**
+        *Wave 63 (2026-07-16):* four mysql→tsql classes — a row tuple
+        compared to a SUBQUERY has no pairwise expansion
+        (whole-degrade with the join/EXISTS hint; 16x); a bare scalar
+        subquery in condition position is MySQL truthiness → `(sq) <>
+        0` on T-SQL/Oracle (12x); a view's ORDER BY without TOP strips
+        on T-SQL (illegal there, advisory on MySQL; 3x); zero-length
+        CHAR/VARCHAR/BINARY become length 1 off MySQL (5x error
+        1001). Tests: TestSubqueryConditionsViewOrderCharZero.
+        *Measurement pending next mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

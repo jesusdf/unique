@@ -2561,3 +2561,41 @@ class TestStrToDateAndCompositeTypes:
             if "compostype" in ln.lower() and not ln.strip().startswith("--")
         ]
         assert not offenders, out
+
+
+class TestSubqueryConditionsViewOrderCharZero:
+    """wave 63: four mysql→tsql classes — a row tuple compared to a
+    SUBQUERY has no pairwise expansion (degrade whole, 16x); a bare
+    scalar subquery as a WHERE/HAVING condition is MySQL truthiness
+    (→ `(sq) <> 0`, 12x); a view's ORDER BY without TOP is illegal on
+    T-SQL and advisory on MySQL (strip + warn, 3x); CHAR(0)/
+    VARCHAR(0) is legal on MySQL only (→ length 1, 5x error 1001)."""
+
+    def test_tuple_vs_subquery_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "select * from t1 where (f3, f4) = (select f3, f4 from t2);",
+            source="mysql",
+            target="tsql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_bare_subquery_condition_compares(self) -> None:
+        out = _t2(
+            "select 1 from t1 group by a having (select max(b) from t2);",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?is)HAVING \(SELECT.*\) <> 0", out), out
+
+    def test_view_order_by_strips(self) -> None:
+        out = _t2("create view tv as select a from t1 order by a;", "mysql", "tsql")
+        assert "ORDER BY" not in out.upper(), out
+
+    def test_char_zero_becomes_one(self) -> None:
+        out = _t2("create table t (c char(0));", "mysql", "tsql")
+        assert re.search(r"(?i)c CHAR\(1\)", out), out
