@@ -107,9 +107,20 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (11x — a PG array-type cast `'{…}'::float8[]` collapsed to
          a bare ARRAY, invalid even PG→PG; wave 106 preserves the
          array type and widens the array gate to Oracle, excluding
-         WITHIN GROUP which Oracle supports). Remaining discovered
-         gaps: `RETURN`-in-body fragments, EXPLAIN carriers — the
-         known deep-single tail.** **Scope decision
+         WITHIN GROUP which Oracle supports). The discovery tool is committed
+         (`scripts/discover_silent_gaps.py`) — MUST use the
+         dollar-quote-aware splitter (a naive `;\n` split shreds
+         plpgsql bodies into false-positive `return …` fragments —
+         verified). Proper run over the whole corpus (5196 stmts):
+         **287 silent gaps**. Wave 107 fixed the worst — a genuine
+         SILENT DATA LOSS the live check exposed: `CREATE TABLE x
+         (LIKE y)` (LIKE inside the column parens) dropped its LIKE
+         entirely → empty `CREATE TABLE x` (the LikeProperty lands in
+         the schema, not properties; now harvested from both).
+         Remaining tail: `ARRAY(...)` constructor (9x, distinct from
+         the cast), VARIADIC ARRAY, PERCENTILE_*(ARRAY …) — genuine
+         array constructs with no non-PG spelling (degrade candidates
+         for a future wave).** **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
          gaps. It is deliberately NOT exposed in the CLI or the API

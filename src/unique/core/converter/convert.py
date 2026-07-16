@@ -1039,9 +1039,9 @@ def _convert_create_table(
     inherits_clause: str | None = None
     partition_of_clause: str | None = None
     like_source: str | None = None
+    sg = sqlglot_dialect_name(source_dialect)
     props = expr.args.get("properties")
     if props is not None:
-        sg = sqlglot_dialect_name(source_dialect)
         for prop in props.expressions:
             if isinstance(prop, exp.InheritsProperty):
                 inherits_clause = prop.sql(dialect=sg)
@@ -1049,6 +1049,14 @@ def _convert_create_table(
                 partition_of_clause = prop.sql(dialect=sg)
             elif isinstance(prop, exp.LikeProperty):
                 like_source = prop.this.sql(dialect=sg)
+    # PG's ``CREATE TABLE x (LIKE y)`` parks the LikeProperty INSIDE the
+    # column schema, not in properties; missing it dropped the whole
+    # clause and emitted an empty ``CREATE TABLE x`` (silent data loss).
+    if like_source is None and isinstance(expr.this, exp.Schema):
+        for e in expr.this.expressions:
+            if isinstance(e, exp.LikeProperty):
+                like_source = e.this.sql(dialect=sg)
+                break
 
     # CREATE TABLE … [AS] SELECT: sqlglot parks the query in
     # ``expression``; never reading it silently dropped the whole CTAS

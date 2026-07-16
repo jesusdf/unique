@@ -3815,3 +3815,24 @@ class TestArrayCastFaithful:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, r.sql
+
+
+class TestCreateTableLikeParenForm:
+    """wave 107 (live-validation discovery — silent DATA LOSS): PG's
+    `CREATE TABLE x (LIKE y)` (LIKE inside the column parens, not a
+    property) had its LIKE clause DROPPED entirely, leaving
+    `CREATE TABLE x;` — a valid-but-empty table (the wave-85 class,
+    caught by live validation). The LIKE source is now harvested from
+    the schema too."""
+
+    def test_like_paren_form_pg(self) -> None:
+        out = _t2("CREATE TABLE m11 (LIKE mlparted1);", "postgresql", "postgresql")
+        assert re.search(r"(?i)LIKE mlparted1", out), out
+
+    def test_like_paren_form_not_empty(self) -> None:
+        r = Transpiler().transpile(
+            "CREATE TABLE m11 (LIKE mlparted1);",
+            source="postgresql",
+            target="tsql",
+        )
+        assert not re.search(r"(?i)CREATE TABLE m11\s*;?\s*$", r.sql), r.sql
