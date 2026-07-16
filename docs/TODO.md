@@ -1617,8 +1617,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         printing transition-table aggregates). The expression now
         hoists into a `DECLARE @uq_prtN NVARCHAR(MAX) = …` temp
         (initializers DO accept subqueries) and PRINT takes the
-        variable. Tests: TestPrintSubqueryHoist. *Measurement pending
-        next pg-corpus cycle.*
+        variable. Tests: TestPrintSubqueryHoist. **Measured at
+        `4c1c679` (2026-07-16): pg→T-SQL 261→257 (92.1%) — the 1046
+        triggers carry further blockers (`dbo.FROM` mangles in UNION
+        aggregates, OLD refs); →MySQL/→Oracle flat. Standing:
+        pg-source {257/160/140}, mysql-source {177/107/141}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
