@@ -43,6 +43,7 @@ from unique.core.ast_nodes import (
     PrintStatement,
     RaiseErrorStatement,
     RawSQL,
+    ReturnStatement,
     SelectIntoStatement,
     WhileStatement,
 )
@@ -55,6 +56,10 @@ logger = logging.getLogger(__name__)
 class PlsqlStatementsMixin(ParserBase):
     """The PL/SQL / PL-pgSQL statement family (BEGIN ... EXCEPTION blocks,
     SQL*Plus directives, CASE statements, compound triggers)."""
+
+    #: Label on the routine body's own block (``foo: begin … end foo``);
+    #: LEAVE of this label is RETURN, not BREAK.
+    _plsql_body_label: str | None = None
 
     _COMPOUND_COLLECT_RE = re.compile(
         r"(?is)AFTER\s+EACH\s+ROW\b.*?"
@@ -127,11 +132,18 @@ class PlsqlStatementsMixin(ParserBase):
                 or (
                     self._current().type == TokenType.IDENTIFIER
                     and self._peek(1).type == TokenType.COLON
-                    and self._peek(2).upper_value in ("LOOP", "WHILE", "REPEAT")
+                    and self._peek(2).upper_value
+                    in ("LOOP", "WHILE", "REPEAT", "BEGIN")
                 )
             )
         ):
-            stmt = self._parse_plsql_statement()
+            # A label on the body's own block: LEAVE <label> is RETURN.
+            if self._peek(1).type == TokenType.COLON:
+                self._plsql_body_label = self._current().value
+            try:
+                stmt = self._parse_plsql_statement()
+            finally:
+                self._plsql_body_label = None
             if stmt is not None:
                 stmts.append(stmt)
             return stmts
@@ -380,6 +392,11 @@ class PlsqlStatementsMixin(ParserBase):
             label = self._advance().value
             self._match_type(TokenType.SEMICOLON)
             if kw == "LEAVE":
+                # LEAVE of the routine body's own block label exits the
+                # routine — RETURN everywhere; ExitStatement emitted a
+                # bare BREAK, invalid outside a loop on T-SQL.
+                if label.upper() == (self._plsql_body_label or "").upper():
+                    return ReturnStatement()
                 return ExitStatement(label=label)
             # ITERATE label — modeled, or T-SQL shipped a literal
             # ``CONTINUE hmm`` (labels don't exist there).
@@ -388,13 +405,17 @@ class PlsqlStatementsMixin(ParserBase):
             self._dialect == "mysql"
             and tok.type == TokenType.IDENTIFIER
             and self._peek(1).type == TokenType.COLON
-            and self._peek(2).upper_value in ("LOOP", "WHILE", "REPEAT")
+            and self._peek(2).upper_value in ("LOOP", "WHILE", "REPEAT", "BEGIN")
         ):
             label = self._advance().value
             self._advance()  # ':'
             inner = self._parse_plsql_statement()
-            if isinstance(inner, (LoopStatement, WhileStatement)):
+            if isinstance(inner, (LoopStatement, WhileStatement, BeginEndBlock)):
                 inner = dataclasses.replace(inner, label=label)
+            # MySQL closes a labeled block/loop with ``END … label``.
+            if self._current().value.upper() == label.upper():
+                self._advance()
+                self._match_type(TokenType.SEMICOLON)
             return inner
         if tok.is_keyword("IF"):
             return self._parse_plsql_if()

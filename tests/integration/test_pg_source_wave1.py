@@ -5859,3 +5859,50 @@ class TestWave157HavingAliasStringAggDistinct:
             "postgresql",
         )
         assert re.search(r"(?i)STRING_AGG\(DISTINCT col1", out), out
+
+
+class TestWave158LabeledBeginBlock:
+    """wave 158 (mysql-corpus): MySQL labels BEGIN blocks too —
+    ``proc i(x int) foo: begin … leave foo; … end foo``. The label
+    shredded into ``DECLARE @foo :;`` and LEAVE became a bare BREAK
+    (invalid outside a loop); a LEAVE of the body's own label is
+    RETURN."""
+
+    _PROC = (
+        "create procedure i(x int)\n"
+        "foo:\n"
+        "begin\n"
+        "  if x = 0 then\n"
+        "    leave foo;\n"
+        "  end if;\n"
+        "  insert into t1 values ('i', x);\n"
+        "end foo"
+    )
+
+    def test_labeled_body_block_tsql(self) -> None:
+        out = _t2(self._PROC, "mysql", "tsql")
+        assert "DECLARE @foo" not in out, out
+        assert re.search(r"(?i)IF @x = 0", out), out
+        assert re.search(r"(?i)RETURN;", out), out
+        assert "BREAK" not in out.upper(), out
+        assert re.search(r"(?i)INSERT INTO t1", out), out
+
+    def test_labeled_empty_block_body(self) -> None:
+        out = _t2(
+            "create procedure bug_1()\nlabel1: begin end label1",
+            "mysql",
+            "tsql",
+        )
+        assert "DECLARE @label1" not in out, out
+        assert ":" not in out.replace("::", ""), out
+
+    def test_nested_labeled_blocks(self) -> None:
+        sql = (
+            "create procedure bug_2()\n"
+            "begin\n"
+            "  label: begin end;\n"
+            "  label1: begin end;\n"
+            "end"
+        )
+        out = _t2(sql, "mysql", "tsql")
+        assert "DECLARE @label" not in out, out

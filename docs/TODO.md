@@ -627,7 +627,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          honest whole-statement carrier (``_gate_tsql_agg_distinct``).
          Measured: mysql→tsql **151 → 150** (−1 — the class was
          chain-glued; re-classify next). Discovery HOLDS 0. Tests:
-         TestWave157HavingAliasStringAggDistinct (6).**
+         TestWave157HavingAliasStringAggDistinct (6).* Wave 158 (2026-07-16): MySQL
+         labels BEGIN blocks too (``proc i(x int) foo: begin … leave
+         foo; … end foo``) — the label shredded into ``DECLARE @foo
+         :;`` and LEAVE became a bare BREAK (invalid outside a loop on
+         T-SQL). The labeled-statement branch now takes BEGIN, closes
+         ``END … label``, and a LEAVE of the body's own label is
+         RETURN (MySQL roundtrip re-labels via proc_exit). Measured:
+         mysql→tsql **150 → 146** (−4). Discovery HOLDS 0. Tests:
+         TestWave158LabeledBeginBlock (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
