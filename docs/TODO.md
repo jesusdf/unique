@@ -1747,6 +1747,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         (2026-07-17): pg→MySQL 146→135 (95.6%), pg→Oracle 98→94
         (97.1%), tsql flat. Standing: pg-source {172/135/94},
         mysql-source {177/107/141}.**
+        *Wave 90 (2026-07-17):* three mysql→tsql classes —
+        `DELETE/UPDATE IGNORE` is unparseable by sqlglot (whole batch
+        carriered and glued innocents, 4x): the modifier
+        pre-normalizes away on the retry path (error-skipping
+        semantics have no cross-engine form); MySQL's INVISIBLE
+        column attribute strips off MySQL (3x); OFFSET…FETCH without
+        ORDER BY gains `ORDER BY (SELECT NULL)` (6x). Tests:
+        TestIgnoreInvisibleOffsetOrder. *Measurement pending next
+        mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

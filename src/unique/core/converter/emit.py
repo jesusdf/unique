@@ -1367,6 +1367,10 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     if node.order_by:
         order_items = ", ".join(_emit_order_item(o, dialect) for o in node.order_by)
         parts.append(f"ORDER BY {order_items}")
+    elif dialect == "tsql" and node.limit is not None and node.limit.offset is not None:
+        # OFFSET…FETCH requires an ORDER BY on T-SQL; the source had
+        # none, so the arbitrary-order marker is faithful.
+        parts.append("ORDER BY (SELECT NULL)")
 
     # LIMIT / OFFSET
     if node.limit:
@@ -2004,6 +2008,10 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
             # emits a typeless definition -- either "col GENERATED ALWAYS AS
             # (...) STORED" or "col AS (...) PERSISTED" -- that those engines
             # reject. Emit a documented comment instead of invalid SQL.
+            # MySQL column visibility is engine-local; INVISIBLE has no
+            # spelling elsewhere.
+            if dialect != "mysql":
+                fragment = re.sub(r"(?i)\s+\bINVISIBLE\b", "", fragment)
             is_generated = re.search(
                 r"(?i)\bGENERATED\s+ALWAYS\s+AS\b|\bAS\s*\(", fragment
             )

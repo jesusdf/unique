@@ -3426,3 +3426,28 @@ class TestOnConflictMysqlAndEStrings:
         out = _t(src, "mysql")
         assert not re.search(r"\bE\s+'", out), out
         assert not re.search(r"\bE'", out), out
+
+
+class TestIgnoreInvisibleOffsetOrder:
+    """wave 90: three mysql→tsql classes — `DELETE IGNORE` is
+    unparseable by sqlglot (the whole batch carriered and glued,
+    4x): the IGNORE keyword pre-normalizes away on the retry path;
+    MySQL's INVISIBLE column attribute leaked into T-SQL generated
+    columns (3x); and OFFSET…FETCH without ORDER BY is illegal on
+    T-SQL (6x) — gains `ORDER BY (SELECT NULL)`."""
+
+    def test_delete_ignore_parses(self) -> None:
+        out = _t2("delete ignore from t1 where i = 1;", "mysql", "tsql")
+        assert re.search(r"(?is)DELETE FROM t1", out), out
+
+    def test_invisible_column_strips(self) -> None:
+        out = _t2(
+            "create table t1 (f1 int, b int as (1) invisible);",
+            "mysql",
+            "tsql",
+        )
+        assert "INVISIBLE" not in out.upper(), out
+
+    def test_offset_without_order_gains_null_order(self) -> None:
+        out = _t2("select count(*) from t1 limit 3 offset 2;", "mysql", "tsql")
+        assert re.search(r"(?is)ORDER BY \(SELECT NULL\)\s+OFFSET 2 ROWS", out), out

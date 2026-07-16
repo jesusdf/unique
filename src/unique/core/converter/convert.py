@@ -140,6 +140,13 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
             if normalized != sql:
                 with contextlib.suppress(Exception):
                     return parse_sql(normalized, dialect)
+            # DELETE/UPDATE IGNORE: sqlglot cannot parse the modifier and
+            # the whole batch would carrier (gluing innocents). The
+            # error-skipping semantics have no cross-engine form anyway.
+            normalized = re.sub(r"(?i)\b(DELETE|UPDATE)\s+IGNORE\b", r"\1", sql)
+            if normalized != sql:
+                with contextlib.suppress(Exception):
+                    return parse_sql(normalized, dialect)
         logger.warning("sqlglot parse error: %s", e)
         return [RawSQL(sql=sql, reason=str(e))]
 
