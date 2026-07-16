@@ -595,7 +595,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          failed: nested parens, then the two-fragment split) joins
          the composite gate. Measured: pg→mysql **74 → 72**,
          pg→tsql **67 → 65** (98.0%), discovery HOLDS 0. Tests:
-         TestRowCompareAny (4).**
+         TestRowCompareAny (4).* Wave 154 (2026-07-16, mysql-corpus
+         front opened): MySQL's REPEAT is T-SQL REPLICATE (it shipped
+         dbo.-qualified as a fake UDF) and a 1-arg CONCAT (valid
+         MySQL/PG) IS its argument on T-SQL/Oracle. Measured:
+         mysql→tsql **167 → 164** — BELOW the 166 campaign record:
+         the ⚠+5 anomaly is resolved and beaten (today's shared
+         waves −4, this wave −3). Discovery HOLDS 0. Tests:
+         TestWave154RepeatConcat (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

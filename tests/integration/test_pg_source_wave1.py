@@ -5696,3 +5696,28 @@ class TestRowCompareAny:
     def test_scalar_any_untouched(self) -> None:
         out = _t("select 1 from t where x = any (select q1 from c);", "mysql")
         assert "UNIQUE:" not in out, out
+
+
+class TestWave154RepeatConcat:
+    """wave 154 (mysql-corpus front): MySQL's REPEAT is T-SQL REPLICATE
+    (it shipped dbo.-qualified as a fake UDF), and a single-argument
+    CONCAT — valid MySQL/PG — needs 2+ args on T-SQL/Oracle: it IS its
+    argument."""
+
+    def test_repeat_replicate_tsql(self) -> None:
+        out = _t2("select repeat('ab', 3);", "mysql", "tsql")
+        assert re.search(r"(?i)REPLICATE\('ab', 3\)", out), out
+        assert "dbo.REPEAT" not in out, out
+
+    def test_one_arg_concat_tsql(self) -> None:
+        out = _t2("select concat(a) from t;", "mysql", "tsql")
+        assert "CONCAT" not in out.upper(), out
+        assert re.search(r"(?i)SELECT a\s+FROM t", out), out
+
+    def test_two_arg_concat_untouched(self) -> None:
+        out = _t2("select concat(a, b) from t;", "mysql", "tsql")
+        assert re.search(r"(?i)CONCAT\(a, b\)", out), out
+
+    def test_repeat_kept_pg(self) -> None:
+        out = _t2("select repeat('ab', 3);", "mysql", "postgresql")
+        assert re.search(r"(?i)REPEAT\('ab', 3\)", out), out

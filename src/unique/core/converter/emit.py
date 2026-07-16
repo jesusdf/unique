@@ -2721,6 +2721,15 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "mysql":
             return f"UNHEX({arg})"
 
+    # MySQL REPEAT is T-SQL REPLICATE (same signature; PG/Oracle keep
+    # REPEAT). And a single-argument CONCAT — valid MySQL/PG — needs 2+
+    # on T-SQL/Oracle: it IS its argument (wave 154).
+    if fn_name == "REPEAT" and dialect == "tsql" and len(node.args) == 2:
+        args = ", ".join(_emit_expression(a, dialect) for a in node.args)
+        return f"REPLICATE({args})"
+    if fn_name == "CONCAT" and len(node.args) == 1 and dialect in ("tsql", "oracle"):
+        return _emit_expression(node.args[0], dialect)
+
     # Date arithmetic has a distinct spelling per engine.
     if fn_name in ("DATE_ADD", "DATE_SUB", "DATEADD"):
         emitted = _emit_date_add(node, dialect)
