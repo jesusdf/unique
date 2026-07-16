@@ -3528,3 +3528,21 @@ class TestTupleInValuesList:
         assert re.search(
             r"(?i)\(u1 = 1 AND ten = 1\) OR \(u1 = 20 AND ten = 0\)", out
         ), out
+
+
+class TestMysqlFunctionDefaultParens:
+    """wave 95: MySQL requires parentheses around expression DEFAULTs
+    (`DEFAULT (UUID())`, error 1064 bare) — the emitted rewrite
+    existed on one path but the column emitter shipped `DEFAULT
+    UUID()` (spotted in the closed nightly-mutation item)."""
+
+    def test_uuid_default_parenthesized(self) -> None:
+        out = _t(
+            "create table t (id uuid default gen_random_uuid(), a int);",
+            "mysql",
+        )
+        assert re.search(r"(?i)DEFAULT \(UUID\(\)\)", out), out
+
+    def test_literal_default_unchanged(self) -> None:
+        out = _t("create table t (a int default 3);", "mysql")
+        assert re.search(r"(?i)DEFAULT 3", out), out

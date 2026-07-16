@@ -1898,6 +1898,16 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     and re.fullmatch(r"'[^']*'", default_sql.strip())
                 ):
                     default_sql = ""
+                if (
+                    dialect == "mysql"
+                    and default_sql
+                    and not default_sql.startswith("(")
+                    and re.search(r"\w\s*\(", default_sql)
+                    and not re.match(r"(?i)^\s*CURRENT_TIMESTAMP\b", default_sql)
+                ):
+                    # MySQL requires parentheses around expression
+                    # defaults (8.0.13+); bare function calls are 1064.
+                    default_sql = f"({default_sql})"
                 default = f" DEFAULT {default_sql}" if default_sql else ""
             # A PostgreSQL SERIAL/BIGSERIAL/SMALLSERIAL column is an
             # auto-increment integer + sequence. On another engine it must become

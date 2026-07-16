@@ -1796,6 +1796,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         statements stack multiple exotic constructs each (deep-singles
         floor: further waves cost a full cycle for −1). Standing:
         pg-source {163/131/89}, mysql-source {166/107/129}.**
+        *Wave 95 (2026-07-17):* backlog housekeeping closed three
+        completed items (nightly mutation floors GREEN at `17de248`,
+        mysql-source corpus sweep, PG corpus import), and the
+        live-check spotted there confirmed: MySQL requires
+        parentheses around expression DEFAULTs — the column emitter
+        shipped `DEFAULT UUID()` bare (1064). Function-call defaults
+        now parenthesize (CURRENT_TIMESTAMP exempt). Tests:
+        TestMysqlFunctionDefaultParens. *Measurement pending next
+        pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
