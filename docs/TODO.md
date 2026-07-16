@@ -1473,7 +1473,9 @@ fix needs an **anonymized** regression fixture (never a private name).
         at `def5cb3` (2026-07-16): −23 — mysql→T-SQL 213→210 (96.5%),
         mysql→PG 121→113 (98.1%), mysql→Oracle 176→164 (97.3%).
         Standing: pg-source {265/163/142}, mysql-source
-        {210/113/164}.**
+        {210/113/164}. pg-corpus re-verified at `76742d3`: identical
+        {265/163/142} — the wave-65 parser changes (identifier stop
+        words) cost nothing on pg source.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
