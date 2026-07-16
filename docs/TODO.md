@@ -224,7 +224,8 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       (wave 97): Oracle's assignment-via-SELECT-INTO decision now
       inspects the value NODE first (`_needs_sql_context`: subquery or
       CAST anywhere in the tree; RawSQL fragments keep the spelling
-      regex). Tests: TestAssignmentViaSelectNodeAware. Remaining 4b:
+      regex). Tests: TestAssignmentViaSelectNodeAware; verification
+      cycle at `129cc6b` identical {163/131/89}. Remaining 4b:
       the DROP-guard→IF matcher and the declare-section hoisting's
       initializer sniffing.*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
