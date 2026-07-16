@@ -9,20 +9,29 @@ lenient than the real engines — forms it accepts can still be rejected live
 (the residue class documented in ``docs/TODO.md`` §2 P1). When a target-engine
 URL is supplied (``TranspileOptions.validate_live_url``), every emitted
 statement the engine rejects is degraded to a documented carrier carrying the
-engine's actual error, so no invalid output ever ships silently.
+engine's actual error, so no *invalid* output ever ships silently.
+
+**Critical blind spot (user, 2026-07-17):** this catches INVALID output, not
+SILENT DATA LOSS. A statement that dropped a clause, an arm, or a row but is
+still syntactically valid PASSES live validation (e.g. wave 85's clobbered
+set-op chain emitted valid SQL missing data). Live validation is therefore
+NEVER the sole check — it complements, never replaces, the no-silent-loss
+gates, the differential audits, and human review of what each degrade drops.
 
 Validation is side-effect free per engine:
 
 - **T-SQL**: ``SET PARSEONLY ON`` (pure parse, no execution).
 - **PostgreSQL**: each statement runs inside a savepoint that is rolled back.
 - **MySQL**: statements run in a throwaway database that is dropped after.
-- **Oracle**: not supported yet (no side-effect-free validation channel:
-  DDL autocommits and a throwaway schema needs DBA rights) — raises
-  ``UnsupportedLiveValidationError``.
+- **Oracle**: ``DBMS_SQL.PARSE`` without EXECUTE (syntax + semantics, no
+  execution) for DML/SELECT; DDL is SKIPPED (Oracle runs DDL at parse
+  time, so it cannot be validated side-effect free) — returned as
+  accepted rather than executed.
 """
 
 from __future__ import annotations
 
+import contextlib
 import re
 import uuid
 
@@ -32,6 +41,14 @@ import uuid
 #: validity sweep uses.
 _PG_SYNTAX_STATES = frozenset({"42601", "42P02", "42809", "0A000", "42P18", "42804"})
 _MYSQL_SYNTAX_ERRNOS = frozenset({1064, 1149, 1327, 1584})
+#: ORA codes for a malformed statement (not a missing object). Mirrors the
+#: validity sweep's classification.
+_ORACLE_SYNTAX_CODES = frozenset(
+    {900, 904, 907, 911, 922, 923, 928, 933, 936, 1756, 6550}
+)
+_DDL_HEAD = re.compile(
+    r"(?is)^\s*(?:CREATE|ALTER|DROP|TRUNCATE|COMMENT|GRANT|REVOKE|RENAME)"
+)
 
 
 class UnsupportedLiveValidationError(RuntimeError):
@@ -49,6 +66,8 @@ def validate_statements(
         return _validate_postgresql(url, statements)
     if target == "mysql":
         return _validate_mysql(url, statements)
+    if target == "oracle":
+        return _validate_oracle(url, statements)
     raise UnsupportedLiveValidationError(
         f"live validation is not supported for target {target!r} "
         "(no side-effect-free channel)"
@@ -142,4 +161,42 @@ def _validate_mysql(url: str, statements: list[str]) -> list[str | None]:
             cur.execute(f"DROP DATABASE IF EXISTS {dbname}")
         finally:
             conn.close()
+    return results
+
+
+def _validate_oracle(url: str, statements: list[str]) -> list[str | None]:
+    import oracledb
+
+    m = re.match(r"oracle(?:\+\w+)?://([^:]+):([^@]*)@([^:/]+)(?::(\d+))?/(\w+)", url)
+    if not m:
+        raise ValueError(f"unparseable Oracle URL: {url!r}")
+    user, password, host, port, service = m.groups()
+    conn = oracledb.connect(
+        user=user, password=password, dsn=f"{host}:{int(port or 1521)}/{service}"
+    )
+    results: list[str | None] = []
+    for st in statements:
+        code = st.strip().rstrip(";").rstrip("/").strip()
+        if not code or _DDL_HEAD.match(code):
+            # DBMS_SQL.PARSE executes DDL — cannot validate side-effect free.
+            results.append(None)
+            continue
+        cur = conn.cursor()
+        handle = None
+        try:
+            handle = cur.callfunc("DBMS_SQL.OPEN_CURSOR", int)
+            cur.callproc("DBMS_SQL.PARSE", [handle, code, 1])  # 1 = NATIVE
+            results.append(None)
+        except Exception as e:  # noqa: BLE001 - the verdict IS the error
+            num = getattr(e, "args", [None])[0]
+            ora = getattr(num, "code", None)
+            if ora is None:
+                mm = re.search(r"ORA-(\d+)", str(e))
+                ora = int(mm.group(1)) if mm else None
+            results.append(str(e) if ora in _ORACLE_SYNTAX_CODES else None)
+        finally:
+            if handle is not None:
+                with contextlib.suppress(Exception):
+                    cur.callproc("DBMS_SQL.CLOSE_CURSOR", [handle])
+    conn.close()
     return results

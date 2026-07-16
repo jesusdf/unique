@@ -90,7 +90,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          missing-table errors on the validation DB must not carrier
          good SQL). Smoke-verified against live PG: syntax rejects
          carrier with the engine's error + a `live_validation`
-         warning; environmental pass untouched. Tests:
+         warning; environmental pass untouched. Oracle channel via
+         `DBMS_SQL.PARSE` (syntax+semantics, no execute) added
+         2026-07-17 — DML/SELECT only; DDL skipped (Oracle runs DDL
+         at parse). **BLIND SPOT (user, 2026-07-17): live validation
+         catches INVALID output, NOT silent data loss — a statement
+         that dropped a clause/arm/row but stays syntactically valid
+         PASSES (wave 85 class). It is NEVER the sole check; it
+         complements the no-silent-loss gates, differential audits,
+         and review of what each degrade drops.** Tests:
          TestLiveOutputValidation (env-gated). **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
