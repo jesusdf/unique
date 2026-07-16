@@ -2282,6 +2282,16 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         mapped_global = _map_system_global(node.sql, dialect)
         if mapped_global is not None:
             return mapped_global
+        # An unmapped construct left visible (a mapping gap) must not be
+        # silent cross-dialect (P1 silent-output, 2026-07-17).
+        if node.reason.startswith("unmapped operator") and SOURCE_DIALECT.get() not in (
+            None,
+            dialect,
+        ):
+            return (
+                f"{node.sql} /* UNIQUE: {node.reason}; "
+                f"no {dialect} mapping — review */"
+            )
         # Inline expression context (e.g. a column DEFAULT): emit the raw
         # SQL directly without a wrapping comment, which would be invalid
         # inside a column definition.
@@ -2851,6 +2861,11 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # T-SQL's ROUND requires the scale argument (error 189).
     if dialect == "tsql" and name.upper() == "ROUND" and len(node.args) == 1:
         args += ", 0"
+    # NOTE (P1 silent-output): a FunctionCall-level gap note here broke
+    # the downstream text handlers that consume this output (TRUNC→ROUND
+    # on the M4 path) — the M3 lesson. The unmapped-operator note lives
+    # on the RawSQL branch instead; FunctionCall-modeled foreigners are
+    # handled by their dedicated downstream handlers.
     return f"{name}({distinct}{args})"
 
 

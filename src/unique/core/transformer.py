@@ -779,7 +779,9 @@ class Transformer:
                 sql = self._CHARSET_INTRO_RE.sub("", value.sql)
                 sql = self._COLLATE_RE.sub("", sql)
                 if sql != value.sql:
-                    return replace(value, sql=sql)
+                    # The construct is handled now — the stale 'unmapped'
+                    # reason must not trigger the gap note downstream.
+                    return replace(value, sql=sql, reason="charset marks stripped")
                 return value
             if isinstance(value, ASTNode):
                 changes = {}

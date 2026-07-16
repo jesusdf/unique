@@ -59,12 +59,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       both violate the no-silent-loss policy: invalid output must
       carry a warning or degrade to a carrier. **Treatment design
       (three mechanisms, ordered by cost):**
-      1. *Foreign-builtin warning (cheap, offline):* when
-         `tsql_call_needs_schema`/the emit layer hits a
-         FOREIGN_BUILTIN_FUNCTIONS name with no mapping for the
-         target, attach a warning naming the gap ("pg builtin CORR
-         has no tsql mapping; left visible") — the "visible gap"
-         decision stays, but stops being silent.
+      1. *Unmapped-construct note (LANDED 2026-07-17, wave 103):*
+         a RawSQL whose reason is `unmapped operator X` emitted
+         cross-dialect now carries an inline `/* UNIQUE: … no
+         <target> mapping — review */` note (covers CORR & friends —
+         they arrive as unmapped-operator RawSQL, not FunctionCall).
+         A FunctionCall-level note was tried and REVERTED: it broke
+         the downstream text handlers that consume that output
+         (TRUNC→ROUND on the M4 path) — the M3 lesson; rewrite passes
+         that fix a construct must also CLEAR the stale reason
+         (charset strip updated). Tests: TestForeignBuiltinNote.
       2. *Verbatim-fallback warning (cheap, offline):* any DML-level
          RawSQL parse-fallback (`parse_sql`'s `RawSQL(sql,
          reason=<ParseError>)`) emitted cross-dialect must warn +

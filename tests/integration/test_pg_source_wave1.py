@@ -3714,3 +3714,25 @@ class TestFetchStatusTopLevel:
         out = _t2("SELECT 1 WHERE @@FETCH_STATUS = 0;", "tsql", "postgresql")
         assert "@@FETCH_STATUS" not in out.split("/*")[0], out
         assert "UNIQUE:" in out, out
+
+
+class TestForeignBuiltinNote:
+    """P1 silent-output, mechanism 1 (wave 103): a foreign builtin
+    deliberately left visible on T-SQL (`CORR`, `TO_CHAR` …) shipped
+    with ZERO warnings. It now carries an inline UNIQUE note naming
+    the mapping gap — the visible-gap decision stays, but stops
+    being silent."""
+
+    def test_corr_notes_gap(self) -> None:
+        out = _t("SELECT CORR(b, a) FROM aggtest;", "tsql")
+        assert re.search(
+            r"(?i)CORR\(b, a\) /\* UNIQUE: unmapped operator Corr", out
+        ), out
+
+    def test_native_builtin_unnoted(self) -> None:
+        out = _t2("SELECT GETDATE();", "tsql", "tsql")
+        assert "UNIQUE:" not in out, out
+
+    def test_mapped_function_unnoted(self) -> None:
+        out = _t2("SELECT NVL(a, b) FROM t;", "oracle", "tsql")
+        assert "UNIQUE:" not in out, out
