@@ -1192,6 +1192,8 @@ class ProceduralTransformer:
             )
         ):
             culprit = "array-typed parameter/return/variable"
+        elif self._target != "postgresql" and self._body_builds_arrays(node.body):
+            culprit = "ARRAY constructor in the body"
         if culprit is None:
             return None
         from unique.core.procedural.emitter import ProceduralEmitter
@@ -1204,6 +1206,24 @@ class ProceduralTransformer:
         self._warnings.append(reason)
         self._register_degraded_routine(getattr(node, "name", None))
         return RawSQL(sql=original, reason=reason)
+
+    _ARRAY_CONSTRUCT_RE = re.compile(r"(?i)\bARRAY\s*\[")
+
+    def _body_builds_arrays(self, value: object) -> bool:
+        """Raw body text building PG arrays — no mechanical form off PG."""
+        import dataclasses as _dc
+
+        if isinstance(value, str):
+            scrubbed = re.sub(r"'(?:[^']|'')*'", "''", value)
+            return self._ARRAY_CONSTRUCT_RE.search(scrubbed) is not None
+        if _dc.is_dataclass(value) and not isinstance(value, type):
+            return any(
+                self._body_builds_arrays(getattr(value, f.name))
+                for f in _dc.fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._body_builds_arrays(item) for item in value)
+        return False
 
     def _has_dynamic_for(self, value: object) -> bool:
         """A FOR loop whose source is EXECUTE of a NON-literal (real

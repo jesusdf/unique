@@ -3346,3 +3346,28 @@ class TestPgArrayTypedRoutines:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, out
+
+
+class TestArrayConstructorInBody:
+    """wave 87: PG ARRAY constructors inside routine BODIES
+    (`x := array[$1,$2]`) shipped raw off PG — the wave-86 degrade
+    only checked declared types (part of the 39x pg→oracle residue).
+    A body whose raw text builds arrays now degrades the routine
+    whole."""
+
+    def test_array_constructor_body_degrades(self) -> None:
+        src = (
+            "create function make_ad(int, int) returns int as $$\n"
+            "declare x int;\n"
+            "begin\n"
+            "  x := array[$1,$2];\n"
+            "  return x;\n"
+            "end$$ language plpgsql;"
+        )
+        out = _t(src, "oracle")
+        code = [
+            ln
+            for ln in out.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, out

@@ -1716,6 +1716,12 @@ fix needs an **anonymized** regression fixture (never a private name).
         (94.7%), pg→MySQL 159→147 (95.2%), pg→Oracle 133→124 (96.2%).
         Standing: pg-source {174/147/124}, mysql-source
         {177/107/141}.**
+        *Wave 87 (2026-07-17):* PG ARRAY constructors inside routine
+        BODIES (`x := array[$1,$2]`) shipped raw off PG — wave 86
+        checked declared types only (part of the 39x pg→oracle
+        residue). A body whose raw text builds arrays now degrades
+        the routine whole. Tests: TestArrayConstructorInBody.
+        *Measurement pending next pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
