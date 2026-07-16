@@ -68,7 +68,9 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          the downstream text handlers that consume that output
          (TRUNC→ROUND on the M4 path) — the M3 lesson; rewrite passes
          that fix a construct must also CLEAR the stale reason
-         (charset strip updated). Tests: TestForeignBuiltinNote.
+         (charset strip updated). Tests: TestForeignBuiltinNote. Verified at
+         `fd2923f`: validity identical {163/131/89}, notes visible
+         in output. Mechanisms 2–3 below remain open.
       2. *Verbatim-fallback warning (cheap, offline):* any DML-level
          RawSQL parse-fallback (`parse_sql`'s `RawSQL(sql,
          reason=<ParseError>)`) emitted cross-dialect must warn +
