@@ -1379,8 +1379,23 @@ def _emit_insert(node: InsertStatement, dialect: str) -> str:
         return f"INSERT INTO {table}{cols}\nVALUES {values}"
 
     if node.select:
-        select = _emit_select(node.select, dialect)
-        return f"INSERT INTO {table}{cols}\n{select}"
+        sel_node = node.select
+        with_prefix = ""
+        if dialect == "tsql" and sel_node.ctes:
+            # T-SQL requires the WITH clause BEFORE the INSERT.
+            cte_parts = []
+            for cte in sel_node.ctes:
+                rec = "RECURSIVE " if cte.recursive else ""
+                ccols = f"({', '.join(cte.columns)})" if cte.columns else ""
+                cte_query = cte.query
+                if cte_query.order_by and not cte_query.limit:
+                    cte_query = dataclasses.replace(cte_query, order_by=())
+                inner = _emit_select(cte_query, dialect)
+                cte_parts.append(f"{rec}{cte.name}{ccols} AS (\n{inner}\n)")
+            with_prefix = f"WITH {', '.join(cte_parts)}\n"
+            sel_node = dataclasses.replace(sel_node, ctes=())
+        select = _emit_select(sel_node, dialect)
+        return f"{with_prefix}INSERT INTO {table}{cols}\n{select}"
 
     if dialect == "mysql":
         # MySQL has no DEFAULT VALUES clause; the all-defaults row is
@@ -2422,6 +2437,15 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         arg = _emit_expression(node.args[0], dialect)
         agg = "MAX" if fn_name in ("LOGICAL_OR", "BOOL_OR") else "MIN"
         if dialect == "tsql":
+            inner = node.args[0]
+            if isinstance(inner, BinaryOp) and inner.operator in _COMPARISON_OPS:
+                # A predicate is not a value on T-SQL — wrap tri-state.
+                arg = f"CASE WHEN {arg} THEN 1 WHEN NOT ({arg}) THEN 0 END"
+            elif isinstance(inner, UnaryOp) and inner.operator == UnaryOperator.NOT:
+                operand = _emit_expression(inner.operand, dialect)
+                arg = (
+                    f"CASE WHEN {operand} = 0 THEN 1 " f"WHEN {operand} <> 0 THEN 0 END"
+                )
             return f"{agg}(CAST({arg} AS INT))"
         if dialect == "mysql":
             return f"{agg}({arg})"

@@ -3234,3 +3234,39 @@ class TestStringAggOrderBy:
         out = _t(src, "tsql")
         assert re.search(r"(?is)STRING_AGG\(.*\) WITHIN GROUP \(ORDER BY a\)", out), out
         assert not re.search(r"(?is)',\s*'\s+order by", out), out
+
+
+class TestBoolAggregateNotArg:
+    """wave 83: `BOOL_AND(NOT b2)` lowered to `MIN(CAST(NOT b2 AS
+    INT))` on T-SQL — NOT is not a value expression there (12x). A
+    predicate argument to the boolean aggregates now wraps tri-state
+    before the CAST."""
+
+    def test_bool_and_not_tsql(self) -> None:
+        out = _t("select bool_and(not b2) from bt;", "tsql")
+        assert not re.search(r"(?i)CAST\(NOT b2", out), out
+        assert re.search(
+            r"(?i)MIN\(CAST\(CASE WHEN b2 = 0 THEN 1 "
+            r"WHEN b2 <> 0 THEN 0 END AS INT\)\)",
+            out,
+        ), out
+
+    def test_bool_or_comparison_tsql(self) -> None:
+        out = _t("select bool_or(a > 3) from bt;", "tsql")
+        assert re.search(r"(?i)MAX\(CAST\(CASE WHEN a > 3 THEN 1", out), out
+
+
+class TestInsertCteHoist:
+    """wave 83b: `INSERT INTO t (cols) WITH cte AS (…) SELECT …` puts
+    the CTE after the INSERT clause — T-SQL requires WITH FIRST (14x
+    error 156). The CTE hoists before the INSERT on T-SQL."""
+
+    def test_insert_with_cte_tsql(self) -> None:
+        out = _t(
+            "insert into t3 (f3) with result as (select f1 from t1) "
+            "select f1 from result;",
+            "tsql",
+        )
+        assert re.search(
+            r"(?is)^\s*WITH result AS \(.*\)\s*INSERT INTO t3 \(f3\)", out
+        ), out

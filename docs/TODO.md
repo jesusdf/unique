@@ -1670,6 +1670,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         (2026-07-17): pg→T-SQL 252→198 (−54, 93.9%, ok +54) — the
         whole class cleared. Standing: pg-source {198/159/133},
         mysql-source {177/107/141}.**
+        *Wave 83 (2026-07-17):* `BOOL_AND(NOT b2)` lowered to
+        `MIN(CAST(NOT b2 AS INT))` on T-SQL — the boolean-aggregate
+        mapping string-formats its arg, bypassing wave 79's IR wrap
+        (12x); predicate/NOT args now wrap tri-state before the CAST.
+        And `INSERT INTO t (cols) WITH cte AS (…) SELECT` puts the
+        CTE after the INSERT clause — T-SQL requires WITH first (14x
+        error 156); the CTE hoists before the INSERT. Tests:
+        TestBoolAggregateNotArg, TestInsertCteHoist. *Measurement
+        pending next pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
