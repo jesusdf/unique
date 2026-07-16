@@ -1880,7 +1880,58 @@ class ProceduralTransformer:
             return SetVariableStatement(name=new_name, value=new_value)
         return AssignmentStatement(target=new_name, value=new_value)
 
+    #: MySQL session options that look like plain variables inside a
+    #: routine body (``SET sql_mode = …``); assigned cross-dialect they
+    #: shipped a fake local (``SET @sql_mode = …`` — wave 162).
+    _MYSQL_SESSION_OPTIONS = frozenset(
+        {
+            "SQL_MODE",
+            "AUTOCOMMIT",
+            "SQL_SAFE_UPDATES",
+            "FOREIGN_KEY_CHECKS",
+            "UNIQUE_CHECKS",
+            "SQL_LOG_BIN",
+            "SQL_NOTES",
+            "SQL_WARNINGS",
+            "SQL_SELECT_LIMIT",
+            "SQL_QUOTE_SHOW_CREATE",
+            "TIME_ZONE",
+            "MAX_SORT_LENGTH",
+            "SORT_BUFFER_SIZE",
+            "GROUP_CONCAT_MAX_LEN",
+            "DIV_PRECISION_INCREMENT",
+            "DEFAULT_STORAGE_ENGINE",
+            "OPTIMIZER_SWITCH",
+            "CHARACTER_SET_CLIENT",
+            "CHARACTER_SET_RESULTS",
+            "CHARACTER_SET_CONNECTION",
+            "COLLATION_CONNECTION",
+        }
+    )
+
     def _transform_assignment(self, node: AssignmentStatement) -> ASTNode:
+        if (
+            self._source == "mysql"
+            and self._target != "mysql"
+            and node.target.lstrip("@").upper() in self._MYSQL_SESSION_OPTIONS
+        ):
+            option = node.target.lstrip("@")
+            self._warnings.append(
+                f"MySQL session option {option} has no {self._target} "
+                "equivalent; statement preserved as a comment"
+            )
+            value = (
+                node.value.sql
+                if isinstance(node.value, RawSQL)
+                else getattr(node.value, "sql", str(node.value))
+            )
+            return CommentStatement(
+                text=(
+                    f"/* UNIQUE: SET {option} = {value} -- {self._source}-only, "
+                    f"no {self._target} equivalent */"
+                ),
+                style="block",
+            )
         bound = self._cursor_binding_to_open(node.target, node.value)
         if bound is not None:
             return bound

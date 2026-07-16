@@ -1480,6 +1480,22 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
     # (a string), not in sql_name() which returns "ANONYMOUS". Its arguments
     # live in `expressions`.
     if isinstance(expr, exp.Anonymous):
+        # MySQL's ADDDATE/SUBDATE are DATE_ADD/DATE_SUB aliases sqlglot
+        # leaves anonymous — they shipped dbo.-qualified as fake UDFs
+        # with a raw INTERVAL argument (wave 162). Canonicalize to the
+        # 3-argument (ts, n, unit) form the date-add emitter renders.
+        anon_name = str(expr.name).upper()
+        if anon_name in ("ADDDATE", "SUBDATE") and len(expr.expressions) == 2:
+            canonical = "DATE_ADD" if anon_name == "ADDDATE" else "DATE_SUB"
+            ts, amount = expr.expressions
+            if isinstance(amount, exp.Interval):
+                n = convert_expression(amount.this)
+                unit = convert_expression(amount.args["unit"])
+            else:
+                # Bare-number second argument counts days.
+                n = convert_expression(amount)
+                unit = RawSQL(sql="DAY", reason="implicit ADDDATE unit")
+            return FunctionCall(name=canonical, args=(convert_expression(ts), n, unit))
         return FunctionCall(
             name=_normalize_stat_aggregate(str(expr.name)),
             args=tuple(convert_expression(a) for a in expr.expressions),

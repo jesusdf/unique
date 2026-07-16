@@ -663,7 +663,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (``COUNT(DISTINCT REPEAT(65, 3))`` shipped REPEAT on T-SQL) —
          now a real FunctionCall with ``distinct=True``. Measured:
          mysql→tsql **142 → 137** (−5). Discovery HOLDS 0. Tests:
-         TestWave161CoalesceOneArgDistinctWrapper (4).**
+         TestWave161CoalesceOneArgDistinctWrapper (4).* Wave 162 (2026-07-16):
+         ADDDATE/SUBDATE are DATE_ADD/DATE_SUB aliases sqlglot leaves
+         anonymous — they shipped dbo.-qualified as fake UDFs with a
+         raw INTERVAL argument; canonicalized to the (ts, n, unit)
+         form (bare-number second argument counts days). And ``SET
+         sql_mode = …`` inside a routine is a session option, not a
+         variable — it shipped a fake ``SET @sql_mode`` local;
+         a known-options list degrades it to the established
+         source-only comment carrier with a warning. Measured:
+         mysql→tsql **137 → 131** (−6). Discovery HOLDS 0. Tests:
+         TestWave162AdddateSqlMode (5).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

@@ -6003,3 +6003,46 @@ class TestWave161CoalesceOneArgDistinctWrapper:
     def test_count_distinct_plain_column(self) -> None:
         out = _t2("select count(distinct a) from t2;", "mysql", "tsql")
         assert re.search(r"(?i)COUNT\(DISTINCT a\)", out), out
+
+
+class TestWave162AdddateSqlMode:
+    """wave 162 (mysql-corpus): ADDDATE/SUBDATE are DATE_ADD/DATE_SUB
+    aliases sqlglot leaves anonymous — they shipped dbo.-qualified with
+    a raw INTERVAL argument. And ``SET sql_mode = …`` inside a routine
+    is a session option, not a variable — it shipped a fake
+    ``SET @sql_mode`` local on T-SQL."""
+
+    def test_adddate_interval_tsql(self) -> None:
+        out = _t2("select adddate('2001-01-01', interval 1 day);", "mysql", "tsql")
+        assert re.search(r"(?i)DATEADD\(DAY, 1, '2001-01-01'\)", out), out
+        assert "dbo." not in out, out
+
+    def test_subdate_interval_pg(self) -> None:
+        out = _t2(
+            "select subdate('2001-01-01', interval 1 day);",
+            "mysql",
+            "postgresql",
+        )
+        assert "dbo." not in out and "SUBDATE" not in out.upper(), out
+        assert re.search(r"(?i)INTERVAL", out), out
+
+    def test_adddate_bare_days(self) -> None:
+        out = _t2("select adddate('2001-01-01', 31);", "mysql", "tsql")
+        assert re.search(r"(?i)DATEADD\(DAY, 31, '2001-01-01'\)", out), out
+
+    def test_set_sql_mode_carrier_tsql(self) -> None:
+        out = _t2(
+            "create procedure p() begin set sql_mode = 'TRADITIONAL';" " select 1; end",
+            "mysql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out and "SQL_MODE" in out.upper(), out
+        assert "SET @sql_mode" not in out, out
+
+    def test_set_sql_mode_kept_mysql(self) -> None:
+        out = _t2(
+            "create procedure p() begin set sql_mode = 'TRADITIONAL';" " select 1; end",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(r"(?i)SET sql_mode = 'TRADITIONAL'", out), out
