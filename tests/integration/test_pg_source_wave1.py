@@ -5264,3 +5264,36 @@ class TestBareWholeRowTriggerRef:
         )
         out = _t(src, "tsql")
         assert "whole-row OLD/NEW" not in out, out
+
+
+class TestWave139DecodeAndSetRole:
+    """wave 139: PG's binary DECODE(text, 'hex') is not Oracle's
+    conditional DECODE (that becomes CASE) — faithful hex mappings exist
+    everywhere; and SET ROLE exists on PG/MySQL/Oracle but not T-SQL."""
+
+    def test_decode_hex_tsql(self) -> None:
+        out = _t("insert into bt values (decode('ff', 'hex'));", "tsql")
+        assert re.search(r"(?i)CONVERT\(VARBINARY\(MAX\), 'ff', 2\)", out), out
+
+    def test_decode_hex_oracle(self) -> None:
+        out = _t("insert into bt values (decode('ff', 'hex'));", "oracle")
+        assert re.search(r"(?i)HEXTORAW\('ff'\)", out), out
+
+    def test_decode_hex_mysql(self) -> None:
+        out = _t("insert into bt values (decode('ff', 'hex'));", "mysql")
+        assert re.search(r"(?i)UNHEX\('ff'\)", out), out
+
+    def test_set_role_degrades_tsql(self) -> None:
+        r = Transpiler().transpile("set role ru;", source="postgresql", target="tsql")
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_set_role_kept_mysql(self) -> None:
+        out = _t("set role ru;", "mysql")
+        assert re.search(r"(?i)set role ru", out), out
+        assert "UNIQUE:" not in out, out

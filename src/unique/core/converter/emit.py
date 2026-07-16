@@ -2629,6 +2629,23 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if fn_name in _SQLGLOT_WRAPPERS and len(node.args) == 1:
         return _emit_expression(node.args[0], dialect)
 
+    # PG's binary DECODE(text, 'hex') — not Oracle's conditional DECODE
+    # (that one has 3+ args and became a CASE upstream). Faithful hex
+    # mappings exist everywhere (wave 139); other formats stay put.
+    if (
+        fn_name == "DECODE"
+        and len(node.args) == 2
+        and isinstance(node.args[1], Literal)
+        and str(node.args[1].value).lower() == "hex"
+    ):
+        arg = _emit_expression(node.args[0], dialect)
+        if dialect == "tsql":
+            return f"CONVERT(VARBINARY(MAX), {arg}, 2)"
+        if dialect == "oracle":
+            return f"HEXTORAW({arg})"
+        if dialect == "mysql":
+            return f"UNHEX({arg})"
+
     # Date arithmetic has a distinct spelling per engine.
     if fn_name in ("DATE_ADD", "DATE_SUB", "DATEADD"):
         emitted = _emit_date_add(node, dialect)

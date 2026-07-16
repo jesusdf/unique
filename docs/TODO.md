@@ -476,7 +476,18 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          exclusions for qualified refs, RETURN NEW/OLD and
          REFERENCING new|old TABLE (4 existing tests fired on the
          draft). Measured: pg→tsql **97 → 92** (97.1%), discovery
-         HOLDS 0. Tests: TestBareWholeRowTriggerRef (2).**
+         HOLDS 0. Tests: TestBareWholeRowTriggerRef (2).* Wave 139 (2026-07-16): PG's
+         BINARY `DECODE(text, 'hex')` (2 args — not Oracle's
+         conditional DECODE, which becomes CASE at 3+) maps
+         faithfully everywhere: `CONVERT(VARBINARY(MAX), x, 2)`
+         tsql, `HEXTORAW` oracle, `UNHEX` mysql; and `SET ROLE`
+         (real SQL on PG/MySQL/Oracle) carriers on T-SQL only — in
+         the SET_OPTION path (the transformer gate drafted first was
+         DEAD CODE for that route; the batch classifier short-
+         circuits it). Measured: pg→tsql **92 → 87** (97.3%),
+         pg→oracle **59 → 56** (98.2%), pg→mysql **109 → 97**
+         (96.7%), discovery HOLDS 0. Tests:
+         TestWave139DecodeAndSetRole (5).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

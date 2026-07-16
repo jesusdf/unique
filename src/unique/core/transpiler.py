@@ -2033,6 +2033,30 @@ class Transpiler:
         — an executable statement reduced to a comment with a misleading
         warning is a no-silent-loss violation (audit 2026-07-08, RC1/RC4).
         """
+        if target == "tsql" and source != "tsql":
+            # SET ROLE is real SQL on PG/MySQL/Oracle but T-SQL has no
+            # such statement (role membership / EXECUTE AS) — wave 139.
+            _, role_code = split_leading_trivia(sql)
+            if re.match(r"(?is)^\s*SET\s+ROLE\b", role_code):
+                commented = "\n".join(
+                    f"-- {line}" if line.strip() else ""
+                    for line in sql.strip().splitlines()
+                )
+                return TranspileResult(
+                    sql=(
+                        "-- UNIQUE: T-SQL has no SET ROLE (use role "
+                        "membership / EXECUTE AS); statement preserved "
+                        f"as a comment.\n{commented}"
+                    ),
+                    warnings=[
+                        _warn(
+                            "SET ROLE commented out (no T-SQL equivalent)",
+                            "set_option",
+                            source,
+                            target,
+                        )
+                    ],
+                )
         if source == "postgresql" and target != "postgresql":
             # PostgreSQL session GUCs (SET name = v / TO v, RESET name):
             # engine-local knobs with no meaning elsewhere — the largest
