@@ -26,6 +26,7 @@ from unique.core.ast_nodes import (
     RaiseErrorStatement,
     RawSQL,
     SelectIntoStatement,
+    SetVariableStatement,
     TryCatchBlock,
     WaitForStatement,
     WhileStatement,
@@ -528,6 +529,17 @@ class TSqlEmitter(ProceduralEmitter):
     def _emit_continue(self, node: ContinueStatement) -> str:
         # T-SQL CONTINUE takes no WHEN clause.
         return "CONTINUE;"
+
+    def _emit_set_variable(self, node: SetVariableStatement) -> str:
+        val = self._emit_node(node.value)
+        # MySQL's boolean-flip idiom ``SET done = NOT done`` — T-SQL has
+        # no NOT in value position; the tri-state CASE preserves NULL
+        # (wave 170). EXISTS stays a predicate, not a value.
+        m = re.match(r"(?is)^\s*NOT\s+(?!EXISTS\b)(.+)$", val)
+        if m:
+            inner = m.group(1).strip()
+            val = f"CASE WHEN {inner} = 0 THEN 1 WHEN {inner} <> 0 THEN 0 END"
+        return f"SET {node.name} = {val};"
 
     def _emit_null(self, _node: NullStatement) -> str:
         # T-SQL has no NULL statement; emit a no-op comment.

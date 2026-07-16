@@ -6304,3 +6304,40 @@ class TestWave169NotNullParenCompare:
             "tsql",
         )
         assert re.search(r"(?i)NOT \(NOT \(c2 IS NULL\)\)", out), out
+
+
+class TestWave170NullTruthinessNotValue:
+    """wave 170 (mysql-corpus): a bare NULL as a truth value (``… OR
+    NULL``) is error 4145 on T-SQL (``NULL <> 0`` is the UNKNOWN-
+    preserving comparison), and ``SET done = NOT done`` has no NOT in
+    T-SQL value position (tri-state CASE)."""
+
+    def test_or_null_condition_tsql(self) -> None:
+        out = _t2(
+            "select case when min(a) is null or null then 1 else 0 end" " from t1;",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)OR NULL <> 0", out), out
+
+    def test_set_not_flip_tsql(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare done int default 0;"
+            " set done = not done; end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(
+            r"(?i)SET @done = CASE WHEN @done = 0 THEN 1"
+            r" WHEN @done <> 0 THEN 0 END;",
+            out,
+        ), out
+
+    def test_set_not_kept_mysql(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare done int default 0;"
+            " set done = not done; end",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(r"(?i)SET done = not done;", out), out

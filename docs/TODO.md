@@ -735,7 +735,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          NULL keep their idiomatic spelling — the wide cut broke the
          dual-guard trio AGAIN; second offense, same lesson). Measured:
          mysql→tsql **67 → 63** (−4, validity 98.9%). Discovery HOLDS
-         0. Tests: TestWave169NotNullParenCompare (3).**
+         0. Tests: TestWave169NotNullParenCompare (3).* Wave 170 (2026-07-17): a bare
+         NULL as a truth value (``… OR NULL``) was error 4145 on T-SQL
+         — ``NULL <> 0`` is the UNKNOWN-preserving comparison; and
+         MySQL's boolean-flip idiom ``SET done = NOT done`` has no NOT
+         in T-SQL value position — the tri-state CASE preserves NULL
+         (EXISTS excluded: it stays a predicate). Measured: mysql→tsql
+         **63 → 60** — validity crossed **99.0%**. Discovery HOLDS 0.
+         Tests: TestWave170NullTruthinessNotValue (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

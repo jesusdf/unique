@@ -762,6 +762,15 @@ def _comparisonize_literals(node: ASTNode) -> ASTNode:
                 left=side,
                 right=Literal(value=0, dtype="integer"),
             )
+        if isinstance(side, Literal) and side.dtype == "null":
+            # A bare NULL truth value (``… OR NULL``): UNKNOWN on both
+            # engines — ``NULL <> 0`` is the comparison spelling (wave
+            # 170).
+            return BinaryOp(
+                operator=BinaryOperator.NEQ,
+                left=side,
+                right=Literal(value=0, dtype="integer"),
+            )
         if isinstance(side, Literal) and side.dtype == "boolean":
             one = Literal(value=1, dtype="integer")
             return BinaryOp(
@@ -873,9 +882,10 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
     if dialect == "tsql" and isinstance(node, Literal) and node.dtype == "boolean":
         return "1 = 1" if node.value else "1 = 0"
     if dialect in ("tsql", "oracle"):
-        if isinstance(node, Literal) and node.dtype in ("integer", "number"):
+        if isinstance(node, Literal) and node.dtype in ("integer", "number", "null"):
             # MySQL truthiness again: a bare numeric literal condition
-            # (``CASE WHEN 1``, ``IF(1, …)``) is error 4145 on T-SQL.
+            # (``CASE WHEN 1``, ``IF(1, …)``) is error 4145 on T-SQL;
+            # a bare NULL is UNKNOWN on both engines (wave 170).
             return f"{_emit_expression(node, dialect)} <> 0"
         if isinstance(node, SubqueryExpression):
             # MySQL truthiness: a bare scalar subquery as a condition is
