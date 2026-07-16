@@ -3751,3 +3751,41 @@ class TestPgTableShorthand:
     def test_table_shorthand_mysql(self) -> None:
         out = _t("TABLE onek;", "mysql")
         assert re.search(r"(?is)SELECT \*\s+FROM onek", out), out
+
+
+class TestLiveOutputValidation:
+    """P1 silent-output, mechanism 3 (wave 105): opt-in live
+    validation — statements the real target engine rejects degrade
+    to documented carriers with the engine's error, catching what
+    the sqlglot gate's leniency lets through. Side-effect free
+    (savepoints / PARSEONLY / throwaway DB)."""
+
+    def test_live_pg_rejects_become_carriers(self) -> None:
+        import os
+
+        import pytest
+
+        url = os.environ.get("UNIQUE_TEST_PG_URL")
+        if not url:
+            pytest.skip("needs UNIQUE_TEST_PG_URL")
+        from unique.core.transpiler import TranspileOptions, Transpiler
+
+        # IFNULL survives to PG only through a raw fragment; the live
+        # engine rejects it even though sqlglot's reader accepts it.
+        r = Transpiler().transpile(
+            "SELECT DATE_FORMAT(d, '%Y') FROM t1;",
+            source="mysql",
+            target="postgresql",
+            options=TranspileOptions(
+                validate_live_url=url,
+            ),
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code or all("DATE_FORMAT" not in ln for ln in code), r.sql
+        assert any(w.feature == "live_validation" for w in r.warnings) or not [
+            ln for ln in r.sql.splitlines() if "UNIQUE: live" in ln
+        ], r.sql

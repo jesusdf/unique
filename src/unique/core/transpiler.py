@@ -779,6 +779,10 @@ class TranspileOptions:
     include_warnings: bool = True
     format_output: bool = True
     db_url: str | None = None
+    #: Target-engine URL for opt-in LIVE output validation: statements the
+    #: real engine rejects degrade to documented carriers with the engine's
+    #: error (catches what the sqlglot gate's leniency lets through).
+    validate_live_url: str | None = None
 
 
 @dataclass
@@ -1115,6 +1119,12 @@ class Transpiler:
                 tvf_names = _harvest_split_tvf_names(sql)
                 if tvf_names:
                     output_sql = _rewrite_tvf_callers(output_sql, tvf_names)
+
+            if options.validate_live_url:
+                output_sql, live_warnings = self._validate_output_live(
+                    output_sql, target, options.validate_live_url
+                )
+                all_warnings.extend(live_warnings)
 
             return TranspileResult(
                 sql=output_sql,
@@ -2279,6 +2289,45 @@ class Transpiler:
             for name in self.registry.available()
             if self.registry.get(name).source_only
         ]
+
+    def _validate_output_live(
+        self, output_sql: str, target: str, url: str
+    ) -> tuple[str, list[TransformWarning]]:
+        """Degrade statements the live target engine rejects to carriers.
+
+        The sqlglot output gate is lenient; the engine's verdict is final.
+        Side-effect free per engine (see ``core.live_validate``)."""
+        from unique.core.live_validate import validate_statements
+        from unique.core.sql_split import is_executable, split_statements
+
+        statements = [
+            st for st in split_statements(output_sql, target) if is_executable(st)
+        ]
+        if not statements:
+            return output_sql, []
+        verdicts = validate_statements(url, target, statements)
+        warnings: list[TransformWarning] = []
+        for st, err in zip(statements, verdicts, strict=True):
+            if err is None:
+                continue
+            first_err = err.splitlines()[0][:160]
+            commented = "\n".join(f"-- {line}" for line in st.strip().splitlines())
+            carrier = (
+                f"-- UNIQUE: live {target} validation rejected this "
+                f"statement ({first_err}); preserved as a comment:\n"
+                f"{commented}"
+            )
+            if st in output_sql:
+                output_sql = output_sql.replace(st, carrier, 1)
+            warnings.append(
+                _warn(
+                    f"live {target} validation rejected a statement: " f"{first_err}",
+                    "live_validation",
+                    "",
+                    target,
+                )
+            )
+        return output_sql, warnings
 
 
 def transpile(

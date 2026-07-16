@@ -80,17 +80,19 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          name`). The remaining silent classes are all
          sqlglot-leniency escapes → mechanism 3. (Wave 104 verified
          at `b400247`: validity flat, mangle gone.)
-      3. *Live output validation, opt-in (complete):* promote the
-         sweep's per-engine executors (`scripts/validity_sweep.py`
-         already has PARSEONLY/throwaway-DB/throwaway-schema runners
-         for all four engines) into an optional validator pass —
-         when target-engine URLs are configured, every emitted
-         statement the engine rejects degrades to a carrier carrying
-         the engine's actual error. This converts 100% of the
-         residue into policy-compliant output mechanically, and is
-         the only way to catch what sqlglot's leniency lets through.
-         Wire as a Transpiler option (`validate_live=<url>`) + CLI
-         flag; default off (no engine dependency).
+      3. *Live output validation, opt-in — LANDED 2026-07-17
+         (wave 105):* `TranspileOptions.validate_live_url` +
+         `core/live_validate.py`. Side-effect free per engine (T-SQL
+         PARSEONLY, PG savepoints, MySQL throwaway DB; Oracle raises
+         UnsupportedLiveValidationError — no side-effect-free channel
+         without DBA rights). Applies the SWEEP'S classification:
+         only syntax-class engine errors degrade (environmental
+         missing-table errors on the validation DB must not carrier
+         good SQL). Smoke-verified against live PG: syntax rejects
+         carrier with the engine's error + a `live_validation`
+         warning; environmental pass untouched. Tests:
+         TestLiveOutputValidation (env-gated). Remaining: CLI/API
+         flag exposure, oracle channel design.
 
 ### P2 — correctness of signals and validation
 
