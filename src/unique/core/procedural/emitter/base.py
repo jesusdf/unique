@@ -668,11 +668,25 @@ class ProceduralEmitter:
 
         lines.append("BEGIN")
         self._indent_level = 1
-        texts = [*hoisted, *(self._emit_node(stmt) for stmt in body_stmts)]
-        if not any(t.strip() for t in texts):
+        texts = [
+            t
+            for t in (*hoisted, *(self._emit_node(stmt) for stmt in body_stmts))
+            # A bare ``;`` (an empty source statement) is PLS-00103.
+            if t.strip() != ";"
+        ]
+
+        def executable(text: str) -> bool:
+            return any(
+                ln.strip() and not ln.lstrip().startswith(("--", "/*", "*"))
+                for ln in text.split("\n")
+            )
+
+        if not any(executable(t) for t in texts):
             # PL/SQL requires at least one statement in a block — an
-            # empty MySQL body (``BEGIN END``) was PLS-00103 (wave 177).
-            texts = ["NULL;"]
+            # empty MySQL body (``BEGIN END``, wave 177) or one whose
+            # only statement degraded to a comment carrier (wave 183)
+            # was PLS-00103.
+            texts.append("NULL;")
         for text in texts:
             for line in text.split("\n"):
                 lines.append(f"{self._indent()}{line}" if line.strip() else "")

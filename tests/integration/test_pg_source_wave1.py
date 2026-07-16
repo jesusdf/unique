@@ -6734,3 +6734,23 @@ class TestWave182ShowRepairInBody:
         )
         assert re.search(r"(?i)show create table tm1", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestWave183CommentOnlyBody:
+    """wave 183 (mysql-corpus): a PL/SQL body whose only statement
+    degraded to a comment carrier (``BEGIN -- UNIQUE: … END;``) is
+    still PLS-00103 — it needs the NULL; too; and bare ``;`` empty
+    statements are dropped."""
+
+    def test_comment_only_body_gets_null(self) -> None:
+        out = _t2(
+            "create procedure p() begin show processlist; end",
+            "mysql",
+            "oracle",
+        )
+        assert "UNIQUE:" in out, out
+        assert re.search(r"(?im)^\s*NULL;", out), out
+
+    def test_executable_body_no_extra_null(self) -> None:
+        out = _t2("create procedure p() begin select 1; end", "mysql", "oracle")
+        assert not re.search(r"(?im)^\s*NULL;", out), out

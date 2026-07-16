@@ -834,7 +834,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          the wave-166 admin-statement family (whole capture, verbatim
          on MySQL, in-body carriers elsewhere). Measured: mysql→oracle
          **39 → 35** (−4, 99.4%), mysql→pg **32 → 22** (−10, 99.6%).
-         Discovery HOLDS 0. Tests: TestWave182ShowRepairInBody (3).**
+         Discovery HOLDS 0. Tests: TestWave182ShowRepairInBody (3).* Wave 183 (2026-07-17): a PL/SQL
+         body whose only statement degraded to a comment carrier
+         (``BEGIN -- UNIQUE: … END;``) was still PLS-00103 — the
+         NULL;-injection now checks for EXECUTABLE text (not just
+         non-empty), and bare ``;`` empty statements drop from the
+         body. Measured: mysql→oracle **35 → 32** (−3, validity
+         99.5%). Discovery HOLDS 0. Tests: TestWave183CommentOnlyBody
+         (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
