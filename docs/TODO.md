@@ -673,7 +673,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          a known-options list degrades it to the established
          source-only comment carrier with a warning. Measured:
          mysql→tsql **137 → 131** (−6). Discovery HOLDS 0. Tests:
-         TestWave162AdddateSqlMode (5).**
+         TestWave162AdddateSqlMode (5).* Wave 163 (2026-07-16): sqlglot
+         collapses ``CAST(x AS CHAR CHARACTER SET cs)`` to a
+         CHARACTER_SET type — it emitted a nonexistent ``CAST(… AS
+         CHARACTER_SET)`` everywhere, silently dropping the CHAR base
+         (the corruption class). Converted to ``CHAR CHARACTER SET
+         cs`` (MySQL keeps it; other targets strip the suffix). And a
+         set-op subquery hangs its ORDER BY on the LAST arm of the
+         set_query chain, dodging the existing unlimited-ORDER strip —
+         now stripped along the chain. Measured: mysql→tsql
+         **131 → 129** (−2). Discovery HOLDS 0. Tests:
+         TestWave163CharsetCastSubqueryOrder (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

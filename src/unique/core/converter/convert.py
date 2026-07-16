@@ -1688,6 +1688,15 @@ def _convert_data_type(expr: exp.Expression) -> DataType:
                 if isinstance(p, exp.Literal) and p.is_string
             )
             return DataType(name=name.upper(), values=values)
+        # MySQL ``CAST(x AS CHAR CHARACTER SET cs)``: sqlglot collapses
+        # the whole type to CHARACTER_SET (the CHAR base is implied —
+        # only CHAR/NCHAR take a charset). It emitted a nonexistent
+        # ``CAST(… AS CHARACTER_SET)`` everywhere (wave 163). Keep the
+        # full MySQL spelling; non-MySQL targets strip the suffix.
+        if name.upper() == "CHARACTER_SET":
+            kind = expr.args.get("kind")
+            cs = str(kind) if kind is not None else ""
+            return DataType(name=f"CHAR CHARACTER SET {cs}".strip() if cs else "CHAR")
         # A PG array type (``float8[]``): sqlglot models it as an ARRAY
         # DataType nesting the element type. Collapsing to a bare "ARRAY"
         # loses the element type and emits invalid ``CAST(… AS ARRAY)``

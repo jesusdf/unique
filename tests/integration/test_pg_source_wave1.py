@@ -6046,3 +6046,45 @@ class TestWave162AdddateSqlMode:
             "mysql",
         )
         assert re.search(r"(?i)SET sql_mode = 'TRADITIONAL'", out), out
+
+
+class TestWave163CharsetCastSubqueryOrder:
+    """wave 163 (mysql-corpus): sqlglot collapses ``CAST(x AS CHAR
+    CHARACTER SET cs)`` to a CHARACTER_SET type — it emitted a
+    nonexistent ``CAST(… AS CHARACTER_SET)`` everywhere (silent
+    corruption of the CHAR base). And a set-op subquery hangs its
+    ORDER BY on the LAST arm, dodging the existing strip."""
+
+    def test_charset_cast_tsql(self) -> None:
+        out = _t2(
+            "select cast('bar' as char character set utf8mb3);",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)CAST\('bar' AS CHAR\)", out), out
+        assert "CHARACTER_SET" not in out.upper(), out
+
+    def test_charset_cast_kept_mysql(self) -> None:
+        out = _t2(
+            "select cast('bar' as char character set utf8mb3);",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(r"(?i)CHAR CHARACTER SET utf8mb3", out), out
+
+    def test_setop_subquery_order_stripped_tsql(self) -> None:
+        out = _t2(
+            "select (select 1 as foo union select 2 order by foo asc) as x" " from t1;",
+            "mysql",
+            "tsql",
+        )
+        assert "ORDER BY" not in out.upper(), out
+        assert re.search(r"(?i)UNION\s+SELECT 2", out), out
+
+    def test_ordered_subquery_with_limit_keeps_order(self) -> None:
+        out = _t2(
+            "select (select a from t2 order by a limit 1) from t1;",
+            "mysql",
+            "tsql",
+        )
+        assert "ORDER BY" in out.upper(), out

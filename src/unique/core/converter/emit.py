@@ -793,6 +793,18 @@ def _comparisonize_literals(node: ASTNode) -> ASTNode:
     return dataclasses.replace(node, left=fix(node.left), right=fix(node.right))
 
 
+def _strip_unlimited_order_by(query: SelectStatement) -> SelectStatement:
+    """Drop ORDER BY (no LIMIT — it cannot change the result) from a
+    subquery's select node and every arm of its set_query chain."""
+    if query.set_query is not None:
+        stripped = _strip_unlimited_order_by(query.set_query)
+        if stripped is not query.set_query:
+            query = dataclasses.replace(query, set_query=stripped)
+    if query.order_by and not query.limit:
+        query = dataclasses.replace(query, order_by=())
+    return query
+
+
 #: Operators whose BinaryOp is a predicate (truth-valued), not a scalar.
 _PREDICATE_OPERATORS = frozenset(
     {
@@ -2488,6 +2500,10 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         # MySQL CAST only accepts a fixed set of target types (SIGNED, not INT;
         # no BOOLEAN); T-SQL has no BOOLEAN (it is BIT).
         dtype = node.target_type.name
+        if dialect != "mysql":
+            # ``CHAR CHARACTER SET cs`` is MySQL-only; the charset has
+            # no inline-cast spelling elsewhere (wave 163).
+            dtype = re.sub(r"(?i)\s+CHARACTER\s+SET\s+\S+$", "", dtype)
         mapped = _CAST_TYPE_MAP.get(dialect, {}).get(dtype.upper())
         if mapped:
             dtype = mapped
@@ -2502,10 +2518,12 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
 
     if isinstance(node, SubqueryExpression):
         query = node.query
-        if dialect in ("tsql", "oracle") and query.order_by and not query.limit:
+        if dialect in ("tsql", "oracle"):
             # Illegal in a T-SQL/Oracle scalar subquery without TOP/FETCH,
             # and with no LIMIT it cannot change the single-row result.
-            query = dataclasses.replace(query, order_by=())
+            # A set-op query hangs its ORDER BY on the LAST arm of the
+            # set_query chain (wave 163), so strip along the chain.
+            query = _strip_unlimited_order_by(query)
         return f"({_emit_select(query, dialect)})"
 
     if isinstance(node, ExpressionList):
