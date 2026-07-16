@@ -804,7 +804,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          embedded CREATE/DROP/ALTER/TRUNCATE wraps in EXECUTE
          IMMEDIATE. Measured: mysql→oracle **53 → 47** (−6, validity
          99.2%); mysql→pg stable 33. Discovery HOLDS 0. Tests:
-         TestWave178SysvarGateExecImmediate (3).**
+         TestWave178SysvarGateExecImmediate (3).* Wave 179 (2026-07-17):
+         STRAIGHT_JOIN is INNER JOIN plus a join-order hint no other
+         engine spells — inside a parenthesized join tree (the PAREN
+         JOIN passthrough) it survived the re-transpile verbatim
+         (ORA-00907 / error 102 live). Normalized pre-transpile for
+         non-MySQL targets. Measured: oracle **47 → 46**, tsql
+         **42 → 41**, pg **33 → 32** (−3; those trees carry other
+         issues too). Discovery HOLDS 0. Tests: TestWave179StraightJoin
+         (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
