@@ -413,7 +413,21 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          shadowing (2, needs block-local declares), dynamic-OPEN
          FETCH chain (2), WITHIN-GROUP-in-CASE view (1), RAISE USING
          variant (1), `return` as a variable name (1), FOREACH
-         multi-target (1), transition tables (1).**
+         multi-target (1), transition tables (1). Wave 133
+         (2026-07-16) closed ALL NINE: FILTER over an ordered-set
+         aggregate (was a fake `WITHINGROUP(CASE…)` call — now the
+         source-rendered RawSQL the gates see); `FETCH RELATIVE -n`
+         signs; leveled `RAISE EXCEPTION USING key = v` (helper
+         shared with wave 119's level-less form); FOREACH
+         comma-targets; and three deep singles via the whole-unit
+         path with NARROW body-shape regexes (nested DECLARE block,
+         a variable literally named `return` with initializer, CTE
+         feeding SELECT INTO — first regex draft broke 44 tests by
+         matching plain `return x;`, calibrated). **DISCOVERY
+         pg→pg = 0 SILENT GAPS (from 287)** — the fixtures-corpus
+         no-silent-loss goal for the discovery channel is COMPLETE:
+         every statement transpiles validly or carries a
+         warning/carrier. Tests: TestWave133Batch (6).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

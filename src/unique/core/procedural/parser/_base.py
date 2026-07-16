@@ -620,6 +620,11 @@ class ParserBase:
             # body-header lines with no model — they shredded into
             # garbage declarations (wave 130).
             return self._whole_unit_raw("plpgsql # compiler option")
+        shape = self._pg_unmodeled_body_shape_ahead()
+        if shape is not None:
+            # Deep-single plpgsql shapes with no model yet (wave 133):
+            # verbatim on PG, carrier elsewhere — never a shred.
+            return self._whole_unit_raw(f"plpgsql unmodeled body shape ({shape})")
         body = self._parse_routine_body()
 
         return CreateFunctionStatement(
@@ -2214,6 +2219,38 @@ class ParserBase:
             tok.type == TokenType.STRING and self._PG_OPTION_LINE_RE.search(tok.value)
             for tok in self._tokens
         )
+
+    #: A statement-position DECLARE after BEGIN (``…; declare`` or
+    #: ``begin declare``) — a nested block with local declarations.
+    _PG_NESTED_DECLARE_RE = re.compile(r"(?is)\bbegin\b(?:\s|;)*declare\b")
+    #: A DECLARE-section line declaring a variable literally named
+    #: ``return`` WITH an initializer (``return int := 42``) — the bare
+    #: ``return x;`` statement form must NOT match.
+    _PG_RETURN_DECL_RE = re.compile(r"(?im)^\s*return\s+\w+\s*:=")
+    #: A CTE directly feeding SELECT … INTO <var> (statement-level WITH
+    #: inside a body, capped at one statement).
+    _PG_CTE_SELECT_INTO_RE = re.compile(
+        r"(?is)(?:^|;|\bbegin\b|\bloop\b|\bthen\b)\s*"
+        r"with\s+\w+\s+as\s*\(.*?\)\s*select\b[^;]*?\binto\b"
+    )
+
+    def _pg_unmodeled_body_shape_ahead(self) -> str | None:
+        """Deep-single plpgsql body shapes without a model (wave 133):
+        a nested DECLARE block (block-local shadowing), a variable NAMED
+        ``return``, and a CTE feeding SELECT … INTO. Checked pre-splice
+        on the body STRING token."""
+        if self._dialect != "postgresql":
+            return None
+        for tok in self._tokens:
+            if tok.type != TokenType.STRING:
+                continue
+            if self._PG_NESTED_DECLARE_RE.search(tok.value):
+                return "nested DECLARE block"
+            if self._PG_RETURN_DECL_RE.search(tok.value):
+                return "variable named return"
+            if self._PG_CTE_SELECT_INTO_RE.search(tok.value):
+                return "CTE feeding SELECT INTO"
+        return None
 
     def _whole_unit_raw(self, reason: str) -> ASTNode:
         """Capture the WHOLE unit verbatim as a RawSQL with *reason* (no

@@ -511,6 +511,14 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return _convert_alias(expr)
     if isinstance(expr, exp.Anonymous):
         return _convert_function(expr)
+    if isinstance(expr, exp.Filter) and isinstance(expr.this, exp.WithinGroup):
+        # FILTER over an ordered-set aggregate: the generic path shredded
+        # it into a fake WITHINGROUP(CASE …) call (wave 133). Preserve the
+        # source spelling; the array/within-group gate handles targets.
+        return RawSQL(
+            sql=_source_sql(expr),
+            reason="Unhandled expression type: WithinGroup(Filter)",
+        )
     if isinstance(expr, exp.Array):
         # ARRAY[…] / ARRAY(SELECT …): a real node, never a FunctionCall —
         # the parenthesized call spelling is invalid even on PostgreSQL.

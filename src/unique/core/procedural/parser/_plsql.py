@@ -751,6 +751,11 @@ class PlsqlStatementsMixin(ParserBase):
         LOOP lost — wave 120)."""
         self._advance()  # FOREACH
         variable = self._parse_identifier()
+        # Comma-separated target list (faithful pass-through; PG itself
+        # validates the row-ness of multi-targets — wave 133).
+        while self._current().type == TokenType.COMMA:
+            self._advance()
+            variable += f", {self._parse_identifier()}"
         slice_depth: int | None = None
         if self._current().upper_value == "SLICE":
             self._advance()
@@ -854,6 +859,17 @@ class PlsqlStatementsMixin(ParserBase):
             self._advance()
             count = self._advance().value
             direction = f"{cur} {count}"
+        elif (
+            cur in ("ABSOLUTE", "RELATIVE", "FORWARD", "BACKWARD")
+            and self._peek(1).value == "-"
+            and self._peek(2).type == TokenType.NUMBER
+            and self._peek(3).is_keyword("FROM", "IN")
+        ):
+            # Negative counts: FETCH RELATIVE -2 FROM c (wave 133).
+            self._advance()
+            self._advance()
+            count = self._advance().value
+            direction = f"{cur} -{count}"
         if self._current().is_keyword("FROM", "IN"):
             self._advance()
         cursor_name = self._parse_identifier()
@@ -955,35 +971,7 @@ class PlsqlStatementsMixin(ParserBase):
         # message; other options fold into the text (no separate channel
         # off PostgreSQL).
         if self._dialect == "postgresql" and self._current().is_keyword("USING"):
-            self._advance()
-            pairs: list[tuple[str, str]] = []
-            while not self._at_end() and self._current().type != TokenType.SEMICOLON:
-                key = self._parse_identifier().lower()
-                if self._current().value == "=":
-                    self._advance()
-                val_parts: list[str] = []
-                while not self._at_end() and self._current().type not in (
-                    TokenType.COMMA,
-                    TokenType.SEMICOLON,
-                ):
-                    val_parts.append(self._flat_value(self._current()))
-                    self._advance()
-                pairs.append((key, " ".join(val_parts)))
-                if not self._match_type(TokenType.COMMA):
-                    break
-            self._match_type(TokenType.SEMICOLON)
-            msg = next((v for k, v in pairs if k == "message"), None)
-            rest = [f"{k} = {v}" for k, v in pairs if k != "message"]
-            if msg is None:
-                content = "; ".join(f"{k} = {v}" for k, v in pairs)
-                literal = "'" + content.replace("'", "''") + "'"
-                return RaiseErrorStatement(
-                    message=RawSQL(sql=literal, reason="pg RAISE USING")
-                )
-            if rest:
-                tail = "; ".join(rest).replace("'", "''")
-                msg = f"{msg} || ' ({tail})'"
-            return RaiseErrorStatement(message=RawSQL(sql=msg, reason="pg RAISE USING"))
+            return self._parse_pg_raise_using(informational=False)
 
         # PostgreSQL RAISE with a level keyword
         level = self._current()
@@ -999,6 +987,11 @@ class PlsqlStatementsMixin(ParserBase):
                     if informational:
                         return PrintStatement(expression=formatted)
                     return RaiseErrorStatement(message=formatted)
+            if self._dialect == "postgresql" and self._current().is_keyword("USING"):
+                # RAISE EXCEPTION USING key = expr, … (no message text) —
+                # fell into the expression fallback and shipped
+                # ``'%', using …`` (wave 133).
+                return self._parse_pg_raise_using(informational)
             expr = self._parse_expression_until_semicolon()
             self._match_type(TokenType.SEMICOLON)
             if informational:
@@ -1068,6 +1061,44 @@ class PlsqlStatementsMixin(ParserBase):
         expr = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)
         return RaiseErrorStatement(message=expr)
+
+    def _parse_pg_raise_using(self, informational: bool) -> ASTNode:
+        """Parse the ``USING key = expr, …`` tail of a plpgsql RAISE.
+
+        The ``message`` option IS the message; other options fold into
+        the text (no separate channel off PostgreSQL) — waves 119/133.
+        """
+        self._advance()  # USING
+        pairs: list[tuple[str, str]] = []
+        while not self._at_end() and self._current().type != TokenType.SEMICOLON:
+            key = self._parse_identifier().lower()
+            if self._current().value == "=":
+                self._advance()
+            val_parts: list[str] = []
+            while not self._at_end() and self._current().type not in (
+                TokenType.COMMA,
+                TokenType.SEMICOLON,
+            ):
+                val_parts.append(self._flat_value(self._current()))
+                self._advance()
+            pairs.append((key, " ".join(val_parts)))
+            if not self._match_type(TokenType.COMMA):
+                break
+        self._match_type(TokenType.SEMICOLON)
+        msg = next((v for k, v in pairs if k == "message"), None)
+        rest = [f"{k} = {v}" for k, v in pairs if k != "message"]
+        if msg is None:
+            content = "; ".join(f"{k} = {v}" for k, v in pairs)
+            literal = "'" + content.replace("'", "''") + "'"
+            node: ASTNode = RawSQL(sql=literal, reason="pg RAISE USING")
+        elif rest:
+            tail = "; ".join(rest).replace("'", "''")
+            node = RawSQL(sql=f"{msg} || ' ({tail})'", reason="pg RAISE USING")
+        else:
+            node = RawSQL(sql=msg, reason="pg RAISE USING")
+        if informational:
+            return PrintStatement(expression=node)
+        return RaiseErrorStatement(message=node)
 
     def _parse_pg_raise_format(self) -> ASTNode | None:
         """Parse PG's ``'fmt %', args [USING opt = v, …]`` RAISE tail.

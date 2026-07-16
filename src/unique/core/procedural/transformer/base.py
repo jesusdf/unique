@@ -3317,7 +3317,12 @@ class ProceduralTransformer:
         # model: both are valid verbatim on their own engine, a documented
         # carrier anywhere else (waves 122, 126).
         if node.reason.startswith(
-            ("non-SQL language function", "plpgsql block label", "plpgsql # compiler")
+            (
+                "non-SQL language function",
+                "plpgsql block label",
+                "plpgsql # compiler",
+                "plpgsql unmodeled body shape",
+            )
         ):
             if self._source == self._target:
                 return node

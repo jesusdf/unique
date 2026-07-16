@@ -5006,3 +5006,90 @@ class TestWave132Batch:
         out = _t(src, "postgresql")
         assert re.search(r"(?i)p1 some_table\.a%TYPE", out), out
         assert "some_table ." not in out, out
+
+
+class TestWave133Batch:
+    """wave 133 — the last discovery tail: FILTER over an ordered-set
+    aggregate shredded into a fake WITHINGROUP() call; FETCH RELATIVE -2
+    lost its sign; RAISE EXCEPTION USING (leveled, no message) mangled;
+    FOREACH comma-target shredded; and three deep-single body shapes
+    (nested DECLARE block, a variable named ``return``, CTE feeding
+    SELECT INTO) go whole-unit — verbatim on PG, carrier elsewhere."""
+
+    def test_filter_within_group_view(self) -> None:
+        out = _t(
+            "create view v as select percentile_disc(0.5) within group "
+            "(order by t) filter (where h = 1) as px from tk;",
+            "postgresql",
+        )
+        assert "WITHINGROUP(CASE" not in out.upper(), out
+        assert re.search(
+            r"(?i)WITHIN GROUP \(ORDER BY t\)\s*FILTER\s*\(WHERE", out
+        ), out
+
+    def test_fetch_relative_negative(self) -> None:
+        src = (
+            "create function f() returns setof integer as $$\n"
+            "declare c refcursor; x integer;\n"
+            "begin\n"
+            "  open c scroll for execute 'select f1 from t';\n"
+            "  fetch relative -2 from c into x;\n"
+            "  close c;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)FETCH RELATIVE -2 FROM c INTO x;", out), out
+        assert "INTO ;" not in out, out
+
+    def test_raise_exception_using(self) -> None:
+        src = (
+            "create function f() returns void as $$\n"
+            "begin\n"
+            "  raise exception using column = 'c1', constraint = 'x_fk';\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert "'%', using" not in out.lower(), out
+        assert re.search(r"(?i)RAISE EXCEPTION", out), out
+
+    def test_foreach_comma_targets(self) -> None:
+        src = (
+            "create function f(anyarray) returns void as $$\n"
+            "declare x int; y int;\n"
+            "begin\n"
+            "  foreach x, y in array $1 loop\n"
+            "    raise notice '%', x;\n"
+            "  end loop;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)FOREACH x, y IN ARRAY p1", out), out
+        assert "IN ARRAY ," not in out, out
+
+    def test_nested_declare_block_whole_unit(self) -> None:
+        src = (
+            "create or replace function shadowtest() returns void as $$\n"
+            "declare f1 int;\n"
+            "begin\n"
+            "  declare f1 int;\n"
+            "  begin\n"
+            "  end;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert out.lower().count("f1 int;\n    f1 int;") == 0, out
+        assert re.search(r"(?is)begin\s+declare", out), out
+
+    def test_cte_select_into_whole_unit(self) -> None:
+        src = (
+            "create function f() returns trigger language plpgsql as $$\n"
+            "declare x int;\n"
+            "begin\n"
+            "  with p as (select a from t)\n"
+            "  select a into x from p;\n"
+            "  return null;\n"
+            "end $$;"
+        )
+        out = _t(src, "postgresql")
+        assert not re.search(r"(?i)\(.*\);\s*SELECT a INTO", out), out
+        assert re.search(r"(?is)with p as\s*\(", out.lower()), out
