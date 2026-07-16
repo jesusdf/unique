@@ -1693,6 +1693,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         newer than local) at 3cc6a3d/6376336 — fixed in this wave's
         commit, CI green again at e540dc3. Standing: pg-source
         {182/159/133}, mysql-source {177/107/141}.**
+        *Wave 85 (2026-07-17):* linking an outer set operation onto
+        an arm that is ITSELF a chain (`(a UNION b ORDER BY 1)
+        INTERSECT c`) clobbered the nested chain — the whole inner
+        tail vanished silently, and a surviving tail ORDER BY landed
+        mid-chain (error 156, 3x+). Chain arms now link at their
+        TAIL, dropping a tail ORDER BY without LIMIT. Tests:
+        TestNestedChainMidOrderStrip. *Measurement pending next
+        pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

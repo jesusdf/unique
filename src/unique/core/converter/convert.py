@@ -741,9 +741,22 @@ def _convert_union(expr: exp.SetOperation) -> SelectStatement:
             ),
         )
     set_ops = [op for op, _ in ops]
+
+    def _link(
+        arm: SelectStatement, op: SetOperationType, rest: SelectStatement
+    ) -> SelectStatement:
+        # An arm that is itself a chain links at its TAIL — replacing
+        # set_op/set_query on the head clobbered the nested chain, and a
+        # tail ORDER BY without LIMIT would land mid-chain (drop it).
+        if arm.set_query is not None:
+            return dataclasses.replace(arm, set_query=_link(arm.set_query, op, rest))
+        if arm.order_by and arm.limit is None:
+            arm = dataclasses.replace(arm, order_by=())
+        return dataclasses.replace(arm, set_op=op, set_query=rest)
+
     result = selects[-1]
     for i in range(len(set_ops) - 1, -1, -1):
-        result = dataclasses.replace(selects[i], set_op=set_ops[i], set_query=result)
+        result = _link(selects[i], set_ops[i], result)
     return result
 
 

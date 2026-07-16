@@ -3286,3 +3286,28 @@ class TestCaseWhenBareBoolean:
     def test_simple_case_operand_untouched(self) -> None:
         out = _t("select case a when 1 then 'x' else 'y' end from t;", "tsql")
         assert re.search(r"(?is)CASE a\s+WHEN 1 THEN 'x'", out), out
+
+
+class TestNestedChainMidOrderStrip:
+    """wave 85: a parenthesized inner set chain carrying its own
+    ORDER BY without LIMIT — `(a INTERSECT b ORDER BY 1) UNION ALL c`
+    — kept that ORDER BY mid-chain on T-SQL (error 156, 3x). Wave
+    48's shielding skipped chain arms; non-final arms now strip the
+    tail order (no observable effect without LIMIT)."""
+
+    def test_mid_chain_order_strips(self) -> None:
+        out = _t(
+            "(select q1 from t1 intersect select q2 from t1 order by 1) "
+            "union all select q2 from t1;",
+            "tsql",
+        )
+        m = re.search(r"(?is)ORDER BY.*UNION ALL", out)
+        assert not m, out
+
+    def test_nested_chain_first_arm_not_clobbered(self) -> None:
+        # The inner chain's links must survive the outer op attaching.
+        out = _t(
+            "(SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) " "INTERSECT SELECT 4,5,6;",
+            "tsql",
+        )
+        assert re.search(r"(?is)UNION\s+SELECT 4, 5, 6\s+INTERSECT", out), out
