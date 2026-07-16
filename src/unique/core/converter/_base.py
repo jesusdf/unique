@@ -233,6 +233,13 @@ PG_TRIGGER_FN_BODIES: contextvars.ContextVar[dict[str, str] | None] = (
     contextvars.ContextVar("pg_trigger_fn_bodies", default=None)
 )
 
+# PG composite types (``CREATE TYPE x AS (…)``) defined in the script: the
+# CREATE itself degrades off PG, so any routine declaring/returning one
+# must degrade whole rather than ship an unknown type name.
+PG_COMPOSITE_TYPES: contextvars.ContextVar[frozenset[str] | None] = (
+    contextvars.ContextVar("pg_composite_types", default=None)
+)
+
 
 _PG_TRIGGER_FN_RE = re.compile(
     r"(?is)\bCREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(\w+)\s*\(\s*\)\s+"
@@ -880,6 +887,7 @@ __all__ = [
     "IDENTITY_COLUMNS",
     "TEMP_TABLES",
     "harvest_temp_tables",
+    "PG_COMPOSITE_TYPES",
     "PG_TRIGGER_FN_BODIES",
     "PROC_DATE_PARAMS",
     "TSQL_ALIAS_TYPES",

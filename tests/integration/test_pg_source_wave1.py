@@ -2516,3 +2516,48 @@ class TestTuplesRoundSetNamesBoolLiterals:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, r.sql
+
+
+class TestStrToDateAndCompositeTypes:
+    """wave 62: STR_TO_DATE of an impossible date becomes a CAST at
+    emit time, AFTER wave 58's gate ran — the gate now also inspects
+    the function form (6x mysql→tsql). And a routine declaring or
+    returning a PG composite type (`CREATE TYPE x AS (…)` — itself an
+    Unhandled-CREATE carrier) shipped `DECLARE @v compostype` garbage
+    (6x pg→tsql): harvested composite names degrade the routine
+    whole."""
+
+    def test_str_to_date_invalid_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "select str_to_date('2007-10-00', '%Y-%m-%d');",
+            source="mysql",
+            target="tsql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_str_to_date_valid_emits(self) -> None:
+        out = _t2("select str_to_date('2007-10-01', '%Y-%m-%d');", "mysql", "tsql")
+        assert re.search(r"(?i)CAST\('2007-10-01' AS DATE\)", out), out
+
+    def test_composite_type_routine_degrades(self) -> None:
+        src = (
+            "create type compostype as (x int, y varchar);\n"
+            "create function compos() returns compostype as $$\n"
+            "declare v compostype;\n"
+            "begin\n"
+            "  v := (1, 'hello');\n"
+            "  return v;\n"
+            "end$$ language plpgsql;"
+        )
+        out = _t(src, "tsql")
+        offenders = [
+            ln
+            for ln in out.splitlines()
+            if "compostype" in ln.lower() and not ln.strip().startswith("--")
+        ]
+        assert not offenders, out

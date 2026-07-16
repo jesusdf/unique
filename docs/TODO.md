@@ -1419,8 +1419,21 @@ fix needs an **anonymized** regression fixture (never a private name).
         (`OR TRUE` shipped as bare `OR 1`; 13x); single-argument ROUND
         gains the mandatory scale (6x error 189); `SET NAMES`/
         `CHARACTER SET` join the session-knob carriers (3x error
-        195). Tests: TestTuplesRoundSetNamesBoolLiterals.
-        *Measurement pending next mysql-corpus cycle.*
+        195). Tests: TestTuplesRoundSetNamesBoolLiterals. **Measured
+        at `30aaf2d` (2026-07-16): −42 — mysql→T-SQL 276→252 (95.8%),
+        mysql→PG 148→140 (97.7%), mysql→Oracle 212→202 (96.7%).
+        Standing: pg-source {270/173/144}, mysql-source
+        {252/140/202}.**
+        *Wave 62 (2026-07-16):* STR_TO_DATE of an impossible date
+        lowers to CAST at EMIT time — after wave 58's gate had run;
+        the gate now inspects the function form too (6x mysql→tsql).
+        And routines declaring/returning a PG composite type
+        (`CREATE TYPE x AS (…)`, itself an Unhandled-CREATE carrier)
+        shipped `DECLARE @v compostype` (6x pg→tsql): new
+        PG_COMPOSITE_TYPES harvest + composite culprit in
+        _degrade_record_function. Tests:
+        TestStrToDateAndCompositeTypes. *Measurement pending next
+        cycles.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

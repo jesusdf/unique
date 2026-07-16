@@ -698,8 +698,9 @@ class Transformer:
     def _find_invalid_date_cast(self, value: object) -> str | None:
         import datetime
 
-        from unique.core.ast_nodes import CastExpression, Literal
+        from unique.core.ast_nodes import CastExpression, FunctionCall, Literal
 
+        candidate: Literal | None = None
         if isinstance(value, CastExpression) and value.target_type.name.upper() in (
             "DATE",
             "DATETIME",
@@ -707,14 +708,26 @@ class Transformer:
         ):
             inner = value.expression
             if isinstance(inner, Literal) and inner.dtype == "string":
-                text = str(inner.value).strip()
-                m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", text)
-                if m is None:
-                    return f"'{text}'"
-                try:
-                    datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
-                except ValueError:
-                    return f"'{text}'"
+                candidate = inner
+        # STR_TO_DATE lowers to the same CAST at emit time, after this
+        # gate has run — inspect the function form here too.
+        if (
+            isinstance(value, FunctionCall)
+            and value.name.upper() == "STR_TO_DATE"
+            and value.args
+            and isinstance(value.args[0], Literal)
+            and value.args[0].dtype == "string"
+        ):
+            candidate = value.args[0]
+        if candidate is not None:
+            text = str(candidate.value).strip()
+            m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", text)
+            if m is None:
+                return f"'{text}'"
+            try:
+                datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            except ValueError:
+                return f"'{text}'"
         if isinstance(value, ASTNode):
             for f in fields(value):
                 found = self._find_invalid_date_cast(getattr(value, f.name))

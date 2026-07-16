@@ -29,6 +29,7 @@ from unique.core.batch_splitter import _TSQL_SYSTEM_PROCS, BatchSplitter, BatchT
 from unique.core.converter import (
     DATE_COLUMNS,
     IDENTITY_COLUMNS,
+    PG_COMPOSITE_TYPES,
     PG_TRIGGER_FN_BODIES,
     PROC_DATE_PARAMS,
     SOURCE_DIALECT,
@@ -38,6 +39,7 @@ from unique.core.converter import (
     USER_FUNCTIONS,
     harvest_date_columns,
     harvest_identity_columns,
+    harvest_pg_composite_types,
     harvest_pg_trigger_functions,
     harvest_proc_date_params,
     harvest_temp_tables,
@@ -904,6 +906,11 @@ class Transpiler:
                 temp_tables_token = TEMP_TABLES.set(temp_tables)
         source_dialect_token = SOURCE_DIALECT.set(source)
         pg_trigger_fn_token = None
+        pg_composite_token = None
+        if source == "postgresql" and target != "postgresql":
+            composite_types = harvest_pg_composite_types(sql)
+            if composite_types:
+                pg_composite_token = PG_COMPOSITE_TYPES.set(composite_types)
         if target == "tsql" and source != "tsql":
             user_functions = harvest_user_functions(sql)
             if user_functions:
@@ -1121,6 +1128,8 @@ class Transpiler:
                 USER_FUNCTIONS.reset(func_token)
             if pg_trigger_fn_token is not None:
                 PG_TRIGGER_FN_BODIES.reset(pg_trigger_fn_token)
+            if pg_composite_token is not None:
+                PG_COMPOSITE_TYPES.reset(pg_composite_token)
             SOURCE_DIALECT.reset(source_dialect_token)
             if metadata_resolver:
                 metadata_resolver.close()

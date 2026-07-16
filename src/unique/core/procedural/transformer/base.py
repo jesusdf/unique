@@ -1015,12 +1015,28 @@ class ProceduralTransformer:
         if self._target == "postgresql":
             return None
         culprit: str | None = None
+        from unique.core.converter import PG_COMPOSITE_TYPES
+
+        composites = PG_COMPOSITE_TYPES.get() or frozenset()
         if any(
             isinstance(s, DeclareStatement)
             and s.data_type.name.upper() in self._PG_PSEUDO_TYPES
             for s in node.body
         ):
             culprit = "'record' variable"
+        elif composites and (
+            any(
+                isinstance(s, DeclareStatement)
+                and s.data_type.name.lower() in composites
+                for s in node.body
+            )
+            or (
+                node.return_type is not None
+                and node.return_type.name.lower() in composites
+            )
+            or any(p.data_type.name.lower() in composites for p in node.parameters)
+        ):
+            culprit = "composite-type variable"
         elif self._target in ("tsql", "mysql") and any(
             isinstance(s, CursorDeclaration) and s.parameters for s in node.body
         ):
