@@ -4674,3 +4674,36 @@ class TestSavepointStatement:
         out = _t("savepoint a;", "tsql")
         assert re.search(r"(?i)SAVE TRANSACTION a", out), out
         assert "SAVEPOINT" not in out.upper(), out
+
+
+class TestEmptySelectList:
+    """wave 124: PG's empty select list (``SELECT;`` — zero columns, one
+    row, allowed since 9.4) silently gained a ``*`` (``SELECT *;`` is
+    invalid without FROM and changes the result shape with one).
+    Preserved on PG; degraded whole elsewhere (no other engine has the
+    form)."""
+
+    def test_empty_select_pg(self) -> None:
+        out = _t("select;", "postgresql")
+        assert "*" not in out, out
+        assert re.search(r"(?im)^\s*SELECT\s*;", out), out
+
+    def test_empty_select_union_pg(self) -> None:
+        out = _t("select union select;", "postgresql")
+        assert "*" not in out, out
+        assert re.search(r"(?is)SELECT\s+UNION\s+SELECT", out), out
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_empty_select_degrades_off_pg(self, target: str) -> None:
+        r = Transpiler().transpile("select;", source="postgresql", target=target)
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_normal_star_select_unaffected(self) -> None:
+        out = _t("select * from t;", "postgresql")
+        assert re.search(r"(?i)SELECT \*\s+FROM t", out), out

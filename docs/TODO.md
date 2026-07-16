@@ -334,7 +334,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          `SAVE TRANSACTION` on T-SQL (+ output-gate reparse exemption
          — sqlglot's tsql reader can't read that valid spelling
          either, the DELETE…OUTPUT lesson). Measured: **48 → 45**.
-         Tests: TestSavepointStatement (4).**
+         Tests: TestSavepointStatement (4). Wave 124 (2026-07-16):
+         PG's empty select list (`SELECT;`, zero columns one row)
+         silently gained a `*` — invalid without FROM, shape-changing
+         with one. `SelectStatement.empty_select_list` flag set only
+         for genuinely-empty SOURCE lists (converter-fallback empty
+         tuples keep their load-bearing `*` default); PG re-emits the
+         bare SELECT, other targets gate to the carrier. Measured:
+         **45 → 42**. Tests: TestEmptySelectList (6).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

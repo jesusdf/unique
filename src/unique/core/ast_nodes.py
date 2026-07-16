@@ -401,6 +401,11 @@ class SelectStatement(ASTNode):
     ctes: tuple[CTEDefinition, ...] = ()
     set_op: SetOperationType | None = None
     set_query: SelectStatement | None = None
+    #: PG's empty select list (``SELECT;`` — zero columns, one row). Distinct
+    #: from an empty ``columns`` tuple built by converter fallbacks, where a
+    #: ``*`` default is load-bearing; only genuinely-empty source lists set
+    #: this. PG re-emits the bare SELECT; no other engine has the form.
+    empty_select_list: bool = False
 
 
 @dataclass(frozen=True)

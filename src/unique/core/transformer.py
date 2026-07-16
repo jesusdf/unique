@@ -581,6 +581,7 @@ class Transformer:
             result = [self._gate_pg_internals(node) for node in result]
         if self.context.target in ("tsql", "mysql", "oracle"):
             result = [self._gate_array_constructs(node) for node in result]
+            result = [self._gate_empty_select_list(node) for node in result]
         if self.context.target == "mysql":
             result = [self._gate_mysql_full_join(node) for node in result]
             result = [self._gate_mysql_function_relation(node) for node in result]
@@ -677,6 +678,39 @@ class Transformer:
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _gate_empty_select_list(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement with PG's zero-column select list — WHOLE.
+
+        ``SELECT;`` (empty list, one row) exists only on PostgreSQL;
+        the old ``*`` substitute silently changed the shape."""
+        if not self._has_empty_select_list(node):
+            return node
+        reason = (
+            f"PostgreSQL's empty select list (zero columns) has no "
+            f"{self.context.target} equivalent; statement preserved as a comment"
+        )
+        self.context.warn(reason, "empty_select_list")
+        self.context.mark_unsupported("empty select list")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _has_empty_select_list(self, value: object) -> bool:
+        if (
+            isinstance(value, SelectStatement)
+            and value.empty_select_list
+            and not value.columns
+        ):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._has_empty_select_list(getattr(value, f.name))
+                for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._has_empty_select_list(item) for item in value)
+        return False
 
     def _gate_mysql_function_relation(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using a function as a relation — WHOLE, on MySQL.

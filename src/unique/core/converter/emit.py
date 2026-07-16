@@ -1331,8 +1331,15 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         pct = " PERCENT" if node.limit.percent else ""
         top = f"TOP {_emit_expression(node.limit.limit, dialect)}{pct} "
     distinct = "DISTINCT " if node.distinct else ""
-    cols = ", ".join(_emit_value_expression(c, dialect) for c in node.columns) or "*"
-    parts.append(f"SELECT {distinct}{top}{cols}")
+    if node.empty_select_list and not node.columns and dialect == "postgresql":
+        # PG's zero-column select list (``SELECT;``) — a ``*`` here is
+        # invalid without FROM and changes the shape with one (wave 124).
+        parts.append(f"SELECT {distinct}".rstrip())
+    else:
+        cols = (
+            ", ".join(_emit_value_expression(c, dialect) for c in node.columns) or "*"
+        )
+        parts.append(f"SELECT {distinct}{top}{cols}")
 
     if into:
         parts.append(f"INTO {into}")

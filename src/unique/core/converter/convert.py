@@ -729,6 +729,10 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
         limit=limit,
         distinct=distinct,
         ctes=ctes,
+        # A genuinely-empty source select list (PG ``SELECT;``) must not
+        # gain a ``*`` (wave 124) — flagged so the emitter distinguishes
+        # it from fallback-built empty tuples where ``*`` is load-bearing.
+        empty_select_list=not (expr.expressions or []),
     )
 
 
