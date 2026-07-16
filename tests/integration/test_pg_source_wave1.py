@@ -3470,3 +3470,24 @@ class TestCharsetIntroducersAndRowOracle:
         out = _t2("select row(b,a) <> row(a,a) as x from t1;", "mysql", "oracle")
         assert "row(" not in out.lower(), out
         assert re.search(r"(?i)b <> a OR a <> a", out), out
+
+
+class TestParenCastDegrades:
+    """wave 92: PG casts of PARENTHESIZED expressions
+    (`row(a,b)::int8_tbl` — composite row types) survive the simple
+    ANSI-cast rewrite and ship as `) : : type` (6x pg→tsql). A body
+    still carrying such a cast degrades the routine whole."""
+
+    def test_row_cast_composite_degrades(self) -> None:
+        src = (
+            "create function mki8(a bigint, b bigint) returns int8_tbl as $$\n"
+            "  select row(a, b)::int8_tbl\n"
+            "$$ language sql;"
+        )
+        out = _t(src, "tsql")
+        code = [
+            ln
+            for ln in out.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, out

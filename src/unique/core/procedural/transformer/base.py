@@ -1194,6 +1194,8 @@ class ProceduralTransformer:
             culprit = "array-typed parameter/return/variable"
         elif self._target != "postgresql" and self._body_builds_arrays(node.body):
             culprit = "ARRAY constructor in the body"
+        elif self._target != "postgresql" and self._body_has_paren_cast(node.body):
+            culprit = "cast of a parenthesized/composite expression"
         if culprit is None:
             return None
         from unique.core.procedural.emitter import ProceduralEmitter
@@ -1208,6 +1210,24 @@ class ProceduralTransformer:
         return RawSQL(sql=original, reason=reason)
 
     _ARRAY_CONSTRUCT_RE = re.compile(r"(?i)\bARRAY\s*\[")
+    #: ``(expr)::type`` — the simple-operand ANSI rewrite cannot resolve
+    #: it, and the target of a ROW cast is a composite anyway.
+    _PAREN_CAST_RE = re.compile(r"\)\s*:\s*:\s*\w+")
+
+    def _body_has_paren_cast(self, value: object) -> bool:
+        import dataclasses as _dc
+
+        if isinstance(value, str):
+            scrubbed = re.sub(r"'(?:[^']|'')*'", "''", value)
+            return self._PAREN_CAST_RE.search(scrubbed) is not None
+        if _dc.is_dataclass(value) and not isinstance(value, type):
+            return any(
+                self._body_has_paren_cast(getattr(value, f.name))
+                for f in _dc.fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._body_has_paren_cast(item) for item in value)
+        return False
 
     def _body_builds_arrays(self, value: object) -> bool:
         """Raw body text building PG arrays — no mechanical form off PG."""

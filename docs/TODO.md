@@ -1770,6 +1770,12 @@ fix needs an **anonymized** regression fixture (never a private name).
         (2026-07-17): mysql→Oracle 141→129 (−12, 97.8%); tsql 166 /
         pg 107 (±1 statement-count noise). Standing: pg-source
         {172/135/94}, mysql-source {166/107/129}.**
+        *Wave 92 (2026-07-17):* PG casts of PARENTHESIZED expressions
+        (`row(a,b)::int8_tbl` — composite row types) survive the
+        simple-operand ANSI rewrite and shipped as `) : : type` (6x
+        pg→tsql). A body still carrying such a cast now degrades the
+        routine whole. Tests: TestParenCastDegrades. *Measurement
+        pending next pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
