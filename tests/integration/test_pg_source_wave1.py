@@ -3111,3 +3111,24 @@ class TestPrintSubqueryHoist:
             out,
         )
         assert m, out
+
+
+class TestFromNeverQualifies:
+    """wave 78: `FROM (` before a derived table got dbo.-qualified
+    (`dbo.FROM`) by the user-function pass — FROM/JOIN were missing
+    from TSQL_NEVER_QUALIFY (2x pg→tsql inside trigger CTEs)."""
+
+    def test_from_derived_table_in_trigger(self) -> None:
+        src = (
+            "create function rif() returns trigger as $$\n"
+            "begin\n"
+            "  select sum(delta) into strict cnt from\n"
+            "    (select 1 as delta from newtab) x;\n"
+            "  return null;\nend$$ language plpgsql;\n"
+            "create trigger rt after insert on t1 "
+            "referencing new table as newtab "
+            "for each statement execute function rif();"
+        )
+        out = _t(src, "tsql")
+        assert "dbo.FROM" not in out, out
+        assert "dbo.from" not in out, out

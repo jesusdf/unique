@@ -1622,6 +1622,12 @@ fix needs an **anonymized** regression fixture (never a private name).
         triggers carry further blockers (`dbo.FROM` mangles in UNION
         aggregates, OLD refs); →MySQL/→Oracle flat. Standing:
         pg-source {257/160/140}, mysql-source {177/107/141}.**
+        *Wave 78 (2026-07-17):* `FROM (` before a derived table got
+        dbo.-qualified (`dbo.FROM`) by the user-function pass —
+        FROM/JOIN/LATERAL/APPLY were missing from TSQL_NEVER_QUALIFY
+        (2x pg→tsql inside trigger CTEs, blocking the 1046 chain).
+        Tests: TestFromNeverQualifies. *Measurement pending next
+        pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
