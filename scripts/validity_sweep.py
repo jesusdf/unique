@@ -133,7 +133,10 @@ def classify_oracle(message: str) -> str:
     # Check the expected-nested shapes first. Trade-off: an undeclared
     # *variable* is also PLS-00201; a schema-less run cannot tell it from a
     # missing procedure, so those land in "expected" too.
-    if re.search(r"PLS-00201\b|PL/SQL: ORA-00942\b|PLS-00905\b", message):
+    # PLS-00221: a call to a procedure that EXISTS but compiled invalid
+    # (its body references schemas/tables absent on the empty database) —
+    # an environmental cascade, not transpiler output.
+    if re.search(r"PLS-00201\b|PL/SQL: ORA-00942\b|PLS-00905\b|PLS-00221\b", message):
         return "expected"
     m = re.search(r"(ORA|PLS)-(\d+)", message)
     if not m:

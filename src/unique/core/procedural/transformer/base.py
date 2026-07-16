@@ -1811,6 +1811,20 @@ class ProceduralTransformer:
         if degraded_uv is not None:
             return degraded_uv
         new_stmts = self._transform_body(node.statements)
+        if new_stmts and all(
+            isinstance(s, RawSQL) and "preserved as a comment" in s.reason
+            for s in new_stmts
+        ):
+            # Every statement degraded: wrapping comment-only carriers in
+            # BEGIN/END ships an empty block (PLS-00103 / error 156).
+            if len(new_stmts) == 1:
+                return new_stmts[0]
+            first = new_stmts[0]
+            assert isinstance(first, RawSQL)
+            return RawSQL(
+                sql="\n".join(s.sql for s in new_stmts if isinstance(s, RawSQL)),
+                reason=first.reason,
+            )
         if (
             self._source == "oracle"
             and self._target != "oracle"

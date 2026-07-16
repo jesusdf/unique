@@ -1485,7 +1485,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         populated by every routine degrade (uservar, record/composite,
         parse fallback — name regexed from the original), checked in
         _transform_call. Tests: TestCharBinaryAndDegradedCallRegistry.
-        *Measurement pending next mysql-corpus cycle.*
+        First cycle at `4e87922` exposed two follow-ups (66b): the
+        CALL carrier got WRAPPED in `BEGIN … END;` — a comment-only
+        block, PLS-00103 (oracle 164→225 regression; an
+        AnonymousBlock whose every statement degraded now returns the
+        merged carrier bare); and `BEGIN a(3); END;` where the proc
+        EXISTS but compiled invalid (its body references absent
+        schemas) is an environmental cascade — PLS-00221 joins the
+        sweep's expected bucket. *Measurement pending relaunch.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
