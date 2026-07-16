@@ -1711,8 +1711,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         `[] LANGUAGE; plpgsql STRICT;` garbage declares). RETURNS now
         parses pg-aware, and array-typed params/returns/declares
         degrade the routine whole off PG (no target equivalent).
-        Tests: TestPgArrayTypedRoutines. *Measurement pending next
-        pg-corpus cycle.*
+        Tests: TestPgArrayTypedRoutines. **Measured at `478ced0`
+        (2026-07-17): −29 across the direction — pg→T-SQL 182→174
+        (94.7%), pg→MySQL 159→147 (95.2%), pg→Oracle 133→124 (96.2%).
+        Standing: pg-source {174/147/124}, mysql-source
+        {177/107/141}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
