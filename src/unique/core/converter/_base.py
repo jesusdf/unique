@@ -233,6 +233,12 @@ PG_TRIGGER_FN_BODIES: contextvars.ContextVar[dict[str, str] | None] = (
     contextvars.ContextVar("pg_trigger_fn_bodies", default=None)
 )
 
+# Procedures whose Oracle conversion appended SYS_REFCURSOR OUT params
+# (name -> how many): later CALLs must pass matching cursor variables.
+REFCURSOR_PROCS: contextvars.ContextVar[dict[str, int] | None] = contextvars.ContextVar(
+    "refcursor_procs", default=None
+)
+
 # Routine names whose CREATE degraded to a carrier in this run: a later
 # CALL to one of them would compile-fail (PLS-00221) — it must degrade too.
 DEGRADED_ROUTINES: contextvars.ContextVar[set[str] | None] = contextvars.ContextVar(
@@ -894,6 +900,7 @@ __all__ = [
     "TEMP_TABLES",
     "harvest_temp_tables",
     "DEGRADED_ROUTINES",
+    "REFCURSOR_PROCS",
     "PG_COMPOSITE_TYPES",
     "PG_TRIGGER_FN_BODIES",
     "PROC_DATE_PARAMS",

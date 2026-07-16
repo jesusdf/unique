@@ -33,6 +33,7 @@ from unique.core.converter import (
     PG_COMPOSITE_TYPES,
     PG_TRIGGER_FN_BODIES,
     PROC_DATE_PARAMS,
+    REFCURSOR_PROCS,
     SOURCE_DIALECT,
     TEMP_TABLES,
     TSQL_ALIAS_TYPES,
@@ -907,6 +908,7 @@ class Transpiler:
                 temp_tables_token = TEMP_TABLES.set(temp_tables)
         source_dialect_token = SOURCE_DIALECT.set(source)
         degraded_routines_token = DEGRADED_ROUTINES.set(set())
+        refcursor_procs_token = REFCURSOR_PROCS.set({})
         pg_trigger_fn_token = None
         pg_composite_token = None
         if source == "postgresql" and target != "postgresql":
@@ -1133,6 +1135,7 @@ class Transpiler:
             if pg_composite_token is not None:
                 PG_COMPOSITE_TYPES.reset(pg_composite_token)
             DEGRADED_ROUTINES.reset(degraded_routines_token)
+            REFCURSOR_PROCS.reset(refcursor_procs_token)
             SOURCE_DIALECT.reset(source_dialect_token)
             if metadata_resolver:
                 metadata_resolver.close()

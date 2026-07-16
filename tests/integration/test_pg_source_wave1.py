@@ -2983,3 +2983,38 @@ class TestRawStrToDateDegrades:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, r.sql
+
+
+class TestRefcursorCallSites:
+    """wave 74: the SYS_REFCURSOR rewrite adds OUT parameters to the
+    procedure's signature, but same-script CALLs kept the old arity —
+    PLS-00306 at compile (19x mysql→oracle). Converted signatures now
+    register per run; later CALLs gain local cursor variables in a
+    nested DECLARE block."""
+
+    def test_call_gains_cursor_arg(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create procedure sel1()\n"
+            "begin\n"
+            "  select * from t1;\n"
+            "end//\n"
+            "DELIMITER ;\n"
+            "call sel1();\n"
+        )
+        out = _t2(src, "mysql", "oracle")
+        assert re.search(r"(?is)DECLARE\s+uq_rc1 SYS_REFCURSOR", out), out
+        assert re.search(r"(?is)sel1\(uq_rc1\);", out), out
+
+    def test_call_with_args_appends_cursor(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create procedure sel2(x int)\n"
+            "begin\n"
+            "  select x + 1;\n"
+            "end//\n"
+            "DELIMITER ;\n"
+            "call sel2(7);\n"
+        )
+        out = _t2(src, "mysql", "oracle")
+        assert re.search(r"(?is)sel2\(7, uq_rc1\);", out), out

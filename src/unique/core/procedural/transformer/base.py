@@ -1780,10 +1780,25 @@ class ProceduralTransformer:
         degraded_uv = self._degrade_mysql_uservar(node)
         if degraded_uv is not None:
             return degraded_uv
-        from unique.core.converter import DEGRADED_ROUTINES
+        from unique.core.converter import DEGRADED_ROUTINES, REFCURSOR_PROCS
 
         registry = DEGRADED_ROUTINES.get() or set()
         callee = node.name.split(".")[-1].strip('`"[]').lower()
+        rc_procs = REFCURSOR_PROCS.get() or {}
+        if self._target == "oracle" and callee in rc_procs:
+            # The converted signature gained SYS_REFCURSOR OUT params;
+            # adapt the call with local cursor variables.
+            n = rc_procs[callee]
+            names = [f"uq_rc{i + 1}" for i in range(n)]
+            decls = "\n".join(f"    {c} SYS_REFCURSOR;" for c in names)
+            args = node.args.strip()
+            all_args = ", ".join(filter(None, [args, ", ".join(names)]))
+            return RawSQL(
+                sql=(
+                    f"DECLARE\n{decls}\nBEGIN\n" f"    {node.name}({all_args});\nEND;"
+                ),
+                reason="refcursor call-site adapter",
+            )
         if callee in registry:
             reason = (
                 f"CALL of routine {node.name} whose definition could not be "

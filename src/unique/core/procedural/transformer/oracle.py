@@ -302,6 +302,11 @@ class OracleTransformer(ProceduralTransformer):
             )
             for c in cursors
         )
+        from unique.core.converter import REFCURSOR_PROCS
+
+        registry = REFCURSOR_PROCS.get()
+        if registry is not None:
+            registry[proc.name.split(".")[-1].strip('`"[]').lower()] = len(cursors)
         return dataclasses.replace(
             proc, parameters=proc.parameters + cursor_params, body=new_body
         )

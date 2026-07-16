@@ -1579,6 +1579,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         (2026-07-16): mysql→T-SQL 188→180 (96.9%), →PG/→Oracle flat.
         Standing: pg-source {261/160/140}, mysql-source
         {180/111/164}.**
+        *Wave 74 (2026-07-16):* the SYS_REFCURSOR rewrite changes the
+        procedure's SIGNATURE, but same-script CALLs kept the old
+        arity — PLS-00306 at compile (19x mysql→oracle). New
+        REFCURSOR_PROCS per-run registry (populated when the rewrite
+        adds params); later CALLs now wrap in a nested DECLARE block
+        with local `uq_rcN SYS_REFCURSOR` variables appended to the
+        argument list. Tests: TestRefcursorCallSites. *Measurement
+        pending next mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
