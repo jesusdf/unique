@@ -279,7 +279,10 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       emit: MySQL gets the real ROW_COUNT(); PG/Oracle top-level get
       a documented neutral (their forms are PL-context only); Oracle's
       `SQL%ROWCOUNT` — which parses as a MODULO — maps at the
-      BinaryOp. Tests: TestSystemGlobalsInDml.*; then the text rewriters can
+      BinaryOp. Tests: TestSystemGlobalsInDml; verification cycle at
+      `63e0d31` identical {163/131/89}. Remaining families:
+      FOUND/fetch cursor idioms, in-expression comments (the IR
+      drops them).*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed
