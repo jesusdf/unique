@@ -332,6 +332,9 @@ def _looks_like_string(node: exp.Expression) -> bool:
     """
     if isinstance(node, exp.Literal):
         return bool(node.args.get("is_string"))
+    if isinstance(node, exp.National):
+        # T-SQL N'…' literals parse as National, not Literal.
+        return True
     if isinstance(node, (exp.DPipe, exp.Concat)):
         return True
     if isinstance(node, exp.Column) and not node.table:

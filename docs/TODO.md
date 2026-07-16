@@ -265,7 +265,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       (shared caveat, not a divergence). Tests:
       TestMysqlProceduralFuncMaps; mysql-corpus cycle at `e933b82`
       stable {166/107/129} (fidelity inside already-counted
-      routines).*; then the text rewriters can
+      routines). Family step 3 (concat classification) landed
+      2026-07-17 (wave 100): T-SQL `N'…'` literals parse as
+      exp.National, which `_looks_like_string` did not recognize —
+      `N'pre' + s` shipped raw `+` to Oracle (invalid on strings).
+      The nested-CONCAT shape on mysql (`CONCAT(CONCAT(a,b),'c')` vs
+      flat) is cosmetic, documented not chased. Tests:
+      TestNationalStringConcat.*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed

@@ -3667,3 +3667,15 @@ class TestMysqlProceduralFuncMaps:
         out = _t2(src, "mysql", "oracle")
         assert "ifnull" not in out.lower(), out
         assert re.search(r"(?i)NVL\s*\(\s*x\s*,\s*0\s*\)", out), out
+
+
+class TestNationalStringConcat:
+    """M3b family migration, concat step (wave 100): T-SQL N'…'
+    literals parse as exp.National, which the string classifier did
+    not recognize — `N'pre' + s` shipped raw `+` to Oracle (invalid
+    on strings; found by the text-vs-IR differential)."""
+
+    def test_national_concat_oracle(self) -> None:
+        out = _t2("SELECT N'pre' + s AS r FROM t;", "tsql", "oracle")
+        assert "+" not in out.split("FROM")[0], out
+        assert re.search(r"(?i)'pre' \|\| s", out), out
