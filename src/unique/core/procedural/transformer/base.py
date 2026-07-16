@@ -3092,6 +3092,26 @@ class ProceduralTransformer:
             return sql
         return self._BASE64_XML_RE.sub(lambda m: template.format(v=m.group(1)), sql)
 
+    #: ``operand::type`` with a simple operand (identifier, @var, literal,
+    #: or number) — parenthesized operands stay untouched.
+    _PG_SIMPLE_CAST_RE = re.compile(
+        r"([@\w']+)\s*:\s*:\s*(\w+(?:\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\))?)"
+    )
+
+    @classmethod
+    def _pg_cast_to_ansi(cls, sql: str) -> str:
+        """Rewrite PG ``expr::type`` casts (simple operands) to ANSI
+        CAST — the raw spelling ships as ``x : : type`` off PG."""
+
+        def sub(segment: str) -> str:
+            prev = None
+            while prev != segment:
+                prev = segment
+                segment = cls._PG_SIMPLE_CAST_RE.sub(r"CAST(\1 AS \2)", segment)
+            return segment
+
+        return cls._map_outside_strings(sql, sub)
+
     @staticmethod
     def _mysql_dq_to_sq(sql: str) -> str:
         """Rewrite MySQL double-quoted STRING literals to single-quoted
@@ -3156,6 +3176,8 @@ class ProceduralTransformer:
         sql = self._fix_base64_xml_idiom(sql)
         if self._source == "mysql" and self._target != "mysql":
             sql = self._mysql_dq_to_sq(sql)
+        if self._source == "postgresql" and self._target != "postgresql":
+            sql = self._pg_cast_to_ansi(sql)
         sql = self._transform_var_in_sql(sql)
         # An Oracle trigger body's assignment value carries ``:NEW.``/``:OLD.``
         # row references; map them to the target's row qualifier (a no-op for the

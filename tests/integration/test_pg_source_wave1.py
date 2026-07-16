@@ -3132,3 +3132,30 @@ class TestFromNeverQualifies:
         out = _t(src, "tsql")
         assert "dbo.FROM" not in out, out
         assert "dbo.from" not in out, out
+
+
+class TestPgCastsInRawTextAndNotInCast:
+    """wave 79: PG `expr::type` casts inside procedural raw text
+    shipped as `@p1 : : text` on T-SQL (65x, the biggest remaining
+    pg→tsql class); simple operands now rewrite to CAST(x AS type).
+    And `CAST(NOT b AS INT)` is invalid on T-SQL (NOT is not a value
+    there; 12x) — the operand wraps tri-state."""
+
+    def test_double_colon_cast_in_body(self) -> None:
+        src = (
+            "create function cf1(p1 text) returns text as $$\n"
+            "begin\n"
+            "  return p1::text;\n"
+            "end$$ language plpgsql;"
+        )
+        out = _t(src, "tsql")
+        assert "::" not in out, out
+        assert ": :" not in out, out
+        assert re.search(r"(?i)CAST\(\s*@p1 AS text\s*\)", out), out
+
+    def test_not_inside_cast_tsql(self) -> None:
+        out = _t("select min(cast(not b2 as int)) from bt;", "tsql")
+        assert not re.search(r"(?i)CAST\(NOT b2", out), out
+        assert re.search(
+            r"(?i)CASE WHEN b2 = 0 THEN 1 WHEN b2 <> 0 THEN 0 END", out
+        ), out

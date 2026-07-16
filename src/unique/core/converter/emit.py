@@ -2131,7 +2131,16 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             lit = _oracle_date_literal(node.expression.value.strip())
             if lit is not None:
                 return lit
-        inner = _emit_expression(node.expression, dialect)
+        if (
+            dialect == "tsql"
+            and isinstance(node.expression, UnaryOp)
+            and node.expression.operator == UnaryOperator.NOT
+        ):
+            # NOT is not a value expression on T-SQL — wrap tri-state.
+            operand = _emit_expression(node.expression.operand, dialect)
+            inner = f"CASE WHEN {operand} = 0 THEN 1 " f"WHEN {operand} <> 0 THEN 0 END"
+        else:
+            inner = _emit_expression(node.expression, dialect)
         # MySQL CAST only accepts a fixed set of target types (SIGNED, not INT;
         # no BOOLEAN); T-SQL has no BOOLEAN (it is BIT).
         dtype = node.target_type.name
