@@ -11,6 +11,7 @@ the AST. Each pass handles one category of normalization.
 from __future__ import annotations
 
 import logging
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
 
@@ -583,6 +584,10 @@ class Transformer:
             result = [self._gate_mysql_full_join(node) for node in result]
         if self.context.target in ("mysql", "oracle"):
             result = [self._gate_column_alias_ref(node) for node in result]
+        if self.context.target != "mysql":
+            result = [self._gate_invalid_date_literal(node) for node in result]
+        if self.context.target == "tsql":
+            result = [self._gate_tsql_unknown_sysvar(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_temp_view(node) for node in result]
             result = [self._gate_tsql_natural_join(node) for node in result]
@@ -666,6 +671,114 @@ class Transformer:
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _gate_invalid_date_literal(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement CASTing an invalid calendar date — WHOLE.
+
+        MySQL returns NULL (with a warning) for CAST('0000-00-00' AS
+        DATE) and impossible dates; every other engine errors. There is
+        no faithful spelling — NULL substitution would hide the
+        warning."""
+        found = self._find_invalid_date_cast(node)
+        if found is None:
+            return node
+        reason = (
+            f"CAST of invalid calendar date {found} returns NULL on MySQL "
+            f"and errors on {self.context.target}; statement preserved as "
+            "a comment"
+        )
+        self.context.warn(reason, "invalid_date_literal")
+        self.context.mark_unsupported("invalid calendar date CAST")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _find_invalid_date_cast(self, value: object) -> str | None:
+        import datetime
+
+        from unique.core.ast_nodes import CastExpression, Literal
+
+        if isinstance(value, CastExpression) and value.target_type.name.upper() in (
+            "DATE",
+            "DATETIME",
+            "TIMESTAMP",
+        ):
+            inner = value.expression
+            if isinstance(inner, Literal) and inner.dtype == "string":
+                text = str(inner.value).strip()
+                m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", text)
+                if m is None:
+                    return f"'{text}'"
+                try:
+                    datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+                except ValueError:
+                    return f"'{text}'"
+        if isinstance(value, ASTNode):
+            for f in fields(value):
+                found = self._find_invalid_date_cast(getattr(value, f.name))
+                if found is not None:
+                    return found
+        if isinstance(value, tuple):
+            for item in value:
+                found = self._find_invalid_date_cast(item)
+                if found is not None:
+                    return found
+        return None
+
+    #: T-SQL's own global variables — anything else in @@ form is a MySQL
+    #: system variable with no T-SQL meaning.
+    _TSQL_GLOBALS = frozenset(
+        {
+            "@@VERSION",
+            "@@IDENTITY",
+            "@@ROWCOUNT",
+            "@@ERROR",
+            "@@TRANCOUNT",
+            "@@SPID",
+            "@@SERVERNAME",
+            "@@FETCH_STATUS",
+            "@@NESTLEVEL",
+            "@@DATEFIRST",
+            "@@LANGUAGE",
+        }
+    )
+
+    def _gate_tsql_unknown_sysvar(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement referencing a MySQL @@system variable
+        T-SQL does not know — WHOLE (error 137 live)."""
+        found = self._find_unknown_sysvar(node)
+        if found is None:
+            return node
+        reason = (
+            f"MySQL system variable {found} has no T-SQL equivalent; "
+            "statement preserved as a comment"
+        )
+        self.context.warn(reason, "mysql_sysvar")
+        self.context.mark_unsupported(f"{found} (MySQL system variable)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    _SYSVAR_RE = re.compile(r"@@\w+(?:\.\w+)?")
+
+    def _find_unknown_sysvar(self, value: object) -> str | None:
+        if isinstance(value, RawSQL):
+            for m in self._SYSVAR_RE.finditer(value.sql):
+                name = m.group(0)
+                if name.upper() not in self._TSQL_GLOBALS:
+                    return name
+            return None
+        if isinstance(value, ASTNode):
+            for f in fields(value):
+                found = self._find_unknown_sysvar(getattr(value, f.name))
+                if found is not None:
+                    return found
+        if isinstance(value, tuple):
+            for item in value:
+                found = self._find_unknown_sysvar(item)
+                if found is not None:
+                    return found
+        return None
 
     def _gate_tsql_nth_value(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using NTH_VALUE — WHOLE, on T-SQL.

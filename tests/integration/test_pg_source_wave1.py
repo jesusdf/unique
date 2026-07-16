@@ -2337,3 +2337,65 @@ class TestParenthesizedJoinRelations:
             "postgresql",
         )
         assert re.search(r"(?is)FROM t1\s+LEFT JOIN t2 ON t1\.a = t2\.a", out), out
+
+
+class TestMysqlEdgeValueClasses:
+    """wave 58: three mysql→tsql residue classes — CAST of an invalid
+    calendar date literal (MySQL returns NULL with a warning;
+    '0000-00-00' and friends are hard errors elsewhere — 24x)
+    whole-degrades off MySQL; interval arithmetic lowers to DATEADD
+    on T-SQL (6x); a MySQL @@sysvar T-SQL doesn't know degrades whole
+    (12x error 137)."""
+
+    def test_invalid_date_cast_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "select cast('0000-00-00' as date);", source="mysql", target="tsql"
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_invalid_february_date_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "select cast('2000-02-31' as date);",
+            source="mysql",
+            target="postgresql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_valid_date_cast_still_emits(self) -> None:
+        out = _t2("select cast('2000-02-29' as date);", "mysql", "tsql")
+        assert re.search(r"(?i)CAST\('2000-02-29' AS DATE\)", out), out
+
+    def test_interval_add_becomes_dateadd(self) -> None:
+        out = _t2("select now() + interval 1 day;", "mysql", "tsql")
+        assert re.search(r"(?i)DATEADD\(DAY, 1, GETDATE\(\)\)", out), out
+
+    def test_interval_sub_becomes_dateadd(self) -> None:
+        out = _t2(
+            "select a from t1 where a < b - interval '2' month;",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)DATEADD\(MONTH, -2, b\)", out), out
+
+    def test_unknown_sysvar_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "insert into t1 values (@@connect_timeout);",
+            source="mysql",
+            target="tsql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql

@@ -2731,6 +2731,36 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
     left = _emit_operand(node.left, node.operator, dialect)
     right = _emit_operand(node.right, node.operator, dialect, right=True)
 
+    # Interval arithmetic: T-SQL has no INTERVAL literal — lower
+    # ``expr ± INTERVAL 'n' UNIT`` to DATEADD(UNIT, ±n, expr).
+    if dialect == "tsql" and node.operator in (
+        BinaryOperator.ADD,
+        BinaryOperator.SUB,
+    ):
+        interval_side = None
+        other_side = None
+        # For SUB only ``expr - INTERVAL`` is date math (INTERVAL - expr
+        # is not); ADD is commutative.
+        candidates = [(node.right, node.left)]
+        if node.operator == BinaryOperator.ADD:
+            candidates.append((node.left, node.right))
+        for cand, other in candidates:
+            if isinstance(cand, RawSQL):
+                m = re.fullmatch(
+                    r"(?is)INTERVAL\s+'?(\d+)'?\s+"
+                    r"(YEAR|QUARTER|MONTH|WEEK|DAY|HOUR|MINUTE|SECOND)S?",
+                    cand.sql.strip(),
+                )
+                if m:
+                    interval_side, other_side = m, other
+                    break
+        if interval_side is not None and other_side is not None:
+            n = interval_side.group(1)
+            unit = interval_side.group(2).upper()
+            amount = n if node.operator == BinaryOperator.ADD else f"-{n}"
+            other_sql = _emit_expression(other_side, dialect)
+            return f"DATEADD({unit}, {amount}, {other_sql})"
+
     # Null-safe comparison: PG spells IS [NOT] DISTINCT FROM, MySQL <=>;
     # T-SQL/Oracle use the version-safe EXISTS-INTERSECT form (INTERSECT
     # compares rows with null-safe semantics on every engine).

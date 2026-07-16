@@ -1368,7 +1368,18 @@ fix needs an **anonymized** regression fixture (never a private name).
         arg hoist into the select (parens around joins are
         semantically transparent; comma-join order preserved); only
         deeper nesting stays passthrough. Tests:
-        TestParenthesizedJoinRelations. *Measurement pending next
+        TestParenthesizedJoinRelations. **Measured at `6c15672`
+        (2026-07-16): mysql→T-SQL 347→334 (94.5%), mysql→PG 156→153
+        (97.5%), mysql→Oracle 246 flat. Standing: pg-source
+        {266/180/140}, mysql-source {334/153/246}.**
+        *Wave 58 (2026-07-16):* three mysql edge-value classes —
+        CAST of an invalid calendar date ('0000-00-00', '2000-02-31',
+        'YYYY-MM-DD'…) whole-degrades off MySQL (MySQL returns NULL +
+        warning, everyone else errors; 24x), interval arithmetic
+        `expr ± INTERVAL 'n' UNIT` lowers to `DATEADD(UNIT, ±n, expr)`
+        on T-SQL (6x), and a MySQL `@@sysvar` T-SQL doesn't know
+        (whitelist of T-SQL globals) whole-degrades (12x error 137).
+        Tests: TestMysqlEdgeValueClasses. *Measurement pending next
         mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
