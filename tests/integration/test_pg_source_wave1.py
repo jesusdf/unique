@@ -5297,3 +5297,28 @@ class TestWave139DecodeAndSetRole:
         out = _t("set role ru;", "mysql")
         assert re.search(r"(?i)set role ru", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestWave140GroupConcatAndDeleteAlias:
+    """wave 140: string_agg(x, NULL) shipped a nonexistent GROUP_CONCAT
+    on T-SQL (NULL separator = concatenate bare) and an EXPRESSION
+    separator fell through the same hole; and T-SQL spells an aliased
+    delete ``DELETE dt FROM t dt`` (``DELETE FROM t dt`` is an error)."""
+
+    def test_string_agg_null_separator_tsql(self) -> None:
+        out = _t("select string_agg(v, null) from t;", "tsql")
+        assert "GROUP_CONCAT" not in out.upper(), out
+        assert re.search(r"(?i)STRING_AGG\(v, ''\)", out), out
+
+    def test_string_agg_expr_separator_tsql(self) -> None:
+        out = _t("select string_agg(v, sep_col) from t;", "tsql")
+        assert "GROUP_CONCAT" not in out.upper(), out
+        assert re.search(r"(?i)STRING_AGG\(v, sep_col\)", out), out
+
+    def test_delete_alias_tsql(self) -> None:
+        out = _t("delete from delete_test dt where dt.a > 75;", "tsql")
+        assert re.search(r"(?i)DELETE dt FROM delete_test dt", out), out
+
+    def test_delete_alias_pg_unchanged(self) -> None:
+        out = _t("delete from delete_test dt where dt.a > 75;", "postgresql")
+        assert re.search(r"(?i)DELETE FROM delete_test dt", out), out

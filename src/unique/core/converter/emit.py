@@ -1731,7 +1731,12 @@ def _emit_update_oracle_subquery(
 def _emit_delete(node: DeleteStatement, dialect: str) -> str:
     """Emit a DELETE statement."""
     table = _emit_table_ref(node.table, dialect)
-    result = f"DELETE FROM {table}"
+    if dialect == "tsql" and node.table.alias:
+        # T-SQL spells an aliased delete ``DELETE alias FROM t alias``
+        # (``DELETE FROM t alias`` is a syntax error — wave 140).
+        result = f"DELETE {node.table.alias} FROM {table}"
+    else:
+        result = f"DELETE FROM {table}"
 
     if node.where:
         result += f"\nWHERE {_emit_expression(node.where, dialect)}"
@@ -2590,33 +2595,50 @@ def _emit_group_concat(node: FunctionCall, dialect: str) -> str | None:
         expr_sql = _emit_expression(first, dialect)
 
     sep: str | None = None
+    dyn_sep: str | None = None
     if len(node.args) > 1:
         sep_node = node.args[1]
         if isinstance(sep_node, Literal) and isinstance(sep_node.value, str):
             sep = sep_node.value
+        elif isinstance(sep_node, Literal) and sep_node.value is None:
+            # PG string_agg(x, NULL): concatenate without a separator —
+            # the generic fallthrough shipped a nonexistent GROUP_CONCAT
+            # on T-SQL (wave 140).
+            sep = ""
         else:
-            return None  # dynamic separator: fall through to generic emission
+            # Expression separator: keep it as the target's own argument
+            # (T-SQL 2022+/PG/Oracle accept an expression; the old
+            # fallthrough shipped GROUP_CONCAT raw).
+            dyn_sep = _emit_expression(sep_node, dialect)
     distinct = "DISTINCT " if node.distinct else ""
 
     def quoted(s: str) -> str:
         return "'" + s.replace("'", "''") + "'"
 
+    def sep_sql(default: str) -> str:
+        if dyn_sep is not None:
+            return dyn_sep
+        return quoted(sep if sep is not None else default)
+
     if dialect == "mysql":
         order = f" ORDER BY {order_sql}" if order_sql else ""
-        separator = f" SEPARATOR {quoted(sep)}" if sep is not None else ""
+        if dyn_sep is not None:
+            separator = f" SEPARATOR {dyn_sep}"
+        else:
+            separator = f" SEPARATOR {quoted(sep)}" if sep is not None else ""
         return f"GROUP_CONCAT({distinct}{expr_sql}{order}{separator})"
     if dialect == "postgresql":
         order = f" ORDER BY {order_sql}" if order_sql else ""
-        return f"STRING_AGG({distinct}{expr_sql}, {quoted(sep or ',')}{order})"
+        return f"STRING_AGG({distinct}{expr_sql}, {sep_sql(',')}{order})"
     if dialect == "tsql":
         within = f" WITHIN GROUP (ORDER BY {order_sql})" if order_sql else ""
-        return f"STRING_AGG({expr_sql}, {quoted(sep or ',')}){within}"
+        return f"STRING_AGG({expr_sql}, {sep_sql(',')}){within}"
     if dialect == "oracle":
         # LISTAGG requires WITHIN GROUP; default to ordering by the
         # aggregated expression itself when the source specified none.
         order = order_sql or expr_sql
         return (
-            f"LISTAGG({distinct}{expr_sql}, {quoted(sep or ',')}) "
+            f"LISTAGG({distinct}{expr_sql}, {sep_sql(',')}) "
             f"WITHIN GROUP (ORDER BY {order})"
         )
     return None

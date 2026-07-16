@@ -487,7 +487,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          circuits it). Measured: pg→tsql **92 → 87** (97.3%),
          pg→oracle **59 → 56** (98.2%), pg→mysql **109 → 97**
          (96.7%), discovery HOLDS 0. Tests:
-         TestWave139DecodeAndSetRole (5).**
+         TestWave139DecodeAndSetRole (5).* Wave 140 (2026-07-16):
+         `string_agg(x, NULL)` shipped a nonexistent GROUP_CONCAT on
+         T-SQL — a NULL separator concatenates bare (`''`) and an
+         EXPRESSION separator now stays the target's own argument
+         (both fell through the literal-only branch to generic
+         emission); and T-SQL's aliased delete is `DELETE dt FROM t
+         dt` (`DELETE FROM t dt` is a syntax error). Measured:
+         pg→tsql **87 → 83** (97.4%), discovery HOLDS 0. Tests:
+         TestWave140GroupConcatAndDeleteAlias (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
