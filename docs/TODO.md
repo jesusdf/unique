@@ -1469,8 +1469,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         (mysql, postgresql) entries (`RETURN tinyint` shipped raw as
         PLS errors; DATETIME→TIMESTAMP to agree with the emit map).
         The scalar-subquery ORDER BY strip extends to Oracle (7x
-        ORA-00907). Tests: TestUnsignedParamsOracleTypes.
-        *Measurement pending next mysql-corpus cycle.*
+        ORA-00907). Tests: TestUnsignedParamsOracleTypes. **Measured
+        at `def5cb3` (2026-07-16): −23 — mysql→T-SQL 213→210 (96.5%),
+        mysql→PG 121→113 (98.1%), mysql→Oracle 176→164 (97.3%).
+        Standing: pg-source {265/163/142}, mysql-source
+        {210/113/164}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
