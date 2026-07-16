@@ -1517,7 +1517,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         pg→tsql raise_test). The condition name now folds into a
         literal message with USING items appended as text (the format
         path's existing convention). Tests: TestRaiseConditionName.
-        *Measurement pending next pg-corpus cycle.*
+        **Measured at `7693a9f` (2026-07-16): pg→T-SQL 265→262
+        (92.0%), pg→MySQL 163→160 (94.8%), pg→Oracle 142→140 (95.7%).
+        Standing: pg-source {262/160/140}, mysql-source
+        {209/111/160}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
