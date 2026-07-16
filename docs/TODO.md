@@ -225,9 +225,22 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       inspects the value NODE first (`_needs_sql_context`: subquery or
       CAST anywhere in the tree; RawSQL fragments keep the spelling
       regex). Tests: TestAssignmentViaSelectNodeAware; verification
-      cycle at `129cc6b` identical {163/131/89}. Remaining 4b:
-      the DROP-guard→IF matcher and the declare-section hoisting's
-      initializer sniffing.*; then the text rewriters can
+      cycle at `129cc6b` identical {163/131/89}. Remaining 4b —
+      *analysis 2026-07-17: the DECLARE-init half is DONE BY
+      CONSTRUCTION after 4a (the hoisting already builds an
+      AssignmentStatement from the initializer NODE, which then takes
+      the node-aware SELECT-INTO path — verified live); the
+      batch-level T-SQL guard recognizer (`_TSQL_GUARD_HEAD_RE`) is
+      PRE-PARSE BY DESIGN (audited M2/P3 single-recognizer decision,
+      runs on batch text before any parsing — unaffected by
+      IR-emitting scalar expressions). The remaining unknown
+      consumers of transformed-expression spellings are best
+      discovered by re-attempting M3b as a controlled experiment
+      (IR-first `_transform_raw_sql` behind the full suite) in a
+      fresh session — the original attempt's 18 failures are the map,
+      and increments 1–4a have since cleared var-types, DATEADD/
+      DATEDIFF sharing, the identity marker and the SELECT-INTO
+      decision.*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed
