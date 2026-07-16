@@ -7,67 +7,36 @@
 
 Unique translates SQL scripts between **SQL Server (T-SQL)**, **Oracle**,
 **PostgreSQL**, and **MySQL** — including stored procedures, functions, and
-triggers, not just standalone queries. **SQLite** is supported as an
-**import-only source** (SQLite → the four server engines): it has no procedural
-language, so it can be a migration source but never a target.
+triggers, not just standalone queries. **SQLite** is an import-only source
+(it has no procedural language, so it can never be a target).
 
-## Built on sqlglot — and what Unique adds
+## What it adds over sqlglot
 
-Unique uses [sqlglot](https://github.com/tobymao/sqlglot) for what sqlglot is
-excellent at: parsing and re-emitting individual SQL **statements** across
-dialects. sqlglot is a load-bearing dependency, pinned to an exact version
-(see [docs/sqlglot-dependency.md](docs/sqlglot-dependency.md)).
+[sqlglot](https://github.com/tobymao/sqlglot) (a load-bearing, exact-pinned
+dependency — see [docs/sqlglot-dependency.md](docs/sqlglot-dependency.md))
+translates individual statements. Unique adds the stored-routine shell that
+is outside sqlglot's statement model:
 
-sqlglot on its own translates *statements*. It does not translate a real
-**stored-routine script** — the procedural shell around the SQL (parameters,
-`DECLARE`, `IF`/`WHILE`/loops, cursors, `TRY/CATCH`, error handling,
-transactions) is dialect-specific and outside sqlglot's statement model. Unique
-is the layer that handles that shell and the cross-engine semantics sqlglot
-doesn't, delegating the embedded DML/DQL to sqlglot. Concretely, Unique adds:
-
-- **A procedural engine.** A real lexer/parser/transformer/emitter for the
-  routine body — `CREATE PROCEDURE/FUNCTION/TRIGGER`, parameter directions
-  (`IN/OUT/INOUT`), `DECLARE`, assignment, `IF`/`WHILE`/`LOOP`/`FOR`, cursors,
-  `RETURN`, `RAISE`/`THROW`, `TRY/CATCH`, transactions — with the embedded DML
-  routed through sqlglot. sqlglot cannot parse `CREATE PROCEDURE ... BEGIN ...
-  END` as a translatable unit; Unique can.
-- **Cross-engine construct rewrites that change shape, not just syntax.**
-  Examples: T-SQL `TRY/CATCH` → MySQL `DECLARE ... HANDLER` (vs. Oracle/PG
-  `EXCEPTION`); table variables (`DECLARE @t TABLE`) → `CREATE TEMPORARY
-  TABLE`; assignment-select (`SELECT @v = expr`) → `SELECT ... INTO`;
-  `STRING_SPLIT` → MySQL `JSON_TABLE`; `OUTPUT ... INTO` handled per engine
-  (invalid `RETURNING` is never emitted for MySQL); PostgreSQL triggers split
-  into a trigger function plus `CREATE TRIGGER`.
-- **Lossy conversions are documented and reversible.** When a type or construct
-  has no faithful target equivalent, Unique emits a permissive carrier plus a
-  `/* UNIQUE: <original> */` comment (e.g. `SQL_VARIANT` → `TEXT /* UNIQUE:
-  SQL_VARIANT */`, unresolved `%TYPE` references, dropped `SET NOCOUNT ON`), so
-  nothing is silently lost and a round-trip can restore the original.
-- **Original comments are preserved**, with line comments normalized to ANSI
-  spacing — they are not discarded the way a statement-only translator would.
-- **Functional-equivalence guards.** A structural fingerprint (DML verb counts,
-  fields per statement, predicate counts, control-flow, MERGE/JOIN/GROUP BY,
-  …) is compared before and after transpilation to catch silent semantic
-  drift, not just syntax errors.
-- **Whole-script orchestration**: batch/`GO` splitting, source-dialect
-  auto-detection, and validation of the result against the *real* target
-  engines in CI (not just our own assumptions).
-
-## Features
-
-- **4 target dialects**: SQL Server, Oracle, PostgreSQL, MySQL (2012+ coverage),
-  plus **SQLite as an import-only source**
-- **AST + intermediate representation**: Parse → Transform → Emit
-- **Plugin architecture**: add new dialects via Python entry points
-- **CLI, REST API, Python library, and web UI**
-- **Source-syntax validation**: a malformed script is caught and located (by line)
-  before transpiling — the API/CLI refuse it (override with `ignore_syntax_errors`)
-  and the web UI disables Translate while it is invalid
-- **Anonymized procedural fixtures** for all four engines, validated live in CI
-- **Measured, per-direction maturity**: direction support is stated as a
-  validity percentage measured by executing transpiled real-world scripts on
-  live engines — see [`docs/STATUS.md`](docs/STATUS.md) for the current
-  numbers per direction
+- **A procedural engine** — lexer/parser/transformer/emitter for
+  `CREATE PROCEDURE/FUNCTION/TRIGGER` bodies: parameter directions, `DECLARE`,
+  `IF`/`WHILE`/`LOOP`/`FOR`, cursors, `RETURN`, `RAISE`/`THROW`, `TRY/CATCH`,
+  transactions — with the embedded DML routed through sqlglot.
+- **Shape-changing rewrites**, not just syntax: T-SQL `TRY/CATCH` → MySQL
+  `DECLARE ... HANDLER`; table variables → temporary tables;
+  `SELECT @v = expr` → `SELECT ... INTO`; `STRING_SPLIT` → MySQL
+  `JSON_TABLE`; PostgreSQL triggers split into trigger function +
+  `CREATE TRIGGER`.
+- **No silent loss** — a construct with no faithful equivalent ships as a
+  permissive carrier plus a `/* UNIQUE: <original> */` comment and a warning,
+  so a round-trip can restore the original. Source comments are preserved.
+- **Whole-script orchestration** — batch/`GO` splitting, source-dialect
+  auto-detection, source-syntax validation (errors located by line before
+  transpiling), and a structural fingerprint compared before/after to catch
+  silent semantic drift. Output is validated against the real target engines
+  in CI.
+- **Measured maturity** — per-direction support is stated as a validity
+  percentage measured by running transpiled real-world scripts on live
+  engines; current numbers in [docs/STATUS.md](docs/STATUS.md).
 
 ## Quick start
 
@@ -85,18 +54,15 @@ print(transpile("SELECT TOP 10 * FROM users", source="tsql", target="postgresql"
 # SELECT * FROM users LIMIT 10
 ```
 
-Or run the API + web UI with Docker:
+Or run the REST API + web UI with Docker (image published on release tags):
 
 ```bash
 docker run --rm -p 8000:8000 jesusdf/unique:latest   # open http://localhost:8000/
 ```
 
-(The `jesusdf/unique:latest` image is published only on release tags
-(`v*`), so it tracks the latest release, not every commit.)
-
-See **[Installation & Deployment](docs/06-installation.md)** and
-**[Interfaces](docs/07-interfaces.md)** for the full CLI, Python, REST, web UI,
-and Docker details.
+Full CLI, Python, REST, web UI, and Docker details:
+[Installation & Deployment](docs/06-installation.md) and
+[Interfaces](docs/07-interfaces.md).
 
 ## Documentation
 
@@ -111,13 +77,9 @@ and Docker details.
 
 ## Project language
 
-**This project is English-only by design** — code, comments, documentation,
-commit messages, and all program output (warnings, `-- UNIQUE:` carriers, error
-messages) are written in English, and there are no plans to translate it. This
-is deliberate: transpiler diagnostics quote or mirror the engines' own error
-text, which is English, so keeping everything in one language means an error
-message can be searched verbatim on the web without fighting different
-localizations of the same error.
+English-only by design — code, comments, docs, and all program output.
+Transpiler diagnostics quote or mirror the engines' own error text, which is
+English, so every message stays searchable verbatim.
 
 ## License
 
