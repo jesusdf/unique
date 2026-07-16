@@ -548,6 +548,9 @@ class DeclareStatement(ASTNode):
     #: without constants emit the plain (mutable) declaration — a safe
     #: relaxation for valid programs (documented in 03-unsupported).
     constant: bool = False
+    #: ``name type NOT NULL [:= x]`` (PG/Oracle). Same relaxation contract
+    #: as ``constant`` on targets without the modifier.
+    not_null: bool = False
 
 
 @dataclass(frozen=True)
@@ -716,6 +719,9 @@ class ParameterDefinition(ASTNode):
     data_type: DataType
     direction: str = "IN"
     default: ASTNode | None = None
+    #: PG ``VARIADIC name type[]`` (parsed as the NAME before wave 131).
+    #: Only the PG emitter renders it; off-PG the array type degrades.
+    variadic: bool = False
 
 
 @dataclass(frozen=True)

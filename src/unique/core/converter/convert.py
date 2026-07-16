@@ -107,9 +107,10 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
         ]
     if dialect == "postgresql":
         # PG's ``TABLE name`` shorthand IS ``SELECT * FROM name``; sqlglot
-        # mis-parses it into an aliased identifier (silent mangle).
+        # mis-parses it into an aliased identifier (silent mangle). Leading
+        # line comments are trivia and must not defeat the match (wave 131).
         sql = re.sub(
-            r'(?is)^(\s*)TABLE\s+([\w."]+)(\s*;?\s*)$',
+            r'(?is)^((?:\s*--[^\n]*\n)*\s*)TABLE\s+([\w."]+)(\s*;?\s*)$',
             r"\1SELECT * FROM \2\3",
             sql,
         )
@@ -762,6 +763,13 @@ def _convert_union(expr: exp.SetOperation) -> SelectStatement:
         # dropped.
         if isinstance(e, exp.Subquery):
             inner = cast(exp.Expression, e.unnest())
+            if isinstance(inner, exp.Values):
+                # A VALUES arm — ``(VALUES ('a'), ('b')) UNION ALL …`` —
+                # mangled into a one-row SELECT; reuse the relation
+                # converter's UNION-chain lowering (wave 131).
+                lowered = _convert_table_or_subquery(inner)
+                if isinstance(lowered, SubqueryExpression):
+                    return lowered.query
             if isinstance(inner, exp.SetOperation):
                 # A parenthesized arm that is ITSELF a chain — ``A UNION
                 # (B UNION ALL C)`` — must keep its association (UNION

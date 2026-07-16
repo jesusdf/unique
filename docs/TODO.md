@@ -390,7 +390,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          `#option` compiler lines go whole-unit (valid PG, shredded
          before). Measured: discovery **31 → 20** (WITH/#/0/UNION
          classes cleared). Tests: TestSetArmWithCte, TestWave130Batch,
-         strengthened TestNestedChainMidOrderStrip.**
+         strengthened TestNestedChainMidOrderStrip.
+         Wave 131 (2026-07-16), five shapes: VARIADIC is an ARGMODE
+         (parsed as the param NAME, every `$1` body alias became
+         `variadic`); `NOT NULL` declare modifier (the wave-115
+         family, PG/Oracle native + tsql/mysql relaxation);
+         a VALUES set-op arm (`(VALUES …) UNION ALL …`) now lowers
+         via the relation converter; `TABLE name` with a LEADING
+         COMMENT escaped the wave-104 pre-normalization (comments are
+         trivia — regex now tolerates them); mapped BIT(n) shipped
+         `BOOLEAN(4)` (BOOLEAN never takes params). Measured:
+         **20 → 13**. Tests: TestWave131Batch (5).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

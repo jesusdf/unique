@@ -1858,6 +1858,10 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 ):
                     # Zero-length character columns are MySQL-only.
                     params = (1,)
+                if dtype.upper() in ("BOOLEAN", "BOOL"):
+                    # BOOLEAN never takes parameters (a mapped BIT(n)
+                    # carried its width along — wave 131).
+                    params = ()
                 if params and "(" not in dtype and not skip_params:
                     dtype += f"({', '.join(str(p) for p in params)})"
                 # A character type with no length is invalid DDL in most engines

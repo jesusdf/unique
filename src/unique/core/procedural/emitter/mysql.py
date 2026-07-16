@@ -289,6 +289,10 @@ class MySqlEmitter(ProceduralEmitter):
     def _declare_prefix(self) -> str:
         return "DECLARE "
 
+    def _not_null_spelling(self) -> str:
+        # No NOT NULL variable modifier here; safe relaxation.
+        return ""
+
     def _constant_spelling(self) -> str:
         # MySQL has no constant variables; the mutable declaration is a
         # safe relaxation (docs/03-unsupported.md).

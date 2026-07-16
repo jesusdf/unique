@@ -1007,6 +1007,7 @@ class ParserBase:
         name = ""
         data_type: DataType | None = None
         default: ASTNode | None = None
+        variadic = False
 
         tok = self._current()
 
@@ -1052,6 +1053,13 @@ class ParserBase:
             elif self._match_keyword("IN"):
                 direction = "IN"
 
+            # VARIADIC is an argmode, not the parameter's NAME — parsed
+            # as one, every $n alias in the body became "variadic"
+            # (wave 131).
+            if self._current().upper_value == "VARIADIC":
+                self._advance()
+                variadic = True
+
             tok = self._current()
             nxt = self._peek(1)
             type_only = tok.upper_value in self._PG_TYPE_KEYWORDS or (
@@ -1094,7 +1102,11 @@ class ParserBase:
             data_type = DataType(name="UNKNOWN")
 
         return ParameterDefinition(
-            name=name, data_type=data_type, direction=direction, default=default
+            name=name,
+            data_type=data_type,
+            direction=direction,
+            default=default,
+            variadic=variadic,
         )
 
     _CARRIER_TYPE_RE = re.compile(r"(?is)^/\*\s*UNIQUE:\s*(?!.*--)(.+?)\s*\*/$")

@@ -282,6 +282,14 @@ class PlsqlStatementsMixin(ParserBase):
             else self._parse_data_type_or_reference()
         )
 
+        # NOT NULL modifier (PG/Oracle). Unconsumed it split the
+        # declaration (``i integer;`` + ``NOT NULL := 0;`` — wave 131).
+        not_null = False
+        if self._current().is_keyword("NOT") and self._peek(1).upper_value == "NULL":
+            self._advance()
+            self._advance()
+            not_null = True
+
         default: ASTNode | None = None
         if (
             self._match_type(TokenType.ASSIGN)
@@ -297,7 +305,11 @@ class PlsqlStatementsMixin(ParserBase):
 
         self._match_type(TokenType.SEMICOLON)
         return DeclareStatement(
-            name=name, data_type=data_type, default=default, constant=constant
+            name=name,
+            data_type=data_type,
+            default=default,
+            constant=constant,
+            not_null=not_null,
         )
 
     def _parse_plsql_statement(self) -> ASTNode | None:

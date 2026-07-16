@@ -412,7 +412,8 @@ class ProceduralEmitter:
         if self._keep_default(p, idx, params) and p.default:
             default_str = f" DEFAULT {self._emit_node(p.default)}"
         direction_str = f"{p.direction} " if p.direction != "IN" else ""
-        return f"{p.name} {direction_str}{dt}{default_str}"
+        variadic_str = "VARIADIC " if p.variadic else ""
+        return f"{variadic_str}{p.name} {direction_str}{dt}{default_str}".strip()
 
     # ---------------------------------------------------------------
     # Procedure / Function / Trigger
@@ -1032,13 +1033,19 @@ class ProceduralEmitter:
             val = self._emit_node(node.default)
             default_str = f" {self._declare_default_op()} {val}"
         const = self._constant_spelling() if node.constant else ""
-        return f"{self._declare_prefix()}{node.name} {const}{dt}{default_str};"
+        nn = self._not_null_spelling() if node.not_null else ""
+        return f"{self._declare_prefix()}{node.name} {const}{dt}{nn}{default_str};"
 
     def _constant_spelling(self) -> str:
         """``CONSTANT `` on the PL/SQL-family targets (Oracle/PG). T-SQL and
         MySQL have no constant variables and override with "" — the plain
         mutable declaration is a safe relaxation for valid programs."""
         return "CONSTANT "
+
+    def _not_null_spelling(self) -> str:
+        """`` NOT NULL`` on PG/Oracle declares; T-SQL/MySQL have no such
+        modifier and override with "" (same relaxation as CONSTANT)."""
+        return " NOT NULL"
 
     def _emit_foreach(self, node: ForeachStatement) -> str:
         """plpgsql FOREACH … IN ARRAY — PG-only (its emitter overrides).

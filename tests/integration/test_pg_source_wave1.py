@@ -4906,3 +4906,56 @@ class TestWave130Batch:
             r"(?is)UNION\s+SELECT \*\s+FROM \(SELECT 2\s+UNION ALL\s+SELECT 2\)", out
         ), out
         assert out.rstrip().endswith("ORDER BY 1 ASC;"), out
+
+
+class TestWave131Batch:
+    """wave 131, five shapes from the individual-gap dump: VARIADIC is an
+    argmode not a parameter NAME (every $1 alias became 'variadic');
+    ``i integer NOT NULL := 0`` declares split; a VALUES set-op arm
+    mangled to a one-row SELECT; ``TABLE name`` with a leading comment
+    escaped its pre-normalization (comments are trivia); BOOLEAN carried
+    a width."""
+
+    def test_variadic_param(self) -> None:
+        src = (
+            "create or replace function vari(variadic int[]) returns void as $$\n"
+            "begin\n"
+            "  for i in array_lower($1,1)..array_upper($1,1) loop\n"
+            "    raise notice '%', $1[i];\n"
+            "  end loop;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)VARIADIC p1 int\[\]", out), out
+        assert re.search(r"(?i)array_lower\s*\(\s*p1", out), out
+        assert "( variadic" not in out.lower(), out
+
+    def test_not_null_declare_pg(self) -> None:
+        src = (
+            "create function f() returns integer as $$\n"
+            "declare i integer NOT NULL := 0;\n"
+            "begin return i; end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)i integer NOT NULL := 0;", out), out
+        assert "NOT NULL :=" not in out.replace("integer NOT NULL :=", ""), out
+
+    def test_values_set_arm(self) -> None:
+        out = _t(
+            "with x(a) as ((values ('a'), ('b')) union all select 'c') "
+            "select * from x;",
+            "postgresql",
+        )
+        assert not re.search(r"(?i)SELECT \('a'\), \('b'\)", out), out
+        assert re.search(
+            r"(?is)SELECT 'a'(\s+AS a)?\s+UNION ALL\s+SELECT 'b'", out
+        ), out
+
+    def test_table_shorthand_with_comment(self) -> None:
+        out = _t("-- a comment\ntable my_table;", "postgresql")
+        assert '"table"' not in out.lower(), out
+        assert re.search(r"(?i)SELECT \*\s+FROM my_table", out), out
+
+    def test_boolean_no_params(self) -> None:
+        out = _t("create table t (y bit(4));", "postgresql")
+        assert "BOOLEAN(" not in out.upper(), out
