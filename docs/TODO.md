@@ -233,14 +233,22 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       batch-level T-SQL guard recognizer (`_TSQL_GUARD_HEAD_RE`) is
       PRE-PARSE BY DESIGN (audited M2/P3 single-recognizer decision,
       runs on batch text before any parsing — unaffected by
-      IR-emitting scalar expressions). The remaining unknown
-      consumers of transformed-expression spellings are best
-      discovered by re-attempting M3b as a controlled experiment
-      (IR-first `_transform_raw_sql` behind the full suite) in a
-      fresh session — the original attempt's 18 failures are the map,
-      and increments 1–4a have since cleared var-types, DATEADD/
-      DATEDIFF sharing, the identity marker and the SELECT-INTO
-      decision.*; then the text rewriters can
+      IR-emitting scalar expressions). The M3b probe RAN 2026-07-17
+      (uncommitted IR-first in `_transform_raw_sql`, full suite):
+      **126 failures** — the text path has GROWN as the expression
+      engine since the original 18. Category map (top offenders):
+      curated DATEADD/DATEDIFF/TRUNC/TO_DATE handlers (16+),
+      function-name mapping & oracle-builtin renames (7+),
+      FOUND/fetch-status cursor idioms (7), string-concat/plus
+      classification (6+), error-global conditions & RAISERROR hoists
+      (8+), comments inside expressions (IR drops them, 6+),
+      SUBSTRING/position arg orders (4). Conclusion: wholesale
+      IR-first is NOT the path — each consumer family must migrate
+      individually (the increments-1..4a pattern), OR the IR
+      expression pipeline must absorb those behaviors first. The
+      probe patch is reproducible: guard `UNIQUE_IR_FIRST` in
+      `_transform_raw_sql` wrapping `_ir_transpile_dml` for scalar
+      fragments.*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed
