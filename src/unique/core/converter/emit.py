@@ -732,6 +732,25 @@ def _comparisonize_literals(node: ASTNode) -> ASTNode:
                 left=one,
                 right=one,
             )
+        # A bare column/function/subquery under AND/OR is PG/MySQL
+        # truthiness — T-SQL/Oracle need the comparison (wave 135; the
+        # top-of-WHERE case was handled, the nested one shipped bare).
+        if isinstance(side, (ColumnRef, FunctionCall, SubqueryExpression)):
+            return BinaryOp(
+                operator=BinaryOperator.NEQ,
+                left=side,
+                right=Literal(value=0, dtype="integer"),
+            )
+        if (
+            isinstance(side, UnaryOp)
+            and side.operator == UnaryOperator.NOT
+            and isinstance(side.operand, (ColumnRef, FunctionCall))
+        ):
+            return BinaryOp(
+                operator=BinaryOperator.EQ,
+                left=side.operand,
+                right=Literal(value=0, dtype="integer"),
+            )
         return _comparisonize_literals(side)
 
     return dataclasses.replace(node, left=fix(node.left), right=fix(node.right))
@@ -755,6 +774,13 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
         if isinstance(node, (FunctionCall, ColumnRef)):
             # Same truthiness for a bare function call or column.
             return f"{_emit_expression(node, dialect)} <> 0"
+        if (
+            isinstance(node, UnaryOp)
+            and node.operator == UnaryOperator.NOT
+            and isinstance(node.operand, (ColumnRef, FunctionCall))
+        ):
+            # NOT boolcol — same truthiness, inverted (wave 135).
+            return f"{_emit_expression(node.operand, dialect)} = 0"
         node = _comparisonize_literals(node)
     if (
         dialect in ("tsql", "oracle")

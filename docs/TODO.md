@@ -437,7 +437,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          WHERE 8x, near-SELECT 8x, `,` 7x, `(n.*)` star 5x, OLD
          pseudo-rows 5x, boolean-agg NOT 3x, DECODE 3x, set role 3x,
          AS 3x, OUTPUT-in-function 3x, E-strings 3x.
-         Tests: TestNestedCteArmGate (3).**
+         Tests: TestNestedCteArmGate (3). Wave 135
+         (2026-07-16): PG boolean truthiness under the condition
+         TREE — a bare column/function/subquery under AND/OR (and
+         `NOT col`) shipped bare to T-SQL/Oracle (4145); only the
+         top-of-WHERE case was comparisonized. Extended
+         `_comparisonize_literals` + `_emit_condition`. Measured:
+         pg→tsql **118 → 116** (96.4%), pg→oracle **65 → 61**
+         (98.1%), discovery HOLDS 0. Tests:
+         TestBareBooleanConditions (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

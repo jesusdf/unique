@@ -5121,3 +5121,26 @@ class TestNestedCteArmGate:
         out = _t(self._SRC, "postgresql")
         assert re.search(r"(?is)UNION ALL\s*\(WITH z", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestBareBooleanConditions:
+    """wave 135: PG boolean truthiness under the condition TREE — a bare
+    column under AND/OR (or NOT col) shipped bare to T-SQL/Oracle (4145,
+    8x of the tsql residue); only the top-of-WHERE case was handled."""
+
+    def test_bare_column_under_and(self) -> None:
+        out = _t("select * from t where a = 1 and boolcol;", "tsql")
+        assert re.search(r"(?i)AND boolcol <> 0", out), out
+
+    def test_not_bare_column(self) -> None:
+        out = _t("select * from t where not boolcol;", "tsql")
+        assert re.search(r"(?i)boolcol = 0", out), out
+        assert not re.search(r"(?i)NOT boolcol", out), out
+
+    def test_oracle_too(self) -> None:
+        out = _t("select * from t where a = 1 and boolcol;", "oracle")
+        assert re.search(r"(?i)AND boolcol <> 0", out), out
+
+    def test_real_predicates_untouched(self) -> None:
+        out = _t("select * from t where a = 1 and b > 2;", "tsql")
+        assert "<> 0" not in out, out
