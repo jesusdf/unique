@@ -1677,8 +1677,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         And `INSERT INTO t (cols) WITH cte AS (…) SELECT` puts the
         CTE after the INSERT clause — T-SQL requires WITH first (14x
         error 156); the CTE hoists before the INSERT. Tests:
-        TestBoolAggregateNotArg, TestInsertCteHoist. *Measurement
-        pending next pg-corpus cycle.*
+        TestBoolAggregateNotArg, TestInsertCteHoist. **Measured at
+        `3cc6a3d` (2026-07-17): pg→T-SQL 198→189 (94.2%), others
+        flat. Standing: pg-source {189/159/133}, mysql-source
+        {177/107/141}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
