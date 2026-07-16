@@ -2653,9 +2653,13 @@ class ProceduralTransformer:
         str_token = _conv.STRING_VARIABLES.set(
             frozenset(v.lstrip("@").lower() for v in self._string_vars)
         )
+        # Embedded text is mid-transform (variables already target-spelled);
+        # RawSQL fallbacks must not re-render it in the source dialect.
+        emb_token = _conv.IR_EMBEDDED.set(True)
         try:
             return self._ir_transpile_dml_inner(sql)
         finally:
+            _conv.IR_EMBEDDED.reset(emb_token)
             _conv.STRING_VARIABLES.reset(str_token)
 
     def _ir_transpile_dml_inner(self, sql: str) -> str | None:

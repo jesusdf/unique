@@ -220,6 +220,17 @@ SOURCE_DIALECT: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "source_dialect", default=None
 )
 
+# True while the procedural engine runs an EMBEDDED statement through the IR
+# (``_ir_transpile_dml``). That text is mid-transform — variables are already
+# rewritten toward the target (``@x`` on a postgresql parse) — so RawSQL
+# fallbacks must keep the generic rendering there: a source-dialect render
+# respells those hybrids (``@p`` became the invalid ``$p`` on T-SQL, caught
+# live by the functional-equivalence suite). Top-level parses hold pure
+# source SQL and DO render in the source dialect (wave 108).
+IR_EMBEDDED: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "ir_embedded", default=False
+)
+
 
 _CREATE_FUNCTION_NAME_RE = re.compile(
     r"(?im)^\s*CREATE\s+(?:OR\s+(?:REPLACE|ALTER)\s+)?FUNCTION\s+" r"([\w\[\]\"`.]+)"
@@ -919,6 +930,7 @@ __all__ = [
     "USER_FUNCTIONS",
     "STRING_VARIABLES",
     "SOURCE_DIALECT",
+    "IR_EMBEDDED",
     "_BARE_CHAR_BIGTEXT",
     "_BIT_COLUMN_RE",
     "_COLUMN_NAME_RE",

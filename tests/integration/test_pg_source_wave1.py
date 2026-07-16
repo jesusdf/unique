@@ -3964,3 +3964,38 @@ class TestArrayModelFidelity:
         out = _t("delete from t where id = any(array[1,2,3]);", "postgresql")
         assert re.search(r"(?i)ANY\(ARRAY\[1, 2, 3\]\)", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestEmbeddedFallbackSpelling:
+    """wave 108 regression (caught live by the FE suite): the source-dialect
+    RawSQL fallback rendering is WRONG inside procedural bodies — that text
+    is mid-transform (variables already @-rewritten for T-SQL), so a
+    postgres render turned ``@p_customer_id`` into the invalid pseudocolumn
+    ``$p_customer_id``. Embedded IR calls keep the generic rendering; only
+    the top-level DML path renders in the source dialect."""
+
+    def test_embedded_insert_params_keep_at_spelling(self) -> None:
+        src = (
+            "create function add_inv(p_customer_id int, p_qty int) "
+            "returns int as $$\n"
+            "declare new_id int;\n"
+            "begin\n"
+            "  insert into invoice (customer_id, qty) "
+            "values (p_customer_id, p_qty);\n"
+            "  select max(id) into new_id from invoice;\n"
+            "  insert into invoice_line (invoice_id, qty)\n"
+            "  select new_id, p_qty from product p where p.id = p_qty;\n"
+            "  return new_id;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "tsql")
+        assert "$p_" not in out, out
+        assert "$new_id" not in out, out
+        assert re.search(r"(?i)VALUES \(@p_customer_id, @p_qty\)", out), out
+        assert re.search(r"(?i)SELECT @new_id, @p_qty", out), out
+
+    def test_top_level_fallback_still_source_spelled(self) -> None:
+        # The pg->pg subscript fidelity (the wave-108 fix) must survive.
+        out = _t("select arr[2] from t;", "postgresql")
+        assert "arr[2]" in out, out
+        assert "arr[1]" not in out, out

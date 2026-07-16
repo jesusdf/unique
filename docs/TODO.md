@@ -153,7 +153,19 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          pg→pg (`a integer[] = '{…}'` → `a integer;` + garbage `[]
          =;` line; `RETURNS SETOF integer[]` silently narrows to
          `SETOF integer`) — the pg→pg preservation counterpart of
-         wave 86's off-PG degrade (6x, the remaining `"["` gaps).**
+         wave 86's off-PG degrade (6x, the remaining `"["` gaps).
+         Wave 108b: the live FE suite caught a wave-108 REGRESSION —
+         source-dialect fallback rendering is wrong INSIDE procedural
+         bodies, where embedded text is mid-transform (variables
+         already `@`-rewritten): a postgres render turned
+         `@p_customer_id` into the invalid `$p_customer_id` on
+         T-SQL. `IR_EMBEDDED` ContextVar (set around
+         `_ir_transpile_dml`) keeps the generic rendering there;
+         top-level parses stay source-spelled. All 16 FE pairs
+         re-verified live-green. Lesson for the structural list: a
+         "render faithfully to the source" rule only holds where the
+         text IS source — the procedural pipeline's embedded text is
+         a hybrid. Tests: TestEmbeddedFallbackSpelling.**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

@@ -425,7 +425,7 @@ def _source_sql(expr: exp.Expr) -> str:
     """
     source = SOURCE_DIALECT.get()
     try:
-        if source:
+        if source and not IR_EMBEDDED.get():
             return expr.sql(dialect=sqlglot_dialect_name(source))
         return expr.sql()
     except Exception:
