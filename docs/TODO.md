@@ -812,7 +812,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          non-MySQL targets. Measured: oracle **47 → 46**, tsql
          **42 → 41**, pg **33 → 32** (−3; those trees carry other
          issues too). Discovery HOLDS 0. Tests: TestWave179StraightJoin
-         (3).**
+         (3).* Wave 180 (2026-07-17):
+         Oracle/PG have no ``ALTER VIEW … AS`` (ORA-00922) —
+         redefinition rewrites to CREATE OR REPLACE VIEW (T-SQL/MySQL
+         keep ALTER VIEW). And a raw embedded ``LIMIT [a,] b`` spells
+         OFFSET/FETCH on Oracle (no ORDER BY needed there, unlike
+         T-SQL). Measured: mysql→oracle **46 → 41** (−5, validity
+         99.3%). Discovery HOLDS 0. Tests:
+         TestWave180AlterViewLimitOracle (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

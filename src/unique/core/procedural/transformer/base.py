@@ -4218,8 +4218,19 @@ class ProceduralTransformer:
     def _map_rowcount_fn_in_sql(self, sql: str) -> str:
         target_expr = self._ROWCOUNT_FN_EXPR.get(self._target)
         if not target_expr:
+            return self._map_limit_in_sql(sql)
+        return self._map_limit_in_sql(self._ROWCOUNT_FN_PATTERN.sub(target_expr, sql))
+
+    #: MySQL LIMIT in raw embedded text — Oracle's spelling is
+    #: OFFSET/FETCH (which, unlike T-SQL's, needs no ORDER BY; wave 180).
+    _LIMIT_TWO_RE = re.compile(r"(?i)\bLIMIT\s+(@?\w+)\s*,\s*(@?\w+)")
+    _LIMIT_ONE_RE = re.compile(r"(?i)\bLIMIT\s+(@?\w+)")
+
+    def _map_limit_in_sql(self, sql: str) -> str:
+        if self._target != "oracle" or self._source != "mysql":
             return sql
-        return self._ROWCOUNT_FN_PATTERN.sub(target_expr, sql)
+        sql = self._LIMIT_TWO_RE.sub(r"OFFSET \1 ROWS FETCH NEXT \2 ROWS ONLY", sql)
+        return self._LIMIT_ONE_RE.sub(r"FETCH FIRST \1 ROWS ONLY", sql)
 
     def _transform_niladic_datetime(self, sql: str) -> str:
         """Translate current-timestamp expressions across dialects.

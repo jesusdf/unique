@@ -987,6 +987,24 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             sql=re.sub(r"(?i)\bSTRAIGHT_JOIN\b", "INNER JOIN", node.sql),
         )
 
+    # Oracle/PG have no ``ALTER VIEW … AS`` (ORA-00922; PG alters only
+    # properties): redefining a view is CREATE OR REPLACE VIEW there
+    # (wave 180). T-SQL/MySQL keep ALTER VIEW.
+    if (
+        node.kind == "ALTER"
+        and dialect in ("oracle", "postgresql")
+        and re.match(r"(?is)^\s*ALTER\s+VIEW\b.*\bAS\b", node.sql)
+    ):
+        node = dataclasses.replace(
+            node,
+            sql=re.sub(
+                r"(?is)^\s*ALTER\s+VIEW\b",
+                "CREATE OR REPLACE VIEW",
+                node.sql,
+                count=1,
+            ),
+        )
+
     # T-SQL ADD CONSTRAINT ... PRIMARY KEY/UNIQUE with storage clauses:
     # rebuilt directly (sqlglot mangles it into comma-joined actions).
     if node.kind == "ALTER" and node.source_dialect == "tsql":

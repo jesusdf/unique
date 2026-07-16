@@ -6624,3 +6624,39 @@ class TestWave179StraightJoin:
     def test_straight_join_kept_mysql(self) -> None:
         out = _t2(self._SQL, "mysql", "mysql")
         assert "STRAIGHT_JOIN" in out.upper(), out
+
+
+class TestWave180AlterViewLimitOracle:
+    """wave 180 (mysql-corpus): Oracle/PG have no ``ALTER VIEW … AS``
+    (ORA-00922) — redefinition is CREATE OR REPLACE VIEW; and a raw
+    embedded ``LIMIT [a,] b`` spells OFFSET/FETCH on Oracle."""
+
+    def test_alter_view_oracle(self) -> None:
+        out = _t2("alter view v1 as select b from t1;", "mysql", "oracle")
+        assert re.search(r"(?i)CREATE OR REPLACE VIEW v1", out), out
+        assert "ALTER VIEW" not in out.upper(), out
+
+    def test_alter_view_kept_tsql(self) -> None:
+        out = _t2("alter view v1 as select b from t1;", "mysql", "tsql")
+        assert re.search(r"(?i)ALTER VIEW v1", out), out
+
+    def test_embedded_limit_two_oracle(self) -> None:
+        out = _t2(
+            "create function f1(p1 int, p2 int) returns int begin"
+            " declare c int;"
+            " set c = (select count(*) from"
+            " (select * from t1 limit p1, p2) a);"
+            " return c; end",
+            "mysql",
+            "oracle",
+        )
+        assert re.search(r"(?i)OFFSET p1 ROWS FETCH NEXT p2 ROWS ONLY", out), out
+        assert "limit" not in out.lower(), out
+
+    def test_limit_kept_pg(self) -> None:
+        out = _t2(
+            "create procedure q(x int) begin" " select id into x from t1 limit 1; end",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?i)LIMIT 1", out), out
