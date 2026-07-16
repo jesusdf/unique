@@ -3736,3 +3736,18 @@ class TestForeignBuiltinNote:
     def test_mapped_function_unnoted(self) -> None:
         out = _t2("SELECT NVL(a, b) FROM t;", "oracle", "tsql")
         assert "UNIQUE:" not in out, out
+
+
+class TestPgTableShorthand:
+    """P1 silent-output follow-up (wave 104): PG's `TABLE name`
+    shorthand mangled silently to `[TABLE] AS onek` (sqlglot parses
+    it into an aliased identifier). It is exactly `SELECT * FROM
+    name` — mapped on every target."""
+
+    def test_table_shorthand_tsql(self) -> None:
+        out = _t("TABLE onek;", "tsql")
+        assert re.search(r"(?is)SELECT \*\s+FROM onek", out), out
+
+    def test_table_shorthand_mysql(self) -> None:
+        out = _t("TABLE onek;", "mysql")
+        assert re.search(r"(?is)SELECT \*\s+FROM onek", out), out

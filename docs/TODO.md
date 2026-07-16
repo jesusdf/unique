@@ -71,12 +71,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (charset strip updated). Tests: TestForeignBuiltinNote. Verified at
          `fd2923f`: validity identical {163/131/89}, notes visible
          in output. Mechanisms 2–3 below remain open.
-      2. *Verbatim-fallback warning (cheap, offline):* any DML-level
-         RawSQL parse-fallback (`parse_sql`'s `RawSQL(sql,
-         reason=<ParseError>)`) emitted cross-dialect must warn +
-         carrier — the DML mirror of the procedural wave-52 fix. Also
-         audit PassthroughSQL kinds whose sqlglot re-render failed
-         and returned the source text: those return paths must warn.
+      2. *Verbatim-fallback warning — VERIFIED ALREADY COVERED
+         (2026-07-17):* the DML parse-fallback path already carriers
+         + warns (probe: `SELECT 1 INTO STRICT v` → carrier with
+         warning). The probe instead exposed a silent-MANGLE class:
+         PG's `TABLE name` shorthand shipped as `[TABLE] AS onek`
+         (wave 104 fixed it — pre-normalized to `SELECT * FROM
+         name`). The remaining silent classes are all
+         sqlglot-leniency escapes → mechanism 3.
       3. *Live output validation, opt-in (complete):* promote the
          sweep's per-engine executors (`scripts/validity_sweep.py`
          already has PARSEONLY/throwaway-DB/throwaway-schema runners

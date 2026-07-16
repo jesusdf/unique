@@ -92,6 +92,14 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
         A list of IR ASTNode instances.
     """
     sg_dialect = sqlglot_dialect_name(dialect)
+    if dialect == "postgresql":
+        # PG's ``TABLE name`` shorthand IS ``SELECT * FROM name``; sqlglot
+        # mis-parses it into an aliased identifier (silent mangle).
+        sql = re.sub(
+            r'(?is)^(\s*)TABLE\s+([\w."]+)(\s*;?\s*)$',
+            r"\1SELECT * FROM \2\3",
+            sql,
+        )
     if dialect == "postgresql" and re.search(r":'\w+'|:\"\w+\"", sql):
         from unique.core.output_gate import scrub
 
