@@ -643,7 +643,18 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          its @ sigil). Depth-0 lookahead keeps single-assignment
          values comma-transparent. Measured: mysql→tsql **146 → 143**
          (−3). Discovery HOLDS 0. Tests:
-         TestWave159MultiDeclareMultiSet (3).**
+         TestWave159MultiDeclareMultiSet (3).* Wave 160 (2026-07-16): MySQL
+         truthiness under NOT — bare columns inside ``NOT (a AND b)``
+         and a parenthesized predicate compared to 0/1 (``NOT (c2 IS
+         NULL) = 1``) were error 4145 on T-SQL. ``_emit_condition``
+         recurses into BinaryOp operands of NOT (narrowed so NOT
+         EXISTS keeps its idiomatic spelling — the wide first cut
+         broke 3 dual-guard tests) and a new
+         ``_predicate_int_comparison`` rewrites ``<pred> = 1/0`` to
+         the predicate or its negation. Measured: mysql→tsql
+         **143 → 142** (−1; the 8x class holds INTERVAL() and
+         outer-ref members). Discovery HOLDS 0. Tests:
+         TestWave160NotParenTruthiness (5).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

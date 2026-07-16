@@ -793,6 +793,49 @@ def _comparisonize_literals(node: ASTNode) -> ASTNode:
     return dataclasses.replace(node, left=fix(node.left), right=fix(node.right))
 
 
+#: Operators whose BinaryOp is a predicate (truth-valued), not a scalar.
+_PREDICATE_OPERATORS = frozenset(
+    {
+        BinaryOperator.EQ,
+        BinaryOperator.NEQ,
+        BinaryOperator.LT,
+        BinaryOperator.GT,
+        BinaryOperator.LTE,
+        BinaryOperator.GTE,
+        BinaryOperator.AND,
+        BinaryOperator.OR,
+        BinaryOperator.LIKE,
+        BinaryOperator.ILIKE,
+        BinaryOperator.IN,
+        BinaryOperator.NOT_IN,
+        BinaryOperator.BETWEEN,
+        BinaryOperator.IS,
+        BinaryOperator.NULLSAFE_EQ,
+        BinaryOperator.NULLSAFE_NEQ,
+    }
+)
+
+
+def _predicate_int_comparison(node: ASTNode) -> ASTNode | None:
+    """Rewrite ``<predicate> = 1`` / ``= 0`` (MySQL's boolean-as-number)
+    to the predicate itself or its negation; None when the shape does
+    not match."""
+    if not (
+        isinstance(node, BinaryOp)
+        and node.operator in (BinaryOperator.EQ, BinaryOperator.NEQ)
+        and isinstance(node.right, Literal)
+        and node.right.dtype == "integer"
+        and node.right.value in (0, 1)
+        and isinstance(node.left, BinaryOp)
+        and node.left.operator in _PREDICATE_OPERATORS
+    ):
+        return None
+    truthy = (node.right.value == 1) == (node.operator == BinaryOperator.EQ)
+    if truthy:
+        return node.left
+    return UnaryOp(operator=UnaryOperator.NOT, operand=node.left)
+
+
 def _emit_condition(node: ASTNode, dialect: str) -> str:
     """Emit an expression in condition position.
 
@@ -822,6 +865,21 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
         ):
             # NOT boolcol — same truthiness, inverted (wave 135).
             return f"{_emit_expression(node.operand, dialect)} = 0"
+        if (
+            isinstance(node, UnaryOp)
+            and node.operator == UnaryOperator.NOT
+            and isinstance(node.operand, BinaryOp)
+        ):
+            # NOT (…) — the parenthesized operand is condition position
+            # too: bare columns under the AND/OR inside shipped as
+            # truthiness (wave 160). Narrow to BinaryOp operands so NOT
+            # EXISTS keeps its idiomatic spelling.
+            return f"NOT ({_emit_condition(node.operand, dialect)})"
+        rewritten = _predicate_int_comparison(node)
+        if rewritten is not None:
+            # ``(c2 IS NULL) = 1`` — MySQL compares a predicate's truth
+            # value to a number; T-SQL has no boolean value position.
+            return _emit_condition(rewritten, dialect)
         node = _comparisonize_literals(node)
     if (
         dialect in ("tsql", "oracle")

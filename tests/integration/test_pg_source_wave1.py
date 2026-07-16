@@ -5952,3 +5952,31 @@ class TestWave159MultiDeclareMultiSet:
         out = _t2(sql, "mysql", "mysql")
         assert re.search(r"(?i)DECLARE a int DEFAULT 3", out), out
         assert re.search(r"(?i)DECLARE b int DEFAULT 3", out), out
+
+
+class TestWave160NotParenTruthiness:
+    """wave 160 (mysql-corpus): MySQL truthiness under NOT — bare
+    columns inside ``NOT (a AND b)`` and a parenthesized predicate
+    compared to 0/1 (``NOT (c2 IS NULL) = 1``) are both error 4145 on
+    T-SQL."""
+
+    def test_not_paren_bare_columns_tsql(self) -> None:
+        out = _t2("select * from t1 where not (a and b);", "mysql", "tsql")
+        assert re.search(r"(?i)NOT \(a <> 0 AND b <> 0\)", out), out
+
+    def test_predicate_eq_one_tsql(self) -> None:
+        out = _t2("select * from t1 where not (c2 is null) = 1;", "mysql", "tsql")
+        assert re.search(r"(?i)NOT \(c2 IS NULL\)", out), out
+        assert "= 1" not in out, out
+
+    def test_predicate_eq_zero_tsql(self) -> None:
+        out = _t2("select * from t1 where not (c2 is null) = 0;", "mysql", "tsql")
+        assert re.search(r"(?i)NOT \(NOT \(c2 IS NULL\)\)", out), out
+
+    def test_real_comparison_untouched(self) -> None:
+        out = _t2("select * from t1 where not (a = 1 and b = 2);", "mysql", "tsql")
+        assert re.search(r"(?i)NOT \(a = 1 AND b = 2\)", out), out
+
+    def test_mysql_keeps_truthiness(self) -> None:
+        out = _t2("select * from t1 where not (a and b);", "mysql", "mysql")
+        assert re.search(r"(?i)NOT \(a AND b\)", out), out
