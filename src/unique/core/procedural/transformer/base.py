@@ -929,7 +929,51 @@ class ProceduralTransformer:
                 out.append(stmt)
         return tuple(out)
 
+    _MYSQL_USER_VAR_RE = re.compile(r"(?<!@)@(\w+)")
+
+    def _degrade_mysql_uservar(self, node: ASTNode) -> RawSQL | None:
+        """A MySQL routine referencing @user variables — WHOLE degrade
+        off MySQL (session-scoped state with no target equivalent; the
+        DML pipeline gates the same class at wave 59, this is its
+        procedural twin)."""
+        if self._source != "mysql" or self._target == "mysql":
+            return None
+        found = self._find_uservar_text(node)
+        if found is None:
+            return None
+        reason = (
+            f"MySQL user variable @{found} has no {self._target} "
+            "equivalent; routine preserved as a comment"
+        )
+        self._warnings.append(reason)
+        from unique.core.procedural.emitter import ProceduralEmitter
+
+        original = ProceduralEmitter(self._source).emit(node)
+        return RawSQL(sql=original, reason=reason)
+
+    def _find_uservar_text(self, value: object) -> str | None:
+        import dataclasses as _dc
+
+        if isinstance(value, str):
+            scrubbed = re.sub(r"'(?:[^']|'')*'", "''", value)
+            m = self._MYSQL_USER_VAR_RE.search(scrubbed)
+            return m.group(1) if m else None
+        if _dc.is_dataclass(value) and not isinstance(value, type):
+            for f in _dc.fields(value):
+                found = self._find_uservar_text(getattr(value, f.name))
+                if found is not None:
+                    return found
+        if isinstance(value, tuple):
+            for item in value:
+                found = self._find_uservar_text(item)
+                if found is not None:
+                    return found
+        return None
+
     def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
+        degraded_uv = self._degrade_mysql_uservar(node)
+        if degraded_uv is not None:
+            return degraded_uv
         new_params = self._transform_params(node.parameters)
         new_body = self._transform_body(
             self._drop_param_shadowing_locals(node.body, node.parameters)
@@ -1086,6 +1130,9 @@ class ProceduralTransformer:
         return False
 
     def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
+        degraded_uv = self._degrade_mysql_uservar(node)
+        if degraded_uv is not None:
+            return degraded_uv
         degraded = self._degrade_record_function(node)
         if degraded is not None:
             return degraded
@@ -1145,6 +1192,9 @@ class ProceduralTransformer:
         )
 
     def _transform_trigger(self, node: CreateTriggerStatement) -> ASTNode:
+        degraded_uv = self._degrade_mysql_uservar(node)
+        if degraded_uv is not None:
+            return degraded_uv
         # An Oracle COMPOUND TRIGGER exists to dodge the mutating-table error
         # (ORA-04091) when re-aggregating a parent row after child rows change.
         # A target without that restriction (PostgreSQL) runs the same
@@ -1644,6 +1694,9 @@ class ProceduralTransformer:
         """Transform a stored-procedure call. The ``dbo`` default schema is
         meaningful only on T-SQL, so drop it for the other targets; the argument
         text gets the same niladic-now / string fixups as embedded DML."""
+        degraded_uv = self._degrade_mysql_uservar(node)
+        if degraded_uv is not None:
+            return degraded_uv
         # An Oracle built-in package call shipped raw is a guaranteed runtime
         # error off Oracle (audit D10: DBMS_SCHEDULER.CREATE_JOB became a raw
         # CALL on PostgreSQL, unwarned). Preserve it as a documented carrier.
@@ -1724,6 +1777,9 @@ class ProceduralTransformer:
         return any(walk(s) for s in statements)
 
     def _transform_anonymous_block(self, node: AnonymousBlock) -> ASTNode:
+        degraded_uv = self._degrade_mysql_uservar(node)
+        if degraded_uv is not None:
+            return degraded_uv
         new_stmts = self._transform_body(node.statements)
         if (
             self._source == "oracle"

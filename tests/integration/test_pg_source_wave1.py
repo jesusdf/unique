@@ -2599,3 +2599,70 @@ class TestSubqueryConditionsViewOrderCharZero:
     def test_char_zero_becomes_one(self) -> None:
         out = _t2("create table t (c char(0));", "mysql", "tsql")
         assert re.search(r"(?i)c CHAR\(1\)", out), out
+
+
+class TestUserVarsInRoutines:
+    """wave 64: wave 59 gated @user variables on the DML pipeline —
+    but routines travel the PROCEDURAL pipeline, which shipped
+    `@cnt := := @cnt + 1` garbage to Oracle (52x mysql→oracle:
+    anonymous CALL blocks, functions, triggers). Same alternate-route
+    hole as wave 38; the procedural transformer now degrades the
+    whole routine."""
+
+    def test_call_with_user_var_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "call zap(7, @zap);", source="mysql", target="oracle"
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not any("@" in ln for ln in code), r.sql
+
+    def test_function_with_user_var_degrades(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create function f1() returns int\n"
+            "begin\n"
+            "  set @cnt = @cnt + 1;\n"
+            "  return 1;\n"
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = _t2(src, "mysql", "oracle")
+        offenders = [
+            ln
+            for ln in out.splitlines()
+            if "@" in ln and not ln.strip().startswith("--")
+        ]
+        assert not offenders, out
+
+    def test_trigger_with_user_var_degrades(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create trigger trg before insert on t1 for each row\n"
+            "begin\n"
+            "  set @a = 1;\n"
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = _t2(src, "mysql", "oracle")
+        offenders = [
+            ln
+            for ln in out.splitlines()
+            if "@" in ln and not ln.strip().startswith("--")
+        ]
+        assert not offenders, out
+
+    def test_routine_without_user_var_still_converts(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create function f2() returns int\n"
+            "begin\n"
+            "  return 2;\n"
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = _t2(src, "mysql", "oracle")
+        assert re.search(r"(?i)CREATE OR REPLACE FUNCTION f2", out), out

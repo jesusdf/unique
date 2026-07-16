@@ -1448,6 +1448,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         (96.0%), mysql→PG 140 flat, mysql→Oracle 202 flat with ok
         +15. Standing: pg-source {265/163/142}, mysql-source
         {238/140/202} — all six directions ≥91.9%.**
+        *Wave 64 (2026-07-16):* wave 59's @user-variable gate covered
+        the DML pipeline only — routines travel the PROCEDURAL one,
+        which shipped `@cnt := := @cnt + 1` garbage to Oracle (52x
+        mysql→oracle: CALL blocks 26x, functions 16x, triggers 10x —
+        the wave-38 alternate-route hole class again). The procedural
+        transformer now whole-degrades any routine/call referencing a
+        @user variable off MySQL. Tests: TestUserVarsInRoutines.
+        *Measurement pending next mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
