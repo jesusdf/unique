@@ -1637,8 +1637,12 @@ fix needs an **anonymized** regression fixture (never a private name).
         (rare). And `CAST(NOT b AS INT)` is invalid on T-SQL (NOT is
         not a value there; 12x) — the operand wraps tri-state
         `CASE WHEN b = 0 THEN 1 WHEN b <> 0 THEN 0 END`. Tests:
-        TestPgCastsInRawTextAndNotInCast. *Measurement pending next
-        pg-corpus cycle.*
+        TestPgCastsInRawTextAndNotInCast. **Measured at `d4bdacc`
+        (2026-07-17): pg→Oracle 140→135 (95.8%), pg→T-SQL 256→254
+        (92.2%) — the 65x routines also carry `RETURNS foodomain`
+        (CREATE DOMAIN types; next front: harvest domains → base
+        types, like PG_COMPOSITE_TYPES). Standing: pg-source
+        {254/160/135}, mysql-source {177/107/141}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
