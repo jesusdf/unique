@@ -881,6 +881,14 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
     wraps them in CASE)."""
     if dialect == "tsql" and isinstance(node, Literal) and node.dtype == "boolean":
         return "1 = 1" if node.value else "1 = 0"
+    if (
+        dialect == "postgresql"
+        and isinstance(node, Literal)
+        and node.dtype in ("integer", "number")
+    ):
+        # PG's CASE/WHERE demand a boolean too — MySQL's numeric
+        # truthiness (``CASE WHEN 1``) is error 42804 there (wave 176).
+        return f"{_emit_expression(node, dialect)} <> 0"
     if dialect in ("tsql", "oracle"):
         if isinstance(node, Literal) and node.dtype in ("integer", "number", "null"):
             # MySQL truthiness again: a bare numeric literal condition

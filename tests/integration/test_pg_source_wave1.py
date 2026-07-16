@@ -6516,3 +6516,25 @@ class TestWave175AllComputedTable:
         )
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)CREATE TABLE", out), out
+
+
+class TestWave176PgConditionLiterals:
+    """wave 176 (mysql-corpus, pg front): PG's CASE/WHERE demand a
+    boolean too — MySQL's numeric truthiness (``CASE WHEN 1``) is
+    error 42804 there."""
+
+    def test_case_when_integer_pg(self) -> None:
+        out = _t2(
+            "select case when 1 then 'a' else 'b' end;",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?i)WHEN 1 <> 0 THEN", out), out
+
+    def test_boolean_literal_kept_pg(self) -> None:
+        out = _t2(
+            "select case when true then 'a' else 'b' end;",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?i)WHEN TRUE THEN", out), out

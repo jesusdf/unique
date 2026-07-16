@@ -782,7 +782,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          passes) — a MySQL table whose columns are ALL generated
          degrades WHOLE with the carrier. Measured: mysql→tsql
          **43 → 42** (−1). Discovery HOLDS 0. Tests:
-         TestWave175AllComputedTable (3).**
+         TestWave175AllComputedTable (3).* Wave 176 (2026-07-17, mysql→pg
+         front opened): the shared waves had already collapsed it
+         105 → 36 unmeasured; PG's CASE/WHERE demand a boolean too —
+         MySQL's numeric truthiness (``CASE WHEN 1``) was error 42804
+         there, now comparisonized like T-SQL/Oracle (boolean literals
+         untouched). Measured: mysql→pg **36 → 33** (validity 99.4%),
+         mysql→tsql stable 42. Discovery HOLDS 0. Tests:
+         TestWave176PgConditionLiterals (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
