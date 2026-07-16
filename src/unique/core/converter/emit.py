@@ -2144,6 +2144,31 @@ def _emit_drop(node: DropStatement, dialect: str) -> str:
     return f"DROP {node.object_type} {exists}{name}{cascade}"
 
 
+def _map_system_global(sql: str, dialect: str) -> str | None:
+    """Map a bare system global (@@ROWCOUNT/@@ERROR/SQL%ROWCOUNT) in a DML
+    fragment — they lived only in the procedural maps and shipped raw off
+    their engine. MySQL has a real SQL function; PG/Oracle only have
+    PL-context forms, so a documented neutral is the honest top-level."""
+    stripped = sql.strip()
+    upper = stripped.upper()
+    if upper == "@@ROWCOUNT" and dialect != "tsql":
+        if dialect == "mysql":
+            return "ROW_COUNT()"
+        return f"0 /* UNIQUE: @@ROWCOUNT has no top-level {dialect} equivalent */"
+    if upper == "@@ERROR" and dialect != "tsql":
+        return (
+            f"0 /* UNIQUE: @@ERROR has no top-level {dialect} equivalent; "
+            "use an exception handler */"
+        )
+    if re.fullmatch(r"(?i)SQL\s*%\s*ROWCOUNT", stripped) and dialect != "oracle":
+        if dialect == "tsql":
+            return "@@ROWCOUNT"
+        if dialect == "mysql":
+            return "ROW_COUNT()"
+        return f"0 /* UNIQUE: SQL%ROWCOUNT has no top-level {dialect} equivalent */"
+    return None
+
+
 def _emit_expression(node: ASTNode, dialect: str) -> str:
     """Emit an expression node as SQL text."""
     if isinstance(node, ColumnRef):
@@ -2247,6 +2272,9 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         return _emit_table_ref(node, dialect)
 
     if isinstance(node, RawSQL):
+        mapped_global = _map_system_global(node.sql, dialect)
+        if mapped_global is not None:
+            return mapped_global
         # Inline expression context (e.g. a column DEFAULT): emit the raw
         # SQL directly without a wrapping comment, which would be invalid
         # inside a column definition.
@@ -3009,6 +3037,20 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             if node.operator == BinaryOperator.EQ:
                 return " AND ".join(f"{a} = {b}" for a, b in zip(lt, rt, strict=True))
             return " OR ".join(f"{a} <> {b}" for a, b in zip(lt, rt, strict=True))
+
+    # Oracle's SQL%ROWCOUNT parses as ``SQL % ROWCOUNT`` (modulo) — map
+    # the global before emitting a bogus arithmetic expression.
+    if (
+        node.operator == BinaryOperator.MOD
+        and isinstance(node.left, ColumnRef)
+        and node.left.name.upper() == "SQL"
+        and isinstance(node.right, ColumnRef)
+        and node.right.name.upper() == "ROWCOUNT"
+    ):
+        mapped = _map_system_global("SQL%ROWCOUNT", dialect)
+        if mapped is not None:
+            return mapped
+        return "SQL%ROWCOUNT"
 
     op_map = {
         BinaryOperator.EQ: "=",

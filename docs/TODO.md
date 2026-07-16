@@ -272,7 +272,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       The nested-CONCAT shape on mysql (`CONCAT(CONCAT(a,b),'c')` vs
       flat) is cosmetic, documented not chased. Tests:
       TestNationalStringConcat; verification cycle at `0a0ad03`
-      identical {163/131/89}.*; then the text rewriters can
+      identical {163/131/89}. Family step 4 (error-globals) landed
+      2026-07-17 (wave 101): the system globals lived only in the
+      procedural maps — a top-level `SELECT @@ROWCOUNT` shipped raw
+      off T-SQL. New shared `_map_system_global` in the DML expression
+      emit: MySQL gets the real ROW_COUNT(); PG/Oracle top-level get
+      a documented neutral (their forms are PL-context only); Oracle's
+      `SQL%ROWCOUNT` — which parses as a MODULO — maps at the
+      BinaryOp. Tests: TestSystemGlobalsInDml.*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed

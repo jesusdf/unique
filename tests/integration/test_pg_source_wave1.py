@@ -3679,3 +3679,25 @@ class TestNationalStringConcat:
         out = _t2("SELECT N'pre' + s AS r FROM t;", "tsql", "oracle")
         assert "+" not in out.split("FROM")[0], out
         assert re.search(r"(?i)'pre' \|\| s", out), out
+
+
+class TestSystemGlobalsInDml:
+    """M3b family migration, error-globals step (wave 101): the
+    system globals (@@ROWCOUNT/@@ERROR, SQL%ROWCOUNT) were mapped
+    only in the procedural text path — a top-level `SELECT
+    @@ROWCOUNT` shipped raw off T-SQL (found by the text-vs-IR
+    differential). The DML emit now shares the mapping."""
+
+    def test_rowcount_mysql(self) -> None:
+        out = _t2("SELECT @@ROWCOUNT AS r;", "tsql", "mysql")
+        assert "@@" not in out, out
+        assert re.search(r"(?i)ROW_COUNT\(\)", out), out
+
+    def test_rowcount_pg_neutral(self) -> None:
+        out = _t2("SELECT @@ROWCOUNT AS r;", "tsql", "postgresql")
+        assert re.search(r"(?i)SELECT 0 /\* UNIQUE:", out), out
+
+    def test_sql_rowcount_tsql(self) -> None:
+        out = _t2("SELECT SQL%ROWCOUNT AS r FROM DUAL;", "oracle", "tsql")
+        assert re.search(r"(?i)@@ROWCOUNT", out), out
+        assert "SQL %" not in out, out
