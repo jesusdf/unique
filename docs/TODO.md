@@ -263,7 +263,9 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       valid; sqlglot's LEN→LENGTH(CAST AS CLOB) vs text's plain
       LENGTH — both count trailing spaces that T-SQL LEN ignores
       (shared caveat, not a divergence). Tests:
-      TestMysqlProceduralFuncMaps.*; then the text rewriters can
+      TestMysqlProceduralFuncMaps; mysql-corpus cycle at `e933b82`
+      stable {166/107/129} (fidelity inside already-counted
+      routines).*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed
