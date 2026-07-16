@@ -4959,3 +4959,50 @@ class TestWave131Batch:
     def test_boolean_no_params(self) -> None:
         out = _t("create table t (y bit(4));", "postgresql")
         assert "BOOLEAN(" not in out.upper(), out
+
+
+class TestWave132Batch:
+    """wave 132: RETURN QUERY for SETOF sql-bodies (a scalar RETURN (…)
+    is invalid there); PG's ALTER COLUMN SET STORAGE knob (sqlglot's own
+    round-trip INVENTS a ``DROP DEFAULT,`` before it) verbatim on PG and
+    carried elsewhere; a dotted unnamed %TYPE parameter took the table
+    name as the PARAM name."""
+
+    def test_setof_sql_body_return_query(self) -> None:
+        src = (
+            "create function sillysrf(int) returns setof int as\n"
+            "  'values (1),(10),(2),($1)' language sql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)RETURN QUERY\s+values", out), out
+        assert not re.search(r"(?i)RETURN \(values", out), out
+
+    def test_set_storage_verbatim_pg(self) -> None:
+        out = _t("ALTER TABLE t ALTER COLUMN b SET STORAGE plain;", "postgresql")
+        assert "DROP DEFAULT" not in out.upper(), out
+        assert re.search(r"(?i)SET STORAGE plain", out), out
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_set_storage_degrades_off_pg(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "ALTER TABLE t ALTER COLUMN b SET STORAGE plain;",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_dotted_unnamed_type_param(self) -> None:
+        src = (
+            "CREATE OR REPLACE FUNCTION f(some_table.a%type) "
+            "RETURNS int AS $$\n"
+            "begin return p1; end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)p1 some_table\.a%TYPE", out), out
+        assert "some_table ." not in out, out

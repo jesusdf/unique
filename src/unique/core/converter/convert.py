@@ -105,6 +105,22 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
                 kind="SAVEPOINT",
             )
         ]
+    # PG's ALTER COLUMN … SET STORAGE knob: sqlglot's own round-trip
+    # INVENTS a ``DROP DEFAULT,`` before it (wave 132). Keep the original
+    # text: verbatim on PG, carrier elsewhere (a storage internal).
+    storage = re.match(
+        r'(?is)^\s*(ALTER\s+TABLE\s+[\w".]+\s+ALTER\s+COLUMN\s+[\w"]+'
+        r"\s+SET\s+STORAGE\s+\w+)\s*;?\s*$",
+        sql,
+    )
+    if storage and dialect == "postgresql":
+        return [
+            PassthroughSQL(
+                sql=storage.group(1),
+                source_dialect=dialect,
+                kind="PG STORAGE",
+            )
+        ]
     if dialect == "postgresql":
         # PG's ``TABLE name`` shorthand IS ``SELECT * FROM name``; sqlglot
         # mis-parses it into an aliased identifier (silent mangle). Leading

@@ -400,7 +400,20 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          COMMENT escaped the wave-104 pre-normalization (comments are
          trivia — regex now tolerates them); mapped BIT(n) shipped
          `BOOLEAN(4)` (BOOLEAN never takes params). Measured:
-         **20 → 13**. Tests: TestWave131Batch (5).**
+         **20 → 13**. Tests: TestWave131Batch (5). Wave 132
+         (2026-07-16): SETOF sql-bodies wrap as `RETURN QUERY …`
+         (the scalar `RETURN (…)` is invalid there); PG's `ALTER
+         COLUMN SET STORAGE` knob — SQLGLOT'S OWN ROUND-TRIP INVENTS
+         a `DROP DEFAULT,` before it — pre-recognized with the
+         ORIGINAL text (PassthroughSQL kind "PG STORAGE": verbatim
+         PG, carrier elsewhere); a dotted unnamed `%TYPE` parameter
+         (`f(tbl.col%type)`) took the table as the param NAME
+         (dotted first token ⇒ type-only). Measured: **13 → 9**.
+         Tests: TestWave132Batch (6). Remaining 9: nested-DECLARE
+         shadowing (2, needs block-local declares), dynamic-OPEN
+         FETCH chain (2), WITHIN-GROUP-in-CASE view (1), RAISE USING
+         variant (1), `return` as a variable name (1), FOREACH
+         multi-target (1), transition tables (1).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

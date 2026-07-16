@@ -1067,6 +1067,10 @@ class ParserBase:
                 or nxt.is_keyword("DEFAULT")
                 or nxt.type == TokenType.ASSIGN
                 or (nxt.type == TokenType.OPERATOR and nxt.value == "=")
+                # A dotted first token starts a %TYPE reference
+                # (``tbl.col%type``) — parameter names are never dotted
+                # (wave 132).
+                or nxt.type == TokenType.DOT
             )
             if not type_only:
                 name = self._parse_identifier()
@@ -1881,9 +1885,17 @@ class ParserBase:
                     "",
                     last.sql.strip(),
                 )
-                stmts[-1] = ReturnStatement(
-                    value=RawSQL(sql=f"({body_sql})", reason="expression")
-                )
+                if self._pg_fn_return_type.startswith("SETOF"):
+                    # A set-returning body must be RETURN QUERY — a
+                    # parenthesized RETURN (…) is the scalar form and
+                    # invalid in a SETOF function (wave 132).
+                    stmts[-1] = ReturnStatement(
+                        value=RawSQL(sql=f"QUERY {body_sql}", reason="expression")
+                    )
+                else:
+                    stmts[-1] = ReturnStatement(
+                        value=RawSQL(sql=f"({body_sql})", reason="expression")
+                    )
         return stmts
 
     def _parse_embedded_dml(self) -> ASTNode:

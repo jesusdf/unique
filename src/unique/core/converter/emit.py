@@ -901,6 +901,16 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             f"{_comment_block(node.sql)}"
         )
 
+    # PG's ALTER COLUMN SET STORAGE knob: engine-internal storage tuning.
+    if node.kind == "PG STORAGE":
+        if dialect == "postgresql":
+            return node.sql
+        return (
+            f"-- UNIQUE: PostgreSQL column STORAGE tuning has no {dialect} "
+            f"equivalent; statement preserved as a comment:\n"
+            f"-- {node.sql}"
+        )
+
     # SAVEPOINT: same spelling everywhere but T-SQL (SAVE TRANSACTION).
     # Modeled as a passthrough because sqlglot mis-parses the statement
     # into an Alias (wave 123).
