@@ -271,7 +271,8 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       `N'pre' + s` shipped raw `+` to Oracle (invalid on strings).
       The nested-CONCAT shape on mysql (`CONCAT(CONCAT(a,b),'c')` vs
       flat) is cosmetic, documented not chased. Tests:
-      TestNationalStringConcat.*; then the text rewriters can
+      TestNationalStringConcat; verification cycle at `0a0ad03`
+      identical {163/131/89}.*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed
