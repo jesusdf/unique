@@ -1721,7 +1721,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         checked declared types only (part of the 39x pg→oracle
         residue). A body whose raw text builds arrays now degrades
         the routine whole. Tests: TestArrayConstructorInBody.
-        *Measurement pending next pg-corpus cycle.*
+        **Measured at `d58d8e0` (2026-07-17): −4 — pg-source
+        {172/146/123}; the 39x PLS class is heterogeneous (remaining
+        shapes: dotted refs, assignment mangles — deep singles).
+        Standing: pg-source {172/146/123}, mysql-source
+        {177/107/141}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
