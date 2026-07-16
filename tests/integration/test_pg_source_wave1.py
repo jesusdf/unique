@@ -4557,6 +4557,10 @@ class TestForeachArrayLoop:
         out = _t(self._SRC, "postgresql")
         assert re.search(r"(?i)FOREACH x IN ARRAY p1", out), out
         assert re.search(r"(?i)END LOOP;", out), out
+        # The body must render as SQL lines, not a Python list repr
+        # (the first emit shipped ["        RAISE NOTICE ..."]).
+        assert re.search(r"(?im)^\s*RAISE NOTICE", out), out
+        assert '["' not in out, out
 
     def test_foreach_slice_preserved_pg(self) -> None:
         src = self._SRC.replace("in array", "slice 1 in array").replace(

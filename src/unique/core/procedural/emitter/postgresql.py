@@ -73,8 +73,9 @@ class PostgresEmitter(ProceduralEmitter):
     def _emit_foreach(self, node: ForeachStatement) -> str:
         slice_str = f" SLICE {node.slice_depth}" if node.slice_depth else ""
         self._indent_level += 1
-        body = self._emit_indented_stmts(node.body)
+        body_lines = self._emit_indented_stmts(node.body)
         self._indent_level -= 1
+        body = "\n".join(body_lines)
         return (
             f"FOREACH {node.variable}{slice_str} IN ARRAY {node.array_expr} LOOP\n"
             f"{body}\nEND LOOP;"
