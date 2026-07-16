@@ -857,7 +857,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          keep the carrier (NULL-extension semantics would change).
          Measured: mysql→oracle **31 → 30** (−1; the class members
          carry other issues too). Discovery HOLDS 0. Tests:
-         TestWave185ParenJoinFlatten (3).**
+         TestWave185ParenJoinFlatten (3).* Wave 186 (2026-07-17): plpgsql
+         bodies mirror the wave-183 Oracle fixes (bare ``;`` dropped,
+         comment-only body gets NULL;), and a set-op ORDER BY over an
+         aggregate/subquery is PG error 0A000 — whole-statement
+         carrier (result-column ORDER BYs pass). First cut missed the
+         SubqueryExpression import — the DML-failed warning caught it
+         in the wave test. Measured: mysql→pg **22 → 18** (−4,
+         validity 99.7%). Discovery HOLDS 0. Tests:
+         TestWave186PgBodySemisSetopOrder (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

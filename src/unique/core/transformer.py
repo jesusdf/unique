@@ -33,6 +33,7 @@ from unique.core.ast_nodes import (
     RawSQL,
     SelectStatement,
     Star,
+    SubqueryExpression,
     TableRef,
 )
 from unique.core.mappings import CANONICAL_FUNCTION_NAMES
@@ -581,6 +582,8 @@ class Transformer:
         result = nodes
         if self.context.target != "postgresql":
             result = [self._gate_pg_internals(node) for node in result]
+        if self.context.target == "postgresql":
+            result = [self._gate_pg_setop_order_aggregate(node) for node in result]
         if self.context.target in ("tsql", "mysql", "oracle"):
             result = [self._gate_array_constructs(node) for node in result]
             result = [self._gate_empty_select_list(node) for node in result]
@@ -1496,6 +1499,43 @@ class Transformer:
         )
         self.context.warn(reason, "tsql_all_computed_table")
         self.context.mark_unsupported("all-computed table (T-SQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    _SETOP_ORDER_AGG_RE = re.compile(r"(?i)\b(MAX|MIN|SUM|COUNT|AVG)\s*\(")
+
+    def _gate_pg_setop_order_aggregate(self, node: ASTNode) -> ASTNode:
+        """Degrade a set-op query ordering by an aggregate or subquery —
+        WHOLE, on PostgreSQL (error 0A000, wave 186): a UNION's ORDER BY
+        may only name result columns there; MySQL tolerates the form."""
+        if not (isinstance(node, SelectStatement) and node.set_op is not None):
+            return node
+        cur: SelectStatement | None = node
+        offending = False
+        while cur is not None:
+            for item in cur.order_by:
+                expr = item.expression
+                if isinstance(expr, SubqueryExpression):
+                    offending = True
+                if isinstance(expr, FunctionCall) and self._SETOP_ORDER_AGG_RE.match(
+                    f"{expr.name}("
+                ):
+                    offending = True
+                if isinstance(expr, RawSQL) and self._SETOP_ORDER_AGG_RE.search(
+                    expr.sql
+                ):
+                    offending = True
+            cur = cur.set_query
+        if not offending:
+            return node
+        reason = (
+            "PostgreSQL's set-operation ORDER BY may only name result "
+            "columns (no aggregates/subqueries). Statement preserved as "
+            "a comment"
+        )
+        self.context.warn(reason, "pg_setop_order_aggregate")
+        self.context.mark_unsupported("set-op ORDER BY aggregate (PG)")
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)

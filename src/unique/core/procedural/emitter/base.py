@@ -730,8 +730,18 @@ class ProceduralEmitter:
             self._indent_level = 0
         lines.append("BEGIN")
         self._indent_level = 1
-        for stmt in body_stmts:
-            text = self._emit_node(stmt)
+        pg_texts = [self._emit_node(stmt) for stmt in body_stmts]
+        # A bare ``;`` (an empty source statement) is a plpgsql syntax
+        # error too, and a comment-only body needs NULL; (wave 186 —
+        # the wave-183 Oracle fix, mirrored).
+        pg_texts = [t for t in pg_texts if t.strip() != ";"]
+        if not any(
+            ln.strip() and not ln.lstrip().startswith(("--", "/*", "*"))
+            for t in pg_texts
+            for ln in t.split("\n")
+        ):
+            pg_texts.append("NULL;")
+        for text in pg_texts:
             for line in text.split("\n"):
                 lines.append(f"{self._indent()}{line}" if line.strip() else "")
         self._indent_level = 0

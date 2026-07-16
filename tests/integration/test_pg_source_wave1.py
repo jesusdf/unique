@@ -6823,3 +6823,36 @@ class TestWave185ParenJoinFlatten:
             "oracle",
         )
         assert "CROSS JOIN" not in out.upper(), out
+
+
+class TestWave186PgBodySemisSetopOrder:
+    """wave 186 (mysql-corpus): plpgsql bodies mirror the Oracle
+    fixes (bare ``;`` dropped, comment-only body gets NULL;), and a
+    set-op ORDER BY over an aggregate is PG error 0A000 — honest
+    carrier."""
+
+    def test_show_only_body_pg(self) -> None:
+        out = _t2(
+            "create procedure p() begin show processlist; end",
+            "mysql",
+            "postgresql",
+        )
+        assert "UNIQUE:" in out, out
+        assert re.search(r"(?im)^\s*NULL;", out), out
+
+    def test_setop_order_aggregate_carrier_pg(self) -> None:
+        out = _t2(
+            "select max(1) as foo union select max(2) order by max(1) asc;",
+            "mysql",
+            "postgresql",
+        )
+        assert "UNIQUE:" in out, out
+        assert not re.search(r"(?im)^\s*SELECT MAX", out), out
+
+    def test_setop_order_column_untouched_pg(self) -> None:
+        out = _t2(
+            "select 1 as foo union select 2 order by foo;",
+            "mysql",
+            "postgresql",
+        )
+        assert "UNIQUE:" not in out, out
