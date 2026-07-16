@@ -88,6 +88,8 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         # MySQL CAST has no VARCHAR spelling — character casts use CHAR.
         "VARCHAR": "CHAR",
         "NVARCHAR": "CHAR",
+        # …nor TEXT (PG's habitual cast target) — wave 148.
+        "TEXT": "CHAR",
     },
     # PG float8 casts parse to DOUBLE — T-SQL's 64-bit float is FLOAT
     # (bare DOUBLE is a syntax error) and Oracle's is BINARY_DOUBLE

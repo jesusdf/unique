@@ -550,7 +550,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (`LAG(ten, four)`) raises 1327 and has no MySQL spelling;
          degrades whole there. Measured: pg→mysql **87 → 83**
          (97.2%), discovery HOLDS 0. Tests: TestMysqlNonConstLag
-         (3).**
+         (3).* Wave 148 (2026-07-16): the DML
+         cast map covered VARCHAR/NVARCHAR→CHAR but not TEXT — PG's
+         habitual cast target shipped `CAST(x AS TEXT)` raw on MySQL
+         (the wave-146 procedural mirror had it; the DML side lagged
+         — dual-pipeline symmetry cuts BOTH ways). Measured:
+         pg→mysql **83 → 78** (97.4%), discovery HOLDS 0. Tests:
+         TestMysqlDmlCastText.**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

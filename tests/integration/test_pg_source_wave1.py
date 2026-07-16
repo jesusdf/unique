@@ -5551,3 +5551,18 @@ class TestMysqlNonConstLag:
     def test_column_offset_kept_pg(self) -> None:
         out = _t("select lag(ten, four) over (order by ten) from t;", "postgresql")
         assert re.search(r"(?i)LAG\(ten, four\)", out), out
+
+
+class TestMysqlDmlCastText:
+    """wave 148: the DML cast map covered VARCHAR/NVARCHAR→CHAR but not
+    TEXT — PG's habitual cast target shipped ``CAST(x AS TEXT)`` raw on
+    MySQL (1064). The wave-146 procedural mirror had it; the DML side
+    lagged (dual-pipeline symmetry, both directions this time)."""
+
+    def test_cast_text_in_view_mysql(self) -> None:
+        out = _t(
+            "create view zv1 as select cast('dummy' as text) as junk from zt1;",
+            "mysql",
+        )
+        assert "AS TEXT" not in out.upper(), out
+        assert re.search(r"(?i)CAST\('dummy' AS CHAR\)", out), out
