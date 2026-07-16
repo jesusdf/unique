@@ -703,6 +703,33 @@ class PlsqlStatementsMixin(ParserBase):
                 return PrintStatement(expression=expr)
             return RaiseErrorStatement(message=expr)
 
+        # ``RAISE condition_name [USING k = v, …]`` — the name folds into
+        # a literal message (USING items appended as text, like the
+        # format path); the raw-expression fallback shipped it verbatim.
+        if (
+            self._dialect == "postgresql"
+            and self._current().type == TokenType.IDENTIFIER
+            and (
+                self._peek(1).type == TokenType.SEMICOLON
+                or self._peek(1).is_keyword("USING")
+            )
+        ):
+            cond = self._advance().value
+            using_parts: list[str] = []
+            if self._current().is_keyword("USING"):
+                self._advance()
+                while (
+                    not self._at_end() and self._current().type != TokenType.SEMICOLON
+                ):
+                    using_parts.append(self._flat_value(self._current()))
+                    self._advance()
+            self._match_type(TokenType.SEMICOLON)
+            content = cond + (" (" + " ".join(using_parts) + ")" if using_parts else "")
+            literal = "'" + content.replace("'", "''") + "'"
+            return RaiseErrorStatement(
+                message=RawSQL(sql=literal, reason="pg condition-name RAISE")
+            )
+
         # Level-less ``RAISE 'msg' [, args] [USING …]`` defaults to
         # EXCEPTION in plpgsql — same format path as the leveled form.
         if self._dialect == "postgresql" and self._current().type == TokenType.STRING:

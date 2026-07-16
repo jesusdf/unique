@@ -1511,6 +1511,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         pg→tsql 265 (raise_test/EXCEPTION chains) and the
         DECLARE HANDLER fidelity work (carriers → EXIT→EXCEPTION
         conversions, no validity delta).**
+        *Wave 68 (2026-07-16):* PG's `RAISE condition_name [USING k =
+        v]` fell to the raw-expression path — T-SQL declared `@msg
+        NVARCHAR(2048) = division_by_zero using detail = '…'` (6x
+        pg→tsql raise_test). The condition name now folds into a
+        literal message with USING items appended as text (the format
+        path's existing convention). Tests: TestRaiseConditionName.
+        *Measurement pending next pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

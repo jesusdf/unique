@@ -2802,3 +2802,40 @@ class TestRepeatUntilLoop:
         out = _t2(self._SRC, "mysql", "oracle")
         assert re.search(r"(?is)LOOP.*EXIT WHEN v >= 3.*END LOOP", out), out
         assert "repeat AS" not in out, out
+
+
+class TestRaiseConditionName:
+    """wave 68: PG's `RAISE condition_name [USING k = v]` fell to the
+    raw-expression path — T-SQL got `DECLARE @msg NVARCHAR(2048) =
+    division_by_zero using detail = '…'` (6x pg→tsql). The condition
+    name folds into a literal message (USING items appended as text,
+    like the format path already does)."""
+
+    def test_condition_name_tsql(self) -> None:
+        src = (
+            "create function rt() returns int as $$\n"
+            "begin\n"
+            "  raise division_by_zero using detail = 'some info';\n"
+            "  return 0;\n"
+            "end$$ language plpgsql;"
+        )
+        out = _t(src, "tsql")
+        offenders = [
+            ln
+            for ln in out.splitlines()
+            if "using detail" in ln.lower() and not ln.strip().startswith("--")
+        ]
+        assert not offenders, out
+        assert re.search(r"(?i)division_by_zero", out), out
+
+    def test_condition_name_oracle(self) -> None:
+        src = (
+            "create function rt2() returns int as $$\n"
+            "begin\n"
+            "  raise unique_violation;\n"
+            "  return 0;\n"
+            "end$$ language plpgsql;"
+        )
+        out = _t(src, "oracle")
+        assert re.search(r"(?i)unique_violation", out), out
+        assert "using" not in out.lower(), out
