@@ -1476,6 +1476,16 @@ fix needs an **anonymized** regression fixture (never a private name).
         {210/113/164}. pg-corpus re-verified at `76742d3`: identical
         {265/163/142} — the wave-65 parser changes (identifier stop
         words) cost nothing on pg source.**
+        *Wave 66 (2026-07-16):* MySQL's `CHAR BINARY` collation
+        attribute shredded the parameter parser like UNSIGNED did
+        (12x mysql→pg; BINARY joins the attribute set), and a CALL to
+        a routine whose CREATE degraded earlier in the same script
+        shipped as `BEGIN a(3); END;` — PLS-00221 at compile (18x
+        mysql→oracle). New DEGRADED_ROUTINES per-run registry:
+        populated by every routine degrade (uservar, record/composite,
+        parse fallback — name regexed from the original), checked in
+        _transform_call. Tests: TestCharBinaryAndDegradedCallRegistry.
+        *Measurement pending next mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

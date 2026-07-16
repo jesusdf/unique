@@ -233,6 +233,12 @@ PG_TRIGGER_FN_BODIES: contextvars.ContextVar[dict[str, str] | None] = (
     contextvars.ContextVar("pg_trigger_fn_bodies", default=None)
 )
 
+# Routine names whose CREATE degraded to a carrier in this run: a later
+# CALL to one of them would compile-fail (PLS-00221) — it must degrade too.
+DEGRADED_ROUTINES: contextvars.ContextVar[set[str] | None] = contextvars.ContextVar(
+    "degraded_routines", default=None
+)
+
 # PG composite types (``CREATE TYPE x AS (…)``) defined in the script: the
 # CREATE itself degrades off PG, so any routine declaring/returning one
 # must degrade whole rather than ship an unknown type name.
@@ -887,6 +893,7 @@ __all__ = [
     "IDENTITY_COLUMNS",
     "TEMP_TABLES",
     "harvest_temp_tables",
+    "DEGRADED_ROUTINES",
     "PG_COMPOSITE_TYPES",
     "PG_TRIGGER_FN_BODIES",
     "PROC_DATE_PARAMS",

@@ -931,6 +931,20 @@ class ProceduralTransformer:
 
     _MYSQL_USER_VAR_RE = re.compile(r"(?<!@)@(\w+)")
 
+    @staticmethod
+    def _register_degraded_routine(name: str | None) -> None:
+        from unique.core.converter import DEGRADED_ROUTINES
+
+        registry = DEGRADED_ROUTINES.get()
+        if registry is not None and name:
+            registry.add(name.lower())
+
+    _ROUTINE_NAME_RE = re.compile(
+        r"(?is)\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:DEFINER\s*=\s*\S+\s+)?"
+        r"(?:PROCEDURE|FUNCTION|TRIGGER)\s+(?:IF\s+NOT\s+EXISTS\s+)?"
+        r"(?:`?\w+`?\.)?`?(\w+)`?"
+    )
+
     def _degrade_mysql_uservar(self, node: ASTNode) -> RawSQL | None:
         """A MySQL routine referencing @user variables — WHOLE degrade
         off MySQL (session-scoped state with no target equivalent; the
@@ -946,6 +960,7 @@ class ProceduralTransformer:
             "equivalent; routine preserved as a comment"
         )
         self._warnings.append(reason)
+        self._register_degraded_routine(getattr(node, "name", None))
         from unique.core.procedural.emitter import ProceduralEmitter
 
         original = ProceduralEmitter(self._source).emit(node)
@@ -1106,6 +1121,7 @@ class ProceduralTransformer:
             "the routine is preserved as a comment"
         )
         self._warnings.append(reason)
+        self._register_degraded_routine(getattr(node, "name", None))
         return RawSQL(sql=original, reason=reason)
 
     def _has_dynamic_for(self, value: object) -> bool:
@@ -1697,6 +1713,20 @@ class ProceduralTransformer:
         degraded_uv = self._degrade_mysql_uservar(node)
         if degraded_uv is not None:
             return degraded_uv
+        from unique.core.converter import DEGRADED_ROUTINES
+
+        registry = DEGRADED_ROUTINES.get() or set()
+        callee = node.name.split(".")[-1].strip('`"[]').lower()
+        if callee in registry:
+            reason = (
+                f"CALL of routine {node.name} whose definition could not be "
+                "converted; statement preserved as a comment"
+            )
+            self._warnings.append(reason)
+            from unique.core.procedural.emitter import ProceduralEmitter
+
+            original = ProceduralEmitter(self._source).emit(node)
+            return RawSQL(sql=original, reason=reason)
         # An Oracle built-in package call shipped raw is a guaranteed runtime
         # error off Oracle (audit D10: DBMS_SCHEDULER.CREATE_JOB became a raw
         # CALL on PostgreSQL, unwarned). Preserve it as a documented carrier.
@@ -2975,6 +3005,9 @@ class ProceduralTransformer:
                 f"({node.reason}); statement preserved as a comment"
             )
             self._warnings.append(reason)
+            m = self._ROUTINE_NAME_RE.search(node.sql)
+            if m:
+                self._register_degraded_routine(m.group(1))
             return RawSQL(sql=node.sql, reason=reason)
         sql = self._fix_fetch_status(node.sql)
         sql = self._fix_base64_xml_idiom(sql)

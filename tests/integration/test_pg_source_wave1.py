@@ -2717,3 +2717,57 @@ class TestUnsignedParamsOracleTypes:
             "oracle",
         )
         assert "ORDER BY" not in out.upper(), out
+
+
+class TestCharBinaryAndDegradedCallRegistry:
+    """wave 66: MySQL's `CHAR BINARY` collation attribute shreds the
+    parameter parser like UNSIGNED did (12x mysql→pg); and a CALL to
+    a routine whose CREATE degraded earlier in the same script
+    shipped as `BEGIN a(3); END;` — PLS-00221 at compile because the
+    procedure never got created (18x mysql→oracle). Degraded routine
+    names now register per run; later CALLs to them degrade too."""
+
+    def test_char_binary_param_parses(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create function bug9048(f1 char binary) returns char\n"
+            "begin\n"
+            "  set f1 = concat('hello', f1);\n"
+            "  return f1;\n"
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = _t2(src, "mysql", "postgresql")
+        assert re.search(r"(?is)CREATE OR REPLACE FUNCTION bug9048\s*\(", out), out
+        assert "binary )" not in out.lower(), out
+
+    def test_call_to_degraded_routine_degrades(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create procedure p9(x int)\n"
+            "begin\n"
+            "  set @acc = @acc + x;\n"
+            "end//\n"
+            "DELIMITER ;\n"
+            "call p9(3);\n"
+        )
+        out = _t2(src, "mysql", "oracle")
+        code = [
+            ln
+            for ln in out.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not any("p9" in ln.lower() for ln in code), out
+
+    def test_call_to_converted_routine_survives(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create procedure p10(x int)\n"
+            "begin\n"
+            "  insert into t1 values (x);\n"
+            "end//\n"
+            "DELIMITER ;\n"
+            "call p10(3);\n"
+        )
+        out = _t2(src, "mysql", "oracle")
+        assert re.search(r"(?is)BEGIN\s+p10\(3\);\s+END;", out), out

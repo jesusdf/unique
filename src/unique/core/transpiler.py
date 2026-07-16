@@ -28,6 +28,7 @@ from unique.core.ast_nodes import (
 from unique.core.batch_splitter import _TSQL_SYSTEM_PROCS, BatchSplitter, BatchType
 from unique.core.converter import (
     DATE_COLUMNS,
+    DEGRADED_ROUTINES,
     IDENTITY_COLUMNS,
     PG_COMPOSITE_TYPES,
     PG_TRIGGER_FN_BODIES,
@@ -905,6 +906,7 @@ class Transpiler:
             if temp_tables:
                 temp_tables_token = TEMP_TABLES.set(temp_tables)
         source_dialect_token = SOURCE_DIALECT.set(source)
+        degraded_routines_token = DEGRADED_ROUTINES.set(set())
         pg_trigger_fn_token = None
         pg_composite_token = None
         if source == "postgresql" and target != "postgresql":
@@ -1130,6 +1132,7 @@ class Transpiler:
                 PG_TRIGGER_FN_BODIES.reset(pg_trigger_fn_token)
             if pg_composite_token is not None:
                 PG_COMPOSITE_TYPES.reset(pg_composite_token)
+            DEGRADED_ROUTINES.reset(degraded_routines_token)
             SOURCE_DIALECT.reset(source_dialect_token)
             if metadata_resolver:
                 metadata_resolver.close()

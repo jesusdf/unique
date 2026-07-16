@@ -1106,7 +1106,12 @@ class ParserBase:
         while self._current().type in (
             TokenType.KEYWORD,
             TokenType.IDENTIFIER,
-        ) and self._current().upper_value in ("UNSIGNED", "SIGNED", "ZEROFILL"):
+        ) and self._current().upper_value in (
+            "UNSIGNED",
+            "SIGNED",
+            "ZEROFILL",
+            "BINARY",
+        ):
             if self._current().upper_value == "UNSIGNED":
                 unsigned = True
             self._advance()
