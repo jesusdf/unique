@@ -1782,8 +1782,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         the raw-expression path where the T-SQL SQLSTATE→ERROR_STATE
         substitution mangled it (3x); like wave 68's condition-name
         form, it folds into a literal message. Tests:
-        TestRaiseSqlstateLiteral. *Measurement pending next pg-corpus
-        cycle.*
+        TestRaiseSqlstateLiteral. **Measured at `8a63039`
+        (2026-07-17): −3 — pg-source {164/131/89}; pg→T-SQL reaches
+        95.0%. Standing: pg-source {164/131/89}, mysql-source
+        {166/107/129} — all six directions ≥95.0%.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
