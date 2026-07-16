@@ -1608,7 +1608,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         label, ITERATE→CONTINUE); the label flows through
         _transform_loop and PG/Oracle emit `<<label>> LOOP … END LOOP
         label;` with `EXIT label;`. Tests: TestLabeledLoops.
-        *Measurement pending next mysql-corpus cycle.*
+        **Measured at `f083425` (2026-07-16): mysql→PG 108→107,
+        others flat — the labeled routines carry further blockers.
+        Standing: pg-source {261/160/140}, mysql-source
+        {177/107/141}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
