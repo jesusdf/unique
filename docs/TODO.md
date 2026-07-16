@@ -749,7 +749,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          dbo. UDF — new niladic session-id map (@@SPID /
          pg_backend_pid() / SYS_CONTEXT('USERENV','SID')), chained
          with the UUID map. Measured: mysql→tsql **60 → 59** (−1).
-         Discovery HOLDS 0. Tests: TestWave171KillConnectionId (4).**
+         Discovery HOLDS 0. Tests: TestWave171KillConnectionId (4).* Wave 172 (2026-07-17):
+         PROCEDURAL_TYPE_MAPS had NO (mysql, tsql) entry at all —
+         ``DECLARE @lf double`` shipped a type T-SQL does not
+         recognize. Added the full map aligned with EMIT_TYPE_MAP
+         (DOUBLE→FLOAT, TEXT family→VARCHAR(MAX), BLOB
+         family→VARBINARY(MAX), BOOLEAN→BIT, YEAR→SMALLINT,
+         MEDIUMINT→INT); the cross-pipeline agreement contract stays
+         green. Measured: mysql→tsql **59 → 57** (−2). Discovery HOLDS
+         0. Tests: TestWave172MysqlTsqlDeclareTypes (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

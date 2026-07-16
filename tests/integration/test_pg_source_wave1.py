@@ -6385,3 +6385,34 @@ class TestWave171KillConnectionId:
             "mysql",
         )
         assert re.search(r"(?i)connection_id\s*\(\s*\)", out), out
+
+
+class TestWave172MysqlTsqlDeclareTypes:
+    """wave 172 (mysql-corpus): PROCEDURAL_TYPE_MAPS had NO
+    (mysql, tsql) entry at all — ``DECLARE @lf double`` shipped a type
+    T-SQL does not recognize (its spelling is FLOAT)."""
+
+    def test_declare_double_becomes_float(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare lf double;" " set lf = 1.5; end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)DECLARE @lf FLOAT", out), out
+        assert "double" not in out.lower(), out
+
+    def test_declare_text_becomes_varchar_max(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare s text; set s = 'x'; end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)DECLARE @s VARCHAR\(MAX\)", out), out
+
+    def test_declare_double_kept_mysql(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare lf double;" " set lf = 1.5; end",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(r"(?i)DECLARE lf double", out), out

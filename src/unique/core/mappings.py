@@ -465,6 +465,23 @@ PROCEDURAL_TYPE_MAPS: dict[tuple[str, str], dict[str, str]] = {
         "LONGBLOB": "BLOB",
         "DATETIME": "TIMESTAMP",
     },
+    ("mysql", "tsql"): {
+        # MySQL declares that T-SQL rejects or narrows (DECLARE @x double
+        # was error 'double is not a recognized type' — wave 172).
+        "DOUBLE": "FLOAT",
+        "MEDIUMINT": "INT",
+        "BOOLEAN": "BIT",
+        "BOOL": "BIT",
+        "TEXT": "VARCHAR(MAX)",
+        "TINYTEXT": "VARCHAR(MAX)",
+        "MEDIUMTEXT": "VARCHAR(MAX)",
+        "LONGTEXT": "VARCHAR(MAX)",
+        "BLOB": "VARBINARY(MAX)",
+        "TINYBLOB": "VARBINARY(MAX)",
+        "MEDIUMBLOB": "VARBINARY(MAX)",
+        "LONGBLOB": "VARBINARY(MAX)",
+        "YEAR": "SMALLINT",
+    },
     ("mysql", "postgresql"): {
         "TINYINT": "SMALLINT",
         "MEDIUMINT": "INTEGER",
