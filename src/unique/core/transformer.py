@@ -595,6 +595,8 @@ class Transformer:
         if self.context.source == "mysql" and self.context.target != "mysql":
             result = [self._gate_mysql_user_var(node) for node in result]
             result = [self._strip_mysql_charset_marks(node) for node in result]
+        if self.context.target in ("tsql", "oracle"):
+            result = [self._gate_nested_cte_arm(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_temp_view(node) for node in result]
             result = [self._gate_tsql_natural_join(node) for node in result]
@@ -705,6 +707,39 @@ class Transformer:
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _gate_nested_cte_arm(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement whose set arm carries its own WITH — WHOLE.
+
+        Valid PG/MySQL-8; T-SQL and Oracle only allow CTEs at the
+        statement top (the parenthesized arm shipped invalid, wave 134)."""
+        if not self._has_nested_cte_arm(node):
+            return node
+        reason = (
+            f"a WITH inside a set-operation arm has no {self.context.target} "
+            "spelling (CTEs are statement-top only); statement preserved "
+            "as a comment"
+        )
+        self.context.warn(reason, "nested_cte_arm")
+        self.context.mark_unsupported("WITH inside a set-operation arm")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _has_nested_cte_arm(self, value: object) -> bool:
+        if isinstance(value, SelectStatement):
+            chain = value.set_query
+            while chain is not None:
+                if chain.ctes:
+                    return True
+                chain = chain.set_query
+        if isinstance(value, ASTNode):
+            return any(
+                self._has_nested_cte_arm(getattr(value, f.name)) for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._has_nested_cte_arm(item) for item in value)
+        return False
 
     def _gate_empty_select_list(self, node: ASTNode) -> ASTNode:
         """Degrade a statement with PG's zero-column select list — WHOLE.

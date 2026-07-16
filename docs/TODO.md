@@ -427,7 +427,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          pg→pg = 0 SILENT GAPS (from 287)** — the fixtures-corpus
          no-silent-loss goal for the discovery channel is COMPLETE:
          every statement transpiles validly or carries a
-         warning/carrier. Tests: TestWave133Batch (6).**
+         warning/carrier. Tests: TestWave133Batch (6). Direction-residue
+         campaign opened (wave 134, 2026-07-16): a WITH inside a
+         set-operation arm (valid PG/MySQL-8 after wave 129) has no
+         T-SQL/Oracle spelling (CTEs are statement-top only) —
+         `_gate_nested_cte_arm` degrades whole there. Measured:
+         pg→tsql **122 → 118** (96.4%), discovery HOLDS at 0.
+         Remaining tsql classes (sweep at `de81b44`): non-boolean
+         WHERE 8x, near-SELECT 8x, `,` 7x, `(n.*)` star 5x, OLD
+         pseudo-rows 5x, boolean-agg NOT 3x, DECODE 3x, set role 3x,
+         AS 3x, OUTPUT-in-function 3x, E-strings 3x.
+         Tests: TestNestedCteArmGate (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

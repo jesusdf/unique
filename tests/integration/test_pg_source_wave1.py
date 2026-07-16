@@ -5093,3 +5093,31 @@ class TestWave133Batch:
         out = _t(src, "postgresql")
         assert not re.search(r"(?i)\(.*\);\s*SELECT a INTO", out), out
         assert re.search(r"(?is)with p as\s*\(", out.lower()), out
+
+
+class TestNestedCteArmGate:
+    """wave 134: a WITH inside a parenthesized set arm is valid PG (wave
+    129 restored the parens) but T-SQL and Oracle only allow CTEs at the
+    statement top — the arm shipped invalid (12x of the pg→tsql sweep
+    residue). Degrade whole there; PG and MySQL (8+) keep it."""
+
+    _SRC = (
+        "with x as (select 1 as a union all "
+        "(with z as (select 2 as a) select a from z)) select * from x;"
+    )
+
+    @pytest.mark.parametrize("target", ["tsql", "oracle"])
+    def test_nested_cte_arm_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(self._SRC, source="postgresql", target=target)
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_nested_cte_arm_kept_pg(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        assert re.search(r"(?is)UNION ALL\s*\(WITH z", out), out
+        assert "UNIQUE:" not in out, out
