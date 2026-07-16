@@ -12,6 +12,7 @@ import re
 from unique.core.ast_nodes import (
     ASTNode,
     CallStatement,
+    ContinueStatement,
     CreateTriggerStatement,
     CursorDeclaration,
     DataType,
@@ -462,9 +463,14 @@ class MySqlEmitter(ProceduralEmitter):
         cond = self._emit_node(node.condition) if node.condition else ""
         cond = self._translate_cursor_attrs(cond)
         # MySQL uses LEAVE with a loop label; emit a guarded LEAVE.
+        label = node.label or "loop_lbl"
         if cond:
-            return f"IF {cond} THEN LEAVE loop_lbl; END IF;"
-        return "LEAVE loop_lbl;"
+            return f"IF {cond} THEN LEAVE {label}; END IF;"
+        return f"LEAVE {label};"
+
+    def _emit_continue(self, node: ContinueStatement) -> str:
+        # MySQL spells CONTINUE as ITERATE <label>.
+        return f"ITERATE {node.label or 'loop_lbl'};"
 
     def _translate_cursor_attrs(self, expr: str) -> str:
         if not expr:

@@ -21,6 +21,7 @@ from unique.core.ast_nodes import (
     BeginEndBlock,
     CallStatement,
     CommentStatement,
+    ContinueStatement,
     CursorDeclaration,
     CursorOperation,
     DeclareStatement,
@@ -119,6 +120,14 @@ class PlsqlStatementsMixin(ParserBase):
                     "WHILE",
                     "CALL",
                     "RETURN",
+                )
+                # REPEAT/LOOP lex as identifiers; a ``label:`` prefix
+                # hides the loop keyword two tokens further on.
+                or self._current().upper_value in ("REPEAT", "LOOP")
+                or (
+                    self._current().type == TokenType.IDENTIFIER
+                    and self._peek(1).type == TokenType.COLON
+                    and self._peek(2).upper_value in ("LOOP", "WHILE", "REPEAT")
                 )
             )
         ):
@@ -372,7 +381,9 @@ class PlsqlStatementsMixin(ParserBase):
             self._match_type(TokenType.SEMICOLON)
             if kw == "LEAVE":
                 return ExitStatement(label=label)
-            return RawSQL(sql=f"CONTINUE {label}", reason="loop continue")
+            # ITERATE label — modeled, or T-SQL shipped a literal
+            # ``CONTINUE hmm`` (labels don't exist there).
+            return ContinueStatement(label=label)
         if (
             self._dialect == "mysql"
             and tok.type == TokenType.IDENTIFIER

@@ -610,7 +610,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          position. Also: pyodbc import-not-found (env driver drift)
          gets the live_validate override treatment. Measured:
          mysql→tsql **164 → 155** (−9). Discovery HOLDS 0. Tests:
-         TestWave155ConditionLiterals (5).**
+         TestWave155ConditionLiterals (5).* Wave 156 (2026-07-16): a MySQL
+         routine body that is a single LABELED loop (``proc c(x int)
+         hmm: while … end while hmm``) or a bare REPEAT/LOOP has no
+         BEGIN — the declare loop shredded it into ``DECLARE @hmm :;``
+         garbage. The single-statement no-BEGIN branch now recognizes
+         the ``label:`` prefix and identifier-lexed REPEAT/LOOP;
+         ITERATE is a modeled ContinueStatement (T-SQL CONTINUE, MySQL
+         ITERATE label — it shipped literal ``CONTINUE hmm``).
+         Measured: mysql→tsql **155 → 151** (−4). Discovery HOLDS 0.
+         Tests: TestWave156LabeledBodyNoBegin (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

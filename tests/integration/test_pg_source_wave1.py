@@ -5755,3 +5755,51 @@ class TestWave155ConditionLiterals:
             "tsql",
         )
         assert re.search(r"(?i)WHEN a = 1 THEN", out), out
+
+
+class TestWave156LabeledBodyNoBegin:
+    """wave 156 (mysql-corpus): a MySQL routine body that is a single
+    LABELED loop (``proc c(x int) hmm: while … end while hmm``) — or a
+    bare REPEAT/LOOP — has no BEGIN; the declare loop shredded it into
+    garbage ``DECLARE @hmm :;`` statements."""
+
+    _LOOP = (
+        "create procedure c(x int)\n"
+        "hmm: while x > 0 do\n"
+        "  insert into t1 values ('c', x);\n"
+        "  set x = x - 1;\n"
+        "  iterate hmm;\n"
+        "end while hmm"
+    )
+
+    def test_labeled_while_tsql_not_shredded(self) -> None:
+        out = _t2(self._LOOP, "mysql", "tsql")
+        assert "DECLARE @hmm" not in out, out
+        # Parsed, not the raw-fallback text: parameters got the @ sigil
+        # and ITERATE became a bare CONTINUE (T-SQL has no labels).
+        assert re.search(r"(?i)WHILE @x > 0", out), out
+        assert re.search(r"(?i)INSERT INTO t1", out), out
+        assert re.search(r"(?i)CONTINUE;", out), out
+        assert "iterate" not in out.lower(), out
+
+    def test_labeled_while_pg(self) -> None:
+        out = _t2(self._LOOP, "mysql", "postgresql")
+        assert "DECLARE @hmm" not in out, out
+        assert re.search(r"(?i)WHILE x > 0", out), out
+        assert re.search(r"(?i)CONTINUE", out), out
+
+    def test_labeled_while_mysql_roundtrip(self) -> None:
+        out = _t2(self._LOOP, "mysql", "mysql")
+        assert re.search(r"(?i)ITERATE hmm;", out), out
+
+    def test_bare_repeat_body_tsql(self) -> None:
+        sql = (
+            "create procedure b2(x int)\n"
+            "repeat\n"
+            "  insert into t1 values ('b2', x);\n"
+            "  set x = x - 1;\n"
+            "until x = 0 end repeat"
+        )
+        out = _t2(sql, "mysql", "tsql")
+        assert "DECLARE @repeat" not in out, out
+        assert re.search(r"(?i)INSERT INTO t1", out), out
