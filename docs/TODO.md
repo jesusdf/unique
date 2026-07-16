@@ -276,7 +276,21 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          alias to its target (the $n positional-aliasing mechanism);
          the declaration vanishes. Measured: discovery **81 → 78**
          (`;` 14→11 — the rest of that class are further sub-shapes,
-         next trace needed). Tests: TestAliasForDeclaration (2).**
+         next trace needed). Tests: TestAliasForDeclaration (2).
+         Wave 118 (2026-07-16): FETCH directions — `FETCH NEXT|LAST|
+         ABSOLUTE n … FROM c INTO x` took the DIRECTION as the cursor
+         name (`FETCH next INTO ;` + orphan). A word is a direction
+         only when FROM/IN follows, so cursors named `last` still
+         work; native re-emit on PG and T-SQL, documented carrier on
+         Oracle/MySQL (forward-only). Found+fixed en route: the
+         shared `_transform_cursor_op`/`_transform_cursor_decl`
+         REBUILT their nodes field-by-field, silently dropping any
+         field they didn't know (scroll, direction) — now
+         dataclasses.replace; that trap ate wave 116's scroll on
+         every transformed route. Measured: discovery **78 → 72**
+         (INTO class gone). Sweeps at `63de504`: pg→tsql **145**
+         (95.6%), pg→mysql **118** (96.1%), pg→oracle **77** (97.6%).
+         Tests: TestFetchDirections (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

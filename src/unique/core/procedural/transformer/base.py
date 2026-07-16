@@ -2131,7 +2131,11 @@ class ProceduralTransformer:
             )
             for p in node.parameters
         )
-        return CursorDeclaration(name=new_name, query=new_query, parameters=new_params)
+        # dataclasses.replace, not reconstruction: a rebuild silently drops
+        # fields this method does not know about (scroll — wave 118).
+        return dataclasses.replace(
+            node, name=new_name, query=new_query, parameters=new_params
+        )
 
     def _transform_cursor_op(self, node: CursorOperation) -> ASTNode:
         new_name = self._transform_var_name(node.cursor_name)
@@ -2155,8 +2159,9 @@ class ProceduralTransformer:
             return NullStatement()
         new_into = tuple(self._transform_var_name(v) for v in node.into_vars)
         new_query = self._transform_node(node.query) if node.query else None
-        return CursorOperation(
-            operation=node.operation,
+        # dataclasses.replace, not reconstruction (drops scroll/direction).
+        return dataclasses.replace(
+            node,
             cursor_name=new_name,
             into_vars=new_into,
             query=new_query,

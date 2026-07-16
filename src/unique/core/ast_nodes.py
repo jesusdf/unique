@@ -800,6 +800,10 @@ class CursorOperation(ASTNode):
     #: PG ``OPEN c [NO] SCROLL FOR …``: "SCROLL" or "NO SCROLL" (None =
     #: unspecified). Only PostgreSQL re-emits it.
     scroll: str | None = None
+    #: FETCH direction (``NEXT``, ``LAST``, ``ABSOLUTE 3``, …). Native on
+    #: PG and T-SQL; Oracle/MySQL cursors are forward-only, so a non-NEXT
+    #: direction degrades to the documented carrier there.
+    direction: str | None = None
 
 
 @dataclass(frozen=True)

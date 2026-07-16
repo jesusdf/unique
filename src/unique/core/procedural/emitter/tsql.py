@@ -487,8 +487,11 @@ class TSqlEmitter(ProceduralEmitter):
         # (and scrollability lives on the DECLARE too).
         return f"OPEN {cursor_name};"
 
-    def _emit_cursor_fetch(self, cursor_name: str, into_str: str) -> str:
-        return f"FETCH NEXT FROM {cursor_name} INTO {into_str};"
+    def _emit_cursor_fetch(
+        self, cursor_name: str, into_str: str, direction: str | None = None
+    ) -> str:
+        # T-SQL supports the full direction family natively.
+        return f"FETCH {direction or 'NEXT'} FROM {cursor_name} INTO {into_str};"
 
     def _emit_cursor_deallocate(self, cursor_name: str) -> str:
         return f"DEALLOCATE {cursor_name};"

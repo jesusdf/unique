@@ -1813,7 +1813,9 @@ class ProceduralEmitter:
             return f"OPEN {node.cursor_name};"
         elif op == "FETCH":
             into_str = ", ".join(node.into_vars)
-            return self._emit_cursor_fetch(node.cursor_name, into_str)
+            return self._emit_cursor_fetch(
+                node.cursor_name, into_str, direction=node.direction
+            )
         elif op == "CLOSE":
             return f"CLOSE {node.cursor_name};"
         elif op == "DEALLOCATE":
@@ -1828,9 +1830,21 @@ class ProceduralEmitter:
         cursors); the PG and T-SQL emitters override."""
         return f"OPEN {cursor_name} FOR\n{query_str.rstrip().rstrip(';')};"
 
-    def _emit_cursor_fetch(self, cursor_name: str, into_str: str) -> str:
+    def _emit_cursor_fetch(
+        self, cursor_name: str, into_str: str, direction: str | None = None
+    ) -> str:
         """FETCH a row INTO variables. Default standard form; T-SQL overrides
-        with FETCH NEXT FROM."""
+        with FETCH NEXT FROM and PG re-emits the direction. This default
+        serves the forward-only engines (Oracle/MySQL): a non-NEXT
+        direction has no equivalent and degrades to the documented
+        carrier."""
+        if direction and direction.upper() != "NEXT":
+            return (
+                f"-- UNIQUE: FETCH {direction} has no {self._dialect} "
+                "equivalent (cursors are forward-only); statement "
+                f"preserved as a comment:\n"
+                f"-- FETCH {direction} FROM {cursor_name} INTO {into_str};"
+            )
         return f"FETCH {cursor_name} INTO {into_str};"
 
     def _emit_cursor_deallocate(self, cursor_name: str) -> str:

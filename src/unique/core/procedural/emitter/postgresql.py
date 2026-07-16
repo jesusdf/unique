@@ -69,6 +69,14 @@ class PostgresEmitter(ProceduralEmitter):
         scroll_str = f" {scroll}" if scroll else ""
         return f"OPEN {cursor_name}{scroll_str} FOR\n{query_str.rstrip().rstrip(';')};"
 
+    def _emit_cursor_fetch(
+        self, cursor_name: str, into_str: str, direction: str | None = None
+    ) -> str:
+        # PG keeps the direction: FETCH [direction FROM] c INTO vars.
+        if direction:
+            return f"FETCH {direction} FROM {cursor_name} INTO {into_str};"
+        return f"FETCH {cursor_name} INTO {into_str};"
+
     def _emit_cursor_decl(self, node: CursorDeclaration) -> str:
         # PL/pgSQL: name CURSOR FOR <select>; a query-less cursor VARIABLE
         # (T-SQL ``DECLARE @cur CURSOR;``) is a REFCURSOR (bare ``x CURSOR;``

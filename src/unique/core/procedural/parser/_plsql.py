@@ -772,9 +772,33 @@ class PlsqlStatementsMixin(ParserBase):
             scroll=scroll,
         )
 
+    _FETCH_DIRECTIONS = frozenset(
+        {"NEXT", "PRIOR", "FIRST", "LAST", "FORWARD", "BACKWARD"}
+    )
+
     def _parse_plsql_fetch(self) -> ASTNode:
-        """Parse FETCH cursor INTO vars."""
+        """Parse FETCH [direction FROM|IN] cursor INTO vars.
+
+        The direction word used to be taken as the CURSOR NAME, emitting
+        ``FETCH next INTO ;`` plus an orphan ``from c into x;`` (wave 118).
+        A word only counts as a direction when FROM/IN follows (PG requires
+        it then), so a cursor actually named ``last`` keeps working."""
         self._expect_keyword("FETCH")
+        direction: str | None = None
+        cur = self._current().upper_value
+        if cur in self._FETCH_DIRECTIONS and self._peek(1).is_keyword("FROM", "IN"):
+            direction = cur
+            self._advance()
+        elif (
+            cur in ("ABSOLUTE", "RELATIVE", "FORWARD", "BACKWARD")
+            and self._peek(1).type == TokenType.NUMBER
+            and self._peek(2).is_keyword("FROM", "IN")
+        ):
+            self._advance()
+            count = self._advance().value
+            direction = f"{cur} {count}"
+        if self._current().is_keyword("FROM", "IN"):
+            self._advance()
         cursor_name = self._parse_identifier()
         into_vars: list[str] = []
         if self._match_keyword("INTO"):
@@ -787,6 +811,7 @@ class PlsqlStatementsMixin(ParserBase):
             operation="FETCH",
             cursor_name=cursor_name,
             into_vars=tuple(into_vars),
+            direction=direction,
         )
 
     def _parse_plsql_close(self) -> ASTNode:

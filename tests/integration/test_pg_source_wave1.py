@@ -4417,3 +4417,69 @@ class TestAliasForDeclaration:
         out = _t(src, "postgresql")
         assert "alias" not in out.lower(), out
         assert re.search(r"(?i)RETURN x \+ 1", out), out
+
+
+class TestFetchDirections:
+    """wave 118: ``FETCH NEXT|LAST|… FROM c INTO x`` — the FETCH parse
+    took the DIRECTION word as the cursor name, emitting ``FETCH next
+    INTO ;`` plus an orphan ``from c into x;`` (the 7x INTO class).
+    Directions are native on PG and T-SQL; Oracle/MySQL cursors only
+    step forward, so a non-NEXT direction degrades to the documented
+    carrier there."""
+
+    def test_fetch_next_from_pg(self) -> None:
+        src = (
+            "create function f() returns int as $$\n"
+            "declare rc refcursor; x record;\n"
+            "begin\n"
+            "  rc := get_cur();\n"
+            "  fetch next from rc into x;\n"
+            "  return x.a;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)FETCH NEXT FROM rc INTO x;", out), out
+        assert "INTO ;" not in out, out
+
+    def test_fetch_last_from_pg(self) -> None:
+        src = (
+            "create function f() returns int as $$\n"
+            "declare c cursor for select f1 from t; x integer;\n"
+            "begin\n"
+            "  open c;\n"
+            "  fetch last from c into x;\n"
+            "  close c; return x;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)FETCH LAST FROM c INTO x;", out), out
+        assert "INTO ;" not in out, out
+
+    def test_fetch_last_degrades_oracle(self) -> None:
+        src = (
+            "create function f() returns int as $$\n"
+            "declare c cursor for select f1 from t; x integer;\n"
+            "begin\n"
+            "  open c;\n"
+            "  fetch last from c into x;\n"
+            "  close c; return x;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "oracle")
+        code = [
+            ln
+            for ln in out.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not any(re.search(r"(?i)FETCH LAST", ln) for ln in code), out
+        assert "UNIQUE:" in out, out
+
+    def test_plain_fetch_unchanged_pg(self) -> None:
+        src = (
+            "create function f() returns int as $$\n"
+            "declare c cursor for select f1 from t; x integer;\n"
+            "begin open c; fetch c into x; close c; return x; end\n"
+            "$$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)FETCH c INTO x;", out), out
