@@ -271,14 +271,28 @@ def _cte_dml_unsupported(sql: str, read: str, dialect: str) -> str | None:
     UPDATE x SET ...``); nothing else does. Oracle additionally has no WITH
     clause on UPDATE/DELETE at all.
     """
-    if dialect == "tsql":
-        return None
     try:
         expr = sqlglot.parse_one(sql, read=read)
     except Exception:  # noqa: BLE001 - let the generic path handle it
         return None
     with_clause = expr.args.get("with") or expr.args.get("with_")
     if with_clause is None:
+        return None
+    # A DML body INSIDE a CTE (``WITH ins AS (INSERT … RETURNING) SELECT``)
+    # is PostgreSQL-only — checked before the T-SQL early-out below, which
+    # covers the inverse shape (updating THROUGH a CTE).
+    if any(
+        isinstance(c.this, (exp.Insert, exp.Update, exp.Delete))
+        for c in with_clause.expressions
+    ):
+        if dialect == "postgresql":
+            return None
+        return (
+            "data-modifying CTEs (WITH x AS (INSERT/UPDATE/DELETE … "
+            "RETURNING)) are PostgreSQL-only; run the DML separately and "
+            "read its result from a table."
+        )
+    if dialect == "tsql":
         return None
     cte_names = {c.alias_or_name.lower() for c in with_clause.expressions}
     target = expr.this

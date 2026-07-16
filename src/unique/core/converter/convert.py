@@ -293,6 +293,21 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="CTE DML",
         )
+    # A data-modifying CTE under a SELECT — ``WITH ins AS (INSERT …
+    # RETURNING) SELECT …`` (PG-only): the CTE converter would shred the
+    # DML body into a bare SELECT skeleton (wave 114). Pass through whole;
+    # the emitter keeps it on PG and carriers it elsewhere.
+    if isinstance(expr, exp.Select):
+        with_arg = expr.args.get("with") or expr.args.get("with_")
+        if with_arg is not None and any(
+            isinstance(cte.this, (exp.Insert, exp.Update, exp.Delete))
+            for cte in with_arg.expressions
+        ):
+            return PassthroughSQL(
+                sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+                source_dialect=source_dialect,
+                kind="CTE DML",
+            )
     # A parenthesized join tree in FROM (the Access-style
     # ``FROM ((a JOIN b ON ...) JOIN c ON ...)``) parses as nested Subquery
     # nodes that are not derived tables; the IR would silently lose the whole

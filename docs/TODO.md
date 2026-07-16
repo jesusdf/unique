@@ -232,7 +232,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          carrier+warning (JSON_TABLE keeps its path); Oracle now
          spells a function relation `TABLE(fn(args)) alias`.
          Verified: pg→mysql **121** (96.0%, beats the 131 record);
-         pg→oracle flat 79. Tests: TestFunctionRelationTargets.**
+         pg→oracle flat 79. Tests: TestFunctionRelationTargets.
+         Wave 114 (2026-07-16): a data-modifying CTE (`WITH ins AS
+         (INSERT … RETURNING) SELECT …`, PG-only) had its DML body
+         SHREDDED into a `SELECT *` skeleton by `_convert_cte`
+         (silent loss of the INSERT/DELETE itself). Now routed
+         through the existing CTE-DML passthrough: preserved pg→pg,
+         degraded whole with the documented carrier elsewhere (the
+         DML-inside-CTE check runs BEFORE the helper's T-SQL
+         early-out, which covers the inverse update-through-CTE
+         shape). Measured: discovery **98 → 86** (−12; 'SELECT *
+         with no tables' 15→3). Tests: TestDataModifyingCte.**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

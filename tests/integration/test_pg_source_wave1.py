@@ -4217,3 +4217,48 @@ class TestFunctionRelationTargets:
             target="mysql",
         )
         assert "1064" not in " ".join(r.unsupported), r.sql
+
+
+class TestDataModifyingCte:
+    """wave 114: a data-modifying CTE (``WITH ins AS (INSERT … RETURNING)
+    SELECT …``) had its DML body SHREDDED into a ``SELECT *`` skeleton by
+    the CTE converter (silent loss of the INSERT/DELETE itself, 15x
+    'SELECT * with no tables' in the discovery). PG-only construct:
+    preserved pg→pg via the CTE-DML passthrough, degraded whole with a
+    carrier elsewhere."""
+
+    def test_with_insert_returning_preserved_pg(self) -> None:
+        out = _t(
+            "with ins as (insert into t (a) values (1) returning a, b) "
+            "select a, b from ins;",
+            "postgresql",
+        )
+        assert re.search(r"(?i)INSERT INTO t", out), out
+        assert re.search(r"(?i)RETURNING", out), out
+        assert not re.search(r"(?i)AS \(\s*SELECT \*\s*\)", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_with_delete_returning_preserved_pg(self) -> None:
+        out = _t(
+            "with d as (delete from t where a = 1 returning a) " "select * from d;",
+            "postgresql",
+        )
+        assert re.search(r"(?i)DELETE FROM t", out), out
+        assert "UNIQUE:" not in out, out
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_dml_cte_degrades_off_pg(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "with ins as (insert into t (a) values (1) returning a) "
+            "select a from ins;",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+        assert re.search(r"(?i)INSERT INTO t", r.sql), r.sql
