@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
 
 from unique.core.ast_nodes import (
+    ArrayLiteral,
     ASTNode,
     BinaryOp,
     BinaryOperator,
@@ -1120,6 +1121,8 @@ class Transformer:
 
     def _find_array_construct(self, value: object) -> str | None:
         """First array-construct function name reachable from *value*."""
+        if isinstance(value, ArrayLiteral):
+            return "ARRAY[…] constructor"
         if (
             isinstance(value, FunctionCall)
             and value.name.upper() in self._ARRAY_CONSTRUCTS
@@ -1130,8 +1133,16 @@ class Transformer:
             or value.target_type.name.rstrip().endswith("[]")
         ):
             return "CAST(… AS ARRAY)"
-        if isinstance(value, RawSQL) and "WithinGroup" in value.reason:
-            return "WITHIN GROUP (ordered-set aggregate)"
+        if isinstance(value, RawSQL):
+            if "WithinGroup" in value.reason and "ARRAY[" not in value.sql:
+                return "WITHIN GROUP (ordered-set aggregate)"
+            if "ARRAY[" in value.sql:
+                # An unmodeled fragment (unmapped operator, WITHIN GROUP,
+                # complex subquery…) carrying an array constructor — the
+                # ARRAY inside has no spelling on these targets either.
+                return "ARRAY[…] constructor"
+            if "Unhandled expression type: Bracket" in value.reason:
+                return "array subscript"
         if isinstance(value, FunctionCall):
             # Custom-aggregate call syntax: fn(*) on a non-COUNT function,
             # or an inner ORDER BY captured as an unhandled-Order arg.

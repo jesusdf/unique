@@ -197,6 +197,19 @@ class FunctionCall(ASTNode):
 
 
 @dataclass(frozen=True)
+class ArrayLiteral(ASTNode):
+    """A PostgreSQL array constructor.
+
+    ``ARRAY[e1, e2, …]`` for value elements, or ``ARRAY(SELECT …)`` when
+    the single element is a query. Modeled as its own node (not a
+    FunctionCall) because the parenthesized function spelling is invalid
+    even on PostgreSQL, and targets without arrays gate on the node.
+    """
+
+    elements: tuple[ASTNode, ...] = ()
+
+
+@dataclass(frozen=True)
 class BinaryOp(ASTNode):
     """Binary operation: left op right."""
 

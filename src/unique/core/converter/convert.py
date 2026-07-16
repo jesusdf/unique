@@ -21,6 +21,7 @@ from sqlglot import transforms
 
 from unique.core.ast_nodes import (
     Alias,
+    ArrayLiteral,
     ASTNode,
     BinaryOp,
     BinaryOperator,
@@ -415,6 +416,22 @@ def _passthrough_kind(expr: exp.Expression) -> str:
     return type(expr).__name__.upper()
 
 
+def _source_sql(expr: exp.Expr) -> str:
+    """Render a sqlglot expression in the transpile's SOURCE dialect.
+
+    RawSQL fallbacks must preserve the source spelling: the generic
+    renderer re-bases PG array subscripts (``arr[2]`` -> ``arr[1]``) and
+    loses other dialect-specific forms.
+    """
+    source = SOURCE_DIALECT.get()
+    try:
+        if source:
+            return expr.sql(dialect=sqlglot_dialect_name(source))
+        return expr.sql()
+    except Exception:
+        return str(expr)
+
+
 def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     """Convert a single sqlglot expression to an IR node.
 
@@ -450,6 +467,12 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return _convert_alias(expr)
     if isinstance(expr, exp.Anonymous):
         return _convert_function(expr)
+    if isinstance(expr, exp.Array):
+        # ARRAY[…] / ARRAY(SELECT …): a real node, never a FunctionCall —
+        # the parenthesized call spelling is invalid even on PostgreSQL.
+        return ArrayLiteral(
+            elements=tuple(convert_expression(e) for e in expr.expressions)
+        )
     if isinstance(expr, exp.Case):
         return _convert_case(expr)
     if isinstance(expr, exp.Cast):
@@ -498,7 +521,7 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
                 operator=UnaryOperator.EXISTS,
                 operand=SubqueryExpression(query=_convert_select(inner)),
             )
-        return RawSQL(sql=expr.sql(), reason="Complex EXISTS")
+        return RawSQL(sql=_source_sql(expr), reason="Complex EXISTS")
     if isinstance(expr, exp.Null):
         return Literal(value=None, dtype="null")
     # EXTRACT/DATEPART -> a FunctionCall the emitter renders as EXTRACT(part FROM x).
@@ -554,7 +577,7 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
             return SubqueryExpression(
                 query=_convert_select(inner), alias=expr.alias or None
             )
-        return RawSQL(sql=expr.sql(), reason="Complex subquery")
+        return RawSQL(sql=_source_sql(expr), reason="Complex subquery")
     if isinstance(expr, exp.Window):
         return _convert_window(expr)
     if isinstance(expr, exp.Paren):
@@ -566,12 +589,14 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     if isinstance(expr, exp.Introducer):
         return convert_expression(expr.expression)
 
-    # Fallback: emit as raw SQL
-    try:
-        raw = expr.sql()
-    except Exception:
-        raw = str(expr)
-    return RawSQL(sql=raw, reason=f"Unhandled expression type: {type(expr).__name__}")
+    # Fallback: emit as raw SQL, rendered in the SOURCE dialect. The
+    # default (generic) renderer silently changes spellings — sqlglot
+    # stores PG subscripts 0-based, so ``arr[2]`` shipped as ``arr[1]``
+    # (silent data corruption, wave 108).
+    return RawSQL(
+        sql=_source_sql(expr),
+        reason=f"Unhandled expression type: {type(expr).__name__}",
+    )
 
 
 def _convert_select(expr: exp.Expression) -> SelectStatement:
@@ -823,7 +848,7 @@ def _convert_insert(expr: exp.Insert) -> InsertStatement | RawSQL:
         # 2026-07-11). Degrade to a passthrough instead; the target-dialect
         # parse check downstream decides whether it must become a carrier.
         return RawSQL(
-            sql=expr.sql(),
+            sql=_source_sql(expr),
             reason=f"Unmodeled INSERT body: {type(val_expr).__name__}",
         )
 
@@ -909,7 +934,7 @@ def _convert_create(expr: exp.Create) -> ASTNode:
     if kind == "VIEW":
         return _convert_create_view(expr)
 
-    return RawSQL(sql=expr.sql(), reason=f"Unhandled CREATE {kind}")
+    return RawSQL(sql=_source_sql(expr), reason=f"Unhandled CREATE {kind}")
 
 
 def _convert_create_table(
@@ -1435,7 +1460,9 @@ def _convert_binary(expr: exp.Binary) -> ASTNode:
     operator = op_map.get(type(expr))
     if operator is None:
         # Unknown operator: preserve verbatim rather than corrupt it to "=".
-        return RawSQL(sql=expr.sql(), reason=f"unmapped operator {type(expr).__name__}")
+        return RawSQL(
+            sql=_source_sql(expr), reason=f"unmapped operator {type(expr).__name__}"
+        )
 
     return BinaryOp(
         operator=operator,

@@ -71,6 +71,13 @@ emitted as comments.
 (JSON arrays, temporary tables), automatic conversion would change the data
 model semantics in unpredictable ways.
 
+Statements using PG array constructs — `ARRAY[…]` / `ARRAY(SELECT …)`
+constructors (including inside `= ANY(…)` or a `WITHIN GROUP` aggregate),
+array-type casts, and subscript reads/slices like `arr[2]` — degrade **whole**
+to the carrier comment with a warning on T-SQL, MySQL and Oracle targets.
+On a PostgreSQL target they are preserved faithfully (bracket spelling and
+1-based subscripts intact).
+
 ### 1.5 Function/Procedure Overloading
 
 **Engines:** Oracle, PostgreSQL

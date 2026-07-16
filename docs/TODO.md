@@ -120,7 +120,41 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          Remaining tail: `ARRAY(...)` constructor (9x, distinct from
          the cast), VARIADIC ARRAY, PERCENTILE_*(ARRAY …) — genuine
          array constructs with no non-PG spelling (degrade candidates
-         for a future wave).** **Scope decision
+         for a future wave). Wave 108 (2026-07-16) closed that tail
+         and found it was worse than a degrade gap — the IR had NO
+         array model, one class, three defects: (a) sqlglot stores PG
+         subscripts 0-BASED and the unhandled-expression RawSQL
+         fallback rendered with NO dialect, so `arr[2]` shipped as
+         `arr[1]` — silent data corruption, and on pg→tsql it even
+         passed the validity gate (brackets parse as a quoted
+         identifier) with ZERO warnings; (b) `ARRAY[…]` collapsed to a
+         generic FunctionCall emitted `ARRAY(1, 2, 3)` — invalid even
+         on PG; (c) the ARRAY(SELECT …) carrier leaked the IR repr
+         instead of SQL. Fixes: `ArrayLiteral` IR node (PG emits
+         `ARRAY[…]`/`ARRAY(SELECT …)` faithfully), ALL converter
+         RawSQL fallbacks now render in the SOURCE dialect
+         (`_source_sql`: unhandled expr, complex EXISTS/subquery,
+         unmodeled INSERT body, unhandled CREATE, unmapped operator),
+         and the array gate recognizes the node, subscripts
+         (Bracket-RawSQL), and any RawSQL fragment carrying `ARRAY[`
+         (neighbor probe caught `= ANY(ARRAY[…])` escaping via the
+         unmapped-operator path; a WITHIN GROUP fragment with an
+         ARRAY arg now degrades on oracle too, plain WITHIN GROUP
+         stays). Tests: TestArrayModelFidelity (18). Measured
+         (whole-corpus discovery, working tree over `f3c07d9`):
+         **287 → 226 silent gaps (−61)**. Next-wave candidates from
+         the new top classes (all silent-loss shapes): set-returning
+         function dropped from FROM in LATERAL contexts (`FROM
+         generate_series(…) s1` → `FROM  s1`), `DROP TRIGGER … ON
+         table` losing the ON clause, CTAS over a parenthesized UNION
+         subquery truncating (`syntax error at end of input`, 99x),
+         and — verified distinct from this wave's DML class — the
+         PROCEDURAL pipeline shreds plpgsql array-typed declares
+         pg→pg (`a integer[] = '{…}'` → `a integer;` + garbage `[]
+         =;` line; `RETURNS SETOF integer[]` silently narrows to
+         `SETOF integer`) — the pg→pg preservation counterpart of
+         wave 86's off-PG degrade (6x, the remaining `"["` gaps).**
+         **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
          gaps. It is deliberately NOT exposed in the CLI or the API

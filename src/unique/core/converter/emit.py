@@ -19,6 +19,7 @@ import sqlglot.expressions as exp
 
 from unique.core.ast_nodes import (
     Alias,
+    ArrayLiteral,
     ASTNode,
     BinaryOp,
     BinaryOperator,
@@ -2212,6 +2213,15 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
 
     if isinstance(node, FunctionCall):
         return _emit_function(node, dialect)
+
+    if isinstance(node, ArrayLiteral):
+        # ARRAY(SELECT …) keeps the subquery-constructor parens; value
+        # elements keep the bracket spelling (targets without arrays are
+        # gated whole before emission ever sees this node).
+        if len(node.elements) == 1 and isinstance(node.elements[0], SelectStatement):
+            return f"ARRAY({_emit_select(node.elements[0], dialect)})"
+        parts = ", ".join(_emit_expression(e, dialect) for e in node.elements)
+        return f"ARRAY[{parts}]"
 
     if isinstance(node, BinaryOp):
         return _emit_binary(node, dialect)

@@ -3836,3 +3836,131 @@ class TestCreateTableLikeParenForm:
             target="tsql",
         )
         assert not re.search(r"(?i)CREATE TABLE m11\s*;?\s*$", r.sql), r.sql
+
+
+class TestArrayModelFidelity:
+    """wave 108: the IR had no array model, so arrays silently mangled.
+
+    ``ARRAY[1,2,3]`` collapsed to a generic FunctionCall emitted as
+    ``ARRAY(1, 2, 3)`` — invalid even on PG. Worse, subscripts went
+    through the unhandled-expression RawSQL fallback rendered WITHOUT a
+    dialect: sqlglot stores PG subscripts 0-based, so ``arr[2]`` shipped
+    as ``arr[1]`` (silent data corruption; on T-SQL it even parsed, as a
+    quoted identifier, so no gate caught it). Arrays are now a real IR
+    node (ArrayLiteral), unhandled fallbacks render in the SOURCE
+    dialect, and subscripts/array-carrying WITHIN GROUP degrade on
+    targets without arrays."""
+
+    def test_array_literal_pg_keeps_bracket_spelling(self) -> None:
+        out = _t("select array[1,2,3];", "postgresql")
+        assert "ARRAY[1, 2, 3]" in out, out
+        assert not re.search(r"(?i)ARRAY\(", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_nested_array_literal_pg(self) -> None:
+        out = _t("select array[[1,2],[3,4]];", "postgresql")
+        assert "ARRAY[ARRAY[1, 2], ARRAY[3, 4]]" in out, out
+        assert not re.search(r"(?i)ARRAY\(", out), out
+
+    def test_array_subquery_constructor_pg(self) -> None:
+        out = _t("select array(select c from t2) from t1;", "postgresql")
+        assert re.search(r"(?is)ARRAY\(SELECT c\s+FROM t2\)", out), out
+        assert "UNIQUE:" not in out, out
+        assert "SelectStatement(" not in out, out
+
+    def test_subscript_index_preserved_pg(self) -> None:
+        out = _t("select arr[2] from t;", "postgresql")
+        assert "arr[2]" in out, out
+        assert "arr[1]" not in out, out
+        assert "UNIQUE:" not in out, out
+
+    def test_paren_array_subscript_preserved_pg(self) -> None:
+        out = _t("select (array[1,2,3])[1];", "postgresql")
+        assert ")[1]" in out, out
+        assert ")[0]" not in out, out
+
+    def test_variadic_array_pg(self) -> None:
+        out = _t("select myfn(variadic array[1,2,3]);", "postgresql")
+        assert re.search(r"(?i)VARIADIC ARRAY\[1, 2, 3\]", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_percentile_array_arg_valid_pg(self) -> None:
+        out = _t(
+            "select percentile_cont(array[0.25,0.5]) "
+            "within group (order by x) from t;",
+            "postgresql",
+        )
+        assert "ARRAY[0.25, 0.5]" in out, out
+        assert not re.search(r"(?i)ARRAY\(0\.25", out), out
+        assert "UNIQUE:" not in out, out
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_subscript_degrades_off_pg(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "select arr[2] from t;", source="postgresql", target=target
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+        assert "arr[2]" in r.sql, r.sql  # original preserved, index intact
+
+    def test_percentile_array_arg_degrades_oracle(self) -> None:
+        r = Transpiler().transpile(
+            "select percentile_cont(array[0.25,0.5]) "
+            "within group (order by x) from t;",
+            source="postgresql",
+            target="oracle",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_plain_within_group_still_ships_oracle(self) -> None:
+        out = _t(
+            "select percentile_cont(0.5) within group (order by x) from t;",
+            "oracle",
+        )
+        assert re.search(r"(?i)WITHIN GROUP", out), out
+        assert "UNIQUE:" not in out, out
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql"])
+    def test_array_subquery_carrier_has_no_ir_repr(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "select array(select c from t2) from t1;",
+            source="postgresql",
+            target=target,
+        )
+        assert "SelectStatement(" not in r.sql, r.sql
+        assert re.search(r"(?is)SELECT c\s+(-- )?FROM t2", r.sql), r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_array_inside_unmodeled_fragment_degrades(self, target: str) -> None:
+        # = ANY(ARRAY[…]) reaches the gate as an unmapped-operator RawSQL;
+        # the ARRAY inside the fragment text must still degrade the
+        # statement whole (neighbor of the ArrayLiteral node gate).
+        r = Transpiler().transpile(
+            "delete from t where id = any(array[1,2,3]);",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_any_array_kept_on_pg(self) -> None:
+        out = _t("delete from t where id = any(array[1,2,3]);", "postgresql")
+        assert re.search(r"(?i)ANY\(ARRAY\[1, 2, 3\]\)", out), out
+        assert "UNIQUE:" not in out, out
