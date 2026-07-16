@@ -1774,8 +1774,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         (`row(a,b)::int8_tbl` — composite row types) survive the
         simple-operand ANSI rewrite and shipped as `) : : type` (6x
         pg→tsql). A body still carrying such a cast now degrades the
-        routine whole. Tests: TestParenCastDegrades. *Measurement
-        pending next pg-corpus cycle.*
+        routine whole. Tests: TestParenCastDegrades. **Measured at
+        `092b41a` (2026-07-17): −14 — pg→T-SQL 172→165 (94.9%),
+        pg→MySQL 135→132 (95.7%), pg→Oracle 94→90 (97.2%). Standing:
+        pg-source {165/132/90}, mysql-source {166/107/129}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
