@@ -200,7 +200,19 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       interval), and DATEDIFF DAY/MONTH/YEAR emitting Oracle-fractional /
       PG-AGE forms instead of T-SQL's boundary counts (both pipelines now
       share the boundary-counting forms).* Remaining increments: (3) the last-identity
-      capture consumes a node, not a marker string; (4) dual-guard→IF and
+      capture consumes a node, not a marker string — *analysis ready
+      (2026-07-17): the marker is the TAIL of the Oracle comment
+      `LAST_IDENTITY_EXPR["oracle"]` produced by
+      `_transform_last_identity`'s text substitution;
+      `_identity_assignment_var` then substring-matches it
+      (`base.py:390`). Design: when the assignment transform detects a
+      LAST_IDENTITY_SOURCE_FUNCS call with target oracle, return a
+      dedicated `LastIdentityCapture(target_var)` node; the pairing
+      pass (`base.py:345`) consumes the node; the emitter renders the
+      documented comment for any UNPAIRED capture (fallback). Keep the
+      non-assignment usages (`SELECT @@IDENTITY` in expressions) on
+      the comment path. This is a fresh-session-sized refactor — the
+      naive attempt broke 18 tests.*; (4) dual-guard→IF and
       DECLARE-init hoisting consume nodes; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
