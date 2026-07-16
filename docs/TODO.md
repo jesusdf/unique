@@ -291,7 +291,8 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       migrate; (b) in-expression COMMENTS need comment-carrying
       expression nodes in the IR (they are dropped today) — both are
       the remaining preconditions for deleting the text rewriters.
-      Tests: TestFetchStatusTopLevel.*; then the text rewriters can
+      Tests: TestFetchStatusTopLevel; verification at `2a2dc90`
+      identical {163/131/89}.*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed
