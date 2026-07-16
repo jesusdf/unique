@@ -1328,6 +1328,37 @@ class ProceduralTransformer:
         degraded_uv = self._degrade_mysql_uservar(node)
         if degraded_uv is not None:
             return degraded_uv
+        # A BARE whole-row OLD/NEW reference (``'x' + OLD``) has no
+        # equivalent off PG — the other engines only address columns
+        # (inserted/deleted tables, :NEW.col, NEW.col). Qualified refs
+        # and the idiomatic RETURN NEW/OLD are handled; scan scrubbed
+        # text so string contents can't false-positive (wave 138).
+        if self._target != "postgresql" and self._source == "postgresql":
+            from unique.core.output_gate import scrub
+            from unique.core.procedural.emitter import ProceduralEmitter
+
+            original = ProceduralEmitter(self._source).emit(node)
+            # A PG trigger DELEGATES to a function; the bare row ref
+            # lives in the harvested body, not the CREATE TRIGGER shell.
+            from unique.core.converter import PG_TRIGGER_FN_BODIES
+
+            bodies = PG_TRIGGER_FN_BODIES.get() or {}
+            fn_body = bodies.get(
+                (getattr(node, "execute_function", None) or "").lower(), ""
+            )
+            if re.search(
+                r"(?i)(?<!return\s)(?<!\breturns\s)\b(?:old|new)\b"
+                r"(?!\s*[.(])(?!\s+table\b)",
+                scrub(original + "\n" + fn_body),
+            ):
+                reason = (
+                    f"a whole-row OLD/NEW reference has no {self._target} "
+                    "equivalent (rows are addressed per column there); "
+                    "routine preserved as a comment"
+                )
+                self._warnings.append(reason)
+                self._register_degraded_routine(getattr(node, "name", None))
+                return RawSQL(sql=original, reason=reason)
         # TRUNCATE trigger events exist only on PostgreSQL (wave 125).
         if self._target != "postgresql" and any(
             e.upper() == "TRUNCATE" for e in (node.events or ())

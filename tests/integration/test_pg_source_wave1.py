@@ -5225,3 +5225,42 @@ class TestCompositeRowValues:
         out = _t("select n.* from nocols n;", "tsql")
         assert re.search(r"(?i)SELECT n\.\*", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestBareWholeRowTriggerRef:
+    """wave 138: a BARE whole-row OLD/NEW ('x' || OLD) inside a trigger
+    body has no off-PG equivalent (rows are addressed per column there);
+    the inlined T-SQL trigger shipped `+ OLD` raw (5x). Qualified refs,
+    RETURN NEW/OLD and REFERENCING new|old TABLE stay on their paths."""
+
+    def test_bare_old_degrades_tsql(self) -> None:
+        src = (
+            "create function tf() returns trigger as $$\n"
+            "begin\n"
+            "  raise notice 'Got OLD row %, returning NULL', OLD;\n"
+            "  return null;\n"
+            "end $$ language plpgsql;\n"
+            "create trigger tg after update on t "
+            "for each row execute function tf();"
+        )
+        r = Transpiler().transpile(src, source="postgresql", target="tsql")
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_qualified_refs_keep_path(self) -> None:
+        src = (
+            "create function tf2() returns trigger as $$\n"
+            "begin\n"
+            "  update t2 set c = NEW.c where id = NEW.id;\n"
+            "  return new;\n"
+            "end $$ language plpgsql;\n"
+            "create trigger tg2 after update on t "
+            "for each row execute function tf2();"
+        )
+        out = _t(src, "tsql")
+        assert "whole-row OLD/NEW" not in out, out

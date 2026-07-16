@@ -466,7 +466,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          some paths) — the `(n.*)` composite single stays PENDING
          (needs a Paren(Star) marker at conversion). Measured:
          pg→tsql **100 → 97** (97.0%), discovery HOLDS 0. Tests:
-         TestCompositeRowValues (5).**
+         TestCompositeRowValues (5).* Wave 138 (2026-07-16): a BARE
+         whole-row OLD/NEW in a trigger body (`'x' || OLD`) has no
+         off-PG equivalent (rows are addressed per column there) —
+         the inlined T-SQL trigger shipped `+ OLD` raw. The gate
+         scans SCRUBBED text (string contents can't false-positive)
+         of the trigger shell PLUS the harvested delegated-function
+         body (PG triggers delegate; the shell has no body), with
+         exclusions for qualified refs, RETURN NEW/OLD and
+         REFERENCING new|old TABLE (4 existing tests fired on the
+         draft). Measured: pg→tsql **97 → 92** (97.1%), discovery
+         HOLDS 0. Tests: TestBareWholeRowTriggerRef (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
