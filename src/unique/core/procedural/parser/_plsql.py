@@ -30,6 +30,7 @@ from unique.core.ast_nodes import (
     ExitStatement,
     ForLoopStatement,
     GetDiagnosticsStatement,
+    HandlerDeclaration,
     IfStatement,
     LoopStatement,
     NullStatement,
@@ -265,6 +266,13 @@ class PlsqlStatementsMixin(ParserBase):
         if tok.is_keyword("DECLARE"):
             # MySQL places variable declarations inside BEGIN ... END.
             self._advance()
+            cur = self._current()
+            if (
+                self._dialect == "mysql"
+                and cur.upper_value in ("EXIT", "CONTINUE", "UNDO")
+                and self._peek(1).upper_value == "HANDLER"
+            ):
+                return self._parse_mysql_handler()
             return self._parse_plsql_declaration()
         if tok.is_keyword("SET"):
             # MySQL assignment: SET var = expr;
@@ -474,6 +482,52 @@ class PlsqlStatementsMixin(ParserBase):
             )
         assert node is not None
         return node
+
+    def _parse_mysql_handler(self) -> ASTNode:
+        """MySQL ``DECLARE {EXIT|CONTINUE|UNDO} HANDLER FOR cond[, …]
+        stmt`` (DECLARE already consumed)."""
+        kind = self._advance().upper_value  # EXIT/CONTINUE/UNDO
+        self._advance()  # HANDLER
+        self._expect_keyword("FOR")
+
+        conditions: list[str] = []
+        current: list[str] = []
+        while not self._at_end():
+            tok = self._current()
+            if tok.type == TokenType.COMMA:
+                conditions.append(" ".join(current).upper())
+                current = []
+                self._advance()
+                continue
+            up = tok.upper_value
+            if up in ("SQLEXCEPTION", "SQLWARNING"):
+                current.append(up)
+                self._advance()
+            elif up == "NOT" and self._peek(1).upper_value == "FOUND":
+                current.append("NOT FOUND")
+                self._advance()
+                self._advance()
+            elif up == "SQLSTATE":
+                self._advance()
+                if self._current().upper_value == "VALUE":
+                    self._advance()
+                current.append(f"SQLSTATE {self._advance().value}")
+            elif tok.type == TokenType.NUMBER or (
+                tok.type == TokenType.IDENTIFIER
+                and self._peek(1).type == TokenType.COMMA
+            ):
+                current.append(str(self._advance().value))
+            else:
+                break
+        if current:
+            conditions.append(" ".join(current).upper())
+
+        action = self._parse_plsql_statement()
+        return HandlerDeclaration(
+            kind=kind,
+            conditions=tuple(conditions),
+            body=(action,) if action else (),
+        )
 
     def _parse_mysql_repeat(self) -> ASTNode:
         """MySQL ``REPEAT … UNTIL cond END REPEAT`` — a post-test loop:

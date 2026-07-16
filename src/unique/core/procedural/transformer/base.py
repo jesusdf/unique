@@ -985,10 +985,73 @@ class ProceduralTransformer:
                     return found
         return None
 
+    def _fold_mysql_handlers(
+        self, body: tuple[ASTNode, ...]
+    ) -> tuple[tuple[ASTNode, ...], str | None]:
+        """Fold a MySQL EXIT-for-SQLEXCEPTION handler into the block's
+        TryCatchBlock; anything else reports the culprit for a whole
+        degrade (CONTINUE resumes at the next statement — no target
+        equivalent; specific conditions have no cross-engine names)."""
+        from unique.core.ast_nodes import HandlerDeclaration
+
+        if self._source != "mysql" or self._target == "mysql":
+            return body, None
+        handlers = [s for s in body if isinstance(s, HandlerDeclaration)]
+        if not handlers:
+            if self._contains_handler(body):
+                return body, "handler declared in a nested block"
+            return body, None
+        for h in handlers:
+            if (
+                h.kind != "EXIT"
+                or not h.conditions
+                or not all(c in ("SQLEXCEPTION", "SQLWARNING") for c in h.conditions)
+            ):
+                what = ", ".join(h.conditions) or "an unrecognized condition"
+                return body, f"{h.kind} handler for {what}"
+        if len(handlers) > 1:
+            return body, "multiple handlers in one block"
+        rest = tuple(s for s in body if not isinstance(s, HandlerDeclaration))
+        if self._contains_handler(rest):
+            return body, "handler declared in a nested block"
+        return (TryCatchBlock(try_body=rest, catch_body=handlers[0].body),), None
+
+    def _contains_handler(self, value: object) -> bool:
+        from unique.core.ast_nodes import HandlerDeclaration
+
+        if isinstance(value, HandlerDeclaration):
+            return True
+        if isinstance(value, ASTNode):
+            import dataclasses as _dc
+
+            return any(
+                self._contains_handler(getattr(value, f.name))
+                for f in _dc.fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_handler(item) for item in value)
+        return False
+
+    def _degrade_for_handler(self, node: ASTNode, culprit: str) -> RawSQL:
+        reason = (
+            f"MySQL {culprit} has no {self._target} equivalent; "
+            "routine preserved as a comment"
+        )
+        self._warnings.append(reason)
+        self._register_degraded_routine(getattr(node, "name", None))
+        from unique.core.procedural.emitter import ProceduralEmitter
+
+        original = ProceduralEmitter(self._source).emit(node)
+        return RawSQL(sql=original, reason=reason)
+
     def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
         degraded_uv = self._degrade_mysql_uservar(node)
         if degraded_uv is not None:
             return degraded_uv
+        folded_body, handler_culprit = self._fold_mysql_handlers(node.body)
+        if handler_culprit is not None:
+            return self._degrade_for_handler(node, handler_culprit)
+        node = dataclasses.replace(node, body=folded_body)
         new_params = self._transform_params(node.parameters)
         new_body = self._transform_body(
             self._drop_param_shadowing_locals(node.body, node.parameters)
@@ -1152,6 +1215,10 @@ class ProceduralTransformer:
         degraded = self._degrade_record_function(node)
         if degraded is not None:
             return degraded
+        folded_fn_body, handler_culprit = self._fold_mysql_handlers(node.body)
+        if handler_culprit is not None:
+            return self._degrade_for_handler(node, handler_culprit)
+        node = dataclasses.replace(node, body=folded_fn_body)
         is_void = (
             node.return_type is not None
             and node.return_type.name.upper() == "VOID"

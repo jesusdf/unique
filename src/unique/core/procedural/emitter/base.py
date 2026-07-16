@@ -41,6 +41,7 @@ from unique.core.ast_nodes import (
     ExitStatement,
     ForLoopStatement,
     GetDiagnosticsStatement,
+    HandlerDeclaration,
     IfStatement,
     Literal,
     LoopStatement,
@@ -297,6 +298,7 @@ class ProceduralEmitter:
             StatementList: self._emit_statement_list,
             AnonymousBlock: self._emit_anonymous_block,
             TryCatchBlock: self._emit_try_catch,
+            HandlerDeclaration: self._emit_handler_declaration,
             ExceptionBlock: self._emit_exception_block,
             ExecuteStatement: self._emit_execute,
             CallStatement: self._emit_call,
@@ -1304,6 +1306,13 @@ class ProceduralEmitter:
             for line in text.split("\n"):
                 out.append(f"{self._indent()}{line}" if line.strip() else "")
         return out
+
+    def _emit_handler_declaration(self, node: HandlerDeclaration) -> str:
+        # MySQL-only spelling; other targets fold it into TryCatchBlock
+        # in the transformer and never reach here.
+        conds = ", ".join(node.conditions)
+        action = self._emit_node(node.body[0]) if node.body else ";"
+        return f"DECLARE {node.kind} HANDLER FOR {conds} {action}"
 
     def _emit_try_catch(self, node: TryCatchBlock) -> str:
         """Default (PL/SQL-style) TRY/CATCH: a BEGIN … EXCEPTION WHEN OTHERS

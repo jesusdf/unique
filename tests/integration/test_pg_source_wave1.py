@@ -2860,3 +2860,53 @@ class TestCteOrderByStrip:
             "tsql",
         )
         assert re.search(r"(?is)TOP.*ORDER BY|ORDER BY.*OFFSET", out), out
+
+
+class TestMysqlDeclareHandler:
+    """wave 70: MySQL's `DECLARE {EXIT|CONTINUE} HANDLER FOR …` never
+    parsed (wave 52 turned the whole routine into a carrier). An EXIT
+    handler for SQLEXCEPTION/SQLWARNING is exactly the enclosing
+    block's exception section — fold into TryCatchBlock (EXCEPTION
+    WHEN OTHERS on PG/Oracle, TRY/CATCH on T-SQL). CONTINUE handlers
+    and condition classes with no target equivalent keep the honest
+    whole-routine degrade."""
+
+    _EXIT_SRC = (
+        "DELIMITER //\n"
+        "create procedure hp()\n"
+        "begin\n"
+        "  declare exit handler for sqlexception select 'bad' as e;\n"
+        "  insert into t1 values (1);\n"
+        "  select 'ok' as r;\n"
+        "end//\n"
+        "DELIMITER ;\n"
+    )
+
+    def test_exit_handler_pg(self) -> None:
+        out = _t2(self._EXIT_SRC, "mysql", "postgresql")
+        assert re.search(r"(?is)EXCEPTION\s+WHEN OTHERS THEN", out), out
+        assert "handler" not in out.lower(), out
+        assert re.search(r"(?is)INSERT INTO t1", out), out
+
+    def test_exit_handler_tsql(self) -> None:
+        out = _t2(self._EXIT_SRC, "mysql", "tsql")
+        assert re.search(r"(?is)BEGIN TRY.*INSERT INTO t1.*END TRY", out), out
+        assert re.search(r"(?is)BEGIN CATCH.*END CATCH", out), out
+
+    def test_continue_handler_degrades(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create procedure hc()\n"
+            "begin\n"
+            "  declare continue handler for sqlstate '23000' select 'dup';\n"
+            "  insert into t1 values (1);\n"
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = _t2(src, "mysql", "postgresql")
+        code = [
+            ln
+            for ln in out.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, out

@@ -1533,6 +1533,20 @@ fix needs an **anonymized** regression fixture (never a private name).
         waves. Remaining named fronts (fidelity, not validity):
         DECLARE HANDLER EXIT→EXCEPTION conversion, PG whole-row CTE
         references on tsql, EXPLAIN/psql-ism passthrough polish.**
+        *Wave 70 (2026-07-16):* MySQL's `DECLARE {EXIT|CONTINUE|UNDO}
+        HANDLER FOR conds stmt` now PARSES (new HandlerDeclaration
+        node; wave 52 had been carrying whole routines). An EXIT
+        handler for SQLEXCEPTION/SQLWARNING folds into the enclosing
+        block's TryCatchBlock — EXCEPTION WHEN OTHERS on PG/Oracle,
+        TRY/CATCH on T-SQL; identity keeps the native DECLARE …
+        HANDLER spelling. CONTINUE handlers (resume semantics — no
+        target equivalent), specific conditions (SQLSTATE/errno/named)
+        and nested/multiple handlers keep the honest whole-routine
+        degrade, now with the culprit spelled out. This is fidelity
+        work: those routines were already carriers, so sweep validity
+        should hold or improve slightly. Tests:
+        TestMysqlDeclareHandler. *Measurement pending next
+        mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

@@ -856,6 +856,19 @@ class PrintStatement(ASTNode):
 
 
 @dataclass(frozen=True)
+class HandlerDeclaration(ASTNode):
+    """MySQL ``DECLARE {EXIT|CONTINUE|UNDO} HANDLER FOR conds stmt``.
+
+    An EXIT handler for SQLEXCEPTION folds into the enclosing block's
+    TryCatchBlock off MySQL; other kinds/conditions degrade the routine.
+    """
+
+    kind: str = "EXIT"
+    conditions: tuple[str, ...] = ()
+    body: tuple[ASTNode, ...] = ()
+
+
+@dataclass(frozen=True)
 class ExceptionHandler(ASTNode):
     """Single WHEN ... THEN handler in an EXCEPTION block."""
 
