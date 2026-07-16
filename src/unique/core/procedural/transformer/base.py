@@ -1113,6 +1113,108 @@ class ProceduralTransformer:
     #: PG pseudo-types a routine cannot carry anywhere else: ``record``
     #: (row shape unknown until runtime) and the polymorphic family
     #: (un-instantiable outside PG's type system).
+    #: Scalar spellings a routine parameter may legitimately carry
+    #: (native names, PG aliases, and anything the type maps know).
+    _KNOWN_SCALAR_TYPES = frozenset(
+        {
+            "SMALLINT",
+            "INT",
+            "INTEGER",
+            "BIGINT",
+            "TINYINT",
+            "INT2",
+            "INT4",
+            "INT8",
+            "DECIMAL",
+            "NUMERIC",
+            "NUMBER",
+            "FLOAT",
+            "REAL",
+            "DOUBLE",
+            "DOUBLE PRECISION",
+            "FLOAT4",
+            "FLOAT8",
+            "MONEY",
+            "CHAR",
+            "NCHAR",
+            "VARCHAR",
+            "NVARCHAR",
+            "VARCHAR2",
+            "NVARCHAR2",
+            "TEXT",
+            "NTEXT",
+            "CLOB",
+            "NCLOB",
+            "CHARACTER",
+            "CHARACTER VARYING",
+            "BPCHAR",
+            "NAME",
+            "BYTEA",
+            "BLOB",
+            "BINARY",
+            "VARBINARY",
+            "RAW",
+            "IMAGE",
+            "BOOLEAN",
+            "BOOL",
+            "BIT",
+            "DATE",
+            "TIME",
+            "TIMETZ",
+            "TIMESTAMP",
+            "TIMESTAMPTZ",
+            "DATETIME",
+            "DATETIME2",
+            "SMALLDATETIME",
+            "DATETIMEOFFSET",
+            "INTERVAL",
+            "UUID",
+            "UNIQUEIDENTIFIER",
+            "XML",
+            "JSON",
+            "JSONB",
+            "SERIAL",
+            "BIGSERIAL",
+            "SMALLSERIAL",
+            "OID",
+            "REFCURSOR",
+            "SYS_REFCURSOR",
+            "CURSOR",
+            "SQL_VARIANT",
+            "ROWVERSION",
+            "VOID",
+            "TRIGGER",
+            "LANGUAGE_HANDLER",
+            "CSTRING",
+            "INET",
+            "CIDR",
+            "MACADDR",
+            "POINT",
+            "ENUM",
+            "SET",
+        }
+    )
+
+    def _is_unknown_scalar_type(self, name: str) -> bool:
+        """True when a parameter type is resolvable nowhere: not a known
+        scalar, not %TYPE/%ROWTYPE, not array-suffixed (its own gate),
+        not a harvested domain/composite."""
+        from unique.core.converter import PG_COMPOSITE_TYPES, PG_DOMAIN_TYPES
+
+        base = name.strip()
+        if not base or "%" in base or base.endswith("[]"):
+            return False
+        upper = base.upper().split("(")[0].strip()
+        if upper in self._KNOWN_SCALAR_TYPES or upper in self._PG_PSEUDO_TYPES:
+            return False
+        if base.lower() in (PG_COMPOSITE_TYPES.get() or frozenset()):
+            # Harvested composites have their OWN degrade message.
+            return False
+        if base.lower() in (PG_DOMAIN_TYPES.get() or {}):
+            return False
+        # Multi-word spellings (DOUBLE PRECISION …) already normalized.
+        return " " not in base
+
     _PG_PSEUDO_TYPES = frozenset(
         {
             "RECORD",
@@ -1161,6 +1263,21 @@ class ProceduralTransformer:
             or any(p.data_type.name.lower() in composites for p in node.parameters)
         ):
             culprit = "composite-type variable"
+        elif self._source == "postgresql" and (
+            unknown := next(
+                (
+                    p.data_type.name
+                    for p in node.parameters
+                    if self._is_unknown_scalar_type(p.data_type.name)
+                ),
+                None,
+            )
+        ):
+            # A param type that is neither a known scalar nor a harvested
+            # domain/composite is a rowtype or custom type defined OUTSIDE
+            # this script (pg_regress setup tables like ``onek``): it
+            # cannot exist on the target either (wave 152).
+            culprit = f"parameter of unresolvable type '{unknown}'"
         elif self._target in ("tsql", "mysql") and any(
             isinstance(s, CursorDeclaration) and s.parameters for s in node.body
         ):

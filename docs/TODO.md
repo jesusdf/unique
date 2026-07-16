@@ -579,7 +579,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          as an explicit composite; table names now join the
          composite-type harvest. Measured: pg→mysql **78 → 75**,
          pg→tsql **68 → 67**, discovery HOLDS 0. Tests:
-         TestTableRowtypeParams (4).**
+         TestTableRowtypeParams (4).* Wave 152 (2026-07-16): a routine
+         parameter typed with a name that resolves NOWHERE (not a
+         known scalar/domain/composite/%TYPE) is a rowtype or custom
+         type defined OUTSIDE the script (pg_regress setup tables
+         like `onek`) — it cannot exist on the target either;
+         degrades with a whitelist of known scalar spellings.
+         Measured: pg→mysql **75 → 74**, pg→oracle **38 → 35**
+         (98.9%), tsql flat 67, discovery HOLDS 0. Tests:
+         TestUnknownParamType (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

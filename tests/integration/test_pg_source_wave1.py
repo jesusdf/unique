@@ -5644,3 +5644,29 @@ class TestTableRowtypeParams:
         out = _t(self._SRC, "postgresql")
         assert re.search(r"(?i)t onek", out), out
         assert "UNIQUE:" not in out.split("create function")[0], out
+
+
+class TestUnknownParamType:
+    """wave 152: a routine parameter typed with a name that resolves
+    NOWHERE — not a known scalar, domain, composite or %TYPE — is a
+    rowtype/custom type defined OUTSIDE the script (pg_regress setup
+    tables like ``onek``); it cannot exist on the target either."""
+
+    @pytest.mark.parametrize("target", ["mysql", "tsql", "oracle"])
+    def test_external_rowtype_param_degrades(self, target: str) -> None:
+        src = (
+            "create function f_field_select(t onek) returns int as $$\n"
+            "begin return t.a; end $$ language plpgsql;"
+        )
+        r = Transpiler().transpile(src, source="postgresql", target=target)
+        assert not re.search(r"(?im)^\s*CREATE (OR REPLACE )?FUNCTION", r.sql), r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_known_scalars_unaffected(self) -> None:
+        src = (
+            "create function g(a int, b text, c numeric(10,2)) returns int as $$\n"
+            "begin return a; end $$ language plpgsql;"
+        )
+        out = _t(src, "mysql")
+        assert re.search(r"(?i)CREATE FUNCTION g", out), out
+        assert "unresolvable" not in out, out
