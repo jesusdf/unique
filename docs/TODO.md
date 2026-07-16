@@ -1585,8 +1585,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         REFCURSOR_PROCS per-run registry (populated when the rewrite
         adds params); later CALLs now wrap in a nested DECLARE block
         with local `uq_rcN SYS_REFCURSOR` variables appended to the
-        argument list. Tests: TestRefcursorCallSites. *Measurement
-        pending next mysql-corpus cycle.*
+        argument list. Tests: TestRefcursorCallSites. **Measured at
+        `f8ceb42` (2026-07-16): mysql→Oracle 164→144 (−20, 97.6%, ok
+        +22); →PG/→T-SQL flat. Standing: pg-source {261/160/140},
+        mysql-source {180/111/144}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
