@@ -797,6 +797,9 @@ class CursorOperation(ASTNode):
     query: ASTNode | None = None
     #: OPEN c(args) — a parameterized cursor's actual arguments (raw text).
     args: str = ""
+    #: PG ``OPEN c [NO] SCROLL FOR …``: "SCROLL" or "NO SCROLL" (None =
+    #: unspecified). Only PostgreSQL re-emits it.
+    scroll: str | None = None
 
 
 @dataclass(frozen=True)

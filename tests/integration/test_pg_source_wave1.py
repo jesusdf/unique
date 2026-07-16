@@ -4335,3 +4335,50 @@ class TestPlpgsqlDeclareModifiers:
         out = _t(src, "tsql")
         assert "scroll;" not in out.lower(), out
         assert ";;" not in out, out
+
+
+class TestOpenCursorScrollExecute:
+    """wave 116: ``OPEN c [NO] SCROLL FOR [EXECUTE …]`` — the OPEN parse
+    stopped at the cursor name, leaving ``scroll for execute '…';`` as an
+    orphan statement (the remaining ';' class). The modifiers and the
+    dynamic FOR EXECUTE form are now consumed; PG re-emits them."""
+
+    def test_open_scroll_for_execute_pg(self) -> None:
+        src = (
+            "create function f() returns int as $$\n"
+            "declare c refcursor; x integer;\n"
+            "begin\n"
+            "  open c scroll for execute 'select f1 from t';\n"
+            "  fetch c into x; close c; return x;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(
+            r"(?is)OPEN c SCROLL FOR\s+EXECUTE 'select f1 from t'", out
+        ), out
+        assert not re.search(r"(?im)^\s*scroll\b", out), out
+
+    def test_open_no_scroll_for_query_pg(self) -> None:
+        src = (
+            "create function f() returns int as $$\n"
+            "declare c refcursor; x integer;\n"
+            "begin\n"
+            "  open c no scroll for select f1 from t;\n"
+            "  fetch c into x; close c; return x;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?is)OPEN c NO SCROLL FOR\s+SELECT f1", out), out
+        assert not re.search(r"(?im)^\s*scroll\b", out), out
+
+    def test_plain_open_for_unchanged_pg(self) -> None:
+        src = (
+            "create function f() returns int as $$\n"
+            "declare c refcursor; x integer;\n"
+            "begin\n"
+            "  open c for select f1 from t;\n"
+            "  fetch c into x; close c; return x;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?is)OPEN c FOR\s+SELECT f1", out), out

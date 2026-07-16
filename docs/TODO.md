@@ -256,7 +256,19 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          cleared, but the 14x `;` class has ANOTHER sub-mechanism —
          re-sampling — and un-shredded routines exposed new chain
          links: INTO 2→4, 'RETURN cannot have a parameter' 2x).
-         Tests: TestPlpgsqlDeclareModifiers (6).**
+         Tests: TestPlpgsqlDeclareModifiers (6).
+         Wave 116 (2026-07-16): `OPEN c [NO] SCROLL FOR [EXECUTE …]`
+         — the OPEN parse stopped at the cursor name, shipping
+         `scroll for execute '…';` as an ORPHAN statement.
+         CursorOperation gains `scroll`; the dynamic `FOR EXECUTE`
+         form is preserved verbatim; PG re-emits both (T-SQL keeps
+         scrollability on its DECLARE; Oracle/MySQL forward-only).
+         Measured: discovery **81 flat** — the wave's own classes
+         cleared ('FOR' 3→0, orphans gone) but chains absorbed the
+         delta (INTO 4→7). The 14x ';' class STILL unmoved after two
+         waves → two-strikes fired: next step is an end-to-end trace
+         of one real tg_* corpus function, not another sub-shape
+         guess. Tests: TestOpenCursorScrollExecute (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

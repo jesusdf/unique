@@ -1805,7 +1805,9 @@ class ProceduralEmitter:
         if op == "OPEN":
             if node.query:
                 query_str = self._emit_node(node.query)
-                return self._emit_cursor_open(node.cursor_name, query_str)
+                return self._emit_cursor_open(
+                    node.cursor_name, query_str, scroll=node.scroll
+                )
             if node.args:
                 return f"OPEN {node.cursor_name}({node.args});"
             return f"OPEN {node.cursor_name};"
@@ -1818,9 +1820,12 @@ class ProceduralEmitter:
             return self._emit_cursor_deallocate(node.cursor_name)
         return f"{op} {node.cursor_name};"
 
-    def _emit_cursor_open(self, cursor_name: str, query_str: str) -> str:
-        """OPEN a cursor with an inline query. Default (PL/SQL/PL-pgSQL) binds
-        the query with FOR; T-SQL overrides (the query is on DECLARE CURSOR)."""
+    def _emit_cursor_open(
+        self, cursor_name: str, query_str: str, scroll: str | None = None
+    ) -> str:
+        """OPEN a cursor with an inline query. Default (PL/SQL) binds the
+        query with FOR and drops the PG-only scroll modifier (forward-only
+        cursors); the PG and T-SQL emitters override."""
         return f"OPEN {cursor_name} FOR\n{query_str.rstrip().rstrip(';')};"
 
     def _emit_cursor_fetch(self, cursor_name: str, into_str: str) -> str:

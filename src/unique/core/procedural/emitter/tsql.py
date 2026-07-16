@@ -480,8 +480,11 @@ class TSqlEmitter(ProceduralEmitter):
         name = "@" + bare if bare.lower() in self._cursor_variables else bare
         return super()._emit_cursor_op(dataclasses.replace(node, cursor_name=name))
 
-    def _emit_cursor_open(self, cursor_name: str, query_str: str) -> str:
-        # In T-SQL the query lives on DECLARE CURSOR, so OPEN takes no query.
+    def _emit_cursor_open(
+        self, cursor_name: str, query_str: str, scroll: str | None = None
+    ) -> str:
+        # In T-SQL the query lives on DECLARE CURSOR, so OPEN takes no query
+        # (and scrollability lives on the DECLARE too).
         return f"OPEN {cursor_name};"
 
     def _emit_cursor_fetch(self, cursor_name: str, into_str: str) -> str:

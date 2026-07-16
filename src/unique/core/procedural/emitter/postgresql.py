@@ -62,6 +62,13 @@ class PostgresEmitter(ProceduralEmitter):
                 pg_last_out = i
         return not (p.direction in ("OUT", "INOUT") or idx < pg_last_out)
 
+    def _emit_cursor_open(
+        self, cursor_name: str, query_str: str, scroll: str | None = None
+    ) -> str:
+        # PG keeps the OPEN's scrollability: OPEN c [NO] SCROLL FOR <query>.
+        scroll_str = f" {scroll}" if scroll else ""
+        return f"OPEN {cursor_name}{scroll_str} FOR\n{query_str.rstrip().rstrip(';')};"
+
     def _emit_cursor_decl(self, node: CursorDeclaration) -> str:
         # PL/pgSQL: name CURSOR FOR <select>; a query-less cursor VARIABLE
         # (T-SQL ``DECLARE @cur CURSOR;``) is a REFCURSOR (bare ``x CURSOR;``

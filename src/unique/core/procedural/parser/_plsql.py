@@ -703,13 +703,44 @@ class PlsqlStatementsMixin(ParserBase):
             args = self._capture_call_args().strip()
             if args.startswith("(") and args.endswith(")"):
                 args = args[1:-1].strip()
+        # PG scrollability on the OPEN itself: ``OPEN c [NO] SCROLL FOR …``
+        # (unconsumed, ``scroll for execute '…';`` shipped as an orphan
+        # statement — wave 116).
+        scroll: str | None = None
+        if self._dialect == "postgresql":
+            if self._current().upper_value == "SCROLL":
+                self._advance()
+                scroll = "SCROLL"
+            elif (
+                self._current().upper_value == "NO"
+                and self._peek(1).upper_value == "SCROLL"
+            ):
+                self._advance()
+                self._advance()
+                scroll = "NO SCROLL"
         query: ASTNode | None = None
         if self._match_keyword("FOR"):
-            query = self._parse_embedded_dml()
+            if self._current().is_keyword("EXECUTE"):
+                # Dynamic open: FOR EXECUTE <string expr> [USING …] — not a
+                # parseable DML; preserve the dynamic form verbatim.
+                parts: list[str] = []
+                while (
+                    not self._at_end() and self._current().type != TokenType.SEMICOLON
+                ):
+                    parts.append(self._flat_value(self._current()))
+                    self._advance()
+                self._match_type(TokenType.SEMICOLON)
+                query = RawSQL(sql=" ".join(parts), reason="dynamic OPEN FOR EXECUTE")
+            else:
+                query = self._parse_embedded_dml()
         else:
             self._match_type(TokenType.SEMICOLON)
         return CursorOperation(
-            operation="OPEN", cursor_name=cursor_name, query=query, args=args
+            operation="OPEN",
+            cursor_name=cursor_name,
+            query=query,
+            args=args,
+            scroll=scroll,
         )
 
     def _parse_plsql_fetch(self) -> ASTNode:
