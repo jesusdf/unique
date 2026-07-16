@@ -901,6 +901,15 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             f"{_comment_block(node.sql)}"
         )
 
+    # SAVEPOINT: same spelling everywhere but T-SQL (SAVE TRANSACTION).
+    # Modeled as a passthrough because sqlglot mis-parses the statement
+    # into an Alias (wave 123).
+    if node.kind == "SAVEPOINT":
+        name = node.sql.split()[-1]
+        if dialect == "tsql":
+            return f"SAVE TRANSACTION {name}"
+        return f"SAVEPOINT {name}"
+
     # MySQL has no MERGE. The canonical one-UPDATE/one-INSERT pattern is
     # rewritten as INSERT ... SELECT ... ON DUPLICATE KEY UPDATE (which relies
     # on a UNIQUE/PRIMARY KEY covering the ON columns — noted in a carrier).

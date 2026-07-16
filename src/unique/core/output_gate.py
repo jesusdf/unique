@@ -188,6 +188,9 @@ def gate_reason(sql: str, target: str) -> str | None:
             # sqlglot's tsql reader cannot parse a (valid) OUTPUT clause
             # followed by WHERE; drop it for the parse check only.
             stmt = _TSQL_OUTPUT_CLAUSE_RE.sub(" ", stmt)
+            # Nor (valid) SAVE TRANSACTION name (wave 123).
+            if re.fullmatch(r"(?is)\s*SAVE\s+TRAN(?:SACTION)?\s+\w+\s*;?\s*", stmt):
+                continue
         try:
             sqlglot.parse(stmt, read=dialect, error_level=sqlglot.ErrorLevel.RAISE)
         except Exception as e:

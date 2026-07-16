@@ -4656,3 +4656,21 @@ class TestNonSqlLanguageFunction:
         assert not code, r.sql
         assert r.warnings or r.unsupported, r.sql
         assert re.search(r"(?i)libdir/refint", r.sql), r.sql
+
+
+class TestSavepointStatement:
+    """wave 123: ``SAVEPOINT a`` mis-parses in sqlglot as an Alias and
+    shipped as the invalid ``SAVEPOINT AS a`` on every engine. Modeled
+    as a passthrough: same spelling on PG/MySQL/Oracle, T-SQL spells it
+    ``SAVE TRANSACTION``."""
+
+    @pytest.mark.parametrize("target", ["postgresql", "mysql", "oracle"])
+    def test_savepoint_plain(self, target: str) -> None:
+        out = _t("savepoint a;", target)
+        assert re.search(r"(?i)SAVEPOINT a", out), out
+        assert "AS a" not in out, out
+
+    def test_savepoint_tsql(self) -> None:
+        out = _t("savepoint a;", "tsql")
+        assert re.search(r"(?i)SAVE TRANSACTION a", out), out
+        assert "SAVEPOINT" not in out.upper(), out

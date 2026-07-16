@@ -93,6 +93,18 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
         A list of IR ASTNode instances.
     """
     sg_dialect = sqlglot_dialect_name(dialect)
+    # ``SAVEPOINT name`` mis-parses in sqlglot as an Alias expression
+    # (``SAVEPOINT AS name`` shipped — invalid everywhere; wave 123).
+    # Same spelling on PG/MySQL/Oracle; T-SQL re-emits SAVE TRANSACTION.
+    sp = re.match(r'(?is)^\s*SAVEPOINT\s+([\w"`\[\]]+)\s*;?\s*$', sql)
+    if sp and dialect in ("postgresql", "mysql", "oracle"):
+        return [
+            PassthroughSQL(
+                sql=f"SAVEPOINT {sp.group(1)}",
+                source_dialect=dialect,
+                kind="SAVEPOINT",
+            )
+        ]
     if dialect == "postgresql":
         # PG's ``TABLE name`` shorthand IS ``SELECT * FROM name``; sqlglot
         # mis-parses it into an aliased identifier (silent mangle).

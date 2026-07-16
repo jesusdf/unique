@@ -326,7 +326,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          VERBATIM same-dialect and carrier+warning cross-dialect (the
          transformer decides — it knows both ends). Measured:
          discovery **63 → 48** (−15). Tests: TestPgDynamicExecute
-         (3), TestNonSqlLanguageFunction (4).**
+         (3), TestNonSqlLanguageFunction (4). Wave 123
+         (2026-07-16): `SAVEPOINT a` mis-parses in SQLGLOT ITSELF as
+         an Alias (`SAVEPOINT AS a` even in its own round-trip) —
+         pre-recognized in parse_sql (the `TABLE name` precedent) as
+         a PassthroughSQL kind: same spelling on PG/MySQL/Oracle,
+         `SAVE TRANSACTION` on T-SQL (+ output-gate reparse exemption
+         — sqlglot's tsql reader can't read that valid spelling
+         either, the DELETE…OUTPUT lesson). Measured: **48 → 45**.
+         Tests: TestSavepointStatement (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
