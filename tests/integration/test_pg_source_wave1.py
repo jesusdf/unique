@@ -5357,3 +5357,31 @@ class TestUnaryPredicateInSelectList:
     def test_exists_value_oracle(self) -> None:
         out = _t("select exists(select 1 from u) as e from t;", "oracle")
         assert re.search(r"(?i)CASE WHEN EXISTS", out), out
+
+
+class TestVoidOutFunctionBecomesProc:
+    """wave 142: a PG void function with OUT/INOUT parameters cannot be a
+    T-SQL FUNCTION (error 181: no OUTPUT option there) — it IS a
+    procedure on that engine."""
+
+    def test_void_out_function_procs_tsql(self) -> None:
+        src = (
+            "create function f1(inout i int) returns void as $$\n"
+            "begin\n"
+            "  i := i + 1;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "tsql")
+        assert re.search(r"(?i)CREATE PROCEDURE f1", out), out
+        assert "RETURNS" not in out.upper(), out
+        assert re.search(r"(?i)@i int OUTPUT", out), out
+
+    def test_void_no_out_stays_function(self) -> None:
+        src = (
+            "create function f2(i int) returns void as $$\n"
+            "begin\n"
+            "  perform pg_sleep(0);\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "tsql")
+        assert re.search(r"(?i)CREATE FUNCTION f2|CREATE PROCEDURE f2", out), out

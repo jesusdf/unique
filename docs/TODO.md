@@ -505,7 +505,12 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          ELSE 0 form. Measured: pg→tsql **83 → 77** (97.6%),
          oracle flat 56, discovery HOLDS 0. Tests:
          TestBooleanOpInSelectList (3),
-         TestUnaryPredicateInSelectList (2).**
+         TestUnaryPredicateInSelectList (2).* Wave 142 (2026-07-16): a PG
+         function with OUT/INOUT params and void-or-INFERRED return
+         (`function f1(in i int, out j int)` — PG infers the return
+         from OUTs) cannot be a T-SQL FUNCTION (error 181) — it IS a
+         procedure there. Measured: pg→tsql **77 → 74** (97.7%),
+         discovery HOLDS 0. Tests: TestVoidOutFunctionBecomesProc.**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

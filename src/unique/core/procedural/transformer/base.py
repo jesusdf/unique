@@ -1315,6 +1315,23 @@ class ProceduralTransformer:
                 f"PostgreSQL trigger function {node.name!r} ('RETURNS TRIGGER') "
                 f"has no {self._target} equivalent; documented."
             )
+        if (
+            self._target == "tsql"
+            and (is_void or node.return_type is None)
+            and any(p.direction in ("OUT", "INOUT") for p in new_params)
+        ):
+            # Also PG's RETURNS-less form: the return is INFERRED from
+            # the OUT params there (``function f1(in i int, out j int)``).
+            # T-SQL functions cannot take OUTPUT parameters; a void
+            # function WITH them IS a procedure there (wave 142). The
+            # synthesized trailing RETURN 0 is a valid proc status code.
+            return CreateProcedureStatement(
+                name=self._translate_ident_quoting(node.name) or node.name,
+                parameters=new_params,
+                body=new_body,
+                or_replace=node.or_replace,
+                schema=node.schema,
+            )
         return CreateFunctionStatement(
             name=self._translate_ident_quoting(node.name) or node.name,
             parameters=new_params,
