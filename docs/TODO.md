@@ -1524,8 +1524,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         *Wave 69 (2026-07-16):* a CTE body's ORDER BY without LIMIT
         is illegal on T-SQL (error 1033, ~7x pg→tsql) and cannot
         change the result — strips like the view/scalar-subquery
-        cases (waves 55/63). Tests: TestCteOrderByStrip. *Measurement
-        pending next pg-corpus cycle.*
+        cases (waves 55/63). Tests: TestCteOrderByStrip. **Measured at
+        `c9d5a60` (2026-07-16): pg→T-SQL 262→261, others flat — the
+        WITH chains carry further blockers (whole-row `SELECT q FROM
+        q` refs). Standing: pg-source {261/160/140}, mysql-source
+        {209/111/160}. Both directions are converged to deep
+        multi-blocker chains: per-wave yield has been ≤3 for four
+        waves. Remaining named fronts (fidelity, not validity):
+        DECLARE HANDLER EXIT→EXCEPTION conversion, PG whole-row CTE
+        references on tsql, EXPLAIN/psql-ism passthrough polish.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
