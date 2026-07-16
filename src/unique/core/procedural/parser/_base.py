@@ -1098,6 +1098,20 @@ class ParserBase:
         self._advance()  # consume the carrier comment
         return original
 
+    def _consume_type_attributes(self) -> bool:
+        """Consume MySQL numeric-type attributes (UNSIGNED/SIGNED/
+        ZEROFILL) so parameter/declare grammars don't shred the rest of
+        the routine; True when UNSIGNED was present."""
+        unsigned = False
+        while self._current().type in (
+            TokenType.KEYWORD,
+            TokenType.IDENTIFIER,
+        ) and self._current().upper_value in ("UNSIGNED", "SIGNED", "ZEROFILL"):
+            if self._current().upper_value == "UNSIGNED":
+                unsigned = True
+            self._advance()
+        return unsigned
+
     def _parse_data_type(self) -> DataType:
         """Parse a SQL data type."""
         self._skip_comments()
@@ -1148,7 +1162,13 @@ class ParserBase:
             self._match_type(TokenType.RPAREN)
             origin = self._take_carrier_origin()
 
-        return DataType(name=type_name, params=tuple(params), origin_comment=origin)
+        unsigned = self._consume_type_attributes()
+        return DataType(
+            name=type_name,
+            params=tuple(params),
+            unsigned=unsigned,
+            origin_comment=origin,
+        )
 
     def _parse_data_type_or_reference(self) -> DataType:
         """Parse a data type that might be a %TYPE or %ROWTYPE reference."""
@@ -1195,7 +1215,13 @@ class ParserBase:
             self._match_type(TokenType.RPAREN)
             origin = self._take_carrier_origin()
 
-        return DataType(name=type_name, params=tuple(params), origin_comment=origin)
+        unsigned = self._consume_type_attributes()
+        return DataType(
+            name=type_name,
+            params=tuple(params),
+            unsigned=unsigned,
+            origin_comment=origin,
+        )
 
     def _run_body_loop(
         self,
@@ -1591,17 +1617,17 @@ class ParserBase:
         parts: list[str] = []
         paren_depth = 0
         first = True
+        stops = {k.upper() for k in keywords}
         while not self._at_end():
             tok = self._current()
             is_call = (
                 tok.type == TokenType.KEYWORD and self._peek(1).type == TokenType.LPAREN
             )
-            if (
-                paren_depth == 0
-                and not (first and is_call)
-                and tok.is_keyword(*keywords)
-                and not is_call
-            ):
+            # Some stop words (MySQL's DO) tokenize as identifiers.
+            is_stop = tok.is_keyword(*keywords) or (
+                tok.type == TokenType.IDENTIFIER and tok.upper_value in stops
+            )
+            if paren_depth == 0 and not (first and is_call) and is_stop and not is_call:
                 break
             if paren_depth == 0 and tok.type == TokenType.SEMICOLON:
                 break

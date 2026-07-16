@@ -2666,3 +2666,54 @@ class TestUserVarsInRoutines:
         )
         out = _t2(src, "mysql", "oracle")
         assert re.search(r"(?i)CREATE OR REPLACE FUNCTION f2", out), out
+
+
+class TestUnsignedParamsOracleTypes:
+    """wave 65: MySQL's `INT UNSIGNED` in routine parameter/return
+    types broke the procedural parser — the whole body was swallowed
+    as parameter garbage (15x mysql→pg). UNSIGNED/SIGNED/ZEROFILL now
+    parse as type attributes; MySQL integer names map to Oracle
+    (TINYINT→NUMBER(3) etc.) in RETURN/DECLARE; and the scalar-
+    subquery ORDER BY strip (wave 55, tsql) extends to Oracle (7x
+    ORA-00907)."""
+
+    _SRC = (
+        "DELIMITER //\n"
+        "create function fac(n int unsigned) returns bigint unsigned\n"
+        "begin\n"
+        "  declare f bigint unsigned default 1;\n"
+        "  while n > 1 do\n"
+        "    set f = f * n;\n"
+        "    set n = n - 1;\n"
+        "  end while;\n"
+        "  return f;\n"
+        "end//\n"
+        "DELIMITER ;\n"
+    )
+
+    def test_unsigned_params_parse_pg(self) -> None:
+        out = _t2(self._SRC, "mysql", "postgresql")
+        assert re.search(r"(?is)CREATE OR REPLACE FUNCTION fac\s*\(\s*n", out), out
+        assert "unsigned )" not in out.lower(), out
+        assert re.search(r"(?is)WHILE.*LOOP", out), out
+
+    def test_tinyint_return_maps_oracle(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create function g1() returns tinyint\n"
+            "begin\n"
+            "  return 0;\n"
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = _t2(src, "mysql", "oracle")
+        assert "TINYINT" not in out.upper(), out
+        assert re.search(r"(?i)RETURN NUMBER", out), out
+
+    def test_scalar_subquery_order_strips_oracle(self) -> None:
+        out = _t2(
+            "select (select 1 as foo order by foo) as x from t1;",
+            "mysql",
+            "oracle",
+        )
+        assert "ORDER BY" not in out.upper(), out

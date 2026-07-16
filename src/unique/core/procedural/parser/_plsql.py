@@ -469,10 +469,17 @@ class PlsqlStatementsMixin(ParserBase):
         return node
 
     def _parse_plsql_while(self) -> ASTNode:
-        """Parse PL/SQL WHILE ... LOOP ... END LOOP."""
+        """Parse PL/SQL WHILE … LOOP … END LOOP (MySQL spells it
+        WHILE … DO … END WHILE)."""
         self._expect_keyword("WHILE")
-        condition = self._parse_expression_until_keyword("LOOP")
-        self._expect_keyword("LOOP")
+        condition = self._parse_expression_until_keyword("LOOP", "DO")
+        if not self._match_keyword("LOOP"):
+            if self._current().type == TokenType.IDENTIFIER and (
+                self._current().upper_value == "DO"
+            ):
+                self._advance()
+            else:
+                self._expect_keyword("DO")
 
         body: list[ASTNode] = []
         while not self._at_end() and not self._current().is_keyword("END"):
@@ -481,7 +488,8 @@ class PlsqlStatementsMixin(ParserBase):
                 body.append(stmt)
 
         self._match_keyword("END")
-        self._match_keyword("LOOP")
+        if not self._match_keyword("LOOP"):
+            self._match_keyword("WHILE")
         self._match_type(TokenType.SEMICOLON)
 
         return WhileStatement(condition=condition, body=tuple(body))

@@ -2141,9 +2141,9 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
 
     if isinstance(node, SubqueryExpression):
         query = node.query
-        if dialect == "tsql" and query.order_by and not query.limit:
-            # Illegal in a T-SQL subquery without TOP/OFFSET, and with no
-            # LIMIT it cannot change the (single-row) result anyway.
+        if dialect in ("tsql", "oracle") and query.order_by and not query.limit:
+            # Illegal in a T-SQL/Oracle scalar subquery without TOP/FETCH,
+            # and with no LIMIT it cannot change the single-row result.
             query = dataclasses.replace(query, order_by=())
         return f"({_emit_select(query, dialect)})"
 
