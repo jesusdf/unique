@@ -1789,8 +1789,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         *Wave 94 (2026-07-17):* `(a, b) IN (VALUES (1,1), (20,0))`
         has no T-SQL/Oracle spelling (row constructors, 4145) —
         literal rows expand to the disjunction of conjunctions.
-        Tests: TestTupleInValuesList. *Measurement pending next
-        pg-corpus cycle.*
+        Tests: TestTupleInValuesList. **Measured at `4cbc26b`
+        (2026-07-17): pg→T-SQL 164→163, rest flat — the remaining
+        statements stack multiple exotic constructs each (deep-singles
+        floor: further waves cost a full cycle for −1). Standing:
+        pg-source {163/131/89}, mysql-source {166/107/129}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
