@@ -832,12 +832,22 @@ def _predicate_int_comparison(node: ASTNode) -> ASTNode | None:
     """Rewrite ``<predicate> = 1`` / ``= 0`` / ``IS TRUE`` / ``IS FALSE``
     (MySQL's boolean-as-number) to the predicate itself or its negation;
     None when the shape does not match."""
+
+    def is_predicate(v: ASTNode) -> bool:
+        if isinstance(v, BinaryOp) and v.operator in _PREDICATE_OPERATORS:
+            return True
+        # sqlglot spells IS NOT NULL as NOT(IS NULL) — still a predicate.
+        return (
+            isinstance(v, UnaryOp)
+            and v.operator == UnaryOperator.NOT
+            and is_predicate(v.operand)
+        )
+
     if not (
         isinstance(node, BinaryOp)
         and node.operator in (BinaryOperator.EQ, BinaryOperator.NEQ, BinaryOperator.IS)
         and isinstance(node.right, Literal)
-        and isinstance(node.left, BinaryOp)
-        and node.left.operator in _PREDICATE_OPERATORS
+        and is_predicate(node.left)
     ):
         return None
     if node.right.dtype == "integer" and node.right.value in (0, 1):
@@ -884,12 +894,20 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
         if (
             isinstance(node, UnaryOp)
             and node.operator == UnaryOperator.NOT
-            and isinstance(node.operand, BinaryOp)
+            and (
+                isinstance(node.operand, BinaryOp)
+                or (
+                    isinstance(node.operand, UnaryOp)
+                    and node.operand.operator == UnaryOperator.NOT
+                )
+            )
         ):
             # NOT (…) — the parenthesized operand is condition position
             # too: bare columns under the AND/OR inside shipped as
-            # truthiness (wave 160). Narrow to BinaryOp operands so NOT
-            # EXISTS keeps its idiomatic spelling.
+            # truthiness (wave 160). Narrow to BinaryOp/nested-NOT
+            # operands so NOT EXISTS / IS NULL keep their idiomatic
+            # spelling; the nested NOT comes from the ``NOT-pred = 0``
+            # rewrite (wave 169).
             return f"NOT ({_emit_condition(node.operand, dialect)})"
         rewritten = _predicate_int_comparison(node)
         if rewritten is not None:

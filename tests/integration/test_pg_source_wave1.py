@@ -6273,3 +6273,34 @@ class TestWave168InsertSetUservarIsTrue:
     def test_predicate_is_false_tsql(self) -> None:
         out = _t2("select * from t1 where (c2 is null) is false;", "mysql", "tsql")
         assert re.search(r"(?i)NOT \(c2 IS NULL\)", out), out
+
+
+class TestWave169NotNullParenCompare:
+    """wave 169 (mysql-corpus): ``(c2 IS NOT NULL) = 1`` — sqlglot
+    spells IS NOT NULL as NOT(IS NULL), so the predicate-to-int
+    rewrite's BinaryOp-left guard missed it and T-SQL got
+    ``NOT (c2 IS NULL) = 1`` (error 102/156)."""
+
+    def test_isnotnull_eq_one(self) -> None:
+        out = _t2(
+            "SELECT * FROM t1 LEFT JOIN t2 ON c1=c2" " WHERE (c2 IS NOT NULL) = 1;",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)WHERE NOT \(c2 IS NULL\)\s*$", out.strip()), out
+
+    def test_isnotnull_is_true(self) -> None:
+        out = _t2(
+            "SELECT * FROM t1 LEFT JOIN t2 ON c1=c2" " WHERE (c2 IS NOT NULL) IS TRUE;",
+            "mysql",
+            "tsql",
+        )
+        assert "IS 1" not in out.upper() and "= 1" not in out, out
+
+    def test_isnotnull_eq_zero(self) -> None:
+        out = _t2(
+            "SELECT * FROM t1 LEFT JOIN t2 ON c1=c2" " WHERE (c2 IS NOT NULL) = 0;",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)NOT \(NOT \(c2 IS NULL\)\)", out), out

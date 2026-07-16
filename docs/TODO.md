@@ -726,7 +726,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          ``IS 1``. Measured: mysql→tsql **109 → 67** (−42 — the
          campaign's biggest drop; the @value chains collapsed).
          Validity **98.8%**. Discovery HOLDS 0. Tests:
-         TestWave168InsertSetUservarIsTrue (6).**
+         TestWave168InsertSetUservarIsTrue (6).* Wave 169 (2026-07-17):
+         ``(c2 IS NOT NULL) = 1`` — sqlglot spells IS NOT NULL as
+         NOT(IS NULL), so the predicate-to-int rewrite's BinaryOp-left
+         guard missed it (error 102/156 live). ``is_predicate`` now
+         accepts the NOT-wrapped form, and the ``NOT (…)`` condition
+         branch takes nested-NOT operands (narrowed so NOT EXISTS/IS
+         NULL keep their idiomatic spelling — the wide cut broke the
+         dual-guard trio AGAIN; second offense, same lesson). Measured:
+         mysql→tsql **67 → 63** (−4, validity 98.9%). Discovery HOLDS
+         0. Tests: TestWave169NotNullParenCompare (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
