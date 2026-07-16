@@ -5670,3 +5670,29 @@ class TestUnknownParamType:
         out = _t(src, "mysql")
         assert re.search(r"(?i)CREATE FUNCTION g", out), out
         assert "unresolvable" not in out, out
+
+
+class TestRowCompareAny:
+    """wave 153: a row tuple compared with ANY/ALL over a subquery ships
+    as a source-spelled RawSQL fragment (RANDOM() unmapped inside) — no
+    verified spelling off PG; joins the composite gate."""
+
+    @pytest.mark.parametrize("target", ["mysql", "tsql", "oracle"])
+    def test_row_any_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "select 1 from t b where (b.u, random() > 0) = any "
+            "(select q1, random() > 0 from c);",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_scalar_any_untouched(self) -> None:
+        out = _t("select 1 from t where x = any (select q1 from c);", "mysql")
+        assert "UNIQUE:" not in out, out

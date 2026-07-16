@@ -587,7 +587,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          degrades with a whitelist of known scalar spellings.
          Measured: pg→mysql **75 → 74**, pg→oracle **38 → 35**
          (98.9%), tsql flat 67, discovery HOLDS 0. Tests:
-         TestUnknownParamType (4).**
+         TestUnknownParamType (4).* Wave 153 (2026-07-16): a row
+         tuple compared with ANY/ALL over a subquery arrives as TWO
+         source-spelled RawSQL fragments (`BinaryOp(EQ, Tuple-RawSQL,
+         Any-RawSQL)` — function maps can't see inside; RANDOM()
+         shipped unmapped); STRUCTURAL detection (two regex drafts
+         failed: nested parens, then the two-fragment split) joins
+         the composite gate. Measured: pg→mysql **74 → 72**,
+         pg→tsql **67 → 65** (98.0%), discovery HOLDS 0. Tests:
+         TestRowCompareAny (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

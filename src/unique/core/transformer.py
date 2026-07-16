@@ -723,6 +723,20 @@ class Transformer:
             arms = [w[1] for w in value.whens] + [value.else_expr]
             if any(is_tuple_raw(a) for a in arms):
                 return "row constructor"
+        if (
+            isinstance(value, BinaryOp)
+            and value.operator in (BinaryOperator.EQ, BinaryOperator.NEQ)
+            and is_tuple_raw(value.left)
+            and isinstance(value.right, RawSQL)
+            and re.search(
+                r"(?is)Unhandled expression type: (Any|All)", value.right.reason
+            )
+        ):
+            # A row tuple compared with ANY/ALL over a subquery — both
+            # sides arrive as source-spelled RawSQL fragments (function
+            # maps can't see inside); no verified spelling off PG
+            # (wave 153).
+            return "row comparison with ANY/ALL"
         if isinstance(value, SelectStatement) and any(
             is_tuple_raw(c) or (isinstance(c, Alias) and is_tuple_raw(c.expression))
             for c in value.columns
