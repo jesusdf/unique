@@ -114,6 +114,15 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 
+# live_validate imports OPTIONAL DB drivers inline, so their presence and
+# typing vary per environment (CI's typecheck env lacks them entirely; a
+# dev venv may have pymssql WITH stubs and pymysql without). Its inline
+# ``# type: ignore`` comments are therefore needed in one env and unused
+# in another — allow that, instead of failing whichever env disagrees.
+[[tool.mypy.overrides]]
+module = ["unique.core.live_validate"]
+disable_error_code = ["unused-ignore"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
