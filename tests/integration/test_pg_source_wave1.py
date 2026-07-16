@@ -3546,3 +3546,33 @@ class TestMysqlFunctionDefaultParens:
     def test_literal_default_unchanged(self) -> None:
         out = _t("create table t (a int default 3);", "mysql")
         assert re.search(r"(?i)DEFAULT 3", out), out
+
+
+class TestLastIdentityCaptureNode:
+    """M3-prereq increment 3 (wave 96): the Oracle last-identity
+    capture consumed a MARKER STRING left in the assignment text; it
+    now consumes a dedicated LastIdentityCapture node. Paired
+    behavior is unchanged (INSERT … RETURNING id INTO v); the
+    UNPAIRED fallback improves from the invalid `v := /* … */;` to a
+    valid NULL assignment with the documented note."""
+
+    _DDL = "CREATE TABLE t1 (\n  id INT IDENTITY(1,1),\n  a INT\n);\nGO\n"
+
+    def test_paired_returning_into(self) -> None:
+        src = self._DDL + (
+            "CREATE PROCEDURE p AS\nBEGIN\n"
+            "  INSERT INTO t1 (a) VALUES (1);\n"
+            "  SET @id = SCOPE_IDENTITY();\nEND"
+        )
+        out = _t2(src, "tsql", "oracle")
+        assert re.search(r"(?i)RETURNING id INTO V_ID;", out), out
+        assert "SCOPE_IDENTITY" not in out.upper(), out
+
+    def test_unpaired_fallback_is_valid(self) -> None:
+        src = "CREATE PROCEDURE p2 AS\nBEGIN\n" "  SET @id = SCOPE_IDENTITY();\nEND"
+        out = _t2(src, "tsql", "oracle")
+        assert re.search(
+            r"(?i)V_ID := NULL;\s*/\* last identity: use <sequence>\.CURRVAL \*/",
+            out,
+        ), out
+        assert not re.search(r"(?i)V_ID := /\*", out), out

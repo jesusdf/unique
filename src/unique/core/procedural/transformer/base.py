@@ -48,6 +48,7 @@ from unique.core.ast_nodes import (
     ForLoopStatement,
     GetDiagnosticsStatement,
     IfStatement,
+    LastIdentityCapture,
     LoopStatement,
     NullStatement,
     ParameterDefinition,
@@ -336,10 +337,6 @@ class ProceduralTransformer:
             result = self._capture_identity_via_returning(result)
         return tuple(result)
 
-    #: Marker left in an assignment value by the Oracle LAST_IDENTITY_EXPR
-    #: placeholder (SCOPE_IDENTITY/@@IDENTITY have no Oracle session form).
-    _ORACLE_LAST_IDENTITY_MARKER = "<sequence>.CURRVAL */"
-
     def _capture_identity_via_returning(self, stmts: list[ASTNode]) -> list[ASTNode]:
         """Rewrite the T-SQL ``INSERT; SET v = SCOPE_IDENTITY()`` pair into
         Oracle's ``INSERT … RETURNING <idcol> INTO v`` (dropping the now-empty
@@ -380,17 +377,10 @@ class ProceduralTransformer:
         return out
 
     def _identity_assignment_var(self, stmt: ASTNode) -> str | None:
-        """Return the assigned variable when ``stmt`` is only a last-identity
-        capture (``v := <placeholder>``), else ``None``."""
-        if isinstance(stmt, (AssignmentStatement, SetVariableStatement)):
-            target = getattr(stmt, "target", None) or getattr(stmt, "name", None)
-            value = stmt.value
-            if (
-                isinstance(value, RawSQL)
-                and self._ORACLE_LAST_IDENTITY_MARKER in value.sql
-                and target
-            ):
-                return str(target)
+        """Return the assigned variable when ``stmt`` is a last-identity
+        capture node, else ``None``."""
+        if isinstance(stmt, LastIdentityCapture):
+            return stmt.target
         return None
 
     def _append_returning_into(
@@ -1662,10 +1652,30 @@ class ProceduralTransformer:
             CursorOperation(operation="OPEN", cursor_name=name, query=query)
         )
 
+    #: A value that is ONLY the source's last-identity call.
+    _LAST_IDENTITY_ONLY_RE = re.compile(
+        r"(?is)^\s*(?:SCOPE_IDENTITY\s*\(\s*\)|@@IDENTITY"
+        r"|LASTVAL\s*\(\s*\)|LAST_INSERT_ID\s*\(\s*\))\s*;?\s*$"
+    )
+
+    def _last_identity_capture(self, name: str, value: ASTNode) -> ASTNode | None:
+        """Oracle has no session-scoped last-identity form: an assignment
+        whose value is only that call becomes a LastIdentityCapture node
+        (paired with its INSERT later, or emitted as a documented
+        fallback)."""
+        if self._target != "oracle":
+            return None
+        if isinstance(value, RawSQL) and self._LAST_IDENTITY_ONLY_RE.match(value.sql):
+            return LastIdentityCapture(target=self._transform_var_name(name))
+        return None
+
     def _transform_set_variable(self, node: SetVariableStatement) -> ASTNode:
         bound = self._cursor_binding_to_open(node.name, node.value)
         if bound is not None:
             return bound
+        capture = self._last_identity_capture(node.name, node.value)
+        if capture is not None:
+            return capture
         new_name = self._transform_var_name(node.name)
         new_value = self._transform_node(node.value)
         # SET keeps a SET statement on engines that have one (T-SQL, MySQL);
@@ -1678,6 +1688,9 @@ class ProceduralTransformer:
         bound = self._cursor_binding_to_open(node.target, node.value)
         if bound is not None:
             return bound
+        capture = self._last_identity_capture(node.target, node.value)
+        if capture is not None:
+            return capture
         new_name = self._transform_var_name(node.target)
         new_value = self._transform_node(node.value)
         # A T-SQL target re-expresses an assignment as SET; the others keep an

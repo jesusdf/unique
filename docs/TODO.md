@@ -199,8 +199,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       month; literal counts compact, expression counts multiply a unit
       interval), and DATEDIFF DAY/MONTH/YEAR emitting Oracle-fractional /
       PG-AGE forms instead of T-SQL's boundary counts (both pipelines now
-      share the boundary-counting forms).* Remaining increments: (3) the last-identity
-      capture consumes a node, not a marker string — *analysis ready
+      share the boundary-counting forms).* Remaining increments: *(3) DONE 2026-07-17 (wave 96):
+      LastIdentityCapture node landed — producer in both assignment
+      transforms (oracle target, value is only the last-identity
+      call), pairing pass consumes the node, marker constant deleted;
+      the UNPAIRED fallback improves from the invalid `v := /* … */;`
+      to a valid NULL assignment + note. Full gate green on first
+      try. Tests: TestLastIdentityCaptureNode.* Original analysis
       (2026-07-17): the marker is the TAIL of the Oracle comment
       `LAST_IDENTITY_EXPR["oracle"]` produced by
       `_transform_last_identity`'s text substitution;

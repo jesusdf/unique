@@ -857,6 +857,18 @@ class PrintStatement(ASTNode):
 
 
 @dataclass(frozen=True)
+class LastIdentityCapture(ASTNode):
+    """Assign the session's last generated identity to ``target``.
+
+    Produced for the Oracle target (which has no session-scoped form);
+    the pairing pass folds it into the preceding INSERT's
+    ``RETURNING <idcol> INTO``. Unpaired, the emitter renders a valid
+    NULL assignment with the documented CURRVAL note."""
+
+    target: str
+
+
+@dataclass(frozen=True)
 class HandlerDeclaration(ASTNode):
     """MySQL ``DECLARE {EXIT|CONTINUE|UNDO} HANDLER FOR conds stmt``.
 
