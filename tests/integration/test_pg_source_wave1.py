@@ -6696,3 +6696,41 @@ class TestWave181OracleShadowedParam:
             "mysql",
         )
         assert "uq_" not in out, out
+
+
+class TestWave182ShowRepairInBody:
+    """wave 182 (mysql-corpus): SHOW/REPAIR/OPTIMIZE/… inside a routine
+    emitted a bare ``;`` (SHOW — silent loss) or shredded (``REPAIR AS
+    TABLE``); they join the admin-statement family."""
+
+    def test_show_carrier_oracle(self) -> None:
+        out = _t2(
+            "create procedure p() begin"
+            " create temporary table tm1 as select 1;"
+            " show create table tm1; drop table tm1; end",
+            "mysql",
+            "oracle",
+        )
+        assert "UNIQUE:" in out and "show create table tm1" in out.lower(), out
+        assert not re.search(r"(?m)^\s*;\s*$", out), out
+
+    def test_optimize_carrier_tsql(self) -> None:
+        out = _t2(
+            "create procedure p() begin repair table t1;"
+            " optimize table t1, t2; analyze table t1; end",
+            "mysql",
+            "tsql",
+        )
+        assert out.lower().count("unique:") >= 3, out
+        assert "REPAIR AS" not in out, out
+
+    def test_show_kept_mysql(self) -> None:
+        out = _t2(
+            "create procedure p() begin"
+            " create temporary table tm1 as select 1;"
+            " show create table tm1; end",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(r"(?i)show create table tm1", out), out
+        assert "UNIQUE:" not in out, out

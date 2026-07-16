@@ -397,6 +397,13 @@ class PlsqlStatementsMixin(ParserBase):
             "RESET",
             "PURGE",
             "KILL",
+            "SHOW",
+            "REPAIR",
+            "OPTIMIZE",
+            "ANALYZE",
+            "CHECKSUM",
+            "LOCK",
+            "UNLOCK",
         ):
             # MySQL admin statements — the embedded-DML fallback
             # shredded ``FLUSH QUERY CACHE`` into ``flush AS query``
