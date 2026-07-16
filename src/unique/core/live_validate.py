@@ -111,6 +111,12 @@ def _validate_postgresql(url: str, statements: list[str]) -> list[str | None]:
     results: list[str | None] = []
     with psycopg.connect(url, autocommit=False) as conn:
         cur = conn.cursor()
+        # Validation runs, not result consumption: a statement that
+        # legitimately produces millions of rows (generate_series perf
+        # tests) OOMed the CLIENT once the transpiler stopped breaking it
+        # (2026-07-16, 32GiB host). A canceled statement is not a syntax
+        # error, so the timeout classifies as environmental (no gap).
+        cur.execute("SET statement_timeout = 3000")
         for st in statements:
             cur.execute("SAVEPOINT uq_lv")
             try:

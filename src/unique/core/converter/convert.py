@@ -716,7 +716,8 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     ctes: tuple[CTEDefinition, ...] = ()
     with_clause = expr.args.get("with") or expr.args.get("with_")
     if with_clause:
-        ctes = tuple(_convert_cte(c) for c in with_clause.expressions)
+        rec = bool(with_clause.args.get("recursive"))
+        ctes = tuple(_convert_cte(c, recursive=rec) for c in with_clause.expressions)
 
     return SelectStatement(
         columns=columns,
@@ -1122,10 +1123,18 @@ def _convert_create_table(
     if isinstance(select_expr, (exp.Select, exp.SetOperation)):
         as_select = _convert_select(select_expr)
 
+    # CREATE TEMP[ORARY] TABLE: the property was never read, silently
+    # turning a session-scoped table into a permanent one (wave 128).
+    temporary = any(
+        isinstance(p, exp.TemporaryProperty)
+        for p in (expr.args.get("properties") or [])
+    )
+
     return CreateTableStatement(
         table=table,
         columns=tuple(columns),
         if_not_exists=if_not_exists,
+        temporary=temporary,
         table_constraints=tuple(constraints),
         inherits_clause=inherits_clause,
         partition_of_clause=partition_of_clause,
@@ -1730,10 +1739,31 @@ def _convert_ordered(expr: exp.Ordered) -> OrderByItem:
     )
 
 
-def _convert_cte(expr: exp.CTE) -> CTEDefinition:
-    """Convert a CTE definition."""
-    name = expr.alias if isinstance(expr.alias, str) else str(expr.alias)
-    query_expr = expr.this
-    query = _convert_select(query_expr) if query_expr else SelectStatement()
+def _convert_cte(expr: exp.CTE, recursive: bool = False) -> CTEDefinition:
+    """Convert a CTE definition.
 
-    return CTEDefinition(name=name, query=query)
+    RECURSIVE and the column list (``x(a)``) were silently dropped, and a
+    VALUES body mangled into a one-row SELECT (wave 127)."""
+    name = expr.alias if isinstance(expr.alias, str) else str(expr.alias)
+    alias_expr = expr.args.get("alias")
+    columns: tuple[str, ...] = ()
+    if alias_expr is not None:
+        columns = tuple(c.name for c in (alias_expr.args.get("columns") or []))
+
+    query_expr = expr.this
+    body = query_expr
+    if isinstance(body, exp.Paren):
+        body = body.this
+    if isinstance(body, exp.Values):
+        converted = _convert_table_or_subquery(body)
+        query = (
+            converted.query
+            if isinstance(converted, SubqueryExpression)
+            else SelectStatement()
+        )
+    elif query_expr is not None:
+        query = _convert_select(query_expr)
+    else:
+        query = SelectStatement()
+
+    return CTEDefinition(name=name, query=query, columns=columns, recursive=recursive)

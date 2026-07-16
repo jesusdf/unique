@@ -356,7 +356,29 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (the body is still one STRING token there — post-splice the
          label is token soup); verbatim on PG via the wave-122
          whole-unit path, carrier elsewhere. Measured: **36 → 34**
-         (`<` class gone). Tests: TestPlpgsqlBlockLabel (4).**
+         (`<` class gone). Tests: TestPlpgsqlBlockLabel (4).
+         Waves 127–128 (+127b, 2026-07-16): CTE fidelity — RECURSIVE
+         and the column list `x(a)` were never harvested (fields
+         existed, unset) and a VALUES body mangled to a one-row
+         SELECT (now the FROM-relation UNION-chain converter);
+         `CREATE TEMP TABLE` lost TEMPORARY even pg→pg (now
+         harvested: TEMPORARY on pg/mysql, GLOBAL TEMPORARY on
+         oracle, dropped-with-#-semantics note on tsql) and
+         zero-column `CREATE TABLE x()` keeps its parens on PG /
+         gates elsewhere. 127b: the sweep VERIFICATION caught my own
+         regression (145→178 on tsql) — RECURSIVE is REQUIRED on
+         pg/mysql and DOESN'T EXIST on tsql/oracle; now per-dialect.
+         ALSO fixed the 32GiB OOM (user-reported): the PG validator
+         (savepoint+execute) began EXECUTING the perf-test SRFs the
+         moment the transpiler stopped breaking them — millions of
+         rows buffered client-side; `statement_timeout=3000` in the
+         validation session (a canceled statement is not
+         syntax-class → no gap). MEASUREMENT POLICY: sequential, max
+         2 python processes (the OOM was 4 parallel measurements).
+         Measured: discovery **34 → 31** (end-of-input cleared);
+         sweeps pg→tsql **132** (96.0%), pg→mysql **109** (96.3%),
+         pg→oracle **65** (97.9%). Tests: TestCteFidelity,
+         TestTempAndZeroColumnTables, TestRecursiveCtePerDialect.**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

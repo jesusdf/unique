@@ -1307,7 +1307,13 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     if node.ctes:
         cte_parts = []
         for cte in node.ctes:
-            recursive = "RECURSIVE " if cte.recursive else ""
+            # PG and MySQL REQUIRE the RECURSIVE keyword; T-SQL and
+            # Oracle have no such keyword (recursion is implicit).
+            recursive = (
+                "RECURSIVE "
+                if cte.recursive and dialect in ("postgresql", "mysql")
+                else ""
+            )
             cols = f"({', '.join(cte.columns)})" if cte.columns else ""
             cte_query = cte.query
             if dialect == "tsql" and cte_query.order_by and not cte_query.limit:
@@ -1728,7 +1734,13 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     # in the current user's schema (Oracle), the connected database (MySQL), or
     # the default "public" schema (PostgreSQL).
     table = _emit_table_ref(node.table, dialect)
-    temp = "TEMPORARY " if node.temporary else ""
+    temp = ""
+    if node.temporary:
+        # PG/MySQL: TEMPORARY. Oracle's closest is a GLOBAL TEMPORARY
+        # table (persistent definition, per-session rows — the table-
+        # variable arc's precedent). T-SQL spells temp-ness as a #name;
+        # the transformer warns about the dropped scope there.
+        temp = {"oracle": "GLOBAL TEMPORARY ", "tsql": ""}.get(dialect, "TEMPORARY ")
     # T-SQL has no "CREATE TABLE IF NOT EXISTS"; the idiomatic equivalent is an
     # existence guard against the catalog. Other engines support the clause
     # inline. Oracle (< 23c) also lacks it, but sqlglot/most targets accept it;
@@ -2017,6 +2029,11 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     if node.inherits_clause:
         # PG requires the empty column list when INHERITS supplies them all.
         return f"{bare} () {node.inherits_clause}"
+    if dialect == "postgresql":
+        # A zero-column table (``CREATE TABLE onerow()``) keeps its parens
+        # — bare CREATE TABLE is invalid PG (wave 128). Only PG has the
+        # form; other targets gate it in the transformer.
+        return f"{bare} ()"
     return bare
 
 

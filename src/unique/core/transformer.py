@@ -582,6 +582,7 @@ class Transformer:
         if self.context.target in ("tsql", "mysql", "oracle"):
             result = [self._gate_array_constructs(node) for node in result]
             result = [self._gate_empty_select_list(node) for node in result]
+            result = [self._gate_zero_column_table(node) for node in result]
         if self.context.target == "mysql":
             result = [self._gate_mysql_full_join(node) for node in result]
             result = [self._gate_mysql_function_relation(node) for node in result]
@@ -675,6 +676,32 @@ class Transformer:
         )
         self.context.warn(reason, "full_outer_join")
         self.context.mark_unsupported("FULL OUTER JOIN (MySQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _gate_zero_column_table(self, node: ASTNode) -> ASTNode:
+        """Degrade PG's zero-column CREATE TABLE — WHOLE, off PG.
+
+        ``CREATE TABLE onerow()`` exists only on PostgreSQL; without the
+        gate the bare (paren-less) form shipped invalid."""
+        if not isinstance(node, CreateTableStatement):
+            return node
+        if (
+            node.columns
+            or node.table_constraints
+            or node.as_select
+            or node.like_source
+            or node.partition_of_clause
+            or node.inherits_clause
+        ):
+            return node
+        reason = (
+            f"PostgreSQL's zero-column CREATE TABLE has no "
+            f"{self.context.target} equivalent; statement preserved as a comment"
+        )
+        self.context.warn(reason, "zero_column_table")
+        self.context.mark_unsupported("zero-column CREATE TABLE")
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)

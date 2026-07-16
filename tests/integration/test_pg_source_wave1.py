@@ -4769,3 +4769,73 @@ class TestPlpgsqlBlockLabel:
         ]
         assert not code, r.sql
         assert r.warnings or r.unsupported, r.sql
+
+
+class TestCteFidelity:
+    """wave 127: `_convert_cte` harvested only name+query — RECURSIVE
+    and the column list `x(a)` silently dropped (both fields existed on
+    CTEDefinition, unset), and a VALUES body mangled into a one-row
+    SELECT (`SELECT ('a'), ('b')`)."""
+
+    def test_recursive_and_columns_kept(self) -> None:
+        out = _t(
+            "with recursive x(a) as (select 1 union all "
+            "select a + 1 from x where a < 3) select * from x;",
+            "postgresql",
+        )
+        assert re.search(r"(?i)WITH RECURSIVE x\(a\) AS", out), out
+
+    def test_values_cte_body(self) -> None:
+        out = _t("with v(a) as (values (1), (2)) select * from v;", "postgresql")
+        assert not re.search(r"(?i)SELECT \(1\), \(2\)", out), out
+        assert re.search(r"(?is)SELECT 1(\s+AS a)?\s+UNION ALL\s+SELECT 2", out), out
+
+
+class TestTempAndZeroColumnTables:
+    """wave 128: ``CREATE TEMP TABLE`` lost its TEMPORARY even pg→pg (a
+    session-scoped table silently became permanent), and a zero-column
+    ``CREATE TABLE onerow()`` lost its parens (invalid PG; the form
+    doesn't exist elsewhere and degrades there)."""
+
+    def test_temp_table_kept_pg(self) -> None:
+        out = _t("create temp table t2 (a int);", "postgresql")
+        assert re.search(r"(?i)CREATE TEMPORARY TABLE t2", out), out
+
+    def test_zero_column_table_pg(self) -> None:
+        out = _t("create temp table onerow();", "postgresql")
+        assert re.search(r"(?i)CREATE TEMPORARY TABLE onerow\s*\(\s*\)", out), out
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_zero_column_degrades_off_pg(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "create table onerow();", source="postgresql", target=target
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+
+class TestRecursiveCtePerDialect:
+    """wave 127b (caught by the sweep regression 145→178 on tsql): the
+    RECURSIVE keyword is REQUIRED on PG/MySQL and does not EXIST on
+    T-SQL/Oracle (recursion is implicit there)."""
+
+    _SRC = (
+        "with recursive x(a) as (select 1 union all "
+        "select a + 1 from x where a < 3) select * from x;"
+    )
+
+    @pytest.mark.parametrize("target", ["postgresql", "mysql"])
+    def test_recursive_kept(self, target: str) -> None:
+        out = _t(self._SRC, target)
+        assert re.search(r"(?i)WITH RECURSIVE x", out), out
+
+    @pytest.mark.parametrize("target", ["tsql", "oracle"])
+    def test_recursive_dropped(self, target: str) -> None:
+        out = _t(self._SRC, target)
+        assert "RECURSIVE" not in out.upper(), out
+        assert re.search(r"(?i)WITH x", out), out
