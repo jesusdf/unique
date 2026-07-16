@@ -3262,6 +3262,11 @@ class ProceduralTransformer:
         sql = self._fix_base64_xml_idiom(sql)
         if self._source == "mysql" and self._target != "mysql":
             sql = self._mysql_dq_to_sq(sql)
+        if self._source == "postgresql" and self._target == "mysql":
+            # PG E-strings: MySQL's backslash escapes are compatible, so
+            # the prefix simply drops (other targets treat backslashes
+            # literally — semantic change, left alone).
+            sql = re.sub(r"(?i)\bE\s*(?=')", "", sql)
         if self._source == "postgresql" and self._target != "postgresql":
             sql = self._pg_cast_to_ansi(sql)
             if self._target == "tsql":

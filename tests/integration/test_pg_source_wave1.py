@@ -3392,3 +3392,37 @@ class TestReturningOracle:
         assert any("UPDATE cv" in ln for ln in code), out
         assert not any("RETURNING" in ln.upper() for ln in code), out
         assert "UNIQUE:" in out, out
+
+
+class TestOnConflictMysqlAndEStrings:
+    """wave 89: the RETURNING+ON CONFLICT carrier (wave 54) sat AFTER
+    the MySQL RETURNING branch, so MySQL stripped RETURNING and
+    shipped ON CONFLICT raw (4x); the check moves first. And PG
+    E-strings in procedural raw text emitted as `E '...'` — invalid
+    off PG; MySQL's backslash escapes are compatible, so the prefix
+    drops there (3x)."""
+
+    def test_returning_on_conflict_mysql_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "insert into t (a,b) values (1,'x') "
+            "on conflict (a) do update set b = 'y' returning *;",
+            source="postgresql",
+            target="mysql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not any("ON CONFLICT" in ln.upper() for ln in code), r.sql
+
+    def test_estring_prefix_drops_mysql(self) -> None:
+        src = (
+            "create function st() returns text as $$\n"
+            "begin\n"
+            "  return E'foo\\\\bar';\n"
+            "end$$ language plpgsql;"
+        )
+        out = _t(src, "mysql")
+        assert not re.search(r"\bE\s+'", out), out
+        assert not re.search(r"\bE'", out), out

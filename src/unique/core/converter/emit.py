@@ -923,6 +923,21 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             + _comment_block(node.sql)
         )
 
+    # RETURNING + ON CONFLICT in one statement: any strip/rewrite of one
+    # clause would ship the other raw — carrier before the per-target
+    # RETURNING branches below get a chance to.
+    if node.kind == "RETURNING" and dialect != "postgresql":
+        try:
+            _oc_parsed = sqlglot.parse(node.sql, read=read)
+        except Exception:  # noqa: BLE001
+            _oc_parsed = []
+        if any(e is not None and e.find(exp.OnConflict) for e in _oc_parsed):
+            return (
+                "-- UNIQUE: INSERT combines RETURNING and ON CONFLICT; "
+                f"rewrite as MERGE/upsert with result capture on {dialect}. "
+                "Original:\n" + _comment_block(node.sql)
+            )
+
     # Oracle's RETURNING…INTO exists only inside PL/SQL with target
     # variables; top-level SQL keeps the DML effect, the clause strips
     # with a documented note (same contract as the MySQL branch below).

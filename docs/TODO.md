@@ -1736,6 +1736,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         — the class spanned INSERT/DELETE RETURNING forms too);
         tsql/mysql flat. Standing: pg-source {172/146/98},
         mysql-source {177/107/141}.**
+        *Wave 89 (2026-07-17):* the RETURNING+ON CONFLICT carrier
+        (wave 54) sat AFTER the MySQL RETURNING branch — MySQL
+        stripped RETURNING and shipped ON CONFLICT raw (4x); the
+        check now runs first, off PG. And PG E-strings in procedural
+        raw text emitted as `E '...'` (3x): MySQL's backslash escapes
+        are compatible, so the prefix drops there (other targets
+        treat backslashes literally — left alone). Tests:
+        TestOnConflictMysqlAndEStrings. *Measurement pending next
+        pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
