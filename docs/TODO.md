@@ -341,7 +341,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          for genuinely-empty SOURCE lists (converter-fallback empty
          tuples keep their load-bearing `*` default); PG re-emits the
          bare SELECT, other targets gate to the carrier. Measured:
-         **45 → 42**. Tests: TestEmptySelectList (6).**
+         **45 → 42**. Tests: TestEmptySelectList (6). Wave 125
+         (2026-07-16): PG's TRUNCATE trigger event was unrecognized —
+         the whole trigger shredded into garbage declarations.
+         Recognized on PG (event list + upper_value, TRUNCATE isn't a
+         lexer keyword); degraded whole via `_transform_trigger` on
+         targets without the event (the `_degrade_mysql_uservar`
+         recipe: re-emit in source + carrier + registry). Measured:
+         **42 → 36** (FUNCTION and ON classes cleared). Tests:
+         TestTruncateTrigger (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

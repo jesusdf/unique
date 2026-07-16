@@ -652,7 +652,12 @@ class ParserBase:
         update_of: list[str] = []
         while True:
             tok = self._current()
-            if tok.is_keyword("INSERT", "UPDATE", "DELETE"):
+            if tok.is_keyword("INSERT", "UPDATE", "DELETE") or (
+                self._dialect == "postgresql" and tok.upper_value == "TRUNCATE"
+            ):
+                # PG also fires triggers on TRUNCATE; unrecognized, the
+                # whole trigger shredded into garbage declarations
+                # (wave 125). Off-PG targets degrade in the transformer.
                 event = self._advance().upper_value
                 events.append(event)
                 # Oracle/PG ``UPDATE OF c1, c2``: the trigger fires only for

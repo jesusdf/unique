@@ -1328,6 +1328,20 @@ class ProceduralTransformer:
         degraded_uv = self._degrade_mysql_uservar(node)
         if degraded_uv is not None:
             return degraded_uv
+        # TRUNCATE trigger events exist only on PostgreSQL (wave 125).
+        if self._target != "postgresql" and any(
+            e.upper() == "TRUNCATE" for e in (node.events or ())
+        ):
+            reason = (
+                f"TRUNCATE trigger events exist only on PostgreSQL (no "
+                f"{self._target} equivalent); routine preserved as a comment"
+            )
+            self._warnings.append(reason)
+            self._register_degraded_routine(getattr(node, "name", None))
+            from unique.core.procedural.emitter import ProceduralEmitter
+
+            original = ProceduralEmitter(self._source).emit(node)
+            return RawSQL(sql=original, reason=reason)
         # An Oracle COMPOUND TRIGGER exists to dodge the mutating-table error
         # (ORA-04091) when re-aggregating a parent row after child rows change.
         # A target without that restriction (PostgreSQL) runs the same

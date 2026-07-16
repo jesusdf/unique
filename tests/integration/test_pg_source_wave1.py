@@ -4707,3 +4707,32 @@ class TestEmptySelectList:
     def test_normal_star_select_unaffected(self) -> None:
         out = _t("select * from t;", "postgresql")
         assert re.search(r"(?i)SELECT \*\s+FROM t", out), out
+
+
+class TestTruncateTrigger:
+    """wave 125: PG's TRUNCATE trigger event was not a recognized event —
+    the whole trigger shredded into garbage declarations (``DECLARE
+    TRUNCATE ON; mytable FOR; …``). Recognized on PG; degraded whole on
+    targets without the event."""
+
+    _SRC = (
+        "CREATE TRIGGER trig BEFORE TRUNCATE ON mytable "
+        "FOR EACH STATEMENT EXECUTE FUNCTION f();"
+    )
+
+    def test_truncate_trigger_preserved_pg(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        assert re.search(r"(?i)BEFORE TRUNCATE\s+ON mytable", out), out
+        assert "TRUNCATE ON;" not in out, out
+        assert "UNIQUE:" not in out, out
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_truncate_trigger_degrades_off_pg(self, target: str) -> None:
+        r = Transpiler().transpile(self._SRC, source="postgresql", target=target)
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
