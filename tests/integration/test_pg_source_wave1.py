@@ -2839,3 +2839,24 @@ class TestRaiseConditionName:
         out = _t(src, "oracle")
         assert re.search(r"(?i)unique_violation", out), out
         assert "using" not in out.lower(), out
+
+
+class TestCteOrderByStrip:
+    """wave 69: a CTE body's ORDER BY without LIMIT is illegal on
+    T-SQL (error 1033, ~7x pg→tsql) and has no observable effect
+    anyway — strip it like the view/scalar-subquery cases."""
+
+    def test_cte_order_by_strips_tsql(self) -> None:
+        out = _t(
+            "with q as (select max(f1) as m from t1 group by f1 order by f1) "
+            "select m from q;",
+            "tsql",
+        )
+        assert "ORDER BY" not in out.upper(), out
+
+    def test_cte_order_by_with_limit_survives(self) -> None:
+        out = _t(
+            "with q as (select f1 from t1 order by f1 limit 3) " "select f1 from q;",
+            "tsql",
+        )
+        assert re.search(r"(?is)TOP.*ORDER BY|ORDER BY.*OFFSET", out), out

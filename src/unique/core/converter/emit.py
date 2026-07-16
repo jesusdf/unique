@@ -1243,7 +1243,12 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         for cte in node.ctes:
             recursive = "RECURSIVE " if cte.recursive else ""
             cols = f"({', '.join(cte.columns)})" if cte.columns else ""
-            inner = _emit_select(cte.query, dialect)
+            cte_query = cte.query
+            if dialect == "tsql" and cte_query.order_by and not cte_query.limit:
+                # Illegal in a T-SQL CTE without TOP/OFFSET (error 1033),
+                # and with no LIMIT it cannot change the result.
+                cte_query = dataclasses.replace(cte_query, order_by=())
+            inner = _emit_select(cte_query, dialect)
             cte_parts.append(f"{cte.name}{cols} AS (\n{inner}\n)")
         parts.append(f"WITH {recursive}{', '.join(cte_parts)}")
 

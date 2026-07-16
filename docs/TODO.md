@@ -1521,6 +1521,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         (92.0%), pg→MySQL 163→160 (94.8%), pg→Oracle 142→140 (95.7%).
         Standing: pg-source {262/160/140}, mysql-source
         {209/111/160}.**
+        *Wave 69 (2026-07-16):* a CTE body's ORDER BY without LIMIT
+        is illegal on T-SQL (error 1033, ~7x pg→tsql) and cannot
+        change the result — strips like the view/scalar-subquery
+        cases (waves 55/63). Tests: TestCteOrderByStrip. *Measurement
+        pending next pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
