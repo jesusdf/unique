@@ -615,6 +615,11 @@ class ParserBase:
             # variable references) are not modeled — the declare loop
             # shredded them into ``< <; label >; >`` garbage (wave 126).
             return self._whole_unit_raw("plpgsql block label (<<label>>)")
+        if self._pg_option_line_ahead():
+            # plpgsql compiler options (``#print_strict_params on``) are
+            # body-header lines with no model — they shredded into
+            # garbage declarations (wave 130).
+            return self._whole_unit_raw("plpgsql # compiler option")
         body = self._parse_routine_body()
 
         return CreateFunctionStatement(
@@ -2171,6 +2176,18 @@ class ParserBase:
             return False
         return any(
             tok.type == TokenType.STRING and self._PG_BLOCK_LABEL_RE.search(tok.value)
+            for tok in self._tokens
+        )
+
+    _PG_OPTION_LINE_RE = re.compile(r"(?m)^\s*#\w+")
+
+    def _pg_option_line_ahead(self) -> bool:
+        """Whether the unit's body starts with plpgsql ``#option`` lines
+        (checked pre-splice on the body STRING token, like block labels)."""
+        if self._dialect != "postgresql":
+            return False
+        return any(
+            tok.type == TokenType.STRING and self._PG_OPTION_LINE_RE.search(tok.value)
             for tok in self._tokens
         )
 

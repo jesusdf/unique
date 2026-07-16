@@ -378,7 +378,19 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          Measured: discovery **34 → 31** (end-of-input cleared);
          sweeps pg→tsql **132** (96.0%), pg→mysql **109** (96.3%),
          pg→oracle **65** (97.9%). Tests: TestCteFidelity,
-         TestTempAndZeroColumnTables, TestRecursiveCtePerDialect.**
+         TestTempAndZeroColumnTables, TestRecursiveCtePerDialect.
+         Waves 129–130 (2026-07-16): a set arm carrying its own WITH
+         lost its parens (`UNION ALL WITH z …` invalid); a
+         parenthesized CHAIN arm — `A UNION (B UNION ALL C)` — is now
+         SHIELDED as a derived table (flattening RE-ASSOCIATED the
+         row set: INTERSECT binds tighter than UNION — an old wave-85
+         test had the wrong flat form CONSECRATED and was
+         strengthened, not weakened); `..` FOR-ranges are ONE lexer
+         token (the `::` twin — shipped `0 . . n`); plpgsql
+         `#option` compiler lines go whole-unit (valid PG, shredded
+         before). Measured: discovery **31 → 20** (WITH/#/0/UNION
+         classes cleared). Tests: TestSetArmWithCte, TestWave130Batch,
+         strengthened TestNestedChainMidOrderStrip.**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

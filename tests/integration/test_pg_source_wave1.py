@@ -3306,11 +3306,19 @@ class TestNestedChainMidOrderStrip:
 
     def test_nested_chain_first_arm_not_clobbered(self) -> None:
         # The inner chain's links must survive the outer op attaching.
+        # Wave 130 STRENGTHENED this: the flat form this test used to
+        # assert re-associated the row set (INTERSECT binds tighter than
+        # UNION, so flat (A UNION B) INTERSECT C read as A UNION
+        # (B INTERSECT C)); the parenthesized chain arm is now shielded
+        # as a derived table, preserving both links AND association.
         out = _t(
             "(SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) " "INTERSECT SELECT 4,5,6;",
             "tsql",
         )
-        assert re.search(r"(?is)UNION\s+SELECT 4, 5, 6\s+INTERSECT", out), out
+        assert re.search(
+            r"(?is)FROM \(SELECT 1, 2, 3\s+UNION\s+SELECT 4, 5, 6\)", out
+        ), out
+        assert re.search(r"(?is)uq_setarm\s+INTERSECT\s+SELECT 4, 5, 6", out), out
 
 
 class TestPgArrayTypedRoutines:
@@ -4839,3 +4847,62 @@ class TestRecursiveCtePerDialect:
         out = _t(self._SRC, target)
         assert "RECURSIVE" not in out.upper(), out
         assert re.search(r"(?i)WITH x", out), out
+
+
+class TestSetArmWithCte:
+    """wave 129: a parenthesized UNION arm carrying its own WITH lost
+    the parens (``UNION ALL WITH z AS (…) SELECT …`` — invalid; the
+    WITH must stay inside a parenthesized arm)."""
+
+    def test_union_arm_with_cte_pg(self) -> None:
+        out = _t(
+            "with x as (select 1 as a union all "
+            "(with z as (select 2 as a) select a from z)) select * from x;",
+            "postgresql",
+        )
+        assert re.search(r"(?is)UNION ALL\s*\(\s*WITH z", out), out
+
+
+class TestWave130Batch:
+    """wave 130: three shapes — a FOR range shipped as ``0 . . n``
+    (``..`` is now ONE lexer token, the wave-112 ``::`` twin); plpgsql
+    ``#option`` compiler lines shredded (whole-unit like block labels);
+    and a parenthesized set arm with its own ORDER BY lost its parens."""
+
+    def test_for_range_dots(self) -> None:
+        src = (
+            "create function f() returns int as $$\n"
+            "declare s int := 0;\n"
+            "begin\n"
+            "  for i in 0..3 loop s := s + i; end loop;\n"
+            "  return s;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert ". ." not in out, out
+        assert re.search(r"(?i)IN 0\s?\.\.\s?3", out), out
+
+    def test_print_strict_params_option(self) -> None:
+        src = (
+            "create or replace function f() returns void as $$\n"
+            "#print_strict_params on\n"
+            "declare x record;\n"
+            "begin\n"
+            "  select 1 into strict x;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert "#print_strict_params on" in out, out
+        assert "#print_strict_params on;" not in out, out
+
+    def test_union_arm_with_order_by(self) -> None:
+        out = _t(
+            "select 1.1 as two union (select 2 union all select 2) order by 1;",
+            "postgresql",
+        )
+        # The parenthesized chain arm is shielded as a derived table so
+        # its association survives and the outer ORDER BY stays outside.
+        assert re.search(
+            r"(?is)UNION\s+SELECT \*\s+FROM \(SELECT 2\s+UNION ALL\s+SELECT 2\)", out
+        ), out
+        assert out.rstrip().endswith("ORDER BY 1 ASC;"), out

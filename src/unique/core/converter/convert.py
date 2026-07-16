@@ -761,7 +761,20 @@ def _convert_union(expr: exp.SetOperation) -> SelectStatement:
         # a Select shipped an empty ``SELECT *`` with FROM and columns
         # dropped.
         if isinstance(e, exp.Subquery):
-            e = cast(exp.Expression, e.unnest())
+            inner = cast(exp.Expression, e.unnest())
+            if isinstance(inner, exp.SetOperation):
+                # A parenthesized arm that is ITSELF a chain — ``A UNION
+                # (B UNION ALL C)`` — must keep its association (UNION
+                # dedups; flattening changes the row set) and its outer
+                # trailing ORDER must stay outside. Shield it as a
+                # derived table, valid on every target (wave 130).
+                return SelectStatement(
+                    columns=(Star(),),
+                    from_clause=SubqueryExpression(
+                        query=_convert_union(inner), alias="uq_setarm"
+                    ),
+                )
+            e = inner
         sel = _convert_select(e)
         if sel.set_query is not None:
             return sel  # nested chain — handled by its own conversion

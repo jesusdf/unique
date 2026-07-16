@@ -546,6 +546,14 @@ class Lexer:
             self._emit(TokenType.OPERATOR, "::", line, col)
             return
 
+        # .. range operator (FOR i IN 0..n). One token, or the joiner
+        # ships ``0 . . n`` (wave 130). A leading digit guard is not
+        # needed: a qualified name never has two adjacent bare dots.
+        if ch == "." and self._peek(1) == ".":
+            self._advance(2)
+            self._emit(TokenType.OPERATOR, "..", line, col)
+            return
+
         # : (bind variable prefix or label)
         if ch == ":":
             self._advance()

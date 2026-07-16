@@ -1433,6 +1433,14 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         }
         op = op_map.get(node.set_op, "UNION")
         right = _emit_select(node.set_query, dialect)
+        if node.set_query.ctes:
+            # A set arm carrying its own WITH was parenthesized in the
+            # source (a flat chain cannot carry one) and needs the parens
+            # back — ``UNION ALL WITH z …`` is invalid (wave 129).
+            # Parenthesized CHAIN arms are shielded as derived tables at
+            # conversion; a bare set_op arm here is a flat chain and must
+            # stay flat (parens would re-associate the row set).
+            right = f"({right})"
         result = f"{result}\n{op}\n{right}"
 
     return result
