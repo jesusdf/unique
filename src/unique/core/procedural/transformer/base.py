@@ -3091,6 +3091,52 @@ class ProceduralTransformer:
             return sql
         return self._BASE64_XML_RE.sub(lambda m: template.format(v=m.group(1)), sql)
 
+    @staticmethod
+    def _mysql_dq_to_sq(sql: str) -> str:
+        """Rewrite MySQL double-quoted STRING literals to single-quoted
+        (double quotes delimit identifiers on every other engine).
+        Single-quoted regions pass through untouched."""
+        out: list[str] = []
+        i, n = 0, len(sql)
+        while i < n:
+            ch = sql[i]
+            if ch == "'":
+                j = i + 1
+                while j < n:
+                    if sql[j] == "'":
+                        if j + 1 < n and sql[j + 1] == "'":
+                            j += 2
+                            continue
+                        break
+                    j += 1
+                out.append(sql[i : j + 1])
+                i = j + 1
+                continue
+            if ch == '"':
+                j = i + 1
+                content: list[str] = []
+                while j < n:
+                    c = sql[j]
+                    if c == "\\" and j + 1 < n:
+                        content.append(sql[j + 1])
+                        j += 2
+                        continue
+                    if c == '"':
+                        if j + 1 < n and sql[j + 1] == '"':
+                            content.append('"')
+                            j += 2
+                            continue
+                        break
+                    content.append(c)
+                    j += 1
+                text = "".join(content).replace("'", "''")
+                out.append(f"'{text}'")
+                i = j + 1
+                continue
+            out.append(ch)
+            i += 1
+        return "".join(out)
+
     def _transform_raw_sql(self, node: RawSQL) -> RawSQL:
         # A whole-unit parse fallback must not ship raw across dialects:
         # the source-dialect body would leak as top-level fragments on the
@@ -3107,6 +3153,8 @@ class ProceduralTransformer:
             return RawSQL(sql=node.sql, reason=reason)
         sql = self._fix_fetch_status(node.sql)
         sql = self._fix_base64_xml_idiom(sql)
+        if self._source == "mysql" and self._target != "mysql":
+            sql = self._mysql_dq_to_sq(sql)
         sql = self._transform_var_in_sql(sql)
         # An Oracle trigger body's assignment value carries ``:NEW.``/``:OLD.``
         # row references; map them to the target's row qualifier (a no-op for the

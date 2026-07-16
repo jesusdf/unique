@@ -3018,3 +3018,38 @@ class TestRefcursorCallSites:
         )
         out = _t2(src, "mysql", "oracle")
         assert re.search(r"(?is)sel2\(7, uq_rc1\);", out), out
+
+
+class TestMysqlDoubleQuotedStrings:
+    """wave 75: MySQL double-quoted STRING literals inside procedural
+    raw text (`CONCAT(arg, "")`, `SET x = "it's"`) survive to targets
+    where double quotes delimit IDENTIFIERS — pg error 42601
+    zero-length identifier (11x mysql→pg). Off MySQL they now rewrite
+    to single-quoted literals with inner quotes doubled."""
+
+    def test_empty_double_quote_pg(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create function dq1(arg text) returns text\n"
+            "begin\n"
+            '  return concat(arg, "");\n'
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = _t2(src, "mysql", "postgresql")
+        assert '""' not in out, out
+        assert re.search(r"(?is)concat\s*\(\s*arg\s*,\s*''\s*\)", out), out
+
+    def test_double_quote_with_apostrophe(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create procedure dq2()\n"
+            "begin\n"
+            "  declare x text;\n"
+            '  set x = "it\'s";\n'
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = _t2(src, "mysql", "postgresql")
+        assert re.search(r"it''s", out), out
+        assert '"' not in out.split("$$")[1], out
