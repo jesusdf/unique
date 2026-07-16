@@ -597,6 +597,13 @@ class Transformer:
             result = [self._gate_invalid_date_literal(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_unknown_sysvar(node) for node in result]
+        elif self.context.source == "mysql" and self.context.target in (
+            "oracle",
+            "postgresql",
+        ):
+            # Oracle/PG have no @@ globals at all — a MySQL @@sysvar in
+            # a top-level statement is unmappable there too (wave 178).
+            result = [self._gate_tsql_unknown_sysvar(node) for node in result]
         if self.context.source == "mysql" and self.context.target != "mysql":
             result = [self._gate_mysql_user_var(node) for node in result]
             result = [self._strip_mysql_charset_marks(node) for node in result]
@@ -1241,14 +1248,15 @@ class Transformer:
         return None
 
     def _gate_tsql_unknown_sysvar(self, node: ASTNode) -> ASTNode:
-        """Degrade a statement referencing a MySQL @@system variable
-        T-SQL does not know — WHOLE (error 137 live)."""
+        """Degrade a statement referencing a MySQL @@system variable the
+        target does not know — WHOLE (T-SQL error 137 live; Oracle/PG
+        have no @@ globals at all — wave 178)."""
         found = self._find_unknown_sysvar(node)
         if found is None:
             return node
         reason = (
-            f"MySQL system variable {found} has no T-SQL equivalent; "
-            "statement preserved as a comment"
+            f"MySQL system variable {found} has no {self.context.target} "
+            "equivalent; statement preserved as a comment"
         )
         self.context.warn(reason, "mysql_sysvar")
         self.context.mark_unsupported(f"{found} (MySQL system variable)")
@@ -1260,9 +1268,12 @@ class Transformer:
 
     def _find_unknown_sysvar(self, value: object) -> str | None:
         if isinstance(value, RawSQL):
+            # Only T-SQL has @@ globals; on Oracle/PG every @@name is
+            # foreign (the gate runs for mysql source only there).
+            known = self._TSQL_GLOBALS if self.context.target == "tsql" else ()
             for m in self._SYSVAR_RE.finditer(value.sql):
                 name = m.group(0)
-                if name.upper() not in self._TSQL_GLOBALS:
+                if name.upper() not in known:
                     return name
             return None
         if isinstance(value, ASTNode):

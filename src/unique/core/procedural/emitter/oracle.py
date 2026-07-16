@@ -15,6 +15,7 @@ from unique.core.ast_nodes import (
     CreateFunctionStatement,
     CreateTriggerStatement,
     DeclareStatement,
+    EmbeddedDML,
     ForLoopStatement,
     ParameterDefinition,
     PerformStatement,
@@ -198,6 +199,17 @@ class OracleEmitter(ProceduralEmitter):
         # (the RETURN clause itself must be unconstrained).
         self._oracle_fn_return_type = ret_type
         return f"\nRETURN {_unconstrained(ret_type)}"
+
+    #: DDL verbs that PL/SQL cannot run statically (ORA/PLS-00103 at the
+    #: CREATE) — they need EXECUTE IMMEDIATE (wave 178).
+    _PLSQL_DDL_RE = re.compile(r"(?is)^\s*(CREATE|DROP|ALTER|TRUNCATE)\b")
+
+    def _emit_embedded_dml(self, node: EmbeddedDML) -> str:
+        sql = node.sql.rstrip(";").strip()
+        if self._PLSQL_DDL_RE.match(sql):
+            quoted = sql.replace("'", "''")
+            return f"EXECUTE IMMEDIATE '{quoted}';"
+        return f"{sql};"
 
     def _emit_param(
         self,

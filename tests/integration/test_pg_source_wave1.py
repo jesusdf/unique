@@ -6566,3 +6566,36 @@ class TestWave177OracleInoutEmptyBody:
             "mysql",
         )
         assert re.search(r"(?i)INOUT io int", out), out
+
+
+class TestWave178SysvarGateExecImmediate:
+    """wave 178 (mysql-corpus): Oracle/PG have no @@ globals at all —
+    a MySQL @@sysvar in a top-level statement degrades WHOLE there too;
+    and PL/SQL cannot run DDL statically — embedded CREATE/DROP wraps
+    in EXECUTE IMMEDIATE."""
+
+    def test_sysvar_insert_carrier_oracle(self) -> None:
+        out = _t2("insert into t1 values (@@connect_timeout);", "mysql", "oracle")
+        assert "UNIQUE:" in out and "connect_timeout" in out, out
+        assert not re.search(r"(?im)^\s*INSERT INTO", out), out
+
+    def test_sysvar_insert_carrier_pg(self) -> None:
+        out = _t2(
+            "insert into t1 values (@@connect_timeout);",
+            "mysql",
+            "postgresql",
+        )
+        assert "UNIQUE:" in out, out
+
+    def test_ddl_in_body_exec_immediate(self) -> None:
+        out = _t2(
+            "create procedure cs(x char(16), y int) begin"
+            " insert into t1 values (x, y);"
+            " create temporary table t3 as select * from t1;"
+            " drop table t3; end",
+            "mysql",
+            "oracle",
+        )
+        assert re.search(r"(?i)EXECUTE IMMEDIATE 'CREATE ", out), out
+        assert re.search(r"(?i)EXECUTE IMMEDIATE 'DROP TABLE", out), out
+        assert re.search(r"(?i)INSERT INTO t1 VALUES", out), out
