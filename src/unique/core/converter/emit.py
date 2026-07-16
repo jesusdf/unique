@@ -2942,6 +2942,38 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         keyword = "IS NOT DISTINCT FROM" if equal else "IS DISTINCT FROM"
         return f"{left} {keyword} {right}"
 
+    # Row tuple IN a literal VALUES list: expand to the disjunction of
+    # conjunctions — T-SQL/Oracle have no row constructors.
+    if (
+        dialect in ("tsql", "oracle")
+        and node.operator == BinaryOperator.IN
+        and isinstance(node.right, ExpressionList)
+        and len(node.right.items) == 1
+        and isinstance(node.right.items[0], RawSQL)
+    ):
+        lt = _tuple_items(node.left, left)
+        values_text = node.right.items[0].sql.strip()
+        vm = re.fullmatch(
+            r"(?is)VALUES\s+(\(([^()]*)\)\s*(?:,\s*\(([^()]*)\)\s*)*)",
+            values_text,
+        )
+        if lt is not None and vm is not None:
+            rows = [r.strip() for r in re.findall(r"\(([^()]*)\)", values_text)]
+            groups = []
+            ok = True
+            for row in rows:
+                cells = [c.strip() for c in row.split(",")]
+                if len(cells) != len(lt):
+                    ok = False
+                    break
+                groups.append(
+                    "("
+                    + " AND ".join(f"{a} = {b}" for a, b in zip(lt, cells, strict=True))
+                    + ")"
+                )
+            if ok and groups:
+                return " OR ".join(groups)
+
     # Row-tuple comparison: T-SQL and Oracle have no row constructors
     # in comparisons — expand ``(a, b) = (x, y)`` pairwise (AND for =,
     # OR for <>).

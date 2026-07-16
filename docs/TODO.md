@@ -1786,6 +1786,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         (2026-07-17): −3 — pg-source {164/131/89}; pg→T-SQL reaches
         95.0%. Standing: pg-source {164/131/89}, mysql-source
         {166/107/129} — all six directions ≥95.0%.**
+        *Wave 94 (2026-07-17):* `(a, b) IN (VALUES (1,1), (20,0))`
+        has no T-SQL/Oracle spelling (row constructors, 4145) —
+        literal rows expand to the disjunction of conjunctions.
+        Tests: TestTupleInValuesList. *Measurement pending next
+        pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

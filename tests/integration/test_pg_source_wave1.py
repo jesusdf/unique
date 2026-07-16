@@ -3511,3 +3511,20 @@ class TestRaiseSqlstateLiteral:
         out = _t(src, "tsql")
         assert "ERROR_STATE()" not in out.split("RAISERROR")[0], out
         assert re.search(r"(?i)'SQLSTATE 1234F'", out), out
+
+
+class TestTupleInValuesList:
+    """wave 94: `(a, b) IN (VALUES (1,1), (20,0))` has no T-SQL
+    spelling (row constructors; 4145) — literal rows expand to the
+    disjunction of conjunctions `(a = 1 AND b = 1) OR (a = 20 AND
+    b = 0)`."""
+
+    def test_tuple_in_values_expands(self) -> None:
+        out = _t(
+            "select * from onek where (u1, ten) in (values (1,1),(20,0));",
+            "tsql",
+        )
+        assert "VALUES" not in out.upper().split("WHERE")[-1], out
+        assert re.search(
+            r"(?i)\(u1 = 1 AND ten = 1\) OR \(u1 = 20 AND ten = 0\)", out
+        ), out
