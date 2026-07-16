@@ -218,8 +218,10 @@ class OracleEmitter(ProceduralEmitter):
             if p.default and p.direction == "IN"
             else ""
         )
-        direction_str = f"{p.direction} " if p.direction != "IN" else "IN "
-        return f"{p.name} {direction_str}{dt}{default_str}"
+        # Oracle spells the bidirectional mode ``IN OUT`` — a MySQL
+        # INOUT shipped verbatim was PLS-00103 (wave 177).
+        direction = "IN OUT" if p.direction == "INOUT" else (p.direction or "IN")
+        return f"{p.name} {direction} {dt}{default_str}"
 
     def _emit_select_into(self, node: SelectIntoStatement) -> str:
         base = super()._emit_select_into(node)

@@ -669,6 +669,10 @@ class ProceduralEmitter:
         lines.append("BEGIN")
         self._indent_level = 1
         texts = [*hoisted, *(self._emit_node(stmt) for stmt in body_stmts)]
+        if not any(t.strip() for t in texts):
+            # PL/SQL requires at least one statement in a block — an
+            # empty MySQL body (``BEGIN END``) was PLS-00103 (wave 177).
+            texts = ["NULL;"]
         for text in texts:
             for line in text.split("\n"):
                 lines.append(f"{self._indent()}{line}" if line.strip() else "")

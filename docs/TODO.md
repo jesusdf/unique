@@ -789,7 +789,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          there, now comparisonized like T-SQL/Oracle (boolean literals
          untouched). Measured: mysql→pg **36 → 33** (validity 99.4%),
          mysql→tsql stable 42. Discovery HOLDS 0. Tests:
-         TestWave176PgConditionLiterals (2).**
+         TestWave176PgConditionLiterals (2).* Wave 177 (2026-07-17,
+         mysql→oracle front opened — the shared waves had collapsed it
+         129 → 66 unmeasured): Oracle spells the bidirectional
+         parameter mode ``IN OUT`` (a verbatim INOUT was PLS-00103,
+         9x), and PL/SQL requires at least one statement in a block —
+         an empty MySQL body (``BEGIN END``) gets ``NULL;`` (5x).
+         Measured: mysql→oracle **66 → 53** (−13, validity 99.1%).
+         Discovery HOLDS 0. Tests: TestWave177OracleInoutEmptyBody
+         (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

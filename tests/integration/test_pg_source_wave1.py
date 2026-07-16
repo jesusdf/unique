@@ -6538,3 +6538,31 @@ class TestWave176PgConditionLiterals:
             "postgresql",
         )
         assert re.search(r"(?i)WHEN TRUE THEN", out), out
+
+
+class TestWave177OracleInoutEmptyBody:
+    """wave 177 (mysql-corpus, oracle front): Oracle spells the
+    bidirectional mode ``IN OUT`` (a verbatim INOUT was PLS-00103),
+    and PL/SQL requires at least one statement in a block — an empty
+    MySQL body needs ``NULL;``."""
+
+    def test_inout_spelled_in_out(self) -> None:
+        out = _t2(
+            "create procedure inc(inout io int) begin set io = io + 1; end",
+            "mysql",
+            "oracle",
+        )
+        assert re.search(r"(?i)io IN OUT NUMBER", out), out
+        assert "INOUT" not in out.upper().replace("IN OUT", ""), out
+
+    def test_empty_body_gets_null(self) -> None:
+        out = _t2("create procedure avg_() begin end", "mysql", "oracle")
+        assert re.search(r"(?i)BEGIN\s+NULL;\s+END;", out), out
+
+    def test_inout_kept_mysql(self) -> None:
+        out = _t2(
+            "create procedure inc(inout io int) begin set io = io + 1; end",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(r"(?i)INOUT io int", out), out
