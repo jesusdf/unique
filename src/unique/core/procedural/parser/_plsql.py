@@ -27,6 +27,7 @@ from unique.core.ast_nodes import (
     ExceptionBlock,
     ExceptionHandler,
     ExecuteStatement,
+    ExitStatement,
     ForLoopStatement,
     GetDiagnosticsStatement,
     IfStatement,
@@ -268,6 +269,12 @@ class PlsqlStatementsMixin(ParserBase):
         if tok.is_keyword("SET"):
             # MySQL assignment: SET var = expr;
             return self._parse_mysql_set()
+        if (
+            self._dialect == "mysql"
+            and tok.type == TokenType.IDENTIFIER
+            and tok.upper_value == "REPEAT"
+        ):
+            return self._parse_mysql_repeat()
         if tok.is_keyword("IF"):
             return self._parse_plsql_if()
         elif tok.is_keyword("CASE") and self._plsql_case_is_statement():
@@ -467,6 +474,28 @@ class PlsqlStatementsMixin(ParserBase):
             )
         assert node is not None
         return node
+
+    def _parse_mysql_repeat(self) -> ASTNode:
+        """MySQL ``REPEAT … UNTIL cond END REPEAT`` — a post-test loop:
+        LoopStatement with a trailing conditional EXIT."""
+        self._advance()  # REPEAT (tokenizes as an identifier)
+
+        body: list[ASTNode] = []
+        while not self._at_end() and not (
+            self._current().type in (TokenType.KEYWORD, TokenType.IDENTIFIER)
+            and self._current().upper_value == "UNTIL"
+        ):
+            stmt = self._parse_plsql_statement()
+            if stmt:
+                body.append(stmt)
+        self._advance()  # UNTIL
+        condition = self._parse_expression_until_keyword("END")
+        self._match_keyword("END")
+        if self._current().upper_value == "REPEAT":
+            self._advance()
+        self._match_type(TokenType.SEMICOLON)
+
+        return LoopStatement(body=tuple(body) + (ExitStatement(condition=condition),))
 
     def _parse_plsql_while(self) -> ASTNode:
         """Parse PL/SQL WHILE … LOOP … END LOOP (MySQL spells it

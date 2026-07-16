@@ -1497,6 +1497,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         fully reversed), mysql→PG 113→112 (98.1%), mysql→T-SQL 210
         flat (96.4%). Standing: pg-source {265/163/142}, mysql-source
         {210/112/158}.**
+        *Wave 67 (2026-07-16):* MySQL's `REPEAT … UNTIL cond END
+        REPEAT` shredded into garbage statements (`repeat AS set;` —
+        REPEAT/UNTIL tokenize as identifiers, no grammar existed). It
+        parses now as a post-test loop: LoopStatement with a trailing
+        `EXIT WHEN cond`, native on every target. Tests:
+        TestRepeatUntilLoop. *Measurement pending next mysql-corpus
+        cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

@@ -2771,3 +2771,34 @@ class TestCharBinaryAndDegradedCallRegistry:
         )
         out = _t2(src, "mysql", "oracle")
         assert re.search(r"(?is)BEGIN\s+p10\(3\);\s+END;", out), out
+
+
+class TestRepeatUntilLoop:
+    """wave 67: MySQL's `REPEAT … UNTIL cond END REPEAT` shredded into
+    garbage statements (`repeat AS set;`). It parses now as a
+    post-test loop — LoopStatement with a trailing EXIT WHEN — which
+    every target spells natively (LOOP…EXIT WHEN on PG/Oracle,
+    WHILE/BREAK on T-SQL)."""
+
+    _SRC = (
+        "DELIMITER //\n"
+        "create procedure rp()\n"
+        "begin\n"
+        "  declare v int default 0;\n"
+        "  repeat\n"
+        "    set v = v + 1;\n"
+        "  until v >= 3 end repeat;\n"
+        "end//\n"
+        "DELIMITER ;\n"
+    )
+
+    def test_repeat_pg(self) -> None:
+        out = _t2(self._SRC, "mysql", "postgresql")
+        assert re.search(
+            r"(?is)LOOP.*v := v \+ 1.*EXIT WHEN v >= 3.*END LOOP", out
+        ), out
+
+    def test_repeat_oracle(self) -> None:
+        out = _t2(self._SRC, "mysql", "oracle")
+        assert re.search(r"(?is)LOOP.*EXIT WHEN v >= 3.*END LOOP", out), out
+        assert "repeat AS" not in out, out
