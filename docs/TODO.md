@@ -1557,7 +1557,9 @@ fix needs an **anonymized** regression fixture (never a private name).
         a result SELECT inside wave 70's folded exception section
         shipped as PL/SQL SELECT-without-INTO (the +5). The recursion
         now covers try/catch bodies. Tests: TestRefcursorInTryCatch.
-        *Measurement pending next mysql-corpus cycle.*
+        **Measured at `f4cf7c9` (2026-07-16): mysql→Oracle 165→164;
+        the rest of wave 70's +5 carries further blockers. Standing:
+        pg-source {261/160/140}, mysql-source {209/111/164}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
