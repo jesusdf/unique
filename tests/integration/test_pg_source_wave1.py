@@ -5385,3 +5385,22 @@ class TestVoidOutFunctionBecomesProc:
         )
         out = _t(src, "tsql")
         assert re.search(r"(?i)CREATE FUNCTION f2|CREATE PROCEDURE f2", out), out
+
+
+class TestEStringsInBodies:
+    """wave 143: PG E-strings inside procedural bodies token-split into a
+    bare identifier ``E`` plus the literal (``PRINT E 'foo\\bar'`` — name
+    E not permitted, 3x). The lexer now decodes the C-style escapes into
+    a plain single-quoted literal every target understands."""
+
+    def test_estring_in_function_body(self) -> None:
+        src = (
+            "create function strtest() returns text as $$\n"
+            "begin\n"
+            "  raise notice '%', E'foo\\\\bar';\n"
+            "  return E'foo\\\\bar';\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "tsql")
+        assert not re.search(r"(?i)\bE\s+'", out), out
+        assert "foo\\bar" in out, out

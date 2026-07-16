@@ -510,7 +510,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (`function f1(in i int, out j int)` — PG infers the return
          from OUTs) cannot be a T-SQL FUNCTION (error 181) — it IS a
          procedure there. Measured: pg→tsql **77 → 74** (97.7%),
-         discovery HOLDS 0. Tests: TestVoidOutFunctionBecomesProc.**
+         discovery HOLDS 0. Tests: TestVoidOutFunctionBecomesProc.* Wave 143 (2026-07-16): PG
+         E-strings inside procedural bodies token-split into a bare
+         identifier `E` + the literal (`PRINT E 'foo\bar'`, 3x);
+         the lexer now DECODES the C-style escapes (\\, \n, octal,
+         \x, \u) into a plain single-quoted literal every target
+         understands. (Also: a ruff failure hidden by a `| tail`
+         pipe — the masked-rc lesson again.) Measured: pg→tsql
+         **74 → 71** (97.8%), discovery HOLDS 0. Tests:
+         TestEStringsInBodies.**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

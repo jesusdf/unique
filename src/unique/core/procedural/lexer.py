@@ -14,6 +14,36 @@ import re
 from dataclasses import dataclass
 from enum import Enum, auto
 
+_PG_ESCAPE_RE = re.compile(
+    r"\\(x[0-9A-Fa-f]{1,2}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[0-7]{1,3}|.)"
+)
+
+_PG_SIMPLE_ESCAPES = {
+    "b": "\b",
+    "f": "\f",
+    "n": "\n",
+    "r": "\r",
+    "t": "\t",
+    "\\": "\\",
+    "'": "'",
+}
+
+
+def _decode_pg_escapes(text: str) -> str:
+    """Decode a PG E-string body's C-style escapes to plain characters."""
+
+    def _sub(m: re.Match[str]) -> str:
+        esc = m.group(1)
+        if esc[0] == "x":
+            return chr(int(esc[1:], 16))
+        if esc[0] in ("u", "U"):
+            return chr(int(esc[1:], 16))
+        if esc[0] in "01234567":
+            return chr(int(esc, 8))
+        return _PG_SIMPLE_ESCAPES.get(esc, esc)
+
+    return _PG_ESCAPE_RE.sub(_sub, text)
+
 
 class TokenType(Enum):
     """Token types for the procedural lexer."""
@@ -419,6 +449,19 @@ class Lexer:
         if ch in ("N", "n") and self._peek(1) == "'":
             self._advance()
             self._tokenize_string(line, col, prefix="N")
+            return
+
+        # PG E-string (C-style escapes): decode the escapes into a plain
+        # single-quoted literal — the split ``E 'x'`` token pair shipped
+        # a bare identifier E (wave 143).
+        if ch in ("E", "e") and self._peek(1) == "'":
+            self._advance()
+            self._tokenize_string(line, col)
+            tok = self._tokens.pop()
+            inner = tok.value[1:-1].replace("''", "'")
+            decoded = _decode_pg_escapes(inner)
+            normalized = "'" + decoded.replace("'", "''") + "'"
+            self._emit(TokenType.STRING, normalized, line, col)
             return
 
         # Oracle q-quoted literal: q'[…]' / q'{…}' / q'(…)' / q'<…>' /
