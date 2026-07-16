@@ -171,6 +171,20 @@ PROCEDURAL_FUNC_MAPS: dict[tuple[str, str], dict[str, str]] = {
         "UUID": "NEWID",
         "UTC_TIMESTAMP": "GETUTCDATE",
     },
+    ("mysql", "postgresql"): {
+        "IFNULL": "COALESCE",
+        "RAND": "RANDOM",
+        "CURDATE": "CURRENT_DATE",
+        "UUID": "GEN_RANDOM_UUID",
+    },
+    ("mysql", "oracle"): {
+        "IFNULL": "NVL",
+        "CURDATE": "TRUNC(SYSDATE)",
+        "UUID": "SYS_GUID",
+        # Round-trips of the oracle->mysql renames (symmetry contract).
+        "CHAR_LENGTH": "LENGTH",
+        "SUBSTRING": "SUBSTR",
+    },
     ("oracle", "postgresql"): {
         "NVL": "COALESCE",
         "LENGTH": "LENGTH",

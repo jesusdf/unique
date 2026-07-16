@@ -253,7 +253,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       a DATEDIFF base added an INTERVAL to a NUMBER (invalid Oracle /
       wrongly typed PG); the IR now matches the text path's numeric
       addition. Tests: TestIrNestedDateaddOverDatediff; verification cycle at
-      `6be5038` identical {163/131/89}.*; then the text rewriters can
+      `6be5038` identical {163/131/89}. Family step 2 (function
+      renames) landed 2026-07-17 (wave 99): the differential found the
+      procedural text path had NO (mysql, postgresql)/(mysql, oracle)
+      function maps — IFNULL shipped raw to PG; both maps added
+      (IFNULL/RAND/CURDATE/UUID + the symmetry round-trips the
+      mapping-contract test enforces). Known cosmetic divergences left
+      documented: NVL→ISNULL (text) vs COALESCE (IR) on tsql — both
+      valid; sqlglot's LEN→LENGTH(CAST AS CLOB) vs text's plain
+      LENGTH — both count trailing spaces that T-SQL LEN ignores
+      (shared caveat, not a divergence). Tests:
+      TestMysqlProceduralFuncMaps.*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed

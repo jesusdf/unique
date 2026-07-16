@@ -3632,3 +3632,38 @@ class TestIrNestedDateaddOverDatediff:
         )
         assert "INTERVAL" not in out.upper(), out
         assert re.search(r"(?i)\+ 1", out), out
+
+
+class TestMysqlProceduralFuncMaps:
+    """M3b family migration, function renames (wave 99): the
+    procedural text path had NO (mysql, postgresql)/(mysql, oracle)
+    function maps — IFNULL shipped raw to PG (no such function
+    there; found by the text-vs-IR differential)."""
+
+    def test_ifnull_pg(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create procedure fp()\n"
+            "begin\n"
+            "  declare x int;\n"
+            "  set x = ifnull(x, 0) + 1;\n"
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = _t2(src, "mysql", "postgresql")
+        assert "ifnull" not in out.lower(), out
+        assert re.search(r"(?i)COALESCE\s*\(\s*x\s*,\s*0\s*\)", out), out
+
+    def test_ifnull_oracle(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create procedure fo()\n"
+            "begin\n"
+            "  declare x int;\n"
+            "  set x = ifnull(x, 0) + 1;\n"
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = _t2(src, "mysql", "oracle")
+        assert "ifnull" not in out.lower(), out
+        assert re.search(r"(?i)NVL\s*\(\s*x\s*,\s*0\s*\)", out), out
