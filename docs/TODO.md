@@ -573,7 +573,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          rejects a BARE `*` alongside other select items (ORA-00923,
          13x) — qualified with the FROM relation (`t.*`) at emit.
          Measured: pg→oracle **51 → 38** (98.8%), discovery HOLDS 0.
-         Tests: TestOracleBareStarWithSiblings (2).**
+         Tests: TestOracleBareStarWithSiblings (2).* Wave 151 (2026-07-16): every PG
+         table name is also a ROWTYPE — a routine parameter typed
+         with one (`function f(t onek)`) is as untranslatable off PG
+         as an explicit composite; table names now join the
+         composite-type harvest. Measured: pg→mysql **78 → 75**,
+         pg→tsql **68 → 67**, discovery HOLDS 0. Tests:
+         TestTableRowtypeParams (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

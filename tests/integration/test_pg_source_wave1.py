@@ -5620,3 +5620,27 @@ class TestOracleBareStarWithSiblings:
     def test_lone_star_untouched_oracle(self) -> None:
         out = _t("select * from t;", "oracle")
         assert re.search(r"(?i)SELECT \*", out), out
+
+
+class TestTableRowtypeParams:
+    """wave 151: every PG table name is also a ROWTYPE — a routine
+    parameter typed with one (``function f(t onek)``) is as
+    untranslatable off PG as an explicit composite; table names now join
+    the composite-type harvest."""
+
+    _SRC = (
+        "create table onek (a int, b text);\n"
+        "create function f_field_select(t onek) returns int as $$\n"
+        "begin return t.a; end $$ language plpgsql;"
+    )
+
+    @pytest.mark.parametrize("target", ["mysql", "tsql", "oracle"])
+    def test_rowtype_param_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(self._SRC, source="postgresql", target=target)
+        assert not re.search(r"(?im)^\s*CREATE (OR REPLACE )?FUNCTION", r.sql), r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_rowtype_param_kept_pg(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        assert re.search(r"(?i)t onek", out), out
+        assert "UNIQUE:" not in out.split("create function")[0], out

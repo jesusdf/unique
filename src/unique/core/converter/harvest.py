@@ -20,9 +20,21 @@ from unique.core.converter._base import *  # noqa: F401,F403
 _PG_COMPOSITE_TYPE_RE = re.compile(r"(?is)\bCREATE\s+TYPE\s+(?:\w+\.)?(\w+)\s+AS\s*\(")
 
 
+_PG_TABLE_NAME_RE = re.compile(
+    r"(?is)\bCREATE\s+(?:TEMP(?:ORARY)?\s+)?TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?"
+    r"(?:\w+\.)?(\w+)"
+)
+
+
 def harvest_pg_composite_types(sql: str) -> frozenset[str]:
-    """Collect PG composite-type names from a whole script."""
-    return frozenset(m.group(1).lower() for m in _PG_COMPOSITE_TYPE_RE.finditer(sql))
+    """Collect PG composite-type names from a whole script.
+
+    Every table name is ALSO a rowtype in PG (``function f(t onek)``) —
+    a routine typed with one is as untranslatable off PG as an explicit
+    CREATE TYPE composite (wave 151)."""
+    named = frozenset(m.group(1).lower() for m in _PG_COMPOSITE_TYPE_RE.finditer(sql))
+    tables = frozenset(m.group(1).lower() for m in _PG_TABLE_NAME_RE.finditer(sql))
+    return named | tables
 
 
 _PG_DOMAIN_RE = re.compile(
