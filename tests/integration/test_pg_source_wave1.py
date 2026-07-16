@@ -6599,3 +6599,28 @@ class TestWave178SysvarGateExecImmediate:
         assert re.search(r"(?i)EXECUTE IMMEDIATE 'CREATE ", out), out
         assert re.search(r"(?i)EXECUTE IMMEDIATE 'DROP TABLE", out), out
         assert re.search(r"(?i)INSERT INTO t1 VALUES", out), out
+
+
+class TestWave179StraightJoin:
+    """wave 179 (mysql-corpus): STRAIGHT_JOIN is INNER JOIN plus a
+    join-order hint no other engine spells — inside a parenthesized
+    join tree it survived the passthrough re-transpile verbatim."""
+
+    _SQL = (
+        "SELECT t1.pk FROM (BB AS t1 INNER JOIN"
+        " (AA AS t2 STRAIGHT_JOIN A AS t3 ON (t3.k = t2.pk))"
+        " ON (t3.dk = t2.ik)) WHERE t1.pk > 0;"
+    )
+
+    def test_straight_join_tsql(self) -> None:
+        out = _t2(self._SQL, "mysql", "tsql")
+        assert "STRAIGHT_JOIN" not in out.upper(), out
+        assert re.search(r"(?i)INNER JOIN A", out), out
+
+    def test_straight_join_oracle(self) -> None:
+        out = _t2(self._SQL, "mysql", "oracle")
+        assert "STRAIGHT_JOIN" not in out.upper(), out
+
+    def test_straight_join_kept_mysql(self) -> None:
+        out = _t2(self._SQL, "mysql", "mysql")
+        assert "STRAIGHT_JOIN" in out.upper(), out

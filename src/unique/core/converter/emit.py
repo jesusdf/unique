@@ -974,6 +974,19 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     read = sqlglot_dialect_name(node.source_dialect)
     write = sqlglot_dialect_name(dialect)
 
+    # MySQL's STRAIGHT_JOIN is INNER JOIN plus a join-order hint no other
+    # engine spells — inside a parenthesized join tree it survived the
+    # re-transpile verbatim (wave 179; ORA-00907 / error 102 live).
+    if (
+        node.source_dialect == "mysql"
+        and dialect != "mysql"
+        and re.search(r"(?i)\bSTRAIGHT_JOIN\b", node.sql)
+    ):
+        node = dataclasses.replace(
+            node,
+            sql=re.sub(r"(?i)\bSTRAIGHT_JOIN\b", "INNER JOIN", node.sql),
+        )
+
     # T-SQL ADD CONSTRAINT ... PRIMARY KEY/UNIQUE with storage clauses:
     # rebuilt directly (sqlglot mangles it into comma-joined actions).
     if node.kind == "ALTER" and node.source_dialect == "tsql":
