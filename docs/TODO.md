@@ -1596,8 +1596,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         scanner now rewrites them to single-quoted literals (inner
         quotes doubled, backslash escapes honored) in
         _transform_raw_sql off MySQL. Tests:
-        TestMysqlDoubleQuotedStrings. *Measurement pending next
-        mysql-corpus cycle.*
+        TestMysqlDoubleQuotedStrings. **Measured at `a4d7783`
+        (2026-07-16): −9 across all three — mysql→T-SQL 180→177
+        (97.0%), mysql→PG 111→108 (98.2%), mysql→Oracle 144→141
+        (97.6%). Standing: pg-source {261/160/140}, mysql-source
+        {177/108/141}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
