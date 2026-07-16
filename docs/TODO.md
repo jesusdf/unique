@@ -524,7 +524,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          tables (2772) — a body creating one degrades whole (the
          wave-138 scan recipe). Measured: pg→tsql **71 → 68**
          (97.9%), discovery HOLDS 0. Tests:
-         TestWave144TupleColumnAndTempFn (4).**
+         TestWave144TupleColumnAndTempFn (4).* Wave 145 (2026-07-16):
+         MySQL-impossible aggregate forms — an EXPRESSION separator
+         (SEPARATOR takes a literal only; the comma form
+         CONCATENATES it onto every value — audit S1-8, and my own
+         wave-140 dyn-sep emitted the invalid SEPARATOR expr there)
+         and DISTINCT inside a non-builtin aggregate (hard 1064;
+         arrives both as the flag AND as an Unhandled-Distinct
+         RawSQL arg). Both degrade whole on mysql. Measured:
+         pg→mysql **97 → 94**, oracle already at **51** (98.4%,
+         waves 141-144 side effects), discovery HOLDS 0. Tests:
+         TestWave145MysqlAggForms (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

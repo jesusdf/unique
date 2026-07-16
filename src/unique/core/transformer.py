@@ -588,6 +588,7 @@ class Transformer:
         if self.context.target == "mysql":
             result = [self._gate_mysql_full_join(node) for node in result]
             result = [self._gate_mysql_function_relation(node) for node in result]
+            result = [self._gate_mysql_agg_forms(node) for node in result]
         if self.context.target in ("mysql", "oracle"):
             result = [self._gate_column_alias_ref(node) for node in result]
         if self.context.target != "mysql":
@@ -891,6 +892,87 @@ class Transformer:
         if isinstance(value, tuple):
             return any(self._has_empty_select_list(item) for item in value)
         return False
+
+    _MYSQL_DISTINCT_BUILTINS = frozenset(
+        {
+            "COUNT",
+            "SUM",
+            "AVG",
+            "MIN",
+            "MAX",
+            "GROUP_CONCAT",
+            "STRING_AGG",
+            "BIT_AND",
+            "BIT_OR",
+            "BIT_XOR",
+            "JSON_ARRAYAGG",
+            "STD",
+            "STDDEV",
+            "VARIANCE",
+            "VAR_POP",
+            "VAR_SAMP",
+            "STDDEV_POP",
+            "STDDEV_SAMP",
+        }
+    )
+
+    def _gate_mysql_agg_forms(self, node: ASTNode) -> ASTNode:
+        """Degrade MySQL-impossible aggregate forms — WHOLE (wave 145).
+
+        A string-agg with an EXPRESSION separator: MySQL's SEPARATOR takes
+        a literal only, and the comma form CONCATENATES the separator onto
+        every value (audit S1-8 — the silent-corruption classic). And
+        DISTINCT inside a non-builtin aggregate call is a hard 1064."""
+        found = self._find_mysql_agg_form(node)
+        if found is None:
+            return node
+        reason = f"{found}; statement preserved as a comment"
+        self.context.warn(reason, "mysql_agg_form")
+        self.context.mark_unsupported(found)
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _find_mysql_agg_form(self, value: object) -> str | None:
+        if isinstance(value, FunctionCall):
+            name = value.name.upper()
+            if (
+                name in ("GROUP_CONCAT", "STRING_AGG", "LISTAGG")
+                and len(value.args) > 1
+                and not (
+                    isinstance(value.args[1], Literal)
+                    and (
+                        value.args[1].value is None
+                        or isinstance(value.args[1].value, str)
+                    )
+                )
+            ):
+                return (
+                    "MySQL's GROUP_CONCAT SEPARATOR takes a literal only "
+                    "(an expression separator has no MySQL spelling)"
+                )
+            has_distinct = value.distinct or any(
+                isinstance(a, RawSQL)
+                and "Unhandled expression type: Distinct" in a.reason
+                for a in value.args
+            )
+            if has_distinct and name not in self._MYSQL_DISTINCT_BUILTINS:
+                return (
+                    f"DISTINCT inside a non-builtin aggregate call "
+                    f"({value.name}) is invalid MySQL"
+                )
+        if isinstance(value, ASTNode):
+            for f in fields(value):
+                found = self._find_mysql_agg_form(getattr(value, f.name))
+                if found is not None:
+                    return found
+            return None
+        if isinstance(value, tuple):
+            for item in value:
+                found = self._find_mysql_agg_form(item)
+                if found is not None:
+                    return found
+        return None
 
     def _gate_mysql_function_relation(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using a function as a relation — WHOLE, on MySQL.

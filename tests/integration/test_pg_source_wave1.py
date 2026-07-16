@@ -5450,3 +5450,47 @@ class TestWave144TupleColumnAndTempFn:
         )
         out = _t(src, "tsql")
         assert re.search(r"(?i)CREATE FUNCTION tf2", out), out
+
+
+class TestWave145MysqlAggForms:
+    """wave 145: MySQL-impossible aggregate forms — an EXPRESSION
+    separator (SEPARATOR takes a literal only; the comma form
+    concatenates it onto every value, audit S1-8) and DISTINCT inside a
+    non-builtin aggregate (hard 1064). Both degrade whole on mysql."""
+
+    def test_expr_separator_degrades_mysql(self) -> None:
+        r = Transpiler().transpile(
+            "select string_agg(v, decode('ee','hex')) from t;",
+            source="postgresql",
+            target="mysql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_distinct_custom_agg_degrades_mysql(self) -> None:
+        r = Transpiler().transpile(
+            "select my_avg(distinct one) from t;",
+            source="postgresql",
+            target="mysql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_count_distinct_untouched_mysql(self) -> None:
+        out = _t("select count(distinct a) from t;", "mysql")
+        assert re.search(r"(?i)COUNT\(DISTINCT a\)", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_literal_separator_untouched_mysql(self) -> None:
+        out = _t("select string_agg(v, ',') from t;", "mysql")
+        assert re.search(r"(?i)GROUP_CONCAT\(v SEPARATOR ','\)", out), out
