@@ -923,6 +923,24 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             + _comment_block(node.sql)
         )
 
+    # Oracle's RETURNING…INTO exists only inside PL/SQL with target
+    # variables; top-level SQL keeps the DML effect, the clause strips
+    # with a documented note (same contract as the MySQL branch below).
+    if node.kind == "RETURNING" and dialect == "oracle":
+        m = re.search(r"(?i)\bRETURNING\b\s+(.*?)\s*;?\s*$", node.sql)
+        cols = m.group(1).strip() if m else ""
+        base = re.sub(r"(?i)\s*\bRETURNING\b.*$", "", node.sql).rstrip()
+        try:
+            rendered = sqlglot.transpile(base, read=read, write=write)
+            if rendered and rendered[0].strip():
+                base = rendered[0]
+        except Exception:  # noqa: BLE001 - keep the source spelling
+            pass
+        return (
+            f"{base};\n-- UNIQUE: Oracle has no top-level RETURNING; "
+            f"the statement returned: {cols}"
+        )
+
     # MySQL has no RETURNING/OUTPUT; comment it rather than emit invalid SQL.
     if node.kind == "RETURNING" and dialect == "mysql":
         m = re.search(r"(?i)\bRETURNING\b\s+(.*?)\s*;?\s*$", node.sql)

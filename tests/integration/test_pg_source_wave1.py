@@ -3371,3 +3371,24 @@ class TestArrayConstructorInBody:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, out
+
+
+class TestReturningOracle:
+    """wave 88: top-level DML with RETURNING shipped the clause raw
+    to Oracle (ORA-00936, 7x) — Oracle's RETURNING…INTO exists only
+    inside PL/SQL with target variables. Like the MySQL branch: the
+    DML keeps its effect, the clause strips with a documented note."""
+
+    def test_update_returning_strips_oracle(self) -> None:
+        out = _t("update cv set n = 'j' where c = 't' returning *;", "oracle")
+        assert "RETURNING" not in [
+            ln for ln in out.splitlines() if not ln.strip().startswith("--")
+        ], out
+        code = [
+            ln
+            for ln in out.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert any("UPDATE cv" in ln for ln in code), out
+        assert not any("RETURNING" in ln.upper() for ln in code), out
+        assert "UNIQUE:" in out, out

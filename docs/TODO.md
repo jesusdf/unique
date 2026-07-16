@@ -1726,6 +1726,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         shapes: dotted refs, assignment mangles — deep singles).
         Standing: pg-source {172/146/123}, mysql-source
         {177/107/141}.**
+        *Wave 88 (2026-07-17):* top-level DML with RETURNING shipped
+        the clause raw to Oracle (ORA-00936, 7x) — RETURNING…INTO
+        exists only inside PL/SQL with target variables. Same
+        contract as the MySQL branch: the DML keeps its effect
+        (sqlglot-rendered for the target), the clause strips with a
+        documented note. Tests: TestReturningOracle. *Measurement
+        pending next pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
