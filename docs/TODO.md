@@ -1626,8 +1626,9 @@ fix needs an **anonymized** regression fixture (never a private name).
         dbo.-qualified (`dbo.FROM`) by the user-function pass —
         FROM/JOIN/LATERAL/APPLY were missing from TSQL_NEVER_QUALIFY
         (2x pg→tsql inside trigger CTEs, blocking the 1046 chain).
-        Tests: TestFromNeverQualifies. *Measurement pending next
-        pg-corpus cycle.*
+        Tests: TestFromNeverQualifies. **Measured at `6033f9a`
+        (2026-07-17): pg→T-SQL 257→256 (92.2%). Standing: pg-source
+        {256/160/140}, mysql-source {177/107/141}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
