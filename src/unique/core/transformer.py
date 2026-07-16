@@ -1219,9 +1219,11 @@ class Transformer:
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
 
     def _find_user_var(self, value: object) -> str | None:
-        if isinstance(value, RawSQL):
+        if isinstance(value, (RawSQL, PassthroughSQL)):
             # Scrub string literals so an email-like '@' inside text
-            # doesn't trip the scan.
+            # doesn't trip the scan. The assignment itself arrives as a
+            # PassthroughSQL SET (``SET @v0 = '2'`` shipped raw — wave
+            # 168), the references as RawSQL.
             scrubbed = re.sub(r"'(?:[^']|'')*'", "''", value.sql)
             m = self._USER_VAR_RE.search(scrubbed)
             return m.group(1) if m else None

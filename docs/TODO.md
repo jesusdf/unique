@@ -714,7 +714,19 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          user-variable whole-routine degrade now also scans @@sysvars
          (one detector, all five call sites inherit it); verbatim on
          MySQL. Measured: mysql→tsql **114 → 109** (−5). Discovery
-         HOLDS 0. Tests: TestWave167MysqlSystemVars (3).**
+         HOLDS 0. Tests: TestWave167MysqlSystemVars (3).* Wave 168 (2026-07-17): three
+         fixes — (1) MySQL's ``INSERT … SET a=1`` form (sqlglot cannot
+         parse it; the routine fallback DROPPED the SET clause —
+         silent loss) pre-recognized into the universal column-list
+         VALUES form; (2) a top-level ``SET @var = …`` arrived as a
+         PassthroughSQL the user-var gate never scanned (the SET-option
+         classifier excludes @ — first cut went on that dead path,
+         removed per the wave-139 lesson) — the gate now scans
+         PassthroughSQL too; (3) ``(pred) IS TRUE/FALSE`` emitted
+         ``IS 1``. Measured: mysql→tsql **109 → 67** (−42 — the
+         campaign's biggest drop; the @value chains collapsed).
+         Validity **98.8%**. Discovery HOLDS 0. Tests:
+         TestWave168InsertSetUservarIsTrue (6).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

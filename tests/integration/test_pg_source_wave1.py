@@ -6232,3 +6232,44 @@ class TestWave167MysqlSystemVars:
         )
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)RETURN 42", out), out
+
+
+class TestWave168InsertSetUservarIsTrue:
+    """wave 168 (mysql-corpus): INSERT … SET (sqlglot cannot parse it;
+    the routine fallback DROPPED the SET clause — silent loss),
+    top-level ``SET @var`` shipping raw via the SET-option classifier,
+    and ``(pred) IS TRUE`` emitting ``IS 1``."""
+
+    def test_insert_set_form_tsql(self) -> None:
+        out = _t2(
+            "create procedure p() begin insert into t3 set a=null; end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)INSERT INTO t3 \(a\)\s*VALUES \(NULL\)", out), out
+
+    def test_insert_set_two_cols_top_level(self) -> None:
+        out = _t2("insert into t3 set a=1, b='x,y';", "mysql", "tsql")
+        assert re.search(r"(?i)INSERT INTO t3 \(a, b\)\s*VALUES \(1, 'x,y'\)", out), out
+
+    def test_top_level_set_uservar_carrier(self) -> None:
+        out = _t2("set @v0 = '2';", "mysql", "tsql")
+        assert "UNIQUE:" in out and "@v0" in out, out
+        assert not re.search(r"(?im)^\s*SET @v0", out), out
+
+    def test_top_level_set_uservar_kept_mysql(self) -> None:
+        out = _t2("set @v0 = '2';", "mysql", "mysql")
+        assert "UNIQUE:" not in out, out
+
+    def test_predicate_is_true_tsql(self) -> None:
+        out = _t2(
+            "select * from t1 where not (c2 is null) is true;",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)NOT \(c2 IS NULL\)", out), out
+        assert "IS 1" not in out.upper(), out
+
+    def test_predicate_is_false_tsql(self) -> None:
+        out = _t2("select * from t1 where (c2 is null) is false;", "mysql", "tsql")
+        assert re.search(r"(?i)NOT \(c2 IS NULL\)", out), out

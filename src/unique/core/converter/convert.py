@@ -121,6 +121,33 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
                 kind="PG STORAGE",
             )
         ]
+    if dialect == "mysql":
+        # MySQL's ``INSERT INTO t SET a = 1, b = 2`` form: sqlglot cannot
+        # parse it at all, and the embedded-routine fallback DROPPED the
+        # SET clause (``INSERT INTO t3;`` — silent loss, wave 168).
+        # Rewrite to the universal column-list VALUES form.
+        ins = re.match(
+            r'(?is)^\s*INSERT\s+(?:IGNORE\s+)?INTO\s+([\w."`]+)\s+SET\s+(.+?)\s*;?\s*$',
+            sql,
+        )
+        if ins:
+            from unique.core.sql_split import split_top_level_commas
+
+            cols: list[str] = []
+            vals: list[str] = []
+            ok = True
+            for pair in split_top_level_commas(ins.group(2)):
+                m2 = re.match(r"(?s)^\s*([\w`\"]+)\s*:?=\s*(.+?)\s*$", pair)
+                if not m2:
+                    ok = False
+                    break
+                cols.append(m2.group(1).strip('`"'))
+                vals.append(m2.group(2))
+            if ok and cols:
+                sql = (
+                    f"INSERT INTO {ins.group(1)} ({', '.join(cols)}) "
+                    f"VALUES ({', '.join(vals)})"
+                )
     if dialect == "postgresql":
         # PG's ``TABLE name`` shorthand IS ``SELECT * FROM name``; sqlglot
         # mis-parses it into an aliased identifier (silent mangle). Leading

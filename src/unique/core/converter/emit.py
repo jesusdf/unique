@@ -829,20 +829,24 @@ _PREDICATE_OPERATORS = frozenset(
 
 
 def _predicate_int_comparison(node: ASTNode) -> ASTNode | None:
-    """Rewrite ``<predicate> = 1`` / ``= 0`` (MySQL's boolean-as-number)
-    to the predicate itself or its negation; None when the shape does
-    not match."""
+    """Rewrite ``<predicate> = 1`` / ``= 0`` / ``IS TRUE`` / ``IS FALSE``
+    (MySQL's boolean-as-number) to the predicate itself or its negation;
+    None when the shape does not match."""
     if not (
         isinstance(node, BinaryOp)
-        and node.operator in (BinaryOperator.EQ, BinaryOperator.NEQ)
+        and node.operator in (BinaryOperator.EQ, BinaryOperator.NEQ, BinaryOperator.IS)
         and isinstance(node.right, Literal)
-        and node.right.dtype == "integer"
-        and node.right.value in (0, 1)
         and isinstance(node.left, BinaryOp)
         and node.left.operator in _PREDICATE_OPERATORS
     ):
         return None
-    truthy = (node.right.value == 1) == (node.operator == BinaryOperator.EQ)
+    if node.right.dtype == "integer" and node.right.value in (0, 1):
+        right_true = node.right.value == 1
+    elif node.right.dtype == "boolean":
+        right_true = bool(node.right.value)
+    else:
+        return None
+    truthy = right_true == (node.operator != BinaryOperator.NEQ)
     if truthy:
         return node.left
     return UnaryOp(operator=UnaryOperator.NOT, operand=node.left)
