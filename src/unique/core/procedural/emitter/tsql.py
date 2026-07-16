@@ -47,6 +47,8 @@ class TSqlEmitter(ProceduralEmitter):
         super().__init__(dialect)
         # Names RAISERROR message variables uniquely across the script.
         self._raise_msg_n = 0
+        # Names PRINT-subquery hoist variables uniquely across the script.
+        self._print_hoist_count = 0
         # Cursor *variables* (``DECLARE @c CURSOR;`` — no query): unlike
         # classic cursors these keep their '@' on OPEN/FETCH/CLOSE.
         self._cursor_variables: set[str] = set()
@@ -201,7 +203,16 @@ class TSqlEmitter(ProceduralEmitter):
         return f"DECLARE {name} CURSOR{body};"
 
     def _emit_print(self, node: PrintStatement) -> str:
-        return f"PRINT {self._emit_node(node.expression)};"
+        expr = self._emit_node(node.expression)
+        if re.search(r"(?is)\(\s*SELECT\b", expr):
+            # T-SQL forbids subqueries in PRINT arguments (error 1046);
+            # a DECLARE initializer accepts them — hoist and print the
+            # variable.
+            self._print_hoist_count += 1
+            var = f"@uq_prt{self._print_hoist_count}"
+            indent = self._indent()
+            return f"DECLARE {var} NVARCHAR(MAX) = {expr};\n" f"{indent}PRINT {var};"
+        return f"PRINT {expr};"
 
     @staticmethod
     def _boolean_var_condition(cond: str) -> str:

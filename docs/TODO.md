@@ -1612,6 +1612,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         others flat — the labeled routines carry further blockers.
         Standing: pg-source {261/160/140}, mysql-source
         {177/107/141}.**
+        *Wave 77 (2026-07-16):* T-SQL forbids subqueries in PRINT
+        arguments (error 1046 — 56x pg→tsql, inlined trigger bodies
+        printing transition-table aggregates). The expression now
+        hoists into a `DECLARE @uq_prtN NVARCHAR(MAX) = …` temp
+        (initializers DO accept subqueries) and PRINT takes the
+        variable. Tests: TestPrintSubqueryHoist. *Measurement pending
+        next pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

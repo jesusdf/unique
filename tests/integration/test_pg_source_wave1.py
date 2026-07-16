@@ -3086,3 +3086,28 @@ class TestLabeledLoops:
         out = _t2(self._SRC, "mysql", "oracle")
         assert "<<foo>>" in out, out
         assert re.search(r"(?i)EXIT foo;", out), out
+
+
+class TestPrintSubqueryHoist:
+    """wave 77: T-SQL forbids subqueries in PRINT arguments (error
+    1046 — 56x pg→tsql: inlined trigger bodies printing transition
+    aggregates). The expression hoists into a DECLAREd temp (where
+    subquery initializers ARE legal) and PRINT takes the variable."""
+
+    def test_print_subquery_hoists(self) -> None:
+        src = (
+            "create function tf3() returns trigger as $$\n"
+            "begin\n"
+            "  raise notice 'count = %', (select count(*) from newtab);\n"
+            "  return null;\nend$$ language plpgsql;\n"
+            "create trigger t3 after insert on t1 "
+            "referencing new table as newtab "
+            "for each statement execute function tf3();"
+        )
+        out = _t(src, "tsql")
+        m = re.search(
+            r"(?is)DECLARE (@uq_prt\d+) NVARCHAR\(MAX\) = .*SELECT COUNT.*"
+            r"PRINT [^;]*\1;",
+            out,
+        )
+        assert m, out
