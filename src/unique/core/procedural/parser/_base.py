@@ -582,7 +582,9 @@ class ParserBase:
             # PG's two-word SETOF <type>: parse as ONE unit or the inner
             # type name leaks into the header/body as garbage.
             if self._dialect == "postgresql" and return_type.name.upper() == "SETOF":
-                inner = self._parse_data_type()
+                # PG-aware inner parse, or ``SETOF integer[]`` silently
+                # narrows to ``SETOF integer`` (wave 115).
+                inner = self._parse_pg_data_type()
                 return_type = DataType(name=f"SETOF {inner.name}")
 
         # An Oracle PIPELINED table function streams rows of a package

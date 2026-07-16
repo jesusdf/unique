@@ -242,7 +242,21 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          DML-inside-CTE check runs BEFORE the helper's T-SQL
          early-out, which covers the inverse update-through-CTE
          shape). Measured: discovery **98 → 86** (−12; 'SELECT *
-         with no tables' 15→3). Tests: TestDataModifyingCte.**
+         with no tables' 15→3). Tests: TestDataModifyingCte.
+         Wave 115 (2026-07-16): the plpgsql DECLARE parser stopped
+         at the first unknown token and SHREDDED the declaration —
+         one mechanism, four sub-shapes now consumed: `CONSTANT`
+         (kept on PG/Oracle, safe mutable relaxation on T-SQL/MySQL,
+         documented in 03-unsupported §1.5), `[NO] SCROLL CURSOR`
+         (kept on PG; T-SQL SCROLL native, replaces FAST_FORWARD),
+         `[]` array suffixes in DECLARE (via `_parse_pg_data_type`,
+         closing the 6x `[` class), and `RETURNS SETOF type[]` no
+         longer narrowing (pg-aware inner parse). Measured:
+         discovery **86 → 81** (−5: `[` −6 and `data type` −3
+         cleared, but the 14x `;` class has ANOTHER sub-mechanism —
+         re-sampling — and un-shredded routines exposed new chain
+         links: INTO 2→4, 'RETURN cannot have a parameter' 2x).
+         Tests: TestPlpgsqlDeclareModifiers (6).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

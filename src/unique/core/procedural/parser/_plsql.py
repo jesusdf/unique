@@ -199,8 +199,32 @@ class PlsqlStatementsMixin(ParserBase):
             self._match_type(TokenType.SEMICOLON)
             return PragmaDeclaration(name=" ".join(parts))
 
-        # Variable: name type [:= value];
+        # Variable: name [CONSTANT] type [:= value];
         name = self._parse_identifier()
+
+        # CONSTANT modifier (Oracle PL/SQL and plpgsql). Unconsumed it
+        # split the declaration in two (``rc constant;`` + ``refcursor ;;``).
+        constant = False
+        if self._current().upper_value == "CONSTANT":
+            self._advance()
+            constant = True
+
+        # PG cursor scrollability: ``c [NO] SCROLL CURSOR … FOR <select>``.
+        scroll: str | None = None
+        if self._dialect == "postgresql":
+            if self._current().upper_value == "SCROLL" and self._peek(1).is_keyword(
+                "CURSOR"
+            ):
+                self._advance()
+                scroll = "SCROLL"
+            elif (
+                self._current().upper_value == "NO"
+                and self._peek(1).upper_value == "SCROLL"
+                and self._peek(2).is_keyword("CURSOR")
+            ):
+                self._advance()
+                self._advance()
+                scroll = "NO SCROLL"
 
         # PG's name-first cursor: ``c1 CURSOR [(params)] FOR <select>``
         # (the keyword-first Oracle form is handled above); unparsed it
@@ -214,10 +238,19 @@ class PlsqlStatementsMixin(ParserBase):
             if self._match_keyword("FOR") or self._match_keyword("IS"):
                 cquery = self._parse_embedded_dml()
             self._match_type(TokenType.SEMICOLON)
-            return CursorDeclaration(name=name, query=cquery, parameters=tuple(cparams))
+            return CursorDeclaration(
+                name=name, query=cquery, parameters=tuple(cparams), scroll=scroll
+            )
 
-        # Check for type_reference (%TYPE, %ROWTYPE)
-        data_type = self._parse_data_type_or_reference()
+        # Check for type_reference (%TYPE, %ROWTYPE); the PG variant also
+        # consumes DOUBLE PRECISION / TIME ZONE spellings and ``[]``
+        # array suffixes (unconsumed, ``a integer[] = …`` shredded into
+        # ``a integer;`` + ``[] =;``).
+        data_type = (
+            self._parse_pg_data_type()
+            if self._dialect == "postgresql"
+            else self._parse_data_type_or_reference()
+        )
 
         default: ASTNode | None = None
         if (
@@ -233,7 +266,9 @@ class PlsqlStatementsMixin(ParserBase):
             default = self._parse_expression_until_semicolon()
 
         self._match_type(TokenType.SEMICOLON)
-        return DeclareStatement(name=name, data_type=data_type, default=default)
+        return DeclareStatement(
+            name=name, data_type=data_type, default=default, constant=constant
+        )
 
     def _parse_plsql_statement(self) -> ASTNode | None:
         """Parse a single PL/SQL statement, guaranteeing token progress."""

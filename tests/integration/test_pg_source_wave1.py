@@ -4262,3 +4262,76 @@ class TestDataModifyingCte:
         assert not code, r.sql
         assert r.warnings or r.unsupported, r.sql
         assert re.search(r"(?i)INSERT INTO t", r.sql), r.sql
+
+
+class TestPlpgsqlDeclareModifiers:
+    """wave 115: the plpgsql DECLARE parser stopped at the first token it
+    did not know and SHREDDED the declaration — ``rc constant refcursor``
+    became ``rc constant;`` + ``refcursor ;;``, ``c scroll cursor for …``
+    became ``c scroll;`` + orphan tokens, and ``a integer[] = '{…}'``
+    became ``a integer;`` + ``[] =;`` (the ';', 'FOR', 'data type' and
+    '[' discovery classes — one parser mechanism). The declaration
+    grammar now consumes CONSTANT, [NO] SCROLL cursors, and array
+    suffixes; PG re-emits them faithfully."""
+
+    def test_constant_declare_pg(self) -> None:
+        src = (
+            "create function f() returns refcursor as $$\n"
+            "declare rc constant refcursor := 'my_cursor';\n"
+            "begin return rc; end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert ";;" not in out, out
+        assert re.search(r"(?i)rc CONSTANT refcursor", out), out
+
+    def test_scroll_cursor_declare_pg(self) -> None:
+        src = (
+            "create function f() returns int as $$\n"
+            "declare c scroll cursor for select 1;\n"
+            "declare x int;\n"
+            "begin open c; fetch c into x; close c; return x; end\n"
+            "$$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)c SCROLL CURSOR FOR", out), out
+        assert "scroll;" not in out.lower(), out
+
+    def test_no_scroll_cursor_declare_pg(self) -> None:
+        src = (
+            "create function f() returns int as $$\n"
+            "declare c no scroll cursor for select 1; x int;\n"
+            "begin open c; fetch c into x; close c; return x; end\n"
+            "$$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)c NO SCROLL CURSOR FOR", out), out
+        assert "no;" not in out.lower(), out
+
+    def test_array_declare_pg(self) -> None:
+        src = (
+            "create function f() returns void as $$\n"
+            "declare a integer[] = '{10,20,30}';\n"
+            "begin a[1] := 1; end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert "[] =" not in out, out
+        assert re.search(r"(?i)a integer\[\]\s*:?=", out), out
+
+    def test_setof_array_return_pg(self) -> None:
+        src = (
+            "create function f() returns setof integer[] as $$\n"
+            "begin return; end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)RETURNS SETOF integer\[\]", out), out
+
+    def test_scroll_cursor_tsql_native(self) -> None:
+        src = (
+            "create function f() returns int as $$\n"
+            "declare c scroll cursor for select 1; x int;\n"
+            "begin open c; fetch c into x; close c; return x; end\n"
+            "$$ language plpgsql;"
+        )
+        out = _t(src, "tsql")
+        assert "scroll;" not in out.lower(), out
+        assert ";;" not in out, out

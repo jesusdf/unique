@@ -539,6 +539,10 @@ class DeclareStatement(ASTNode):
     name: str
     data_type: DataType
     default: ASTNode | None = None
+    #: PL/SQL & plpgsql ``name CONSTANT type``. Native on Oracle/PG; targets
+    #: without constants emit the plain (mutable) declaration — a safe
+    #: relaxation for valid programs (documented in 03-unsupported).
+    constant: bool = False
 
 
 @dataclass(frozen=True)
@@ -778,6 +782,9 @@ class CursorDeclaration(ASTNode):
     name: str
     query: ASTNode | None = None
     parameters: tuple[ParameterDefinition, ...] = ()
+    #: PG/T-SQL scrollability modifier: "SCROLL" or "NO SCROLL" (None =
+    #: unspecified). Engines without scrollable cursors emit it away.
+    scroll: str | None = None
 
 
 @dataclass(frozen=True)

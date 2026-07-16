@@ -1029,7 +1029,14 @@ class ProceduralEmitter:
         if node.default:
             val = self._emit_node(node.default)
             default_str = f" {self._declare_default_op()} {val}"
-        return f"{self._declare_prefix()}{node.name} {dt}{default_str};"
+        const = self._constant_spelling() if node.constant else ""
+        return f"{self._declare_prefix()}{node.name} {const}{dt}{default_str};"
+
+    def _constant_spelling(self) -> str:
+        """``CONSTANT `` on the PL/SQL-family targets (Oracle/PG). T-SQL and
+        MySQL have no constant variables and override with "" — the plain
+        mutable declaration is a safe relaxation for valid programs."""
+        return "CONSTANT "
 
     def _emit_pragma(self, node: PragmaDeclaration) -> str:
         """A PL/SQL compiler directive. Only Oracle can execute it (its emitter

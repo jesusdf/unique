@@ -164,6 +164,11 @@ class TSqlEmitter(ProceduralEmitter):
     def _declare_prefix(self) -> str:
         return "DECLARE "
 
+    def _constant_spelling(self) -> str:
+        # T-SQL has no constant variables; the mutable declaration is a
+        # safe relaxation (docs/03-unsupported.md).
+        return ""
+
     def _emit_data_type(self, dt: DataType) -> str:
         out = super()._emit_data_type(dt)
         # A bare (N)VARCHAR defaults to length 1 in declarations and 30 in
@@ -199,7 +204,9 @@ class TSqlEmitter(ProceduralEmitter):
         )
         if query_str:
             self._cursor_queries[name.lower()] = query_str
-        body = f" LOCAL FAST_FORWARD FOR {query_str}" if query_str else ""
+        # SCROLL is native T-SQL but incompatible with FAST_FORWARD.
+        opts = "LOCAL SCROLL" if node.scroll == "SCROLL" else "LOCAL FAST_FORWARD"
+        body = f" {opts} FOR {query_str}" if query_str else ""
         return f"DECLARE {name} CURSOR{body};"
 
     def _emit_print(self, node: PrintStatement) -> str:

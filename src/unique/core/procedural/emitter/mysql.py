@@ -289,6 +289,11 @@ class MySqlEmitter(ProceduralEmitter):
     def _declare_prefix(self) -> str:
         return "DECLARE "
 
+    def _constant_spelling(self) -> str:
+        # MySQL has no constant variables; the mutable declaration is a
+        # safe relaxation (docs/03-unsupported.md).
+        return ""
+
     def _emit_data_type(self, dt: DataType) -> str:
         out = super()._emit_data_type(dt)
         # MySQL rejects VARCHAR without a length; the unsized source form

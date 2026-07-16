@@ -78,7 +78,19 @@ to the carrier comment with a warning on T-SQL, MySQL and Oracle targets.
 On a PostgreSQL target they are preserved faithfully (bracket spelling and
 1-based subscripts intact).
 
-### 1.5 Function/Procedure Overloading
+### 1.5 Constant variables (`CONSTANT` declarations)
+
+**Engines:** Oracle (PL/SQL), PostgreSQL (plpgsql)
+
+T-SQL and MySQL have no constant local variables. A `name CONSTANT type`
+declaration is emitted as the plain mutable declaration on those targets —
+a safe relaxation for valid programs (the initializer still applies; only
+the compile-time reassignment guard is lost). Oracle↔PostgreSQL keep
+`CONSTANT` intact. Cursor scrollability (`[NO] SCROLL`) is likewise kept on
+PostgreSQL and T-SQL (`SCROLL`) and dropped on MySQL/Oracle, whose cursors
+are forward-only.
+
+### 1.6 Function/Procedure Overloading
 
 **Engines:** Oracle, PostgreSQL
 
