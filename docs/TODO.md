@@ -1455,7 +1455,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         the wave-38 alternate-route hole class again). The procedural
         transformer now whole-degrades any routine/call referencing a
         @user variable off MySQL. Tests: TestUserVarsInRoutines.
-        *Measurement pending next mysql-corpus cycle.*
+        **Measured at `00c2476` (2026-07-16): −70 — mysql→T-SQL
+        238→213 (96.4%), mysql→PG 140→121 (98.0%), mysql→Oracle
+        202→176 (97.1%). Standing: pg-source {265/163/142},
+        mysql-source {213/121/176}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
