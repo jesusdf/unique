@@ -276,8 +276,15 @@ class TSqlEmitter(ProceduralEmitter):
             col = cols[i] if i < len(cols) else (cols[-1] if cols else "")
             pairs.append(f"{var} = {col}")
         assignments = ", ".join(pairs)
+        # A MySQL SELECT INTO's trailing LIMIT survives in the raw
+        # remainder; T-SQL's spelling in a SELECT-assign is TOP.
+        top = ""
+        m = re.search(r"(?is)\bLIMIT\s+(\d+)\s*$", rest)
+        if m:
+            rest = rest[: m.start()].rstrip()
+            top = f"TOP {m.group(1)} "
         prefix = f"{node.with_sql}\n" if node.with_sql else ""
-        return f"{prefix}SELECT {distinct}{assignments} {rest};"
+        return f"{prefix}SELECT {top}{distinct}{assignments} {rest};"
 
     def _emit_guard_if(self, cond: str, body_lines: list[str]) -> str | None:
         # T-SQL's IF takes a SQL condition (incl. EXISTS), so the guard is a

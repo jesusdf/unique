@@ -683,7 +683,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          set_query chain, dodging the existing unlimited-ORDER strip —
          now stripped along the chain. Measured: mysql→tsql
          **131 → 129** (−2). Discovery HOLDS 0. Tests:
-         TestWave163CharsetCastSubqueryOrder (4).**
+         TestWave163CharsetCastSubqueryOrder (4).* Wave 164 (2026-07-16): MySQL's
+         walrus assignment (``SET x := 1``) left the ``:=`` in the
+         value (``SET @x = := 1`` — the OPERATOR match missed the
+         ASSIGN token), and a SELECT INTO's trailing ``LIMIT n``
+         survived verbatim in the T-SQL SELECT-assign, where the
+         spelling is ``SELECT TOP n @v = …``. Measured: mysql→tsql
+         **129 → 119** (−10, the day's biggest drop — both classes
+         chained). Validity crossed **98.0%**. Discovery HOLDS 0.
+         Tests: TestWave164AssignOpSelectLimit (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

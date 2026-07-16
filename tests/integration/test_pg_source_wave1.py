@@ -6088,3 +6088,43 @@ class TestWave163CharsetCastSubqueryOrder:
             "tsql",
         )
         assert "ORDER BY" in out.upper(), out
+
+
+class TestWave164AssignOpSelectLimit:
+    """wave 164 (mysql-corpus): MySQL's ``SET x := 1`` (walrus form)
+    left the ``:=`` in the value (``SET @x = := 1``), and a SELECT
+    INTO's trailing ``LIMIT n`` survived verbatim in the T-SQL
+    SELECT-assign, where the spelling is TOP."""
+
+    def test_set_walrus_tsql(self) -> None:
+        out = _t2("create procedure p() begin set x := 1; end", "mysql", "tsql")
+        assert re.search(r"(?i)SET @x = 1;", out), out
+        assert ":=" not in out, out
+
+    def test_select_into_limit_becomes_top(self) -> None:
+        out = _t2(
+            "create procedure q(x char(16)) begin"
+            " select id into x from t1 limit 1; end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)SELECT TOP 1 @x = id\b", out), out
+        assert "limit" not in out.lower(), out
+
+    def test_select_into_no_limit_untouched(self) -> None:
+        out = _t2(
+            "create procedure r(x int) begin" " select max(id) into x from t1; end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)SELECT @x = max\s*\(\s*id\s*\)", out), out
+        assert "TOP" not in out.upper(), out
+
+    def test_select_into_limit_kept_pg(self) -> None:
+        out = _t2(
+            "create procedure q(x char(16)) begin"
+            " select id into x from t1 limit 1; end",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?i)LIMIT 1", out), out

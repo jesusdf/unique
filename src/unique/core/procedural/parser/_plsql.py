@@ -957,7 +957,10 @@ class PlsqlStatementsMixin(ParserBase):
                 self._advance()
                 name_parts.append(self._parse_identifier())
             target = ".".join(name_parts)
-            self._match_type(TokenType.OPERATOR)  # =
+            # ``SET x = 1`` or the walrus ``SET x := 1`` — unmatched,
+            # the := leaked into the value (``SET @x = := 1``).
+            if not self._match_type(TokenType.OPERATOR):
+                self._match_type(TokenType.ASSIGN)
             # MySQL assigns several variables in ONE SET (``SET a = 1,
             # b = 2;``) — split; the comma form is invalid T-SQL and
             # the second target shipped without its @ sigil (wave 159).
