@@ -964,6 +964,72 @@ def _prefix_tsql_output_items(e: exp.Expression) -> None:
             target.set("table", exp.to_identifier(prefix))
 
 
+def _flatten_paren_joins(sql: str, source_dialect: str) -> str | None:
+    """Flatten a parenthesized INNER/CROSS join tree into the equivalent
+    flat CROSS chain with the ON conditions ANDed into WHERE. None when
+    the statement carries any outer join (the rewrite would change
+    NULL-extension semantics) or does not parse."""
+    if re.search(r"(?i)\b(LEFT|RIGHT|FULL)\s+(OUTER\s+)?JOIN\b", sql):
+        return None
+    try:
+        tree = sqlglot.parse_one(sql, read=sqlglot_dialect_name(source_dialect))
+    except Exception:
+        return None
+    if not isinstance(tree, exp.Select):
+        return None
+    from_clause = tree.args.get("from") or tree.args.get("from_")
+    if from_clause is None or tree.args.get("joins"):
+        return None
+    rel = from_clause.this
+
+    tables: list[exp.Expression] = []
+    conditions: list[exp.Expression] = []
+
+    def walk(r: exp.Expression) -> bool:
+        if isinstance(r, exp.Subquery) and isinstance(r.this, exp.Table):
+            if r.alias:
+                return False  # a real derived table, not a paren group
+            return walk(r.this)
+        if isinstance(r, exp.Table):
+            joins = r.args.get("joins") or []
+            bare = r.copy()
+            bare.args.pop("joins", None)
+            tables.append(bare)
+            for j in joins:
+                kind = (j.args.get("kind") or "").upper() if j.args.get("kind") else ""
+                side = (j.args.get("side") or "").upper() if j.args.get("side") else ""
+                if side or kind not in ("INNER", "CROSS", ""):
+                    return False
+                if not walk(j.this):
+                    return False
+                if j.args.get("on") is not None:
+                    conditions.append(j.args["on"])
+            return True
+        return False
+
+    if not walk(rel) or len(tables) < 2:
+        return None
+
+    first, rest = tables[0], tables[1:]
+    new_select = tree.copy()
+    from_key = "from" if "from" in new_select.arg_types else "from_"
+    new_select.set(from_key, exp.From(this=first))
+    new_select.set(
+        "joins",
+        [exp.Join(this=t, kind="CROSS") for t in rest],
+    )
+    where_parts = [c.this if isinstance(c, exp.Paren) else c for c in conditions]
+    existing = new_select.args.get("where")
+    if existing is not None:
+        where_parts.append(existing.this)
+    if where_parts:
+        combined = where_parts[0]
+        for part in where_parts[1:]:
+            combined = exp.And(this=combined, expression=part)
+        new_select.set("where", exp.Where(this=combined))
+    return new_select.sql(dialect=sqlglot_dialect_name(source_dialect))
+
+
 def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     """Re-transpile a passthrough statement to the target dialect.
 
@@ -1004,6 +1070,14 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 count=1,
             ),
         )
+
+    # Oracle rejects parenthesized join trees in FROM (ORA-00907). For a
+    # pure INNER/CROSS tree the flat CROSS-chain + ANDed WHERE is exactly
+    # equivalent (wave 185); outer joins keep the paren carrier.
+    if node.kind == "PAREN JOIN" and dialect == "oracle":
+        flattened = _flatten_paren_joins(node.sql, node.source_dialect)
+        if flattened is not None:
+            node = dataclasses.replace(node, sql=flattened)
 
     # T-SQL ADD CONSTRAINT ... PRIMARY KEY/UNIQUE with storage clauses:
     # rebuilt directly (sqlglot mangles it into comma-joined actions).

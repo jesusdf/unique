@@ -6789,3 +6789,37 @@ class TestWave184BareWhileCondition:
     def test_while_kept_mysql(self) -> None:
         out = _t2(self._SQL, "mysql", "mysql")
         assert re.search(r"(?i)WHILE x DO", out), out
+
+
+class TestWave185ParenJoinFlatten:
+    """wave 185 (mysql-corpus): Oracle rejects parenthesized join trees
+    in FROM (ORA-00907). A pure INNER/CROSS tree flattens to the exact
+    equivalent CROSS chain with the ON conditions ANDed into WHERE;
+    outer joins keep the carrier."""
+
+    _SQL = (
+        "SELECT t1.pk FROM (BB t1 INNER JOIN"
+        " (AA t2 INNER JOIN A t3 ON (t3.k = t2.pk))"
+        " ON (t3.dk = t2.ik)) WHERE t1.pk > 0;"
+    )
+
+    def test_flattened_oracle(self) -> None:
+        out = _t2(self._SQL, "mysql", "oracle")
+        assert re.search(r"(?i)FROM BB t1 CROSS JOIN AA t2 CROSS JOIN A t3", out), out
+        assert re.search(
+            r"(?i)WHERE t3\.k = t2\.pk AND t3\.dk = t2\.ik AND t1\.pk > 0",
+            out,
+        ), out
+
+    def test_parens_kept_mysql(self) -> None:
+        out = _t2(self._SQL, "mysql", "mysql")
+        assert re.search(r"(?i)FROM \(BB AS t1 INNER JOIN", out), out
+
+    def test_outer_join_not_flattened(self) -> None:
+        out = _t2(
+            "SELECT t1.pk FROM (BB t1 LEFT JOIN A t3 ON (t3.k = t1.pk))"
+            " WHERE t1.pk > 0;",
+            "mysql",
+            "oracle",
+        )
+        assert "CROSS JOIN" not in out.upper(), out

@@ -849,7 +849,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          condition as ``<> 0`` for mysql source off-MySQL. Measured:
          mysql→oracle **32 → 31** (99.5%); tsql stable 40 (the fix
          there was semantics, not syntax). Discovery HOLDS 0. Tests:
-         TestWave184BareWhileCondition (4).**
+         TestWave184BareWhileCondition (4).* Wave 185 (2026-07-17): Oracle
+         rejects parenthesized join trees in FROM (ORA-00907). A pure
+         INNER/CROSS tree (post STRAIGHT_JOIN normalization) flattens
+         to the exactly-equivalent CROSS chain with the ON conditions
+         ANDed into WHERE — sqlglot-parsed, structural; outer joins
+         keep the carrier (NULL-extension semantics would change).
+         Measured: mysql→oracle **31 → 30** (−1; the class members
+         carry other issues too). Discovery HOLDS 0. Tests:
+         TestWave185ParenJoinFlatten (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
