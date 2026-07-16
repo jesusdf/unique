@@ -44,7 +44,7 @@ from unique.core.ast_nodes import (
     SelectIntoStatement,
     WhileStatement,
 )
-from unique.core.procedural.lexer import TokenType
+from unique.core.procedural.lexer import Token, TokenType
 from unique.core.procedural.parser._base import ParserBase
 
 logger = logging.getLogger(__name__)
@@ -201,6 +201,35 @@ class PlsqlStatementsMixin(ParserBase):
 
         # Variable: name [CONSTANT] type [:= value];
         name = self._parse_identifier()
+
+        # ``name ALIAS FOR <ident>;`` — plpgsql's parameter alias (wave
+        # 117). Renaming the alias to its target in the remaining tokens
+        # is the token-level equivalent (same mechanism as $n positional
+        # aliasing), valid on every target; no declaration is emitted.
+        if (
+            self._dialect == "postgresql"
+            and self._current().upper_value == "ALIAS"
+            and self._peek(1).upper_value == "FOR"
+        ):
+            self._advance()
+            self._advance()
+            alias_target = self._parse_identifier()
+            self._match_type(TokenType.SEMICOLON)
+            low = name.lower()
+            self._tokens[self._pos :] = [
+                (
+                    Token(
+                        type=t.type,
+                        value=alias_target,
+                        line=t.line,
+                        column=t.column,
+                    )
+                    if t.type == TokenType.IDENTIFIER and t.value.lower() == low
+                    else t
+                )
+                for t in self._tokens[self._pos :]
+            ]
+            return None
 
         # CONSTANT modifier (Oracle PL/SQL and plpgsql). Unconsumed it
         # split the declaration in two (``rc constant;`` + ``refcursor ;;``).

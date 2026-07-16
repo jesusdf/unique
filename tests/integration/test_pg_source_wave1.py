@@ -4382,3 +4382,38 @@ class TestOpenCursorScrollExecute:
         )
         out = _t(src, "postgresql")
         assert re.search(r"(?is)OPEN c FOR\s+SELECT f1", out), out
+
+
+class TestAliasForDeclaration:
+    """wave 117 (found by the two-strikes end-to-end trace of a real
+    corpus function): ``myname ALIAS FOR $1;`` shredded into ``myname
+    alias;`` + orphan ``for p1;`` — the unmoved 14x ';' class. The
+    token-level rename (alias -> its target, the same mechanism as the
+    $n positional aliasing) is the faithful translation on EVERY
+    target; the declaration itself vanishes."""
+
+    def test_alias_for_positional_param(self) -> None:
+        src = (
+            "create function f(bpchar) returns integer as '\n"
+            "declare\n"
+            "    myname alias for $1;\n"
+            "    mytype char(2);\n"
+            "begin\n"
+            "    mytype := substr(myname, 1, 2);\n"
+            "    return 0;\n"
+            "end' language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert "alias" not in out.lower(), out
+        assert not re.search(r"(?im)^\s*for p1;", out), out
+        assert re.search(r"(?i)substr\s*\(\s*p1", out), out
+
+    def test_alias_for_named_param(self) -> None:
+        src = (
+            "create function f(x integer) returns integer as $$\n"
+            "declare n alias for x;\n"
+            "begin return n + 1; end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert "alias" not in out.lower(), out
+        assert re.search(r"(?i)RETURN x \+ 1", out), out

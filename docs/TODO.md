@@ -268,7 +268,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          delta (INTO 4→7). The 14x ';' class STILL unmoved after two
          waves → two-strikes fired: next step is an end-to-end trace
          of one real tg_* corpus function, not another sub-shape
-         guess. Tests: TestOpenCursorScrollExecute (3).**
+         guess. Tests: TestOpenCursorScrollExecute (3).
+         Wave 117 (2026-07-16): the trace found it first try — the
+         tg_* corpus functions declare `myname ALIAS FOR $1;`, which
+         shredded into `myname alias;` + orphan `for p1;`. Faithful
+         translation on EVERY target: token-level rename of the
+         alias to its target (the $n positional-aliasing mechanism);
+         the declaration vanishes. Measured: discovery **81 → 78**
+         (`;` 14→11 — the rest of that class are further sub-shapes,
+         next trace needed). Tests: TestAliasForDeclaration (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
