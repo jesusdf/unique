@@ -757,7 +757,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          family→VARBINARY(MAX), BOOLEAN→BIT, YEAR→SMALLINT,
          MEDIUMINT→INT); the cross-pipeline agreement contract stays
          green. Measured: mysql→tsql **59 → 57** (−2). Discovery HOLDS
-         0. Tests: TestWave172MysqlTsqlDeclareTypes (3).**
+         0. Tests: TestWave172MysqlTsqlDeclareTypes (3).* Wave 173 (2026-07-17): T-SQL
+         EXEC arguments take only variables/literals — ``EXEC cbv2
+         @y + 1, @y`` was error 102. The T-SQL emitter now tracks
+         declared variable/parameter types while emitting the unit and
+         hoists an expression argument into a variable of the
+         referenced variable's declared type (generalizing the
+         GETDATE() hoist); atomic and named-association arguments pass
+         through. Measured: mysql→tsql **57 → 51** (−6, validity
+         99.1%). Discovery HOLDS 0. Tests:
+         TestWave173ExecExpressionArgs (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

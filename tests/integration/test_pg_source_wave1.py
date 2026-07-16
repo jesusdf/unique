@@ -6416,3 +6416,38 @@ class TestWave172MysqlTsqlDeclareTypes:
             "mysql",
         )
         assert re.search(r"(?i)DECLARE lf double", out), out
+
+
+class TestWave173ExecExpressionArgs:
+    """wave 173 (mysql-corpus): T-SQL EXEC arguments take only
+    variables/literals — ``EXEC cbv2 @y + 1, @y`` was error 102. The
+    expression hoists into a variable of the referenced variable's
+    declared type."""
+
+    def test_exec_arith_arg_hoisted(self) -> None:
+        out = _t2(
+            "create procedure cbv1() begin declare y int default 3;"
+            " call cbv2(y+1, y); end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)DECLARE @uq_exec\d+ int = @y \+ 1;", out), out
+        assert re.search(r"(?i)EXEC cbv2 @uq_exec\d+, @y;", out), out
+
+    def test_exec_atomic_args_untouched(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare y int;" " call q(y, 5, 'x'); end",
+            "mysql",
+            "tsql",
+        )
+        assert "uq_exec" not in out, out
+        assert re.search(r"(?i)EXEC q @y, 5, 'x';", out), out
+
+    def test_call_kept_mysql(self) -> None:
+        out = _t2(
+            "create procedure cbv1() begin declare y int default 3;"
+            " call cbv2(y+1, y); end",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(r"(?i)CALL cbv2\(y\s*\+\s*1, y\)", out), out

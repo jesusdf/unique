@@ -17,6 +17,7 @@ from unique.core.ast_nodes import (
     CursorDeclaration,
     CursorOperation,
     DataType,
+    DeclareStatement,
     ExitStatement,
     IfStatement,
     NullStatement,
@@ -56,10 +57,21 @@ class TSqlEmitter(ProceduralEmitter):
         # Loop variables already DECLAREd in the current unit (T-SQL DECLARE
         # is batch-scoped; a re-declaration is error 134). Reset per emit().
         self._loop_vars_emitted: set[str] = set()
+        # Declared variable/parameter types — the EXEC expression-argument
+        # hoist needs them (wave 173). Reset per emit().
+        self._declared_var_types: dict[str, str] = {}
 
     def emit(self, node: ASTNode) -> str:
         self._loop_vars_emitted = set()
+        self._declared_var_types = {}
         return super().emit(node)
+
+    def _emit_declare(self, node: DeclareStatement) -> str:
+        out = super()._emit_declare(node)
+        m = re.match(r"(?is)^DECLARE\s+@?(\w+)\s+(\S+)", out)
+        if m:
+            self._declared_var_types[m.group(1).lower()] = m.group(2).rstrip(";")
+        return out
 
     def _wants_empty_parens_function(self) -> bool:
         # T-SQL functions require the parentheses even with no parameters.
@@ -76,6 +88,7 @@ class TSqlEmitter(ProceduralEmitter):
         default_str = f" = {self._emit_node(p.default)}" if p.default else ""
         direction_str = " OUTPUT" if p.direction in ("OUT", "INOUT") else ""
         name = p.name if p.name.startswith("@") else f"@{p.name}"
+        self._declared_var_types[name.lstrip("@").lower()] = dt
         return f"{name} {dt}{default_str}{direction_str}"
 
     def _returns_clause(self, ret_type: str) -> str:
@@ -152,9 +165,51 @@ class TSqlEmitter(ProceduralEmitter):
             var = f"@uq_now{self._raise_msg_n}"
             args = self._EXEC_NOW_ARG_RE.sub(var, args)
             prelude = f"DECLARE {var} DATETIME = {now_call.group(0)};\n"
+        if args:
+            # The general case of the same rule: an arithmetic argument
+            # (``EXEC p @y + 1``) is error 102 — hoist it into a variable
+            # of the referenced variable's declared type (wave 173).
+            hoisted, args = self._hoist_exec_expression_args(args)
+            prelude += hoisted
         name = self._qualified_name(node.schema, node.name)
         call = f"EXEC {name} {args};" if args else f"EXEC {name};"
         return prelude + call
+
+    #: EXEC arguments that are already legal: a variable (optionally
+    #: OUTPUT), a dotted name, a string/number literal, NULL or DEFAULT.
+    _EXEC_ATOMIC_ARG_RE = re.compile(
+        r"(?is)^\s*(?:@\w+(?:\s+OUTPUT)?|[\w.]+|'(?:[^']|'')*'"
+        r"|-?\d+(?:\.\d+)?|NULL|DEFAULT)\s*$"
+    )
+
+    def _hoist_exec_expression_args(self, args: str) -> tuple[str, str]:
+        """Hoist expression arguments of an EXEC into typed variables
+        (T-SQL takes only variables/literals there). The type comes from
+        the first referenced variable's declaration; an expression with
+        no known-typed variable is left alone (already-atomic arguments
+        and named association pass through)."""
+        from unique.core.sql_split import split_top_level_commas
+
+        prelude = ""
+        parts = split_top_level_commas(args)
+        out_parts: list[str] = []
+        for part in parts:
+            p = part.strip()
+            if self._EXEC_ATOMIC_ARG_RE.match(p) or "=" in p:
+                out_parts.append(p)
+                continue
+            var_m = re.search(r"@(\w+)", p)
+            vtype = (
+                self._declared_var_types.get(var_m.group(1).lower()) if var_m else None
+            )
+            if not vtype:
+                out_parts.append(p)
+                continue
+            self._raise_msg_n += 1
+            hoist_var = f"@uq_exec{self._raise_msg_n}"
+            prelude += f"DECLARE {hoist_var} {vtype} = {p};\n"
+            out_parts.append(hoist_var)
+        return prelude, ", ".join(out_parts)
 
     def _supports_table_valued_function(self) -> bool:
         return True
