@@ -779,6 +779,19 @@ class TypeReference(ASTNode):
 
 
 @dataclass(frozen=True)
+class ForeachStatement(ASTNode):
+    """plpgsql ``FOREACH var [SLICE n] IN ARRAY expr LOOP … END LOOP``.
+
+    PG-only (arrays); other targets degrade whole with a carrier.
+    """
+
+    variable: str
+    array_expr: str
+    body: tuple[ASTNode, ...] = ()
+    slice_depth: int | None = None
+
+
+@dataclass(frozen=True)
 class CursorDeclaration(ASTNode):
     """DECLARE CURSOR ... FOR SELECT."""
 

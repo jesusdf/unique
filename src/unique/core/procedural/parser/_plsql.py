@@ -29,6 +29,7 @@ from unique.core.ast_nodes import (
     ExceptionHandler,
     ExecuteStatement,
     ExitStatement,
+    ForeachStatement,
     ForLoopStatement,
     GetDiagnosticsStatement,
     HandlerDeclaration,
@@ -382,6 +383,8 @@ class PlsqlStatementsMixin(ParserBase):
             return self._parse_plsql_for()
         elif tok.is_keyword("LOOP"):
             return self._parse_plsql_loop()
+        elif tok.upper_value == "FOREACH" and self._dialect == "postgresql":
+            return self._parse_plsql_foreach()
         elif tok.is_keyword("OPEN"):
             return self._parse_plsql_open()
         elif tok.is_keyword("FETCH"):
@@ -722,6 +725,42 @@ class PlsqlStatementsMixin(ParserBase):
             self._advance()
         self._match_type(TokenType.SEMICOLON)
         return LoopStatement(body=tuple(body))
+
+    def _parse_plsql_foreach(self) -> ASTNode:
+        """Parse plpgsql FOREACH var [SLICE n] IN ARRAY expr LOOP … END LOOP.
+
+        Unmodeled, the loop structure shredded (header flattened, END
+        LOOP lost — wave 120)."""
+        self._advance()  # FOREACH
+        variable = self._parse_identifier()
+        slice_depth: int | None = None
+        if self._current().upper_value == "SLICE":
+            self._advance()
+            if self._current().type == TokenType.NUMBER:
+                slice_depth = int(self._advance().value)
+        self._match_keyword("IN")
+        # ARRAY keyword, then the array expression up to LOOP.
+        if self._current().upper_value == "ARRAY":
+            self._advance()
+        expr_parts: list[str] = []
+        while not self._at_end() and not self._current().is_keyword("LOOP"):
+            expr_parts.append(self._flat_value(self._current()))
+            self._advance()
+        self._expect_keyword("LOOP")
+        body: list[ASTNode] = []
+        while not self._at_end() and not self._current().is_keyword("END"):
+            stmt = self._parse_plsql_statement()
+            if stmt:
+                body.append(stmt)
+        self._match_keyword("END")
+        self._match_keyword("LOOP")
+        self._match_type(TokenType.SEMICOLON)
+        return ForeachStatement(
+            variable=variable,
+            array_expr=" ".join(expr_parts).strip(),
+            body=tuple(body),
+            slice_depth=slice_depth,
+        )
 
     def _parse_plsql_open(self) -> ASTNode:
         """Parse OPEN cursor [FOR select]."""

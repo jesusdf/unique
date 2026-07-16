@@ -45,6 +45,7 @@ from unique.core.ast_nodes import (
     ExceptionHandler,
     ExecuteStatement,
     ExitStatement,
+    ForeachStatement,
     ForLoopStatement,
     GetDiagnosticsStatement,
     IfStatement,
@@ -278,6 +279,7 @@ class ProceduralTransformer:
             CursorDeclaration: self._transform_cursor_decl,
             CursorOperation: self._transform_cursor_op,
             ForLoopStatement: self._transform_for_loop,
+            ForeachStatement: self._transform_foreach,
             LoopStatement: self._transform_loop,
             ExitStatement: self._transform_exit,
             EmbeddedDML: self._transform_embedded_dml,
@@ -2211,6 +2213,15 @@ class ProceduralTransformer:
     def _warn_for_loop_unsupported(self) -> None:
         """Hook for targets with no native FOR loop to record a warning. Default
         does nothing; T-SQL overrides."""
+
+    def _transform_foreach(self, node: ForeachStatement) -> ASTNode:
+        # replace, not reconstruction (the field-eating lesson).
+        return dataclasses.replace(
+            node,
+            variable=self._transform_var_name(node.variable),
+            array_expr=self._transform_var_in_sql(node.array_expr),
+            body=self._transform_body(node.body),
+        )
 
     def _transform_loop(self, node: LoopStatement) -> ASTNode:
         """Default keeps an unconditional LOOP (Oracle/PG/MySQL); T-SQL

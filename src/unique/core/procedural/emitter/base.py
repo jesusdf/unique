@@ -39,6 +39,7 @@ from unique.core.ast_nodes import (
     ExceptionBlock,
     ExecuteStatement,
     ExitStatement,
+    ForeachStatement,
     ForLoopStatement,
     GetDiagnosticsStatement,
     HandlerDeclaration,
@@ -294,6 +295,7 @@ class ProceduralEmitter:
             IfStatement: self._emit_if,
             WhileStatement: self._emit_while,
             ForLoopStatement: self._emit_for_loop,
+            ForeachStatement: self._emit_foreach,
             LoopStatement: self._emit_loop,
             BeginEndBlock: self._emit_begin_end,
             StatementList: self._emit_statement_list,
@@ -1037,6 +1039,19 @@ class ProceduralEmitter:
         MySQL have no constant variables and override with "" — the plain
         mutable declaration is a safe relaxation for valid programs."""
         return "CONSTANT "
+
+    def _emit_foreach(self, node: ForeachStatement) -> str:
+        """plpgsql FOREACH … IN ARRAY — PG-only (its emitter overrides).
+        Elsewhere arrays have no equivalent: the loop degrades to the
+        documented carrier (the containing routine normally degrades
+        whole before reaching here via the array-body gate)."""
+        slice_str = f" SLICE {node.slice_depth}" if node.slice_depth else ""
+        header = f"FOREACH {node.variable}{slice_str} IN ARRAY {node.array_expr}"
+        return (
+            f"-- UNIQUE: {header} LOOP … has no {self._dialect} equivalent "
+            "(no array type); statement preserved as a comment:\n"
+            f"-- {header} LOOP … END LOOP;"
+        )
 
     def _emit_pragma(self, node: PragmaDeclaration) -> str:
         """A PL/SQL compiler directive. Only Oracle can execute it (its emitter

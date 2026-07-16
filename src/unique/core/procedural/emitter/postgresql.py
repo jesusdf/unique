@@ -14,6 +14,7 @@ from unique.core.ast_nodes import (
     CallStatement,
     CreateTriggerStatement,
     CursorDeclaration,
+    ForeachStatement,
     GetDiagnosticsStatement,
     ParameterDefinition,
     PerformStatement,
@@ -68,6 +69,16 @@ class PostgresEmitter(ProceduralEmitter):
         # PG keeps the OPEN's scrollability: OPEN c [NO] SCROLL FOR <query>.
         scroll_str = f" {scroll}" if scroll else ""
         return f"OPEN {cursor_name}{scroll_str} FOR\n{query_str.rstrip().rstrip(';')};"
+
+    def _emit_foreach(self, node: ForeachStatement) -> str:
+        slice_str = f" SLICE {node.slice_depth}" if node.slice_depth else ""
+        self._indent_level += 1
+        body = self._emit_indented_stmts(node.body)
+        self._indent_level -= 1
+        return (
+            f"FOREACH {node.variable}{slice_str} IN ARRAY {node.array_expr} LOOP\n"
+            f"{body}\nEND LOOP;"
+        )
 
     def _emit_cursor_fetch(
         self, cursor_name: str, into_str: str, direction: str | None = None
