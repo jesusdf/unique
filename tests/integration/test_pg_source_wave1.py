@@ -5604,3 +5604,19 @@ class TestPgSourceProceduralTypeMaps:
         out = _t(src, "oracle")
         assert "bytea" not in out.lower(), out
         assert re.search(r"(?i)RETURN BLOB", out), out
+
+
+class TestOracleBareStarWithSiblings:
+    """wave 150: Oracle rejects a BARE ``*`` alongside other select items
+    (ORA-00923, 13x) — it must be qualified with the FROM relation."""
+
+    def test_star_with_sibling_oracle(self) -> None:
+        out = _t(
+            "create view zv1 as select *, cast('d' as text) as junk from zt1;",
+            "oracle",
+        )
+        assert re.search(r"(?i)SELECT zt1\.\*,", out), out
+
+    def test_lone_star_untouched_oracle(self) -> None:
+        out = _t("select * from t;", "oracle")
+        assert re.search(r"(?i)SELECT \*", out), out

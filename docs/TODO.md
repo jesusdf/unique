@@ -569,7 +569,11 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          passthrough). Measured: syntax counts flat {68/78/51} BUT
          oracle ok +27 (1749→1776 — correct types moved statements
          from environmental-fail to EXECUTING), discovery HOLDS 0.
-         Tests: TestPgSourceProceduralTypeMaps (3).**
+         Tests: TestPgSourceProceduralTypeMaps (3).* Wave 150 (2026-07-16): Oracle
+         rejects a BARE `*` alongside other select items (ORA-00923,
+         13x) — qualified with the FROM relation (`t.*`) at emit.
+         Measured: pg→oracle **51 → 38** (98.8%), discovery HOLDS 0.
+         Tests: TestOracleBareStarWithSiblings (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

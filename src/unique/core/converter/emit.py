@@ -1410,6 +1410,22 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         pct = " PERCENT" if node.limit.percent else ""
         top = f"TOP {_emit_expression(node.limit.limit, dialect)}{pct} "
     distinct = "DISTINCT " if node.distinct else ""
+    if (
+        dialect == "oracle"
+        and len(node.columns) > 1
+        and any(isinstance(c, Star) and not c.table for c in node.columns)
+        and isinstance(node.from_clause, TableRef)
+    ):
+        # Oracle rejects a BARE ``*`` alongside other select items
+        # (ORA-00923); qualify it with the FROM relation (wave 150).
+        qual = node.from_clause.alias or node.from_clause.name
+        node = dataclasses.replace(
+            node,
+            columns=tuple(
+                Star(table=qual) if isinstance(c, Star) and not c.table else c
+                for c in node.columns
+            ),
+        )
     if node.empty_select_list and not node.columns and dialect == "postgresql":
         # PG's zero-column select list (``SELECT;``) — a ``*`` here is
         # invalid without FROM and changes the shape with one (wave 124).
