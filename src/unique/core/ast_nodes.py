@@ -552,6 +552,7 @@ class WhileStatement(ASTNode):
 
     condition: ASTNode
     body: tuple[ASTNode, ...] = ()
+    label: str | None = None
 
 
 @dataclass(frozen=True)

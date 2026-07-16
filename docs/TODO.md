@@ -1601,6 +1601,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         (97.0%), mysql→PG 111→108 (98.2%), mysql→Oracle 144→141
         (97.6%). Standing: pg-source {261/160/140}, mysql-source
         {177/108/141}.**
+        *Wave 76 (2026-07-16):* MySQL labeled loops (`foo: loop … end
+        loop foo`) and `LEAVE label` mangled into `foo AS %(loop)s;`
+        garbage (4x mysql→pg). Labels parse now (loop/while/repeat
+        heads; trailing END labels consumed; LEAVE→ExitStatement with
+        label, ITERATE→CONTINUE); the label flows through
+        _transform_loop and PG/Oracle emit `<<label>> LOOP … END LOOP
+        label;` with `EXIT label;`. Tests: TestLabeledLoops.
+        *Measurement pending next mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

@@ -10,6 +10,7 @@ Delegates embedded DML/DQL statements to sqlglot for transpilation.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import re
 from dataclasses import replace
@@ -283,6 +284,30 @@ class PlsqlStatementsMixin(ParserBase):
             and tok.upper_value == "REPEAT"
         ):
             return self._parse_mysql_repeat()
+        if (
+            self._dialect == "mysql"
+            and tok.type in (TokenType.IDENTIFIER, TokenType.KEYWORD)
+            and tok.upper_value in ("LEAVE", "ITERATE")
+            and self._peek(1).type == TokenType.IDENTIFIER
+        ):
+            kw = self._advance().upper_value
+            label = self._advance().value
+            self._match_type(TokenType.SEMICOLON)
+            if kw == "LEAVE":
+                return ExitStatement(label=label)
+            return RawSQL(sql=f"CONTINUE {label}", reason="loop continue")
+        if (
+            self._dialect == "mysql"
+            and tok.type == TokenType.IDENTIFIER
+            and self._peek(1).type == TokenType.COLON
+            and self._peek(2).upper_value in ("LOOP", "WHILE", "REPEAT")
+        ):
+            label = self._advance().value
+            self._advance()  # ':'
+            inner = self._parse_plsql_statement()
+            if isinstance(inner, (LoopStatement, WhileStatement)):
+                inner = dataclasses.replace(inner, label=label)
+            return inner
         if tok.is_keyword("IF"):
             return self._parse_plsql_if()
         elif tok.is_keyword("CASE") and self._plsql_case_is_statement():
@@ -573,6 +598,8 @@ class PlsqlStatementsMixin(ParserBase):
         self._match_keyword("END")
         if not self._match_keyword("LOOP"):
             self._match_keyword("WHILE")
+        if self._current().type == TokenType.IDENTIFIER:
+            self._advance()  # MySQL trailing label
         self._match_type(TokenType.SEMICOLON)
 
         return WhileStatement(condition=condition, body=tuple(body))
@@ -626,6 +653,9 @@ class PlsqlStatementsMixin(ParserBase):
                 body.append(stmt)
         self._match_keyword("END")
         self._match_keyword("LOOP")
+        # MySQL closes a labeled loop as ``END LOOP label``.
+        if self._current().type == TokenType.IDENTIFIER:
+            self._advance()
         self._match_type(TokenType.SEMICOLON)
         return LoopStatement(body=tuple(body))
 

@@ -1210,7 +1210,14 @@ class ProceduralEmitter:
         self._indent_level += 1
         body_lines = self._emit_indented_stmts(node.body)
         self._indent_level -= 1
-        return self._emit_loop_body(body_lines)
+        result = self._emit_loop_body(body_lines)
+        if node.label:
+            # PL/SQL and plpgsql spell loop labels ``<<label>> LOOP …
+            # END LOOP label;``.
+            result = f"<<{node.label}>>\n{result}"
+            if result.rstrip().endswith("END LOOP;"):
+                result = result.rstrip()[: -len(";")] + f" {node.label};"
+        return result
 
     def _emit_loop_body(self, body_lines: list[str]) -> str:
         """Emit an unconditional loop. Default (Oracle/PostgreSQL) ``LOOP …
@@ -1813,9 +1820,10 @@ class ProceduralEmitter:
         # Cursor %NOTFOUND / %FOUND have dialect-specific equivalents.
         cond = self._translate_cursor_attrs(cond)
         # Default: Oracle / PostgreSQL EXIT [WHEN cond]. T-SQL and MySQL override.
+        label = f" {node.label}" if node.label else ""
         if cond:
-            return f"EXIT WHEN {cond};"
-        return "EXIT;"
+            return f"EXIT{label} WHEN {cond};"
+        return f"EXIT{label};"
 
     def _translate_cursor_attrs(self, expr: str) -> str:
         """Translate Oracle cursor attributes to the target dialect.

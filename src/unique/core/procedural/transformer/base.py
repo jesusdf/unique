@@ -2140,7 +2140,8 @@ class ProceduralTransformer:
         """Default keeps an unconditional LOOP (Oracle/PG/MySQL); T-SQL
         overrides to a ``WHILE 1=1`` (it has no bare LOOP)."""
         return LoopStatement(
-            body=self._ensure_non_empty_body(self._transform_body(node.body))
+            body=self._ensure_non_empty_body(self._transform_body(node.body)),
+            label=node.label,
         )
 
     def _transform_exit(self, node: ExitStatement) -> ASTNode:

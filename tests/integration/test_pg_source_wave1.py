@@ -3053,3 +3053,36 @@ class TestMysqlDoubleQuotedStrings:
         out = _t2(src, "mysql", "postgresql")
         assert re.search(r"it''s", out), out
         assert '"' not in out.split("$$")[1], out
+
+
+class TestLabeledLoops:
+    """wave 76: MySQL labeled loops (`foo: loop … end loop foo`) and
+    `LEAVE label` mangled into `foo AS %(loop)s;` garbage (4x
+    mysql→pg). Labels now parse; PG/Oracle emit `<<label>>` blocks
+    with `EXIT label;`."""
+
+    _SRC = (
+        "DELIMITER //\n"
+        "create procedure lp()\n"
+        "begin\n"
+        "  declare i int default 0;\n"
+        "  foo: loop\n"
+        "    set i = i + 1;\n"
+        "    if i > 3 then\n"
+        "      leave foo;\n"
+        "    end if;\n"
+        "  end loop foo;\n"
+        "end//\n"
+        "DELIMITER ;\n"
+    )
+
+    def test_labeled_loop_pg(self) -> None:
+        out = _t2(self._SRC, "mysql", "postgresql")
+        assert "<<foo>>" in out, out
+        assert re.search(r"(?i)EXIT foo;", out), out
+        assert "%(loop)s" not in out, out
+
+    def test_labeled_loop_oracle(self) -> None:
+        out = _t2(self._SRC, "mysql", "oracle")
+        assert "<<foo>>" in out, out
+        assert re.search(r"(?i)EXIT foo;", out), out
