@@ -2276,6 +2276,18 @@ def _emit_date_add(node: FunctionCall, dialect: str) -> str | None:
     n = literal_n if literal_n is not None else _emit_expression(amount, dialect)
     sub = node.name.upper() == "DATE_SUB"
 
+    # A DATEADD whose base is a DATEDIFF result operates on a NUMBER, not
+    # a date — plain arithmetic is the (live-validated) form; an interval
+    # add would be invalid (Oracle) or wrongly typed (PG).
+    base = _unwrap_sqlglot_wrappers(node.args[0])
+    if (
+        dialect in ("postgresql", "oracle")
+        and isinstance(base, FunctionCall)
+        and base.name.upper() == "DATEDIFF"
+    ):
+        op = "-" if sub else "+"
+        return f"{ts} {op} {n}"
+
     if dialect == "mysql":
         fn = "DATE_SUB" if sub else "DATE_ADD"
         return f"{fn}({ts}, INTERVAL {n} {unit})"

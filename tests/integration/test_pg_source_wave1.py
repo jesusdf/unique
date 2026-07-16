@@ -3602,3 +3602,33 @@ class TestAssignmentViaSelectNodeAware:
         src = "CREATE PROCEDURE p2 AS\nBEGIN\n  SET @c = 1 + 2;\nEND"
         out = _t2(src, "tsql", "oracle")
         assert re.search(r"(?i)V_C := 1 \+ 2;", out), out
+
+
+class TestIrNestedDateaddOverDatediff:
+    """M3b family migration, dates step 1 (wave 98): the IR's DATEADD
+    emission adds an INTERVAL to the base even when the base is a
+    DATEDIFF result — a NUMBER (Oracle: invalid; PG: wrong type). The
+    text path's live-validated form is plain numeric addition; the IR
+    now matches it."""
+
+    def test_nested_numeric_add_oracle(self) -> None:
+        out = _t2(
+            "SELECT DATEADD(day, 1, DATEDIFF(day, x, y)) FROM t;",
+            "tsql",
+            "oracle",
+        )
+        assert "NUMTODSINTERVAL" not in out.upper(), out
+        assert re.search(
+            r"(?is)\(TRUNC\(CAST\(y AS DATE\)\) - TRUNC\(CAST\(x AS DATE\)\)\)"
+            r" \+ 1",
+            out,
+        ), out
+
+    def test_nested_numeric_add_pg(self) -> None:
+        out = _t2(
+            "SELECT DATEADD(day, 1, DATEDIFF(day, x, y)) FROM t;",
+            "tsql",
+            "postgresql",
+        )
+        assert "INTERVAL" not in out.upper(), out
+        assert re.search(r"(?i)\+ 1", out), out

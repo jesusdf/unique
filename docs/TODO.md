@@ -248,7 +248,11 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       expression pipeline must absorb those behaviors first. The
       probe patch is reproducible: guard `UNIQUE_IR_FIRST` in
       `_transform_raw_sql` wrapping `_ir_transpile_dml` for scalar
-      fragments.*; then the text rewriters can
+      fragments. Family migration step 1 (dates) landed 2026-07-17
+      (wave 98): the differential found a live IR bug — DATEADD over
+      a DATEDIFF base added an INTERVAL to a NUMBER (invalid Oracle /
+      wrongly typed PG); the IR now matches the text path's numeric
+      addition. Tests: TestIrNestedDateaddOverDatediff.*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed
