@@ -641,6 +641,20 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     if isinstance(expr, exp.Introducer):
         return convert_expression(expr.expression)
 
+    # MySQL's INTERVAL(x, v1, v2, …) INDEX function (position of the
+    # last threshold ≤ x) parses as an Interval literal wrapping a
+    # Tuple — it shipped ``INTERVAL ((x, v1, …))``, invalid everywhere
+    # (wave 165). Only the unit-less Tuple form is the function.
+    if (
+        isinstance(expr, exp.Interval)
+        and isinstance(expr.this, exp.Tuple)
+        and expr.args.get("unit") is None
+    ):
+        return FunctionCall(
+            name="INTERVAL",
+            args=tuple(convert_expression(a) for a in expr.this.expressions),
+        )
+
     # Fallback: emit as raw SQL, rendered in the SOURCE dialect. The
     # default (generic) renderer silently changes spellings — sqlglot
     # stores PG subscripts 0-based, so ``arr[2]`` shipped as ``arr[1]``

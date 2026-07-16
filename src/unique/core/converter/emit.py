@@ -2814,6 +2814,20 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if fn_name == "COALESCE" and len(node.args) == 1 and dialect == "tsql":
         return _emit_expression(node.args[0], dialect)
 
+    # MySQL's INTERVAL(x, v1, v2, …) index function: position of the
+    # last threshold ≤ x, −1 for NULL x. Only MySQL has it; the CASE
+    # chain is the mechanical form everywhere else (wave 165).
+    if fn_name == "INTERVAL" and len(node.args) >= 2:
+        if dialect == "mysql":
+            args = ", ".join(_emit_expression(a, dialect) for a in node.args)
+            return f"INTERVAL({args})"
+        x = _emit_expression(node.args[0], dialect)
+        whens = [f"WHEN {x} IS NULL THEN -1"]
+        for i, threshold in enumerate(node.args[1:]):
+            t = _emit_expression(threshold, dialect)
+            whens.append(f"WHEN {x} < {t} THEN {i}")
+        return f"CASE {' '.join(whens)} ELSE {len(node.args) - 1} END"
+
     # Date arithmetic has a distinct spelling per engine.
     if fn_name in ("DATE_ADD", "DATE_SUB", "DATEADD"):
         emitted = _emit_date_add(node, dialect)

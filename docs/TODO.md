@@ -691,7 +691,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          spelling is ``SELECT TOP n @v = …``. Measured: mysql→tsql
          **129 → 119** (−10, the day's biggest drop — both classes
          chained). Validity crossed **98.0%**. Discovery HOLDS 0.
-         Tests: TestWave164AssignOpSelectLimit (4).**
+         Tests: TestWave164AssignOpSelectLimit (4).* Wave 165 (2026-07-16): MySQL's
+         INTERVAL(x, v1, v2, …) INDEX function (position of the last
+         threshold ≤ x, −1 for NULL) parsed as an Interval literal
+         wrapping a Tuple and shipped ``INTERVAL ((x, v1, …))`` —
+         invalid everywhere. The unit-less Tuple form converts to a
+         FunctionCall; MySQL keeps the native call, every other target
+         gets the mechanical CASE chain. Measured: mysql→tsql
+         **119 → 116** (−3). Discovery HOLDS 0. Tests:
+         TestWave165IntervalIndexFunction (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

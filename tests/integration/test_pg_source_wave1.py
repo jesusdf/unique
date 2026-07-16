@@ -6128,3 +6128,26 @@ class TestWave164AssignOpSelectLimit:
             "postgresql",
         )
         assert re.search(r"(?i)LIMIT 1", out), out
+
+
+class TestWave165IntervalIndexFunction:
+    """wave 165 (mysql-corpus): MySQL's INTERVAL(x, v1, v2, …) index
+    function (position of the last threshold ≤ x, −1 for NULL) parsed
+    as an Interval literal and shipped ``INTERVAL ((x, v1, …))`` —
+    invalid everywhere. Targets without it get the CASE chain."""
+
+    def test_interval_fn_case_chain_tsql(self) -> None:
+        out = _t2("select interval(qty, 2, 3) from t1;", "mysql", "tsql")
+        up = " ".join(out.upper().split())
+        assert "CASE WHEN QTY IS NULL THEN -1" in up, out
+        assert "WHEN QTY < 2 THEN 0" in up, out
+        assert "WHEN QTY < 3 THEN 1" in up, out
+        assert "ELSE 2 END" in up, out
+
+    def test_interval_fn_kept_mysql(self) -> None:
+        out = _t2("select interval(qty, 2, 3) from t1;", "mysql", "mysql")
+        assert re.search(r"(?i)INTERVAL\(qty, 2, 3\)", out), out
+
+    def test_interval_literal_untouched(self) -> None:
+        out = _t2("select date_add('2001-01-01', interval 1 day);", "mysql", "tsql")
+        assert re.search(r"(?i)DATEADD\(DAY, 1, '2001-01-01'\)", out), out
