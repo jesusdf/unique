@@ -1560,6 +1560,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         **Measured at `f4cf7c9` (2026-07-16): mysql→Oracle 165→164;
         the rest of wave 70's +5 carries further blockers. Standing:
         pg-source {261/160/140}, mysql-source {209/111/164}.**
+        *Wave 72 (2026-07-16):* two more MySQL-truthiness shapes — a
+        bare function call or COLUMN as a condition gains `<> 0` on
+        T-SQL/Oracle (`WHERE dbo.DAYNAME('…')`, `WHERE b`); and a row
+        tuple in `IN (SELECT …)` joins wave 63's whole-degrade (the
+        IN operator joins the tuple-vs-subquery gate). Tests:
+        TestBareValueConditionsAndTupleIn. *Measurement pending next
+        mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

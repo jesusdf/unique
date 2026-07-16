@@ -871,7 +871,8 @@ class Transformer:
 
         if (
             isinstance(value, BinaryOp)
-            and value.operator in (BinaryOperator.EQ, BinaryOperator.NEQ)
+            and value.operator
+            in (BinaryOperator.EQ, BinaryOperator.NEQ, BinaryOperator.IN)
             and (
                 (is_tuple(value.left) and isinstance(value.right, SubqueryExpression))
                 or (

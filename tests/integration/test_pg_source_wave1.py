@@ -2932,3 +2932,32 @@ class TestRefcursorInTryCatch:
         out = _t2(src, "mysql", "oracle")
         assert re.search(r"(?is)OPEN RESULT_CURSOR FOR SELECT 'bad'", out), out
         assert re.search(r"(?is)RESULT_CURSOR OUT SYS_REFCURSOR", out), out
+
+
+class TestBareValueConditionsAndTupleIn:
+    """wave 72: two more MySQL-truthiness shapes on T-SQL — a bare
+    function call or column as a WHERE/HAVING condition needs the
+    `<> 0` comparison (error 4145/195), and a row tuple in
+    `IN (SELECT …)` has no T-SQL spelling (degrade whole, like wave
+    63's tuple = subquery)."""
+
+    def test_bare_function_condition(self) -> None:
+        out = _t2("select * from t3 where dayname('1995-01-01');", "mysql", "tsql")
+        assert re.search(r"(?is)WHERE .*DAYNAME.* <> 0", out), out
+
+    def test_bare_column_condition(self) -> None:
+        out = _t2("select a from t1 where b;", "mysql", "tsql")
+        assert re.search(r"(?is)WHERE b <> 0", out), out
+
+    def test_tuple_in_subquery_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "select * from t1 where (f1, pk) in (select 7, 4 union select 9, 2);",
+            source="mysql",
+            target="tsql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql

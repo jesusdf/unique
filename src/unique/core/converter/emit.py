@@ -731,6 +731,9 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
             # MySQL truthiness: a bare scalar subquery as a condition is
             # nonzero-is-true; T-SQL/Oracle need the comparison.
             return f"({_emit_select(node.query, dialect)}) <> 0"
+        if isinstance(node, (FunctionCall, ColumnRef)):
+            # Same truthiness for a bare function call or column.
+            return f"{_emit_expression(node, dialect)} <> 0"
         node = _comparisonize_literals(node)
     if (
         dialect in ("tsql", "oracle")
