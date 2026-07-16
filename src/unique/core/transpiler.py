@@ -2061,6 +2061,7 @@ class Transpiler:
                     code,
                 )
                 or re.match(r"(?is)^\s*SET\s+[A-Za-z_][\w.]*\s*=", code)
+                or re.match(r"(?is)^\s*SET\s+(?:NAMES|CHARACTER\s+SET|CHARSET)\b", code)
                 or (re.match(r"(?is)^\s*SET\b", code) and "@@" in code)
                 or re.match(
                     r"(?is)^(?:FLUSH|LOCK\s+TABLES|UNLOCK\s+TABLES|"

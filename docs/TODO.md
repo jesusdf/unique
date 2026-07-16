@@ -1407,7 +1407,20 @@ fix needs an **anonymized** regression fixture (never a private name).
         PG/MySQL keep native `LEFT JOIN LATERAL … ON …`; a non-TRUE
         lateral condition keeps the LATERAL spelling (gate carriers it
         on tsql — no APPLY equivalent). Tests: TestLateralJoins.
-        *Measurement pending next pg-corpus cycle.*
+        **Measured at `2399670` (2026-07-16): un-carriered LATERAL
+        batches un-glued +51 statements on pg→tsql (ok 2963→3010,
+        syntax 266→270 — honest +4 reaching next blockers); pg→MySQL
+        180→173 (94.4%), pg→Oracle 140→144 (honest +4). Standing:
+        pg-source {270/173/144}, mysql-source {276/148/212}.**
+        *Wave 61 (2026-07-16):* four mysql→tsql classes — row-tuple
+        comparisons expand pairwise on T-SQL (no row constructors;
+        `(a,b) = (x,y)` → `a = x AND b = y`, `<>` → OR; 17x error
+        4145); boolean literals under AND/OR join wave 55's rewrite
+        (`OR TRUE` shipped as bare `OR 1`; 13x); single-argument ROUND
+        gains the mandatory scale (6x error 189); `SET NAMES`/
+        `CHARACTER SET` join the session-knob carriers (3x error
+        195). Tests: TestTuplesRoundSetNamesBoolLiterals.
+        *Measurement pending next mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

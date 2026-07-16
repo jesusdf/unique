@@ -675,6 +675,18 @@ def _emit_value_expression(node: ASTNode, dialect: str) -> str:
     return _emit_expression(node, dialect)
 
 
+def _tuple_items(side: ASTNode, emitted: str) -> list[str] | None:
+    """The comma items of a row-constructor operand, or None."""
+    if isinstance(side, ExpressionList):
+        return [_emit_expression(i, "tsql") for i in side.items]
+    text = emitted.strip()
+    if isinstance(side, RawSQL) and text.startswith("(") and text.endswith(")"):
+        inner = text[1:-1]
+        if "(" not in inner and "," in inner:
+            return [p.strip() for p in inner.split(",")]
+    return None
+
+
 def _comparisonize_literals(node: ASTNode) -> ASTNode:
     """MySQL/PG treat a numeric operand of AND/OR as a truth value;
     T-SQL/Oracle need a real comparison — rewrite the literal to
@@ -691,6 +703,13 @@ def _comparisonize_literals(node: ASTNode) -> ASTNode:
                 operator=BinaryOperator.NEQ,
                 left=side,
                 right=Literal(value=0, dtype="integer"),
+            )
+        if isinstance(side, Literal) and side.dtype == "boolean":
+            one = Literal(value=1, dtype="integer")
+            return BinaryOp(
+                operator=(BinaryOperator.EQ if side.value else BinaryOperator.NEQ),
+                left=one,
+                right=one,
             )
         return _comparisonize_literals(side)
 
@@ -2667,6 +2686,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
 
     distinct = "DISTINCT " if node.distinct else ""
     args = ", ".join(_emit_expression(a, dialect) for a in node.args)
+    # T-SQL's ROUND requires the scale argument (error 189).
+    if dialect == "tsql" and name.upper() == "ROUND" and len(node.args) == 1:
+        args += ", 0"
     return f"{name}({distinct}{args})"
 
 
@@ -2814,6 +2836,19 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             return f"CASE WHEN {pred} THEN 1 ELSE 0 END = 1"
         keyword = "IS NOT DISTINCT FROM" if equal else "IS DISTINCT FROM"
         return f"{left} {keyword} {right}"
+
+    # Row-tuple comparison: T-SQL has no row constructors — expand
+    # ``(a, b) = (x, y)`` pairwise (AND for =, OR for <>).
+    if dialect == "tsql" and node.operator in (
+        BinaryOperator.EQ,
+        BinaryOperator.NEQ,
+    ):
+        lt = _tuple_items(node.left, left)
+        rt = _tuple_items(node.right, right)
+        if lt is not None and rt is not None and len(lt) == len(rt) > 1:
+            if node.operator == BinaryOperator.EQ:
+                return " AND ".join(f"{a} = {b}" for a, b in zip(lt, rt, strict=True))
+            return " OR ".join(f"{a} <> {b}" for a, b in zip(lt, rt, strict=True))
 
     op_map = {
         BinaryOperator.EQ: "=",

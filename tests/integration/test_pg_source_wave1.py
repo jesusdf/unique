@@ -2482,3 +2482,37 @@ class TestLateralJoins:
             "mysql",
         )
         assert re.search(r"(?is)LEFT JOIN LATERAL \(SELECT", out), out
+
+
+class TestTuplesRoundSetNamesBoolLiterals:
+    """wave 61: four mysql→tsql classes — row-tuple comparisons
+    expand pairwise on T-SQL (no row constructors: 17x error 4145);
+    boolean literals under AND/OR join wave 55's rewrite (`OR TRUE`
+    shipped as bare `OR 1`, 13x); single-argument ROUND gains the
+    mandatory scale 0 (6x error 189); and `SET NAMES` becomes a
+    documented session-knob carrier (3x error 195)."""
+
+    def test_row_tuple_eq_expands(self) -> None:
+        out = _t2("select * from t1 where (f1, f2) = (2, null);", "mysql", "tsql")
+        assert re.search(r"(?i)f1 = 2 AND f2 = NULL", out), out
+
+    def test_row_tuple_neq_expands(self) -> None:
+        out = _t2("select * from t1 where (f1, f2) <> (1, 2);", "mysql", "tsql")
+        assert re.search(r"(?i)f1 <> 1 OR f2 <> 2", out), out
+
+    def test_or_true_becomes_comparison(self) -> None:
+        out = _t2("select a as f1 from t1 having f1 = 'a' or true;", "mysql", "tsql")
+        assert re.search(r"(?i)OR 1 = 1", out), out
+
+    def test_round_single_arg_gains_scale(self) -> None:
+        out = _t2("select round(rand() * 10) from t1;", "mysql", "tsql")
+        assert re.search(r"(?i)ROUND\(RAND\(\) \* 10, 0\)", out), out
+
+    def test_set_names_carrier(self) -> None:
+        r = Transpiler().transpile("set names latin1;", source="mysql", target="tsql")
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
