@@ -2713,16 +2713,16 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         haystack = _emit_expression(node.args[1], dialect)
         start = _emit_expression(node.args[2], dialect) if len(node.args) > 2 else None
         if dialect == "tsql":
-            inner = f"{needle}, {haystack}" + (f", {start}" if start else "")
-            return f"CHARINDEX({inner})"
+            args_sql = f"{needle}, {haystack}" + (f", {start}" if start else "")
+            return f"CHARINDEX({args_sql})"
         if dialect == "mysql":
             # LOCATE(needle, haystack[, start])
-            inner = f"{needle}, {haystack}" + (f", {start}" if start else "")
-            return f"LOCATE({inner})"
+            args_sql = f"{needle}, {haystack}" + (f", {start}" if start else "")
+            return f"LOCATE({args_sql})"
         if dialect == "oracle":
             # INSTR(haystack, needle[, start])
-            inner = f"{haystack}, {needle}" + (f", {start}" if start else "")
-            return f"INSTR({inner})"
+            args_sql = f"{haystack}, {needle}" + (f", {start}" if start else "")
+            return f"INSTR({args_sql})"
         # postgresql: STRPOS has no start arg; use POSITION(needle IN haystack)
         # and add the offset when a start position is given.
         if start:
@@ -3004,7 +3004,13 @@ def _emit_case(node: CaseExpression, dialect: str) -> str:
         parts[0] += f" {_emit_expression(node.operand, dialect)}"
 
     for condition, result in node.whens:
-        cond = _emit_expression(condition, dialect)
+        # A searched CASE's WHEN is condition position (a simple CASE
+        # compares the operand — expression position).
+        cond = (
+            _emit_expression(condition, dialect)
+            if node.operand
+            else _emit_condition(condition, dialect)
+        )
         res = _emit_expression(result, dialect)
         parts.append(f"  WHEN {cond} THEN {res}")
 

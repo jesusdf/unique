@@ -3270,3 +3270,19 @@ class TestInsertCteHoist:
         assert re.search(
             r"(?is)^\s*WITH result AS \(.*\)\s*INSERT INTO t3 \(f3\)", out
         ), out
+
+
+class TestCaseWhenBareBoolean:
+    """wave 84: a searched CASE's WHEN emitted its condition as an
+    EXPRESSION — a bare boolean column (`CASE WHEN b1 THEN …`)
+    shipped raw to T-SQL (error 4145). Searched WHENs (no operand)
+    now emit in condition position, picking up the truthiness
+    wraps."""
+
+    def test_bare_column_when_tsql(self) -> None:
+        out = _t("select max(case when b1 then 1 else 0 end) from bt;", "tsql")
+        assert re.search(r"(?is)WHEN b1 <> 0 THEN 1", out), out
+
+    def test_simple_case_operand_untouched(self) -> None:
+        out = _t("select case a when 1 then 'x' else 'y' end from t;", "tsql")
+        assert re.search(r"(?is)CASE a\s+WHEN 1 THEN 'x'", out), out

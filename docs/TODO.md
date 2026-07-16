@@ -1681,6 +1681,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         `3cc6a3d` (2026-07-17): pg→T-SQL 198→189 (94.2%), others
         flat. Standing: pg-source {189/159/133}, mysql-source
         {177/107/141}.**
+        *Wave 84 (2026-07-17):* a searched CASE's WHEN emitted its
+        condition as an EXPRESSION — a bare boolean column
+        (`CASE WHEN b1 THEN …`) shipped raw to T-SQL (part of the
+        4145 residue). Searched WHENs (no operand) now emit in
+        condition position, picking up the truthiness wraps; simple
+        CASE operands stay expressions. Tests:
+        TestCaseWhenBareBoolean. *Measurement pending next pg-corpus
+        cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
