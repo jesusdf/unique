@@ -300,7 +300,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          hit AGAIN en route (`_transform_raise_error` dropped the new
          flag) — fixed with dataclasses.replace like wave 118's.
          Measured: discovery **72 → 68** ('missing expression' class
-         gone). Tests: TestBareRaiseAndUsing (5).**
+         gone). Tests: TestBareRaiseAndUsing (5).
+         Wave 120 (2026-07-16): plpgsql `FOREACH var [SLICE n] IN
+         ARRAY expr LOOP … END LOOP` modeled (ForeachStatement):
+         preserved pg→pg with a transformed body, documented carrier
+         elsewhere (the array-body routine degrade usually fires
+         first off-PG). Measured: discovery **68 flat** but the
+         composition moved — `;` 11→5 (the FOREACH shreds cleared)
+         and `[` REAPPEARED at 5x: un-shredding the loops exposed
+         their bodies (array subscripts in plpgsql assignment
+         contexts, being re-sampled). Chains, as ever. Tests:
+         TestForeachArrayLoop (5).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
