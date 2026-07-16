@@ -1444,7 +1444,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         on T-SQL (illegal there, advisory on MySQL; 3x); zero-length
         CHAR/VARCHAR/BINARY become length 1 off MySQL (5x error
         1001). Tests: TestSubqueryConditionsViewOrderCharZero.
-        *Measurement pending next mysql-corpus cycle.*
+        **Measured at `62e7f1c` (2026-07-16): mysql→T-SQL 252→238
+        (96.0%), mysql→PG 140 flat, mysql→Oracle 202 flat with ok
+        +15. Standing: pg-source {265/163/142}, mysql-source
+        {238/140/202} — all six directions ≥91.9%.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
