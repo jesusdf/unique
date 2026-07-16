@@ -1662,6 +1662,12 @@ fix needs an **anonymized** regression fixture (never a private name).
         at `e90c761` (2026-07-17): pg→T-SQL 254→252 (92.3%),
         pg→Oracle 135→133 (95.9%), →MySQL flat. Standing: pg-source
         {252/159/133}, mysql-source {177/107/141}.**
+        *Wave 82 (2026-07-17):* PG's in-call aggregate ORDER BY —
+        `STRING_AGG(x, ',' ORDER BY a)` — is `… ) WITHIN GROUP (ORDER
+        BY a)` on T-SQL (51x, the blocker wave 77's hoist exposed). A
+        paren-aware, string-safe scanner rewrites it in raw trigger
+        text. Tests: TestStringAggOrderBy. *Measurement pending next
+        pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

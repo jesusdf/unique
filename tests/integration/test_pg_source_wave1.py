@@ -3212,3 +3212,25 @@ class TestLanguageSqlTailStrip:
         out = _t(src, "tsql")
         assert "immutable" not in out.lower(), out
         assert "language" not in out.lower().replace("language plpgsql", ""), out
+
+
+class TestStringAggOrderBy:
+    """wave 82: PG's in-call aggregate ORDER BY —
+    `STRING_AGG(x, ',' ORDER BY a)` — is `STRING_AGG(x, ',') WITHIN
+    GROUP (ORDER BY a)` on T-SQL (51x, unblocked by wave 77's PRINT
+    hoist). A paren-aware scan rewrites it in raw trigger text."""
+
+    def test_string_agg_order_rewrites(self) -> None:
+        src = (
+            "create function saf() returns trigger as $$\n"
+            "begin\n"
+            "  raise notice 'rows = %', "
+            "(select string_agg(cast(a as text), ', ' order by a) from newtab);\n"
+            "  return null;\nend$$ language plpgsql;\n"
+            "create trigger sat after insert on t1 "
+            "referencing new table as newtab "
+            "for each statement execute function saf();"
+        )
+        out = _t(src, "tsql")
+        assert re.search(r"(?is)STRING_AGG\(.*\) WITHIN GROUP \(ORDER BY a\)", out), out
+        assert not re.search(r"(?is)',\s*'\s+order by", out), out

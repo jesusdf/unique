@@ -3122,6 +3122,54 @@ class ProceduralTransformer:
 
         return cls._map_outside_strings(sql, sub)
 
+    @classmethod
+    def _string_agg_within_group(cls, sql: str) -> str:
+        """PG's in-call aggregate ORDER BY — ``STRING_AGG(x, ',' ORDER
+        BY a)`` — spells ``… ) WITHIN GROUP (ORDER BY a)`` on T-SQL.
+        Paren-aware: the ORDER BY split happens at call depth only."""
+        out: list[str] = []
+        i, n = 0, len(sql)
+        while i < n:
+            m = re.compile(r"(?i)\bSTRING_AGG\s*\(").search(sql, i)
+            if m is None:
+                out.append(sql[i:])
+                break
+            out.append(sql[i : m.end()])
+            depth = 1
+            j = m.end()
+            order_at = None
+            while j < n and depth > 0:
+                c = sql[j]
+                if c == "'":
+                    k = j + 1
+                    while k < n:
+                        if sql[k] == "'":
+                            if k + 1 < n and sql[k + 1] == "'":
+                                k += 2
+                                continue
+                            break
+                        k += 1
+                    j = k + 1
+                    continue
+                if c == "(":
+                    depth += 1
+                elif c == ")":
+                    depth -= 1
+                elif depth == 1 and order_at is None:
+                    om = re.compile(r"(?i)\border\s+by\b").match(sql, j)
+                    if om:
+                        order_at = (j, om.end())
+                j += 1
+            if order_at is None:
+                out.append(sql[m.end() : j])
+            else:
+                start, kw_end = order_at
+                inner_order = sql[kw_end : j - 1].strip()
+                out.append(sql[m.end() : start].rstrip())
+                out.append(f") WITHIN GROUP (ORDER BY {inner_order})")
+            i = j
+        return "".join(out)
+
     @staticmethod
     def _mysql_dq_to_sq(sql: str) -> str:
         """Rewrite MySQL double-quoted STRING literals to single-quoted
@@ -3188,6 +3236,8 @@ class ProceduralTransformer:
             sql = self._mysql_dq_to_sq(sql)
         if self._source == "postgresql" and self._target != "postgresql":
             sql = self._pg_cast_to_ansi(sql)
+            if self._target == "tsql":
+                sql = self._string_agg_within_group(sql)
             from unique.core.converter import PG_DOMAIN_TYPES
 
             domains = PG_DOMAIN_TYPES.get() or {}
