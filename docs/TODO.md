@@ -1666,8 +1666,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         `STRING_AGG(x, ',' ORDER BY a)` — is `… ) WITHIN GROUP (ORDER
         BY a)` on T-SQL (51x, the blocker wave 77's hoist exposed). A
         paren-aware, string-safe scanner rewrites it in raw trigger
-        text. Tests: TestStringAggOrderBy. *Measurement pending next
-        pg-corpus cycle.*
+        text. Tests: TestStringAggOrderBy. **Measured at `abeaaa0`
+        (2026-07-17): pg→T-SQL 252→198 (−54, 93.9%, ok +54) — the
+        whole class cleared. Standing: pg-source {198/159/133},
+        mysql-source {177/107/141}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
