@@ -1766,8 +1766,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         negated arm, 3x); and PLS-00049 (trigger :NEW field on a
         table whose CREATE degraded) joins the sweep's expected
         bucket (6x cascade). Tests:
-        TestCharsetIntroducersAndRowOracle. *Measurement pending next
-        mysql-corpus cycle.*
+        TestCharsetIntroducersAndRowOracle. **Measured at `b09c3ea`
+        (2026-07-17): mysql→Oracle 141→129 (−12, 97.8%); tsql 166 /
+        pg 107 (±1 statement-count noise). Standing: pg-source
+        {172/135/94}, mysql-source {166/107/129}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
