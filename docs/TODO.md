@@ -455,7 +455,18 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          ON TRUE form maps). Measured: pg→tsql **116 → 100** (96.9%,
          the deep-CTE gate caught double the sampled class),
          pg→oracle **61 → 59** (98.1%), discovery HOLDS 0. Tests:
-         TestWave136LateralAndDeepCte (5).**
+         TestWave136LateralAndDeepCte (5).* Wave 137 (2026-07-16): PG row
+         constructors in VALUE position (`ELSE (a, b, c)` as a CASE
+         result / function arg) degrade off PG — detection is
+         deliberately NARROW (Tuple-RawSQL under CASE arms or fn
+         args, plus the DISTINCT-wrapped text form where the whole
+         arg is one RawSQL): the first draft ate the row-tuple
+         COMPARISONS that later passes expand (5 tests fired), and
+         `ColumnRef('*')` proved ambiguous (legit `n.*` uses it on
+         some paths) — the `(n.*)` composite single stays PENDING
+         (needs a Paren(Star) marker at conversion). Measured:
+         pg→tsql **100 → 97** (97.0%), discovery HOLDS 0. Tests:
+         TestCompositeRowValues (5).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

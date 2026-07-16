@@ -583,6 +583,7 @@ class Transformer:
             result = [self._gate_array_constructs(node) for node in result]
             result = [self._gate_empty_select_list(node) for node in result]
             result = [self._gate_zero_column_table(node) for node in result]
+            result = [self._gate_composite_row_value(node) for node in result]
         if self.context.target == "mysql":
             result = [self._gate_mysql_full_join(node) for node in result]
             result = [self._gate_mysql_function_relation(node) for node in result]
@@ -682,6 +683,66 @@ class Transformer:
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _gate_composite_row_value(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement using a PG composite/row VALUE — WHOLE.
+
+        A row constructor in value position (``(a, b, c)`` as a CASE
+        result or function argument — an unhandled-Tuple RawSQL) and the
+        parenthesized whole-row form (``(n.*)`` — ColumnRef('*')) have
+        no spelling off PostgreSQL (wave 137)."""
+        found = self._find_composite_row_value(node)
+        if found is None:
+            return node
+        reason = (
+            f"PostgreSQL composite row value {found} has no "
+            f"{self.context.target} equivalent; statement preserved as a comment"
+        )
+        self.context.warn(reason, "composite_row_value")
+        self.context.mark_unsupported(f"{found} (composite row value)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _find_composite_row_value(self, value: object) -> str | None:
+        # ONLY a Tuple in a CASE result or function-argument position:
+        # tuple COMPARISONS ((a,b) = (c,d), IN lists, set-op tuples) are
+        # expanded by later passes and must not gate (their tests fired
+        # on the first draft).
+        from unique.core.ast_nodes import CaseExpression
+
+        def is_tuple_raw(v: object) -> bool:
+            return isinstance(v, RawSQL) and (
+                "Unhandled expression type: Tuple" in v.reason
+            )
+
+        if isinstance(value, CaseExpression):
+            arms = [w[1] for w in value.whens] + [value.else_expr]
+            if any(is_tuple_raw(a) for a in arms):
+                return "row constructor"
+        if isinstance(value, FunctionCall) and any(is_tuple_raw(a) for a in value.args):
+            return "row constructor"
+        if isinstance(value, FunctionCall) and any(
+            isinstance(a, RawSQL)
+            and "Unhandled expression type: Distinct" in a.reason
+            and re.search(r"(?is)\b(?:then|else)\s*\((?:[^()]+,)+[^()]+\)", a.sql)
+            for a in value.args
+        ):
+            # DISTINCT wraps the whole argument in one RawSQL; a CASE
+            # branch returning a row constructor hides in its text.
+            return "row constructor"
+        if isinstance(value, ASTNode):
+            for f in fields(value):
+                found = self._find_composite_row_value(getattr(value, f.name))
+                if found is not None:
+                    return found
+            return None
+        if isinstance(value, tuple):
+            for item in value:
+                found = self._find_composite_row_value(item)
+                if found is not None:
+                    return found
+        return None
 
     def _gate_zero_column_table(self, node: ASTNode) -> ASTNode:
         """Degrade PG's zero-column CREATE TABLE — WHOLE, off PG.

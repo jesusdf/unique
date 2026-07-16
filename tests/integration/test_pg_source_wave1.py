@@ -5191,3 +5191,37 @@ class TestWave136LateralAndDeepCte:
         )
         assert re.search(r"(?i)CROSS APPLY", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestCompositeRowValues:
+    """wave 137: PG composite/row VALUES in expression position — a row
+    constructor as a CASE result (``ELSE (a, b, c)``, 7x on the tsql
+    sweep) and the parenthesized whole-row form (``(n.*)``, distinct
+    from expanding ``n.*``) — have no spelling off PG. Preserved on PG,
+    degraded whole elsewhere."""
+
+    _ROW_SRC = (
+        "select f(case when a is null then null else (a, b, c) end) "
+        "from (select 1 as a, 3 as b, 'x' as c) s;"
+    )
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_row_constructor_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(self._ROW_SRC, source="postgresql", target=target)
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_row_constructor_kept_pg(self) -> None:
+        out = _t(self._ROW_SRC, "postgresql")
+        assert "(a, b, c)" in out, out
+        assert "UNIQUE:" not in out, out
+
+    def test_expanding_star_untouched(self) -> None:
+        out = _t("select n.* from nocols n;", "tsql")
+        assert re.search(r"(?i)SELECT n\.\*", out), out
+        assert "UNIQUE:" not in out, out
