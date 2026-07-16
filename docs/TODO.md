@@ -200,7 +200,21 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          unconditioned inner lateral `CROSS JOIN LATERAL`. Together:
          **156 → 122 silent gaps (−34)** (working tree over
          `6bbf102`; end-of-input 29→4, near-WHERE class gone).
-         Tests: TestFunctionRelations (7), TestCommaLateralJoin.**
+         Tests: TestFunctionRelations (7), TestCommaLateralJoin.
+         Wave 112 (2026-07-16): the procedural lexer tokenized `::`
+         as two COLON tokens and the joiner spaced them —
+         `relname::text` shipped as the invalid `relname : : text`
+         inside converted routine bodies (the 25x near-":" discovery
+         class, plus 4x live on the pg→tsql sweep). `::` is now ONE
+         OPERATOR token (PG accepts spaced `x :: text`); Oracle
+         `:new`/`:old` single-colon refs unaffected. Tests:
+         TestDoubleColonCastInBodies. Gate green; **discovery/sweep
+         re-measurement PENDING** (host RAM upgrade in progress —
+         resume by re-running `scripts/discover_silent_gaps.py`
+         [expect ≈122−~25] and the full validity sweeps of BOTH
+         corpora, which were last measured at `3fdfc88` wave ~102;
+         a pg→tsql sweep at `5aed9ee` ran but its summary was lost
+         to a `tail` pipe — DON'T pipe sweep output).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

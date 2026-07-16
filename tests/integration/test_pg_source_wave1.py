@@ -4130,3 +4130,46 @@ class TestCommaLateralJoin:
         )
         assert re.search(r"(?i)LEFT JOIN LATERAL", out), out
         assert re.search(r"(?i)ON TRUE", out), out
+
+
+class TestDoubleColonCastInBodies:
+    """wave 112: the procedural lexer tokenized ``::`` as two COLON tokens,
+    and the token-joiner spaced them — ``relname::text`` shipped as the
+    invalid ``relname : : text`` inside converted routine bodies (25x of
+    the discovery tail, plus 4x live on the pg→tsql sweep). ``::`` is now
+    ONE operator token; PG accepts spaced ``x :: text``."""
+
+    def test_cast_survives_in_sql_function_body(self) -> None:
+        src = (
+            "create function error1(text) returns text language sql as $$\n"
+            "SELECT relname::text FROM pg_class c WHERE c.oid = $1::regclass\n"
+            "$$;"
+        )
+        out = _t(src, "postgresql")
+        assert ": :" not in out, out
+        assert re.search(r"(?i)relname\s*::\s*text", out), out
+        assert re.search(r"(?i)p1\s*::\s*regclass", out), out
+
+    def test_cast_in_plpgsql_assignment(self) -> None:
+        src = (
+            "create function f() returns date as $$\n"
+            "declare d date;\n"
+            "begin\n"
+            "  d := '2024-01-01'::date;\n"
+            "  return d;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert ": :" not in out, out
+        assert re.search(r"::\s*date", out), out
+
+    def test_oracle_trigger_colon_refs_unaffected(self) -> None:
+        src = (
+            "create or replace trigger trg before insert on t for each row\n"
+            "begin\n"
+            "  :new.c := 1;\n"
+            "end;"
+        )
+        out = _t2(src, "oracle", "oracle")
+        assert ":new" in out.lower() or ": new" not in out, out
+        assert ": :" not in out, out

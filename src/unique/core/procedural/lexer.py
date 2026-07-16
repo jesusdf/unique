@@ -539,6 +539,13 @@ class Lexer:
             self._emit(TokenType.ASSIGN, ":=", line, col)
             return
 
+        # :: cast operator (PG). One token — two COLONs would be re-joined
+        # with a space by the emitters (``x : : text``, invalid; wave 112).
+        if ch == ":" and self._peek(1) == ":":
+            self._advance(2)
+            self._emit(TokenType.OPERATOR, "::", line, col)
+            return
+
         # : (bind variable prefix or label)
         if ch == ":":
             self._advance()
