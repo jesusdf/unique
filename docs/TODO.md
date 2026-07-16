@@ -1731,8 +1731,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         exists only inside PL/SQL with target variables. Same
         contract as the MySQL branch: the DML keeps its effect
         (sqlglot-rendered for the target), the clause strips with a
-        documented note. Tests: TestReturningOracle. *Measurement
-        pending next pg-corpus cycle.*
+        documented note. Tests: TestReturningOracle. **Measured at
+        `a4623e5` (2026-07-17): pg→Oracle 123→98 (−25, 97.0%, ok +15
+        — the class spanned INSERT/DELETE RETURNING forms too);
+        tsql/mysql flat. Standing: pg-source {172/146/98},
+        mysql-source {177/107/141}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
