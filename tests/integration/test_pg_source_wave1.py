@@ -3576,3 +3576,29 @@ class TestLastIdentityCaptureNode:
             out,
         ), out
         assert not re.search(r"(?i)V_ID := /\*", out), out
+
+
+class TestAssignmentViaSelectNodeAware:
+    """M3-prereq increment 4a (wave 97): Oracle's assignment-via-
+    SELECT-INTO decision matched the EMITTED TEXT with a spelling
+    regex; it now inspects the value NODE first (SubqueryExpression /
+    CastExpression anywhere in the tree), keeping the regex only for
+    raw text fragments. Behavior pinned: subquery assignments become
+    SELECT … INTO … FROM DUAL."""
+
+    def test_subquery_assignment_select_into(self) -> None:
+        src = (
+            "CREATE PROCEDURE p AS\nBEGIN\n"
+            "  SET @c = (SELECT COUNT(*) FROM t1);\nEND"
+        )
+        out = _t2(src, "tsql", "oracle")
+        assert re.search(
+            r"(?is)SELECT \(\s*SELECT COUNT\s*\(\s*\*\s*\)\s*FROM t1\s*\)"
+            r" INTO V_C FROM DUAL;",
+            out,
+        ), out
+
+    def test_plain_assignment_stays(self) -> None:
+        src = "CREATE PROCEDURE p2 AS\nBEGIN\n  SET @c = 1 + 2;\nEND"
+        out = _t2(src, "tsql", "oracle")
+        assert re.search(r"(?i)V_C := 1 \+ 2;", out), out

@@ -21,6 +21,7 @@ from unique.core.ast_nodes import (
     PragmaDeclaration,
     PrintStatement,
     RaiseErrorStatement,
+    RawSQL,
     ReturnStatement,
     SelectIntoStatement,
     StatementList,
@@ -108,7 +109,9 @@ class OracleEmitter(ProceduralEmitter):
         # 'dbo' is T-SQL's default schema and has no Oracle counterpart.
         return schema.lower() != "dbo"
 
-    def _assignment_via_select(self, target: str, val: str) -> str | None:
+    def _assignment_via_select(
+        self, target: str, val: str, value_node: ASTNode | None = None
+    ) -> str | None:
         # Oracle PL/SQL forbids a subquery inside an expression (PLS-00405) and
         # rejects a SQL-only operator like CAST in a procedural expression
         # (PLS-00103), so `x := (SELECT …)` / `x := LOWER(CAST(…))` is invalid.
@@ -116,9 +119,35 @@ class OracleEmitter(ProceduralEmitter):
         #   SELECT <expr> INTO x FROM DUAL;
         # DUAL yields exactly one row (NULL for a no-row scalar subquery), matching
         # T-SQL's `SET @x = …` and avoiding NO_DATA_FOUND.
+        # Structure first (M3-prereq increment 4a): a value tree carrying a
+        # subquery or CAST decides by NODE; the spelling regex remains only
+        # for raw text fragments the IR does not model.
+        if value_node is not None and self._needs_sql_context(value_node):
+            return f"SELECT {val.strip()} INTO {target} FROM DUAL;"
         if re.search(_SQL_ONLY_IN_PLSQL, val):
             return f"SELECT {val.strip()} INTO {target} FROM DUAL;"
         return None
+
+    @classmethod
+    def _needs_sql_context(cls, value: object) -> bool:
+        """Whether the value TREE contains a construct PL/SQL cannot
+        evaluate in an expression (subquery, CAST)."""
+        import dataclasses as _dc
+
+        from unique.core.ast_nodes import CastExpression, SubqueryExpression
+
+        if isinstance(value, (SubqueryExpression, CastExpression)):
+            return True
+        if isinstance(value, RawSQL):
+            return False  # raw fragments stay on the regex path
+        if _dc.is_dataclass(value) and not isinstance(value, type):
+            return any(
+                cls._needs_sql_context(getattr(value, f.name))
+                for f in _dc.fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(cls._needs_sql_context(item) for item in value)
+        return False
 
     def _tvf_unsupported_note(self) -> str:
         return (

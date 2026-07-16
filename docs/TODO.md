@@ -220,7 +220,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       non-assignment usages (`SELECT @@IDENTITY` in expressions) on
       the comment path. This is a fresh-session-sized refactor — the
       naive attempt broke 18 tests.*; (4) dual-guard→IF and
-      DECLARE-init hoisting consume nodes; then the text rewriters can
+      DECLARE-init hoisting consume nodes — *4a landed 2026-07-17
+      (wave 97): Oracle's assignment-via-SELECT-INTO decision now
+      inspects the value NODE first (`_needs_sql_context`: subquery or
+      CAST anywhere in the tree; RawSQL fragments keep the spelling
+      regex). Tests: TestAssignmentViaSelectNodeAware. Remaining 4b:
+      the DROP-guard→IF matcher and the declare-section hoisting's
+      initializer sniffing.*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed
