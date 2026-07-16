@@ -30,6 +30,7 @@ from unique.core.ast_nodes import (
     ParameterDefinition,
     RawSQL,
     StatementList,
+    TryCatchBlock,
     WhileStatement,
 )
 from unique.core.procedural.transformer.base import (
@@ -351,6 +352,16 @@ class OracleTransformer(ProceduralTransformer):
                         stmt,
                         statements=self._rewrite_result_selects(
                             stmt.statements, cursors
+                        ),
+                    )
+                )
+            elif isinstance(stmt, TryCatchBlock):
+                out.append(
+                    dataclasses.replace(
+                        stmt,
+                        try_body=self._rewrite_result_selects(stmt.try_body, cursors),
+                        catch_body=self._rewrite_result_selects(
+                            stmt.catch_body, cursors
                         ),
                     )
                 )

@@ -2910,3 +2910,25 @@ class TestMysqlDeclareHandler:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, out
+
+
+class TestRefcursorInTryCatch:
+    """wave 71: the bare-SELECT → SYS_REFCURSOR rewrite (Oracle) did
+    not recurse into TryCatchBlock bodies, so a result SELECT inside
+    wave 70's folded exception section shipped as PL/SQL
+    SELECT-without-INTO (PLS-00428, the +5 from the wave-70
+    measure)."""
+
+    def test_select_in_catch_becomes_refcursor(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create procedure hp2()\n"
+            "begin\n"
+            "  declare exit handler for sqlexception select 'bad' as e;\n"
+            "  insert into t1 values (1);\n"
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = _t2(src, "mysql", "oracle")
+        assert re.search(r"(?is)OPEN RESULT_CURSOR FOR SELECT 'bad'", out), out
+        assert re.search(r"(?is)RESULT_CURSOR OUT SYS_REFCURSOR", out), out

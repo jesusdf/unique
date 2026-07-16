@@ -1552,6 +1552,12 @@ fix needs an **anonymized** regression fixture (never a private name).
         (honest +5: converted handler bodies now reach PL/SQL's
         SELECT-without-INTO — the next front). Standing: pg-source
         {261/160/140}, mysql-source {209/111/165}.**
+        *Wave 71 (2026-07-16):* the bare-SELECT → SYS_REFCURSOR
+        rewrite (Oracle) did not recurse into TryCatchBlock bodies —
+        a result SELECT inside wave 70's folded exception section
+        shipped as PL/SQL SELECT-without-INTO (the +5). The recursion
+        now covers try/catch bodies. Tests: TestRefcursorInTryCatch.
+        *Measurement pending next mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
