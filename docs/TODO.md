@@ -635,7 +635,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          ``END … label``, and a LEAVE of the body's own label is
          RETURN (MySQL roundtrip re-labels via proc_exit). Measured:
          mysql→tsql **150 → 146** (−4). Discovery HOLDS 0. Tests:
-         TestWave158LabeledBeginBlock (3).**
+         TestWave158LabeledBeginBlock (3).* Wave 159 (2026-07-16): MySQL
+         declares several variables with one type (``DECLARE z1, z2
+         int;`` → per-name DeclareStatements in a StatementList) and
+         assigns several in one SET (``SET a = 1, b = 2;`` → split;
+         the comma form was invalid T-SQL and the second target lost
+         its @ sigil). Depth-0 lookahead keeps single-assignment
+         values comma-transparent. Measured: mysql→tsql **146 → 143**
+         (−3). Discovery HOLDS 0. Tests:
+         TestWave159MultiDeclareMultiSet (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

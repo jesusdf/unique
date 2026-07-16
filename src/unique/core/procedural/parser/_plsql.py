@@ -45,6 +45,7 @@ from unique.core.ast_nodes import (
     RawSQL,
     ReturnStatement,
     SelectIntoStatement,
+    StatementList,
     WhileStatement,
 )
 from unique.core.procedural.lexer import Token, TokenType
@@ -224,6 +225,15 @@ class PlsqlStatementsMixin(ParserBase):
         # Variable: name [CONSTANT] type [:= value];
         name = self._parse_identifier()
 
+        # MySQL declares several variables with ONE type (``DECLARE
+        # z1, z2 int;``) — the unconsumed comma shredded the section
+        # into ``DECLARE @z1 ,;`` garbage (wave 159).
+        extra_names: list[str] = []
+        if self._dialect == "mysql":
+            while self._current().type == TokenType.COMMA:
+                self._advance()
+                extra_names.append(self._parse_identifier())
+
         # ``name ALIAS FOR <ident>;`` — plpgsql's parameter alias (wave
         # 117). Renaming the alias to its target in the remaining tokens
         # is the token-level equivalent (same mechanism as $n positional
@@ -325,12 +335,18 @@ class PlsqlStatementsMixin(ParserBase):
             default = self._parse_expression_until_semicolon()
 
         self._match_type(TokenType.SEMICOLON)
-        return DeclareStatement(
+        first = DeclareStatement(
             name=name,
             data_type=data_type,
             default=default,
             constant=constant,
             not_null=not_null,
+        )
+        if not extra_names:
+            return first
+        return StatementList(
+            statements=(first,)
+            + tuple(dataclasses.replace(first, name=n) for n in extra_names)
         )
 
     def _parse_plsql_statement(self) -> ASTNode | None:
@@ -934,15 +950,61 @@ class PlsqlStatementsMixin(ParserBase):
         before the ``=`` instead of stopping at the first identifier.
         """
         self._expect_keyword("SET")
-        name_parts = [self._parse_identifier()]
-        while self._current().type == TokenType.DOT:
-            self._advance()
-            name_parts.append(self._parse_identifier())
-        target = ".".join(name_parts)
-        self._match_type(TokenType.OPERATOR)  # =
-        value = self._parse_expression_until_semicolon()
+        assignments: list[ASTNode] = []
+        while True:
+            name_parts = [self._parse_identifier()]
+            while self._current().type == TokenType.DOT:
+                self._advance()
+                name_parts.append(self._parse_identifier())
+            target = ".".join(name_parts)
+            self._match_type(TokenType.OPERATOR)  # =
+            # MySQL assigns several variables in ONE SET (``SET a = 1,
+            # b = 2;``) — split; the comma form is invalid T-SQL and
+            # the second target shipped without its @ sigil (wave 159).
+            value = (
+                self._parse_expression_until_comma_or_semicolon()
+                if self._peek_multi_assign_ahead()
+                else self._parse_expression_until_semicolon()
+            )
+            assignments.append(AssignmentStatement(target=target, value=value))
+            if self._current().type == TokenType.COMMA:
+                self._advance()
+                continue
+            break
         self._match_type(TokenType.SEMICOLON)
-        return AssignmentStatement(target=target, value=value)
+        if len(assignments) == 1:
+            return assignments[0]
+        return StatementList(statements=tuple(assignments))
+
+    def _peek_multi_assign_ahead(self) -> bool:
+        """Whether a depth-0 ``, ident =`` follows before the statement
+        ends — the multi-assignment SET form. The single-assignment
+        capture must stay comma-transparent (``SET a = GREATEST(b,
+        c)`` at depth 0 has no comma, but ``SET s = 'x,y'`` strings and
+        row constructors do appear as values)."""
+        depth = 0
+        i = 0
+        while True:
+            tok = self._peek(i)
+            if tok.type == TokenType.EOF or tok.type == TokenType.SEMICOLON:
+                return False
+            if tok.type == TokenType.LPAREN:
+                depth += 1
+            elif tok.type == TokenType.RPAREN:
+                depth -= 1
+            elif depth == 0 and tok.is_keyword("END"):
+                return False
+            elif (
+                depth == 0
+                and tok.type == TokenType.COMMA
+                and self._peek(i + 1).type == TokenType.IDENTIFIER
+                and self._peek(i + 2).type == TokenType.OPERATOR
+                and self._peek(i + 2).value == "="
+            ):
+                return True
+            i += 1
+            if i > 4000:
+                return False
 
     def _parse_get_diagnostics(self) -> ASTNode:
         """GET [STACKED|CURRENT] DIAGNOSTICS v = ITEM[, …];"""

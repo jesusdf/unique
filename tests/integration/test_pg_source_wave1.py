@@ -5906,3 +5906,49 @@ class TestWave158LabeledBeginBlock:
         )
         out = _t2(sql, "mysql", "tsql")
         assert "DECLARE @label" not in out, out
+
+
+class TestWave159MultiDeclareMultiSet:
+    """wave 159 (mysql-corpus): MySQL declares several variables with
+    one type (``DECLARE z1, z2 int;``) and assigns several in one SET
+    (``SET a = 1, b = 2;``) — both shredded/shipped invalid on T-SQL."""
+
+    def test_multi_declare_tsql(self) -> None:
+        sql = (
+            "create procedure locset(x char(16), y int)\n"
+            "begin\n"
+            "  declare z1, z2 int;\n"
+            "  set z1 = y;\n"
+            "  set z2 = z1 + 2;\n"
+            "  insert into t1 values (x, z2);\n"
+            "end"
+        )
+        out = _t2(sql, "mysql", "tsql")
+        assert re.search(r"(?i)DECLARE @z1 int", out), out
+        assert re.search(r"(?i)DECLARE @z2 int", out), out
+        assert re.search(r"(?i)SET @z2 = @z1 \+ 2", out), out
+        assert "," not in out.split("DECLARE @z1")[1].split(";")[0], out
+
+    def test_multi_set_split_tsql(self) -> None:
+        sql = (
+            "create procedure zap(x int)\n"
+            "begin\n"
+            "  declare z int;\n"
+            "  set z = x + 1, x = z - 1;\n"
+            "end"
+        )
+        out = _t2(sql, "mysql", "tsql")
+        assert re.search(r"(?i)SET @z = @x \+ 1;", out), out
+        assert re.search(r"(?i)SET @x = @z - 1;", out), out
+
+    def test_multi_declare_default_mysql_roundtrip(self) -> None:
+        sql = (
+            "create procedure p1()\n"
+            "begin\n"
+            "  declare a, b int default 3;\n"
+            "  set a = b;\n"
+            "end"
+        )
+        out = _t2(sql, "mysql", "mysql")
+        assert re.search(r"(?i)DECLARE a int DEFAULT 3", out), out
+        assert re.search(r"(?i)DECLARE b int DEFAULT 3", out), out
