@@ -405,6 +405,12 @@ class PlsqlStatementsMixin(ParserBase):
             return self._parse_get_diagnostics()
         elif tok.is_keyword("EXECUTE") and self._peek(1).is_keyword("IMMEDIATE"):
             return self._parse_plsql_execute_immediate()
+        elif tok.is_keyword("EXECUTE") and self._dialect == "postgresql":
+            # plpgsql's EXECUTE is ALWAYS dynamic SQL (procedure calls are
+            # spelled CALL there); the SQL*Plus exec-call fallthrough
+            # mangled ``EXECUTE 'select …' INTO STRICT x`` into
+            # ``CALL 'select …'();`` (wave 121).
+            return self._parse_pg_dynamic_execute()
         elif tok.is_keyword("EXEC", "EXECUTE"):
             # SQL*Plus ``EXEC[UTE] proc[(args)]`` — shorthand for
             # ``BEGIN proc(args); END;``. Model it as a CallStatement so each
@@ -1160,6 +1166,40 @@ class PlsqlStatementsMixin(ParserBase):
             args = self._capture_call_args()
         self._match_type(TokenType.SEMICOLON)
         return CallStatement(name=name, args=args, schema=schema)
+
+    def _parse_pg_dynamic_execute(self) -> ASTNode:
+        """Parse plpgsql ``EXECUTE expr [INTO [STRICT] vars] [USING …]``."""
+        self._expect_keyword("EXECUTE")
+        expr = self._parse_expression_until_keyword("USING", "INTO")
+
+        strict = False
+        into_vars: list[str] = []
+        if self._match_keyword("INTO"):
+            if self._current().upper_value == "STRICT":
+                self._advance()
+                strict = True
+            while not self._at_end():
+                into_vars.append(self._parse_identifier())
+                if not self._match_type(TokenType.COMMA):
+                    break
+
+        params: list[ASTNode] = []
+        if self._match_keyword("USING"):
+            while not self._at_end():
+                param = self._parse_expression_until_comma_or_semicolon()
+                if isinstance(param, RawSQL) and param.sql:
+                    params.append(param)
+                if not self._match_type(TokenType.COMMA):
+                    break
+
+        self._match_type(TokenType.SEMICOLON)
+        return ExecuteStatement(
+            sql_expression=expr,
+            params=tuple(params),
+            immediate=True,
+            into_vars=tuple(into_vars),
+            strict=strict,
+        )
 
     def _parse_plsql_execute_immediate(self) -> ASTNode:
         """Parse EXECUTE IMMEDIATE expr [USING bind1, bind2, ...].

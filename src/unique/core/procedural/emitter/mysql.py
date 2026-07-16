@@ -426,7 +426,12 @@ class MySqlEmitter(ProceduralEmitter):
         return f"CALL {node.name}({node.args});"
 
     def _emit_execute_into(
-        self, expr: str, params: list[str], into_vars: list[str], immediate: bool
+        self,
+        expr: str,
+        params: list[str],
+        into_vars: list[str],
+        immediate: bool,
+        strict: bool = False,
     ) -> str:
         # MySQL PREPARE/EXECUTE cannot capture a result into variables unless
         # the dynamic string itself selects INTO session variables — which we

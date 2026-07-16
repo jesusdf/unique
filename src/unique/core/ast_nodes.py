@@ -727,6 +727,10 @@ class ExecuteStatement(ASTNode):
     sql_expression: ASTNode
     params: tuple[ASTNode, ...] = ()
     immediate: bool = False
+    #: plpgsql ``EXECUTE … INTO STRICT vars`` (exactly-one-row check).
+    #: PG re-emits it; Oracle's SELECT INTO is inherently strict; T-SQL and
+    #: MySQL have no equivalent and drop it.
+    strict: bool = False
     # Oracle ``EXECUTE IMMEDIATE <expr> INTO v1, v2``: the dynamic SELECT's
     # scalar capture targets (each engine spells the capture differently).
     into_vars: tuple[str, ...] = ()

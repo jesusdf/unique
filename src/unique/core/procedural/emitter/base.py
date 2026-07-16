@@ -1397,16 +1397,21 @@ class ProceduralEmitter:
         params = [self._emit_node(p) for p in node.params]
         if node.into_vars:
             return self._emit_execute_into(
-                expr, params, list(node.into_vars), node.immediate
+                expr, params, list(node.into_vars), node.immediate, node.strict
             )
         return self._emit_execute_stmt(expr, params, node.immediate)
 
     def _emit_execute_into(
-        self, expr: str, params: list[str], into_vars: list[str], immediate: bool
+        self,
+        expr: str,
+        params: list[str],
+        into_vars: list[str],
+        immediate: bool,
+        strict: bool = False,
     ) -> str:
         """Dynamic SQL whose scalar result is captured (Oracle ``EXECUTE
-        IMMEDIATE <expr> INTO v``). Default is Oracle's native form; each
-        engine overrides with its capture idiom."""
+        IMMEDIATE <expr> INTO v``). Default is Oracle's native form (which is
+        inherently strict); each engine overrides with its capture idiom."""
         using = f" USING {', '.join(params)}" if params else ""
         return f"EXECUTE IMMEDIATE {expr} INTO {', '.join(into_vars)}{using};"
 

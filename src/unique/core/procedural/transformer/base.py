@@ -3298,6 +3298,21 @@ class ProceduralTransformer:
         return "".join(out)
 
     def _transform_raw_sql(self, node: RawSQL) -> RawSQL:
+        # A non-SQL-language routine (LANGUAGE C/internal/plperl…) has no
+        # transpilable body: valid verbatim on its own engine, a documented
+        # carrier anywhere else (wave 122).
+        if node.reason.startswith("non-SQL language function"):
+            if self._source == self._target:
+                return node
+            reason = (
+                f"{node.reason} cannot be transpiled to {self._target}; "
+                "statement preserved as a comment"
+            )
+            self._warnings.append(reason)
+            m = self._ROUTINE_NAME_RE.search(node.sql)
+            if m:
+                self._register_degraded_routine(m.group(1))
+            return RawSQL(sql=node.sql, reason=reason)
         # A whole-unit parse fallback must not ship raw across dialects:
         # the source-dialect body would leak as top-level fragments on the
         # target. Rewrite to the carrier contract the emitter comments out.

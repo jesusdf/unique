@@ -356,11 +356,17 @@ class PostgresEmitter(ProceduralEmitter):
         return f"PERFORM pg_sleep({secs});"
 
     def _emit_execute_into(
-        self, expr: str, params: list[str], into_vars: list[str], immediate: bool
+        self,
+        expr: str,
+        params: list[str],
+        into_vars: list[str],
+        immediate: bool,
+        strict: bool = False,
     ) -> str:
         # PL/pgSQL captures a dynamic scalar natively: EXECUTE expr INTO vars.
         using = f" USING {', '.join(params)}" if params else ""
-        return f"EXECUTE {expr} INTO {', '.join(into_vars)}{using};"
+        strict_kw = "STRICT " if strict else ""
+        return f"EXECUTE {expr} INTO {strict_kw}{', '.join(into_vars)}{using};"
 
     def _emit_execute_stmt(
         self, expr: str, params: list[str], immediate: bool = False

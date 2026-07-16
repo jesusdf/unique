@@ -549,7 +549,12 @@ class TSqlEmitter(ProceduralEmitter):
         return "\n".join(lines)
 
     def _emit_execute_into(
-        self, expr: str, params: list[str], into_vars: list[str], immediate: bool
+        self,
+        expr: str,
+        params: list[str],
+        into_vars: list[str],
+        immediate: bool,
+        strict: bool = False,
     ) -> str:
         # T-SQL cannot capture a dynamic SELECT into variables directly;
         # INSERT ... EXEC materializes the result set into a table variable

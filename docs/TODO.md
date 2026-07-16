@@ -310,7 +310,23 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          and `[` REAPPEARED at 5x: un-shredding the loops exposed
          their bodies (array subscripts in plpgsql assignment
          contexts, being re-sampled). Chains, as ever. Tests:
-         TestForeachArrayLoop (5).**
+         TestForeachArrayLoop (5). Wave 120b: the '[' 5x was my own
+         wave-120 emit (a Python list repr interpolated into the loop
+         body — the wave tests only checked header/END LOOP;
+         strengthened). 68 → 63. Waves 121–122 (2026-07-16):
+         plpgsql's EXECUTE is ALWAYS dynamic (CALL is spelled CALL) —
+         the SQL*Plus exec-call fallthrough mangled `EXECUTE 'q' INTO
+         STRICT x` into `CALL 'q'();` (8x): new `_parse_pg_dynamic_
+         execute` with INTO [STRICT] + USING, PG re-emits natively
+         (ExecuteStatement.strict). And a `LANGUAGE C` function
+         (`AS '$libdir/…'`) emitted an EMPTY plpgsql function —
+         silent loss of the implementation reference: non-SQL-language
+         units (C/internal/plperl…) now capture whole
+         (`_pg_non_sql_language_ahead` + `_whole_unit_raw`), ship
+         VERBATIM same-dialect and carrier+warning cross-dialect (the
+         transformer decides — it knows both ends). Measured:
+         discovery **63 → 48** (−15). Tests: TestPgDynamicExecute
+         (3), TestNonSqlLanguageFunction (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

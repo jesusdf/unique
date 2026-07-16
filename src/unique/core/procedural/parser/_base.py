@@ -603,6 +603,13 @@ class ParserBase:
 
         if self._plsql_collection_type_ahead():
             return self._parse_fallback()
+        lang = self._pg_non_sql_language_ahead()
+        if lang is not None:
+            # A C/internal/PL-other function has no SQL body to transpile;
+            # the body parse emitted an EMPTY plpgsql function (silent loss
+            # of the implementation reference — wave 122). Same-dialect
+            # ships verbatim; the transformer carriers it cross-dialect.
+            return self._whole_unit_raw(f"non-SQL language function (LANGUAGE {lang})")
         body = self._parse_routine_body()
 
         return CreateFunctionStatement(
@@ -2127,6 +2134,39 @@ class ParserBase:
             ):
                 return True
             offset += 1
+
+    _TRANSPILABLE_PG_LANGUAGES = frozenset({"SQL", "PLPGSQL"})
+
+    def _pg_non_sql_language_ahead(self) -> str | None:
+        """The unit's ``LANGUAGE <name>`` when it is NOT transpilable
+        (C, internal, plperl, …); None for sql/plpgsql or no clause."""
+        if self._dialect != "postgresql":
+            return None
+        for i, tok in enumerate(self._tokens):
+            if tok.is_keyword("LANGUAGE") and i + 1 < len(self._tokens):
+                nxt = self._tokens[i + 1]
+                name = nxt.value.strip("'").upper()
+                if name and name not in self._TRANSPILABLE_PG_LANGUAGES:
+                    return name
+        return None
+
+    def _whole_unit_raw(self, reason: str) -> ASTNode:
+        """Capture the WHOLE unit verbatim as a RawSQL with *reason* (no
+        warning here — the transformer decides same-dialect passthrough
+        vs cross-dialect carrier)."""
+        self._pos = 0
+        parts: list[str] = []
+        prev_line: int | None = None
+        while not self._at_end():
+            tok = self._current()
+            if parts:
+                parts.append(
+                    " " if prev_line is None or tok.line == prev_line else "\n"
+                )
+            parts.append(tok.value)
+            prev_line = tok.line
+            self._advance()
+        return RawSQL(sql="".join(parts).strip(), reason=reason)
 
     def _parse_fallback(self) -> ASTNode:
         """When we can't parse, capture everything as RawSQL (a documented

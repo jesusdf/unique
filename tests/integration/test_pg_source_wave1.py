@@ -4582,3 +4582,77 @@ class TestForeachArrayLoop:
         assert not any("foreach" in ln.lower() for ln in code), r.sql
         assert r.warnings or r.unsupported, r.sql
         assert "foreach" in out_low, r.sql  # original preserved in the carrier
+
+
+class TestPgDynamicExecute:
+    """wave 121: plpgsql's EXECUTE is ALWAYS dynamic SQL (procedure calls
+    are spelled CALL there), but the SQL*Plus exec-call fallthrough
+    mangled ``EXECUTE 'select …' INTO STRICT x`` into ``CALL 'select
+    …'();`` plus an orphan ``into strict x;`` (8x, the biggest remaining
+    discovery class)."""
+
+    def test_execute_string_into_strict(self) -> None:
+        src = (
+            "create or replace function f() returns void as $$\n"
+            "declare x record;\n"
+            "begin\n"
+            "  execute 'select * from foo where f1 = 3' into strict x;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert "CALL '" not in out, out
+        assert re.search(
+            r"(?i)EXECUTE 'select \* from foo where f1 = 3' INTO STRICT x;", out
+        ), out
+
+    def test_execute_expr_using(self) -> None:
+        src = (
+            "create or replace function f(n int) returns void as $$\n"
+            "declare x int;\n"
+            "begin\n"
+            "  execute 'select $1 + 1' into x using n;\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert "CALL '" not in out, out
+        assert re.search(r"(?i)EXECUTE 'select .* \+ 1' INTO x USING n;", out), out
+
+    def test_call_statement_untouched(self) -> None:
+        src = (
+            "create or replace function f() returns void as $$\n"
+            "begin\n"
+            "  call my_proc(1);\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)CALL my_proc\s*\(\s*1\s*\);", out), out
+
+
+class TestNonSqlLanguageFunction:
+    """wave 122: a ``LANGUAGE C`` function (``AS '$libdir/…'``) has no SQL
+    body — it emitted an EMPTY plpgsql function with the LANGUAGE
+    rewritten (silent loss of the implementation reference). Verbatim on
+    its own engine, documented carrier cross-dialect."""
+
+    _SRC = (
+        "CREATE FUNCTION check_primary_key() RETURNS trigger\n"
+        "AS '$libdir/refint' LANGUAGE C;"
+    )
+
+    def test_language_c_verbatim_pg(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        assert re.search(r"(?i)LANGUAGE C", out), out
+        assert re.search(r"(?i)\$libdir/refint", out), out
+        assert "plpgsql" not in out.lower(), out
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_language_c_degrades_off_pg(self, target: str) -> None:
+        r = Transpiler().transpile(self._SRC, source="postgresql", target=target)
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+        assert re.search(r"(?i)libdir/refint", r.sql), r.sql
