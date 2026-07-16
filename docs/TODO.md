@@ -841,7 +841,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          non-empty), and bare ``;`` empty statements drop from the
          body. Measured: mysql→oracle **35 → 32** (−3, validity
          99.5%). Discovery HOLDS 0. Tests: TestWave183CommentOnlyBody
-         (2).**
+         (2).* Wave 184 (2026-07-17): MySQL's
+         ``WHILE x DO`` loops while x ≠ 0 — Oracle/PG demand a boolean
+         (PLS-00382/42804) and T-SQL's BIT fixup spelled it ``= 1``,
+         SILENTLY changing a countdown loop's semantics (loops once
+         instead of x times). The transformer wraps a bare-variable
+         condition as ``<> 0`` for mysql source off-MySQL. Measured:
+         mysql→oracle **32 → 31** (99.5%); tsql stable 40 (the fix
+         there was semantics, not syntax). Discovery HOLDS 0. Tests:
+         TestWave184BareWhileCondition (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

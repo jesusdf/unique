@@ -6754,3 +6754,38 @@ class TestWave183CommentOnlyBody:
     def test_executable_body_no_extra_null(self) -> None:
         out = _t2("create procedure p() begin select 1; end", "mysql", "oracle")
         assert not re.search(r"(?im)^\s*NULL;", out), out
+
+
+class TestWave184BareWhileCondition:
+    """wave 184 (mysql-corpus): MySQL's ``WHILE x DO`` loops while
+    x ≠ 0 — Oracle/PG demand a boolean (PLS-00382/42804) and T-SQL's
+    BIT fixup spelled it ``= 1``, silently changing a countdown loop's
+    semantics."""
+
+    _SQL = (
+        "create procedure a0(x_in int) begin"
+        " declare x int default x_in;"
+        " while x do set x = x - 1; end while; end"
+    )
+
+    def test_while_bare_var_oracle(self) -> None:
+        out = _t2(self._SQL, "mysql", "oracle")
+        assert re.search(r"(?i)WHILE uq_x <> 0 LOOP|WHILE x <> 0 LOOP", out), out
+
+    def test_while_bare_var_tsql_neq(self) -> None:
+        out = _t2(self._SQL, "mysql", "tsql")
+        assert re.search(r"(?i)WHILE @x <> 0", out), out
+        assert "= 1" not in out, out
+
+    def test_while_real_condition_untouched(self) -> None:
+        out = _t2(
+            "create procedure b(x int) begin"
+            " while x > 0 do set x = x - 1; end while; end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)WHILE @x > 0", out), out
+
+    def test_while_kept_mysql(self) -> None:
+        out = _t2(self._SQL, "mysql", "mysql")
+        assert re.search(r"(?i)WHILE x DO", out), out

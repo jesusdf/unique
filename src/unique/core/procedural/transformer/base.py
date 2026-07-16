@@ -2041,6 +2041,18 @@ class ProceduralTransformer:
 
     def _transform_while(self, node: WhileStatement) -> WhileStatement:
         new_cond = self._transform_node(node.condition)
+        # MySQL's ``WHILE x DO`` loops while x ≠ 0; every other engine
+        # demands a boolean condition (PLS-00382 / 42804 — and T-SQL's
+        # BIT fixup spelled it ``= 1``, silently changing a countdown
+        # loop's semantics; wave 184).
+        if (
+            self._source == "mysql"
+            and self._target != "mysql"
+            and isinstance(new_cond, RawSQL)
+            and re.fullmatch(r"\s*@?\w+\s*", new_cond.sql)
+            and not re.fullmatch(r"(?i)\s*(TRUE|FALSE)\s*", new_cond.sql)
+        ):
+            new_cond = dataclasses.replace(new_cond, sql=f"{new_cond.sql.strip()} <> 0")
         new_body = self._ensure_non_empty_body(self._transform_body(node.body))
         return WhileStatement(condition=new_cond, body=new_body)
 
