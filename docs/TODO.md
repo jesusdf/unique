@@ -1379,7 +1379,22 @@ fix needs an **anonymized** regression fixture (never a private name).
         `expr ± INTERVAL 'n' UNIT` lowers to `DATEADD(UNIT, ±n, expr)`
         on T-SQL (6x), and a MySQL `@@sysvar` T-SQL doesn't know
         (whitelist of T-SQL globals) whole-degrades (12x error 137).
-        Tests: TestMysqlEdgeValueClasses. *Measurement pending next
+        Tests: TestMysqlEdgeValueClasses. **Measured at `3a6f13e`
+        (2026-07-16): mysql→T-SQL 334→303 (94.9%), mysql→Oracle
+        246→242, mysql→PG 153 flat. Standing: pg-source
+        {266/180/140}, mysql-source {303/153/242}.**
+        *Wave 59 (2026-07-16):* three mysql-source classes — a
+        top-level statement referencing a MySQL @user variable shipped
+        raw off MySQL (session state lives client-side there; 23x
+        ORA-00936 plus pg/tsql twins — whole-degrade, source==mysql
+        gate); the EXISTS-INTERSECT null-safe form emitted ROW
+        constructors as parenthesized tuples (`SELECT (f1, f2) FROM
+        DUAL`, ORA-00907 15x — operands now unpack into select-list
+        items, ExpressionList or paren-RawSQL); and MySQL's
+        fixed-point `DOUBLE(p,s)`/`FLOAT(p,s)` mapped to
+        `BINARY_DOUBLE(7, 2)` on Oracle which takes no parameters
+        (13x ORA-00922 — now NUMBER(p,s)). Tests:
+        TestUserVarsRowTuplesOracleDouble. *Measurement pending next
         mysql-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling

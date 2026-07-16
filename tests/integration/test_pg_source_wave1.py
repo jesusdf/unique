@@ -2399,3 +2399,53 @@ class TestMysqlEdgeValueClasses:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, r.sql
+
+
+class TestUserVarsRowTuplesOracleDouble:
+    """wave 59: three mysql-source classes — a top-level statement
+    referencing a MySQL @user variable ships raw off MySQL (no
+    equivalent: ORA-00936 / pg syntax error / tsql 137 — degrade
+    whole); the EXISTS-INTERSECT null-safe form emitted ROW
+    constructors as parenthesized tuples (`SELECT (f1, f2)` — illegal
+    select list on Oracle/T-SQL; unpack to items); and DOUBLE(p,s)
+    mapped to `BINARY_DOUBLE(7, 2)` on Oracle, which takes no
+    parameters (→ NUMBER(p,s))."""
+
+    def test_user_var_select_degrades_oracle(self) -> None:
+        r = Transpiler().transpile("select @a, @b;", source="mysql", target="oracle")
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_user_var_expr_degrades_pg(self) -> None:
+        r = Transpiler().transpile(
+            "select @a + 1 from t1;", source="mysql", target="postgresql"
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+
+    def test_row_tuple_intersect_unpacks(self) -> None:
+        out = _t2(
+            "select (1, 2) is distinct from (2, null) as x;",
+            "mysql",
+            "oracle",
+        )
+        assert re.search(
+            r"(?is)SELECT 1, 2 FROM DUAL INTERSECT SELECT 2, NULL FROM DUAL", out
+        ), out
+
+    def test_double_params_to_number_oracle(self) -> None:
+        out = _t2(
+            "create table t (a double(7,2), b double unsigned);",
+            "mysql",
+            "oracle",
+        )
+        assert re.search(r"(?i)a NUMBER\(7, ?2\)", out), out
+        assert re.search(r"(?i)b BINARY_DOUBLE", out), out

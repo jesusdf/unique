@@ -588,6 +588,8 @@ class Transformer:
             result = [self._gate_invalid_date_literal(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_unknown_sysvar(node) for node in result]
+        if self.context.source == "mysql" and self.context.target != "mysql":
+            result = [self._gate_mysql_user_var(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_temp_view(node) for node in result]
             result = [self._gate_tsql_natural_join(node) for node in result]
@@ -742,6 +744,45 @@ class Transformer:
             "@@LANGUAGE",
         }
     )
+
+    _USER_VAR_RE = re.compile(r"(?<!@)@(\w+)")
+
+    def _gate_mysql_user_var(self, node: ASTNode) -> ASTNode:
+        """Degrade a top-level statement referencing a MySQL @user
+        variable — WHOLE, off MySQL (no equivalent: session state
+        lives in the client there)."""
+        found = self._find_user_var(node)
+        if found is None:
+            return node
+        reason = (
+            f"MySQL user variable @{found} has no "
+            f"{self.context.target} equivalent outside a routine; "
+            "statement preserved as a comment"
+        )
+        self.context.warn(reason, "mysql_user_var")
+        self.context.mark_unsupported(f"@{found} (MySQL user variable)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _find_user_var(self, value: object) -> str | None:
+        if isinstance(value, RawSQL):
+            # Scrub string literals so an email-like '@' inside text
+            # doesn't trip the scan.
+            scrubbed = re.sub(r"'(?:[^']|'')*'", "''", value.sql)
+            m = self._USER_VAR_RE.search(scrubbed)
+            return m.group(1) if m else None
+        if isinstance(value, ASTNode):
+            for f in fields(value):
+                found = self._find_user_var(getattr(value, f.name))
+                if found is not None:
+                    return found
+        if isinstance(value, tuple):
+            for item in value:
+                found = self._find_user_var(item)
+                if found is not None:
+                    return found
+        return None
 
     def _gate_tsql_unknown_sysvar(self, node: ASTNode) -> ASTNode:
         """Degrade a statement referencing a MySQL @@system variable

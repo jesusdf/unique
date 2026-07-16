@@ -1669,6 +1669,23 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     set_type_notes.append(note)
             else:
                 dtype = _portable_type_name(col.data_type.name, dialect)
+                # Oracle's BINARY_DOUBLE takes no precision, and FLOAT no
+                # scale; MySQL's parameterized DOUBLE(p,s)/FLOAT(p,s) is
+                # fixed-point semantics — NUMBER(p,s) is the faithful
+                # spelling.
+                _tn = col.data_type.name.upper()
+                if (
+                    dialect == "oracle"
+                    and col.data_type.params
+                    and (
+                        _tn in ("DOUBLE", "UDOUBLE")
+                        or (
+                            _tn in ("FLOAT", "UFLOAT")
+                            and len(col.data_type.params) == 2
+                        )
+                    )
+                ):
+                    dtype = "NUMBER"
                 # If the mapped name already carries a length (e.g. CHAR(36)),
                 # don't append the caller's params on top of it. PostgreSQL and
                 # T-SQL integer types take no parameters at all — a MySQL display
@@ -2771,6 +2788,24 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             return core if equal else f"NOT ({core})"
         if dialect in ("tsql", "oracle"):
             dual = " FROM DUAL" if dialect == "oracle" else ""
+
+            # A ROW constructor operand must unpack into select-list items:
+            # ``SELECT (f1, f2)`` is an illegal parenthesized tuple there.
+            # It arrives as an ExpressionList or as parenthesized RawSQL.
+            def _unpack_row(side: ASTNode, emitted: str) -> str:
+                if isinstance(side, ExpressionList):
+                    return ", ".join(_emit_expression(i, dialect) for i in side.items)
+                text = emitted.strip()
+                if (
+                    isinstance(side, RawSQL)
+                    and text.startswith("(")
+                    and text.endswith(")")
+                ):
+                    return text[1:-1].strip()
+                return emitted
+
+            left = _unpack_row(node.left, left)
+            right = _unpack_row(node.right, right)
             core = f"EXISTS (SELECT {left}{dual} INTERSECT SELECT {right}{dual})"
             pred = core if equal else f"NOT {core}"
             # A predicate is not a value expression on these engines; the
