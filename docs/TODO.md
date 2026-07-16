@@ -776,7 +776,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          T-SQL's SUBSTRING requires its length argument (error 174):
          the 2-argument form gets LEN(x). Measured: mysql→tsql
          **51 → 43** (−8, validity 99.3%). Discovery HOLDS 0. Tests:
-         TestWave174HexRowcountSubstring (4).**
+         TestWave174HexRowcountSubstring (4).* Wave 175 (2026-07-17): T-SQL
+         requires at least one non-computed column in a table
+         (verified LIVE: error 102 at the closing paren; a mixed table
+         passes) — a MySQL table whose columns are ALL generated
+         degrades WHOLE with the carrier. Measured: mysql→tsql
+         **43 → 42** (−1). Discovery HOLDS 0. Tests:
+         TestWave175AllComputedTable (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

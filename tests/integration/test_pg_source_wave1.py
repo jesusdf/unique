@@ -6487,3 +6487,32 @@ class TestWave174HexRowcountSubstring:
             r"(?i)SUBSTRING\(email, CHARINDEX\('@', email\) \+ 1," r" LEN\(email\)\)",
             out,
         ), out
+
+
+class TestWave175AllComputedTable:
+    """wave 175 (mysql-corpus): T-SQL requires at least one
+    non-computed column in a table (verified live: error 102 at the
+    closing paren) — an all-generated MySQL table degrades WHOLE."""
+
+    def test_all_computed_carrier_tsql(self) -> None:
+        out = _t2(
+            "create table t1 (a int as (1), b int as (a), c int as (1));",
+            "mysql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out and "non-computed" in out, out
+        assert not re.search(r"(?im)^\s*CREATE TABLE", out), out
+
+    def test_mixed_table_untouched(self) -> None:
+        out = _t2("create table t2 (x int, a int as (1));", "mysql", "tsql")
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)CREATE TABLE", out), out
+
+    def test_all_computed_kept_mysql(self) -> None:
+        out = _t2(
+            "create table t1 (a int as (1), b int as (a));",
+            "mysql",
+            "mysql",
+        )
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)CREATE TABLE", out), out

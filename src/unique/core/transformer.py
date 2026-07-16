@@ -610,6 +610,7 @@ class Transformer:
             result = [self._gate_conditioned_lateral(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_temp_view(node) for node in result]
+            result = [self._gate_tsql_all_computed_table(node) for node in result]
             result = [self._gate_tsql_agg_distinct(node) for node in result]
             result = [self._gate_tsql_natural_join(node) for node in result]
             result = [self._gate_tsql_nth_value(node) for node in result]
@@ -1455,6 +1456,38 @@ class Transformer:
             if new is not old:
                 changes[f.name] = new
         return replace(value, **changes) if changes else value  # type: ignore[arg-type]
+
+    _GENERATED_COLUMN_RE = re.compile(r"(?i)\bGENERATED\s+ALWAYS\s+AS\b|\bAS\s*\(")
+
+    def _gate_tsql_all_computed_table(self, node: ASTNode) -> ASTNode:
+        """Degrade a CREATE TABLE whose columns are ALL computed — WHOLE,
+        on T-SQL (wave 175): the engine requires at least one
+        non-computed column (error 102 at the closing paren, verified
+        live)."""
+        if not (
+            isinstance(node, CreateTableStatement)
+            and not node.columns
+            and node.table_constraints
+        ):
+            return node
+        col_frags = [
+            c
+            for c in node.table_constraints
+            if isinstance(c, PassthroughSQL) and c.kind == "COLUMN"
+        ]
+        if not col_frags or len(col_frags) != len(node.table_constraints):
+            return node
+        if not all(self._GENERATED_COLUMN_RE.search(c.sql) for c in col_frags):
+            return node
+        reason = (
+            "T-SQL requires at least one non-computed column in a table; "
+            "every column here is generated. Statement preserved as a comment"
+        )
+        self.context.warn(reason, "tsql_all_computed_table")
+        self.context.mark_unsupported("all-computed table (T-SQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
 
     def _gate_tsql_agg_distinct(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using STRING_AGG(DISTINCT …) — WHOLE, on
