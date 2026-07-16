@@ -1545,8 +1545,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         degrade, now with the culprit spelled out. This is fidelity
         work: those routines were already carriers, so sweep validity
         should hold or improve slightly. Tests:
-        TestMysqlDeclareHandler. *Measurement pending next
-        mysql-corpus cycle.*
+        TestMysqlDeclareHandler. **Measured at `95afaf8`
+        (2026-07-16): the fidelity gain is visible — mysql→PG 111
+        flat with ok +6 and warnings 289→263 (fewer carriers),
+        mysql→T-SQL 209 flat with ok +11, mysql→Oracle 160→165
+        (honest +5: converted handler bodies now reach PL/SQL's
+        SELECT-without-INTO — the next front). Standing: pg-source
+        {261/160/140}, mysql-source {209/111/165}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
