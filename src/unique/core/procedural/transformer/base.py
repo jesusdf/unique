@@ -3313,9 +3313,10 @@ class ProceduralTransformer:
 
     def _transform_raw_sql(self, node: RawSQL) -> RawSQL:
         # A non-SQL-language routine (LANGUAGE C/internal/plperl…) has no
-        # transpilable body: valid verbatim on its own engine, a documented
-        # carrier anywhere else (wave 122).
-        if node.reason.startswith("non-SQL language function"):
+        # transpilable body — and a plpgsql block label (<<label>>) has no
+        # model: both are valid verbatim on their own engine, a documented
+        # carrier anywhere else (waves 122, 126).
+        if node.reason.startswith(("non-SQL language function", "plpgsql block label")):
             if self._source == self._target:
                 return node
             reason = (

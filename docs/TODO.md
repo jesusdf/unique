@@ -349,7 +349,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          targets without the event (the `_degrade_mysql_uservar`
          recipe: re-emit in source + carrier + registry). Measured:
          **42 → 36** (FUNCTION and ON classes cleared). Tests:
-         TestTruncateTrigger (4).**
+         TestTruncateTrigger (4).* Wave 126 (2026-07-16): plpgsql
+         `<<label>>` block labels (and their label-qualified variable
+         refs) are unmodeled — the declare loop shredded them into
+         `< <; label >; >` garbage. Detected BEFORE the body splice
+         (the body is still one STRING token there — post-splice the
+         label is token soup); verbatim on PG via the wave-122
+         whole-unit path, carrier elsewhere. Measured: **36 → 34**
+         (`<` class gone). Tests: TestPlpgsqlBlockLabel (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

@@ -610,6 +610,11 @@ class ParserBase:
             # of the implementation reference — wave 122). Same-dialect
             # ships verbatim; the transformer carriers it cross-dialect.
             return self._whole_unit_raw(f"non-SQL language function (LANGUAGE {lang})")
+        if self._pg_block_label_ahead():
+            # plpgsql ``<<label>>`` block labels (and their qualified
+            # variable references) are not modeled — the declare loop
+            # shredded them into ``< <; label >; >`` garbage (wave 126).
+            return self._whole_unit_raw("plpgsql block label (<<label>>)")
         body = self._parse_routine_body()
 
         return CreateFunctionStatement(
@@ -2154,6 +2159,20 @@ class ParserBase:
                 if name and name not in self._TRANSPILABLE_PG_LANGUAGES:
                     return name
         return None
+
+    _PG_BLOCK_LABEL_RE = re.compile(r"<<\s*\w+\s*>>")
+
+    def _pg_block_label_ahead(self) -> bool:
+        """Whether the unit's body contains a plpgsql ``<<label>>`` block
+        label. Runs BEFORE the body splice, so the body is still one
+        STRING token — scan its value (post-splice the label lexes into
+        ``< < ident > >`` soup, which is exactly the shred this avoids)."""
+        if self._dialect != "postgresql":
+            return False
+        return any(
+            tok.type == TokenType.STRING and self._PG_BLOCK_LABEL_RE.search(tok.value)
+            for tok in self._tokens
+        )
 
     def _whole_unit_raw(self, reason: str) -> ASTNode:
         """Capture the WHOLE unit verbatim as a RawSQL with *reason* (no

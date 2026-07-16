@@ -4736,3 +4736,36 @@ class TestTruncateTrigger:
         ]
         assert not code, r.sql
         assert r.warnings or r.unsupported, r.sql
+
+
+class TestPlpgsqlBlockLabel:
+    """wave 126: plpgsql ``<<label>>`` block labels (and their qualified
+    variable references, ``label.var``) are not modeled — the declare
+    loop shredded them into ``< <; label >; >`` garbage. Verbatim on PG,
+    documented carrier elsewhere."""
+
+    _SRC = (
+        "create function f() returns integer as $$\n"
+        "<<outerblock>>\n"
+        "declare quantity integer := 30;\n"
+        "begin\n"
+        "  quantity := quantity + 10;\n"
+        "  return outerblock.quantity;\n"
+        "end $$ language plpgsql;"
+    )
+
+    def test_block_label_verbatim_pg(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        assert "<<outerblock>>" in out.replace(" ", ""), out
+        assert "< <;" not in out, out
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_block_label_degrades_off_pg(self, target: str) -> None:
+        r = Transpiler().transpile(self._SRC, source="postgresql", target=target)
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
