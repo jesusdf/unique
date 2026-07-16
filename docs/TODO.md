@@ -654,7 +654,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          the predicate or its negation. Measured: mysql→tsql
          **143 → 142** (−1; the 8x class holds INTERVAL() and
          outer-ref members). Discovery HOLDS 0. Tests:
-         TestWave160NotParenTruthiness (5).**
+         TestWave160NotParenTruthiness (5).* Wave 161 (2026-07-16): a
+         single-argument COALESCE is T-SQL error 1088 — it IS its
+         argument (CONCAT's wave-154 rule extended). And an
+         aggregate's DISTINCT wrapper (``Count(this=Distinct(…))``)
+         converted to a verbatim RawSQL argument, so the inner
+         expressions bypassed EVERY function mapping
+         (``COUNT(DISTINCT REPEAT(65, 3))`` shipped REPEAT on T-SQL) —
+         now a real FunctionCall with ``distinct=True``. Measured:
+         mysql→tsql **142 → 137** (−5). Discovery HOLDS 0. Tests:
+         TestWave161CoalesceOneArgDistinctWrapper (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

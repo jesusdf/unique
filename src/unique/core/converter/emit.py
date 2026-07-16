@@ -2791,6 +2791,10 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         return f"REPLICATE({args})"
     if fn_name == "CONCAT" and len(node.args) == 1 and dialect in ("tsql", "oracle"):
         return _emit_expression(node.args[0], dialect)
+    # Same for a single-argument COALESCE (T-SQL error 1088: at least
+    # two arguments) — it IS its argument (wave 161).
+    if fn_name == "COALESCE" and len(node.args) == 1 and dialect == "tsql":
+        return _emit_expression(node.args[0], dialect)
 
     # Date arithmetic has a distinct spelling per engine.
     if fn_name in ("DATE_ADD", "DATE_SUB", "DATEADD"):

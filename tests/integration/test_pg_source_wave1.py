@@ -5980,3 +5980,26 @@ class TestWave160NotParenTruthiness:
     def test_mysql_keeps_truthiness(self) -> None:
         out = _t2("select * from t1 where not (a and b);", "mysql", "mysql")
         assert re.search(r"(?i)NOT \(a AND b\)", out), out
+
+
+class TestWave161CoalesceOneArgDistinctWrapper:
+    """wave 161 (mysql-corpus): a single-argument COALESCE is error
+    1088 on T-SQL — it IS its argument. And an aggregate's DISTINCT
+    wrapper (Count(this=Distinct(…))) converted to a verbatim RawSQL
+    argument, so inner expressions bypassed every function mapping."""
+
+    def test_one_arg_coalesce_tsql(self) -> None:
+        out = _t2("select coalesce(1), coalesce(a, b) from t1;", "mysql", "tsql")
+        assert re.search(r"(?i)SELECT 1, COALESCE\(a, b\)", out), out
+
+    def test_one_arg_coalesce_kept_pg(self) -> None:
+        out = _t2("select coalesce(1) from t1;", "mysql", "postgresql")
+        assert re.search(r"(?i)COALESCE\(1\)", out), out
+
+    def test_count_distinct_inner_repeat_mapped(self) -> None:
+        out = _t2("select count(distinct repeat(65, 3)) from t2;", "mysql", "tsql")
+        assert re.search(r"(?i)COUNT\(DISTINCT REPLICATE\(65, 3\)\)", out), out
+
+    def test_count_distinct_plain_column(self) -> None:
+        out = _t2("select count(distinct a) from t2;", "mysql", "tsql")
+        assert re.search(r"(?i)COUNT\(DISTINCT a\)", out), out

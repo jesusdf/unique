@@ -1429,6 +1429,20 @@ def _normalize_stat_aggregate(name: str) -> str:
 
 def _convert_function(expr: exp.Expression) -> FunctionCall:
     """Convert a function call."""
+    # An aggregate's DISTINCT lives in a wrapper node (Count(this=
+    # Distinct(...))); unconverted it became a verbatim RawSQL argument,
+    # so the inner expressions bypassed every function mapping
+    # (COUNT(DISTINCT REPEAT(65, 3)) shipped REPEAT on T-SQL — wave 161).
+    if isinstance(expr.this, exp.Distinct) and not expr.expressions:
+        inner = expr.this.expressions
+        name = (
+            expr.sql_name() if hasattr(expr, "sql_name") else type(expr).__name__
+        ).upper()
+        return FunctionCall(
+            name=_normalize_stat_aggregate(name),
+            args=tuple(convert_expression(a) for a in inner),
+            distinct=True,
+        )
     # StrPosition (T-SQL CHARINDEX, MySQL LOCATE, ...) keeps its arguments in
     # named slots (this=haystack, substr=needle, position=start) rather than in
     # `expressions`, so the generic collection below would drop all but the
