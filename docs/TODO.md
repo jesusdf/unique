@@ -280,9 +280,18 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       a documented neutral (their forms are PL-context only); Oracle's
       `SQL%ROWCOUNT` — which parses as a MODULO — maps at the
       BinaryOp. Tests: TestSystemGlobalsInDml; verification cycle at
-      `63e0d31` identical {163/131/89}. Remaining families:
-      FOUND/fetch cursor idioms, in-expression comments (the IR
-      drops them).*; then the text rewriters can
+      `63e0d31` identical {163/131/89}. Family survey CLOSED
+      2026-07-17 (wave 102): @@FETCH_STATUS gets the top-level
+      neutral (it is CURSOR-CONTEXTUAL by nature — the procedural
+      path maps it with surrounding state: FOUND on pg, handler
+      flags on mysql, cursor%FOUND on oracle; a context-free IR
+      mapping is impossible today). DESIGN CONCLUSIONS for M3 final:
+      (a) the IR expression pipeline must RECEIVE procedural context
+      (cursor state, like STRING_VARIABLES) before fetch idioms can
+      migrate; (b) in-expression COMMENTS need comment-carrying
+      expression nodes in the IR (they are dropped today) — both are
+      the remaining preconditions for deleting the text rewriters.
+      Tests: TestFetchStatusTopLevel.*; then the text rewriters can
       shrink. Original blocker analysis:** A first attempt at IR-first
       for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
       reverted: downstream machinery pattern-matches on the *transformed

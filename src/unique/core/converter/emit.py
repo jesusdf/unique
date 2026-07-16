@@ -2155,6 +2155,13 @@ def _map_system_global(sql: str, dialect: str) -> str | None:
         if dialect == "mysql":
             return "ROW_COUNT()"
         return f"0 /* UNIQUE: @@ROWCOUNT has no top-level {dialect} equivalent */"
+    if upper == "@@FETCH_STATUS" and dialect != "tsql":
+        # Cursor-contextual by nature; the procedural path maps it with
+        # surrounding state. Context-free there is only the neutral.
+        return (
+            f"0 /* UNIQUE: @@FETCH_STATUS has no top-level {dialect} "
+            "equivalent; it is cursor state */"
+        )
     if upper == "@@ERROR" and dialect != "tsql":
         return (
             f"0 /* UNIQUE: @@ERROR has no top-level {dialect} equivalent; "

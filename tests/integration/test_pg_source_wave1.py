@@ -3701,3 +3701,16 @@ class TestSystemGlobalsInDml:
         out = _t2("SELECT SQL%ROWCOUNT AS r FROM DUAL;", "oracle", "tsql")
         assert re.search(r"(?i)@@ROWCOUNT", out), out
         assert "SQL %" not in out, out
+
+
+class TestFetchStatusTopLevel:
+    """M3b family survey close (wave 102): @@FETCH_STATUS is
+    cursor-contextual by nature (the procedural path maps it to
+    FOUND / handler flags / cursor%FOUND using surrounding state);
+    context-free at top level it gets the documented neutral like
+    the other globals."""
+
+    def test_fetch_status_neutral_pg(self) -> None:
+        out = _t2("SELECT 1 WHERE @@FETCH_STATUS = 0;", "tsql", "postgresql")
+        assert "@@FETCH_STATUS" not in out.split("/*")[0], out
+        assert "UNIQUE:" in out, out
