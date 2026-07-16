@@ -2226,6 +2226,16 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
     read = sqlglot_dialect_name(node.source_dialect)
     write = sqlglot_dialect_name(dialect)
     fragment_sql = node.sql
+    if (
+        node.source_dialect == "mysql"
+        and dialect != "mysql"
+        and re.match(r"(?i)\s*(PRIMARY\s+KEY|UNIQUE|KEY|INDEX)\b", fragment_sql)
+    ):
+        # MySQL prefix indexes (``KEY (a, b(132))``): only MySQL indexes
+        # a column prefix — the length has no spelling elsewhere, and
+        # indexing the whole column accepts every row the prefix key
+        # accepted (wave 166).
+        fragment_sql = re.sub(r"(?i)\b(\w+)\s*\(\s*\d+\s*\)", r"\1", fragment_sql)
     if node.source_dialect == "tsql" and dialect != "tsql":
         # T-SQL physical hints in a table constraint (the CLUSTERED keyword,
         # WITH (...) storage options, ON [filegroup]) have no meaning on the

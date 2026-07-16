@@ -3547,6 +3547,17 @@ class ProceduralTransformer:
         # transpilable body — and a plpgsql block label (<<label>>) has no
         # model: both are valid verbatim on their own engine, a documented
         # carrier anywhere else (waves 122, 126).
+        if node.reason.startswith("MySQL admin statement"):
+            # Verbatim on MySQL; a documented in-body carrier elsewhere
+            # (FLUSH/RESET/PURGE have no cross-engine form — wave 166).
+            if self._target == "mysql":
+                return node
+            reason = (
+                f"{node.reason} has no {self._target} equivalent; "
+                "statement preserved as a comment"
+            )
+            self._warnings.append(reason)
+            return RawSQL(sql=node.sql, reason=reason)
         if node.reason.startswith(
             (
                 "non-SQL language function",

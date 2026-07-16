@@ -699,7 +699,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          FunctionCall; MySQL keeps the native call, every other target
          gets the mechanical CASE chain. Measured: mysql→tsql
          **119 → 116** (−3). Discovery HOLDS 0. Tests:
-         TestWave165IntervalIndexFunction (3).**
+         TestWave165IntervalIndexFunction (3).* Wave 166 (2026-07-16): MySQL
+         prefix indexes (``PRIMARY KEY (a, b(132))``) have no
+         cross-engine spelling — the passthrough-constraint path
+         strips the length (whole-column keys accept every row the
+         prefix key accepted; same precedent as the CLUSTERED/WITH
+         strips). And FLUSH/RESET/PURGE admin statements shredded into
+         ``flush AS query`` via the embedded-DML fallback — captured
+         whole, verbatim on MySQL, in-body comment carriers elsewhere.
+         Measured: mysql→tsql **116 → 114** (−2, validity 98.1%).
+         Discovery HOLDS 0. Tests: TestWave166PrefixIndexFlush (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

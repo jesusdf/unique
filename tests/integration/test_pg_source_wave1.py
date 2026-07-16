@@ -6151,3 +6151,50 @@ class TestWave165IntervalIndexFunction:
     def test_interval_literal_untouched(self) -> None:
         out = _t2("select date_add('2001-01-01', interval 1 day);", "mysql", "tsql")
         assert re.search(r"(?i)DATEADD\(DAY, 1, '2001-01-01'\)", out), out
+
+
+class TestWave166PrefixIndexFlush:
+    """wave 166 (mysql-corpus): MySQL prefix indexes (``PRIMARY KEY
+    (a, b(132))``) have no cross-engine spelling — the length is
+    stripped (whole-column keys accept every row the prefix key
+    accepted). And FLUSH/RESET/PURGE admin statements shredded into
+    ``flush AS query`` via the embedded-DML fallback — now honest
+    carriers."""
+
+    def test_prefix_pk_stripped_tsql(self) -> None:
+        out = _t2(
+            "create temporary table t2 (a int, b varchar(200) not null,"
+            " primary key (a, b(132)));",
+            "mysql",
+            "tsql",
+        )
+        assert "b(132)" not in out and "b (132)" not in out, out
+        assert re.search(r"(?i)PRIMARY KEY\s*\(a, b\)", out), out
+
+    def test_prefix_pk_kept_mysql(self) -> None:
+        out = _t2(
+            "create temporary table t2 (a int, b varchar(200) not null,"
+            " primary key (a, b(132)));",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(r"(?i)b\s*\(132\)", out), out
+
+    def test_flush_carrier_tsql(self) -> None:
+        out = _t2(
+            "create procedure p() begin update t3 set a = 1;" " flush query cache; end",
+            "mysql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out and "FLUSH" in out.upper(), out
+        assert "flush AS" not in out, out
+        assert re.search(r"(?i)UPDATE t3 SET a = 1", out), out
+
+    def test_flush_kept_mysql(self) -> None:
+        out = _t2(
+            "create procedure p() begin update t3 set a = 1;" " flush query cache; end",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(r"(?i)flush query cache", out), out
+        assert "UNIQUE:" not in out, out

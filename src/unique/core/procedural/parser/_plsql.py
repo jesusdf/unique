@@ -392,6 +392,24 @@ class PlsqlStatementsMixin(ParserBase):
         if tok.is_keyword("SET"):
             # MySQL assignment: SET var = expr;
             return self._parse_mysql_set()
+        if self._dialect == "mysql" and tok.upper_value in (
+            "FLUSH",
+            "RESET",
+            "PURGE",
+        ):
+            # MySQL admin statements — the embedded-DML fallback
+            # shredded ``FLUSH QUERY CACHE`` into ``flush AS query``
+            # (wave 166). Capture whole; the transformer carriers them
+            # cross-dialect, MySQL keeps them verbatim.
+            kw = tok.upper_value
+            parts: list[str] = []
+            while not self._at_end() and self._current().type != TokenType.SEMICOLON:
+                parts.append(self._advance().value)
+            self._match_type(TokenType.SEMICOLON)
+            return RawSQL(
+                sql=" ".join(parts),
+                reason=f"MySQL admin statement ({kw})",
+            )
         if (
             self._dialect == "mysql"
             and tok.type == TokenType.IDENTIFIER
