@@ -597,6 +597,7 @@ class Transformer:
             result = [self._strip_mysql_charset_marks(node) for node in result]
         if self.context.target in ("tsql", "oracle"):
             result = [self._gate_nested_cte_arm(node) for node in result]
+            result = [self._gate_conditioned_lateral(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_temp_view(node) for node in result]
             result = [self._gate_tsql_natural_join(node) for node in result]
@@ -726,19 +727,67 @@ class Transformer:
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
 
-    def _has_nested_cte_arm(self, value: object) -> bool:
-        if isinstance(value, SelectStatement):
-            chain = value.set_query
-            while chain is not None:
-                if chain.ctes:
-                    return True
-                chain = chain.set_query
+    def _has_nested_cte_arm(self, value: object, is_top: bool = True) -> bool:
+        # ANY non-top CTE: a set arm's WITH, a derived table's WITH, a
+        # lateral/APPLY subquery's WITH, a CTE whose own body has a WITH —
+        # T-SQL/Oracle only allow the clause at the statement top
+        # (waves 134/136).
+        from unique.core.ast_nodes import InsertStatement
+
+        if isinstance(value, SelectStatement) and not is_top and value.ctes:
+            return True
+        if isinstance(value, InsertStatement):
+            # An INSERT's source-select CTE is hoistable to the statement
+            # top (the emitter already does) — it stays "top".
+            return any(
+                self._has_nested_cte_arm(
+                    getattr(value, f.name), is_top=(f.name == "select")
+                )
+                for f in fields(value)
+            )
         if isinstance(value, ASTNode):
             return any(
-                self._has_nested_cte_arm(getattr(value, f.name)) for f in fields(value)
+                self._has_nested_cte_arm(getattr(value, f.name), False)
+                for f in fields(value)
             )
         if isinstance(value, tuple):
-            return any(self._has_nested_cte_arm(item) for item in value)
+            return any(self._has_nested_cte_arm(item, False) for item in value)
+        return False
+
+    def _gate_conditioned_lateral(self, node: ASTNode) -> ASTNode:
+        """Degrade a LATERAL join with a REAL ON condition — WHOLE, on
+        T-SQL/Oracle. Their APPLY operators take no ON clause; only the
+        unconditioned (ON TRUE) form maps (wave 136)."""
+        if not self._has_conditioned_lateral(node):
+            return node
+        reason = (
+            f"a LATERAL join with an ON condition has no {self.context.target} "
+            "APPLY equivalent (APPLY takes no ON); statement preserved "
+            "as a comment"
+        )
+        self.context.warn(reason, "conditioned_lateral")
+        self.context.mark_unsupported("LATERAL JOIN … ON <condition>")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _has_conditioned_lateral(self, value: object) -> bool:
+        from unique.core.ast_nodes import JoinClause
+
+        if isinstance(value, JoinClause) and value.lateral:
+            cond = value.condition
+            real = cond is not None and not (
+                isinstance(cond, Literal) and cond.dtype == "boolean" and cond.value
+            )
+            if real:
+                return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._has_conditioned_lateral(getattr(value, f.name))
+                for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._has_conditioned_lateral(item) for item in value)
         return False
 
     def _gate_empty_select_list(self, node: ASTNode) -> ASTNode:

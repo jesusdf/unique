@@ -445,7 +445,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          `_comparisonize_literals` + `_emit_condition`. Measured:
          pg→tsql **118 → 116** (96.4%), pg→oracle **65 → 61**
          (98.1%), discovery HOLDS 0. Tests:
-         TestBareBooleanConditions (4).**
+         TestBareBooleanConditions (4).* Wave 136 (2026-07-16): the
+         nested-CTE gate generalizes to ANY non-top WITH (set arms,
+         derived tables, APPLY/lateral subqueries, CTE bodies) —
+         with the INSERT-source exemption (that CTE is hoistable and
+         the emitter already hoists it; the neighbor probe caught the
+         over-fire); and a LATERAL join with a REAL ON condition
+         degrades on T-SQL/Oracle (APPLY takes no ON — only the
+         ON TRUE form maps). Measured: pg→tsql **116 → 100** (96.9%,
+         the deep-CTE gate caught double the sampled class),
+         pg→oracle **61 → 59** (98.1%), discovery HOLDS 0. Tests:
+         TestWave136LateralAndDeepCte (5).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

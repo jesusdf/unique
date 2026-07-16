@@ -5144,3 +5144,50 @@ class TestBareBooleanConditions:
     def test_real_predicates_untouched(self) -> None:
         out = _t("select * from t where a = 1 and b > 2;", "tsql")
         assert "<> 0" not in out, out
+
+
+class TestWave136LateralAndDeepCte:
+    """wave 136: a LATERAL join with a REAL ON condition has no
+    T-SQL/Oracle APPLY form (APPLY takes no ON) and shipped `JOIN
+    LATERAL`; and the nested-CTE gate only saw set arms — a WITH inside
+    an APPLY/derived subquery still shipped."""
+
+    @pytest.mark.parametrize("target", ["tsql", "oracle"])
+    def test_conditioned_lateral_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "select count(*) from t1 a, t2 b join lateral "
+            "(values(a.x)) ss(x) on b.y = ss.x;",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    @pytest.mark.parametrize("target", ["tsql", "oracle"])
+    def test_cte_inside_lateral_degrades(self, target: str) -> None:
+        r = Transpiler().transpile(
+            "select sum(ss.a) from o cross join lateral "
+            "(with x(a) as (select o.f as a) select * from x) ss;",
+            source="postgresql",
+            target=target,
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_unconditioned_lateral_still_applies_tsql(self) -> None:
+        out = _t(
+            "select * from t cross join lateral (select t.a + 1 as b) ss;",
+            "tsql",
+        )
+        assert re.search(r"(?i)CROSS APPLY", out), out
+        assert "UNIQUE:" not in out, out
