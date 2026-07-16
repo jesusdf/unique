@@ -782,6 +782,9 @@ class TranspileOptions:
     #: Target-engine URL for opt-in LIVE output validation: statements the
     #: real engine rejects degrade to documented carriers with the engine's
     #: error (catches what the sqlglot gate's leniency lets through).
+    #: DEVELOPMENT-FACING ONLY — a code-refinement hook for the sweep/tuning
+    #: loops; deliberately not exposed in the CLI or the API (decision
+    #: 2026-07-17).
     validate_live_url: str | None = None
 
 

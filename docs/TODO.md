@@ -91,8 +91,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          good SQL). Smoke-verified against live PG: syntax rejects
          carrier with the engine's error + a `live_validation`
          warning; environmental pass untouched. Tests:
-         TestLiveOutputValidation (env-gated). Remaining: CLI/API
-         flag exposure, oracle channel design.
+         TestLiveOutputValidation (env-gated). **Scope decision
+         (user, 2026-07-17): live validation is a CODE-REFINEMENT
+         tool only — used by the sweeps/tuning loops to find mapping
+         gaps. It is deliberately NOT exposed in the CLI or the API
+         (an end-user feature that needs a live engine to produce
+         correct output would be a botch); `validate_live_url` stays
+         a development-facing option.**
 
 ### P2 — correctness of signals and validation
 
