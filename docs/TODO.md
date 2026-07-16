@@ -1502,8 +1502,15 @@ fix needs an **anonymized** regression fixture (never a private name).
         REPEAT/UNTIL tokenize as identifiers, no grammar existed). It
         parses now as a post-test loop: LoopStatement with a trailing
         `EXIT WHEN cond`, native on every target. Tests:
-        TestRepeatUntilLoop. *Measurement pending next mysql-corpus
-        cycle.*
+        TestRepeatUntilLoop. **Measured at `50d734a` (2026-07-16):
+        mysql→T-SQL 210→209, mysql→PG 112→111, mysql→Oracle 158→160
+        (honest +2: un-carriered REPEAT routines reach their next
+        blocker). Standing: pg-source {265/163/142}, mysql-source
+        {209/111/160}. The mysql-source residue is now long-tail
+        (top classes ≤5x); the next highest-yield front is the
+        pg→tsql 265 (raise_test/EXCEPTION chains) and the
+        DECLARE HANDLER fidelity work (carriers → EXIT→EXCEPTION
+        conversions, no validity delta).**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
