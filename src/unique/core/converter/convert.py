@@ -1178,6 +1178,23 @@ def _convert_table_ref(expr: exp.Expression) -> TableRef:
                 if isinstance(alias_expr.this, str)
                 else str(alias_expr.this)
             )
+        # A set-returning function in relation position — ``FROM fn(args)
+        # alias`` parses as Table(this=<func>). Reading only ``.name``
+        # dropped the function and promoted the alias to a fake table name
+        # (silent data loss, wave 110).
+        # (exp.Func is a mixin outside exp.Expression; concrete function
+        # nodes inherit both, so the double check also narrows for mypy.)
+        if isinstance(expr.this, exp.Func) and isinstance(expr.this, exp.Expression):
+            fn_cols: tuple[str, ...] = ()
+            if alias_expr is not None:
+                fn_cols = tuple(c.name for c in (alias_expr.args.get("columns") or []))
+            return TableRef(
+                name=alias or expr.name or "",
+                alias=alias,
+                function=convert_expression(expr.this),
+                ordinality=bool(expr.args.get("ordinality")),
+                column_aliases=fn_cols,
+            )
         # DROP SCHEMA x / USE x parse as a Table with only the db part set;
         # promoting db to name avoids emitting a dangling "x." qualifier.
         if not expr.name and expr.db:
@@ -1204,6 +1221,22 @@ def _convert_table_ref(expr: exp.Expression) -> TableRef:
         )
     if isinstance(expr, exp.Schema):
         return _convert_table_ref(expr.this)
+    if isinstance(expr, exp.Unnest):
+        # ``FROM unnest(arr) AS u(x)`` parses as a bare Unnest relation.
+        un_alias_expr = expr.args.get("alias")
+        un_alias = un_alias_expr.this.name if un_alias_expr is not None else None
+        un_cols: tuple[str, ...] = ()
+        if un_alias_expr is not None:
+            un_cols = tuple(c.name for c in (un_alias_expr.args.get("columns") or []))
+        return TableRef(
+            name=un_alias or "unnest",
+            alias=un_alias,
+            function=FunctionCall(
+                name="UNNEST",
+                args=tuple(convert_expression(e) for e in expr.expressions),
+            ),
+            column_aliases=un_cols,
+        )
     if hasattr(expr, "name"):
         return TableRef(name=expr.name)
     return TableRef(name=str(expr))
@@ -1355,6 +1388,10 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
 
     name = expr.sql_name() if hasattr(expr, "sql_name") else type(expr).__name__.upper()
     name = _normalize_stat_aggregate(name)
+    # sqlglot's postgres reader models FROM-position generate_series as an
+    # internal "exploding" node whose sql_name is not a real function.
+    if isinstance(expr, (exp.GenerateSeries, exp.ExplodingGenerateSeries)):
+        name = "GENERATE_SERIES"
 
     # Generic argument collection. sqlglot models most specialized functions
     # with their arguments in *named slots* (Substring -> this/start/length,

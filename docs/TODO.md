@@ -183,7 +183,24 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          function-relation model in the IR, fresh-session scale),
          psql client-side leftovers (25x near ":"), `WITH ins AS
          (INSERT … RETURNING)` mangled to `SELECT *` (14x), plpgsql
-         array-typed declare shred (6x, above).**
+         array-typed declare shred (6x, above). Waves 110–111
+         (2026-07-16): the function-relation model landed —
+         `TableRef.function` (+`ordinality`) carries the SRF,
+         harvested from `Table(this=<func>)` in FROM/JOIN position
+         and from bare `Unnest` relations; PG re-emits `fn(args)
+         [WITH ORDINALITY] [AS a(c…)]` faithfully; unnest relations
+         still degrade off-PG via the array gate (it sees the
+         FunctionCall by field recursion); sqlglot's internal
+         `ExplodingGenerateSeries` canonicalizes to GENERATE_SERIES.
+         Wave 110 alone measured FLAT (157) — green-but-unmoved
+         fired: those statements were blocker CHAINS, and preserving
+         the SRF exposed the next link — comma-joined LATERAL
+         emitted `JOIN LATERAL (…) ss` with NO ON (invalid PG that
+         sqlglot's lenient gate passes). Wave 111 spells an
+         unconditioned inner lateral `CROSS JOIN LATERAL`. Together:
+         **156 → 122 silent gaps (−34)** (working tree over
+         `6bbf102`; end-of-input 29→4, near-WHERE class gone).
+         Tests: TestFunctionRelations (7), TestCommaLateralJoin.**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

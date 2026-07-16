@@ -3249,6 +3249,20 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
     reference verbatim (used where the schema must be preserved, e.g. a T-SQL
     OBJECT_ID guard).
     """
+    if node.function is not None:
+        # A function IS the relation (``FROM fn(args) alias``); targets
+        # without the construct degrade in the transformer, so this only
+        # ever renders where it is (or is claimed to be) valid.
+        result = _emit_expression(node.function, dialect or "")
+        if node.ordinality:
+            result += " WITH ORDINALITY"
+        if node.column_aliases and node.alias:
+            cols = ", ".join(node.column_aliases)
+            return f"{result} AS {node.alias}({cols})"
+        if node.alias:
+            result += f" {node.alias}"
+        return result
+
     parts = []
     if node.database:
         parts.append(node.database)
@@ -3315,6 +3329,11 @@ def _emit_join(
             JoinType.LEFT: "LEFT JOIN",
             JoinType.CROSS: "CROSS JOIN",
         }.get(join.join_type, "JOIN")
+        if side == "JOIN" and cond_is_true:
+            # A comma-joined LATERAL arrives as an unconditioned inner
+            # join; bare ``JOIN LATERAL`` without ON is invalid on the
+            # engines that spell LATERAL (wave 111).
+            side = "CROSS JOIN"
         result = f"{side} LATERAL {sub}{alias_sql}"
         if join.condition is not None and side != "CROSS JOIN":
             result += f" ON {_emit_condition(join.condition, dialect)}"

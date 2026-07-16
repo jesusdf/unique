@@ -4034,3 +4034,99 @@ class TestDropTriggerOnTable:
         assert not code, r.sql
         assert r.warnings or r.unsupported, r.sql
         assert re.search(r"(?i)DROP TRIGGER (IF EXISTS )?mytrig", r.sql), r.sql
+
+
+class TestFunctionRelations:
+    """wave 110: a set-returning function in FROM/JOIN position VANISHED —
+    ``FROM generate_series(1,3) g`` shipped as ``FROM g`` (the alias
+    promoted to a table name, the function gone: silent data loss even
+    pg→pg, the biggest remaining discovery class). sqlglot models it as
+    ``Table(this=<func>)``; the converter only read ``.name``. TableRef
+    now carries the function, PG re-emits it faithfully (FROM, JOIN,
+    WITH ORDINALITY, unnest with column aliases), and targets without
+    the construct keep their honest paths."""
+
+    def test_from_function_preserved_pg(self) -> None:
+        out = _t("select * from generate_series(1,3) g;", "postgresql")
+        assert re.search(r"(?i)FROM generate_series\(1, 3\) (AS )?g", out), out
+        assert not re.search(r"(?i)FROM\s+g\b(?!enerate)", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_join_function_preserved_pg(self) -> None:
+        out = _t(
+            "select * from t join generate_series(1,3) g on g = t.id;",
+            "postgresql",
+        )
+        assert re.search(r"(?i)JOIN generate_series\(1, 3\) (AS )?g", out), out
+        assert not re.search(r"(?i)JOIN g\b(?!enerate)", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_unnest_relation_with_column_alias_pg(self) -> None:
+        out = _t("select * from unnest(arr) as u(x);", "postgresql")
+        assert re.search(r"(?i)FROM UNNEST\(arr\) (AS )?u\(x\)", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_with_ordinality_pg(self) -> None:
+        out = _t(
+            "select * from generate_series(1,3) with ordinality as g(v, o);",
+            "postgresql",
+        )
+        assert re.search(
+            r"(?i)generate_series\(1, 3\) WITH ORDINALITY (AS )?g\(v, o\)", out
+        ), out
+        assert "UNIQUE:" not in out, out
+
+    def test_comma_lateral_shape_pg(self) -> None:
+        # The corpus shape that exposed the class: SRF + comma + LATERAL.
+        out = _t(
+            "select s1, sm from generate_series(1,3) s1, "
+            "lateral (select sum(s1) as sm from t) ss;",
+            "postgresql",
+        )
+        assert re.search(r"(?i)generate_series\(1, 3\)", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_unnest_relation_still_degrades_off_pg(self) -> None:
+        r = Transpiler().transpile(
+            "select * from unnest(arr) as u(x);",
+            source="postgresql",
+            target="tsql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+
+    def test_plain_table_alias_unaffected(self) -> None:
+        out = _t("select * from mytable g;", "postgresql")
+        assert re.search(r"(?i)FROM mytable (AS )?g", out), out
+
+
+class TestCommaLateralJoin:
+    """wave 111 (the blocker wave 110 exposed): a comma-joined LATERAL
+    (``FROM t, LATERAL (…) ss``) emitted ``JOIN LATERAL (…) ss`` with NO
+    ON clause — invalid PG/MySQL that sqlglot's lenient gate passes (the
+    silent-gap signature). An unconditioned inner lateral is spelled
+    ``CROSS JOIN LATERAL``."""
+
+    def test_comma_lateral_emits_cross_join_pg(self) -> None:
+        out = _t(
+            "select s1, sm from generate_series(1,3) s1, "
+            "lateral (select sum(s1) as sm from t) ss;",
+            "postgresql",
+        )
+        assert re.search(r"(?i)CROSS JOIN LATERAL", out), out
+        assert not re.search(r"(?i)(?<!CROSS )JOIN LATERAL", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_conditioned_lateral_keeps_on_pg(self) -> None:
+        out = _t(
+            "select * from t left join lateral (select x from u "
+            "where u.id = t.id) ss on true;",
+            "postgresql",
+        )
+        assert re.search(r"(?i)LEFT JOIN LATERAL", out), out
+        assert re.search(r"(?i)ON TRUE", out), out

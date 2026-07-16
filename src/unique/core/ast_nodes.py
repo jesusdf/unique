@@ -161,6 +161,13 @@ class TableRef(ASTNode):
     #: PG ``x AS xx(c1, c2)`` column renames; T-SQL rewrites to a derived
     #: table, MySQL/Oracle degrade (no spelling without column knowledge).
     column_aliases: tuple[str, ...] = ()
+    #: Set-returning function in relation position (``FROM fn(args) alias``):
+    #: the FunctionCall (or fallback) that IS the relation. ``name`` then
+    #: holds the alias so outer references still resolve (wave 110 — the
+    #: function used to vanish, leaving the alias as a fake table name).
+    function: ASTNode | None = None
+    #: PG ``fn(…) WITH ORDINALITY [AS a(c…)]``.
+    ordinality: bool = False
 
 
 @dataclass(frozen=True)
