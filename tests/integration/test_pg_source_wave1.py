@@ -2449,3 +2449,36 @@ class TestUserVarsRowTuplesOracleDouble:
         )
         assert re.search(r"(?i)a NUMBER\(7, ?2\)", out), out
         assert re.search(r"(?i)b BINARY_DOUBLE", out), out
+
+
+class TestLateralJoins:
+    """wave 60: a LATERAL joined subquery vanished — exp.Lateral fell
+    through _convert_table_or_subquery to an EMPTY TableRef (the gate
+    then carriered the batch; 7x pg→tsql). T-SQL/Oracle spell it
+    APPLY (LEFT+ON TRUE → OUTER APPLY, INNER/CROSS → CROSS APPLY);
+    PG/MySQL keep native LATERAL."""
+
+    def test_left_lateral_true_becomes_outer_apply(self) -> None:
+        out = _t(
+            "select t1.a from t1 left join lateral "
+            "(select t2.b from t2 where t2.a = t1.a) ss on true;",
+            "tsql",
+        )
+        assert re.search(r"(?is)OUTER APPLY \(SELECT", out), out
+        assert "LATERAL" not in out.upper(), out
+
+    def test_cross_join_lateral_becomes_cross_apply(self) -> None:
+        out = _t(
+            "select t1.a from t1 cross join lateral "
+            "(select t2.b from t2 where t2.a = t1.a) ss;",
+            "tsql",
+        )
+        assert re.search(r"(?is)CROSS APPLY \(SELECT", out), out
+
+    def test_lateral_keeps_native_mysql(self) -> None:
+        out = _t(
+            "select t1.a from t1 left join lateral "
+            "(select t2.b from t2 where t2.a = t1.a) ss on true;",
+            "mysql",
+        )
+        assert re.search(r"(?is)LEFT JOIN LATERAL \(SELECT", out), out

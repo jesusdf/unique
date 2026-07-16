@@ -3007,6 +3007,29 @@ def _emit_join(
     joins included, where a later USING references the chain's MERGED
     column (COALESCE over the arms once a FULL join is involved).
     """
+    if join.lateral and isinstance(join.table, SubqueryExpression):
+        sub = f"({_emit_select(join.table.query, dialect)})"
+        lat_alias = join.alias or join.table.alias or ""
+        alias_sql = f" {_ident(lat_alias, False, dialect)}" if lat_alias else ""
+        cond_is_true = join.condition is None or (
+            isinstance(join.condition, Literal)
+            and join.condition.dtype == "boolean"
+            and bool(join.condition.value)
+        )
+        if dialect in ("tsql", "oracle") and cond_is_true:
+            keyword = (
+                "OUTER APPLY" if join.join_type == JoinType.LEFT else "CROSS APPLY"
+            )
+            return f"{keyword} {sub}{alias_sql}"
+        side = {
+            JoinType.LEFT: "LEFT JOIN",
+            JoinType.CROSS: "CROSS JOIN",
+        }.get(join.join_type, "JOIN")
+        result = f"{side} LATERAL {sub}{alias_sql}"
+        if join.condition is not None and side != "CROSS JOIN":
+            result += f" ON {_emit_condition(join.condition, dialect)}"
+        return result
+
     type_map = {
         JoinType.INNER: "INNER JOIN",
         JoinType.LEFT: "LEFT JOIN",

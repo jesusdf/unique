@@ -1494,6 +1494,24 @@ def _convert_join(expr: exp.Join) -> JoinClause:
     join_type = _JOIN_TYPE_MAP.get(join_type_str, JoinType.INNER)
 
     table_expr = expr.this
+    # A LATERAL subquery would fall through to an EMPTY TableRef, dropping
+    # the joined relation entirely; unwrap it and mark the JoinClause.
+    lateral = isinstance(table_expr, exp.Lateral)
+    if lateral:
+        lat_alias = table_expr.alias or None
+        lat_inner = table_expr.this
+        if isinstance(lat_inner, exp.Subquery):
+            lat_alias = lat_alias or lat_inner.alias or None
+            lat_inner = lat_inner.unnest()
+        return JoinClause(
+            join_type=_JOIN_TYPE_MAP.get(join_type_str, JoinType.INNER),
+            table=SubqueryExpression(query=_convert_select(lat_inner), alias=lat_alias),
+            alias=lat_alias,
+            condition=(
+                convert_expression(expr.args["on"]) if expr.args.get("on") else None
+            ),
+            lateral=True,
+        )
     # A joined derived table (``… JOIN (SELECT …) b ON …``) is a Subquery, not a
     # Table; _convert_table_ref would flatten it to an empty TableRef, dropping
     # the whole joined relation.

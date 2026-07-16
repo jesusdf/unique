@@ -1394,8 +1394,20 @@ fix needs an **anonymized** regression fixture (never a private name).
         fixed-point `DOUBLE(p,s)`/`FLOAT(p,s)` mapped to
         `BINARY_DOUBLE(7, 2)` on Oracle which takes no parameters
         (13x ORA-00922 — now NUMBER(p,s)). Tests:
-        TestUserVarsRowTuplesOracleDouble. *Measurement pending next
-        mysql-corpus cycle.*
+        TestUserVarsRowTuplesOracleDouble. **Measured at `60bf727`
+        (2026-07-16): −59 across the direction — mysql→T-SQL 303→276
+        (95.4%), mysql→Oracle 242→212 (96.5%), mysql→PG 153→148
+        (97.6%). Standing: pg-source {266/180/140}, mysql-source
+        {276/148/212}.**
+        *Wave 60 (2026-07-16):* LATERAL joined subqueries VANISHED —
+        exp.Lateral fell through _convert_table_or_subquery to an
+        empty TableRef and the gate carriered the batch (7x pg→tsql).
+        JoinClause gained `lateral`: T-SQL/Oracle spell it APPLY
+        (LEFT + ON TRUE → OUTER APPLY, INNER/CROSS → CROSS APPLY),
+        PG/MySQL keep native `LEFT JOIN LATERAL … ON …`; a non-TRUE
+        lateral condition keeps the LATERAL spelling (gate carriers it
+        on tsql — no APPLY equivalent). Tests: TestLateralJoins.
+        *Measurement pending next pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

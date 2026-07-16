@@ -295,6 +295,8 @@ class JoinClause(ASTNode):
     using: tuple[str, ...] = ()
     #: NATURAL join modifier (PG/MySQL/Oracle); T-SQL must degrade.
     natural: bool = False
+    #: LATERAL joined subquery: APPLY on T-SQL/Oracle, native elsewhere.
+    lateral: bool = False
 
 
 @dataclass(frozen=True)
