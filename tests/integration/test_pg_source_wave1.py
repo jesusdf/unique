@@ -6341,3 +6341,47 @@ class TestWave170NullTruthinessNotValue:
             "mysql",
         )
         assert re.search(r"(?i)SET done = not done;", out), out
+
+
+class TestWave171KillConnectionId:
+    """wave 171 (mysql-corpus): ``KILL QUERY id`` DROPPED its id via
+    the embedded fallback (silent loss) — now a whole admin carrier;
+    and CONNECTION_ID() shipped as a fake dbo. UDF — every engine has
+    a session id under a different name."""
+
+    def test_kill_carrier_tsql(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare id int;"
+            " set id = connection_id(); kill query id; end",
+            "mysql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out and "kill query id" in out.lower(), out
+
+    def test_connection_id_spid_tsql(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare id int;"
+            " set id = connection_id(); end",
+            "mysql",
+            "tsql",
+        )
+        assert "@@SPID" in out, out
+        assert "connection_id" not in out.lower(), out
+
+    def test_connection_id_pg(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare id int;"
+            " set id = connection_id(); end",
+            "mysql",
+            "postgresql",
+        )
+        assert "pg_backend_pid()" in out, out
+
+    def test_connection_id_kept_mysql(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare id int;"
+            " set id = connection_id(); end",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(r"(?i)connection_id\s*\(\s*\)", out), out

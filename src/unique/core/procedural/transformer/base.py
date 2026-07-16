@@ -4185,7 +4185,27 @@ class ProceduralTransformer:
         target_fn = UUID_FUNCTION.get(self._target)
         if not target_fn:
             return sql
-        return self._UUID_PATTERN.sub(f"{target_fn}()", sql)
+        return self._map_session_id_in_sql(
+            self._UUID_PATTERN.sub(f"{target_fn}()", sql)
+        )
+
+    #: Session-id spellings: every engine has one under a different name
+    #: (MySQL CONNECTION_ID shipped as a fake dbo. UDF on T-SQL — wave 171).
+    _SESSION_ID_PATTERN = re.compile(
+        r"(?i)\b(?:CONNECTION_ID\s*\(\s*\)|PG_BACKEND_PID\s*\(\s*\))|@@SPID\b"
+    )
+    _SESSION_ID_EXPR = {
+        "tsql": "@@SPID",
+        "postgresql": "pg_backend_pid()",
+        "mysql": "CONNECTION_ID()",
+        "oracle": "SYS_CONTEXT('USERENV', 'SID')",
+    }
+
+    def _map_session_id_in_sql(self, sql: str) -> str:
+        target_expr = self._SESSION_ID_EXPR.get(self._target)
+        if not target_expr:
+            return sql
+        return self._SESSION_ID_PATTERN.sub(target_expr, sql)
 
     def _transform_niladic_datetime(self, sql: str) -> str:
         """Translate current-timestamp expressions across dialects.

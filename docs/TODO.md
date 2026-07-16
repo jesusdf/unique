@@ -742,7 +742,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          in T-SQL value position — the tri-state CASE preserves NULL
          (EXISTS excluded: it stays a predicate). Measured: mysql→tsql
          **63 → 60** — validity crossed **99.0%**. Discovery HOLDS 0.
-         Tests: TestWave170NullTruthinessNotValue (3).**
+         Tests: TestWave170NullTruthinessNotValue (3).* Wave 171 (2026-07-17): ``KILL
+         QUERY id`` DROPPED its id via the embedded fallback (silent
+         loss) — KILL joins the admin-statement family (whole capture,
+         carrier off-MySQL). And CONNECTION_ID() shipped as a fake
+         dbo. UDF — new niladic session-id map (@@SPID /
+         pg_backend_pid() / SYS_CONTEXT('USERENV','SID')), chained
+         with the UUID map. Measured: mysql→tsql **60 → 59** (−1).
+         Discovery HOLDS 0. Tests: TestWave171KillConnectionId (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

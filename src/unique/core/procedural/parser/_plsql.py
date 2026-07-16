@@ -396,10 +396,12 @@ class PlsqlStatementsMixin(ParserBase):
             "FLUSH",
             "RESET",
             "PURGE",
+            "KILL",
         ):
             # MySQL admin statements — the embedded-DML fallback
             # shredded ``FLUSH QUERY CACHE`` into ``flush AS query``
-            # (wave 166). Capture whole; the transformer carriers them
+            # (wave 166) and ``KILL QUERY id`` DROPPED its id (wave
+            # 171). Capture whole; the transformer carriers them
             # cross-dialect, MySQL keeps them verbatim.
             kw = tok.upper_value
             parts: list[str] = []

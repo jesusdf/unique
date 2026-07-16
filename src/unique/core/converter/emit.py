@@ -2856,6 +2856,18 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if fn_name == "COALESCE" and len(node.args) == 1 and dialect == "tsql":
         return _emit_expression(node.args[0], dialect)
 
+    # MySQL's CONNECTION_ID(): every engine has a session id under a
+    # different name (wave 171) — dbo.connection_id shipped as a fake
+    # UDF on T-SQL.
+    if fn_name == "CONNECTION_ID" and not node.args:
+        if dialect == "tsql":
+            return "@@SPID"
+        if dialect == "postgresql":
+            return "pg_backend_pid()"
+        if dialect == "oracle":
+            return "SYS_CONTEXT('USERENV', 'SID')"
+        return "CONNECTION_ID()"
+
     # MySQL's INTERVAL(x, v1, v2, …) index function: position of the
     # last threshold ≤ x, −1 for NULL x. Only MySQL has it; the CASE
     # chain is the mechanical form everywhere else (wave 165).
