@@ -583,6 +583,7 @@ class Transformer:
             result = [self._gate_array_constructs(node) for node in result]
         if self.context.target == "mysql":
             result = [self._gate_mysql_full_join(node) for node in result]
+            result = [self._gate_mysql_function_relation(node) for node in result]
         if self.context.target in ("mysql", "oracle"):
             result = [self._gate_column_alias_ref(node) for node in result]
         if self.context.target != "mysql":
@@ -676,6 +677,48 @@ class Transformer:
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _gate_mysql_function_relation(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement using a function as a relation — WHOLE, on MySQL.
+
+        MySQL has no table functions except JSON_TABLE: ``FROM fn(…) a``
+        is a hard 1064 in every spelling (243x on the pg corpus once
+        wave 110 stopped dropping the function silently)."""
+        found = self._find_function_relation(node)
+        if found is None:
+            return node
+        reason = (
+            f"MySQL has no table functions (only JSON_TABLE); FROM "
+            f"{found}(…) has no MySQL spelling. Statement preserved as a comment"
+        )
+        self.context.warn(reason, "function_relation")
+        self.context.mark_unsupported(f"{found} as a relation (MySQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _find_function_relation(self, value: object) -> str | None:
+        """First non-JSON_TABLE function-relation name reachable from *value*."""
+        if isinstance(value, TableRef) and value.function is not None:
+            name = (
+                value.function.name
+                if isinstance(value.function, FunctionCall)
+                else "function"
+            )
+            if name.upper() != "JSON_TABLE":
+                return name
+        if isinstance(value, ASTNode):
+            for f in fields(value):
+                found = self._find_function_relation(getattr(value, f.name))
+                if found is not None:
+                    return found
+            return None
+        if isinstance(value, tuple):
+            for item in value:
+                found = self._find_function_relation(item)
+                if found is not None:
+                    return found
+        return None
 
     def _gate_invalid_date_literal(self, node: ASTNode) -> ASTNode:
         """Degrade a statement CASTing an invalid calendar date — WHOLE.

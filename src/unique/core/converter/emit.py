@@ -3254,6 +3254,9 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
         # without the construct degrade in the transformer, so this only
         # ever renders where it is (or is claimed to be) valid.
         result = _emit_expression(node.function, dialect or "")
+        if dialect == "oracle":
+            # Oracle spells a function relation ``TABLE(fn(args)) alias``.
+            result = f"TABLE({result})"
         if node.ordinality:
             result += " WITH ORDINALITY"
         if node.column_aliases and node.alias:

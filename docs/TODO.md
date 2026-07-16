@@ -214,7 +214,25 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          [expect ≈122−~25] and the full validity sweeps of BOTH
          corpora, which were last measured at `3fdfc88` wave ~102;
          a pg→tsql sweep at `5aed9ee` ran but its summary was lost
-         to a `tail` pipe — DON'T pipe sweep output).**
+         to a `tail` pipe — DON'T pipe sweep output). MEASURED
+         post-upgrade (2026-07-16, 31GiB host, all four engines
+         parallel): discovery pg→pg **122 → 98** (−24, the ":"
+         class gone as predicted). Full sweeps at `314f7c6`:
+         pg-source {tsql **153** (95.4%), mysql 246→see 113, oracle
+         **79** (97.5%)}; mysql-source {tsql **171** (97.1%), pg
+         **105** (98.3%), oracle **129** (97.8%)} — pg-source beats
+         the wave-102 record {163/131/89} across the board;
+         mysql→tsql +5 vs record (166), unclassified, likely the
+         SRF-honesty class. Wave 113 (2026-07-16): wave 110's
+         preserved SRF relations surfaced the target truth — MySQL
+         has NO table functions except JSON_TABLE (`FROM
+         generate_series(…) g` = hard 1064, 243x, previously hidden
+         as an expected-missing bare alias): new
+         `_gate_mysql_function_relation` degrades WHOLE with
+         carrier+warning (JSON_TABLE keeps its path); Oracle now
+         spells a function relation `TABLE(fn(args)) alias`.
+         Verified: pg→mysql **121** (96.0%, beats the 131 record);
+         pg→oracle flat 79. Tests: TestFunctionRelationTargets.**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

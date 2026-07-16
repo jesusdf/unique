@@ -4173,3 +4173,47 @@ class TestDoubleColonCastInBodies:
         out = _t2(src, "oracle", "oracle")
         assert ":new" in out.lower() or ": new" not in out, out
         assert ": :" not in out, out
+
+
+class TestFunctionRelationTargets:
+    """wave 113: wave 110 preserved SRF relations, which surfaced the
+    target-side truth — MySQL has NO table functions (except JSON_TABLE),
+    so ``FROM generate_series(…) g`` shipped as a hard 1064 syntax error
+    (243x on the pg→mysql sweep, previously hidden as an
+    'expected-missing' bare alias). Per the no-silent-loss contract the
+    statement degrades WHOLE on mysql; Oracle spells a function relation
+    ``TABLE(fn(args)) alias``."""
+
+    def test_srf_relation_degrades_on_mysql(self) -> None:
+        r = Transpiler().transpile(
+            "select * from generate_series(1,3) g;",
+            source="postgresql",
+            target="mysql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+        assert re.search(r"(?i)generate_series", r.sql), r.sql
+
+    def test_srf_relation_table_wrapped_on_oracle(self) -> None:
+        out = _t("select * from generate_series(1,3) g;", "oracle")
+        assert re.search(r"(?i)TABLE\(GENERATE_SERIES\(1, 3\)\) g", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_srf_relation_kept_on_tsql(self) -> None:
+        # T-SQL has table functions (and GENERATE_SERIES since 2022).
+        out = _t("select * from generate_series(1,3) g;", "tsql")
+        assert re.search(r"(?i)GENERATE_SERIES\(1, 3\) g", out), out
+
+    def test_json_table_not_degraded_on_mysql(self) -> None:
+        # JSON_TABLE is MySQL's own table function — it must keep its path.
+        r = Transpiler().transpile(
+            "select * from json_table('[1]', '$[*]' columns (x int path '$')) jt;",
+            source="mysql",
+            target="mysql",
+        )
+        assert "1064" not in " ".join(r.unsupported), r.sql
