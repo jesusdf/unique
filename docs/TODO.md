@@ -1565,8 +1565,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         T-SQL/Oracle (`WHERE dbo.DAYNAME('…')`, `WHERE b`); and a row
         tuple in `IN (SELECT …)` joins wave 63's whole-degrade (the
         IN operator joins the tuple-vs-subquery gate). Tests:
-        TestBareValueConditionsAndTupleIn. *Measurement pending next
-        mysql-corpus cycle.*
+        TestBareValueConditionsAndTupleIn. **Measured at `4511621`
+        (2026-07-16): mysql→T-SQL 209→188 (−21, 96.8%) — the
+        truthiness shapes were widespread; →PG/→Oracle flat.
+        Standing: pg-source {261/160/140}, mysql-source
+        {188/111/164}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
