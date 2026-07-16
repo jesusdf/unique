@@ -692,6 +692,16 @@ class ProceduralTransformer:
         if unquoted != dt.name:
             dt = DataType(name=unquoted, params=dt.params)
 
+        # A PG DOMAIN name resolves to its harvested base type off PG
+        # (the CREATE DOMAIN itself degrades, so the name exists nowhere).
+        if self._source == "postgresql" and self._target != "postgresql":
+            from unique.core.converter import PG_DOMAIN_TYPES
+
+            domains = PG_DOMAIN_TYPES.get() or {}
+            base = domains.get(dt.name.lower())
+            if base is not None:
+                return self._transform_data_type(DataType(name=base))
+
         type_name = dt.name.upper()
 
         # Handle %TYPE / %ROWTYPE references
@@ -3178,6 +3188,15 @@ class ProceduralTransformer:
             sql = self._mysql_dq_to_sq(sql)
         if self._source == "postgresql" and self._target != "postgresql":
             sql = self._pg_cast_to_ansi(sql)
+            from unique.core.converter import PG_DOMAIN_TYPES
+
+            domains = PG_DOMAIN_TYPES.get() or {}
+            for dom, base in domains.items():
+
+                def _sub_domain(seg: str, d: str = dom, b: str = base) -> str:
+                    return re.sub(rf"(?i)\b{re.escape(d)}\b", b, seg)
+
+                sql = self._map_outside_strings(sql, _sub_domain)
         sql = self._transform_var_in_sql(sql)
         # An Oracle trigger body's assignment value carries ``:NEW.``/``:OLD.``
         # row references; map them to the target's row qualifier (a no-op for the

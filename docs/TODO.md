@@ -1643,6 +1643,13 @@ fix needs an **anonymized** regression fixture (never a private name).
         (CREATE DOMAIN types; next front: harvest domains → base
         types, like PG_COMPOSITE_TYPES). Standing: pg-source
         {254/160/135}, mysql-source {177/107/141}.**
+        *Wave 80 (2026-07-17):* PG DOMAIN types survived into
+        signatures, declares and raw casts off PG (unknown type names
+        — the rest of the 65x class). New PG_DOMAIN_TYPES harvest
+        (name → base type); _transform_data_type resolves them and
+        raw-text casts substitute string-safely. Tests:
+        TestPgDomainTypes. *Measurement pending next pg-corpus
+        cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

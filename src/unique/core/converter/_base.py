@@ -239,6 +239,12 @@ REFCURSOR_PROCS: contextvars.ContextVar[dict[str, int] | None] = contextvars.Con
     "refcursor_procs", default=None
 )
 
+# PG DOMAIN types defined in the script (name -> base type text): off PG
+# they resolve to the base type in signatures, declares and raw casts.
+PG_DOMAIN_TYPES: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
+    "pg_domain_types", default=None
+)
+
 # Routine names whose CREATE degraded to a carrier in this run: a later
 # CALL to one of them would compile-fail (PLS-00221) — it must degrade too.
 DEGRADED_ROUTINES: contextvars.ContextVar[set[str] | None] = contextvars.ContextVar(
@@ -902,6 +908,7 @@ __all__ = [
     "DEGRADED_ROUTINES",
     "REFCURSOR_PROCS",
     "PG_COMPOSITE_TYPES",
+    "PG_DOMAIN_TYPES",
     "PG_TRIGGER_FN_BODIES",
     "PROC_DATE_PARAMS",
     "TSQL_ALIAS_TYPES",

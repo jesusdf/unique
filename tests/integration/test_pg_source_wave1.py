@@ -3159,3 +3159,28 @@ class TestPgCastsInRawTextAndNotInCast:
         assert re.search(
             r"(?i)CASE WHEN b2 = 0 THEN 1 WHEN b2 <> 0 THEN 0 END", out
         ), out
+
+
+class TestPgDomainTypes:
+    """wave 80: PG DOMAIN types (`CREATE DOMAIN foodomain AS text`)
+    survived into signatures, declares and CASTs off PG — unknown
+    type names everywhere else (the residue of the 65x class).
+    Domains harvest per run and resolve to their base type."""
+
+    def test_domain_in_signature_and_cast(self) -> None:
+        src = (
+            "create domain foodomain as text;\n"
+            "create function vf(p1 text) returns foodomain as $$\n"
+            "begin\n"
+            "  return p1::foodomain;\n"
+            "end$$ language plpgsql;"
+        )
+        out = _t(src, "tsql")
+        body = out.split("CREATE FUNCTION", 1)[-1]
+        offenders = [
+            ln
+            for ln in body.splitlines()
+            if "foodomain" in ln.lower() and not ln.strip().startswith("--")
+        ]
+        assert not offenders, out
+        assert re.search(r"(?i)RETURNS text", out), out

@@ -31,6 +31,7 @@ from unique.core.converter import (
     DEGRADED_ROUTINES,
     IDENTITY_COLUMNS,
     PG_COMPOSITE_TYPES,
+    PG_DOMAIN_TYPES,
     PG_TRIGGER_FN_BODIES,
     PROC_DATE_PARAMS,
     REFCURSOR_PROCS,
@@ -42,6 +43,7 @@ from unique.core.converter import (
     harvest_date_columns,
     harvest_identity_columns,
     harvest_pg_composite_types,
+    harvest_pg_domains,
     harvest_pg_trigger_functions,
     harvest_proc_date_params,
     harvest_temp_tables,
@@ -911,10 +913,14 @@ class Transpiler:
         refcursor_procs_token = REFCURSOR_PROCS.set({})
         pg_trigger_fn_token = None
         pg_composite_token = None
+        pg_domain_token = None
         if source == "postgresql" and target != "postgresql":
             composite_types = harvest_pg_composite_types(sql)
             if composite_types:
                 pg_composite_token = PG_COMPOSITE_TYPES.set(composite_types)
+            domains = harvest_pg_domains(sql)
+            if domains:
+                pg_domain_token = PG_DOMAIN_TYPES.set(domains)
         if target == "tsql" and source != "tsql":
             user_functions = harvest_user_functions(sql)
             if user_functions:
@@ -1134,6 +1140,8 @@ class Transpiler:
                 PG_TRIGGER_FN_BODIES.reset(pg_trigger_fn_token)
             if pg_composite_token is not None:
                 PG_COMPOSITE_TYPES.reset(pg_composite_token)
+            if pg_domain_token is not None:
+                PG_DOMAIN_TYPES.reset(pg_domain_token)
             DEGRADED_ROUTINES.reset(degraded_routines_token)
             REFCURSOR_PROCS.reset(refcursor_procs_token)
             SOURCE_DIALECT.reset(source_dialect_token)

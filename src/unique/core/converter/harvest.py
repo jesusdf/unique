@@ -25,6 +25,17 @@ def harvest_pg_composite_types(sql: str) -> frozenset[str]:
     return frozenset(m.group(1).lower() for m in _PG_COMPOSITE_TYPE_RE.finditer(sql))
 
 
+_PG_DOMAIN_RE = re.compile(
+    r"(?is)\bCREATE\s+DOMAIN\s+(?:\w+\.)?(\w+)\s+AS\s+"
+    r"(\w+(?:\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\))?)"
+)
+
+
+def harvest_pg_domains(sql: str) -> dict[str, str]:
+    """Collect PG domain-type names and their base types."""
+    return {m.group(1).lower(): m.group(2) for m in _PG_DOMAIN_RE.finditer(sql)}
+
+
 def harvest_tsql_alias_types(sql: str) -> dict[str, DataType]:
     """Collect T-SQL alias-type definitions from a whole script."""
     aliases: dict[str, DataType] = {}
