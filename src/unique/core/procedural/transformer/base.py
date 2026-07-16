@@ -4205,7 +4205,21 @@ class ProceduralTransformer:
         target_expr = self._SESSION_ID_EXPR.get(self._target)
         if not target_expr:
             return sql
-        return self._SESSION_ID_PATTERN.sub(target_expr, sql)
+        return self._map_rowcount_fn_in_sql(
+            self._SESSION_ID_PATTERN.sub(target_expr, sql)
+        )
+
+    #: MySQL's ROW_COUNT() — T-SQL/Oracle spell it as a global, not a
+    #: function (wave 174). PG's form is GET DIAGNOSTICS (a statement,
+    #: not an expression), so PG keeps the source spelling.
+    _ROWCOUNT_FN_PATTERN = re.compile(r"(?i)\bROW_COUNT\s*\(\s*\)")
+    _ROWCOUNT_FN_EXPR = {"tsql": "@@ROWCOUNT", "oracle": "SQL%ROWCOUNT"}
+
+    def _map_rowcount_fn_in_sql(self, sql: str) -> str:
+        target_expr = self._ROWCOUNT_FN_EXPR.get(self._target)
+        if not target_expr:
+            return sql
+        return self._ROWCOUNT_FN_PATTERN.sub(target_expr, sql)
 
     def _transform_niladic_datetime(self, sql: str) -> str:
         """Translate current-timestamp expressions across dialects.

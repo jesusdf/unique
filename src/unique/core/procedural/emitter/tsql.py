@@ -198,6 +198,14 @@ class TSqlEmitter(ProceduralEmitter):
             if self._EXEC_ATOMIC_ARG_RE.match(p) or "=" in p:
                 out_parts.append(p)
                 continue
+            if re.fullmatch(r"@@\w+", p):
+                # A global (@@ROWCOUNT) is not a legal EXEC argument
+                # either — hoist it as the numeric it is (wave 174).
+                self._raise_msg_n += 1
+                hoist_var = f"@uq_exec{self._raise_msg_n}"
+                prelude += f"DECLARE {hoist_var} INT = {p};\n"
+                out_parts.append(hoist_var)
+                continue
             var_m = re.search(r"@(\w+)", p)
             vtype = (
                 self._declared_var_types.get(var_m.group(1).lower()) if var_m else None

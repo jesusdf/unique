@@ -2484,6 +2484,18 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             if dialect in ("tsql", "oracle"):
                 return "1" if node.value else "0"
             return "TRUE" if node.value else "FALSE"
+        if node.dtype == "hex":
+            # Binary/hex literal: MySQL x'8f', T-SQL 0x8f, PG bytea,
+            # Oracle HEXTORAW (wave 174 — it shipped as a DECIMAL
+            # rendering that overflowed past BIGINT digits).
+            digits = str(node.value)
+            if dialect == "tsql":
+                return f"0x{digits}"
+            if dialect == "postgresql":
+                return f"'\\x{digits}'::bytea"
+            if dialect == "oracle":
+                return f"HEXTORAW('{digits}')"
+            return f"x'{digits}'"
         if node.dtype == "string" or (
             node.dtype == "unknown" and isinstance(node.value, str)
         ):
@@ -2855,6 +2867,12 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # two arguments) — it IS its argument (wave 161).
     if fn_name == "COALESCE" and len(node.args) == 1 and dialect == "tsql":
         return _emit_expression(node.args[0], dialect)
+    # T-SQL's SUBSTRING requires the length argument (error 174); the
+    # 2-argument form means "to the end" — LEN(x) always covers it.
+    if fn_name == "SUBSTRING" and dialect == "tsql" and len(node.args) == 2:
+        a0 = _emit_expression(node.args[0], dialect)
+        a1 = _emit_expression(node.args[1], dialect)
+        return f"SUBSTRING({a0}, {a1}, LEN({a0}))"
 
     # MySQL's CONNECTION_ID(): every engine has a session id under a
     # different name (wave 171) — dbo.connection_id shipped as a fake

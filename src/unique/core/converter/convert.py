@@ -668,6 +668,12 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     if isinstance(expr, exp.Introducer):
         return convert_expression(expr.expression)
 
+    # Hex/binary literal (MySQL x'8f'): the raw fallback rendered it as
+    # a DECIMAL number, overflowing past BIGINT digits (wave 174). Model
+    # it; each emitter has its own spelling.
+    if isinstance(expr, exp.HexString):
+        return Literal(value=str(expr.this), dtype="hex")
+
     # MySQL's INTERVAL(x, v1, v2, …) INDEX function (position of the
     # last threshold ≤ x) parses as an Interval literal wrapping a
     # Tuple — it shipped ``INTERVAL ((x, v1, …))``, invalid everywhere

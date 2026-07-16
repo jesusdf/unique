@@ -766,7 +766,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          GETDATE() hoist); atomic and named-association arguments pass
          through. Measured: mysql→tsql **57 → 51** (−6, validity
          99.1%). Discovery HOLDS 0. Tests:
-         TestWave173ExecExpressionArgs (3).**
+         TestWave173ExecExpressionArgs (3).* Wave 174 (2026-07-17): x'…'
+         hex literals rendered as DECIMAL numbers (overflowing past
+         BIGINT digits) — modeled as Literal dtype "hex" with per-
+         engine spellings (0x…, x'…', bytea, HEXTORAW). ROW_COUNT()
+         is a global on T-SQL/Oracle (@@ROWCOUNT / SQL%ROWCOUNT; PG
+         keeps the source spelling — GET DIAGNOSTICS is a statement)
+         and not a legal EXEC argument — @@globals hoist as INT. And
+         T-SQL's SUBSTRING requires its length argument (error 174):
+         the 2-argument form gets LEN(x). Measured: mysql→tsql
+         **51 → 43** (−8, validity 99.3%). Discovery HOLDS 0. Tests:
+         TestWave174HexRowcountSubstring (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

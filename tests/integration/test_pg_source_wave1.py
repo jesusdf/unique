@@ -6451,3 +6451,39 @@ class TestWave173ExecExpressionArgs:
             "mysql",
         )
         assert re.search(r"(?i)CALL cbv2\(y\s*\+\s*1, y\)", out), out
+
+
+class TestWave174HexRowcountSubstring:
+    """wave 174 (mysql-corpus): x'…' hex literals rendered as DECIMAL
+    numbers (overflowing past BIGINT digits); ROW_COUNT() is a global
+    on T-SQL/Oracle (and not a legal EXEC argument — hoisted); and
+    T-SQL's SUBSTRING requires its length argument."""
+
+    def test_hex_literal_tsql(self) -> None:
+        out = _t2("insert into t1 values (x'8000000000000000');", "mysql", "tsql")
+        assert "0x8000000000000000" in out, out
+
+    def test_hex_literal_kept_mysql(self) -> None:
+        out = _t2("insert into t1 values (x'8f');", "mysql", "mysql")
+        assert re.search(r"(?i)x'8f'", out), out
+
+    def test_rowcount_exec_arg_hoisted(self) -> None:
+        out = _t2(
+            "create procedure p() begin update b set n = n + 1;"
+            " call log_p('x', row_count()); end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)DECLARE @uq_exec\d+ INT = @@ROWCOUNT;", out), out
+        assert re.search(r"(?i)EXEC log_p 'x', @uq_exec\d+;", out), out
+
+    def test_two_arg_substring_tsql(self) -> None:
+        out = _t2(
+            "select substring(email, locate('@', email) + 1) from t1;",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(
+            r"(?i)SUBSTRING\(email, CHARINDEX\('@', email\) \+ 1," r" LEN\(email\)\)",
+            out,
+        ), out
