@@ -5803,3 +5803,59 @@ class TestWave156LabeledBodyNoBegin:
         out = _t2(sql, "mysql", "tsql")
         assert "DECLARE @repeat" not in out, out
         assert re.search(r"(?i)INSERT INTO t1", out), out
+
+
+class TestWave157HavingAliasStringAggDistinct:
+    """wave 157 (mysql-corpus): MySQL lets HAVING reference a select
+    alias — T-SQL/PG/Oracle need the expression inlined. And
+    STRING_AGG(DISTINCT …) has no T-SQL spelling at all: honest
+    carrier, never invalid output."""
+
+    def test_having_alias_inlined_tsql(self) -> None:
+        out = _t2(
+            "select max(col1) as a from t1 group by col2 having a like '%';",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)HAVING MAX\(col1\) LIKE '%'", out), out
+
+    def test_having_alias_inlined_pg(self) -> None:
+        out = _t2(
+            "select max(col1) as a from t1 group by col2 having a > 1;",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?i)HAVING MAX\(col1\) > 1", out), out
+
+    def test_having_alias_kept_mysql(self) -> None:
+        out = _t2(
+            "select max(col1) as a from t1 group by col2 having a > 1;",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(r"(?i)HAVING a > 1", out), out
+
+    def test_having_real_column_untouched(self) -> None:
+        out = _t2(
+            "select col2, max(col1) from t1 group by col2 having col2 > 1;",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)HAVING col2 > 1", out), out
+
+    def test_string_agg_distinct_carrier_tsql(self) -> None:
+        out = _t2(
+            "select group_concat(distinct col1) from t1 group by col2;",
+            "mysql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out, out
+        assert "STRING_AGG(DISTINCT" not in out.upper(), out
+
+    def test_string_agg_distinct_kept_pg(self) -> None:
+        out = _t2(
+            "select group_concat(distinct col1) from t1 group by col2;",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?i)STRING_AGG\(DISTINCT col1", out), out

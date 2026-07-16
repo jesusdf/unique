@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 
 from unique.core.ast_nodes import (
@@ -599,11 +600,17 @@ class Transformer:
         if self.context.source == "mysql" and self.context.target != "mysql":
             result = [self._gate_mysql_user_var(node) for node in result]
             result = [self._strip_mysql_charset_marks(node) for node in result]
+            result = [
+                n2
+                for n in result
+                if isinstance((n2 := self._inline_having_alias(n)), ASTNode)
+            ]
         if self.context.target in ("tsql", "oracle"):
             result = [self._gate_nested_cte_arm(node) for node in result]
             result = [self._gate_conditioned_lateral(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_temp_view(node) for node in result]
+            result = [self._gate_tsql_agg_distinct(node) for node in result]
             result = [self._gate_tsql_natural_join(node) for node in result]
             result = [self._gate_tsql_nth_value(node) for node in result]
             result = [self._gate_tsql_tuple_subquery(node) for node in result]
@@ -1395,6 +1402,94 @@ class Transformer:
             )
         if isinstance(value, tuple):
             return any(self._contains_column_alias_ref(item) for item in value)
+        return False
+
+    def _inline_having_alias(self, value: object) -> object:
+        """MySQL lets HAVING reference a select alias; every other engine
+        needs the aliased expression inlined (wave 157). Bottom-up so
+        subquery HAVINGs get the same treatment."""
+        node = self._map_children(value, self._inline_having_alias)
+        if not (isinstance(node, SelectStatement) and node.having is not None):
+            return node
+        aliases = {
+            col.name.upper(): col.expression
+            for col in node.columns
+            if isinstance(col, Alias) and not isinstance(col.expression, ColumnRef)
+        }
+        if not aliases:
+            return node
+
+        def substitute(v: object) -> object:
+            if (
+                isinstance(v, ColumnRef)
+                and v.table is None
+                and v.name.upper() in aliases
+            ):
+                return aliases[v.name.upper()]
+            return self._map_children(v, substitute)
+
+        having = substitute(node.having)
+        if having is node.having:
+            return node
+        assert isinstance(having, ASTNode)
+        return replace(node, having=having)
+
+    def _map_children(self, value: object, fn: Callable[[object], object]) -> object:
+        """Rebuild ``value`` with ``fn`` mapped over its child nodes
+        (identity when nothing changes — callers can ``is``-check)."""
+        if isinstance(value, tuple):
+            new_items = tuple(fn(v) for v in value)
+            return (
+                value
+                if all(a is b for a, b in zip(new_items, value, strict=True))
+                else new_items
+            )
+        if not isinstance(value, ASTNode):
+            return value
+        changes: dict[str, object] = {}
+        for f in fields(value):
+            old = getattr(value, f.name)
+            new = fn(old)
+            if new is not old:
+                changes[f.name] = new
+        return replace(value, **changes) if changes else value  # type: ignore[arg-type]
+
+    def _gate_tsql_agg_distinct(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement using STRING_AGG(DISTINCT …) — WHOLE, on
+        T-SQL (wave 157). MySQL/PG accept DISTINCT inside their
+        string-aggregate; T-SQL's STRING_AGG has no DISTINCT in any
+        spelling and the rewrite needs a derived-table restructure."""
+        if not self._contains_agg_distinct(node):
+            return node
+        reason = (
+            "T-SQL's STRING_AGG takes no DISTINCT; deduplicate in a "
+            "derived table first. Statement preserved as a comment"
+        )
+        self.context.warn(reason, "tsql_agg_distinct")
+        self.context.mark_unsupported("STRING_AGG(DISTINCT) (T-SQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _contains_agg_distinct(self, value: object) -> bool:
+        if isinstance(value, FunctionCall):
+            name = value.name.upper()
+            if name in ("STRING_AGG", "GROUP_CONCAT", "LISTAGG") and (
+                value.distinct
+                or any(
+                    isinstance(a, RawSQL)
+                    and "Unhandled expression type: Distinct" in a.reason
+                    for a in value.args
+                )
+            ):
+                return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_agg_distinct(getattr(value, f.name))
+                for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_agg_distinct(item) for item in value)
         return False
 
     def _gate_tsql_natural_join(self, node: ASTNode) -> ASTNode:

@@ -619,7 +619,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          ITERATE is a modeled ContinueStatement (T-SQL CONTINUE, MySQL
          ITERATE label — it shipped literal ``CONTINUE hmm``).
          Measured: mysql→tsql **155 → 151** (−4). Discovery HOLDS 0.
-         Tests: TestWave156LabeledBodyNoBegin (4).**
+         Tests: TestWave156LabeledBodyNoBegin (4).* Wave 157 (2026-07-16): MySQL
+         lets HAVING reference a select alias — every other engine
+         needs the aliased expression inlined (new bottom-up
+         ``_inline_having_alias`` + generic ``_map_children`` helper).
+         And STRING_AGG(DISTINCT …) has no T-SQL spelling in any form:
+         honest whole-statement carrier (``_gate_tsql_agg_distinct``).
+         Measured: mysql→tsql **151 → 150** (−1 — the class was
+         chain-glued; re-classify next). Discovery HOLDS 0. Tests:
+         TestWave157HavingAliasStringAggDistinct (6).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
