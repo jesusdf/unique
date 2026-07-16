@@ -3491,3 +3491,23 @@ class TestParenCastDegrades:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, out
+
+
+class TestRaiseSqlstateLiteral:
+    """wave 93: PG's `RAISE sqlstate '1234F'` fell to the
+    raw-expression path where the T-SQL SQLSTATE→ERROR_STATE()
+    substitution mangled it into `CAST(ERROR_STATE() …) '1234F'`
+    (3x). Like the condition-name form (wave 68), it folds into a
+    literal message."""
+
+    def test_raise_sqlstate_tsql(self) -> None:
+        src = (
+            "create function rs() returns int as $$\n"
+            "begin\n"
+            "  raise sqlstate '1234F';\n"
+            "  return 0;\n"
+            "end$$ language plpgsql;"
+        )
+        out = _t(src, "tsql")
+        assert "ERROR_STATE()" not in out.split("RAISERROR")[0], out
+        assert re.search(r"(?i)'SQLSTATE 1234F'", out), out

@@ -787,6 +787,33 @@ class PlsqlStatementsMixin(ParserBase):
                 return PrintStatement(expression=expr)
             return RaiseErrorStatement(message=expr)
 
+        # ``RAISE SQLSTATE 'xxxxx' [USING …]`` — folds into a literal
+        # message like the condition-name form below (the raw path would
+        # let the SQLSTATE→ERROR_STATE substitution mangle it).
+        if (
+            self._dialect == "postgresql"
+            and self._current().upper_value == "SQLSTATE"
+            and self._peek(1).type == TokenType.STRING
+        ):
+            self._advance()
+            state = self._advance().value.strip("'")
+            state_using: list[str] = []
+            if self._current().is_keyword("USING"):
+                self._advance()
+                while (
+                    not self._at_end() and self._current().type != TokenType.SEMICOLON
+                ):
+                    state_using.append(self._flat_value(self._current()))
+                    self._advance()
+            self._match_type(TokenType.SEMICOLON)
+            content = f"SQLSTATE {state}" + (
+                " (" + " ".join(state_using) + ")" if state_using else ""
+            )
+            literal = "'" + content.replace("'", "''") + "'"
+            return RaiseErrorStatement(
+                message=RawSQL(sql=literal, reason="pg sqlstate RAISE")
+            )
+
         # ``RAISE condition_name [USING k = v, …]`` — the name folds into
         # a literal message (USING items appended as text, like the
         # format path); the raw-expression fallback shipped it verbatim.

@@ -1778,6 +1778,12 @@ fix needs an **anonymized** regression fixture (never a private name).
         `092b41a` (2026-07-17): −14 — pg→T-SQL 172→165 (94.9%),
         pg→MySQL 135→132 (95.7%), pg→Oracle 94→90 (97.2%). Standing:
         pg-source {165/132/90}, mysql-source {166/107/129}.**
+        *Wave 93 (2026-07-17):* PG's `RAISE sqlstate '1234F'` fell to
+        the raw-expression path where the T-SQL SQLSTATE→ERROR_STATE
+        substitution mangled it (3x); like wave 68's condition-name
+        form, it folds into a literal message. Tests:
+        TestRaiseSqlstateLiteral. *Measurement pending next pg-corpus
+        cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
