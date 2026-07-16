@@ -165,7 +165,25 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          re-verified live-green. Lesson for the structural list: a
          "render faithfully to the source" rule only holds where the
          text IS source — the procedural pipeline's embedded text is
-         a hybrid. Tests: TestEmbeddedFallbackSpelling.**
+         a hybrid. Tests: TestEmbeddedFallbackSpelling. Wave 109
+         (2026-07-16): `DROP TRIGGER name ON tbl` lost its mandatory
+         ON even pg→pg (sqlglot parks it in the unread `cluster` arg
+         — the DROP INDEX lesson again); now harvested for TRIGGER
+         too, PG emits it, and the inverse neighbor (tsql/mysql/
+         oracle sources are schema-scoped, no table to carry)
+         degrades to the documented carrier instead of shipping
+         invalid PG silently. Known honest limit: `ON schema.tbl`
+         doesn't parse in sqlglot (carrier + warning, not silent).
+         Tests: TestDropTriggerOnTable (7). Measured: **226 → 156
+         silent gaps (−70)** (working tree over `45edfa2`; the
+         DROP TRIGGERs were most of the 99x end-of-input class).
+         Remaining top classes: FROM-position set-returning function
+         dropped (`FROM generate_series(…) g` → `FROM g`, the
+         biggest remaining silent DATA LOSS — needs a
+         function-relation model in the IR, fresh-session scale),
+         psql client-side leftovers (25x near ":"), `WITH ins AS
+         (INSERT … RETURNING)` mangled to `SELECT *` (14x), plpgsql
+         array-typed declare shred (6x, above).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

@@ -3999,3 +3999,38 @@ class TestEmbeddedFallbackSpelling:
         out = _t("select arr[2] from t;", "postgresql")
         assert "arr[2]" in out, out
         assert "arr[1]" not in out, out
+
+
+class TestDropTriggerOnTable:
+    """wave 109: PG's ``DROP TRIGGER name ON table`` lost its mandatory ON
+    clause even pg→pg (sqlglot parks it in the unread ``cluster`` arg —
+    the DROP INDEX lesson again), shipping invalid PG silently. And the
+    inverse neighbor: a T-SQL/MySQL/Oracle DROP TRIGGER (schema-scoped,
+    no table) shipped to PG without the ON that PG requires — now the
+    documented carrier, like DROP INDEX."""
+
+    def test_pg_keeps_on_table(self) -> None:
+        out = _t("drop trigger if exists mytrig on t1;", "postgresql")
+        assert re.search(r"(?i)DROP TRIGGER IF EXISTS mytrig ON t1", out), out
+        assert "UNIQUE:" not in out, out
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_on_correctly_dropped_off_pg(self, target: str) -> None:
+        out = _t("drop trigger if exists mytrig on t1;", target)
+        assert re.search(r"(?i)DROP TRIGGER", out), out
+        assert not re.search(r"(?i)ON t1", out), out
+        assert "UNIQUE:" not in out, out
+
+    @pytest.mark.parametrize("source", ["tsql", "mysql", "oracle"])
+    def test_sourceless_on_degrades_to_pg(self, source: str) -> None:
+        r = Transpiler().transpile(
+            "drop trigger mytrig;", source=source, target="postgresql"
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql
+        assert r.warnings or r.unsupported, r.sql
+        assert re.search(r"(?i)DROP TRIGGER (IF EXISTS )?mytrig", r.sql), r.sql

@@ -1124,16 +1124,18 @@ def _convert_drop(expr: exp.Drop) -> DropStatement:
     table = _convert_table_ref(expr.this) if expr.this else TableRef(name="unknown")
     if_exists = expr.args.get("exists") is not None
 
-    # DROP INDEX: keep the owning table. T-SQL spells it ``ON tbl`` (sqlglot
-    # parks it in ``cluster`` as an OnProperty) or, legacy, as the qualifier
-    # of a two-part name (``DROP INDEX tbl.ix``). MySQL requires it; dropping
-    # it silently made the statement invalid there (audit B2).
+    # DROP INDEX / DROP TRIGGER: keep the owning table. T-SQL indexes and PG
+    # triggers spell it ``ON tbl`` (sqlglot parks it in ``cluster`` as an
+    # OnProperty) or, legacy, as the qualifier of a two-part index name
+    # (``DROP INDEX tbl.ix``). MySQL DROP INDEX and PG DROP TRIGGER require
+    # it; dropping it silently made the statement invalid there (audit B2;
+    # wave 109 for triggers).
     on_table: str | None = None
-    if kind == "INDEX":
+    if kind in ("INDEX", "TRIGGER"):
         cluster = expr.args.get("cluster")
         if cluster is not None and getattr(cluster, "this", None) is not None:
             on_table = str(cluster.this.name or cluster.this)
-        elif table.schema:
+        elif kind == "INDEX" and table.schema:
             # Two-part legacy form: the "schema" slot is really the table.
             on_table = table.schema
             table = TableRef(name=table.name, quoted=table.quoted)

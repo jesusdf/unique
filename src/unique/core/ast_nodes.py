@@ -474,8 +474,9 @@ class DropStatement(ASTNode):
     name: TableRef
     if_exists: bool = False
     cascade: bool = False
-    # DROP INDEX only: the owning table (T-SQL ``ON tbl`` / legacy ``tbl.ix``;
-    # MySQL requires it, Oracle/PostgreSQL don't carry it).
+    # DROP INDEX / DROP TRIGGER: the owning table (T-SQL ``ON tbl`` /
+    # legacy ``tbl.ix`` for indexes; PG ``ON tbl`` for triggers — mandatory
+    # there, absent on the schema-scoped engines).
     on_table: str | None = None
 
 

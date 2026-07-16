@@ -2142,6 +2142,21 @@ def _emit_drop(node: DropStatement, dialect: str) -> str:
         # Oracle/PostgreSQL: index names are schema-scoped; the T-SQL ON
         # table (or legacy tbl. qualifier) is dropped.
         return f"DROP INDEX {exists}{name}"
+    if node.object_type == "TRIGGER":
+        # PG triggers are per-table: ``ON tbl`` is mandatory there and
+        # invalid everywhere else (trigger names are schema-scoped on
+        # T-SQL/MySQL/Oracle, which is also why a non-PG source has no
+        # table to carry over — that degrades, like DROP INDEX).
+        if dialect == "postgresql":
+            if not node.on_table:
+                return (
+                    "-- UNIQUE: PostgreSQL DROP TRIGGER requires the "
+                    "owning table (ON tbl), which the source statement "
+                    "does not carry; original preserved:\n"
+                    f"-- DROP TRIGGER {exists}{name}"
+                )
+            return f"DROP TRIGGER {exists}{name} ON {node.on_table}{cascade}"
+        return f"DROP TRIGGER {exists}{name}{cascade}"
     return f"DROP {node.object_type} {exists}{name}{cascade}"
 
 
