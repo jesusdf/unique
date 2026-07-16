@@ -556,7 +556,20 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (the wave-146 procedural mirror had it; the DML side lagged
          — dual-pipeline symmetry cuts BOTH ways). Measured:
          pg→mysql **83 → 78** (97.4%), discovery HOLDS 0. Tests:
-         TestMysqlDmlCastText.**
+         TestMysqlDmlCastText.* Wave 149 (2026-07-16): the
+         PG-source PROCEDURAL_TYPE_MAPS **never existed** — internal
+         aliases (int2/4/8, float4/8) and PG-only types (TEXT, BYTEA,
+         UUID, TIMESTAMPTZ, JSON/B, SERIAL) shipped raw into every
+         target's routine signatures. All three maps added, ALIGNED
+         with EMIT_TYPE_MAP via the cross-pipeline agreement contract
+         (which fired on the first draft: FLOAT4/INT8/TIMESTAMPTZ
+         disagreements — Oracle has NO BIGINT, mysql REAL is a
+         DOUBLE alias); two tests STRENGTHENED (TEXT now maps to the
+         modern large-string type instead of the deprecated raw
+         passthrough). Measured: syntax counts flat {68/78/51} BUT
+         oracle ok +27 (1749→1776 — correct types moved statements
+         from environmental-fail to EXECUTING), discovery HOLDS 0.
+         Tests: TestPgSourceProceduralTypeMaps (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

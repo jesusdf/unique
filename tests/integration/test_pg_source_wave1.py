@@ -1597,7 +1597,9 @@ class TestOracleUnderscoreLocals:
             "language plpgsql;",
             "oracle",
         )
-        assert re.search(r"(?i)uq_msg text", out), out
+        # wave 149 STRENGTHENED: TEXT now maps to the target's modern
+        # large-string type instead of passing through raw.
+        assert re.search(r"(?i)uq_msg (text|NVARCHAR\(MAX\)|CLOB)", out), out
         assert re.search(r"(?i)uq_msg := 'x'", out), out
         assert re.search(r"'_msg: ' \|\| uq_msg", out), out
 
@@ -3183,7 +3185,10 @@ class TestPgDomainTypes:
             if "foodomain" in ln.lower() and not ln.strip().startswith("--")
         ]
         assert not offenders, out
-        assert re.search(r"(?i)RETURNS text", out), out
+        # wave 149: the domain's base TEXT maps to NVARCHAR(MAX) on
+        # T-SQL (raw TEXT is deprecated there) — stronger than the old
+        # passthrough expectation.
+        assert re.search(r"(?i)RETURNS (text|NVARCHAR\(MAX\))", out), out
 
 
 class TestLanguageSqlTailStrip:
@@ -5566,3 +5571,36 @@ class TestMysqlDmlCastText:
         )
         assert "AS TEXT" not in out.upper(), out
         assert re.search(r"(?i)CAST\('dummy' AS CHAR\)", out), out
+
+
+class TestPgSourceProceduralTypeMaps:
+    """wave 149: the PG-source PROCEDURAL_TYPE_MAPS never existed — the
+    internal aliases (int4/int8/float8…) and PG-only types shipped raw
+    into every target's routine signatures."""
+
+    def test_int_aliases_mysql(self) -> None:
+        src = (
+            "create function g1(x int4) returns int8 as $$\n"
+            "begin return x; end $$ language plpgsql;"
+        )
+        out = _t(src, "mysql")
+        assert "int4" not in out.lower(), out
+        assert re.search(r"(?i)RETURNS BIGINT", out), out
+
+    def test_float8_tsql(self) -> None:
+        src = (
+            "create function g2(x float8) returns float8 as $$\n"
+            "begin return x; end $$ language plpgsql;"
+        )
+        out = _t(src, "tsql")
+        assert "float8" not in out.lower(), out
+        assert re.search(r"(?i)RETURNS FLOAT", out), out
+
+    def test_bytea_oracle(self) -> None:
+        src = (
+            "create function g3(x bytea) returns bytea as $$\n"
+            "begin return x; end $$ language plpgsql;"
+        )
+        out = _t(src, "oracle")
+        assert "bytea" not in out.lower(), out
+        assert re.search(r"(?i)RETURN BLOB", out), out

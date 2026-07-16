@@ -255,6 +255,13 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "YEAR": "SMALLINT",
     },
     "mysql": {
+        # PG internal type aliases (int4 etc.) — invalid spellings
+        # everywhere else (wave 149).
+        "INT2": "SMALLINT",
+        "INT4": "INT",
+        "INT8": "BIGINT",
+        "FLOAT4": "FLOAT",
+        "FLOAT8": "DOUBLE",
         # Oracle-source names (the passthrough/MODIFY rewriters feed these).
         "NUMBER": "DECIMAL",
         "VARCHAR2": "VARCHAR",
@@ -282,6 +289,13 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "TIMESTAMPTZ": "TIMESTAMP",
     },
     "oracle": {
+        # PG internal type aliases (int4 etc.) — invalid spellings
+        # everywhere else (wave 149).
+        "INT2": "SMALLINT",
+        "INT4": "INTEGER",
+        "INT8": "NUMBER(19)",
+        "FLOAT4": "BINARY_FLOAT",
+        "FLOAT8": "BINARY_DOUBLE",
         "NVARCHAR": "NVARCHAR2",
         "VARCHAR": "VARCHAR2",
         "NTEXT": "NCLOB",
@@ -323,6 +337,13 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "TIMESTAMPTZ": "TIMESTAMP WITH TIME ZONE",
     },
     "tsql": {
+        # PG internal type aliases (int4 etc.) — invalid spellings
+        # everywhere else (wave 149).
+        "INT2": "SMALLINT",
+        "INT4": "INT",
+        "INT8": "BIGINT",
+        "FLOAT4": "REAL",
+        "FLOAT8": "FLOAT",
         "VARCHAR2": "VARCHAR",
         "NVARCHAR2": "NVARCHAR",
         "NUMBER": "NUMERIC",
@@ -373,6 +394,54 @@ BARE_CHAR_BIGTEXT: dict[str, dict[str, str]] = {
 #: Per-pair type renames applied by the procedural pipeline (routine
 #: parameters, DECLARE sections, RETURN types).
 PROCEDURAL_TYPE_MAPS: dict[tuple[str, str], dict[str, str]] = {
+    # PG-source maps NEVER EXISTED before wave 149 — the internal
+    # aliases (int4…) and PG-only types shipped raw into every target.
+    ("postgresql", "tsql"): {
+        "INT2": "SMALLINT",
+        "INT4": "INT",
+        "INT8": "BIGINT",
+        "FLOAT4": "REAL",
+        "FLOAT8": "FLOAT",
+        "DOUBLE PRECISION": "FLOAT",
+        "TEXT": "NVARCHAR(MAX)",
+        "BYTEA": "VARBINARY(MAX)",
+        "BOOLEAN": "BIT",
+        "BOOL": "BIT",
+        "TIMESTAMPTZ": "DATETIMEOFFSET",
+        "UUID": "UNIQUEIDENTIFIER",
+        "JSON": "NVARCHAR(MAX)",
+        "JSONB": "NVARCHAR(MAX)",
+    },
+    ("postgresql", "mysql"): {
+        "INT2": "SMALLINT",
+        "INT4": "INT",
+        "INT8": "BIGINT",
+        "FLOAT4": "FLOAT",
+        "FLOAT8": "DOUBLE",
+        "DOUBLE PRECISION": "DOUBLE",
+        "BYTEA": "LONGBLOB",
+        "TIMESTAMPTZ": "TIMESTAMP",
+        "UUID": "CHAR(36)",
+        "JSONB": "JSON",
+        "SERIAL": "INT",
+        "BIGSERIAL": "BIGINT",
+    },
+    ("postgresql", "oracle"): {
+        "INT2": "SMALLINT",
+        "INT4": "INTEGER",
+        "INT8": "NUMBER(19)",
+        "FLOAT4": "BINARY_FLOAT",
+        "FLOAT8": "BINARY_DOUBLE",
+        "DOUBLE PRECISION": "BINARY_DOUBLE",
+        "TEXT": "CLOB",
+        "BYTEA": "BLOB",
+        "TIMESTAMPTZ": "TIMESTAMP WITH TIME ZONE",
+        "UUID": "RAW(16)",
+        "JSON": "CLOB",
+        "JSONB": "CLOB",
+        "SERIAL": "NUMBER",
+        "BIGSERIAL": "NUMBER",
+    },
     ("mysql", "oracle"): {
         "INT": "NUMBER(10)",
         "INTEGER": "NUMBER(10)",
