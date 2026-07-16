@@ -1705,6 +1705,14 @@ fix needs an **anonymized** regression fixture (never a private name).
         so this is a pure correctness (no-silent-loss) repair.
         Standing: pg-source {182/159/133}, mysql-source
         {177/107/141}.**
+        *Wave 86 (2026-07-17):* PG array types in RETURNS shredded
+        the header — the RETURNS branch used the generic type parser,
+        not the pg-aware one that consumes `[]` (48x pg→oracle:
+        `[] LANGUAGE; plpgsql STRICT;` garbage declares). RETURNS now
+        parses pg-aware, and array-typed params/returns/declares
+        degrade the routine whole off PG (no target equivalent).
+        Tests: TestPgArrayTypedRoutines. *Measurement pending next
+        pg-corpus cycle.*
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED

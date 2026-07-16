@@ -3311,3 +3311,38 @@ class TestNestedChainMidOrderStrip:
             "tsql",
         )
         assert re.search(r"(?is)UNION\s+SELECT 4, 5, 6\s+INTERSECT", out), out
+
+
+class TestPgArrayTypedRoutines:
+    """wave 86: PG array types in signatures (`x real[]`) shredded
+    the header parser — `[] LANGUAGE; plpgsql STRICT;` garbage
+    declares (48x pg→oracle). `type[]` now parses as an array-marked
+    DataType, and array-typed params/returns/declares degrade the
+    routine whole off PG (no target equivalent)."""
+
+    _SRC = (
+        "create function eatarray(x real[]) returns real[] as $$\n"
+        "begin\n"
+        "  x[1] := x[1] + 1;\n"
+        "  return x;\n"
+        "end$$ language plpgsql;"
+    )
+
+    def test_array_param_degrades_oracle(self) -> None:
+        out = _t(self._SRC, "oracle")
+        code = [
+            ln
+            for ln in out.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, out
+        assert "real[]" in out, out
+
+    def test_array_param_degrades_tsql(self) -> None:
+        out = _t(self._SRC, "tsql")
+        code = [
+            ln
+            for ln in out.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, out

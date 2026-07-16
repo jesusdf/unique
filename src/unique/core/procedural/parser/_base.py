@@ -574,7 +574,11 @@ class ParserBase:
             # declaration section that follows.
             return_type = self._parse_data_type_or_reference()
         elif self._match_keyword("RETURNS"):
-            return_type = self._parse_data_type()
+            return_type = (
+                self._parse_pg_data_type()
+                if self._dialect == "postgresql"
+                else self._parse_data_type()
+            )
             # PG's two-word SETOF <type>: parse as ONE unit or the inner
             # type name leaks into the header/body as garbage.
             if self._dialect == "postgresql" and return_type.name.upper() == "SETOF":

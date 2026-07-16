@@ -1184,6 +1184,14 @@ class ProceduralTransformer:
             or node.return_type.name.upper().startswith("SETOF")
         ):
             culprit = f"'{node.return_type.name}' return type"
+        elif "[]" in (
+            (node.return_type.name if node.return_type else "")
+            + "".join(p.data_type.name for p in node.parameters)
+            + "".join(
+                s.data_type.name for s in node.body if isinstance(s, DeclareStatement)
+            )
+        ):
+            culprit = "array-typed parameter/return/variable"
         if culprit is None:
             return None
         from unique.core.procedural.emitter import ProceduralEmitter
