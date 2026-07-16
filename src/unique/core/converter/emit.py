@@ -804,6 +804,10 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
     if dialect == "tsql" and isinstance(node, Literal) and node.dtype == "boolean":
         return "1 = 1" if node.value else "1 = 0"
     if dialect in ("tsql", "oracle"):
+        if isinstance(node, Literal) and node.dtype in ("integer", "number"):
+            # MySQL truthiness again: a bare numeric literal condition
+            # (``CASE WHEN 1``, ``IF(1, …)``) is error 4145 on T-SQL.
+            return f"{_emit_expression(node, dialect)} <> 0"
         if isinstance(node, SubqueryExpression):
             # MySQL truthiness: a bare scalar subquery as a condition is
             # nonzero-is-true; T-SQL/Oracle need the comparison.
@@ -2791,7 +2795,10 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # Conditional shorthand: MySQL IF() / T-SQL IIF(). Neither exists on
     # PostgreSQL/Oracle, whose spelling is a searched CASE.
     if fn_name in ("IF", "IIF") and len(node.args) == 3:
-        cond, then_v, else_v = (_emit_expression(a, dialect) for a in node.args)
+        # The first argument is condition position — MySQL truthiness
+        # (a bare number/column) must become a comparison on T-SQL/Oracle.
+        cond = _emit_condition(node.args[0], dialect)
+        then_v, else_v = (_emit_expression(a, dialect) for a in node.args[1:])
         if dialect == "tsql":
             return f"IIF({cond}, {then_v}, {else_v})"
         if dialect == "mysql":

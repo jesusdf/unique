@@ -5721,3 +5721,37 @@ class TestWave154RepeatConcat:
     def test_repeat_kept_pg(self) -> None:
         out = _t2("select repeat('ab', 3);", "mysql", "postgresql")
         assert re.search(r"(?i)REPEAT\('ab', 3\)", out), out
+
+
+class TestWave155ConditionLiterals:
+    """wave 155 (mysql-corpus): MySQL treats a bare integer as a truth
+    value in IF()/searched-CASE conditions; T-SQL/Oracle raise 4145 —
+    the literal must become a real comparison (``1 <> 0``)."""
+
+    def test_iif_integer_condition_tsql(self) -> None:
+        out = _t2("select if(1, 'a', 'b');", "mysql", "tsql")
+        assert re.search(r"(?i)IIF\(1 <> 0,", out), out
+
+    def test_case_when_integer_tsql(self) -> None:
+        out = _t2("select case when 1 then 'a' else 'b' end;", "mysql", "tsql")
+        assert re.search(r"(?i)WHEN 1 <> 0 THEN", out), out
+
+    def test_case_when_integer_oracle(self) -> None:
+        out = _t2(
+            "select case when 1 then 'a' else 'b' end from dual;",
+            "mysql",
+            "oracle",
+        )
+        assert re.search(r"(?i)WHEN 1 <> 0 THEN", out), out
+
+    def test_if_integer_kept_mysql(self) -> None:
+        out = _t2("select if(1, 'a', 'b');", "mysql", "mysql")
+        assert re.search(r"(?i)IF\(1,", out), out
+
+    def test_real_condition_untouched(self) -> None:
+        out = _t2(
+            "select case when a = 1 then 'a' else 'b' end from t;",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)WHEN a = 1 THEN", out), out

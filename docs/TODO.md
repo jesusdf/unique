@@ -602,7 +602,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          mysql→tsql **167 → 164** — BELOW the 166 campaign record:
          the ⚠+5 anomaly is resolved and beaten (today's shared
          waves −4, this wave −3). Discovery HOLDS 0. Tests:
-         TestWave154RepeatConcat (4).**
+         TestWave154RepeatConcat (4).* Wave 155 (2026-07-16): MySQL
+         truthiness in condition position — a bare numeric literal in
+         ``IF(1, …)``/searched ``CASE WHEN 1`` is error 4145 on
+         T-SQL/Oracle; ``_emit_condition`` now comparisonizes the
+         literal and IIF routes its first argument through condition
+         position. Also: pyodbc import-not-found (env driver drift)
+         gets the live_validate override treatment. Measured:
+         mysql→tsql **164 → 155** (−9). Discovery HOLDS 0. Tests:
+         TestWave155ConditionLiterals (5).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

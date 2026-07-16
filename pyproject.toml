@@ -120,7 +120,7 @@ warn_unused_configs = true
 # ``# type: ignore`` comments are therefore needed in one env and unused
 # in another — allow that, instead of failing whichever env disagrees.
 [[tool.mypy.overrides]]
-module = ["unique.core.live_validate"]
+module = ["unique.core.live_validate", "unique.core.metadata"]
 disable_error_code = ["unused-ignore"]
 
 [tool.pytest.ini_options]

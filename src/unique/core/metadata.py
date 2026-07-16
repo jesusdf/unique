@@ -153,7 +153,7 @@ class MetadataResolver:
             )
             self._placeholder = "%s"  # pymssql uses pyformat
         except ImportError:
-            import pyodbc
+            import pyodbc  # type: ignore[import-not-found]
 
             conn_str = (
                 f"DRIVER={{ODBC Driver 18 for SQL Server}};"
