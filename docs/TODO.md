@@ -78,7 +78,8 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          PG's `TABLE name` shorthand shipped as `[TABLE] AS onek`
          (wave 104 fixed it — pre-normalized to `SELECT * FROM
          name`). The remaining silent classes are all
-         sqlglot-leniency escapes → mechanism 3.
+         sqlglot-leniency escapes → mechanism 3. (Wave 104 verified
+         at `b400247`: validity flat, mangle gone.)
       3. *Live output validation, opt-in (complete):* promote the
          sweep's per-engine executors (`scripts/validity_sweep.py`
          already has PARSEONLY/throwaway-DB/throwaway-schema runners
