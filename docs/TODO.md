@@ -495,7 +495,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          emission); and T-SQL's aliased delete is `DELETE dt FROM t
          dt` (`DELETE FROM t dt` is a syntax error). Measured:
          pg→tsql **87 → 83** (97.4%), discovery HOLDS 0. Tests:
-         TestWave140GroupConcatAndDeleteAlias (4).**
+         TestWave140GroupConcatAndDeleteAlias (4).* Wave 141 (2026-07-16): boolean
+         AND/OR **and unary predicates** (NOT / IS [NOT] NULL /
+         EXISTS) in VALUE position — the CASE wrap existed for
+         comparisons only; AND/OR wrapped with BARE truthy operands
+         (`WHEN b1 AND a3`, 4145) and `(id IS NOT NULL) AS a3`
+         shipped bare. Both now route through `_emit_condition`
+         (which comparisonizes); two-valued predicates get the exact
+         ELSE 0 form. Measured: pg→tsql **83 → 77** (97.6%),
+         oracle flat 56, discovery HOLDS 0. Tests:
+         TestBooleanOpInSelectList (3),
+         TestUnaryPredicateInSelectList (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

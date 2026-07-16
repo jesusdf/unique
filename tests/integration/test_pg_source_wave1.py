@@ -5322,3 +5322,38 @@ class TestWave140GroupConcatAndDeleteAlias:
     def test_delete_alias_pg_unchanged(self) -> None:
         out = _t("delete from delete_test dt where dt.a > 75;", "postgresql")
         assert re.search(r"(?i)DELETE FROM delete_test dt", out), out
+
+
+class TestBooleanOpInSelectList:
+    """wave 141: a boolean AND/OR in VALUE position wrapped into a CASE
+    whose condition kept the BARE columns (``CASE WHEN b1 AND a3`` —
+    4145, 6x): the wrap must route through _emit_condition, which
+    comparisonizes truthy operands."""
+
+    def test_and_in_select_list_tsql(self) -> None:
+        out = _t("select (b1 and a3) as b3 from t;", "tsql")
+        assert re.search(r"(?i)WHEN b1 <> 0 AND a3 <> 0 THEN 1", out), out
+
+    def test_or_in_select_list_oracle(self) -> None:
+        out = _t("select (b1 or a3) as b3 from t;", "oracle")
+        assert re.search(r"(?i)WHEN b1 <> 0 OR a3 <> 0 THEN 1", out), out
+
+    def test_comparison_wrap_unchanged(self) -> None:
+        out = _t("select a > 3 as flag from t;", "tsql")
+        assert re.search(r"(?i)CASE WHEN a > 3 THEN 1 WHEN a <= 3 THEN 0", out), out
+
+
+class TestUnaryPredicateInSelectList:
+    """wave 141b: unary predicates in VALUE position — ``(id IS NOT
+    NULL) AS a3`` shipped as ``NOT (id IS NULL) AS a3`` (4145). Two-valued
+    predicates get ELSE 0; NOT keeps the tri-state two-WHEN form."""
+
+    def test_is_not_null_value_tsql(self) -> None:
+        out = _t("select (id is not null) as a3 from t;", "tsql")
+        # Any CASE wrap is valid; the bare predicate-as-value is what 4145s.
+        assert re.search(r"(?i)CASE WHEN .*id IS NULL.* THEN 1", out), out
+        assert not re.search(r"(?im)^\s*SELECT NOT \(", out), out
+
+    def test_exists_value_oracle(self) -> None:
+        out = _t("select exists(select 1 from u) as e from t;", "oracle")
+        assert re.search(r"(?i)CASE WHEN EXISTS", out), out

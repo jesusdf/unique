@@ -671,6 +671,41 @@ def _emit_value_expression(node: ASTNode, dialect: str) -> str:
         return value
     if (
         dialect in ("tsql", "oracle")
+        and isinstance(inner, UnaryOp)
+        and inner.operator
+        in (
+            UnaryOperator.IS_NULL,
+            UnaryOperator.IS_NOT_NULL,
+            UnaryOperator.EXISTS,
+            UnaryOperator.NOT,
+        )
+    ):
+        # A unary predicate in value position (``(id IS NOT NULL) AS a3``)
+        # — 4145 on T-SQL/Oracle. IS [NOT] NULL and EXISTS are two-valued
+        # (ELSE 0 exact); NOT keeps the tri-state two-WHEN form (wave 141).
+        cond = _emit_condition(inner, dialect)
+        if inner.operator == UnaryOperator.NOT:
+            wrapped = f"CASE WHEN {cond} THEN 1 WHEN NOT ({cond}) THEN 0 END"
+        else:
+            wrapped = f"CASE WHEN {cond} THEN 1 ELSE 0 END"
+        if isinstance(node, Alias):
+            return f"{wrapped} AS {_ident(node.name, node.quoted, dialect)}"
+        return wrapped
+    if (
+        dialect in ("tsql", "oracle")
+        and isinstance(inner, BinaryOp)
+        and inner.operator in (BinaryOperator.AND, BinaryOperator.OR)
+    ):
+        # A boolean AND/OR in value position: the CASE wrap must go
+        # through _emit_condition so bare truthy operands comparisonize
+        # (``WHEN b1 AND a3`` was 4145 — wave 141).
+        cond = _emit_condition(inner, dialect)
+        wrapped = f"CASE WHEN {cond} THEN 1 WHEN NOT ({cond}) THEN 0 END"
+        if isinstance(node, Alias):
+            return f"{wrapped} AS {_ident(node.name, node.quoted, dialect)}"
+        return wrapped
+    if (
+        dialect in ("tsql", "oracle")
         and isinstance(inner, BinaryOp)
         and inner.operator in _COMPARISON_OPS
     ):
