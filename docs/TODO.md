@@ -1754,8 +1754,10 @@ fix needs an **anonymized** regression fixture (never a private name).
         semantics have no cross-engine form); MySQL's INVISIBLE
         column attribute strips off MySQL (3x); OFFSET…FETCH without
         ORDER BY gains `ORDER BY (SELECT NULL)` (6x). Tests:
-        TestIgnoreInvisibleOffsetOrder. *Measurement pending next
-        mysql-corpus cycle.*
+        TestIgnoreInvisibleOffsetOrder. **Measured at `e673e81`
+        (2026-07-17): mysql→T-SQL 177→165 (97.2%), mysql→PG 107→106
+        (98.2%), oracle flat. Standing: pg-source {172/135/94},
+        mysql-source {165/106/141}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
