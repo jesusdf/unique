@@ -797,7 +797,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          an empty MySQL body (``BEGIN END``) gets ``NULL;`` (5x).
          Measured: mysql→oracle **66 → 53** (−13, validity 99.1%).
          Discovery HOLDS 0. Tests: TestWave177OracleInoutEmptyBody
-         (3).**
+         (3).* Wave 178 (2026-07-17): Oracle/PG
+         have no @@ globals at all — the unknown-sysvar gate now also
+         runs for mysql-source oracle/postgresql targets (whitelist
+         only applies on T-SQL). And PL/SQL cannot run DDL statically —
+         embedded CREATE/DROP/ALTER/TRUNCATE wraps in EXECUTE
+         IMMEDIATE. Measured: mysql→oracle **53 → 47** (−6, validity
+         99.2%); mysql→pg stable 33. Discovery HOLDS 0. Tests:
+         TestWave178SysvarGateExecImmediate (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
