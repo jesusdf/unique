@@ -1492,7 +1492,11 @@ fix needs an **anonymized** regression fixture (never a private name).
         merged carrier bare); and `BEGIN a(3); END;` where the proc
         EXISTS but compiled invalid (its body references absent
         schemas) is an environmental cascade — PLS-00221 joins the
-        sweep's expected bucket. *Measurement pending relaunch.*
+        sweep's expected bucket. **Measured at `5ab96bb`
+        (2026-07-16): mysql→Oracle 164→158 (97.4%, the +61 regression
+        fully reversed), mysql→PG 113→112 (98.1%), mysql→T-SQL 210
+        flat (96.4%). Standing: pg-source {265/163/142}, mysql-source
+        {210/112/158}.**
         *Wave 27 (2026-07-15):* whole-row `COUNT(t2.*)` (PG counts
         non-NULL rows after an outer join; 9x 1064) — no spelling
         elsewhere and no rewrite without schema knowledge: a QUALIFIED
