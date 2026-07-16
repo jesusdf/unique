@@ -2961,3 +2961,25 @@ class TestBareValueConditionsAndTupleIn:
             if ln.strip() and not ln.strip().startswith("--")
         ]
         assert not code, r.sql
+
+
+class TestRawStrToDateDegrades:
+    """wave 73: STR_TO_DATE inside an unconverted expression blob
+    (e.g. a BETWEEN that fell to RawSQL) ships raw off MySQL — error
+    195 on T-SQL, unknown function elsewhere (6x). The invalid-date
+    gate now also degrades statements whose RawSQL text calls
+    STR_TO_DATE."""
+
+    def test_str_to_date_in_between_degrades(self) -> None:
+        r = Transpiler().transpile(
+            "select str_to_date('1000-01-01', '%Y-%m-%d') "
+            "between '0000-00-00' and null as x;",
+            source="mysql",
+            target="tsql",
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not code, r.sql

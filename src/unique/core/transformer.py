@@ -720,6 +720,12 @@ class Transformer:
             and value.args[0].dtype == "string"
         ):
             candidate = value.args[0]
+        if isinstance(value, RawSQL) and re.search(
+            r"(?i)\bSTR_TO_DATE\s*\(", value.sql
+        ):
+            # Inside an unconverted expression blob the emit-time
+            # STR_TO_DATE→CAST mapping never fires; it would ship raw.
+            return "STR_TO_DATE(...)"
         if candidate is not None:
             text = str(candidate.value).strip()
             m = re.match(r"^(\d{4})-(\d{1,2})-(\d{1,2})", text)
