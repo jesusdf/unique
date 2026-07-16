@@ -205,7 +205,9 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       call), pairing pass consumes the node, marker constant deleted;
       the UNPAIRED fallback improves from the invalid `v := /* … */;`
       to a valid NULL assignment + note. Full gate green on first
-      try. Tests: TestLastIdentityCaptureNode.* Original analysis
+      try; pg-corpus verification cycle at `b073133` identical
+      {163/131/89} — no regression. Tests:
+      TestLastIdentityCaptureNode.* Original analysis
       (2026-07-17): the marker is the TAIL of the Oracle comment
       `LAST_IDENTITY_EXPR["oracle"]` produced by
       `_transform_last_identity`'s text substitution;
