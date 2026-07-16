@@ -4483,3 +4483,98 @@ class TestFetchDirections:
         )
         out = _t(src, "postgresql")
         assert re.search(r"(?i)FETCH c INTO x;", out), out
+
+
+class TestBareRaiseAndUsing:
+    """wave 119: plpgsql's bare re-``RAISE;`` and ``RAISE USING key =
+    expr`` fell into the generic expression fallback — the re-raise
+    emitted the invalid ``RAISE EXCEPTION '%', ;`` and the USING form
+    mangled into ``'%', using message = …``. Every engine has a native
+    re-raise (PG/Oracle ``RAISE;``, T-SQL ``THROW;``, MySQL
+    ``RESIGNAL;``); USING's message option IS the message."""
+
+    _SRC_RERAISE = (
+        "create function f() returns void as $$\n"
+        "begin\n"
+        "  begin\n"
+        "    raise exception 'boom';\n"
+        "  exception when others then\n"
+        "    raise;\n"
+        "  end;\n"
+        "end $$ language plpgsql;"
+    )
+
+    def test_bare_reraise_pg(self) -> None:
+        out = _t(self._SRC_RERAISE, "postgresql")
+        assert "'%', ;" not in out, out
+        assert re.search(r"(?im)^\s*RAISE;", out), out
+
+    def test_bare_reraise_tsql(self) -> None:
+        out = _t(self._SRC_RERAISE, "tsql")
+        assert "'%', ;" not in out, out
+        assert re.search(r"(?im)^\s*THROW;", out), out
+
+    def test_bare_reraise_mysql(self) -> None:
+        out = _t(self._SRC_RERAISE, "mysql")
+        assert re.search(r"(?i)RESIGNAL", out), out
+
+    def test_bare_reraise_oracle(self) -> None:
+        out = _t(self._SRC_RERAISE, "oracle")
+        assert "'%', ;" not in out, out
+        assert re.search(r"(?im)^\s*RAISE;", out), out
+
+    def test_raise_using_message_pg(self) -> None:
+        src = (
+            "create function f() returns void as $$\n"
+            "begin\n"
+            "  raise using message = 'custom' || ' message';\n"
+            "end $$ language plpgsql;"
+        )
+        out = _t(src, "postgresql")
+        assert "using message" not in out.lower(), out
+        assert re.search(r"(?i)RAISE EXCEPTION '%', 'custom' \|\| ' message'", out), out
+
+
+class TestForeachArrayLoop:
+    """wave 120: plpgsql's ``FOREACH x [SLICE n] IN ARRAY expr LOOP …
+    END LOOP`` was not modeled — the loop structure shredded (``foreach
+    x in array p1 loop raise notice`` flattened, END LOOP lost). PG-only
+    construct (arrays): preserved pg→pg, degraded whole with a carrier
+    elsewhere."""
+
+    _SRC = (
+        "create function f(anyarray) returns void as $$\n"
+        "declare x int;\n"
+        "begin\n"
+        "  foreach x in array $1\n"
+        "  loop\n"
+        "    raise notice '%', x;\n"
+        "  end loop;\n"
+        "end $$ language plpgsql;"
+    )
+
+    def test_foreach_preserved_pg(self) -> None:
+        out = _t(self._SRC, "postgresql")
+        assert re.search(r"(?i)FOREACH x IN ARRAY p1", out), out
+        assert re.search(r"(?i)END LOOP;", out), out
+
+    def test_foreach_slice_preserved_pg(self) -> None:
+        src = self._SRC.replace("in array", "slice 1 in array").replace(
+            "x int", "x int[]"
+        )
+        out = _t(src, "postgresql")
+        assert re.search(r"(?i)FOREACH x SLICE 1 IN ARRAY p1", out), out
+        assert re.search(r"(?i)END LOOP;", out), out
+
+    @pytest.mark.parametrize("target", ["tsql", "mysql", "oracle"])
+    def test_foreach_degrades_off_pg(self, target: str) -> None:
+        r = Transpiler().transpile(self._SRC, source="postgresql", target=target)
+        out_low = r.sql.lower()
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not any("foreach" in ln.lower() for ln in code), r.sql
+        assert r.warnings or r.unsupported, r.sql
+        assert "foreach" in out_low, r.sql  # original preserved in the carrier

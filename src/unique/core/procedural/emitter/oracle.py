@@ -255,6 +255,8 @@ class OracleEmitter(ProceduralEmitter):
         )
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
+        if node.reraise:
+            return "RAISE;"
         msg = self._emit_node(node.message) if node.message else "'Error'"
         # Message text preserved; T-SQL user error numbers 50000-50999 map
         # onto Oracle's -20000..-20999 user range (audit 2026-07-02, S2-2).

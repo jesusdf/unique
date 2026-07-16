@@ -412,6 +412,8 @@ class TSqlEmitter(ProceduralEmitter):
         return f"DECLARE @uq_discard{self._raise_msg_n} SQL_VARIANT = ({expr});"
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
+        if node.reraise:
+            return "THROW;"
         msg = self._emit_node(node.message) if node.message else ""
         if not msg.strip():
             # Bare re-RAISE inside a CATCH: T-SQL's spelling is THROW;

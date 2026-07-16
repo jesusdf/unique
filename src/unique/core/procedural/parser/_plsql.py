@@ -887,6 +887,47 @@ class PlsqlStatementsMixin(ParserBase):
             self._match_type(TokenType.SEMICOLON)
             return RaiseErrorStatement(message=expr)
 
+        # Bare re-``RAISE;`` (re-throw the active exception): the generic
+        # expression fallback emitted the invalid ``RAISE EXCEPTION '%', ;``
+        # (wave 119). Every target has a native re-raise.
+        if self._current().type == TokenType.SEMICOLON:
+            self._advance()
+            return RaiseErrorStatement(reraise=True)
+
+        # ``RAISE USING key = expr, …`` — the ``message`` option IS the
+        # message; other options fold into the text (no separate channel
+        # off PostgreSQL).
+        if self._dialect == "postgresql" and self._current().is_keyword("USING"):
+            self._advance()
+            pairs: list[tuple[str, str]] = []
+            while not self._at_end() and self._current().type != TokenType.SEMICOLON:
+                key = self._parse_identifier().lower()
+                if self._current().value == "=":
+                    self._advance()
+                val_parts: list[str] = []
+                while not self._at_end() and self._current().type not in (
+                    TokenType.COMMA,
+                    TokenType.SEMICOLON,
+                ):
+                    val_parts.append(self._flat_value(self._current()))
+                    self._advance()
+                pairs.append((key, " ".join(val_parts)))
+                if not self._match_type(TokenType.COMMA):
+                    break
+            self._match_type(TokenType.SEMICOLON)
+            msg = next((v for k, v in pairs if k == "message"), None)
+            rest = [f"{k} = {v}" for k, v in pairs if k != "message"]
+            if msg is None:
+                content = "; ".join(f"{k} = {v}" for k, v in pairs)
+                literal = "'" + content.replace("'", "''") + "'"
+                return RaiseErrorStatement(
+                    message=RawSQL(sql=literal, reason="pg RAISE USING")
+                )
+            if rest:
+                tail = "; ".join(rest).replace("'", "''")
+                msg = f"{msg} || ' ({tail})'"
+            return RaiseErrorStatement(message=RawSQL(sql=msg, reason="pg RAISE USING"))
+
         # PostgreSQL RAISE with a level keyword
         level = self._current()
         if level.type in (TokenType.KEYWORD, TokenType.IDENTIFIER) and (

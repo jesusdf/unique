@@ -2010,9 +2010,9 @@ class ProceduralTransformer:
 
     def _transform_raise_error(self, node: RaiseErrorStatement) -> ASTNode:
         new_msg = self._transform_node(node.message) if node.message else None
-        return RaiseErrorStatement(
-            message=new_msg, severity=node.severity, state=node.state
-        )
+        # replace, not reconstruction (a rebuild drops reraise — wave 118's
+        # field-eating lesson, hit again on wave 119's first run).
+        return dataclasses.replace(node, message=new_msg)
 
     #: GET DIAGNOSTICS item -> target expression (None = no equivalent,
     #: the item degrades to a carrier line). MySQL keeps condition items

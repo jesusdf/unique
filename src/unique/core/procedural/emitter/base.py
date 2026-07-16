@@ -1630,6 +1630,8 @@ class ProceduralEmitter:
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
         """Default raise is MySQL's SIGNAL. T-SQL, Oracle and PostgreSQL
         override with their own raise form."""
+        if node.reraise:
+            return "RESIGNAL;"
         msg = self._emit_node(node.message) if node.message else ""
         if not msg.strip():
             # A bare re-RAISE inside a handler: MySQL's spelling is

@@ -290,7 +290,17 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          every transformed route. Measured: discovery **78 → 72**
          (INTO class gone). Sweeps at `63de504`: pg→tsql **145**
          (95.6%), pg→mysql **118** (96.1%), pg→oracle **77** (97.6%).
-         Tests: TestFetchDirections (4).**
+         Tests: TestFetchDirections (4).
+         Wave 119 (2026-07-16): plpgsql's bare re-`RAISE;` emitted the
+         invalid `RAISE EXCEPTION '%', ;` and `RAISE USING key = expr`
+         mangled — both fell into the generic expression fallback. New
+         `reraise` flag (native everywhere: PG/Oracle `RAISE;`, T-SQL
+         `THROW;`, MySQL `RESIGNAL;`); USING's `message` option IS the
+         message, other options fold into the text. The rebuild trap
+         hit AGAIN en route (`_transform_raise_error` dropped the new
+         flag) — fixed with dataclasses.replace like wave 118's.
+         Measured: discovery **72 → 68** ('missing expression' class
+         gone). Tests: TestBareRaiseAndUsing (5).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

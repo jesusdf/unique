@@ -116,6 +116,8 @@ class PostgresEmitter(ProceduralEmitter):
         return "\n".join([f"IF {cond} THEN", *body_lines, "END IF;"])
 
     def _emit_raise_error(self, node: RaiseErrorStatement) -> str:
+        if node.reraise:
+            return "RAISE;"
         msg = self._emit_node(node.message) if node.message else "'Error'"
         # Keep the human-readable message, not the error number (audit
         # 2026-07-02, S2-2). The '%%'-format form is safe for texts that

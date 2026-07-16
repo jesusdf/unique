@@ -674,6 +674,9 @@ class RaiseErrorStatement(ASTNode):
     message: ASTNode | None = None
     severity: ASTNode | None = None
     state: ASTNode | None = None
+    #: A bare re-raise inside a handler (``RAISE;``): every engine has a
+    #: native spelling (PG/Oracle RAISE;, T-SQL THROW;, MySQL RESIGNAL;).
+    reraise: bool = False
 
 
 @dataclass(frozen=True)
