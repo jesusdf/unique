@@ -708,7 +708,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          ``flush AS query`` via the embedded-DML fallback — captured
          whole, verbatim on MySQL, in-body comment carriers elsewhere.
          Measured: mysql→tsql **116 → 114** (−2, validity 98.1%).
-         Discovery HOLDS 0. Tests: TestWave166PrefixIndexFlush (4).**
+         Discovery HOLDS 0. Tests: TestWave166PrefixIndexFlush (4).* Wave 167 (2026-07-16): MySQL
+         @@system variables (``@@server_id``, ``@@GLOBAL.x``) shipped
+         raw — T-SQL rejects an unknown @@name (error 137). The
+         user-variable whole-routine degrade now also scans @@sysvars
+         (one detector, all five call sites inherit it); verbatim on
+         MySQL. Measured: mysql→tsql **114 → 109** (−5). Discovery
+         HOLDS 0. Tests: TestWave167MysqlSystemVars (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

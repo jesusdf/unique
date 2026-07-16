@@ -954,11 +954,18 @@ class ProceduralTransformer:
         procedural twin)."""
         if self._source != "mysql" or self._target == "mysql":
             return None
+        kind = "user"
         found = self._find_uservar_text(node)
         if found is None:
+            # MySQL @@system variables (@@server_id, …) shipped raw and
+            # T-SQL rejects an unknown @@name (wave 167).
+            found = self._find_sysvar_text(node)
+            kind = "system"
+        if found is None:
             return None
+        sigil = "@" if kind == "user" else "@@"
         reason = (
-            f"MySQL user variable @{found} has no {self._target} "
+            f"MySQL {kind} variable {sigil}{found} has no {self._target} "
             "equivalent; routine preserved as a comment"
         )
         self._warnings.append(reason)
@@ -983,6 +990,27 @@ class ProceduralTransformer:
         if isinstance(value, tuple):
             for item in value:
                 found = self._find_uservar_text(item)
+                if found is not None:
+                    return found
+        return None
+
+    _MYSQL_SYS_VAR_RE = re.compile(r"@@(?:(?:GLOBAL|SESSION|LOCAL)\.)?(\w+)", re.I)
+
+    def _find_sysvar_text(self, value: object) -> str | None:
+        import dataclasses as _dc
+
+        if isinstance(value, str):
+            scrubbed = re.sub(r"'(?:[^']|'')*'", "''", value)
+            m = self._MYSQL_SYS_VAR_RE.search(scrubbed)
+            return m.group(1) if m else None
+        if _dc.is_dataclass(value) and not isinstance(value, type):
+            for f in _dc.fields(value):
+                found = self._find_sysvar_text(getattr(value, f.name))
+                if found is not None:
+                    return found
+        if isinstance(value, tuple):
+            for item in value:
+                found = self._find_sysvar_text(item)
                 if found is not None:
                     return found
         return None

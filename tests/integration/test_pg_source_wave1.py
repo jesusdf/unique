@@ -6198,3 +6198,37 @@ class TestWave166PrefixIndexFlush:
         )
         assert re.search(r"(?i)flush query cache", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestWave167MysqlSystemVars:
+    """wave 167 (mysql-corpus): MySQL @@system variables
+    (``@@server_id``) shipped raw — T-SQL rejects an unknown @@name
+    (error 137). The user-variable whole-routine degrade now covers
+    them."""
+
+    def test_sysvar_function_carrier_tsql(self) -> None:
+        out = _t2(
+            "create function f1() returns int begin return @@server_id; end",
+            "mysql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out and "server_id" in out, out
+        assert re.search(r"(?im)^\s*RETURN @@server_id", out) is None, out
+
+    def test_sysvar_kept_mysql(self) -> None:
+        out = _t2(
+            "create function f1() returns int begin return @@server_id; end",
+            "mysql",
+            "mysql",
+        )
+        assert "UNIQUE:" not in out, out
+        assert "@@server_id" in out, out
+
+    def test_plain_routine_untouched(self) -> None:
+        out = _t2(
+            "create function f2() returns int begin return 42; end",
+            "mysql",
+            "tsql",
+        )
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)RETURN 42", out), out
