@@ -1327,6 +1327,19 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             f"run the target's own maintenance.\n{_comment_block(node.sql)}"
         )
 
+    # A TEMPORARY sequence exists only on PostgreSQL (T-SQL/Oracle
+    # sequences are permanent objects; the temp-rename would ship an
+    # invalid #name) — zero push.
+    if (
+        node.kind == "CREATE SEQUENCE"
+        and dialect != "postgresql"
+        and re.search(r"(?i)\bTEMP(?:ORARY)?\s+SEQUENCE\b", node.sql)
+    ):
+        return (
+            f"-- UNIQUE: {dialect} has no TEMPORARY sequences; statement "
+            "preserved as a comment\n" + _comment_block(node.sql)
+        )
+
     # MySQL has no CREATE SEQUENCE; sqlglot would emit invalid SQL.
     if dialect == "mysql" and node.kind == "CREATE SEQUENCE":
         return (
@@ -1900,7 +1913,11 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         and node.limit.offset is None
     ):
         pct = " PERCENT" if node.limit.percent else ""
-        top = f"TOP {_emit_expression(node.limit.limit, dialect)}{pct} "
+        limit_sql = _emit_expression(node.limit.limit, dialect)
+        if not re.fullmatch(r"\d+", limit_sql.strip()):
+            # T-SQL requires parentheses around a non-literal TOP argument.
+            limit_sql = f"({limit_sql.strip()})"
+        top = f"TOP {limit_sql}{pct} "
     distinct = "DISTINCT " if node.distinct else ""
     if (
         dialect in ("oracle", "mysql")
@@ -4478,6 +4495,15 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
         parts.append(node.database)
     schema = node.schema
     if dialect in ("oracle", "mysql", "postgresql") and schema == "dbo":
+        schema = None
+    # PostgreSQL's default schema plays the same role: off PG it is a
+    # RESERVED word on T-SQL (error 156 near 'public') and a nonexistent
+    # database/schema elsewhere.
+    if (
+        dialect in ("oracle", "mysql", "tsql")
+        and schema == "public"
+        and SOURCE_DIALECT.get() == "postgresql"
+    ):
         schema = None
     if schema:
         parts.append(_ident(schema, node.schema_quoted, dialect))

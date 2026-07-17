@@ -589,6 +589,8 @@ class Transformer:
             result = [self._gate_pg_setop_order_aggregate(node) for node in result]
         if self.context.source != self.context.target:
             result = [self._gate_unmapped_operator(node) for node in result]
+        if self.context.source == "mysql" and self.context.target != "mysql":
+            result = [self._gate_column_position(node) for node in result]
         if self.context.target in ("tsql", "mysql", "oracle"):
             result = [self._gate_whole_row_cast(node) for node in result]
             result = [self._gate_srf_window(node) for node in result]
@@ -608,6 +610,7 @@ class Transformer:
             result = [self._gate_mysql_udf_window(node) for node in result]
             result = [self._gate_untranslatable_columns(node) for node in result]
             result = [self._gate_deferrable(node) for node in result]
+            result = [self._gate_column_position(node) for node in result]
             result = [self._gate_mysql_null_ntile(node) for node in result]
         if self.context.target in ("mysql", "oracle"):
             result = [self._gate_column_alias_ref(node) for node in result]
@@ -642,6 +645,7 @@ class Transformer:
             result = [self._gate_tsql_tuple_subquery(node) for node in result]
             result = [self._gate_untranslatable_columns(node) for node in result]
             result = [self._gate_deferrable(node) for node in result]
+            result = [self._gate_column_position(node) for node in result]
         for pass_ in self._passes:
             result = [self._apply_pass(pass_, node) for node in result]
         return result
@@ -757,6 +761,28 @@ class Transformer:
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _gate_column_position(self, node: ASTNode) -> ASTNode:
+        """MySQL's ALTER ... ADD col ... FIRST/AFTER x physical position has
+        no spelling elsewhere: the position drops with a warning (the column
+        appends last — SELECT * order differs, documented)."""
+        if not isinstance(node, PassthroughSQL):
+            return node
+        if not re.search(
+            r"(?i)\bADD\b.*\s(?:FIRST\s*;?\s*$|AFTER\s+[\w`\"]+\s*;?\s*$)",
+            node.sql,
+        ):
+            return node
+        had_semi = node.sql.rstrip().endswith(";")
+        stripped = re.sub(r"(?is)\s+(?:FIRST|AFTER\s+[\w`\"]+)\s*;?\s*$", "", node.sql)
+        if had_semi:
+            stripped += ";"
+        self.context.warn(
+            "column position (FIRST/AFTER) dropped — the column appends "
+            f"last on {self.context.target}",
+            "column_position_dropped",
+        )
+        return replace(node, sql=stripped)
 
     def _gate_deferrable(self, node: ASTNode) -> ASTNode:
         """DEFERRABLE constraints have no MySQL/T-SQL form: the keywords

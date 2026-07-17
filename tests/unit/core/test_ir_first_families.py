@@ -812,3 +812,98 @@ class TestZeroPushPgOnlyShapes:
         )
         assert not any("timeofday" in ln.lower() for ln in self._code(r)), r.sql
         assert r.warnings, r.sql
+
+
+class TestZeroPushZ4bBatch:
+    """Zero-push batch Z4b mechanisms."""
+
+    def _t(self, sql, s, t):
+        from unique.core.transpiler import Transpiler
+
+        return Transpiler().transpile(sql, s, t)
+
+    def test_variable_top_takes_parens(self) -> None:
+        r = self._t(
+            "DELIMITER //\ncreate procedure p1() begin declare cnt int default 1;"
+            " declare foo int; set foo = (select min(c1) from t1 limit cnt); end//\n"
+            "DELIMITER ;",
+            "mysql",
+            "tsql",
+        )
+        assert "TOP (@cnt)" in r.sql, r.sql
+
+    def test_alter_database_carriers_in_body(self) -> None:
+        r = self._t(
+            "DELIMITER //\ncreate procedure p1() begin alter database character"
+            " set koi8r; end//\nDELIMITER ;",
+            "mysql",
+            "tsql",
+        )
+        assert "-- alter database" in r.sql.lower(), r.sql
+        assert r.warnings, r.sql
+
+    def test_alter_table_in_body_stays_dml(self) -> None:
+        r = self._t(
+            "DELIMITER //\ncreate procedure p2() begin alter table t1 add"
+            " column c2 int; end//\nDELIMITER ;",
+            "mysql",
+            "tsql",
+        )
+        assert "ALTER TABLE" in r.sql.upper(), r.sql
+        assert "-- alter" not in r.sql.lower(), r.sql
+
+    def test_empty_trigger_body_gets_executable_noop(self) -> None:
+        r = self._t(
+            "DELIMITER //\ncreate trigger t1_bu after update on t1 for each row"
+            " begin end//\nDELIMITER ;",
+            "mysql",
+            "tsql",
+        )
+        assert "SET NOCOUNT ON;" in r.sql, r.sql
+
+    def test_first_position_strips_with_warning(self) -> None:
+        r = self._t(
+            "ALTER TABLE t3 ADD t2nr INT NOT NULL AUTO_INCREMENT PRIMARY KEY" " FIRST;",
+            "mysql",
+            "tsql",
+        )
+        assert "FIRST" not in r.sql.upper(), r.sql
+        assert r.warnings, r.sql
+
+    def test_public_schema_strips_on_tsql(self) -> None:
+        r = self._t("CREATE TABLE public.stuffs (stuff TEXT);", "postgresql", "tsql")
+        assert "public" not in r.sql.lower(), r.sql
+
+    def test_temporary_sequence_carriers(self) -> None:
+        r = self._t("CREATE TEMPORARY SEQUENCE ts1;", "postgresql", "tsql")
+        assert "-- CREATE TEMPORARY SEQUENCE" in r.sql, r.sql
+        assert r.warnings, r.sql
+
+    def test_predicate_return_wraps_for_bit(self) -> None:
+        r = self._t(
+            "create function dc(val int) returns boolean language plpgsql as"
+            " $$ begin return val > 0; end $$;",
+            "postgresql",
+            "tsql",
+        )
+        assert "CASE WHEN @val > 0 THEN 1" in r.sql, r.sql
+
+    def test_bare_reraise_outside_handler_carriers(self) -> None:
+        r = self._t(
+            "create function rt() returns int language plpgsql as $$ begin"
+            " raise; return 0; end $$;",
+            "postgresql",
+            "tsql",
+        )
+        assert "THROW;" not in r.sql, r.sql
+        assert r.warnings, r.sql
+
+    def test_reraise_inside_catch_stays(self) -> None:
+        r = self._t(
+            "create function rt2() returns int language plpgsql as $$ begin\n"
+            "begin\n  perform 1/0;\nexception when others then\n  raise;\nend;\n"
+            "return 0;\nend $$;",
+            "postgresql",
+            "tsql",
+        )
+        assert "THROW;" in r.sql, r.sql

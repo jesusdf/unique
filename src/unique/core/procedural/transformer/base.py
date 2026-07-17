@@ -1519,6 +1519,11 @@ class ProceduralTransformer:
         degraded_body = self._degrade_untranslatable_body(node)
         if degraded_body is not None:
             return degraded_body
+        # A boolean-returning function maps to BIT on T-SQL: returned
+        # predicates must wrap (no boolean values there).
+        self._return_type_is_bit = self._target == "tsql" and (
+            getattr(node.return_type, "name", "") or ""
+        ).upper() in ("BOOLEAN", "BOOL", "BIT")
         # T-SQL functions cannot access temporary tables (error 2772);
         # a routine creating one — or REFERENCING a session temp table the
         # script declared (the emit renames it #name script-wide) —
@@ -1748,7 +1753,7 @@ class ProceduralTransformer:
         prev_rewrite = self._preserve_set_based_dml
         self._preserve_set_based_dml = set_based
         try:
-            new_body = self._transform_body(node.body)
+            new_body = self._ensure_non_empty_body(self._transform_body(node.body))
         finally:
             self._in_trigger = prev_in_trigger
             self._preserve_set_based_dml = prev_rewrite
@@ -2235,7 +2240,12 @@ class ProceduralTransformer:
         """Default keeps a TRY/CATCH block (T-SQL/MySQL/PostgreSQL handle it in
         the emitter); Oracle overrides to a PL/SQL EXCEPTION block."""
         new_try = self._transform_body(node.try_body)
-        new_catch = self._transform_body(node.catch_body)
+        prev_handler = getattr(self, "_in_exception_handler", False)
+        self._in_exception_handler = True
+        try:
+            new_catch = self._transform_body(node.catch_body)
+        finally:
+            self._in_exception_handler = prev_handler
         return TryCatchBlock(
             try_body=new_try, catch_body=new_catch, catch_kind=node.catch_kind
         )
@@ -2243,13 +2253,18 @@ class ProceduralTransformer:
     def _transform_exception_block(self, node: ExceptionBlock) -> ASTNode:
         """Default keeps an EXCEPTION block (Oracle/PostgreSQL); T-SQL overrides
         to a TRY/CATCH (its only structured-handler form)."""
-        handlers = tuple(
-            ExceptionHandler(
-                exception_name=h.exception_name,
-                body=self._transform_body(h.body),
+        prev_handler = getattr(self, "_in_exception_handler", False)
+        self._in_exception_handler = True
+        try:
+            handlers = tuple(
+                ExceptionHandler(
+                    exception_name=h.exception_name,
+                    body=self._transform_body(h.body),
+                )
+                for h in node.handlers
             )
-            for h in node.handlers
-        )
+        finally:
+            self._in_exception_handler = prev_handler
         return ExceptionBlock(handlers=handlers)
 
     _CONSTANT_SQL_STRING_RE = re.compile(r"(?s)^\s*N?'((?:[^']|'')*)'\s*$")
@@ -2488,6 +2503,18 @@ class ProceduralTransformer:
         return PrintStatement(expression=self._transform_node(node.expression))
 
     def _transform_raise_error(self, node: RaiseErrorStatement) -> ASTNode:
+        if getattr(node, "reraise", False) and not getattr(
+            self, "_in_exception_handler", False
+        ):
+            # A bare re-raise OUTSIDE any handler has no valid spelling on
+            # ANY engine (T-SQL 10704, PLS-00367, plpgsql 0A000 — the
+            # source is an error-path test): honest carrier (zero push).
+            reason = (
+                "a bare re-RAISE outside an exception handler is invalid "
+                f"on {self._target}; statement preserved as a comment"
+            )
+            self._warnings.append(reason)
+            return RawSQL(sql="RAISE;", reason=reason)
         new_msg = self._transform_node(node.message) if node.message else None
         # replace, not reconstruction (a rebuild drops reraise — wave 118's
         # field-eating lesson, hit again on wave 119's first run).
@@ -2611,12 +2638,35 @@ class ProceduralTransformer:
     def _strip_strings(sql: str) -> str:
         return re.sub(r"'(?:[^']|'')*'", "''", sql)
 
+    #: A top-level comparison/IS NULL predicate in a returned VALUE — T-SQL
+    #: has no boolean values (a pg boolean function maps to BIT).
+    _PREDICATE_VALUE_RE = re.compile(
+        r"(?is)^\s*(?!CASE\b|EXISTS\b)\S.*?(?:[<>!]=?|=|<>|\bIS\s+(?:NOT\s+)?NULL\b)"
+    )
+
+    def _wrap_predicate_return(self, value: ASTNode | None) -> ASTNode | None:
+        if self._target != "tsql" or not isinstance(value, RawSQL):
+            return value
+        text = value.sql.strip()
+        # Only a bare top-level comparison (no parens imbalance risk: the
+        # whole text becomes the CASE condition verbatim).
+        if not re.match(
+            r"(?is)^(?!CASE\b)(?!EXISTS\b)[^()]*(?:[<>!]=?|<>|=)[^()]*$", text
+        ):
+            return value
+        return dataclasses.replace(
+            value,
+            sql=f"CASE WHEN {text} THEN 1 WHEN NOT ({text}) THEN 0 END",
+        )
+
     def _transform_return(self, node: ReturnStatement) -> ReturnStatement:
         new_value = self._transform_node(node.value) if node.value else None
         if new_value is None and getattr(self, "_in_void_function", False):
             # A bare ``RETURN;`` is invalid in a MySQL/T-SQL/Oracle
             # function; the void mapping gives it the neutral value.
             new_value = self._void_return_value()
+        if getattr(self, "_return_type_is_bit", False):
+            new_value = self._wrap_predicate_return(new_value)
         return ReturnStatement(value=new_value)
 
     def _transform_cursor_decl(self, node: CursorDeclaration) -> CursorDeclaration:

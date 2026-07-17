@@ -424,18 +424,28 @@ class PlsqlStatementsMixin(ParserBase):
                 sql=" ".join(parts_c) + ";",
                 reason="COMMENT ON statement",
             )
-        if self._dialect == "mysql" and tok.upper_value in (
-            "FLUSH",
-            "RESET",
-            "PURGE",
-            "KILL",
-            "SHOW",
-            "REPAIR",
-            "OPTIMIZE",
-            "ANALYZE",
-            "CHECKSUM",
-            "LOCK",
-            "UNLOCK",
+        if self._dialect == "mysql" and (
+            tok.upper_value
+            in (
+                "FLUSH",
+                "RESET",
+                "PURGE",
+                "KILL",
+                "SHOW",
+                "REPAIR",
+                "OPTIMIZE",
+                "ANALYZE",
+                "CHECKSUM",
+                "LOCK",
+                "UNLOCK",
+            )
+            # ALTER DATABASE/SERVER/INSTANCE in a routine body is server
+            # administration (zero push) — a body ALTER TABLE stays DML.
+            or (
+                tok.upper_value == "ALTER"
+                and self._peek(1).upper_value
+                in ("DATABASE", "SCHEMA", "SERVER", "INSTANCE")
+            )
         ):
             # MySQL admin statements — the embedded-DML fallback
             # shredded ``FLUSH QUERY CACHE`` into ``flush AS query``

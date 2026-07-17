@@ -945,6 +945,12 @@ class TSqlTransformer(ProceduralTransformer):
     def _transform_null(self, node: NullStatement) -> ASTNode:
         return RawSQL(sql="-- NULL statement (no-op)", reason="no T-SQL equivalent")
 
+    def _noop_statement(self) -> ASTNode:
+        # The empty-body filler must be EXECUTABLE on T-SQL (a comment-only
+        # BEGIN END is still error 102); SET NOCOUNT ON is the canonical
+        # side-effect-free statement.
+        return RawSQL(sql="SET NOCOUNT ON;", reason="no-op filler")
+
     def _has_update_predicate(self) -> bool:
         # T-SQL keeps UPDATE(col) as-is.
         return False
