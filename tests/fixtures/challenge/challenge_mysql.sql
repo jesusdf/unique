@@ -119,6 +119,9 @@ SELECT TIMESTAMPADD(MINUTE, 30, '2020-01-01 10:00') AS r
 -- CASE[open]: my-timestampdiff — fails on oracle. ORA-01861: literal does not match format string
 SELECT TIMESTAMPDIFF(DAY, '2020-01-01', '2020-01-10') AS r
 
+-- CASE[open]: my-timestampdiff-mon — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
+SELECT TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10') AS r
+
 -- CASE[open]: my-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'a ' = 'a' AS r
 

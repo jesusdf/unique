@@ -109,6 +109,18 @@ does **not** invent new cases. BLUE is the **only** role that edits `src/`;
 it flips each finding it closes from `-- CASE[open]:` to `-- CASE[fixed]:` and
 removes it from `FINDINGS.md`.
 
+> **HARD RULE — BLUE FIXES WITHIN THE RULES, IT DOES NOT CHANGE THEM.** BLUE
+> must **not** modify any skill, **not** contradict an existing skill, and
+> **not** alter the project's architecture to make a fix possible. The fix lives
+> inside the established guardrails (`SKILL-development-workflow.md`,
+> `docs/02-architecture.md`): the per-engine plugin/AST layers, no regex
+> shape-patches in the script layer, no text-level semantic rewrites, no silent
+> invalid output. If closing a case seems to *require* weakening a skill or
+> bending the architecture, that is a signal to **stop and escalate** (record it
+> and surface it to the human) — never edit the rules to make your patch legal.
+> Weakening a test assertion, widening a regex, or adding an `xfail` to go green
+> is not a fix either.
+
 1. **Fix at the right layer**, obeying the architecture guardrails in the
    [development-workflow skill](SKILL-development-workflow.md): route through the
    AST paths (lexer / parser / transformer / IR converter / emitter), never a

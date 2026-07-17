@@ -1,7 +1,3 @@
-
----
-
-Totals: 211 distinct constructs; defect rows by kind: carrier 28, func 70, invalid 335, semantic 2.
 # Challenge findings ledger (RED)
 
 Source constructs that transpile wrong on >=1 target, each **validated on a
@@ -204,6 +200,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `ORA-01861: literal does not match format string`
 - src: `SELECT TIMESTAMPDIFF(DAY, '2020-01-01', '2020-01-10') AS r`
 
+## my-timestampdiff-mon  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
+- src: `SELECT TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10') AS r`
+
 ## my-trailing-eq  (mysql)
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -274,6 +275,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: mysql(semantic), postgresql(invalid)
 - live error: `SEMANTIC: Oracle 'date + 1' adds ONE DAY; MySQL 'CURRENT_TIMESTAMP + 1' does numeric arith`
 - src: `SELECT SYSDATE + 1 AS r FROM DUAL`
+
+## ora-day-of-week  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('24',),)`
+- src: `SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL`
 
 ## ora-div  (oracle)
 - targets: postgresql(func), tsql(func)
@@ -351,6 +357,11 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - targets: mysql(invalid), postgresql(invalid)
 - live error: `operator does not exist: timestamp with time zone - integer`
 - src: `SELECT MONTHS_BETWEEN(SYSDATE, SYSDATE - 40) AS r FROM DUAL`
+
+## ora-months-between-val  (oracle)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('1.83871',),) target=(('2',),)`
+- src: `SELECT MONTHS_BETWEEN(DATE '2020-03-10', DATE '2020-01-15') AS r FROM DUAL`
 
 ## ora-next-day  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -831,6 +842,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN IF OLD.n <> NEW.n THEN RAIS
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (id INT); CREATE VIEW v AS SELECT id FROM t WITH LOCAL CHECK OPTION`
 
+## pg-week  (postgresql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
+- src: `SELECT EXTRACT(WEEK FROM DATE '2020-01-05') AS r`
+
 ## pg-xmlelement  (postgresql)
 - targets: mysql(invalid), tsql(invalid)
 - live error: `(195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018`
@@ -1089,3 +1105,6 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `PROCEDURE P compiled INVALID (line 15): PLS-00103: Encountered the symbol "=" when expecti`
 - src: `CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN SET @n -=`
+---
+
+Totals: 215 distinct constructs; defect rows by kind: carrier 28, func 74, invalid 335, semantic 2.

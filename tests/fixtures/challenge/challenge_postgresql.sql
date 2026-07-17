@@ -243,6 +243,9 @@ CREATE TABLE t (id INT, n INT); UPDATE t SET n = 1 RETURNING id, n
 -- CASE[open]: pg-view-check — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id INT); CREATE VIEW v AS SELECT id FROM t WITH LOCAL CHECK OPTION
 
+-- CASE[open]: pg-week — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
+SELECT EXTRACT(WEEK FROM DATE '2020-01-05') AS r
+
 -- CASE[open]: pg-xmlelement — fails on mysql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT XMLELEMENT(NAME foo, 'bar') AS r
 

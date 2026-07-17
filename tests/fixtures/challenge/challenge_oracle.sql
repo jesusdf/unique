@@ -50,6 +50,9 @@ CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN 
 -- CASE[open]: ora-date-plus-int — fails on mysql, postgresql. SEMANTIC: Oracle 'date + 1' adds ONE DAY; MySQL 'CURRENT_TIMESTAMP + 1' does numeric arith
 SELECT SYSDATE + 1 AS r FROM DUAL
 
+-- CASE[open]: ora-day-of-week — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('24',),)
+SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL
+
 -- CASE[open]: ora-div — fails on postgresql, tsql. FUNC-DIFF: source=(('2.5',),) target=(('2',),)
 SELECT 5 / 2 AS r FROM DUAL
 
@@ -96,6 +99,9 @@ SELECT LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) AS r FROM (SELECT 1 x FROM DUAL
 
 -- CASE[open]: ora-months-between — fails on mysql, postgresql. operator does not exist: timestamp with time zone - integer
 SELECT MONTHS_BETWEEN(SYSDATE, SYSDATE - 40) AS r FROM DUAL
+
+-- CASE[open]: ora-months-between-val — fails on tsql. FUNC-DIFF: source=(('1.83871',),) target=(('2',),)
+SELECT MONTHS_BETWEEN(DATE '2020-03-10', DATE '2020-01-15') AS r FROM DUAL
 
 -- CASE[open]: ora-next-day — fails on mysql, postgresql, tsql. (195, b"'NEXT_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT NEXT_DAY(SYSDATE, 'MONDAY') AS r FROM DUAL

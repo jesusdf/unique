@@ -196,7 +196,26 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
 
 New regression corpus at [`tests/fixtures/challenge/`](../../tests/fixtures/challenge/)
 — one anonymized script per source engine collecting tricky constructs as they
-are found; guarded by `tests/integration/test_challenge.py`.
+are found; guarded by `tests/integration/test_challenge.py`. Cases are tagged
+`[fixed]` (strictly guarded) or `[open]` (RED backlog). See the
+[challenge-corpus skill](../skills/SKILL-challenge-corpus.md) for the red/blue
+workflow.
+
+- [ ] **BLUE backlog: ~219 open RED findings (P2/P3)** — a RED sweep
+      (2026-07-17) generated valid per-engine source, validated each original on
+      a live DB, transpiled to the other three engines, and validated/executed
+      the output. Ledger in
+      [`tests/fixtures/challenge/FINDINGS.md`](../../tests/fixtures/challenge/FINDINGS.md):
+      **335 invalid-output** rows (unmapped function/type → target rejects it,
+      mostly no warning), **74 functional-equivalence** rows (runs clean but
+      returns a *different result* — int division, `LOG` base, `CAST(x AS INT)`
+      round-vs-truncate, `LENGTH` bytes-vs-chars, `LEN` trailing-space,
+      `GREATEST`/`CONCAT` NULL handling, `'a '='a'` CHAR padding, negative
+      `SUBSTR`/`LEFT`, Oracle `||`-null / `''`-is-NULL, `TOP … WITH TIES`),
+      **28 carrier**, **2 semantic**. BLUE works these down: fix at the AST
+      layer, flip the case to `[fixed]` with an assertion, remove from the
+      ledger. Highest-value first: the functional-equivalence rows (silent wrong
+      results).
 
 - [x] **Duplicate `SET NOCOUNT ON` on `oracle`/`pg`/`mysql` → T-SQL (P2)** — the
       T-SQL procedure emitter injects `SET NOCOUNT ON` as a best-practice
