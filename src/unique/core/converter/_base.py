@@ -210,6 +210,16 @@ STRING_VARIABLES: contextvars.ContextVar[frozenset[str] | None] = (
     contextvars.ContextVar("string_variables", default=None)
 )
 
+# (success, failure) target spellings for the T-SQL ``@@FETCH_STATUS = 0`` /
+# ``<> 0`` cursor-loop idiom, e.g. ("V_C1%FOUND", "V_C1%NOTFOUND"). Cursor
+# state is procedural context the IR cannot derive; the procedural
+# transformer publishes it around IR calls (M3 precondition (a)) so the
+# fetch-idiom family can migrate off the text rewriters. None outside a
+# cursor-aware transform — the emit then keeps the documented neutral.
+FETCH_STATUS_FORMS: contextvars.ContextVar[tuple[str, str] | None] = (
+    contextvars.ContextVar("fetch_status_forms", default=None)
+)
+
 # The transpile's SOURCE dialect, set for the whole run by the transpiler.
 # Conversion decisions that depend on where the SQL came from (e.g. MySQL's
 # VARIANCE/STDDEV are population aggregates while the canonical names carry
@@ -935,6 +945,7 @@ __all__ = [
     "TSQL_BIT_COLUMNS",
     "USER_FUNCTIONS",
     "STRING_VARIABLES",
+    "FETCH_STATUS_FORMS",
     "SOURCE_DIALECT",
     "IR_EMBEDDED",
     "_BARE_CHAR_BIGTEXT",

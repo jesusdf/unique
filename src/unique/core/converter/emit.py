@@ -2805,6 +2805,19 @@ def _emit_drop(node: DropStatement, dialect: str) -> str:
     return f"DROP {node.object_type} {exists}{name}{cascade}"
 
 
+def _plain_int_value(node: ASTNode) -> int | None:
+    """The integer value of a literal (or unary-minus literal), else None."""
+    if isinstance(node, UnaryOp) and node.operator == UnaryOperator.NEGATIVE:
+        inner = _plain_int_value(node.operand)
+        return None if inner is None else -inner
+    if isinstance(node, Literal):
+        try:
+            return int(str(node.value))
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 def _map_system_global(sql: str, dialect: str) -> str | None:
     """Map a bare system global (@@ROWCOUNT/@@ERROR/SQL%ROWCOUNT) in a DML
     fragment — they lived only in the procedural maps and shipped raw off
@@ -3903,6 +3916,27 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             if node.operator == BinaryOperator.EQ:
                 return " AND ".join(f"{a} = {b}" for a, b in zip(lt, rt, strict=True))
             return " OR ".join(f"{a} <> {b}" for a, b in zip(lt, rt, strict=True))
+
+    # ``@@FETCH_STATUS = 0`` / ``<> 0`` / ``= -1`` is cursor state: when the
+    # procedural transformer published the target's (success, failure) forms
+    # (FETCH_STATUS_FORMS — M3 precondition (a)), map the comparison exactly
+    # like the text path does; without context the RawSQL emit keeps the
+    # documented neutral.
+    fetch_forms = FETCH_STATUS_FORMS.get()
+    if (
+        fetch_forms is not None
+        and isinstance(node.left, RawSQL)
+        and node.left.sql.strip().upper() == "@@FETCH_STATUS"
+        and node.operator in (BinaryOperator.EQ, BinaryOperator.NEQ)
+    ):
+        value = _plain_int_value(node.right)
+        ok_form, fail_form = fetch_forms
+        if node.operator == BinaryOperator.EQ and value == 0:
+            return ok_form
+        if node.operator == BinaryOperator.NEQ and value == 0:
+            return fail_form
+        if node.operator == BinaryOperator.EQ and value in (-1, -2):
+            return fail_form
 
     # Oracle's SQL%ROWCOUNT parses as ``SQL % ROWCOUNT`` (modulo) — map
     # the global before emitting a bogus arithmetic expression.

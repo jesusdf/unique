@@ -886,3 +886,59 @@ class TestDateAddUnderConvertMySql:
             read="mysql",
             error_level=sqlglot.ErrorLevel.RAISE,
         )
+
+
+class TestIrFetchStatusContext:
+    """M3 precondition (a): the IR expression pipeline receives cursor state.
+
+    ``@@FETCH_STATUS`` comparisons are cursor-contextual — the text path maps
+    them with the transformer's surrounding state (FOUND on pg, %FOUND with
+    the last-fetch cursor on oracle, the handler flag on mysql). The IR path
+    now receives the same forms via the FETCH_STATUS_FORMS ContextVar
+    published around ``_ir_transpile_dml``, so the fetch-idiom family can
+    migrate off the text rewriters (docs/TODO.md M3 final).
+    """
+
+    FRAG = "SELECT CASE WHEN @@FETCH_STATUS = 0 THEN 1 ELSE 2 END"
+    FRAG_NEQ = "SELECT CASE WHEN @@FETCH_STATUS <> 0 THEN 1 ELSE 2 END"
+
+    def test_oracle_maps_found_with_cursor(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        t._last_fetch_cursor = "V_C1"
+        out = t._ir_transpile_dml(self.FRAG)
+        assert out is not None and "V_C1%FOUND" in out
+        assert "@@FETCH_STATUS" not in out.upper()
+        out2 = t._ir_transpile_dml(self.FRAG_NEQ)
+        assert out2 is not None and "V_C1%NOTFOUND" in out2
+
+    def test_oracle_without_cursor_keeps_neutral(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        out = t._ir_transpile_dml(self.FRAG)
+        assert out is None or "%FOUND" not in out
+
+    def test_postgresql_maps_found(self) -> None:
+        t = ProceduralTransformer("tsql", "postgresql")
+        out = t._ir_transpile_dml(self.FRAG)
+        assert out is not None and "FOUND" in out
+        assert "@@FETCH_STATUS" not in out.upper()
+        out2 = t._ir_transpile_dml(self.FRAG_NEQ)
+        assert out2 is not None and "NOT FOUND" in out2
+
+    def test_mysql_maps_flag_and_marks_handler(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        out = t._ir_transpile_dml(self.FRAG)
+        assert out is not None and "NOT v_fetch_done" in out
+        assert t._used_fetch_done is True
+
+    def test_mysql_no_fetch_status_no_side_effect(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        t._ir_transpile_dml("SELECT 1 WHERE a = 0")
+        assert t._used_fetch_done is False
+
+    def test_oracle_negative_one_is_notfound(self) -> None:
+        t = ProceduralTransformer("tsql", "oracle")
+        t._last_fetch_cursor = "V_C1"
+        out = t._ir_transpile_dml(
+            "SELECT CASE WHEN @@FETCH_STATUS = -1 THEN 1 ELSE 2 END"
+        )
+        assert out is not None and "V_C1%NOTFOUND" in out

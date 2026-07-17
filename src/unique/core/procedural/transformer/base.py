@@ -2865,6 +2865,12 @@ class ProceduralTransformer:
         str_token = _conv.STRING_VARIABLES.set(
             frozenset(v.lstrip("@").lower() for v in self._string_vars)
         )
+        # Cursor state for @@FETCH_STATUS comparisons (M3 precondition (a)).
+        # Guarded on the token so MySQL's form lookup (which flags the
+        # NOT FOUND handler injection) only fires when the idiom is present.
+        fetch_token = _conv.FETCH_STATUS_FORMS.set(
+            self._fetch_status_forms() if "@@FETCH_STATUS" in sql.upper() else None
+        )
         # Embedded text is mid-transform (variables already target-spelled);
         # RawSQL fallbacks must not re-render it in the source dialect.
         emb_token = _conv.IR_EMBEDDED.set(True)
@@ -2873,6 +2879,7 @@ class ProceduralTransformer:
         finally:
             _conv.IR_EMBEDDED.reset(emb_token)
             _conv.STRING_VARIABLES.reset(str_token)
+            _conv.FETCH_STATUS_FORMS.reset(fetch_token)
 
     def _ir_transpile_dml_inner(self, sql: str) -> str | None:
         from unique.core import converter as _conv
