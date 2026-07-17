@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import os
 import re
 from collections.abc import Callable
 
@@ -3564,7 +3565,20 @@ class ProceduralTransformer:
             if m:
                 self._register_degraded_routine(m.group(1))
             return RawSQL(sql=node.sql, reason=reason)
-        sql = self._fix_fetch_status(node.sql)
+        # M3-final migration switch (docs/TODO.md §2 P0): scalar fragments
+        # route IR-first when UNIQUE_IR_FIRST is set — the development loop
+        # that burns the remaining text-path/IR divergences family by
+        # family. Off (the default) keeps the text path as the expression
+        # engine until the families below it migrate. The switch replaces
+        # the EXPRESSION-MAPPING layers only: the procedural-shell text
+        # passes above it (variable renames, source-spelling parse aids,
+        # pseudorecords) still run — that context is the shell's, not the
+        # expression engine's. Cursor state travels via FETCH_STATUS_FORMS
+        # (precondition (a)), so the text fetch-status fix is skipped.
+        ir_first = bool(os.environ.get("UNIQUE_IR_FIRST"))
+        sql = node.sql
+        if not ir_first:
+            sql = self._fix_fetch_status(sql)
         sql = self._fix_base64_xml_idiom(sql)
         if self._source == "mysql" and self._target != "mysql":
             sql = self._mysql_dq_to_sq(sql)
@@ -3593,6 +3607,10 @@ class ProceduralTransformer:
         # scalar expression is normalized the same as one inside embedded DML.
         if self._source == "oracle" and self._in_trigger:
             sql = self._normalize_oracle_pseudorecords(sql)
+        if ir_first:
+            ir = self._ir_transpile_dml(sql)
+            if ir is not None:
+                return dataclasses.replace(node, sql=ir)
         # Apply function name transformations
         sql = self._expr._transform_functions_in_sql(sql)
         # If the expression contains exactly one subquery (no other DML), try
