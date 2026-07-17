@@ -20,6 +20,11 @@ at the start of every session; they override generic defaults.
   the no-silent-loss invariant, the pre-commit verification gate, commit/push
   discipline, and performance rules (e.g. never build a string with `+=` in an
   input-proportional loop).
+- [`skills/SKILL-challenge-corpus.md`](skills/SKILL-challenge-corpus.md) —
+  the `tests/fixtures/challenge/` regression corpus and its **red/blue**
+  workflow: a RED role that only finds mis-transpilations (valid, non-repeated,
+  anonymized source SQL) and a BLUE role that only fixes and locks them in. Load
+  this when hunting for or fixing transpilation defects.
 
 If a Skill tool is available, invoke the matching skill rather than only reading
 the file. When guidance here and a skill disagree, the skill is authoritative.
