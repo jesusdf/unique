@@ -105,6 +105,9 @@ SELECT IIF(1>0,'y','n'), CHOOSE(2,'a','b','c'), ISNULL(NULL,'x'), NULLIF(1,1)
 -- CASE[open]: ts-continue-break — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol "=" when expectin
 CREATE PROCEDURE p AS BEGIN DECLARE @i INT=1; WHILE @i<=3 BEGIN SET @i+=1; IF @i=2 CONTINUE; IF @i=5 BREAK; END; END
 
+-- CASE[open]: ts-cube — fails on mysql, oracle, postgresql. ORA-00937: not a single-group group function
+SELECT a,b,SUM(c) FROM (SELECT 1 a,2 b,3 c) t GROUP BY CUBE(a,b)
+
 -- CASE[open]: ts-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT FROM c INTO @x; WHILE @@FETCH_STATUS = 0 BEGIN FETCH NEXT FROM c INTO @x; END; CLOSE c; DEALLOCATE c; END
 
@@ -266,6 +269,9 @@ CREATE TABLE src (id INT);
 GO
 SELECT id INTO dst FROM src
 
+-- CASE[open]: ts-seq-use — fails on oracle, postgresql. ORA-00904: "NEXT_VALUE_FOR": invalid identifier
+CREATE SEQUENCE s START WITH 1; SELECT NEXT VALUE FOR s
+
 -- CASE[open]: ts-sequence-next — fails on oracle, postgresql. ORA-00904: "NEXT_VALUE_FOR": invalid identifier
 CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1;
 GO
@@ -364,6 +370,9 @@ SELECT SWITCHOFFSET(SYSDATETIMEOFFSET(),'+00:00'), TODATETIMEOFFSET(GETDATE(),'+
 
 -- CASE[open]: ts-tzoffset — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier
 SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r
+
+-- CASE[open]: ts-unpivot — fails on mysql, oracle, postgresql. ORA-00904: "VAL": invalid identifier
+SELECT id,col,val FROM (SELECT 1 id,10 a,20 b) s UNPIVOT (val FOR col IN (a,b)) u
 
 -- CASE[open]: ts-update-output — fails on oracle. ORA-00925: missing INTO keyword
 CREATE TABLE t (id INT);

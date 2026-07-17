@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (418 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (432 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -1058,6 +1058,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `ORA-32039: missing column alias list in recursive WITH clause element SEQ`
 - src: `WITH RECURSIVE seq AS (SELECT 1 n UNION ALL SELECT n+1 FROM seq WHERE n<10) SELECT GROUP_CONCAT(n) FROM seq`
 
+## my-session-fns  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'USER'.DB-Lib error message 20018, severity 15:\`
+- src: `CREATE TABLE t (id INT); SELECT LAST_INSERT_ID(),ROW_COUNT(),CONNECTION_ID(),DATABASE(),VERSION(),USER(),CURRENT_USER()`
+
 ## my-set-fns  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI`
@@ -1622,6 +1627,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(102, b"Incorrect syntax near '*'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
 - src: `CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)`
 
+## ora-grouping-sets  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(8120, b"Column 'uq_dt.deptno' is invalid in the select list because it is not contained i`
+- src: `SELECT deptno,job,SUM(sal) FROM (SELECT 10 deptno,'X' job,100 sal FROM DUAL) GROUP BY GROUPING SETS ((deptno),(job),())`
+
 ## ora-hash-all  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'STANDARD_HASH' is not a recognized built-in function name.DB-Lib error message 20`
@@ -1863,6 +1873,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - src: `CREATE FUNCTION f(n NUMBER) RETURN NUMBER AS BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END;
 /`
 
+## ora-regex-suite  (oracle)
+- targets: mysql(invalid)
+- live error: `(1305, 'FUNCTION unique_val_8dd1b20b3f30.REGEXP_COUNT does not exist')`
+- src: `SELECT REGEXP_REPLACE('abc123','[0-9]+','X'),REGEXP_SUBSTR('abc123','[0-9]+'),REGEXP_INSTR('abc123','[0-9]'),REGEXP_COUNT('a1b2','`
+
 ## ora-regexp-cnt  (oracle)
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_015f5453adcc.REGEXP_COUNT does not exist')`
@@ -1892,6 +1907,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('a',),) target=(('',),)`
 - src: `SELECT RTRIM('axxx', 'x') AS r FROM DUAL`
+
+## ora-seq-use  (oracle)
+- targets: tsql(invalid)
+- live error: `(4104, b'The multi-part identifier "s.CURRVAL" could not be bound.DB-Lib error message 200`
+- src: `CREATE SEQUENCE s START WITH 1; SELECT s.NEXTVAL,s.CURRVAL FROM DUAL`
 
 ## ora-sequence-options  (oracle)
 - targets: postgresql(invalid), tsql(invalid)
@@ -2017,6 +2037,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: tsql(invalid)
 - live error: `(102, b"Incorrect syntax near 'DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQL `
 - src: `CREATE TABLE t (a TIMESTAMP WITH TIME ZONE, b INTERVAL DAY TO SECOND, c INTERVAL YEAR TO MONTH)`
+
+## ora-unpivot  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(207, b"Invalid column name 'col'.DB-Lib error message 20018, severity 16:\nGeneral SQL Se`
+- src: `SELECT id,col,val FROM (SELECT 1 id,10 a,20 b FROM DUAL) UNPIVOT (val FOR col IN (a,b))`
 
 ## ora-upd-correlated  (oracle)
 - targets: mysql(invalid)
@@ -2876,6 +2901,11 @@ CREATE TABLE ledger (id SERIA`
 - live error: `(8120, b"Column 'v.x' is invalid in the select list because it is not contained in either `
 - src: `SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)`
 
+## pg-rollup2  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(8120, b"Column 't.a' is invalid in the select list because it is not contained in either `
+- src: `SELECT a,b,sum(c) FROM (SELECT 1 a,2 b,3 c) t GROUP BY ROLLUP(a,b)`
+
 ## pg-round-1005  (postgresql)
 - targets: mysql(func), oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1.01',),) target=(('1',),)`
@@ -2895,6 +2925,11 @@ CREATE TABLE ledger (id SERIA`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.sc`
 - src: `SELECT scale(1.230), trim_scale(1.230)`
+
+## pg-seq-use  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne`
+- src: `CREATE SEQUENCE s; SELECT nextval('s'),currval('s'),setval('s',10)`
 
 ## pg-sequence  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
@@ -3348,6 +3383,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol "=" when expectin`
 - src: `CREATE PROCEDURE p AS BEGIN DECLARE @i INT=1; WHILE @i<=3 BEGIN SET @i+=1; IF @i=2 CONTINUE; IF @i=5 BREAK; END; END`
 
+## ts-cube  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00937: not a single-group group function`
+- src: `SELECT a,b,SUM(c) FROM (SELECT 1 a,2 b,3 c) t GROUP BY CUBE(a,b)`
+
 ## ts-cursor  (tsql)
 - targets: mysql(invalid)
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
@@ -3607,6 +3647,11 @@ CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BE`
 GO
 SELECT id INTO dst FROM src`
 
+## ts-seq-use  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "NEXT_VALUE_FOR": invalid identifier`
+- src: `CREATE SEQUENCE s START WITH 1; SELECT NEXT VALUE FOR s`
+
 ## ts-sequence-next  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "NEXT_VALUE_FOR": invalid identifier`
@@ -3764,6 +3809,11 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - live error: `ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier`
 - src: `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r`
 
+## ts-unpivot  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "VAL": invalid identifier`
+- src: `SELECT id,col,val FROM (SELECT 1 id,10 a,20 b) s UNPIVOT (val FOR col IN (a,b)) u`
+
 ## ts-update-output  (tsql)
 - targets: oracle(invalid)
 - live error: `ORA-00925: missing INTO keyword`
@@ -3799,4 +3849,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 743 distinct constructs; defect rows by kind: func 329, invalid 1146, semantic 2, silent-drop 75.
+Totals: 753 distinct constructs; defect rows by kind: func 329, invalid 1170, semantic 2, silent-drop 75.

@@ -491,6 +491,9 @@ SELECT REPEAT('ab', 3), LEFT('abc', 2), RIGHT('abc', 2)
 -- CASE[open]: pg-rollup — fails on mysql, oracle, tsql. (8120, b"Column 'v.x' is invalid in the select list because it is not contained in either 
 SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)
 
+-- CASE[open]: pg-rollup2 — fails on mysql, oracle, tsql. (8120, b"Column 't.a' is invalid in the select list because it is not contained in either 
+SELECT a,b,sum(c) FROM (SELECT 1 a,2 b,3 c) t GROUP BY ROLLUP(a,b)
+
 -- CASE[open]: pg-round-1005 — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('1.01',),) target=(('1',),)
 SELECT ROUND(1.005::numeric, 2) AS r
 
@@ -502,6 +505,9 @@ BEGIN; SAVEPOINT sp; ROLLBACK TO SAVEPOINT sp; COMMIT
 
 -- CASE[open]: pg-scale — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.sc
 SELECT scale(1.230), trim_scale(1.230)
+
+-- CASE[open]: pg-seq-use — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne
+CREATE SEQUENCE s; SELECT nextval('s'),currval('s'),setval('s',10)
 
 -- CASE[open]: pg-sequence — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne
 CREATE SEQUENCE seq; SELECT nextval('seq'), currval('seq')

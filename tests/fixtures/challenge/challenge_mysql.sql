@@ -615,6 +615,9 @@ CREATE TABLE emp (id INT PRIMARY KEY, mgr INT, FOREIGN KEY (mgr) REFERENCES emp(
 -- CASE[open]: my-seq-concat — fails on oracle, postgresql. ORA-32039: missing column alias list in recursive WITH clause element SEQ
 WITH RECURSIVE seq AS (SELECT 1 n UNION ALL SELECT n+1 FROM seq WHERE n<10) SELECT GROUP_CONCAT(n) FROM seq
 
+-- CASE[open]: my-session-fns — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'USER'.DB-Lib error message 20018, severity 15:\
+CREATE TABLE t (id INT); SELECT LAST_INSERT_ID(),ROW_COUNT(),CONNECTION_ID(),DATABASE(),VERSION(),USER(),CURRENT_USER()
+
 -- CASE[open]: my-set-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
 SELECT FIND_IN_SET('b', 'a,b,c'), MAKE_SET(6, 'x','y','z')
 

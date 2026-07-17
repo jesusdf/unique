@@ -173,6 +173,9 @@ SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL
 -- CASE[open]: ora-functional-index — fails on mysql, postgresql, tsql. (102, b"Incorrect syntax near '*'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)
 
+-- CASE[open]: ora-grouping-sets — fails on mysql, postgresql, tsql. (8120, b"Column 'uq_dt.deptno' is invalid in the select list because it is not contained i
+SELECT deptno,job,SUM(sal) FROM (SELECT 10 deptno,'X' job,100 sal FROM DUAL) GROUP BY GROUPING SETS ((deptno),(job),())
+
 -- CASE[open]: ora-hash-all — fails on mysql, postgresql, tsql. (195, b"'STANDARD_HASH' is not a recognized built-in function name.DB-Lib error message 20
 SELECT STANDARD_HASH('abc', 'SHA256'), ORA_HASH('abc', 100) FROM DUAL
 
@@ -318,6 +321,9 @@ SELECT RAWTOHEX('AB'), HEXTORAW('4142') FROM DUAL
 CREATE FUNCTION f(n NUMBER) RETURN NUMBER AS BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END;
 /
 
+-- CASE[open]: ora-regex-suite — fails on mysql. (1305, 'FUNCTION unique_val_8dd1b20b3f30.REGEXP_COUNT does not exist')
+SELECT REGEXP_REPLACE('abc123','[0-9]+','X'),REGEXP_SUBSTR('abc123','[0-9]+'),REGEXP_INSTR('abc123','[0-9]'),REGEXP_COUNT('a1b2','[0-9]') FROM DUAL
+
 -- CASE[open]: ora-regexp-cnt — fails on mysql. (1305, 'FUNCTION unique_val_015f5453adcc.REGEXP_COUNT does not exist')
 SELECT REGEXP_COUNT('a1b2c3','[0-9]'),REGEXP_INSTR('a1b2','[0-9]',1,2) FROM DUAL
 
@@ -335,6 +341,9 @@ SELECT FLOOR(3.7), CEIL(3.2), ROUND(3.567, 2), TRUNC(3.567, 1), REMAINDER(10,3) 
 
 -- CASE[open]: ora-rtrim-chars — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('a',),) target=(('',),)
 SELECT RTRIM('axxx', 'x') AS r FROM DUAL
+
+-- CASE[open]: ora-seq-use — fails on tsql. (4104, b'The multi-part identifier "s.CURRVAL" could not be bound.DB-Lib error message 200
+CREATE SEQUENCE s START WITH 1; SELECT s.NEXTVAL,s.CURRVAL FROM DUAL
 
 -- CASE[open]: ora-sequence-options — fails on postgresql, tsql. (102, b"Incorrect syntax near 'NOCYCLE'.DB-Lib error message 20018, severity 15:\nGeneral 
 CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1 CACHE 20 NOCYCLE ORDER
@@ -410,6 +419,9 @@ SELECT SYSTIMESTAMP, LOCALTIMESTAMP, SESSIONTIMEZONE FROM DUAL
 
 -- CASE[open]: ora-tz-interval — fails on tsql. (102, b"Incorrect syntax near 'DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQL 
 CREATE TABLE t (a TIMESTAMP WITH TIME ZONE, b INTERVAL DAY TO SECOND, c INTERVAL YEAR TO MONTH)
+
+-- CASE[open]: ora-unpivot — fails on mysql, postgresql, tsql. (207, b"Invalid column name 'col'.DB-Lib error message 20018, severity 16:\nGeneral SQL Se
+SELECT id,col,val FROM (SELECT 1 id,10 a,20 b FROM DUAL) UNPIVOT (val FOR col IN (a,b))
 
 -- CASE[open]: ora-upd-correlated — fails on mysql. (1093, "You can't specify target table 't' for update in FROM clause")
 CREATE TABLE t (id NUMBER, n NUMBER);UPDATE t SET n=(SELECT MAX(n) FROM t x WHERE x.id<t.id)
