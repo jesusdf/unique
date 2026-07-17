@@ -5,9 +5,39 @@ live engine** (original accepted by its own engine; output rejected by the
 target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
-Kinds: **invalid** = live target rejected the output; **carrier** = degraded
-to an `Unhandled`/unrecognized carrier (may be an acceptable degrade — BLUE
-triages); **silent/-rt** = valid output but a source literal vanished (verify manually — the literal detector is noisy).
+Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
+
+
+## Priority classes for BLUE (recurring mechanisms, most severe first)
+
+**A. Silent WRONG RESULTS (func — valid output, different value/rows):**
+
+1. **Integer division** — `5/2`, `1/3` differ (2/0 on T-SQL/PG vs 2.5/0.333 on MySQL/Oracle); propagates through expressions (`1/3*3` = 0 vs 1).
+
+2. **NULL ordering** — bare `ORDER BY x` / DISTINCT / GROUP BY reorders: NULLs FIRST on T-SQL/MySQL vs LAST on PG/Oracle.
+
+3. **String collation** — `ORDER BY <text>`, `=`, `LIKE`, DISTINCT differ by case/accent sensitivity (MySQL CI/AI vs binary elsewhere).
+
+4. **Oracle empty-string-is-NULL** and `||` NULL-as-empty ('a'||NULL='a').
+
+5. **Aggregate integer truncation** (AVG over INT), **CAST float->int** round-vs-truncate, **ROUND(x, n)** precision arg dropped, float length args round vs truncate (REPEAT/SUBSTRING/LEFT).
+
+6. **GREATEST/LEAST/CONCAT NULL** — MySQL returns NULL, others skip.
+
+7. **LENGTH bytes vs chars**, **T-SQL LEN** ignores trailing spaces.
+
+8. **Date arithmetic** — Oracle `date+1` = +1 day; MySQL `date-date` = numeric; `+` string-concat vs numeric; `TOP n WITH TIES` dropped; LOG base; `~0` sign.
+
+
+**B. Silent CLAUSE DROPS (silent-drop — data integrity):**
+
+9. FK `ON DELETE/UPDATE` actions; CHECK constraints; COLLATE / CHARACTER SET; IDENTITY/sequence seed (START WITH); UNSIGNED; window `ROWS/RANGE BETWEEN` frame; `WITH ROLLUP`; EXCLUDE constraint; column COMMENT; MySQL BIT(64)->1-bit.
+
+
+**C. Invalid output, no warning (invalid):** unmapped scalar functions emit verbatim (STUFF, CHOOSE, AGE, DATE_TRUNC, OVERLAY, ADD_MONTHS, …) or an invented name (FORMAT -> NUMBER_TO_STR); most cross-engine function/type gaps.
+
+
+---
 
 
 ## my-accent-eq  (mysql)
