@@ -655,8 +655,14 @@ SELECT xpath('/a/text()', '<a>1</a>'::xml)
 -- CASE[open]: po-distinct-case — fails on mysql, tsql. FUNC-DIFF: source=(('A',), ('B',), ('a',)) target=(('A',), ('B',))
 SELECT DISTINCT x FROM (VALUES ('a'),('A'),('a'),('B')) v(x) ORDER BY x
 
+-- CASE[open]: po-distinct-null — fails on mysql, tsql. FUNC-DIFF: source=(('1',), ('2',), ('NULL',)) target=(('NULL',), ('1',), ('2',))
+SELECT DISTINCT x FROM (VALUES (1),(NULL),(1),(NULL),(2)) v(x) ORDER BY x
+
 -- CASE[open]: po-group-case — fails on mysql, tsql. FUNC-DIFF: source=(('A', '1'), ('a', '1'), ('b', '1')) target=(('A', '2'), ('b', '1'))
 SELECT x, COUNT(*) FROM (VALUES ('a'),('A'),('b')) v(x) GROUP BY x ORDER BY x
+
+-- CASE[open]: po-group-null — fails on mysql, tsql. FUNC-DIFF: source=(('1', '2'), ('NULL', '2')) target=(('NULL', '2'), ('1', '2'))
+SELECT x, COUNT(*) FROM (VALUES (1),(NULL),(1),(NULL)) v(x) GROUP BY x ORDER BY x
 
 -- CASE[open]: po-order-strings — fails on mysql. FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), 
 SELECT x FROM (VALUES ('banana'),('Apple'),('cherry'),('Banana')) v(x) ORDER BY x

@@ -22,6 +22,9 @@ END;
 
 -- ===== RED-found open findings (validated live; see FINDINGS.md) =====
 
+-- CASE[open]: or-distinct-null — fails on mysql, tsql. FUNC-DIFF: source=(('1',), ('2',), ('NULL',)) target=(('NULL',), ('1',), ('2',))
+SELECT DISTINCT x FROM (SELECT 1 x FROM DUAL UNION ALL SELECT NULL x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT NULL x FROM DUAL UNION ALL SELECT 2 x FROM DUAL) ORDER BY x
+
 -- CASE[open]: or-order-strings — fails on mysql. FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), 
 SELECT x FROM (SELECT 'banana' x FROM DUAL UNION ALL SELECT 'Apple' x FROM DUAL UNION ALL SELECT 'cherry' x FROM DUAL UNION ALL SELECT 'Banana' x FROM DUAL) ORDER BY x
 

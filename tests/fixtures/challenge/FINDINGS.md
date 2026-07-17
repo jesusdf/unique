@@ -781,6 +781,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `SILENT CLAUSE DROP: 'SQL_CALC_FOUND_ROWS|FOUND' absent from valid tsql output, no warning`
 - src: `SELECT SQL_CALC_FOUND_ROWS x FROM (SELECT 1 x) t LIMIT 1`
 
+## or-distinct-null  (oracle)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',), ('2',), ('NULL',)) target=(('NULL',), ('1',), ('2',))`
+- src: `SELECT DISTINCT x FROM (SELECT 1 x FROM DUAL UNION ALL SELECT NULL x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT NUL`
+
 ## or-order-strings  (oracle)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), `
@@ -2524,10 +2529,20 @@ CREATE TRIGGE`
 - live error: `FUNC-DIFF: source=(('A',), ('B',), ('a',)) target=(('A',), ('B',))`
 - src: `SELECT DISTINCT x FROM (VALUES ('a'),('A'),('a'),('B')) v(x) ORDER BY x`
 
+## po-distinct-null  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',), ('2',), ('NULL',)) target=(('NULL',), ('1',), ('2',))`
+- src: `SELECT DISTINCT x FROM (VALUES (1),(NULL),(1),(NULL),(2)) v(x) ORDER BY x`
+
 ## po-group-case  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('A', '1'), ('a', '1'), ('b', '1')) target=(('A', '2'), ('b', '1'))`
 - src: `SELECT x, COUNT(*) FROM (VALUES ('a'),('A'),('b')) v(x) GROUP BY x ORDER BY x`
+
+## po-group-null  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1', '2'), ('NULL', '2')) target=(('NULL', '2'), ('1', '2'))`
+- src: `SELECT x, COUNT(*) FROM (VALUES (1),(NULL),(1),(NULL)) v(x) GROUP BY x ORDER BY x`
 
 ## po-order-strings  (postgresql)
 - targets: mysql(func)
@@ -3167,4 +3182,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 613 distinct constructs; defect rows by kind: carrier 138, func 250, invalid 774, semantic 2, silent-drop 75.
+Totals: 616 distinct constructs; defect rows by kind: carrier 138, func 256, invalid 774, semantic 2, silent-drop 75.
