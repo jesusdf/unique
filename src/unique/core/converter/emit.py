@@ -1407,6 +1407,21 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 base = rendered[0]
         except Exception:  # noqa: BLE001 - keep the source spelling
             pass
+        # The stripped base may still carry PG-only shapes (wave 206):
+        # Oracle takes WITH only inside the INSERT's subquery, and has
+        # no UPDATE … FROM at all.
+        base = re.sub(
+            r"(?is)^\s*WITH\s+(.*?)\s+INSERT\s+INTO\s+(\S+)\s+SELECT\b",
+            r"INSERT INTO \2 WITH \1 SELECT",
+            base,
+            count=1,
+        )
+        if re.search(r"(?is)\bUPDATE\b.*\bSET\b.*\sFROM\s", base):
+            return (
+                "-- UNIQUE: Oracle has no UPDATE … FROM (rewrite with a "
+                "correlated subquery or MERGE) and no top-level RETURNING. "
+                "Statement preserved as a comment\n" + _comment_block(node.sql)
+            )
         return (
             f"{base};\n-- UNIQUE: Oracle has no top-level RETURNING; "
             f"the statement returned: {cols}"

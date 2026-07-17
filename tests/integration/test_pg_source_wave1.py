@@ -7356,3 +7356,28 @@ class TestWave205InlineTvfJoinAlias:
             "tsql",
         )
         assert re.search(r"(?i)CROSS JOIN \(SELECT 123456\) uq_j", out), out
+
+
+class TestWave206OracleReturningShapes:
+    """wave 206 (pg-corpus): the RETURNING-oracle strip left PG-only
+    shapes behind — Oracle takes WITH only inside the INSERT subquery,
+    and has no UPDATE … FROM (carrier)."""
+
+    def test_returning_with_insert_oracle(self) -> None:
+        out = _t2(
+            "with t as (select a from y) insert into y"
+            " select a + 20 from t returning y.a;",
+            "postgresql",
+            "oracle",
+        )
+        assert re.search(r"(?i)^INSERT INTO y WITH t AS", out.strip()), out
+
+    def test_returning_update_from_carrier_oracle(self) -> None:
+        out = _t2(
+            "with t as (select a from y) update y set a = y.a-10 from t"
+            " where t.a = y.a returning y.a;",
+            "postgresql",
+            "oracle",
+        )
+        assert "UNIQUE:" in out and "UPDATE … FROM" in out, out
+        assert not re.search(r"(?im)^\s*WITH t", out), out

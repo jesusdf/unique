@@ -1000,7 +1000,12 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          was error 102; and a derived table joined without alias gets
          ``uq_j`` on T-SQL/MySQL. Measured: pg→tsql **49 → 47** (−2).
          Discovery HOLDS 0. Tests: TestWave205InlineTvfJoinAlias
-         (3).**
+         (3).* Wave 206 (2026-07-17): the
+         RETURNING-oracle strip left PG-only shapes behind — Oracle
+         takes WITH only inside the INSERT's subquery (rewritten) and
+         has no UPDATE … FROM at all (carrier). Measured: pg→oracle
+         **32 → 30** (−2). Discovery HOLDS 0. Tests:
+         TestWave206OracleReturningShapes (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
