@@ -4274,8 +4274,24 @@ class ProceduralTransformer:
     def _map_rowcount_fn_in_sql(self, sql: str) -> str:
         target_expr = self._ROWCOUNT_FN_EXPR.get(self._target)
         if not target_expr:
-            return self._map_limit_in_sql(sql)
-        return self._map_limit_in_sql(self._ROWCOUNT_FN_PATTERN.sub(target_expr, sql))
+            return self._map_limit_in_sql(self._map_bool_literals_in_sql(sql))
+        return self._map_limit_in_sql(
+            self._map_bool_literals_in_sql(
+                self._ROWCOUNT_FN_PATTERN.sub(target_expr, sql)
+            )
+        )
+
+    #: MySQL's TRUE/FALSE are the numbers 1/0; Oracle PL/SQL types them
+    #: BOOLEAN, which cannot assign into NUMBER (PLS-00382 — wave 211).
+    #: MySQL declares no PL/SQL BOOLEANs, so the rewrite is safe there.
+    _BOOL_LITERAL_RE = re.compile(r"(?i)\b(TRUE|FALSE)\b")
+
+    def _map_bool_literals_in_sql(self, sql: str) -> str:
+        if self._source != "mysql" or self._target != "oracle":
+            return sql
+        return self._BOOL_LITERAL_RE.sub(
+            lambda m: "1" if m.group(1).upper() == "TRUE" else "0", sql
+        )
 
     #: MySQL LIMIT in raw embedded text — Oracle's spelling is
     #: OFFSET/FETCH (which, unlike T-SQL's, needs no ORDER BY; wave 180).

@@ -1034,7 +1034,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          now (via unnest() — double parens nest Subquery). Measured:
          mysql→tsql **38 → 34** (better than the pre-regression 35),
          pg→tsql stable 39. Discovery HOLDS 0. Tests:
-         TestWave210ParenGroupNotAliased (2).**
+         TestWave210ParenGroupNotAliased (2).* Wave 211 (2026-07-17): Oracle
+         has no CAST(… AS BINARY) form — whole carrier (7x); and
+         MySQL's TRUE/FALSE are the numbers 1/0 while Oracle PL/SQL
+         types them BOOLEAN (PLS-00382 assigning to NUMBER) — mapped
+         in the raw-text chain for mysql→oracle only (MySQL declares
+         no PL/SQL BOOLEANs, so the rewrite is safe). Measured:
+         mysql→oracle **27 → 19** (−8, validity 99.7%). Discovery
+         HOLDS 0. Tests: TestWave211OracleBinaryCastBoolLiterals
+         (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

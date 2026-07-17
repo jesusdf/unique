@@ -594,6 +594,8 @@ class Transformer:
             result = [self._gate_composite_row_value(node) for node in result]
         if self.context.target in ("mysql", "tsql"):
             result = [self._gate_interval_cast(node) for node in result]
+        if self.context.target == "oracle" and self.context.source == "mysql":
+            result = [self._gate_oracle_binary_cast(node) for node in result]
         if self.context.target == "mysql":
             result = [self._gate_mysql_full_join(node) for node in result]
             result = [self._gate_mysql_function_relation(node) for node in result]
@@ -1046,6 +1048,35 @@ class Transformer:
                 if found is not None:
                     return found
         return None
+
+    def _gate_oracle_binary_cast(self, node: ASTNode) -> ASTNode:
+        """Degrade a CAST to BINARY(n) — WHOLE, on Oracle (wave 211):
+        it has no BINARY cast type (RAW takes hex via HEXTORAW, not a
+        value cast)."""
+        if not self._contains_binary_cast(node):
+            return node
+        reason = (
+            "Oracle has no CAST(… AS BINARY) form; " "statement preserved as a comment"
+        )
+        self.context.warn(reason, "oracle_binary_cast")
+        self.context.mark_unsupported("CAST(… AS BINARY) (Oracle)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _contains_binary_cast(self, value: object) -> bool:
+        if isinstance(value, CastExpression) and re.match(
+            r"(?i)^BINARY\b", value.target_type.name
+        ):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_binary_cast(getattr(value, f.name))
+                for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_binary_cast(item) for item in value)
+        return False
 
     def _gate_interval_cast(self, node: ASTNode) -> ASTNode:
         """Degrade a statement casting to INTERVAL — WHOLE, on

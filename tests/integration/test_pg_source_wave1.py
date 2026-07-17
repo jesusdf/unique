@@ -7483,3 +7483,38 @@ class TestWave210ParenGroupNotAliased:
     def test_derived_select_still_aliased(self) -> None:
         out = _t2("SELECT * FROM ((SELECT 1 AS x));", "postgresql", "tsql")
         assert "uq_dt1" in out, out
+
+
+class TestWave211OracleBinaryCastBoolLiterals:
+    """wave 211 (mysql-corpus): Oracle has no CAST(… AS BINARY) form
+    (whole carrier), and MySQL's TRUE/FALSE are the numbers 1/0 —
+    Oracle PL/SQL types them BOOLEAN (PLS-00382 assigning to NUMBER)."""
+
+    def test_binary_cast_carrier_oracle(self) -> None:
+        out = _t2(
+            "select cast(cast('2004-01-22' as datetime) as binary(4));",
+            "mysql",
+            "oracle",
+        )
+        assert "UNIQUE:" in out and "BINARY" in out, out
+
+    def test_bool_literal_numeric_oracle(self) -> None:
+        out = _t2(
+            "create function rf() returns int begin"
+            " declare result tinyint(1); set result = false;"
+            " return result; end",
+            "mysql",
+            "oracle",
+        )
+        assert re.search(r"(?i)result := 0;", out), out
+        assert "FALSE" not in out.upper(), out
+
+    def test_bool_literal_kept_pg(self) -> None:
+        out = _t2(
+            "create function rf() returns int begin"
+            " declare result tinyint(1); set result = false;"
+            " return result; end",
+            "mysql",
+            "postgresql",
+        )
+        assert re.search(r"(?i)false", out), out
