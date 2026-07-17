@@ -7,10 +7,17 @@ architectural floor at `469917a`): the six corpus directions (pg-source and
 mysql-source × the three foreign targets) went from ~770 live-invalid
 statements to **133**, validity **98.9–99.8%**, and the pg→pg silent-gap
 discovery channel (`scripts/discover_silent_gaps.py`) from **287 to 0** — every
-statement now transpiles validly or carries an explicit warning/carrier. The
-residue is three non-wave classes (adversarial pg_regress error-path inputs,
-schema-dependent ambiguity, `RETURN QUERY` table functions) that need
-schema-aware transpilation, declared out of scope. Full log: `docs/DONE.md` §36.
+statement now transpiles validly or carries an explicit warning/carrier. Full
+log: `docs/DONE.md` §36.
+
+**Zero-reduction follow-up 2026-07-17** (batches W1–W6, `e102128`): after the
+M3-final flip, the six-direction residue was driven **127 → 22** with mechanism
+fixes (not waves), each commit gated + live-verified (FE 16/16, discovery pg→pg
+0). Current: pg-source {tsql 3, mysql 5, oracle 4}, mysql-source {tsql 4, pg 4,
+oracle **2 — 100.0% validity**}, overall **99.8–100.0%**. The remaining 22 are
+the architectural floor (adversarial pg_regress/sqlancer inputs sqlglot cannot
+parse, correlated outer-aggregate subqueries, schema-dependent type inference).
+Full log: `docs/DONE.md` §40.
 
 **M4 milestone reached 2026-07-11:** the Oracle-source bring-up closed at
 **0 syntax failures on all three directions** over the real 13 MB migration

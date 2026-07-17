@@ -4841,3 +4841,66 @@ differentials: MySQL byte-vs-char LENGTH, LTRIM/RTRIM position loss,
 CHARINDEX not-found offset drift, N'…' invalid on PG, silent GROUPS-frame
 material, the '+'-as-concat mysql-source semantics, COUNT boundary
 semantics of DATEDIFF(HOUR).
+
+## 40. Zero-reduction campaign — six-direction residue 127 → 22 (batches W1–W6)
+
+Archived from `docs/TODO.md` on 2026-07-17 (landed across `80c9545`..`e102128`).
+After the M3-final flip, the six-direction live syntax residue was driven down
+with **mechanism fixes, not corpus waves** — each batch a commit with always-on
+tests in `tests/unit/core/test_ir_first_families.py`, the full gate
+(black/isort/ruff/mypy + `scripts/test-parallel.sh`), and live-syntax + FE 16/16
+against the four engines. Discovery pg→pg held **0** throughout; validity
+99.8–100.0%.
+
+Cycle-by-cycle (`scripts/validity_sweep.py`, per direction on live engines):
+
+| Cycle | Batch | pg→{tsql,mysql,oracle} | my→{tsql,pg,oracle} | Total |
+|---|---|---|---|---|
+| flip | M3-final | 20 / 37 / 25 | 17 / 13 / 15 | 127 |
+| z3 | (prior) | 11 / 9 / 11 | 10 / 8 / 9 | 58 |
+| z4 | W1 | 9 / 8 / 9 | 8 / 5 / 9 | 48 |
+| z5 | W2 | 7 / 7 / 8 | 6 / 4 / 9 | 40 |
+| z6 | W3 | 3 / 7 / 8 | 6 / 4 / 9 | 36 |
+| z7 | W3-remodel+W4 | 3 / 7 / 6 | 6 / 4 / 5 | 29 |
+| z8 | W5 | 3 / 5 / 4 | 4 / 4 / 5 | 25 |
+| z9 | W6 | 3 / 5 / 4 | 4 / 4 / **2** | **22** |
+
+Mechanisms (all live-verified where Oracle):
+
+- **W1** — MySQL param `CHARSET`/`CHARACTER SET`/`COLLATE` attributes consumed;
+  `REAL` joins the pg skip-params set; `CURRENT_USER`/`SESSION_USER` niladic;
+  scalar `(VALUES (row))` → single-row subquery; bare `WHERE <expr>` routed
+  through `_emit_condition`; `CAST(… AS information_schema.*)` gated;
+  PREPARE/EXECUTE/DEALLOCATE join the MySQL admin-carrier family; CTE names in
+  `DEFINED_ALIASES`.
+- **W2** — MySQL BEFORE-row trigger IF-predicate transpiled through the IR
+  (`ISNULL(x)` → `x IS NULL`) with a balanced wrapping-paren strip; MySQL
+  `REPLACE` *statement* → routine carrier (distinct from `REPLACE()` the
+  function); literal `OFFSET 0` dropped on T-SQL/MySQL; `ANY/ALL` subquery
+  unwrapped to a scalar `SubqueryExpression` (multi-column stays RawSQL for the
+  composite gate); `MODE() WITHIN GROUP` → Oracle `STATS_MODE`; nameless
+  embedded `CREATE INDEX` gets a synthesized name.
+- **W3** — join-position derived-table `ORDER BY` strip on T-SQL/Oracle;
+  `RETURN QUERY`/`RETURN NEXT` bodies → routine carrier; self-join / comma-source
+  `UPDATE … FROM` emits correctly (`_cross_update_target` picks the target by
+  alias; PG + MySQL list the FROM source — MySQL as a comma multi-table UPDATE).
+- **W3-remodel** — aliased `UPDATE … FROM … RETURNING` re-parsed through the
+  modeled converter in the RETURNING passthrough (`_remodel_update_from`).
+- **W4** — self-referential declaration init drop (guarded so a shadowed-param
+  init is kept); Oracle-unsafe local names (count/min/max/sum/avg) renamed with
+  the `SELECT … INTO` target following; named cursor args `:=` → `=>`; BLOB
+  literal RETURN → `TO_BLOB(UTL_RAW.CAST_TO_RAW(…))`.
+- **W5** — Oracle SYS_REFCURSOR parameter the body OPENs → `IN OUT`; refcursor
+  declaration init dropped; a comment-only T-SQL trigger body (untranslatable
+  CALLs) gets a `SET NOCOUNT ON` no-op filler.
+- **W6** — `NULLS FIRST/LAST` stripped from an embedded Oracle `CREATE INDEX`
+  (sqlglot injects it; ORA-00907) — proc_bug19733 compiles clean.
+
+**Remaining 22 are the architectural floor**: adversarial pg_regress/sqlancer
+inputs sqlglot cannot parse (nested-paren join trees `(a CROSS JOIN (b JOIN c
+ON …) ON …)`, chained `a = b = c` comparisons), correlated outer-aggregate
+subqueries, and schema-dependent type inference (`COALESCE` bigint/char,
+aggregate in a set-op `ORDER BY`). Measurement note: the pg→oracle sweep hangs
+at *runtime* on bare `SELECT <dml-fn>()` pg_regress driver calls (DML in a
+SQL-called function / lock wait) — these are not syntax defects (the
+`CREATE FUNCTION` is compiled and counted); the sweep skips them.

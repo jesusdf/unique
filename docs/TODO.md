@@ -82,6 +82,25 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       = TOTAL 127 vs the declared floor 133 (−6); validity 98.7–99.8%;
       discovery pg→pg 0; FE live 16/16.** Full log in
       [`docs/DONE.md`](DONE.md) §39.
+- [~] **Zero-reduction campaign (P2) — residue 127 → 22 (2026-07-17,
+      batches W1–W6, `e102128`).** After the M3-final flip, drove the
+      six-direction live syntax residue down with mechanism fixes (not
+      waves), each a commit with always-on tests + full gate + live-syntax
+      + FE 16/16. Cycles: 127 → 58 → 48 (W1) → 40 (W2) → 36 (W3) → 29 (W4)
+      → 25 (W5) → **22 (W6)**: pg-corpus {tsql 3, mysql 5, oracle 4},
+      mysql-corpus {tsql 4, pg 4, oracle **2** — 100.0% validity}. Discovery
+      pg→pg held 0; validity 99.8–100.0%. Highlights: IR-routed trigger
+      predicates (ISNULL), REPLACE/RETURN-QUERY/comment-only-body carriers,
+      self-join `UPDATE…FROM` multi-table (pg + mysql), Oracle refcursor
+      IN OUT / init-drop / named-cursor `=>` / BLOB-literal / unsafe-local
+      rename / self-init drop, embedded CREATE INDEX NULLS strip
+      (proc_bug19733). Full log: [`docs/DONE.md`](DONE.md) §40. **Remaining
+      22 are the architectural floor** — adversarial pg_regress/sqlancer
+      inputs sqlglot cannot parse (nested-paren join trees, chained `a=b=c`
+      comparisons), correlated outer-aggregate subqueries, and
+      schema-dependent type inference (COALESCE bigint/char). Measurement
+      gotcha recorded: the pg→oracle sweep hangs at runtime on bare
+      `SELECT <dml-fn>()` pg_regress driver calls (not syntax defects).
 - [x] **Prune fallback-only text rewriters (P3) — CLOSED BY MEASUREMENT
       2026-07-17:** a coverage run over ALL real material (both corpora,
       the procedures fixtures and the three private fixtures, every
