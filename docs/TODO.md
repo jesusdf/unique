@@ -928,7 +928,18 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          wrapping in the tri-state CASE (the NOT(pred) negation path —
          no pairwise negation operator exists for IN). Measured:
          pg→tsql **61 → 58** (−3). Discovery HOLDS 0. Tests:
-         TestWave195InSubqueryValue (2).**
+         TestWave195InSubqueryValue (2).* Wave 196 (2026-07-17): PG's
+         ``DELETE … USING`` sources were silently DROPPED at
+         conversion (the DeleteStatement.using field existed but was
+         never populated nor emitted) — dangling references shipped on
+         EVERY target, pg→pg included. Now: PG keeps USING, T-SQL/
+         MySQL spell the multi-table delete, Oracle gets the
+         correlated-EXISTS rewrite; derived-table sources degrade
+         honestly. Gotcha: sqlglot stores False (not None) in
+         args['using'] for plain deletes — the first cut broke 5
+         tests. Measured: pg→tsql stable **58** (corpus cases are
+         WITH-prefixed → passthrough); the fix is silent-loss class.
+         Discovery HOLDS 0. Tests: TestWave196DeleteUsing (5).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

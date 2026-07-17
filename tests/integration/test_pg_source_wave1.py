@@ -7063,3 +7063,33 @@ class TestWave195InSubqueryValue:
             "tsql",
         )
         assert "CASE WHEN" not in out.upper(), out
+
+
+class TestWave196DeleteUsing:
+    """wave 196 (pg-corpus): PG's ``DELETE … USING`` sources were
+    silently DROPPED at conversion, leaving dangling references on
+    every target (pg→pg included). PG keeps USING; T-SQL/MySQL spell
+    the multi-table delete; Oracle gets the correlated EXISTS."""
+
+    _SQL = "delete from parent using rcte where parent.id = rcte.maxid;"
+
+    def test_using_kept_pg(self) -> None:
+        out = _t2(self._SQL, "postgresql", "postgresql")
+        assert re.search(r"(?i)USING rcte", out), out
+
+    def test_using_multitable_tsql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "tsql")
+        assert re.search(r"(?i)DELETE parent FROM parent, rcte", out), out
+        assert "USING" not in out.upper(), out
+
+    def test_using_multitable_mysql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "mysql")
+        assert re.search(r"(?i)DELETE parent FROM parent, rcte", out), out
+
+    def test_using_exists_oracle(self) -> None:
+        out = _t2(self._SQL, "postgresql", "oracle")
+        assert re.search(r"(?i)WHERE EXISTS \(SELECT 1 FROM rcte WHERE", out), out
+
+    def test_plain_delete_untouched(self) -> None:
+        out = _t2("delete from parent where id = 5;", "postgresql", "tsql")
+        assert re.search(r"(?i)DELETE FROM parent\s+WHERE id = 5", out), out

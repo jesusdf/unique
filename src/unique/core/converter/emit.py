@@ -2033,6 +2033,22 @@ def _emit_update_oracle_subquery(
 def _emit_delete(node: DeleteStatement, dialect: str) -> str:
     """Emit a DELETE statement."""
     table = _emit_table_ref(node.table, dialect)
+    if node.using:
+        # PG's DELETE … USING (wave 196). PG keeps it; T-SQL/MySQL spell
+        # the multi-table delete; Oracle (no multi-table form) gets the
+        # correlated-EXISTS rewrite, exact when WHERE is the join
+        # condition (the target's columns stay visible inside).
+        sources = ", ".join(_emit_table_ref(u, dialect) for u in node.using)
+        where = _emit_expression(node.where, dialect) if node.where else "1 = 1"
+        if dialect == "postgresql":
+            return f"DELETE FROM {table}\nUSING {sources}\nWHERE {where}"
+        if dialect in ("tsql", "mysql"):
+            target = node.table.alias or node.table.name
+            return f"DELETE {target} FROM {table}, {sources}\nWHERE {where}"
+        return (
+            f"DELETE FROM {table}\nWHERE EXISTS (SELECT 1 FROM {sources} "
+            f"WHERE {where})"
+        )
     if dialect == "tsql" and node.table.alias:
         # T-SQL spells an aliased delete ``DELETE alias FROM t alias``
         # (``DELETE FROM t alias`` is a syntax error — wave 140).

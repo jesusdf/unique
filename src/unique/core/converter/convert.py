@@ -1067,7 +1067,7 @@ def _convert_update(expr: exp.Update) -> ASTNode:
     )
 
 
-def _convert_delete(expr: exp.Delete) -> DeleteStatement:
+def _convert_delete(expr: exp.Delete) -> ASTNode:
     """Convert a sqlglot Delete to DeleteStatement."""
     # Oracle's FROM-less ``DELETE t WHERE …`` parses with the table in
     # ``tables`` and ``this=False`` — reading ``this`` blindly emitted the
@@ -1085,7 +1085,31 @@ def _convert_delete(expr: exp.Delete) -> DeleteStatement:
     if where_expr:
         where = convert_expression(where_expr.this)
 
-    return DeleteStatement(table=table, where=where)
+    # PG's DELETE … USING sources: sqlglot nests the comma list as the
+    # first table's joins. Unread, the whole clause was silently
+    # DROPPED, leaving dangling references (wave 196).
+    using: list[TableRef] = []
+    using_expr = expr.args.get("using")
+    # sqlglot stores False (not None) here for plain deletes.
+    if using_expr:
+        sources = using_expr if isinstance(using_expr, list) else [using_expr]
+        for src in sources:
+            if not isinstance(src, exp.Table):
+                return RawSQL(
+                    sql=_source_sql(expr),
+                    reason="Unhandled expression type: DELETE USING derived table",
+                )
+            using.append(_convert_table_ref(src))
+            for j in src.args.get("joins") or []:
+                jt = j.this
+                if not isinstance(jt, exp.Table):
+                    return RawSQL(
+                        sql=_source_sql(expr),
+                        reason="Unhandled expression type: DELETE USING derived table",
+                    )
+                using.append(_convert_table_ref(jt))
+
+    return DeleteStatement(table=table, where=where, using=tuple(using))
 
 
 def _convert_create(expr: exp.Create) -> ASTNode:
