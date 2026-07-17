@@ -2545,7 +2545,10 @@ class TestStrToDateAndCompositeTypes:
 
     def test_str_to_date_valid_emits(self) -> None:
         out = _t2("select str_to_date('2007-10-01', '%Y-%m-%d');", "mysql", "tsql")
-        assert re.search(r"(?i)CAST\('2007-10-01' AS DATE\)", out), out
+        # The known format maps to its fixed CONVERT style (M3 F7) — a
+        # blanket CAST dropped the format (and the time part when present).
+        assert re.search(r"(?i)CONVERT\(DATETIME, '2007-10-01', 120\)", out), out
+        assert not re.search(r"(?i)CAST\('2007-10-01' AS DATE\)", out), out
 
     def test_composite_type_routine_degrades(self) -> None:
         src = (

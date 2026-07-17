@@ -642,6 +642,21 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     # sqlglot canonicalizes LTRIM/RTRIM to Trim(position=LEADING/TRAILING);
     # dropping the position silently trims BOTH sides. Recover the concrete
     # one-sided name (a position-less Trim is the plain TRIM).
+    # An in-call ordered aggregate (PG ``string_agg(x, sep ORDER BY a)`` /
+    # MySQL GROUP_CONCAT ... ORDER BY): sqlglot nests the Order inside
+    # ``this``. Fold it into the canonical first-argument RawSQL the
+    # group-concat emitter understands ("expr ORDER BY ...").
+    if isinstance(expr, exp.GroupConcat) and isinstance(expr.this, exp.Order):
+        ordered = expr.this
+        expr_txt = ordered.this.sql()
+        order_txt = ", ".join(o.sql() for o in ordered.expressions)
+        gc_args: list[ASTNode] = [
+            RawSQL(sql=f"{expr_txt} ORDER BY {order_txt}", reason="ordered aggregate")
+        ]
+        sep_arg = expr.args.get("separator")
+        if sep_arg is not None:
+            gc_args.append(convert_expression(sep_arg))
+        return FunctionCall(name="GROUP_CONCAT", args=tuple(gc_args))
     if isinstance(expr, exp.Trim) and expr.args.get("position") and not expr.expression:
         side = str(expr.args["position"]).upper()
         name = {"LEADING": "LTRIM", "TRAILING": "RTRIM"}.get(side)

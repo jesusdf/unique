@@ -397,3 +397,21 @@ class TestSmallIrParityFixes:
         t._date_vars = {"@d1", "@d2"}
         out = t._ir_transpile_dml("SELECT @d2 - @d1")
         assert out is not None and "DATEDIFF(DAY, @d1, @d2)" in out, out
+
+
+class TestOrderedStringAggInIr:
+    """An in-call ORDER BY aggregate converts structurally (M3 family F4)."""
+
+    def test_pg_string_agg_order_to_tsql_within_group(self) -> None:
+        out = _ir("postgresql", "tsql", "SELECT string_agg(a, ', ' ORDER BY a) FROM t")
+        assert out is not None, out
+        assert __import__("re").search(
+            r"(?i)STRING_AGG\(a, ', '\) WITHIN GROUP \(ORDER BY a\)", out
+        ), out
+        assert "GROUP_CONCAT" not in out.upper(), out
+
+    def test_pg_string_agg_order_to_mysql(self) -> None:
+        out = _ir("postgresql", "mysql", "SELECT string_agg(a, ', ' ORDER BY a) FROM t")
+        assert (
+            out is not None and "GROUP_CONCAT(a ORDER BY a SEPARATOR ', ')" in out
+        ), out
