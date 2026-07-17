@@ -223,6 +223,12 @@ DATE_VARIABLES: contextvars.ContextVar[frozenset[str] | None] = contextvars.Cont
     "date_variables", default=None
 )
 
+# Aliases defined by the statement being emitted (set per emit_node): the
+# temp-table qualifier rename must not capture them.
+DEFINED_ALIASES: contextvars.ContextVar[frozenset[str] | None] = contextvars.ContextVar(
+    "defined_aliases", default=None
+)
+
 # (success, failure) target spellings for the T-SQL ``@@FETCH_STATUS = 0`` /
 # ``<> 0`` cursor-loop idiom, e.g. ("V_C1%FOUND", "V_C1%NOTFOUND"). Cursor
 # state is procedural context the IR cannot derive; the procedural
@@ -995,6 +1001,7 @@ __all__ = [
     "STRING_VARIABLES",
     "FETCH_STATUS_FORMS",
     "DATE_VARIABLES",
+    "DEFINED_ALIASES",
     "SOURCE_DIALECT",
     "IR_EMBEDDED",
     "_BARE_CHAR_BIGTEXT",

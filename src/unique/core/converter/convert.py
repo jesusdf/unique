@@ -62,6 +62,7 @@ from unique.core.ast_nodes import (
 # Split out of the former single-file converter; see the package __init__.
 from unique.core.converter._base import *  # noqa: F401,F403
 from unique.core.converter.harvest import _resolve_tsql_alias_type  # noqa: F401
+from unique.core.sql_split import split_leading_trivia
 
 _INSERT_COLS_RE = re.compile(
     r"(?is)\b(INSERT\s+(?:IGNORE\s+)?INTO\s+`?(\w+)`?\s*\()([^)]*)(\))"
@@ -93,6 +94,22 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
         A list of IR ASTNode instances.
     """
     sg_dialect = sqlglot_dialect_name(dialect)
+    # Comments are trivia (guardrail 3): the regex pre-recognitions below
+    # must see the CODE, not a leading comment — a commented ALTER … SET
+    # (storage) dodged the PG STORAGE branch. Split once and recurse on the
+    # code; the trivia re-attaches as leading comment nodes.
+    leading_trivia, code = split_leading_trivia(sql)
+    if leading_trivia.strip() and code.strip():
+        trivia_nodes: list[ASTNode] = [
+            CommentStatement(
+                text=line,
+                style="line" if line.lstrip().startswith("--") else "block",
+            )
+            for line in leading_trivia.rstrip().splitlines()
+            if line.strip()
+        ]
+        return [*trivia_nodes, *parse_sql(code, dialect)]
+
     # ``DROP TABLE a, b, c`` — sqlglot cannot parse the multi-object
     # form (it shredded the statement at the first comma; waves 236,
     # 239 extend it to FUNCTION/PROCEDURE/VIEW/SEQUENCE/etc.). Split

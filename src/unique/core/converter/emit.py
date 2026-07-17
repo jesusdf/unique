@@ -443,8 +443,34 @@ def _oracle_merge_paren_on(sql: str) -> str:
     return f"{sql[:on_at]} ON ({cond}){sql[when_at:]}"
 
 
+def _collect_defined_aliases(value: object) -> set[str]:
+    """Aliases the statement itself defines (table/derived-table aliases):
+    the temp-table QUALIFIER rename must not fire on them — ``(SELECT …) y``
+    is the statement's own name even when a temp table ``y`` exists."""
+    found: set[str] = set()
+    if isinstance(value, TableRef) and value.alias:
+        found.add(value.alias.lower())
+    if isinstance(value, SubqueryExpression) and value.alias:
+        found.add(value.alias.lower())
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        for f in dataclasses.fields(value):
+            found |= _collect_defined_aliases(getattr(value, f.name))
+    elif isinstance(value, tuple):
+        for item in value:
+            found |= _collect_defined_aliases(item)
+    return found
+
+
 def emit_node(node: ASTNode, dialect: str) -> str:
     """Emit a single IR node as SQL text."""
+    token = DEFINED_ALIASES.set(frozenset(_collect_defined_aliases(node)))
+    try:
+        return _emit_node_inner(node, dialect)
+    finally:
+        DEFINED_ALIASES.reset(token)
+
+
+def _emit_node_inner(node: ASTNode, dialect: str) -> str:
     if isinstance(node, CommentStatement):
         # A preserved source comment, re-emitted verbatim (text keeps its
         # ``--`` / ``/* */`` delimiters).
@@ -2106,7 +2132,11 @@ def _emit_join_table_ref(table: TableRef | SubqueryExpression, dialect: str) -> 
         # The derived table's alias must survive (references break without
         # it, and MySQL requires every derived table to be aliased).
         alias = f" {table.alias}" if table.alias else ""
-        return f"({_emit_select(table.query, dialect)}){alias}"
+        inner_sql = _emit_select(table.query, dialect)
+        if dialect == "tsql" and not re.search(r"(?i)\bTOP\b", inner_sql):
+            # Same 1033 rule as the FROM-position derived table.
+            inner_sql = re.sub(r"(?is)\s+ORDER\s+BY\s+[^()]*$", "", inner_sql)
+        return f"({inner_sql}){alias}"
     return _emit_table_ref(table, dialect)
 
 
@@ -2907,7 +2937,12 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             # t1.c0 = 5`` left t1 dangling on T-SQL — wave 231).
             if dialect == "tsql" and not qual.startswith("#"):
                 temp_tables = TEMP_TABLES.get()
-                if temp_tables and qual.lower() in temp_tables:
+                defined = DEFINED_ALIASES.get() or frozenset()
+                if (
+                    temp_tables
+                    and qual.lower() in temp_tables
+                    and qual.lower() not in defined
+                ):
                     qual = f"#{qual}"
             table = _ident(qual, node.table_quoted, dialect)
             return f"{table}.{name}"
@@ -3285,6 +3320,15 @@ def _emit_group_concat(node: FunctionCall, dialect: str) -> str | None:
         return quoted(sep if sep is not None else default)
 
     if dialect == "mysql":
+        # The canonical first argument may be a generically rendered RawSQL
+        # ("expr ORDER BY …"); MySQL's CAST target set differs (no TEXT).
+        def _mysql_cast_targets(s: str) -> str:
+            s = re.sub(r"(?i)\bAS\s+TEXT\s*\)", "AS CHAR)", s)
+            return re.sub(r"(?i)\bAS\s+(?:INT|INTEGER|BIGINT)\s*\)", "AS SIGNED)", s)
+
+        expr_sql = _mysql_cast_targets(expr_sql)
+        if order_sql:
+            order_sql = _mysql_cast_targets(order_sql)
         order = f" ORDER BY {order_sql}" if order_sql else ""
         if dyn_sep is not None:
             separator = f" SEPARATOR {dyn_sep}"
