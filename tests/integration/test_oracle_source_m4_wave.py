@@ -181,7 +181,8 @@ class TestOracleBuiltinsOnTsql:
             " WHERE f >= TRUNC(p_fecha);\nEND;\n/"
         )
         out = _flat(_t(src, "tsql"))
-        assert "CHAR( 13 ) + CHAR( 10 )" in out.replace("CHAR(13)", "CHAR( 13 )"), out
+        assert re.search(r"CHAR\s*\(\s*13\s*\)\s*\+\s*CHAR\s*\(\s*10\s*\)", out), out
+        assert "CHR" not in out.upper(), out
         assert "CONVERT(VARCHAR(MAX), SUBSTRING(@p_c, 1, 4000) )" in out, out
         assert "ROUND(@p_min / 60, 0, 1)" in out, out
         assert "CAST(@p_fecha AS DATE)" in out, out

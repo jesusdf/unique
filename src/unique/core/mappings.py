@@ -96,6 +96,23 @@ LAST_IDENTITY_SOURCE_FUNCS: dict[str, str] = {
     "LAST_INSERT_ID": "mysql",
 }
 
+#: The current-error-message expression per dialect (exception-handler
+#: context). MySQL has no expression form (GET DIAGNOSTICS is a statement;
+#: the procedural transformer handles assignments) — absent means "no
+#: context-free spelling; keep the name visible".
+ERROR_MESSAGE_EXPR: dict[str, str] = {
+    "tsql": "ERROR_MESSAGE()",
+    "oracle": "SQLERRM",
+    "postgresql": "SQLERRM",
+}
+
+#: Source spellings of the current-error-message global, with the dialects
+#: they belong to (SQLERRM is both PL/SQL and plpgsql).
+ERROR_MESSAGE_SOURCES: dict[str, frozenset[str]] = {
+    "ERROR_MESSAGE": frozenset({"tsql"}),
+    "SQLERRM": frozenset({"oracle", "postgresql"}),
+}
+
 #: Per-pair function renames applied by the procedural pipeline to raw
 #: routine text (function-call positions only). Values starting with "--"
 #: document constructs that need manual conversion and are not rewritten.
@@ -118,6 +135,7 @@ PROCEDURAL_FUNC_MAPS: dict[tuple[str, str], dict[str, str]] = {
     },
     ("oracle", "tsql"): {
         "NVL": "ISNULL",
+        "CHR": "CHAR",
         "LENGTH": "LEN",
         "SYS_GUID": "NEWID",
         "SUBSTR": "SUBSTRING",
@@ -147,6 +165,7 @@ PROCEDURAL_FUNC_MAPS: dict[tuple[str, str], dict[str, str]] = {
     },
     ("postgresql", "tsql"): {
         "COALESCE": "COALESCE",
+        "CHR": "CHAR",
         "LENGTH": "LEN",
         "GEN_RANDOM_UUID": "NEWID",
         "CEIL": "CEILING",
@@ -194,8 +213,18 @@ PROCEDURAL_FUNC_MAPS: dict[tuple[str, str], dict[str, str]] = {
         "TO_DATE": "TO_DATE",
         "TO_NUMBER": "-- TO_NUMBER -> CAST(... AS NUMERIC)",
     },
+    ("postgresql", "mysql"): {
+        "CHR": "CHAR",
+        # Round-trips of the mysql->postgresql renames (symmetry contract);
+        # COALESCE/CURRENT_DATE are native on both (identity collapse).
+        "COALESCE": "COALESCE",
+        "CURRENT_DATE": "CURRENT_DATE",
+        "RANDOM": "RAND",
+        "GEN_RANDOM_UUID": "UUID",
+    },
     ("oracle", "mysql"): {
         "NVL": "IFNULL",
+        "CHR": "CHAR",
         "LENGTH": "CHAR_LENGTH",
         "SYS_GUID": "UUID",
         "SUBSTR": "SUBSTRING",

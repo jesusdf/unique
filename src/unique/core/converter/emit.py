@@ -67,6 +67,10 @@ from unique.core.converter.harvest import (  # noqa: F401
 from unique.core.mappings import (
     CURRENT_DATE_EXPR,
     CURRENT_TIMESTAMP_EXPR,
+    ERROR_MESSAGE_EXPR,
+    ERROR_MESSAGE_SOURCES,
+    LAST_IDENTITY_EXPR,
+    LAST_IDENTITY_SOURCE_FUNCS,
     TSQL_OBJECT_CONTEXT_WORDS,
     tsql_call_needs_schema,
 )
@@ -2853,6 +2857,15 @@ def _map_system_global(sql: str, dialect: str) -> str | None:
 def _emit_expression(node: ASTNode, dialect: str) -> str:
     """Emit an expression node as SQL text."""
     if isinstance(node, ColumnRef):
+        # Bare SQLERRM (PL/SQL and plpgsql spell it without parens) is the
+        # current-error-message global, not a column (exception context).
+        if (
+            not node.table
+            and SOURCE_DIALECT.get()
+            in ERROR_MESSAGE_SOURCES.get(node.name.upper(), frozenset())
+            and dialect in ERROR_MESSAGE_EXPR
+        ):
+            return ERROR_MESSAGE_EXPR[dialect]
         name = _ident(node.name, node.quoted, dialect)
         if node.table:
             qual = node.table
@@ -3702,6 +3715,40 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
                 f"+ {start} - 1)"
             )
         return f"POSITION({needle} IN {haystack})"
+
+    # The source's last-identity function is a GLOBAL, not a UDF — it maps
+    # to the target's whole expression (LAST_IDENTITY_EXPR); guarded on the
+    # name belonging to the SOURCE dialect so a same-named user function on
+    # another engine stays a visible call.
+    if (
+        not node.args
+        and fn_name in LAST_IDENTITY_SOURCE_FUNCS
+        and LAST_IDENTITY_SOURCE_FUNCS[fn_name] == SOURCE_DIALECT.get()
+        and dialect in LAST_IDENTITY_EXPR
+    ):
+        return LAST_IDENTITY_EXPR[dialect]
+
+    # The current-error-message global (exception context): T-SQL's
+    # ERROR_MESSAGE() ↔ SQLERRM. MySQL has no expression form (absent from
+    # the table) — the name stays a visible gap there.
+    if (
+        not node.args
+        and SOURCE_DIALECT.get() in ERROR_MESSAGE_SOURCES.get(fn_name, frozenset())
+        and dialect in ERROR_MESSAGE_EXPR
+    ):
+        return ERROR_MESSAGE_EXPR[dialect]
+
+    # Oracle's bare TO_NUMBER(x) (no format) is a decimal cast off Oracle —
+    # a name rename would emit CONVERT/CAST without a type (error 156); the
+    # text path's live-validated form is CAST(x AS DECIMAL(38, 10)).
+    if (
+        fn_name == "TO_NUMBER"
+        and len(node.args) == 1
+        and dialect in ("tsql", "mysql", "postgresql")
+    ):
+        arg = _emit_expression(node.args[0], dialect)
+        target_num = "DECIMAL(38, 10)" if dialect != "postgresql" else "NUMERIC"
+        return f"CAST({arg} AS {target_num})"
 
     # Map canonical function names to dialect-specific names
     name = _map_function_name(node.name, dialect)

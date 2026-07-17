@@ -29,7 +29,12 @@ from unique.core.ast_nodes import (
     TableRef,
     UpdateStatement,
 )
-from unique.core.mappings import BARE_CHAR_BIGTEXT, EMIT_TYPE_MAP, UUID_FUNCTION
+from unique.core.mappings import (
+    BARE_CHAR_BIGTEXT,
+    EMIT_TYPE_MAP,
+    PROCEDURAL_FUNC_MAPS,
+    UUID_FUNCTION,
+)
 
 # Split out of the former single-file converter; see the package __init__.
 
@@ -913,6 +918,16 @@ def _map_function_name(name: str, dialect: str) -> str:
     # (found by a hardened test during audit 2026-07-02 remediation).
     if upper in ("UUID", "NEWID", "GEN_RANDOM_UUID", "SYS_GUID"):
         return UUID_FUNCTION.get(dialect, name)
+
+    # The shared pair renames (PROCEDURAL_FUNC_MAPS) — ONE table, both
+    # pipelines (M3-final: the IR must not lag the text rewriter it
+    # replaces). Only plain identifier renames apply here; ``--``
+    # placeholders and expression-shaped values need dedicated handling.
+    source = SOURCE_DIALECT.get()
+    if source and source != dialect:
+        mapped = PROCEDURAL_FUNC_MAPS.get((source, dialect), {}).get(upper)
+        if mapped and mapped.isidentifier() and mapped.upper() != upper:
+            return mapped
 
     return name
 

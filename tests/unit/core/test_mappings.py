@@ -66,6 +66,13 @@ class TestFunctionMapSymmetry:
         # MySQL LENGTH() counts bytes; both LENGTH and CHAR_LENGTH fold to
         # LEN on T-SQL, but the reverse expansion picks CHAR_LENGTH only.
         ("mysql", "tsql", "LENGTH"): "byte- vs char-length collapse",
+        # CHR -> CHAR must not invert: "CHAR(" is also the type spelling in
+        # CAST contexts, which the text rewriter's name(paren) regex would
+        # mangle (CAST(x AS CHAR(10)) -> CHR(10)).
+        ("oracle", "tsql", "CHR"): "CHAR( collides with the CAST type spelling",
+        ("oracle", "mysql", "CHR"): "CHAR( collides with the CAST type spelling",
+        ("postgresql", "tsql", "CHR"): "CHAR( collides with the CAST type spelling",
+        ("postgresql", "mysql", "CHR"): "CHAR( collides with the CAST type spelling",
     }
 
     def test_renames_round_trip(self) -> None:

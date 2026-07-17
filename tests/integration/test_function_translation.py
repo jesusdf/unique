@@ -102,7 +102,7 @@ class TestUnmappedFunctionNamePreserved:
 
     @pytest.mark.parametrize(
         "fn",
-        ["PATINDEX('%x%', a)", "CHOOSE(2, 'a', 'b')", "STR(1.5, 6, 2)", "GETUTCDATE()"],
+        ["PATINDEX('%x%', a)", "CHOOSE(2, 'a', 'b')", "STR(1.5, 6, 2)"],
     )
     @pytest.mark.parametrize("target", _TARGETS)
     def test_name_not_anonymous(self, fn: str, target: str) -> None:
@@ -113,6 +113,13 @@ class TestUnmappedFunctionNamePreserved:
 
 class TestKnownGoodMappings:
     """Spot-check functions that do have clean cross-engine mappings."""
+
+    def test_getutcdate_maps_to_utc_timestamp_on_mysql(self) -> None:
+        # Shared pair map (PROCEDURAL_FUNC_MAPS) consumed by the IR too
+        # (M3-final): GETUTCDATE is no longer an unmapped passthrough.
+        out = _t("SELECT GETUTCDATE() FROM t", "mysql")
+        assert "UTC_TIMESTAMP" in out.upper()
+        assert "GETUTCDATE" not in out.upper()
 
     def test_charindex_to_instr_oracle(self) -> None:
         out = _t("SELECT CHARINDEX('x', a) FROM t", "oracle")
