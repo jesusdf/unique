@@ -604,7 +604,35 @@ class TSqlTransformer(ProceduralTransformer):
 
             original = ProceduralEmitter("postgresql").emit(node)
             return RawSQL(sql=original, reason=reason)
+        if self._contains_whole_row_ref(kept):
+            # ``OLD.*`` / ``NEW.*`` (a whole-row value, usually cast to text
+            # for a log message) has no T-SQL spelling — there is no whole-row
+            # variable — so degrade the trigger rather than inline invalid SQL.
+            reason = (
+                "trigger function references a whole-row OLD.*/NEW.* value; "
+                "T-SQL has no whole-row variable — trigger preserved as a comment"
+            )
+            self._warnings.append(reason)
+            from unique.core.procedural.emitter import ProceduralEmitter
+
+            original = ProceduralEmitter("postgresql").emit(node)
+            return RawSQL(sql=original, reason=reason)
         return self._tsql_statement_trigger(node, kept)
+
+    _WHOLE_ROW_RE = re.compile(r"(?i)\b(?:OLD|NEW)\s*\.\s*\*")
+
+    def _contains_whole_row_ref(self, body: tuple[ASTNode, ...]) -> bool:
+        found = False
+
+        def scan(segment: str) -> str:
+            nonlocal found
+            if self._WHOLE_ROW_RE.search(segment):
+                found = True
+            return segment
+
+        for b in body:
+            self._rewrite_raw_text_fields(b, scan)
+        return found
 
     def _contains_raw_text(self, body: tuple[ASTNode, ...], needle: str) -> bool:
         found = False

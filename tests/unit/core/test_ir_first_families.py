@@ -1334,3 +1334,24 @@ class TestZeroPushW7Batch:
             "postgresql",
         )
         assert "set-operation ORDER BY" not in r.sql, r.sql
+
+    def test_whole_row_ref_trigger_carrier_tsql(self) -> None:
+        src = (
+            "create function afn() returns trigger language plpgsql as $$\n"
+            "begin\n  raise warning '%', old.*::text;\n  return null;\nend;$$;\n"
+            "create trigger atr after update on t for each row"
+            " execute procedure afn();"
+        )
+        r = self._t(src, "postgresql", "tsql")
+        assert any("whole-row" in w.message for w in r.warnings), r.sql
+        assert "old . *" not in r.sql and "old.*" not in r.sql, r.sql
+
+    def test_column_ref_trigger_still_inlines_tsql(self) -> None:
+        src = (
+            "create function bfn() returns trigger language plpgsql as $$\n"
+            "begin\n  new.c := new.c + 1;\n  return new;\nend;$$;\n"
+            "create trigger btr before insert on t for each row"
+            " execute procedure bfn();"
+        )
+        r = self._t(src, "postgresql", "tsql")
+        assert not any("whole-row" in w.message for w in r.warnings), r.sql
