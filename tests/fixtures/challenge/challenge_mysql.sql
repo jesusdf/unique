@@ -227,6 +227,9 @@ SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)
 -- CASE[open]: my-insert-oob — fails on tsql. FUNC-DIFF: source=(('abc',),) target=(('NULL',),)
 SELECT INSERT('abc', 10, 1, 'X') AS r
 
+-- CASE[open]: my-instr-case — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('2',),)
+SELECT INSTR('aAaA', 'A') AS r
+
 -- CASE[open]: my-int-or-empty — fails on oracle. FUNC-DIFF: source=(('0',),) target=(('NULL',),)
 SELECT 0 OR '' AS r
 
@@ -299,6 +302,9 @@ SELECT LOG(2, 8) AS r
 -- CASE[open]: my-log2-log10 — fails on tsql. FUNC-DIFF: source=(('3', '3'),) target=(('0.333333', '0.333333'),)
 SELECT LOG2(8), LOG10(1000)
 
+-- CASE[open]: my-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)
+SELECT LPAD('ab', 5, 'xy') AS r
+
 -- CASE[open]: my-lpad-trunc — fails on tsql. FUNC-DIFF: source=(('ab',),) target=(('bc',),)
 SELECT LPAD('abc', 2, 'x') AS r
 
@@ -347,6 +353,9 @@ SELECT REPEAT('ab', 2.9) AS r
 
 -- CASE[open]: my-repeat-neg — fails on tsql. FUNC-DIFF: source=(('',),) target=(('NULL',),)
 SELECT REPEAT('ab', -1) AS r
+
+-- CASE[open]: my-replace-case — fails on tsql. FUNC-DIFF: source=(('AbCXBc',),) target=(('XbCXBc',),)
+SELECT REPLACE('AbCaBc', 'a', 'X') AS r
 
 -- CASE[open]: my-replace-null2 — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT REPLACE('abc', NULL, 'x') IS NULL AS r
@@ -440,6 +449,9 @@ SELECT UPPER('ß') AS r
 
 -- CASE[open]: my-upper-sharps-len — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('2',),) target=(('1',),)
 SELECT LENGTH(UPPER('ß')) AS r
+
+-- CASE[open]: my-upper-strasse — fails on postgresql. FUNC-DIFF: source=(('STRAßE',),) target=(('STRAẞE',),)
+SELECT UPPER('straße') AS r
 
 -- CASE[open]: my-uuid-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
 SELECT UUID(), UUID_SHORT()

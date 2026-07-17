@@ -135,6 +135,9 @@ SELECT INITCAP('hello world') AS r FROM DUAL
 -- CASE[open]: ora-insert-append — fails on postgresql. validator-crash: sending query failed: another command is already in progress
 CREATE TABLE t (a NUMBER); INSERT /*+ APPEND */ INTO t SELECT 1 FROM DUAL
 
+-- CASE[open]: ora-instr-case — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('1',),)
+SELECT INSTR('aAaA', 'A') AS r FROM DUAL
+
 -- CASE[open]: ora-interval-tochar — fails on postgresql. FUNC-DIFF: source=(('+02 03:04:05.000000',),) target=(('2 days 03:04:05',),)
 SELECT TO_CHAR(INTERVAL '2 3:04:05.000' DAY TO SECOND) AS r FROM DUAL
 
@@ -158,6 +161,12 @@ SELECT LNNVL(1 = 2) AS r FROM DUAL WHERE LNNVL(1 = 2)
 
 -- CASE[open]: ora-lob-length — fails on mysql, postgresql, tsql. (195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT DBMS_LOB.GETLENGTH(TO_CLOB('hello')) AS r FROM DUAL
+
+-- CASE[open]: ora-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)
+SELECT LPAD('ab', 5, 'xy') AS r FROM DUAL
+
+-- CASE[open]: ora-ltrim-set — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
+SELECT LTRIM('xxabc', 'x') AS r FROM DUAL
 
 -- CASE[open]: ora-median-mode — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME
 SELECT MEDIAN(x), STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 FROM DUAL UNION ALL SELECT 2 FROM DUAL)

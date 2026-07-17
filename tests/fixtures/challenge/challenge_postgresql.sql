@@ -254,6 +254,9 @@ SELECT LOG(100) AS r
 -- CASE[open]: pg-lpad-shrink — fails on tsql. FUNC-DIFF: source=(('hel',),) target=(('llo',),)
 SELECT LPAD('hello', 3) AS r
 
+-- CASE[open]: pg-ltrim-set — fails on mysql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
+SELECT ltrim('xxabc', 'x') AS r
+
 -- CASE[open]: pg-make-date — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKE_DATE(2020, 6, 15), MAKE_TIME(10, 30, 0)
 

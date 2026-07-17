@@ -413,6 +413,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('abc',),) target=(('NULL',),)`
 - src: `SELECT INSERT('abc', 10, 1, 'X') AS r`
 
+## my-instr-case  (mysql)
+- targets: oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
+- src: `SELECT INSTR('aAaA', 'A') AS r`
+
 ## my-int-or-empty  (mysql)
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('NULL',),)`
@@ -533,6 +538,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('3', '3'),) target=(('0.333333', '0.333333'),)`
 - src: `SELECT LOG2(8), LOG10(1000)`
 
+## my-lpad-multichar  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)`
+- src: `SELECT LPAD('ab', 5, 'xy') AS r`
+
 ## my-lpad-trunc  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('ab',),) target=(('bc',),)`
@@ -612,6 +622,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('',),) target=(('NULL',),)`
 - src: `SELECT REPEAT('ab', -1) AS r`
+
+## my-replace-case  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('AbCXBc',),) target=(('XbCXBc',),)`
+- src: `SELECT REPLACE('AbCaBc', 'a', 'X') AS r`
 
 ## my-replace-null2  (mysql)
 - targets: oracle(func)
@@ -767,6 +782,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('1',),)`
 - src: `SELECT LENGTH(UPPER('ß')) AS r`
+
+## my-upper-strasse  (mysql)
+- targets: postgresql(func)
+- live error: `FUNC-DIFF: source=(('STRAßE',),) target=(('STRAẞE',),)`
+- src: `SELECT UPPER('straße') AS r`
 
 ## my-uuid-funcs  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -1055,6 +1075,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `validator-crash: sending query failed: another command is already in progress`
 - src: `CREATE TABLE t (a NUMBER); INSERT /*+ APPEND */ INTO t SELECT 1 FROM DUAL`
 
+## ora-instr-case  (oracle)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('2',),) target=(('1',),)`
+- src: `SELECT INSTR('aAaA', 'A') AS r FROM DUAL`
+
 ## ora-interval-tochar  (oracle)
 - targets: postgresql(func)
 - live error: `FUNC-DIFF: source=(('+02 03:04:05.000000',),) target=(('2 days 03:04:05',),)`
@@ -1094,6 +1119,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s`
 - src: `SELECT DBMS_LOB.GETLENGTH(TO_CLOB('hello')) AS r FROM DUAL`
+
+## ora-lpad-multichar  (oracle)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)`
+- src: `SELECT LPAD('ab', 5, 'xy') AS r FROM DUAL`
+
+## ora-ltrim-set  (oracle)
+- targets: mysql(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('abc',),) target=(('',),)`
+- src: `SELECT LTRIM('xxabc', 'x') AS r FROM DUAL`
 
 ## ora-median-mode  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1757,6 +1792,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('hel',),) target=(('llo',),)`
 - src: `SELECT LPAD('hello', 3) AS r`
+
+## pg-ltrim-set  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('abc',),) target=(('',),)`
+- src: `SELECT ltrim('xxabc', 'x') AS r`
 
 ## pg-make-date  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2616,4 +2656,4 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 508 distinct constructs; defect rows by kind: func 258, invalid 717, semantic 2, silent-drop 75.
+Totals: 516 distinct constructs; defect rows by kind: func 271, invalid 717, semantic 2, silent-drop 75.
