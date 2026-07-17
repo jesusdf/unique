@@ -1188,7 +1188,19 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          quantifier field; the emitter re-attaches the keyword and the
          inner query maps fully. Measured: mysql→tsql **21 → 20**
          (validity 99.7%). Discovery HOLDS 0. Tests:
-         TestWave234QuantifiedSubquery (3).**
+         TestWave234QuantifiedSubquery (3).* **CHECKPOINT wave 235
+         (2026-07-17, `17a3c32`, final matrix)**: mysql-corpus {tsql
+         **20**, pg **15**, oracle **13**}; pg-corpus {tsql **29**,
+         mysql **34**, oracle **24**} = **135 total**, validity
+         98.8–99.8%. Discovery pg→pg **0**. **ADVERSARIAL FLOOR
+         reached**: the residue is pg_regress error-path tests
+         (corrupt latin1 identifiers, PREPARE/EXECUTE dynamic SQL,
+         custom aggregates), constructs already carried (composite row
+         values, whole-row casts), and cases needing SCHEMA knowledge
+         (a column whose name collides with a local variable — cannot
+         disambiguate without the table's columns). Each further wave
+         moves ≈1 statement. Campaign: **128 waves (108–234), ~770 →
+         135**, discovery 287 → 0.**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
