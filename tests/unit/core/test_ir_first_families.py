@@ -1226,3 +1226,53 @@ class TestZeroPushW4Batch:
             "oracle",
         )
         assert "TO_BLOB" not in r.sql, r.sql
+
+
+class TestZeroPushW5Batch:
+    """Zero-push batch W5 — refcursor params and comment-only trigger bodies."""
+
+    def _t(self, sql, s, t):
+        from unique.core.transpiler import Transpiler
+
+        return Transpiler().transpile(sql, s, t)
+
+    def test_refcursor_initializer_dropped_oracle(self) -> None:
+        r = self._t(
+            "create function cr() returns refcursor as $$"
+            " declare rc refcursor := 'my_cursor_name';"
+            " begin open rc for select a from rc_test; return rc; end$$"
+            " language plpgsql;",
+            "postgresql",
+            "oracle",
+        )
+        assert ":= 'my_cursor_name'" not in r.sql, r.sql
+        assert "rc SYS_REFCURSOR;" in r.sql, r.sql
+
+    def test_opened_refcursor_param_is_in_out_oracle(self) -> None:
+        r = self._t(
+            "create function rr(rc refcursor) returns refcursor as $$"
+            " begin open rc for select a from rc_test; return rc; end$$"
+            " language plpgsql;",
+            "postgresql",
+            "oracle",
+        )
+        assert "rc IN OUT SYS_REFCURSOR" in r.sql, r.sql
+
+    def test_comment_only_trigger_body_gets_noop(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create procedure p1() begin declare c cursor for select 1;"
+            " open c; end//\n"
+            "DELIMITER ;\n"
+            "DELIMITER //\n"
+            "CREATE TRIGGER t1_bu BEFORE UPDATE ON t1 FOR EACH ROW\n"
+            "BEGIN\n  CALL p1();\nEND//\n"
+            "DELIMITER ;"
+        )
+        r = self._t(src, "mysql", "tsql")
+        # the trigger, if emitted, must not have a comment-only body
+        import re
+
+        m = re.search(r"(?is)CREATE TRIGGER t1_bu.*?\bEND\b", r.sql)
+        if m and "-- " in m.group(0):
+            assert "SET NOCOUNT ON;" in m.group(0), m.group(0)

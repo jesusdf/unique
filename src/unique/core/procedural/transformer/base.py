@@ -483,11 +483,18 @@ class ProceduralTransformer:
                 self._string_vars.add(new_name)
             if self._is_date_type(p.data_type):
                 self._date_vars.add(new_name)
+            new_direction = p.direction
+            if self._target == "oracle" and self._REFCURSOR_TYPE_RE.search(
+                p.data_type.name.strip()
+            ):
+                # A SYS_REFCURSOR parameter the body OPENs must be IN OUT
+                # (PLS-00361 on a plain IN cursor); IN OUT still allows FETCH.
+                new_direction = "INOUT"
             result.append(
                 ParameterDefinition(
                     name=new_name,
                     data_type=new_type,
-                    direction=p.direction,
+                    direction=new_direction,
                     default=new_default,
                 )
             )
@@ -2037,6 +2044,14 @@ class ProceduralTransformer:
             if self._is_self_init(node.default, node.name)
             else self._transform_node(node.default) if node.default else None
         )
+        # A SYS_REFCURSOR cannot carry an initializer on Oracle (PLS-00382 on
+        # ``rc SYS_REFCURSOR := 'name'``); the cursor is bound by OPEN … FOR.
+        if (
+            self._target == "oracle"
+            and new_default is not None
+            and self._REFCURSOR_TYPE_RE.search(node.data_type.name.strip())
+        ):
+            new_default = None
         self._var_map[node.name] = new_name
         if self._is_string_type(node.data_type):
             self._string_vars.add(new_name)
@@ -2277,10 +2292,26 @@ class ProceduralTransformer:
         engines like MySQL. Append a dialect-appropriate no-op so the block
         stays syntactically valid while preserving any documenting comment.
         """
-        has_executable = any(not isinstance(s, CommentStatement) for s in body)
+        has_executable = any(
+            not isinstance(s, CommentStatement) and not self._is_comment_only_raw(s)
+            for s in body
+        )
         if has_executable:
             return body
         return (*body, self._noop_statement())
+
+    def _is_comment_only_raw(self, node: ASTNode) -> bool:
+        """A RawSQL carrier the emitter renders wholly commented — an
+        untranslatable CALL / unparseable construct preserved as ``-- …``.
+        It emits no executable statement, so a block holding only these
+        still needs a no-op filler (T-SQL error 102 on ``BEGIN <comments>
+        END``). The reason test mirrors ``ProceduralEmitter._emit_raw_sql``."""
+        if not isinstance(node, RawSQL):
+            return False
+        return (
+            node.reason == "Could not parse procedural construct"
+            or "preserved as a comment" in node.reason
+        )
 
     def _noop_statement(self) -> ASTNode:
         """A no-op statement valid in the target dialect. Default is PL/SQL /

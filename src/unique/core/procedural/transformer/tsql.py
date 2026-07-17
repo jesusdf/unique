@@ -727,6 +727,10 @@ class TSqlTransformer(ProceduralTransformer):
         kept = [s for s in stmts if s is not None]
         if not kept:
             return None
+        # Every body statement may have degraded to a comment-only carrier
+        # (e.g. CALLs of routines that could not be converted); a T-SQL
+        # trigger with a comment-only body is error 102, so guarantee a no-op.
+        kept = list(self._ensure_non_empty_body(tuple(kept)))
         if node.update_of:
             # T-SQL has no UPDATE OF event list; the same firing condition is
             # an IF UPDATE(c1) OR UPDATE(c2) ... wrapper around the body.
