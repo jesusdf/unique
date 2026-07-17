@@ -1165,3 +1165,64 @@ class TestZeroPushW3Batch:
         assert "v1.country_name = v2.country_name" in r.sql, r.sql
         # the executable statement (before the carrier note) has no RETURNING
         assert "RETURNING" not in r.sql.split(";")[0].upper(), r.sql
+
+
+class TestZeroPushW4Batch:
+    """Zero-push batch W4 — Oracle procedural mechanisms."""
+
+    def _t(self, sql, s, t):
+        from unique.core.transpiler import Transpiler
+
+        return Transpiler().transpile(sql, s, t)
+
+    def test_self_referential_init_dropped_oracle(self) -> None:
+        r = self._t(
+            "create function b() returns void as $$ declare x numeric(10) := x;"
+            " begin null; end$$ language plpgsql;",
+            "postgresql",
+            "oracle",
+        )
+        assert ":= x" not in r.sql, r.sql
+        assert "x numeric(10)" in r.sql.lower() or "x NUMBER" in r.sql, r.sql
+
+    def test_oracle_unsafe_local_count_renamed(self) -> None:
+        r = self._t(
+            "create function cl(p1 numeric) returns numeric as $$"
+            " declare count numeric(10); begin select count(*) into count from t1;"
+            " return count; end$$ language plpgsql;",
+            "postgresql",
+            "oracle",
+        )
+        assert "uq_count numeric" in r.sql.lower(), r.sql
+        assert "INTO uq_count" in r.sql, r.sql
+        assert "RETURN uq_count" in r.sql, r.sql
+        assert "COUNT(*)" in r.sql, r.sql
+
+    def test_named_cursor_args_use_arrow_oracle(self) -> None:
+        r = self._t(
+            "create function nc() returns void as $$ declare"
+            " c1 cursor (p1 int, p2 int) for select 1 where 1=p1 and 2=p2;"
+            " begin open c1 (p2 := 77, p1 := 42); end $$ language plpgsql;",
+            "postgresql",
+            "oracle",
+        )
+        assert "p2 => 77" in r.sql and "p1 => 42" in r.sql, r.sql
+        assert ":= 77" not in r.sql, r.sql
+
+    def test_blob_literal_return_wrapped_oracle(self) -> None:
+        r = self._t(
+            "create function bl() returns bytea as $$ begin return 'a'; end$$"
+            " language plpgsql;",
+            "postgresql",
+            "oracle",
+        )
+        assert "TO_BLOB(UTL_RAW.CAST_TO_RAW('a'))" in r.sql, r.sql
+
+    def test_text_return_not_wrapped(self) -> None:
+        r = self._t(
+            "create function f() returns text as $$ begin return 'a'; end$$"
+            " language plpgsql;",
+            "postgresql",
+            "oracle",
+        )
+        assert "TO_BLOB" not in r.sql, r.sql

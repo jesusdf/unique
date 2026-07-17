@@ -49,6 +49,7 @@ from unique.core.ast_nodes import (
     GetDiagnosticsStatement,
     IfStatement,
     LastIdentityCapture,
+    Literal,
     LoopStatement,
     NullStatement,
     ParameterDefinition,
@@ -1569,6 +1570,11 @@ class ProceduralTransformer:
         self._return_type_is_bit = self._target == "tsql" and (
             getattr(node.return_type, "name", "") or ""
         ).upper() in ("BOOLEAN", "BOOL", "BIT")
+        # A BLOB-returning function can't RETURN a bare string literal on
+        # Oracle (PLS-00382); wrap it as binary.
+        self._return_type_is_blob = self._target == "oracle" and (
+            getattr(node.return_type, "name", "") or ""
+        ).upper() in ("BYTEA", "BLOB")
         # T-SQL functions cannot access temporary tables (error 2772);
         # a routine creating one — or REFERENCING a session temp table the
         # script declared (the emit renames it #name script-wide) —
@@ -1981,18 +1987,27 @@ class ProceduralTransformer:
             )
         return node
 
+    #: Names Oracle refuses as a plain local variable — a SQL aggregate/
+    #: pseudo-column usable only inside a statement (PLS-00204). Renamed so
+    #: ``DECLARE count NUMBER`` does not clash with the COUNT aggregate.
+    _ORACLE_UNSAFE_LOCAL_NAMES = frozenset({"count", "min", "max", "sum", "avg"})
+
     def _transform_declare(self, node: DeclareStatement) -> ASTNode:
         new_name = self._transform_var_name(node.name)
-        if (
-            self._target == "oracle"
-            and new_name.lower().lstrip("@") in self._param_names
+        bare_lower = new_name.lower().lstrip("@")
+        if self._target == "oracle" and (
+            bare_lower in self._param_names
+            or bare_lower in self._ORACLE_UNSAFE_LOCAL_NAMES
         ):
-            # Oracle forbids a local shadowing a parameter (PLS-00410).
+            # Oracle forbids a local shadowing a parameter (PLS-00410) or one
+            # named after a SQL aggregate/pseudo-column (PLS-00204).
             # MySQL's shadowing semantics: the default still sees the
             # parameter; body references after the declare mean the
             # local — the rename preserves both (wave 181).
             new_default_shadow = (
-                self._transform_node(node.default) if node.default else None
+                None
+                if self._is_self_init(node.default, node.name)
+                else self._transform_node(node.default) if node.default else None
             )
             renamed = f"uq_{new_name.lstrip('@')}"
             self._var_map[node.name] = renamed
@@ -2015,13 +2030,35 @@ class ProceduralTransformer:
             self._var_map[node.name] = new_name
             return self._table_variable_to_temp_table(new_name, node.data_type.name)
         new_type = self._transform_data_type(node.data_type)
-        new_default = self._transform_node(node.default) if node.default else None
+        # Oracle rejects a self-referential initializer (``x NUMBER := x`` is
+        # PLS-00320); in the source it only seeds NULL, so drop it.
+        new_default = (
+            None
+            if self._is_self_init(node.default, node.name)
+            else self._transform_node(node.default) if node.default else None
+        )
         self._var_map[node.name] = new_name
         if self._is_string_type(node.data_type):
             self._string_vars.add(new_name)
         if self._is_date_type(node.data_type):
             self._date_vars.add(new_name)
         return DeclareStatement(name=new_name, data_type=new_type, default=new_default)
+
+    def _is_self_init(self, default: ASTNode | None, name: str) -> bool:
+        """Whether a declaration's initializer is just the variable itself.
+
+        A local shadowing a same-named PARAMETER initializes FROM that
+        parameter (wave 181) — that is not a self-reference, so it is kept.
+        """
+        if self._target != "oracle" or default is None:
+            return False
+        bare = name.strip().lstrip("@").lower()
+        if bare in self._param_names:
+            return False
+        text = default.sql if isinstance(default, RawSQL) else None
+        if text is None:
+            return False
+        return text.strip().lstrip("@").lower() == bare
 
     def _table_variable_to_temp_table(self, name: str, type_text: str) -> ASTNode:
         """Build a CREATE TEMPORARY TABLE from a captured ``TABLE (cols)`` type.
@@ -2712,6 +2749,19 @@ class ProceduralTransformer:
             new_value = self._void_return_value()
         if getattr(self, "_return_type_is_bit", False):
             new_value = self._wrap_predicate_return(new_value)
+        if getattr(self, "_return_type_is_blob", False):
+            quoted: str | None = None
+            if isinstance(new_value, Literal) and isinstance(new_value.value, str):
+                quoted = "'" + new_value.value.replace("'", "''") + "'"
+            elif isinstance(new_value, RawSQL) and re.fullmatch(
+                r"'(?:[^']|'')*'", new_value.sql.strip()
+            ):
+                quoted = new_value.sql.strip()
+            if quoted is not None:
+                new_value = RawSQL(
+                    sql=f"TO_BLOB(UTL_RAW.CAST_TO_RAW({quoted}))",
+                    reason="BLOB literal",
+                )
         return ReturnStatement(value=new_value)
 
     def _transform_cursor_decl(self, node: CursorDeclaration) -> CursorDeclaration:
@@ -2737,6 +2787,11 @@ class ProceduralTransformer:
     def _transform_cursor_op(self, node: CursorOperation) -> ASTNode:
         new_name = self._transform_var_name(node.cursor_name)
         new_args = self._transform_var_in_sql(node.args) if node.args else ""
+        if new_args and self._target == "oracle":
+            # A named cursor argument uses ``=>`` on Oracle (PLS-00103 on the
+            # PostgreSQL ``name := value`` spelling); positional args have no
+            # ``:=`` and are untouched.
+            new_args = re.sub(r"(\w+)\s*:=", r"\1 =>", new_args)
         bare = new_name.lower().lstrip("@").lstrip(":")
         if bare in self._dropped_cursor_params:
             if node.operation.upper() == "OPEN" and node.query is not None:
@@ -2842,7 +2897,14 @@ class ProceduralTransformer:
                 self._normalize_oracle_pseudorecords(v) for v in into_vars
             )
         new_into = tuple(
-            v if re.match(r"(?i)^(?:NEW|OLD)\s*\.", v) else self._transform_var_name(v)
+            (
+                v
+                if re.match(r"(?i)^(?:NEW|OLD)\s*\.", v)
+                # A renamed local (e.g. an Oracle-unsafe ``count`` → ``uq_count``)
+                # lives in _var_map; the INTO target must follow the rename or it
+                # references an undeclared name.
+                else self._var_map.get(v, self._transform_var_name(v))
+            )
             for v in into_vars
         )
         # Transform the select list and rest via variable + function mapping
