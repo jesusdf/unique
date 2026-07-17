@@ -219,18 +219,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       re-exporting `__init__`, `0e6ead0`). Full detail archived in
       [`docs/DONE.md`](DONE.md) §37; the rewriter object is what M3's
       IR-first expressions will eventually replace.
-- [ ] **tsql→mysql procedural DATEADD emits a nested INTERVAL (P2, found
-      2026-07-17 during the ExpressionRewriter verification —
-      pre-existing, byte-identical before/after the refactor):**
-      `SET @s = 'x' + CONVERT(VARCHAR(10), DATEADD(MONTH, -1, @d))`
-      inside a procedure ships `DATE_ADD(v_d, INTERVAL (INTERVAL '-1'
-      MONTH) DAY)` on MySQL — the DATEADD handler's unit interval is
-      wrapped again as a DAY interval (invalid MySQL). Mechanism lives in
-      the `_transform_dateadd`/`_transform_datediff` curated family (now
-      `_expr.py`); the plain `DATEADD(MONTH, -1, @d)` without the CONVERT
-      chain maps correctly, so suspect the expression-count branch
-      (wave-M3-prereq increment 2 territory: "expression counts multiply
-      a unit interval").
+- [x] **tsql→mysql procedural DATEADD nested INTERVAL — FIXED 2026-07-17**
+      (same day it was filed): `_mysql_normalize_funcs`'s sqlglot
+      round-trip re-emitted a tsql-read `DateAdd` carrying its whole
+      `Interval` in the *expression* slot through the mysql generator,
+      which invents an implicit DAY unit (`INTERVAL (INTERVAL '-1'
+      MONTH) DAY` — invalid MySQL and a silent unit change). The
+      normalize walk hoists the interval into the expression/unit
+      slots. Test: TestDateAddUnderConvertMySql.
 
 ## 3. Test-corpus expansion (P3)
 
