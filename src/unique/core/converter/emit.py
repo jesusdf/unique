@@ -68,6 +68,8 @@ from unique.core.mappings import (
     CURRENT_DATE_EXPR,
     CURRENT_TIMESTAMP_EXPR,
     DML_FOUND_EXPR,
+    ERROR_DIAGNOSTIC_EXPRS,
+    ERROR_DIAGNOSTIC_SOURCES,
     ERROR_MESSAGE_EXPR,
     ERROR_MESSAGE_SOURCES,
     LAST_IDENTITY_EXPR,
@@ -1598,6 +1600,13 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 # T-SQL's multi-column drop is ONE DROP COLUMN with a comma
                 # list (each engine's normalized form repeats the keyword).
                 result = re.sub(r"(?i),\s*DROP\s+COLUMN\s+", ", ", result)
+                # sqlglot's tsql writer emits FETCH FIRST/NEXT without the
+                # OFFSET clause T-SQL requires (error 102 near 'first').
+                result = re.sub(
+                    r"(?i)(?<!ROWS )\bFETCH (FIRST|NEXT)\b",
+                    r"OFFSET 0 ROWS FETCH \1",
+                    result,
+                )
             if dialect != "tsql" and node.kind == "ALTER":
                 result = _drop_named_default(result)
             if dialect != "oracle":
@@ -2875,6 +2884,14 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             and dialect in ERROR_MESSAGE_EXPR
         ):
             return ERROR_MESSAGE_EXPR[dialect]
+        # SQLSTATE/SQLCODE diagnostic globals (same exception context).
+        if (
+            not node.table
+            and SOURCE_DIALECT.get()
+            in ERROR_DIAGNOSTIC_SOURCES.get(node.name.upper(), frozenset())
+            and dialect in ERROR_DIAGNOSTIC_EXPRS[node.name.upper()]
+        ):
+            return ERROR_DIAGNOSTIC_EXPRS[node.name.upper()][dialect]
         name = _ident(node.name, node.quoted, dialect)
         if node.table:
             qual = node.table

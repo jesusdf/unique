@@ -457,7 +457,9 @@ class TestNumericPlusIsNotConcat:
         assert "CONCAT" not in line.upper(), line
         # T-SQL-style DATEDIFF(part, start, end) = end - start -> MySQL
         # DATEDIFF(end, start).
-        assert "DATEDIFF(d_b, d_a) + 1" in line, line
+        # Identifier case follows sqlglot's oracle-reader normalization
+        # (MySQL local variables are case-insensitive).
+        assert "DATEDIFF(D_B, d_a) + 1".upper() in line.upper(), line
 
     def test_oracle_source_datediff_to_tsql_unquotes_part(self) -> None:
         line = self._fn("DATEDIFF('D', d_a, d_b) + 1", target="tsql")

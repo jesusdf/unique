@@ -238,5 +238,5 @@ def test_three_arg_charindex_keeps_start_on_postgresql() -> None:
     out = Transpiler().transpile(src, "tsql", "postgresql").sql
     up = " ".join(out.split())
     assert "SUBSTRING(v_s FROM 5)" in up, out
-    assert re.search(r"WHEN STRPOS\(.*\) = 0 THEN 0", up), out
+    assert re.search(r"WHEN POSITION\(.*\) = 0 THEN 0", up), out
     assert "||" not in up, out

@@ -51,6 +51,6 @@ class TestOracleSubqueryDeclareInit:
         # bare declaration in the IS section (no ':=' subquery init there)
         assert "V_X NUMBER(10);" in up, out
         # the init moved into the body as a SELECT … INTO
-        assert "SELECT ( SELECT MAX ( A ) FROM RT ) INTO V_X FROM DUAL" in up, out
+        assert "SELECT (SELECT MAX(A) FROM RT) INTO V_X FROM DUAL" in up, out
         # it must precede the use of V_X
         assert up.index("INTO V_X FROM DUAL") < up.index("V_X := V_X + 1"), out

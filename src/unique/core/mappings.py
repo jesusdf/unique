@@ -108,6 +108,27 @@ ORACLE_DATE_FORMAT_STYLES: dict[str, int] = {
     "DD.MM.YYYY": 104,
 }
 
+#: Exception-context diagnostic globals: {name: {source dialects}} plus the
+#: per-target expression. T-SQL reads them from the ERROR_* functions; the
+#: CASTs keep the ubiquitous ``SQLCODE || ' ' || SQLERRM`` concat working.
+ERROR_DIAGNOSTIC_EXPRS: dict[str, dict[str, str]] = {
+    "SQLSTATE": {
+        "tsql": "CAST(ERROR_STATE() AS NVARCHAR(5))",
+        "oracle": "TO_CHAR(SQLCODE)",
+        "postgresql": "SQLSTATE",
+    },
+    "SQLCODE": {
+        "tsql": "CAST(ERROR_NUMBER() AS NVARCHAR(20))",
+        "oracle": "SQLCODE",
+    },
+}
+
+#: The dialects whose scripts may spell each diagnostic global.
+ERROR_DIAGNOSTIC_SOURCES: dict[str, frozenset[str]] = {
+    "SQLSTATE": frozenset({"postgresql"}),
+    "SQLCODE": frozenset({"oracle"}),
+}
+
 #: plpgsql's FOUND flag (set by the last DML/FETCH) per target — the
 #: row-count predicate where no such flag exists.
 DML_FOUND_EXPR: dict[str, str] = {

@@ -107,10 +107,11 @@ class TestDateDiff:
 
     def test_mysql_datediff_body_to_oracle(self) -> None:
         out = self.t.transpile(self._MYSQL_FN, "mysql", "oracle").sql
-        assert "RETURN (d2 - d1)" in out
+        # ANSI CAST spelling of the same date subtraction (IR canonical).
+        assert "(CAST(d2 AS DATE) - CAST(d1 AS DATE))" in out
         assert "DATEDIFF" not in out
 
     def test_mysql_datediff_body_to_postgresql(self) -> None:
         out = self.t.transpile(self._MYSQL_FN, "mysql", "postgresql").sql
-        assert "(d2::date - d1::date)" in out
+        assert "(CAST(d2 AS DATE) - CAST(d1 AS DATE))" in out
         assert "DATEDIFF" not in out

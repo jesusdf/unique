@@ -1003,6 +1003,23 @@ class Transformer:
                     f"DISTINCT inside a non-builtin aggregate call "
                     f"({value.name}) is invalid MySQL"
                 )
+            if (
+                has_distinct
+                and name in ("GROUP_CONCAT", "STRING_AGG", "LISTAGG")
+                and value.args
+                and isinstance(value.args[0], RawSQL)
+                and " ORDER BY " in value.args[0].sql
+            ):
+                expr_txt, order_txt = value.args[0].sql.split(" ORDER BY ", 1)
+                order_txt = re.sub(
+                    r"(?i)\s+NULLS\s+(FIRST|LAST)\s*$", "", order_txt
+                ).strip()
+                if order_txt.strip().upper() != expr_txt.strip().upper():
+                    return (
+                        "MySQL requires a DISTINCT string-aggregate to ORDER "
+                        "BY its own argument; a different ordering "
+                        "expression has no MySQL spelling"
+                    )
         if isinstance(value, ASTNode):
             for f in fields(value):
                 found = self._find_mysql_agg_form(getattr(value, f.name))

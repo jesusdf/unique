@@ -61,8 +61,11 @@ class TestTSQLToOracle:
             "END"
         )
         out = _transpile(sql, "tsql", "oracle")
-        assert "CAST ( 0.10 AS NUMBER )" in out
-        assert "DECIMAL" not in out
+        # IR-first hoists the CAST into SELECT ... INTO ... FROM DUAL —
+        # a SQL context, where the constrained DECIMAL cast is valid
+        # Oracle (the constraint strip only applies to PL/SQL expression
+        # CASTs).
+        assert "CAST(0.1 AS DECIMAL(12, 2)) INTO" in out
 
     IDENTITY_PROC = (
         "CREATE TABLE dbo.invoice (\n"
@@ -1083,8 +1086,8 @@ class TestBareReturnInProcedure:
         out = _transpile(src, "tsql", "mysql")
         normalized = " ".join(out.split())
         assert (
-            "RETURN ( SELECT COUNT( * ) FROM t )" in normalized
-        )  # COUNT( collapsed: MariaDB rejects 'COUNT (' without IGNORE_SPACE
+            "RETURN (SELECT COUNT(*) FROM t)" in normalized
+        )  # compact COUNT(: MariaDB rejects 'COUNT (' without IGNORE_SPACE
         assert "LEAVE" not in out
 
 

@@ -464,3 +464,85 @@ class TestNationalLiterals:
     def test_national_kept_on_oracle(self) -> None:
         out = _ir("tsql", "oracle", "SELECT N'@' FROM t")
         assert out is not None and "N'@'" in out, out
+
+
+class TestFlipRegressions:
+    """Classes surfaced by the flip's corpus sweep (pg->tsql)."""
+
+    def test_ordered_distinct_agg_degrades_on_tsql(self) -> None:
+        out = _ir(
+            "postgresql",
+            "tsql",
+            "SELECT string_agg(DISTINCT f1, ',' ORDER BY f1) FROM t",
+        )
+        # No T-SQL spelling in any form (wave 157): whole carrier.
+        assert out is None or "STRING_AGG(DISTINCT" not in out.upper(), out
+
+    def test_ordered_distinct_agg_keeps_distinct_on_mysql(self) -> None:
+        out = _ir(
+            "postgresql",
+            "mysql",
+            "SELECT string_agg(DISTINCT f1, ',' ORDER BY f1) FROM t",
+        )
+        assert out is not None and "GROUP_CONCAT(DISTINCT f1 ORDER BY f1" in out, out
+
+    def test_sqlstate_maps_on_tsql(self) -> None:
+        out = _ir("postgresql", "tsql", "SELECT 'S: ' || SQLSTATE")
+        assert out is not None and "CAST(ERROR_STATE() AS NVARCHAR(5))" in out, out
+        assert "SQLSTATE" not in out.upper(), out
+
+    def test_sqlcode_maps_on_tsql(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT SQLCODE FROM DUAL")
+        assert out is not None and "CAST(ERROR_NUMBER() AS NVARCHAR(20))" in out, out
+
+    def test_ordered_distinct_mismatch_degrades_on_mysql(self) -> None:
+        out = _ir(
+            "postgresql",
+            "mysql",
+            "SELECT string_agg(DISTINCT f1, ',' ORDER BY f1::text) FROM t",
+        )
+        # MySQL requires the DISTINCT argument itself as the ORDER BY
+        # expression; a different one has no spelling.
+        assert out is None or "GROUP_CONCAT(DISTINCT" not in (out or ""), out
+
+    def test_ordered_distinct_match_kept_on_mysql(self) -> None:
+        out = _ir(
+            "postgresql",
+            "mysql",
+            "SELECT string_agg(DISTINCT f1, ',' ORDER BY f1) FROM t",
+        )
+        assert out is not None and "GROUP_CONCAT(DISTINCT f1 ORDER BY f1" in out, out
+
+
+class TestTempReferenceFunctionGate:
+    """A T-SQL FUNCTION referencing a session temp table is error 2772 —
+    the wave-144 gate covered only bodies CREATING one, and only from a
+    PostgreSQL source; references from any source degrade too."""
+
+    def test_mysql_function_referencing_temp_degrades(self, monkeypatch) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "CREATE TEMPORARY TABLE t1 (c1 INT);\n"
+            "DELIMITER //\n"
+            "CREATE FUNCTION bug12472() RETURNS int DETERMINISTIC "
+            "BEGIN RETURN (SELECT COUNT(*) FROM t1); END//\n"
+            "DELIMITER ;\n"
+        )
+        r = Transpiler().transpile(src, "mysql", "tsql")
+        assert "cannot access temporary tables" in r.sql.lower(), r.sql
+        assert not __import__("re").search(
+            r"(?i)^\s*CREATE FUNCTION", r.sql, __import__("re").M
+        ), r.sql
+
+    def test_function_without_temp_stays(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "DELIMITER //\n"
+            "CREATE FUNCTION f2() RETURNS int DETERMINISTIC "
+            "BEGIN RETURN 1; END//\n"
+            "DELIMITER ;\n"
+        )
+        r = Transpiler().transpile(src, "mysql", "tsql")
+        assert "CREATE FUNCTION" in r.sql, r.sql

@@ -3683,7 +3683,8 @@ class TestMysqlProceduralFuncMaps:
         )
         out = _t2(src, "mysql", "oracle")
         assert "ifnull" not in out.lower(), out
-        assert re.search(r"(?i)NVL\s*\(\s*x\s*,\s*0\s*\)", out), out
+        # IR-first canonical: COALESCE (standard SQL, valid PL/SQL).
+        assert re.search(r"(?i)COALESCE\s*\(\s*x\s*,\s*0\s*\)", out), out
 
 
 class TestNationalStringConcat:
@@ -6656,7 +6657,10 @@ class TestWave180AlterViewLimitOracle:
             "mysql",
             "oracle",
         )
-        assert re.search(r"(?i)OFFSET p1 ROWS FETCH NEXT p2 ROWS ONLY", out), out
+        # FETCH FIRST/NEXT are synonyms; the IR emits FIRST.
+        assert re.search(
+            r"(?i)OFFSET p1 ROWS FETCH (?:FIRST|NEXT) p2 ROWS ONLY", out
+        ), out
         assert "limit" not in out.lower(), out
 
     def test_limit_kept_pg(self) -> None:
@@ -7904,7 +7908,9 @@ class TestWave227OracleBoolReturnRefcursor:
             "postgresql",
             "oracle",
         )
-        assert re.search(r"(?i)RETURN true;", out), out
+        # IR-first spells the boolean via the exact comparison — the
+        # same BOOLEAN value on Oracle, and target-typed either way.
+        assert re.search(r"(?i)RETURN (?:true|\(1 <> 0\));", out), out
 
     def test_refcursor_declare_oracle(self) -> None:
         out = _t2(
@@ -7929,7 +7935,8 @@ class TestWave229SubqueryLimitTsql:
             "postgresql",
             "tsql",
         )
-        assert re.search(r"(?i)OFFSET 0 ROWS FETCH NEXT 1 ROWS ONLY\s*\)", out), out
+        # TOP 1 is the T-SQL idiom the IR emits inside a scalar subquery.
+        assert re.search(r"(?i)SELECT TOP 1 ", out), out
         assert "limit" not in out.lower(), out
 
     def test_trailing_limit_stays_top(self) -> None:

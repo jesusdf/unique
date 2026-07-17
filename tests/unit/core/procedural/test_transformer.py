@@ -217,7 +217,8 @@ class TestFunctionMapping:
         t = ProceduralTransformer("tsql", "oracle")
         node = RawSQL(sql="ISNULL(a, b)", reason="x")
         result = t._transform_node(node)
-        assert "NVL" in result.sql
+        # IR-first canonical: COALESCE (standard SQL, valid PL/SQL).
+        assert result.sql == "COALESCE(a, b)"
 
     def test_isnull_to_coalesce_pg(self) -> None:
         t = ProceduralTransformer("tsql", "postgresql")
@@ -227,7 +228,8 @@ class TestFunctionMapping:
     def test_isnull_to_ifnull_mysql(self) -> None:
         t = ProceduralTransformer("tsql", "mysql")
         result = t._transform_node(RawSQL(sql="ISNULL(a, b)", reason="x"))
-        assert "IFNULL" in result.sql
+        # IR-first canonical: COALESCE (native MySQL).
+        assert result.sql == "COALESCE(a, b)"
 
     def test_len_to_char_length_mysql(self) -> None:
         t = ProceduralTransformer("tsql", "mysql")
@@ -320,7 +322,9 @@ class TestStringAggregation:
     def test_string_agg_to_oracle(self) -> None:
         t = ProceduralTransformer("tsql", "oracle")
         out = t._transform_node(RawSQL(sql="STRING_AGG(name, ',')", reason="x"))
-        assert out.sql == "LISTAGG(name, ',')"
+        # LISTAGG requires WITHIN GROUP on every supported Oracle version;
+        # with no source ordering the IR orders by the expression itself.
+        assert out.sql == "LISTAGG(name, ',') WITHIN GROUP (ORDER BY name)"
 
     def test_string_agg_to_mysql(self) -> None:
         t = ProceduralTransformer("tsql", "mysql")
@@ -337,7 +341,7 @@ class TestStringAggregation:
         out = t._transform_node(
             RawSQL(sql="GROUP_CONCAT(name SEPARATOR ',')", reason="x")
         )
-        assert out.sql == "LISTAGG(name, ',')"
+        assert out.sql == "LISTAGG(name, ',') WITHIN GROUP (ORDER BY name)"
 
     def test_comma_inside_string_literal_not_split(self) -> None:
         # Regression: a comma inside a quoted separator must not be treated
@@ -406,7 +410,9 @@ class TestOracleDateFormat:
         # Single-arg TO_CHAR (numeric to string) has no format to map.
         t = ProceduralTransformer("oracle", "mysql")
         out = t._transform_node(RawSQL(sql="TO_CHAR(salary)", reason="x"))
-        assert out.sql == "TO_CHAR(salary)"
+        # IR-first: the to-string conversion is a CAST — MySQL has no
+        # TO_CHAR at all, so the passthrough was invalid there.
+        assert out.sql == "CAST(salary AS CHAR)"
 
     def test_to_char_to_postgresql_unchanged(self) -> None:
         # PostgreSQL uses the same format patterns as Oracle.
@@ -446,7 +452,8 @@ class TestSubstringPosition:
     def test_charindex_to_postgresql(self) -> None:
         t = ProceduralTransformer("tsql", "postgresql")
         out = t._transform_node(RawSQL(sql="CHARINDEX(n, h)", reason="x"))
-        assert out.sql == "STRPOS(h, n)"
+        # POSITION(n IN h) is the standard spelling STRPOS aliases.
+        assert out.sql == "POSITION(n IN h)"
 
     def test_instr_to_tsql_reorders(self) -> None:
         t = ProceduralTransformer("oracle", "tsql")
@@ -468,7 +475,9 @@ class TestDateAdd:
     def test_dateadd_day_to_oracle(self) -> None:
         t = ProceduralTransformer("tsql", "oracle")
         out = t._transform_node(RawSQL(sql="DATEADD(day, 5, d)", reason="x"))
-        assert out.sql == "(d + 5)"
+        # The interval form is explicit about the unit (d + 5 relies on
+        # Oracle's date arithmetic defaulting to days).
+        assert out.sql == "d + NUMTODSINTERVAL(5, 'DAY')"
 
     def test_dateadd_month_to_oracle(self) -> None:
         t = ProceduralTransformer("tsql", "oracle")
@@ -518,7 +527,8 @@ class TestDateDiff:
     def test_datediff_day_to_postgresql(self) -> None:
         t = ProceduralTransformer("tsql", "postgresql")
         out = t._transform_node(RawSQL(sql="DATEDIFF(day, a, b)", reason="x"))
-        assert "::date" in out.sql
+        # ANSI CAST spelling of the same date subtraction.
+        assert out.sql == "(CAST(b AS DATE) - CAST(a AS DATE))"
 
     def test_datediff_day_to_mysql(self) -> None:
         t = ProceduralTransformer("tsql", "mysql")
@@ -528,14 +538,19 @@ class TestDateDiff:
     def test_datediff_hour_to_mysql_timestampdiff(self) -> None:
         t = ProceduralTransformer("tsql", "mysql")
         out = t._transform_node(RawSQL(sql="DATEDIFF(hour, a, b)", reason="x"))
-        assert "TIMESTAMPDIFF(HOUR, a, b)" in out.sql
+        # T-SQL DATEDIFF counts BOUNDARY CROSSINGS; TIMESTAMPDIFF counts
+        # complete hours (10:59->11:01 is 1 vs 0) — the epoch-floor form
+        # keeps the source semantics.
+        assert out.sql == (
+            "(FLOOR(UNIX_TIMESTAMP(b) / 3600) - FLOOR(UNIX_TIMESTAMP(a) / 3600))"
+        )
 
     def test_nested_dateadd_datediff(self) -> None:
         t = ProceduralTransformer("tsql", "oracle")
         out = t._transform_node(
             RawSQL(sql="DATEADD(day, 1, DATEDIFF(day, x, y))", reason="x")
         )
-        assert out.sql == ("((TRUNC(CAST(y AS DATE)) - TRUNC(CAST(x AS DATE))) + 1)")
+        assert out.sql == ("(TRUNC(CAST(y AS DATE)) - TRUNC(CAST(x AS DATE))) + 1")
 
 
 class TestMySQLStringConcat:
@@ -625,7 +640,12 @@ class TestMySQLCleanDML:
         out = self._mysql()._transform_node(
             RawSQL(sql="DATE_ADD(d, INTERVAL 2 HOUR)", reason="x")
         )
-        assert out.sql == "DATE_ADD(d, INTERVAL 2 HOUR)"
+        # sqlglot's mysql reader stores INTERVAL amounts as strings; the
+        # quoted spelling is equally valid MySQL.
+        assert out.sql in (
+            "DATE_ADD(d, INTERVAL 2 HOUR)",
+            "DATE_ADD(d, INTERVAL '2' HOUR)",
+        )
 
 
 class TestMySQLTypeAndFuncMapping:

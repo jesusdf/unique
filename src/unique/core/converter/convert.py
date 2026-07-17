@@ -648,7 +648,13 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     # group-concat emitter understands ("expr ORDER BY ...").
     if isinstance(expr, exp.GroupConcat) and isinstance(expr.this, exp.Order):
         ordered = expr.this
-        expr_txt = ordered.this.sql()
+        inner_agg = ordered.this
+        is_distinct = isinstance(inner_agg, exp.Distinct)
+        if is_distinct and len(inner_agg.expressions) == 1:
+            # Carry DISTINCT on the node so the T-SQL whole-statement gate
+            # (wave 157) and the per-target emitters see it.
+            inner_agg = inner_agg.expressions[0]
+        expr_txt = inner_agg.sql()
         order_txt = ", ".join(o.sql() for o in ordered.expressions)
         gc_args: list[ASTNode] = [
             RawSQL(sql=f"{expr_txt} ORDER BY {order_txt}", reason="ordered aggregate")
@@ -656,7 +662,9 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         sep_arg = expr.args.get("separator")
         if sep_arg is not None:
             gc_args.append(convert_expression(sep_arg))
-        return FunctionCall(name="GROUP_CONCAT", args=tuple(gc_args))
+        return FunctionCall(
+            name="GROUP_CONCAT", args=tuple(gc_args), distinct=is_distinct
+        )
     if isinstance(expr, exp.Trim) and expr.args.get("position") and not expr.expression:
         side = str(expr.args["position"]).upper()
         name = {"LEADING": "LTRIM", "TRAILING": "RTRIM"}.get(side)

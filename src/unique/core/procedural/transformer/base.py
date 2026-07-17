@@ -635,7 +635,7 @@ class ProceduralTransformer:
         routine stays syntactically valid and the limitation is documented.
         """
         upper = var.upper()
-        if upper == "@@FETCH_STATUS" and os.environ.get("UNIQUE_IR_FIRST"):
+        if upper == "@@FETCH_STATUS" and not os.environ.get("UNIQUE_NO_IR_FIRST"):
             # IR-first mode maps the comparison via FETCH_STATUS_FORMS (M3
             # precondition (a)); commenting the token here would hand the IR
             # a headless ``/* … */ = 0``.
@@ -1455,14 +1455,25 @@ class ProceduralTransformer:
         if degraded_uv is not None:
             return degraded_uv
         # T-SQL functions cannot access temporary tables (error 2772);
-        # a routine creating one inside its body degrades whole (wave 144).
-        if self._target == "tsql" and self._source == "postgresql":
+        # a routine creating one — or REFERENCING a session temp table the
+        # script declared (the emit renames it #name script-wide) —
+        # degrades whole (wave 144, extended to references and all
+        # sources at the M3 flip).
+        if self._target == "tsql":
+            from unique.core.converter import TEMP_TABLES
             from unique.core.output_gate import scrub
             from unique.core.procedural.emitter import ProceduralEmitter
 
             original = ProceduralEmitter(self._source).emit(node)
             scrubbed_fn = scrub(original)
-            if re.search(r"(?is)\bcreate\s+temp(?:orary)?\s+table\b", scrubbed_fn):
+            temp_names = TEMP_TABLES.get() or frozenset()
+            references_temp = any(
+                re.search(rf"(?i)(?<![\w#])#?{re.escape(n)}\b", scrubbed_fn)
+                for n in temp_names
+            )
+            if references_temp or re.search(
+                r"(?is)\bcreate\s+temp(?:orary)?\s+table\b", scrubbed_fn
+            ):
                 reason = (
                     "T-SQL functions cannot access temporary tables (2772); "
                     "routine preserved as a comment"
@@ -3616,17 +3627,17 @@ class ProceduralTransformer:
             if m:
                 self._register_degraded_routine(m.group(1))
             return RawSQL(sql=node.sql, reason=reason)
-        # M3-final migration switch (docs/TODO.md §2 P0): scalar fragments
-        # route IR-first when UNIQUE_IR_FIRST is set — the development loop
-        # that burns the remaining text-path/IR divergences family by
-        # family. Off (the default) keeps the text path as the expression
-        # engine until the families below it migrate. The switch replaces
-        # the EXPRESSION-MAPPING layers only: the procedural-shell text
-        # passes above it (variable renames, source-spelling parse aids,
+        # M3-final (docs/TODO.md §2 P0, audit doc-04 P4): scalar fragments
+        # route IR-FIRST — the shared IR pipeline is the expression engine;
+        # the text rewriters below serve only the fragments the IR declines
+        # (parse failures, shell-machinery text). The switch replaces the
+        # EXPRESSION-MAPPING layers only: the procedural-shell text passes
+        # above it (variable renames, source-spelling parse aids,
         # pseudorecords) still run — that context is the shell's, not the
         # expression engine's. Cursor state travels via FETCH_STATUS_FORMS
-        # (precondition (a)), so the text fetch-status fix is skipped.
-        ir_first = bool(os.environ.get("UNIQUE_IR_FIRST"))
+        # and declared types via STRING/DATE_VARIABLES. UNIQUE_NO_IR_FIRST
+        # is the emergency kill-switch back to the text-primary path.
+        ir_first = not os.environ.get("UNIQUE_NO_IR_FIRST")
         sql = node.sql
         if not ir_first:
             sql = self._fix_fetch_status(sql)
