@@ -6904,3 +6904,25 @@ class TestWave188IfBareCondTrimTwoArg:
     def test_one_arg_trim_untouched(self) -> None:
         out = _t2("select trim(col) from t1;", "mysql", "tsql")
         assert re.search(r"(?i)TRIM\(col\)", out), out
+
+
+class TestWave189BitwiseNotReplaceSet:
+    """wave 189 (mysql-corpus): ``~x`` has no Oracle spelling
+    (ORA-00911) — the two's-complement identity ``-(x) - 1`` is exact;
+    and ``REPLACE t SET a=1`` (MySQL) joins the INSERT-SET
+    pre-recognition instead of shredding in bodies."""
+
+    def test_bitwise_not_oracle(self) -> None:
+        out = _t2("select ~5;", "mysql", "oracle")
+        assert re.search(r"-\(5\) - 1", out), out
+        assert "~" not in out, out
+
+    def test_bitwise_not_kept_tsql(self) -> None:
+        out = _t2("select ~5;", "mysql", "tsql")
+        assert "~5" in out, out
+
+    def test_replace_set_converts(self) -> None:
+        out = _t2("replace t1 set data = 1, id = 'bar';", "mysql", "mysql")
+        assert re.search(
+            r"(?i)REPLACE INTO t1 \(data, id\)\s*VALUES \(1, 'bar'\)", out
+        ), out

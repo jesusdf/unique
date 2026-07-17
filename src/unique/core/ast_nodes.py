@@ -71,6 +71,7 @@ class SetOperationType(Enum):
 class UnaryOperator(Enum):
     NOT = auto()
     NEGATIVE = auto()
+    BITWISE_NOT = auto()
     EXISTS = auto()
     IS_NULL = auto()
     IS_NOT_NULL = auto()

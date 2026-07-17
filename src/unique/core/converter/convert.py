@@ -127,7 +127,8 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
         # SET clause (``INSERT INTO t3;`` — silent loss, wave 168).
         # Rewrite to the universal column-list VALUES form.
         ins = re.match(
-            r'(?is)^\s*INSERT\s+(?:IGNORE\s+)?INTO\s+([\w."`]+)\s+SET\s+(.+?)\s*;?\s*$',
+            r"(?is)^\s*(INSERT\s+(?:IGNORE\s+)?INTO|REPLACE\s+(?:INTO\s+)?)"
+            r'\s*([\w."`]+)\s+SET\s+(.+?)\s*;?\s*$',
             sql,
         )
         if ins:
@@ -136,7 +137,7 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
             cols: list[str] = []
             vals: list[str] = []
             ok = True
-            for pair in split_top_level_commas(ins.group(2)):
+            for pair in split_top_level_commas(ins.group(3)):
                 m2 = re.match(r"(?s)^\s*([\w`\"]+)\s*:?=\s*(.+?)\s*$", pair)
                 if not m2:
                     ok = False
@@ -144,8 +145,13 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
                 cols.append(m2.group(1).strip('`"'))
                 vals.append(m2.group(2))
             if ok and cols:
+                verb = (
+                    "REPLACE INTO"
+                    if ins.group(1).upper().startswith("REPLACE")
+                    else "INSERT INTO"
+                )
                 sql = (
-                    f"INSERT INTO {ins.group(1)} ({', '.join(cols)}) "
+                    f"{verb} {ins.group(2)} ({', '.join(cols)}) "
                     f"VALUES ({', '.join(vals)})"
                 )
     if dialect == "postgresql":
@@ -673,6 +679,14 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     # it; each emitter has its own spelling.
     if isinstance(expr, exp.HexString):
         return Literal(value=str(expr.this), dtype="hex")
+
+    # Bitwise NOT (``~x``): Oracle has no ~ operator (ORA-00911) — the
+    # emitter spells the two's-complement identity there (wave 189).
+    if isinstance(expr, exp.BitwiseNot):
+        return UnaryOp(
+            operator=UnaryOperator.BITWISE_NOT,
+            operand=convert_expression(expr.this),
+        )
 
     # MySQL's INTERVAL(x, v1, v2, …) INDEX function (position of the
     # last threshold ≤ x) parses as an Interval literal wrapping a

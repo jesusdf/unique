@@ -879,7 +879,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          TRIM spells ``TRIM([BOTH] x FROM y)`` off MySQL (error 174 /
          ORA-00907). Measured: mysql→oracle **30 → 28**, tsql
          **36 → 35**. Discovery HOLDS 0. Tests:
-         TestWave188IfBareCondTrimTwoArg (4).**
+         TestWave188IfBareCondTrimTwoArg (4).* Wave 189 (2026-07-17): ``~x``
+         has no Oracle spelling (ORA-00911) — new
+         UnaryOperator.BITWISE_NOT with the exact two's-complement
+         identity ``-(x) - 1`` there (native ``~`` elsewhere); and
+         ``REPLACE t SET a=1`` joins the wave-168 INSERT-SET
+         pre-recognition (it shredded inside bodies). Measured:
+         mysql→oracle **28 → 27** (−1). Discovery HOLDS 0. Tests:
+         TestWave189BitwiseNotReplaceSet (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

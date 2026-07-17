@@ -3690,6 +3690,12 @@ def _emit_unary(node: UnaryOp, dialect: str) -> str:
         return f"NOT {operand}"
     if node.operator == UnaryOperator.NEGATIVE:
         return f"-{operand}"
+    if node.operator == UnaryOperator.BITWISE_NOT:
+        # Oracle has no ~ (ORA-00911); the two's-complement identity
+        # ``-(x) - 1`` is exact for integers (wave 189).
+        if dialect == "oracle":
+            return f"-({operand}) - 1"
+        return f"~{operand}"
     if node.operator == UnaryOperator.IS_NULL:
         return f"{operand} IS NULL"
     if node.operator == UnaryOperator.IS_NOT_NULL:
