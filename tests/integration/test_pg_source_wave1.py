@@ -8000,3 +8000,29 @@ class TestWave232TimestampaddYearCast:
     def test_timestampadd_kept_mysql(self) -> None:
         out = _t2("select timestampadd(minute, 1, x);", "mysql", "mysql")
         assert re.search(r"(?i)timestampadd\(minute, 1, x\)", out), out
+
+
+class TestWave233StarIntoMultipleVars:
+    """wave 233 (mysql-corpus): ``SELECT * INTO x, y`` assigns each
+    column to a variable, but the star is unexpanded (no schema) — it
+    shipped ``@x = *, @y = *`` (error 102); degrade honestly."""
+
+    def test_star_into_multi_degrades(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare x char(16); declare y int;"
+            " select * into x, y from t1 limit 1; end",
+            "mysql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out and "column list" in out, out
+        assert "@x = *" not in out, out
+
+    def test_expr_into_single_untouched(self) -> None:
+        out = _t2(
+            "create procedure q() begin declare x int;"
+            " select max(a) into x from t1; end",
+            "mysql",
+            "tsql",
+        )
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)SELECT @x = max", out), out

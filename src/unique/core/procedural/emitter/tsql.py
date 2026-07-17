@@ -340,6 +340,20 @@ class TSqlEmitter(ProceduralEmitter):
         from unique.core.sql_split import split_top_level_commas
 
         cols = split_top_level_commas(select_list)
+        # ``SELECT * INTO x, y`` assigns each column to a variable — but
+        # the star has not been expanded (no schema), so it would ship
+        # ``@x = *, @y = *`` (error 102). Degrade honestly (wave 233).
+        if len(node.into_vars) > 1 and any(c.strip() == "*" for c in cols):
+            body = "\n".join(
+                f"-- {ln}"
+                for ln in f"SELECT {select_list} INTO "
+                f"{', '.join(node.into_vars)} {rest}".splitlines()
+            )
+            return (
+                "-- UNIQUE: SELECT * INTO multiple variables needs the "
+                "column list (no schema to expand '*'); statement "
+                f"preserved as a comment\n{body}"
+            )
         # DISTINCT belongs to the whole select list: hoist it ahead of the
         # first assignment (``SELECT @v = DISTINCT c`` is error 156).
         distinct = ""
