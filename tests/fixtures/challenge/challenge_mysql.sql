@@ -188,3 +188,12 @@ CREATE TABLE t (a INT, b INT); CREATE VIEW v AS SELECT a FROM t WHERE a > 0 WITH
 -- CASE[open]: my-week-quarter — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEEK('2020-06-15'), QUARTER('2020-06-15'), DAYOFWEEK('2020-06-15')
 
+-- CASE[open]: mysql-drop-'note'|note — fails on oracle, postgresql. SILENT CLAUSE DROP: ''note'|note' absent from valid oracle output, no warning (target supp
+CREATE TABLE t (a INT COMMENT 'note')
+
+-- CASE[open]: mysql-drop-CHECK — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'CHECK' absent from valid tsql output, no warning (target supports it)
+CREATE TABLE t (email VARCHAR(255) CHECK (email LIKE '%@%'))
+
+-- CASE[open]: mysql-drop-GENERATED|AS\s — fails on tsql. SILENT CLAUSE DROP: 'GENERATED|AS\s*\(' absent from valid tsql output, no warning (target 
+CREATE TABLE t (a INT, b INT AS (a+1) STORED)
+

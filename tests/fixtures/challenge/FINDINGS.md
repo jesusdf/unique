@@ -315,6 +315,21 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE`
 - src: `SELECT WEEK('2020-06-15'), QUARTER('2020-06-15'), DAYOFWEEK('2020-06-15')`
 
+## mysql-drop-'note'|note  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop)
+- live error: `SILENT CLAUSE DROP: ''note'|note' absent from valid oracle output, no warning (target supp`
+- src: `CREATE TABLE t (a INT COMMENT 'note')`
+
+## mysql-drop-CHECK  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'CHECK' absent from valid tsql output, no warning (target supports it)`
+- src: `CREATE TABLE t (email VARCHAR(255) CHECK (email LIKE '%@%'))`
+
+## mysql-drop-GENERATED|AS\s  (mysql)
+- targets: tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'GENERATED|AS\s*\(' absent from valid tsql output, no warning (target `
+- src: `CREATE TABLE t (a INT, b INT AS (a+1) STORED)`
+
 ## ora-add-months  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018`
@@ -1265,6 +1280,26 @@ CREATE TRIGGE`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.xp`
 - src: `SELECT xpath('/a/text()', '<a>1</a>'::xml)`
 
+## postgresql-drop-CHECK  (postgresql)
+- targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'CHECK' absent from valid tsql output, no warning (target supports it)`
+- src: `CREATE TABLE t (age INT CHECK (age >= 0))`
+
+## postgresql-drop-DEFERRABLE  (postgresql)
+- targets: oracle(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'DEFERRABLE' absent from valid oracle output, no warning (target suppo`
+- src: `CREATE TABLE t (id INT PRIMARY KEY DEFERRABLE INITIALLY DEFERRED)`
+
+## postgresql-drop-ON\s+DELETE\s+  (postgresql)
+- targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'ON\s+DELETE\s+CASCADE' absent from valid tsql output, no warning (tar`
+- src: `CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (pid INT REFERENCES p(id) ON DELETE CASCADE)`
+
+## postgresql-drop-ON\s+UPDATE\s+  (postgresql)
+- targets: mysql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'ON\s+UPDATE\s+CASCADE' absent from valid mysql output, no warning (ta`
+- src: `CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (pid INT REFERENCES p(id) ON UPDATE CASCADE)`
+
 ## ts-after-delete-count  (tsql)
 - targets: oracle(invalid)
 - live error: `TRIGGER TRG compiled INVALID (line 4): PL/SQL: ORA-00942: table or view does not exist`
@@ -1608,4 +1643,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r`
 ---
 
-Totals: 312 distinct constructs; defect rows by kind: carrier 62, func 88, invalid 498, semantic 2.
+Totals: 319 distinct constructs; defect rows by kind: carrier 62, func 88, invalid 498, semantic 2, silent-drop 14.
