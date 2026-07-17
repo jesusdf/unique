@@ -7800,3 +7800,27 @@ class TestWave223ValuesFnOutfile:
         )
         assert re.search(r"(?i)into outfile 'b2'", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestWave224ReturnsTableNoBody:
+    """wave 224 (pg-corpus): a bare RETURNS TABLE needs T-SQL's inline
+    ``AS RETURN (select)`` form — a body without a RETURN has no
+    faithful spelling and degrades whole."""
+
+    def test_returns_table_no_return_carrier(self) -> None:
+        out = _t2(
+            "create function st(in1 int) returns table (out1 int)"
+            " language plpgsql as $$ declare out1 int; begin end $$;",
+            "postgresql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out and "returnable" in out, out
+
+    def test_returns_table_with_return_inline(self) -> None:
+        out = _t2(
+            "create function tv(x int) returns table (a int)"
+            " language sql as $$ select abs(x) $$;",
+            "postgresql",
+            "tsql",
+        )
+        assert re.search(r"(?is)AS\s+RETURN \(", out), out

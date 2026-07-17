@@ -1340,6 +1340,16 @@ class ProceduralTransformer:
         ):
             # Neither engine has cursor-valued functions (wave 202).
             culprit = f"cursor-valued return type '{node.return_type.name}'"
+        elif (
+            self._target == "tsql"
+            and node.return_type is not None
+            and node.return_type.name.upper() == "TABLE"
+            and not any(isinstance(s, ReturnStatement) for s in node.body)
+        ):
+            # A bare RETURNS TABLE needs the inline ``AS RETURN
+            # (select)`` form on T-SQL; a body without one has no
+            # faithful spelling (wave 224).
+            culprit = "RETURNS TABLE without a returnable query body"
         elif self._target == "mysql" and any(
             isinstance(s, DeclareStatement)
             and self._REFCURSOR_TYPE_RE.search(s.data_type.name.strip())

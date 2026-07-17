@@ -1117,7 +1117,12 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          export the variable-INTO parse mangled into a fake variable —
          whole admin carrier now. Measured: mysql→oracle **16 → 13**
          (99.8%), mysql→tsql **26 → 23**. Discovery HOLDS 0. Tests:
-         TestWave223ValuesFnOutfile (3).**
+         TestWave223ValuesFnOutfile (3).* Wave 224 (2026-07-17): a bare
+         RETURNS TABLE needs T-SQL's inline ``AS RETURN (select)``
+         form — a body without a RETURN has no faithful spelling and
+         degrades whole (new culprit). Measured: pg→tsql **38 → 34**
+         (−4, validity 98.9%). Discovery HOLDS 0. Tests:
+         TestWave224ReturnsTableNoBody (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
