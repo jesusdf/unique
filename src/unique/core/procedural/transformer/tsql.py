@@ -819,7 +819,7 @@ class TSqlTransformer(ProceduralTransformer):
                 # preceding operator's whitespace is not swallowed.
                 expr = re.sub(r"(?i):\s*(?=(?:NEW|OLD)\s*\.)", "", expr)
                 expr = re.sub(r"(?i)\b(?:NEW|OLD)\s*\.\s*", "", expr)
-                expr = self._qualify_tsql_udfs(self._map_now_in_sql(expr))
+                expr = self._qualify_tsql_udfs(self._expr._map_now_in_sql(expr))
                 pk = self._tsql_pk(bare_table)
                 sql = (
                     f"UPDATE {bare_table} SET {col} = {expr} "

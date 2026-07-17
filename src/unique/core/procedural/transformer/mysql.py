@@ -182,7 +182,7 @@ class MySqlTransformer(ProceduralTransformer):
         return "DO 0;"
 
     def _fix_target_dml(self, sql: str) -> str:
-        sql = self._mysql_string_concat(sql)
+        sql = self._expr._mysql_string_concat(sql)
         sql = self._mysql_clean_dml(sql)
         sql = self._mysql_fix_cast_max(sql)
         sql = self._mysql_cast_types(sql)
@@ -264,10 +264,10 @@ class MySqlTransformer(ProceduralTransformer):
                 f"-- UNIQUE: no MySQL equivalent: ALTER TRIGGER "
                 f"{mt.group(1)} {mt.group(2).upper()}\nDO 0;"
             )
-        sql = self._mysql_trunc(sql)
-        sql = self._mysql_pipes_to_concat(sql)
-        sql = self._mysql_normalize_funcs(sql)
-        sql = self._mysql_string_concat(sql)
+        sql = self._expr._mysql_trunc(sql)
+        sql = self._expr._mysql_pipes_to_concat(sql)
+        sql = self._expr._mysql_normalize_funcs(sql)
+        sql = self._expr._mysql_string_concat(sql)
         sql = self._mysql_clean_dml(sql)
         sql = self._mysql_fix_cast_max(sql)
         sql = self._mysql_cast_types(sql)

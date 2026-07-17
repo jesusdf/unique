@@ -468,12 +468,12 @@ class OracleTransformer(ProceduralTransformer):
         sql = re.sub(r"(?i)\bdbo\s*\.\s*", "", sql)
 
         # T-SQL string ``+`` in an assignment/return expression -> Oracle ``||``.
-        sql = self._rewrite_string_concat(sql, "oracle")
+        sql = self._expr._rewrite_string_concat(sql, "oracle")
 
         # A MySQL/PostgreSQL-source trigger body's NEW./OLD. row reference in an
         # assignment value becomes Oracle's :NEW./:OLD.
         if self._in_trigger:
-            sql = self._to_oracle_row_ref(sql)
+            sql = self._expr._to_oracle_row_ref(sql)
 
         # A PL/SQL expression CAST rejects a constrained type (PLS-00103):
         # CAST(x AS NUMBER(12,2)) / VARCHAR2(10) must drop the length, and
@@ -488,7 +488,7 @@ class OracleTransformer(ProceduralTransformer):
         sql = self._CAST_CONSTRAINED_RE.sub(_unconstrained_cast_type, sql)
         # Last: after the concat re-pass (which can drop a CAST's length) and the
         # constraint strip — TRY_CAST, a bare character CAST needing a length, etc.
-        return self._oracle_function_fixes(sql)
+        return self._expr._oracle_function_fixes(sql)
 
     @staticmethod
     def _top_to_oracle(sql: str) -> str:
