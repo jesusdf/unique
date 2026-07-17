@@ -373,6 +373,15 @@ SELECT INT4RANGE(1, 10) @> 5 AS r
 -- CASE[open]: pg-range-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m
 CREATE TABLE t (rng INT4RANGE, tsr TSRANGE)
 
+-- CASE[open]: pg-realworld-transfer — fails on oracle, tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
+CREATE TABLE accounts (id SERIAL PRIMARY KEY, balance NUMERIC(12,2) DEFAULT 0 CHECK (balance >= 0));
+CREATE TABLE ledger (id SERIAL PRIMARY KEY, account_id INT REFERENCES accounts(id) ON DELETE CASCADE, amount NUMERIC(12,2), ts TIMESTAMPTZ DEFAULT now());
+CREATE FUNCTION transfer(from_id INT, to_id INT, amt NUMERIC) RETURNS VOID AS $$
+BEGIN UPDATE accounts SET balance = balance - amt WHERE id = from_id;
+UPDATE accounts SET balance = balance + amt WHERE id = to_id;
+INSERT INTO ledger (account_id, amount) VALUES (from_id, -amt), (to_id, amt);
+EXCEPTION WHEN check_violation THEN RAISE EXCEPTION 'insufficient funds'; END; $$ LANGUAGE plpgsql;
+
 -- CASE[open]: pg-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END; $$ LANGUAGE plpgsql
 

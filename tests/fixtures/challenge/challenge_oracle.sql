@@ -246,6 +246,18 @@ SELECT RATIO_TO_REPORT(x) OVER () FROM (SELECT 1 x FROM DUAL)
 -- CASE[open]: ora-ratio2 — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT RATIO_TO_REPORT(1) OVER () FROM DUAL
 
+-- CASE[open]: ora-realworld-emp — fails on tsql. (1003, b'Line 13: FOR UPDATE clause allowed only for DECLARE CURSOR.DB-Lib error message 2
+CREATE TABLE emp (id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name VARCHAR2(50), mgr_id NUMBER, salary NUMBER(10,2));
+ALTER TABLE emp ADD CONSTRAINT fk_mgr FOREIGN KEY (mgr_id) REFERENCES emp(id);
+CREATE OR REPLACE PROCEDURE give_raise(p_id NUMBER, p_pct NUMBER) AS
+v_sal NUMBER;
+BEGIN
+SELECT salary INTO v_sal FROM emp WHERE id = p_id FOR UPDATE;
+UPDATE emp SET salary = v_sal * (1 + p_pct/100) WHERE id = p_id;
+COMMIT;
+EXCEPTION WHEN NO_DATA_FOUND THEN RAISE_APPLICATION_ERROR(-20001, 'no such employee'); END;
+/
+
 -- CASE[open]: ora-realworld-orders — fails on mysql, postgresql. relation "orders" already exists
 CREATE TABLE orders (id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, customer_id NUMBER NOT NULL, total NUMBER(10,2) DEFAULT 0, created DATE DEFAULT SYSDATE);
 CREATE INDEX ix_cust ON orders (customer_id);

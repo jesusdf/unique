@@ -1002,6 +1002,12 @@ CREATE PACKAGE BODY pkg AS FUNCTION f(x NUMBER) RETURN NUMBER`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA`
 - src: `SELECT RATIO_TO_REPORT(1) OVER () FROM DUAL`
 
+## ora-realworld-emp  (oracle)
+- targets: tsql(invalid)
+- live error: `(1003, b'Line 13: FOR UPDATE clause allowed only for DECLARE CURSOR.DB-Lib error message 2`
+- src: `CREATE TABLE emp (id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name VARCHAR2(50), mgr_id NUMBER, salary NUMBER(10,2));
+ALTE`
+
 ## ora-realworld-orders  (oracle)
 - targets: mysql(invalid), postgresql(invalid)
 - live error: `relation "orders" already exists`
@@ -1783,6 +1789,12 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m`
 - src: `CREATE TABLE t (rng INT4RANGE, tsr TSRANGE)`
 
+## pg-realworld-transfer  (postgresql)
+- targets: mysql(silent-rt), oracle(invalid), tsql(invalid)
+- live error: `(443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro`
+- src: `CREATE TABLE accounts (id SERIAL PRIMARY KEY, balance NUMERIC(12,2) DEFAULT 0 CHECK (balance >= 0));
+CREATE TABLE ledger (id SERIA`
+
 ## pg-recursive-func  (postgresql)
 - targets: tsql(invalid)
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
@@ -2434,6 +2446,13 @@ SELECT * FROM t WITH (NOLOCK)`
 GO
 CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BE`
 
+## ts-realworld-inventory  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `PROCEDURE ADJUST_STOCK compiled INVALID (line 12): PLS-00103: Encountered the symbol "SELE`
+- src: `CREATE TABLE inventory (sku NVARCHAR(20) PRIMARY KEY, qty INT NOT NULL CHECK (qty >= 0));
+GO
+CREATE PROCEDURE dbo.adjust_stock @sk`
+
 ## ts-realworld-orders  (tsql)
 - targets: postgresql(invalid)
 - live error: `relation "orders" already exists`
@@ -2602,4 +2621,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 507 distinct constructs; defect rows by kind: carrier 97, func 206, invalid 652, semantic 2, silent-drop 73.
+Totals: 510 distinct constructs; defect rows by kind: carrier 97, func 206, invalid 657, semantic 2, silent-drop 73.

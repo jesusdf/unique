@@ -220,6 +220,23 @@ CREATE TABLE dbo.audit (id INT IDENTITY, msg NVARCHAR(MAX), ts DATETIME2);
 GO
 CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BEGIN BEGIN TRY INSERT INTO dbo.audit (msg, ts) VALUES (@msg, SYSDATETIME()); END TRY BEGIN CATCH THROW; END CATCH END
 
+-- CASE[open]: ts-realworld-inventory — fails on oracle, postgresql. PROCEDURE ADJUST_STOCK compiled INVALID (line 12): PLS-00103: Encountered the symbol "SELE
+CREATE TABLE inventory (sku NVARCHAR(20) PRIMARY KEY, qty INT NOT NULL CHECK (qty >= 0));
+GO
+CREATE PROCEDURE dbo.adjust_stock @sku NVARCHAR(20), @delta INT AS
+BEGIN
+SET NOCOUNT ON;
+BEGIN TRANSACTION;
+BEGIN TRY
+UPDATE inventory SET qty = qty + @delta WHERE sku = @sku;
+IF (SELECT qty FROM inventory WHERE sku = @sku) < 0 THROW 50001, 'negative stock', 1;
+COMMIT;
+END TRY
+BEGIN CATCH
+ROLLBACK; THROW;
+END CATCH
+END
+
 -- CASE[open]: ts-realworld-orders — fails on postgresql. relation "orders" already exists
 CREATE TABLE dbo.orders (id INT IDENTITY PRIMARY KEY, customer_id INT NOT NULL, total DECIMAL(10,2) DEFAULT 0, created DATETIME2 DEFAULT SYSDATETIME());
 GO
