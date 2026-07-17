@@ -418,6 +418,9 @@ SELECT REPEAT('ab', 3), LEFT('abc', 2), RIGHT('abc', 2)
 -- CASE[open]: pg-return-query — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE FUNCTION f() RETURNS SETOF INT AS $$ BEGIN RETURN QUERY SELECT 1 UNION SELECT 2; END; $$ LANGUAGE plpgsql
 
+-- CASE[open]: pg-return-refcursor — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE FUNCTION f() RETURNS refcursor AS $$ DECLARE c refcursor; BEGIN OPEN c FOR SELECT 1; RETURN c; END; $$ LANGUAGE plpgsql
+
 -- CASE[open]: pg-returning-expr — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id INT, n INT);
 UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled

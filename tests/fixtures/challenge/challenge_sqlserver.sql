@@ -264,6 +264,9 @@ SELECT REPLICATE('ab', 3), SPACE(5), REVERSE('abc')
 -- CASE[open]: ts-rowversion — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (row_ver ROWVERSION, flags BINARY(8))
 
+-- CASE[open]: ts-scroll-cursor — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 9): PLS-00103: Encountered the symbol ";" when expectin
+CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR LOCAL SCROLL FOR SELECT 1; OPEN c; FETCH LAST FROM c; CLOSE c; DEALLOCATE c; END
+
 -- CASE[open]: ts-select-into — fails on oracle. ORA-00905: missing keyword
 CREATE TABLE src (id INT);
 GO

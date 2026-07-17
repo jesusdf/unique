@@ -236,8 +236,24 @@ CREATE PACKAGE pkg AS FUNCTION f(x NUMBER) RETURN NUMBER; END pkg;
 CREATE PACKAGE BODY pkg AS FUNCTION f(x NUMBER) RETURN NUMBER IS BEGIN RETURN x*2; END; END pkg;
 /
 
+-- CASE[open]: ora-package-collection — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['could not translate']
+CREATE PACKAGE pkg IS TYPE num_tab IS TABLE OF NUMBER; g_cache num_tab; PROCEDURE init; END pkg;
+/
+
+-- CASE[open]: ora-package-overload — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['could not translate']
+CREATE PACKAGE pkg IS PROCEDURE p(x NUMBER); PROCEDURE p(x VARCHAR2); END pkg;
+/
+
 -- CASE[open]: ora-package-spec — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['could not translate']
 CREATE PACKAGE pkg AS PROCEDURE p; FUNCTION f RETURN NUMBER; END pkg;
+/
+
+-- CASE[open]: ora-param-cursor — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE PROCEDURE p AS CURSOR c(pid NUMBER) IS SELECT 1 FROM DUAL WHERE 1=pid; BEGIN OPEN c(1); CLOSE c; END;
+/
+
+-- CASE[open]: ora-pipelined — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['could not translate']
+CREATE FUNCTION f RETURN SYS.ODCINUMBERLIST PIPELINED AS BEGIN PIPE ROW(1); PIPE ROW(2); RETURN; END;
 /
 
 -- CASE[open]: ora-pk-using-index — fails on mysql, postgresql, tsql. (1018, b"Incorrect syntax near 'INDEX'. If this is intended as a part of a table hint, A W
@@ -275,11 +291,23 @@ CREATE PROCEDURE p AS TYPE rec IS RECORD (a NUMBER, b VARCHAR2(10)); r rec; BEGI
 CREATE FUNCTION f(n NUMBER) RETURN NUMBER AS BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END;
 /
 
+-- CASE[open]: ora-ref-cursor — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['could not translate']
+CREATE PROCEDURE p AS TYPE rc IS REF CURSOR; c rc; v NUMBER; BEGIN OPEN c FOR SELECT 1 FROM DUAL; FETCH c INTO v; CLOSE c; END;
+/
+
 -- CASE[open]: ora-regexp-count — fails on mysql. (1305, 'FUNCTION unique_val_41751da4688e.REGEXP_COUNT does not exist')
 SELECT REGEXP_COUNT('a1b2c3', '[0-9]') AS r FROM DUAL
 
 -- CASE[open]: ora-regexp-like — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT REGEXP_LIKE('abc', '^a') AS matched FROM DUAL WHERE REGEXP_LIKE('abc', '^a')
+
+-- CASE[open]: ora-result-cache — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE FUNCTION f(x NUMBER) RETURN NUMBER DETERMINISTIC RESULT_CACHE AS BEGIN RETURN x; END;
+/
+
+-- CASE[open]: ora-return-refcursor — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE FUNCTION f RETURN SYS_REFCURSOR AS c SYS_REFCURSOR; BEGIN OPEN c FOR SELECT 1 AS x FROM DUAL; RETURN c; END;
+/
 
 -- CASE[open]: ora-reverse-index — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (a NUMBER, b NUMBER);

@@ -991,10 +991,34 @@ INSERT ALL WHEN a > 0 THEN INTO t VALUES (a) SELECT 1 a FROM DUAL`
 /
 CREATE PACKAGE BODY pkg AS FUNCTION f(x NUMBER) RETURN NUMBER`
 
+## ora-package-collection  (oracle)
+- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
+- src: `CREATE PACKAGE pkg IS TYPE num_tab IS TABLE OF NUMBER; g_cache num_tab; PROCEDURE init; END pkg;
+/`
+
+## ora-package-overload  (oracle)
+- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
+- src: `CREATE PACKAGE pkg IS PROCEDURE p(x NUMBER); PROCEDURE p(x VARCHAR2); END pkg;
+/`
+
 ## ora-package-spec  (oracle)
 - targets: mysql(invalid), postgresql(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['could not translate']`
 - src: `CREATE PACKAGE pkg AS PROCEDURE p; FUNCTION f RETURN NUMBER; END pkg;
+/`
+
+## ora-param-cursor  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE PROCEDURE p AS CURSOR c(pid NUMBER) IS SELECT 1 FROM DUAL WHERE 1=pid; BEGIN OPEN c(1); CLOSE c; END;
+/`
+
+## ora-pipelined  (oracle)
+- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
+- src: `CREATE FUNCTION f RETURN SYS.ODCINUMBERLIST PIPELINED AS BEGIN PIPE ROW(1); PIPE ROW(2); RETURN; END;
 /`
 
 ## ora-pk-using-index  (oracle)
@@ -1035,6 +1059,12 @@ ALTE`
 - src: `CREATE FUNCTION f(n NUMBER) RETURN NUMBER AS BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END;
 /`
 
+## ora-ref-cursor  (oracle)
+- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
+- src: `CREATE PROCEDURE p AS TYPE rc IS REF CURSOR; c rc; v NUMBER; BEGIN OPEN c FOR SELECT 1 FROM DUAL; FETCH c INTO v; CLOSE c; END;
+/`
+
 ## ora-regexp-count  (oracle)
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_41751da4688e.REGEXP_COUNT does not exist')`
@@ -1044,6 +1074,18 @@ ALTE`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT REGEXP_LIKE('abc', '^a') AS matched FROM DUAL WHERE REGEXP_LIKE('abc', '^a')`
+
+## ora-result-cache  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE FUNCTION f(x NUMBER) RETURN NUMBER DETERMINISTIC RESULT_CACHE AS BEGIN RETURN x; END;
+/`
+
+## ora-return-refcursor  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE FUNCTION f RETURN SYS_REFCURSOR AS c SYS_REFCURSOR; BEGIN OPEN c FOR SELECT 1 AS x FROM DUAL; RETURN c; END;
+/`
 
 ## ora-reverse-index  (oracle)
 - targets: mysql(carrier), postgresql(carrier), tsql(carrier)
@@ -1865,6 +1907,11 @@ CREATE TABLE ledger (id SERIA`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE FUNCTION f() RETURNS SETOF INT AS $$ BEGIN RETURN QUERY SELECT 1 UNION SELECT 2; END; $$ LANGUAGE plpgsql`
 
+## pg-return-refcursor  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE FUNCTION f() RETURNS refcursor AS $$ DECLARE c refcursor; BEGIN OPEN c FOR SELECT 1; RETURN c; END; $$ LANGUAGE plpgsql`
+
 ## pg-returning-expr  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -2530,6 +2577,11 @@ CREATE PROCEDURE dbo.adjust_stock @sk`
 - live error: `ORA-00902: invalid datatype`
 - src: `CREATE TABLE t (row_ver ROWVERSION, flags BINARY(8))`
 
+## ts-scroll-cursor  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `PROCEDURE P compiled INVALID (line 9): PLS-00103: Encountered the symbol ";" when expectin`
+- src: `CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR LOCAL SCROLL FOR SELECT 1; OPEN c; FETCH LAST FROM c; CLOSE c; DEALLOCATE c; END`
+
 ## ts-select-into  (tsql)
 - targets: oracle(invalid)
 - live error: `ORA-00905: missing keyword`
@@ -2687,4 +2739,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 522 distinct constructs; defect rows by kind: carrier 97, func 206, invalid 678, semantic 2, silent-drop 73.
+Totals: 531 distinct constructs; defect rows by kind: carrier 105, func 206, invalid 689, semantic 2, silent-drop 73.
