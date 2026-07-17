@@ -291,6 +291,13 @@ SELECT TRY_PARSE('2020-01-01' AS DATE) AS r
 -- CASE[open]: ts-tzoffset — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier
 SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r
 
+-- CASE[open]: ts-update-output — fails on oracle. ORA-00925: missing INTO keyword
+CREATE TABLE t (id INT);
+GO
+CREATE INDEX ix ON t (id);
+GO
+UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id
+
 -- CASE[open]: ts-waitfor-exec — fails on oracle. PROCEDURE P compiled INVALID (line 4): PLS-00201: identifier 'DBMS_LOCK' must be declared
 CREATE PROCEDURE p AS BEGIN WAITFOR DELAY '00:00:01'; EXEC sp_who; END
 

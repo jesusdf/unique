@@ -127,6 +127,10 @@ SELECT TO_CHAR(DATE '2020-06-15', 'WW') AS r FROM DUAL
 -- CASE[open]: ora-for-update-nowait — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 CREATE TABLE t (id NUMBER); SELECT * FROM t FOR UPDATE NOWAIT
 
+-- CASE[open]: ora-forupdate-wait — fails on mysql, postgresql. syntax error at or near "WAIT"
+CREATE TABLE t (id NUMBER); CREATE INDEX ix ON t (id);
+SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5
+
 -- CASE[open]: ora-from-tz — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR
 SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL
 

@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (335 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (338 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -372,6 +372,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('3',),)`
 - src: `SELECT FLOOR(2.9999999999999999) AS r`
+
+## my-for-share  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-02000: missing COMPRESS or UPDATE keyword`
+- src: `CREATE TABLE t (id INT, INDEX ix (id)); SELECT id FROM t WHERE id = 1 FOR SHARE`
 
 ## my-full-select  (mysql)
 - targets: oracle(invalid), tsql(invalid)
@@ -1125,6 +1130,12 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: mysql(invalid)
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
 - src: `CREATE TABLE t (id NUMBER); SELECT * FROM t FOR UPDATE NOWAIT`
+
+## ora-forupdate-wait  (oracle)
+- targets: mysql(invalid), postgresql(invalid)
+- live error: `syntax error at or near "WAIT"`
+- src: `CREATE TABLE t (id NUMBER); CREATE INDEX ix ON t (id);
+SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 
 ## ora-from-tz  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -2756,6 +2767,15 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - live error: `ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier`
 - src: `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r`
 
+## ts-update-output  (tsql)
+- targets: oracle(invalid)
+- live error: `ORA-00925: missing INTO keyword`
+- src: `CREATE TABLE t (id INT);
+GO
+CREATE INDEX ix ON t (id);
+GO
+UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
+
 ## ts-waitfor-exec  (tsql)
 - targets: mysql(silent), oracle(invalid), postgresql(silent)
 - live error: `PROCEDURE P compiled INVALID (line 4): PLS-00201: identifier 'DBMS_LOCK' must be declared`
@@ -2782,4 +2802,4 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 541 distinct constructs; defect rows by kind: func 291, invalid 733, semantic 2, silent-drop 75.
+Totals: 544 distinct constructs; defect rows by kind: func 291, invalid 737, semantic 2, silent-drop 75.
