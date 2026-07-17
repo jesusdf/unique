@@ -178,6 +178,9 @@ SELECT SCOPE_IDENTITY(), @@IDENTITY, IDENT_CURRENT('t')
 -- CASE[open]: ts-inline-index2 — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (id INT, name VARCHAR(50), INDEX ix_name NONCLUSTERED (name))
 
+-- CASE[open]: ts-inline-tvf — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE FUNCTION f() RETURNS TABLE AS RETURN (SELECT 1 AS x)
+
 -- CASE[open]: ts-insert-output — fails on mysql, oracle. ORA-00925: missing INTO keyword
 CREATE TABLE t (id INT, n INT);
 GO
@@ -222,6 +225,9 @@ SELECT CAST(10.5 AS MONEY) + CAST(2.3 AS MONEY) AS r
 
 -- CASE[open]: ts-month-overflow — fails on mysql. FUNC-DIFF: source=(('2020-02-29 00:00:00',),) target=(('2020-02-29',),)
 SELECT DATEADD(MONTH, 1, '2020-01-31') AS r
+
+-- CASE[open]: ts-multistatement-tvf — fails on mysql, oracle, postgresql. FUNCTION F compiled INVALID (line 2): PLS-00103: Encountered the symbol "@" when expecting
+CREATE FUNCTION f() RETURNS @t TABLE (x INT) AS BEGIN INSERT INTO @t VALUES (1); RETURN; END
 
 -- CASE[open]: ts-nchar-hex — fails on mysql, oracle, postgresql. ORA-00904: "NCHAR": invalid identifier
 SELECT NCHAR(0x1F600) AS r

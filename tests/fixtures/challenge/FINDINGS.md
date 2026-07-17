@@ -511,6 +511,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE`
 - src: `SELECT PERIOD_DIFF(202006, 202001) AS r`
 
+## my-reads-sql  (mysql)
+- targets: tsql(invalid)
+- live error: `(8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve`
+- src: `CREATE FUNCTION f(a INT) RETURNS INT READS SQL DATA BEGIN RETURN (SELECT COUNT(*) FROM (SELECT a) t); END`
+
 ## my-realworld-orders  (mysql)
 - targets: postgresql(invalid)
 - live error: `relation "orders" already exists`
@@ -741,6 +746,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `SILENT CLAUSE DROP: 'utf8mb4|CHARSET' absent from valid tsql output, no warning`
 - src: `CREATE TABLE t (a INT AUTO_INCREMENT PRIMARY KEY, b VARCHAR(20)) DEFAULT CHARSET=utf8mb4`
 
+## mysql-prec-64|BIGINT|  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop)
+- live error: `SILENT PRECISION CHANGE: '64|BIGINT|BINARY' not preserved in valid oracle output, no warni`
+- src: `CREATE TABLE t (a BIT(64))`
+
 ## mysql-qdrop-ROLLUP  (mysql)
 - targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'ROLLUP' absent from valid tsql output, no warning`
@@ -771,6 +781,12 @@ ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENABLE NOVALIDATE`
 - targets: mysql(invalid), postgresql(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD'`
+
+## ora-authid  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE PROCEDURE p (a NUMBER) AUTHID CURRENT_USER AS BEGIN NULL; END;
+/`
 
 ## ora-bitand  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -808,6 +824,12 @@ ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENABLE NOVALIDATE`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
 - src: `SELECT CAST(COLLECT(x) AS SYS.ODCINUMBERLIST) FROM (SELECT 1 x FROM DUAL)`
+
+## ora-collection-param  (oracle)
+- targets: tsql(invalid)
+- live error: `(258, b'Cannot call methods on sql_variant.DB-Lib error message 20018, severity 15:\nGener`
+- src: `CREATE FUNCTION f (p_ids SYS.ODCINUMBERLIST) RETURN NUMBER AS BEGIN RETURN p_ids.COUNT; END;
+/`
 
 ## ora-comment-col  (oracle)
 - targets: mysql(invalid), postgresql(carrier), tsql(carrier)
@@ -1175,6 +1197,12 @@ CREATE PACKAGE BODY pkg AS FUNCTION f(x NUMBER) RETURN NUMBER`
 - targets: mysql(invalid), postgresql(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['could not translate']`
 - src: `CREATE PACKAGE pkg AS PROCEDURE p; FUNCTION f RETURN NUMBER; END pkg;
+/`
+
+## ora-parallel-enable  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE FUNCTION f RETURN NUMBER DETERMINISTIC PARALLEL_ENABLE AS BEGIN RETURN 1; END;
 /`
 
 ## ora-param-cursor  (oracle)
@@ -1640,6 +1668,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co`
 - src: `SELECT convert_to('abc', 'UTF8')`
 
+## pg-create-aggregate  (postgresql)
+- targets: mysql(carrier), oracle(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE AGGREGATE my_sum (INT) (SFUNC = int4pl, STYPE = INT, INITCOND = '0')`
+
 ## pg-create-role  (postgresql)
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
@@ -1819,6 +1852,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
 - src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id FROM t WHERE to_tsvector('english', s) @@ plainto_tsquery('english', 'ter`
+
+## pg-func-attrs  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near 'sql'.DB-Lib error message 20018, severity 15:\nGeneral SQL `
+- src: `CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE sql SECURITY DEFINER STABLE PARALLEL SAFE`
 
 ## pg-generate-series  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2396,6 +2434,11 @@ CREATE TRIGGE`
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `VALUES (1, 'a'), (2, 'b')`
 
+## pg-variadic  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE FUNCTION f (VARIADIC arr INT[]) RETURNS INT AS $$ SELECT array_length($1, 1) $$ LANGUAGE sql`
+
 ## pg-view-check  (postgresql)
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
@@ -2763,6 +2806,11 @@ GRANT SELECT ON OBJECT::t TO PUBLIC`
 - live error: `ORA-00902: invalid datatype`
 - src: `CREATE TABLE t (id INT, name VARCHAR(50), INDEX ix_name NONCLUSTERED (name))`
 
+## ts-inline-tvf  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE FUNCTION f() RETURNS TABLE AS RETURN (SELECT 1 AS x)`
+
 ## ts-insert-output  (tsql)
 - targets: mysql(invalid), oracle(invalid)
 - live error: `ORA-00925: missing INTO keyword`
@@ -2833,6 +2881,11 @@ MERGE tgt USING src ON tgt.id = src.id WHEN MAT`
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('2020-02-29 00:00:00',),) target=(('2020-02-29',),)`
 - src: `SELECT DATEADD(MONTH, 1, '2020-01-31') AS r`
+
+## ts-multistatement-tvf  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `FUNCTION F compiled INVALID (line 2): PLS-00103: Encountered the symbol "@" when expecting`
+- src: `CREATE FUNCTION f() RETURNS @t TABLE (x INT) AS BEGIN INSERT INTO @t VALUES (1); RETURN; END`
 
 ## ts-nchar-hex  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
@@ -3069,4 +3122,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 594 distinct constructs; defect rows by kind: carrier 135, func 249, invalid 742, semantic 2, silent-drop 73.
+Totals: 604 distinct constructs; defect rows by kind: carrier 138, func 249, invalid 754, semantic 2, silent-drop 75.

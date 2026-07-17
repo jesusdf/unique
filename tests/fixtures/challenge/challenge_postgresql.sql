@@ -145,6 +145,9 @@ CREATE TABLE t (data JSONB, name TEXT GENERATED ALWAYS AS (data->>'name') STORED
 -- CASE[open]: pg-convert-to — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co
 SELECT convert_to('abc', 'UTF8')
 
+-- CASE[open]: pg-create-aggregate — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE AGGREGATE my_sum (INT) (SFUNC = int4pl, STYPE = INT, INITCOND = '0')
+
 -- CASE[open]: pg-create-role — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE ROLE r LOGIN PASSWORD 'x'
 
@@ -252,6 +255,9 @@ SELECT to_tsvector('a cat') @@ to_tsquery('cat') AS r
 
 -- CASE[open]: pg-fulltext2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id FROM t WHERE to_tsvector('english', s) @@ plainto_tsquery('english', 'term')
+
+-- CASE[open]: pg-func-attrs — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'sql'.DB-Lib error message 20018, severity 15:\nGeneral SQL 
+CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE sql SECURITY DEFINER STABLE PARALLEL SAFE
 
 -- CASE[open]: pg-generate-series — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT generate_series(1, 5) AS r
@@ -609,6 +615,9 @@ CREATE TABLE t (id INT, n INT); UPDATE t SET n = 1 RETURNING id, n
 
 -- CASE[open]: pg-values-stmt — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 VALUES (1, 'a'), (2, 'b')
+
+-- CASE[open]: pg-variadic — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE FUNCTION f (VARIADIC arr INT[]) RETURNS INT AS $$ SELECT array_length($1, 1) $$ LANGUAGE sql
 
 -- CASE[open]: pg-view-check — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id INT); CREATE VIEW v AS SELECT id FROM t WITH LOCAL CHECK OPTION

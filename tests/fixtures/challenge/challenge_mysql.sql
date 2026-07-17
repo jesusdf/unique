@@ -306,6 +306,9 @@ CREATE TABLE t (id INT, dt DATE) PARTITION BY HASH(id) PARTITIONS 4
 -- CASE[open]: my-period-diff — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE
 SELECT PERIOD_DIFF(202006, 202001) AS r
 
+-- CASE[open]: my-reads-sql — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
+CREATE FUNCTION f(a INT) RETURNS INT READS SQL DATA BEGIN RETURN (SELECT COUNT(*) FROM (SELECT a) t); END
+
 -- CASE[open]: my-realworld-orders — fails on postgresql. relation "orders" already exists
 CREATE TABLE orders (id INT AUTO_INCREMENT PRIMARY KEY, customer_id INT NOT NULL, total DECIMAL(10,2) DEFAULT 0, created TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX ix_cust (customer_id), CHECK (total >= 0)) ENGINE=InnoDB;
 CREATE TRIGGER trg BEFORE INSERT ON orders FOR EACH ROW SET NEW.created = NOW();
@@ -444,6 +447,9 @@ CREATE TABLE t (a INT ZEROFILL)
 
 -- CASE[open]: mysql-drop5-utf8mb4|CHAR — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'utf8mb4|CHARSET' absent from valid tsql output, no warning
 CREATE TABLE t (a INT AUTO_INCREMENT PRIMARY KEY, b VARCHAR(20)) DEFAULT CHARSET=utf8mb4
+
+-- CASE[open]: mysql-prec-64|BIGINT| — fails on oracle, postgresql. SILENT PRECISION CHANGE: '64|BIGINT|BINARY' not preserved in valid oracle output, no warni
+CREATE TABLE t (a BIT(64))
 
 -- CASE[open]: mysql-qdrop-ROLLUP — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ROLLUP' absent from valid tsql output, no warning
 SELECT x FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x WITH ROLLUP

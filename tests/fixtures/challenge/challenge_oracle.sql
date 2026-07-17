@@ -35,6 +35,10 @@ SELECT ADD_MONTHS(SYSDATE, 3) AS r FROM DUAL
 -- CASE[open]: ora-alter-session — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD'
 
+-- CASE[open]: ora-authid — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE PROCEDURE p (a NUMBER) AUTHID CURRENT_USER AS BEGIN NULL; END;
+/
+
 -- CASE[open]: ora-bitand — fails on mysql, postgresql, tsql. (195, b"'BITAND' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT BITAND(5, 3) AS r FROM DUAL
 
@@ -57,6 +61,10 @@ SELECT COALESCE(TO_CLOB('a'), TO_CLOB('b')) AS r FROM DUAL
 
 -- CASE[open]: ora-collect — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT CAST(COLLECT(x) AS SYS.ODCINUMBERLIST) FROM (SELECT 1 x FROM DUAL)
+
+-- CASE[open]: ora-collection-param — fails on tsql. (258, b'Cannot call methods on sql_variant.DB-Lib error message 20018, severity 15:\nGener
+CREATE FUNCTION f (p_ids SYS.ODCINUMBERLIST) RETURN NUMBER AS BEGIN RETURN p_ids.COUNT; END;
+/
 
 -- CASE[open]: ora-comment-col — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id NUMBER); COMMENT ON COLUMN t.id IS 'the id'
@@ -286,6 +294,10 @@ CREATE PACKAGE pkg IS PROCEDURE p(x NUMBER); PROCEDURE p(x VARCHAR2); END pkg;
 
 -- CASE[open]: ora-package-spec — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['could not translate']
 CREATE PACKAGE pkg AS PROCEDURE p; FUNCTION f RETURN NUMBER; END pkg;
+/
+
+-- CASE[open]: ora-parallel-enable — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE FUNCTION f RETURN NUMBER DETERMINISTIC PARALLEL_ENABLE AS BEGIN RETURN 1; END;
 /
 
 -- CASE[open]: ora-param-cursor — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
