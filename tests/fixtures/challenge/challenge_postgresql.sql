@@ -26,9 +26,6 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DATA TYPE BIGINT
 -- CASE[open]: pg-any-array-subquery — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
 CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a WHERE id = ANY(ARRAY(SELECT id FROM b))
 
--- CASE[open]: pg-array-index2 — fails on mysql. FUNC-DIFF: source=(('2',),) target=()
-SELECT (ARRAY[1,2,3])[2] AS r
-
 -- CASE[open]: pg-array-jsonb — fails on oracle. ORA-03099: unexpected item [ in a column definition
 CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)
 
@@ -62,12 +59,6 @@ SELECT true::text AS r
 -- CASE[open]: pg-bulk-insert — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)
 
--- CASE[open]: pg-caret-assoc — fails on mysql. FUNC-DIFF: source=(('64',),) target=()
-SELECT 2 ^ 3 ^ 2 AS r
-
--- CASE[open]: pg-caret-power — fails on mysql. FUNC-DIFF: source=(('8',),) target=()
-SELECT 2 ^ 3 AS r
-
 -- CASE[open]: pg-case-statement — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS TEXT AS $$ BEGIN CASE n WHEN 1 THEN RETURN 'one'; ELSE RETURN 'other'; END CASE; END; $$ LANGUAGE plpgsql
 
@@ -98,9 +89,6 @@ SELECT chr(65) || chr(66)
 -- CASE[open]: pg-chr-unicode — fails on mysql, tsql. FUNC-DIFF: source=(('μ',),) target=(('NULL',),)
 SELECT CHR(956) AS r
 
--- CASE[open]: pg-collate-cmp — fails on mysql. FUNC-DIFF: source=(('0',),) target=()
-SELECT 'A' = 'a' COLLATE "C" AS r
-
 -- CASE[open]: pg-computed-func — fails on tsql. (8116, b'Argument data type text is invalid for argument 1 of lower function.DB-Lib error 
 CREATE TABLE t (a TEXT, b TEXT GENERATED ALWAYS AS (lower(a)) STORED)
 
@@ -121,15 +109,6 @@ SELECT DATE_PART('week', DATE '2020-06-15'), DATE_PART('quarter', DATE '2020-06-
 
 -- CASE[open]: pg-date-trunc — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d
-
--- CASE[open]: pg-div-fn2 — fails on mysql. FUNC-DIFF: source=(('3',),) target=()
-SELECT div(10, 3) AS r
-
--- CASE[open]: pg-div-func — fails on mysql. FUNC-DIFF: source=(('3',),) target=()
-SELECT DIV(7, 2) AS r
-
--- CASE[open]: pg-div-mod-int — fails on mysql. FUNC-DIFF: source=(('3', '2'),) target=()
-SELECT DIV(17, 5), 17 % 5
 
 -- CASE[open]: pg-div-precision — fails on mysql. FUNC-DIFF: source=(('0.333333',),) target=(('0.33333',),)
 SELECT 1.0 / 3 AS r
@@ -236,12 +215,6 @@ SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7
 -- CASE[open]: pg-json-aggs — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_
 SELECT json_agg(x), json_object_agg(x::text, x*2) FROM (VALUES (1),(2)) v(x)
 
--- CASE[open]: pg-json-idx — fails on mysql. FUNC-DIFF: source=(('20',),) target=()
-SELECT ('[10,20,30]'::jsonb)->1 AS r
-
--- CASE[open]: pg-json-num — fails on mysql. FUNC-DIFF: source=(('1.5',),) target=()
-SELECT ('{"a":1.5}'::jsonb->>'a')
-
 -- CASE[open]: pg-jsonb-agg — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSONB_AGG(x) FROM (VALUES (1),(2)) v(x)
 
@@ -326,9 +299,6 @@ SELECT POSITION('a' IN 'ABC') AS r
 -- CASE[open]: pg-position-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT POSITION('' IN 'abc') AS r
 
--- CASE[open]: pg-power-neg — fails on mysql. FUNC-DIFF: source=(('0.5',),) target=()
-SELECT POWER(2, -1) AS r
-
 -- CASE[open]: pg-quote — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
 SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')
 
@@ -346,9 +316,6 @@ EXCEPTION WHEN check_violation THEN RAISE EXCEPTION 'insufficient funds'; END; $
 
 -- CASE[open]: pg-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END; $$ LANGUAGE plpgsql
-
--- CASE[open]: pg-regex-case — fails on mysql. FUNC-DIFF: source=(('0',),) target=()
-SELECT 'abc' ~ '^A' AS r
 
 -- CASE[open]: pg-regexp-backref — fails on mysql, oracle. ORA-01722: unable to convert string value containing 'g' to a number: 
 SELECT regexp_replace('a1b2', '(\d)', '[\1]', 'g') AS r

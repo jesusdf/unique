@@ -103,9 +103,20 @@ session-only and fire while the REPL is idle.)
      `ON DELETE` action, a `CHECK`, an ENUM's values, a `WITH TIES`, a
      collation; an operator or type that changed meaning; an outer join
      inner-joined) — round-trip A→B→A to surface it, then confirm by executing.
-   - an **unrecognized-construct carrier** (`UNIQUE: Unhandled`,
-     `could not translate`) where a real translation is possible;
+   - a **SILENT unrecognized-construct carrier** — `UNIQUE: Unhandled` /
+     `could not translate` emitted with **NO** warning. A carrier that comes
+     **with** a warning is out of scope (see the hard rule below).
    - a **mislabeled or missing warning** (a lying warning is a defect too).
+
+> **HARD RULE — A WARNED DEGRADATION IS NOT A DEFECT.** If the transpiler
+> emitted a warning for the construct (a carrier + warning, a documented
+> "no equivalent", "preserved as a comment", "lossy conversion", …), it did its
+> job of flagging the limitation — that is the *documented, acceptable* outcome,
+> **not an error**, and RED must NOT record it as a finding. RED counts only
+> **SILENT** problems: a *different result* (functional-equivalence failure),
+> a *silently dropped clause*, or *invalid output shipped with NO warning*.
+> When your detector flags something, always check `result.warnings` first and
+> drop it if non-empty. (This is why the harness excludes every warned row.)
 4. **De-duplicate.** If the corpus already covers that *mechanism* (not just
    that spelling), it is not a new case — the corpus holds **non-repeated**
    constructs. Skip near-duplicates; one construct per entry.
@@ -161,6 +172,10 @@ a regression test and updated docs.
 
 ## Rules every case must obey
 
+- **A warned degradation is NOT a defect — only SILENT problems count.** If the
+  transpiler warned about the construct, that is the documented, acceptable
+  outcome; drop it. Record only wrong results, silently dropped clauses, or
+  invalid output emitted with no warning. Check `result.warnings` before adding.
 - **"Runs without error" is NOT the bar — same result is.** For a standalone
   query, correctness means the transpiled output returns the *same result set*
   as the original on the target engine. Output that compiles and runs but yields

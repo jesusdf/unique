@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (314 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (326 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -1368,11 +1368,6 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ`
 - src: `CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a WHERE id = ANY(ARRAY(SELECT id FROM b))`
 
-## pg-array-index2  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('2',),) target=()`
-- src: `SELECT (ARRAY[1,2,3])[2] AS r`
-
 ## pg-array-jsonb  (postgresql)
 - targets: oracle(invalid)
 - live error: `ORA-03099: unexpected item [ in a column definition`
@@ -1428,16 +1423,6 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
 - src: `CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)`
 
-## pg-caret-assoc  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('64',),) target=()`
-- src: `SELECT 2 ^ 3 ^ 2 AS r`
-
-## pg-caret-power  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('8',),) target=()`
-- src: `SELECT 2 ^ 3 AS r`
-
 ## pg-case-statement  (postgresql)
 - targets: tsql(invalid)
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
@@ -1488,11 +1473,6 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `FUNC-DIFF: source=(('μ',),) target=(('NULL',),)`
 - src: `SELECT CHR(956) AS r`
 
-## pg-collate-cmp  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('0',),) target=()`
-- src: `SELECT 'A' = 'a' COLLATE "C" AS r`
-
 ## pg-computed-func  (postgresql)
 - targets: tsql(invalid)
 - live error: `(8116, b'Argument data type text is invalid for argument 1 of lower function.DB-Lib error `
@@ -1527,21 +1507,6 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI`
 - src: `SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d`
-
-## pg-div-fn2  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('3',),) target=()`
-- src: `SELECT div(10, 3) AS r`
-
-## pg-div-func  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('3',),) target=()`
-- src: `SELECT DIV(7, 2) AS r`
-
-## pg-div-mod-int  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('3', '2'),) target=()`
-- src: `SELECT DIV(17, 5), 17 % 5`
 
 ## pg-div-precision  (postgresql)
 - targets: mysql(func)
@@ -1718,16 +1683,6 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_`
 - src: `SELECT json_agg(x), json_object_agg(x::text, x*2) FROM (VALUES (1),(2)) v(x)`
 
-## pg-json-idx  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('20',),) target=()`
-- src: `SELECT ('[10,20,30]'::jsonb)->1 AS r`
-
-## pg-json-num  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('1.5',),) target=()`
-- src: `SELECT ('{"a":1.5}'::jsonb->>'a')`
-
 ## pg-jsonb-agg  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
@@ -1868,11 +1823,6 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT POSITION('' IN 'abc') AS r`
 
-## pg-power-neg  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('0.5',),) target=()`
-- src: `SELECT POWER(2, -1) AS r`
-
 ## pg-quote  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU`
@@ -1893,11 +1843,6 @@ CREATE TABLE ledger (id SERIA`
 - targets: tsql(invalid)
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
 - src: `CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END; $$ LANGUAGE plpgsql`
-
-## pg-regex-case  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('0',),) target=()`
-- src: `SELECT 'abc' ~ '^A' AS r`
 
 ## pg-regexp-backref  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
@@ -2450,7 +2395,7 @@ MERGE tgt USING src ON tgt.id = src.id WHEN MAT`
 - src: `CREATE TABLE t (price MONEY, small SMALLMONEY)`
 
 ## ts-money-arith  (tsql)
-- targets: mysql(func), postgresql(func)
+- targets: postgresql(func)
 - live error: `FUNC-DIFF: source=(('12.8',),) target=(('$12.80',),)`
 - src: `SELECT CAST(10.5 AS MONEY) + CAST(2.3 AS MONEY) AS r`
 
@@ -2656,4 +2601,4 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 516 distinct constructs; defect rows by kind: func 265, invalid 717, semantic 2, silent-drop 75.
+Totals: 505 distinct constructs; defect rows by kind: func 253, invalid 717, semantic 2, silent-drop 75.
