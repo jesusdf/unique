@@ -18,21 +18,17 @@ dump (35k+ statements per direction, live engines): oracle→T-SQL 100.0%,
 oracle→PostgreSQL 100.0%, oracle→MySQL 100.0% — from 475/41/121 failures at
 the start of the bring-up (official `validity_sweep` at `7c1cea7`).
 
-The project is executing the architecture plan adopted from the 2026-07-08
-audit ([`audit/2026-07-08/04-architecture-analysis.md`](../audit/2026-07-08/04-architecture-analysis.md)):
-close the paths that bypass the AST core, make every failure loud and honest,
-and replace "the fixture is green" with a **measured per-direction validity
-percentage** as the definition of done. Milestones **M0** (validity sweep),
-**M1** (output honesty gate) and **M2** (comment trivia + unified AST guard
-path) are done. **M3**'s core landed (2026-07-09): embedded DML in routine
-bodies now runs the same `parse → transform → emit` IR pipeline standalone
-DML uses (raw sqlglot only as a warned fallback) — one mapping engine, two
-callers. Routing that traffic exposed and fixed four IR-core bugs that also
-corrupted standalone DML (pass recursion stopped at top-level SELECTs; a
-derived table's WHERE duplicated onto the outer SELECT; parens/precedence
-dropped on emit; NULL-ordering not carried on ORDER BY). M3's final step
-(deleting the expression-level text rewriters) is blocked on moving the
-procedural text-matchers onto structure — tracked in `docs/TODO.md`.
+The architecture plan adopted from the 2026-07-08 audit
+([`audit/2026-07-08/04-architecture-analysis.md`](../audit/2026-07-08/04-architecture-analysis.md))
+— close the paths that bypass the AST core, make every failure loud and
+honest, measure validity per direction as the definition of done — is
+**fully executed**: **M0** (validity sweep), **M1** (output honesty gate),
+**M2** (comment trivia + unified AST guard path), **M3** (embedded DML
+*and* scalar expressions through the shared IR pipeline — IR-first with
+the text rewriters as the warned fallback; `UNIQUE_NO_IR_FIRST` is the
+emergency kill-switch) and **M4** (Oracle-source bring-up) are all done.
+Remaining backlog: the fallback-rewriter pruning follow-up and PyPI
+packaging — see `docs/TODO.md`.
 
 ### What holds today (measured, not asserted)
 
