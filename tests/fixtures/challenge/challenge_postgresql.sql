@@ -34,6 +34,9 @@ CREATE TABLE t (id INT PRIMARY KEY, n INT, updated TIMESTAMP);
 CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated := now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION trg_fn();
 
+-- CASE[open]: pg-caret-power — fails on mysql. FUNC-DIFF: source=(('8',),) target=()
+SELECT 2 ^ 3 AS r
+
 -- CASE[open]: pg-cast-int — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
 SELECT CAST(2.7 AS INT) AS r
 
@@ -57,6 +60,9 @@ SELECT DATE_PART('week', DATE '2020-06-15'), DATE_PART('quarter', DATE '2020-06-
 
 -- CASE[open]: pg-date-trunc — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d
+
+-- CASE[open]: pg-div-func — fails on mysql. FUNC-DIFF: source=(('3',),) target=()
+SELECT DIV(7, 2) AS r
 
 -- CASE[open]: pg-domain — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE DOMAIN posint AS INT CHECK (VALUE > 0)
@@ -124,8 +130,14 @@ SELECT '{"a":[1,2]}'::jsonb #> '{a,0}'
 -- CASE[open]: pg-justify — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 mon 40 days'.DB-Lib error message 20018, severity 15:\nGe
 SELECT JUSTIFY_INTERVAL(INTERVAL '1 mon 40 days') AS r
 
+-- CASE[open]: pg-left-neg — fails on mysql. FUNC-DIFF: source=(('ab',),) target=(('',),)
+SELECT LEFT('abc', -1) AS r
+
 -- CASE[open]: pg-like-cs — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'ABC' LIKE 'abc' AS r
+
+-- CASE[open]: pg-log-base — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('4.60517',),)
+SELECT LOG(100) AS r
 
 -- CASE[open]: pg-make-date — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKE_DATE(2020, 6, 15), MAKE_TIME(10, 30, 0)
@@ -196,6 +208,9 @@ SELECT SUBSTRING('abcdef', 0, 3) AS r
 -- CASE[open]: pg-substring-regex — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib
 SELECT SUBSTRING('a1b2' FROM '[0-9]+') AS r
 
+-- CASE[open]: pg-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+SELECT 'a ' = 'a' AS r
+
 -- CASE[open]: pg-translate — fails on mysql. (1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
 
@@ -206,6 +221,9 @@ CREATE TRIGGER trg BEFORE UPDATE ON t FOR EACH ROW EXECUTE PROCEDURE trg_fn();
 
 -- CASE[open]: pg-trim-both-chars — fails on oracle. ORA-30001: trim set should have only one character
 SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS t
+
+-- CASE[open]: pg-trim-len — fails on oracle, tsql. FUNC-DIFF: source=(('2', '0'),) target=(('0', '0'),)
+SELECT CHAR_LENGTH('  '), LENGTH(TRIM('  '))
 
 -- CASE[open]: pg-truncate-restart — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'RESTART'.DB-Lib error message 20018, severity 15:\nGeneral 
 CREATE TABLE t (id INT); TRUNCATE TABLE t RESTART IDENTITY CASCADE

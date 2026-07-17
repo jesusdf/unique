@@ -1,3 +1,7 @@
+
+---
+
+Totals: 211 distinct constructs; defect rows by kind: carrier 28, func 70, invalid 335, semantic 2.
 # Challenge findings ledger (RED)
 
 Source constructs that transpile wrong on >=1 target, each **validated on a
@@ -140,6 +144,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')`
 
+## my-left-neg  (mysql)
+- targets: postgresql(func)
+- live error: `FUNC-DIFF: source=(('',),) target=(('ab',),)`
+- src: `SELECT LEFT('abc', -1) AS r`
+
 ## my-length-bytes  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('5',),) target=(('4',),)`
@@ -175,6 +184,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
 - src: `SELECT SOUNDEX('Smith'), FORMAT(1234.5, 2)`
 
+## my-substr-neg  (mysql)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('def',),) target=(('ab',),)`
+- src: `SELECT SUBSTRING('abcdef', -3) AS r`
+
 ## my-substring-index  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU`
@@ -189,6 +203,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid)
 - live error: `ORA-01861: literal does not match format string`
 - src: `SELECT TIMESTAMPDIFF(DAY, '2020-01-01', '2020-01-10') AS r`
+
+## my-trailing-eq  (mysql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
+- src: `SELECT 'a ' = 'a' AS r`
 
 ## my-trim-both  (mysql)
 - targets: postgresql(func), tsql(func)
@@ -405,6 +424,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - live error: `FUNC-DIFF: source=(('SUNDAY',),) target=(('Sunday',),)`
 - src: `SELECT TO_CHAR(DATE '2020-06-14', 'DAY') AS r FROM DUAL`
 
+## ora-trailing-eq  (oracle)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
+- src: `SELECT CASE WHEN 'a ' = 'a' THEN 1 ELSE 0 END AS r FROM DUAL`
+
 ## ora-translate  (oracle)
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_6c47c43e12f3.TRANSLATE does not exist')`
@@ -461,6 +485,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - src: `CREATE TABLE t (id INT PRIMARY KEY, n INT, updated TIMESTAMP);
 CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 
+## pg-caret-power  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('8',),) target=()`
+- src: `SELECT 2 ^ 3 AS r`
+
 ## pg-cast-int  (postgresql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
@@ -500,6 +529,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI`
 - src: `SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d`
+
+## pg-div-func  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('3',),) target=()`
+- src: `SELECT DIV(7, 2) AS r`
 
 ## pg-domain  (postgresql)
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
@@ -611,10 +645,20 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(102, b"Incorrect syntax near '1 mon 40 days'.DB-Lib error message 20018, severity 15:\nGe`
 - src: `SELECT JUSTIFY_INTERVAL(INTERVAL '1 mon 40 days') AS r`
 
+## pg-left-neg  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('ab',),) target=(('',),)`
+- src: `SELECT LEFT('abc', -1) AS r`
+
 ## pg-like-cs  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
 - src: `SELECT 'ABC' LIKE 'abc' AS r`
+
+## pg-log-base  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('2',),) target=(('4.60517',),)`
+- src: `SELECT LOG(100) AS r`
 
 ## pg-make-date  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -731,6 +775,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib`
 - src: `SELECT SUBSTRING('a1b2' FROM '[0-9]+') AS r`
 
+## pg-trailing-eq  (postgresql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
+- src: `SELECT 'a ' = 'a' AS r`
+
 ## pg-translate  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')`
@@ -746,6 +795,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN IF OLD.n <> NEW.n THEN RAIS
 - targets: oracle(invalid)
 - live error: `ORA-30001: trim set should have only one character`
 - src: `SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS t`
+
+## pg-trim-len  (postgresql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('2', '0'),) target=(('0', '0'),)`
+- src: `SELECT CHAR_LENGTH('  '), LENGTH(TRIM('  '))`
 
 ## pg-truncate-restart  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -810,6 +864,11 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00902: invalid datatype`
 - src: `SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r`
+
+## ts-cast-bit  (tsql)
+- targets: mysql(func), oracle(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
+- src: `SELECT CAST(2 AS BIT) AS r`
 
 ## ts-cast-trycast  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
@@ -1009,6 +1068,11 @@ SELECT NEXT VALUE FOR seq`
 - live error: `SILENT LOSS: TOP n WITH TIES -> plain LIMIT n on PG/MySQL (ties dropped); on Oracle the ro`
 - src: `SELECT TOP 1 WITH TIES x FROM (VALUES (1),(1),(2)) v(x) ORDER BY x`
 
+## ts-trailing-eq  (tsql)
+- targets: mysql(func), oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT IIF('a ' = 'a', 1, 0) AS r`
+
 ## ts-try-convert  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-01722: unable to convert string value containing 'a' to a number: `
@@ -1025,6 +1089,3 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `PROCEDURE P compiled INVALID (line 15): PLS-00103: Encountered the symbol "=" when expecti`
 - src: `CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN SET @n -=`
----
-
-Totals: 199 distinct constructs; 335 invalid-output rows, 80 carrier rows.

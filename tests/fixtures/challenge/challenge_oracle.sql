@@ -141,6 +141,9 @@ CREATE TABLE t (a NUMBER) TABLESPACE users
 -- CASE[open]: ora-to-char-day — fails on mysql. FUNC-DIFF: source=(('SUNDAY',),) target=(('Sunday',),)
 SELECT TO_CHAR(DATE '2020-06-14', 'DAY') AS r FROM DUAL
 
+-- CASE[open]: ora-trailing-eq — fails on tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+SELECT CASE WHEN 'a ' = 'a' THEN 1 ELSE 0 END AS r FROM DUAL
+
 -- CASE[open]: ora-translate — fails on mysql. (1305, 'FUNCTION unique_val_6c47c43e12f3.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r FROM DUAL
 

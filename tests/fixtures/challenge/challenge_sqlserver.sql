@@ -50,6 +50,9 @@ SELECT ASCII('A'), CHAR(65), NCHAR(65)
 -- CASE[open]: ts-at-time-zone — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
 SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r
 
+-- CASE[open]: ts-cast-bit — fails on mysql, oracle. FUNC-DIFF: source=(('1',),) target=(('2',),)
+SELECT CAST(2 AS BIT) AS r
+
 -- CASE[open]: ts-cast-trycast — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'x' to a number: 
 SELECT CAST(123 AS VARCHAR(10)), TRY_CAST('x' AS INT), CONVERT(DATE, GETDATE())
 
@@ -171,6 +174,9 @@ DECLARE @t TABLE (id INT); INSERT INTO @t VALUES (1); SELECT * FROM @t
 
 -- CASE[open]: ts-top-with-ties — fails on postgresql. SILENT LOSS: TOP n WITH TIES -> plain LIMIT n on PG/MySQL (ties dropped); on Oracle the ro
 SELECT TOP 1 WITH TIES x FROM (VALUES (1),(1),(2)) v(x) ORDER BY x
+
+-- CASE[open]: ts-trailing-eq — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT IIF('a ' = 'a', 1, 0) AS r
 
 -- CASE[open]: ts-try-convert — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'a' to a number: 
 SELECT TRY_CONVERT(INT, 'abc') AS r

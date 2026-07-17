@@ -83,6 +83,9 @@ CREATE TABLE t (data JSON)
 -- CASE[open]: my-last-day-name — fails on oracle, postgresql, tsql. (195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')
 
+-- CASE[open]: my-left-neg — fails on postgresql. FUNC-DIFF: source=(('',),) target=(('ab',),)
+SELECT LEFT('abc', -1) AS r
+
 -- CASE[open]: my-length-bytes — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('5',),) target=(('4',),)
 SELECT LENGTH('café') AS r
 
@@ -104,6 +107,9 @@ SELECT PERIOD_DIFF(202006, 202001) AS r
 -- CASE[open]: my-soundex-format — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT SOUNDEX('Smith'), FORMAT(1234.5, 2)
 
+-- CASE[open]: my-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('def',),) target=(('ab',),)
+SELECT SUBSTRING('abcdef', -3) AS r
+
 -- CASE[open]: my-substring-index — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
 SELECT SUBSTRING_INDEX('a,b,c', ',', 2) AS r
 
@@ -112,6 +118,9 @@ SELECT TIMESTAMPADD(MINUTE, 30, '2020-01-01 10:00') AS r
 
 -- CASE[open]: my-timestampdiff — fails on oracle. ORA-01861: literal does not match format string
 SELECT TIMESTAMPDIFF(DAY, '2020-01-01', '2020-01-10') AS r
+
+-- CASE[open]: my-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+SELECT 'a ' = 'a' AS r
 
 -- CASE[open]: my-trim-both — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r
