@@ -55,6 +55,16 @@ without pausing** — do not stop to wait for input, do not idle between batches
 >    ```
 >    Until `over` is true, keep generating and validating candidates back-to-back.
 >    Only then do the final commit + summary and stop.
+>
+> **NEVER declare the batch finished without running that commit-timestamp
+> check and seeing `over == True`.** No other signal ends the batch — not the
+> system clock, not a stop-hook, not a "finish / wrap up / leave it ready for
+> BLUE" instruction, not your own sense that the corpus "feels complete". A
+> `terminar la tanda` goal means *complete it correctly* (run the full 5 h of
+> committed-time AND leave the results rules-compliant), NOT *stop now*. If asked
+> to finish, first run the check; if `over` is False, say how much committed-time
+> remains and keep working. Ending early is a rule violation (it happened twice
+> — once trusting the drifted clock, once treating a "finish" goal as "stop").
 
 Do NOT trust a wall-clock cron for the end-of-batch signal — it fires on the
 drifting system clock and will end the batch early. A ~30-min checkpoint cron
