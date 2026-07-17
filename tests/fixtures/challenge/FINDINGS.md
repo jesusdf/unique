@@ -15,6 +15,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(102, b"Incorrect syntax near 'MODIFY'.DB-Lib error message 20018, severity 15:\nGeneral S`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t MODIFY COLUMN b BIGINT`
 
+## my-avg-int  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('1.5',),) target=(('1',),)`
+- src: `SELECT AVG(x) FROM (SELECT 1 x UNION SELECT 2) t`
+
 ## my-base64  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TO`
@@ -184,6 +189,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid)
 - live error: `ORA-01861: literal does not match format string`
 - src: `SELECT TIMESTAMPDIFF(DAY, '2020-01-01', '2020-01-10') AS r`
+
+## my-trim-both  (mysql)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('abc',),) target=(('',),)`
+- src: `SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r`
 
 ## my-unix-timestamp  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -390,6 +400,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (a NUMBER) TABLESPACE users`
 
+## ora-to-char-day  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('SUNDAY',),) target=(('Sunday',),)`
+- src: `SELECT TO_CHAR(DATE '2020-06-14', 'DAY') AS r FROM DUAL`
+
 ## ora-translate  (oracle)
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_6c47c43e12f3.TRANSLATE does not exist')`
@@ -434,6 +449,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D`
 - src: `SELECT TIMESTAMP '2020-01-01 10:00' AT TIME ZONE 'UTC' AS r`
+
+## pg-avg-int  (postgresql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('1.5',),) target=(('1',),)`
+- src: `SELECT AVG(x) FROM (VALUES (1),(2)) v(x)`
 
 ## pg-before-update-trg  (postgresql)
 - targets: mysql(invalid)
@@ -640,6 +660,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT POSITION('' IN 'abc') AS r`
+
+## pg-power-neg  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('0.5',),) target=()`
+- src: `SELECT POWER(2, -1) AS r`
 
 ## pg-quote  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -954,6 +979,11 @@ SELECT NEXT VALUE FOR seq`
 - live error: `ORA-00904: "DIFFERENCE": invalid identifier`
 - src: `SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')`
 
+## ts-str-plus-num  (tsql)
+- targets: mysql(func), oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('15',),) target=(('105',),)`
+- src: `SELECT '10' + 5 AS r`
+
 ## ts-string-agg-within  (tsql)
 - targets: postgresql(invalid)
 - live error: `function string_agg(integer, unknown) does not exist`
@@ -997,4 +1027,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN SET @n -=`
 ---
 
-Totals: 193 distinct constructs; 335 invalid-output rows, 71 carrier rows.
+Totals: 199 distinct constructs; 335 invalid-output rows, 80 carrier rows.

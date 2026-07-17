@@ -154,6 +154,9 @@ SELECT NEXT VALUE FOR seq
 -- CASE[open]: ts-soundex-diff — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
 SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')
 
+-- CASE[open]: ts-str-plus-num — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('15',),) target=(('105',),)
+SELECT '10' + 5 AS r
+
 -- CASE[open]: ts-string-agg-within — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2)) v(x)
 

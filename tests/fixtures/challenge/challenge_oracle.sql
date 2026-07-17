@@ -138,6 +138,9 @@ SELECT SYS_CONNECT_BY_PATH(id, '/') AS p FROM (SELECT 1 id, NULL par FROM DUAL) 
 -- CASE[open]: ora-tablespace — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (a NUMBER) TABLESPACE users
 
+-- CASE[open]: ora-to-char-day — fails on mysql. FUNC-DIFF: source=(('SUNDAY',),) target=(('Sunday',),)
+SELECT TO_CHAR(DATE '2020-06-14', 'DAY') AS r FROM DUAL
+
 -- CASE[open]: ora-translate — fails on mysql. (1305, 'FUNCTION unique_val_6c47c43e12f3.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r FROM DUAL
 

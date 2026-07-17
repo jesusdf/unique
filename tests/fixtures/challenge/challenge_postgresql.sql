@@ -26,6 +26,9 @@ CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)
 -- CASE[open]: pg-at-time-zone — fails on mysql, oracle, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D
 SELECT TIMESTAMP '2020-01-01 10:00' AT TIME ZONE 'UTC' AS r
 
+-- CASE[open]: pg-avg-int — fails on tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
+SELECT AVG(x) FROM (VALUES (1),(2)) v(x)
+
 -- CASE[open]: pg-before-update-trg — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id INT PRIMARY KEY, n INT, updated TIMESTAMP);
 CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated := now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
@@ -150,6 +153,9 @@ SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) 
 
 -- CASE[open]: pg-position-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT POSITION('' IN 'abc') AS r
+
+-- CASE[open]: pg-power-neg — fails on mysql. FUNC-DIFF: source=(('0.5',),) target=()
+SELECT POWER(2, -1) AS r
 
 -- CASE[open]: pg-quote — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
 SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')

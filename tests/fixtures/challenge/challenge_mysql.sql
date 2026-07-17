@@ -8,6 +8,9 @@
 -- CASE[open]: my-alter-modify — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'MODIFY'.DB-Lib error message 20018, severity 15:\nGeneral S
 CREATE TABLE t (a INT, b INT); ALTER TABLE t MODIFY COLUMN b BIGINT
 
+-- CASE[open]: my-avg-int — fails on tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
+SELECT AVG(x) FROM (SELECT 1 x UNION SELECT 2) t
+
 -- CASE[open]: my-base64 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TO
 SELECT TO_BASE64('abc'), FROM_BASE64('YWJj')
 
@@ -109,6 +112,9 @@ SELECT TIMESTAMPADD(MINUTE, 30, '2020-01-01 10:00') AS r
 
 -- CASE[open]: my-timestampdiff — fails on oracle. ORA-01861: literal does not match format string
 SELECT TIMESTAMPDIFF(DAY, '2020-01-01', '2020-01-10') AS r
+
+-- CASE[open]: my-trim-both — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
+SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r
 
 -- CASE[open]: my-unix-timestamp — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
 SELECT UNIX_TIMESTAMP('2020-01-01'), FROM_UNIXTIME(1577836800)
