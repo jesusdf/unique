@@ -75,6 +75,9 @@ SELECT CAST('123' AS INT),CONVERT(INT,'123'),CONVERT(VARCHAR,123),TRY_CAST('x' A
 -- CASE[open]: ts-cast-trycast — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'x' to a number: 
 SELECT CAST(123 AS VARCHAR(10)), TRY_CAST('x' AS INT), CONVERT(DATE, GETDATE())
 
+-- CASE[open]: ts-char-encoding — fails on mysql, oracle, postgresql. ORA-00906: missing left parenthesis
+SELECT ASCII('A'),CHAR(65),UNICODE(N'é'),NCHAR(233),CONVERT(VARBINARY,'AB'),CONVERT(VARCHAR,0x4142)
+
 -- CASE[open]: ts-checksum-agg — fails on mysql, oracle, postgresql. ORA-00904: "CHECKSUM_AGG": invalid identifier
 SELECT CHECKSUM_AGG(x) FROM (VALUES (1),(2)) v(x)
 
@@ -194,10 +197,10 @@ SELECT SCOPE_IDENTITY(), @@IDENTITY, IDENT_CURRENT('t')
 -- CASE[open]: ts-inline-index2 — fails on oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (id INT, name VARCHAR(50), INDEX ix_name NONCLUSTERED (name))
 
--- CASE[open]: ts-insert-output — fails on oracle. ORA-00925: missing INTO keyword
-CREATE TABLE t (id INT, n INT);
+-- CASE[open]: ts-insert-output — fails on oracle. ORA-63809: returning clause is not allowed with INSERT and Table Value Constructor
+CREATE TABLE t (id INT IDENTITY, n INT);
 GO
-INSERT INTO t (id, n) OUTPUT INSERTED.id VALUES (1, 5)
+INSERT INTO t (n) OUTPUT INSERTED.id,INSERTED.n VALUES (10),(20)
 
 -- CASE[open]: ts-instead-of-insert — fails on postgresql. "t" is a table
 CREATE TABLE t (id INT PRIMARY KEY, n INT);
@@ -243,6 +246,9 @@ SELECT * FROM OPENJSON('[1,2,3]')
 
 -- CASE[open]: ts-order-strings — fails on mysql. FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), 
 SELECT x FROM (VALUES ('banana'),('Apple'),('cherry'),('Banana')) v(x) ORDER BY x
+
+-- CASE[open]: ts-pad-repeat — fails on mysql, oracle, postgresql. ORA-00904: "STR": invalid identifier
+SELECT REPLICATE('ab',3),REVERSE('abc'),SPACE(3),RIGHT('000'+'7',3),STR(7,3)
 
 -- CASE[open]: ts-patindex — fails on mysql, oracle, postgresql. ORA-00904: "PATINDEX": invalid identifier
 SELECT PATINDEX('%[0-9]%', 'abc123') AS r
@@ -296,6 +302,9 @@ SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')
 -- CASE[open]: ts-soundex3 — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
 SELECT SOUNDEX('Smith'),DIFFERENCE('Smith','Smyth')
 
+-- CASE[open]: ts-sp-executesql — fails on oracle. PROCEDURE P compiled INVALID (line 5): PLS-00103: Encountered the symbol ">" when expectin
+CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(200)=N'SELECT * FROM t WHERE id=@i'; EXEC sp_executesql @sql,N'@i INT',@i=5; END
+
 -- CASE[open]: ts-spectypes — fails on oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (a BINARY(16), b VARBINARY(MAX), c IMAGE, d BIT, e UNIQUEIDENTIFIER, f XML, g SQL_VARIANT, h ROWVERSION, i HIERARCHYID, j GEOGRAPHY)
 
@@ -310,6 +319,9 @@ SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)) AS r
 
 -- CASE[open]: ts-str-func — fails on mysql, oracle, postgresql. ORA-00904: "STR": invalid identifier
 SELECT STR(3.14, 6, 2) AS r
+
+-- CASE[open]: ts-str-misc — fails on mysql, oracle, postgresql. ORA-00904: "QUOTENAME": invalid identifier
+SELECT SOUNDEX('Robert'),DIFFERENCE('Robert','Rupert'),FORMAT(1234567.891,'N2'),QUOTENAME('a]b')
 
 -- CASE[open]: ts-str-plus-num — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('15',),) target=(('105',),)
 SELECT '10' + 5 AS r
@@ -371,6 +383,9 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t SELECT id FROM 
 
 -- CASE[open]: ts-trim-chars — fails on oracle. ORA-30001: trim set should have only one character
 SELECT TRIM('x' FROM 'xxabcxx') AS r
+
+-- CASE[open]: ts-try-catch-raiserror — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 8): PLS-00103: Encountered the symbol "RAISERROR" when 
+CREATE PROCEDURE p AS BEGIN BEGIN TRY INSERT INTO t VALUES(1); END TRY BEGIN CATCH IF ERROR_NUMBER()=2627 RAISERROR('dup',16,1); END CATCH END
 
 -- CASE[open]: ts-try-convert — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'a' to a number: 
 SELECT TRY_CONVERT(INT, 'abc') AS r

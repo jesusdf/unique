@@ -72,6 +72,9 @@ SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL
 -- CASE[open]: ora-cast-onerror — fails on postgresql, tsql. (8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit
 SELECT CAST('abc' AS NUMBER DEFAULT -1 ON CONVERSION ERROR) AS r FROM DUAL
 
+-- CASE[open]: ora-char-encoding — fails on mysql, postgresql, tsql. (195, b"'RAWTOHEX' is not a recognized built-in function name.DB-Lib error message 20018, 
+SELECT ASCII('A'),CHR(65),RAWTOHEX('AB'),UTL_RAW.CAST_TO_RAW('AB'),DUMP('AB'),NCHR(65) FROM DUAL
+
 -- CASE[open]: ora-clob-coalesce — fails on mysql, postgresql, tsql. (195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT COALESCE(TO_CLOB('a'), TO_CLOB('b')) AS r FROM DUAL
 
@@ -372,6 +375,9 @@ SELECT SOUNDEX('Smith') AS r FROM DUAL
 
 -- CASE[open]: ora-soundex3 — fails on postgresql. function soundex(unknown) does not exist
 SELECT SOUNDEX('Smith') FROM DUAL
+
+-- CASE[open]: ora-str-misc — fails on postgresql, tsql. (195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s
+SELECT SOUNDEX('Robert'),TO_CHAR(1234567.891,'999G999G999D99'),NVL(NULLIF('a','a'),'x') FROM DUAL
 
 -- CASE[open]: ora-substr-edge — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('llo', 'el', 'he'),) target=(('h', 'el', 'h'),)
 SELECT SUBSTR('hello',-3), SUBSTR('hello',2,2), SUBSTR('hello',0,2) FROM DUAL

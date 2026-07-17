@@ -129,6 +129,9 @@ SELECT 7.5 :: int AS r
 -- CASE[open]: pg-cast-tstz — fails on mysql, oracle, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity
 SELECT '2020-01-01'::timestamptz AS r
 
+-- CASE[open]: pg-char-encoding — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se
+SELECT ascii('A'),chr(65),encode('AB','hex'),decode('4142','hex'),encode('AB','base64'),octet_length('AB')
+
 -- CASE[open]: pg-check-array-len — fails on oracle. ORA-03099: unexpected item [ in a column definition
 CREATE TABLE t (a INT PRIMARY KEY, path TEXT[], CONSTRAINT ck CHECK (array_length(path,1) > 0))
 
@@ -218,6 +221,9 @@ SELECT 1 EXCEPT ALL SELECT 2
 
 -- CASE[open]: pg-exception-handler — fails on tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
 CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1; EXCEPTION WHEN OTHERS THEN RETURN -1; END; $$ LANGUAGE plpgsql
+
+-- CASE[open]: pg-exception-when — fails on oracle, tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
+CREATE FUNCTION f() RETURNS void AS $$ BEGIN INSERT INTO t VALUES(1); EXCEPTION WHEN unique_violation THEN RAISE EXCEPTION 'dup'; WHEN others THEN RAISE; END; $$ LANGUAGE plpgsql
 
 -- CASE[open]: pg-execute-using — fails on mysql. (1336, 'Dynamic SQL is not allowed in stored function or trigger')
 CREATE FUNCTION f() RETURNS VOID AS $$ BEGIN EXECUTE 'INSERT INTO t VALUES ($1)' USING 5; END; $$ LANGUAGE plpgsql
@@ -461,6 +467,9 @@ SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x
 
 -- CASE[open]: pg-overlay — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV
 SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o
+
+-- CASE[open]: pg-pad-repeat — fails on oracle. ORA-00904: "REPEAT": invalid identifier
+SELECT lpad('7',3,'0'),rpad('7',3,'x'),repeat('ab',3),reverse('abc'),repeat(' ',3)
 
 -- CASE[open]: pg-pi-fns — fails on oracle. ORA-00904: "PI": invalid identifier
 SELECT trunc(pi()::numeric, 4), round(pi()::numeric, 4)

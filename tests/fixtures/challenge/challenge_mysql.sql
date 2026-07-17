@@ -146,6 +146,9 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t CHANGE a x INT
 -- CASE[open]: my-char-256 — fails on oracle, postgresql. FUNC-DIFF: source=(('0100',),) target=(('\x01\x00',),)
 SELECT CHAR(256) AS r
 
+-- CASE[open]: my-char-encoding — fails on oracle, postgresql, tsql. (195, b"'CHR' is not a recognized built-in function name.DB-Lib error message 20018, sever
+SELECT ASCII('A'),CHAR(65),ORD('é'),HEX('AB'),UNHEX('4142'),TO_BASE64('AB'),FROM_BASE64('QUI='),BIT_LENGTH('AB')
+
 -- CASE[open]: my-char-unicode — fails on postgresql. FUNC-DIFF: source=(('NULL',),) target=(('μ',),)
 SELECT CHAR(956 USING utf8mb4) AS r
 
@@ -566,6 +569,9 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 -- CASE[open]: my-order-strings — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('Apple',), ('banana',), ('Banana',), ('cherry',)) target=(('Apple',), 
 SELECT x FROM (SELECT 'banana' x UNION ALL SELECT 'Apple' x UNION ALL SELECT 'cherry' x UNION ALL SELECT 'Banana' x) t ORDER BY x
 
+-- CASE[open]: my-pad-repeat — fails on oracle, postgresql. ORA-00904: "SPACE": invalid identifier
+SELECT LPAD('7',3,'0'),RPAD('7',3,'x'),REPEAT('ab',3),REVERSE('abc'),SPACE(3),CONCAT('[',SPACE(2),']')
+
 -- CASE[open]: my-period-diff — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE
 SELECT PERIOD_DIFF(202006, 202001) AS r
 
@@ -656,6 +662,9 @@ SELECT STATEMENT_DIGEST('SELECT 1'), STATEMENT_DIGEST_TEXT('SELECT 1')
 
 -- CASE[open]: my-str-lt — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'apple' < 'Banana' AS r
+
+-- CASE[open]: my-str-misc — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+SELECT SOUNDEX('Robert'),FORMAT(1234567.891,2),INSERT('abcd',2,2,'XY'),QUOTE('a''b')
 
 -- CASE[open]: my-str-plus-interval — fails on tsql. FUNC-DIFF: source=(('2020-01-02',),) target=(('2020-01-02 00:00:00',),)
 SELECT '2020-01-01' + INTERVAL 1 DAY AS r
@@ -755,6 +764,9 @@ SELECT LENGTH(UPPER('ß')) AS r
 
 -- CASE[open]: my-upper-strasse — fails on postgresql. FUNC-DIFF: source=(('STRAßE',),) target=(('STRAẞE',),)
 SELECT UPPER('straße') AS r
+
+-- CASE[open]: my-using-join — fails on tsql. (209, b"Ambiguous column name 'x'.DB-Lib error message 20018, severity 16:\nGeneral SQL Se
+SELECT x FROM (SELECT 1 x) a JOIN (SELECT 1 x) b USING (x)
 
 -- CASE[open]: my-uuid-bin — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
 SELECT UUID_TO_BIN(UUID()),BIN_TO_UUID(UUID_TO_BIN('6ccd780c-baba-1026-9564-5b8c656024db'))

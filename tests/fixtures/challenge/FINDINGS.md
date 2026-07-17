@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (477 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (494 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -277,6 +277,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('0100',),) target=(('\x01\x00',),)`
 - src: `SELECT CHAR(256) AS r`
+
+## my-char-encoding  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'CHR' is not a recognized built-in function name.DB-Lib error message 20018, sever`
+- src: `SELECT ASCII('A'),CHAR(65),ORD('é'),HEX('AB'),UNHEX('4142'),TO_BASE64('AB'),FROM_BASE64('QUI='),BIT_LENGTH('AB')`
 
 ## my-char-unicode  (mysql)
 - targets: postgresql(func)
@@ -978,6 +983,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('Apple',), ('banana',), ('Banana',), ('cherry',)) target=(('Apple',), `
 - src: `SELECT x FROM (SELECT 'banana' x UNION ALL SELECT 'Apple' x UNION ALL SELECT 'cherry' x UNION ALL SELECT 'Banana' x) t ORDER BY x`
 
+## my-pad-repeat  (mysql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "SPACE": invalid identifier`
+- src: `SELECT LPAD('7',3,'0'),RPAD('7',3,'x'),REPEAT('ab',3),REVERSE('abc'),SPACE(3),CONCAT('[',SPACE(2),']')`
+
 ## my-period-diff  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE`
@@ -1127,6 +1137,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT 'apple' < 'Banana' AS r`
+
+## my-str-misc  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
+- src: `SELECT SOUNDEX('Robert'),FORMAT(1234567.891,2),INSERT('abcd',2,2,'XY'),QUOTE('a''b')`
 
 ## my-str-plus-interval  (mysql)
 - targets: tsql(func)
@@ -1292,6 +1307,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: postgresql(func)
 - live error: `FUNC-DIFF: source=(('STRAßE',),) target=(('STRAẞE',),)`
 - src: `SELECT UPPER('straße') AS r`
+
+## my-using-join  (mysql)
+- targets: tsql(invalid)
+- live error: `(209, b"Ambiguous column name 'x'.DB-Lib error message 20018, severity 16:\nGeneral SQL Se`
+- src: `SELECT x FROM (SELECT 1 x) a JOIN (SELECT 1 x) b USING (x)`
 
 ## my-uuid-bin  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -1481,6 +1501,11 @@ ALTER`
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit`
 - src: `SELECT CAST('abc' AS NUMBER DEFAULT -1 ON CONVERSION ERROR) AS r FROM DUAL`
+
+## ora-char-encoding  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'RAWTOHEX' is not a recognized built-in function name.DB-Lib error message 20018, `
+- src: `SELECT ASCII('A'),CHR(65),RAWTOHEX('AB'),UTL_RAW.CAST_TO_RAW('AB'),DUMP('AB'),NCHR(65) FROM DUAL`
 
 ## ora-clob-coalesce  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1981,6 +2006,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `function soundex(unknown) does not exist`
 - src: `SELECT SOUNDEX('Smith') FROM DUAL`
 
+## ora-str-misc  (oracle)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s`
+- src: `SELECT SOUNDEX('Robert'),TO_CHAR(1234567.891,'999G999G999D99'),NVL(NULLIF('a','a'),'x') FROM DUAL`
+
 ## ora-substr-edge  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('llo', 'el', 'he'),) target=(('h', 'el', 'h'),)`
@@ -2367,6 +2397,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `(243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity`
 - src: `SELECT '2020-01-01'::timestamptz AS r`
 
+## pg-char-encoding  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se`
+- src: `SELECT ascii('A'),chr(65),encode('AB','hex'),decode('4142','hex'),encode('AB','base64'),octet_length('AB')`
+
 ## pg-check-array-len  (postgresql)
 - targets: oracle(invalid)
 - live error: `ORA-03099: unexpected item [ in a column definition`
@@ -2516,6 +2551,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: tsql(invalid)
 - live error: `(443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro`
 - src: `CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1; EXCEPTION WHEN OTHERS THEN RETURN -1; END; $$ LANGUAGE plpgsql`
+
+## pg-exception-when  (postgresql)
+- targets: mysql(silent-rt), oracle(invalid), tsql(invalid)
+- live error: `(443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro`
+- src: `CREATE FUNCTION f() RETURNS void AS $$ BEGIN INSERT INTO t VALUES(1); EXCEPTION WHEN unique_violation THEN RAISE EXCEPTION 'dup';`
 
 ## pg-execute-using  (postgresql)
 - targets: mysql(invalid)
@@ -2921,6 +2961,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV`
 - src: `SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o`
+
+## pg-pad-repeat  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-00904: "REPEAT": invalid identifier`
+- src: `SELECT lpad('7',3,'0'),rpad('7',3,'x'),repeat('ab',3),reverse('abc'),repeat(' ',3)`
 
 ## pg-pi-fns  (postgresql)
 - targets: oracle(invalid)
@@ -3442,6 +3487,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `ORA-01722: unable to convert string value containing 'x' to a number: `
 - src: `SELECT CAST(123 AS VARCHAR(10)), TRY_CAST('x' AS INT), CONVERT(DATE, GETDATE())`
 
+## ts-char-encoding  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00906: missing left parenthesis`
+- src: `SELECT ASCII('A'),CHAR(65),UNICODE(N'é'),NCHAR(233),CONVERT(VARBINARY,'AB'),CONVERT(VARCHAR,0x4142)`
+
 ## ts-checksum-agg  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "CHECKSUM_AGG": invalid identifier`
@@ -3641,10 +3691,10 @@ CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
 
 ## ts-insert-output  (tsql)
 - targets: oracle(invalid)
-- live error: `ORA-00925: missing INTO keyword`
-- src: `CREATE TABLE t (id INT, n INT);
+- live error: `ORA-63809: returning clause is not allowed with INSERT and Table Value Constructor`
+- src: `CREATE TABLE t (id INT IDENTITY, n INT);
 GO
-INSERT INTO t (id, n) OUTPUT INSERTED.id VALUES (1, 5)`
+INSERT INTO t (n) OUTPUT INSERTED.id,INSERTED.n VALUES (10),(20)`
 
 ## ts-instead-of-insert  (tsql)
 - targets: postgresql(invalid)
@@ -3716,6 +3766,11 @@ SELECT * FROM t WITH (NOLOCK)`
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), `
 - src: `SELECT x FROM (VALUES ('banana'),('Apple'),('cherry'),('Banana')) v(x) ORDER BY x`
+
+## ts-pad-repeat  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "STR": invalid identifier`
+- src: `SELECT REPLICATE('ab',3),REVERSE('abc'),SPACE(3),RIGHT('000'+'7',3),STR(7,3)`
 
 ## ts-patindex  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
@@ -3799,6 +3854,11 @@ SELECT NEXT VALUE FOR seq`
 - live error: `ORA-00904: "DIFFERENCE": invalid identifier`
 - src: `SELECT SOUNDEX('Smith'),DIFFERENCE('Smith','Smyth')`
 
+## ts-sp-executesql  (tsql)
+- targets: oracle(invalid)
+- live error: `PROCEDURE P compiled INVALID (line 5): PLS-00103: Encountered the symbol ">" when expectin`
+- src: `CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(200)=N'SELECT * FROM t WHERE id=@i'; EXEC sp_executesql @sql,N'@i INT',@i=5; END`
+
 ## ts-spectypes  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00902: invalid datatype`
@@ -3823,6 +3883,11 @@ SELECT NEXT VALUE FOR seq`
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "STR": invalid identifier`
 - src: `SELECT STR(3.14, 6, 2) AS r`
+
+## ts-str-misc  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "QUOTENAME": invalid identifier`
+- src: `SELECT SOUNDEX('Robert'),DIFFERENCE('Robert','Rupert'),FORMAT(1234567.891,'N2'),QUOTENAME('a]b')`
 
 ## ts-str-plus-num  (tsql)
 - targets: mysql(func), oracle(func), postgresql(func)
@@ -3919,6 +3984,11 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - live error: `ORA-30001: trim set should have only one character`
 - src: `SELECT TRIM('x' FROM 'xxabcxx') AS r`
 
+## ts-try-catch-raiserror  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `PROCEDURE P compiled INVALID (line 8): PLS-00103: Encountered the symbol "RAISERROR" when `
+- src: `CREATE PROCEDURE p AS BEGIN BEGIN TRY INSERT INTO t VALUES(1); END TRY BEGIN CATCH IF ERROR_NUMBER()=2627 RAISERROR('dup',16,1); E`
+
 ## ts-try-convert  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-01722: unable to convert string value containing 'a' to a number: `
@@ -3979,4 +4049,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 777 distinct constructs; defect rows by kind: func 353, invalid 1190, semantic 2, silent-drop 75.
+Totals: 791 distinct constructs; defect rows by kind: func 353, invalid 1223, semantic 2, silent-drop 75.
