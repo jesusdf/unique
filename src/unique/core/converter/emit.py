@@ -3291,6 +3291,15 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             dialect,
         )
 
+    # MySQL's VALUES(col) is only meaningful inside INSERT … ON
+    # DUPLICATE KEY UPDATE; anywhere else MySQL itself evaluates it to
+    # NULL — the faithful mapping (wave 223).
+    if fn_name == "VALUES" and len(node.args) == 1 and dialect != "mysql":
+        return (
+            "NULL /* UNIQUE: MySQL VALUES(col) outside INSERT … ON "
+            "DUPLICATE KEY UPDATE is NULL */"
+        )
+
     # MySQL's CONNECTION_ID(): every engine has a session id under a
     # different name (wave 171) — dbo.connection_id shipped as a fake
     # UDF on T-SQL.

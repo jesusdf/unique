@@ -1108,7 +1108,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          RETURNING-stripped WITH-first form was 1064 (the wave-206
          Oracle relocation, mirrored). Measured: pg→mysql **38 → 37**
          (−1). Discovery HOLDS 0. Tests:
-         TestWave222MysqlReturningWithInsert (1).**
+         TestWave222MysqlReturningWithInsert (1).* Wave 223 (2026-07-17):
+         VALUES(col) outside INSERT … ON DUPLICATE KEY UPDATE is NULL
+         on MySQL itself — the faithful inline-noted mapping off it
+         (the embedded leak rule refined: only ``-- UNIQUE:`` line
+         carriers reject; ``/* UNIQUE: */`` notes are faithful
+         mappings); and SELECT … INTO OUTFILE/DUMPFILE is a file
+         export the variable-INTO parse mangled into a fake variable —
+         whole admin carrier now. Measured: mysql→oracle **16 → 13**
+         (99.8%), mysql→tsql **26 → 23**. Discovery HOLDS 0. Tests:
+         TestWave223ValuesFnOutfile (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

@@ -3098,9 +3098,11 @@ class ProceduralTransformer:
                 trailing.insert(0, lines.pop())
             return "\n".join(trailing + lines)
         # The IR pipeline emits RawSQL fragments (an unconvertible expression
-        # deep in the tree) verbatim; a leaked carrier marker means the result
-        # is not a faithful conversion — use the fallback instead.
-        if "UNIQUE:" in out:
+        # deep in the tree) verbatim; a leaked LINE carrier means the result
+        # is not a faithful conversion — use the fallback instead. Inline
+        # ``/* UNIQUE: … */`` notes are documented FAITHFUL mappings
+        # (VALUES(col)→NULL, wave 223) and pass.
+        if "-- UNIQUE:" in out:
             return None
         return out
 

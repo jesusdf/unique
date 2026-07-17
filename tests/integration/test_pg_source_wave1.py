@@ -7764,3 +7764,39 @@ class TestWave222MysqlReturningWithInsert:
             "mysql",
         )
         assert re.search(r"(?i)^INSERT INTO y WITH t AS", out.strip()), out
+
+
+class TestWave223ValuesFnOutfile:
+    """wave 223 (mysql-corpus): VALUES(col) outside INSERT … ON
+    DUPLICATE KEY UPDATE is NULL on MySQL itself — the faithful
+    mapping off it; and SELECT … INTO OUTFILE is a file export the
+    variable-INTO parse mangled — admin carrier now."""
+
+    def test_values_fn_null_oracle(self) -> None:
+        out = _t2(
+            "create procedure p(c varchar(25)) begin"
+            " update t3 set id = 2, county = values(c); end",
+            "mysql",
+            "oracle",
+        )
+        assert re.search(r"(?i)county = NULL /\* UNIQUE:", out), out
+
+    def test_into_outfile_carrier_tsql(self) -> None:
+        out = _t2(
+            "create procedure b2(x int) begin"
+            " select 1 into outfile 'b2'; insert into t1 values (x); end",
+            "mysql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out and "OUTFILE" in out.upper(), out
+        assert "@outfile" not in out, out
+        assert re.search(r"(?i)INSERT INTO t1 VALUES \(@x\)", out), out
+
+    def test_into_outfile_kept_mysql(self) -> None:
+        out = _t2(
+            "create procedure b2() begin select 1 into outfile 'b2'; end",
+            "mysql",
+            "mysql",
+        )
+        assert re.search(r"(?i)into outfile 'b2'", out), out
+        assert "UNIQUE:" not in out, out

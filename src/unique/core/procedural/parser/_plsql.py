@@ -1461,6 +1461,39 @@ class PlsqlStatementsMixin(ParserBase):
         (FROM onward) so the emitter can produce the right target syntax.
         """
         start = self._pos
+        # MySQL's SELECT … INTO OUTFILE/DUMPFILE is a file export — the
+        # variable-INTO parse mangled OUTFILE into a fake variable
+        # (wave 223). Capture whole; admin-statement routing applies.
+        if self._dialect == "mysql":
+            j = 0
+            depth = 0
+            while True:
+                tok_a = self._peek(j)
+                if tok_a.type in (TokenType.SEMICOLON, TokenType.EOF):
+                    break
+                if tok_a.type == TokenType.LPAREN:
+                    depth += 1
+                elif tok_a.type == TokenType.RPAREN:
+                    depth -= 1
+                elif (
+                    depth == 0
+                    and tok_a.upper_value == "INTO"
+                    and self._peek(j + 1).upper_value in ("OUTFILE", "DUMPFILE")
+                ):
+                    parts_of: list[str] = []
+                    while (
+                        not self._at_end()
+                        and self._current().type != TokenType.SEMICOLON
+                    ):
+                        parts_of.append(self._advance().value)
+                    self._match_type(TokenType.SEMICOLON)
+                    return RawSQL(
+                        sql=" ".join(parts_of),
+                        reason="MySQL admin statement (SELECT INTO OUTFILE)",
+                    )
+                j += 1
+                if j > 4000:
+                    break
         self._expect_keyword("SELECT")
 
         # Capture select list up to INTO or FROM
