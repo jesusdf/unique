@@ -907,7 +907,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          has no bare OFFSET — the documented all-rows idiom is
          ``LIMIT 18446744073709551615 OFFSET n``. Measured: pg→mysql
          **72 → 68** (−4 — wave 191's fragments also settled here).
-         Discovery HOLDS 0. Tests: TestWave192MysqlBareOffset (3).**
+         Discovery HOLDS 0. Tests: TestWave192MysqlBareOffset (3).* Wave 193 (2026-07-17): an
+         UPDATE whose FROM source is a derived table (``FROM (VALUES
+         …) s(x)``) was silently DROPPED at conversion, leaving
+         dangling alias references. Now: verbatim on the source
+         engine (SOURCE_DIALECT check in the top-level RawSQL emit),
+         honest unhandled-expression carrier cross-dialect; the
+         procedural cross-table-UPDATE helper takes the documented
+         fallback when the conversion degrades. Measured: pg→mysql
+         **68 → 67** (−1). Discovery HOLDS 0. Tests:
+         TestWave193UpdateFromDerived (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

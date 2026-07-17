@@ -455,6 +455,13 @@ def emit_node(node: ASTNode, dialect: str) -> str:
     if isinstance(node, DropStatement):
         return _emit_drop(node, dialect)
     if isinstance(node, RawSQL):
+        if (
+            node.reason.startswith("Unhandled expression type: UPDATE FROM")
+            and SOURCE_DIALECT.get() == dialect
+        ):
+            # Valid, merely unmodeled source SQL is verbatim on its own
+            # engine (wave 193) — the carrier is for cross-dialect only.
+            return node.sql
         # The reason can be a multi-line sqlglot ParseError (source excerpt +
         # ANSI highlighting); embedded raw it would leak its lines 2+ as
         # executable text after the ``--`` prefix — flatten it to one clean

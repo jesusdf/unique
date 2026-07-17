@@ -63,6 +63,7 @@ from unique.core.ast_nodes import (
     SetVariableStatement,
     StatementList,
     TryCatchBlock,
+    UpdateStatement,
     WhileStatement,
     needs_procedural_wrapper,
 )
@@ -3111,6 +3112,10 @@ class ProceduralTransformer:
                     return None
         try:
             ir_node = _conv._convert_update(update_expr)
+            if not isinstance(ir_node, UpdateStatement):
+                # The conversion degraded (derived-table FROM, wave 193)
+                # — take the documented fallback path.
+                return None
             if ir_node.from_clause is None and not ir_node.joins:
                 return None
             return _conv._emit_update(ir_node, self._target)

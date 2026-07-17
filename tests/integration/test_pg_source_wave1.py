@@ -6987,3 +6987,33 @@ class TestWave192MysqlBareOffset:
     def test_limit_offset_untouched_mysql(self) -> None:
         out = _t2("select * from t1 limit 5 offset 2;", "postgresql", "mysql")
         assert re.search(r"(?i)LIMIT 5\s+OFFSET 2", out), out
+
+
+class TestWave193UpdateFromDerived:
+    """wave 193 (pg-corpus): an UPDATE whose FROM source is a derived
+    table (``FROM (VALUES …) s(x)``) was silently DROPPED, leaving
+    dangling alias references. Verbatim on the source engine, honest
+    carrier cross-dialect."""
+
+    _SQL = (
+        "update utrtest set a = 3 - a" " from (values (1), (2)) as s(x) where a = s.x;"
+    )
+
+    def test_verbatim_pg(self) -> None:
+        out = _t2(self._SQL, "postgresql", "postgresql")
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)FROM \(VALUES", out), out
+
+    def test_carrier_mysql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "mysql")
+        assert "UNIQUE:" in out, out
+        assert not re.search(r"(?im)^\s*UPDATE utrtest", out), out
+
+    def test_plain_update_from_table_untouched(self) -> None:
+        out = _t2(
+            "update a set x = b.x from b where a.id = b.id;",
+            "postgresql",
+            "mysql",
+        )
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)UPDATE a", out), out

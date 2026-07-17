@@ -1014,7 +1014,7 @@ def _convert_insert(expr: exp.Insert) -> InsertStatement | RawSQL:
     )
 
 
-def _convert_update(expr: exp.Update) -> UpdateStatement:
+def _convert_update(expr: exp.Update) -> ASTNode:
     """Convert a sqlglot Update to UpdateStatement.
 
     A cross-table ``UPDATE ... SET ... FROM t JOIN s ON ...`` keeps its source
@@ -1041,6 +1041,15 @@ def _convert_update(expr: exp.Update) -> UpdateStatement:
             from_clause = _convert_table_ref(source_table)
             for join_expr in source_table.args.get("joins") or []:
                 joins.append(_convert_join(join_expr))
+        else:
+            # A derived-table source (``FROM (VALUES …) s(x)``) has no
+            # modeled form — it was silently DROPPED, leaving dangling
+            # alias references (wave 193). Same-dialect ships verbatim,
+            # cross-dialect gets the unhandled-expression carrier.
+            return RawSQL(
+                sql=_source_sql(expr),
+                reason="Unhandled expression type: UPDATE FROM derived table",
+            )
 
     where = None
     # Direct arg, not find(): find() would descend into a subquery in SET/FROM
