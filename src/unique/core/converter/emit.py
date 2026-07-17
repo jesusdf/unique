@@ -2228,7 +2228,12 @@ def _emit_update_postgres_from(
     """PostgreSQL: UPDATE t SET c = s.c FROM s [, ...] WHERE <join preds>."""
     target_sql = _emit_table_ref(target, dialect)
     sets = ", ".join(f"{col} = {val}" for col, val in assignments)
-    sources = [_emit_join_table_ref(j.table, dialect) for j in node.joins]
+    sources = []
+    # A FROM source distinct from the target (a self-join ``… FROM t AS v2``)
+    # lives in from_clause, not joins — it must still be listed as a source.
+    if node.from_clause is not None and node.from_clause is not target:
+        sources.append(_emit_join_table_ref(node.from_clause, dialect))
+    sources += [_emit_join_table_ref(j.table, dialect) for j in node.joins]
     result = f"UPDATE {target_sql}\nSET {sets}"
     if sources:
         result += f"\nFROM {', '.join(sources)}"
@@ -2246,11 +2251,39 @@ def _emit_update_mysql_join(
     assignments: list[tuple[str, str]],
     dialect: str,
 ) -> str:
-    """MySQL: UPDATE t JOIN s ON ... SET t.c = s.c [WHERE ...]."""
-    target_sql = _emit_table_ref(target, dialect)
-    joins_sql = "".join(f"\n{_emit_join(j, dialect)}" for j in node.joins)
-    sets = ", ".join(f"{col} = {val}" for col, val in assignments)
-    result = f"UPDATE {target_sql}{joins_sql}\nSET {sets}"
+    """MySQL multi-table UPDATE: ``UPDATE t [, s] [JOIN j ON …] SET … WHERE``.
+
+    A source with an ON condition stays a JOIN (``UPDATE t JOIN s ON …``); a
+    comma/cross source and a self-join FROM source join the comma table list
+    (their correlation stays in WHERE). The SET target column is qualified
+    with the target alias so it is not ambiguous across the listed tables.
+    """
+    comma_tables = [_emit_table_ref(target, dialect)]
+    # A self-join FROM source (distinct from the target) is not in joins.
+    if node.from_clause is not None and node.from_clause is not target:
+        comma_tables.append(_emit_join_table_ref(node.from_clause, dialect))
+    join_clauses: list[str] = []
+    for j in node.joins:
+        if (
+            j.condition is None
+            and not j.using
+            and not j.natural
+            and j.join_type in (JoinType.INNER, JoinType.CROSS)
+        ):
+            comma_tables.append(_emit_join_table_ref(j.table, dialect))
+        else:
+            join_clauses.append(_emit_join(j, dialect))
+    multi = len(comma_tables) > 1 or bool(join_clauses)
+    tgt_alias = target.alias or target.name
+
+    def _qualify(col: str) -> str:
+        return f"{tgt_alias}.{col}" if multi and "." not in col else col
+
+    sets = ", ".join(f"{_qualify(col)} = {val}" for col, val in assignments)
+    result = f"UPDATE {', '.join(comma_tables)}"
+    for jc in join_clauses:
+        result += f"\n{jc}"
+    result += f"\nSET {sets}"
     if node.where is not None:
         result += f"\nWHERE {_emit_condition(node.where, dialect)}"
     return result
@@ -4640,7 +4673,13 @@ def _emit_join(
         )
 
     if isinstance(join.table, SubqueryExpression):
-        table = f"({_emit_select(join.table.query, dialect)})"
+        sub_query = join.table.query
+        if dialect in ("tsql", "oracle"):
+            # A derived table may not carry ORDER BY without a row limit
+            # (T-SQL error 1033 / Oracle ORA-00907 in this position); with
+            # no LIMIT the ordering cannot change the join's result set.
+            sub_query = _strip_unlimited_order_by(sub_query)
+        table = f"({_emit_select(sub_query, dialect)})"
         # A subquery has no TableRef to carry the alias, so add it here
         # (the SubqueryExpression's own alias — e.g. a VALUES relation's —
         # when the JoinClause carries none).

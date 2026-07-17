@@ -605,7 +605,15 @@ def _cross_update_target(node: UpdateStatement) -> TableRef:
     tgt_name = node.table.name
     if node.from_clause is not None:
         fc = node.from_clause
-        if fc.alias == tgt_name or fc.name == tgt_name:
+        # FROM's first source is the update TARGET only when it denotes the
+        # same instance. When the target carries its own alias
+        # (PG ``UPDATE t AS v1 … FROM t AS v2``), a FROM source under a
+        # DIFFERENT alias is a self-join SOURCE, not the target — matching
+        # on the bare table name alone picked the wrong instance.
+        if node.table.alias:
+            if fc.alias == node.table.alias:
+                return fc
+        elif fc.alias == tgt_name or fc.name == tgt_name:
             return fc
     return node.table
 

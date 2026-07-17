@@ -1067,3 +1067,88 @@ class TestZeroPushW2Batch:
         )
         r = self._t(src, "postgresql", "tsql")
         assert "CREATE INDEX ddl_t_c2_idx ON" in r.sql, r.sql
+
+
+class TestZeroPushW3Batch:
+    """Zero-push batch W3 mechanisms."""
+
+    def _t(self, sql, s, t):
+        from unique.core.transpiler import Transpiler
+
+        return Transpiler().transpile(sql, s, t)
+
+    def test_join_derived_table_order_by_stripped_tsql(self) -> None:
+        r = self._t(
+            "SELECT * FROM a FULL OUTER JOIN (SELECT * FROM b ORDER BY b.i DESC) d"
+            " ON a.i = d.i;",
+            "postgresql",
+            "tsql",
+        )
+        assert "ORDER BY" not in r.sql.upper(), r.sql
+
+    def test_join_derived_table_order_by_kept_with_limit(self) -> None:
+        r = self._t(
+            "SELECT * FROM a JOIN (SELECT * FROM b ORDER BY c LIMIT 5) d ON a.x = d.x;",
+            "postgresql",
+            "tsql",
+        )
+        assert "TOP 5" in r.sql, r.sql
+        assert "ORDER BY" in r.sql.upper(), r.sql
+
+    def test_return_query_function_degrades(self) -> None:
+        r = self._t(
+            "create function tf(a1 int) returns table(a int, b int) as $$\n"
+            "begin\n  return query select a1, a1 + 1;\nend$$ language plpgsql;",
+            "postgresql",
+            "tsql",
+        )
+        assert any("RETURN QUERY" in w.message for w in r.warnings), r.sql
+
+    def test_return_next_function_degrades(self) -> None:
+        r = self._t(
+            "create function tf(a1 int) returns table(a int) as $$\n"
+            "begin\n  a := a1; return next;\nend$$ language plpgsql;",
+            "postgresql",
+            "tsql",
+        )
+        assert any("RETURN QUERY" in w.message for w in r.warnings), r.sql
+
+    def test_scalar_function_not_degraded_by_set_return_gate(self) -> None:
+        r = self._t(
+            "create function inc(i int) returns int as $$\n"
+            "begin return i + 1; end$$ language plpgsql;",
+            "postgresql",
+            "tsql",
+        )
+        assert not any("RETURN QUERY" in w.message for w in r.warnings), r.sql
+
+    def test_self_join_update_from_mysql_multi_table(self) -> None:
+        r = self._t(
+            "UPDATE city_view AS v1 SET country_name = v2.country_name"
+            " FROM city_view AS v2 WHERE v2.city_name = 'B' AND v1.city_name = 'L';",
+            "postgresql",
+            "mysql",
+        )
+        assert "UPDATE city_view v1, city_view v2" in r.sql, r.sql
+        assert "v1.country_name = v2.country_name" in r.sql, r.sql
+        assert "FROM" not in r.sql.upper(), r.sql
+
+    def test_comma_source_update_from_mysql(self) -> None:
+        r = self._t(
+            "UPDATE t AS v SET c = 1 FROM s AS a, u AS b"
+            " WHERE v.id = a.id AND a.x = b.x;",
+            "postgresql",
+            "mysql",
+        )
+        assert "UPDATE t v, s a, u b" in r.sql, r.sql
+        assert "v.c = 1" in r.sql, r.sql
+
+    def test_self_join_update_from_postgres(self) -> None:
+        r = self._t(
+            "UPDATE city_view AS v1 SET country_name = v2.country_name"
+            " FROM city_view AS v2 WHERE v2.city_name = 'B' AND v1.city_name = 'L';",
+            "postgresql",
+            "postgresql",
+        )
+        assert "UPDATE city_view v1" in r.sql, r.sql
+        assert "FROM city_view v2" in r.sql, r.sql

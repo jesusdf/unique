@@ -1436,6 +1436,12 @@ class ProceduralTransformer:
             # (select)`` form on T-SQL; a body without one has no
             # faithful spelling (wave 224).
             culprit = "RETURNS TABLE without a returnable query body"
+        elif self._target in ("tsql", "mysql") and self._body_has_set_return(node.body):
+            # ``RETURN QUERY <select>`` / ``RETURN NEXT`` are plpgsql's
+            # set-returning idioms; T-SQL/MySQL table-valued functions use
+            # a different model (fill a table variable / single inline
+            # SELECT) with no faithful mechanical translation.
+            culprit = "set-returning RETURN QUERY/RETURN NEXT body"
         elif self._target == "mysql" and any(
             isinstance(s, DeclareStatement)
             and self._REFCURSOR_TYPE_RE.search(s.data_type.name.strip())
@@ -1474,6 +1480,30 @@ class ProceduralTransformer:
     #: ``(expr)::type`` — the simple-operand ANSI rewrite cannot resolve
     #: it, and the target of a ROW cast is a composite anyway.
     _PAREN_CAST_RE = re.compile(r"\)\s*:\s*:\s*\w+")
+
+    #: plpgsql set-returning RETURN forms captured as a ReturnStatement's
+    #: RawSQL value (``RETURN QUERY <select>`` / ``RETURN NEXT``).
+    _SET_RETURN_RE = re.compile(r"(?is)^\s*(?:QUERY|NEXT)\b")
+
+    def _body_has_set_return(self, value: object) -> bool:
+        """A ``RETURN QUERY``/``RETURN NEXT`` anywhere in the body (they
+        nest inside loops/IFs) — the plpgsql set-returning idiom."""
+        import dataclasses as _dc
+
+        if (
+            isinstance(value, ReturnStatement)
+            and isinstance(value.value, RawSQL)
+            and self._SET_RETURN_RE.match(value.value.sql)
+        ):
+            return True
+        if _dc.is_dataclass(value) and not isinstance(value, type):
+            return any(
+                self._body_has_set_return(getattr(value, f.name))
+                for f in _dc.fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._body_has_set_return(item) for item in value)
+        return False
 
     def _body_has_paren_cast(self, value: object) -> bool:
         import dataclasses as _dc
