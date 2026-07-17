@@ -6926,3 +6926,39 @@ class TestWave189BitwiseNotReplaceSet:
         assert re.search(
             r"(?i)REPLACE INTO t1 \(data, id\)\s*VALUES \(1, 'bar'\)", out
         ), out
+
+
+class TestWave191PgSearchCte:
+    """wave 191 (pg-corpus): PG 14's recursive-CTE ordering clauses
+    (``) SEARCH DEPTH FIRST BY … SET seq`` / ``CYCLE``) — sqlglot
+    cannot parse them; the fallback shredded the statement into
+    fragments (46x of the pg→mysql residue). Verbatim on PG, carrier
+    elsewhere."""
+
+    _SQL = (
+        "with recursive sg(f, t) as ("
+        " select * from g0 union all"
+        " select g.* from g0 g, sg where g.f = sg.t"
+        ") search depth first by f, t set seq"
+        " select * from sg order by seq;"
+    )
+
+    def test_search_clause_verbatim_pg(self) -> None:
+        out = _t2(self._SQL, "postgresql", "postgresql")
+        assert re.search(r"(?i)search depth first by f, t set seq", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_search_clause_carrier_mysql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "mysql")
+        assert "UNIQUE:" in out and "SEARCH/CYCLE" in out, out
+        assert not re.search(r"(?im)^\s*with recursive", out), out
+
+    def test_plain_recursive_cte_untouched(self) -> None:
+        out = _t2(
+            "with recursive t(n) as (select 1 union all"
+            " select n + 1 from t where n < 5) select * from t;",
+            "postgresql",
+            "mysql",
+        )
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)WITH RECURSIVE", out), out

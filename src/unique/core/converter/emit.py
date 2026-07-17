@@ -1201,6 +1201,17 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             f"-- {node.sql}"
         )
 
+    if node.kind == "PG SEARCH CTE":
+        # PG 14 recursive-CTE SEARCH/CYCLE ordering — no spelling on any
+        # other engine (wave 191).
+        if dialect == "postgresql":
+            return node.sql
+        return (
+            f"-- UNIQUE: PostgreSQL's recursive-CTE SEARCH/CYCLE clause has "
+            f"no {dialect} equivalent; statement preserved as a comment\n"
+            f"{_comment_block(node.sql)}"
+        )
+
     # SAVEPOINT: same spelling everywhere but T-SQL (SAVE TRANSACTION).
     # Modeled as a passthrough because sqlglot mis-parses the statement
     # into an Alias (wave 123).

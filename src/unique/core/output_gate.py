@@ -191,6 +191,17 @@ def gate_reason(sql: str, target: str) -> str | None:
             # Nor (valid) SAVE TRANSACTION name (wave 123).
             if re.fullmatch(r"(?is)\s*SAVE\s+TRAN(?:SACTION)?\s+\w+\s*;?\s*", stmt):
                 continue
+        if (
+            target == "postgresql"
+            # PG 14's recursive-CTE SEARCH/CYCLE ordering clause is valid
+            # PG that sqlglot cannot parse (wave 191).
+            and re.search(
+                r"(?is)\)\s*(SEARCH\s+(?:DEPTH|BREADTH)\s+FIRST\s+BY|CYCLE\s+)",
+                stmt,
+            )
+            and re.search(r"(?is)\bWITH\s+RECURSIVE\b", stmt)
+        ):
+            continue
         try:
             sqlglot.parse(stmt, read=dialect, error_level=sqlglot.ErrorLevel.RAISE)
         except Exception as e:

@@ -155,6 +155,22 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
                     f"VALUES ({', '.join(vals)})"
                 )
     if dialect == "postgresql":
+        # PG 14's recursive-CTE ordering clauses (``) SEARCH DEPTH|BREADTH
+        # FIRST BY … SET col`` / ``) CYCLE … SET col``): sqlglot cannot
+        # parse them and the fallback SHREDDED the statement into
+        # fragments (46x in the pg→mysql residue — wave 191). Verbatim on
+        # PG; a documented carrier elsewhere.
+        if re.search(
+            r"(?is)\)\s*(SEARCH\s+(?:DEPTH|BREADTH)\s+FIRST\s+BY|CYCLE\s+)",
+            sql,
+        ) and re.search(r"(?is)\bWITH\s+RECURSIVE\b", sql):
+            return [
+                PassthroughSQL(
+                    sql=sql.rstrip().rstrip(";"),
+                    source_dialect=dialect,
+                    kind="PG SEARCH CTE",
+                )
+            ]
         # PG's ``TABLE name`` shorthand IS ``SELECT * FROM name``; sqlglot
         # mis-parses it into an aliased identifier (silent mangle). Leading
         # line comments are trivia and must not defeat the match (wave 131).

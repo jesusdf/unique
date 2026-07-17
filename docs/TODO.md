@@ -892,7 +892,18 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (unchanged), pg→oracle **35 → 32**: the pg-corpus classes are
          DISJOINT from the mysql-corpus ones. Total pending across
          both corpora: mysql-corpus 80 (35/18/27) + pg-corpus 168
-         (64/72/32) = **248**, all deep singles / ≤3x classes.**
+         (64/72/32) = **248**, all deep singles / ≤3x classes.* Wave 191 (2026-07-17): PG 14's
+         recursive-CTE ordering clauses (``) SEARCH DEPTH|BREADTH
+         FIRST BY … SET col`` / ``CYCLE``) — sqlglot cannot parse
+         them; the fallback SHREDDED the statement into fragments (46
+         dump samples in the pg→mysql residue). Pre-recognized:
+         verbatim on PG (output-gate exemption — sqlglot can't reparse
+         valid PG here), documented carrier elsewhere. Measured:
+         pg→mysql headline stays **72** (the fragments were not all
+         counted as syntax) but output stmts 2939 → 2934 and the
+         fragment class is GONE from the dump — no regressions (strict
+         subset by diff). Discovery HOLDS 0. Tests:
+         TestWave191PgSearchCte (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
