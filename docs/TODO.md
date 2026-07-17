@@ -1216,7 +1216,19 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (mysql→tsql 5817 → 6299 — the split expands multi-drops) with
          syntax stable **20** / pg→mysql **33** — the fix is
          correctness, not a validity-count mover. Discovery HOLDS 0.
-         Tests: TestWave236MultiTableDrop (3).**
+         Tests: TestWave236MultiTableDrop (3).* Wave 237 (2026-07-17,
+         CORRECTNESS): the token rejoin spells a qualified column
+         ``t1.data`` as ``t1 . data`` (spaces), and the fixed-width
+         lookbehind protecting dotted names from the variable rename
+         was blind across the space — a column whose name matched a
+         local variable got mangled to ``t1. = @data`` (silent
+         corruption). The rename now captures the optional
+         ``<qual> .`` prefix and preserves it. Measured: mysql→tsql
+         stable **20** (the corpus's setcontext also has a genuinely
+         schema-ambiguous ``REPLACE … SET data = data`` where the RHS
+         column-vs-variable is undecidable); the fix prevents the
+         mangle class elsewhere. Discovery HOLDS 0. Tests:
+         TestWave237DottedNameRenameSpaces (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

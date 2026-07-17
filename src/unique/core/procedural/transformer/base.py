@@ -596,9 +596,18 @@ class ProceduralTransformer:
                     # variable — ``count(*)`` became ``@count(*)`` when a
                     # local named count existed (wave 219). Dotted names
                     # (t.count) are columns, not the variable either.
+                    # An optional ``<qualifier> .`` prefix (possibly
+                    # space-separated, as the token rejoin spells
+                    # ``t1 . data``) marks a COLUMN, not the variable —
+                    # capture and preserve it so the fixed-width
+                    # lookbehind's blind spot across spaces is closed
+                    # (wave 237).
+                    def _rn(m: re.Match[str], _new: str = new_name) -> str:
+                        return m.group(0) if m.group(1) else _new
+
                     segment = re.sub(
-                        rf"(?i)(?<![.@\w]){re.escape(old_name)}\b(?!\s*\()",
-                        new_name,
+                        rf"(?i)(?<![@\w])(\w+\s*\.\s*)?{re.escape(old_name)}\b(?!\s*\()",
+                        _rn,
                         segment,
                     )
                 return segment

@@ -8104,3 +8104,30 @@ class TestWave236MultiTableDrop:
     def test_single_drop_untouched(self) -> None:
         out = _t2("drop table a;", "postgresql", "mysql")
         assert out.upper().count("DROP TABLE") == 1, out
+
+
+class TestWave237DottedNameRenameSpaces:
+    """wave 237 (mysql-corpus): the token rejoin spells a qualified
+    column ``t1.data`` as ``t1 . data`` (spaces); the fixed-width
+    lookbehind protecting dotted names was blind across the space, so
+    a column whose name matched a local variable got mangled to
+    ``t1. = @data``."""
+
+    def test_dotted_column_var_collision(self) -> None:
+        out = _t2(
+            "create procedure sc() begin declare data int default 2;"
+            " update t1 set id = 'kaka', data = 3"
+            " where t1.data = data; end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)WHERE t1\.data = @data", out), out
+        assert "t1. =" not in out, out
+
+    def test_plain_variable_still_renames(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare v int;" " set v = v + 1; end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)SET @v = @v \+ 1", out), out
