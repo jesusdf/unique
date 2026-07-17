@@ -7700,3 +7700,31 @@ class TestWave219VarRenameFunctionCalls:
             "tsql",
         )
         assert "t1.@data" not in out, out
+
+
+class TestWave220ChainedComparison:
+    """wave 220 (mysql-corpus, three fronts): MySQL's chained
+    comparison (``(x IS NULL) = y = 1000``) compares a predicate's
+    truth VALUE — the exact tri-state CASE, recursively; the PG leg
+    only for mysql source (its own boolean columns compare
+    legitimately)."""
+
+    _SQL = "select * from t0 right join t2" " on not (t1.c0 is null) = t2.c0 = 1000;"
+
+    def test_chained_tsql(self) -> None:
+        out = _t2(self._SQL, "mysql", "tsql")
+        up = " ".join(out.upper().split())
+        assert "CASE WHEN T1.C0 IS NULL THEN 1" in up, out
+        assert "= 1000" in up, out
+
+    def test_chained_pg(self) -> None:
+        out = _t2(self._SQL, "mysql", "postgresql")
+        assert "CASE WHEN" in out.upper(), out
+
+    def test_pg_source_boolean_untouched(self) -> None:
+        out = _t2(
+            "select * from t where (a is null) = b;",
+            "postgresql",
+            "postgresql",
+        )
+        assert "CASE" not in out.upper(), out

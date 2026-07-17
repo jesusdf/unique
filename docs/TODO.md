@@ -1091,7 +1091,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          **28 → 26** (99.6%; the wave-218 CALL fix had also rippled
          31 → 28 in the interim remeasure), pg→tsql stable 38.
          Discovery HOLDS 0. Tests: TestWave219VarRenameFunctionCalls
-         (2).**
+         (2).*** Wave 220 (2026-07-17): MySQL's chained comparison
+         (``(x IS NULL) = y = 1000``) compares a predicate's truth
+         VALUE — now the exact recursive tri-state CASE on
+         T-SQL/Oracle and (mysql-source only) PG, including the PG
+         NOT-recursion the shape needs. Measured: mysql→tsql/pg stable
+         **26/18** (the corpus instances carry out-of-scope refs);
+         fix stands on its tests. Discovery HOLDS 0. Tests:
+         TestWave220ChainedComparison (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

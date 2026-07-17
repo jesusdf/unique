@@ -904,20 +904,22 @@ _PREDICATE_OPERATORS = frozenset(
 )
 
 
+def _is_predicate_node(v: ASTNode) -> bool:
+    if isinstance(v, BinaryOp) and v.operator in _PREDICATE_OPERATORS:
+        return True
+    # sqlglot spells IS NOT NULL as NOT(IS NULL) — still a predicate.
+    return (
+        isinstance(v, UnaryOp)
+        and v.operator == UnaryOperator.NOT
+        and _is_predicate_node(v.operand)
+    )
+
+
 def _predicate_int_comparison(node: ASTNode) -> ASTNode | None:
     """Rewrite ``<predicate> = 1`` / ``= 0`` / ``IS TRUE`` / ``IS FALSE``
     (MySQL's boolean-as-number) to the predicate itself or its negation;
     None when the shape does not match."""
-
-    def is_predicate(v: ASTNode) -> bool:
-        if isinstance(v, BinaryOp) and v.operator in _PREDICATE_OPERATORS:
-            return True
-        # sqlglot spells IS NOT NULL as NOT(IS NULL) — still a predicate.
-        return (
-            isinstance(v, UnaryOp)
-            and v.operator == UnaryOperator.NOT
-            and is_predicate(v.operand)
-        )
+    is_predicate = _is_predicate_node
 
     if not (
         isinstance(node, BinaryOp)
@@ -1000,6 +1002,34 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
             # value to a number; T-SQL has no boolean value position.
             return _emit_condition(rewritten, dialect)
         node = _comparisonize_literals(node)
+    if (
+        dialect == "postgresql"
+        and SOURCE_DIALECT.get() == "mysql"
+        and isinstance(node, UnaryOp)
+        and node.operator == UnaryOperator.NOT
+        and isinstance(node.operand, BinaryOp)
+    ):
+        # PG needs the same NOT-recursion as T-SQL/Oracle for MySQL
+        # truthiness shapes (wave 220).
+        return f"NOT ({_emit_condition(node.operand, dialect)})"
+    if (
+        (
+            dialect in ("tsql", "oracle")
+            or (dialect == "postgresql" and SOURCE_DIALECT.get() == "mysql")
+        )
+        and isinstance(node, BinaryOp)
+        and node.operator in (BinaryOperator.EQ, BinaryOperator.NEQ)
+        and _is_predicate_node(node.left)
+        and not _is_predicate_node(node.right)
+    ):
+        # The general chained comparison (``(x IS NULL) = y``, ``… =
+        # 1000``): the predicate's MySQL truth VALUE is the exact
+        # tri-state CASE (wave 220; the PG leg only for mysql source —
+        # PG's own boolean columns compare legitimately).
+        cond = _emit_condition(node.left, dialect)
+        right = _emit_expression(node.right, dialect)
+        op = "=" if node.operator == BinaryOperator.EQ else "<>"
+        return f"CASE WHEN {cond} THEN 1 WHEN NOT ({cond}) THEN 0 END " f"{op} {right}"
     if (
         dialect in ("tsql", "oracle")
         and isinstance(node, BinaryOp)
