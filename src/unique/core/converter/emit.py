@@ -3300,6 +3300,22 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         return f"REPLICATE({args})"
     if fn_name == "CONCAT" and len(node.args) == 1 and dialect in ("tsql", "oracle"):
         return _emit_expression(node.args[0], dialect)
+    # A CONCAT chain emits ONE flat call on MySQL (nested CONCATs are valid
+    # but the flat form is the canonical output both pipelines agree on).
+    if fn_name == "CONCAT" and dialect == "mysql" and len(node.args) >= 2:
+        flat: list[str] = []
+
+        def _gather_concat_args(n: ASTNode) -> None:
+            inner = _unwrap_sqlglot_wrappers(n)
+            if isinstance(inner, FunctionCall) and inner.name.upper() == "CONCAT":
+                for a in inner.args:
+                    _gather_concat_args(a)
+            else:
+                flat.append(_emit_expression(n, dialect))
+
+        for concat_arg in node.args:
+            _gather_concat_args(concat_arg)
+        return f"CONCAT({', '.join(flat)})"
     # Same for a single-argument COALESCE (T-SQL error 1088: at least
     # two arguments) — it IS its argument (wave 161).
     if fn_name == "COALESCE" and len(node.args) == 1 and dialect == "tsql":
@@ -4122,7 +4138,20 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         if dialect == "tsql":
             op = "+"
         elif dialect == "mysql":
-            return f"CONCAT({left}, {right})"
+            # MySQL has no concat operator at all — and a chain must emit
+            # ONE flat CONCAT (the nested form is valid but the flat one is
+            # the canonical output both pipelines agree on).
+            parts: list[str] = []
+
+            def _gather_concat(n: ASTNode) -> None:
+                if isinstance(n, BinaryOp) and n.operator == BinaryOperator.CONCAT:
+                    _gather_concat(n.left)
+                    _gather_concat(n.right)
+                else:
+                    parts.append(_emit_expression(n, dialect))
+
+            _gather_concat(node)
+            return f"CONCAT({', '.join(parts)})"
 
     if node.operator == BinaryOperator.MOD and dialect == "oracle":
         return f"MOD({left}, {right})"

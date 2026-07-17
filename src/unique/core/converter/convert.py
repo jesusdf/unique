@@ -293,7 +293,11 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
             expression = transforms.eliminate_join_marks(expression)
         # T-SQL "+" on strings is concatenation; rewrite it to "||" so it maps
         # to the target's concat operator (sqlglot keeps it as arithmetic "+").
-        if dialect == "tsql":
+        # Oracle/PostgreSQL sources get the same charity: their "+" over a
+        # recognizable string is malformed source whose intent is concat (the
+        # text path's stance). MySQL is excluded — its "+" is numeric by
+        # definition, string operands included.
+        if dialect in ("tsql", "oracle", "postgresql"):
             expression = _rewrite_tsql_string_concat(
                 expression  # type: ignore[arg-type]
             )

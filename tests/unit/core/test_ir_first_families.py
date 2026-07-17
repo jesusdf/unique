@@ -266,3 +266,25 @@ class TestCommentsInIrFragments:
 
         out = Transpiler().transpile(self.SRC, "tsql", "oracle").sql
         assert "= 'U'" in out.replace("V_M_TIPO = 'U'", "= 'U'"), out
+
+
+class TestMysqlConcatShape:
+    """MySQL concat is flat and never ships '+' (numeric there) — M3 F13."""
+
+    def test_oracle_plus_string_becomes_concat(self) -> None:
+        out = _ir("oracle", "mysql", "SELECT 'pre' || v_a FROM DUAL")
+        assert out is not None and "CONCAT('pre', v_a)" in out
+
+    def test_chain_flattens(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        t._string_vars = {"v_a", "v_b"}
+        out = t._ir_transpile_dml("SELECT 'a' + v_a + 'b' + v_b")
+        assert out is not None and "CONCAT('a', v_a, 'b', v_b)" in out, out
+
+    def test_oracle_source_plus_with_string_literal(self) -> None:
+        out = _ir("oracle", "mysql", "SELECT 'pre' + v_a FROM DUAL")
+        assert out is not None and "CONCAT('pre', v_a)" in out, out
+
+    def test_mysql_source_plus_stays_numeric(self) -> None:
+        out = _ir("mysql", "tsql", "SELECT a + b FROM t")
+        assert out is not None and "CONCAT" not in out.upper()
