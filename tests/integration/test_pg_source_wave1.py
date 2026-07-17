@@ -7119,3 +7119,23 @@ class TestWave197AliasedUpdateReturning:
         )
         assert re.search(r"(?i)UPDATE t SET", out), out
         assert "OUTPUT INSERTED.A" in out.upper(), out
+
+
+class TestWave198BareDerivedTables:
+    """wave 198 (pg-corpus): T-SQL/MySQL require an alias on every
+    derived table — PG's ``FROM ((SELECT 1 AS x))`` shipped alias-less
+    (error 102 / 1248); uq_dtN aliases inject structurally."""
+
+    _SQL = "SELECT * FROM ((SELECT 1 AS x)), ((SELECT 2 AS y));"
+
+    def test_aliases_injected_tsql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "tsql")
+        assert re.search(r"(?i)\)\s*AS uq_dt\d+", out), out
+
+    def test_aliases_injected_mysql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "mysql")
+        assert re.search(r"(?i)\)\s*AS uq_dt\d+", out), out
+
+    def test_bare_kept_pg(self) -> None:
+        out = _t2(self._SQL, "postgresql", "postgresql")
+        assert "uq_dt" not in out, out

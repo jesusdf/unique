@@ -946,7 +946,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          OUTPUT-prefixer so INSERTED. qualification survives (the
          early-return first cut lost it). Measured: pg→tsql
          **58 → 55** (−3). Discovery HOLDS 0. Tests:
-         TestWave197AliasedUpdateReturning (2).**
+         TestWave197AliasedUpdateReturning (2).* Wave 198 (2026-07-17):
+         T-SQL/MySQL require an alias on every derived table — PG's
+         bare ``FROM ((SELECT 1 AS x))`` shipped alias-less (error 102
+         / MySQL 1248; the double parens are legal once aliased,
+         verified live). ``uq_dtN`` aliases inject structurally in the
+         PAREN JOIN passthrough. Measured: pg→tsql **55 → 54** (−1).
+         Discovery HOLDS 0. Tests: TestWave198BareDerivedTables (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

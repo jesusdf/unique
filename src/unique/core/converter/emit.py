@@ -983,6 +983,24 @@ def _prefix_tsql_output_items(e: exp.Expression) -> None:
             target.set("table", exp.to_identifier(prefix))
 
 
+def _alias_bare_derived_tables(sql: str, source_dialect: str) -> str | None:
+    """Give every alias-less derived table in relation position a
+    ``uq_dtN`` alias (T-SQL error 102 / MySQL 1248 without one; the
+    double parens themselves are legal once aliased — wave 198)."""
+    try:
+        tree = sqlglot.parse_one(sql, read=sqlglot_dialect_name(source_dialect))
+    except Exception:
+        return None
+    n = 0
+    for sq in tree.find_all(exp.Subquery):
+        if not sq.alias and isinstance(sq.parent, (exp.From, exp.Join)):
+            n += 1
+            sq.set("alias", exp.TableAlias(this=exp.to_identifier(f"uq_dt{n}")))
+    if n == 0:
+        return None
+    return tree.sql(dialect=sqlglot_dialect_name(source_dialect))
+
+
 def _flatten_paren_joins(sql: str, source_dialect: str) -> str | None:
     """Flatten a parenthesized INNER/CROSS join tree into the equivalent
     flat CROSS chain with the ON conditions ANDed into WHERE. None when
@@ -1097,6 +1115,14 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         flattened = _flatten_paren_joins(node.sql, node.source_dialect)
         if flattened is not None:
             node = dataclasses.replace(node, sql=flattened)
+
+    # T-SQL/MySQL require an alias on every derived table — PG's bare
+    # ``FROM ((SELECT 1 AS x))`` shipped alias-less (error 102 / 1248;
+    # wave 198). Inject uq_dtN aliases structurally.
+    if node.kind == "PAREN JOIN" and dialect in ("tsql", "mysql"):
+        aliased = _alias_bare_derived_tables(node.sql, node.source_dialect)
+        if aliased is not None:
+            node = dataclasses.replace(node, sql=aliased)
 
     # T-SQL ADD CONSTRAINT ... PRIMARY KEY/UNIQUE with storage clauses:
     # rebuilt directly (sqlglot mangles it into comma-joined actions).
