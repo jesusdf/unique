@@ -57,6 +57,20 @@ engines and indicates the transpilation support status for each.
 > four procedural fixtures validate **live** with 0 errors, so several
 > "⚠️ Partial" procedural rows are effectively full today. See `docs/DONE.md`
 > for the detailed history.
+>
+> **2026-07-17 — direction-residue campaign (waves 103–239, `docs/DONE.md`
+> §36):** the PostgreSQL- and MySQL-source directions were corpus-measured to
+> **98.8–99.8% live validity** and promoted to Tier 1 (see `docs/STATUS.md`).
+> Folded into the rows below: an IR array model (PG arrays preserved pg→pg,
+> whole-statement carriers elsewhere), set-returning functions in FROM
+> (Oracle `TABLE(fn())`; MySQL carrier), boolean truthiness / predicates in
+> value position comparisonized for strict engines, quantified `ALL`/`ANY`
+> subqueries modeled, PG `DELETE … USING` → multi-table/correlated forms,
+> data-modifying CTEs, hex literals per engine, dozens of procedural
+> lexer/parser shapes (plpgsql `ALIAS FOR`, `FOREACH`, block labels, `::`
+> and `..` tokens, MySQL labeled bodies, `INSERT … SET`, admin statements),
+> and per-target impossibility gates that degrade honestly instead of
+> shipping invalid SQL (see `docs/03-unsupported.md` §7).
 
 **Legend**
 
@@ -130,7 +144,7 @@ engines and indicates the transpilation support status for each.
 | CUBE | ✓ | ✓ | ✓ | N/A | ⚠️ |
 | GROUPING SETS | ✓ | ✓ | ✓ | N/A | ⚠️ |
 | Aggregate functions (COUNT, SUM, AVG, MIN, MAX) | ✓ | ✓ | ✓ | ✓ | ✅ |
-| STRING_AGG / LISTAGG / GROUP_CONCAT | ✓(2017+) | ✓ | ✓ | ✓ | ✅ |
+| STRING_AGG / LISTAGG / GROUP_CONCAT | ✓(2017+) | ✓ | ✓ | ✓ | ✅ NULL/expression separators handled per target; the impossible forms (T-SQL `STRING_AGG(DISTINCT …)`, MySQL expression separator / DISTINCT in non-builtin aggregates) degrade with a documented carrier |
 
 ### 1.5 Window Functions
 
@@ -139,7 +153,7 @@ engines and indicates the transpilation support status for each.
 | ROW_NUMBER() | ✓ | ✓ | ✓ | ✓ (8.0+) | ✅ |
 | RANK() / DENSE_RANK() | ✓ | ✓ | ✓ | ✓ (8.0+) | ✅ |
 | NTILE() | ✓ | ✓ | ✓ | ✓ (8.0+) | ✅ |
-| LAG() / LEAD() | ✓ | ✓ | ✓ | ✓ (8.0+) | ✅ |
+| LAG() / LEAD() / NTH_VALUE() | ✓ | ✓ | ✓ | ✓ (8.0+) | ✅ MySQL requires a constant offset — a non-constant offset (and `NTILE(NULL)`) degrades there with a documented carrier |
 | FIRST_VALUE / LAST_VALUE | ✓ | ✓ | ✓ | ✓ (8.0+) | ✅ |
 | Frame specs (ROWS/RANGE BETWEEN) | ✓ | ✓ | ✓ | ✓ (8.0+) | ✅ |
 | Named window (WINDOW clause) | N/A | N/A | ✓ | ✓ (8.0+) | ⚠️ Inline expansion |
@@ -151,8 +165,13 @@ engines and indicates the transpilation support status for each.
 | Scalar subqueries | ✓ | ✓ | ✓ | ✓ | ✅ |
 | Correlated subqueries | ✓ | ✓ | ✓ | ✓ | ✅ |
 | CTE (WITH clause) | ✓ | ✓ | ✓ | ✓ (8.0+) | ✅ |
-| Recursive CTE | ✓ | ✓ | ✓ | ✓ (8.0+) | ✅ |
+| Recursive CTE | ✓ | ✓ | ✓ | ✓ (8.0+) | ✅ `RECURSIVE` keyword per dialect (required on PG/MySQL, absent on T-SQL/Oracle); CTE column lists and VALUES bodies carried |
 | Materialized CTE hints | N/A | ✓ | ✓ | N/A | ⚠️ Hint removed if unsupported |
+| Non-top-level WITH (in a set-op arm / derived table / subquery) | N/A | N/A | ✓ | ✓ (8.0+) | ⚠️ preserved on PG/MySQL; T-SQL/Oracle allow CTEs only statement-top — documented carrier (INSERT-source CTEs are hoisted instead) |
+| Data-modifying CTE (`WITH x AS (INSERT/UPDATE/DELETE … RETURNING) …`) | N/A | N/A | ✓ | N/A | ⚠️ preserved on PG, documented carrier elsewhere |
+| SEARCH / CYCLE clauses (recursive-CTE ordering, PG 14+) | N/A | N/A | ✓ | N/A | ⚠️ verbatim on PG, documented carrier elsewhere |
+| Set-returning function in FROM (`FROM generate_series(…) [WITH ORDINALITY]`) | ✓ | ✓ | ✓ | N/A | ⚠️ PG native, Oracle `TABLE(fn(args))`; MySQL has no table functions (JSON_TABLE aside) — documented carrier |
+| Quantified subqueries (`> ALL / ANY / SOME (SELECT …)`) | ✓ | ✓ | ✓ | ✓ | ✅ modeled in the IR — the inner query maps fully |
 
 ### 1.7 Set Operations
 
@@ -175,7 +194,7 @@ engines and indicates the transpilation support status for each.
 | UPDATE | ✓ | ✓ | ✓ | ✓ | ✅ |
 | UPDATE with JOIN | ✓ | ✓ | ✓ | ✓ | ✅ (syntax adaptation) |
 | DELETE | ✓ | ✓ | ✓ | ✓ | ✅ |
-| DELETE with JOIN | ✓ | N/A | ✓ (USING) | ✓ | ⚠️ |
+| DELETE with JOIN / USING | ✓ | N/A | ✓ (USING) | ✓ | ✅ PG `USING` → T-SQL/MySQL multi-table DELETE, Oracle correlated `EXISTS`; derived-table sources degrade with a documented carrier |
 | MERGE statement | ✓ | ✓ | ✓ (15+) | N/A | ⚠️ MySQL → INSERT ON DUP + UPDATE |
 | TRUNCATE | ✓ | ✓ | ✓ | ✓ | ✅ |
 | OUTPUT / RETURNING clause | ✓ (OUTPUT) | ✓ (RETURNING) | ✓ (RETURNING) | N/A | ⚠️ No MySQL equivalent |
@@ -244,8 +263,9 @@ engines and indicates the transpilation support status for each.
 | UUID/GUID | UNIQUEIDENTIFIER | RAW(16) | UUID | CHAR(36)/BINARY(16) | ⚠️ |
 | JSON | NVARCHAR(MAX) | JSON (21c+) | JSON, JSONB | JSON | ⚠️ |
 | XML | XML | XMLTYPE | XML | N/A | ⚠️ |
-| Array | N/A | VARRAY | ARRAY | N/A | ❌ |
-| User-defined types | ✓ | ✓ | ✓ | N/A | ❌ |
+| Array | N/A | VARRAY | ARRAY | N/A | ⚠️ modeled in the IR: PG constructors/subscripts/casts preserved faithfully pg→pg; whole-statement documented carrier on other targets (see [03-unsupported §1.4](03-unsupported.md)) |
+| Hex literals (`0x…` / `x'…'`) | ✓ (0x…) | ✓ (HEXTORAW) | ✓ (bytea) | ✓ (x'…') | ✅ per-engine spellings |
+| User-defined types | ✓ | ✓ | ✓ | N/A | ❌ (incl. composite/rowtype-typed routine parameters — documented carrier off PG) |
 
 ---
 
@@ -304,8 +324,9 @@ engines and indicates the transpilation support status for each.
 |---------|-------|--------|------------|-------|------------------|
 | CASE WHEN | ✓ | ✓ | ✓ | ✓ | ✅ |
 | IIF() | ✓ (IIF) | CASE WHEN | CASE WHEN | IF() | ✅ Oracle/PostgreSQL → `CASE WHEN`; MySQL `IF()`; T-SQL `IIF()` (live-validated) |
-| DECODE() | N/A | ✓ | N/A | N/A | ✅ → CASE WHEN |
+| DECODE() | N/A | ✓ | N/A | N/A | ✅ → CASE WHEN (PG's binary 2-arg `DECODE(x,'hex')` maps to CONVERT/HEXTORAW/UNHEX instead) |
 | GREATEST / LEAST | N/A (2022+) | ✓ | ✓ | ✓ | ✅ |
+| Numeric truthiness / predicates as values | N/A | N/A | partial | ✓ | ✅ MySQL/PG bare-value conditions are comparisonized (`<> 0`) for strict engines, and predicates in value position (`(x IS NULL) = y`, `SELECT a IN (…)`) become the exact tri-state CASE |
 
 ### 5.6 Type Conversion
 
@@ -375,7 +396,8 @@ engines and indicates the transpilation support status for each.
 | DECLARE CURSOR | ✓ | ✓ | ✓ | ✓ | ✅ |
 | OPEN / FETCH / CLOSE | ✓ | ✓ | ✓ | ✓ | ✅ |
 | Cursor attributes | @@FETCH_STATUS | %FOUND, %NOTFOUND | FOUND | ✓ | ⚠️ |
-| Ref cursors | N/A | ✓ (SYS_REFCURSOR) | ✓ (REFCURSOR) | N/A | ⚠️ |
+| Ref cursors | N/A | ✓ (SYS_REFCURSOR) | ✓ (REFCURSOR) | N/A | ⚠️ Oracle↔PG type-mapped; a routine declaring or returning a ref cursor degrades whole on T-SQL/MySQL with a documented carrier |
+| FETCH directions (NEXT/LAST/ABSOLUTE/RELATIVE) | ✓ | N/A | ✓ | N/A | ⚠️ native on PG/T-SQL (incl. SCROLL); Oracle/MySQL cursors are forward-only — documented carrier |
 
 ### 6.6 Dynamic SQL
 
@@ -425,12 +447,12 @@ engines and indicates the transpilation support status for each.
 
 | Category | Total Features | ✅ Full | ⚠️ Partial | ❌ Out of Scope |
 |----------|---------------|---------|------------|-----------------|
-| DQL (SELECT, JOINs, etc.) | 48 | 38 | 9 | 1 |
-| DML (INSERT, UPDATE, etc.) | 11 | 7 | 4 | 0 |
+| DQL (SELECT, JOINs, etc.) | 53 | 39 | 13 | 1 |
+| DML (INSERT, UPDATE, etc.) | 11 | 8 | 3 | 0 |
 | DDL (Tables, Indexes, etc.) | 20 | 14 | 5 | 1 |
-| Data Types | 16 | 10 | 5 | 1 |
-| Built-in Functions | 32 | 24 | 8 | 0 |
-| Procedural SQL | 26 | 14 | 10 | 2 |
+| Data Types | 17 | 11 | 6 | 0 |
+| Built-in Functions | 33 | 25 | 8 | 0 |
+| Procedural SQL | 27 | 14 | 11 | 2 |
 | Transaction & DCL | 6 | 4 | 2 | 0 |
 | Triggers | 5 | 1 | 4 | 0 |
-| **Total** | **164** | **112 (68%)** | **47 (29%)** | **5 (3%)** |
+| **Total** | **172** | **116 (67%)** | **52 (30%)** | **4 (2%)** |

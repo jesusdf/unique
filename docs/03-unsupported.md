@@ -34,8 +34,10 @@ prefix/hash index by hand.
 
 ## 1. Fully Unsupported (❌)
 
-These features will **never** be transpiled. They are silently dropped or
-emitted as comments in the output.
+These features will **never** be transpiled. They are degraded to a documented
+carrier comment (`/* UNIQUE: … */` or `-- UNIQUE: …`) **with a matching
+`warnings`/`unsupported` entry** in the result — nothing is dropped silently
+(the project's no-silent-loss invariant).
 
 ### 1.1 GOTO Statements
 
@@ -389,3 +391,81 @@ Validated against a 1,900-line real-world PL/SQL file (25 procedures):
 
 These limitations are reported as **warnings** during transpilation so the
 affected statements can be reviewed manually.
+
+---
+
+## 7. Per-target impossibility gates (2026-07 direction-residue campaign)
+
+The corpus campaign (waves 103–239, `docs/DONE.md` §36) live-validated the
+PostgreSQL- and MySQL-source directions against all four real engines and
+added **whole-statement degrade gates** for constructs the target engine
+simply cannot express. Each gate emits the documented carrier + warning —
+never invalid SQL, never a silent drop.
+
+### To T-SQL
+
+- **CTEs are statement-top only** — a `WITH` inside a set-operation arm,
+  derived table, or subquery has no spelling (an INSERT-source CTE is hoisted
+  instead of degraded). Same on Oracle.
+- **Functions cannot write** (error 443): a PG function with side-effecting
+  DML that stays a function (non-void, no OUT params, non-trigger) degrades;
+  void/OUT-param functions become procedures instead. Functions can't access
+  temp tables (2772) or return cursors either.
+- **`APPLY` takes no `ON`** — only a `LATERAL … ON TRUE` join maps; a lateral
+  join with a real condition degrades. Same on Oracle.
+- **No expression indexes**; `STRING_AGG(DISTINCT …)` has no form; `EXEC`
+  arguments take only variables/literals (expression arguments are hoisted
+  into typed variables automatically).
+- `SET ROLE` exists everywhere but T-SQL (carrier there only).
+
+### To MySQL
+
+- **No table functions** except `JSON_TABLE` — a set-returning function in
+  FROM position degrades whole.
+- **`LAG`/`LEAD`/`NTH_VALUE` need constant offsets; `NTILE` a positive
+  integer**; `GROUP_CONCAT SEPARATOR` takes a literal only, and `DISTINCT`
+  inside non-builtin aggregates is a hard error — all degrade.
+- **Cursors bind at declaration** — ref-cursor variables (opened dynamically)
+  have no form; routines declaring/returning them degrade (also on T-SQL).
+- `WITH` is legal only inside an INSERT's SELECT (relocated automatically);
+  index prefix lengths (`KEY (a(132))`) are stripped (whole-column keys are a
+  safe superset).
+- MySQL-only **admin statements** (`FLUSH`/`RESET`/`PURGE`/`KILL`/`SHOW`/
+  `REPAIR`/`OPTIMIZE`/`LOCK`/`INTO OUTFILE`…) ship verbatim on MySQL and
+  degrade to carriers on every other target.
+
+### To Oracle
+
+- **No parenthesized join trees in FROM** (ORA-00907): pure INNER/CROSS trees
+  flatten to the equivalent CROSS chain + WHERE; outer-join trees degrade
+  (NULL-extension semantics would change).
+- No `@@` globals, no `CAST(… AS BINARY)`, no `ALTER VIEW … AS` (rewritten to
+  `CREATE OR REPLACE VIEW`), and PL/SQL cannot run static DDL (wrapped in
+  `EXECUTE IMMEDIATE`). Locals shadowing parameters (PLS-00410) are renamed.
+
+### PostgreSQL-only shapes (carried on every other target)
+
+- Composite **row values** (`ELSE (a, b, c)`, row tuples as columns,
+  whole-row casts `CAST(alias.* AS type)`, bare whole-row `OLD`/`NEW` in
+  trigger bodies).
+- `SEARCH`/`CYCLE` recursive-CTE clauses, data-modifying CTEs,
+  `GENERATE_SERIES(…) OVER ()`, `TRUNCATE` triggers (kept where the target
+  has the event), **non-SQL-language functions** (`LANGUAGE C`/internal —
+  verbatim pg→pg, carrier elsewhere), `INTERVAL`-type casts (no such data
+  type on MySQL/T-SQL).
+
+### Statement-level architecture floor (not closable by more mappings)
+
+After the campaign, the six corpus directions hold **98.8–99.8% live
+validity**; the residue (133 statements) is three classes that need
+**schema-aware transpilation**, declared out of scope for the current
+statement-level architecture:
+
+1. **Schema-dependent ambiguity** — e.g. a column whose name equals a local
+   variable (the right-hand side of `SET data = data` is undecidable without
+   the table's columns), `SELECT *` expansion into variables.
+2. **Adversarial error-path inputs** (pg_regress corpora): corrupt latin1
+   identifiers, `PREPARE`/`EXECUTE` dynamic SQL, custom aggregates.
+3. **`RETURN QUERY` table functions** — a real multi-file feature (parser +
+   IR + three emitters), tracked separately; attempted and cleanly reverted
+   once to avoid a pg→pg regression.

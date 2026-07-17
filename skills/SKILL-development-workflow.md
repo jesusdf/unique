@@ -115,10 +115,13 @@ of your fix, that is the rule working — do the structural version or escalate.
    updated. Direction maturity is stated as a measured validity %, never as
    "complete".
 
-## The validity-wave cadence (proven 2026-07-15, waves 4-19)
+## The validity-wave cadence (proven 2026-07-15 → 2026-07-17, waves 4-239)
 
 Corpus-driven direction work follows a measured loop; each wave is one
-mechanism (never one spelling — see the circuit breakers):
+mechanism (never one spelling — see the circuit breakers). **Both shipped
+corpora (pg-source, mysql-source) are at their user-declared architectural
+floor (2026-07-17, `docs/DONE.md` §36) — do not resume waves on them; this
+cadence applies to NEW corpora or fidelity targets:**
 
 1. **Classify** the sweep's own failure dumps (`SWEEP_DUMP_FILE` hook): group
    by the first NON-comment code line's leading tokens; sample real blocks

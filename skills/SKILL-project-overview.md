@@ -130,20 +130,34 @@ Each completed feature should have corresponding tests in the test suite.
 `audit/2026-07-08/`). Audits are ground truth about real defects and must not
 be contradicted by STATUS/README claims.
 
-**Active workstream (since 2026-07-11): the pg-source validity waves.** The
-upstream PostgreSQL regression corpus (source-validated) is swept against the
-live engines per direction; every wave fixes ONE mechanism and re-measures
-(the full log with per-wave numbers and the measured commit hash lives in
-`docs/TODO.md` §3). Method in the development-workflow skill ("validity-wave
-cadence"). Architecture facts added by those waves worth knowing before
-touching the code: the procedural lexer tokenizes PG dollar-quotes as STRING
-tokens (normalized to single-quote form) and `$n` positional params as one
-token; the parser aliases `$n` to parameter names at token level and splices
-string bodies (old-style quoted and dollar-quoted) through one canonical
-path; `SOURCE_DIALECT` is a converter ContextVar (set per transpile, like
-`TEMP_TABLES`) for source-dependent normalizations; and
-`Transformer.transform` runs statement-level whole-degrade gates for
-constructs with no target equivalent (arrays, PG catalog internals).
+**The corpus validity campaigns are CLOSED (2026-07-17, user-declared
+architectural floor).** The pg-source and mysql-source directions were swept
+wave-by-wave against the live engines (waves 4–95 "corpus validity", then
+103–239 "direction-residue"); final state: **98.8–99.8% live validity** on
+all six directions, silent-gap discovery pg→pg **0** from 287. The full
+per-wave logs live in `docs/DONE.md` (wave campaign section + §36); measured
+percentages in `docs/STATUS.md`. **Do not resume waves on these corpora**
+without a new corpus or a fidelity target — the residue is architectural
+(schema-dependent ambiguity, adversarial pg_regress error-path inputs,
+`RETURN QUERY` table functions). Method preserved in the
+development-workflow skill ("validity-wave cadence") for future corpora.
+Architecture facts added by those waves worth knowing before touching the
+code: the procedural lexer tokenizes PG dollar-quotes as STRING tokens
+(normalized to single-quote form), `$n` positional params, `::` and `..`
+each as ONE token; the parser aliases `$n` (and `ALIAS FOR $n`) to parameter
+names at token level and splices string bodies through one canonical path;
+`SOURCE_DIALECT`, `STRING_VARIABLES`, `IR_EMBEDDED`, `TEMP_TABLES` and the
+degrade registries (DEGRADED_ROUTINES, PG_COMPOSITE_TYPES, …) are converter
+ContextVars set per transpile; converter RawSQL fallbacks render in the
+SOURCE dialect at top level (but generic inside embedded routine bodies —
+that text is mid-transform, `IR_EMBEDDED` guards it); the IR models arrays
+(`ArrayLiteral`), function relations in FROM (`TableRef.function`),
+quantified subqueries (`SubqueryExpression.quantifier`) and hex literals;
+and `Transformer.transform` runs statement-level whole-degrade gates for
+constructs with no target equivalent (arrays, PG catalog internals, non-top
+CTEs, per-target impossibilities — see `docs/03-unsupported.md` §7). In
+transforms always use `dataclasses.replace`, never field-by-field rebuilds
+(they silently drop fields).
 
 **The architecture direction is set by `audit/2026-07-08/04-architecture-analysis.md`
 (adopted).** Its five root causes and proposals P1–P6 govern all transpiler
