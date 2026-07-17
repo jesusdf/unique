@@ -98,6 +98,9 @@ SELECT CONCAT_WS('-', 'a', 'b', 'c') AS r
 -- CASE[open]: ts-concatws2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT CONCAT_WS(',', 'a', NULL, 'b') AS r
 
+-- CASE[open]: ts-conditional — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
+SELECT IIF(1>0,'y','n'), CHOOSE(2,'a','b','c'), ISNULL(NULL,'x'), NULLIF(1,1)
+
 -- CASE[open]: ts-create-role — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE ROLE r AUTHORIZATION dbo
 

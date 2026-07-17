@@ -65,6 +65,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(156, b"Incorrect syntax near the keyword 'SET'.DB-Lib error message 20018, severity 15:\n`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DEFAULT 5`
 
+## my-any-value  (mysql)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near '>'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
+- src: `SELECT ANY_VALUE(x), GROUP_CONCAT(x) FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x>0`
+
 ## my-ascii-empty  (mysql)
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('NULL',),)`
@@ -415,6 +420,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'IS'.DB-Lib error message 20018, severity 15:\nG`
 - src: `SELECT 1 IN (SELECT 1) IS TRUE AS r`
+
+## my-json-aggs  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_ARRAYAGG(x), JSON_OBJECTAGG(x, x*2) FROM (SELECT 1 x UNION SELECT 2) t`
 
 ## my-json-arrayagg  (mysql)
 - targets: tsql(invalid)
@@ -1221,6 +1231,11 @@ SELECT LEVEL n FROM DUAL CONNECT BY LEVEL <= 10`
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE MATERIALIZED VIEW mv BUILD DEFERRED REFRESH COMPLETE ON DEMAND AS SELECT 1 AS x FROM DUAL`
 
+## ora-median-mode  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME`
+- src: `SELECT MEDIAN(x), STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 FROM DUAL UNION ALL SELECT 2 FROM DUAL)`
+
 ## ora-merge-insert-only  (oracle)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -1396,10 +1411,20 @@ ALTE`
 - live error: `(1305, 'FUNCTION unique_val_41751da4688e.REGEXP_COUNT does not exist')`
 - src: `SELECT REGEXP_COUNT('a1b2c3', '[0-9]') AS r FROM DUAL`
 
+## ora-regexp-group  (oracle)
+- targets: mysql(invalid)
+- live error: `(1582, "Incorrect parameter count in the call to native function 'REGEXP_SUBSTR'")`
+- src: `SELECT REGEXP_SUBSTR('a1b2c3', '(\d)', 1, 1, NULL, 1) AS r FROM DUAL`
+
 ## ora-regexp-like  (oracle)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT REGEXP_LIKE('abc', '^a') AS matched FROM DUAL WHERE REGEXP_LIKE('abc', '^a')`
+
+## ora-regr  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT CORR(x, y), COVAR_POP(x, y), REGR_SLOPE(y, x) FROM (SELECT 1 x, 2 y FROM DUAL UNION SELECT 2, 4 FROM DUAL)`
 
 ## ora-result-cache  (oracle)
 - targets: mysql(invalid)
@@ -2109,6 +2134,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S`
 - src: `SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7`
 
+## pg-json-aggs  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_`
+- src: `SELECT json_agg(x), json_object_agg(x::text, x*2) FROM (VALUES (1),(2)) v(x)`
+
 ## pg-json-idx  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('20',),) target=()`
@@ -2289,6 +2319,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(x)`
 
+## pg-percentiles  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY x), percentile_disc(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(`
+
 ## pg-position-case  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -2345,6 +2380,16 @@ CREATE TABLE ledger (id SERIA`
 - live error: `FUNC-DIFF: source=(('0',),) target=()`
 - src: `SELECT 'abc' ~ '^A' AS r`
 
+## pg-regexp-backref  (postgresql)
+- targets: mysql(invalid), oracle(invalid)
+- live error: `ORA-01722: unable to convert string value containing 'g' to a number: `
+- src: `SELECT regexp_replace('a1b2', '(\d)', '[\1]', 'g') AS r`
+
+## pg-regexp-group  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT (regexp_match('a1b2', '(\w)(\d)'))[2] AS r`
+
 ## pg-regexp-matches  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE`
@@ -2354,6 +2399,11 @@ CREATE TABLE ledger (id SERIA`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(208, b"Invalid object name 'dbo.regexp_split_to_table'.DB-Lib error message 20018, severi`
 - src: `SELECT * FROM regexp_split_to_table('a,b,c', ',')`
+
+## pg-regr  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT corr(x, y), covar_pop(x, y), regr_slope(y, x) FROM (VALUES (1,2),(2,4)) v(x,y)`
 
 ## pg-repeat-left-right  (postgresql)
 - targets: oracle(invalid)
@@ -2884,6 +2934,11 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - live error: `ORA-00904: "CONCAT_WS": invalid identifier`
 - src: `SELECT CONCAT_WS(',', 'a', NULL, 'b') AS r`
 
+## ts-conditional  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "CHOOSE": invalid identifier`
+- src: `SELECT IIF(1>0,'y','n'), CHOOSE(2,'a','b','c'), ISNULL(NULL,'x'), NULLIF(1,1)`
+
 ## ts-create-role  (tsql)
 - targets: mysql(carrier), oracle(carrier), postgresql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
@@ -3350,4 +3405,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 643 distinct constructs; defect rows by kind: carrier 138, func 256, invalid 837, semantic 2, silent-drop 75.
+Totals: 654 distinct constructs; defect rows by kind: carrier 138, func 256, invalid 858, semantic 2, silent-drop 75.

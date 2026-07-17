@@ -245,6 +245,9 @@ CREATE TRIGGER trg AFTER LOGON ON DATABASE BEGIN NULL; END;
 -- CASE[open]: ora-matview-options — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE MATERIALIZED VIEW mv BUILD DEFERRED REFRESH COMPLETE ON DEMAND AS SELECT 1 AS x FROM DUAL
 
+-- CASE[open]: ora-median-mode — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME
+SELECT MEDIAN(x), STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 FROM DUAL UNION ALL SELECT 2 FROM DUAL)
+
 -- CASE[open]: ora-merge-insert-only — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id NUMBER, n NUMBER, s VARCHAR2(50));
 MERGE INTO t d USING (SELECT 1 id, 2 n FROM DUAL) s ON (d.id=s.id) WHEN NOT MATCHED THEN INSERT (id, n) VALUES (s.id, s.n)
@@ -368,8 +371,14 @@ CREATE PROCEDURE p AS TYPE rc IS REF CURSOR; c rc; v NUMBER; BEGIN OPEN c FOR SE
 -- CASE[open]: ora-regexp-count — fails on mysql. (1305, 'FUNCTION unique_val_41751da4688e.REGEXP_COUNT does not exist')
 SELECT REGEXP_COUNT('a1b2c3', '[0-9]') AS r FROM DUAL
 
+-- CASE[open]: ora-regexp-group — fails on mysql. (1582, "Incorrect parameter count in the call to native function 'REGEXP_SUBSTR'")
+SELECT REGEXP_SUBSTR('a1b2c3', '(\d)', 1, 1, NULL, 1) AS r FROM DUAL
+
 -- CASE[open]: ora-regexp-like — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT REGEXP_LIKE('abc', '^a') AS matched FROM DUAL WHERE REGEXP_LIKE('abc', '^a')
+
+-- CASE[open]: ora-regr — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT CORR(x, y), COVAR_POP(x, y), REGR_SLOPE(y, x) FROM (SELECT 1 x, 2 y FROM DUAL UNION SELECT 2, 4 FROM DUAL)
 
 -- CASE[open]: ora-result-cache — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE FUNCTION f(x NUMBER) RETURN NUMBER DETERMINISTIC RESULT_CACHE AS BEGIN RETURN x; END;

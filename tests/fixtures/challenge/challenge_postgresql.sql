@@ -331,6 +331,9 @@ SELECT 1 INTERSECT ALL SELECT 1
 -- CASE[open]: pg-interval-arith — fails on mysql, oracle, tsql. (207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S
 SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7
 
+-- CASE[open]: pg-json-aggs — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_
+SELECT json_agg(x), json_object_agg(x::text, x*2) FROM (VALUES (1),(2)) v(x)
+
 -- CASE[open]: pg-json-idx — fails on mysql. FUNC-DIFF: source=(('20',),) target=()
 SELECT ('[10,20,30]'::jsonb)->1 AS r
 
@@ -439,6 +442,9 @@ SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) 
 -- CASE[open]: pg-percentile-disc — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(x)
 
+-- CASE[open]: pg-percentiles — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY x), percentile_disc(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(x)
+
 -- CASE[open]: pg-position-case — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT POSITION('a' IN 'ABC') AS r
 
@@ -478,11 +484,20 @@ CREATE TABLE t (a INT, b INT); CREATE RECURSIVE VIEW v(n) AS SELECT 1 UNION ALL 
 -- CASE[open]: pg-regex-case — fails on mysql. FUNC-DIFF: source=(('0',),) target=()
 SELECT 'abc' ~ '^A' AS r
 
+-- CASE[open]: pg-regexp-backref — fails on mysql, oracle. ORA-01722: unable to convert string value containing 'g' to a number: 
+SELECT regexp_replace('a1b2', '(\d)', '[\1]', 'g') AS r
+
+-- CASE[open]: pg-regexp-group — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT (regexp_match('a1b2', '(\w)(\d)'))[2] AS r
+
 -- CASE[open]: pg-regexp-matches — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE
 SELECT REGEXP_MATCHES('a1b2', '[0-9]', 'g') AS r
 
 -- CASE[open]: pg-regexp-split-table — fails on mysql, oracle, tsql. (208, b"Invalid object name 'dbo.regexp_split_to_table'.DB-Lib error message 20018, severi
 SELECT * FROM regexp_split_to_table('a,b,c', ',')
+
+-- CASE[open]: pg-regr — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT corr(x, y), covar_pop(x, y), regr_slope(y, x) FROM (VALUES (1,2),(2,4)) v(x,y)
 
 -- CASE[open]: pg-repeat-left-right — fails on oracle. ORA-00904: "RIGHT": invalid identifier
 SELECT REPEAT('ab', 3), LEFT('abc', 2), RIGHT('abc', 2)

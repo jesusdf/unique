@@ -20,6 +20,9 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t MODIFY COLUMN b BIGINT
 -- CASE[open]: my-alter-set-default — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'SET'.DB-Lib error message 20018, severity 15:\n
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DEFAULT 5
 
+-- CASE[open]: my-any-value — fails on postgresql, tsql. (102, b"Incorrect syntax near '>'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
+SELECT ANY_VALUE(x), GROUP_CONCAT(x) FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x>0
+
 -- CASE[open]: my-ascii-empty — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('NULL',),)
 SELECT ASCII('') AS r
 
@@ -230,6 +233,9 @@ SELECT 0 OR '' AS r
 
 -- CASE[open]: my-is-true — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'IS'.DB-Lib error message 20018, severity 15:\nG
 SELECT 1 IN (SELECT 1) IS TRUE AS r
+
+-- CASE[open]: my-json-aggs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT JSON_ARRAYAGG(x), JSON_OBJECTAGG(x, x*2) FROM (SELECT 1 x UNION SELECT 2) t
 
 -- CASE[open]: my-json-arrayagg — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION SELECT 2) t
