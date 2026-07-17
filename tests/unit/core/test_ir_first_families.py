@@ -1276,3 +1276,23 @@ class TestZeroPushW5Batch:
         m = re.search(r"(?is)CREATE TRIGGER t1_bu.*?\bEND\b", r.sql)
         if m and "-- " in m.group(0):
             assert "SET NOCOUNT ON;" in m.group(0), m.group(0)
+
+
+class TestZeroPushW6Batch:
+    """Zero-push batch W6 — embedded DDL index NULLS strip."""
+
+    def _t(self, sql, s, t):
+        from unique.core.transpiler import Transpiler
+
+        return Transpiler().transpile(sql, s, t)
+
+    def test_embedded_create_index_strips_nulls_oracle(self) -> None:
+        src = (
+            "DELIMITER //\n"
+            "create procedure p() begin\n"
+            "  create index i on t3 (s1);\n  drop index i on t3;\nend//\n"
+            "DELIMITER ;"
+        )
+        r = self._t(src, "mysql", "oracle")
+        assert "EXECUTE IMMEDIATE 'CREATE INDEX i ON t3(s1)'" in r.sql, r.sql
+        assert "NULLS FIRST" not in r.sql, r.sql

@@ -215,6 +215,12 @@ class OracleEmitter(ProceduralEmitter):
     def _emit_embedded_dml(self, node: EmbeddedDML) -> str:
         sql = node.sql.rstrip(";").strip()
         if self._PLSQL_DDL_RE.match(sql):
+            # A bare NULLS FIRST/LAST in an index column list is invalid on
+            # Oracle (ORA-00907); sqlglot injects it emulating the default
+            # nulls ordering. Strip it from an embedded CREATE INDEX (the
+            # standalone path already does — this is the EXECUTE IMMEDIATE one).
+            if re.match(r"(?is)^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\b", sql):
+                sql = re.sub(r"(?i)\s+NULLS\s+(?:FIRST|LAST)", "", sql)
             quoted = sql.replace("'", "''")
             return f"EXECUTE IMMEDIATE '{quoted}';"
         return f"{sql};"
