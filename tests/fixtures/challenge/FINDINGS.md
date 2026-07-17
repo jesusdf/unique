@@ -65,6 +65,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(102, b"Incorrect syntax near 'CHANGE'.DB-Lib error message 20018, severity 15:\nGeneral S`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t CHANGE a x INT`
 
+## my-char-unicode  (mysql)
+- targets: postgresql(func)
+- live error: `FUNC-DIFF: source=(('NULL',),) target=(('μ',),)`
+- src: `SELECT CHAR(956 USING utf8mb4) AS r`
+
 ## my-coalesce-empty  (mysql)
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('NULL',),)`
@@ -115,10 +120,20 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('2.5',),) target=(('2',),)`
 - src: `SELECT 5 / 2 AS r`
 
+## my-div-precision  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('0.33333',),) target=(('0.333333',),)`
+- src: `SELECT 1.0 / 3 AS r`
+
 ## my-elt  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EL`
 - src: `SELECT ELT(2, 'a', 'b', 'c') AS r`
+
+## my-emoji-len  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
+- src: `SELECT CHAR_LENGTH('😀') AS r`
 
 ## my-empty-eq-zero  (mysql)
 - targets: oracle(func)
@@ -274,6 +289,16 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: tsql(invalid)
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
 - src: `CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END`
+
+## my-scalar-subquery-assign  (mysql)
+- targets: tsql(invalid)
+- live error: `(8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve`
+- src: `CREATE PROCEDURE p() BEGIN DECLARE v INT; SET v = (SELECT COUNT(*) FROM (SELECT 1) t); END`
+
+## my-select-into-out  (mysql)
+- targets: tsql(invalid)
+- live error: `(8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve`
+- src: `CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END`
 
 ## my-soundex-format  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -473,6 +498,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('2.5',),) target=(('2',),)`
 - src: `SELECT 5 / 2 AS r FROM DUAL`
 
+## ora-div-precision  (oracle)
+- targets: mysql(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('0.333333',),) target=(('0',),)`
+- src: `SELECT 1 / 3 AS r FROM DUAL`
+
 ## ora-dump  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU`
@@ -518,6 +548,12 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR`
 - src: `SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL`
+
+## ora-goto  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG`
+- src: `CREATE PROCEDURE p AS BEGIN GOTO done; <<done>> NULL; END;
+/`
 
 ## ora-grant  (oracle)
 - targets: mysql(carrier), postgresql(carrier), tsql(carrier)
@@ -646,6 +682,12 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA`
 - src: `SELECT RATIO_TO_REPORT(1) OVER () FROM DUAL`
 
+## ora-record-type  (oracle)
+- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
+- src: `CREATE PROCEDURE p AS TYPE rec IS RECORD (a NUMBER, b VARCHAR2(10)); r rec; BEGIN r.a := 1; END;
+/`
+
 ## ora-recursive-func  (oracle)
 - targets: tsql(invalid)
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
@@ -683,6 +725,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - targets: postgresql(invalid)
 - live error: `function soundex(unknown) does not exist`
 - src: `SELECT SOUNDEX('Smith') AS r FROM DUAL`
+
+## ora-sqlerrm  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE PROCEDURE p AS BEGIN NULL; EXCEPTION WHEN NO_DATA_FOUND THEN RAISE; WHEN OTHERS THEN RAISE_APPLICATION_ERROR(-20001, SQLERR`
 
 ## ora-substr-neg  (oracle)
 - targets: postgresql(func), tsql(func)
@@ -754,6 +801,12 @@ SELECT seq.NEXTVAL FROM DUAL`
 - live error: `(195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018`
 - src: `SELECT XMLELEMENT("foo", 'bar') AS r FROM DUAL`
 
+## ora-zero-divide  (oracle)
+- targets: postgresql(invalid)
+- live error: `unrecognized exception condition "zero_divide"`
+- src: `CREATE PROCEDURE p AS v NUMBER; BEGIN v := 1/0; EXCEPTION WHEN ZERO_DIVIDE THEN v := 0; END;
+/`
+
 ## pg-age  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(195, b"'AGE' is not a recognized built-in function name.DB-Lib error message 20018, sever`
@@ -788,6 +841,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT ARRAY[1,2,3] || ARRAY[4,5] AS r`
+
+## pg-array-index2  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('2',),) target=()`
+- src: `SELECT (ARRAY[1,2,3])[2] AS r`
 
 ## pg-array-jsonb  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
@@ -850,6 +908,16 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNC-DIFF: source=(('8',),) target=(('7',),)`
 - src: `SELECT 7.5 :: int AS r`
 
+## pg-chr-concat  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('AB',),) target=(('4142',),)`
+- src: `SELECT chr(65) || chr(66)`
+
+## pg-chr-unicode  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('μ',),) target=(('NULL',),)`
+- src: `SELECT CHR(956) AS r`
+
 ## pg-collate  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -910,6 +978,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNC-DIFF: source=(('3', '2'),) target=()`
 - src: `SELECT DIV(17, 5), 17 % 5`
 
+## pg-div-precision  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('0.333333',),) target=(('0.33333',),)`
+- src: `SELECT 1.0 / 3 AS r`
+
 ## pg-domain  (postgresql)
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
@@ -919,6 +992,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL`
+
+## pg-emoji-len  (postgresql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
+- src: `SELECT LENGTH('😀') AS r`
 
 ## pg-empty-is-null  (postgresql)
 - targets: oracle(func)
@@ -949,6 +1027,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: tsql(invalid)
 - live error: `(443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro`
 - src: `CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1; EXCEPTION WHEN OTHERS THEN RETURN -1; END; $$ LANGUAGE plpgsql`
+
+## pg-execute-using  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1336, 'Dynamic SQL is not allowed in stored function or trigger')`
+- src: `CREATE FUNCTION f() RETURNS VOID AS $$ BEGIN EXECUTE 'INSERT INTO t VALUES ($1)' USING 5; END; $$ LANGUAGE plpgsql`
 
 ## pg-explain  (postgresql)
 - targets: mysql(invalid), oracle(carrier), tsql(carrier)
@@ -1145,6 +1228,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNCTION F compiled INVALID (line 7): PLS-00201: identifier 'VOID' must be declared`
 - src: `CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; END; $$ LANGUAGE plpgsql`
 
+## pg-named-exception  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro`
+- src: `CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1/0; EXCEPTION WHEN division_by_zero THEN RETURN -1; WHEN OTHERS THEN RAISE; EN`
+
 ## pg-network-types  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag`
@@ -1185,6 +1273,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU`
 - src: `SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')`
 
+## pg-raise-using  (postgresql)
+- targets: mysql(invalid), tsql(invalid)
+- live error: `(443, b"Invalid use of a side-effecting operator 'RAISERROR' within a function.DB-Lib erro`
+- src: `CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RAISE EXCEPTION 'err %', 42 USING ERRCODE = 'P0001'; END; $$ LANGUAGE plpgsql`
+
 ## pg-range-contains  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -1224,6 +1317,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE FUNCTION f() RETURNS SETOF INT AS $$ BEGIN RETURN QUERY SELECT 1 UNION SELECT 2; END; $$ LANGUAGE plpgsql`
+
+## pg-returns-table  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE FUNCTION f() RETURNS TABLE(a INT, b TEXT) AS $$ BEGIN RETURN QUERY SELECT 1, 'x'; END; $$ LANGUAGE plpgsql`
 
 ## pg-rollup  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -1549,6 +1647,11 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - live error: `ORA-03060: Data type TIME is invalid.`
 - src: `CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))`
 
+## ts-emoji-len  (tsql)
+- targets: mysql(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('2',),) target=(('1',),)`
+- src: `SELECT LEN(N'😀') AS r`
+
 ## ts-eomonth  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-01861: literal does not match format string`
@@ -1558,6 +1661,11 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-01861: literal does not match format string`
 - src: `SELECT DATEADD(MONTH, -1, EOMONTH('2020-03-01')) AS r`
+
+## ts-error-functions  (tsql)
+- targets: oracle(invalid)
+- live error: `PROCEDURE P compiled INVALID (line 12): PL/SQL: ORA-00904: "ERROR_LINE": invalid identifie`
+- src: `CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERROR_MESSAGE(), ERROR_NUMBER(), ERROR_LINE(); END CA`
 
 ## ts-filtered-index  (tsql)
 - targets: mysql(invalid), oracle(invalid)
@@ -1803,4 +1911,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r`
 ---
 
-Totals: 351 distinct constructs; defect rows by kind: carrier 62, func 107, invalid 538, semantic 2, silent-drop 24.
+Totals: 372 distinct constructs; defect rows by kind: carrier 64, func 123, invalid 553, semantic 2, silent-drop 24.

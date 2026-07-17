@@ -79,6 +79,9 @@ SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL
 -- CASE[open]: ora-div — fails on postgresql, tsql. FUNC-DIFF: source=(('2.5',),) target=(('2',),)
 SELECT 5 / 2 AS r FROM DUAL
 
+-- CASE[open]: ora-div-precision — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('0.333333',),) target=(('0',),)
+SELECT 1 / 3 AS r FROM DUAL
+
 -- CASE[open]: ora-dump — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU
 SELECT DUMP('abc') AS r FROM DUAL
 
@@ -106,6 +109,10 @@ CREATE TABLE t (id NUMBER); SELECT * FROM t FOR UPDATE NOWAIT
 
 -- CASE[open]: ora-from-tz — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR
 SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL
+
+-- CASE[open]: ora-goto — fails on mysql, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG
+CREATE PROCEDURE p AS BEGIN GOTO done; <<done>> NULL; END;
+/
 
 -- CASE[open]: ora-grant — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id NUMBER); GRANT SELECT ON t TO PUBLIC
@@ -184,6 +191,10 @@ SELECT RATIO_TO_REPORT(x) OVER () FROM (SELECT 1 x FROM DUAL)
 -- CASE[open]: ora-ratio2 — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT RATIO_TO_REPORT(1) OVER () FROM DUAL
 
+-- CASE[open]: ora-record-type — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['could not translate']
+CREATE PROCEDURE p AS TYPE rec IS RECORD (a NUMBER, b VARCHAR2(10)); r rec; BEGIN r.a := 1; END;
+/
+
 -- CASE[open]: ora-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n NUMBER) RETURN NUMBER AS BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END;
 /
@@ -207,6 +218,10 @@ CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1 CACHE 20 NOCYCLE ORDER
 
 -- CASE[open]: ora-soundex — fails on postgresql. function soundex(unknown) does not exist
 SELECT SOUNDEX('Smith') AS r FROM DUAL
+
+-- CASE[open]: ora-sqlerrm — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE PROCEDURE p AS BEGIN NULL; EXCEPTION WHEN NO_DATA_FOUND THEN RAISE; WHEN OTHERS THEN RAISE_APPLICATION_ERROR(-20001, SQLERRM); END;
+/
 
 -- CASE[open]: ora-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('de',),) target=(('',),)
 SELECT SUBSTR('abcdef', -3, 2) AS r FROM DUAL
@@ -249,4 +264,8 @@ SELECT WIDTH_BUCKET(5, 0, 10, 5) AS r FROM DUAL
 
 -- CASE[open]: ora-xmlelement — fails on mysql, postgresql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT XMLELEMENT("foo", 'bar') AS r FROM DUAL
+
+-- CASE[open]: ora-zero-divide — fails on postgresql. unrecognized exception condition "zero_divide"
+CREATE PROCEDURE p AS v NUMBER; BEGIN v := 1/0; EXCEPTION WHEN ZERO_DIVIDE THEN v := 0; END;
+/
 

@@ -26,6 +26,9 @@ SELECT 3 = ANY(ARRAY[1,2,3]) AS r
 -- CASE[open]: pg-array-concat — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT ARRAY[1,2,3] || ARRAY[4,5] AS r
 
+-- CASE[open]: pg-array-index2 — fails on mysql. FUNC-DIFF: source=(('2',),) target=()
+SELECT (ARRAY[1,2,3])[2] AS r
+
 -- CASE[open]: pg-array-jsonb — fails on mysql, oracle. ORA-03099: unexpected item [ in a column definition
 CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)
 
@@ -64,6 +67,12 @@ SELECT CAST(2.7 AS INT) AS r
 -- CASE[open]: pg-cast-round-half — fails on tsql. FUNC-DIFF: source=(('8',),) target=(('7',),)
 SELECT 7.5 :: int AS r
 
+-- CASE[open]: pg-chr-concat — fails on mysql. FUNC-DIFF: source=(('AB',),) target=(('4142',),)
+SELECT chr(65) || chr(66)
+
+-- CASE[open]: pg-chr-unicode — fails on mysql, tsql. FUNC-DIFF: source=(('μ',),) target=(('NULL',),)
+SELECT CHR(956) AS r
+
 -- CASE[open]: pg-collate — fails on mysql. (1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT 'a' < 'B' COLLATE "C" AS r
 
@@ -100,11 +109,17 @@ SELECT DIV(7, 2) AS r
 -- CASE[open]: pg-div-mod-int — fails on mysql. FUNC-DIFF: source=(('3', '2'),) target=()
 SELECT DIV(17, 5), 17 % 5
 
+-- CASE[open]: pg-div-precision — fails on mysql. FUNC-DIFF: source=(('0.333333',),) target=(('0.33333',),)
+SELECT 1.0 / 3 AS r
+
 -- CASE[open]: pg-domain — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE DOMAIN posint AS INT CHECK (VALUE > 0)
 
 -- CASE[open]: pg-drop-not-null — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL
+
+-- CASE[open]: pg-emoji-len — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
+SELECT LENGTH('😀') AS r
 
 -- CASE[open]: pg-empty-is-null — fails on oracle. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT '' IS NULL AS r
@@ -123,6 +138,9 @@ SELECT 1 EXCEPT ALL SELECT 2
 
 -- CASE[open]: pg-exception-handler — fails on tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
 CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1; EXCEPTION WHEN OTHERS THEN RETURN -1; END; $$ LANGUAGE plpgsql
+
+-- CASE[open]: pg-execute-using — fails on mysql. (1336, 'Dynamic SQL is not allowed in stored function or trigger')
+CREATE FUNCTION f() RETURNS VOID AS $$ BEGIN EXECUTE 'INSERT INTO t VALUES ($1)' USING 5; END; $$ LANGUAGE plpgsql
 
 -- CASE[open]: pg-explain — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 EXPLAIN SELECT 1
@@ -241,6 +259,9 @@ SELECT MODE() WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(1),(2)) v(x)
 -- CASE[open]: pg-multi-out — fails on oracle. FUNCTION F compiled INVALID (line 7): PLS-00201: identifier 'VOID' must be declared
 CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; END; $$ LANGUAGE plpgsql
 
+-- CASE[open]: pg-named-exception — fails on oracle, tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
+CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1/0; EXCEPTION WHEN division_by_zero THEN RETURN -1; WHEN OTHERS THEN RAISE; END; $$ LANGUAGE plpgsql
+
 -- CASE[open]: pg-network-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag
 CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)
 
@@ -265,6 +286,9 @@ SELECT POWER(2, -1) AS r
 -- CASE[open]: pg-quote — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
 SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')
 
+-- CASE[open]: pg-raise-using — fails on mysql, tsql. (443, b"Invalid use of a side-effecting operator 'RAISERROR' within a function.DB-Lib erro
+CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RAISE EXCEPTION 'err %', 42 USING ERRCODE = 'P0001'; END; $$ LANGUAGE plpgsql
+
 -- CASE[open]: pg-range-contains — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT INT4RANGE(1, 10) @> 5 AS r
 
@@ -288,6 +312,9 @@ SELECT REPEAT('ab', 3), LEFT('abc', 2), RIGHT('abc', 2)
 
 -- CASE[open]: pg-return-query — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE FUNCTION f() RETURNS SETOF INT AS $$ BEGIN RETURN QUERY SELECT 1 UNION SELECT 2; END; $$ LANGUAGE plpgsql
+
+-- CASE[open]: pg-returns-table — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE FUNCTION f() RETURNS TABLE(a INT, b TEXT) AS $$ BEGIN RETURN QUERY SELECT 1, 'x'; END; $$ LANGUAGE plpgsql
 
 -- CASE[open]: pg-rollup — fails on mysql, oracle, tsql. (8120, b"Column 'v.x' is invalid in the select list because it is not contained in either 
 SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)

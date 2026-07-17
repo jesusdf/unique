@@ -38,6 +38,9 @@ SELECT CAST(2.7 AS SIGNED) AS r
 -- CASE[open]: my-change-column — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'CHANGE'.DB-Lib error message 20018, severity 15:\nGeneral S
 CREATE TABLE t (a INT, b INT); ALTER TABLE t CHANGE a x INT
 
+-- CASE[open]: my-char-unicode — fails on postgresql. FUNC-DIFF: source=(('NULL',),) target=(('μ',),)
+SELECT CHAR(956 USING utf8mb4) AS r
+
 -- CASE[open]: my-coalesce-empty — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('NULL',),)
 SELECT COALESCE(NULL, 0) = '' AS r
 
@@ -68,8 +71,14 @@ CREATE TABLE t (a DATETIME(6), b TIMESTAMP(3), c YEAR)
 -- CASE[open]: my-div — fails on postgresql, tsql. FUNC-DIFF: source=(('2.5',),) target=(('2',),)
 SELECT 5 / 2 AS r
 
+-- CASE[open]: my-div-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('0.33333',),) target=(('0.333333',),)
+SELECT 1.0 / 3 AS r
+
 -- CASE[open]: my-elt — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EL
 SELECT ELT(2, 'a', 'b', 'c') AS r
+
+-- CASE[open]: my-emoji-len — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
+SELECT CHAR_LENGTH('😀') AS r
 
 -- CASE[open]: my-empty-eq-zero — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('NULL',),)
 SELECT '' = 0 AS r
@@ -163,6 +172,12 @@ SELECT PERIOD_DIFF(202006, 202001) AS r
 
 -- CASE[open]: my-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END
+
+-- CASE[open]: my-scalar-subquery-assign — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
+CREATE PROCEDURE p() BEGIN DECLARE v INT; SET v = (SELECT COUNT(*) FROM (SELECT 1) t); END
+
+-- CASE[open]: my-select-into-out — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
+CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END
 
 -- CASE[open]: my-soundex-format — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT SOUNDEX('Smith'), FORMAT(1234.5, 2)

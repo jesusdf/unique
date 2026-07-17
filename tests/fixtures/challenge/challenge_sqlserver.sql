@@ -95,11 +95,17 @@ SELECT DATETIMEFROMPARTS(2020, 6, 15, 10, 30, 0, 0) AS r
 -- CASE[open]: ts-datetimeoffset — fails on mysql, oracle. ORA-03060: Data type TIME is invalid.
 CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))
 
+-- CASE[open]: ts-emoji-len — fails on mysql, postgresql. FUNC-DIFF: source=(('2',),) target=(('1',),)
+SELECT LEN(N'😀') AS r
+
 -- CASE[open]: ts-eomonth — fails on oracle, postgresql. ORA-01861: literal does not match format string
 SELECT EOMONTH('2020-02-15') AS r
 
 -- CASE[open]: ts-eomonth-nested — fails on oracle, postgresql. ORA-01861: literal does not match format string
 SELECT DATEADD(MONTH, -1, EOMONTH('2020-03-01')) AS r
+
+-- CASE[open]: ts-error-functions — fails on oracle. PROCEDURE P compiled INVALID (line 12): PL/SQL: ORA-00904: "ERROR_LINE": invalid identifie
+CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERROR_MESSAGE(), ERROR_NUMBER(), ERROR_LINE(); END CATCH END
 
 -- CASE[open]: ts-filtered-index — fails on mysql, oracle. ORA-02158: invalid CREATE INDEX option
 CREATE TABLE t (a INT, b INT); CREATE NONCLUSTERED INDEX ix ON t (a) INCLUDE (b) WHERE a > 0
