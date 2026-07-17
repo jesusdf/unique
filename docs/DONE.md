@@ -4588,3 +4588,42 @@ nets were tried and reverted (RETURN QUERY, opaque-Command carrier);
 both proved the floor is architectural, not a patch. Closing further
 requires schema-aware transpilation or the dev-only live validator on
 the emit path — out of scope for statement-level transpilation.
+
+---
+
+## 37. Module-growth hardening — parser, transformer and transpiler splits
+
+Archived from `docs/TODO.md` §2 P3 on 2026-07-17. The three modules that had
+outgrown review size are packages/composed objects now:
+
+- **`procedural/parser`** (2026-07-10): package split `_base` 1.7k +
+  `_tsql` 0.7k + `_plsql` 0.8k with an explicit cross-family contract.
+  (The same name-based mixin cut did NOT transfer to the transformer — its
+  families cross-call heavily; a first attempt needed a dozen-plus stub
+  contract and was reverted, leading to the composed-object design below.)
+- **`procedural/transformer/_expr.py`** (`997f0e8`, 2026-07-17): the
+  expression-rewrite family — 36 text-level rewriters (curated
+  DATEADD/DATEDIFF/STRING_AGG/DECODE handlers, string-concat
+  classification, function renames, niladic/date-format maps,
+  last-identity capture) plus their 13 class constants — moved to a
+  composed `ExpressionRewriter` constructed per transform as
+  `self._expr`, reading its narrow context (source/target, string/date
+  vars, warning sink, pair func map) through the owning transformer.
+  13 base + 11 per-target call edges rewired mechanically; no override
+  point moved (`_fix_raw_sql_target` & friends stay per-target).
+  `base.py` 5053 → 3735 lines. Verified: full gate green and the
+  cross-target expression-path output byte-identical before/after.
+  This object is the text path M3's IR-first expressions will replace.
+- **`core/transpiler/`** (`0e6ead0`, 2026-07-17): the 2.4k-line module
+  became a package — `_text_rules.py` (module-level batch recognizers and
+  pre/post text helpers: the M2/P3 single guard recognizer, Oracle
+  idempotent creates, carrier/warning reconciliation, SQLite source
+  rewrites) and `_core.py` (the `Transpiler` orchestrator + options/result
+  types), with `__init__.py` re-exporting the public surface unchanged
+  (`Transpiler`, `TranspileOptions`, `TranspileResult`, `transpile`).
+  Mechanical, no behavior change; public surface and CLI probed.
+
+En route finding (filed as its own TODO item): the tsql→mysql procedural
+DATEADD handler emits a nested `INTERVAL (INTERVAL '-1' MONTH) DAY` when the
+DATEADD sits under a CONVERT chain — pre-existing (byte-identical before the
+refactor), P2.

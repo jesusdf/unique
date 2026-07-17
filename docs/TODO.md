@@ -211,19 +211,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
 
 ### P3 — hardening carry-overs (from 2026-07-02, still open)
 
-- [ ] **Module growth** — *parser done 2026-07-10:* `procedural/parser` is
-      now a package (_base 1.7k + _tsql 0.7k + _plsql 0.8k, explicit
-      cross-family contract). *Transformer done 2026-07-17 (`997f0e8`):*
-      the designed `ExpressionRewriter` seam landed as the planned single
-      mechanical commit — the 36 text-level expression rewriters (the
-      family had grown from the measured 24 during the wave campaign)
-      moved with their 13 class constants to `transformer/_expr.py`,
-      composed per transform as `self._expr`; 13 base + 11 per-target
-      call edges rewired; no override point moved (`_fix_raw_sql_target`
-      & friends stay per-target). `base.py` 5053 → 3735 lines; full gate
-      green; expression-path output verified byte-identical. The rewriter
-      object is what M3's IR-first expressions will eventually replace.
-      Still to split: `transpiler.py` (~2.4k).
+- [x] **Module growth — DONE 2026-07-17.** All three oversized modules are
+      split: `procedural/parser` package (2026-07-10), the transformer's
+      `ExpressionRewriter` seam (`transformer/_expr.py`, `997f0e8` —
+      base.py 5053 → 3735 lines), and `transpiler.py` → the
+      `core/transpiler/` package (`_text_rules.py` + `_core.py` +
+      re-exporting `__init__`, `0e6ead0`). Full detail archived in
+      [`docs/DONE.md`](DONE.md) §37; the rewriter object is what M3's
+      IR-first expressions will eventually replace.
 - [ ] **tsql→mysql procedural DATEADD emits a nested INTERVAL (P2, found
       2026-07-17 during the ExpressionRewriter verification —
       pre-existing, byte-identical before/after the refactor):**
