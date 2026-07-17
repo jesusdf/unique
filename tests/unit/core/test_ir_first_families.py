@@ -378,3 +378,22 @@ class TestTrimPositionAndLobHelpers:
     def test_dbms_lob_getlength(self) -> None:
         out = _ir("oracle", "tsql", "SELECT DBMS_LOB.GETLENGTH(x) FROM t")
         assert out is not None and "DATALENGTH(x)" in out, out
+
+
+class TestSmallIrParityFixes:
+    """Small IR/text parity fixes (M3 burn-down bundle)."""
+
+    def test_negative_literal_interval_on_pg(self) -> None:
+        out = _ir("tsql", "postgresql", "SELECT DATEADD(MONTH, -1, d) FROM t")
+        assert out is not None and "INTERVAL '-1 MONTH'" in out, out
+
+    def test_length_is_char_length_on_mysql(self) -> None:
+        out = _ir("tsql", "mysql", "SELECT LEN(name) FROM t")
+        assert out is not None and "CHAR_LENGTH" in out.upper(), out
+        assert not __import__("re").search(r"(?i)\bLENGTH\s*\(", out), out
+
+    def test_date_subtraction_over_parameters(self) -> None:
+        t = ProceduralTransformer("postgresql", "tsql")
+        t._date_vars = {"@d1", "@d2"}
+        out = t._ir_transpile_dml("SELECT @d2 - @d1")
+        assert out is not None and "DATEDIFF(DAY, @d1, @d2)" in out, out

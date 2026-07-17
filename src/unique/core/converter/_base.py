@@ -912,10 +912,13 @@ def _map_function_name(name: str, dialect: str) -> str:
     if upper == "COALESCE":
         return "COALESCE"
 
-    # LENGTH
+    # LENGTH: T-SQL spells it LEN; MySQL's own LENGTH() counts BYTES, so a
+    # character-count from any other source must be CHAR_LENGTH there.
     if upper == "LENGTH":
         if dialect == "tsql":
             return "LEN"
+        if dialect == "mysql" and SOURCE_DIALECT.get() not in (None, "mysql"):
+            return "CHAR_LENGTH"
         return "LENGTH"
 
     # SUBSTRING

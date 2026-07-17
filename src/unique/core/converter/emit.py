@@ -3065,9 +3065,12 @@ def _emit_date_add(node: FunctionCall, dialect: str) -> str | None:
     ts = _emit_expression(_unwrap_sqlglot_wrappers(node.args[0]), dialect)
     amount = node.args[1]
     literal_n: str | None = None
-    if isinstance(amount, Literal) and re.fullmatch(r"-?\d+", str(amount.value)):
-        # MySQL parses INTERVAL amounts as string literals; use the bare number.
-        literal_n = str(amount.value)
+    plain = _plain_int_value(amount)
+    if plain is not None:
+        # MySQL parses INTERVAL amounts as string literals; use the bare
+        # number (a unary-minus literal counts — ``-1`` must stay INSIDE
+        # the INTERVAL string on PG, not multiply a unit interval).
+        literal_n = str(plain)
     n = literal_n if literal_n is not None else _emit_expression(amount, dialect)
     sub = node.name.upper() == "DATE_SUB"
 
@@ -4138,18 +4141,25 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
     # T-SQL has no date ``-`` operator (error 8117/257): ``d2 - d1`` over
     # two declared DATE variables spells DATEDIFF(DAY, d1, d2) — the days
     # from d1 to d2, matching the source's date-difference semantics.
-    if (
-        node.operator == BinaryOperator.SUB
-        and dialect == "tsql"
-        and isinstance(node.left, ColumnRef)
-        and isinstance(node.right, ColumnRef)
-        and not node.left.table
-        and not node.right.table
-    ):
+    if node.operator == BinaryOperator.SUB and dialect == "tsql":
+
+        def _bare_var_name(n: ASTNode) -> str | None:
+            if isinstance(n, ColumnRef) and not n.table:
+                return n.name
+            # A mid-transform @name parses as a Parameter and lands in a
+            # RawSQL (the embedded-hybrid rule).
+            if isinstance(n, RawSQL) and re.fullmatch(r"@?\w+", n.sql.strip()):
+                return n.sql.strip()
+            return None
+
+        left_name = _bare_var_name(node.left)
+        right_name = _bare_var_name(node.right)
         date_vars = DATE_VARIABLES.get() or frozenset()
         if (
-            node.left.name.lstrip("@").lower() in date_vars
-            and node.right.name.lstrip("@").lower() in date_vars
+            left_name is not None
+            and right_name is not None
+            and left_name.lstrip("@").lower() in date_vars
+            and right_name.lstrip("@").lower() in date_vars
         ):
             left_sql = _emit_expression(node.left, dialect)
             right_sql = _emit_expression(node.right, dialect)
