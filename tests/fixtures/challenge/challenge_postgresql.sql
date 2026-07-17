@@ -55,17 +55,32 @@ CREATE TRIGGER trg BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION trg_fn();
 -- CASE[open]: pg-bitnot — fails on mysql. FUNC-DIFF: source=(('-1',),) target=(('18446744073709551616',),)
 SELECT ~0 AS r
 
+-- CASE[open]: pg-bool-int-cast — fails on oracle. ORA-01722: unable to convert string value containing 't' to a number: 
+SELECT 'true'::boolean::int AS r
+
 -- CASE[open]: pg-caret-power — fails on mysql. FUNC-DIFF: source=(('8',),) target=()
 SELECT 2 ^ 3 AS r
 
 -- CASE[open]: pg-case-statement — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS TEXT AS $$ BEGIN CASE n WHEN 1 THEN RETURN 'one'; ELSE RETURN 'other'; END CASE; END; $$ LANGUAGE plpgsql
 
+-- CASE[open]: pg-cast-array — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT '{1,2,3}'::int[] AS r
+
 -- CASE[open]: pg-cast-int — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
 SELECT CAST(2.7 AS INT) AS r
 
+-- CASE[open]: pg-cast-interval — fails on mysql, oracle. ORA-30089: missing or invalid <datetime field>
+SELECT '1 day'::interval AS r
+
+-- CASE[open]: pg-cast-point — fails on mysql, oracle, tsql. (243, b'Type POINT is not a defined system type.DB-Lib error message 20018, severity 16:\n
+SELECT '(1,2)'::point AS r
+
 -- CASE[open]: pg-cast-round-half — fails on tsql. FUNC-DIFF: source=(('8',),) target=(('7',),)
 SELECT 7.5 :: int AS r
+
+-- CASE[open]: pg-cast-tstz — fails on mysql, oracle, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity
+SELECT '2020-01-01'::timestamptz AS r
 
 -- CASE[open]: pg-chr-concat — fails on mysql. FUNC-DIFF: source=(('AB',),) target=(('4142',),)
 SELECT chr(65) || chr(66)
@@ -117,6 +132,9 @@ SELECT 1.0 / 3 AS r
 
 -- CASE[open]: pg-domain — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE DOMAIN posint AS INT CHECK (VALUE > 0)
+
+-- CASE[open]: pg-double-cast — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
+SELECT 123::text::int AS r
 
 -- CASE[open]: pg-drop-not-null — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL

@@ -32,8 +32,20 @@ SELECT ~0 AS r
 -- CASE[open]: my-cast-convert — fails on oracle, postgresql, tsql. (243, b'Type UBIGINT is not a defined system type.DB-Lib error message 20018, severity 16:
 SELECT CAST(123 AS CHAR), CONVERT('2020-01-01', DATE), CAST(1 AS UNSIGNED)
 
+-- CASE[open]: my-cast-datetime — fails on oracle. ORA-01843: An invalid month was specified.
+SELECT CAST('2020-01-01' AS DATETIME) AS r
+
+-- CASE[open]: my-cast-hex-char — fails on oracle. ORA-25137: Data value out of range
+SELECT CAST(0xFF AS CHAR) AS r
+
 -- CASE[open]: my-cast-int — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
 SELECT CAST(2.7 AS SIGNED) AS r
+
+-- CASE[open]: my-cast-num-char — fails on oracle. ORA-25137: Data value out of range
+SELECT CAST(1234.5 AS CHAR) AS r
+
+-- CASE[open]: my-cast-time — fails on oracle. DPY-3006: Oracle data type 178 is not supported
+SELECT CAST('10:00:00' AS TIME) AS r
 
 -- CASE[open]: my-change-column — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'CHANGE'.DB-Lib error message 20018, severity 15:\nGeneral S
 CREATE TABLE t (a INT, b INT); ALTER TABLE t CHANGE a x INT
@@ -52,6 +64,9 @@ SELECT CONCAT('a', NULL, 'b') AS r
 
 -- CASE[open]: my-concat-ws — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT CONCAT_WS('-', 'a', 'b', NULL, 'c') AS r
+
+-- CASE[open]: my-convert-signed — fails on oracle. ORA-00902: invalid datatype
+SELECT CONVERT('123', SIGNED) AS r
 
 -- CASE[open]: my-convert-tz — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT CONVERT_TZ('2020-01-01 10:00', '+00:00', '+02:00') AS r

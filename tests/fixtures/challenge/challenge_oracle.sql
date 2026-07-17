@@ -42,6 +42,9 @@ CREATE PROCEDURE p (n IN NUMBER) AS BEGIN CASE n WHEN 1 THEN NULL; ELSE NULL; EN
 -- CASE[open]: ora-cast-expr — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL
 
+-- CASE[open]: ora-cast-onerror — fails on postgresql, tsql. (8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit
+SELECT CAST('abc' AS NUMBER DEFAULT -1 ON CONVERSION ERROR) AS r FROM DUAL
+
 -- CASE[open]: ora-clob-coalesce — fails on mysql, postgresql, tsql. (195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT COALESCE(TO_CLOB('a'), TO_CLOB('b')) AS r FROM DUAL
 
@@ -255,6 +258,12 @@ CREATE TABLE t (a NUMBER) TABLESPACE users
 
 -- CASE[open]: ora-to-char-day — fails on mysql. FUNC-DIFF: source=(('SUNDAY',),) target=(('Sunday',),)
 SELECT TO_CHAR(DATE '2020-06-14', 'DAY') AS r FROM DUAL
+
+-- CASE[open]: ora-to-number-sci — fails on tsql. (8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit
+SELECT TO_NUMBER('1.234E2') AS r FROM DUAL
+
+-- CASE[open]: ora-to-timestamp — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+SELECT TO_TIMESTAMP('2020-01-01 10:00:00.123', 'YYYY-MM-DD HH24:MI:SS.FF') AS r FROM DUAL
 
 -- CASE[open]: ora-trailing-eq — fails on tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT CASE WHEN 'a ' = 'a' THEN 1 ELSE 0 END AS r FROM DUAL

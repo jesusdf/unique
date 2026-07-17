@@ -55,10 +55,30 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(243, b'Type UBIGINT is not a defined system type.DB-Lib error message 20018, severity 16:`
 - src: `SELECT CAST(123 AS CHAR), CONVERT('2020-01-01', DATE), CAST(1 AS UNSIGNED)`
 
+## my-cast-datetime  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-01843: An invalid month was specified.`
+- src: `SELECT CAST('2020-01-01' AS DATETIME) AS r`
+
+## my-cast-hex-char  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-25137: Data value out of range`
+- src: `SELECT CAST(0xFF AS CHAR) AS r`
+
 ## my-cast-int  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
 - src: `SELECT CAST(2.7 AS SIGNED) AS r`
+
+## my-cast-num-char  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-25137: Data value out of range`
+- src: `SELECT CAST(1234.5 AS CHAR) AS r`
+
+## my-cast-time  (mysql)
+- targets: oracle(invalid)
+- live error: `DPY-3006: Oracle data type 178 is not supported`
+- src: `SELECT CAST('10:00:00' AS TIME) AS r`
 
 ## my-change-column  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -89,6 +109,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid)
 - live error: `ORA-00904: "CONCAT_WS": invalid identifier`
 - src: `SELECT CONCAT_WS('-', 'a', 'b', NULL, 'c') AS r`
+
+## my-convert-signed  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-00902: invalid datatype`
+- src: `SELECT CONVERT('123', SIGNED) AS r`
 
 ## my-convert-tz  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -477,6 +502,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL`
 
+## ora-cast-onerror  (oracle)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit`
+- src: `SELECT CAST('abc' AS NUMBER DEFAULT -1 ON CONVERSION ERROR) AS r FROM DUAL`
+
 ## ora-clob-coalesce  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s`
@@ -826,6 +856,16 @@ SELECT seq.NEXTVAL FROM DUAL`
 - live error: `FUNC-DIFF: source=(('SUNDAY',),) target=(('Sunday',),)`
 - src: `SELECT TO_CHAR(DATE '2020-06-14', 'DAY') AS r FROM DUAL`
 
+## ora-to-number-sci  (oracle)
+- targets: tsql(invalid)
+- live error: `(8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit`
+- src: `SELECT TO_NUMBER('1.234E2') AS r FROM DUAL`
+
+## ora-to-timestamp  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST`
+- src: `SELECT TO_TIMESTAMP('2020-01-01 10:00:00.123', 'YYYY-MM-DD HH24:MI:SS.FF') AS r FROM DUAL`
+
 ## ora-trailing-eq  (oracle)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -958,6 +998,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNC-DIFF: source=(('-1',),) target=(('18446744073709551616',),)`
 - src: `SELECT ~0 AS r`
 
+## pg-bool-int-cast  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-01722: unable to convert string value containing 't' to a number: `
+- src: `SELECT 'true'::boolean::int AS r`
+
 ## pg-caret-power  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('8',),) target=()`
@@ -968,15 +1013,35 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
 - src: `CREATE FUNCTION f(n INT) RETURNS TEXT AS $$ BEGIN CASE n WHEN 1 THEN RETURN 'one'; ELSE RETURN 'other'; END CASE; END; $$ LANGUAGE`
 
+## pg-cast-array  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT '{1,2,3}'::int[] AS r`
+
 ## pg-cast-int  (postgresql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
 - src: `SELECT CAST(2.7 AS INT) AS r`
 
+## pg-cast-interval  (postgresql)
+- targets: mysql(invalid), oracle(invalid)
+- live error: `ORA-30089: missing or invalid <datetime field>`
+- src: `SELECT '1 day'::interval AS r`
+
+## pg-cast-point  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(243, b'Type POINT is not a defined system type.DB-Lib error message 20018, severity 16:\n`
+- src: `SELECT '(1,2)'::point AS r`
+
 ## pg-cast-round-half  (postgresql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('8',),) target=(('7',),)`
 - src: `SELECT 7.5 :: int AS r`
+
+## pg-cast-tstz  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity`
+- src: `SELECT '2020-01-01'::timestamptz AS r`
 
 ## pg-chr-concat  (postgresql)
 - targets: mysql(func)
@@ -1062,6 +1127,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE DOMAIN posint AS INT CHECK (VALUE > 0)`
+
+## pg-double-cast  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message`
+- src: `SELECT 123::text::int AS r`
 
 ## pg-drop-not-null  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -1667,6 +1737,16 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
 - src: `SELECT CAST(2 AS BIT) AS r`
 
+## ts-cast-date-int  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00932: expression is of data type DATE, which is incompatible with expected data type `
+- src: `SELECT CAST(GETDATE() AS INT) AS r`
+
+## ts-cast-int-datetime  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00932: expression is of data type NUMBER, which is incompatible with expected data typ`
+- src: `SELECT CAST(1 AS DATETIME) AS r`
+
 ## ts-cast-trycast  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-01722: unable to convert string value containing 'x' to a number: `
@@ -2041,4 +2121,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r`
 ---
 
-Totals: 398 distinct constructs; defect rows by kind: carrier 64, func 134, invalid 594, semantic 2, silent-drop 24.
+Totals: 414 distinct constructs; defect rows by kind: carrier 64, func 134, invalid 621, semantic 2, silent-drop 24.

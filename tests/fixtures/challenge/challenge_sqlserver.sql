@@ -53,6 +53,12 @@ SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r
 -- CASE[open]: ts-cast-bit — fails on mysql, oracle. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT CAST(2 AS BIT) AS r
 
+-- CASE[open]: ts-cast-date-int — fails on oracle, postgresql. ORA-00932: expression is of data type DATE, which is incompatible with expected data type 
+SELECT CAST(GETDATE() AS INT) AS r
+
+-- CASE[open]: ts-cast-int-datetime — fails on oracle, postgresql. ORA-00932: expression is of data type NUMBER, which is incompatible with expected data typ
+SELECT CAST(1 AS DATETIME) AS r
+
 -- CASE[open]: ts-cast-trycast — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'x' to a number: 
 SELECT CAST(123 AS VARCHAR(10)), TRY_CAST('x' AS INT), CONVERT(DATE, GETDATE())
 
