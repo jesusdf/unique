@@ -1385,3 +1385,13 @@ class TestZeroPushW7Batch:
             "oracle",
         )
         assert not any("preserved as a comment" in w.message for w in r.warnings)
+
+    def test_numeric_return_wrapped_for_bool_type_oracle(self) -> None:
+        r = self._t(
+            "create function bk() returns bool as $$ begin return 1; end$$"
+            " language plpgsql;",
+            "postgresql",
+            "oracle",
+        )
+        assert "RETURN (1 <> 0)" in r.sql, r.sql
+        assert "RETURN 1;" not in r.sql, r.sql
