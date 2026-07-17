@@ -1077,7 +1077,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          mysql→tsql **33 → 31** (validity 99.5%) and warnings 335 →
          305 (bodies stop over-degrading); top-level @vars still gate.
          Discovery HOLDS 0. Tests: TestWave217EmbeddedUservarGate
-         (2).**
+         (2).*** Wave 218 (2026-07-17): CALL lexes as an IDENTIFIER —
+         a MySQL routine whose no-BEGIN body is a single ``call p()``
+         shredded into a fake declaration and the body emptied to NULL
+         (silent loss); CALL joins the identifier-lexed no-BEGIN
+         branch (REPEAT/LOOP family). Measured: mysql→oracle
+         **19 → 16** (−3, validity 99.7%). Discovery HOLDS 0. Tests:
+         TestWave218NoBeginCallBody (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

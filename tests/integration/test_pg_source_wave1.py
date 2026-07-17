@@ -7658,3 +7658,18 @@ class TestWave217EmbeddedUservarGate:
     def test_top_level_uservar_still_gated(self) -> None:
         out = _t2("insert into t1 values (@value);", "mysql", "tsql")
         assert "UNIQUE:" in out and "@value" in out, out
+
+
+class TestWave218NoBeginCallBody:
+    """wave 218 (mysql-corpus): CALL lexes as an IDENTIFIER — a MySQL
+    routine whose no-BEGIN body is a single ``call p()`` shredded into
+    a fake declaration and the body emptied to NULL (silent loss)."""
+
+    def test_call_body_oracle(self) -> None:
+        out = _t2("create procedure b3() call b1();", "mysql", "oracle")
+        assert re.search(r"(?i)BEGIN\s+b1\(\);\s+END", out), out
+        assert "IS     call" not in out, out
+
+    def test_call_body_tsql(self) -> None:
+        out = _t2("create procedure b3() call b1();", "mysql", "tsql")
+        assert re.search(r"(?i)EXEC b1;", out), out

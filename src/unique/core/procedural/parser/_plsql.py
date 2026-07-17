@@ -127,9 +127,9 @@ class PlsqlStatementsMixin(ParserBase):
                     "CALL",
                     "RETURN",
                 )
-                # REPEAT/LOOP lex as identifiers; a ``label:`` prefix
-                # hides the loop keyword two tokens further on.
-                or self._current().upper_value in ("REPEAT", "LOOP")
+                # REPEAT/LOOP/CALL lex as identifiers; a ``label:``
+                # prefix hides the loop keyword two tokens further on.
+                or self._current().upper_value in ("REPEAT", "LOOP", "CALL")
                 or (
                     self._current().type == TokenType.IDENTIFIER
                     and self._peek(1).type == TokenType.COLON
