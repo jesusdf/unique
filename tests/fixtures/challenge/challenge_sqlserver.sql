@@ -36,18 +36,13 @@ CREATE TABLE t (id INT PRIMARY KEY, n INT);
 GO
 CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) FROM deleted); END
 
--- CASE[open]: ts-after-update-trg — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-CREATE TABLE t (id INT PRIMARY KEY, n INT, updated DATETIME);
-GO
-CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET updated = GETDATE() FROM t JOIN inserted i ON t.id = i.id; END
-
 -- CASE[open]: ts-alter-add — fails on oracle. ORA-30649: missing DIRECTORY keyword
 CREATE TABLE t (a INT); ALTER TABLE t ADD b NVARCHAR(10) NOT NULL DEFAULT 'x'
 
 -- CASE[open]: ts-ascii-char — fails on mysql, oracle, postgresql. ORA-00904: "NCHAR": invalid identifier
 SELECT ASCII('A'), CHAR(65), NCHAR(65)
 
--- CASE[open]: ts-at-time-zone — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[open]: ts-at-time-zone — fails on oracle, postgresql. ORA-00902: invalid datatype
 SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r
 
 -- CASE[open]: ts-binary-length — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
@@ -74,20 +69,8 @@ SELECT CHECKSUM_AGG(x) FROM (VALUES (1),(2)) v(x)
 -- CASE[open]: ts-choose — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
 SELECT CHOOSE(2, 'a', 'b', 'c') AS r
 
--- CASE[open]: ts-collate — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-SELECT 'a' COLLATE Latin1_General_CS_AS AS r
-
--- CASE[open]: ts-collate2 — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-SELECT 'abc' COLLATE Latin1_General_BIN AS r
-
 -- CASE[open]: ts-compress — fails on oracle, postgresql. ORA-00936: missing expression
 SELECT COMPRESS('data') AS r
-
--- CASE[open]: ts-computed-chain — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-CREATE TABLE t (price DECIMAL(10,2), tax AS (price * 0.21), total AS (price * 1.21) PERSISTED)
-
--- CASE[open]: ts-computed-func — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-CREATE TABLE t (a NVARCHAR(50), b AS (UPPER(a)) PERSISTED)
 
 -- CASE[open]: ts-concat-null — fails on mysql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
 SELECT CONCAT('a', NULL, 'b') AS r
@@ -100,9 +83,6 @@ SELECT CONCAT_WS(',', 'a', NULL, 'b') AS r
 
 -- CASE[open]: ts-conditional — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
 SELECT IIF(1>0,'y','n'), CHOOSE(2,'a','b','c'), ISNULL(NULL,'x'), NULLIF(1,1)
-
--- CASE[open]: ts-create-role — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
-CREATE ROLE r AUTHORIZATION dbo
 
 -- CASE[open]: ts-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT FROM c INTO @x; WHILE @@FETCH_STATUS = 0 BEGIN FETCH NEXT FROM c INTO @x; END; CLOSE c; DEALLOCATE c; END
@@ -125,18 +105,10 @@ SELECT DATETIMEFROMPARTS(2020, 6, 15, 10, 30, 0, 0) AS r
 -- CASE[open]: ts-datetimeoffset — fails on mysql, oracle. ORA-03060: Data type TIME is invalid.
 CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))
 
--- CASE[open]: ts-ddl-trigger — fails on mysql, oracle, postgresql. ORA-00942: table or view "SYSTEM"."DATABASE" does not exist
-CREATE TRIGGER trg ON DATABASE FOR CREATE_TABLE AS BEGIN PRINT 'created'; END
-
--- CASE[open]: ts-default-nextval — fails on mysql, oracle, postgresql. ORA-04044: procedure, function, package, or type is not allowed here
+-- CASE[open]: ts-default-nextval — fails on oracle, postgresql. ORA-04044: procedure, function, package, or type is not allowed here
 CREATE SEQUENCE s AS INT START WITH 1;
 GO
 CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)
-
--- CASE[open]: ts-delete-cte — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-CREATE TABLE t (id INT, n INT, s NVARCHAR(50));
-GO
-WITH cte AS (SELECT id, ROW_NUMBER() OVER (PARTITION BY n ORDER BY id) rn FROM t) DELETE FROM cte WHERE rn > 1
 
 -- CASE[open]: ts-emoji-len — fails on mysql, postgresql. FUNC-DIFF: source=(('2',),) target=(('1',),)
 SELECT LEN(N'😀') AS r
@@ -150,12 +122,6 @@ SELECT DATEADD(MONTH, -1, EOMONTH('2020-03-01')) AS r
 -- CASE[open]: ts-error-functions — fails on oracle. PROCEDURE P compiled INVALID (line 12): PL/SQL: ORA-00904: "ERROR_LINE": invalid identifie
 CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERROR_MESSAGE(), ERROR_NUMBER(), ERROR_LINE(); END CATCH END
 
--- CASE[open]: ts-filtered-index — fails on mysql, oracle. ORA-02158: invalid CREATE INDEX option
-CREATE TABLE t (a INT, b INT); CREATE NONCLUSTERED INDEX ix ON t (a) INCLUDE (b) WHERE a > 0
-
--- CASE[open]: ts-filtered-index2 — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-CREATE TABLE t (a INT, b INT); CREATE INDEX ix ON t (a) WHERE b IS NOT NULL
-
 -- CASE[open]: ts-format-iso — fails on oracle. ORA-01821: date format not recognized
 SELECT FORMAT(CAST('2020-06-15 14:30:45' AS DATETIME2), 'yyyy-MM-ddTHH:mm:ss') AS r
 
@@ -168,60 +134,29 @@ SELECT FORMATMESSAGE('hi %s', 'x') AS r
 -- CASE[open]: ts-geography — fails on mysql, oracle, postgresql. ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier
 SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r
 
--- CASE[open]: ts-grant — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
-CREATE TABLE t (id INT);
-GO
-GRANT SELECT ON t TO PUBLIC
-
--- CASE[open]: ts-grant-object — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
-CREATE TABLE t (a INT);
-GO
-GRANT SELECT ON OBJECT::t TO PUBLIC
-
--- CASE[open]: ts-hierarchyid — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-SELECT CAST('/1/2/' AS HIERARCHYID).ToString() AS r
-
 -- CASE[open]: ts-host-db — fails on mysql, oracle, postgresql. ORA-00904: "DB_NAME": invalid identifier
 SELECT HOST_NAME(), DB_NAME(), SUSER_SNAME()
 
 -- CASE[open]: ts-identity-funcs — fails on mysql, oracle, postgresql. ORA-00936: missing expression
 SELECT SCOPE_IDENTITY(), @@IDENTITY, IDENT_CURRENT('t')
 
--- CASE[open]: ts-inline-index2 — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[open]: ts-inline-index2 — fails on oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (id INT, name VARCHAR(50), INDEX ix_name NONCLUSTERED (name))
 
--- CASE[open]: ts-inline-tvf — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-CREATE FUNCTION f() RETURNS TABLE AS RETURN (SELECT 1 AS x)
-
--- CASE[open]: ts-insert-output — fails on mysql, oracle. ORA-00925: missing INTO keyword
+-- CASE[open]: ts-insert-output — fails on oracle. ORA-00925: missing INTO keyword
 CREATE TABLE t (id INT, n INT);
 GO
 INSERT INTO t (id, n) OUTPUT INSERTED.id VALUES (1, 5)
 
--- CASE[open]: ts-instead-of-insert — fails on mysql, postgresql. "t" is a table
+-- CASE[open]: ts-instead-of-insert — fails on postgresql. "t" is a table
 CREATE TABLE t (id INT PRIMARY KEY, n INT);
 GO
 CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT id, n FROM inserted; END
 
--- CASE[open]: ts-json-value — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-SELECT JSON_VALUE('{"a":1}', '$.a')
-
--- CASE[open]: ts-lead-ignore-nulls — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-SELECT x, LEAD(x, 1) IGNORE NULLS OVER (ORDER BY x) FROM (VALUES (1),(2)) v(x)
-
 -- CASE[open]: ts-len-trailing — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('3',),) target=(('6',),)
 SELECT LEN('abc   ') AS r
 
--- CASE[open]: ts-log — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-SELECT LOG(2.718), LOG10(100), POWER(2, 8)
-
--- CASE[open]: ts-math — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-SELECT CEILING(4.2), FLOOR(4.8), ROUND(4.555, 2), SQUARE(4)
-
--- CASE[open]: ts-merge — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-CREATE TABLE tgt (id INT PRIMARY KEY, n INT); MERGE tgt USING (VALUES (1, 5)) AS s(id, n) ON tgt.id = s.id WHEN MATCHED THEN UPDATE SET n = s.n WHEN NOT MATCHED THEN INSERT (id, n) VALUES (s.id, s.n);
-
--- CASE[open]: ts-merge-full — fails on mysql, oracle, postgresql. ORA-02000: missing THEN keyword
+-- CASE[open]: ts-merge-full — fails on oracle, postgresql. ORA-02000: missing THEN keyword
 CREATE TABLE tgt (id INT PRIMARY KEY, n INT); CREATE TABLE src (id INT, n INT);
 GO
 MERGE tgt USING src ON tgt.id = src.id WHEN MATCHED AND src.n > 0 THEN UPDATE SET n = src.n WHEN MATCHED THEN DELETE WHEN NOT MATCHED BY TARGET THEN INSERT (id, n) VALUES (src.id, src.n) WHEN NOT MATCHED BY SOURCE THEN DELETE;
@@ -229,7 +164,7 @@ MERGE tgt USING src ON tgt.id = src.id WHEN MATCHED AND src.n > 0 THEN UPDATE SE
 -- CASE[open]: ts-metadata-funcs — fails on mysql, oracle, postgresql. ORA-00904: "OBJECT_ID": invalid identifier
 SELECT COL_LENGTH('t', 'c'), OBJECT_ID('t')
 
--- CASE[open]: ts-money — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[open]: ts-money — fails on oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (price MONEY, small SMALLMONEY)
 
 -- CASE[open]: ts-money-arith — fails on mysql, postgresql. FUNC-DIFF: source=(('12.8',),) target=(('$12.80',),)
@@ -237,9 +172,6 @@ SELECT CAST(10.5 AS MONEY) + CAST(2.3 AS MONEY) AS r
 
 -- CASE[open]: ts-month-overflow — fails on mysql. FUNC-DIFF: source=(('2020-02-29 00:00:00',),) target=(('2020-02-29',),)
 SELECT DATEADD(MONTH, 1, '2020-01-31') AS r
-
--- CASE[open]: ts-multistatement-tvf — fails on mysql, oracle, postgresql. FUNCTION F compiled INVALID (line 2): PLS-00103: Encountered the symbol "@" when expecting
-CREATE FUNCTION f() RETURNS @t TABLE (x INT) AS BEGIN INSERT INTO @t VALUES (1); RETURN; END
 
 -- CASE[open]: ts-nchar-hex — fails on mysql, oracle, postgresql. ORA-00904: "NCHAR": invalid identifier
 SELECT NCHAR(0x1F600) AS r
@@ -249,7 +181,7 @@ CREATE TABLE t (id INT);
 GO
 SELECT * FROM t WITH (NOLOCK)
 
--- CASE[open]: ts-openjson — fails on mysql, oracle, postgresql. ORA-00904: "OPEN_J_S_O_N": invalid identifier
+-- CASE[open]: ts-openjson — fails on oracle, postgresql. ORA-00904: "OPEN_J_S_O_N": invalid identifier
 SELECT * FROM OPENJSON('[1,2,3]')
 
 -- CASE[open]: ts-order-strings — fails on mysql. FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), 
@@ -266,39 +198,13 @@ CREATE TABLE dbo.audit (id INT IDENTITY, msg NVARCHAR(MAX), ts DATETIME2);
 GO
 CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BEGIN BEGIN TRY INSERT INTO dbo.audit (msg, ts) VALUES (@msg, SYSDATETIME()); END TRY BEGIN CATCH THROW; END CATCH END
 
--- CASE[open]: ts-realworld-inventory — fails on oracle, postgresql. PROCEDURE ADJUST_STOCK compiled INVALID (line 12): PLS-00103: Encountered the symbol "SELE
-CREATE TABLE inventory (sku NVARCHAR(20) PRIMARY KEY, qty INT NOT NULL CHECK (qty >= 0));
-GO
-CREATE PROCEDURE dbo.adjust_stock @sku NVARCHAR(20), @delta INT AS
-BEGIN
-SET NOCOUNT ON;
-BEGIN TRANSACTION;
-BEGIN TRY
-UPDATE inventory SET qty = qty + @delta WHERE sku = @sku;
-IF (SELECT qty FROM inventory WHERE sku = @sku) < 0 THROW 50001, 'negative stock', 1;
-COMMIT;
-END TRY
-BEGIN CATCH
-ROLLBACK; THROW;
-END CATCH
-END
-
--- CASE[open]: ts-realworld-orders — fails on postgresql. relation "orders" already exists
-CREATE TABLE dbo.orders (id INT IDENTITY PRIMARY KEY, customer_id INT NOT NULL, total DECIMAL(10,2) DEFAULT 0, created DATETIME2 DEFAULT SYSDATETIME());
-GO
-CREATE INDEX ix_cust ON dbo.orders (customer_id);
-GO
-CREATE TRIGGER trg_audit ON dbo.orders AFTER INSERT AS BEGIN UPDATE dbo.orders SET created = SYSDATETIME() FROM dbo.orders o JOIN inserted i ON o.id = i.id; END;
-GO
-CREATE PROCEDURE dbo.add_order @cid INT, @total DECIMAL(10,2) AS BEGIN SET NOCOUNT ON; INSERT INTO dbo.orders (customer_id, total) VALUES (@cid, @total); SELECT SCOPE_IDENTITY(); END
-
 -- CASE[open]: ts-recursive-cte — fails on mysql, postgresql. relation "r" does not exist
 WITH r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n < 5) SELECT * FROM r
 
 -- CASE[open]: ts-replicate-space — fails on oracle, postgresql. ORA-00904: "SPACE": invalid identifier
 SELECT REPLICATE('ab', 3), SPACE(5), REVERSE('abc')
 
--- CASE[open]: ts-rowversion — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[open]: ts-rowversion — fails on oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (row_ver ROWVERSION, flags BINARY(8))
 
 -- CASE[open]: ts-scroll-cursor — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 9): PLS-00103: Encountered the symbol ";" when expectin
@@ -309,7 +215,7 @@ CREATE TABLE src (id INT);
 GO
 SELECT id INTO dst FROM src
 
--- CASE[open]: ts-sequence-next — fails on mysql, oracle, postgresql. ORA-00904: "NEXT_VALUE_FOR": invalid identifier
+-- CASE[open]: ts-sequence-next — fails on oracle, postgresql. ORA-00904: "NEXT_VALUE_FOR": invalid identifier
 CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1;
 GO
 SELECT NEXT VALUE FOR seq
@@ -317,15 +223,10 @@ SELECT NEXT VALUE FOR seq
 -- CASE[open]: ts-soundex-diff — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
 SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')
 
--- CASE[open]: ts-sp-rename — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-CREATE TABLE t (a INT, b INT);
-GO
-EXEC sp_rename 't.a', 'x', 'COLUMN'
-
 -- CASE[open]: ts-spid-version — fails on mysql, oracle, postgresql. ORA-00936: missing expression
 SELECT @@SPID, @@VERSION
 
--- CASE[open]: ts-st-distance — fails on mysql, oracle, postgresql. DPY-4010: a bind variable replacement value for placeholder ":POINT" was not provided
+-- CASE[open]: ts-st-distance — fails on oracle, postgresql. DPY-4010: a bind variable replacement value for placeholder ":POINT" was not provided
 SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)) AS r
 
 -- CASE[open]: ts-str-func — fails on mysql, oracle, postgresql. ORA-00904: "STR": invalid identifier
@@ -342,22 +243,14 @@ SELECT STRING_AGG(CAST(n AS VARCHAR), ',') WITHIN GROUP (ORDER BY id) FROM t
 -- CASE[open]: ts-string-agg-within — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
--- CASE[open]: ts-string-split2 — fails on mysql, oracle, postgresql. ORA-00904: "STRING_SPLIT": invalid identifier
+-- CASE[open]: ts-string-split2 — fails on oracle, postgresql. ORA-00904: "STRING_SPLIT": invalid identifier
 SELECT * FROM STRING_SPLIT('a,b,c', ',') WHERE value <> 'b'
 
 -- CASE[open]: ts-stuff — fails on mysql, oracle, postgresql. ORA-00904: "STUFF": invalid identifier
 SELECT STUFF('abcdef', 2, 3, 'XY') AS r
 
--- CASE[open]: ts-synonym — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
-CREATE TABLE t (a INT);
-GO
-CREATE SYNONYM syn FOR dbo.t
-
 -- CASE[open]: ts-sysdatetime — fails on mysql, oracle, postgresql. ORA-00904: "GETUTCDATE": invalid identifier
 SELECT SYSDATETIME(), SYSUTCDATETIME(), GETUTCDATE()
-
--- CASE[open]: ts-table-variable — fails on oracle. ORA-06550: line 2, column 5:
-DECLARE @t TABLE (id INT); INSERT INTO @t VALUES (1); SELECT * FROM @t
 
 -- CASE[open]: ts-tablesample — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 CREATE TABLE t (id INT);
@@ -373,12 +266,7 @@ SELECT IIF('a ' = 'a', 1, 0) AS r
 -- CASE[open]: ts-translate — fails on mysql. (1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
 
--- CASE[open]: ts-trigger-deleted-inserted — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-CREATE TABLE t (id INT, n INT);
-GO
-CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN SELECT d.id, i.n FROM deleted d JOIN inserted i ON d.id = i.id; END
-
--- CASE[open]: ts-trigger-on-view — fails on mysql, postgresql. INSTEAD OF triggers must be FOR EACH ROW
+-- CASE[open]: ts-trigger-on-view — fails on postgresql. INSTEAD OF triggers must be FOR EACH ROW
 CREATE TABLE t (id INT);
 GO
 CREATE VIEW v AS SELECT id FROM t;
@@ -397,19 +285,11 @@ SELECT TRY_PARSE('2020-01-01' AS DATE) AS r
 -- CASE[open]: ts-tzoffset — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier
 SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r
 
--- CASE[open]: ts-view-check — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
-CREATE TABLE t (id INT);
-GO
-CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION
-
 -- CASE[open]: ts-while-break-continue — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 11): PLS-00201: identifier 'BREAK' must be declared
 CREATE PROCEDURE p AS BEGIN DECLARE @i INT = 0; WHILE @i < 5 BEGIN SET @i = @i + 1; IF @i = 3 CONTINUE; IF @i = 5 BREAK; END; END
 
 -- CASE[open]: ts-while-loop — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 15): PLS-00103: Encountered the symbol "=" when expecti
 CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN SET @n -= 1; END; END
-
--- CASE[open]: ts-xml-value — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
-SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r
 
 -- CASE[open]: tsql-drop2-100|START|ID — fails on postgresql. SILENT CLAUSE DROP: '100|START|IDENTITY' absent from valid postgresql output, no warning
 CREATE TABLE t (id INT IDENTITY(100, 5))

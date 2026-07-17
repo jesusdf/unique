@@ -5,6 +5,9 @@ live engine** (original accepted by its own engine; output rejected by the
 target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
+
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (314 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
 
@@ -245,11 +248,6 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR`
 - src: `SELECT CRC32('abc') AS r`
 
-## my-create-role  (mysql)
-- targets: oracle(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE ROLE 'r'`
-
 ## my-date-add-interval  (mysql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-30081: invalid data type for datetime/interval arithmetic`
@@ -330,12 +328,6 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('1', '0', '1'),) target=(('1', '1', '1'),)`
 - src: `SELECT 1 = 1.0 AS r, 'a' = 'a ' AS b, 1 = TRUE AS c`
 
-## my-event-scheduler  (mysql)
-- targets: oracle(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a INT);
-CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
-
 ## my-export-set  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
@@ -410,11 +402,6 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
 - src: `SELECT HEX(255) AS r, BIN(5) AS b`
-
-## my-index-using  (mysql)
-- targets: oracle(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a INT, b INT); CREATE INDEX ix ON t (a) USING BTREE`
 
 ## my-inet  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -536,11 +523,6 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT LOCATE('', '') AS r`
 
-## my-lock-tables  (mysql)
-- targets: oracle(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (id INT); LOCK TABLES t WRITE`
-
 ## my-log-2arg  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('0.333333',),)`
@@ -596,11 +578,6 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `FUNC-DIFF: source=(('Apple',), ('banana',), ('Banana',), ('cherry',)) target=(('Apple',), `
 - src: `SELECT x FROM (SELECT 'banana' x UNION ALL SELECT 'Apple' x UNION ALL SELECT 'cherry' x UNION ALL SELECT 'Banana' x) t ORDER BY x`
 
-## my-partition-hash  (mysql)
-- targets: oracle(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (id INT, dt DATE) PARTITION BY HASH(id) PARTITIONS 4`
-
 ## my-period-diff  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE`
@@ -635,11 +612,6 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('',),) target=(('NULL',),)`
 - src: `SELECT REPEAT('ab', -1) AS r`
-
-## my-replace-into  (mysql)
-- targets: oracle(carrier), postgresql(invalid), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a INT); REPLACE INTO t VALUES (1)`
 
 ## my-replace-null2  (mysql)
 - targets: oracle(func)
@@ -796,11 +768,6 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU`
 - src: `SELECT UUID(), UUID_SHORT()`
 
-## my-view-cascade-check  (mysql)
-- targets: oracle(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a INT, b INT); CREATE VIEW v AS SELECT a FROM t WHERE a > 0 WITH CASCADED CHECK OPTION`
-
 ## my-week-quarter  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE`
@@ -812,8 +779,8 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - src: `SELECT WEIGHT_STRING('abc') AS r`
 
 ## my8-lag-nth  (mysql)
-- targets: oracle(invalid), tsql(invalid)
-- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
+- targets: oracle(invalid)
+- live error: `ORA-43853: JSON type cannot be used in non-automatic segment space management tablespace "`
 - src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, LAG(n, 1, 0) OVER (ORDER BY id), NTH_VALUE(n`
 
 ## my8-recursive  (mysql)
@@ -906,27 +873,10 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), `
 - src: `SELECT x FROM (SELECT 'banana' x FROM DUAL UNION ALL SELECT 'Apple' x FROM DUAL UNION ALL SELECT 'cherry' x FROM DUAL UNION ALL SE`
 
-## ora-add-constraint-state  (oracle)
-- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a NUMBER, b NUMBER);
-ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENABLE NOVALIDATE`
-
 ## ora-add-months  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018`
 - src: `SELECT ADD_MONTHS(SYSDATE, 3) AS r FROM DUAL`
-
-## ora-alter-session  (oracle)
-- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD'`
-
-## ora-authid  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE PROCEDURE p (a NUMBER) AUTHID CURRENT_USER AS BEGIN NULL; END;
-/`
 
 ## ora-bit-fns  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -937,12 +887,6 @@ ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENABLE NOVALIDATE`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'BITAND' is not a recognized built-in function name.DB-Lib error message 20018, se`
 - src: `SELECT BITAND(5, 3) AS r FROM DUAL`
-
-## ora-bulk-collect  (oracle)
-- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
-- src: `CREATE PROCEDURE p AS TYPE t_tab IS TABLE OF NUMBER; v t_tab; BEGIN SELECT 1 BULK COLLECT INTO v FROM DUAL; END;
-/`
 
 ## ora-case-statement  (oracle)
 - targets: tsql(invalid)
@@ -966,26 +910,9 @@ ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENABLE NOVALIDATE`
 - src: `SELECT COALESCE(TO_CLOB('a'), TO_CLOB('b')) AS r FROM DUAL`
 
 ## ora-collect  (oracle)
-- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- targets: postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
 - src: `SELECT CAST(COLLECT(x) AS SYS.ODCINUMBERLIST) FROM (SELECT 1 x FROM DUAL)`
-
-## ora-collection-param  (oracle)
-- targets: tsql(invalid)
-- live error: `(258, b'Cannot call methods on sql_variant.DB-Lib error message 20018, severity 15:\nGener`
-- src: `CREATE FUNCTION f (p_ids SYS.ODCINUMBERLIST) RETURN NUMBER AS BEGIN RETURN p_ids.COUNT; END;
-/`
-
-## ora-comment-col  (oracle)
-- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (id NUMBER); COMMENT ON COLUMN t.id IS 'the id'`
-
-## ora-compound-trigger  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id NUMBER, n NUMBER);
-CREATE TRIGGER trg FOR UPDATE ON t COMPOUND TRIGGER BEFORE EACH ROW IS BEGIN NULL; END BEFOR`
 
 ## ora-concat-null  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
@@ -996,26 +923,6 @@ CREATE TRIGGER trg FOR UPDATE ON t COMPOUND TRIGGER BEFORE EACH ROW IS BEGIN NUL
 - targets: tsql(invalid)
 - live error: `(245, b"Conversion failed when converting the varchar value 'a' to data type int.DB-Lib er`
 - src: `SELECT 'a' || 5 AS r FROM DUAL`
-
-## ora-connect-by  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT LEVEL, 1 AS n FROM DUAL CONNECT BY LEVEL <= 5`
-
-## ora-connect-by-root  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT CONNECT_BY_ROOT id AS root FROM (SELECT 1 id, NULL par FROM DUAL) CONNECT BY PRIOR id = par`
-
-## ora-connect-by2  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT id FROM (SELECT 1 id, NULL par FROM DUAL) START WITH par IS NULL CONNECT BY PRIOR id = par`
-
-## ora-create-role  (oracle)
-- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE ROLE r`
 
 ## ora-cursor  (oracle)
 - targets: mysql(invalid)
@@ -1043,22 +950,10 @@ CREATE TRIGGER trg FOR UPDATE ON t COMPOUND TRIGGER BEFORE EACH ROW IS BEGIN NUL
 - live error: `FUNC-DIFF: source=(('1',),) target=(('24',),)`
 - src: `SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL`
 
-## ora-ddl-trigger  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TRIGGER trg BEFORE CREATE ON SCHEMA BEGIN NULL; END;
-/`
-
 ## ora-decode-null  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('match',),) target=(('no',),)`
 - src: `SELECT DECODE(NULL, NULL, 'match', 'no') AS r FROM DUAL`
-
-## ora-default-nextval  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE SEQUENCE s;
-CREATE TABLE t (id NUMBER DEFAULT s.NEXTVAL, a NUMBER)`
 
 ## ora-div  (oracle)
 - targets: postgresql(func), tsql(func)
@@ -1100,21 +995,10 @@ CREATE TABLE t (id NUMBER DEFAULT s.NEXTVAL, a NUMBER)`
 - live error: `FUNC-DIFF: source=(('x',),) target=(('',),)`
 - src: `SELECT NVL('', 'x') AS r FROM DUAL`
 
-## ora-exception-init  (oracle)
-- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
-- live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type EXCEPTION.DB-Lib error m`
-- src: `CREATE PROCEDURE p AS e EXCEPTION; PRAGMA EXCEPTION_INIT(e, -20001); BEGIN RAISE e; END;
-/`
-
 ## ora-extractvalue  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
 - src: `SELECT EXTRACTVALUE(XMLTYPE('<a>1</a>'), '/a') AS r FROM DUAL`
-
-## ora-fk-novalidate  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE p (id NUMBER PRIMARY KEY); CREATE TABLE c (pid NUMBER, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES p(id) ON DELETE CAS`
 
 ## ora-fmt-dayname  (oracle)
 - targets: mysql(func)
@@ -1146,22 +1030,6 @@ CREATE TABLE t (id NUMBER DEFAULT s.NEXTVAL, a NUMBER)`
 - live error: `(102, b"Incorrect syntax near '*'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
 - src: `CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)`
 
-## ora-goto  (oracle)
-- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
-- live error: `(156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG`
-- src: `CREATE PROCEDURE p AS BEGIN GOTO done; <<done>> NULL; END;
-/`
-
-## ora-grant  (oracle)
-- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (id NUMBER); GRANT SELECT ON t TO PUBLIC`
-
-## ora-grant-system  (oracle)
-- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `GRANT CREATE SESSION, CREATE TABLE TO r`
-
 ## ora-hint-comment  (oracle)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -1172,42 +1040,15 @@ CREATE TABLE t (id NUMBER DEFAULT s.NEXTVAL, a NUMBER)`
 - live error: `(195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s`
 - src: `SELECT INITCAP('hello world') AS r FROM DUAL`
 
-## ora-insert-all  (oracle)
-- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE a (id NUMBER); CREATE TABLE b (id NUMBER);
-INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
-
-## ora-insert-all-cond  (oracle)
-- targets: mysql(carrier), postgresql(invalid), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a NUMBER);
-INSERT ALL WHEN a > 0 THEN INTO t VALUES (a) SELECT 1 a FROM DUAL`
-
 ## ora-insert-append  (oracle)
 - targets: postgresql(invalid)
 - live error: `validator-crash: sending query failed: another command is already in progress`
 - src: `CREATE TABLE t (a NUMBER); INSERT /*+ APPEND */ INTO t SELECT 1 FROM DUAL`
 
-## ora-interval-partition  (oracle)
-- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (id NUMBER, dt DATE) PARTITION BY RANGE (dt) INTERVAL (NUMTOYMINTERVAL(1,'MONTH')) (PARTITION p0 VALUES LESS THAN (`
-
 ## ora-interval-tochar  (oracle)
 - targets: postgresql(func)
 - live error: `FUNC-DIFF: source=(('+02 03:04:05.000000',),) target=(('2 days 03:04:05',),)`
 - src: `SELECT TO_CHAR(INTERVAL '2 3:04:05.000' DAY TO SECOND) AS r FROM DUAL`
-
-## ora-json-object  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT JSON_OBJECT('a' VALUE 1) AS r FROM DUAL`
-
-## ora-json-table  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT * FROM JSON_TABLE('[1,2]', '$[*]' COLUMNS (v NUMBER PATH '$'))`
 
 ## ora-json-value  (oracle)
 - targets: postgresql(invalid), tsql(silent-rt)
@@ -1219,26 +1060,10 @@ INSERT ALL WHEN a > 0 THEN INTO t VALUES (a) SELECT 1 a FROM DUAL`
 - live error: `(195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT LAST_DAY(SYSDATE) AS r FROM DUAL`
 
-## ora-last-value-ignore  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT LAST_VALUE(x IGNORE NULLS) OVER (ORDER BY x) FROM (SELECT 1 x FROM DUAL)`
-
 ## ora-length-trailing  (oracle)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('6',),) target=(('3',),)`
 - src: `SELECT LENGTH('abc   ') AS r FROM DUAL`
-
-## ora-level-recursive  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id NUMBER, n NUMBER, s VARCHAR2(50));
-SELECT LEVEL n FROM DUAL CONNECT BY LEVEL <= 10`
-
-## ora-level2  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= 3`
 
 ## ora-listagg  (oracle)
 - targets: postgresql(invalid)
@@ -1260,33 +1085,10 @@ SELECT LEVEL n FROM DUAL CONNECT BY LEVEL <= 10`
 - live error: `(195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s`
 - src: `SELECT DBMS_LOB.GETLENGTH(TO_CLOB('hello')) AS r FROM DUAL`
 
-## ora-logon-trigger  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TRIGGER trg AFTER LOGON ON DATABASE BEGIN NULL; END;
-/`
-
-## ora-matview-options  (oracle)
-- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE MATERIALIZED VIEW mv BUILD DEFERRED REFRESH COMPLETE ON DEMAND AS SELECT 1 AS x FROM DUAL`
-
 ## ora-median-mode  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME`
 - src: `SELECT MEDIAN(x), STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 FROM DUAL UNION ALL SELECT 2 FROM DUAL)`
-
-## ora-merge-insert-only  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id NUMBER, n NUMBER, s VARCHAR2(50));
-MERGE INTO t d USING (SELECT 1 id, 2 n FROM DUAL) s ON (d.id=s.id) WHEN NOT`
-
-## ora-modify-default  (oracle)
-- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a NUMBER, b NUMBER);
-ALTER TABLE t MODIFY a DEFAULT 5`
 
 ## ora-month-name  (oracle)
 - targets: mysql(func)
@@ -1312,12 +1114,6 @@ ALTER TABLE t MODIFY a DEFAULT 5`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NC`
 - src: `SELECT NCHR(233), UNISTR('\00e9') FROM DUAL`
-
-## ora-nested-proc  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE PROCEDURE p AS PROCEDURE helper IS BEGIN NULL; END; BEGIN helper; END;
-/`
 
 ## ora-next-day  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1364,66 +1160,18 @@ ALTER TABLE t MODIFY a DEFAULT 5`
 - live error: `FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))`
 - src: `SELECT x FROM (SELECT 3 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT NULL x FROM DUAL) ORDER BY x`
 
-## ora-package-body  (oracle)
-- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
-- src: `CREATE PACKAGE pkg AS FUNCTION f(x NUMBER) RETURN NUMBER; END pkg;
-/
-CREATE PACKAGE BODY pkg AS FUNCTION f(x NUMBER) RETURN NUMBER`
-
-## ora-package-collection  (oracle)
-- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
-- src: `CREATE PACKAGE pkg IS TYPE num_tab IS TABLE OF NUMBER; g_cache num_tab; PROCEDURE init; END pkg;
-/`
-
-## ora-package-overload  (oracle)
-- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
-- src: `CREATE PACKAGE pkg IS PROCEDURE p(x NUMBER); PROCEDURE p(x VARCHAR2); END pkg;
-/`
-
-## ora-package-spec  (oracle)
-- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
-- src: `CREATE PACKAGE pkg AS PROCEDURE p; FUNCTION f RETURN NUMBER; END pkg;
-/`
-
-## ora-parallel-enable  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE FUNCTION f RETURN NUMBER DETERMINISTIC PARALLEL_ENABLE AS BEGIN RETURN 1; END;
-/`
-
-## ora-param-cursor  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE PROCEDURE p AS CURSOR c(pid NUMBER) IS SELECT 1 FROM DUAL WHERE 1=pid; BEGIN OPEN c(1); CLOSE c; END;
-/`
-
-## ora-pipelined  (oracle)
-- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
-- src: `CREATE FUNCTION f RETURN SYS.ODCINUMBERLIST PIPELINED AS BEGIN PIPE ROW(1); PIPE ROW(2); RETURN; END;
-/`
-
 ## ora-pk-using-index  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(1018, b"Incorrect syntax near 'INDEX'. If this is intended as a part of a table hint, A W`
 - src: `CREATE TABLE t (id NUMBER, CONSTRAINT pk PRIMARY KEY (id) USING INDEX)`
 
-## ora-public-synonym  (oracle)
-- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE PUBLIC SYNONYM psyn FOR t`
-
 ## ora-ratio-to-report  (oracle)
-- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- targets: postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA`
 - src: `SELECT RATIO_TO_REPORT(x) OVER () FROM (SELECT 1 x FROM DUAL)`
 
 ## ora-ratio2  (oracle)
-- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- targets: postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA`
 - src: `SELECT RATIO_TO_REPORT(1) OVER () FROM DUAL`
 
@@ -1432,33 +1180,10 @@ CREATE PACKAGE BODY pkg AS FUNCTION f(x NUMBER) RETURN NUMBER`
 - live error: `(195, b"'RAWTOHEX' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT RAWTOHEX('AB'), HEXTORAW('4142') FROM DUAL`
 
-## ora-realworld-emp  (oracle)
-- targets: tsql(invalid)
-- live error: `(1003, b'Line 13: FOR UPDATE clause allowed only for DECLARE CURSOR.DB-Lib error message 2`
-- src: `CREATE TABLE emp (id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name VARCHAR2(50), mgr_id NUMBER, salary NUMBER(10,2));
-ALTE`
-
-## ora-realworld-orders  (oracle)
-- targets: mysql(invalid), postgresql(invalid)
-- live error: `relation "orders" already exists`
-- src: `CREATE TABLE orders (id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, customer_id NUMBER NOT NULL, total NUMBER(10,2) DEFAULT 0`
-
-## ora-record-type  (oracle)
-- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
-- src: `CREATE PROCEDURE p AS TYPE rec IS RECORD (a NUMBER, b VARCHAR2(10)); r rec; BEGIN r.a := 1; END;
-/`
-
 ## ora-recursive-func  (oracle)
 - targets: tsql(invalid)
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
 - src: `CREATE FUNCTION f(n NUMBER) RETURN NUMBER AS BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END;
-/`
-
-## ora-ref-cursor  (oracle)
-- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
-- src: `CREATE PROCEDURE p AS TYPE rc IS REF CURSOR; c rc; v NUMBER; BEGIN OPEN c FOR SELECT 1 FROM DUAL; FETCH c INTO v; CLOSE c; END;
 /`
 
 ## ora-regexp-count  (oracle)
@@ -1471,34 +1196,6 @@ ALTE`
 - live error: `(1582, "Incorrect parameter count in the call to native function 'REGEXP_SUBSTR'")`
 - src: `SELECT REGEXP_SUBSTR('a1b2c3', '(\d)', 1, 1, NULL, 1) AS r FROM DUAL`
 
-## ora-regexp-like  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT REGEXP_LIKE('abc', '^a') AS matched FROM DUAL WHERE REGEXP_LIKE('abc', '^a')`
-
-## ora-regr  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT CORR(x, y), COVAR_POP(x, y), REGR_SLOPE(y, x) FROM (SELECT 1 x, 2 y FROM DUAL UNION SELECT 2, 4 FROM DUAL)`
-
-## ora-result-cache  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE FUNCTION f(x NUMBER) RETURN NUMBER DETERMINISTIC RESULT_CACHE AS BEGIN RETURN x; END;
-/`
-
-## ora-return-refcursor  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE FUNCTION f RETURN SYS_REFCURSOR AS c SYS_REFCURSOR; BEGIN OPEN c FOR SELECT 1 AS x FROM DUAL; RETURN c; END;
-/`
-
-## ora-reverse-index  (oracle)
-- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a NUMBER, b NUMBER);
-CREATE INDEX ix ON t (a) REVERSE`
-
 ## ora-round-date-month  (oracle)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('2020-07-01 00:00:00',),) target=(('2020',),)`
@@ -1509,14 +1206,8 @@ CREATE INDEX ix ON t (a) REVERSE`
 - live error: `FUNC-DIFF: source=(('a',),) target=(('',),)`
 - src: `SELECT RTRIM('axxx', 'x') AS r FROM DUAL`
 
-## ora-sequence  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE SEQUENCE seq START WITH 1;
-SELECT seq.NEXTVAL FROM DUAL`
-
 ## ora-sequence-options  (oracle)
-- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- targets: postgresql(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near 'NOCYCLE'.DB-Lib error message 20018, severity 15:\nGeneral `
 - src: `CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1 CACHE 20 NOCYCLE ORDER`
 
@@ -1525,26 +1216,10 @@ SELECT seq.NEXTVAL FROM DUAL`
 - live error: `function soundex(unknown) does not exist`
 - src: `SELECT SOUNDEX('Smith') AS r FROM DUAL`
 
-## ora-sqlerrm  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE PROCEDURE p AS BEGIN NULL; EXCEPTION WHEN NO_DATA_FOUND THEN RAISE; WHEN OTHERS THEN RAISE_APPLICATION_ERROR(-20001, SQLERR`
-
 ## ora-substr-neg  (oracle)
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('de',),) target=(('',),)`
 - src: `SELECT SUBSTR('abcdef', -3, 2) AS r FROM DUAL`
-
-## ora-synonym  (oracle)
-- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a NUMBER);
-CREATE SYNONYM syn FOR t`
-
-## ora-sys-connect-path  (oracle)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT SYS_CONNECT_BY_PATH(id, '/') AS p FROM (SELECT 1 id, NULL par FROM DUAL) START WITH par IS NULL CONNECT BY PRIOR id = par`
 
 ## ora-sys-extract-utc  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1552,19 +1227,14 @@ CREATE SYNONYM syn FOR t`
 - src: `SELECT SYS_EXTRACT_UTC(SYSTIMESTAMP) AS r FROM DUAL`
 
 ## ora-table-collection  (oracle)
-- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- targets: postgresql(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:`
 - src: `SELECT * FROM TABLE(SYS.ODCINUMBERLIST(1,2,3))`
 
 ## ora-table-varchar-list  (oracle)
-- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- targets: postgresql(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:`
 - src: `SELECT COLUMN_VALUE FROM TABLE(SYS.ODCIVARCHAR2LIST('a','b','c'))`
-
-## ora-tablespace  (oracle)
-- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a NUMBER) TABLESPACE users`
 
 ## ora-to-char-day  (oracle)
 - targets: mysql(func)
@@ -1612,7 +1282,7 @@ CREATE SYNONYM syn FOR t`
 - src: `SELECT SYSTIMESTAMP, LOCALTIMESTAMP, SESSIONTIMEZONE FROM DUAL`
 
 ## ora-tz-interval  (oracle)
-- targets: mysql(invalid), tsql(invalid)
+- targets: tsql(invalid)
 - live error: `(102, b"Incorrect syntax near 'DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQL `
 - src: `CREATE TABLE t (a TIMESTAMP WITH TIME ZONE, b INTERVAL DAY TO SECOND, c INTERVAL YEAR TO MONTH)`
 
@@ -1648,7 +1318,7 @@ CREATE SYNONYM syn FOR t`
 /`
 
 ## ora23-json-object-star  (oracle)
-- targets: mysql(invalid), postgresql(invalid)
+- targets: postgresql(invalid)
 - live error: `function j_s_o_n_object() does not exist`
 - src: `CREATE TABLE t (id NUMBER, n NUMBER); CREATE TABLE s (id NUMBER, n NUMBER);
 SELECT JSON_OBJECT(*) FROM t`
@@ -1698,60 +1368,15 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ`
 - src: `CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a WHERE id = ANY(ARRAY(SELECT id FROM b))`
 
-## pg-array-agg  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT ARRAY_AGG(x ORDER BY x) FROM (VALUES (1),(2)) v(x)`
-
-## pg-array-any  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT 3 = ANY(ARRAY[1,2,3]) AS r`
-
-## pg-array-concat  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT ARRAY[1,2,3] || ARRAY[4,5] AS r`
-
 ## pg-array-index2  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=()`
 - src: `SELECT (ARRAY[1,2,3])[2] AS r`
 
 ## pg-array-jsonb  (postgresql)
-- targets: mysql(invalid), oracle(invalid)
+- targets: oracle(invalid)
 - live error: `ORA-03099: unexpected item [ in a column definition`
 - src: `CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)`
-
-## pg-array-manip  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT ARRAY[3,1,2] || 4, array_prepend(0, ARRAY[1]), array_remove(ARRAY[1,2,1], 1)`
-
-## pg-array-ops  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT ARRAY[1,2,3] @> ARRAY[2], ARRAY[1,2] && ARRAY[2,3], array_length(ARRAY[1,2],1)`
-
-## pg-array-pos  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT array_position(ARRAY['a','b'], 'b'), array_replace(ARRAY[1,2,1], 1, 9)`
-
-## pg-array-subquery  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT ARRAY(SELECT generate_series(1,3)) AS r`
-
-## pg-array-to-string  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT array_to_string(ARRAY[1,2,3], ',')`
-
-## pg-arrayagg-filter-order  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT array_agg(x ORDER BY x DESC) FILTER (WHERE x > 1) FROM (VALUES (1),(2),(3)) v(x)`
 
 ## pg-ascii-empty  (postgresql)
 - targets: oracle(func), tsql(func)
@@ -1772,12 +1397,6 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2.33333',),) target=(('2',),)`
 - src: `SELECT AVG(x) FROM (VALUES (1),(2),(NULL),(4)) v(x)`
-
-## pg-before-update-trg  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT PRIMARY KEY, n INT, updated TIMESTAMP);
-CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 
 ## pg-bit-fns  (postgresql)
 - targets: mysql(invalid)
@@ -1824,23 +1443,18 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
 - src: `CREATE FUNCTION f(n INT) RETURNS TEXT AS $$ BEGIN CASE n WHEN 1 THEN RETURN 'one'; ELSE RETURN 'other'; END CASE; END; $$ LANGUAGE`
 
-## pg-cast-array  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT '{1,2,3}'::int[] AS r`
-
 ## pg-cast-int  (postgresql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
 - src: `SELECT CAST(2.7 AS INT) AS r`
 
 ## pg-cast-interval  (postgresql)
-- targets: mysql(invalid), oracle(invalid)
+- targets: oracle(invalid)
 - live error: `ORA-30089: missing or invalid <datetime field>`
 - src: `SELECT '1 day'::interval AS r`
 
 ## pg-cast-point  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- targets: oracle(invalid), tsql(invalid)
 - live error: `(243, b'Type POINT is not a defined system type.DB-Lib error message 20018, severity 16:\n`
 - src: `SELECT '(1,2)'::point AS r`
 
@@ -1874,45 +1488,10 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNC-DIFF: source=(('μ',),) target=(('NULL',),)`
 - src: `SELECT CHR(956) AS r`
 
-## pg-collate  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT 'a' < 'B' COLLATE "C" AS r`
-
 ## pg-collate-cmp  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=()`
 - src: `SELECT 'A' = 'a' COLLATE "C" AS r`
-
-## pg-collate2  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT 'abc' COLLATE "C" AS r`
-
-## pg-comment-on  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a INT); COMMENT ON COLUMN t.a IS 'the a column'`
-
-## pg-comment-table  (postgresql)
-- targets: mysql(invalid), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (id INT); COMMENT ON TABLE t IS 'my table'`
-
-## pg-composite-in-table  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type money_amt.DB-Lib error m`
-- src: `CREATE TYPE money_amt AS (amount NUMERIC, currency TEXT); CREATE TABLE t (price money_amt)`
-
-## pg-composite-type  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TYPE addr AS (street TEXT, city TEXT)`
-
-## pg-computed-array  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (dims INT[], area INT GENERATED ALWAYS AS (dims[1] * dims[2]) STORED)`
 
 ## pg-computed-func  (postgresql)
 - targets: tsql(invalid)
@@ -1928,31 +1507,6 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co`
 - src: `SELECT convert_to('abc', 'UTF8')`
-
-## pg-create-aggregate  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE AGGREGATE my_sum (INT) (SFUNC = int4pl, STYPE = INT, INITCOND = '0')`
-
-## pg-create-role  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE ROLE r LOGIN PASSWORD 'x'`
-
-## pg-cte-cycle  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n<3) CYCLE n SET is_cycle USING path SELECT * FROM r`
-
-## pg-cte-delete-insert  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); WITH moved AS (DELETE FROM t WHERE n < 0 RETURNING *) INSERT INTO t SELECT * FROM m`
-
-## pg-cte-search  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n<3) SEARCH DEPTH FIRST BY n SET ord SELECT * FROM r`
 
 ## pg-date-bin  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -1994,16 +1548,6 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNC-DIFF: source=(('0.333333',),) target=(('0.33333',),)`
 - src: `SELECT 1.0 / 3 AS r`
 
-## pg-domain  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE DOMAIN posint AS INT CHECK (VALUE > 0)`
-
-## pg-domain-in-table  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type email.DB-Lib error messa`
-- src: `CREATE DOMAIN email AS TEXT CHECK (VALUE ~ '@'); CREATE TABLE t (e email)`
-
 ## pg-double-cast  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message`
@@ -2039,16 +1583,6 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se`
 - src: `SELECT ENCODE(DECODE('SGVsbG8=', 'base64'), 'hex')`
 
-## pg-estring  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT E'line1\nline2' AS r`
-
-## pg-estring-hex  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT E'\x41' AS r`
-
 ## pg-except-all  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
@@ -2063,11 +1597,6 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid)
 - live error: `(1336, 'Dynamic SQL is not allowed in stored function or trigger')`
 - src: `CREATE FUNCTION f() RETURNS VOID AS $$ BEGIN EXECUTE 'INSERT INTO t VALUES ($1)' USING 5; END; $$ LANGUAGE plpgsql`
-
-## pg-explain  (postgresql)
-- targets: mysql(invalid), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `EXPLAIN SELECT 1`
 
 ## pg-expr-index  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
@@ -2094,11 +1623,6 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(130, b'Cannot perform an aggregate function on an expression containing an aggregate or a`
 - src: `CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id, COUNT(*) FILTER (WHERE n > (SELECT AVG(v) FROM u)) FROM`
 
-## pg-for-record-loop  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE FUNCTION f() RETURNS INT AS $$ DECLARE r RECORD; t INT := 0; BEGIN FOR r IN SELECT generate_series(1,3) AS n LOOP t := t +`
-
 ## pg-for-update  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
@@ -2108,11 +1632,6 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
 - src: `SELECT format('%s=%s', 'a', 1) AS r`
-
-## pg-full-outer-join  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a FULL OUTER JOIN b ON a.id = b.id`
 
 ## pg-fulltext  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2133,16 +1652,6 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
 - src: `SELECT generate_series(1, 5) AS r`
-
-## pg-grant  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (id INT); GRANT SELECT, INSERT ON t TO PUBLIC`
-
-## pg-grant-column  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a INT); GRANT SELECT (a) ON t TO PUBLIC`
 
 ## pg-greatest-null  (postgresql)
 - targets: mysql(func), oracle(func)
@@ -2179,28 +1688,13 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ`
 - src: `SELECT x'FF'::int AS h, 1.5e3 AS s`
 
-## pg-ilike-any  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id, n FROM t WHERE s ILIKE '%abc%' AND n = ANY(ARRAY[1,2,3])`
-
-## pg-inheritance  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE parent (id INT); CREATE TABLE child () INHERITS (parent)`
-
 ## pg-initcap  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s`
 - src: `SELECT INITCAP('hello world') AS r`
 
-## pg-insert-returning  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT, n INT); INSERT INTO t (id, n) VALUES (1, 5) RETURNING id`
-
 ## pg-insert-select-conflict  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- targets: oracle(invalid), tsql(invalid)
 - live error: `(208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:`
 - src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); INSERT INTO t (id, n) SELECT g, g*2 FROM generate_series(1,5) g ON CONFLICT DO NOTH`
 
@@ -2239,20 +1733,10 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
 - src: `SELECT JSONB_AGG(x) FROM (VALUES (1),(2)) v(x)`
 
-## pg-jsonb-arrow  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT '{"a":1}'::jsonb -> 'a'`
-
 ## pg-jsonb-build  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
 - src: `SELECT JSONB_BUILD_OBJECT('a', 1, 'b', 2)`
-
-## pg-jsonb-path  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT '{"a":[1,2]}'::jsonb #> '{a,0}'`
 
 ## pg-jsonb-path-query  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2260,7 +1744,7 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - src: `SELECT jsonb_path_query('{"a":[1,2]}', '$.a[*]') AS r`
 
 ## pg-jsonb-recordset  (postgresql)
-- targets: mysql(invalid), tsql(invalid)
+- targets: tsql(invalid)
 - live error: `(317, b"Table-valued function 'jsonb_to_recordset' cannot have a column alias.DB-Lib error`
 - src: `SELECT * FROM jsonb_to_recordset('[{"a":1}]') AS x(a INT)`
 
@@ -2289,11 +1773,6 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT 'a_b' LIKE 'a\_b' AS r`
 
-## pg-lock-table  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT); LOCK TABLE t IN SHARE MODE`
-
 ## pg-log-2arg  (postgresql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('0.333333',),)`
@@ -2314,16 +1793,6 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
 - src: `SELECT MAKE_DATE(2020, 6, 15), MAKE_TIME(10, 30, 0)`
 
-## pg-math-log  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT LOG(10, 100), LN(2.718), POWER(2, 8), SQRT(16)`
-
-## pg-matview-nodata  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE MATERIALIZED VIEW mv AS SELECT 1 AS x WITH NO DATA`
-
 ## pg-md5  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever`
@@ -2333,11 +1802,6 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(func), oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
 - src: `SELECT MOD(10, 3.5::numeric) AS r`
-
-## pg-mode  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT MODE() WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(1),(2)) v(x)`
 
 ## pg-multi-out  (postgresql)
 - targets: oracle(invalid)
@@ -2360,7 +1824,7 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - src: `CREATE PROCEDURE outer_p() AS $$ BEGIN CALL inner_p(); END; $$ LANGUAGE plpgsql`
 
 ## pg-network-types  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- targets: oracle(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag`
 - src: `CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)`
 
@@ -2394,31 +1858,6 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV`
 - src: `SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o`
 
-## pg-partial-unique  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (a INT, b INT); CREATE UNIQUE INDEX ix ON t (a) WHERE b > 0`
-
-## pg-partition-of  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT, dt DATE) PARTITION BY RANGE (dt); CREATE TABLE t_2020 PARTITION OF t FOR VALUES FROM ('2020-01-01') TO ('2`
-
-## pg-percentile  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(x)`
-
-## pg-percentile-disc  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(x)`
-
-## pg-percentiles  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY x), percentile_disc(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(`
-
 ## pg-position-case  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -2439,16 +1878,6 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU`
 - src: `SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')`
 
-## pg-raise-using  (postgresql)
-- targets: mysql(invalid), tsql(invalid)
-- live error: `(443, b"Invalid use of a side-effecting operator 'RAISERROR' within a function.DB-Lib erro`
-- src: `CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RAISE EXCEPTION 'err %', 42 USING ERRCODE = 'P0001'; END; $$ LANGUAGE plpgsql`
-
-## pg-range-contains  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT INT4RANGE(1, 10) @> 5 AS r`
-
 ## pg-range-types  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m`
@@ -2465,11 +1894,6 @@ CREATE TABLE ledger (id SERIA`
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
 - src: `CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END; $$ LANGUAGE plpgsql`
 
-## pg-recursive-view  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a INT, b INT); CREATE RECURSIVE VIEW v(n) AS SELECT 1 UNION ALL SELECT n+1 FROM v WHERE n < 5`
-
 ## pg-regex-case  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=()`
@@ -2480,56 +1904,20 @@ CREATE TABLE ledger (id SERIA`
 - live error: `ORA-01722: unable to convert string value containing 'g' to a number: `
 - src: `SELECT regexp_replace('a1b2', '(\d)', '[\1]', 'g') AS r`
 
-## pg-regexp-group  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT (regexp_match('a1b2', '(\w)(\d)'))[2] AS r`
-
 ## pg-regexp-matches  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE`
 - src: `SELECT REGEXP_MATCHES('a1b2', '[0-9]', 'g') AS r`
 
 ## pg-regexp-split-table  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- targets: oracle(invalid), tsql(invalid)
 - live error: `(208, b"Invalid object name 'dbo.regexp_split_to_table'.DB-Lib error message 20018, severi`
 - src: `SELECT * FROM regexp_split_to_table('a,b,c', ',')`
-
-## pg-regr  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT corr(x, y), covar_pop(x, y), regr_slope(y, x) FROM (VALUES (1,2),(2,4)) v(x,y)`
 
 ## pg-repeat-left-right  (postgresql)
 - targets: oracle(invalid)
 - live error: `ORA-00904: "RIGHT": invalid identifier`
 - src: `SELECT REPEAT('ab', 3), LEFT('abc', 2), RIGHT('abc', 2)`
-
-## pg-return-query  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE FUNCTION f() RETURNS SETOF INT AS $$ BEGIN RETURN QUERY SELECT 1 UNION SELECT 2; END; $$ LANGUAGE plpgsql`
-
-## pg-return-refcursor  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE FUNCTION f() RETURNS refcursor AS $$ DECLARE c refcursor; BEGIN OPEN c FOR SELECT 1; RETURN c; END; $$ LANGUAGE plpgsql`
-
-## pg-returning-expr  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT, n INT);
-UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
-
-## pg-returns-table  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE FUNCTION f() RETURNS TABLE(a INT, b TEXT) AS $$ BEGIN RETURN QUERY SELECT 1, 'x'; END; $$ LANGUAGE plpgsql`
-
-## pg-revoke  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a INT); REVOKE ALL ON t FROM PUBLIC`
 
 ## pg-rollup  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2546,18 +1934,8 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - live error: `FUNC-DIFF: source=(('2.68',),) target=(('3',),)`
 - src: `SELECT ROUND(2.675::numeric, 2) AS r`
 
-## pg-row-constructor  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id FROM t WHERE ROW(n, id) = (SELECT MAX(v), MIN(id) FROM u`
-
-## pg-rule  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a INT); CREATE RULE r AS ON DELETE TO t DO INSTEAD NOTHING`
-
 ## pg-savepoint  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- targets: mysql(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG`
 - src: `BEGIN; SAVEPOINT sp; ROLLBACK TO SAVEPOINT sp; COMMIT`
 
@@ -2567,17 +1945,12 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - src: `SELECT scale(1.230), trim_scale(1.230)`
 
 ## pg-sequence  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- targets: oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne`
 - src: `CREATE SEQUENCE seq; SELECT nextval('seq'), currval('seq')`
 
-## pg-sequence-options  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE SEQUENCE seq INCREMENT 2 MINVALUE 10 MAXVALUE 100 CACHE 5 CYCLE`
-
 ## pg-serial-bit  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- targets: oracle(invalid), tsql(invalid)
 - live error: `(2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit`
 - src: `CREATE TABLE t (a BIGSERIAL, flags BIT(8), vb VARBIT(16))`
 
@@ -2585,11 +1958,6 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'SET'.DB-Lib error message 20018, severity 15:\n`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DEFAULT 5`
-
-## pg-set-searchpath  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
-- src: `SET search_path TO myschema, public`
 
 ## pg-setweight  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2646,20 +2014,10 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - live error: `ORA-00955: name is already used by an existing object`
 - src: `CREATE TABLE t (a INT); CREATE VIEW syn AS SELECT * FROM t`
 
-## pg-system-funcs  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT version(), current_database(), current_user, pg_backend_pid()`
-
 ## pg-tablesample  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
 - src: `CREATE TABLE t (id INT); SELECT * FROM t TABLESAMPLE BERNOULLI(50)`
-
-## pg-to-hex-typeof  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT to_hex(255), pg_typeof(1)`
 
 ## pg-tochar-iso  (postgresql)
 - targets: mysql(invalid), tsql(invalid)
@@ -2686,44 +2044,10 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
 - src: `SELECT 'a ' = 'a' AS r`
 
-## pg-transition-tables  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT, n INT);
-CREATE FUNCTION trg() RETURNS TRIGGER AS $$ BEGIN RETURN NULL; END; $$ LANGUAGE plpgsql;
-CREATE TR`
-
 ## pg-translate  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')`
 - src: `SELECT TRANSLATE('abc', 'ab', 'xy') AS r`
-
-## pg-trigger-multi-event  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT, n INT);
-CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
-CREATE`
-
-## pg-trigger-on-view  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT);
-CREATE VIEW v AS SELECT id FROM t;
-CREATE FUNCTION f() RETURNS TRIGGER AS $$ BEGIN INSERT INTO t VALUES (`
-
-## pg-trigger-raise  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT PRIMARY KEY, n INT);
-CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN IF OLD.n <> NEW.n THEN RAISE EXCE`
-
-## pg-trigger-statement-level  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT);
-CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN RETURN NULL; END; $$ LANGUAGE plpgsql;
-CREATE TRIGGE`
 
 ## pg-trim-both-chars  (postgresql)
 - targets: oracle(invalid)
@@ -2756,7 +2080,7 @@ CREATE TRIGGE`
 - src: `SELECT tstzrange(now(), now() + INTERVAL '1 day') AS r`
 
 ## pg-tz-interval  (postgresql)
-- targets: mysql(invalid), oracle(invalid)
+- targets: oracle(invalid)
 - live error: `ORA-30089: missing or invalid <datetime field>`
 - src: `CREATE TABLE t (a TIMESTAMPTZ, b TIME WITH TIME ZONE, c INTERVAL)`
 
@@ -2764,36 +2088,6 @@ CREATE TRIGGE`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(207, b"Invalid column name 'U'.DB-Lib error message 20018, severity 16:\nGeneral SQL Serv`
 - src: `SELECT U&'\0041' AS r`
-
-## pg-unnest  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT UNNEST(ARRAY[1,2,3]) AS r`
-
-## pg-update-from-window  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); UPDATE t SET n = s.rn FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY id) rn FROM t) s`
-
-## pg-update-returning  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT, n INT); UPDATE t SET n = 1 RETURNING id, n`
-
-## pg-values-stmt  (postgresql)
-- targets: mysql(invalid), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `VALUES (1, 'a'), (2, 'b')`
-
-## pg-variadic  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE FUNCTION f (VARIADIC arr INT[]) RETURNS INT AS $$ SELECT array_length($1, 1) $$ LANGUAGE sql`
-
-## pg-view-check  (postgresql)
-- targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (id INT); CREATE VIEW v AS SELECT id FROM t WITH LOCAL CHECK OPTION`
 
 ## pg-week  (postgresql)
 - targets: tsql(func)
@@ -2826,12 +2120,12 @@ CREATE TRIGGE`
 - src: `SELECT xmlelement(name foo, 'bar')`
 
 ## pg-xpath  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- targets: oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.xp`
 - src: `SELECT xpath('/a/text()', '<a>1</a>'::xml)`
 
 ## pg15-merge  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- targets: oracle(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
 - src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); MERGE INTO t USING s ON t.id=s.id WHEN MATCHED THEN UPD`
 
@@ -2942,13 +2236,6 @@ CREATE TRIGGE`
 GO
 CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) FRO`
 
-## ts-after-update-trg  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT PRIMARY KEY, n INT, updated DATETIME);
-GO
-CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
-
 ## ts-alter-add  (tsql)
 - targets: oracle(invalid)
 - live error: `ORA-30649: missing DIRECTORY keyword`
@@ -2960,7 +2247,7 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - src: `SELECT ASCII('A'), CHAR(65), NCHAR(65)`
 
 ## ts-at-time-zone  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00902: invalid datatype`
 - src: `SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r`
 
@@ -3004,30 +2291,10 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - live error: `ORA-00904: "CHOOSE": invalid identifier`
 - src: `SELECT CHOOSE(2, 'a', 'b', 'c') AS r`
 
-## ts-collate  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT 'a' COLLATE Latin1_General_CS_AS AS r`
-
-## ts-collate2  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT 'abc' COLLATE Latin1_General_BIN AS r`
-
 ## ts-compress  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00936: missing expression`
 - src: `SELECT COMPRESS('data') AS r`
-
-## ts-computed-chain  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (price DECIMAL(10,2), tax AS (price * 0.21), total AS (price * 1.21) PERSISTED)`
-
-## ts-computed-func  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (a NVARCHAR(50), b AS (UPPER(a)) PERSISTED)`
 
 ## ts-concat-null  (tsql)
 - targets: mysql(func)
@@ -3048,11 +2315,6 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "CHOOSE": invalid identifier`
 - src: `SELECT IIF(1>0,'y','n'), CHOOSE(2,'a','b','c'), ISNULL(NULL,'x'), NULLIF(1,1)`
-
-## ts-create-role  (tsql)
-- targets: mysql(carrier), oracle(carrier), postgresql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE ROLE r AUTHORIZATION dbo`
 
 ## ts-cursor  (tsql)
 - targets: mysql(invalid)
@@ -3089,24 +2351,12 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - live error: `ORA-03060: Data type TIME is invalid.`
 - src: `CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))`
 
-## ts-ddl-trigger  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
-- live error: `ORA-00942: table or view "SYSTEM"."DATABASE" does not exist`
-- src: `CREATE TRIGGER trg ON DATABASE FOR CREATE_TABLE AS BEGIN PRINT 'created'; END`
-
 ## ts-default-nextval  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-04044: procedure, function, package, or type is not allowed here`
 - src: `CREATE SEQUENCE s AS INT START WITH 1;
 GO
 CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
-
-## ts-delete-cte  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT, n INT, s NVARCHAR(50));
-GO
-WITH cte AS (SELECT id, ROW_NUMBER() OVER (PARTITION BY n ORDER BY id) rn FROM`
 
 ## ts-emoji-len  (tsql)
 - targets: mysql(func), postgresql(func)
@@ -3128,16 +2378,6 @@ WITH cte AS (SELECT id, ROW_NUMBER() OVER (PARTITION BY n ORDER BY id) rn FROM`
 - live error: `PROCEDURE P compiled INVALID (line 12): PL/SQL: ORA-00904: "ERROR_LINE": invalid identifie`
 - src: `CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERROR_MESSAGE(), ERROR_NUMBER(), ERROR_LINE(); END CA`
 
-## ts-filtered-index  (tsql)
-- targets: mysql(invalid), oracle(invalid)
-- live error: `ORA-02158: invalid CREATE INDEX option`
-- src: `CREATE TABLE t (a INT, b INT); CREATE NONCLUSTERED INDEX ix ON t (a) INCLUDE (b) WHERE a > 0`
-
-## ts-filtered-index2  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (a INT, b INT); CREATE INDEX ix ON t (a) WHERE b IS NOT NULL`
-
 ## ts-format-iso  (tsql)
 - targets: mysql(silent), oracle(invalid), postgresql(silent)
 - live error: `ORA-01821: date format not recognized`
@@ -3158,25 +2398,6 @@ WITH cte AS (SELECT id, ROW_NUMBER() OVER (PARTITION BY n ORDER BY id) rn FROM`
 - live error: `ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier`
 - src: `SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r`
 
-## ts-grant  (tsql)
-- targets: mysql(carrier), oracle(carrier), postgresql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (id INT);
-GO
-GRANT SELECT ON t TO PUBLIC`
-
-## ts-grant-object  (tsql)
-- targets: mysql(carrier), oracle(carrier), postgresql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a INT);
-GO
-GRANT SELECT ON OBJECT::t TO PUBLIC`
-
-## ts-hierarchyid  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT CAST('/1/2/' AS HIERARCHYID).ToString() AS r`
-
 ## ts-host-db  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "DB_NAME": invalid identifier`
@@ -3188,61 +2409,31 @@ GRANT SELECT ON OBJECT::t TO PUBLIC`
 - src: `SELECT SCOPE_IDENTITY(), @@IDENTITY, IDENT_CURRENT('t')`
 
 ## ts-inline-index2  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00902: invalid datatype`
 - src: `CREATE TABLE t (id INT, name VARCHAR(50), INDEX ix_name NONCLUSTERED (name))`
 
-## ts-inline-tvf  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE FUNCTION f() RETURNS TABLE AS RETURN (SELECT 1 AS x)`
-
 ## ts-insert-output  (tsql)
-- targets: mysql(invalid), oracle(invalid)
+- targets: oracle(invalid)
 - live error: `ORA-00925: missing INTO keyword`
 - src: `CREATE TABLE t (id INT, n INT);
 GO
 INSERT INTO t (id, n) OUTPUT INSERTED.id VALUES (1, 5)`
 
 ## ts-instead-of-insert  (tsql)
-- targets: mysql(invalid), postgresql(invalid)
+- targets: postgresql(invalid)
 - live error: `"t" is a table`
 - src: `CREATE TABLE t (id INT PRIMARY KEY, n INT);
 GO
 CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT id,`
-
-## ts-json-value  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT JSON_VALUE('{"a":1}', '$.a')`
-
-## ts-lead-ignore-nulls  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT x, LEAD(x, 1) IGNORE NULLS OVER (ORDER BY x) FROM (VALUES (1),(2)) v(x)`
 
 ## ts-len-trailing  (tsql)
 - targets: mysql(func), oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('6',),)`
 - src: `SELECT LEN('abc   ') AS r`
 
-## ts-log  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT LOG(2.718), LOG10(100), POWER(2, 8)`
-
-## ts-math  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT CEILING(4.2), FLOOR(4.8), ROUND(4.555, 2), SQUARE(4)`
-
-## ts-merge  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE tgt (id INT PRIMARY KEY, n INT); MERGE tgt USING (VALUES (1, 5)) AS s(id, n) ON tgt.id = s.id WHEN MATCHED THEN UPDAT`
-
 ## ts-merge-full  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-02000: missing THEN keyword`
 - src: `CREATE TABLE tgt (id INT PRIMARY KEY, n INT); CREATE TABLE src (id INT, n INT);
 GO
@@ -3254,7 +2445,7 @@ MERGE tgt USING src ON tgt.id = src.id WHEN MAT`
 - src: `SELECT COL_LENGTH('t', 'c'), OBJECT_ID('t')`
 
 ## ts-money  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00902: invalid datatype`
 - src: `CREATE TABLE t (price MONEY, small SMALLMONEY)`
 
@@ -3267,11 +2458,6 @@ MERGE tgt USING src ON tgt.id = src.id WHEN MAT`
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('2020-02-29 00:00:00',),) target=(('2020-02-29',),)`
 - src: `SELECT DATEADD(MONTH, 1, '2020-01-31') AS r`
-
-## ts-multistatement-tvf  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
-- live error: `FUNCTION F compiled INVALID (line 2): PLS-00103: Encountered the symbol "@" when expecting`
-- src: `CREATE FUNCTION f() RETURNS @t TABLE (x INT) AS BEGIN INSERT INTO @t VALUES (1); RETURN; END`
 
 ## ts-nchar-hex  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
@@ -3286,7 +2472,7 @@ GO
 SELECT * FROM t WITH (NOLOCK)`
 
 ## ts-openjson  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "OPEN_J_S_O_N": invalid identifier`
 - src: `SELECT * FROM OPENJSON('[1,2,3]')`
 
@@ -3312,18 +2498,6 @@ SELECT * FROM t WITH (NOLOCK)`
 GO
 CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BE`
 
-## ts-realworld-inventory  (tsql)
-- targets: oracle(invalid), postgresql(invalid)
-- live error: `PROCEDURE ADJUST_STOCK compiled INVALID (line 12): PLS-00103: Encountered the symbol "SELE`
-- src: `CREATE TABLE inventory (sku NVARCHAR(20) PRIMARY KEY, qty INT NOT NULL CHECK (qty >= 0));
-GO
-CREATE PROCEDURE dbo.adjust_stock @sk`
-
-## ts-realworld-orders  (tsql)
-- targets: postgresql(invalid)
-- live error: `relation "orders" already exists`
-- src: `CREATE TABLE dbo.orders (id INT IDENTITY PRIMARY KEY, customer_id INT NOT NULL, total DECIMAL(10,2) DEFAULT 0, created DATETIME2 D`
-
 ## ts-recursive-cte  (tsql)
 - targets: mysql(invalid), postgresql(invalid)
 - live error: `relation "r" does not exist`
@@ -3335,7 +2509,7 @@ CREATE PROCEDURE dbo.adjust_stock @sk`
 - src: `SELECT REPLICATE('ab', 3), SPACE(5), REVERSE('abc')`
 
 ## ts-rowversion  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00902: invalid datatype`
 - src: `CREATE TABLE t (row_ver ROWVERSION, flags BINARY(8))`
 
@@ -3352,7 +2526,7 @@ GO
 SELECT id INTO dst FROM src`
 
 ## ts-sequence-next  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "NEXT_VALUE_FOR": invalid identifier`
 - src: `CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1;
 GO
@@ -3363,20 +2537,13 @@ SELECT NEXT VALUE FOR seq`
 - live error: `ORA-00904: "DIFFERENCE": invalid identifier`
 - src: `SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')`
 
-## ts-sp-rename  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (a INT, b INT);
-GO
-EXEC sp_rename 't.a', 'x', 'COLUMN'`
-
 ## ts-spid-version  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00936: missing expression`
 - src: `SELECT @@SPID, @@VERSION`
 
 ## ts-st-distance  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- targets: oracle(invalid), postgresql(invalid)
 - live error: `DPY-4010: a bind variable replacement value for placeholder ":POINT" was not provided`
 - src: `SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)) AS r`
 
@@ -3403,7 +2570,7 @@ SELECT STRING_AGG(CAST(`
 - src: `SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2)) v(x)`
 
 ## ts-string-split2  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "STRING_SPLIT": invalid identifier`
 - src: `SELECT * FROM STRING_SPLIT('a,b,c', ',') WHERE value <> 'b'`
 
@@ -3412,22 +2579,10 @@ SELECT STRING_AGG(CAST(`
 - live error: `ORA-00904: "STUFF": invalid identifier`
 - src: `SELECT STUFF('abcdef', 2, 3, 'XY') AS r`
 
-## ts-synonym  (tsql)
-- targets: mysql(carrier), oracle(carrier), postgresql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (a INT);
-GO
-CREATE SYNONYM syn FOR dbo.t`
-
 ## ts-sysdatetime  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "GETUTCDATE": invalid identifier`
 - src: `SELECT SYSDATETIME(), SYSUTCDATETIME(), GETUTCDATE()`
-
-## ts-table-variable  (tsql)
-- targets: oracle(invalid)
-- live error: `ORA-06550: line 2, column 5:`
-- src: `DECLARE @t TABLE (id INT); INSERT INTO @t VALUES (1); SELECT * FROM @t`
 
 ## ts-tablesample  (tsql)
 - targets: mysql(invalid)
@@ -3451,15 +2606,8 @@ SELECT * FROM t TABLESAMPLE (10 PERCENT)`
 - live error: `(1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')`
 - src: `SELECT TRANSLATE('abc', 'ab', 'xy') AS r`
 
-## ts-trigger-deleted-inserted  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT, n INT);
-GO
-CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN SELECT d.id, i.n FROM deleted d JOIN inserted i O`
-
 ## ts-trigger-on-view  (tsql)
-- targets: mysql(invalid), postgresql(invalid)
+- targets: postgresql(invalid)
 - live error: `INSTEAD OF triggers must be FOR EACH ROW`
 - src: `CREATE TABLE t (id INT);
 GO
@@ -3487,13 +2635,6 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - live error: `ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier`
 - src: `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r`
 
-## ts-view-check  (tsql)
-- targets: mysql(carrier), oracle(carrier), postgresql(carrier)
-- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
-- src: `CREATE TABLE t (id INT);
-GO
-CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
-
 ## ts-while-break-continue  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `PROCEDURE P compiled INVALID (line 11): PLS-00201: identifier 'BREAK' must be declared`
@@ -3503,11 +2644,6 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `PROCEDURE P compiled INVALID (line 15): PLS-00103: Encountered the symbol "=" when expecti`
 - src: `CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN SET @n -=`
-
-## ts-xml-value  (tsql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r`
 
 ## tsql-drop2-100|START|ID  (tsql)
 - targets: postgresql(silent-drop)
@@ -3520,4 +2656,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 677 distinct constructs; defect rows by kind: carrier 138, func 265, invalid 893, semantic 2, silent-drop 75.
+Totals: 516 distinct constructs; defect rows by kind: func 265, invalid 717, semantic 2, silent-drop 75.
