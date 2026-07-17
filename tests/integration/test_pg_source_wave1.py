@@ -7381,3 +7381,30 @@ class TestWave206OracleReturningShapes:
         )
         assert "UNIQUE:" in out and "UPDATE … FROM" in out, out
         assert not re.search(r"(?im)^\s*WITH t", out), out
+
+
+class TestWave207SystemReservedNtileNull:
+    """wave 207 (pg-corpus): SYSTEM is reserved since MySQL 8.0.16
+    (bare it was 1064); and MySQL's NTILE requires a positive integer
+    — NTILE(NULL) degrades whole."""
+
+    def test_system_table_quoted_mysql(self) -> None:
+        out = _t2("create table system (name text);", "postgresql", "mysql")
+        assert "`system`" in out.lower(), out
+
+    def test_ntile_null_carrier_mysql(self) -> None:
+        out = _t2(
+            "select ntile(null) over (order by ten) from tenk1;",
+            "postgresql",
+            "mysql",
+        )
+        assert "UNIQUE:" in out, out
+
+    def test_ntile_int_untouched_mysql(self) -> None:
+        out = _t2(
+            "select ntile(4) over (order by ten) from tenk1;",
+            "postgresql",
+            "mysql",
+        )
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)NTILE\(4\)", out), out

@@ -1005,7 +1005,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          takes WITH only inside the INSERT's subquery (rewritten) and
          has no UPDATE … FROM at all (carrier). Measured: pg→oracle
          **32 → 30** (−2). Discovery HOLDS 0. Tests:
-         TestWave206OracleReturningShapes (2).**
+         TestWave206OracleReturningShapes (2).* Wave 207 (2026-07-17): SYSTEM
+         is reserved since MySQL 8.0.16 (a bare ``CREATE TABLE
+         system`` was 1064, probed live) — joins the quoting set; and
+         MySQL's NTILE requires a positive integer — NTILE(NULL)
+         degrades whole (PG returns NULL rows for it). Measured:
+         pg→mysql **54 → 51** (−3). Discovery HOLDS 0. Tests:
+         TestWave207SystemReservedNtileNull (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

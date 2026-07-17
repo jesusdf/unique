@@ -594,6 +594,7 @@ class Transformer:
             result = [self._gate_mysql_function_relation(node) for node in result]
             result = [self._gate_mysql_agg_forms(node) for node in result]
             result = [self._gate_mysql_nonconst_lag(node) for node in result]
+            result = [self._gate_mysql_null_ntile(node) for node in result]
         if self.context.target in ("mysql", "oracle"):
             result = [self._gate_column_alias_ref(node) for node in result]
         if self.context.target != "mysql":
@@ -1006,6 +1007,39 @@ class Transformer:
                 if found is not None:
                     return found
         return None
+
+    def _gate_mysql_null_ntile(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement using NTILE(NULL) — WHOLE, on MySQL
+        (wave 207): its NTILE requires a positive integer; PG returns
+        NULL rows for the NULL argument."""
+        if not self._contains_null_ntile(node):
+            return node
+        reason = (
+            "MySQL's NTILE requires a positive integer argument (PG "
+            "returns NULL for NTILE(NULL)). Statement preserved as a comment"
+        )
+        self.context.warn(reason, "mysql_null_ntile")
+        self.context.mark_unsupported("NTILE(NULL) (MySQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _contains_null_ntile(self, value: object) -> bool:
+        if (
+            isinstance(value, FunctionCall)
+            and value.name.upper() == "NTILE"
+            and len(value.args) == 1
+            and isinstance(value.args[0], Literal)
+            and value.args[0].value is None
+        ):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_null_ntile(getattr(value, f.name)) for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_null_ntile(item) for item in value)
+        return False
 
     def _gate_mysql_nonconst_lag(self, node: ASTNode) -> ASTNode:
         """LAG/LEAD with a NON-CONSTANT offset — MySQL requires a constant

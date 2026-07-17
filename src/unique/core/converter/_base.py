@@ -755,6 +755,8 @@ _RESERVED_IDENTIFIERS: dict[str, frozenset[str]] = {
             # wave 200).
             "ROW",
             "ROWS",
+            # SYSTEM is reserved since MySQL 8.0.16 (wave 207).
+            "SYSTEM",
             "TABLESAMPLE",
             "LATERAL",
             "RECURSIVE",
