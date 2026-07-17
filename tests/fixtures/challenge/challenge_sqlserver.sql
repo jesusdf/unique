@@ -199,6 +199,20 @@ SELECT PATINDEX('%[0-9]%', 'abc123') AS r
 -- CASE[open]: ts-quotename — fails on mysql, oracle, postgresql. ORA-00904: "SPLIT_PART": invalid identifier
 SELECT QUOTENAME('my table'), PARSENAME('a.b.c', 2)
 
+-- CASE[open]: ts-realworld-audit — fails on mysql, oracle, postgresql. PROCEDURE LOG_IT compiled INVALID (line 11): PLS-00103: Encountered the symbol ")" when ex
+CREATE TABLE dbo.audit (id INT IDENTITY, msg NVARCHAR(MAX), ts DATETIME2);
+GO
+CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BEGIN BEGIN TRY INSERT INTO dbo.audit (msg, ts) VALUES (@msg, SYSDATETIME()); END TRY BEGIN CATCH THROW; END CATCH END
+
+-- CASE[open]: ts-realworld-orders — fails on postgresql. relation "orders" already exists
+CREATE TABLE dbo.orders (id INT IDENTITY PRIMARY KEY, customer_id INT NOT NULL, total DECIMAL(10,2) DEFAULT 0, created DATETIME2 DEFAULT SYSDATETIME());
+GO
+CREATE INDEX ix_cust ON dbo.orders (customer_id);
+GO
+CREATE TRIGGER trg_audit ON dbo.orders AFTER INSERT AS BEGIN UPDATE dbo.orders SET created = SYSDATETIME() FROM dbo.orders o JOIN inserted i ON o.id = i.id; END;
+GO
+CREATE PROCEDURE dbo.add_order @cid INT, @total DECIMAL(10,2) AS BEGIN SET NOCOUNT ON; INSERT INTO dbo.orders (customer_id, total) VALUES (@cid, @total); SELECT SCOPE_IDENTITY(); END
+
 -- CASE[open]: ts-recursive-cte — fails on mysql, postgresql. relation "r" does not exist
 WITH r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n < 5) SELECT * FROM r
 

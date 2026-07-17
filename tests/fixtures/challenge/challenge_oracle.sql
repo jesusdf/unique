@@ -209,6 +209,12 @@ SELECT RATIO_TO_REPORT(x) OVER () FROM (SELECT 1 x FROM DUAL)
 -- CASE[open]: ora-ratio2 — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT RATIO_TO_REPORT(1) OVER () FROM DUAL
 
+-- CASE[open]: ora-realworld-orders — fails on mysql, postgresql. relation "orders" already exists
+CREATE TABLE orders (id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, customer_id NUMBER NOT NULL, total NUMBER(10,2) DEFAULT 0, created DATE DEFAULT SYSDATE);
+CREATE INDEX ix_cust ON orders (customer_id);
+CREATE OR REPLACE PROCEDURE add_order(p_cid IN NUMBER, p_total IN NUMBER) AS BEGIN INSERT INTO orders (customer_id, total) VALUES (p_cid, p_total); COMMIT; END;
+/
+
 -- CASE[open]: ora-record-type — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['could not translate']
 CREATE PROCEDURE p AS TYPE rec IS RECORD (a NUMBER, b VARCHAR2(10)); r rec; BEGIN r.a := 1; END;
 /

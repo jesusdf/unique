@@ -107,6 +107,9 @@ SELECT CHAR_LENGTH('😀') AS r
 -- CASE[open]: my-empty-eq-zero — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('NULL',),)
 SELECT '' = 0 AS r
 
+-- CASE[open]: my-eq-mix — fails on oracle, tsql. FUNC-DIFF: source=(('1', '0', '1'),) target=(('1', '1', '1'),)
+SELECT 1 = 1.0 AS r, 'a' = 'a ' AS b, 1 = TRUE AS c
+
 -- CASE[open]: my-export-set — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXPORT_SET(5, 'Y', 'N', ',', 4) AS r
 
@@ -115,6 +118,9 @@ SELECT EXTRACTVALUE('<a>1</a>', '/a') AS r
 
 -- CASE[open]: my-field — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
 SELECT FIELD('b', 'a', 'b', 'c') AS r
+
+-- CASE[open]: my-floor-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
+SELECT FLOOR(2.9999999999999999) AS r
 
 -- CASE[open]: my-get-lock — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT GET_LOCK('l', 0), RELEASE_LOCK('l')
@@ -176,6 +182,9 @@ SELECT 'a_b' LIKE 'a\_b' AS r
 -- CASE[open]: my-like-single — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'x' LIKE 'X' AS r
 
+-- CASE[open]: my-locate-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT LOCATE('', '') AS r
+
 -- CASE[open]: my-lock-tables — fails on oracle, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id INT); LOCK TABLES t WRITE
 
@@ -208,6 +217,10 @@ CREATE TABLE t (id INT, dt DATE) PARTITION BY HASH(id) PARTITIONS 4
 
 -- CASE[open]: my-period-diff — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE
 SELECT PERIOD_DIFF(202006, 202001) AS r
+
+-- CASE[open]: my-realworld-orders — fails on postgresql. relation "orders" already exists
+CREATE TABLE orders (id INT AUTO_INCREMENT PRIMARY KEY, customer_id INT NOT NULL, total DECIMAL(10,2) DEFAULT 0, created TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX ix_cust (customer_id), CHECK (total >= 0)) ENGINE=InnoDB;
+CREATE TRIGGER trg BEFORE INSERT ON orders FOR EACH ROW SET NEW.created = NOW();
 
 -- CASE[open]: my-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END
@@ -256,6 +269,9 @@ SELECT 'a ' = 'a' AS r
 
 -- CASE[open]: my-trim-both — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r
+
+-- CASE[open]: my-trim-leading — fails on postgresql, tsql. FUNC-DIFF: source=(('7',),) target=(('',),)
+SELECT TRIM(LEADING '0' FROM '007') AS r
 
 -- CASE[open]: my-ts-to-date — fails on postgresql. FUNC-DIFF: source=(('2020-01-01',),) target=(('2020-01-01 14:30:00+00:00',),)
 SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r

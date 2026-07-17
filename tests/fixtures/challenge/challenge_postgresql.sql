@@ -352,6 +352,9 @@ CREATE FUNCTION f() RETURNS TABLE(a INT, b TEXT) AS $$ BEGIN RETURN QUERY SELECT
 -- CASE[open]: pg-rollup — fails on mysql, oracle, tsql. (8120, b"Column 'v.x' is invalid in the select list because it is not contained in either 
 SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)
 
+-- CASE[open]: pg-round-2675 — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('2.68',),) target=(('3',),)
+SELECT ROUND(2.675::numeric, 2) AS r
+
 -- CASE[open]: pg-savepoint — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG
 BEGIN; SAVEPOINT sp; ROLLBACK TO SAVEPOINT sp; COMMIT
 
@@ -387,6 +390,9 @@ SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
 -- CASE[open]: pg-string-to-array — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
 SELECT string_to_array('a,b,c', ',')
+
+-- CASE[open]: pg-strpos-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT STRPOS('', '') AS r
 
 -- CASE[open]: pg-substr-zero — fails on mysql, oracle. FUNC-DIFF: source=(('ab',),) target=(('abc',),)
 SELECT SUBSTRING('abcdef', 0, 3) AS r

@@ -180,6 +180,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('1',),) target=(('NULL',),)`
 - src: `SELECT '' = 0 AS r`
 
+## my-eq-mix  (mysql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1', '0', '1'),) target=(('1', '1', '1'),)`
+- src: `SELECT 1 = 1.0 AS r, 'a' = 'a ' AS b, 1 = TRUE AS c`
+
 ## my-export-set  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
@@ -194,6 +199,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI`
 - src: `SELECT FIELD('b', 'a', 'b', 'c') AS r`
+
+## my-floor-precision  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('2',),) target=(('3',),)`
+- src: `SELECT FLOOR(2.9999999999999999) AS r`
 
 ## my-get-lock  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -295,6 +305,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT 'x' LIKE 'X' AS r`
 
+## my-locate-empty  (mysql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT LOCATE('', '') AS r`
+
 ## my-lock-tables  (mysql)
 - targets: oracle(carrier), postgresql(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
@@ -349,6 +364,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE`
 - src: `SELECT PERIOD_DIFF(202006, 202001) AS r`
+
+## my-realworld-orders  (mysql)
+- targets: postgresql(invalid)
+- live error: `relation "orders" already exists`
+- src: `CREATE TABLE orders (id INT AUTO_INCREMENT PRIMARY KEY, customer_id INT NOT NULL, total DECIMAL(10,2) DEFAULT 0, created TIMESTAMP`
 
 ## my-recursive-func  (mysql)
 - targets: tsql(invalid)
@@ -429,6 +449,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('abc',),) target=(('',),)`
 - src: `SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r`
+
+## my-trim-leading  (mysql)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('7',),) target=(('',),)`
+- src: `SELECT TRIM(LEADING '0' FROM '007') AS r`
 
 ## my-ts-to-date  (mysql)
 - targets: postgresql(func)
@@ -811,6 +836,11 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA`
 - src: `SELECT RATIO_TO_REPORT(1) OVER () FROM DUAL`
+
+## ora-realworld-orders  (oracle)
+- targets: mysql(invalid), postgresql(invalid)
+- live error: `relation "orders" already exists`
+- src: `CREATE TABLE orders (id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, customer_id NUMBER NOT NULL, total NUMBER(10,2) DEFAULT 0`
 
 ## ora-record-type  (oracle)
 - targets: mysql(invalid), postgresql(carrier), tsql(carrier)
@@ -1538,6 +1568,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(8120, b"Column 'v.x' is invalid in the select list because it is not contained in either `
 - src: `SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)`
 
+## pg-round-2675  (postgresql)
+- targets: mysql(func), oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('2.68',),) target=(('3',),)`
+- src: `SELECT ROUND(2.675::numeric, 2) AS r`
+
 ## pg-savepoint  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG`
@@ -1597,6 +1632,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message `
 - src: `SELECT string_to_array('a,b,c', ',')`
+
+## pg-strpos-empty  (postgresql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT STRPOS('', '') AS r`
 
 ## pg-substr-zero  (postgresql)
 - targets: mysql(func), oracle(func)
@@ -2055,6 +2095,18 @@ SELECT * FROM t WITH (NOLOCK)`
 - live error: `ORA-00904: "SPLIT_PART": invalid identifier`
 - src: `SELECT QUOTENAME('my table'), PARSENAME('a.b.c', 2)`
 
+## ts-realworld-audit  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `PROCEDURE LOG_IT compiled INVALID (line 11): PLS-00103: Encountered the symbol ")" when ex`
+- src: `CREATE TABLE dbo.audit (id INT IDENTITY, msg NVARCHAR(MAX), ts DATETIME2);
+GO
+CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BE`
+
+## ts-realworld-orders  (tsql)
+- targets: postgresql(invalid)
+- live error: `relation "orders" already exists`
+- src: `CREATE TABLE dbo.orders (id INT IDENTITY PRIMARY KEY, customer_id INT NOT NULL, total DECIMAL(10,2) DEFAULT 0, created DATETIME2 D`
+
 ## ts-recursive-cte  (tsql)
 - targets: mysql(invalid), postgresql(invalid)
 - live error: `relation "r" does not exist`
@@ -2206,4 +2258,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (id INT IDENTITY(100, 5))`
 ---
 
-Totals: 431 distinct constructs; defect rows by kind: carrier 64, func 151, invalid 621, semantic 2, silent-drop 42.
+Totals: 441 distinct constructs; defect rows by kind: carrier 64, func 165, invalid 628, semantic 2, silent-drop 42.
