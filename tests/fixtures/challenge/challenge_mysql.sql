@@ -8,6 +8,9 @@
 -- CASE[open]: my-accent-eq — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'Ä' = 'A' AS r
 
+-- CASE[open]: my-adddate — fails on tsql. FUNC-DIFF: source=(('2020-01-31',),) target=(('2020-01-31 00:00:00',),)
+SELECT ADDDATE('2020-01-01', 30) AS r
+
 -- CASE[open]: my-aes — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT HEX(AES_ENCRYPT('data', 'key')) AS r
 
@@ -130,6 +133,9 @@ SELECT CONVERT('123', SIGNED) AS r
 
 -- CASE[open]: my-convert-tz — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT CONVERT_TZ('2020-01-01 10:00', '+00:00', '+02:00') AS r
+
+-- CASE[open]: my-convert-using2 — fails on oracle, postgresql. FUNC-DIFF: source=(('2020-06-15 14:30',),) target=(('2',),)
+SELECT CONVERT('2020-06-15 14:30' USING utf8mb4) AS r
 
 -- CASE[open]: my-crc32 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR
 SELECT CRC32('abc') AS r
@@ -404,6 +410,9 @@ SELECT '2020-01-01' + INTERVAL 1 DAY AS r
 
 -- CASE[open]: my-strnum-add — fails on tsql. FUNC-DIFF: source=(('10',),) target=(('55',),)
 SELECT '5'+'5' AS r
+
+-- CASE[open]: my-subdate — fails on tsql. FUNC-DIFF: source=(('2019-12-31',),) target=(('2019-12-31 00:00:00',),)
+SELECT SUBDATE('2020-01-31', INTERVAL 1 MONTH) AS r
 
 -- CASE[open]: my-substr-float — fails on oracle, tsql. FUNC-DIFF: source=(('llo',),) target=(('el',),)
 SELECT SUBSTRING('hello', 2.9, 2.9) AS r

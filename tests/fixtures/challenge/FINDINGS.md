@@ -48,6 +48,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT 'Ä' = 'A' AS r`
 
+## my-adddate  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('2020-01-31',),) target=(('2020-01-31 00:00:00',),)`
+- src: `SELECT ADDDATE('2020-01-01', 30) AS r`
+
 ## my-aes  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
@@ -252,6 +257,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
 - src: `SELECT CONVERT_TZ('2020-01-01 10:00', '+00:00', '+02:00') AS r`
+
+## my-convert-using2  (mysql)
+- targets: oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('2020-06-15 14:30',),) target=(('2',),)`
+- src: `SELECT CONVERT('2020-06-15 14:30' USING utf8mb4) AS r`
 
 ## my-crc32  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -708,6 +718,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('10',),) target=(('55',),)`
 - src: `SELECT '5'+'5' AS r`
 
+## my-subdate  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('2019-12-31',),) target=(('2019-12-31 00:00:00',),)`
+- src: `SELECT SUBDATE('2020-01-31', INTERVAL 1 MONTH) AS r`
+
 ## my-substr-float  (mysql)
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('llo',),) target=(('el',),)`
@@ -1114,6 +1129,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT LAST_DAY(SYSDATE) AS r FROM DUAL`
+
+## ora-lastday-leap  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('2020-02-29 00:00:00',),) target=(('2020-02-29',),)`
+- src: `SELECT LAST_DAY(DATE '2020-02-01') AS r FROM DUAL`
 
 ## ora-length-trailing  (oracle)
 - targets: tsql(func)
@@ -2696,4 +2716,4 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 524 distinct constructs; defect rows by kind: func 275, invalid 726, semantic 2, silent-drop 75.
+Totals: 528 distinct constructs; defect rows by kind: func 280, invalid 726, semantic 2, silent-drop 75.
