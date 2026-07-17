@@ -980,3 +980,90 @@ class TestZeroPushW1Batch:
         )
         assert r.warnings, r.sql
         assert "NEW./OLD." in r.warnings[0].message, r.warnings[0].message
+
+
+class TestZeroPushW2Batch:
+    """Zero-push batch W2 mechanisms."""
+
+    def _t(self, sql, s, t):
+        from unique.core.transpiler import Transpiler
+
+        return Transpiler().transpile(sql, s, t)
+
+    def test_isnull_predicate_in_before_trigger_condition(self) -> None:
+        r = self._t(
+            "DELIMITER //\ncreate trigger trg before insert on t1 for each row\n"
+            "begin\n  if isnull(new.j) then\n    set new.j := new.i * 10;\n"
+            "  end if;\nend//\nDELIMITER ;",
+            "mysql",
+            "tsql",
+        )
+        assert "j IS NULL" in r.sql, r.sql
+        assert "isnull" not in r.sql.lower(), r.sql
+
+    def test_replace_statement_degrades_to_carrier(self) -> None:
+        for tgt in ("tsql", "postgresql", "oracle"):
+            r = self._t(
+                "DELIMITER //\ncreate procedure p() begin"
+                " replace t1 set data = 1, id = 2; end//\nDELIMITER ;",
+                "mysql",
+                tgt,
+            )
+            assert any("REPLACE" in w.message for w in r.warnings), (tgt, r.sql)
+
+    def test_replace_function_not_degraded(self) -> None:
+        r = self._t(
+            "DELIMITER //\ncreate procedure p() begin"
+            " update t set s = replace(s, ',', ''); end//\nDELIMITER ;",
+            "mysql",
+            "tsql",
+        )
+        assert not any("upsert" in w.message for w in r.warnings), r.sql
+        assert "REPLACE(" in r.sql, r.sql
+
+    def test_offset_zero_dropped_on_tsql_and_mysql(self) -> None:
+        for tgt in ("tsql", "mysql"):
+            r = self._t("SELECT f1 FROM t WHERE x = 1 OFFSET 0;", "postgresql", tgt)
+            assert "OFFSET" not in r.sql.upper(), (tgt, r.sql)
+
+    def test_offset_zero_kept_when_real_offset(self) -> None:
+        r = self._t("SELECT f1 FROM t ORDER BY f1 OFFSET 3;", "postgresql", "tsql")
+        assert "OFFSET 3 ROWS" in r.sql, r.sql
+
+    def test_any_subquery_offset_zero_modeled(self) -> None:
+        r = self._t(
+            "SELECT * FROM a WHERE x = ANY (SELECT y FROM b WHERE z = 1 OFFSET 0);",
+            "postgresql",
+            "tsql",
+        )
+        assert "= ANY (" in r.sql, r.sql
+        assert "OFFSET" not in r.sql.upper(), r.sql
+
+    def test_mode_within_group_to_stats_mode_on_oracle(self) -> None:
+        r = self._t(
+            "SELECT MODE() WITHIN GROUP (ORDER BY s) FROM t;",
+            "postgresql",
+            "oracle",
+        )
+        assert "STATS_MODE(s)" in r.sql, r.sql
+        assert "WITHIN GROUP" not in r.sql, r.sql
+
+    def test_mode_within_group_carrier_on_tsql(self) -> None:
+        r = self._t(
+            "SELECT MODE() WITHIN GROUP (ORDER BY s) FROM t;",
+            "postgresql",
+            "tsql",
+        )
+        assert any("ordered-set" in w.message for w in r.warnings), r.sql
+
+    def test_nameless_create_index_in_trigger_gets_name(self) -> None:
+        src = (
+            "create table ddl_t (c1 integer, c2 integer);\n"
+            "create or replace function ddl_fn() returns trigger as $$\n"
+            "begin\n  create index on ddl_t (c2);\n  return new;\n"
+            "end$$ language plpgsql;\n"
+            "create trigger ddl_fn_t before insert on ddl_t for each row\n"
+            "  execute procedure ddl_fn();"
+        )
+        r = self._t(src, "postgresql", "tsql")
+        assert "CREATE INDEX ddl_t_c2_idx ON" in r.sql, r.sql

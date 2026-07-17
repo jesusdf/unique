@@ -1137,6 +1137,21 @@ class ProceduralTransformer:
                     "equivalent; routine preserved as a comment",
                 )
             )
+        if self._source == "mysql" and self._target != "mysql":
+            # The MySQL REPLACE *statement* (delete-then-insert on a key
+            # clash) has no standard equivalent — distinct from the
+            # universal REPLACE() string function (``REPLACE(`` with the
+            # paren adjacent). Match only the statement forms: ``REPLACE
+            # INTO …``, ``REPLACE tbl SET …``, ``REPLACE tbl (cols) …``.
+            checks.append(
+                (
+                    r"(?i)\bREPLACE\s+"
+                    r"(?:(?:LOW_PRIORITY|DELAYED|HIGH_PRIORITY|IGNORE)\s+)*"
+                    r"(?:INTO\b|[`\"\[]?\w[\w.]*[`\"\]]?\s*(?:SET\b|\())",
+                    f"MySQL REPLACE (delete-then-insert upsert) has no "
+                    f"{self._target} equivalent; routine preserved as a comment",
+                )
+            )
         if not checks:
             return None
         from unique.core.output_gate import scrub
@@ -2925,6 +2940,22 @@ class ProceduralTransformer:
             if self._in_trigger and self._rewrites_trigger_pseudotables():
                 sql = self._rewrite_trigger_pseudotables(sql)
             return EmbeddedDML(sql=sql + capture_suffix, dialect=self._target)
+        # A PostgreSQL nameless ``CREATE INDEX ON t (col)`` (the IR doesn't
+        # model index DDL) leaves raw sqlglot to emit it nameless — invalid
+        # on T-SQL/MySQL, which require an index name. The converter's index
+        # rebuilder synthesizes one.
+        if (
+            self._source == "postgresql"
+            and self._target in ("tsql", "mysql")
+            and (re.match(r"(?is)^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\b", sql))
+        ):
+            from unique.core.converter.emit import _pg_index_rebuild
+
+            rebuilt = _pg_index_rebuild(
+                sql, self._get_sqlglot_dialect(self._source), self._target
+            )
+            if rebuilt is not None:
+                return EmbeddedDML(sql=rebuilt + capture_suffix, dialect=self._target)
         self._warnings.append(
             "Embedded DML not modeled by the IR converter; converted with raw "
             "sqlglot (review the statement)"

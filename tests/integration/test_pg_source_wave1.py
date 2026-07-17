@@ -6976,15 +6976,24 @@ class TestWave191PgSearchCte:
 
 class TestWave192MysqlBareOffset:
     """wave 192 (pg-corpus): MySQL has no bare OFFSET — the documented
-    all-rows idiom is ``LIMIT 18446744073709551615 OFFSET n``."""
+    all-rows idiom is ``LIMIT 18446744073709551615 OFFSET n``. A literal
+    ``OFFSET 0`` is a no-op and drops entirely (batch W2)."""
 
     def test_bare_offset_mysql(self) -> None:
+        out = _t2(
+            "select foo from (select 1 as foo offset 5) foo;",
+            "postgresql",
+            "mysql",
+        )
+        assert re.search(r"(?i)LIMIT 18446744073709551615\s+OFFSET 5", out), out
+
+    def test_bare_offset_zero_dropped_mysql(self) -> None:
         out = _t2(
             "select foo from (select 1 as foo offset 0) foo;",
             "postgresql",
             "mysql",
         )
-        assert re.search(r"(?i)LIMIT 18446744073709551615\s+OFFSET 0", out), out
+        assert "OFFSET" not in out.upper(), out
 
     def test_bare_offset_kept_pg(self) -> None:
         out = _t2(

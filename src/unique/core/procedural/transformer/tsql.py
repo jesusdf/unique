@@ -40,6 +40,29 @@ from unique.core.procedural.transformer.base import (
 from unique.core.sql_split import qualify_function_calls
 
 
+def _strip_wrapping_parens(text: str) -> str:
+    """Remove a single fully-enclosing ``(...)`` pair, if present.
+
+    Unlike ``str.strip("()")``, this only peels a matched outer pair — a
+    predicate whose outermost token is a function call (``isnull(j)``) keeps
+    its closing paren instead of being corrupted into ``isnull(j``.
+    """
+    text = text.strip()
+    if not (text.startswith("(") and text.endswith(")")):
+        return text
+    depth = 0
+    for i, ch in enumerate(text):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            # The first ``)`` that closes the opening paren must be the LAST
+            # character for the whole string to be one wrapping pair.
+            if depth == 0:
+                return text[1:-1].strip() if i == len(text) - 1 else text
+    return text
+
+
 class TSqlTransformer(ProceduralTransformer):
     #: Uniquifies the sys.indexes lookup variables across a batch.
     _drop_index_n = 0
@@ -774,7 +797,8 @@ class TSqlTransformer(ProceduralTransformer):
             ):
                 clean = re.sub(r"(?i):\s*(?=(?:NEW|OLD)\s*\.)", "", cond_text)
                 clean = re.sub(r"(?i)\b(?:NEW|OLD)\s*\.\s*", "", clean).strip()
-                clean = clean.strip("()").strip() or "1=1"
+                clean = _strip_wrapping_parens(clean).strip() or "1=1"
+                clean = self._condition_via_ir(clean)
                 folded = tuple(
                     EmbeddedDML(
                         sql=s.sql.replace(
@@ -884,6 +908,18 @@ class TSqlTransformer(ProceduralTransformer):
                 rf"(?i)\b(?:NEW|OLD)\s*\.\s*{re.escape(fk)}\b", f"{bare}.{key}", sql
             )
         return trivia + sql
+
+    def _condition_via_ir(self, cond: str) -> str:
+        """Transpile a boolean predicate fragment through the shared IR so a
+        source-dialect predicate builtin maps correctly in predicate position
+        (MySQL ``ISNULL(x)`` → ``x IS NULL``, not the scalar CASE form). Falls
+        back to the fragment unchanged when the IR declines it."""
+        ir = self._ir_transpile_dml(f"SELECT 1 WHERE {cond}")
+        if ir:
+            m = re.search(r"(?is)\bWHERE\b(.*)$", ir)
+            if m:
+                return m.group(1).strip().rstrip(";").strip()
+        return cond
 
     def _tsql_pk(self, table: str) -> str:
         registry = IDENTITY_COLUMNS.get() or {}

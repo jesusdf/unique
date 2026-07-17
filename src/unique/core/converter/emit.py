@@ -1907,6 +1907,22 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
             cte_parts.append(f"{cte.name}{cols} AS (\n{inner}\n)")
         parts.append(f"WITH {recursive}{', '.join(cte_parts)}")
 
+    # A literal ``OFFSET 0`` is a no-op (skip zero rows). On T-SQL it would
+    # force an ORDER BY and on MySQL a LIMIT the source never had, so drop it
+    # for those targets — the result set is identical either way.
+    if (
+        dialect in ("tsql", "mysql")
+        and node.limit is not None
+        and isinstance(node.limit.offset, Literal)
+        and node.limit.offset.value == 0
+    ):
+        new_limit = (
+            None
+            if node.limit.limit is None
+            else dataclasses.replace(node.limit, offset=None)
+        )
+        node = dataclasses.replace(node, limit=new_limit)
+
     # SELECT — T-SQL spells a plain row limit as TOP inside the SELECT
     # clause (OFFSET/FETCH needs an ORDER BY and an offset). v0.7.0 reduced
     # it to a comment, silently returning all rows (audit 2026-07-02).
@@ -3120,6 +3136,22 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         mapped_global = _map_system_global(node.sql, dialect)
         if mapped_global is not None:
             return mapped_global
+        # PostgreSQL's ``MODE() WITHIN GROUP (ORDER BY x)`` ordered-set
+        # aggregate is spelled ``STATS_MODE(x)`` on Oracle (T-SQL/MySQL have
+        # no equivalent and degraded the whole statement upstream).
+        if dialect == "oracle":
+            mode_m = re.match(
+                r"(?is)^\s*MODE\s*\(\s*\)\s+WITHIN\s+GROUP\s*\(\s*ORDER\s+BY\s+"
+                r"(.+?)\s*\)\s*$",
+                node.sql,
+            )
+            if mode_m:
+                arg = re.sub(
+                    r"(?i)\s+(?:ASC|DESC)?\s*(?:NULLS\s+(?:FIRST|LAST))?\s*$",
+                    "",
+                    mode_m.group(1),
+                ).strip()
+                return f"STATS_MODE({arg})"
         # An unmapped construct left visible (a mapping gap) must not be
         # silent cross-dialect (P1 silent-output, 2026-07-17).
         if node.reason.startswith("unmapped operator") and SOURCE_DIALECT.get() not in (

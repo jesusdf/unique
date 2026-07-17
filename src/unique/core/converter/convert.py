@@ -745,7 +745,17 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     # subquery; the emitter re-attaches the quantifier keyword.
     if isinstance(expr, (exp.All, exp.Any)):
         inner = expr.this
-        if isinstance(inner, (exp.Select, exp.SetOperation)):
+        # sqlglot wraps the operand in a Subquery/Paren — unwrap to the
+        # SELECT so it becomes a modeled SubqueryExpression (else it fell
+        # through to a RawSQL carrier that never saw the emit pipeline,
+        # e.g. a no-op OFFSET 0 the target rejects). A MULTI-column subquery
+        # implies a row-value ``(a, b) = ANY (…)`` comparison with no
+        # faithful spelling off PG — leave it a RawSQL for the composite
+        # gate to degrade whole (wave 153).
+        while isinstance(inner, (exp.Subquery, exp.Paren)):
+            inner = inner.this
+        scalar = not (isinstance(inner, exp.Select) and len(inner.expressions) > 1)
+        if isinstance(inner, (exp.Select, exp.SetOperation)) and scalar:
             kw = "ALL" if isinstance(expr, exp.All) else "ANY"
             return SubqueryExpression(query=_convert_select(inner), quantifier=kw)
     if isinstance(expr, exp.Null):
