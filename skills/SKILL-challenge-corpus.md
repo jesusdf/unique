@@ -35,8 +35,17 @@ time.**
 
 ### 🔴 RED — find breaks only
 
-RED's only job is to **discover source SQL that transpiles incorrectly**. RED
-does **not** touch `src/`.
+RED's only job is to **discover source SQL that transpiles incorrectly**.
+
+> **HARD RULE — RED NEVER FIXES.** RED must not modify `src/` (the transpiler)
+> in any way: no function/type/operator mappings, no parser/emitter/transformer
+> edits, no "quick fix while I'm here". If you spot the fix, **write it as a
+> note in the finding for BLUE — do not apply it.** RED's only writes are:
+> the `tests/fixtures/challenge/*.sql` scripts (new `[open]` cases),
+> `tests/fixtures/challenge/FINDINGS.md` (the ledger), and — if the workflow
+> itself needs it — this skill / the test harness that *records* findings.
+> A commit that touches `src/` is by definition not a RED commit. Finding and
+> fixing never happen in the same session.
 
 1. **Generate candidate source SQL** for one source engine — small, focused,
    and exercising a real dialect feature (a scripting construct, a function, a
@@ -84,7 +93,9 @@ transpile wrong, and are not already covered.
 ### 🔵 BLUE — fix and prevent only
 
 BLUE takes RED's cases and makes them transpile correctly, **durably**. BLUE
-does **not** invent new cases.
+does **not** invent new cases. BLUE is the **only** role that edits `src/`;
+it flips each finding it closes from `-- CASE[open]:` to `-- CASE[fixed]:` and
+removes it from `FINDINGS.md`.
 
 1. **Fix at the right layer**, obeying the architecture guardrails in the
    [development-workflow skill](SKILL-development-workflow.md): route through the
@@ -121,6 +132,21 @@ a regression test and updated docs.
 - **A documented degrade is a valid outcome**, not a defect — when a construct
   has no faithful cross-engine equivalent, the correct result is a carrier +
   warning + `docs/03-unsupported.md` entry, not an error.
+
+## Case status tags
+
+Each `-- CASE:` header carries a status so the committed test can stay green
+while RED accumulates a backlog:
+
+- `-- CASE[open]: <desc>` — RED-found, **not yet fixed**. `test_challenge.py`
+  only smoke-checks it (must not crash); its output is known-wrong on some
+  target. Detail lives in `FINDINGS.md`.
+- `-- CASE[fixed]: <desc>` — BLUE closed it. Strictly guarded: must transpile to
+  every target with no unrecognized carrier, plus a specific assertion.
+- `-- CASE: <desc>` (untagged) — treated as `fixed`.
+
+RED adds `[open]`; BLUE flips to `[fixed]`. A RED session that produces green
+`[fixed]` cases has overstepped into BLUE's job.
 
 ## Running the corpus
 
