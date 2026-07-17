@@ -55,6 +55,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
 - src: `SELECT CAST(2.7 AS SIGNED) AS r`
 
+## my-change-column  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near 'CHANGE'.DB-Lib error message 20018, severity 15:\nGeneral S`
+- src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t CHANGE a x INT`
+
 ## my-coalesce-empty  (mysql)
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('NULL',),)`
@@ -149,6 +154,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
 - src: `SELECT HEX(255) AS r, BIN(5) AS b`
+
+## my-index-using  (mysql)
+- targets: oracle(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a INT, b INT); CREATE INDEX ix ON t (a) USING BTREE`
 
 ## my-inet  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -294,6 +304,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU`
 - src: `SELECT UUID(), UUID_SHORT()`
+
+## my-view-cascade-check  (mysql)
+- targets: oracle(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a INT, b INT); CREATE VIEW v AS SELECT a FROM t WHERE a > 0 WITH CASCADED CHECK OPTION`
 
 ## my-week-quarter  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -562,6 +577,12 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - live error: `(1305, 'FUNCTION unique_val_41751da4688e.REGEXP_COUNT does not exist')`
 - src: `SELECT REGEXP_COUNT('a1b2c3', '[0-9]') AS r FROM DUAL`
 
+## ora-reverse-index  (oracle)
+- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a NUMBER, b NUMBER);
+CREATE INDEX ix ON t (a) REVERSE`
+
 ## ora-rtrim-chars  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('a',),) target=(('',),)`
@@ -657,6 +678,16 @@ SELECT seq.NEXTVAL FROM DUAL`
 - targets: mysql(invalid), oracle(invalid)
 - live error: `ORA-30649: missing DIRECTORY keyword`
 - src: `CREATE TABLE t (a INT); ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT 'x'`
+
+## pg-alter-type  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-01735: invalid ALTER TABLE option`
+- src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a TYPE BIGINT`
+
+## pg-any-array-subquery  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ`
+- src: `CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a WHERE id = ANY(ARRAY(SELECT id FROM b))`
 
 ## pg-array-agg  (postgresql)
 - targets: mysql(invalid)
@@ -779,6 +810,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE DOMAIN posint AS INT CHECK (VALUE > 0)`
 
+## pg-drop-not-null  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n`
+- src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL`
+
 ## pg-empty-is-null  (postgresql)
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -843,6 +879,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
 - src: `SELECT format('%s=%s', 'a', 1) AS r`
+
+## pg-full-outer-join  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a FULL OUTER JOIN b ON a.id = b.id`
 
 ## pg-fulltext  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -989,6 +1030,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV`
 - src: `SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o`
 
+## pg-partial-unique  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (a INT, b INT); CREATE UNIQUE INDEX ix ON t (a) WHERE b > 0`
+
 ## pg-percentile  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -1018,6 +1064,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: tsql(invalid)
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
 - src: `CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END; $$ LANGUAGE plpgsql`
+
+## pg-recursive-view  (postgresql)
+- targets: mysql(carrier), oracle(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a INT, b INT); CREATE RECURSIVE VIEW v(n) AS SELECT 1 UNION ALL SELECT n+1 FROM v WHERE n < 5`
 
 ## pg-regexp-matches  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -1058,6 +1109,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit`
 - src: `CREATE TABLE t (a BIGSERIAL, flags BIT(8), vb VARBIT(16))`
+
+## pg-set-default  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'SET'.DB-Lib error message 20018, severity 15:\n`
+- src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DEFAULT 5`
 
 ## pg-set-searchpath  (postgresql)
 - targets: mysql(invalid)
@@ -1460,6 +1516,13 @@ SELECT NEXT VALUE FOR seq`
 - live error: `ORA-00904: "DIFFERENCE": invalid identifier`
 - src: `SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')`
 
+## ts-sp-rename  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (a INT, b INT);
+GO
+EXEC sp_rename 't.a', 'x', 'COLUMN'`
+
 ## ts-spid-version  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00936: missing expression`
@@ -1545,4 +1608,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r`
 ---
 
-Totals: 300 distinct constructs; defect rows by kind: carrier 50, func 88, invalid 483, semantic 2.
+Totals: 312 distinct constructs; defect rows by kind: carrier 62, func 88, invalid 498, semantic 2.

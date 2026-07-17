@@ -188,6 +188,11 @@ SELECT NEXT VALUE FOR seq
 -- CASE[open]: ts-soundex-diff — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
 SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')
 
+-- CASE[open]: ts-sp-rename — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (a INT, b INT);
+GO
+EXEC sp_rename 't.a', 'x', 'COLUMN'
+
 -- CASE[open]: ts-spid-version — fails on mysql, oracle, postgresql. ORA-00936: missing expression
 SELECT @@SPID, @@VERSION
 

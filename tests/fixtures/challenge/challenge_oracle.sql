@@ -182,6 +182,10 @@ CREATE FUNCTION f(n NUMBER) RETURN NUMBER AS BEGIN IF n <= 1 THEN RETURN 1; ELSE
 -- CASE[open]: ora-regexp-count — fails on mysql. (1305, 'FUNCTION unique_val_41751da4688e.REGEXP_COUNT does not exist')
 SELECT REGEXP_COUNT('a1b2c3', '[0-9]') AS r FROM DUAL
 
+-- CASE[open]: ora-reverse-index — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a NUMBER, b NUMBER);
+CREATE INDEX ix ON t (a) REVERSE
+
 -- CASE[open]: ora-rtrim-chars — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('a',),) target=(('',),)
 SELECT RTRIM('axxx', 'x') AS r FROM DUAL
 

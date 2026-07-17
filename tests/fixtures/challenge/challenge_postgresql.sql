@@ -11,6 +11,12 @@ SELECT AGE(TIMESTAMP '2020-01-01', TIMESTAMP '2019-01-01') AS a
 -- CASE[open]: pg-alter-add — fails on mysql, oracle. ORA-30649: missing DIRECTORY keyword
 CREATE TABLE t (a INT); ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT 'x'
 
+-- CASE[open]: pg-alter-type — fails on oracle. ORA-01735: invalid ALTER TABLE option
+CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a TYPE BIGINT
+
+-- CASE[open]: pg-any-array-subquery — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
+CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a WHERE id = ANY(ARRAY(SELECT id FROM b))
+
 -- CASE[open]: pg-array-agg — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT ARRAY_AGG(x ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
@@ -85,6 +91,9 @@ SELECT DIV(17, 5), 17 % 5
 -- CASE[open]: pg-domain — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE DOMAIN posint AS INT CHECK (VALUE > 0)
 
+-- CASE[open]: pg-drop-not-null — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
+CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL
+
 -- CASE[open]: pg-empty-is-null — fails on oracle. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT '' IS NULL AS r
 
@@ -123,6 +132,9 @@ CREATE TABLE t (id INT); SELECT * FROM t FOR UPDATE
 
 -- CASE[open]: pg-format-func — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
 SELECT format('%s=%s', 'a', 1) AS r
+
+-- CASE[open]: pg-full-outer-join — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a FULL OUTER JOIN b ON a.id = b.id
 
 -- CASE[open]: pg-fulltext — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT to_tsvector('a cat') @@ to_tsquery('cat') AS r
@@ -211,6 +223,9 @@ CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)
 -- CASE[open]: pg-overlay — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV
 SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o
 
+-- CASE[open]: pg-partial-unique — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (a INT, b INT); CREATE UNIQUE INDEX ix ON t (a) WHERE b > 0
+
 -- CASE[open]: pg-percentile — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(x)
 
@@ -228,6 +243,9 @@ CREATE TABLE t (rng INT4RANGE, tsr TSRANGE)
 
 -- CASE[open]: pg-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END; $$ LANGUAGE plpgsql
+
+-- CASE[open]: pg-recursive-view — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a INT, b INT); CREATE RECURSIVE VIEW v(n) AS SELECT 1 UNION ALL SELECT n+1 FROM v WHERE n < 5
 
 -- CASE[open]: pg-regexp-matches — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE
 SELECT REGEXP_MATCHES('a1b2', '[0-9]', 'g') AS r
@@ -252,6 +270,9 @@ CREATE SEQUENCE seq INCREMENT 2 MINVALUE 10 MAXVALUE 100 CACHE 5 CYCLE
 
 -- CASE[open]: pg-serial-bit — fails on mysql, oracle, tsql. (2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit
 CREATE TABLE t (a BIGSERIAL, flags BIT(8), vb VARBIT(16))
+
+-- CASE[open]: pg-set-default — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'SET'.DB-Lib error message 20018, severity 15:\n
+CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DEFAULT 5
 
 -- CASE[open]: pg-set-searchpath — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 SET search_path TO myschema, public

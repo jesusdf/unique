@@ -32,6 +32,9 @@ SELECT CAST(123 AS CHAR), CONVERT('2020-01-01', DATE), CAST(1 AS UNSIGNED)
 -- CASE[open]: my-cast-int — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
 SELECT CAST(2.7 AS SIGNED) AS r
 
+-- CASE[open]: my-change-column — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'CHANGE'.DB-Lib error message 20018, severity 15:\nGeneral S
+CREATE TABLE t (a INT, b INT); ALTER TABLE t CHANGE a x INT
+
 -- CASE[open]: my-coalesce-empty — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('NULL',),)
 SELECT COALESCE(NULL, 0) = '' AS r
 
@@ -88,6 +91,9 @@ SELECT MD5('abc'), SHA1('abc'), SHA2('abc', 256)
 
 -- CASE[open]: my-hex-bin — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT HEX(255) AS r, BIN(5) AS b
+
+-- CASE[open]: my-index-using — fails on oracle, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a INT, b INT); CREATE INDEX ix ON t (a) USING BTREE
 
 -- CASE[open]: my-inet — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
 SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)
@@ -175,6 +181,9 @@ CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); UPDATE t JOIN s 
 
 -- CASE[open]: my-uuid-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
 SELECT UUID(), UUID_SHORT()
+
+-- CASE[open]: my-view-cascade-check — fails on oracle, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a INT, b INT); CREATE VIEW v AS SELECT a FROM t WHERE a > 0 WITH CASCADED CHECK OPTION
 
 -- CASE[open]: my-week-quarter — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEEK('2020-06-15'), QUARTER('2020-06-15'), DAYOFWEEK('2020-06-15')
