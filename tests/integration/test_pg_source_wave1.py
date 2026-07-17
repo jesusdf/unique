@@ -7264,3 +7264,30 @@ class TestWave202RefcursorReturn:
         out = _t2(self._SQL, "postgresql", "postgresql")
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)RETURNS refcursor", out), out
+
+
+class TestWave203ReturningMultiTable:
+    """wave 203 (pg-corpus): the RETURNING-mysql strip left PG-only
+    DML shapes behind — UPDATE … FROM is MySQL's multi-table UPDATE,
+    DELETE … USING its multi-table DELETE."""
+
+    def test_returning_update_from_mysql(self) -> None:
+        out = _t2(
+            "with t as (select a from y) update y set a = y.a-10 from t"
+            " where y.a > 20 and t.a = y.a returning y.a;",
+            "postgresql",
+            "mysql",
+        )
+        assert re.search(r"(?i)UPDATE y, t SET", out), out
+        assert " FROM t WHERE" not in out, out
+
+    def test_returning_delete_using_mysql(self) -> None:
+        out = _t2(
+            "with recursive t(a) as (select 11 union all select a+1"
+            " from t where a < 50) delete from y using t"
+            " where t.a = y.a returning y.a;",
+            "postgresql",
+            "mysql",
+        )
+        assert re.search(r"(?i)DELETE y FROM y, t\s+WHERE", out), out
+        assert "USING" not in out.upper(), out

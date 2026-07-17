@@ -979,7 +979,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          culprit in the record-function degrade chain; Oracle keeps
          its SYS_REFCURSOR mapping, PG verbatim). Measured: pg→mysql
          **63 → 58** (−5, validity 98.0%). Discovery HOLDS 0. Tests:
-         TestWave202RefcursorReturn (3).**
+         TestWave202RefcursorReturn (3).* Wave 203 (2026-07-17): the
+         RETURNING-mysql strip left PG-only DML shapes behind —
+         ``UPDATE … FROM`` rewrites to MySQL's multi-table UPDATE and
+         ``DELETE … USING`` to its multi-table DELETE (WITH prefixes
+         stay legal on MySQL 8). Measured: pg→mysql **58 → 57** (−1).
+         Discovery HOLDS 0. Tests: TestWave203ReturningMultiTable
+         (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

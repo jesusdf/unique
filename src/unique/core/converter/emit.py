@@ -1382,6 +1382,23 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         m = re.search(r"(?i)\bRETURNING\b\s+(.*?)\s*;?\s*$", node.sql)
         cols = m.group(1).strip() if m else ""
         base = re.sub(r"(?i)\s*\bRETURNING\b.*$", "", node.sql).rstrip()
+        # The stripped base may still carry PG-only DML shapes (wave
+        # 203): UPDATE … FROM is MySQL's multi-table UPDATE, DELETE …
+        # USING its multi-table DELETE.
+        base = re.sub(
+            r"(?is)\bUPDATE\s+([\w.`\"]+)\s+SET\s+(.*?)\s+FROM\s+([\w.`\",\s]+?)"
+            r"(\s+WHERE\b)",
+            r"UPDATE \1, \3 SET \2\4",
+            base,
+            count=1,
+        )
+        base = re.sub(
+            r"(?is)\bDELETE\s+FROM\s+([\w.`\"]+)\s+USING\s+([\w.`\",\s]+?)"
+            r"(\s+WHERE\b)",
+            r"DELETE \1 FROM \1, \2\3",
+            base,
+            count=1,
+        )
         return (
             f"{base};\n-- UNIQUE: MySQL has no RETURNING/OUTPUT; "
             f"the statement returned: {cols}"
