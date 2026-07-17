@@ -309,3 +309,30 @@ class TestDateFamilyInIr:
         out = _ir("tsql", "postgresql", "SELECT DATEADD(microsecond, 1, d) FROM t")
         assert out is not None and "DATEADD" in out.upper(), out
         assert "DATE_ADD(d, 1, MICROSECOND)" not in out, out
+
+
+class TestDateVarsContextInIr:
+    """Date-typed variable context reaches the IR (M3 family F14)."""
+
+    def _t(self, source: str, target: str, frag: str, date_vars: set[str]):
+        t = ProceduralTransformer(source, target)
+        t._date_vars = date_vars
+        return t._ir_transpile_dml(frag)
+
+    def test_trunc_date_var_becomes_date_on_mysql(self) -> None:
+        out = self._t("oracle", "mysql", "SELECT TRUNC(d_fecha) FROM t", {"d_fecha"})
+        assert out is not None and "DATE(D_FECHA)" in out.upper(), out
+
+    def test_trunc_non_date_becomes_truncate_on_mysql(self) -> None:
+        out = self._t("oracle", "mysql", "SELECT TRUNC(v_num) FROM t", set())
+        assert out is not None and "TRUNCATE(V_NUM, 0)" in out.upper(), out
+
+    def test_date_subtraction_becomes_datediff_on_tsql(self) -> None:
+        out = self._t(
+            "oracle", "tsql", "SELECT d2 - d1 FROM t", {"@d1", "@d2", "d1", "d2"}
+        )
+        assert out is not None and "DATEDIFF(DAY, D1, D2)" in out.upper(), out
+
+    def test_numeric_subtraction_untouched(self) -> None:
+        out = self._t("oracle", "tsql", "SELECT a - b FROM t", set())
+        assert out is not None and "DATEDIFF" not in out.upper()

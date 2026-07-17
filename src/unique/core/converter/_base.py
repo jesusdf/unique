@@ -215,6 +215,14 @@ STRING_VARIABLES: contextvars.ContextVar[frozenset[str] | None] = (
     contextvars.ContextVar("string_variables", default=None)
 )
 
+# Names (lowercased) of procedural variables/parameters declared with a
+# DATE/DATETIME type. The date-typed operations the engines spell apart
+# (Oracle TRUNC(date) vs TRUNC(number); T-SQL's missing date ``-``) need
+# the declaration knowledge only the procedural shell has.
+DATE_VARIABLES: contextvars.ContextVar[frozenset[str] | None] = contextvars.ContextVar(
+    "date_variables", default=None
+)
+
 # (success, failure) target spellings for the T-SQL ``@@FETCH_STATUS = 0`` /
 # ``<> 0`` cursor-loop idiom, e.g. ("V_C1%FOUND", "V_C1%NOTFOUND"). Cursor
 # state is procedural context the IR cannot derive; the procedural
@@ -964,6 +972,7 @@ __all__ = [
     "USER_FUNCTIONS",
     "STRING_VARIABLES",
     "FETCH_STATUS_FORMS",
+    "DATE_VARIABLES",
     "SOURCE_DIALECT",
     "IR_EMBEDDED",
     "_BARE_CHAR_BIGTEXT",

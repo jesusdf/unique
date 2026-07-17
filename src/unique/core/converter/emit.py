@@ -3526,6 +3526,22 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if fn_name in ("CURRENT_DATE", "CURDATE") and not node.args:
         return CURRENT_DATE_EXPR.get(dialect, "CURRENT_DATE")
 
+    # Oracle's 1-arg TRUNC is type-dependent: over a declared DATE variable
+    # it is midnight truncation (MySQL DATE()); otherwise numeric
+    # truncation-toward-zero (MySQL TRUNCATE(x, 0)). The declaration
+    # knowledge travels via DATE_VARIABLES (procedural context).
+    if fn_name == "TRUNC" and len(node.args) == 1 and dialect == "mysql":
+        arg_node = _unwrap_sqlglot_wrappers(node.args[0])
+        arg_sql = _emit_expression(node.args[0], dialect)
+        date_vars = DATE_VARIABLES.get() or frozenset()
+        if (
+            isinstance(arg_node, ColumnRef)
+            and not arg_node.table
+            and arg_node.name.lstrip("@").lower() in date_vars
+        ):
+            return f"DATE({arg_sql})"
+        return f"TRUNCATE({arg_sql}, 0)"
+
     # Numeric TRUNC(x): only PostgreSQL/Oracle have TRUNC. A bare numeric literal
     # is truncation-toward-zero (a date TRUNC keeps its native form untouched).
     if (
@@ -4082,6 +4098,26 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             return fail_form
         if node.operator == BinaryOperator.EQ and value in (-1, -2):
             return fail_form
+
+    # T-SQL has no date ``-`` operator (error 8117/257): ``d2 - d1`` over
+    # two declared DATE variables spells DATEDIFF(DAY, d1, d2) — the days
+    # from d1 to d2, matching the source's date-difference semantics.
+    if (
+        node.operator == BinaryOperator.SUB
+        and dialect == "tsql"
+        and isinstance(node.left, ColumnRef)
+        and isinstance(node.right, ColumnRef)
+        and not node.left.table
+        and not node.right.table
+    ):
+        date_vars = DATE_VARIABLES.get() or frozenset()
+        if (
+            node.left.name.lstrip("@").lower() in date_vars
+            and node.right.name.lstrip("@").lower() in date_vars
+        ):
+            left_sql = _emit_expression(node.left, dialect)
+            right_sql = _emit_expression(node.right, dialect)
+            return f"DATEDIFF(DAY, {right_sql}, {left_sql})"
 
     # Oracle's SQL%ROWCOUNT parses as ``SQL % ROWCOUNT`` (modulo) — map
     # the global before emitting a bogus arithmetic expression. The other

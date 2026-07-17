@@ -2894,6 +2894,9 @@ class ProceduralTransformer:
         str_token = _conv.STRING_VARIABLES.set(
             frozenset(v.lstrip("@").lower() for v in self._string_vars)
         )
+        date_token = _conv.DATE_VARIABLES.set(
+            frozenset(v.lstrip("@").lower() for v in self._date_vars)
+        )
         # The source dialect drives shared-map lookups (pair renames,
         # source-owned globals). The transpiler publishes it per run; set it
         # here too so direct IR calls (tests, tools) see the same context.
@@ -2914,6 +2917,7 @@ class ProceduralTransformer:
             _conv.STRING_VARIABLES.reset(str_token)
             _conv.FETCH_STATUS_FORMS.reset(fetch_token)
             _conv.SOURCE_DIALECT.reset(src_token)
+            _conv.DATE_VARIABLES.reset(date_token)
 
     def _ir_transpile_dml_inner(self, sql: str) -> str | None:
         from unique.core import converter as _conv
