@@ -886,7 +886,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          ``REPLACE t SET a=1`` joins the wave-168 INSERT-SET
          pre-recognition (it shredded inside bodies). Measured:
          mysql→oracle **28 → 27** (−1). Discovery HOLDS 0. Tests:
-         TestWave189BitwiseNotReplaceSet (3).**
+         TestWave189BitwiseNotReplaceSet (3).* Wave 190 measurement
+         (2026-07-17, `a0819d9`): pg-corpus remeasured after 40 waves
+         of shared fixes — pg→tsql **65 → 64**, pg→mysql **72**
+         (unchanged), pg→oracle **35 → 32**: the pg-corpus classes are
+         DISJOINT from the mysql-corpus ones. Total pending across
+         both corpora: mysql-corpus 80 (35/18/27) + pg-corpus 168
+         (64/72/32) = **248**, all deep singles / ≤3x classes.**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
