@@ -41,6 +41,15 @@ SELECT (ARRAY[1,2,3])[2] AS r
 -- CASE[open]: pg-array-jsonb — fails on mysql, oracle. ORA-03099: unexpected item [ in a column definition
 CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)
 
+-- CASE[open]: pg-array-manip — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT ARRAY[3,1,2] || 4, array_prepend(0, ARRAY[1]), array_remove(ARRAY[1,2,1], 1)
+
+-- CASE[open]: pg-array-ops — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT ARRAY[1,2,3] @> ARRAY[2], ARRAY[1,2] && ARRAY[2,3], array_length(ARRAY[1,2],1)
+
+-- CASE[open]: pg-array-pos — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT array_position(ARRAY['a','b'], 'b'), array_replace(ARRAY[1,2,1], 1, 9)
+
 -- CASE[open]: pg-array-subquery — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT ARRAY(SELECT generate_series(1,3)) AS r
 
@@ -569,6 +578,9 @@ SELECT 'apple' < 'Banana' AS r
 -- CASE[open]: pg-string-agg-order — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
 SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
+-- CASE[open]: pg-string-split-fns — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.st
+SELECT string_to_table('a,b,c', ','), regexp_split_to_array('a1b2', '\d')
+
 -- CASE[open]: pg-string-to-array — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
 SELECT string_to_array('a,b,c', ',')
 
@@ -593,11 +605,17 @@ CREATE TABLE t (id INT); SELECT * FROM t TABLESAMPLE BERNOULLI(50)
 -- CASE[open]: pg-to-hex-typeof — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT to_hex(255), pg_typeof(1)
 
+-- CASE[open]: pg-tochar-iso — fails on mysql, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of format function.DB-Lib 
+SELECT to_char(TIMESTAMP '2020-06-15 14:30:45', 'YYYY-MM-DD"T"HH24:MI:SS') AS r
+
 -- CASE[open]: pg-tochar-neg — fails on mysql, tsql. FUNC-DIFF: source=(('-1234.5',),) target=(('-9999123599',),)
 SELECT to_char(-1234.5, '9999.99') AS r
 
 -- CASE[open]: pg-tohex2 — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT to_hex(255), to_char(255, 'XX')
+
+-- CASE[open]: pg-totimestamp-long — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+SELECT to_timestamp('June 15 2020', 'Month DD YYYY') AS r
 
 -- CASE[open]: pg-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'a ' = 'a' AS r

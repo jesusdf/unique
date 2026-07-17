@@ -146,6 +146,12 @@ SELECT DATE('2020-01-01') = '2020-01-01 00:00:00' AS r
 -- CASE[open]: my-date-format — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
 SELECT DATE_FORMAT('2020-05-17', '%Y/%m/%d') AS r
 
+-- CASE[open]: my-dateformat-iso — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
+SELECT DATE_FORMAT('2020-06-15 14:30:45', '%Y-%m-%dT%H:%i:%s') AS r
+
+-- CASE[open]: my-dateformat-long — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
+SELECT DATE_FORMAT('2020-06-15', '%W, %M %D, %Y') AS r
+
 -- CASE[open]: my-datetime-precision — fails on tsql. (2716, b'Column, parameter, or variable #1: Cannot specify a column width on data type dat
 CREATE TABLE t (a DATETIME(6), b TIMESTAMP(3), c YEAR)
 
@@ -195,6 +201,9 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 -- CASE[open]: my-gc-order — fails on oracle. FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)
 SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t
 
+-- CASE[open]: my-get-format — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
+SELECT GET_FORMAT(DATE, 'USA'), GET_FORMAT(DATETIME, 'ISO')
+
 -- CASE[open]: my-get-lock — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT GET_LOCK('l', 0), RELEASE_LOCK('l')
 
@@ -237,8 +246,14 @@ SELECT 1 IN (SELECT 1) IS TRUE AS r
 -- CASE[open]: my-json-aggs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_ARRAYAGG(x), JSON_OBJECTAGG(x, x*2) FROM (SELECT 1 x UNION SELECT 2) t
 
+-- CASE[open]: my-json-array-ops — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT JSON_ARRAY_APPEND('[1,2]', '$', 3), JSON_ARRAY_INSERT('[1,2]', '$[0]', 0)
+
 -- CASE[open]: my-json-arrayagg — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION SELECT 2) t
+
+-- CASE[open]: my-json-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT JSON_SEARCH('{"a":"x"}', 'one', 'x'), JSON_DEPTH('[1,[2]]'), JSON_LENGTH('[1,2,3]')
 
 -- CASE[open]: my-json-keys — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_KEYS('{"a":1,"b":2}') AS r

@@ -275,6 +275,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
 - src: `SELECT DATE_FORMAT('2020-05-17', '%Y/%m/%d') AS r`
 
+## my-dateformat-iso  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
+- src: `SELECT DATE_FORMAT('2020-06-15 14:30:45', '%Y-%m-%dT%H:%i:%s') AS r`
+
+## my-dateformat-long  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
+- src: `SELECT DATE_FORMAT('2020-06-15', '%W, %M %D, %Y') AS r`
+
 ## my-datetime-precision  (mysql)
 - targets: tsql(invalid)
 - live error: `(2716, b'Column, parameter, or variable #1: Cannot specify a column width on data type dat`
@@ -356,6 +366,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)`
 - src: `SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t`
 
+## my-get-format  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
+- src: `SELECT GET_FORMAT(DATE, 'USA'), GET_FORMAT(DATETIME, 'ISO')`
+
 ## my-get-lock  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
@@ -426,10 +441,20 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
 - src: `SELECT JSON_ARRAYAGG(x), JSON_OBJECTAGG(x, x*2) FROM (SELECT 1 x UNION SELECT 2) t`
 
+## my-json-array-ops  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_ARRAY_APPEND('[1,2]', '$', 3), JSON_ARRAY_INSERT('[1,2]', '$[0]', 0)`
+
 ## my-json-arrayagg  (mysql)
 - targets: tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
 - src: `SELECT JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION SELECT 2) t`
+
+## my-json-fns2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_SEARCH('{"a":"x"}', 'one', 'x'), JSON_DEPTH('[1,[2]]'), JSON_LENGTH('[1,2,3]')`
 
 ## my-json-keys  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -1501,6 +1526,11 @@ CREATE SYNONYM syn FOR t`
 - live error: `(156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:`
 - src: `SELECT * FROM TABLE(SYS.ODCINUMBERLIST(1,2,3))`
 
+## ora-table-varchar-list  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:`
+- src: `SELECT COLUMN_VALUE FROM TABLE(SYS.ODCIVARCHAR2LIST('a','b','c'))`
+
 ## ora-tablespace  (oracle)
 - targets: mysql(carrier), postgresql(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
@@ -1520,6 +1550,16 @@ CREATE SYNONYM syn FOR t`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST`
 - src: `SELECT TO_TIMESTAMP('2020-01-01 10:00:00.123', 'YYYY-MM-DD HH24:MI:SS.FF') AS r FROM DUAL`
+
+## ora-tochar-iso  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST`
+- src: `SELECT TO_CHAR(TIMESTAMP '2020-06-15 14:30:45', 'YYYY-MM-DD"T"HH24:MI:SS') AS r FROM DUAL`
+
+## ora-tochar-long  (oracle)
+- targets: mysql(silent), postgresql(invalid), tsql(invalid)
+- live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
+- src: `SELECT TO_CHAR(DATE '2020-06-15', 'Day, Month DD, YYYY') AS r FROM DUAL`
 
 ## ora-tochar-neg  (oracle)
 - targets: mysql(func)
@@ -1652,6 +1692,21 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(invalid), oracle(invalid)
 - live error: `ORA-03099: unexpected item [ in a column definition`
 - src: `CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)`
+
+## pg-array-manip  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT ARRAY[3,1,2] || 4, array_prepend(0, ARRAY[1]), array_remove(ARRAY[1,2,1], 1)`
+
+## pg-array-ops  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT ARRAY[1,2,3] @> ARRAY[2], ARRAY[1,2] && ARRAY[2,3], array_length(ARRAY[1,2],1)`
+
+## pg-array-pos  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT array_position(ARRAY['a','b'], 'b'), array_replace(ARRAY[1,2,1], 1, 9)`
 
 ## pg-array-subquery  (postgresql)
 - targets: mysql(invalid)
@@ -2521,6 +2576,11 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - live error: `(529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message`
 - src: `SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)`
 
+## pg-string-split-fns  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.st`
+- src: `SELECT string_to_table('a,b,c', ','), regexp_split_to_array('a1b2', '\d')`
+
 ## pg-string-to-array  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message `
@@ -2561,6 +2621,11 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT to_hex(255), pg_typeof(1)`
 
+## pg-tochar-iso  (postgresql)
+- targets: mysql(invalid), tsql(invalid)
+- live error: `(8116, b'Argument data type timestamp is invalid for argument 1 of format function.DB-Lib `
+- src: `SELECT to_char(TIMESTAMP '2020-06-15 14:30:45', 'YYYY-MM-DD"T"HH24:MI:SS') AS r`
+
 ## pg-tochar-neg  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('-1234.5',),) target=(('-9999123599',),)`
@@ -2570,6 +2635,11 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
 - src: `SELECT to_hex(255), to_char(255, 'XX')`
+
+## pg-totimestamp-long  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST`
+- src: `SELECT to_timestamp('June 15 2020', 'Month DD YYYY') AS r`
 
 ## pg-trailing-eq  (postgresql)
 - targets: oracle(func), tsql(func)
@@ -3028,6 +3098,11 @@ WITH cte AS (SELECT id, ROW_NUMBER() OVER (PARTITION BY n ORDER BY id) rn FROM`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE t (a INT, b INT); CREATE INDEX ix ON t (a) WHERE b IS NOT NULL`
 
+## ts-format-iso  (tsql)
+- targets: mysql(silent), oracle(invalid), postgresql(silent)
+- live error: `ORA-01821: date format not recognized`
+- src: `SELECT FORMAT(CAST('2020-06-15 14:30:45' AS DATETIME2), 'yyyy-MM-ddTHH:mm:ss') AS r`
+
 ## ts-format-number  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "NUMBER_TO_STR": invalid identifier`
@@ -3405,4 +3480,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 654 distinct constructs; defect rows by kind: carrier 138, func 256, invalid 858, semantic 2, silent-drop 75.
+Totals: 669 distinct constructs; defect rows by kind: carrier 138, func 256, invalid 893, semantic 2, silent-drop 75.

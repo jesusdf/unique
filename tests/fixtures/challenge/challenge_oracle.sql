@@ -428,6 +428,9 @@ SELECT SYS_EXTRACT_UTC(SYSTIMESTAMP) AS r FROM DUAL
 -- CASE[open]: ora-table-collection — fails on mysql, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:
 SELECT * FROM TABLE(SYS.ODCINUMBERLIST(1,2,3))
 
+-- CASE[open]: ora-table-varchar-list — fails on mysql, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:
+SELECT COLUMN_VALUE FROM TABLE(SYS.ODCIVARCHAR2LIST('a','b','c'))
+
 -- CASE[open]: ora-tablespace — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (a NUMBER) TABLESPACE users
 
@@ -439,6 +442,12 @@ SELECT TO_NUMBER('1.234E2') AS r FROM DUAL
 
 -- CASE[open]: ora-to-timestamp — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
 SELECT TO_TIMESTAMP('2020-01-01 10:00:00.123', 'YYYY-MM-DD HH24:MI:SS.FF') AS r FROM DUAL
+
+-- CASE[open]: ora-tochar-iso — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+SELECT TO_CHAR(TIMESTAMP '2020-06-15 14:30:45', 'YYYY-MM-DD"T"HH24:MI:SS') AS r FROM DUAL
+
+-- CASE[open]: ora-tochar-long — fails on postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
+SELECT TO_CHAR(DATE '2020-06-15', 'Day, Month DD, YYYY') AS r FROM DUAL
 
 -- CASE[open]: ora-tochar-neg — fails on mysql. FUNC-DIFF: source=(('-1234.5',),) target=(('NULL',),)
 SELECT TO_CHAR(-1234.5, '9999.99') AS r FROM DUAL
