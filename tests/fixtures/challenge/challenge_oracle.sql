@@ -40,6 +40,9 @@ SELECT MEDIAN(x),STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 x F
 -- CASE[open]: ora-asciistr — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AS
 SELECT ASCIISTR('ABÄCD'), UNISTR('\0041') FROM DUAL
 
+-- CASE[open]: ora-baseconv — fails on mysql, postgresql, tsql. (195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s
+SELECT TO_CHAR(255,'XXX'),BIN_TO_NUM(1,1,1,1,1,1,1,1) FROM DUAL
+
 -- CASE[open]: ora-bit-fns — fails on mysql, postgresql, tsql. (195, b"'BITAND' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT BITAND(12, 10), BIN_TO_NUM(1,1,0) FROM DUAL
 
@@ -144,6 +147,9 @@ SELECT TO_CHAR(DATE '2020-06-15', 'Q') AS r FROM DUAL
 
 -- CASE[open]: ora-fmt-week — fails on mysql. FUNC-DIFF: source=(('24',),) target=(('Monday',),)
 SELECT TO_CHAR(DATE '2020-06-15', 'WW') AS r FROM DUAL
+
+-- CASE[open]: ora-fmt3 — fails on tsql. (195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s
+SELECT TO_CHAR(1234.5678,'9G999D99'),TO_CHAR(-5,'S9') FROM DUAL
 
 -- CASE[open]: ora-for-update-nowait — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 CREATE TABLE t (id NUMBER); SELECT * FROM t FOR UPDATE NOWAIT
@@ -291,6 +297,9 @@ SELECT RAWTOHEX('AB'), HEXTORAW('4142') FROM DUAL
 CREATE FUNCTION f(n NUMBER) RETURN NUMBER AS BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END;
 /
 
+-- CASE[open]: ora-regexp-cnt — fails on mysql. (1305, 'FUNCTION unique_val_015f5453adcc.REGEXP_COUNT does not exist')
+SELECT REGEXP_COUNT('a1b2c3','[0-9]'),REGEXP_INSTR('a1b2','[0-9]',1,2) FROM DUAL
+
 -- CASE[open]: ora-regexp-count — fails on mysql. (1305, 'FUNCTION unique_val_41751da4688e.REGEXP_COUNT does not exist')
 SELECT REGEXP_COUNT('a1b2c3', '[0-9]') AS r FROM DUAL
 
@@ -311,6 +320,9 @@ CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1 CACHE 20 NOCYCLE ORDER
 
 -- CASE[open]: ora-soundex — fails on postgresql. function soundex(unknown) does not exist
 SELECT SOUNDEX('Smith') AS r FROM DUAL
+
+-- CASE[open]: ora-soundex3 — fails on postgresql. function soundex(unknown) does not exist
+SELECT SOUNDEX('Smith') FROM DUAL
 
 -- CASE[open]: ora-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('de',),) target=(('',),)
 SELECT SUBSTR('abcdef', -3, 2) AS r FROM DUAL

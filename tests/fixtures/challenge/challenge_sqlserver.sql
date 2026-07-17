@@ -161,6 +161,9 @@ SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r
 -- CASE[open]: ts-hash-all — fails on mysql, postgresql. SILENT: source literal(s) ["'SHA2_512'"] absent from valid output, no warning
 SELECT HASHBYTES('SHA2_512', 'abc'), CHECKSUM('abc')
 
+-- CASE[open]: ts-hexcast — fails on oracle, postgresql. ORA-00906: missing left parenthesis
+SELECT CONVERT(VARCHAR,0x48656C6C6F),CONVERT(VARBINARY,'Hello',0)
+
 -- CASE[open]: ts-host-db — fails on mysql, oracle, postgresql. ORA-00904: "DB_NAME": invalid identifier
 SELECT HOST_NAME(), DB_NAME(), SUSER_SNAME()
 
@@ -262,8 +265,14 @@ SELECT SESSION_CONTEXT(N'k'), CURRENT_TRANSACTION_ID()
 -- CASE[open]: ts-soundex-diff — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
 SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')
 
+-- CASE[open]: ts-soundex3 — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
+SELECT SOUNDEX('Smith'),DIFFERENCE('Smith','Smyth')
+
 -- CASE[open]: ts-spid-version — fails on mysql, oracle, postgresql. ORA-00936: missing expression
 SELECT @@SPID, @@VERSION
+
+-- CASE[open]: ts-split-agg — fails on oracle, postgresql. ORA-00904: "STRING_SPLIT": invalid identifier
+SELECT STRING_AGG(value,',') FROM STRING_SPLIT('a,b,c',',')
 
 -- CASE[open]: ts-st-distance — fails on oracle, postgresql. DPY-4010: a bind variable replacement value for placeholder ":POINT" was not provided
 SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)) AS r

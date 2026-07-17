@@ -44,6 +44,9 @@ SELECT AVG(x) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 2) t
 -- CASE[open]: my-base64 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TO
 SELECT TO_BASE64('abc'), FROM_BASE64('YWJj')
 
+-- CASE[open]: my-baseconv — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
+SELECT BIN(255),OCT(255),HEX(255),CONV(255,10,36)
+
 -- CASE[open]: my-benchmark — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BE
 SELECT BENCHMARK(1, 1+1) AS r
 
@@ -131,6 +134,9 @@ SELECT CHAR(256) AS r
 -- CASE[open]: my-char-unicode — fails on postgresql. FUNC-DIFF: source=(('NULL',),) target=(('μ',),)
 SELECT CHAR(956 USING utf8mb4) AS r
 
+-- CASE[open]: my-char-unicode2 — fails on oracle, postgresql, tsql. (195, b"'CHR' is not a recognized built-in function name.DB-Lib error message 20018, sever
+SELECT CHAR(0x41,0x42 USING utf8mb4),ORD('中')
+
 -- CASE[open]: my-check-enforced — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'ENFORCED'.DB-Lib error message 20018, severity 15:\nGeneral
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENFORCED
 
@@ -184,6 +190,9 @@ SELECT CONVERT('2020-06-15 14:30' USING utf8mb4) AS r
 
 -- CASE[open]: my-crc32 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR
 SELECT CRC32('abc') AS r
+
+-- CASE[open]: my-crypto2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR
+SELECT FROM_BASE64(TO_BASE64('hello')),HEX(AES_DECRYPT(AES_ENCRYPT('d','k'),'k'))
 
 -- CASE[open]: my-date-add-interval — fails on oracle, postgresql. ORA-30081: invalid data type for datetime/interval arithmetic
 SELECT DATE_ADD('2020-01-01', INTERVAL 7 DAY) AS r
@@ -260,6 +269,9 @@ SELECT LOAD_FILE('/etc/x'), IS_USED_LOCK('l')
 -- CASE[open]: my-floor-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
 SELECT FLOOR(2.9999999999999999) AS r
 
+-- CASE[open]: my-fmt3 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+SELECT FORMAT(1234.5678,2),FORMAT(1234.5678,4,'de_DE'),TRUNCATE(1234.5678,2)
+
 -- CASE[open]: my-for-share — fails on oracle. ORA-02000: missing COMPRESS or UPDATE keyword
 CREATE TABLE t (id INT, INDEX ix (id)); SELECT id FROM t WHERE id = 1 FOR SHARE
 
@@ -308,6 +320,9 @@ SELECT HEX(255) AS r, BIN(5) AS b
 -- CASE[open]: my-hex-str-add — fails on postgresql. FUNC-DIFF: source=(('0',),) target=(('16',),)
 SELECT '0x10' + 0 AS r
 
+-- CASE[open]: my-hexcast — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
+SELECT CAST(x'48656C6C6F' AS CHAR),HEX('Hello'),UNHEX('48656C6C6F')
+
 -- CASE[open]: my-ifnull-empty — fails on oracle. FUNC-DIFF: source=(('',),) target=(('NULL',),)
 SELECT IFNULL('', NULL) AS r
 
@@ -316,6 +331,9 @@ SELECT INTERVAL(3, 1, 2, 4, 6), FIELD('b','a','b'), ELT(1,'x','y')
 
 -- CASE[open]: my-inet — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
 SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)
+
+-- CASE[open]: my-inet3 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
+SELECT INET_ATON('10.0.0.1'),INET_NTOA(167772161),INET6_ATON('::1')
 
 -- CASE[open]: my-inet6 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
 SELECT INET6_ATON('::1'), INET6_NTOA(INET6_ATON('::1'))
@@ -516,6 +534,9 @@ SELECT REPLACE('AbCaBc', 'a', 'X') AS r
 -- CASE[open]: my-replace-null2 — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT REPLACE('abc', NULL, 'x') IS NULL AS r
 
+-- CASE[open]: my-round-cast — fails on oracle. ORA-00902: invalid datatype
+SELECT CAST(3.99 AS SIGNED),CAST(-3.99 AS SIGNED),CONVERT(3.99,SIGNED)
+
 -- CASE[open]: my-round-fns — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CE
 SELECT FLOOR(3.7), CEILING(3.2), ROUND(3.567, 2), TRUNCATE(3.567, 1)
 
@@ -576,6 +597,9 @@ SELECT SUBSTRING('abcdef', -3) AS r
 -- CASE[open]: my-substr3 — fails on postgresql, tsql. FUNC-DIFF: source=(('bcdef', 'bcd', 'ef'),) target=(('bcdef', 'bcd', 'abc'),)
 SELECT SUBSTR('abcdef',2), SUBSTR('abcdef',2,3), SUBSTR('abcdef',-2)
 
+-- CASE[open]: my-substridx-agg — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
+SELECT SUBSTRING_INDEX(GROUP_CONCAT(x),',',2) FROM (SELECT 1 x UNION SELECT 2 UNION SELECT 3) t
+
 -- CASE[open]: my-substridx-nested — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
 SELECT SUBSTRING_INDEX(SUBSTRING_INDEX('a,b,c,d', ',', 3), ',', -1) AS r
 
@@ -615,6 +639,9 @@ SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r
 -- CASE[open]: my-trim-leading — fails on postgresql, tsql. FUNC-DIFF: source=(('7',),) target=(('',),)
 SELECT TRIM(LEADING '0' FROM '007') AS r
 
+-- CASE[open]: my-trim-len — fails on oracle. ORA-30001: trim set should have only one character
+SELECT LENGTH(TRIM(BOTH ' ' FROM '  hi  ')),CHAR_LENGTH(RTRIM(' hi '))
+
 -- CASE[open]: my-trim-trailing — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT TRIM(TRAILING '.' FROM 'abc...') AS r
 
@@ -641,6 +668,9 @@ SELECT LENGTH(UPPER('ß')) AS r
 
 -- CASE[open]: my-upper-strasse — fails on postgresql. FUNC-DIFF: source=(('STRAßE',),) target=(('STRAẞE',),)
 SELECT UPPER('straße') AS r
+
+-- CASE[open]: my-uuid-bin — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
+SELECT UUID_TO_BIN(UUID()),BIN_TO_UUID(UUID_TO_BIN('6ccd780c-baba-1026-9564-5b8c656024db'))
 
 -- CASE[open]: my-uuid-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
 SELECT UUID(), UUID_SHORT()

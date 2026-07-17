@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (364 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (365 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -107,6 +107,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TO`
 - src: `SELECT TO_BASE64('abc'), FROM_BASE64('YWJj')`
+
+## my-baseconv  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI`
+- src: `SELECT BIN(255),OCT(255),HEX(255),CONV(255,10,36)`
 
 ## my-benchmark  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -253,6 +258,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('μ',),)`
 - src: `SELECT CHAR(956 USING utf8mb4) AS r`
 
+## my-char-unicode2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'CHR' is not a recognized built-in function name.DB-Lib error message 20018, sever`
+- src: `SELECT CHAR(0x41,0x42 USING utf8mb4),ORD('中')`
+
 ## my-check-enforced  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near 'ENFORCED'.DB-Lib error message 20018, severity 15:\nGeneral`
@@ -342,6 +352,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR`
 - src: `SELECT CRC32('abc') AS r`
+
+## my-crypto2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR`
+- src: `SELECT FROM_BASE64(TO_BASE64('hello')),HEX(AES_DECRYPT(AES_ENCRYPT('d','k'),'k'))`
 
 ## my-date-add-interval  (mysql)
 - targets: oracle(invalid), postgresql(invalid)
@@ -468,6 +483,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('2',),) target=(('3',),)`
 - src: `SELECT FLOOR(2.9999999999999999) AS r`
 
+## my-fmt3  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
+- src: `SELECT FORMAT(1234.5678,2),FORMAT(1234.5678,4,'de_DE'),TRUNCATE(1234.5678,2)`
+
 ## my-for-share  (mysql)
 - targets: oracle(invalid)
 - live error: `ORA-02000: missing COMPRESS or UPDATE keyword`
@@ -548,6 +568,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('0',),) target=(('16',),)`
 - src: `SELECT '0x10' + 0 AS r`
 
+## my-hexcast  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
+- src: `SELECT CAST(x'48656C6C6F' AS CHAR),HEX('Hello'),UNHEX('48656C6C6F')`
+
 ## my-ifnull-empty  (mysql)
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('',),) target=(('NULL',),)`
@@ -562,6 +587,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN`
 - src: `SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)`
+
+## my-inet3  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN`
+- src: `SELECT INET_ATON('10.0.0.1'),INET_NTOA(167772161),INET6_ATON('::1')`
 
 ## my-inet6  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -893,6 +923,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT REPLACE('abc', NULL, 'x') IS NULL AS r`
 
+## my-round-cast  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-00902: invalid datatype`
+- src: `SELECT CAST(3.99 AS SIGNED),CAST(-3.99 AS SIGNED),CONVERT(3.99,SIGNED)`
+
 ## my-round-fns  (mysql)
 - targets: tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CE`
@@ -993,6 +1028,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('bcdef', 'bcd', 'ef'),) target=(('bcdef', 'bcd', 'abc'),)`
 - src: `SELECT SUBSTR('abcdef',2), SUBSTR('abcdef',2,3), SUBSTR('abcdef',-2)`
 
+## my-substridx-agg  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU`
+- src: `SELECT SUBSTRING_INDEX(GROUP_CONCAT(x),',',2) FROM (SELECT 1 x UNION SELECT 2 UNION SELECT 3) t`
+
 ## my-substridx-nested  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU`
@@ -1058,6 +1098,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('7',),) target=(('',),)`
 - src: `SELECT TRIM(LEADING '0' FROM '007') AS r`
 
+## my-trim-len  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-30001: trim set should have only one character`
+- src: `SELECT LENGTH(TRIM(BOTH ' ' FROM '  hi  ')),CHAR_LENGTH(RTRIM(' hi '))`
+
 ## my-trim-trailing  (mysql)
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('abc',),) target=(('',),)`
@@ -1102,6 +1147,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: postgresql(func)
 - live error: `FUNC-DIFF: source=(('STRAßE',),) target=(('STRAẞE',),)`
 - src: `SELECT UPPER('straße') AS r`
+
+## my-uuid-bin  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU`
+- src: `SELECT UUID_TO_BIN(UUID()),BIN_TO_UUID(UUID_TO_BIN('6ccd780c-baba-1026-9564-5b8c656024db'))`
 
 ## my-uuid-funcs  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -1237,6 +1287,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AS`
 - src: `SELECT ASCIISTR('ABÄCD'), UNISTR('\0041') FROM DUAL`
+
+## ora-baseconv  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s`
+- src: `SELECT TO_CHAR(255,'XXX'),BIN_TO_NUM(1,1,1,1,1,1,1,1) FROM DUAL`
 
 ## ora-bit-fns  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1410,6 +1465,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('24',),) target=(('Monday',),)`
 - src: `SELECT TO_CHAR(DATE '2020-06-15', 'WW') AS r FROM DUAL`
+
+## ora-fmt3  (oracle)
+- targets: postgresql(silent-rt), tsql(invalid)
+- live error: `(195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s`
+- src: `SELECT TO_CHAR(1234.5678,'9G999D99'),TO_CHAR(-5,'S9') FROM DUAL`
 
 ## ora-for-update-nowait  (oracle)
 - targets: mysql(invalid)
@@ -1653,6 +1713,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - src: `CREATE FUNCTION f(n NUMBER) RETURN NUMBER AS BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END;
 /`
 
+## ora-regexp-cnt  (oracle)
+- targets: mysql(invalid)
+- live error: `(1305, 'FUNCTION unique_val_015f5453adcc.REGEXP_COUNT does not exist')`
+- src: `SELECT REGEXP_COUNT('a1b2c3','[0-9]'),REGEXP_INSTR('a1b2','[0-9]',1,2) FROM DUAL`
+
 ## ora-regexp-count  (oracle)
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_41751da4688e.REGEXP_COUNT does not exist')`
@@ -1687,6 +1752,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: postgresql(invalid)
 - live error: `function soundex(unknown) does not exist`
 - src: `SELECT SOUNDEX('Smith') AS r FROM DUAL`
+
+## ora-soundex3  (oracle)
+- targets: postgresql(invalid)
+- live error: `function soundex(unknown) does not exist`
+- src: `SELECT SOUNDEX('Smith') FROM DUAL`
 
 ## ora-substr-neg  (oracle)
 - targets: postgresql(func), tsql(func)
@@ -1885,6 +1955,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ`
 - src: `CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a WHERE id = ANY(ARRAY(SELECT id FROM b))`
 
+## pg-arr-str-roundtrip  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message `
+- src: `SELECT array_to_string(string_to_array('a,b,c',','),'|')`
+
 ## pg-array-jsonb  (postgresql)
 - targets: oracle(invalid)
 - live error: `ORA-03099: unexpected item [ in a column definition`
@@ -1914,6 +1989,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2.33333',),) target=(('2',),)`
 - src: `SELECT AVG(x) FROM (VALUES (1),(2),(NULL),(4)) v(x)`
+
+## pg-baseconv  (postgresql)
+- targets: tsql(invalid)
+- live error: `(291, b"CAST or CONVERT: invalid attributes specified for type 'bit'DB-Lib error message 2`
+- src: `SELECT 255::bit(8)::text,to_hex(255),255::text`
 
 ## pg-bit-fns  (postgresql)
 - targets: mysql(invalid)
@@ -2050,6 +2130,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type JSONB.DB-Lib error messa`
 - src: `CREATE TABLE t (data JSONB, name TEXT GENERATED ALWAYS AS (data->>'name') STORED)`
 
+## pg-convert-roundtrip  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co`
+- src: `SELECT convert_from(convert_to('héllo','UTF8'),'UTF8')`
+
 ## pg-convert-to  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co`
@@ -2170,6 +2255,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(130, b'Cannot perform an aggregate function on an expression containing an aggregate or a`
 - src: `CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id, COUNT(*) FILTER (WHERE n > (SELECT AVG(v) FROM u)) FROM`
 
+## pg-fmt3  (postgresql)
+- targets: mysql(silent), oracle(invalid), tsql(silent)
+- live error: `SILENT: source literal(s) ["'9G999D99'"] absent from valid output, no warning`
+- src: `SELECT to_char(1234.5678,'9G999D99'),to_char(-5,'S9')`
+
 ## pg-for-update  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
@@ -2264,6 +2354,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: oracle(invalid)
 - live error: `ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ`
 - src: `SELECT x'FF'::int AS h, 1.5e3 AS s`
+
+## pg-hexcast  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se`
+- src: `SELECT encode('Hello'::bytea,'hex'),decode('48656c6c6f','hex')::text`
 
 ## pg-inet-ops  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
@@ -2510,6 +2605,11 @@ CREATE TABLE ledger (id SERIA`
 - targets: mysql(invalid), oracle(invalid)
 - live error: `ORA-01722: unable to convert string value containing 'g' to a number: `
 - src: `SELECT regexp_replace('a1b2', '(\d)', '[\1]', 'g') AS r`
+
+## pg-regexp-cnt  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1305, 'FUNCTION unique_val_a1fe6b8252a9.REGEXP_COUNT does not exist')`
+- src: `SELECT regexp_count('a1b2','[0-9]'),regexp_instr('a1b2','[0-9]',1,2)`
 
 ## pg-regexp-matches  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -3085,6 +3185,11 @@ CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
 - live error: `SILENT: source literal(s) ["'SHA2_512'"] absent from valid output, no warning`
 - src: `SELECT HASHBYTES('SHA2_512', 'abc'), CHECKSUM('abc')`
 
+## ts-hexcast  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00906: missing left parenthesis`
+- src: `SELECT CONVERT(VARCHAR,0x48656C6C6F),CONVERT(VARBINARY,'Hello',0)`
+
 ## ts-host-db  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "DB_NAME": invalid identifier`
@@ -3244,10 +3349,20 @@ SELECT NEXT VALUE FOR seq`
 - live error: `ORA-00904: "DIFFERENCE": invalid identifier`
 - src: `SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')`
 
+## ts-soundex3  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "DIFFERENCE": invalid identifier`
+- src: `SELECT SOUNDEX('Smith'),DIFFERENCE('Smith','Smyth')`
+
 ## ts-spid-version  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00936: missing expression`
 - src: `SELECT @@SPID, @@VERSION`
+
+## ts-split-agg  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "STRING_SPLIT": invalid identifier`
+- src: `SELECT STRING_AGG(value,',') FROM STRING_SPLIT('a,b,c',',')`
 
 ## ts-st-distance  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
@@ -3397,4 +3512,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 663 distinct constructs; defect rows by kind: func 301, invalid 1009, semantic 2, silent-drop 75.
+Totals: 686 distinct constructs; defect rows by kind: func 301, invalid 1060, semantic 2, silent-drop 75.

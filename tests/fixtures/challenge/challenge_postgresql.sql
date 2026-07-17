@@ -32,6 +32,9 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DATA TYPE BIGINT
 -- CASE[open]: pg-any-array-subquery — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
 CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a WHERE id = ANY(ARRAY(SELECT id FROM b))
 
+-- CASE[open]: pg-arr-str-roundtrip — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
+SELECT array_to_string(string_to_array('a,b,c',','),'|')
+
 -- CASE[open]: pg-array-jsonb — fails on oracle. ORA-03099: unexpected item [ in a column definition
 CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)
 
@@ -49,6 +52,9 @@ SELECT AVG(x) FROM (VALUES (1),(2)) v(x)
 
 -- CASE[open]: pg-avg-null — fails on mysql, tsql. FUNC-DIFF: source=(('2.33333',),) target=(('2',),)
 SELECT AVG(x) FROM (VALUES (1),(2),(NULL),(4)) v(x)
+
+-- CASE[open]: pg-baseconv — fails on tsql. (291, b"CAST or CONVERT: invalid attributes specified for type 'bit'DB-Lib error message 2
+SELECT 255::bit(8)::text,to_hex(255),255::text
 
 -- CASE[open]: pg-bit-fns — fails on mysql. (1305, 'FUNCTION unique_val_ff6c8e4945b4.GETBIT does not exist')
 SELECT get_bit(B'1011', 0), set_bit(B'0000', 1, 1)
@@ -131,6 +137,9 @@ CREATE TABLE t (a TEXT, b TEXT GENERATED ALWAYS AS (lower(a)) STORED)
 -- CASE[open]: pg-computed-jsonb — fails on mysql, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type JSONB.DB-Lib error messa
 CREATE TABLE t (data JSONB, name TEXT GENERATED ALWAYS AS (data->>'name') STORED)
 
+-- CASE[open]: pg-convert-roundtrip — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co
+SELECT convert_from(convert_to('héllo','UTF8'),'UTF8')
+
 -- CASE[open]: pg-convert-to — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co
 SELECT convert_to('abc', 'UTF8')
 
@@ -203,6 +212,9 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 -- CASE[open]: pg-filter-subquery — fails on tsql. (130, b'Cannot perform an aggregate function on an expression containing an aggregate or a
 CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id, COUNT(*) FILTER (WHERE n > (SELECT AVG(v) FROM u)) FROM t GROUP BY id
 
+-- CASE[open]: pg-fmt3 — fails on oracle. SILENT: source literal(s) ["'9G999D99'"] absent from valid output, no warning
+SELECT to_char(1234.5678,'9G999D99'),to_char(-5,'S9')
+
 -- CASE[open]: pg-for-update — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 CREATE TABLE t (id INT); SELECT * FROM t FOR UPDATE
 
@@ -259,6 +271,9 @@ SELECT lpad('x', 3), md5('x'), sha256('x'::bytea)
 
 -- CASE[open]: pg-hex-literal — fails on oracle. ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ
 SELECT x'FF'::int AS h, 1.5e3 AS s
+
+-- CASE[open]: pg-hexcast — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se
+SELECT encode('Hello'::bytea,'hex'),decode('48656c6c6f','hex')::text
 
 -- CASE[open]: pg-inet-ops — fails on oracle, tsql. (243, b'Type cidr is not a defined system type.DB-Lib error message 20018, severity 16:\nG
 SELECT '192.168.1.0/24'::cidr >> '192.168.1.5'::inet, abbrev('10.0.0.0/8'::cidr)
@@ -412,6 +427,9 @@ CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE R
 
 -- CASE[open]: pg-regexp-backref — fails on mysql, oracle. ORA-01722: unable to convert string value containing 'g' to a number: 
 SELECT regexp_replace('a1b2', '(\d)', '[\1]', 'g') AS r
+
+-- CASE[open]: pg-regexp-cnt — fails on mysql. (1305, 'FUNCTION unique_val_a1fe6b8252a9.REGEXP_COUNT does not exist')
+SELECT regexp_count('a1b2','[0-9]'),regexp_instr('a1b2','[0-9]',1,2)
 
 -- CASE[open]: pg-regexp-matches — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE
 SELECT REGEXP_MATCHES('a1b2', '[0-9]', 'g') AS r
