@@ -1427,6 +1427,23 @@ fix needs an **anonymized** regression fixture (never a private name).
       full suite as the net; per-target subclassing of the rewriter can
       come later. This also unblocks M3-prereq's final step (the rewriter
       object is what IR-first expressions will eventually replace).
+## FLOOR DECLARED (2026-07-17, user, HEAD 469917a)
+
+The direction-residue campaign (waves 108–239) is **complete at its
+architectural floor**: **133 pending** across six directions
+(mysql-corpus {tsql 20, pg 15, oracle 13}, pg-corpus {tsql 29, mysql
+34→32, oracle 24}), validity **98.9–99.8%**, discovery pg→pg **0** from
+287. The remaining residue is THREE non-wave classes: (1) adversarial
+pg_regress error-path inputs (corrupt latin1 idents, PREPARE/EXECUTE,
+custom aggregates); (2) schema-dependent (a column whose name equals a
+local variable — RHS undecidable at statement level); (3) `RETURN
+QUERY` table functions (a multi-file feature — attempted as a wave,
+reverted cleanly to avoid a pg→pg regression). Two broad-net safety
+nets were tried and reverted (RETURN QUERY, opaque-Command carrier);
+both proved the floor is architectural, not a patch. Closing further
+requires schema-aware transpilation or the dev-only live validator on
+the emit path — out of scope for statement-level transpilation.
+
 ## 3. Test-corpus expansion (P3)
 
 - Corpus wave campaign **COMPLETED and archived** (2026-07-15 →
