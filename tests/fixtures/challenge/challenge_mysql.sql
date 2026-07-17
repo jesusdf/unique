@@ -26,6 +26,9 @@ SELECT BIT_XOR(x), BIT_OR(x) FROM (SELECT 1 x UNION SELECT 2) t
 -- CASE[open]: my-bit-count — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT BIT_COUNT(255) AS r
 
+-- CASE[open]: my-bitnot — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('18446744073709551616',),) target=(('-1',),)
+SELECT ~0 AS r
+
 -- CASE[open]: my-cast-convert — fails on oracle, postgresql, tsql. (243, b'Type UBIGINT is not a defined system type.DB-Lib error message 20018, severity 16:
 SELECT CAST(123 AS CHAR), CONVERT('2020-01-01', DATE), CAST(1 AS UNSIGNED)
 
@@ -83,6 +86,9 @@ SELECT FIELD('b', 'a', 'b', 'c') AS r
 -- CASE[open]: my-greatest-null — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('3',),)
 SELECT GREATEST(1, NULL, 3) AS r
 
+-- CASE[open]: my-greatest-string — fails on oracle, postgresql. FUNC-DIFF: source=(('B',),) target=(('a',),)
+SELECT GREATEST('a', 'B') AS r
+
 -- CASE[open]: my-group-concat — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR '|') AS r FROM (SELECT 1 x UNION SELECT 2) t
 
@@ -121,6 +127,12 @@ SELECT 'ABC' LIKE 'abc' AS r
 
 -- CASE[open]: my-lock-tables — fails on oracle, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id INT); LOCK TABLES t WRITE
+
+-- CASE[open]: my-log-2arg — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('0.333333',),)
+SELECT LOG(2, 8) AS r
+
+-- CASE[open]: my-log2-log10 — fails on tsql. FUNC-DIFF: source=(('3', '3'),) target=(('0.333333', '0.333333'),)
+SELECT LOG2(8), LOG10(1000)
 
 -- CASE[open]: my-lpad-trunc — fails on tsql. FUNC-DIFF: source=(('ab',),) target=(('bc',),)
 SELECT LPAD('abc', 2, 'x') AS r
@@ -196,4 +208,10 @@ CREATE TABLE t (email VARCHAR(255) CHECK (email LIKE '%@%'))
 
 -- CASE[open]: mysql-drop-GENERATED|AS\s — fails on tsql. SILENT CLAUSE DROP: 'GENERATED|AS\s*\(' absent from valid tsql output, no warning (target 
 CREATE TABLE t (a INT, b INT AS (a+1) STORED)
+
+-- CASE[open]: mysql-qdrop-ROLLUP — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ROLLUP' absent from valid tsql output, no warning
+SELECT x FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x WITH ROLLUP
+
+-- CASE[open]: mysql-qdrop-SQL_CALC_FOU — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'SQL_CALC_FOUND_ROWS|FOUND' absent from valid tsql output, no warning
+SELECT SQL_CALC_FOUND_ROWS x FROM (SELECT 1 x) t LIMIT 1
 

@@ -45,6 +45,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI`
 - src: `SELECT BIT_COUNT(255) AS r`
 
+## my-bitnot  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('18446744073709551616',),) target=(('-1',),)`
+- src: `SELECT ~0 AS r`
+
 ## my-cast-convert  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(243, b'Type UBIGINT is not a defined system type.DB-Lib error message 20018, severity 16:`
@@ -140,6 +145,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('3',),)`
 - src: `SELECT GREATEST(1, NULL, 3) AS r`
 
+## my-greatest-string  (mysql)
+- targets: oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('B',),) target=(('a',),)`
+- src: `SELECT GREATEST('a', 'B') AS r`
+
 ## my-group-concat  (mysql)
 - targets: postgresql(invalid)
 - live error: `function string_agg(integer, unknown) does not exist`
@@ -204,6 +214,16 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(carrier), postgresql(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (id INT); LOCK TABLES t WRITE`
+
+## my-log-2arg  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('3',),) target=(('0.333333',),)`
+- src: `SELECT LOG(2, 8) AS r`
+
+## my-log2-log10  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('3', '3'),) target=(('0.333333', '0.333333'),)`
+- src: `SELECT LOG2(8), LOG10(1000)`
 
 ## my-lpad-trunc  (mysql)
 - targets: tsql(func)
@@ -329,6 +349,16 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'GENERATED|AS\s*\(' absent from valid tsql output, no warning (target `
 - src: `CREATE TABLE t (a INT, b INT AS (a+1) STORED)`
+
+## mysql-qdrop-ROLLUP  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'ROLLUP' absent from valid tsql output, no warning`
+- src: `SELECT x FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x WITH ROLLUP`
+
+## mysql-qdrop-SQL_CALC_FOU  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'SQL_CALC_FOUND_ROWS|FOUND' absent from valid tsql output, no warning`
+- src: `SELECT SQL_CALC_FOUND_ROWS x FROM (SELECT 1 x) t LIMIT 1`
 
 ## ora-add-months  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -745,6 +775,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - src: `CREATE TABLE t (id INT PRIMARY KEY, n INT, updated TIMESTAMP);
 CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 
+## pg-bitnot  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('-1',),) target=(('18446744073709551616',),)`
+- src: `SELECT ~0 AS r`
+
 ## pg-caret-power  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('8',),) target=()`
@@ -759,6 +794,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
 - src: `SELECT CAST(2.7 AS INT) AS r`
+
+## pg-cast-round-half  (postgresql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('8',),) target=(('7',),)`
+- src: `SELECT 7.5 :: int AS r`
 
 ## pg-collate  (postgresql)
 - targets: mysql(invalid)
@@ -920,6 +960,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNC-DIFF: source=(('3',),) target=(('NULL',),)`
 - src: `SELECT GREATEST(1, NULL, 3) AS r`
 
+## pg-greatest-string  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('a',),) target=(('B',),)`
+- src: `SELECT GREATEST('a', 'B') AS r`
+
 ## pg-grouping-fn  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(8161, b'Argument 1 of the GROUPING function does not match any of the expressions in the `
@@ -999,6 +1044,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE t (id INT); LOCK TABLE t IN SHARE MODE`
+
+## pg-log-2arg  (postgresql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('3',),) target=(('0.333333',),)`
+- src: `SELECT LOG(2, 8) AS r`
 
 ## pg-log-base  (postgresql)
 - targets: mysql(func), tsql(func)
@@ -1260,6 +1310,11 @@ CREATE TRIGGE`
 - live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
 - src: `SELECT EXTRACT(WEEK FROM DATE '2020-01-05') AS r`
 
+## pg-week-jan1  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT EXTRACT(WEEK FROM DATE '2020-01-01') AS r`
+
 ## pg-width-bucket  (postgresql)
 - targets: mysql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI`
@@ -1299,6 +1354,16 @@ CREATE TRIGGE`
 - targets: mysql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'ON\s+UPDATE\s+CASCADE' absent from valid mysql output, no warning (ta`
 - src: `CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (pid INT REFERENCES p(id) ON UPDATE CASCADE)`
+
+## postgresql-qdrop-FOR\s+UPDATE  (postgresql)
+- targets: tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'FOR\s+UPDATE' absent from valid tsql output, no warning`
+- src: `SELECT x FROM (VALUES (1),(2)) v(x) FOR UPDATE`
+
+## postgresql-qdrop-ROWS\s+BETWE  (postgresql)
+- targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'ROWS\s+BETWEEN' absent from valid tsql output, no warning`
+- src: `SELECT x, SUM(x) OVER (ORDER BY x ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM (VALUES (1),(2)) v(x)`
 
 ## ts-after-delete-count  (tsql)
 - targets: oracle(invalid)
@@ -1643,4 +1708,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r`
 ---
 
-Totals: 319 distinct constructs; defect rows by kind: carrier 62, func 88, invalid 498, semantic 2, silent-drop 14.
+Totals: 332 distinct constructs; defect rows by kind: carrier 62, func 101, invalid 498, semantic 2, silent-drop 24.

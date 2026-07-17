@@ -43,6 +43,9 @@ CREATE TABLE t (id INT PRIMARY KEY, n INT, updated TIMESTAMP);
 CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated := now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION trg_fn();
 
+-- CASE[open]: pg-bitnot — fails on mysql. FUNC-DIFF: source=(('-1',),) target=(('18446744073709551616',),)
+SELECT ~0 AS r
+
 -- CASE[open]: pg-caret-power — fails on mysql. FUNC-DIFF: source=(('8',),) target=()
 SELECT 2 ^ 3 AS r
 
@@ -51,6 +54,9 @@ CREATE FUNCTION f(n INT) RETURNS TEXT AS $$ BEGIN CASE n WHEN 1 THEN RETURN 'one
 
 -- CASE[open]: pg-cast-int — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
 SELECT CAST(2.7 AS INT) AS r
+
+-- CASE[open]: pg-cast-round-half — fails on tsql. FUNC-DIFF: source=(('8',),) target=(('7',),)
+SELECT 7.5 :: int AS r
 
 -- CASE[open]: pg-collate — fails on mysql. (1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT 'a' < 'B' COLLATE "C" AS r
@@ -148,6 +154,9 @@ CREATE TABLE t (id INT); GRANT SELECT, INSERT ON t TO PUBLIC
 -- CASE[open]: pg-greatest-null — fails on mysql, oracle. FUNC-DIFF: source=(('3',),) target=(('NULL',),)
 SELECT GREATEST(1, NULL, 3) AS r
 
+-- CASE[open]: pg-greatest-string — fails on mysql, tsql. FUNC-DIFF: source=(('a',),) target=(('B',),)
+SELECT GREATEST('a', 'B') AS r
+
 -- CASE[open]: pg-grouping-fn — fails on mysql, oracle, tsql. (8161, b'Argument 1 of the GROUPING function does not match any of the expressions in the 
 SELECT x, GROUPING(x) FROM (VALUES (1)) v(x) GROUP BY CUBE (x)
 
@@ -195,6 +204,9 @@ SELECT 'ABC' LIKE 'abc' AS r
 
 -- CASE[open]: pg-lock-table — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id INT); LOCK TABLE t IN SHARE MODE
+
+-- CASE[open]: pg-log-2arg — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('0.333333',),)
+SELECT LOG(2, 8) AS r
 
 -- CASE[open]: pg-log-base — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('4.60517',),)
 SELECT LOG(100) AS r
@@ -355,6 +367,9 @@ CREATE TABLE t (id INT); CREATE VIEW v AS SELECT id FROM t WITH LOCAL CHECK OPTI
 -- CASE[open]: pg-week — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT EXTRACT(WEEK FROM DATE '2020-01-05') AS r
 
+-- CASE[open]: pg-week-jan1 — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT EXTRACT(WEEK FROM DATE '2020-01-01') AS r
+
 -- CASE[open]: pg-width-bucket — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI
 SELECT width_bucket(5, 0, 10, 5) AS r
 
@@ -378,4 +393,10 @@ CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (pid INT REFERENCES p(id) ON
 
 -- CASE[open]: postgresql-drop-ON\s+UPDATE\s+ — fails on mysql. SILENT CLAUSE DROP: 'ON\s+UPDATE\s+CASCADE' absent from valid mysql output, no warning (ta
 CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (pid INT REFERENCES p(id) ON UPDATE CASCADE)
+
+-- CASE[open]: postgresql-qdrop-FOR\s+UPDATE — fails on tsql. SILENT CLAUSE DROP: 'FOR\s+UPDATE' absent from valid tsql output, no warning
+SELECT x FROM (VALUES (1),(2)) v(x) FOR UPDATE
+
+-- CASE[open]: postgresql-qdrop-ROWS\s+BETWE — fails on mysql, oracle, tsql. SILENT CLAUSE DROP: 'ROWS\s+BETWEEN' absent from valid tsql output, no warning
+SELECT x, SUM(x) OVER (ORDER BY x ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM (VALUES (1),(2)) v(x)
 
