@@ -2490,6 +2490,29 @@ class ProceduralTransformer:
             return RawSQL(sql=f"PERFORM {raw};", reason=reason)
         return PerformStatement(expression=expr)
 
+    @classmethod
+    def _line_comments_to_block(cls, sql: str) -> str:
+        """Convert ``-- text`` line comments to inline ``/* text */`` blocks.
+
+        Applied to IR-emitted expression fragments (they may be joined onto
+        one line downstream). ``-- UNIQUE:`` carrier lines are left alone —
+        the no-silent-loss gates match on exactly that spelling.
+        """
+        if "--" not in sql:
+            return sql
+
+        def sub(segment: str) -> str:
+            def repl(m: re.Match[str]) -> str:
+                body = m.group(1).strip()
+                if body.upper().startswith("UNIQUE:"):
+                    return m.group(0)
+                body = body.replace("*/", "* /")
+                return f"/* {body} */" if body else "/* */"
+
+            return re.sub(r"--([^\n]*)", repl, segment)
+
+        return cls._map_outside_strings(sql, sub)
+
     @staticmethod
     def _strip_strings(sql: str) -> str:
         return re.sub(r"'(?:[^']|'')*'", "''", sql)
@@ -3640,6 +3663,12 @@ class ProceduralTransformer:
                         # (Oracle binds :NEW./:OLD.) — IR output gets the
                         # same normalization as text output.
                         ir = self._expr._to_oracle_row_ref(ir)
+                    # Comments are trivia, but a LINE comment in an
+                    # expression fragment swallows the rest of the line once
+                    # the emitter joins the statement (the _flat_value rule;
+                    # M3 precondition (b)). Carrier lines keep their form —
+                    # the output gate rejects on them by design.
+                    ir = self._line_comments_to_block(ir)
                     return dataclasses.replace(node, sql=ir)
         # Apply function name transformations
         sql = self._expr._transform_functions_in_sql(sql)

@@ -229,3 +229,40 @@ class TestStyledConvertInIr:
         out = _ir("oracle", "tsql", "SELECT TO_CHAR(SYSDATE) FROM DUAL")
         # unrelated sanity: same-direction fragments still transpile
         assert out is None or "ERROR" not in out.upper()
+
+
+class TestCommentsInIrFragments:
+    """In-expression comments survive IR-first as block comments (M3
+    precondition (b)): a line comment would swallow the rest of the
+    expression once the emitter joins the statement onto one line.
+    """
+
+    SRC = (
+        "CREATE PROCEDURE p_c\n"
+        "    @m_tipo NVARCHAR(10)\n"
+        "AS\n"
+        "BEGIN\n"
+        "    IF -- Si el episodio es de urgencias\n"
+        "    @m_tipo = 'U'\n"
+        "    BEGIN\n"
+        "        INSERT INTO t_log (a) VALUES (1);\n"
+        "    END\n"
+        "END\n"
+        "GO\n"
+    )
+
+    def test_comment_becomes_block_on_mysql(self, monkeypatch) -> None:
+        monkeypatch.setenv("UNIQUE_IR_FIRST", "1")
+        from unique.core.transpiler import Transpiler
+
+        out = Transpiler().transpile(self.SRC, "tsql", "mysql").sql
+        flat = " ".join(out.splitlines())
+        assert "/* Si el episodio es de urgencias */" in out, out
+        assert not __import__("re").search(r"--[^\n]*= 'U'", flat), out
+
+    def test_condition_survives_on_oracle(self, monkeypatch) -> None:
+        monkeypatch.setenv("UNIQUE_IR_FIRST", "1")
+        from unique.core.transpiler import Transpiler
+
+        out = Transpiler().transpile(self.SRC, "tsql", "oracle").sql
+        assert "= 'U'" in out.replace("V_M_TIPO = 'U'", "= 'U'"), out
