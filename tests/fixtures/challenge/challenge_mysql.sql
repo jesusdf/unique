@@ -50,8 +50,14 @@ SELECT BIT_COUNT(255) AS r
 -- CASE[open]: my-bit-fns — fails on postgresql. function bitwise_count(bit) does not exist
 SELECT BIT_COUNT(b'1011'), BIT_LENGTH('a'), OCTET_LENGTH('ab')
 
+-- CASE[open]: my-bitand-prec — fails on tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
+SELECT 10 & 6 + 1 AS r
+
 -- CASE[open]: my-bitnot — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('18446744073709551616',),) target=(('-1',),)
 SELECT ~0 AS r
+
+-- CASE[open]: my-bitnot-arith — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('18446744073709551616',),) target=(('-5',),)
+SELECT ~5 + 1 AS r
 
 -- CASE[open]: my-blob-length — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 CREATE TABLE t (data BLOB); INSERT INTO t VALUES (LOAD_FILE('/x')); SELECT LENGTH(data) FROM t

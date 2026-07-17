@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (326 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (327 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -118,10 +118,20 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `function bitwise_count(bit) does not exist`
 - src: `SELECT BIT_COUNT(b'1011'), BIT_LENGTH('a'), OCTET_LENGTH('ab')`
 
+## my-bitand-prec  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('2',),) target=(('3',),)`
+- src: `SELECT 10 & 6 + 1 AS r`
+
 ## my-bitnot  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('18446744073709551616',),) target=(('-1',),)`
 - src: `SELECT ~0 AS r`
+
+## my-bitnot-arith  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('18446744073709551616',),) target=(('-5',),)`
+- src: `SELECT ~5 + 1 AS r`
 
 ## my-blob-length  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -2656,4 +2666,4 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 516 distinct constructs; defect rows by kind: func 271, invalid 717, semantic 2, silent-drop 75.
+Totals: 518 distinct constructs; defect rows by kind: func 275, invalid 717, semantic 2, silent-drop 75.
