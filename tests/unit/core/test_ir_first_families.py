@@ -552,3 +552,87 @@ class TestTempReferenceFunctionGate:
         assert out is not None, out
         assert "RAWTOHEX(STANDARD_HASH(x, 'SHA256'))" in out, out
         assert "SHA2" not in out.upper().replace("'SHA256'", ""), out
+
+
+class TestZeroPushMysqlOracle:
+    """my->oracle residue fixes (zero push)."""
+
+    def test_last_identity_neutral_is_expression_valid(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "DELIMITER //\n"
+            "create procedure p1() begin\n"
+            "  select last_insert_id();\n"
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = Transpiler().transpile(src, "mysql", "oracle").sql
+        assert "SELECT NULL /* last identity" in out, out
+        assert "SELECT /*" not in out, out
+
+    def test_not_value_wraps_tristate_on_oracle(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "DELIMITER //\n"
+            "create procedure p2() begin\n"
+            "  declare done int default 0;\n"
+            "  set done = not done;\n"
+            "end//\n"
+            "DELIMITER ;\n"
+        )
+        out = Transpiler().transpile(src, "mysql", "oracle").sql
+        assert "CASE WHEN done = 0 THEN 1 WHEN done <> 0 THEN 0 END" in out, out
+        assert ":= NOT done" not in out, out
+
+    def test_pg_boolean_not_stays_on_oracle(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "create function f() returns boolean language plpgsql as $$\n"
+            "declare b boolean := true;\n"
+            "begin\n  b := not b;\n  return b;\nend $$;"
+        )
+        out = Transpiler().transpile(src, "postgresql", "oracle").sql
+        assert "NOT b" in out or "NOT B" in out, out
+
+
+class TestZeroPushTypeWidths:
+    """Display widths / tz types that shipped raw (zero push)."""
+
+    def test_mysql_float_width_to_pg_real(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        out = (
+            Transpiler()
+            .transpile("CREATE TABLE t1 (f FLOAT(9,6));", "mysql", "postgresql")
+            .sql
+        )
+        assert "REAL" in out.upper(), out
+        assert "FLOAT(9" not in out.upper().replace(" ", ""), out
+
+    def test_mysql_declare_widths_to_pg(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "DELIMITER //\n"
+            "create procedure p() begin\n"
+            "  declare loops bigint(19) default 0;\n"
+            "  declare f float(9,6);\n"
+            "end//\nDELIMITER ;\n"
+        )
+        out = Transpiler().transpile(src, "mysql", "postgresql").sql
+        assert "bigint(19)" not in out.lower(), out
+        assert "float(9" not in out.lower().replace(" ", ""), out
+
+    def test_pg_timetz_to_mysql_time(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        out = (
+            Transpiler()
+            .transpile("CREATE TEMPORARY TABLE d (f TIMETZ);", "postgresql", "mysql")
+            .sql
+        )
+        assert "TIME" in out.upper(), out
+        assert "TIMETZ" not in out.upper(), out

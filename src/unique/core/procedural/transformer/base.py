@@ -686,6 +686,21 @@ class ProceduralTransformer:
 
     def _transform_data_type(self, dt: DataType) -> DataType:
         """Transform a data type between dialects."""
+        # MySQL integer display widths (BIGINT(19)) and the FLOAT(M,D)
+        # display form are invalid declares on PostgreSQL (42601 live).
+        if self._source == "mysql" and self._target == "postgresql" and dt.params:
+            upper_name = dt.name.upper()
+            if upper_name in (
+                "TINYINT",
+                "SMALLINT",
+                "MEDIUMINT",
+                "INT",
+                "INTEGER",
+                "BIGINT",
+            ):
+                dt = DataType(name=dt.name, params=())
+            elif upper_name in ("FLOAT", "DOUBLE") and len(dt.params) == 2:
+                dt = DataType(name="REAL", params=())
         # A carrier type parsed with its original preserved in a `/* UNIQUE: … */`
         # comment: re-map the *original* for this target. The result keeps the
         # original where the target supports it (faithful round-trip) and
@@ -1998,6 +2013,24 @@ class ProceduralTransformer:
             return LastIdentityCapture(target=self._transform_var_name(name))
         return None
 
+    def _wrap_mysql_not_value(self, value: ASTNode) -> ASTNode:
+        """MySQL's boolean-flip ``SET done = NOT done`` over a NUMBER local:
+        Oracle's NOT takes a BOOLEAN (PLS-00306). mysql-source only — a
+        pg/oracle-source ``NOT b`` over a real BOOLEAN must stay. The
+        tri-state CASE preserves NULL (the wave-170 T-SQL form)."""
+        if self._source != "mysql" or self._target != "oracle":
+            return value
+        if not isinstance(value, RawSQL):
+            return value
+        m = re.match(r"(?is)^\s*NOT\s+(?!EXISTS\b)(.+)$", value.sql.strip())
+        if not m:
+            return value
+        inner = m.group(1).strip()
+        return dataclasses.replace(
+            value,
+            sql=f"CASE WHEN {inner} = 0 THEN 1 WHEN {inner} <> 0 THEN 0 END",
+        )
+
     def _transform_set_variable(self, node: SetVariableStatement) -> ASTNode:
         bound = self._cursor_binding_to_open(node.name, node.value)
         if bound is not None:
@@ -2006,7 +2039,7 @@ class ProceduralTransformer:
         if capture is not None:
             return capture
         new_name = self._transform_var_name(node.name)
-        new_value = self._transform_node(node.value)
+        new_value = self._wrap_mysql_not_value(self._transform_node(node.value))
         # SET keeps a SET statement on engines that have one (T-SQL, MySQL);
         # Oracle/PostgreSQL lower it to a ``:=`` assignment.
         if self._uses_set_statement():
@@ -2072,7 +2105,7 @@ class ProceduralTransformer:
         if capture is not None:
             return capture
         new_name = self._transform_var_name(node.target)
-        new_value = self._transform_node(node.value)
+        new_value = self._wrap_mysql_not_value(self._transform_node(node.value))
         # A T-SQL target re-expresses an assignment as SET; the others keep an
         # assignment node (MySQL's is rendered as SET by its emitter).
         if self._assignment_becomes_set():

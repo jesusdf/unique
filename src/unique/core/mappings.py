@@ -85,7 +85,9 @@ LAST_IDENTITY_EXPR: dict[str, str] = {
     "tsql": "SCOPE_IDENTITY()",
     "postgresql": "LASTVAL()",
     "mysql": "LAST_INSERT_ID()",
-    "oracle": "/* last identity: use <sequence>.CURRVAL */",
+    # NULL keeps the expression position valid (a bare comment was ORA-00936
+    # in a select list); the documented note rides along.
+    "oracle": "NULL /* last identity: use <sequence>.CURRVAL */",
 }
 
 #: The source spellings recognized as a "last generated id" call, mapped to
@@ -358,6 +360,9 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "UINT": "INT UNSIGNED",
         "UBIGINT": "BIGINT UNSIGNED",
         "TIMESTAMPTZ": "TIMESTAMP",
+        # MySQL TIME carries no zone; the zone drops (documented tz-loss
+        # class, same as TIMESTAMPTZ above).
+        "TIMETZ": "TIME",
     },
     "oracle": {
         # PG internal type aliases (int4 etc.) — invalid spellings

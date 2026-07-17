@@ -2417,6 +2417,14 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     )
                 ):
                     dtype = "NUMBER"
+                # PostgreSQL FLOAT takes ONE precision argument; MySQL's
+                # FLOAT(M,D) display form maps to the same 4-byte REAL.
+                if (
+                    dialect == "postgresql"
+                    and _tn in ("FLOAT", "UFLOAT")
+                    and len(col.data_type.params) == 2
+                ):
+                    dtype = "REAL"
                 # If the mapped name already carries a length (e.g. CHAR(36)),
                 # don't append the caller's params on top of it. PostgreSQL and
                 # T-SQL integer types take no parameters at all — a MySQL display
