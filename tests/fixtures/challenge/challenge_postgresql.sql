@@ -296,6 +296,18 @@ SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7
 -- CASE[open]: pg-json-aggs — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_
 SELECT json_agg(x), json_object_agg(x::text, x*2) FROM (VALUES (1),(2)) v(x)
 
+-- CASE[open]: pg-json-build — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+SELECT jsonb_build_array(1,'a',NULL,true),jsonb_build_object('k','v')
+
+-- CASE[open]: pg-json-meta — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+SELECT jsonb_typeof('[1]'),jsonb_array_length('[1,2,3]'),jsonb_pretty('{"a":1}')
+
+-- CASE[open]: pg-json-mod — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+SELECT jsonb_set('{}','{a}','1'),jsonb_insert('{}','{a}','1'),'{"a":1}'::jsonb-'a','{"a":1}'::jsonb||'{"b":2}'
+
+-- CASE[open]: pg-json-path — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+SELECT jsonb_path_query('{"a":[1,2]}','$.a[*]'),jsonb_path_exists('{"a":1}','$.a')
+
 -- CASE[open]: pg-jsonb-agg — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSONB_AGG(x) FROM (VALUES (1),(2)) v(x)
 

@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (365 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (380 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -87,6 +87,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near '>'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
 - src: `SELECT ANY_VALUE(x), GROUP_CONCAT(x) FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x>0`
+
+## my-arr-json  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_ARRAY(1,2,3),JSON_ARRAY_APPEND('[1]','$',2),JSON_ARRAY_INSERT('[1,2]','$[0]',0)`
 
 ## my-ascii-empty  (mysql)
 - targets: oracle(func), tsql(func)
@@ -648,6 +653,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
 - src: `SELECT JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION SELECT 2) t`
 
+## my-json-build  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_ARRAY(1,'a',NULL,TRUE),JSON_OBJECT('k','v','n',1)`
+
 ## my-json-fns2  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
@@ -663,6 +673,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
 - src: `SELECT JSON_MERGE_PATCH('{"a":1}', '{"b":2}') AS r`
 
+## my-json-meta  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_TYPE('[1]'),JSON_LENGTH('[1,2,3]'),JSON_DEPTH('[[1]]'),JSON_VALID('{a}')`
+
+## my-json-mod  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_SET('{}','$.a',1),JSON_INSERT('{}','$.a',1),JSON_REPLACE('{"a":1}','$.a',2),JSON_REMOVE('{"a":1,"b":2}','$.a')`
+
 ## my-json-modify  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
@@ -672,6 +692,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_`
 - src: `SELECT JSON_OBJECT('a', 1, 'b', 2)`
+
+## my-json-search  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_KEYS('{"a":1,"b":2}'),JSON_CONTAINS('[1,2]','1'),JSON_CONTAINS_PATH('{"a":1}','one','$.a')`
+
+## my-json-search2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_SEARCH('{"a":"x","b":"x"}','all','x'),JSON_OVERLAPS('[1,2]','[2,3]')`
 
 ## my-json-type  (mysql)
 - targets: oracle(invalid), tsql(invalid)
@@ -1283,6 +1313,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME`
 - src: `SELECT MEDIAN(x),STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT 2 x FROM DUAL)`
 
+## ora-arr-collect  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "SYS" or the user-defined function or aggregate "SYS.OD`
+- src: `SELECT SYS.ODCINUMBERLIST(1,2,3) FROM DUAL`
+
 ## ora-asciistr  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AS`
@@ -1531,6 +1566,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: postgresql(invalid), tsql(silent-rt)
 - live error: `SILENT-ROUNDTRIP: literal(s) ['\'{"a":1}\'', "'$.a'"] lost after oracle->tsql->oracle`
 - src: `SELECT JSON_VALUE('{"a":1}', '$.a') AS r FROM DUAL`
+
+## ora-json-x  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(silent-rt)
+- live error: `SILENT-ROUNDTRIP: literal(s) ['\'{"a":1}\'', "'$.a'", '\'{"a":[1]}\'', "'$.a'"] lost after`
+- src: `SELECT JSON_VALUE('{"a":1}','$.a'),JSON_QUERY('{"a":[1]}','$.a') FROM DUAL`
 
 ## ora-last-day  (oracle)
 - targets: postgresql(invalid), tsql(invalid)
@@ -2394,6 +2434,26 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_`
 - src: `SELECT json_agg(x), json_object_agg(x::text, x*2) FROM (VALUES (1),(2)) v(x)`
+
+## pg-json-build  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js`
+- src: `SELECT jsonb_build_array(1,'a',NULL,true),jsonb_build_object('k','v')`
+
+## pg-json-meta  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js`
+- src: `SELECT jsonb_typeof('[1]'),jsonb_array_length('[1,2,3]'),jsonb_pretty('{"a":1}')`
+
+## pg-json-mod  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js`
+- src: `SELECT jsonb_set('{}','{a}','1'),jsonb_insert('{}','{a}','1'),'{"a":1}'::jsonb-'a','{"a":1}'::jsonb||'{"b":2}'`
+
+## pg-json-path  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js`
+- src: `SELECT jsonb_path_query('{"a":[1,2]}','$.a[*]'),jsonb_path_exists('{"a":1}','$.a')`
 
 ## pg-jsonb-agg  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -3512,4 +3572,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 686 distinct constructs; defect rows by kind: func 301, invalid 1060, semantic 2, silent-drop 75.
+Totals: 698 distinct constructs; defect rows by kind: func 301, invalid 1095, semantic 2, silent-drop 75.

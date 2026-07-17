@@ -37,6 +37,9 @@ SELECT LISTAGG(x,',') WITHIN GROUP(ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION 
 -- CASE[open]: ora-agg-median — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME
 SELECT MEDIAN(x),STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT 2 x FROM DUAL)
 
+-- CASE[open]: ora-arr-collect — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "SYS" or the user-defined function or aggregate "SYS.OD
+SELECT SYS.ODCINUMBERLIST(1,2,3) FROM DUAL
+
 -- CASE[open]: ora-asciistr — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AS
 SELECT ASCIISTR('ABÄCD'), UNISTR('\0041') FROM DUAL
 
@@ -187,6 +190,9 @@ SELECT TO_CHAR(INTERVAL '2 3:04:05.000' DAY TO SECOND) AS r FROM DUAL
 
 -- CASE[open]: ora-json-value — fails on postgresql. SILENT-ROUNDTRIP: literal(s) ['\'{"a":1}\'', "'$.a'"] lost after oracle->tsql->oracle
 SELECT JSON_VALUE('{"a":1}', '$.a') AS r FROM DUAL
+
+-- CASE[open]: ora-json-x — fails on mysql, postgresql. SILENT-ROUNDTRIP: literal(s) ['\'{"a":1}\'', "'$.a'", '\'{"a":[1]}\'', "'$.a'"] lost after
+SELECT JSON_VALUE('{"a":1}','$.a'),JSON_QUERY('{"a":[1]}','$.a') FROM DUAL
 
 -- CASE[open]: ora-last-day — fails on postgresql, tsql. (195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT LAST_DAY(SYSDATE) AS r FROM DUAL

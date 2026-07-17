@@ -32,6 +32,9 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DEFAULT 5
 -- CASE[open]: my-any-value — fails on postgresql, tsql. (102, b"Incorrect syntax near '>'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 SELECT ANY_VALUE(x), GROUP_CONCAT(x) FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x>0
 
+-- CASE[open]: my-arr-json — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT JSON_ARRAY(1,2,3),JSON_ARRAY_APPEND('[1]','$',2),JSON_ARRAY_INSERT('[1,2]','$[0]',0)
+
 -- CASE[open]: my-ascii-empty — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('NULL',),)
 SELECT ASCII('') AS r
 
@@ -368,6 +371,9 @@ SELECT JSON_ARRAY_APPEND('[1,2]', '$', 3), JSON_ARRAY_INSERT('[1,2]', '$[0]', 0)
 -- CASE[open]: my-json-arrayagg — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION SELECT 2) t
 
+-- CASE[open]: my-json-build — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT JSON_ARRAY(1,'a',NULL,TRUE),JSON_OBJECT('k','v','n',1)
+
 -- CASE[open]: my-json-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_SEARCH('{"a":"x"}', 'one', 'x'), JSON_DEPTH('[1,[2]]'), JSON_LENGTH('[1,2,3]')
 
@@ -377,11 +383,23 @@ SELECT JSON_KEYS('{"a":1,"b":2}') AS r
 -- CASE[open]: my-json-merge — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_MERGE_PATCH('{"a":1}', '{"b":2}') AS r
 
+-- CASE[open]: my-json-meta — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT JSON_TYPE('[1]'),JSON_LENGTH('[1,2,3]'),JSON_DEPTH('[[1]]'),JSON_VALID('{a}')
+
+-- CASE[open]: my-json-mod — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT JSON_SET('{}','$.a',1),JSON_INSERT('{}','$.a',1),JSON_REPLACE('{"a":1}','$.a',2),JSON_REMOVE('{"a":1,"b":2}','$.a')
+
 -- CASE[open]: my-json-modify — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_SET('{}', '$.a', 1), JSON_REMOVE('{"a":1}', '$.a'), JSON_REPLACE('{"a":1}', '$.a', 2)
 
 -- CASE[open]: my-json-object — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_
 SELECT JSON_OBJECT('a', 1, 'b', 2)
+
+-- CASE[open]: my-json-search — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT JSON_KEYS('{"a":1,"b":2}'),JSON_CONTAINS('[1,2]','1'),JSON_CONTAINS_PATH('{"a":1}','one','$.a')
+
+-- CASE[open]: my-json-search2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT JSON_SEARCH('{"a":"x","b":"x"}','all','x'),JSON_OVERLAPS('[1,2]','[2,3]')
 
 -- CASE[open]: my-json-type — fails on oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (data JSON)
