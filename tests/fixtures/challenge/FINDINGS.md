@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (432 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (477 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -99,7 +99,7 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - src: `SELECT ASCII('') AS r`
 
 ## my-avg-int  (mysql)
-- targets: tsql(func)
+- targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1.5',),) target=(('1',),)`
 - src: `SELECT AVG(x) FROM (SELECT 1 x UNION SELECT 2) t`
 
@@ -242,6 +242,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid)
 - live error: `ORA-25137: Data value out of range`
 - src: `SELECT CAST(1234.5 AS CHAR) AS r`
+
+## my-cast-suite  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-00902: invalid datatype`
+- src: `SELECT CAST('123' AS SIGNED),CAST('1.5' AS DECIMAL(4,2)),CONVERT('123',SIGNED),CAST('2020-01-01' AS DATE),CAST(65 AS CHAR)`
 
 ## my-cast-time  (mysql)
 - targets: oracle(invalid)
@@ -402,6 +407,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
 - src: `SELECT DATE_FORMAT('2020-05-17', '%Y/%m/%d') AS r`
+
+## my-dateadd  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('2020-02-29', '2020-01-02', '2020-02-29', '2020-01-01 01:00:00'),) tar`
+- src: `SELECT DATE_ADD('2020-01-31',INTERVAL 1 MONTH), DATE_ADD('2020-01-01',INTERVAL 1 DAY), DATE_SUB('2020-03-01',INTERVAL 1 DAY), '202`
 
 ## my-dateadd-units  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -618,6 +628,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `function string_agg(integer, unknown) does not exist`
 - src: `SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR '|') AS r FROM (SELECT 1 x UNION SELECT 2) t`
 
+## my-groupconcat-order  (mysql)
+- targets: postgresql(invalid)
+- live error: `function string_agg(integer, unknown) does not exist`
+- src: `SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR ',') FROM (SELECT 1 x UNION ALL SELECT 2) t`
+
 ## my-hash  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever`
@@ -822,6 +837,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('6',),) target=(('1',),)`
 - src: `SELECT LENGTH(1/3) AS r`
+
+## my-length-unicode  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('5', '4', '5'),) target=(('4', '4', '3'),)`
+- src: `SELECT LENGTH('café'), CHAR_LENGTH('café'), LENGTH('  x  ')`
 
 ## my-like-ci  (mysql)
 - targets: oracle(func), postgresql(func)
@@ -1208,6 +1228,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('abc',),) target=(('',),)`
 - src: `SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r`
 
+## my-trim-edge  (mysql)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('hi', '7', 'hi'),) target=(('', '', ''),)`
+- src: `SELECT TRIM(BOTH 'x' FROM 'xxhixx'), TRIM(LEADING '0' FROM '007'), TRIM(TRAILING '!' FROM 'hi!!')`
+
 ## my-trim-leading  (mysql)
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('7',),) target=(('',),)`
@@ -1403,6 +1428,14 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME`
 - src: `SELECT MEDIAN(x),STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT 2 x FROM DUAL)`
 
+## ora-alter-suite  (oracle)
+- targets: tsql(invalid)
+- live error: `(5074, b"The object 'DF__t__name__6D63CF5D' is dependent on column 'nm'.DB-Lib error messa`
+- src: `CREATE TABLE t (id NUMBER);
+ALTER TABLE t ADD (name VARCHAR2(50) DEFAULT '' NOT NULL);
+ALTER TABLE t MODIFY (id NUMBER(19));
+ALTER`
+
 ## ora-arr-collect  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "SYS" or the user-defined function or aggregate "SYS.OD`
@@ -1571,6 +1604,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('x',),) target=(('',),)`
 - src: `SELECT NVL('', 'x') AS r FROM DUAL`
 
+## ora-extract  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('2020', '6', '2', '2'),) target=(('2020', '6', '25', 'Q'),)`
+- src: `SELECT EXTRACT(YEAR FROM DATE '2020-06-15'), EXTRACT(MONTH FROM DATE '2020-06-15'), TO_CHAR(DATE '2020-06-15','D'), TO_CHAR(DATE '`
+
 ## ora-extractvalue  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
@@ -1647,6 +1685,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(1075, 'Incorrect table definition; there can be only one auto column and it must be defin`
 - src: `CREATE TABLE t (a NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100 INCREMENT BY 10 MAXVALUE 9999 CYCLE))`
 
+## ora-implicit-arith  (oracle)
+- targets: mysql(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('2', '20', '2'),) target=(('11', '20', '2'),)`
+- src: `SELECT '1'+1, '10'*2, TO_NUMBER('1')+1 FROM DUAL`
+
 ## ora-initcap  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s`
@@ -1661,6 +1704,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('1',),)`
 - src: `SELECT INSTR('aAaA', 'A') AS r FROM DUAL`
+
+## ora-instr-edge  (oracle)
+- targets: mysql(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('3', '4', '4'),) target=(('3', '3', '3'),)`
+- src: `SELECT INSTR('hello','l'), INSTR('hello','l',1,2), INSTR('hello','l',-1) FROM DUAL`
 
 ## ora-instr-empty  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
@@ -1700,7 +1748,7 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 ## ora-listagg  (oracle)
 - targets: postgresql(invalid)
 - live error: `function string_agg(integer, unknown) does not exist`
-- src: `SELECT LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) AS r FROM (SELECT 1 x FROM DUAL UNION SELECT 2 FROM DUAL)`
+- src: `SELECT LISTAGG(x,',') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 FROM DUAL)`
 
 ## ora-listagg-over  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1842,6 +1890,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))`
 - src: `SELECT x FROM (SELECT 3 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT NULL x FROM DUAL) ORDER BY x`
 
+## ora-percentile  (oracle)
+- targets: postgresql(invalid)
+- live error: `function median(integer) does not exist`
+- src: `SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x),PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY x),MEDIAN(x) FROM (SELECT 1 x FR`
+
 ## ora-pk-using-index  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(1018, b"Incorrect syntax near 'INDEX'. If this is intended as a part of a table hint, A W`
@@ -1927,6 +1980,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: postgresql(invalid)
 - live error: `function soundex(unknown) does not exist`
 - src: `SELECT SOUNDEX('Smith') FROM DUAL`
+
+## ora-substr-edge  (oracle)
+- targets: mysql(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('llo', 'el', 'he'),) target=(('h', 'el', 'h'),)`
+- src: `SELECT SUBSTR('hello',-3), SUBSTR('hello',2,2), SUBSTR('hello',0,2) FROM DUAL`
 
 ## ora-substr-neg  (oracle)
 - targets: postgresql(func), tsql(func)
@@ -2023,6 +2081,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
 - src: `SELECT ACOS(1),ASIN(0),ATAN(1),COS(0),SIN(0),TAN(0),COSH(0),SINH(0),TANH(0) FROM DUAL`
 
+## ora-trim-translate  (oracle)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('7', '7', 'hi', 'XbZ'),) target=(('', '', '', 'XbZ'),)`
+- src: `SELECT TRIM(LEADING '0' FROM '007'), LTRIM('007','0'), RTRIM('hi!!','!'), TRANSLATE('abc','ac','XZ') FROM DUAL`
+
 ## ora-tz-fns  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(155, b"'TIMEZONE_HOUR' is not a recognized datepart option.DB-Lib error message 20018, se`
@@ -2067,6 +2130,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI`
 - src: `SELECT WIDTH_BUCKET(5, 0, 10, 5) AS r FROM DUAL`
+
+## ora-window-analytic  (oracle)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA`
+- src: `SELECT x,RATIO_TO_REPORT(x) OVER (),NTILE(2) OVER (ORDER BY x),CUME_DIST() OVER (ORDER BY x),PERCENT_RANK() OVER (ORDER BY x) FROM`
 
 ## ora-xmlagg  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -2130,6 +2198,20 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `ORA-30649: missing DIRECTORY keyword`
 - src: `CREATE TABLE t (a INT); ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT 'x'`
 
+## pg-alter-notvalid  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n`
+- src: `CREATE TABLE t (id INT);
+ALTER TABLE t RENAME TO tbl;
+ALTER TABLE tbl ADD CONSTRAINT ck CHECK (id>0) NOT VALID;`
+
+## pg-alter-suite  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'SET'.DB-Lib error message 20018, severity 15:\n`
+- src: `CREATE TABLE t (id INT);
+ALTER TABLE t ADD COLUMN name VARCHAR(50) NOT NULL DEFAULT '';
+ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
+
 ## pg-alter-type  (postgresql)
 - targets: oracle(invalid)
 - live error: `ORA-01735: invalid ALTER TABLE option`
@@ -2171,7 +2253,7 @@ SELECT JSON_OBJECT(*) FROM t`
 - src: `SELECT now() AT TIME ZONE 'UTC', timezone('UTC', now())`
 
 ## pg-avg-int  (postgresql)
-- targets: tsql(func)
+- targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1.5',),) target=(('1',),)`
 - src: `SELECT AVG(x) FROM (VALUES (1),(2)) v(x)`
 
@@ -2329,6 +2411,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type JSONB.DB-Lib error messa`
 - src: `CREATE TABLE t (data JSONB, name TEXT GENERATED ALWAYS AS (data->>'name') STORED)`
+
+## pg-concat-null  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('NULL', 'ab', 'a-b'),) target=(('NULL', 'NULL', 'a-b'),)`
+- src: `SELECT 'a'||NULL||'b', concat('a',NULL,'b'), concat_ws('-','a',NULL,'b')`
 
 ## pg-convert-roundtrip  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2926,6 +3013,13 @@ CREATE TABLE ledger (id SERIA`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.sc`
 - src: `SELECT scale(1.230), trim_scale(1.230)`
 
+## pg-select-into-ctas  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-00905: missing keyword`
+- src: `CREATE TABLE t (id INT);
+SELECT id INTO TEMP t2 FROM t;
+CREATE TABLE t3 AS SELECT * FROM t;`
+
 ## pg-seq-use  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne`
@@ -2971,6 +3065,11 @@ CREATE TABLE ledger (id SERIA`
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
 - src: `SELECT 'apple' < 'Banana' AS r`
 
+## pg-stragg-order  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message`
+- src: `SELECT string_agg(x::text,',' ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2) t`
+
 ## pg-string-agg-order  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message`
@@ -3000,6 +3099,11 @@ CREATE TABLE ledger (id SERIA`
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT STRPOS('', '') AS r`
+
+## pg-substr-edge  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('hello', 'el', 'hell', 'ello'),) target=(('llo', 'el', '', ''),)`
+- src: `SELECT substring('hello',-3), substr('hello',2,2), left('hello',-1), right('hello',-1)`
 
 ## pg-substr-zero  (postgresql)
 - targets: mysql(func), oracle(func)
@@ -3080,6 +3184,11 @@ CREATE TABLE ledger (id SERIA`
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2', '0'),) target=(('0', '0'),)`
 - src: `SELECT CHAR_LENGTH('  '), LENGTH(TRIM('  '))`
+
+## pg-trim-translate  (postgresql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('hi', '7', 'XbZ'),) target=(('', '', 'XbZ'),)`
+- src: `SELECT trim(both 'x' from 'xxhixx'), ltrim('007','0'), translate('abc','ac','XZ')`
 
 ## pg-truncate-restart  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -3323,6 +3432,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `ORA-00902: invalid datatype`
 - src: `SELECT CAST(12.99 AS MONEY), CAST(12.99 AS SMALLMONEY), CONVERT(MONEY, '$12.99')`
 
+## ts-cast-suite  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00906: missing left parenthesis`
+- src: `SELECT CAST('123' AS INT),CONVERT(INT,'123'),CONVERT(VARCHAR,123),TRY_CAST('x' AS INT),TRY_CONVERT(INT,'x'),PARSE('123' AS INT)`
+
 ## ts-cast-trycast  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-01722: unable to convert string value containing 'x' to a number: `
@@ -3383,6 +3497,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol "=" when expectin`
 - src: `CREATE PROCEDURE p AS BEGIN DECLARE @i INT=1; WHILE @i<=3 BEGIN SET @i+=1; IF @i=2 CONTINUE; IF @i=5 BREAK; END; END`
 
+## ts-convert-style  (tsql)
+- targets: oracle(invalid)
+- live error: `ORA-01821: date format not recognized`
+- src: `SELECT CONVERT(VARCHAR,GETDATE(),101),CONVERT(VARCHAR,GETDATE(),112),CONVERT(VARCHAR,GETDATE(),120),CONVERT(VARCHAR,GETDATE(),126)`
+
 ## ts-cube  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00937: not a single-group group function`
@@ -3399,9 +3518,9 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - src: `SELECT DATE_BUCKET(MINUTE, 15, CAST('2020-01-01 00:07' AS DATETIME2))`
 
 ## ts-dateadd  (tsql)
-- targets: oracle(invalid), postgresql(invalid)
-- live error: `ORA-30081: invalid data type for datetime/interval arithmetic`
-- src: `SELECT DATEADD(DAY, 7, '2020-01-01') AS r`
+- targets: mysql(func), oracle(invalid), postgresql(invalid)
+- live error: `FUNC-DIFF: source=(('2020-02-29 00:00:00', '2020-01-02 00:00:00', '2020-02-29'),) target=(`
+- src: `SELECT DATEADD(MONTH,1,'2020-01-31'), DATEADD(DAY,1,'2020-01-01'), EOMONTH('2020-02-15')`
 
 ## ts-datediff  (tsql)
 - targets: oracle(invalid)
@@ -3647,6 +3766,12 @@ CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BE`
 GO
 SELECT id INTO dst FROM src`
 
+## ts-select-into-temp  (tsql)
+- targets: oracle(invalid)
+- live error: `ORA-00905: missing keyword`
+- src: `SELECT id INTO #t2 FROM (SELECT 1 id) s;
+SELECT * FROM #t2;`
+
 ## ts-seq-use  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "NEXT_VALUE_FOR": invalid identifier`
@@ -3703,6 +3828,11 @@ SELECT NEXT VALUE FOR seq`
 - targets: mysql(func), oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('15',),) target=(('105',),)`
 - src: `SELECT '10' + 5 AS r`
+
+## ts-stragg-within  (tsql)
+- targets: postgresql(invalid)
+- live error: `function string_agg(integer, unknown) does not exist`
+- src: `SELECT STRING_AGG(x,',') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2 x) t`
 
 ## ts-stragg-within2  (tsql)
 - targets: mysql(invalid), oracle(invalid)
@@ -3849,4 +3979,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 753 distinct constructs; defect rows by kind: func 329, invalid 1170, semantic 2, silent-drop 75.
+Totals: 777 distinct constructs; defect rows by kind: func 353, invalid 1190, semantic 2, silent-drop 75.

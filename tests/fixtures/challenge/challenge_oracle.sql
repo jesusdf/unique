@@ -37,6 +37,13 @@ SELECT LISTAGG(x,',') WITHIN GROUP(ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION 
 -- CASE[open]: ora-agg-median — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME
 SELECT MEDIAN(x),STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT 2 x FROM DUAL)
 
+-- CASE[open]: ora-alter-suite — fails on tsql. (5074, b"The object 'DF__t__name__6D63CF5D' is dependent on column 'nm'.DB-Lib error messa
+CREATE TABLE t (id NUMBER);
+ALTER TABLE t ADD (name VARCHAR2(50) DEFAULT '' NOT NULL);
+ALTER TABLE t MODIFY (id NUMBER(19));
+ALTER TABLE t RENAME COLUMN name TO nm;
+ALTER TABLE t DROP COLUMN nm;
+
 -- CASE[open]: ora-arr-collect — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "SYS" or the user-defined function or aggregate "SYS.OD
 SELECT SYS.ODCINUMBERLIST(1,2,3) FROM DUAL
 
@@ -139,6 +146,9 @@ SELECT CASE WHEN '' IS NULL THEN 1 ELSE 0 END AS r FROM DUAL
 -- CASE[open]: ora-empty-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('x',),) target=(('',),)
 SELECT NVL('', 'x') AS r FROM DUAL
 
+-- CASE[open]: ora-extract — fails on mysql. FUNC-DIFF: source=(('2020', '6', '2', '2'),) target=(('2020', '6', '25', 'Q'),)
+SELECT EXTRACT(YEAR FROM DATE '2020-06-15'), EXTRACT(MONTH FROM DATE '2020-06-15'), TO_CHAR(DATE '2020-06-15','D'), TO_CHAR(DATE '2020-06-15','Q') FROM DUAL
+
 -- CASE[open]: ora-extractvalue — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXTRACTVALUE(XMLTYPE('<a>1</a>'), '/a') AS r FROM DUAL
 
@@ -185,6 +195,9 @@ SELECT /*+ FULL(t) */ 1 AS r FROM DUAL t
 -- CASE[open]: ora-identity-opts — fails on mysql. (1075, 'Incorrect table definition; there can be only one auto column and it must be defin
 CREATE TABLE t (a NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100 INCREMENT BY 10 MAXVALUE 9999 CYCLE))
 
+-- CASE[open]: ora-implicit-arith — fails on mysql, postgresql. FUNC-DIFF: source=(('2', '20', '2'),) target=(('11', '20', '2'),)
+SELECT '1'+1, '10'*2, TO_NUMBER('1')+1 FROM DUAL
+
 -- CASE[open]: ora-initcap — fails on mysql, postgresql, tsql. (195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT INITCAP('hello world') AS r FROM DUAL
 
@@ -193,6 +206,9 @@ CREATE TABLE t (a NUMBER); INSERT /*+ APPEND */ INTO t SELECT 1 FROM DUAL
 
 -- CASE[open]: ora-instr-case — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('1',),)
 SELECT INSTR('aAaA', 'A') AS r FROM DUAL
+
+-- CASE[open]: ora-instr-edge — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('3', '4', '4'),) target=(('3', '3', '3'),)
+SELECT INSTR('hello','l'), INSTR('hello','l',1,2), INSTR('hello','l',-1) FROM DUAL
 
 -- CASE[open]: ora-instr-empty — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('0',),)
 SELECT INSTR('abc', '') AS r FROM DUAL
@@ -216,7 +232,7 @@ SELECT LAST_DAY(DATE '2020-02-01') AS r FROM DUAL
 SELECT LENGTH('abc   ') AS r FROM DUAL
 
 -- CASE[open]: ora-listagg — fails on postgresql. function string_agg(integer, unknown) does not exist
-SELECT LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) AS r FROM (SELECT 1 x FROM DUAL UNION SELECT 2 FROM DUAL)
+SELECT LISTAGG(x,',') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 FROM DUAL)
 
 -- CASE[open]: ora-listagg-over — fails on mysql, postgresql, tsql. (4113, b"The function 'STRING_AGG' is not a valid windowing function, and cannot be used w
 SELECT deptno, LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) OVER (PARTITION BY deptno) FROM (SELECT 1 deptno, 2 x FROM DUAL)
@@ -302,6 +318,9 @@ SELECT ORA_HASH('abc') AS r FROM DUAL
 -- CASE[open]: ora-order-nulls-default — fails on mysql, tsql. FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))
 SELECT x FROM (SELECT 3 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT NULL x FROM DUAL) ORDER BY x
 
+-- CASE[open]: ora-percentile — fails on postgresql. function median(integer) does not exist
+SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x),PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY x),MEDIAN(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 3 FROM DUAL)
+
 -- CASE[open]: ora-pk-using-index — fails on mysql, postgresql, tsql. (1018, b"Incorrect syntax near 'INDEX'. If this is intended as a part of a table hint, A W
 CREATE TABLE t (id NUMBER, CONSTRAINT pk PRIMARY KEY (id) USING INDEX)
 
@@ -353,6 +372,9 @@ SELECT SOUNDEX('Smith') AS r FROM DUAL
 
 -- CASE[open]: ora-soundex3 — fails on postgresql. function soundex(unknown) does not exist
 SELECT SOUNDEX('Smith') FROM DUAL
+
+-- CASE[open]: ora-substr-edge — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('llo', 'el', 'he'),) target=(('h', 'el', 'h'),)
+SELECT SUBSTR('hello',-3), SUBSTR('hello',2,2), SUBSTR('hello',0,2) FROM DUAL
 
 -- CASE[open]: ora-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('de',),) target=(('',),)
 SELECT SUBSTR('abcdef', -3, 2) AS r FROM DUAL
@@ -411,6 +433,9 @@ SELECT ATAN2(1,1), COSH(1), SINH(1), TANH(1) FROM DUAL
 -- CASE[open]: ora-trig-suite — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT ACOS(1),ASIN(0),ATAN(1),COS(0),SIN(0),TAN(0),COSH(0),SINH(0),TANH(0) FROM DUAL
 
+-- CASE[open]: ora-trim-translate — fails on postgresql, tsql. FUNC-DIFF: source=(('7', '7', 'hi', 'XbZ'),) target=(('', '', '', 'XbZ'),)
+SELECT TRIM(LEADING '0' FROM '007'), LTRIM('007','0'), RTRIM('hi!!','!'), TRANSLATE('abc','ac','XZ') FROM DUAL
+
 -- CASE[open]: ora-tz-fns — fails on mysql, postgresql, tsql. (155, b"'TIMEZONE_HOUR' is not a recognized datepart option.DB-Lib error message 20018, se
 SELECT EXTRACT(TIMEZONE_HOUR FROM SYSTIMESTAMP), TZ_OFFSET('US/Eastern') FROM DUAL
 
@@ -437,6 +462,9 @@ SELECT VSIZE(123) AS r FROM DUAL
 
 -- CASE[open]: ora-width-bucket — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI
 SELECT WIDTH_BUCKET(5, 0, 10, 5) AS r FROM DUAL
+
+-- CASE[open]: ora-window-analytic — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
+SELECT x,RATIO_TO_REPORT(x) OVER (),NTILE(2) OVER (ORDER BY x),CUME_DIST() OVER (ORDER BY x),PERCENT_RANK() OVER (ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 FROM DUAL)
 
 -- CASE[open]: ora-xmlagg — fails on mysql, postgresql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT XMLAGG(XMLELEMENT("e", dummy)) FROM DUAL

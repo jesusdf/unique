@@ -38,7 +38,7 @@ SELECT JSON_ARRAY(1,2,3),JSON_ARRAY_APPEND('[1]','$',2),JSON_ARRAY_INSERT('[1,2]
 -- CASE[open]: my-ascii-empty — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('NULL',),)
 SELECT ASCII('') AS r
 
--- CASE[open]: my-avg-int — fails on tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
+-- CASE[open]: my-avg-int — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
 SELECT AVG(x) FROM (SELECT 1 x UNION SELECT 2) t
 
 -- CASE[open]: my-avg-precision2 — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1.6667',),) target=(('1',),)
@@ -124,6 +124,9 @@ SELECT CAST(3.14 AS DECIMAL(10,2)), CAST(3.14 AS SIGNED), CAST(3.14 AS CHAR), CA
 
 -- CASE[open]: my-cast-num-char — fails on oracle. ORA-25137: Data value out of range
 SELECT CAST(1234.5 AS CHAR) AS r
+
+-- CASE[open]: my-cast-suite — fails on oracle. ORA-00902: invalid datatype
+SELECT CAST('123' AS SIGNED),CAST('1.5' AS DECIMAL(4,2)),CONVERT('123',SIGNED),CAST('2020-01-01' AS DATE),CAST(65 AS CHAR)
 
 -- CASE[open]: my-cast-time — fails on oracle. DPY-3006: Oracle data type 178 is not supported
 SELECT CAST('10:00:00' AS TIME) AS r
@@ -220,6 +223,9 @@ SELECT DATE('2020-01-01') = '2020-01-01 00:00:00' AS r
 
 -- CASE[open]: my-date-format — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
 SELECT DATE_FORMAT('2020-05-17', '%Y/%m/%d') AS r
+
+-- CASE[open]: my-dateadd — fails on tsql. FUNC-DIFF: source=(('2020-02-29', '2020-01-02', '2020-02-29', '2020-01-01 01:00:00'),) tar
+SELECT DATE_ADD('2020-01-31',INTERVAL 1 MONTH), DATE_ADD('2020-01-01',INTERVAL 1 DAY), DATE_SUB('2020-03-01',INTERVAL 1 DAY), '2020-01-01'+INTERVAL 1 HOUR
 
 -- CASE[open]: my-dateadd-units — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of dateadd function.DB-Lib e
 SELECT DATE_ADD(NOW(),INTERVAL 1 QUARTER), DATE_SUB(NOW(),INTERVAL 2 WEEK)
@@ -350,6 +356,9 @@ SELECT x, COUNT(*) FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'b
 -- CASE[open]: my-group-concat — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR '|') AS r FROM (SELECT 1 x UNION SELECT 2) t
 
+-- CASE[open]: my-groupconcat-order — fails on postgresql. function string_agg(integer, unknown) does not exist
+SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR ',') FROM (SELECT 1 x UNION ALL SELECT 2) t
+
 -- CASE[open]: my-hash — fails on oracle, postgresql, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT MD5('abc'), SHA1('abc'), SHA2('abc', 256)
 
@@ -472,6 +481,9 @@ SELECT LENGTH('café') AS r
 
 -- CASE[open]: my-length-div — fails on oracle, tsql. FUNC-DIFF: source=(('6',),) target=(('1',),)
 SELECT LENGTH(1/3) AS r
+
+-- CASE[open]: my-length-unicode — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('5', '4', '5'),) target=(('4', '4', '3'),)
+SELECT LENGTH('café'), CHAR_LENGTH('café'), LENGTH('  x  ')
 
 -- CASE[open]: my-like-ci — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'ABC' LIKE 'abc' AS r
@@ -704,6 +716,9 @@ SELECT ACOS(1),ASIN(0),ATAN(1),COS(0),SIN(0),TAN(0),COT(1),DEGREES(1),RADIANS(1)
 
 -- CASE[open]: my-trim-both — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r
+
+-- CASE[open]: my-trim-edge — fails on postgresql, tsql. FUNC-DIFF: source=(('hi', '7', 'hi'),) target=(('', '', ''),)
+SELECT TRIM(BOTH 'x' FROM 'xxhixx'), TRIM(LEADING '0' FROM '007'), TRIM(TRAILING '!' FROM 'hi!!')
 
 -- CASE[open]: my-trim-leading — fails on postgresql, tsql. FUNC-DIFF: source=(('7',),) target=(('',),)
 SELECT TRIM(LEADING '0' FROM '007') AS r

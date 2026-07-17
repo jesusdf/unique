@@ -69,6 +69,9 @@ SELECT CAST(1 AS DATETIME) AS r
 -- CASE[open]: ts-cast-money — fails on oracle, postgresql. ORA-00902: invalid datatype
 SELECT CAST(12.99 AS MONEY), CAST(12.99 AS SMALLMONEY), CONVERT(MONEY, '$12.99')
 
+-- CASE[open]: ts-cast-suite — fails on mysql, oracle, postgresql. ORA-00906: missing left parenthesis
+SELECT CAST('123' AS INT),CONVERT(INT,'123'),CONVERT(VARCHAR,123),TRY_CAST('x' AS INT),TRY_CONVERT(INT,'x'),PARSE('123' AS INT)
+
 -- CASE[open]: ts-cast-trycast — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'x' to a number: 
 SELECT CAST(123 AS VARCHAR(10)), TRY_CAST('x' AS INT), CONVERT(DATE, GETDATE())
 
@@ -105,6 +108,9 @@ SELECT IIF(1>0,'y','n'), CHOOSE(2,'a','b','c'), ISNULL(NULL,'x'), NULLIF(1,1)
 -- CASE[open]: ts-continue-break — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol "=" when expectin
 CREATE PROCEDURE p AS BEGIN DECLARE @i INT=1; WHILE @i<=3 BEGIN SET @i+=1; IF @i=2 CONTINUE; IF @i=5 BREAK; END; END
 
+-- CASE[open]: ts-convert-style — fails on oracle. ORA-01821: date format not recognized
+SELECT CONVERT(VARCHAR,GETDATE(),101),CONVERT(VARCHAR,GETDATE(),112),CONVERT(VARCHAR,GETDATE(),120),CONVERT(VARCHAR,GETDATE(),126)
+
 -- CASE[open]: ts-cube — fails on mysql, oracle, postgresql. ORA-00937: not a single-group group function
 SELECT a,b,SUM(c) FROM (SELECT 1 a,2 b,3 c) t GROUP BY CUBE(a,b)
 
@@ -114,8 +120,8 @@ CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) 
 -- CASE[open]: ts-date-bucket2 — fails on mysql, oracle, postgresql. ORA-01861: literal does not match format string
 SELECT DATE_BUCKET(MINUTE, 15, CAST('2020-01-01 00:07' AS DATETIME2))
 
--- CASE[open]: ts-dateadd — fails on oracle, postgresql. ORA-30081: invalid data type for datetime/interval arithmetic
-SELECT DATEADD(DAY, 7, '2020-01-01') AS r
+-- CASE[open]: ts-dateadd — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('2020-02-29 00:00:00', '2020-01-02 00:00:00', '2020-02-29'),) target=(
+SELECT DATEADD(MONTH,1,'2020-01-31'), DATEADD(DAY,1,'2020-01-01'), EOMONTH('2020-02-15')
 
 -- CASE[open]: ts-datediff — fails on oracle. ORA-01861: literal does not match format string
 SELECT DATEDIFF(DAY, '2020-01-01', '2020-01-10') AS r
@@ -269,6 +275,10 @@ CREATE TABLE src (id INT);
 GO
 SELECT id INTO dst FROM src
 
+-- CASE[open]: ts-select-into-temp — fails on oracle. ORA-00905: missing keyword
+SELECT id INTO #t2 FROM (SELECT 1 id) s;
+SELECT * FROM #t2;
+
 -- CASE[open]: ts-seq-use — fails on oracle, postgresql. ORA-00904: "NEXT_VALUE_FOR": invalid identifier
 CREATE SEQUENCE s START WITH 1; SELECT NEXT VALUE FOR s
 
@@ -303,6 +313,9 @@ SELECT STR(3.14, 6, 2) AS r
 
 -- CASE[open]: ts-str-plus-num — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('15',),) target=(('105',),)
 SELECT '10' + 5 AS r
+
+-- CASE[open]: ts-stragg-within — fails on postgresql. function string_agg(integer, unknown) does not exist
+SELECT STRING_AGG(x,',') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2 x) t
 
 -- CASE[open]: ts-stragg-within2 — fails on mysql, oracle. ORA-00906: missing left parenthesis
 CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); CREATE TABLE data (data NVARCHAR(MAX));

@@ -23,6 +23,19 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 -- CASE[open]: pg-alter-add — fails on mysql, oracle. ORA-30649: missing DIRECTORY keyword
 CREATE TABLE t (a INT); ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT 'x'
 
+-- CASE[open]: pg-alter-notvalid — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
+CREATE TABLE t (id INT);
+ALTER TABLE t RENAME TO tbl;
+ALTER TABLE tbl ADD CONSTRAINT ck CHECK (id>0) NOT VALID;
+
+-- CASE[open]: pg-alter-suite — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'SET'.DB-Lib error message 20018, severity 15:\n
+CREATE TABLE t (id INT);
+ALTER TABLE t ADD COLUMN name VARCHAR(50) NOT NULL DEFAULT '';
+ALTER TABLE t ALTER COLUMN id TYPE BIGINT;
+ALTER TABLE t ALTER COLUMN name SET DEFAULT 'x';
+ALTER TABLE t RENAME COLUMN name TO nm;
+ALTER TABLE t DROP COLUMN nm;
+
 -- CASE[open]: pg-alter-type — fails on oracle. ORA-01735: invalid ALTER TABLE option
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a TYPE BIGINT
 
@@ -47,7 +60,7 @@ SELECT TIMESTAMP '2020-01-01 10:00' AT TIME ZONE 'UTC' AS r
 -- CASE[open]: pg-attz2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ti
 SELECT now() AT TIME ZONE 'UTC', timezone('UTC', now())
 
--- CASE[open]: pg-avg-int — fails on tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
+-- CASE[open]: pg-avg-int — fails on mysql, tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
 SELECT AVG(x) FROM (VALUES (1),(2)) v(x)
 
 -- CASE[open]: pg-avg-null — fails on mysql, tsql. FUNC-DIFF: source=(('2.33333',),) target=(('2',),)
@@ -142,6 +155,9 @@ CREATE TABLE t (a TEXT, b TEXT GENERATED ALWAYS AS (lower(a)) STORED)
 
 -- CASE[open]: pg-computed-jsonb — fails on mysql, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type JSONB.DB-Lib error messa
 CREATE TABLE t (data JSONB, name TEXT GENERATED ALWAYS AS (data->>'name') STORED)
+
+-- CASE[open]: pg-concat-null — fails on mysql. FUNC-DIFF: source=(('NULL', 'ab', 'a-b'),) target=(('NULL', 'NULL', 'a-b'),)
+SELECT 'a'||NULL||'b', concat('a',NULL,'b'), concat_ws('-','a',NULL,'b')
 
 -- CASE[open]: pg-convert-roundtrip — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co
 SELECT convert_from(convert_to('héllo','UTF8'),'UTF8')
@@ -506,6 +522,11 @@ BEGIN; SAVEPOINT sp; ROLLBACK TO SAVEPOINT sp; COMMIT
 -- CASE[open]: pg-scale — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.sc
 SELECT scale(1.230), trim_scale(1.230)
 
+-- CASE[open]: pg-select-into-ctas — fails on oracle. ORA-00905: missing keyword
+CREATE TABLE t (id INT);
+SELECT id INTO TEMP t2 FROM t;
+CREATE TABLE t3 AS SELECT * FROM t;
+
 -- CASE[open]: pg-seq-use — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne
 CREATE SEQUENCE s; SELECT nextval('s'),currval('s'),setval('s',10)
 
@@ -533,6 +554,9 @@ SELECT SPLIT_PART('a,b,c', ',', 2) AS r
 -- CASE[open]: pg-str-lt — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'apple' < 'Banana' AS r
 
+-- CASE[open]: pg-stragg-order — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
+SELECT string_agg(x::text,',' ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2) t
+
 -- CASE[open]: pg-string-agg-order — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
 SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
@@ -550,6 +574,9 @@ SELECT string_to_array('a,b,c', ',')
 
 -- CASE[open]: pg-strpos-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT STRPOS('', '') AS r
+
+-- CASE[open]: pg-substr-edge — fails on mysql. FUNC-DIFF: source=(('hello', 'el', 'hell', 'ello'),) target=(('llo', 'el', '', ''),)
+SELECT substring('hello',-3), substr('hello',2,2), left('hello',-1), right('hello',-1)
 
 -- CASE[open]: pg-substr-zero — fails on mysql, oracle. FUNC-DIFF: source=(('ab',),) target=(('abc',),)
 SELECT SUBSTRING('abcdef', 0, 3) AS r
@@ -598,6 +625,9 @@ SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS t
 
 -- CASE[open]: pg-trim-len — fails on oracle, tsql. FUNC-DIFF: source=(('2', '0'),) target=(('0', '0'),)
 SELECT CHAR_LENGTH('  '), LENGTH(TRIM('  '))
+
+-- CASE[open]: pg-trim-translate — fails on tsql. FUNC-DIFF: source=(('hi', '7', 'XbZ'),) target=(('', '', 'XbZ'),)
+SELECT trim(both 'x' from 'xxhixx'), ltrim('007','0'), translate('abc','ac','XZ')
 
 -- CASE[open]: pg-truncate-restart — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'RESTART'.DB-Lib error message 20018, severity 15:\nGeneral 
 CREATE TABLE t (id INT); TRUNCATE TABLE t RESTART IDENTITY CASCADE
