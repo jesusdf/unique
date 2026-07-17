@@ -326,6 +326,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `FUNC-DIFF: source=(('2',),) target=(('3',),)`
 - src: `SELECT FLOOR(2.9999999999999999) AS r`
 
+## my-full-select  (mysql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
+- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t GROUP BY id HAVING COUNT(*) > 1 ORDER`
+
 ## my-gc-order  (mysql)
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)`
@@ -525,6 +530,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - targets: tsql(invalid)
 - live error: `(2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se`
 - src: `CREATE TABLE t (a DECIMAL(20,4), b FLOAT(10,2), c DOUBLE)`
+
+## my-optimizer-hints  (mysql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
+- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT /*+ QB_NAME(qb1) */ id FROM t WHERE n > (SELECT`
 
 ## my-order-strings  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
@@ -740,6 +750,21 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE`
 - src: `SELECT WEIGHT_STRING('abc') AS r`
+
+## my8-lag-nth  (mysql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
+- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, LAG(n, 1, 0) OVER (ORDER BY id), NTH_VALUE(n`
+
+## my8-recursive  (mysql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
+- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); WITH RECURSIVE cte AS (SELECT 1 n UNION ALL SELECT n+1`
+
+## my8-window  (mysql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
+- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, ROW_NUMBER() OVER w, SUM(n) OVER w FROM t WI`
 
 ## mysql-drop-'note'|note  (mysql)
 - targets: oracle(silent-drop), postgresql(silent-drop)
@@ -1487,6 +1512,12 @@ CREATE SYNONYM syn FOR t`
 - src: `CREATE PROCEDURE p AS v NUMBER; BEGIN v := 1/0; EXCEPTION WHEN ZERO_DIVIDE THEN v := 0; END;
 /`
 
+## ora23-json-object-star  (oracle)
+- targets: mysql(invalid), postgresql(invalid)
+- live error: `function j_s_o_n_object() does not exist`
+- src: `CREATE TABLE t (id NUMBER, n NUMBER); CREATE TABLE s (id NUMBER, n NUMBER);
+SELECT JSON_OBJECT(*) FROM t`
+
 ## oracle-drop2-100|START  (oracle)
 - targets: postgresql(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: '100|START' absent from valid tsql output, no warning`
@@ -1506,6 +1537,11 @@ CREATE SYNONYM syn FOR t`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(195, b"'AGE' is not a recognized built-in function name.DB-Lib error message 20018, sever`
 - src: `SELECT AGE(TIMESTAMP '2020-01-01', TIMESTAMP '2019-01-01') AS a`
+
+## pg-all-values  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
+- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t WHERE n > ALL (VALUES (1),(2),(3))`
 
 ## pg-alter-add  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
@@ -1883,6 +1919,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1`
 - src: `SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r`
 
+## pg-fetch-ties2  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
+- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t ORDER BY id FETCH FIRST 5 ROWS WITH TI`
+
 ## pg-filter-subquery  (postgresql)
 - targets: tsql(invalid)
 - live error: `(130, b'Cannot perform an aggregate function on an expression containing an aggregate or a`
@@ -1957,6 +1998,16 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(8120, b"Column 'v.x' is invalid in the select list because it is not contained in either `
 - src: `SELECT x, SUM(y) FROM (VALUES (1,10)) v(x,y) GROUP BY GROUPING SETS ((x),())`
+
+## pg-grouping-sets2  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
+- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, n, GROUPING(id), GROUPING(n) FROM t GROUP BY`
+
+## pg-groups2  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
+- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, n, count(*) OVER (ORDER BY id GROUPS BETWEEN`
 
 ## pg-hex-literal  (postgresql)
 - targets: oracle(invalid)
@@ -2554,6 +2605,11 @@ CREATE TRIGGE`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.xp`
 - src: `SELECT xpath('/a/text()', '<a>1</a>'::xml)`
 
+## pg15-merge  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
+- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); MERGE INTO t USING s ON t.id=s.id WHEN MATCHED THEN UPD`
+
 ## po-distinct-case  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('A',), ('B',), ('a',)) target=(('A',), ('B',))`
@@ -3089,6 +3145,13 @@ EXEC sp_rename 't.a', 'x', 'COLUMN'`
 - live error: `FUNC-DIFF: source=(('15',),) target=(('105',),)`
 - src: `SELECT '10' + 5 AS r`
 
+## ts-stragg-within2  (tsql)
+- targets: mysql(invalid), oracle(invalid)
+- live error: `ORA-00906: missing left parenthesis`
+- src: `CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); CREATE TABLE data (data NVARCHAR(MAX));
+GO
+SELECT STRING_AGG(CAST(`
+
 ## ts-string-agg-within  (tsql)
 - targets: postgresql(invalid)
 - live error: `function string_agg(integer, unknown) does not exist`
@@ -3212,4 +3275,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 616 distinct constructs; defect rows by kind: carrier 138, func 256, invalid 774, semantic 2, silent-drop 75.
+Totals: 628 distinct constructs; defect rows by kind: carrier 138, func 256, invalid 801, semantic 2, silent-drop 75.

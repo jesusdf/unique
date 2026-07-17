@@ -11,6 +11,9 @@ SELECT 'Ä' = 'A' AS r
 -- CASE[open]: pg-age — fails on mysql, oracle, tsql. (195, b"'AGE' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT AGE(TIMESTAMP '2020-01-01', TIMESTAMP '2019-01-01') AS a
 
+-- CASE[open]: pg-all-values — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t WHERE n > ALL (VALUES (1),(2),(3))
+
 -- CASE[open]: pg-alter-add — fails on mysql, oracle. ORA-30649: missing DIRECTORY keyword
 CREATE TABLE t (a INT); ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT 'x'
 
@@ -238,6 +241,9 @@ SELECT EXTRACT(DOW FROM DATE '2020-01-01') AS d
 -- CASE[open]: pg-extract-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1
 SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r
 
+-- CASE[open]: pg-fetch-ties2 — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t ORDER BY id FETCH FIRST 5 ROWS WITH TIES
+
 -- CASE[open]: pg-filter-subquery — fails on tsql. (130, b'Cannot perform an aggregate function on an expression containing an aggregate or a
 CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id, COUNT(*) FILTER (WHERE n > (SELECT AVG(v) FROM u)) FROM t GROUP BY id
 
@@ -282,6 +288,12 @@ SELECT x, GROUPING(x) FROM (VALUES (1)) v(x) GROUP BY CUBE (x)
 
 -- CASE[open]: pg-grouping-sets — fails on mysql, oracle, tsql. (8120, b"Column 'v.x' is invalid in the select list because it is not contained in either 
 SELECT x, SUM(y) FROM (VALUES (1,10)) v(x,y) GROUP BY GROUPING SETS ((x),())
+
+-- CASE[open]: pg-grouping-sets2 — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, n, GROUPING(id), GROUPING(n) FROM t GROUP BY GROUPING SETS ((id),(n),())
+
+-- CASE[open]: pg-groups2 — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, n, count(*) OVER (ORDER BY id GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 
 -- CASE[open]: pg-hex-literal — fails on oracle. ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ
 SELECT x'FF'::int AS h, 1.5e3 AS s
@@ -651,6 +663,9 @@ SELECT xmlelement(name foo, 'bar')
 
 -- CASE[open]: pg-xpath — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.xp
 SELECT xpath('/a/text()', '<a>1</a>'::xml)
+
+-- CASE[open]: pg15-merge — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); MERGE INTO t USING s ON t.id=s.id WHEN MATCHED THEN UPDATE SET n=s.n WHEN NOT MATCHED THEN INSERT VALUES (s.id, s.n)
 
 -- CASE[open]: po-distinct-case — fails on mysql, tsql. FUNC-DIFF: source=(('A',), ('B',), ('a',)) target=(('A',), ('B',))
 SELECT DISTINCT x FROM (VALUES ('a'),('A'),('a'),('B')) v(x) ORDER BY x

@@ -456,6 +456,10 @@ SELECT XMLELEMENT("foo", 'bar') AS r FROM DUAL
 CREATE PROCEDURE p AS v NUMBER; BEGIN v := 1/0; EXCEPTION WHEN ZERO_DIVIDE THEN v := 0; END;
 /
 
+-- CASE[open]: ora23-json-object-star — fails on mysql, postgresql. function j_s_o_n_object() does not exist
+CREATE TABLE t (id NUMBER, n NUMBER); CREATE TABLE s (id NUMBER, n NUMBER);
+SELECT JSON_OBJECT(*) FROM t
+
 -- CASE[open]: oracle-drop2-100|START — fails on postgresql, tsql. SILENT CLAUSE DROP: '100|START' absent from valid tsql output, no warning
 CREATE TABLE t (id NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100))
 

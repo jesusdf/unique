@@ -177,6 +177,9 @@ SELECT FIELD('b', 'a', 'b', 'c') AS r
 -- CASE[open]: my-floor-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
 SELECT FLOOR(2.9999999999999999) AS r
 
+-- CASE[open]: my-full-select — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t GROUP BY id HAVING COUNT(*) > 1 ORDER BY id LIMIT 10 OFFSET 5
+
 -- CASE[open]: my-gc-order — fails on oracle. FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)
 SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t
 
@@ -296,6 +299,9 @@ CREATE PROCEDURE p() BEGIN CALL other_proc(); END
 
 -- CASE[open]: my-numeric — fails on tsql. (2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se
 CREATE TABLE t (a DECIMAL(20,4), b FLOAT(10,2), c DOUBLE)
+
+-- CASE[open]: my-optimizer-hints — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT /*+ QB_NAME(qb1) */ id FROM t WHERE n > (SELECT /*+ SEMIJOIN(@qb1) */ AVG(n) FROM t)
 
 -- CASE[open]: my-order-strings — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('Apple',), ('banana',), ('Banana',), ('cherry',)) target=(('Apple',), 
 SELECT x FROM (SELECT 'banana' x UNION ALL SELECT 'Apple' x UNION ALL SELECT 'cherry' x UNION ALL SELECT 'Banana' x) t ORDER BY x
@@ -426,6 +432,15 @@ SELECT WEEK('2020-06-15'), QUARTER('2020-06-15'), DAYOFWEEK('2020-06-15')
 
 -- CASE[open]: my-weight-string — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEIGHT_STRING('abc') AS r
+
+-- CASE[open]: my8-lag-nth — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, LAG(n, 1, 0) OVER (ORDER BY id), NTH_VALUE(n, 2) OVER (ORDER BY id) FROM t
+
+-- CASE[open]: my8-recursive — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); WITH RECURSIVE cte AS (SELECT 1 n UNION ALL SELECT n+1 FROM cte WHERE n<5) SELECT * FROM cte
+
+-- CASE[open]: my8-window — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, ROW_NUMBER() OVER w, SUM(n) OVER w FROM t WINDOW w AS (ORDER BY id)
 
 -- CASE[open]: mysql-drop-'note'|note — fails on oracle, postgresql. SILENT CLAUSE DROP: ''note'|note' absent from valid oracle output, no warning (target supp
 CREATE TABLE t (a INT COMMENT 'note')

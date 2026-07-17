@@ -322,6 +322,11 @@ SELECT STR(3.14, 6, 2) AS r
 -- CASE[open]: ts-str-plus-num — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('15',),) target=(('105',),)
 SELECT '10' + 5 AS r
 
+-- CASE[open]: ts-stragg-within2 — fails on mysql, oracle. ORA-00906: missing left parenthesis
+CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); CREATE TABLE data (data NVARCHAR(MAX));
+GO
+SELECT STRING_AGG(CAST(n AS VARCHAR), ',') WITHIN GROUP (ORDER BY id) FROM t
+
 -- CASE[open]: ts-string-agg-within — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
