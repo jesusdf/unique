@@ -160,8 +160,10 @@ transforms always use `dataclasses.replace`, never field-by-field rebuilds
 (they silently drop fields).
 
 **The architecture direction is set by `audit/2026-07-08/04-architecture-analysis.md`
-(adopted).** Its five root causes and proposals P1–P6 govern all transpiler
-work until the M0–M4 milestones close. The binding rules derived from it live
+(adopted) — and its M0–M4 milestones are ALL COMPLETE as of 2026-07-17**
+(M3 final: IR-first expressions; scalar fragments route through the shared
+IR pipeline by default, text rewriters are the warned fallback only;
+`UNIQUE_NO_IR_FIRST` is the emergency kill-switch). The binding rules derived from it live
 in `skills/SKILL-development-workflow.md` ("Architecture guardrails" and
 "Detect the wrong path"); read both before touching `transpiler.py`,
 `batch_splitter.py`, or the procedural engine. Headline: the failing 20% is

@@ -1,6 +1,6 @@
 # Unique — Project Status
 
-## Current state: v0.25.0 (M0–M2 + M4 complete; M3 core landed; **direction-residue campaign closed at its floor**)
+## Current state: v0.25.0+ (**ALL architecture milestones M0–M4 complete** — M3 final landed 2026-07-17)
 
 **Direction-residue campaign closed 2026-07-17** (waves 103–239, user-declared
 architectural floor at `469917a`): the six corpus directions (pg-source and
@@ -82,6 +82,15 @@ procedural text-matchers onto structure — tracked in `docs/TODO.md`.
 | 2 — experimental | Oracle → T-SQL / PostgreSQL / MySQL | large known defect classes; use behind the validity sweep |
 
 ### Recent milestones
+
+- **M3 final — IR-first expressions** (2026-07-17, `86f7c11`): scalar
+  fragments in routine bodies route through the shared IR pipeline by
+  default; the text rewriters serve only IR-declined fragments (the
+  primary+warned-fallback shape M3a gave embedded DML). Burn-down: the
+  126-failure wholesale-probe rejection became ~15 family migrations with
+  one shared table per family (both pipelines), closing with a measured
+  live cycle BETTER than the declared floor: 127 total syntax failures
+  across the six corpus directions (was 133), discovery pg→pg 0, FE 16/16.
 
 - **Direction-residue campaign (waves 103–239)** (2026-07-15 → 2026-07-17):
   the no-silent-loss push over both validated corpora — silent-gap discovery

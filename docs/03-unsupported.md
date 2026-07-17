@@ -410,7 +410,8 @@ never invalid SQL, never a silent drop.
 - **Functions cannot write** (error 443): a PG function with side-effecting
   DML that stays a function (non-void, no OUT params, non-trigger) degrades;
   void/OUT-param functions become procedures instead. Functions can't access
-  temp tables (2772) or return cursors either.
+  temp tables (2772) — creating one OR referencing a session temp table the
+  script declares, from any source — or return cursors either.
 - **`APPLY` takes no `ON`** — only a `LATERAL … ON TRUE` join maps; a lateral
   join with a real condition degrades. Same on Oracle.
 - **No expression indexes**; `STRING_AGG(DISTINCT …)` has no form; `EXEC`
@@ -425,6 +426,9 @@ never invalid SQL, never a silent drop.
 - **`LAG`/`LEAD`/`NTH_VALUE` need constant offsets; `NTILE` a positive
   integer**; `GROUP_CONCAT SEPARATOR` takes a literal only, and `DISTINCT`
   inside non-builtin aggregates is a hard error — all degrade.
+- **A DISTINCT string-aggregate must ORDER BY its own argument** —
+  `string_agg(DISTINCT x, sep ORDER BY <other expr>)` has no MySQL
+  spelling and degrades whole (M3 flip).
 - **Cursors bind at declaration** — ref-cursor variables (opened dynamically)
   have no form; routines declaring/returning them degrade (also on T-SQL).
 - `WITH` is legal only inside an INSERT's SELECT (relocated automatically);

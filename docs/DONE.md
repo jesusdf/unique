@@ -4782,3 +4782,62 @@ The superseded M3 history (M3a/M3b detail), kept for reference:
       cleared) / MySQL 75.0%; live-syntax suite 53 passed. Transpile of the
       13 MB dump ~55 s (+22% vs pre-M3, linear). Still open: deleting the
       expression-level text rewriters — blocked on the M3-prereq below.
+
+---
+
+## 39. M3 final — IR-first expressions (the last architecture-plan milestone)
+
+Archived from `docs/TODO.md` §2 P0 on 2026-07-17 (landed at `86f7c11`).
+Original consolidated item with the burn-down record:
+
+- [ ] **M3 final — IR-first scalar expressions; retire the text-level
+      expression rewriters (`transformer/_expr.py`).** The LAST open
+      architecture-plan step, a declared MULTI-SESSION milestone — never a
+      wave. *Done so far:* M3a/M3b (embedded DML through the shared IR
+      pipeline, measured 2026-07-09) and the whole M3-prereq arc
+      (increments 1–4 + family steps 1–4, archived in
+      [`docs/DONE.md`](DONE.md) §38). *Remaining, in dependency order:*
+      1. *Precondition (a) — DONE 2026-07-17 (`e44ce92`):* cursor state
+         reaches the IR expression pipeline. `FETCH_STATUS_FORMS`
+         ContextVar published around `_ir_transpile_dml` (guarded on the
+         idiom so MySQL's handler-injection flag has no false side
+         effect); the IR BinaryOp emit maps `@@FETCH_STATUS = 0 / <> 0 /
+         = -1|-2` to the per-target forms exactly like the text path.
+         Probe 113 → 109; live FE 16/16 green. Tests:
+         TestIrFetchStatusContext (6).
+      2. *Precondition (b) — comment-carrying expression nodes:* the IR
+         drops in-expression comments today; the converter/emitters need
+         trivia-bearing expression nodes. Fresh-session-scale.
+      3. *Family-by-family migration* (the increments-1..4a pattern,
+         differential text-vs-IR audits per family, live sweeps as the
+         net), then flip `_transform_raw_sql` to IR-first and delete the
+         rewriters.
+      **Probe measurements 2026-07-17:** IR-first for scalar fragments =
+      **113 failures at `5b26d5b`** (was 126 at the original probe;
+      waves 98–102 absorbed the difference), **109 after precondition
+      (a)**. Module map at 113: pg_source_wave1 25,
+      procedural/test_transformer 21, oracle_source_m4_wave 15,
+      test_procedural 13, oracle_mysql_tail 9, test2_residue_wave 7,
+      embedded_dml_ir 5, triggers 4+4, singles 10.
+      Probe recipe (reproducible): guard `UNIQUE_IR_FIRST` in
+      `_transform_raw_sql`, calling `self._ir_transpile_dml(node.sql)`
+      right after the early-return carriers and returning the replaced
+      node when it succeeds; run the full suite with `UNIQUE_IR_FIRST=1`.
+
+Closing summary: the UNIQUE_IR_FIRST development switch became the default
+(kill-switch `UNIQUE_NO_IR_FIRST`); the family burn-down ran probe
+126 → 113 (waves 98–102) → 109 (precondition (a)) → 74 (switch placed at
+the expression-mapping layer, below the shell's variable renames) → 0 real
+divergences across ~15 family commits (d7e0ea4..75bfc9d), each with its
+always-on unit family in `tests/unit/core/test_ir_first_families.py`,
+full-gate + FE-live verification, and one new shared table per family
+(PROCEDURAL_FUNC_MAPS consumed by the IR, ERROR_MESSAGE/DIAGNOSTIC
+tables, DML_FOUND_EXPR, ORACLE_DATE_FORMAT_STYLES, FETCH_STATUS_FORMS,
+DATE_VARIABLES) — the audit's "one table, both pipelines" direction.
+Definitive live cycle at the flip: TOTAL 127 syntax failures across the
+six corpus directions vs the pre-M3 declared floor of 133, discovery
+pg→pg 0, FE 16/16, suite green. Real bugs found en route by the
+differentials: MySQL byte-vs-char LENGTH, LTRIM/RTRIM position loss,
+CHARINDEX not-found offset drift, N'…' invalid on PG, silent GROUPS-frame
+material, the '+'-as-concat mysql-source semantics, COUNT boundary
+semantics of DATEDIFF(HOUR).

@@ -65,39 +65,28 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
 
 ### P0 — architecture plan (audit doc 04 — ADOPTED 2026-07-08)
 
-- [ ] **M3 final — IR-first scalar expressions; retire the text-level
-      expression rewriters (`transformer/_expr.py`).** The LAST open
-      architecture-plan step, a declared MULTI-SESSION milestone — never a
-      wave. *Done so far:* M3a/M3b (embedded DML through the shared IR
-      pipeline, measured 2026-07-09) and the whole M3-prereq arc
-      (increments 1–4 + family steps 1–4, archived in
-      [`docs/DONE.md`](DONE.md) §38). *Remaining, in dependency order:*
-      1. *Precondition (a) — DONE 2026-07-17 (`e44ce92`):* cursor state
-         reaches the IR expression pipeline. `FETCH_STATUS_FORMS`
-         ContextVar published around `_ir_transpile_dml` (guarded on the
-         idiom so MySQL's handler-injection flag has no false side
-         effect); the IR BinaryOp emit maps `@@FETCH_STATUS = 0 / <> 0 /
-         = -1|-2` to the per-target forms exactly like the text path.
-         Probe 113 → 109; live FE 16/16 green. Tests:
-         TestIrFetchStatusContext (6).
-      2. *Precondition (b) — comment-carrying expression nodes:* the IR
-         drops in-expression comments today; the converter/emitters need
-         trivia-bearing expression nodes. Fresh-session-scale.
-      3. *Family-by-family migration* (the increments-1..4a pattern,
-         differential text-vs-IR audits per family, live sweeps as the
-         net), then flip `_transform_raw_sql` to IR-first and delete the
-         rewriters.
-      **Probe measurements 2026-07-17:** IR-first for scalar fragments =
-      **113 failures at `5b26d5b`** (was 126 at the original probe;
-      waves 98–102 absorbed the difference), **109 after precondition
-      (a)**. Module map at 113: pg_source_wave1 25,
-      procedural/test_transformer 21, oracle_source_m4_wave 15,
-      test_procedural 13, oracle_mysql_tail 9, test2_residue_wave 7,
-      embedded_dml_ir 5, triggers 4+4, singles 10.
-      Probe recipe (reproducible): guard `UNIQUE_IR_FIRST` in
-      `_transform_raw_sql`, calling `self._ir_transpile_dml(node.sql)`
-      right after the early-return carriers and returning the replaced
-      node when it succeeds; run the full suite with `UNIQUE_IR_FIRST=1`.
+- [x] **M3 final — DONE 2026-07-17 (`86f7c11`): IR-first is the expression
+      engine.** The LAST architecture-plan milestone (audit doc-04 P4)
+      closed: scalar fragments route through the shared IR pipeline by
+      default; the text rewriters serve only IR-declined fragments (parse
+      failures, shell-machinery text) — the same primary+fallback shape
+      M3a gave embedded DML. `UNIQUE_NO_IR_FIRST` is the kill-switch.
+      Arc: probe 126 → 113 → 109 → … → 0-real via ~15 family commits
+      (shared func/error/diagnostic tables consumed by BOTH pipelines,
+      cursor+FOUND state context, styled CONVERT + TO_DATE/TO_CHAR format
+      bridge, trigger-shell guards, comment line→block carrying, national
+      literals, Trim positions, nested subqueries, LOB helpers, concat
+      classification+flattening) + 23 assertions strengthened to exact IR
+      forms at the flip. **Measured (definitive cycle): pg-corpus {tsql
+      20, mysql 37, oracle 25}, mysql-corpus {tsql 17, pg 13, oracle 15}
+      = TOTAL 127 vs the declared floor 133 (−6); validity 98.7–99.8%;
+      discovery pg→pg 0; FE live 16/16.** Full log in
+      [`docs/DONE.md`](DONE.md) §39.
+- [ ] **Prune fallback-only text rewriters (P3):** with IR-first the
+      expression engine, measure which `transformer/_expr.py` rewriters
+      still receive fallback traffic on the corpora (coverage run) and
+      delete the dead ones; the live ones are the honest fallback surface
+      and stay.
 
 ### P3 — hardening carry-overs (from 2026-07-02, still open)
 
