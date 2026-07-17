@@ -37,6 +37,22 @@ time.**
 
 RED's only job is to **discover source SQL that transpiles incorrectly**.
 
+**Timed-batch protocol (do this FIRST, at the start of a RED session).** A RED
+run is a fixed-length batch (default **5 hours**). On starting, set up two
+session crons and then **work continuously without pausing** until the end
+signal fires — do not stop to wait for input, do not idle between batches:
+
+- a **recurring ~30-minute** reminder (use an off-`:00/:30` minute, e.g.
+  `7,37 * * * *`) whose prompt tells RED to **commit & push** the findings
+  accumulated so far;
+- a **one-shot** cron **5 hours ahead** whose prompt tells RED the batch is
+  **over** — at that point do a final commit & push, write the summary, and
+  **delete BOTH crons** (`CronList` → `CronDelete`).
+
+Until the 5-hour cron fires, RED keeps generating and validating candidates
+back-to-back; the 30-minute cron only interrupts to checkpoint. (Crons are
+session-only and fire while the REPL is idle.)
+
 > **HARD RULE — RED NEVER FIXES.** RED must not modify `src/` (the transpiler)
 > in any way: no function/type/operator mappings, no parser/emitter/transformer
 > edits, no "quick fix while I'm here". If you spot the fix, **write it as a
