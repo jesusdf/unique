@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (387 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (411 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -127,6 +127,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN`
 - src: `SELECT SUBSTRING(UNHEX('48656C6C6F'), 1, 2) AS r`
+
+## my-bintypes  (mysql)
+- targets: tsql(invalid)
+- live error: `(2716, b'Column, parameter, or variable #7: Cannot specify a column width on data type bit`
+- src: `CREATE TABLE t (a BINARY(16), b VARBINARY(255), c TINYBLOB, d BLOB, e MEDIUMBLOB, f LONGBLOB, g BIT(8), h BOOL)`
 
 ## my-bit-agg  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -432,6 +437,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0.33333',),) target=(('0.333333',),)`
 - src: `SELECT 1.0 / 3 AS r`
+
+## my-dttypes  (mysql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(2716, b'Column, parameter, or variable #6: Cannot specify a column width on data type dat`
+- src: `CREATE TABLE t (a DATE, b TIME, c DATETIME, d TIMESTAMP, e YEAR, f DATETIME(6), g TIME(3))`
 
 ## my-elt  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -1188,6 +1198,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2`
 - src: `SELECT FROM_UNIXTIME(1600000000,'%Y-%m-%d'), UNIX_TIMESTAMP('2020-09-13')`
 
+## my-upd-selfjoin  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4104, b'The multi-part identifier "t2.n" could not be bound.DB-Lib error message 20018, s`
+- src: `CREATE TABLE t (id INT, n INT);UPDATE t t1 JOIN t t2 ON t1.id=t2.id+1 SET t1.n=t2.n`
+
 ## my-update-join  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4104, b'The multi-part identifier "s.n" could not be bound.DB-Lib error message 20018, se`
@@ -1474,6 +1489,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: mysql(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0.333333',),) target=(('0',),)`
 - src: `SELECT 1 / 3 AS r FROM DUAL`
+
+## ora-dttypes  (oracle)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near 'YEAR'.DB-Lib error message 20018, severity 15:\nGeneral SQL`
+- src: `CREATE TABLE t (a DATE, b TIMESTAMP, c TIMESTAMP WITH TIME ZONE, d TIMESTAMP WITH LOCAL TIME ZONE, e INTERVAL YEAR TO MONTH, f INT`
 
 ## ora-dump  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1933,6 +1953,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(102, b"Incorrect syntax near 'DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQL `
 - src: `CREATE TABLE t (a TIMESTAMP WITH TIME ZONE, b INTERVAL DAY TO SECOND, c INTERVAL YEAR TO MONTH)`
 
+## ora-upd-correlated  (oracle)
+- targets: mysql(invalid)
+- live error: `(1093, "You can't specify target table 't' for update in FROM clause")`
+- src: `CREATE TABLE t (id NUMBER, n NUMBER);UPDATE t SET n=(SELECT MAX(n) FROM t x WHERE x.id<t.id)`
+
 ## ora-user-context  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'SYS_CONTEXT' is not a recognized built-in function name.DB-Lib error message 2001`
@@ -2264,6 +2289,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL`
+
+## pg-dttypes  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-30089: missing or invalid <datetime field>`
+- src: `CREATE TABLE t (a DATE, b TIME, c TIMESTAMP, d TIMESTAMPTZ, e TIMETZ, f INTERVAL, g TIMESTAMP(3))`
 
 ## pg-dyn-count  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
@@ -2675,6 +2705,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.nu`
 - src: `SELECT num_nonnulls(1,NULL,2),num_nulls(1,NULL,2)`
 
+## pg-numtypes  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1075, 'Incorrect table definition; there can be only one auto column and it must be defin`
+- src: `CREATE TABLE t (a SMALLINT, b INT, c BIGINT, d NUMERIC(10,2), e REAL, f DOUBLE PRECISION, g SERIAL, h MONEY)`
+
 ## pg-order-nulls-default  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))`
@@ -2795,6 +2830,11 @@ CREATE TABLE ledger (id SERIA`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.pg`
 - src: `SELECT pg_size_pretty(1024::bigint), pg_relation_size('pg_class')`
+
+## pg-spectypes  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit`
+- src: `CREATE TABLE t (a BYTEA, b BIT(8), c VARBIT(16), d BOOLEAN, e UUID, f XML, g JSON, h JSONB)`
 
 ## pg-split-part  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -3203,6 +3243,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `ORA-00904: "CHOOSE": invalid identifier`
 - src: `SELECT IIF(1>0,'y','n'), CHOOSE(2,'a','b','c'), ISNULL(NULL,'x'), NULLIF(1,1)`
 
+## ts-continue-break  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol "=" when expectin`
+- src: `CREATE PROCEDURE p AS BEGIN DECLARE @i INT=1; WHILE @i<=3 BEGIN SET @i+=1; IF @i=2 CONTINUE; IF @i=5 BREAK; END; END`
+
 ## ts-cursor  (tsql)
 - targets: mysql(invalid)
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
@@ -3244,6 +3289,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - src: `CREATE SEQUENCE s AS INT START WITH 1;
 GO
 CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
+
+## ts-dttypes  (tsql)
+- targets: oracle(invalid)
+- live error: `ORA-03060: Data type TIME is invalid.`
+- src: `CREATE TABLE t (a DATE, b TIME, c DATETIME, d DATETIME2, e SMALLDATETIME, f DATETIMEOFFSET, g TIME(3))`
 
 ## ts-dyn-concat-loop  (tsql)
 - targets: mysql(silent-rt), oracle(invalid)
@@ -3474,6 +3524,11 @@ SELECT NEXT VALUE FOR seq`
 - live error: `ORA-00904: "DIFFERENCE": invalid identifier`
 - src: `SELECT SOUNDEX('Smith'),DIFFERENCE('Smith','Smyth')`
 
+## ts-spectypes  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00902: invalid datatype`
+- src: `CREATE TABLE t (a BINARY(16), b VARBINARY(MAX), c IMAGE, d BIT, e UNIQUEIDENTIFIER, f XML, g SQL_VARIANT, h ROWVERSION, i HIERARCH`
+
 ## ts-spid-version  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00936: missing expression`
@@ -3558,6 +3613,13 @@ SELECT * FROM t TABLESAMPLE (10 PERCENT)`
 - live error: `(1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')`
 - src: `SELECT TRANSLATE('abc', 'ab', 'xy') AS r`
 
+## ts-trg-instead-delete  (tsql)
+- targets: postgresql(invalid)
+- live error: `"t" is a table`
+- src: `CREATE TABLE t (id INT);
+GO
+CREATE TRIGGER g ON t INSTEAD OF DELETE AS BEGIN DELETE FROM t WHERE id IN (SELECT id FROM deleted WHE`
+
 ## ts-trig  (tsql)
 - targets: oracle(invalid)
 - live error: `ORA-00904: "COT": invalid identifier`
@@ -3632,4 +3694,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 710 distinct constructs; defect rows by kind: func 322, invalid 1103, semantic 2, silent-drop 75.
+Totals: 722 distinct constructs; defect rows by kind: func 322, invalid 1123, semantic 2, silent-drop 75.

@@ -173,6 +173,9 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP DEFAULT
 -- CASE[open]: pg-drop-not-null — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL
 
+-- CASE[open]: pg-dttypes — fails on oracle. ORA-30089: missing or invalid <datetime field>
+CREATE TABLE t (a DATE, b TIME, c TIMESTAMP, d TIMESTAMPTZ, e TIMETZ, f INTERVAL, g TIMESTAMP(3))
+
 -- CASE[open]: pg-dyn-count — fails on oracle, tsql. (102, b"Incorrect syntax near 'SELECT COUNT(*) FROM %I'.DB-Lib error message 20018, severi
 CREATE FUNCTION f(tbl TEXT) RETURNS BIGINT AS $$ DECLARE n BIGINT; BEGIN EXECUTE format('SELECT COUNT(*) FROM %I', tbl) INTO n; RETURN n; END; $$ LANGUAGE plpgsql
 
@@ -419,6 +422,9 @@ SELECT to_char(1234567.891, '9,999,999.99') AS r
 -- CASE[open]: pg-numnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.nu
 SELECT num_nonnulls(1,NULL,2),num_nulls(1,NULL,2)
 
+-- CASE[open]: pg-numtypes — fails on mysql. (1075, 'Incorrect table definition; there can be only one auto column and it must be defin
+CREATE TABLE t (a SMALLINT, b INT, c BIGINT, d NUMERIC(10,2), e REAL, f DOUBLE PRECISION, g SERIAL, h MONEY)
+
 -- CASE[open]: pg-order-nulls-default — fails on mysql, tsql. FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))
 SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x
 
@@ -496,6 +502,9 @@ SELECT setweight(to_tsvector('cat'), 'A') AS r
 
 -- CASE[open]: pg-size-funcs — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.pg
 SELECT pg_size_pretty(1024::bigint), pg_relation_size('pg_class')
+
+-- CASE[open]: pg-spectypes — fails on oracle, tsql. (2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit
+CREATE TABLE t (a BYTEA, b BIT(8), c VARBIT(16), d BOOLEAN, e UUID, f XML, g JSON, h JSONB)
 
 -- CASE[open]: pg-split-part — fails on mysql, oracle, tsql. (195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT SPLIT_PART('a,b,c', ',', 2) AS r

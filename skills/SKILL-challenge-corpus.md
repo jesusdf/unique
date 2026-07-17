@@ -236,3 +236,17 @@ pytest tests/integration/test_challenge.py -q
 Each fixture is split on its `-- CASE:` markers, and every case is transpiled to
 the other three engines. Add the case first (RED), then the fix + assertion
 (BLUE); the two never land in the same working session.
+
+**CI gotchas (keep the batch green — a red CI is not "ready for BLUE"):**
+
+- **Do NOT parametrize the generic guards per case.** `test_open_cases_*`
+  (no-crash) and `test_fixed_cases_*` (no-carrier) check *absence*, so they pass
+  under the identity transpiler; parametrizing them per case would add hundreds
+  of identity-surviving items and sink CI's **Identity-mutation gate**
+  (`scripts/identity_mutation_check.py`, kill-rate floor 45%) below threshold.
+  Keep each as ONE looping test; the real assertion quality lives in the
+  specific `[fixed]` classes. Run `python scripts/identity_mutation_check.py`
+  locally after touching the test harness.
+- **Space out the pushes.** Committing every ~1–2 min spawns overlapping CI +
+  CodeQL runs that contend and flake. Batch several finding-rounds per commit;
+  push on the ~30-min committed-time cadence, not after every micro-batch.

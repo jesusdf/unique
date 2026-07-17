@@ -56,6 +56,9 @@ SELECT BENCHMARK(1, 1+1) AS r
 -- CASE[open]: my-binary-substr — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
 SELECT SUBSTRING(UNHEX('48656C6C6F'), 1, 2) AS r
 
+-- CASE[open]: my-bintypes — fails on tsql. (2716, b'Column, parameter, or variable #7: Cannot specify a column width on data type bit
+CREATE TABLE t (a BINARY(16), b VARBINARY(255), c TINYBLOB, d BLOB, e MEDIUMBLOB, f LONGBLOB, g BIT(8), h BOOL)
+
 -- CASE[open]: my-bit-agg — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT BIT_XOR(x), BIT_OR(x) FROM (SELECT 1 x UNION SELECT 2) t
 
@@ -238,6 +241,9 @@ SELECT 1/3*3 AS r
 
 -- CASE[open]: my-div-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('0.33333',),) target=(('0.333333',),)
 SELECT 1.0 / 3 AS r
+
+-- CASE[open]: my-dttypes — fails on oracle, tsql. (2716, b'Column, parameter, or variable #6: Cannot specify a column width on data type dat
+CREATE TABLE t (a DATE, b TIME, c DATETIME, d TIMESTAMP, e YEAR, f DATETIME(6), g TIME(3))
 
 -- CASE[open]: my-elt — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EL
 SELECT ELT(2, 'a', 'b', 'c') AS r
@@ -692,6 +698,9 @@ SELECT UNIX_TIMESTAMP('2020-01-01'), FROM_UNIXTIME(1577836800)
 
 -- CASE[open]: my-unixtime2 — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
 SELECT FROM_UNIXTIME(1600000000,'%Y-%m-%d'), UNIX_TIMESTAMP('2020-09-13')
+
+-- CASE[open]: my-upd-selfjoin — fails on oracle, postgresql, tsql. (4104, b'The multi-part identifier "t2.n" could not be bound.DB-Lib error message 20018, s
+CREATE TABLE t (id INT, n INT);UPDATE t t1 JOIN t t2 ON t1.id=t2.id+1 SET t1.n=t2.n
 
 -- CASE[open]: my-update-join — fails on oracle, postgresql, tsql. (4104, b'The multi-part identifier "s.n" could not be bound.DB-Lib error message 20018, se
 CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); UPDATE t JOIN s ON t.id = s.id SET t.n = s.n

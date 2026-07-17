@@ -99,6 +99,9 @@ SELECT ISNULL(NULL,3),NULLIF(1,1),COALESCE(NULL,3),IIF(1=1,'y','n'),CHOOSE(1,'a'
 -- CASE[open]: ts-conditional — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
 SELECT IIF(1>0,'y','n'), CHOOSE(2,'a','b','c'), ISNULL(NULL,'x'), NULLIF(1,1)
 
+-- CASE[open]: ts-continue-break — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol "=" when expectin
+CREATE PROCEDURE p AS BEGIN DECLARE @i INT=1; WHILE @i<=3 BEGIN SET @i+=1; IF @i=2 CONTINUE; IF @i=5 BREAK; END; END
+
 -- CASE[open]: ts-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT FROM c INTO @x; WHILE @@FETCH_STATUS = 0 BEGIN FETCH NEXT FROM c INTO @x; END; CLOSE c; DEALLOCATE c; END
 
@@ -124,6 +127,9 @@ CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))
 CREATE SEQUENCE s AS INT START WITH 1;
 GO
 CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)
+
+-- CASE[open]: ts-dttypes — fails on oracle. ORA-03060: Data type TIME is invalid.
+CREATE TABLE t (a DATE, b TIME, c DATETIME, d DATETIME2, e SMALLDATETIME, f DATETIMEOFFSET, g TIME(3))
 
 -- CASE[open]: ts-dyn-concat-loop — fails on oracle. PROCEDURE P compiled INVALID (line 6): PL/SQL: ORA-00942: table or view does not exist
 CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(MAX) = N''; SELECT @sql = @sql + 'DROP TABLE ' + name + ';' FROM sys.tables; EXEC(@sql); END
@@ -268,6 +274,9 @@ SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')
 -- CASE[open]: ts-soundex3 — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
 SELECT SOUNDEX('Smith'),DIFFERENCE('Smith','Smyth')
 
+-- CASE[open]: ts-spectypes — fails on oracle, postgresql. ORA-00902: invalid datatype
+CREATE TABLE t (a BINARY(16), b VARBINARY(MAX), c IMAGE, d BIT, e UNIQUEIDENTIFIER, f XML, g SQL_VARIANT, h ROWVERSION, i HIERARCHYID, j GEOGRAPHY)
+
 -- CASE[open]: ts-spid-version — fails on mysql, oracle, postgresql. ORA-00936: missing expression
 SELECT @@SPID, @@VERSION
 
@@ -319,6 +328,11 @@ SELECT IIF('a ' = 'a', 1, 0) AS r
 
 -- CASE[open]: ts-translate — fails on mysql. (1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
+
+-- CASE[open]: ts-trg-instead-delete — fails on postgresql. "t" is a table
+CREATE TABLE t (id INT);
+GO
+CREATE TRIGGER g ON t INSTEAD OF DELETE AS BEGIN DELETE FROM t WHERE id IN (SELECT id FROM deleted WHERE id>0); END
 
 -- CASE[open]: ts-trig — fails on oracle. ORA-00904: "COT": invalid identifier
 SELECT ATN2(1,1), DEGREES(PI()), RADIANS(180.0), COT(1)

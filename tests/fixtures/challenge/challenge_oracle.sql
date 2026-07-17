@@ -117,6 +117,9 @@ SELECT 1/3*3 AS r FROM DUAL
 -- CASE[open]: ora-div-precision — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('0.333333',),) target=(('0',),)
 SELECT 1 / 3 AS r FROM DUAL
 
+-- CASE[open]: ora-dttypes — fails on postgresql, tsql. (102, b"Incorrect syntax near 'YEAR'.DB-Lib error message 20018, severity 15:\nGeneral SQL
+CREATE TABLE t (a DATE, b TIMESTAMP, c TIMESTAMP WITH TIME ZONE, d TIMESTAMP WITH LOCAL TIME ZONE, e INTERVAL YEAR TO MONTH, f INTERVAL DAY TO SECOND)
+
 -- CASE[open]: ora-dump — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU
 SELECT DUMP('abc') AS r FROM DUAL
 
@@ -392,6 +395,9 @@ SELECT SYSTIMESTAMP, LOCALTIMESTAMP, SESSIONTIMEZONE FROM DUAL
 
 -- CASE[open]: ora-tz-interval — fails on tsql. (102, b"Incorrect syntax near 'DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQL 
 CREATE TABLE t (a TIMESTAMP WITH TIME ZONE, b INTERVAL DAY TO SECOND, c INTERVAL YEAR TO MONTH)
+
+-- CASE[open]: ora-upd-correlated — fails on mysql. (1093, "You can't specify target table 't' for update in FROM clause")
+CREATE TABLE t (id NUMBER, n NUMBER);UPDATE t SET n=(SELECT MAX(n) FROM t x WHERE x.id<t.id)
 
 -- CASE[open]: ora-user-context — fails on mysql, postgresql, tsql. (195, b"'SYS_CONTEXT' is not a recognized built-in function name.DB-Lib error message 2001
 SELECT USER, SYS_CONTEXT('USERENV','SESSION_USER') FROM DUAL
