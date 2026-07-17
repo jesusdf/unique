@@ -1,6 +1,6 @@
 # Unique — Project Status
 
-## Current state: v0.26.0 (**ALL architecture milestones M0–M4 complete** — M3 final, IR-first expressions)
+## Current state: v0.27.0 (**ALL architecture milestones M0–M4 complete**; zero-reduction campaign closed at residue 16 — both Oracle directions at 100.0% validity)
 
 **Direction-residue campaign closed 2026-07-17** (waves 103–239, user-declared
 architectural floor at `469917a`): the six corpus directions (pg-source and
