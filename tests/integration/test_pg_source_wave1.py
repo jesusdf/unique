@@ -7824,3 +7824,23 @@ class TestWave224ReturnsTableNoBody:
             "tsql",
         )
         assert re.search(r"(?is)AS\s+RETURN \(", out), out
+
+
+class TestWave225CommentOnInBody:
+    """wave 225 (pg-corpus): ``COMMENT ON`` inside a routine body is
+    PG/Oracle SQL — verbatim there, carrier on MySQL/T-SQL."""
+
+    _SQL = (
+        "create function ur() returns int language plpgsql as $$"
+        " begin comment on function ur() is 'x'; return 1; end $$;"
+    )
+
+    def test_comment_on_carrier_mysql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "mysql")
+        assert "UNIQUE:" in out and "COMMENT ON" in out, out
+        assert re.search(r"(?i)RETURN 1", out), out
+
+    def test_comment_on_verbatim_oracle(self) -> None:
+        out = _t2(self._SQL, "postgresql", "oracle")
+        assert re.search(r"(?i)comment on function ur", out), out
+        assert "UNIQUE:" not in out, out

@@ -1122,7 +1122,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          form — a body without a RETURN has no faithful spelling and
          degrades whole (new culprit). Measured: pg→tsql **38 → 34**
          (−4, validity 98.9%). Discovery HOLDS 0. Tests:
-         TestWave224ReturnsTableNoBody (2).**
+         TestWave224ReturnsTableNoBody (2).* Wave 225 (2026-07-17):
+         ``COMMENT ON`` inside a routine body is PG/Oracle SQL —
+         verbatim there (semicolon carried FROM THE PARSER: the
+         transformer-side fix missed pg→pg, which briefly broke
+         discovery to 1 before the in-wave verification caught it),
+         carrier on MySQL/T-SQL. Measured: pg→mysql **37 → 36** (−1).
+         Discovery HOLDS 0 (recovered in-wave). Tests:
+         TestWave225CommentOnInBody (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

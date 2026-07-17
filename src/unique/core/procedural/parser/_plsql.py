@@ -400,6 +400,17 @@ class PlsqlStatementsMixin(ParserBase):
         if tok.is_keyword("SET"):
             # MySQL assignment: SET var = expr;
             return self._parse_mysql_set()
+        if tok.upper_value == "COMMENT" and self._peek(1).upper_value == "ON":
+            # ``COMMENT ON <obj> IS '…'`` inside a body: PG/Oracle SQL,
+            # nothing on MySQL/T-SQL (wave 225). Capture whole.
+            parts_c: list[str] = []
+            while not self._at_end() and self._current().type != TokenType.SEMICOLON:
+                parts_c.append(self._advance().value)
+            self._match_type(TokenType.SEMICOLON)
+            return RawSQL(
+                sql=" ".join(parts_c) + ";",
+                reason="COMMENT ON statement",
+            )
         if self._dialect == "mysql" and tok.upper_value in (
             "FLUSH",
             "RESET",

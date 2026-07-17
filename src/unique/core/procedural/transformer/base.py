@@ -3658,6 +3658,16 @@ class ProceduralTransformer:
         # transpilable body — and a plpgsql block label (<<label>>) has no
         # model: both are valid verbatim on their own engine, a documented
         # carrier anywhere else (waves 122, 126).
+        if node.reason == "COMMENT ON statement":
+            # PG/Oracle SQL; MySQL/T-SQL have no COMMENT ON (wave 225).
+            if self._target in ("postgresql", "oracle"):
+                return node
+            reason = (
+                f"COMMENT ON has no {self._target} equivalent; "
+                "statement preserved as a comment"
+            )
+            self._warnings.append(reason)
+            return RawSQL(sql=node.sql, reason=reason)
         if node.reason.startswith("MySQL admin statement"):
             # Verbatim on MySQL; a documented in-body carrier elsewhere
             # (FLUSH/RESET/PURGE have no cross-engine form — wave 166).
