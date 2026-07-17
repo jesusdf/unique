@@ -587,6 +587,7 @@ class Transformer:
         if self.context.source != self.context.target:
             result = [self._gate_unmapped_operator(node) for node in result]
         if self.context.target in ("tsql", "mysql", "oracle"):
+            result = [self._gate_whole_row_cast(node) for node in result]
             result = [self._gate_srf_window(node) for node in result]
             result = [self._gate_array_constructs(node) for node in result]
             result = [self._gate_empty_select_list(node) for node in result]
@@ -1048,6 +1049,37 @@ class Transformer:
                 if found is not None:
                     return found
         return None
+
+    def _gate_whole_row_cast(self, node: ASTNode) -> ASTNode:
+        """Degrade a whole-row cast (``CAST(a.* AS type)``) — WHOLE, off
+        PG (wave 214): rows are not castable values elsewhere."""
+        if not self._contains_whole_row_cast(node):
+            return node
+        reason = (
+            "PostgreSQL's whole-row cast (CAST(alias.* AS type)) has no "
+            f"{self.context.target} form; statement preserved as a comment"
+        )
+        self.context.warn(reason, "whole_row_cast")
+        self.context.mark_unsupported("whole-row cast")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _contains_whole_row_cast(self, value: object) -> bool:
+        if (
+            isinstance(value, CastExpression)
+            and isinstance(value.expression, ColumnRef)
+            and value.expression.name == "*"
+        ):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_whole_row_cast(getattr(value, f.name))
+                for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_whole_row_cast(item) for item in value)
+        return False
 
     def _gate_oracle_binary_cast(self, node: ASTNode) -> ASTNode:
         """Degrade a CAST to BINARY(n) — WHOLE, on Oracle (wave 211):

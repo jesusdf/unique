@@ -7564,3 +7564,32 @@ class TestWave213MysqlBareStarSiblings:
     def test_lone_star_untouched_mysql(self) -> None:
         out = _t2("select * from department;", "postgresql", "mysql")
         assert re.search(r"(?i)SELECT \*", out), out
+
+
+class TestWave214WholeRowCast:
+    """wave 214 (pg-corpus): PG's whole-row cast (``CAST(a.* AS
+    type)``) has no form elsewhere — whole carrier off PG."""
+
+    def test_whole_row_cast_carrier_mysql(self) -> None:
+        out = _t2(
+            "select (select cast(a.* as char)) from view_a a;",
+            "postgresql",
+            "mysql",
+        )
+        assert "UNIQUE:" in out and "whole-row" in out, out
+
+    def test_whole_row_cast_kept_pg(self) -> None:
+        out = _t2(
+            "select (select cast(a.* as text)) from view_a a;",
+            "postgresql",
+            "postgresql",
+        )
+        assert "UNIQUE:" not in out, out
+
+    def test_column_cast_untouched(self) -> None:
+        out = _t2(
+            "select cast(a.x as char) from view_a a;",
+            "postgresql",
+            "mysql",
+        )
+        assert "UNIQUE:" not in out, out

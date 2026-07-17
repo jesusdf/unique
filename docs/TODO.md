@@ -1051,7 +1051,11 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          also rejects a bare ``*`` alongside other select items (1064)
          — the wave-150 Oracle FROM-relation qualification extends to
          it. Measured: pg→mysql **43 → 40** (−3). Discovery HOLDS 0.
-         Tests: TestWave213MysqlBareStarSiblings (2).**
+         Tests: TestWave213MysqlBareStarSiblings (2).* Wave 214 (2026-07-17): PG's
+         whole-row cast (``CAST(alias.* AS type)``) has no form
+         elsewhere — whole carrier off PG. Measured: pg→mysql
+         **40 → 39**, pg→tsql **39 → 38**. Discovery HOLDS 0. Tests:
+         TestWave214WholeRowCast (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
