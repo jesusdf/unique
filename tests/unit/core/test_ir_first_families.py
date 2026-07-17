@@ -443,3 +443,24 @@ class TestCharindexStartGuardOnPg:
             r"(?i)CASE WHEN POSITION\('x' IN SUBSTRING\(s FROM 5\)\) = 0 THEN 0",
             out,
         ), out
+
+
+class TestNationalLiterals:
+    """N'...' literals are modeled: T-SQL/Oracle keep the prefix, PG has no
+    such literal at all, and MySQL's canonical output drops it."""
+
+    def test_national_drops_on_mysql(self) -> None:
+        t = ProceduralTransformer("tsql", "mysql")
+        t._string_vars = {"v_a"}
+        out = t._ir_transpile_dml("SELECT v_a + N'@'")
+        assert out is not None and "N'" not in out, out
+
+    def test_national_drops_on_postgresql(self) -> None:
+        t = ProceduralTransformer("tsql", "postgresql")
+        t._string_vars = {"v_a"}
+        out = t._ir_transpile_dml("SELECT v_a + N'@'")
+        assert out is not None and "N'" not in out, out
+
+    def test_national_kept_on_oracle(self) -> None:
+        out = _ir("tsql", "oracle", "SELECT N'@' FROM t")
+        assert out is not None and "N'@'" in out, out

@@ -2902,6 +2902,11 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             if dialect in ("tsql", "oracle"):
                 return "1" if node.value else "0"
             return "TRUE" if node.value else "FALSE"
+        if node.dtype == "national":
+            quoted_n = str(node.value).replace("'", "''")
+            if dialect in ("tsql", "oracle"):
+                return f"N'{quoted_n}'"
+            return f"'{quoted_n}'"
         if node.dtype == "hex":
             # Binary/hex literal: MySQL x'8f', T-SQL 0x8f, PG bytea,
             # Oracle HEXTORAW (wave 174 — it shipped as a DECIMAL

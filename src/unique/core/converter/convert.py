@@ -806,6 +806,12 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     if isinstance(expr, exp.HexString):
         return Literal(value=str(expr.this), dtype="hex")
 
+    # T-SQL N'...' national literals: modeled so each target spells them —
+    # PostgreSQL has NO such literal (the RawSQL fallback shipped it raw)
+    # and MySQL's canonical output drops the prefix.
+    if isinstance(expr, exp.National):
+        return Literal(value=str(expr.name), dtype="national")
+
     # Bitwise NOT (``~x``): Oracle has no ~ operator (ORA-00911) — the
     # emitter spells the two's-complement identity there (wave 189).
     if isinstance(expr, exp.BitwiseNot):
