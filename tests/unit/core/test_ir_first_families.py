@@ -79,3 +79,62 @@ class TestToNumberInIr:
     def test_to_number_stays_on_oracle(self) -> None:
         out = _ir("postgresql", "oracle", "SELECT TO_NUMBER(c, '999') FROM t")
         assert out is None or "TO_NUMBER" in out.upper()
+
+
+class TestTriggerShellIdiomsIrFirst:
+    """Trigger-shell spellings survive IR-first routing (M3 family F5/F10/F11).
+
+    Event predicates (INSERTING/UPDATING/UPDATE(col)) are trigger-shell
+    context the source parse would corrupt (UPDATE(col) parses as DML) —
+    those fragments skip the IR and keep the text path's mapping. Oracle's
+    :NEW./:OLD. row-ref spelling applies to IR output too.
+    """
+
+    def _probe(self, monkeypatch, src_sql: str, source: str, target: str) -> str:
+        import pytest  # noqa: F401 - fixture-injected monkeypatch
+
+        monkeypatch.setenv("UNIQUE_IR_FIRST", "1")
+        from unique.core.transpiler import Transpiler
+
+        return Transpiler().transpile(src_sql, source, target).sql
+
+    def test_tsql_update_predicate_not_corrupted(self, monkeypatch) -> None:
+        src = (
+            "CREATE TRIGGER trg ON t AFTER UPDATE AS\n"
+            "BEGIN\n"
+            "    IF UPDATE(col_32)\n"
+            "    BEGIN\n"
+            "        INSERT INTO log (a) VALUES (1);\n"
+            "    END\n"
+            "END\n"
+            "GO\n"
+        )
+        out = self._probe(monkeypatch, src, "tsql", "postgresql")
+        assert "IS DISTINCT FROM" in out, out
+        assert "UPDATE SET" not in out, out
+
+    def test_oracle_inserting_maps_to_tg_op(self, monkeypatch) -> None:
+        src = (
+            "CREATE OR REPLACE TRIGGER trg_m AFTER INSERT OR UPDATE ON t_d\n"
+            "FOR EACH ROW\n"
+            "BEGIN\n"
+            "    IF INSERTING THEN\n"
+            "        INSERT INTO t_log (op) VALUES ('I');\n"
+            "    END IF;\n"
+            "END;\n"
+            "/\n"
+        )
+        out = self._probe(monkeypatch, src, "oracle", "postgresql")
+        assert "(TG_OP = 'INSERT')" in out, out
+        assert "INSERTING" not in out.upper(), out
+
+    def test_mysql_new_ref_spells_colon_new_on_oracle(self, monkeypatch) -> None:
+        src = (
+            "CREATE TRIGGER trg_c BEFORE INSERT ON invoice_line\n"
+            "FOR EACH ROW\n"
+            "BEGIN\n"
+            "    SET NEW.line_total = NEW.qty * NEW.unit_price;\n"
+            "END;\n"
+        )
+        out = self._probe(monkeypatch, src, "mysql", "oracle")
+        assert ":NEW.line_total := :NEW.qty * :NEW.unit_price" in out, out

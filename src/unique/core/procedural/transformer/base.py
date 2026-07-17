@@ -3360,6 +3360,12 @@ class ProceduralTransformer:
         overrides to a comment (it has no NULL statement)."""
         return node
 
+    #: Trigger event-predicate spellings (either family's source form):
+    #: T-SQL ``UPDATE(col)`` and PL/SQL INSERTING/UPDATING/DELETING.
+    _TRIGGER_PREDICATE_RE = re.compile(
+        r"(?i)\bUPDATE\s*\(\s*\w+\s*\)|\b(?:INSERTING|UPDATING|DELETING)\b"
+    )
+
     _FETCH_STATUS_OK_RE = re.compile(r"(?i)@@FETCH_STATUS\s*=\s*0\b")
     _FETCH_STATUS_FAIL_RE = re.compile(
         r"(?i)@@FETCH_STATUS\s*(?:<>|!=)\s*0\b|@@FETCH_STATUS\s*=\s*-\s*[12]\b"
@@ -3618,9 +3624,23 @@ class ProceduralTransformer:
         if self._source == "oracle" and self._in_trigger:
             sql = self._normalize_oracle_pseudorecords(sql)
         if ir_first:
-            ir = self._ir_transpile_dml(sql)
-            if ir is not None:
-                return dataclasses.replace(node, sql=ir)
+            # Trigger event predicates are shell spellings the SOURCE parse
+            # corrupts (T-SQL ``UPDATE(col)`` parses as a DML statement,
+            # INSERTING as a bare identifier) — those fragments stay on the
+            # text path, whose per-target trigger mapping owns them.
+            has_trigger_predicate = (
+                self._in_trigger
+                and self._TRIGGER_PREDICATE_RE.search(self._strip_strings(sql))
+            )
+            if not has_trigger_predicate:
+                ir = self._ir_transpile_dml(sql)
+                if ir is not None:
+                    if self._in_trigger and self._target == "oracle":
+                        # The row-ref spelling is per-target shell context
+                        # (Oracle binds :NEW./:OLD.) — IR output gets the
+                        # same normalization as text output.
+                        ir = self._expr._to_oracle_row_ref(ir)
+                    return dataclasses.replace(node, sql=ir)
         # Apply function name transformations
         sql = self._expr._transform_functions_in_sql(sql)
         # If the expression contains exactly one subquery (no other DML), try
