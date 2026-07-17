@@ -635,6 +635,11 @@ class ProceduralTransformer:
         routine stays syntactically valid and the limitation is documented.
         """
         upper = var.upper()
+        if upper == "@@FETCH_STATUS" and os.environ.get("UNIQUE_IR_FIRST"):
+            # IR-first mode maps the comparison via FETCH_STATUS_FORMS (M3
+            # precondition (a)); commenting the token here would hand the IR
+            # a headless ``/* … */ = 0``.
+            return var
         mapping = self._system_var_map()
         if not mapping:
             return var
