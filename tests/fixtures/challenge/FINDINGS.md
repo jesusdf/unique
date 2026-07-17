@@ -170,6 +170,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (id INT); LOCK TABLES t WRITE`
 
+## my-lpad-trunc  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('ab',),) target=(('bc',),)`
+- src: `SELECT LPAD('abc', 2, 'x') AS r`
+
 ## my-make-set  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
@@ -194,6 +199,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE`
 - src: `SELECT PERIOD_DIFF(202006, 202001) AS r`
+
+## my-recursive-func  (mysql)
+- targets: tsql(invalid)
+- live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
+- src: `CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END`
 
 ## my-soundex-format  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -286,6 +296,12 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - src: `CREATE PROCEDURE p AS TYPE t_tab IS TABLE OF NUMBER; v t_tab; BEGIN SELECT 1 BULK COLLECT INTO v FROM DUAL; END;
 /`
 
+## ora-case-statement  (oracle)
+- targets: tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'ELSE'.DB-Lib error message 20018, severity 15:\`
+- src: `CREATE PROCEDURE p (n IN NUMBER) AS BEGIN CASE n WHEN 1 THEN NULL; ELSE NULL; END CASE; END;
+/`
+
 ## ora-cast-expr  (oracle)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -315,6 +331,12 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: mysql(invalid)
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
 - src: `CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; CLOSE c; END;`
+
+## ora-cursor-for-loop  (oracle)
+- targets: tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'END'.DB-Lib error message 20018, severity 15:\n`
+- src: `CREATE PROCEDURE p AS BEGIN FOR r IN (SELECT 1 AS x FROM DUAL) LOOP NULL; END LOOP; END;
+/`
 
 ## ora-date-plus-int  (oracle)
 - targets: mysql(semantic), postgresql(invalid)
@@ -459,10 +481,21 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA`
 - src: `SELECT RATIO_TO_REPORT(x) OVER () FROM (SELECT 1 x FROM DUAL)`
 
+## ora-recursive-func  (oracle)
+- targets: tsql(invalid)
+- live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
+- src: `CREATE FUNCTION f(n NUMBER) RETURN NUMBER AS BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END;
+/`
+
 ## ora-regexp-count  (oracle)
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_41751da4688e.REGEXP_COUNT does not exist')`
 - src: `SELECT REGEXP_COUNT('a1b2c3', '[0-9]') AS r FROM DUAL`
+
+## ora-rtrim-chars  (oracle)
+- targets: mysql(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('a',),) target=(('',),)`
+- src: `SELECT RTRIM('axxx', 'x') AS r FROM DUAL`
 
 ## ora-sequence  (oracle)
 - targets: mysql(invalid)
@@ -586,6 +619,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNC-DIFF: source=(('8',),) target=()`
 - src: `SELECT 2 ^ 3 AS r`
 
+## pg-case-statement  (postgresql)
+- targets: tsql(invalid)
+- live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
+- src: `CREATE FUNCTION f(n INT) RETURNS TEXT AS $$ BEGIN CASE n WHEN 1 THEN RETURN 'one'; ELSE RETURN 'other'; END CASE; END; $$ LANGUAGE`
+
 ## pg-cast-int  (postgresql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
@@ -636,6 +674,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNC-DIFF: source=(('3',),) target=()`
 - src: `SELECT DIV(7, 2) AS r`
 
+## pg-div-mod-int  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('3', '2'),) target=()`
+- src: `SELECT DIV(17, 5), 17 % 5`
+
 ## pg-domain  (postgresql)
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
@@ -680,6 +723,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1`
 - src: `SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r`
+
+## pg-for-record-loop  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE FUNCTION f() RETURNS INT AS $$ DECLARE r RECORD; t INT := 0; BEGIN FOR r IN SELECT generate_series(1,3) AS n LOOP t := t +`
 
 ## pg-for-update  (postgresql)
 - targets: mysql(invalid)
@@ -811,6 +859,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever`
 - src: `SELECT MD5('abc') AS r`
 
+## pg-mod-decimal  (postgresql)
+- targets: mysql(func), oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
+- src: `SELECT MOD(10, 3.5::numeric) AS r`
+
 ## pg-mode  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -855,6 +908,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m`
 - src: `CREATE TABLE t (rng INT4RANGE, tsr TSRANGE)`
+
+## pg-recursive-func  (postgresql)
+- targets: tsql(invalid)
+- live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
+- src: `CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END; $$ LANGUAGE plpgsql`
 
 ## pg-regexp-matches  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -946,11 +1004,25 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')`
 - src: `SELECT TRANSLATE('abc', 'ab', 'xy') AS r`
 
+## pg-trigger-multi-event  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT, n INT);
+CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
+CREATE`
+
 ## pg-trigger-raise  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE t (id INT PRIMARY KEY, n INT);
 CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN IF OLD.n <> NEW.n THEN RAISE EXCE`
+
+## pg-trigger-statement-level  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT);
+CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN RETURN NULL; END; $$ LANGUAGE plpgsql;
+CREATE TRIGGE`
 
 ## pg-trim-both-chars  (postgresql)
 - targets: oracle(invalid)
@@ -1317,10 +1389,15 @@ SELECT * FROM t TABLESAMPLE (10 PERCENT)`
 GO
 CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 
+## ts-while-break-continue  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `PROCEDURE P compiled INVALID (line 11): PLS-00201: identifier 'BREAK' must be declared`
+- src: `CREATE PROCEDURE p AS BEGIN DECLARE @i INT = 0; WHILE @i < 5 BEGIN SET @i = @i + 1; IF @i = 3 CONTINUE; IF @i = 5 BREAK; END; END`
+
 ## ts-while-loop  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `PROCEDURE P compiled INVALID (line 15): PLS-00103: Encountered the symbol "=" when expecti`
 - src: `CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN SET @n -=`
 ---
 
-Totals: 257 distinct constructs; defect rows by kind: carrier 50, func 74, invalid 414, semantic 2.
+Totals: 271 distinct constructs; defect rows by kind: carrier 50, func 82, invalid 426, semantic 2.

@@ -222,6 +222,9 @@ CREATE TABLE t (id INT);
 GO
 CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION
 
+-- CASE[open]: ts-while-break-continue — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 11): PLS-00201: identifier 'BREAK' must be declared
+CREATE PROCEDURE p AS BEGIN DECLARE @i INT = 0; WHILE @i < 5 BEGIN SET @i = @i + 1; IF @i = 3 CONTINUE; IF @i = 5 BREAK; END; END
+
 -- CASE[open]: ts-while-loop — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 15): PLS-00103: Encountered the symbol "=" when expecti
 CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN SET @n -= 1; END; END
 

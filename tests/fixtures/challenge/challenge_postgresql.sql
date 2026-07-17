@@ -37,6 +37,9 @@ CREATE TRIGGER trg BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION trg_fn();
 -- CASE[open]: pg-caret-power — fails on mysql. FUNC-DIFF: source=(('8',),) target=()
 SELECT 2 ^ 3 AS r
 
+-- CASE[open]: pg-case-statement — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
+CREATE FUNCTION f(n INT) RETURNS TEXT AS $$ BEGIN CASE n WHEN 1 THEN RETURN 'one'; ELSE RETURN 'other'; END CASE; END; $$ LANGUAGE plpgsql
+
 -- CASE[open]: pg-cast-int — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
 SELECT CAST(2.7 AS INT) AS r
 
@@ -67,6 +70,9 @@ SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d
 -- CASE[open]: pg-div-func — fails on mysql. FUNC-DIFF: source=(('3',),) target=()
 SELECT DIV(7, 2) AS r
 
+-- CASE[open]: pg-div-mod-int — fails on mysql. FUNC-DIFF: source=(('3', '2'),) target=()
+SELECT DIV(17, 5), 17 % 5
+
 -- CASE[open]: pg-domain — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE DOMAIN posint AS INT CHECK (VALUE > 0)
 
@@ -93,6 +99,9 @@ SELECT EXTRACT(DOW FROM DATE '2020-01-01') AS d
 
 -- CASE[open]: pg-extract-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1
 SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r
+
+-- CASE[open]: pg-for-record-loop — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE FUNCTION f() RETURNS INT AS $$ DECLARE r RECORD; t INT := 0; BEGIN FOR r IN SELECT generate_series(1,3) AS n LOOP t := t + r.n; END LOOP; RETURN t; END; $$ LANGUAGE plpgsql
 
 -- CASE[open]: pg-for-update — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 CREATE TABLE t (id INT); SELECT * FROM t FOR UPDATE
@@ -172,6 +181,9 @@ SELECT LOG(10, 100), LN(2.718), POWER(2, 8), SQRT(16)
 -- CASE[open]: pg-md5 — fails on oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT MD5('abc') AS r
 
+-- CASE[open]: pg-mod-decimal — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
+SELECT MOD(10, 3.5::numeric) AS r
+
 -- CASE[open]: pg-mode — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT MODE() WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(1),(2)) v(x)
 
@@ -198,6 +210,9 @@ SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')
 
 -- CASE[open]: pg-range-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m
 CREATE TABLE t (rng INT4RANGE, tsr TSRANGE)
+
+-- CASE[open]: pg-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
+CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END; $$ LANGUAGE plpgsql
 
 -- CASE[open]: pg-regexp-matches — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE
 SELECT REGEXP_MATCHES('a1b2', '[0-9]', 'g') AS r
@@ -253,10 +268,20 @@ SELECT 'a ' = 'a' AS r
 -- CASE[open]: pg-translate — fails on mysql. (1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
 
+-- CASE[open]: pg-trigger-multi-event — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id INT, n INT);
+CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER trg AFTER INSERT OR UPDATE OR DELETE ON t FOR EACH ROW EXECUTE FUNCTION trg_fn();
+
 -- CASE[open]: pg-trigger-raise — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id INT PRIMARY KEY, n INT);
 CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN IF OLD.n <> NEW.n THEN RAISE EXCEPTION 'no change allowed'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg BEFORE UPDATE ON t FOR EACH ROW EXECUTE PROCEDURE trg_fn();
+
+-- CASE[open]: pg-trigger-statement-level — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id INT);
+CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN RETURN NULL; END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER trg AFTER INSERT ON t FOR EACH STATEMENT EXECUTE FUNCTION trg_fn();
 
 -- CASE[open]: pg-trim-both-chars — fails on oracle. ORA-30001: trim set should have only one character
 SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS t
