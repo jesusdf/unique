@@ -205,6 +205,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('2',),) target=(('3',),)`
 - src: `SELECT FLOOR(2.9999999999999999) AS r`
 
+## my-gc-order  (mysql)
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)`
+- src: `SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t`
+
 ## my-get-lock  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
@@ -715,6 +720,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE a (id NUMBER); CREATE TABLE b (id NUMBER);
 INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
+
+## ora-interval-partition  (oracle)
+- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (id NUMBER, dt DATE) PARTITION BY RANGE (dt) INTERVAL (NUMTOYMINTERVAL(1,'MONTH')) (PARTITION p0 VALUES LESS THAN (`
 
 ## ora-interval-tochar  (oracle)
 - targets: postgresql(func)
@@ -1338,6 +1348,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ`
 - src: `SELECT x'FF'::int AS h, 1.5e3 AS s`
 
+## pg-inheritance  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE parent (id INT); CREATE TABLE child () INHERITS (parent)`
+
 ## pg-initcap  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s`
@@ -1362,6 +1377,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S`
 - src: `SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7`
+
+## pg-json-num  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('1.5',),) target=()`
+- src: `SELECT ('{"a":1.5}'::jsonb->>'a')`
 
 ## pg-jsonb-agg  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -1487,6 +1507,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE t (a INT, b INT); CREATE UNIQUE INDEX ix ON t (a) WHERE b > 0`
+
+## pg-partition-of  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT, dt DATE) PARTITION BY RANGE (dt); CREATE TABLE t_2020 PARTITION OF t FOR VALUES FROM ('2020-01-01') TO ('2`
 
 ## pg-percentile  (postgresql)
 - targets: mysql(invalid)
@@ -2004,6 +2029,11 @@ GRANT SELECT ON t TO PUBLIC`
 - live error: `ORA-00936: missing expression`
 - src: `SELECT SCOPE_IDENTITY(), @@IDENTITY, IDENT_CURRENT('t')`
 
+## ts-inline-index2  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00902: invalid datatype`
+- src: `CREATE TABLE t (id INT, name VARCHAR(50), INDEX ix_name NONCLUSTERED (name))`
+
 ## ts-insert-output  (tsql)
 - targets: mysql(invalid), oracle(invalid)
 - live error: `ORA-00925: missing INTO keyword`
@@ -2258,4 +2288,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (id INT IDENTITY(100, 5))`
 ---
 
-Totals: 441 distinct constructs; defect rows by kind: carrier 64, func 165, invalid 628, semantic 2, silent-drop 42.
+Totals: 447 distinct constructs; defect rows by kind: carrier 67, func 167, invalid 633, semantic 2, silent-drop 42.

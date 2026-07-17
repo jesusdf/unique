@@ -136,6 +136,9 @@ SELECT INITCAP('hello world') AS r FROM DUAL
 CREATE TABLE a (id NUMBER); CREATE TABLE b (id NUMBER);
 INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM DUAL
 
+-- CASE[open]: ora-interval-partition — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (id NUMBER, dt DATE) PARTITION BY RANGE (dt) INTERVAL (NUMTOYMINTERVAL(1,'MONTH')) (PARTITION p0 VALUES LESS THAN (DATE '2020-01-01'))
+
 -- CASE[open]: ora-interval-tochar — fails on postgresql. FUNC-DIFF: source=(('+02 03:04:05.000000',),) target=(('2 days 03:04:05',),)
 SELECT TO_CHAR(INTERVAL '2 3:04:05.000' DAY TO SECOND) AS r FROM DUAL
 

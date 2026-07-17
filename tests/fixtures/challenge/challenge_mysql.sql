@@ -122,6 +122,9 @@ SELECT FIELD('b', 'a', 'b', 'c') AS r
 -- CASE[open]: my-floor-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
 SELECT FLOOR(2.9999999999999999) AS r
 
+-- CASE[open]: my-gc-order — fails on oracle. FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)
+SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t
+
 -- CASE[open]: my-get-lock — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT GET_LOCK('l', 0), RELEASE_LOCK('l')
 

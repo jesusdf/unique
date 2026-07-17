@@ -142,6 +142,9 @@ SELECT HOST_NAME(), DB_NAME(), SUSER_SNAME()
 -- CASE[open]: ts-identity-funcs — fails on mysql, oracle, postgresql. ORA-00936: missing expression
 SELECT SCOPE_IDENTITY(), @@IDENTITY, IDENT_CURRENT('t')
 
+-- CASE[open]: ts-inline-index2 — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
+CREATE TABLE t (id INT, name VARCHAR(50), INDEX ix_name NONCLUSTERED (name))
+
 -- CASE[open]: ts-insert-output — fails on mysql, oracle. ORA-00925: missing INTO keyword
 CREATE TABLE t (id INT, n INT);
 GO

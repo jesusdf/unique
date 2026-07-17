@@ -214,6 +214,9 @@ SELECT x, SUM(y) FROM (VALUES (1,10)) v(x,y) GROUP BY GROUPING SETS ((x),())
 -- CASE[open]: pg-hex-literal — fails on oracle. ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ
 SELECT x'FF'::int AS h, 1.5e3 AS s
 
+-- CASE[open]: pg-inheritance — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE parent (id INT); CREATE TABLE child () INHERITS (parent)
+
 -- CASE[open]: pg-initcap — fails on mysql, oracle, tsql. (195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT INITCAP('hello world') AS r
 
@@ -228,6 +231,9 @@ SELECT 1 INTERSECT ALL SELECT 1
 
 -- CASE[open]: pg-interval-arith — fails on mysql, oracle, tsql. (207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S
 SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7
+
+-- CASE[open]: pg-json-num — fails on mysql. FUNC-DIFF: source=(('1.5',),) target=()
+SELECT ('{"a":1.5}'::jsonb->>'a')
 
 -- CASE[open]: pg-jsonb-agg — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSONB_AGG(x) FROM (VALUES (1),(2)) v(x)
@@ -303,6 +309,9 @@ SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o
 
 -- CASE[open]: pg-partial-unique — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (a INT, b INT); CREATE UNIQUE INDEX ix ON t (a) WHERE b > 0
+
+-- CASE[open]: pg-partition-of — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id INT, dt DATE) PARTITION BY RANGE (dt); CREATE TABLE t_2020 PARTITION OF t FOR VALUES FROM ('2020-01-01') TO ('2021-01-01')
 
 -- CASE[open]: pg-percentile — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(x)
