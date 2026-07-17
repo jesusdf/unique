@@ -1471,7 +1471,14 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         base = re.sub(r"(?i)\s*\bRETURNING\b.*$", "", node.sql).rstrip()
         # The stripped base may still carry PG-only DML shapes (wave
         # 203): UPDATE … FROM is MySQL's multi-table UPDATE, DELETE …
-        # USING its multi-table DELETE.
+        # USING its multi-table DELETE — and MySQL takes WITH only
+        # inside the INSERT's SELECT (wave 222).
+        base = re.sub(
+            r"(?is)^\s*WITH\s+(.*?)\s+INSERT\s+INTO\s+(\S+)\s+SELECT\b",
+            r"INSERT INTO \2 WITH \1 SELECT",
+            base,
+            count=1,
+        )
         base = re.sub(
             r"(?is)\bUPDATE\s+([\w.`\"]+)\s+SET\s+(.*?)\s+FROM\s+([\w.`\",\s]+?)"
             r"(\s+WHERE\b)",

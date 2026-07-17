@@ -7750,3 +7750,17 @@ class TestWave221MysqlRefcursorVariable:
     def test_refcursor_var_kept_pg(self) -> None:
         out = _t2(self._SQL, "postgresql", "postgresql")
         assert "UNIQUE:" not in out, out
+
+
+class TestWave222MysqlReturningWithInsert:
+    """wave 222 (pg-corpus): MySQL takes WITH only inside the INSERT's
+    SELECT — the RETURNING-stripped WITH-first form was 1064."""
+
+    def test_returning_with_insert_mysql(self) -> None:
+        out = _t2(
+            "with t as (select a from y) insert into y"
+            " select a+20 from t returning *;",
+            "postgresql",
+            "mysql",
+        )
+        assert re.search(r"(?i)^INSERT INTO y WITH t AS", out.strip()), out

@@ -1103,7 +1103,12 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          VARIABLE (opened later, dynamically) has no form there; the
          routine degrades whole (sibling of the wave-202 return-type
          culprit). Measured: pg→mysql **39 → 38** (−1). Discovery
-         HOLDS 0. Tests: TestWave221MysqlRefcursorVariable (2).**
+         HOLDS 0. Tests: TestWave221MysqlRefcursorVariable (2).* Wave 222 (2026-07-17): MySQL
+         takes WITH only inside the INSERT's SELECT — the
+         RETURNING-stripped WITH-first form was 1064 (the wave-206
+         Oracle relocation, mirrored). Measured: pg→mysql **38 → 37**
+         (−1). Discovery HOLDS 0. Tests:
+         TestWave222MysqlReturningWithInsert (1).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
