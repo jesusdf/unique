@@ -53,6 +53,9 @@ SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r
 -- CASE[open]: ts-binary-length — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
 SELECT DATALENGTH(CAST('hello' AS VARBINARY(MAX))) AS r
 
+-- CASE[open]: ts-bit-fns — fails on mysql, oracle, postgresql. ORA-00904: "SET_BIT": invalid identifier
+SELECT GET_BIT(0x0A, 1), SET_BIT(0x0A, 0, 1)
+
 -- CASE[open]: ts-cast-bit — fails on mysql, oracle. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT CAST(2 AS BIT) AS r
 
@@ -100,6 +103,9 @@ CREATE ROLE r AUTHORIZATION dbo
 
 -- CASE[open]: ts-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT FROM c INTO @x; WHILE @@FETCH_STATUS = 0 BEGIN FETCH NEXT FROM c INTO @x; END; CLOSE c; DEALLOCATE c; END
+
+-- CASE[open]: ts-date-bucket2 — fails on mysql, oracle, postgresql. ORA-01861: literal does not match format string
+SELECT DATE_BUCKET(MINUTE, 15, CAST('2020-01-01 00:07' AS DATETIME2))
 
 -- CASE[open]: ts-dateadd — fails on oracle, postgresql. ORA-30081: invalid data type for datetime/interval arithmetic
 SELECT DATEADD(DAY, 7, '2020-01-01') AS r

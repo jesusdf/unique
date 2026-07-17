@@ -42,6 +42,9 @@ ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD'
 CREATE PROCEDURE p (a NUMBER) AUTHID CURRENT_USER AS BEGIN NULL; END;
 /
 
+-- CASE[open]: ora-bit-fns — fails on mysql, postgresql, tsql. (195, b"'BITAND' is not a recognized built-in function name.DB-Lib error message 20018, se
+SELECT BITAND(12, 10), BIN_TO_NUM(1,1,0) FROM DUAL
+
 -- CASE[open]: ora-bitand — fails on mysql, postgresql, tsql. (195, b"'BITAND' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT BITAND(5, 3) AS r FROM DUAL
 
@@ -262,6 +265,9 @@ SELECT MONTHS_BETWEEN(DATE '2020-03-10', DATE '2020-01-15') AS r FROM DUAL
 -- CASE[open]: ora-nanvl — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA
 SELECT NANVL(0/1, 0) AS r FROM DUAL
 
+-- CASE[open]: ora-nchr-unistr — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NC
+SELECT NCHR(233), UNISTR('\00e9') FROM DUAL
+
 -- CASE[open]: ora-nested-proc — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE PROCEDURE p AS PROCEDURE helper IS BEGIN NULL; END; BEGIN helper; END;
 /
@@ -325,6 +331,9 @@ SELECT RATIO_TO_REPORT(x) OVER () FROM (SELECT 1 x FROM DUAL)
 
 -- CASE[open]: ora-ratio2 — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT RATIO_TO_REPORT(1) OVER () FROM DUAL
+
+-- CASE[open]: ora-rawtohex — fails on mysql, postgresql, tsql. (195, b"'RAWTOHEX' is not a recognized built-in function name.DB-Lib error message 20018, 
+SELECT RAWTOHEX('AB'), HEXTORAW('4142') FROM DUAL
 
 -- CASE[open]: ora-realworld-emp — fails on tsql. (1003, b'Line 13: FOR UPDATE clause allowed only for DECLARE CURSOR.DB-Lib error message 2
 CREATE TABLE emp (id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name VARCHAR2(50), mgr_id NUMBER, salary NUMBER(10,2));

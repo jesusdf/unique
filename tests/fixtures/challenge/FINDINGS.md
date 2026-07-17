@@ -105,6 +105,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI`
 - src: `SELECT BIT_COUNT(255) AS r`
 
+## my-bit-fns  (mysql)
+- targets: postgresql(invalid)
+- live error: `function bitwise_count(bit) does not exist`
+- src: `SELECT BIT_COUNT(b'1011'), BIT_LENGTH('a'), OCTET_LENGTH('ab')`
+
 ## my-bitnot  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('18446744073709551616',),) target=(('-1',),)`
@@ -119,6 +124,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: postgresql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('t',),)`
 - src: `SELECT CAST((1=1) AS CHAR) AS r`
+
+## my-cast-charset  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-25137: Data value out of range`
+- src: `SELECT CAST(0xC3A9 AS CHAR CHARACTER SET utf8mb4) AS r`
 
 ## my-cast-convert  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -209,6 +219,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid)
 - live error: `ORA-00904: "CONCAT_WS": invalid identifier`
 - src: `SELECT CONCAT_WS('-', 'a', 'b', NULL, 'c') AS r`
+
+## my-conv2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
+- src: `SELECT CONV('7F', 16, 2), CONV(255, 10, 16)`
 
 ## my-convert-signed  (mysql)
 - targets: oracle(invalid)
@@ -431,6 +446,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `(195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')`
 
+## my-lastday-extract  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
+- src: `SELECT LAST_DAY('2020-02-15'), EXTRACT(DAY FROM LAST_DAY('2020-02-15'))`
+
 ## my-least-null2  (mysql)
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('1',),)`
@@ -600,6 +620,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - targets: tsql(invalid)
 - live error: `(8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve`
 - src: `CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END`
+
+## my-set-fns  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI`
+- src: `SELECT FIND_IN_SET('b', 'a,b,c'), MAKE_SET(6, 'x','y','z')`
 
 ## my-soundex-eq  (mysql)
 - targets: postgresql(invalid)
@@ -867,6 +892,11 @@ ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENABLE NOVALIDATE`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE PROCEDURE p (a NUMBER) AUTHID CURRENT_USER AS BEGIN NULL; END;
 /`
+
+## ora-bit-fns  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'BITAND' is not a recognized built-in function name.DB-Lib error message 20018, se`
+- src: `SELECT BITAND(12, 10), BIN_TO_NUM(1,1,0) FROM DUAL`
 
 ## ora-bitand  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1223,6 +1253,11 @@ ALTER TABLE t MODIFY a DEFAULT 5`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA`
 - src: `SELECT NANVL(0/1, 0) AS r FROM DUAL`
 
+## ora-nchr-unistr  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NC`
+- src: `SELECT NCHR(233), UNISTR('\00e9') FROM DUAL`
+
 ## ora-nested-proc  (oracle)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -1321,6 +1356,11 @@ CREATE PACKAGE BODY pkg AS FUNCTION f(x NUMBER) RETURN NUMBER`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA`
 - src: `SELECT RATIO_TO_REPORT(1) OVER () FROM DUAL`
+
+## ora-rawtohex  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'RAWTOHEX' is not a recognized built-in function name.DB-Lib error message 20018, `
+- src: `SELECT RAWTOHEX('AB'), HEXTORAW('4142') FROM DUAL`
 
 ## ora-realworld-emp  (oracle)
 - targets: tsql(invalid)
@@ -1629,6 +1669,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - src: `CREATE TABLE t (id INT PRIMARY KEY, n INT, updated TIMESTAMP);
 CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 
+## pg-bit-fns  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1305, 'FUNCTION unique_val_ff6c8e4945b4.GETBIT does not exist')`
+- src: `SELECT get_bit(B'1011', 0), set_bit(B'0000', 1, 1)`
+
 ## pg-bitnot  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('-1',),) target=(('18446744073709551616',),)`
@@ -1703,6 +1748,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) NOT VALID`
+
+## pg-chr-ascii-unicode  (postgresql)
+- targets: oracle(invalid)
+- live error: `'utf-8' codec can't decode byte 0xe9 in position 0: unexpected end of data`
+- src: `SELECT chr(233), ascii('é')`
 
 ## pg-chr-concat  (postgresql)
 - targets: mysql(func)
@@ -1793,6 +1843,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n<3) SEARCH DEPTH FIRST BY n SET ord SELECT * FROM r`
+
+## pg-date-bin  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA`
+- src: `SELECT date_bin('15 minutes', TIMESTAMP '2020-01-01 00:07', TIMESTAMP '2020-01-01')`
 
 ## pg-date-diff-days  (postgresql)
 - targets: mysql(func)
@@ -2361,6 +2416,11 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - live error: `(156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG`
 - src: `BEGIN; SAVEPOINT sp; ROLLBACK TO SAVEPOINT sp; COMMIT`
 
+## pg-scale  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.sc`
+- src: `SELECT scale(1.230), trim_scale(1.230)`
+
 ## pg-sequence  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne`
@@ -2455,6 +2515,11 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('-1234.5',),) target=(('-9999123599',),)`
 - src: `SELECT to_char(-1234.5, '9999.99') AS r`
+
+## pg-tohex2  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
+- src: `SELECT to_hex(255), to_char(255, 'XX')`
 
 ## pg-trailing-eq  (postgresql)
 - targets: oracle(func), tsql(func)
@@ -2744,6 +2809,11 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - live error: `ORA-00902: invalid datatype`
 - src: `SELECT DATALENGTH(CAST('hello' AS VARBINARY(MAX))) AS r`
 
+## ts-bit-fns  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "SET_BIT": invalid identifier`
+- src: `SELECT GET_BIT(0x0A, 1), SET_BIT(0x0A, 0, 1)`
+
 ## ts-cast-bit  (tsql)
 - targets: mysql(func), oracle(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
@@ -2823,6 +2893,11 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - targets: mysql(invalid)
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
 - src: `CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT FROM c IN`
+
+## ts-date-bucket2  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-01861: literal does not match format string`
+- src: `SELECT DATE_BUCKET(MINUTE, 15, CAST('2020-01-01 00:07' AS DATETIME2))`
 
 ## ts-dateadd  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
@@ -3275,4 +3350,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 628 distinct constructs; defect rows by kind: carrier 138, func 256, invalid 801, semantic 2, silent-drop 75.
+Totals: 643 distinct constructs; defect rows by kind: carrier 138, func 256, invalid 837, semantic 2, silent-drop 75.

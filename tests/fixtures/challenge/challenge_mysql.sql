@@ -44,6 +44,9 @@ SELECT BIT_XOR(x), BIT_OR(x) FROM (SELECT 1 x UNION SELECT 2) t
 -- CASE[open]: my-bit-count — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT BIT_COUNT(255) AS r
 
+-- CASE[open]: my-bit-fns — fails on postgresql. function bitwise_count(bit) does not exist
+SELECT BIT_COUNT(b'1011'), BIT_LENGTH('a'), OCTET_LENGTH('ab')
+
 -- CASE[open]: my-bitnot — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('18446744073709551616',),) target=(('-1',),)
 SELECT ~0 AS r
 
@@ -52,6 +55,9 @@ CREATE TABLE t (data BLOB); INSERT INTO t VALUES (LOAD_FILE('/x')); SELECT LENGT
 
 -- CASE[open]: my-bool-char — fails on postgresql. FUNC-DIFF: source=(('1',),) target=(('t',),)
 SELECT CAST((1=1) AS CHAR) AS r
+
+-- CASE[open]: my-cast-charset — fails on oracle. ORA-25137: Data value out of range
+SELECT CAST(0xC3A9 AS CHAR CHARACTER SET utf8mb4) AS r
 
 -- CASE[open]: my-cast-convert — fails on oracle, postgresql, tsql. (243, b'Type UBIGINT is not a defined system type.DB-Lib error message 20018, severity 16:
 SELECT CAST(123 AS CHAR), CONVERT('2020-01-01', DATE), CAST(1 AS UNSIGNED)
@@ -106,6 +112,9 @@ SELECT CONCAT('a', NULL, 'b') AS r
 
 -- CASE[open]: my-concat-ws — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT CONCAT_WS('-', 'a', 'b', NULL, 'c') AS r
+
+-- CASE[open]: my-conv2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
+SELECT CONV('7F', 16, 2), CONV(255, 10, 16)
 
 -- CASE[open]: my-convert-signed — fails on oracle. ORA-00902: invalid datatype
 SELECT CONVERT('123', SIGNED) AS r
@@ -240,6 +249,9 @@ CREATE TABLE t (data JSON)
 -- CASE[open]: my-last-day-name — fails on oracle, postgresql, tsql. (195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')
 
+-- CASE[open]: my-lastday-extract — fails on oracle, postgresql, tsql. (195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
+SELECT LAST_DAY('2020-02-15'), EXTRACT(DAY FROM LAST_DAY('2020-02-15'))
+
 -- CASE[open]: my-least-null2 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1',),)
 SELECT LEAST(1, 2, NULL, 3) AS r
 
@@ -342,6 +354,9 @@ CREATE PROCEDURE p() BEGIN DECLARE v INT; SET v = (SELECT COUNT(*) FROM (SELECT 
 
 -- CASE[open]: my-select-into-out — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
 CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END
+
+-- CASE[open]: my-set-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
+SELECT FIND_IN_SET('b', 'a,b,c'), MAKE_SET(6, 'x','y','z')
 
 -- CASE[open]: my-soundex-eq — fails on postgresql. function soundex(unknown) does not exist
 SELECT SOUNDEX('hello') = SOUNDEX('hallo') AS r

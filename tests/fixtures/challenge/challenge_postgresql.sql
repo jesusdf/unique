@@ -67,6 +67,9 @@ CREATE TABLE t (id INT PRIMARY KEY, n INT, updated TIMESTAMP);
 CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated := now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION trg_fn();
 
+-- CASE[open]: pg-bit-fns — fails on mysql. (1305, 'FUNCTION unique_val_ff6c8e4945b4.GETBIT does not exist')
+SELECT get_bit(B'1011', 0), set_bit(B'0000', 1, 1)
+
 -- CASE[open]: pg-bitnot — fails on mysql. FUNC-DIFF: source=(('-1',),) target=(('18446744073709551616',),)
 SELECT ~0 AS r
 
@@ -111,6 +114,9 @@ SELECT '2020-01-01'::timestamptz AS r
 
 -- CASE[open]: pg-check-notvalid — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) NOT VALID
+
+-- CASE[open]: pg-chr-ascii-unicode — fails on oracle. 'utf-8' codec can't decode byte 0xe9 in position 0: unexpected end of data
+SELECT chr(233), ascii('é')
 
 -- CASE[open]: pg-chr-concat — fails on mysql. FUNC-DIFF: source=(('AB',),) target=(('4142',),)
 SELECT chr(65) || chr(66)
@@ -165,6 +171,9 @@ CREATE TABLE t (id INT, n INT, s VARCHAR(50)); WITH moved AS (DELETE FROM t WHER
 
 -- CASE[open]: pg-cte-search — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n<3) SEARCH DEPTH FIRST BY n SET ord SELECT * FROM r
+
+-- CASE[open]: pg-date-bin — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA
+SELECT date_bin('15 minutes', TIMESTAMP '2020-01-01 00:07', TIMESTAMP '2020-01-01')
 
 -- CASE[open]: pg-date-diff-days — fails on mysql. FUNC-DIFF: source=(('60',),) target=(('200',),)
 SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r
@@ -512,6 +521,9 @@ CREATE TABLE t (a INT); CREATE RULE r AS ON DELETE TO t DO INSTEAD NOTHING
 -- CASE[open]: pg-savepoint — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG
 BEGIN; SAVEPOINT sp; ROLLBACK TO SAVEPOINT sp; COMMIT
 
+-- CASE[open]: pg-scale — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.sc
+SELECT scale(1.230), trim_scale(1.230)
+
 -- CASE[open]: pg-sequence — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne
 CREATE SEQUENCE seq; SELECT nextval('seq'), currval('seq')
 
@@ -568,6 +580,9 @@ SELECT to_hex(255), pg_typeof(1)
 
 -- CASE[open]: pg-tochar-neg — fails on mysql, tsql. FUNC-DIFF: source=(('-1234.5',),) target=(('-9999123599',),)
 SELECT to_char(-1234.5, '9999.99') AS r
+
+-- CASE[open]: pg-tohex2 — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
+SELECT to_hex(255), to_char(255, 'XX')
 
 -- CASE[open]: pg-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'a ' = 'a' AS r
