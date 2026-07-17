@@ -77,6 +77,9 @@ SELECT CONCAT('a', NULL, 'b') AS r
 -- CASE[open]: ts-concat-ws — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT CONCAT_WS('-', 'a', 'b', 'c') AS r
 
+-- CASE[open]: ts-concatws2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
+SELECT CONCAT_WS(',', 'a', NULL, 'b') AS r
+
 -- CASE[open]: ts-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT FROM c INTO @x; WHILE @@FETCH_STATUS = 0 BEGIN FETCH NEXT FROM c INTO @x; END; CLOSE c; DEALLOCATE c; END
 
@@ -112,6 +115,9 @@ CREATE TABLE t (a INT, b INT); CREATE NONCLUSTERED INDEX ix ON t (a) INCLUDE (b)
 
 -- CASE[open]: ts-format-number — fails on mysql, oracle, postgresql. ORA-00904: "NUMBER_TO_STR": invalid identifier
 SELECT FORMAT(1234.5, 'N2') AS r
+
+-- CASE[open]: ts-formatmessage — fails on mysql, oracle, postgresql. ORA-00904: "FORMATMESSAGE": invalid identifier
+SELECT FORMATMESSAGE('hi %s', 'x') AS r
 
 -- CASE[open]: ts-geography — fails on mysql, oracle, postgresql. ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier
 SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r
@@ -164,6 +170,15 @@ SELECT COL_LENGTH('t', 'c'), OBJECT_ID('t')
 -- CASE[open]: ts-money — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (price MONEY, small SMALLMONEY)
 
+-- CASE[open]: ts-money-arith — fails on mysql, postgresql. FUNC-DIFF: source=(('12.8',),) target=(('$12.80',),)
+SELECT CAST(10.5 AS MONEY) + CAST(2.3 AS MONEY) AS r
+
+-- CASE[open]: ts-month-overflow — fails on mysql. FUNC-DIFF: source=(('2020-02-29 00:00:00',),) target=(('2020-02-29',),)
+SELECT DATEADD(MONTH, 1, '2020-01-31') AS r
+
+-- CASE[open]: ts-nchar-hex — fails on mysql, oracle, postgresql. ORA-00904: "NCHAR": invalid identifier
+SELECT NCHAR(0x1F600) AS r
+
 -- CASE[open]: ts-nolock-hint — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 CREATE TABLE t (id INT);
 GO
@@ -208,6 +223,9 @@ EXEC sp_rename 't.a', 'x', 'COLUMN'
 -- CASE[open]: ts-spid-version — fails on mysql, oracle, postgresql. ORA-00936: missing expression
 SELECT @@SPID, @@VERSION
 
+-- CASE[open]: ts-str-func — fails on mysql, oracle, postgresql. ORA-00904: "STR": invalid identifier
+SELECT STR(3.14, 6, 2) AS r
+
 -- CASE[open]: ts-str-plus-num — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('15',),) target=(('105',),)
 SELECT '10' + 5 AS r
 
@@ -236,6 +254,12 @@ SELECT TOP 1 WITH TIES x FROM (VALUES (1),(1),(2)) v(x) ORDER BY x
 
 -- CASE[open]: ts-trailing-eq — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT IIF('a ' = 'a', 1, 0) AS r
+
+-- CASE[open]: ts-translate — fails on mysql. (1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')
+SELECT TRANSLATE('abc', 'ab', 'xy') AS r
+
+-- CASE[open]: ts-trim-chars — fails on oracle. ORA-30001: trim set should have only one character
+SELECT TRIM('x' FROM 'xxabcxx') AS r
 
 -- CASE[open]: ts-try-convert — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'a' to a number: 
 SELECT TRY_CONVERT(INT, 'abc') AS r

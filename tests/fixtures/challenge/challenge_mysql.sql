@@ -44,6 +44,9 @@ SELECT CHAR(956 USING utf8mb4) AS r
 -- CASE[open]: my-coalesce-empty — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('NULL',),)
 SELECT COALESCE(NULL, 0) = '' AS r
 
+-- CASE[open]: my-compress — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
+SELECT UNCOMPRESS(COMPRESS('data')) AS r
+
 -- CASE[open]: my-concat-null — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('ab',),)
 SELECT CONCAT('a', NULL, 'b') AS r
 
@@ -61,6 +64,9 @@ SELECT DATE_ADD('2020-01-01', INTERVAL 7 DAY) AS r
 
 -- CASE[open]: my-date-add-month — fails on tsql. FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)
 SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r
+
+-- CASE[open]: my-date-diff-minus — fails on oracle, postgresql. FUNC-DIFF: source=(('200',),) target=(('60',),)
+SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r
 
 -- CASE[open]: my-date-format — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
 SELECT DATE_FORMAT('2020-05-17', '%Y/%m/%d') AS r
@@ -91,6 +97,9 @@ SELECT EXTRACTVALUE('<a>1</a>', '/a') AS r
 
 -- CASE[open]: my-field — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
 SELECT FIELD('b', 'a', 'b', 'c') AS r
+
+-- CASE[open]: my-get-lock — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
+SELECT GET_LOCK('l', 0), RELEASE_LOCK('l')
 
 -- CASE[open]: my-greatest-null — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('3',),)
 SELECT GREATEST(1, NULL, 3) AS r
@@ -161,6 +170,12 @@ SELECT MAKE_SET(3, 'a', 'b', 'c') AS r
 -- CASE[open]: my-makedate — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)
 
+-- CASE[open]: my-month-overflow — fails on tsql. FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)
+SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r
+
+-- CASE[open]: my-name-const — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA
+SELECT NAME_CONST('col', 5) AS r
+
 -- CASE[open]: my-numeric — fails on tsql. (2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se
 CREATE TABLE t (a DECIMAL(20,4), b FLOAT(10,2), c DOUBLE)
 
@@ -206,11 +221,17 @@ SELECT TIMESTAMPDIFF(DAY, '2020-01-01', '2020-01-10') AS r
 -- CASE[open]: my-timestampdiff-mon — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10') AS r
 
+-- CASE[open]: my-timestampdiff-year — fails on tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+SELECT TIMESTAMPDIFF(YEAR, '2019-12-31', '2020-01-01') AS r
+
 -- CASE[open]: my-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'a ' = 'a' AS r
 
 -- CASE[open]: my-trim-both — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r
+
+-- CASE[open]: my-ts-to-date — fails on postgresql. FUNC-DIFF: source=(('2020-01-01',),) target=(('2020-01-01 14:30:00+00:00',),)
+SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r
 
 -- CASE[open]: my-unix-timestamp — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
 SELECT UNIX_TIMESTAMP('2020-01-01'), FROM_UNIXTIME(1577836800)
@@ -226,6 +247,9 @@ CREATE TABLE t (a INT, b INT); CREATE VIEW v AS SELECT a FROM t WHERE a > 0 WITH
 
 -- CASE[open]: my-week-quarter — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEEK('2020-06-15'), QUARTER('2020-06-15'), DAYOFWEEK('2020-06-15')
+
+-- CASE[open]: my-weight-string — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
+SELECT WEIGHT_STRING('abc') AS r
 
 -- CASE[open]: mysql-drop-'note'|note — fails on oracle, postgresql. SILENT CLAUSE DROP: ''note'|note' absent from valid oracle output, no warning (target supp
 CREATE TABLE t (a INT COMMENT 'note')

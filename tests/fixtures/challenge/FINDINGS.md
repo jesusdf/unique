@@ -75,6 +75,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('1',),) target=(('NULL',),)`
 - src: `SELECT COALESCE(NULL, 0) = '' AS r`
 
+## my-compress  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN`
+- src: `SELECT UNCOMPRESS(COMPRESS('data')) AS r`
+
 ## my-concat-null  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('ab',),)`
@@ -104,6 +109,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)`
 - src: `SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r`
+
+## my-date-diff-minus  (mysql)
+- targets: oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('200',),) target=(('60',),)`
+- src: `SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r`
 
 ## my-date-format  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -154,6 +164,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI`
 - src: `SELECT FIELD('b', 'a', 'b', 'c') AS r`
+
+## my-get-lock  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
+- src: `SELECT GET_LOCK('l', 0), RELEASE_LOCK('l')`
 
 ## my-greatest-null  (mysql)
 - targets: postgresql(func), tsql(func)
@@ -270,6 +285,16 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
 - src: `SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)`
 
+## my-month-overflow  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)`
+- src: `SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r`
+
+## my-name-const  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA`
+- src: `SELECT NAME_CONST('col', 5) AS r`
+
 ## my-numeric  (mysql)
 - targets: tsql(invalid)
 - live error: `(2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se`
@@ -345,6 +370,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
 - src: `SELECT TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10') AS r`
 
+## my-timestampdiff-year  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
+- src: `SELECT TIMESTAMPDIFF(YEAR, '2019-12-31', '2020-01-01') AS r`
+
 ## my-trailing-eq  (mysql)
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -354,6 +384,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('abc',),) target=(('',),)`
 - src: `SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r`
+
+## my-ts-to-date  (mysql)
+- targets: postgresql(func)
+- live error: `FUNC-DIFF: source=(('2020-01-01',),) target=(('2020-01-01 14:30:00+00:00',),)`
+- src: `SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r`
 
 ## my-unix-timestamp  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -379,6 +414,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE`
 - src: `SELECT WEEK('2020-06-15'), QUARTER('2020-06-15'), DAYOFWEEK('2020-06-15')`
+
+## my-weight-string  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE`
+- src: `SELECT WEIGHT_STRING('abc') AS r`
 
 ## mysql-drop-'note'|note  (mysql)
 - targets: oracle(silent-drop), postgresql(silent-drop)
@@ -437,6 +477,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL`
 
+## ora-clob-coalesce  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s`
+- src: `SELECT COALESCE(TO_CLOB('a'), TO_CLOB('b')) AS r FROM DUAL`
+
 ## ora-collect  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
@@ -482,6 +527,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(156, b"Incorrect syntax near the keyword 'END'.DB-Lib error message 20018, severity 15:\n`
 - src: `CREATE PROCEDURE p AS BEGIN FOR r IN (SELECT 1 AS x FROM DUAL) LOOP NULL; END LOOP; END;
 /`
+
+## ora-date-diff-days  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('60',),) target=(('0',),)`
+- src: `SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r FROM DUAL`
 
 ## ora-date-plus-int  (oracle)
 - targets: mysql(semantic), postgresql(invalid)
@@ -571,6 +621,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - src: `CREATE TABLE a (id NUMBER); CREATE TABLE b (id NUMBER);
 INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 
+## ora-interval-tochar  (oracle)
+- targets: postgresql(func)
+- live error: `FUNC-DIFF: source=(('+02 03:04:05.000000',),) target=(('2 days 03:04:05',),)`
+- src: `SELECT TO_CHAR(INTERVAL '2 3:04:05.000' DAY TO SECOND) AS r FROM DUAL`
+
 ## ora-json-object  (oracle)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -615,6 +670,11 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4113, b"The function 'STRING_AGG' is not a valid windowing function, and cannot be used w`
 - src: `SELECT deptno, LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) OVER (PARTITION BY deptno) FROM (SELECT 1 deptno, 2 x FROM DUAL)`
+
+## ora-lnnvl  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near '='.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
+- src: `SELECT LNNVL(1 = 2) AS r FROM DUAL WHERE LNNVL(1 = 2)`
 
 ## ora-months-between  (oracle)
 - targets: mysql(invalid), postgresql(invalid)
@@ -699,6 +759,11 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - live error: `(1305, 'FUNCTION unique_val_41751da4688e.REGEXP_COUNT does not exist')`
 - src: `SELECT REGEXP_COUNT('a1b2c3', '[0-9]') AS r FROM DUAL`
 
+## ora-regexp-like  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT REGEXP_LIKE('abc', '^a') AS matched FROM DUAL WHERE REGEXP_LIKE('abc', '^a')`
+
 ## ora-reverse-index  (oracle)
 - targets: mysql(carrier), postgresql(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
@@ -740,6 +805,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT SYS_CONNECT_BY_PATH(id, '/') AS p FROM (SELECT 1 id, NULL par FROM DUAL) START WITH par IS NULL CONNECT BY PRIOR id = par`
+
+## ora-sys-extract-utc  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SY`
+- src: `SELECT SYS_EXTRACT_UTC(SYSTIMESTAMP) AS r FROM DUAL`
 
 ## ora-table-collection  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -957,6 +1027,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n<3) SEARCH DEPTH FIRST BY n SET ord SELECT * FROM r`
+
+## pg-date-diff-days  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('60',),) target=(('200',),)`
+- src: `SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r`
 
 ## pg-date-part  (postgresql)
 - targets: oracle(invalid)
@@ -1238,6 +1313,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag`
 - src: `CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)`
 
+## pg-num-nonnulls  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
+- src: `SELECT NUM_NONNULLS(1, NULL, 2) AS r`
+
 ## pg-order-nulls-default  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))`
@@ -1257,6 +1337,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(x)`
+
+## pg-percentile-disc  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(x)`
 
 ## pg-position-empty  (postgresql)
 - targets: oracle(func), tsql(func)
@@ -1357,6 +1442,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid)
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
 - src: `SET search_path TO myschema, public`
+
+## pg-setweight  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.se`
+- src: `SELECT setweight(to_tsvector('cat'), 'A') AS r`
 
 ## pg-size-funcs  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -1617,6 +1707,11 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - live error: `ORA-00904: "CONCAT_WS": invalid identifier`
 - src: `SELECT CONCAT_WS('-', 'a', 'b', 'c') AS r`
 
+## ts-concatws2  (tsql)
+- targets: oracle(invalid)
+- live error: `ORA-00904: "CONCAT_WS": invalid identifier`
+- src: `SELECT CONCAT_WS(',', 'a', NULL, 'b') AS r`
+
 ## ts-cursor  (tsql)
 - targets: mysql(invalid)
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
@@ -1676,6 +1771,11 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "NUMBER_TO_STR": invalid identifier`
 - src: `SELECT FORMAT(1234.5, 'N2') AS r`
+
+## ts-formatmessage  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "FORMATMESSAGE": invalid identifier`
+- src: `SELECT FORMATMESSAGE('hi %s', 'x') AS r`
 
 ## ts-geography  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
@@ -1758,6 +1858,21 @@ CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT 
 - live error: `ORA-00902: invalid datatype`
 - src: `CREATE TABLE t (price MONEY, small SMALLMONEY)`
 
+## ts-money-arith  (tsql)
+- targets: mysql(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('12.8',),) target=(('$12.80',),)`
+- src: `SELECT CAST(10.5 AS MONEY) + CAST(2.3 AS MONEY) AS r`
+
+## ts-month-overflow  (tsql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('2020-02-29 00:00:00',),) target=(('2020-02-29',),)`
+- src: `SELECT DATEADD(MONTH, 1, '2020-01-31') AS r`
+
+## ts-nchar-hex  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "NCHAR": invalid identifier`
+- src: `SELECT NCHAR(0x1F600) AS r`
+
 ## ts-nolock-hint  (tsql)
 - targets: mysql(invalid)
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
@@ -1826,6 +1941,11 @@ EXEC sp_rename 't.a', 'x', 'COLUMN'`
 - live error: `ORA-00936: missing expression`
 - src: `SELECT @@SPID, @@VERSION`
 
+## ts-str-func  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "STR": invalid identifier`
+- src: `SELECT STR(3.14, 6, 2) AS r`
+
 ## ts-str-plus-num  (tsql)
 - targets: mysql(func), oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('15',),) target=(('105',),)`
@@ -1873,6 +1993,16 @@ SELECT * FROM t TABLESAMPLE (10 PERCENT)`
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT IIF('a ' = 'a', 1, 0) AS r`
 
+## ts-translate  (tsql)
+- targets: mysql(invalid)
+- live error: `(1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')`
+- src: `SELECT TRANSLATE('abc', 'ab', 'xy') AS r`
+
+## ts-trim-chars  (tsql)
+- targets: oracle(invalid)
+- live error: `ORA-30001: trim set should have only one character`
+- src: `SELECT TRIM('x' FROM 'xxabcxx') AS r`
+
 ## ts-try-convert  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-01722: unable to convert string value containing 'a' to a number: `
@@ -1911,4 +2041,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r`
 ---
 
-Totals: 372 distinct constructs; defect rows by kind: carrier 64, func 123, invalid 553, semantic 2, silent-drop 24.
+Totals: 398 distinct constructs; defect rows by kind: carrier 64, func 134, invalid 594, semantic 2, silent-drop 24.
