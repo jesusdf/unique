@@ -3133,11 +3133,17 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
         return f"(CAST({end} AS DATE) - CAST({start} AS DATE))"
     if len(node.args) != 3:
         return None
-    unit = _date_unit_name(node.args[2])
+    args = node.args
+    # A part-FIRST spelling (T-SQL-style DATEDIFF(part, start, end) kept
+    # positional by an anonymous parse) reorders to the canonical
+    # (end, start, unit).
+    if _date_unit_name(args[2]) is None and _date_unit_name(args[0]) is not None:
+        args = (args[2], args[1], args[0])
+    unit = _date_unit_name(args[2])
     if unit is None:
         return None
-    end = _emit_expression(_unwrap_sqlglot_wrappers(node.args[0]), dialect)
-    start = _emit_expression(_unwrap_sqlglot_wrappers(node.args[1]), dialect)
+    end = _emit_expression(_unwrap_sqlglot_wrappers(args[0]), dialect)
+    start = _emit_expression(_unwrap_sqlglot_wrappers(args[1]), dialect)
 
     if dialect == "tsql":
         return f"DATEDIFF({unit}, {start}, {end})"
@@ -3405,10 +3411,23 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         emitted = _emit_date_add(node, dialect)
         if emitted is not None:
             return emitted
+        if len(node.args) == 3:
+            # Unknown part: keep the SOURCE-visible T-SQL spelling for
+            # manual review (the canonical 3-arg DATE_ADD form is invalid
+            # on every engine — audit S1-4).
+            unit_sql = _emit_expression(node.args[2], dialect).strip("'\"")
+            n_sql = _emit_expression(node.args[1], dialect)
+            ts_sql = _emit_expression(node.args[0], dialect)
+            return f"DATEADD({unit_sql}, {n_sql}, {ts_sql})"
     if fn_name in ("DATEDIFF", "TIMESTAMPDIFF"):
         emitted = _emit_date_diff(node, dialect)
         if emitted is not None:
             return emitted
+        if len(node.args) == 3:
+            unit_sql = _emit_expression(node.args[0], dialect).strip("'\"")
+            a_sql = _emit_expression(node.args[1], dialect)
+            b_sql = _emit_expression(node.args[2], dialect)
+            return f"DATEDIFF({unit_sql}, {a_sql}, {b_sql})"
 
     # String aggregation: IR canonical form is GROUP_CONCAT(expr[, sep]).
     # Each engine spells it differently, and MySQL's comma form

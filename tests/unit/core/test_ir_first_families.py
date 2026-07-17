@@ -288,3 +288,24 @@ class TestMysqlConcatShape:
     def test_mysql_source_plus_stays_numeric(self) -> None:
         out = _ir("mysql", "tsql", "SELECT a + b FROM t")
         assert out is not None and "CONCAT" not in out.upper()
+
+
+class TestDateFamilyInIr:
+    """Date-function edge shapes in the IR (M3 family F9 + visibility)."""
+
+    def test_quoted_part_first_datediff_to_tsql(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT DATEDIFF('D', d_a, d_b) + 1 FROM t")
+        assert out is not None and "DATEDIFF(DAY, D_A, D_B)" in out.upper(), out
+
+    def test_quoted_year_part_to_tsql(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT DATEDIFF('Y', d_a, d_b) FROM t")
+        assert out is not None and "DATEDIFF(YEAR, D_A, D_B)" in out.upper(), out
+
+    def test_part_first_datediff_to_mysql_two_arg(self) -> None:
+        out = _ir("oracle", "mysql", "SELECT DATEDIFF('D', d_a, d_b) FROM t")
+        assert out is not None and "DATEDIFF(D_B, D_A)" in out.upper(), out
+
+    def test_unknown_dateadd_part_stays_visible(self) -> None:
+        out = _ir("tsql", "postgresql", "SELECT DATEADD(microsecond, 1, d) FROM t")
+        assert out is not None and "DATEADD" in out.upper(), out
+        assert "DATE_ADD(d, 1, MICROSECOND)" not in out, out

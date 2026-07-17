@@ -841,6 +841,9 @@ _DATE_UNIT_ALIASES = {
     "M": "MONTH",
     "YY": "YEAR",
     "YYYY": "YEAR",
+    # The private-corpus spelling: DATEDIFF('Y', …) means YEAR (the text
+    # path's live-validated mapping; T-SQL's own 'y' would be DAYOFYEAR).
+    "Y": "YEAR",
     "HH": "HOUR",
     "MI": "MINUTE",
     "N": "MINUTE",
