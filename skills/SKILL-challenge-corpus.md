@@ -38,20 +38,28 @@ time.**
 RED's only job is to **discover source SQL that transpiles incorrectly**.
 
 **Timed-batch protocol (do this FIRST, at the start of a RED session).** A RED
-run is a fixed-length batch (default **5 hours**). On starting, set up two
-session crons and then **work continuously without pausing** until the end
-signal fires — do not stop to wait for input, do not idle between batches:
+run is a fixed-length batch (default **5 hours**), then **work continuously
+without pausing** — do not stop to wait for input, do not idle between batches.
 
-- a **recurring ~30-minute** reminder (use an off-`:00/:30` minute, e.g.
-  `7,37 * * * *`) whose prompt tells RED to **commit & push** the findings
-  accumulated so far;
-- a **one-shot** cron **5 hours ahead** whose prompt tells RED the batch is
-  **over** — at that point do a final commit & push, write the summary, and
-  **delete BOTH crons** (`CronList` → `CronDelete`).
+> **THE CLOCK IS THE GIT COMMIT TIMESTAMP, NOT the system clock.** The sandbox
+> `date` clock is unreliable (it drifts and even jumps backwards), so timing
+> MUST come from git/GitHub commit timestamps, which are real and recorded.
+> 1. **Note the START commit** — the first commit of the RED batch (its
+>    `git show -s --format=%ci <sha>` is the reference start time).
+> 2. Commit & push findings roughly every ~30 min of *committed-time* progress.
+> 3. **The batch is over only when the LATEST commit's timestamp exceeds the
+>    START commit's by ≥ 5 hours.** Check after each batch:
+>    ```bash
+>    S=$(git show -s --format=%ct <start-sha>); N=$(git show -s --format=%ct HEAD)
+>    python3 -c "d=$N-$S; print(d//3600,'h',(d%3600)//60,'m; over=',d>=5*3600)"
+>    ```
+>    Until `over` is true, keep generating and validating candidates back-to-back.
+>    Only then do the final commit + summary and stop.
 
-Until the 5-hour cron fires, RED keeps generating and validating candidates
-back-to-back; the 30-minute cron only interrupts to checkpoint. (Crons are
-session-only and fire while the REPL is idle.)
+Do NOT trust a wall-clock cron for the end-of-batch signal — it fires on the
+drifting system clock and will end the batch early. A ~30-min checkpoint cron
+is optional convenience; the authoritative deadline is the commit-timestamp
+check above.
 
 > **HARD RULE — RED NEVER FIXES.** RED must not modify `src/` (the transpiler)
 > in any way: no function/type/operator mappings, no parser/emitter/transformer
