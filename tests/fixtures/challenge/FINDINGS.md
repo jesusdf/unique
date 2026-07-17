@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (355 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (356 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -248,10 +248,20 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('ab',),)`
 - src: `SELECT CONCAT('a', NULL, 'b') AS r`
 
+## my-concat-null3  (mysql)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('NULL', 'a,b'),) target=(('a', 'a,b'),)`
+- src: `SELECT CONCAT('a',NULL), CONCAT_WS(',','a',NULL,'b')`
+
 ## my-concat-ws  (mysql)
 - targets: oracle(invalid)
 - live error: `ORA-00904: "CONCAT_WS": invalid identifier`
 - src: `SELECT CONCAT_WS('-', 'a', 'b', NULL, 'c') AS r`
+
+## my-concatws3  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-00904: "CONCAT_WS": invalid identifier`
+- src: `SELECT CONCAT_WS('-', a, b) FROM (SELECT 'x' a, 'y' b) t`
 
 ## my-conv2  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -362,6 +372,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
 - src: `SELECT EXPORT_SET(5, 'Y', 'N', ',', 4) AS r`
+
+## my-export-set2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
+- src: `SELECT EXPORT_SET(5,'Y','N',',',4) AS r`
 
 ## my-extractvalue  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -483,6 +498,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('abc',),) target=(('NULL',),)`
 - src: `SELECT INSERT('abc', 10, 1, 'X') AS r`
 
+## my-insert-zeropos  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('abcdef',),) target=(('NULL',),)`
+- src: `SELECT INSERT('abcdef', 0, 2, 'XY') AS r`
+
+## my-insert2  (mysql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "STUFF": invalid identifier`
+- src: `SELECT INSERT('Quadratic', 3, 4, 'What') AS r`
+
 ## my-instr-case  (mysql)
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
@@ -573,6 +598,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('',),) target=(('ab',),)`
 - src: `SELECT LEFT('abc', -1) AS r`
 
+## my-len-trio  (mysql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI`
+- src: `SELECT CHAR_LENGTH(s), LENGTH(s), BIT_LENGTH(s) FROM (SELECT 'héllo' s) t`
+
 ## my-length-bytes  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('5',),) target=(('4',),)`
@@ -597,6 +627,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT 'x' LIKE 'X' AS r`
+
+## my-loadfile  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO`
+- src: `SELECT LOAD_FILE('/nonexist') IS NULL AS r`
 
 ## my-locate-case  (mysql)
 - targets: oracle(func), postgresql(func)
@@ -628,6 +663,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN`
 - src: `SELECT LOG2(8), LOG10(100), LN(2.718), EXP(1)`
 
+## my-lpad-conv  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
+- src: `SELECT LPAD(CONV(5,10,2), 8, '0') AS r`
+
 ## my-lpad-multichar  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)`
@@ -642,6 +682,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
 - src: `SELECT MAKE_SET(3, 'a', 'b', 'c') AS r`
+
+## my-make-set2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
+- src: `SELECT MAKE_SET(1|4,'hello','nice','world') AS r`
 
 ## my-makedate  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -707,6 +752,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('180', '3.14159', '3.14159'),) target=(('180', '3', '3.14159'),)`
 - src: `SELECT DEGREES(PI()), RADIANS(180), PI()`
+
+## my-quote2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU`
+- src: `SELECT QUOTE('Don\'t!') AS r`
 
 ## my-rand  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -847,6 +897,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('def',),) target=(('ab',),)`
 - src: `SELECT SUBSTRING('abcdef', -3) AS r`
+
+## my-substr3  (mysql)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('bcdef', 'bcd', 'ef'),) target=(('bcdef', 'bcd', 'abc'),)`
+- src: `SELECT SUBSTR('abcdef',2), SUBSTR('abcdef',2,3), SUBSTR('abcdef',-2)`
+
+## my-substridx-nested  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU`
+- src: `SELECT SUBSTRING_INDEX(SUBSTRING_INDEX('a,b,c,d', ',', 3), ',', -1) AS r`
 
 ## my-substring-index  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -1058,6 +1118,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018`
 - src: `SELECT ADD_MONTHS(SYSDATE, 3) AS r FROM DUAL`
 
+## ora-asciistr  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AS`
+- src: `SELECT ASCIISTR('ABÄCD'), UNISTR('\0041') FROM DUAL`
+
 ## ora-bit-fns  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'BITAND' is not a recognized built-in function name.DB-Lib error message 20018, se`
@@ -1098,6 +1163,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
 - src: `SELECT CAST(COLLECT(x) AS SYS.ODCINUMBERLIST) FROM (SELECT 1 x FROM DUAL)`
+
+## ora-compose  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
+- src: `SELECT COMPOSE('a'||UNISTR('\0301')), DECOMPOSE('á') FROM DUAL`
 
 ## ora-concat-null  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
@@ -1322,6 +1392,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)`
 - src: `SELECT LPAD('ab', 5, 'xy') AS r FROM DUAL`
 
+## ora-lpad-tochar  (oracle)
+- targets: tsql(invalid)
+- live error: `(195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s`
+- src: `SELECT LPAD(TO_CHAR(5,'FMB'), 8, '0') FROM DUAL`
+
 ## ora-ltrim-set  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('abc',),) target=(('',),)`
@@ -1366,6 +1441,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'NEXT_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT NEXT_DAY(SYSDATE, 'MONDAY') AS r FROM DUAL`
+
+## ora-nls-case  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NL`
+- src: `SELECT NLS_INITCAP('word'), NLS_UPPER('word'), NLS_LOWER('WORD') FROM DUAL`
 
 ## ora-nlssort  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1542,6 +1622,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_6c47c43e12f3.TRANSLATE does not exist')`
 - src: `SELECT TRANSLATE('abc', 'ab', 'xy') AS r FROM DUAL`
+
+## ora-translate3  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(174, b'The replace function requires 3 argument(s).DB-Lib error message 20018, severity 1`
+- src: `SELECT TRANSLATE('12345', '123', 'abc'), REPLACE('aaa','a') FROM DUAL`
 
 ## ora-trig  (oracle)
 - targets: mysql(invalid), tsql(invalid)
@@ -1909,6 +1994,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
 - src: `SELECT format('%s=%s', 'a', 1) AS r`
+
+## pg-format2  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-00904: "CONCAT_WS": invalid identifier`
+- src: `SELECT format('%s-%I-%L', 'a', 'col name', 'val'), concat_ws('|', 'a', NULL, 'b')`
 
 ## pg-fulltext  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2306,6 +2396,16 @@ CREATE TABLE ledger (id SERIA`
 - live error: `(529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message`
 - src: `SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)`
 
+## pg-string-fns2  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018`
+- src: `SELECT split_part('a,b,c', ',', 2), left('abc',-1), right('abc',-1)`
+
+## pg-string-fns3  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message `
+- src: `SELECT starts_with('abc','ab'), string_to_array('a.b.c','.')`
+
 ## pg-string-split-fns  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.st`
@@ -2325,6 +2425,11 @@ CREATE TABLE ledger (id SERIA`
 - targets: mysql(func), oracle(func)
 - live error: `FUNC-DIFF: source=(('ab',),) target=(('abc',),)`
 - src: `SELECT SUBSTRING('abcdef', 0, 3) AS r`
+
+## pg-substring-escape  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib`
+- src: `SELECT substring('a1b2' from '([a-z])([0-9])' for '#') AS r`
 
 ## pg-substring-regex  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
@@ -2946,6 +3051,16 @@ SELECT STRING_AGG(CAST(`
 - live error: `function string_agg(integer, unknown) does not exist`
 - src: `SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2)) v(x)`
 
+## ts-string-fns2  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "STUFF": invalid identifier`
+- src: `SELECT STRING_ESCAPE('a"b', 'json'), STUFF('abcdef',2,3,'XYZ')`
+
+## ts-string-fns3  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "QUOTENAME": invalid identifier`
+- src: `SELECT TRANSLATE('abc','ab','xy'), REPLICATE('ab',3), QUOTENAME('a]b')`
+
 ## ts-string-split2  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "STRING_SPLIT": invalid identifier`
@@ -3052,4 +3167,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 594 distinct constructs; defect rows by kind: func 296, invalid 852, semantic 2, silent-drop 75.
+Totals: 617 distinct constructs; defect rows by kind: func 301, invalid 903, semantic 2, silent-drop 75.

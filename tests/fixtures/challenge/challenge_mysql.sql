@@ -128,8 +128,14 @@ SELECT CONCAT(DATE '2020-01-01', '') AS r
 -- CASE[open]: my-concat-null — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('ab',),)
 SELECT CONCAT('a', NULL, 'b') AS r
 
+-- CASE[open]: my-concat-null3 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL', 'a,b'),) target=(('a', 'a,b'),)
+SELECT CONCAT('a',NULL), CONCAT_WS(',','a',NULL,'b')
+
 -- CASE[open]: my-concat-ws — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT CONCAT_WS('-', 'a', 'b', NULL, 'c') AS r
+
+-- CASE[open]: my-concatws3 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
+SELECT CONCAT_WS('-', a, b) FROM (SELECT 'x' a, 'y' b) t
 
 -- CASE[open]: my-conv2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT CONV('7F', 16, 2), CONV(255, 10, 16)
@@ -196,6 +202,9 @@ SELECT 1 = 1.0 AS r, 'a' = 'a ' AS b, 1 = TRUE AS c
 
 -- CASE[open]: my-export-set — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXPORT_SET(5, 'Y', 'N', ',', 4) AS r
+
+-- CASE[open]: my-export-set2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
+SELECT EXPORT_SET(5,'Y','N',',',4) AS r
 
 -- CASE[open]: my-extractvalue — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXTRACTVALUE('<a>1</a>', '/a') AS r
@@ -269,6 +278,12 @@ CREATE PROCEDURE p() BEGIN DECLARE c INT; SELECT COUNT(*) INTO c FROM informatio
 -- CASE[open]: my-insert-oob — fails on tsql. FUNC-DIFF: source=(('abc',),) target=(('NULL',),)
 SELECT INSERT('abc', 10, 1, 'X') AS r
 
+-- CASE[open]: my-insert-zeropos — fails on tsql. FUNC-DIFF: source=(('abcdef',),) target=(('NULL',),)
+SELECT INSERT('abcdef', 0, 2, 'XY') AS r
+
+-- CASE[open]: my-insert2 — fails on oracle, postgresql. ORA-00904: "STUFF": invalid identifier
+SELECT INSERT('Quadratic', 3, 4, 'What') AS r
+
 -- CASE[open]: my-instr-case — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT INSTR('aAaA', 'A') AS r
 
@@ -323,6 +338,9 @@ SELECT LEFT('hello', 2.9) AS r
 -- CASE[open]: my-left-neg — fails on postgresql. FUNC-DIFF: source=(('',),) target=(('ab',),)
 SELECT LEFT('abc', -1) AS r
 
+-- CASE[open]: my-len-trio — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
+SELECT CHAR_LENGTH(s), LENGTH(s), BIT_LENGTH(s) FROM (SELECT 'héllo' s) t
+
 -- CASE[open]: my-length-bytes — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('5',),) target=(('4',),)
 SELECT LENGTH('café') AS r
 
@@ -337,6 +355,9 @@ SELECT 'a_b' LIKE 'a\_b' AS r
 
 -- CASE[open]: my-like-single — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'x' LIKE 'X' AS r
+
+-- CASE[open]: my-loadfile — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
+SELECT LOAD_FILE('/nonexist') IS NULL AS r
 
 -- CASE[open]: my-locate-case — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT LOCATE('a', 'ABC') AS r
@@ -356,6 +377,9 @@ SELECT LOG2(8), LOG10(1000)
 -- CASE[open]: my-logexp — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN
 SELECT LOG2(8), LOG10(100), LN(2.718), EXP(1)
 
+-- CASE[open]: my-lpad-conv — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
+SELECT LPAD(CONV(5,10,2), 8, '0') AS r
+
 -- CASE[open]: my-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)
 SELECT LPAD('ab', 5, 'xy') AS r
 
@@ -364,6 +388,9 @@ SELECT LPAD('abc', 2, 'x') AS r
 
 -- CASE[open]: my-make-set — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKE_SET(3, 'a', 'b', 'c') AS r
+
+-- CASE[open]: my-make-set2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
+SELECT MAKE_SET(1|4,'hello','nice','world') AS r
 
 -- CASE[open]: my-makedate — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)
@@ -403,6 +430,9 @@ SELECT TRUNCATE(PI(), 4), ROUND(PI(), 4), FORMAT(PI(), 4)
 
 -- CASE[open]: my-pi-vals — fails on tsql. FUNC-DIFF: source=(('180', '3.14159', '3.14159'),) target=(('180', '3', '3.14159'),)
 SELECT DEGREES(PI()), RADIANS(180), PI()
+
+-- CASE[open]: my-quote2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
+SELECT QUOTE('Don\'t!') AS r
 
 -- CASE[open]: my-rand — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT RAND(1), RANDOM_BYTES(4), UUID()
@@ -488,6 +518,12 @@ SELECT SUBSTRING('hello', 2.9, 2.9) AS r
 
 -- CASE[open]: my-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('def',),) target=(('ab',),)
 SELECT SUBSTRING('abcdef', -3) AS r
+
+-- CASE[open]: my-substr3 — fails on postgresql, tsql. FUNC-DIFF: source=(('bcdef', 'bcd', 'ef'),) target=(('bcdef', 'bcd', 'abc'),)
+SELECT SUBSTR('abcdef',2), SUBSTR('abcdef',2,3), SUBSTR('abcdef',-2)
+
+-- CASE[open]: my-substridx-nested — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
+SELECT SUBSTRING_INDEX(SUBSTRING_INDEX('a,b,c,d', ',', 3), ',', -1) AS r
 
 -- CASE[open]: my-substring-index — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
 SELECT SUBSTRING_INDEX('a,b,c', ',', 2) AS r

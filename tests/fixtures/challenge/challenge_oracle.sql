@@ -31,6 +31,9 @@ SELECT x FROM (SELECT 'banana' x FROM DUAL UNION ALL SELECT 'Apple' x FROM DUAL 
 -- CASE[open]: ora-add-months — fails on mysql, postgresql, tsql. (195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT ADD_MONTHS(SYSDATE, 3) AS r FROM DUAL
 
+-- CASE[open]: ora-asciistr — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AS
+SELECT ASCIISTR('ABÄCD'), UNISTR('\0041') FROM DUAL
+
 -- CASE[open]: ora-bit-fns — fails on mysql, postgresql, tsql. (195, b"'BITAND' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT BITAND(12, 10), BIN_TO_NUM(1,1,0) FROM DUAL
 
@@ -55,6 +58,9 @@ SELECT TO_CLOB('x') || TO_CLOB('y'), DBMS_LOB.SUBSTR(TO_CLOB('hello'), 3) FROM D
 
 -- CASE[open]: ora-collect — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT CAST(COLLECT(x) AS SYS.ODCINUMBERLIST) FROM (SELECT 1 x FROM DUAL)
+
+-- CASE[open]: ora-compose — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
+SELECT COMPOSE('a'||UNISTR('\0301')), DECOMPOSE('á') FROM DUAL
 
 -- CASE[open]: ora-concat-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
 SELECT 'a' || NULL || 'b' AS r FROM DUAL
@@ -191,6 +197,9 @@ SELECT LOG(2, 8), LN(2.718), EXP(1) FROM DUAL
 -- CASE[open]: ora-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)
 SELECT LPAD('ab', 5, 'xy') AS r FROM DUAL
 
+-- CASE[open]: ora-lpad-tochar — fails on tsql. (195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s
+SELECT LPAD(TO_CHAR(5,'FMB'), 8, '0') FROM DUAL
+
 -- CASE[open]: ora-ltrim-set — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT LTRIM('xxabc', 'x') AS r FROM DUAL
 
@@ -217,6 +226,9 @@ SELECT NCHR(233), UNISTR('\00e9') FROM DUAL
 
 -- CASE[open]: ora-next-day — fails on mysql, postgresql, tsql. (195, b"'NEXT_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT NEXT_DAY(SYSDATE, 'MONDAY') AS r FROM DUAL
+
+-- CASE[open]: ora-nls-case — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NL
+SELECT NLS_INITCAP('word'), NLS_UPPER('word'), NLS_LOWER('WORD') FROM DUAL
 
 -- CASE[open]: ora-nlssort — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NL
 SELECT NLSSORT('abc', 'NLS_SORT=BINARY_CI') AS r FROM DUAL
@@ -323,6 +335,9 @@ SELECT CASE WHEN 'a ' = 'a' THEN 1 ELSE 0 END AS r FROM DUAL
 
 -- CASE[open]: ora-translate — fails on mysql. (1305, 'FUNCTION unique_val_6c47c43e12f3.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r FROM DUAL
+
+-- CASE[open]: ora-translate3 — fails on mysql, postgresql, tsql. (174, b'The replace function requires 3 argument(s).DB-Lib error message 20018, severity 1
+SELECT TRANSLATE('12345', '123', 'abc'), REPLACE('aaa','a') FROM DUAL
 
 -- CASE[open]: ora-trig — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AT
 SELECT ATAN2(1,1), COSH(1), SINH(1), TANH(1) FROM DUAL

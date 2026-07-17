@@ -185,6 +185,9 @@ CREATE TABLE t (id INT); SELECT * FROM t FOR UPDATE
 -- CASE[open]: pg-format-func — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
 SELECT format('%s=%s', 'a', 1) AS r
 
+-- CASE[open]: pg-format2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
+SELECT format('%s-%I-%L', 'a', 'col name', 'val'), concat_ws('|', 'a', NULL, 'b')
+
 -- CASE[open]: pg-fulltext — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT to_tsvector('a cat') @@ to_tsquery('cat') AS r
 
@@ -428,6 +431,12 @@ SELECT 'apple' < 'Banana' AS r
 -- CASE[open]: pg-string-agg-order — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
 SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
+-- CASE[open]: pg-string-fns2 — fails on mysql, oracle, tsql. (195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018
+SELECT split_part('a,b,c', ',', 2), left('abc',-1), right('abc',-1)
+
+-- CASE[open]: pg-string-fns3 — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
+SELECT starts_with('abc','ab'), string_to_array('a.b.c','.')
+
 -- CASE[open]: pg-string-split-fns — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.st
 SELECT string_to_table('a,b,c', ','), regexp_split_to_array('a1b2', '\d')
 
@@ -439,6 +448,9 @@ SELECT STRPOS('', '') AS r
 
 -- CASE[open]: pg-substr-zero — fails on mysql, oracle. FUNC-DIFF: source=(('ab',),) target=(('abc',),)
 SELECT SUBSTRING('abcdef', 0, 3) AS r
+
+-- CASE[open]: pg-substring-escape — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib
+SELECT substring('a1b2' from '([a-z])([0-9])' for '#') AS r
 
 -- CASE[open]: pg-substring-regex — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib
 SELECT SUBSTRING('a1b2' FROM '[0-9]+') AS r
