@@ -4844,13 +4844,18 @@ semantics of DATEDIFF(HOUR).
 
 ## 40. Zero-reduction campaign — six-direction residue 127 → 22 (batches W1–W6)
 
-Archived from `docs/TODO.md` on 2026-07-17 (landed across `80c9545`..`e102128`).
-After the M3-final flip, the six-direction live syntax residue was driven down
-with **mechanism fixes, not corpus waves** — each batch a commit with always-on
-tests in `tests/unit/core/test_ir_first_families.py`, the full gate
-(black/isort/ruff/mypy + `scripts/test-parallel.sh`), and live-syntax + FE 16/16
-against the four engines. Discovery pg→pg held **0** throughout; validity
-99.8–100.0%.
+Archived from `docs/TODO.md` on 2026-07-17 (landed across `80c9545`..`34d7338`).
+**The direction-residue campaign was CLOSED at a user-declared floor of 133
+(§36). This follow-up campaign then blew straight through that floor: 133
+(declared) → 127 (M3-final flip) → 16 — a further −88% below the floor, and
+both Oracle directions reached 100.0% validity.** After the M3-final flip the
+residue was driven down with **mechanism fixes, not corpus waves** — each batch
+a commit with always-on tests in `tests/unit/core/test_ir_first_families.py`,
+the full gate (black/isort/ruff/mypy + `scripts/test-parallel.sh`), and
+live-syntax + FE 16/16 against the four engines. Discovery pg→pg held **0**
+throughout; validity 99.8–100.0%. Concluded by the user 2026-07-17 ("la
+reducción a cero la damos por concluida") — the remaining 16 is the true
+architectural floor.
 
 Cycle-by-cycle (`scripts/validity_sweep.py`, per direction on live engines):
 

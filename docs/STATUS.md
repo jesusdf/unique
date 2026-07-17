@@ -10,15 +10,18 @@ discovery channel (`scripts/discover_silent_gaps.py`) from **287 to 0** — ever
 statement now transpiles validly or carries an explicit warning/carrier. Full
 log: `docs/DONE.md` §36.
 
-**Zero-reduction follow-up 2026-07-17** (batches W1–W10, `34d7338`): after the
-M3-final flip, the six-direction residue was driven **127 → 16** with mechanism
-fixes (not waves), each commit gated + live-verified (FE 16/16, discovery pg→pg
-0). Current: pg-source {tsql 1, mysql 5, oracle **1**}, mysql-source {tsql 4,
-pg 3, oracle **2**} — **both Oracle directions at 100.0% validity**, overall
-**99.8–100.0%**. The remaining 16 are the architectural floor (adversarial
-pg_regress/sqlancer inputs sqlglot cannot parse, a correlated outer-aggregate
-subquery, composite-field access, schema-dependent type inference, LATERAL
-column-alias lists). Full log: `docs/DONE.md` §40.
+**Zero-reduction campaign — CLOSED far below the declared floor
+(2026-07-17, batches W1–W10, `34d7338`).** The direction-residue campaign was
+closed at a **user-declared floor of 133**; the M3-final flip then measured
+127, and this campaign drove it to **16** — a further **−88% below the declared
+floor** — with mechanism fixes (not waves), each commit gated + live-verified
+(FE 16/16, discovery pg→pg 0). Current: pg-source {tsql 1, mysql 5, oracle
+**1**}, mysql-source {tsql 4, pg 3, oracle **2**} — **both Oracle directions at
+100.0% validity**, overall **99.8–100.0%**. The remaining 16 are the true
+architectural floor (adversarial pg_regress/sqlancer inputs sqlglot cannot
+parse, a correlated outer-aggregate subquery, composite-field access,
+schema-dependent type inference, LATERAL column-alias lists). Full log:
+`docs/DONE.md` §40.
 
 **M4 milestone reached 2026-07-11:** the Oracle-source bring-up closed at
 **0 syntax failures on all three directions** over the real 13 MB migration

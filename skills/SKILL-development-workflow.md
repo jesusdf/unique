@@ -119,9 +119,16 @@ of your fix, that is the rule working — do the structural version or escalate.
 
 Corpus-driven direction work follows a measured loop; each wave is one
 mechanism (never one spelling — see the circuit breakers). **Both shipped
-corpora (pg-source, mysql-source) are at their user-declared architectural
-floor (2026-07-17, `docs/DONE.md` §36) — do not resume waves on them; this
-cadence applies to NEW corpora or fidelity targets:**
+corpora (pg-source, mysql-source) are CLOSED at the architectural floor: the
+declared floor of 133 was driven to 16 by the zero-reduction campaign
+(2026-07-17, `docs/DONE.md` §40; both Oracle directions at 100.0% validity) —
+do not resume waves on them; this cadence applies to NEW corpora or fidelity
+targets. Two measurement notes from §40: (a) the pg→oracle sweep hangs at
+runtime on bare `SELECT <dml-fn>()` pg_regress driver calls (skip them — not
+syntax defects); (b) some failures only reproduce in WHOLE-corpus context
+(a preceding statement changes a ContextVar / RETURNING passthrough) — extract
+the real output with `Transpiler().transpile(open(corpus).read(), …)` rather
+than trusting an isolated probe:**
 
 1. **Classify** the sweep's own failure dumps (`SWEEP_DUMP_FILE` hook): group
    by the first NON-comment code line's leading tokens; sample real blocks

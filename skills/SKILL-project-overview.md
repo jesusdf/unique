@@ -130,16 +130,19 @@ Each completed feature should have corresponding tests in the test suite.
 `audit/2026-07-08/`). Audits are ground truth about real defects and must not
 be contradicted by STATUS/README claims.
 
-**The corpus validity campaigns are CLOSED (2026-07-17, user-declared
-architectural floor).** The pg-source and mysql-source directions were swept
-wave-by-wave against the live engines (waves 4–95 "corpus validity", then
-103–239 "direction-residue"); final state: **98.8–99.8% live validity** on
-all six directions, silent-gap discovery pg→pg **0** from 287. The full
-per-wave logs live in `docs/DONE.md` (wave campaign section + §36); measured
+**The corpus validity campaigns are CLOSED (2026-07-17).** The pg-source and
+mysql-source directions were swept wave-by-wave against the live engines
+(waves 4–95 "corpus validity", then 103–239 "direction-residue", closed at a
+user-declared floor of **133** syntax failures), then driven far below that
+floor by the **zero-reduction campaign** (batches W1–W10, `docs/DONE.md` §40):
+the six-direction residue went **133 (declared floor) → 127 (M3-final flip) →
+16**, with **both Oracle directions at 100.0% validity** and the rest
+99.8–99.9%; silent-gap discovery pg→pg **0** from 287. The full per-wave logs
+live in `docs/DONE.md` (wave campaign section + §36 + §40); measured
 percentages in `docs/STATUS.md`. **Do not resume waves on these corpora**
-without a new corpus or a fidelity target — the residue is architectural
-(schema-dependent ambiguity, adversarial pg_regress error-path inputs,
-`RETURN QUERY` table functions). Method preserved in the
+without a new corpus or a fidelity target — the remaining 16 is architectural
+(schema-dependent ambiguity, adversarial pg_regress/sqlancer inputs sqlglot
+cannot parse, composite-field access, correlated outer aggregates). Method preserved in the
 development-workflow skill ("validity-wave cadence") for future corpora.
 Architecture facts added by those waves worth knowing before touching the
 code: the procedural lexer tokenizes PG dollar-quotes as STRING tokens
