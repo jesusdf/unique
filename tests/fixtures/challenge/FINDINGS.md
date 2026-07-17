@@ -1,343 +1,696 @@
 # Challenge findings ledger (RED)
 
-Auto-collected from live-engine validation. Each entry is a source
-construct that transpiles wrong on >=1 target. `[open]` in the
-`challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
+Source constructs that transpile wrong on >=1 target, each **validated on a
+live engine** (original accepted by its own engine; output rejected by the
+target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
+the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
-Kinds: **invalid** = target output rejected by the live engine;
-**carrier** = degraded to an `Unhandled`/unrecognized carrier;
-**silent** = valid output but a source literal/clause vanished (verify).
+Kinds: **invalid** = live target rejected the output; **carrier** = degraded
+to an `Unhandled`/unrecognized carrier (may be an acceptable degrade — BLUE
+triages); **silent/-rt** = valid output but a source literal vanished (verify manually — the literal detector is noisy).
 
 
 ## my-alter-modify  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
-- sample: `(102, b"Incorrect syntax near 'MODIFY'.DB-Lib error message 20018, severity 15:\nGeneral S`
+- live error: `(102, b"Incorrect syntax near 'MODIFY'.DB-Lib error message 20018, severity 15:\nGeneral S`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t MODIFY COLUMN b BIGINT`
+
+## my-base64  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TO`
+- src: `SELECT TO_BASE64('abc'), FROM_BASE64('YWJj')`
+
+## my-bit-count  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI`
+- src: `SELECT BIT_COUNT(255) AS r`
 
 ## my-cast-convert  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
-- sample: `(243, b'Type UBIGINT is not a defined system type.DB-Lib error message 20018, severity 16:`
+- live error: `(243, b'Type UBIGINT is not a defined system type.DB-Lib error message 20018, severity 16:`
 - src: `SELECT CAST(123 AS CHAR), CONVERT('2020-01-01', DATE), CAST(1 AS UNSIGNED)`
 
 ## my-concat-ws  (mysql)
 - targets: oracle(invalid)
-- sample: `ORA-00904: "CONCAT_WS": invalid identifier`
+- live error: `ORA-00904: "CONCAT_WS": invalid identifier`
 - src: `SELECT CONCAT_WS('-', 'a', 'b', NULL, 'c') AS r`
+
+## my-convert-tz  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
+- src: `SELECT CONVERT_TZ('2020-01-01 10:00', '+00:00', '+02:00') AS r`
+
+## my-crc32  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR`
+- src: `SELECT CRC32('abc') AS r`
 
 ## my-date-add-interval  (mysql)
 - targets: oracle(invalid), postgresql(invalid)
-- sample: `ORA-30081: invalid data type for datetime/interval arithmetic`
+- live error: `ORA-30081: invalid data type for datetime/interval arithmetic`
 - src: `SELECT DATE_ADD('2020-01-01', INTERVAL 7 DAY) AS r`
 
 ## my-date-format  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
-- sample: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
+- live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
 - src: `SELECT DATE_FORMAT('2020-05-17', '%Y/%m/%d') AS r`
 
 ## my-datetime-precision  (mysql)
 - targets: tsql(invalid)
-- sample: `(2716, b'Column, parameter, or variable #1: Cannot specify a column width on data type dat`
+- live error: `(2716, b'Column, parameter, or variable #1: Cannot specify a column width on data type dat`
 - src: `CREATE TABLE t (a DATETIME(6), b TIMESTAMP(3), c YEAR)`
+
+## my-elt  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EL`
+- src: `SELECT ELT(2, 'a', 'b', 'c') AS r`
+
+## my-field  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI`
+- src: `SELECT FIELD('b', 'a', 'b', 'c') AS r`
 
 ## my-group-concat  (mysql)
 - targets: postgresql(invalid)
-- sample: `function string_agg(integer, unknown) does not exist`
+- live error: `function string_agg(integer, unknown) does not exist`
 - src: `SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR '|') AS r FROM (SELECT 1 x UNION SELECT 2) t`
+
+## my-hash  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever`
+- src: `SELECT MD5('abc'), SHA1('abc'), SHA2('abc', 256)`
 
 ## my-hex-bin  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
-- sample: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
 - src: `SELECT HEX(255) AS r, BIN(5) AS b`
+
+## my-inet  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN`
+- src: `SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)`
 
 ## my-json-object  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
-- sample: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_`
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_`
 - src: `SELECT JSON_OBJECT('a', 1, 'b', 2)`
 
 ## my-json-type  (mysql)
 - targets: oracle(invalid), tsql(invalid)
-- sample: `(2715, b'Column, parameter, or variable #1: Cannot find data type json.DB-Lib error messag`
+- live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type json.DB-Lib error messag`
 - src: `CREATE TABLE t (data JSON)`
+
+## my-last-day-name  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
+- src: `SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')`
+
+## my-makedate  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
+- src: `SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)`
 
 ## my-numeric  (mysql)
 - targets: tsql(invalid)
-- sample: `(2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se`
+- live error: `(2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se`
 - src: `CREATE TABLE t (a DECIMAL(20,4), b FLOAT(10,2), c DOUBLE)`
+
+## my-period-diff  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE`
+- src: `SELECT PERIOD_DIFF(202006, 202001) AS r`
+
+## my-soundex-format  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
+- src: `SELECT SOUNDEX('Smith'), FORMAT(1234.5, 2)`
+
+## my-substring-index  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU`
+- src: `SELECT SUBSTRING_INDEX('a,b,c', ',', 2) AS r`
+
+## my-timestampadd  (mysql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-30081: invalid data type for datetime/interval arithmetic`
+- src: `SELECT TIMESTAMPADD(MINUTE, 30, '2020-01-01 10:00') AS r`
 
 ## my-timestampdiff  (mysql)
 - targets: oracle(invalid)
-- sample: `ORA-01861: literal does not match format string`
+- live error: `ORA-01861: literal does not match format string`
 - src: `SELECT TIMESTAMPDIFF(DAY, '2020-01-01', '2020-01-10') AS r`
+
+## my-unix-timestamp  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2`
+- src: `SELECT UNIX_TIMESTAMP('2020-01-01'), FROM_UNIXTIME(1577836800)`
+
+## my-update-join  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4104, b'The multi-part identifier "s.n" could not be bound.DB-Lib error message 20018, se`
+- src: `CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); UPDATE t JOIN s ON t.id = s.id SET t.n = s.n`
+
+## my-week-quarter  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE`
+- src: `SELECT WEEK('2020-06-15'), QUARTER('2020-06-15'), DAYOFWEEK('2020-06-15')`
 
 ## ora-add-months  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
-- sample: `(195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018`
+- live error: `(195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018`
 - src: `SELECT ADD_MONTHS(SYSDATE, 3) AS r FROM DUAL`
+
+## ora-bitand  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'BITAND' is not a recognized built-in function name.DB-Lib error message 20018, se`
+- src: `SELECT BITAND(5, 3) AS r FROM DUAL`
 
 ## ora-cast-expr  (oracle)
 - targets: mysql(invalid)
-- sample: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL`
 
 ## ora-concat-num  (oracle)
 - targets: tsql(invalid)
-- sample: `(245, b"Conversion failed when converting the varchar value 'a' to data type int.DB-Lib er`
+- live error: `(245, b"Conversion failed when converting the varchar value 'a' to data type int.DB-Lib er`
 - src: `SELECT 'a' || 5 AS r FROM DUAL`
+
+## ora-connect-by  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT LEVEL, 1 AS n FROM DUAL CONNECT BY LEVEL <= 5`
 
 ## ora-cursor  (oracle)
 - targets: mysql(invalid)
-- sample: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
+- live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
 - src: `CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; CLOSE c; END;`
+
+## ora-dump  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU`
+- src: `SELECT DUMP('abc') AS r FROM DUAL`
+
+## ora-from-tz  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR`
+- src: `SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL`
+
+## ora-initcap  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s`
+- src: `SELECT INITCAP('hello world') AS r FROM DUAL`
 
 ## ora-last-day  (oracle)
 - targets: postgresql(invalid), tsql(invalid)
-- sample: `(195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
+- live error: `(195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT LAST_DAY(SYSDATE) AS r FROM DUAL`
 
 ## ora-listagg  (oracle)
 - targets: postgresql(invalid)
-- sample: `function string_agg(integer, unknown) does not exist`
+- live error: `function string_agg(integer, unknown) does not exist`
 - src: `SELECT LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) AS r FROM (SELECT 1 x FROM DUAL UNION SELECT 2 FROM DUAL)`
 
 ## ora-months-between  (oracle)
 - targets: mysql(invalid), postgresql(invalid)
-- sample: `operator does not exist: timestamp with time zone - integer`
+- live error: `operator does not exist: timestamp with time zone - integer`
 - src: `SELECT MONTHS_BETWEEN(SYSDATE, SYSDATE - 40) AS r FROM DUAL`
+
+## ora-next-day  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'NEXT_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
+- src: `SELECT NEXT_DAY(SYSDATE, 'MONDAY') AS r FROM DUAL`
+
+## ora-numtodsinterval  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
+- src: `SELECT NUMTODSINTERVAL(90, 'MINUTE') AS r FROM DUAL`
+
+## ora-sequence  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE SEQUENCE seq START WITH 1;
+SELECT seq.NEXTVAL FROM DUAL`
+
+## ora-soundex  (oracle)
+- targets: postgresql(invalid)
+- live error: `function soundex(unknown) does not exist`
+- src: `SELECT SOUNDEX('Smith') AS r FROM DUAL`
 
 ## ora-tablespace  (oracle)
 - targets: mysql(carrier), postgresql(carrier), tsql(carrier)
-- sample: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (a NUMBER) TABLESPACE users`
+
+## ora-translate  (oracle)
+- targets: mysql(invalid)
+- live error: `(1305, 'FUNCTION unique_val_6c47c43e12f3.TRANSLATE does not exist')`
+- src: `SELECT TRANSLATE('abc', 'ab', 'xy') AS r FROM DUAL`
 
 ## ora-tz-interval  (oracle)
 - targets: mysql(invalid), tsql(invalid)
-- sample: `(102, b"Incorrect syntax near 'DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQL `
+- live error: `(102, b"Incorrect syntax near 'DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQL `
 - src: `CREATE TABLE t (a TIMESTAMP WITH TIME ZONE, b INTERVAL DAY TO SECOND, c INTERVAL YEAR TO MONTH)`
 
 ## pg-age  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- sample: `(195, b"'AGE' is not a recognized built-in function name.DB-Lib error message 20018, sever`
+- live error: `(195, b"'AGE' is not a recognized built-in function name.DB-Lib error message 20018, sever`
 - src: `SELECT AGE(TIMESTAMP '2020-01-01', TIMESTAMP '2019-01-01') AS a`
 
 ## pg-alter-add  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
-- sample: `ORA-30649: missing DIRECTORY keyword`
+- live error: `ORA-30649: missing DIRECTORY keyword`
 - src: `CREATE TABLE t (a INT); ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT 'x'`
 
 ## pg-array-agg  (postgresql)
 - targets: mysql(invalid)
-- sample: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT ARRAY_AGG(x ORDER BY x) FROM (VALUES (1),(2)) v(x)`
 
 ## pg-array-jsonb  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
-- sample: `ORA-03099: unexpected item [ in a column definition`
+- live error: `ORA-03099: unexpected item [ in a column definition`
 - src: `CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)`
+
+## pg-at-time-zone  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D`
+- src: `SELECT TIMESTAMP '2020-01-01 10:00' AT TIME ZONE 'UTC' AS r`
 
 ## pg-before-update-trg  (postgresql)
 - targets: mysql(invalid)
-- sample: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE t (id INT PRIMARY KEY, n INT, updated TIMESTAMP);
-CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.`
+CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
+
+## pg-collate  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT 'a' < 'B' COLLATE "C" AS r`
 
 ## pg-comment-on  (postgresql)
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
-- sample: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (a INT); COMMENT ON COLUMN t.a IS 'the a column'`
+
+## pg-date-part  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-00907: missing right parenthesis`
+- src: `SELECT DATE_PART('week', DATE '2020-06-15'), DATE_PART('quarter', DATE '2020-06-15')`
 
 ## pg-date-trunc  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- sample: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI`
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI`
 - src: `SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d`
+
+## pg-encode-base64  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se`
+- src: `SELECT ENCODE('abc'::bytea, 'base64') AS r`
+
+## pg-estring  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT E'line1\nline2' AS r`
 
 ## pg-exception-handler  (postgresql)
 - targets: tsql(invalid)
-- sample: `(443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro`
+- live error: `(443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro`
 - src: `CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1; EXCEPTION WHEN OTHERS THEN RETURN -1; END; $$ LANGUAGE plpgsql`
 
 ## pg-expr-index  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
-- sample: `ORA-02327: cannot create index on expression with data type LOB`
+- live error: `ORA-02327: cannot create index on expression with data type LOB`
 - src: `CREATE TABLE t (a INT, b TEXT); CREATE INDEX ix ON t (lower(b))`
 
 ## pg-extract-dow  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- sample: `(155, b"'DOW' is not a recognized datepart option.DB-Lib error message 20018, severity 15:`
+- live error: `(155, b"'DOW' is not a recognized datepart option.DB-Lib error message 20018, severity 15:`
 - src: `SELECT EXTRACT(DOW FROM DATE '2020-01-01') AS d`
+
+## pg-extract-epoch  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1`
+- src: `SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r`
 
 ## pg-grouping-sets  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- sample: `(8120, b"Column 'v.x' is invalid in the select list because it is not contained in either `
+- live error: `(8120, b"Column 'v.x' is invalid in the select list because it is not contained in either `
 - src: `SELECT x, SUM(y) FROM (VALUES (1,10)) v(x,y) GROUP BY GROUPING SETS ((x),())`
+
+## pg-hex-literal  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ`
+- src: `SELECT x'FF'::int AS h, 1.5e3 AS s`
+
+## pg-initcap  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s`
+- src: `SELECT INITCAP('hello world') AS r`
+
+## pg-insert-returning  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT, n INT); INSERT INTO t (id, n) VALUES (1, 5) RETURNING id`
+
+## pg-interval-arith  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S`
+- src: `SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7`
 
 ## pg-jsonb-arrow  (postgresql)
 - targets: mysql(invalid)
-- sample: `(1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My`
+- live error: `(1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT '{"a":1}'::jsonb -> 'a'`
+
+## pg-justify  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near '1 mon 40 days'.DB-Lib error message 20018, severity 15:\nGe`
+- src: `SELECT JUSTIFY_INTERVAL(INTERVAL '1 mon 40 days') AS r`
+
+## pg-make-date  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
+- src: `SELECT MAKE_DATE(2020, 6, 15), MAKE_TIME(10, 30, 0)`
+
+## pg-math-log  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT LOG(10, 100), LN(2.718), POWER(2, 8), SQRT(16)`
+
+## pg-md5  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever`
+- src: `SELECT MD5('abc') AS r`
 
 ## pg-multi-out  (postgresql)
 - targets: oracle(invalid)
-- sample: `FUNCTION F compiled INVALID (line 7): PLS-00201: identifier 'VOID' must be declared`
+- live error: `FUNCTION F compiled INVALID (line 7): PLS-00201: identifier 'VOID' must be declared`
 - src: `CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; END; $$ LANGUAGE plpgsql`
 
 ## pg-network-types  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- sample: `(2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag`
+- live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag`
 - src: `CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)`
 
 ## pg-overlay  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- sample: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV`
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV`
 - src: `SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o`
+
+## pg-percentile  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(x)`
+
+## pg-quote  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU`
+- src: `SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')`
 
 ## pg-range-types  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- sample: `(2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m`
+- live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m`
 - src: `CREATE TABLE t (rng INT4RANGE, tsr TSRANGE)`
 
 ## pg-repeat-left-right  (postgresql)
 - targets: oracle(invalid)
-- sample: `ORA-00904: "RIGHT": invalid identifier`
+- live error: `ORA-00904: "RIGHT": invalid identifier`
 - src: `SELECT REPEAT('ab', 3), LEFT('abc', 2), RIGHT('abc', 2)`
 
 ## pg-return-query  (postgresql)
 - targets: mysql(invalid)
-- sample: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE FUNCTION f() RETURNS SETOF INT AS $$ BEGIN RETURN QUERY SELECT 1 UNION SELECT 2; END; $$ LANGUAGE plpgsql`
 
 ## pg-rollup  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- sample: `(8120, b"Column 'v.x' is invalid in the select list because it is not contained in either `
+- live error: `(8120, b"Column 'v.x' is invalid in the select list because it is not contained in either `
 - src: `SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)`
+
+## pg-sequence  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne`
+- src: `CREATE SEQUENCE seq; SELECT nextval('seq'), currval('seq')`
 
 ## pg-serial-bit  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- sample: `(2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit`
+- live error: `(2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit`
 - src: `CREATE TABLE t (a BIGSERIAL, flags BIT(8), vb VARBIT(16))`
+
+## pg-split-part  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018`
+- src: `SELECT SPLIT_PART('a,b,c', ',', 2) AS r`
 
 ## pg-string-agg-order  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
-- sample: `(529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message`
+- live error: `(529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message`
 - src: `SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)`
+
+## pg-translate  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')`
+- src: `SELECT TRANSLATE('abc', 'ab', 'xy') AS r`
 
 ## pg-trigger-raise  (postgresql)
 - targets: mysql(invalid)
-- sample: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE t (id INT PRIMARY KEY, n INT);
-CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN IF OLD.n <> NEW.n THEN`
+CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN IF OLD.n <> NEW.n THEN RAISE EXCE`
 
 ## pg-trim-both-chars  (postgresql)
 - targets: oracle(invalid)
-- sample: `ORA-30001: trim set should have only one character`
+- live error: `ORA-30001: trim set should have only one character`
 - src: `SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS t`
+
+## pg-truncate-restart  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near 'RESTART'.DB-Lib error message 20018, severity 15:\nGeneral `
+- src: `CREATE TABLE t (id INT); TRUNCATE TABLE t RESTART IDENTITY CASCADE`
 
 ## pg-tz-interval  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
-- sample: `ORA-30089: missing or invalid <datetime field>`
+- live error: `ORA-30089: missing or invalid <datetime field>`
 - src: `CREATE TABLE t (a TIMESTAMPTZ, b TIME WITH TIME ZONE, c INTERVAL)`
+
+## pg-unicode-escape  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(207, b"Invalid column name 'U'.DB-Lib error message 20018, severity 16:\nGeneral SQL Serv`
+- src: `SELECT U&'\0041' AS r`
+
+## pg-update-returning  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT, n INT); UPDATE t SET n = 1 RETURNING id, n`
+
+## pg-view-check  (postgresql)
+- targets: mysql(carrier), oracle(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (id INT); CREATE VIEW v AS SELECT id FROM t WITH LOCAL CHECK OPTION`
+
+## pg-xmlelement  (postgresql)
+- targets: mysql(invalid), tsql(invalid)
+- live error: `(195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018`
+- src: `SELECT XMLELEMENT(NAME foo, 'bar') AS r`
 
 ## ts-after-delete-count  (tsql)
 - targets: oracle(invalid)
-- sample: `TRIGGER TRG compiled INVALID (line 4): PL/SQL: ORA-00942: table or view does not exist`
+- live error: `TRIGGER TRG compiled INVALID (line 4): PL/SQL: ORA-00942: table or view does not exist`
 - src: `CREATE TABLE t (id INT PRIMARY KEY, n INT);
 GO
-CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT CO`
+CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) FRO`
 
 ## ts-after-update-trg  (tsql)
 - targets: mysql(invalid)
-- sample: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE t (id INT PRIMARY KEY, n INT, updated DATETIME);
 GO
-CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t`
+CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 
 ## ts-alter-add  (tsql)
 - targets: oracle(invalid)
-- sample: `ORA-30649: missing DIRECTORY keyword`
+- live error: `ORA-30649: missing DIRECTORY keyword`
 - src: `CREATE TABLE t (a INT); ALTER TABLE t ADD b NVARCHAR(10) NOT NULL DEFAULT 'x'`
+
+## ts-ascii-char  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "NCHAR": invalid identifier`
+- src: `SELECT ASCII('A'), CHAR(65), NCHAR(65)`
+
+## ts-at-time-zone  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00902: invalid datatype`
+- src: `SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r`
 
 ## ts-cast-trycast  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
-- sample: `ORA-01722: unable to convert string value containing 'x' to a number: `
+- live error: `ORA-01722: unable to convert string value containing 'x' to a number: `
 - src: `SELECT CAST(123 AS VARCHAR(10)), TRY_CAST('x' AS INT), CONVERT(DATE, GETDATE())`
 
 ## ts-choose  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
-- sample: `ORA-00904: "CHOOSE": invalid identifier`
+- live error: `ORA-00904: "CHOOSE": invalid identifier`
 - src: `SELECT CHOOSE(2, 'a', 'b', 'c') AS r`
+
+## ts-collate  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT 'a' COLLATE Latin1_General_CS_AS AS r`
 
 ## ts-concat-ws  (tsql)
 - targets: oracle(invalid)
-- sample: `ORA-00904: "CONCAT_WS": invalid identifier`
+- live error: `ORA-00904: "CONCAT_WS": invalid identifier`
 - src: `SELECT CONCAT_WS('-', 'a', 'b', 'c') AS r`
 
 ## ts-cursor  (tsql)
 - targets: mysql(invalid)
-- sample: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
-- src: `CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT`
+- live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
+- src: `CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT FROM c IN`
 
 ## ts-dateadd  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
-- sample: `ORA-30081: invalid data type for datetime/interval arithmetic`
+- live error: `ORA-30081: invalid data type for datetime/interval arithmetic`
 - src: `SELECT DATEADD(DAY, 7, '2020-01-01') AS r`
 
 ## ts-datediff  (tsql)
 - targets: oracle(invalid)
-- sample: `ORA-01861: literal does not match format string`
+- live error: `ORA-01861: literal does not match format string`
 - src: `SELECT DATEDIFF(DAY, '2020-01-01', '2020-01-10') AS r`
+
+## ts-datediff-big  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-01861: literal does not match format string`
+- src: `SELECT DATEDIFF_BIG(SECOND, '2020-01-01', '2020-01-02') AS r`
+
+## ts-datetimefromparts  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "TIMESTAMP_FROM_PARTS": invalid identifier`
+- src: `SELECT DATETIMEFROMPARTS(2020, 6, 15, 10, 30, 0, 0) AS r`
 
 ## ts-datetimeoffset  (tsql)
 - targets: mysql(invalid), oracle(invalid)
-- sample: `ORA-03060: Data type TIME is invalid.`
+- live error: `ORA-03060: Data type TIME is invalid.`
 - src: `CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))`
+
+## ts-eomonth  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-01861: literal does not match format string`
+- src: `SELECT EOMONTH('2020-02-15') AS r`
+
+## ts-eomonth-nested  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-01861: literal does not match format string`
+- src: `SELECT DATEADD(MONTH, -1, EOMONTH('2020-03-01')) AS r`
 
 ## ts-filtered-index  (tsql)
 - targets: mysql(invalid), oracle(invalid)
-- sample: `ORA-02158: invalid CREATE INDEX option`
+- live error: `ORA-02158: invalid CREATE INDEX option`
 - src: `CREATE TABLE t (a INT, b INT); CREATE NONCLUSTERED INDEX ix ON t (a) INCLUDE (b) WHERE a > 0`
 
 ## ts-format-number  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
-- sample: `ORA-00904: "NUMBER_TO_STR": invalid identifier`
+- live error: `ORA-00904: "NUMBER_TO_STR": invalid identifier`
 - src: `SELECT FORMAT(1234.5, 'N2') AS r`
+
+## ts-insert-output  (tsql)
+- targets: mysql(invalid), oracle(invalid)
+- live error: `ORA-00925: missing INTO keyword`
+- src: `CREATE TABLE t (id INT, n INT);
+GO
+INSERT INTO t (id, n) OUTPUT INSERTED.id VALUES (1, 5)`
 
 ## ts-instead-of-insert  (tsql)
 - targets: mysql(invalid), postgresql(invalid)
-- sample: `"t" is a table`
+- live error: `"t" is a table`
 - src: `CREATE TABLE t (id INT PRIMARY KEY, n INT);
 GO
-CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n)`
+CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT id,`
 
 ## ts-json-value  (tsql)
 - targets: mysql(invalid)
-- sample: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT JSON_VALUE('{"a":1}', '$.a')`
+
+## ts-log  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT LOG(2.718), LOG10(100), POWER(2, 8)`
+
+## ts-math  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT CEILING(4.2), FLOOR(4.8), ROUND(4.555, 2), SQUARE(4)`
 
 ## ts-merge  (tsql)
 - targets: mysql(invalid)
-- sample: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE tgt (id INT PRIMARY KEY, n INT); MERGE tgt USING (VALUES (1, 5)) AS s(id, n) ON tgt.id = s.id WHEN MATCHED`
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE tgt (id INT PRIMARY KEY, n INT); MERGE tgt USING (VALUES (1, 5)) AS s(id, n) ON tgt.id = s.id WHEN MATCHED THEN UPDAT`
 
 ## ts-money  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
-- sample: `ORA-00902: invalid datatype`
+- live error: `ORA-00902: invalid datatype`
 - src: `CREATE TABLE t (price MONEY, small SMALLMONEY)`
+
+## ts-quotename  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "SPLIT_PART": invalid identifier`
+- src: `SELECT QUOTENAME('my table'), PARSENAME('a.b.c', 2)`
 
 ## ts-recursive-cte  (tsql)
 - targets: mysql(invalid), postgresql(invalid)
-- sample: `relation "r" does not exist`
+- live error: `relation "r" does not exist`
 - src: `WITH r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n < 5) SELECT * FROM r`
+
+## ts-replicate-space  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "SPACE": invalid identifier`
+- src: `SELECT REPLICATE('ab', 3), SPACE(5), REVERSE('abc')`
 
 ## ts-rowversion  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
-- sample: `ORA-00902: invalid datatype`
+- live error: `ORA-00902: invalid datatype`
 - src: `CREATE TABLE t (row_ver ROWVERSION, flags BINARY(8))`
+
+## ts-select-into  (tsql)
+- targets: oracle(invalid)
+- live error: `ORA-00905: missing keyword`
+- src: `CREATE TABLE src (id INT);
+GO
+SELECT id INTO dst FROM src`
+
+## ts-sequence-next  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "NEXT_VALUE_FOR": invalid identifier`
+- src: `CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1;
+GO
+SELECT NEXT VALUE FOR seq`
+
+## ts-soundex-diff  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "DIFFERENCE": invalid identifier`
+- src: `SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')`
 
 ## ts-stuff  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
-- sample: `ORA-00904: "STUFF": invalid identifier`
+- live error: `ORA-00904: "STUFF": invalid identifier`
 - src: `SELECT STUFF('abcdef', 2, 3, 'XY') AS r`
+
+## ts-sysdatetime  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "GETUTCDATE": invalid identifier`
+- src: `SELECT SYSDATETIME(), SYSUTCDATETIME(), GETUTCDATE()`
+
+## ts-view-check  (tsql)
+- targets: mysql(carrier), oracle(carrier), postgresql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (id INT);
+GO
+CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 
 ## ts-while-loop  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
-- sample: `PROCEDURE P compiled INVALID (line 15): PLS-00103: Encountered the symbol "=" when expecti`
-- src: `CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN`
+- live error: `PROCEDURE P compiled INVALID (line 15): PLS-00103: Encountered the symbol "=" when expecti`
+- src: `CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN SET @n -=`
+---
+
+Totals: 133 distinct constructs; 277 invalid-output rows, 12 carrier rows.
