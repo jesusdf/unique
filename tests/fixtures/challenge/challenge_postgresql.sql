@@ -29,6 +29,9 @@ SELECT ARRAY[1,2,3] || ARRAY[4,5] AS r
 -- CASE[open]: pg-array-jsonb — fails on mysql, oracle. ORA-03099: unexpected item [ in a column definition
 CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)
 
+-- CASE[open]: pg-array-subquery — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT ARRAY(SELECT generate_series(1,3)) AS r
+
 -- CASE[open]: pg-array-to-string — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT array_to_string(ARRAY[1,2,3], ',')
 
@@ -37,6 +40,9 @@ SELECT TIMESTAMP '2020-01-01 10:00' AT TIME ZONE 'UTC' AS r
 
 -- CASE[open]: pg-avg-int — fails on tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
 SELECT AVG(x) FROM (VALUES (1),(2)) v(x)
+
+-- CASE[open]: pg-avg-null — fails on mysql, tsql. FUNC-DIFF: source=(('2.33333',),) target=(('2',),)
+SELECT AVG(x) FROM (VALUES (1),(2),(NULL),(4)) v(x)
 
 -- CASE[open]: pg-before-update-trg — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id INT PRIMARY KEY, n INT, updated TIMESTAMP);
@@ -193,6 +199,12 @@ SELECT JSONB_BUILD_OBJECT('a', 1, 'b', 2)
 -- CASE[open]: pg-jsonb-path — fails on mysql. (1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT '{"a":[1,2]}'::jsonb #> '{a,0}'
 
+-- CASE[open]: pg-jsonb-path-query — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+SELECT jsonb_path_query('{"a":[1,2]}', '$.a[*]') AS r
+
+-- CASE[open]: pg-jsonb-recordset — fails on mysql, tsql. (317, b"Table-valued function 'jsonb_to_recordset' cannot have a column alias.DB-Lib error
+SELECT * FROM jsonb_to_recordset('[{"a":1}]') AS x(a INT)
+
 -- CASE[open]: pg-justify — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 mon 40 days'.DB-Lib error message 20018, severity 15:\nGe
 SELECT JUSTIFY_INTERVAL(INTERVAL '1 mon 40 days') AS r
 
@@ -232,6 +244,9 @@ CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; E
 -- CASE[open]: pg-network-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag
 CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)
 
+-- CASE[open]: pg-order-nulls-default — fails on mysql, tsql. FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))
+SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x
+
 -- CASE[open]: pg-overlay — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV
 SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o
 
@@ -250,6 +265,9 @@ SELECT POWER(2, -1) AS r
 -- CASE[open]: pg-quote — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
 SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')
 
+-- CASE[open]: pg-range-contains — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT INT4RANGE(1, 10) @> 5 AS r
+
 -- CASE[open]: pg-range-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m
 CREATE TABLE t (rng INT4RANGE, tsr TSRANGE)
 
@@ -261,6 +279,9 @@ CREATE TABLE t (a INT, b INT); CREATE RECURSIVE VIEW v(n) AS SELECT 1 UNION ALL 
 
 -- CASE[open]: pg-regexp-matches — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE
 SELECT REGEXP_MATCHES('a1b2', '[0-9]', 'g') AS r
+
+-- CASE[open]: pg-regexp-split-table — fails on mysql, oracle, tsql. (208, b"Invalid object name 'dbo.regexp_split_to_table'.DB-Lib error message 20018, severi
+SELECT * FROM regexp_split_to_table('a,b,c', ',')
 
 -- CASE[open]: pg-repeat-left-right — fails on oracle. ORA-00904: "RIGHT": invalid identifier
 SELECT REPEAT('ab', 3), LEFT('abc', 2), RIGHT('abc', 2)
@@ -345,6 +366,9 @@ SELECT CHAR_LENGTH('  '), LENGTH(TRIM('  '))
 
 -- CASE[open]: pg-truncate-restart — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'RESTART'.DB-Lib error message 20018, severity 15:\nGeneral 
 CREATE TABLE t (id INT); TRUNCATE TABLE t RESTART IDENTITY CASCADE
+
+-- CASE[open]: pg-tstzrange — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
+SELECT tstzrange(now(), now() + INTERVAL '1 day') AS r
 
 -- CASE[open]: pg-tz-interval — fails on mysql, oracle. ORA-30089: missing or invalid <datetime field>
 CREATE TABLE t (a TIMESTAMPTZ, b TIME WITH TIME ZONE, c INTERVAL)

@@ -175,10 +175,25 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN`
 - src: `SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)`
 
+## my-is-true  (mysql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'IS'.DB-Lib error message 20018, severity 15:\nG`
+- src: `SELECT 1 IN (SELECT 1) IS TRUE AS r`
+
 ## my-json-arrayagg  (mysql)
 - targets: tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
 - src: `SELECT JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION SELECT 2) t`
+
+## my-json-keys  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_KEYS('{"a":1,"b":2}') AS r`
+
+## my-json-merge  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_MERGE_PATCH('{"a":1}', '{"b":2}') AS r`
 
 ## my-json-object  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -264,6 +279,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
 - src: `SELECT SOUNDEX('Smith'), FORMAT(1234.5, 2)`
+
+## my-spatial  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST`
+- src: `SELECT ST_AsText(ST_GeomFromText('POINT(1 1)')) AS r`
 
 ## my-status-funcs  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -391,6 +411,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL`
+
+## ora-collect  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
+- src: `SELECT CAST(COLLECT(x) AS SYS.ODCINUMBERLIST) FROM (SELECT 1 x FROM DUAL)`
 
 ## ora-comment-col  (oracle)
 - targets: mysql(invalid), postgresql(carrier), tsql(carrier)
@@ -550,6 +575,11 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - live error: `function string_agg(integer, unknown) does not exist`
 - src: `SELECT LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) AS r FROM (SELECT 1 x FROM DUAL UNION SELECT 2 FROM DUAL)`
 
+## ora-listagg-over  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4113, b"The function 'STRING_AGG' is not a valid windowing function, and cannot be used w`
+- src: `SELECT deptno, LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) OVER (PARTITION BY deptno) FROM (SELECT 1 deptno, 2 x FROM DUAL)`
+
 ## ora-months-between  (oracle)
 - targets: mysql(invalid), postgresql(invalid)
 - live error: `operator does not exist: timestamp with time zone - integer`
@@ -589,6 +619,11 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'ORA_HASH' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT ORA_HASH('abc') AS r FROM DUAL`
+
+## ora-order-nulls-default  (oracle)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))`
+- src: `SELECT x FROM (SELECT 3 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT NULL x FROM DUAL) ORDER BY x`
 
 ## ora-package-spec  (oracle)
 - targets: mysql(invalid), postgresql(carrier), tsql(carrier)
@@ -658,6 +693,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT SYS_CONNECT_BY_PATH(id, '/') AS p FROM (SELECT 1 id, NULL par FROM DUAL) START WITH par IS NULL CONNECT BY PRIOR id = par`
+
+## ora-table-collection  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:`
+- src: `SELECT * FROM TABLE(SYS.ODCINUMBERLIST(1,2,3))`
 
 ## ora-tablespace  (oracle)
 - targets: mysql(carrier), postgresql(carrier), tsql(carrier)
@@ -754,6 +794,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - live error: `ORA-03099: unexpected item [ in a column definition`
 - src: `CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)`
 
+## pg-array-subquery  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT ARRAY(SELECT generate_series(1,3)) AS r`
+
 ## pg-array-to-string  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -768,6 +813,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('1.5',),) target=(('1',),)`
 - src: `SELECT AVG(x) FROM (VALUES (1),(2)) v(x)`
+
+## pg-avg-null  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('2.33333',),) target=(('2',),)`
+- src: `SELECT AVG(x) FROM (VALUES (1),(2),(NULL),(4)) v(x)`
 
 ## pg-before-update-trg  (postgresql)
 - targets: mysql(invalid)
@@ -1025,6 +1075,16 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT '{"a":[1,2]}'::jsonb #> '{a,0}'`
 
+## pg-jsonb-path-query  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js`
+- src: `SELECT jsonb_path_query('{"a":[1,2]}', '$.a[*]') AS r`
+
+## pg-jsonb-recordset  (postgresql)
+- targets: mysql(invalid), tsql(invalid)
+- live error: `(317, b"Table-valued function 'jsonb_to_recordset' cannot have a column alias.DB-Lib error`
+- src: `SELECT * FROM jsonb_to_recordset('[{"a":1}]') AS x(a INT)`
+
 ## pg-justify  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near '1 mon 40 days'.DB-Lib error message 20018, severity 15:\nGe`
@@ -1090,6 +1150,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag`
 - src: `CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)`
 
+## pg-order-nulls-default  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))`
+- src: `SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x`
+
 ## pg-overlay  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV`
@@ -1120,6 +1185,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU`
 - src: `SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')`
 
+## pg-range-contains  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT INT4RANGE(1, 10) @> 5 AS r`
+
 ## pg-range-types  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m`
@@ -1139,6 +1209,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE`
 - src: `SELECT REGEXP_MATCHES('a1b2', '[0-9]', 'g') AS r`
+
+## pg-regexp-split-table  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(208, b"Invalid object name 'dbo.regexp_split_to_table'.DB-Lib error message 20018, severi`
+- src: `SELECT * FROM regexp_split_to_table('a,b,c', ',')`
 
 ## pg-repeat-left-right  (postgresql)
 - targets: oracle(invalid)
@@ -1274,6 +1349,11 @@ CREATE TRIGGE`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near 'RESTART'.DB-Lib error message 20018, severity 15:\nGeneral `
 - src: `CREATE TABLE t (id INT); TRUNCATE TABLE t RESTART IDENTITY CASCADE`
+
+## pg-tstzrange  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ`
+- src: `SELECT tstzrange(now(), now() + INTERVAL '1 day') AS r`
 
 ## pg-tz-interval  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
@@ -1489,12 +1569,22 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - live error: `ORA-00904: "NUMBER_TO_STR": invalid identifier`
 - src: `SELECT FORMAT(1234.5, 'N2') AS r`
 
+## ts-geography  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier`
+- src: `SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r`
+
 ## ts-grant  (tsql)
 - targets: mysql(carrier), oracle(carrier), postgresql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (id INT);
 GO
 GRANT SELECT ON t TO PUBLIC`
+
+## ts-hierarchyid  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT CAST('/1/2/' AS HIERARCHYID).ToString() AS r`
 
 ## ts-host-db  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
@@ -1638,6 +1728,11 @@ EXEC sp_rename 't.a', 'x', 'COLUMN'`
 - live error: `function string_agg(integer, unknown) does not exist`
 - src: `SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2)) v(x)`
 
+## ts-string-split2  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "STRING_SPLIT": invalid identifier`
+- src: `SELECT * FROM STRING_SPLIT('a,b,c', ',') WHERE value <> 'b'`
+
 ## ts-stuff  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "STUFF": invalid identifier`
@@ -1708,4 +1803,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r`
 ---
 
-Totals: 332 distinct constructs; defect rows by kind: carrier 62, func 101, invalid 498, semantic 2, silent-drop 24.
+Totals: 351 distinct constructs; defect rows by kind: carrier 62, func 107, invalid 538, semantic 2, silent-drop 24.

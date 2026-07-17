@@ -107,10 +107,16 @@ CREATE TABLE t (a INT, b INT); CREATE NONCLUSTERED INDEX ix ON t (a) INCLUDE (b)
 -- CASE[open]: ts-format-number — fails on mysql, oracle, postgresql. ORA-00904: "NUMBER_TO_STR": invalid identifier
 SELECT FORMAT(1234.5, 'N2') AS r
 
+-- CASE[open]: ts-geography — fails on mysql, oracle, postgresql. ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier
+SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r
+
 -- CASE[open]: ts-grant — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id INT);
 GO
 GRANT SELECT ON t TO PUBLIC
+
+-- CASE[open]: ts-hierarchyid — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT CAST('/1/2/' AS HIERARCHYID).ToString() AS r
 
 -- CASE[open]: ts-host-db — fails on mysql, oracle, postgresql. ORA-00904: "DB_NAME": invalid identifier
 SELECT HOST_NAME(), DB_NAME(), SUSER_SNAME()
@@ -201,6 +207,9 @@ SELECT '10' + 5 AS r
 
 -- CASE[open]: ts-string-agg-within — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2)) v(x)
+
+-- CASE[open]: ts-string-split2 — fails on mysql, oracle, postgresql. ORA-00904: "STRING_SPLIT": invalid identifier
+SELECT * FROM STRING_SPLIT('a,b,c', ',') WHERE value <> 'b'
 
 -- CASE[open]: ts-stuff — fails on mysql, oracle, postgresql. ORA-00904: "STUFF": invalid identifier
 SELECT STUFF('abcdef', 2, 3, 'XY') AS r
