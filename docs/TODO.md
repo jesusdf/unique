@@ -1207,7 +1207,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          PROCEDURAL_TYPE_MAPS not the same-keyed FUNC map. Measured:
          pg→mysql **34 → 33**, pg→oracle 24 (one reclassified). Floor
          now **134**. Discovery HOLDS 0. Tests:
-         TestWave235BpcharNameTypes (2).**
+         TestWave235BpcharNameTypes (2).* Wave 236 (2026-07-17,
+         FIDELITY): sqlglot cannot parse ``DROP TABLE a, b`` — it
+         shipped the whole statement as a NO-OP COMMENT (the tables
+         were never dropped — a silent behavior loss). A parse_sql
+         pre-recognition splits it into one real DROP per table (valid
+         everywhere; Oracle has no comma form). Statement counts jumped
+         (mysql→tsql 5817 → 6299 — the split expands multi-drops) with
+         syntax stable **20** / pg→mysql **33** — the fix is
+         correctness, not a validity-count mover. Discovery HOLDS 0.
+         Tests: TestWave236MultiTableDrop (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

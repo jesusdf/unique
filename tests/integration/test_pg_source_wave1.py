@@ -8085,3 +8085,22 @@ class TestWave235BpcharNameTypes:
             "oracle",
         )
         assert re.search(r"(?i)hname IN VARCHAR2", out), out
+
+
+class TestWave236MultiTableDrop:
+    """wave 236 (both corpora): sqlglot cannot parse ``DROP TABLE a,
+    b`` — it shredded the statement at the first comma. Split into one
+    DROP per table (valid everywhere; Oracle has no comma form)."""
+
+    def test_multi_drop_mysql(self) -> None:
+        out = _t2("drop table a, b, c;", "postgresql", "mysql")
+        assert out.upper().count("DROP TABLE") == 3, out
+        assert "UNIQUE:" not in out, out
+
+    def test_multi_drop_oracle(self) -> None:
+        out = _t2("drop table a, b;", "postgresql", "oracle")
+        assert out.upper().count("DROP TABLE") == 2, out
+
+    def test_single_drop_untouched(self) -> None:
+        out = _t2("drop table a;", "postgresql", "mysql")
+        assert out.upper().count("DROP TABLE") == 1, out
