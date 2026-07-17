@@ -13,6 +13,7 @@ from unique.core.ast_nodes import (
     AnonymousBlock,
     ASTNode,
     CallStatement,
+    CommentStatement,
     ContinueStatement,
     CursorDeclaration,
     CursorOperation,
@@ -26,6 +27,7 @@ from unique.core.ast_nodes import (
     PrintStatement,
     RaiseErrorStatement,
     RawSQL,
+    ReturnStatement,
     SelectIntoStatement,
     SetVariableStatement,
     TryCatchBlock,
@@ -114,6 +116,16 @@ class TSqlEmitter(ProceduralEmitter):
         """A T-SQL scalar function forbids ``SET NOCOUNT`` (a side-effecting SET
         option, error 443), so — unlike a procedure — its body carries no such
         preamble: ``AS BEGIN [DECLARE …] … RETURN … END``."""
+        # A PG RETURNS TABLE function whose body is one RETURN (SELECT …)
+        # is T-SQL's INLINE table-valued function — the BEGIN…END form
+        # is error 102 there (wave 205).
+        if re.search(r"(?i)\bRETURNS\s+table\s*$", header.strip()) and not declarations:
+            real = [s for s in body_stmts if not isinstance(s, CommentStatement)]
+            if len(real) == 1 and isinstance(real[0], ReturnStatement):
+                ret_text = self._emit_node(real[0]).strip()
+                m = re.match(r"(?is)^RETURN\s*\((.*)\)\s*;?\s*$", ret_text)
+                if m:
+                    return f"{header}\nAS\nRETURN (\n    {m.group(1).strip()}\n);"
         lines = [f"{header}\nAS\nBEGIN"]
         self._indent_level = 1
         for decl in declarations:

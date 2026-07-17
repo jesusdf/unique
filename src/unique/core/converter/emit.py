@@ -4094,6 +4094,10 @@ def _emit_join(
         # (the SubqueryExpression's own alias — e.g. a VALUES relation's —
         # when the JoinClause carries none).
         alias = join.alias or join.table.alias
+        if not alias and dialect in ("tsql", "mysql"):
+            # Both engines demand an alias on a derived table (error
+            # 102 / 1248) — PG tolerates the bare form (wave 205).
+            alias = "uq_j"
         if alias:
             table += f" {_ident(alias, False, dialect)}"
     else:

@@ -7321,3 +7321,38 @@ class TestWave204ExpressionIndexes:
         out = _t2("create index i1 on t1(a, b);", "postgresql", "mysql")
         assert re.search(r"(?i)ON t1\s*\(a, b\)", out), out
         assert "((" not in out, out
+
+
+class TestWave205InlineTvfJoinAlias:
+    """wave 205 (pg-corpus): a PG RETURNS TABLE function whose body is
+    one RETURN (SELECT …) is T-SQL's INLINE table-valued function (the
+    BEGIN…END form was error 102); and a derived table joined without
+    alias gets uq_j on T-SQL/MySQL."""
+
+    def test_inline_tvf_tsql(self) -> None:
+        out = _t2(
+            "create function tv(x int) returns table (a int)"
+            " language sql as $$ select abs(x) $$;",
+            "postgresql",
+            "tsql",
+        )
+        assert re.search(r"(?is)AS\s+RETURN \(", out), out
+        assert "BEGIN" not in out.upper(), out
+
+    def test_scalar_function_keeps_begin(self) -> None:
+        out = _t2(
+            "create function s1(x int) returns int language sql"
+            " as $$ select abs(x) $$;",
+            "postgresql",
+            "tsql",
+        )
+        assert "BEGIN" in out.upper(), out
+
+    def test_join_subquery_alias_tsql(self) -> None:
+        out = _t2(
+            "select * from (select * from t1) uq_dt"
+            " cross join (select 123456) where f1 = col1;",
+            "postgresql",
+            "tsql",
+        )
+        assert re.search(r"(?i)CROSS JOIN \(SELECT 123456\) uq_j", out), out

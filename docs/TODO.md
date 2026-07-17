@@ -994,6 +994,12 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          valid form). T-SQL has no expression indexes at all — honest
          carrier. Measured: pg→mysql **57 → 54**, pg→tsql **52 → 49**
          (−6). Discovery HOLDS 0. Tests: TestWave204ExpressionIndexes
+         (3).* Wave 205 (2026-07-17): a PG
+         RETURNS TABLE function whose body is one RETURN (SELECT …)
+         is T-SQL's INLINE table-valued function — the BEGIN…END form
+         was error 102; and a derived table joined without alias gets
+         ``uq_j`` on T-SQL/MySQL. Measured: pg→tsql **49 → 47** (−2).
+         Discovery HOLDS 0. Tests: TestWave205InlineTvfJoinAlias
          (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
