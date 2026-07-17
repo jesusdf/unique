@@ -139,6 +139,9 @@ SELECT DATE_PART('week', DATE '2020-06-15'), DATE_PART('quarter', DATE '2020-06-
 -- CASE[open]: pg-date-trunc — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d
 
+-- CASE[open]: pg-div-fn2 — fails on mysql. FUNC-DIFF: source=(('3',),) target=()
+SELECT div(10, 3) AS r
+
 -- CASE[open]: pg-div-func — fails on mysql. FUNC-DIFF: source=(('3',),) target=()
 SELECT DIV(7, 2) AS r
 
@@ -460,6 +463,9 @@ CREATE TABLE t (id INT); SELECT * FROM t TABLESAMPLE BERNOULLI(50)
 
 -- CASE[open]: pg-to-hex-typeof — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT to_hex(255), pg_typeof(1)
+
+-- CASE[open]: pg-tochar-neg — fails on mysql, tsql. FUNC-DIFF: source=(('-1234.5',),) target=(('-9999123599',),)
+SELECT to_char(-1234.5, '9999.99') AS r
 
 -- CASE[open]: pg-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'a ' = 'a' AS r

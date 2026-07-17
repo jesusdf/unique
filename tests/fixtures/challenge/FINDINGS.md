@@ -115,6 +115,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('1',),) target=(('NULL',),)`
 - src: `SELECT COALESCE(NULL, 0) = '' AS r`
 
+## my-collation-fn  (mysql)
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('utf8mb4_0900_ai_ci',),) target=(('USING_NLS_COMP',),)`
+- src: `SELECT COLLATION('abc') AS r`
+
 ## my-compress  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN`
@@ -1101,6 +1106,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST`
 - src: `SELECT TO_TIMESTAMP('2020-01-01 10:00:00.123', 'YYYY-MM-DD HH24:MI:SS.FF') AS r FROM DUAL`
 
+## ora-tochar-neg  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('-1234.5',),) target=(('NULL',),)`
+- src: `SELECT TO_CHAR(-1234.5, '9999.99') AS r FROM DUAL`
+
 ## ora-trailing-eq  (oracle)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -1382,6 +1392,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI`
 - src: `SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d`
+
+## pg-div-fn2  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('3',),) target=()`
+- src: `SELECT div(10, 3) AS r`
 
 ## pg-div-func  (postgresql)
 - targets: mysql(func)
@@ -1918,6 +1933,11 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT to_hex(255), pg_typeof(1)`
+
+## pg-tochar-neg  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('-1234.5',),) target=(('-9999123599',),)`
+- src: `SELECT to_char(-1234.5, '9999.99') AS r`
 
 ## pg-trailing-eq  (postgresql)
 - targets: oracle(func), tsql(func)
@@ -2582,4 +2602,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 503 distinct constructs; defect rows by kind: carrier 97, func 201, invalid 652, semantic 2, silent-drop 73.
+Totals: 507 distinct constructs; defect rows by kind: carrier 97, func 206, invalid 652, semantic 2, silent-drop 73.

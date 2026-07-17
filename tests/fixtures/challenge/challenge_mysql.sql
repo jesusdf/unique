@@ -68,6 +68,9 @@ SELECT CHAR(956 USING utf8mb4) AS r
 -- CASE[open]: my-coalesce-empty — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('NULL',),)
 SELECT COALESCE(NULL, 0) = '' AS r
 
+-- CASE[open]: my-collation-fn — fails on oracle. FUNC-DIFF: source=(('utf8mb4_0900_ai_ci',),) target=(('USING_NLS_COMP',),)
+SELECT COLLATION('abc') AS r
+
 -- CASE[open]: my-compress — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
 SELECT UNCOMPRESS(COMPRESS('data')) AS r
 

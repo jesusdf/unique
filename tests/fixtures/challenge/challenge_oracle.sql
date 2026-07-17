@@ -314,6 +314,9 @@ SELECT TO_NUMBER('1.234E2') AS r FROM DUAL
 -- CASE[open]: ora-to-timestamp — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
 SELECT TO_TIMESTAMP('2020-01-01 10:00:00.123', 'YYYY-MM-DD HH24:MI:SS.FF') AS r FROM DUAL
 
+-- CASE[open]: ora-tochar-neg — fails on mysql. FUNC-DIFF: source=(('-1234.5',),) target=(('NULL',),)
+SELECT TO_CHAR(-1234.5, '9999.99') AS r FROM DUAL
+
 -- CASE[open]: ora-trailing-eq — fails on tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT CASE WHEN 'a ' = 'a' THEN 1 ELSE 0 END AS r FROM DUAL
 
