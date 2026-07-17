@@ -1,0 +1,4 @@
+-- Challenge fixtures — MySQL source.
+-- Anonymized tricky constructs; one per entry. See README.md.
+-- (No entries yet — add the smallest self-contained reproduction of each
+--  problematic construct as it is found.)

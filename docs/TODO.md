@@ -159,7 +159,61 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
     buys ~−1); do not resume waves on these corpora without a new
     corpus or a fidelity target.
 
-## 4. Packaging (P3)
+## 4. T-SQL keyword coverage
+
+- [x] **`PROC` abbreviation of `PROCEDURE` (P2)** — T-SQL accepts `PROC` in
+      `CREATE`/`ALTER`/`DROP`; the abbreviated spelling was mishandled while the
+      full one worked (`CREATE PROC`/`ALTER PROC` degraded to an "Unhandled
+      CREATE" carrier; `DROP PROC` leaked the T-SQL-only `PROC` keyword into
+      PG/Oracle/MySQL output — invalid there). Fixed at three layers: the
+      procedural-routing regex (`batch_splitter._PROCEDURAL_PATTERNS["tsql"]`)
+      matches `PROC(?:EDURE)?`; the procedural lexer normalizes `PROC` →
+      `PROCEDURE` only in the `CREATE`/`ALTER` keyword position (a column/object
+      named `proc` stays an identifier); and `converter._normalize_ddl_kind`
+      canonicalizes the DROP/CREATE `kind`. Covered by
+      `tests/integration/test_tsql_keyword_alias.py`. The other two documented
+      T-SQL statement abbreviations already work: `EXEC`≡`EXECUTE` and
+      `TRAN`≡`TRANSACTION` on `COMMIT`/`ROLLBACK`/`SAVE`.
+- [ ] **`CREATE OR ALTER {PROCEDURE|PROC}` not routed to the procedural engine
+      (P2)** — the T-SQL 2016+ `CREATE OR ALTER` form (distinct from
+      `CREATE OR REPLACE`) falls to the DML path and degrades to an "Unhandled
+      CREATE PROCEDURE" carrier. Needs the routing regex to accept
+      `CREATE\s+OR\s+ALTER` and `parser._parse_create` to consume the
+      `OR ALTER` prefix like it does `OR REPLACE`. Not an alias bug — filed
+      while fixing the `PROC` abbreviation.
+- [ ] **`BEGIN TRAN[SACTION]` unhandled (P2)** — both the abbreviated and full
+      spellings degrade to "Unhandled expression type: Transaction" (so it is
+      *not* an alias asymmetry). `COMMIT`/`ROLLBACK`/`SAVE TRAN` already map;
+      only the transaction-*open* statement is missing a target mapping.
+
+## 5. Procedural round-trip fidelity (challenge corpus)
+
+New regression corpus at [`tests/fixtures/challenge/`](../../tests/fixtures/challenge/)
+— one anonymized script per source engine collecting tricky constructs as they
+are found; guarded by `tests/integration/test_challenge.py`.
+
+- [x] **Duplicate `SET NOCOUNT ON` on `oracle`/`pg`/`mysql` → T-SQL (P2)** — the
+      T-SQL procedure emitter injects `SET NOCOUNT ON` as a best-practice
+      default, but did so even when the body already opened with one (an
+      explicit author directive, or the restored `/* UNIQUE: SET NOCOUNT ON … */`
+      round-trip carrier) — emitting it twice, and forcing `ON` in front of an
+      explicit `SET NOCOUNT OFF`. Fixed: `emitter.base._emit_procedure_body`
+      suppresses the injection when the first executable statement is already a
+      `SET NOCOUNT` directive (`_body_manages_nocount`). Removed a dead,
+      identically-buggy `_emit_tsql_procedure_body` duplicate. Covered by
+      `tests/integration/test_tsql_nocount.py`.
+- [x] **Oracle self-qualified parameter `<routine>.<param>` mangled → T-SQL/MySQL
+      (P2)** — Oracle lets a body reference a formal parameter as
+      `usp_get.topfilas`; the parameter rename treated any qualified name as a
+      column, so it was left un-renamed (`WHERE n = usp_get.topfilas`) and, in a
+      `FETCH FIRST` count, sqlglot could not parse it and dropped `.topfilas`
+      (`FETCH FIRST usp_get`). Fixed: `transformer.base._strip_self_qualified_params`
+      drops the `<routine>.` qualifier before the rename when the qualifier is
+      the routine's own name and the suffix is a known parameter (a real
+      table/alias of the same name is untouched). Covered by
+      `tests/integration/test_challenge.py`.
+
+## 6. Packaging (P3)
 
 - [ ] **PyPI publication** — deferred until the tool has been used in real
       projects for a few months and proven stable. Not before then.

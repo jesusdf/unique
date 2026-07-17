@@ -187,6 +187,11 @@ class ProceduralTransformer:
         # transformed — Oracle forbids a local shadowing a parameter
         # (PLS-00410; wave 181), so colliding declares rename.
         self._param_names: set[str] = set()
+        # Bare name of the routine currently being transformed. Oracle lets a
+        # body self-qualify a formal parameter as ``<routine>.<param>``; that
+        # qualifier is stripped before the parameter rename (see
+        # ``_strip_self_qualified_params``).
+        self._routine_name: str | None = None
         # Names (transformed form) of variables/parameters declared with a
         # string type. Used to disambiguate T-SQL '+' as concatenation when no
         # string literal is present (e.g. SHA2(@a + @b) over two text vars).
@@ -551,8 +556,39 @@ class ProceduralTransformer:
             return f"uq{name}"
         return name
 
+    @staticmethod
+    def _bare_ident(name: str | None) -> str:
+        """Last dotted component of an identifier, unquoted (``dbo.p`` → ``p``)."""
+        if not name:
+            return ""
+        return name.split(".")[-1].strip('[]"`')
+
+    def _strip_self_qualified_params(self, sql: str) -> str:
+        """Reduce a PL/SQL self-qualified parameter to the bare parameter.
+
+        Oracle lets a body reference a formal parameter as
+        ``<subprogram>.<param>`` (e.g. ``usp_get.topfilas``); no target engine
+        has that form, and sqlglot cannot even parse it in a ``FETCH FIRST``
+        count. Dropping the ``<routine>.`` qualifier leaves the bare parameter,
+        which the normal rename then maps to the target variable. Restricted to
+        the routine's own name + a known parameter, so a real column/table that
+        merely shares the name is untouched.
+        """
+        if self._source not in ("oracle", "postgresql", "mysql"):
+            return sql
+        if not self._routine_name or not self._var_map:
+            return sql
+        params = "|".join(
+            re.escape(k) for k in sorted(self._var_map, key=len, reverse=True)
+        )
+        pattern = re.compile(
+            rf"(?i)(?<![@\w]){re.escape(self._routine_name)}\s*\.\s*({params})\b"
+        )
+        return self._map_outside_strings(sql, lambda seg: pattern.sub(r"\1", seg))
+
     def _transform_var_in_sql(self, sql: str) -> str:
         """Transform variable references within raw SQL text."""
+        sql = self._strip_self_qualified_params(sql)
         if self._source == "tsql" and self._target != "tsql":
             # Strip SQL Server's default schema prefix — none of the other
             # engines has a "dbo" schema (Oracle objects live in the current
@@ -1211,6 +1247,7 @@ class ProceduralTransformer:
         if handler_culprit is not None:
             return self._degrade_for_handler(node, handler_culprit)
         node = dataclasses.replace(node, body=folded_body)
+        self._routine_name = self._bare_ident(node.name)
         new_params = self._transform_params(node.parameters)
         new_body = self._transform_body(
             self._drop_param_shadowing_locals(node.body, node.parameters)
@@ -1228,6 +1265,7 @@ class ProceduralTransformer:
 
     def _transform_alter_procedure(self, node: AlterProcedureStatement) -> ASTNode:
         """Transform ALTER PROCEDURE (T-SQL) → CREATE OR REPLACE (others)."""
+        self._routine_name = self._bare_ident(node.name)
         new_params = self._transform_params(node.parameters)
         new_body = self._transform_body(node.body)
         if self._alter_becomes_create():
@@ -1667,6 +1705,7 @@ class ProceduralTransformer:
             and node.return_type.name.upper() == "VOID"
             and self._target != "postgresql"
         )
+        self._routine_name = self._bare_ident(node.name)
         new_params = self._transform_params(node.parameters)
         prev_void = getattr(self, "_in_void_function", False)
         self._in_void_function = is_void
