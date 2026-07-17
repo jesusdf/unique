@@ -207,6 +207,9 @@ SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')
 -- CASE[open]: my-least-null2 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1',),)
 SELECT LEAST(1, 2, NULL, 3) AS r
 
+-- CASE[open]: my-left-float — fails on tsql. FUNC-DIFF: source=(('hel',),) target=(('he',),)
+SELECT LEFT('hello', 2.9) AS r
+
 -- CASE[open]: my-left-neg — fails on postgresql. FUNC-DIFF: source=(('',),) target=(('ab',),)
 SELECT LEFT('abc', -1) AS r
 
@@ -274,6 +277,9 @@ CREATE TABLE t (id INT, n INT, s VARCHAR(50)); WITH RECURSIVE seq AS (SELECT 1 n
 -- CASE[open]: my-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END
 
+-- CASE[open]: my-repeat-float — fails on tsql. FUNC-DIFF: source=(('ababab',),) target=(('abab',),)
+SELECT REPEAT('ab', 2.9) AS r
+
 -- CASE[open]: my-repeat-neg — fails on tsql. FUNC-DIFF: source=(('',),) target=(('NULL',),)
 SELECT REPEAT('ab', -1) AS r
 
@@ -297,6 +303,12 @@ SELECT LAST_INSERT_ID(), ROW_COUNT(), FOUND_ROWS()
 
 -- CASE[open]: my-str-lt — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'apple' < 'Banana' AS r
+
+-- CASE[open]: my-strnum-add — fails on tsql. FUNC-DIFF: source=(('10',),) target=(('55',),)
+SELECT '5'+'5' AS r
+
+-- CASE[open]: my-substr-float — fails on oracle, tsql. FUNC-DIFF: source=(('llo',),) target=(('el',),)
+SELECT SUBSTRING('hello', 2.9, 2.9) AS r
 
 -- CASE[open]: my-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('def',),) target=(('ab',),)
 SELECT SUBSTRING('abcdef', -3) AS r

@@ -346,6 +346,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('1',),)`
 - src: `SELECT LEAST(1, 2, NULL, 3) AS r`
 
+## my-left-float  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('hel',),) target=(('he',),)`
+- src: `SELECT LEFT('hello', 2.9) AS r`
+
 ## my-left-neg  (mysql)
 - targets: postgresql(func)
 - live error: `FUNC-DIFF: source=(('',),) target=(('ab',),)`
@@ -456,6 +461,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
 - src: `CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END`
 
+## my-repeat-float  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('ababab',),) target=(('abab',),)`
+- src: `SELECT REPEAT('ab', 2.9) AS r`
+
 ## my-repeat-neg  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('',),) target=(('NULL',),)`
@@ -495,6 +505,16 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT 'apple' < 'Banana' AS r`
+
+## my-strnum-add  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('10',),) target=(('55',),)`
+- src: `SELECT '5'+'5' AS r`
+
+## my-substr-float  (mysql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('llo',),) target=(('el',),)`
+- src: `SELECT SUBSTRING('hello', 2.9, 2.9) AS r`
 
 ## my-substr-neg  (mysql)
 - targets: postgresql(func), tsql(func)
@@ -1793,6 +1813,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNC-DIFF: source=(('ab',),) target=(('',),)`
 - src: `SELECT LEFT('abc', -1) AS r`
 
+## pg-left-round  (postgresql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('hel',),) target=(('he',),)`
+- src: `SELECT LEFT('hello', 2.9::int) AS r`
+
 ## pg-like-cs  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -2019,6 +2044,11 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(8120, b"Column 'v.x' is invalid in the select list because it is not contained in either `
 - src: `SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)`
+
+## pg-round-1005  (postgresql)
+- targets: mysql(func), oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1.01',),) target=(('1',),)`
+- src: `SELECT ROUND(1.005::numeric, 2) AS r`
 
 ## pg-round-2675  (postgresql)
 - targets: mysql(func), oracle(func), tsql(func)
@@ -2867,4 +2897,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 554 distinct constructs; defect rows by kind: carrier 129, func 206, invalid 712, semantic 2, silent-drop 73.
+Totals: 560 distinct constructs; defect rows by kind: carrier 129, func 215, invalid 712, semantic 2, silent-drop 73.
