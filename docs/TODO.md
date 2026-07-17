@@ -1055,7 +1055,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          whole-row cast (``CAST(alias.* AS type)``) has no form
          elsewhere — whole carrier off PG. Measured: pg→mysql
          **40 → 39**, pg→tsql **39 → 38**. Discovery HOLDS 0. Tests:
-         TestWave214WholeRowCast (3).**
+         TestWave214WholeRowCast (3).* Wave 215 (2026-07-17): PG 14's
+         SQL-standard body (``BEGIN ATOMIC …``) — unconsumed, ATOMIC
+         shredded the first statement into an ``atomic;`` leftover and
+         DROPPED it (silent loss; ATOMIC lexes as IDENTIFIER, so the
+         keyword match missed). Measured: pg→tsql stable **38** (the
+         corpus instances fail at the sqlglot source parse for other
+         reasons); the fix is silent-loss class. Discovery HOLDS 0.
+         Tests: TestWave215BeginAtomic (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

@@ -7593,3 +7593,28 @@ class TestWave214WholeRowCast:
             "mysql",
         )
         assert "UNIQUE:" not in out, out
+
+
+class TestWave215BeginAtomic:
+    """wave 215 (pg-corpus): PG 14's SQL-standard body (``BEGIN ATOMIC
+    …``) — unconsumed, ATOMIC shredded the first statement into an
+    ``atomic;`` leftover and DROPPED it (silent loss)."""
+
+    def test_begin_atomic_body_survives(self) -> None:
+        out = _t2(
+            "create function fa(x int) returns int language sql"
+            " begin atomic select x + 1; end;",
+            "postgresql",
+            "tsql",
+        )
+        assert "atomic" not in out.lower(), out
+        assert re.search(r"(?i)SELECT @x \+ 1", out), out
+
+    def test_plain_begin_untouched(self) -> None:
+        out = _t2(
+            "create function fb(x int) returns int language plpgsql"
+            " as $$ begin return x; end $$;",
+            "postgresql",
+            "tsql",
+        )
+        assert re.search(r"(?i)RETURN @x", out), out

@@ -167,6 +167,14 @@ class PlsqlStatementsMixin(ParserBase):
 
         # BEGIN ... END block
         if self._match_keyword("BEGIN"):
+            # PG 14's SQL-standard function body (``BEGIN ATOMIC …``):
+            # unconsumed, ATOMIC shredded the first statement into an
+            # ``atomic;`` leftover and DROPPED it (wave 215).
+            if (
+                self._dialect == "postgresql"
+                and self._current().upper_value == "ATOMIC"
+            ):
+                self._advance()
             guard = 0
             while not self._at_end() and not self._current().is_keyword("END"):
                 guard += 1
