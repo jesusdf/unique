@@ -1,6 +1,6 @@
 # Unique — Project Status
 
-## Current state: v0.25.0+ (**ALL architecture milestones M0–M4 complete** — M3 final landed 2026-07-17)
+## Current state: v0.26.0 (**ALL architecture milestones M0–M4 complete** — M3 final, IR-first expressions)
 
 **Direction-residue campaign closed 2026-07-17** (waves 103–239, user-declared
 architectural floor at `469917a`): the six corpus directions (pg-source and
