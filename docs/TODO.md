@@ -1148,7 +1148,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (98.8%), oracle **25** (99.2%)} — **TOTAL 143** from ~770 at
          campaign open (121 waves, 108–227). Discovery pg→pg **0**
          throughout. Remaining: adversarial deep singles (pg_regress
-         shadow/label/custom-aggregate cases) across six fronts.**
+         shadow/label/custom-aggregate cases) across six fronts.* Wave 229 (2026-07-17): a
+         single-arg ``LIMIT n`` INSIDE a subquery (``RETURN (select …
+         limit 1)``) spells OFFSET/FETCH with the no-order idiom on
+         T-SQL (the trailing statement-level form stays the wave-212
+         SELECT-assign TOP); the raw-text LIMIT map now covers pg
+         source too. Measured: pg→tsql **33 → 31** (−2). Discovery
+         HOLDS 0. Tests: TestWave229SubqueryLimitTsql (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

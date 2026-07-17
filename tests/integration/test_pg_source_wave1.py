@@ -7909,3 +7909,28 @@ class TestWave227OracleBoolReturnRefcursor:
             "oracle",
         )
         assert re.search(r"(?i)c SYS_REFCURSOR;", out), out
+
+
+class TestWave229SubqueryLimitTsql:
+    """wave 229 (pg-corpus): a single-arg ``LIMIT n`` INSIDE a
+    subquery (``RETURN (select … limit 1)``) spells OFFSET/FETCH with
+    the no-order idiom on T-SQL; the trailing statement-level form
+    stays the wave-212 SELECT-assign TOP."""
+
+    def test_return_subquery_limit(self) -> None:
+        out = _t2(
+            "create function sr(p1 float) returns float language plpgsql"
+            " as $$ begin return (select recurse(p1) limit 1); end $$;",
+            "postgresql",
+            "tsql",
+        )
+        assert re.search(r"(?i)OFFSET 0 ROWS FETCH NEXT 1 ROWS ONLY\s*\)", out), out
+        assert "limit" not in out.lower(), out
+
+    def test_trailing_limit_stays_top(self) -> None:
+        out = _t2(
+            "create procedure q(x int) begin" " select id into x from t1 limit 1; end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)SELECT TOP 1 @x = id", out), out
