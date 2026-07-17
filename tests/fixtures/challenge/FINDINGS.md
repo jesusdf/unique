@@ -723,6 +723,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
 - src: `SELECT TIMESTAMPDIFF(YEAR, '2019-12-31', '2020-01-01') AS r`
 
+## my-timestr-plus  (mysql)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('NULL',),) target=(('1900-01-01 13:30:00',),)`
+- src: `SELECT '12:00:00' + INTERVAL 90 MINUTE AS r`
+
 ## my-trailing-eq  (mysql)
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -944,6 +949,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: mysql(semantic), postgresql(invalid)
 - live error: `SEMANTIC: Oracle 'date + 1' adds ONE DAY; MySQL 'CURRENT_TIMESTAMP + 1' does numeric arith`
 - src: `SELECT SYSDATE + 1 AS r FROM DUAL`
+
+## ora-date-plus-int2  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('2020-01-31 00:00:00',),) target=(('2050',),)`
+- src: `SELECT DATE '2020-01-01' + 30 AS r FROM DUAL`
 
 ## ora-day-of-week  (oracle)
 - targets: mysql(func)
@@ -1502,6 +1512,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: oracle(invalid)
 - live error: `ORA-00907: missing right parenthesis`
 - src: `SELECT DATE_PART('week', DATE '2020-06-15'), DATE_PART('quarter', DATE '2020-06-15')`
+
+## pg-date-plus-int  (postgresql)
+- targets: mysql(func), oracle(func)
+- live error: `FUNC-DIFF: source=(('2020-01-31',),) target=(('2020-01-31 00:00:00',),)`
+- src: `SELECT DATE '2020-01-01' + 30 AS r`
 
 ## pg-date-trunc  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2601,4 +2616,4 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 505 distinct constructs; defect rows by kind: func 253, invalid 717, semantic 2, silent-drop 75.
+Totals: 508 distinct constructs; defect rows by kind: func 258, invalid 717, semantic 2, silent-drop 75.

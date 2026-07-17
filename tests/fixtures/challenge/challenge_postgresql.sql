@@ -107,6 +107,9 @@ SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r
 -- CASE[open]: pg-date-part — fails on oracle. ORA-00907: missing right parenthesis
 SELECT DATE_PART('week', DATE '2020-06-15'), DATE_PART('quarter', DATE '2020-06-15')
 
+-- CASE[open]: pg-date-plus-int — fails on mysql, oracle. FUNC-DIFF: source=(('2020-01-31',),) target=(('2020-01-31 00:00:00',),)
+SELECT DATE '2020-01-01' + 30 AS r
+
 -- CASE[open]: pg-date-trunc — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d
 

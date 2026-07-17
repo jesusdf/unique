@@ -414,6 +414,9 @@ SELECT TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10') AS r
 -- CASE[open]: my-timestampdiff-year — fails on tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT TIMESTAMPDIFF(YEAR, '2019-12-31', '2020-01-01') AS r
 
+-- CASE[open]: my-timestr-plus — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1900-01-01 13:30:00',),)
+SELECT '12:00:00' + INTERVAL 90 MINUTE AS r
+
 -- CASE[open]: my-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'a ' = 'a' AS r
 
