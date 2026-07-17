@@ -77,36 +77,42 @@ def _cases_by_status(want: str) -> list[tuple[str, str, int]]:
     return out
 
 
-@pytest.mark.parametrize("fname,source,case_idx", _cases_by_status("fixed"))
-def test_fixed_case_has_no_unrecognized_construct(
-    fname: str, source: str, case_idx: int
-) -> None:
+def test_fixed_cases_have_no_unrecognized_construct() -> None:
     """A closed case must transpile to every engine without an unrecognized
-    carrier (a documented degrade is fine, an Unhandled construct is not)."""
-    sql = _cases(fname)[case_idx]
-    for target in _ALL_ENGINES:
-        if target == source:
-            continue
-        out = _tx(sql, source, target)
-        for marker in _UNRECOGNIZED_MARKERS:
-            assert (
-                marker not in out
-            ), f"{fname}[{case_idx}] -> {target}: {marker!r}\n{out}"
+    carrier (a documented degrade is fine, an Unhandled construct is not).
+
+    Kept as ONE looping test (not parametrized per case): these generic guards
+    check *absence* of a marker, so they pass under an identity transpiler and
+    would otherwise dilute the identity-mutation gate as the corpus grows. The
+    real assertion-quality lives in the specific ``[fixed]`` classes below."""
+    failures: list[str] = []
+    for fname, source, i in _cases_by_status("fixed"):
+        sql = _cases(fname)[i]
+        for target in _ALL_ENGINES:
+            if target == source:
+                continue
+            out = _tx(sql, source, target)
+            for marker in _UNRECOGNIZED_MARKERS:
+                if marker in out:
+                    failures.append(f"{fname}[{i}] -> {target}: {marker!r}")
+    assert not failures, "unrecognized carrier on fixed cases:\n" + "\n".join(
+        failures[:20]
+    )
 
 
-@pytest.mark.parametrize("fname,source,case_idx", _cases_by_status("open"))
-def test_open_case_transpiles_without_crashing(
-    fname: str, source: str, case_idx: int
-) -> None:
-    """An OPEN (RED-found, unfixed) case is a known defect backlog — its output
-    is wrong on some target. We only assert the transpiler does not *crash* on
-    it; correctness is BLUE's job (which flips it to ``[fixed]`` with a real
-    assertion). Documented in tests/fixtures/challenge/FINDINGS.md."""
-    sql = _cases(fname)[case_idx]
-    for target in _ALL_ENGINES:
-        if target == source:
-            continue
-        _tx(sql, source, target)  # must not raise
+def test_open_cases_transpile_without_crashing() -> None:
+    """OPEN (RED-found, unfixed) cases are the known-defect backlog — output is
+    wrong on some target. We only assert the transpiler does not *crash*;
+    correctness is BLUE's job (flip to ``[fixed]`` with a real assertion). ONE
+    looping test on purpose (a no-crash smoke check passes under identity, so
+    parametrizing it per case would swamp the identity-mutation gate). See
+    tests/fixtures/challenge/FINDINGS.md."""
+    for fname, source, i in _cases_by_status("open"):
+        sql = _cases(fname)[i]
+        for target in _ALL_ENGINES:
+            if target == source:
+                continue
+            _tx(sql, source, target)  # must not raise
 
 
 class TestOracleSelfQualifiedParam:
