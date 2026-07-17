@@ -66,11 +66,17 @@ SELECT CAST(123 AS VARCHAR(10)), TRY_CAST('x' AS INT), CONVERT(DATE, GETDATE())
 -- CASE[open]: ts-checksum-agg — fails on mysql, oracle, postgresql. ORA-00904: "CHECKSUM_AGG": invalid identifier
 SELECT CHECKSUM_AGG(x) FROM (VALUES (1),(2)) v(x)
 
+-- CASE[open]: ts-checksum-fns — fails on mysql, oracle, postgresql. ORA-00909: invalid number of arguments
+SELECT CHECKSUM('a','b'), BINARY_CHECKSUM('x'), HASHBYTES('MD5','x')
+
 -- CASE[open]: ts-choose — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
 SELECT CHOOSE(2, 'a', 'b', 'c') AS r
 
 -- CASE[open]: ts-compress — fails on oracle, postgresql. ORA-00936: missing expression
 SELECT COMPRESS('data') AS r
+
+-- CASE[open]: ts-compress2 — fails on mysql, oracle, postgresql. ORA-00936: missing expression
+SELECT COMPRESS('x'), DECOMPRESS(COMPRESS('x'))
 
 -- CASE[open]: ts-concat-null — fails on mysql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
 SELECT CONCAT('a', NULL, 'b') AS r
@@ -159,6 +165,9 @@ CREATE TABLE t (id INT PRIMARY KEY, n INT);
 GO
 CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT id, n FROM inserted; END
 
+-- CASE[open]: ts-is-fns — fails on mysql, oracle, postgresql. ORA-00904: "ISJSON": invalid identifier
+SELECT ISNUMERIC('12.3'), ISDATE('2020-01-01'), ISJSON('{}')
+
 -- CASE[open]: ts-len-trailing — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('3',),) target=(('6',),)
 SELECT LEN('abc   ') AS r
 
@@ -225,6 +234,9 @@ SELECT id INTO dst FROM src
 CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1;
 GO
 SELECT NEXT VALUE FOR seq
+
+-- CASE[open]: ts-session-ctx — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TRANSACTION_ID": invalid identifier
+SELECT SESSION_CONTEXT(N'k'), CURRENT_TRANSACTION_ID()
 
 -- CASE[open]: ts-soundex-diff — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
 SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')

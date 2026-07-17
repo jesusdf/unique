@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (338 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (341 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -223,6 +223,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN`
 - src: `SELECT UNCOMPRESS(COMPRESS('data')) AS r`
 
+## my-compress2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN`
+- src: `SELECT COMPRESS('x'), UNCOMPRESSED_LENGTH(COMPRESS('x'))`
+
 ## my-computed-json  (mysql)
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'JSON_UNQUOTE' is not a recognized built-in function name.DB-Lib error message 200`
@@ -368,6 +373,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI`
 - src: `SELECT FIELD('b', 'a', 'b', 'c') AS r`
 
+## my-file-lock  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO`
+- src: `SELECT LOAD_FILE('/etc/x'), IS_USED_LOCK('l')`
+
 ## my-floor-precision  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('3',),)`
@@ -448,6 +458,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN`
 - src: `SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)`
 
+## my-inet6  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN`
+- src: `SELECT INET6_ATON('::1'), INET6_NTOA(INET6_ATON('::1'))`
+
 ## my-infoschema  (mysql)
 - targets: oracle(invalid)
 - live error: `PROCEDURE P compiled INVALID (line 8): PL/SQL: ORA-00942: table or view does not exist`
@@ -503,6 +518,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
 - src: `SELECT JSON_MERGE_PATCH('{"a":1}', '{"b":2}') AS r`
 
+## my-json-modify  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_SET('{}', '$.a', 1), JSON_REMOVE('{"a":1}', '$.a'), JSON_REPLACE('{"a":1}', '$.a', 2)`
+
 ## my-json-object  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_`
@@ -522,6 +542,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT LAST_DAY('2020-02-15'), EXTRACT(DAY FROM LAST_DAY('2020-02-15'))`
+
+## my-least-greatest-null  (mysql)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('NULL', 'NULL'),) target=(('a', '1'),)`
+- src: `SELECT LEAST(NULL, 'a') AS r, GREATEST(NULL, 1) AS b`
 
 ## my-least-null2  (mysql)
 - targets: postgresql(func), tsql(func)
@@ -737,6 +762,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RO`
 - src: `SELECT LAST_INSERT_ID(), ROW_COUNT(), FOUND_ROWS()`
+
+## my-stmt-digest  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST`
+- src: `SELECT STATEMENT_DIGEST('SELECT 1'), STATEMENT_DIGEST_TEXT('SELECT 1')`
 
 ## my-str-lt  (mysql)
 - targets: oracle(func), postgresql(func)
@@ -1003,6 +1033,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s`
 - src: `SELECT COALESCE(TO_CLOB('a'), TO_CLOB('b')) AS r FROM DUAL`
+
+## ora-clob-ops  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s`
+- src: `SELECT TO_CLOB('x') || TO_CLOB('y'), DBMS_LOB.SUBSTR(TO_CLOB('hello'), 3) FROM DUAL`
 
 ## ora-collect  (oracle)
 - targets: postgresql(invalid), tsql(invalid)
@@ -1368,6 +1403,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SY`
 - src: `SELECT SYS_EXTRACT_UTC(SYSTIMESTAMP) AS r FROM DUAL`
 
+## ora-sys-fns  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'SYS_CONTEXT' is not a recognized built-in function name.DB-Lib error message 2001`
+- src: `SELECT SYS_GUID(), SYS_CONTEXT('USERENV','SID'), USERENV('LANGUAGE') FROM DUAL`
+
 ## ora-table-collection  (oracle)
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:`
@@ -1448,6 +1488,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI`
 - src: `SELECT WIDTH_BUCKET(5, 0, 10, 5) AS r FROM DUAL`
 
+## ora-xmlagg  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018`
+- src: `SELECT XMLAGG(XMLELEMENT("e", dummy)) FROM DUAL`
+
 ## ora-xmlelement  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018`
@@ -1480,10 +1525,20 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
 - src: `SELECT 'Ä' = 'A' AS r`
 
+## pg-admin-fns  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'pg_sleep' is not a recognized built-in function name.DB-Lib error message 20018, `
+- src: `SELECT pg_sleep(0), pg_advisory_lock(1), txid_current()`
+
 ## pg-age  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(195, b"'AGE' is not a recognized built-in function name.DB-Lib error message 20018, sever`
 - src: `SELECT AGE(TIMESTAMP '2020-01-01', TIMESTAMP '2019-01-01') AS a`
+
+## pg-age-epoch  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'age' is not a recognized built-in function name.DB-Lib error message 20018, sever`
+- src: `SELECT age(now(), '2020-01-01'), date_part('epoch', now())`
 
 ## pg-all-values  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -1815,10 +1870,20 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
 - src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, n, count(*) OVER (ORDER BY id GROUPS BETWEEN`
 
+## pg-hash-fns  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever`
+- src: `SELECT lpad('x', 3), md5('x'), sha256('x'::bytea)`
+
 ## pg-hex-literal  (postgresql)
 - targets: oracle(invalid)
 - live error: `ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ`
 - src: `SELECT x'FF'::int AS h, 1.5e3 AS s`
+
+## pg-inet-ops  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(243, b'Type cidr is not a defined system type.DB-Lib error message 20018, severity 16:\nG`
+- src: `SELECT '192.168.1.0/24'::cidr >> '192.168.1.5'::inet, abbrev('10.0.0.0/8'::cidr)`
 
 ## pg-initcap  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -1859,6 +1924,16 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
 - src: `SELECT JSONB_BUILD_OBJECT('a', 1, 'b', 2)`
+
+## pg-jsonb-fns2  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js`
+- src: `SELECT jsonb_pretty('{"a":1}'::jsonb), jsonb_strip_nulls('{"a":null}'::jsonb)`
+
+## pg-jsonb-modify  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js`
+- src: `SELECT jsonb_set('{}', '{a}', '1'), '{"a":1}'::jsonb - 'a'`
 
 ## pg-jsonb-path-query  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -1944,6 +2019,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: oracle(invalid)
 - live error: `ORA-30485: missing ORDER BY expression in the window specification`
 - src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id, LAG(n) OVER w, LEAD(n) OVER w FROM t WINDOW w AS (PARTITION BY s ORDER B`
+
+## pg-nan-cmp  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT 'NaN'::numeric > 1 AS r`
 
 ## pg-nested-call  (postgresql)
 - targets: oracle(invalid)
@@ -2408,6 +2488,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `ORA-00904: "CHECKSUM_AGG": invalid identifier`
 - src: `SELECT CHECKSUM_AGG(x) FROM (VALUES (1),(2)) v(x)`
 
+## ts-checksum-fns  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00909: invalid number of arguments`
+- src: `SELECT CHECKSUM('a','b'), BINARY_CHECKSUM('x'), HASHBYTES('MD5','x')`
+
 ## ts-choose  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "CHOOSE": invalid identifier`
@@ -2417,6 +2502,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00936: missing expression`
 - src: `SELECT COMPRESS('data') AS r`
+
+## ts-compress2  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00936: missing expression`
+- src: `SELECT COMPRESS('x'), DECOMPRESS(COMPRESS('x'))`
 
 ## ts-concat-null  (tsql)
 - targets: mysql(func)
@@ -2559,6 +2649,11 @@ INSERT INTO t (id, n) OUTPUT INSERTED.id VALUES (1, 5)`
 GO
 CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT id,`
 
+## ts-is-fns  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "ISJSON": invalid identifier`
+- src: `SELECT ISNUMERIC('12.3'), ISDATE('2020-01-01'), ISJSON('{}')`
+
 ## ts-len-trailing  (tsql)
 - targets: mysql(func), oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('6',),)`
@@ -2663,6 +2758,11 @@ SELECT id INTO dst FROM src`
 - src: `CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1;
 GO
 SELECT NEXT VALUE FOR seq`
+
+## ts-session-ctx  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "CURRENT_TRANSACTION_ID": invalid identifier`
+- src: `SELECT SESSION_CONTEXT(N'k'), CURRENT_TRANSACTION_ID()`
 
 ## ts-soundex-diff  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
@@ -2802,4 +2902,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 544 distinct constructs; defect rows by kind: func 291, invalid 737, semantic 2, silent-drop 75.
+Totals: 564 distinct constructs; defect rows by kind: func 294, invalid 790, semantic 2, silent-drop 75.

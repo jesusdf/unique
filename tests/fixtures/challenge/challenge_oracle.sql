@@ -50,6 +50,9 @@ SELECT CAST('abc' AS NUMBER DEFAULT -1 ON CONVERSION ERROR) AS r FROM DUAL
 -- CASE[open]: ora-clob-coalesce — fails on mysql, postgresql, tsql. (195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT COALESCE(TO_CLOB('a'), TO_CLOB('b')) AS r FROM DUAL
 
+-- CASE[open]: ora-clob-ops — fails on mysql, postgresql, tsql. (195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s
+SELECT TO_CLOB('x') || TO_CLOB('y'), DBMS_LOB.SUBSTR(TO_CLOB('hello'), 3) FROM DUAL
+
 -- CASE[open]: ora-collect — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT CAST(COLLECT(x) AS SYS.ODCINUMBERLIST) FROM (SELECT 1 x FROM DUAL)
 
@@ -270,6 +273,9 @@ SELECT SUBSTR('abcdef', -3, 2) AS r FROM DUAL
 -- CASE[open]: ora-sys-extract-utc — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SY
 SELECT SYS_EXTRACT_UTC(SYSTIMESTAMP) AS r FROM DUAL
 
+-- CASE[open]: ora-sys-fns — fails on mysql, postgresql, tsql. (195, b"'SYS_CONTEXT' is not a recognized built-in function name.DB-Lib error message 2001
+SELECT SYS_GUID(), SYS_CONTEXT('USERENV','SID'), USERENV('LANGUAGE') FROM DUAL
+
 -- CASE[open]: ora-table-collection — fails on postgresql, tsql. (156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:
 SELECT * FROM TABLE(SYS.ODCINUMBERLIST(1,2,3))
 
@@ -317,6 +323,9 @@ SELECT VSIZE(123) AS r FROM DUAL
 
 -- CASE[open]: ora-width-bucket — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI
 SELECT WIDTH_BUCKET(5, 0, 10, 5) AS r FROM DUAL
+
+-- CASE[open]: ora-xmlagg — fails on mysql, postgresql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
+SELECT XMLAGG(XMLELEMENT("e", dummy)) FROM DUAL
 
 -- CASE[open]: ora-xmlelement — fails on mysql, postgresql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT XMLELEMENT("foo", 'bar') AS r FROM DUAL

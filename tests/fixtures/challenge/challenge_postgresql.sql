@@ -8,8 +8,14 @@
 -- CASE[open]: pg-accent-eq — fails on mysql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'Ä' = 'A' AS r
 
+-- CASE[open]: pg-admin-fns — fails on mysql, oracle, tsql. (195, b"'pg_sleep' is not a recognized built-in function name.DB-Lib error message 20018, 
+SELECT pg_sleep(0), pg_advisory_lock(1), txid_current()
+
 -- CASE[open]: pg-age — fails on mysql, oracle, tsql. (195, b"'AGE' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT AGE(TIMESTAMP '2020-01-01', TIMESTAMP '2019-01-01') AS a
+
+-- CASE[open]: pg-age-epoch — fails on mysql, oracle, tsql. (195, b"'age' is not a recognized built-in function name.DB-Lib error message 20018, sever
+SELECT age(now(), '2020-01-01'), date_part('epoch', now())
 
 -- CASE[open]: pg-all-values — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t WHERE n > ALL (VALUES (1),(2),(3))
@@ -209,8 +215,14 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 -- CASE[open]: pg-groups2 — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, n, count(*) OVER (ORDER BY id GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 
+-- CASE[open]: pg-hash-fns — fails on mysql, oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
+SELECT lpad('x', 3), md5('x'), sha256('x'::bytea)
+
 -- CASE[open]: pg-hex-literal — fails on oracle. ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ
 SELECT x'FF'::int AS h, 1.5e3 AS s
+
+-- CASE[open]: pg-inet-ops — fails on oracle, tsql. (243, b'Type cidr is not a defined system type.DB-Lib error message 20018, severity 16:\nG
+SELECT '192.168.1.0/24'::cidr >> '192.168.1.5'::inet, abbrev('10.0.0.0/8'::cidr)
 
 -- CASE[open]: pg-initcap — fails on mysql, oracle, tsql. (195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT INITCAP('hello world') AS r
@@ -235,6 +247,12 @@ SELECT JSONB_AGG(x) FROM (VALUES (1),(2)) v(x)
 
 -- CASE[open]: pg-jsonb-build — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSONB_BUILD_OBJECT('a', 1, 'b', 2)
+
+-- CASE[open]: pg-jsonb-fns2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+SELECT jsonb_pretty('{"a":1}'::jsonb), jsonb_strip_nulls('{"a":null}'::jsonb)
+
+-- CASE[open]: pg-jsonb-modify — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+SELECT jsonb_set('{}', '{a}', '1'), '{"a":1}'::jsonb - 'a'
 
 -- CASE[open]: pg-jsonb-path-query — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
 SELECT jsonb_path_query('{"a":[1,2]}', '$.a[*]') AS r
@@ -286,6 +304,9 @@ CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1/0; EXCEPTION WHEN division_
 
 -- CASE[open]: pg-named-window2 — fails on oracle. ORA-30485: missing ORDER BY expression in the window specification
 CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id, LAG(n) OVER w, LEAD(n) OVER w FROM t WINDOW w AS (PARTITION BY s ORDER BY id)
+
+-- CASE[open]: pg-nan-cmp — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT 'NaN'::numeric > 1 AS r
 
 -- CASE[open]: pg-nested-call — fails on oracle. PROCEDURE OUTER_P compiled INVALID (line 4): PLS-00201: identifier 'INNER_P' must be decla
 CREATE PROCEDURE outer_p() AS $$ BEGIN CALL inner_p(); END; $$ LANGUAGE plpgsql
