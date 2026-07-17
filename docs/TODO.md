@@ -973,7 +973,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          T-SQL rule extended to mysql; the emitter already spells its
          RETURN as LEAVE proc_exit). Measured: pg→mysql **66 → 63**
          (−3). Discovery HOLDS 0. Tests:
-         TestWave201MysqlOutParamFunction (2).**
+         TestWave201MysqlOutParamFunction (2).* Wave 202 (2026-07-17): neither
+         MySQL nor T-SQL has cursor-valued functions — a ``RETURNS
+         refcursor`` routine degrades WHOLE with the carrier (new
+         culprit in the record-function degrade chain; Oracle keeps
+         its SYS_REFCURSOR mapping, PG verbatim). Measured: pg→mysql
+         **63 → 58** (−5, validity 98.0%). Discovery HOLDS 0. Tests:
+         TestWave202RefcursorReturn (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

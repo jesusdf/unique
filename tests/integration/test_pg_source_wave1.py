@@ -7238,3 +7238,29 @@ class TestWave201MysqlOutParamFunction:
             "mysql",
         )
         assert re.search(r"(?i)CREATE FUNCTION g1", out), out
+
+
+class TestWave202RefcursorReturn:
+    """wave 202 (pg-corpus): neither MySQL nor T-SQL has cursor-valued
+    functions — a ``RETURNS refcursor`` routine degrades WHOLE with
+    the carrier; Oracle keeps its SYS_REFCURSOR mapping."""
+
+    _SQL = (
+        "create function rt() returns refcursor language plpgsql as $$"
+        " declare rc refcursor; begin open rc for select 1;"
+        " return rc; end $$;"
+    )
+
+    def test_refcursor_return_carrier_mysql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "mysql")
+        assert "UNIQUE:" in out and "cursor-valued" in out, out
+        assert not re.search(r"(?im)^\s*CREATE FUNCTION rt", out), out
+
+    def test_refcursor_return_carrier_tsql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "tsql")
+        assert "UNIQUE:" in out and "cursor-valued" in out, out
+
+    def test_refcursor_kept_pg(self) -> None:
+        out = _t2(self._SQL, "postgresql", "postgresql")
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)RETURNS refcursor", out), out

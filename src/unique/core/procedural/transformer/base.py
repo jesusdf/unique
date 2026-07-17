@@ -1327,6 +1327,13 @@ class ProceduralTransformer:
             or node.return_type.name.upper().startswith("SETOF")
         ):
             culprit = f"'{node.return_type.name}' return type"
+        elif (
+            self._target in ("mysql", "tsql")
+            and node.return_type is not None
+            and self._REFCURSOR_TYPE_RE.search(node.return_type.name.strip())
+        ):
+            # Neither engine has cursor-valued functions (wave 202).
+            culprit = f"cursor-valued return type '{node.return_type.name}'"
         elif "[]" in (
             (node.return_type.name if node.return_type else "")
             + "".join(p.data_type.name for p in node.parameters)
