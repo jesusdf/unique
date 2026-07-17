@@ -1210,11 +1210,12 @@ class Transformer:
         if not found:
             return node
         reason = (
-            "MySQL requires a constant LAG/LEAD offset (a column offset "
-            "has no MySQL spelling); statement preserved as a comment"
+            "MySQL requires a constant LAG/LEAD/NTH_VALUE integer argument "
+            "(an expression has no MySQL spelling); statement preserved "
+            "as a comment"
         )
         self.context.warn(reason, "nonconst_lag_offset")
-        self.context.mark_unsupported("non-constant LAG/LEAD offset (MySQL)")
+        self.context.mark_unsupported("non-constant window argument (MySQL)")
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
@@ -1224,6 +1225,15 @@ class Transformer:
             isinstance(value, FunctionCall)
             and value.name.upper() in ("LAG", "LEAD")
             and len(value.args) >= 2
+            and not isinstance(value.args[1], Literal)
+        ):
+            return True
+        # NTH_VALUE's N must be a positive integer LITERAL on MySQL —
+        # an expression (``NTH_VALUE(x, four + 1)``) is 1064 (wave 238).
+        if (
+            isinstance(value, FunctionCall)
+            and value.name.upper() == "NTH_VALUE"
+            and len(value.args) == 2
             and not isinstance(value.args[1], Literal)
         ):
             return True

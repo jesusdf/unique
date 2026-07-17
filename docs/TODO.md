@@ -1228,7 +1228,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          schema-ambiguous ``REPLACE … SET data = data`` where the RHS
          column-vs-variable is undecidable); the fix prevents the
          mangle class elsewhere. Discovery HOLDS 0. Tests:
-         TestWave237DottedNameRenameSpaces (2).**
+         TestWave237DottedNameRenameSpaces (2).* Wave 238 (2026-07-17):
+         MySQL's NTH_VALUE requires a positive integer LITERAL — an
+         expression (``NTH_VALUE(x, four + 1)``) is 1064 (verified
+         live); it joins the non-constant window-argument gate
+         alongside LAG/LEAD. Measured: pg→mysql **33 → 32** (−1).
+         Discovery HOLDS 0. Tests: TestWave238MysqlNonconstNthValue
+         (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

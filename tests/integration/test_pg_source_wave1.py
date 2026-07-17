@@ -8131,3 +8131,26 @@ class TestWave237DottedNameRenameSpaces:
             "tsql",
         )
         assert re.search(r"(?i)SET @v = @v \+ 1", out), out
+
+
+class TestWave238MysqlNonconstNthValue:
+    """wave 238 (pg-corpus): MySQL's NTH_VALUE requires a positive
+    integer literal — an expression ``NTH_VALUE(x, four + 1)`` is 1064
+    (verified live); it joins the non-constant-window-argument gate."""
+
+    def test_nonconst_nth_value_carrier(self) -> None:
+        out = _t2(
+            "select nth_value(ten, four + 1) over (partition by four)" " from tenk1;",
+            "postgresql",
+            "mysql",
+        )
+        assert "UNIQUE:" in out, out
+
+    def test_const_nth_value_untouched(self) -> None:
+        out = _t2(
+            "select nth_value(ten, 2) over (partition by four) from tenk1;",
+            "postgresql",
+            "mysql",
+        )
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)NTH_VALUE\(ten, 2\)", out), out
