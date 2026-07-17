@@ -7093,3 +7093,29 @@ class TestWave196DeleteUsing:
     def test_plain_delete_untouched(self) -> None:
         out = _t2("delete from parent where id = 5;", "postgresql", "tsql")
         assert re.search(r"(?i)DELETE FROM parent\s+WHERE id = 5", out), out
+
+
+class TestWave197AliasedUpdateReturning:
+    """wave 197 (pg-corpus): T-SQL takes no AS alias on the UPDATE
+    target (error 156) — the RETURNING passthrough now names the alias
+    and binds it in FROM, keeping the OUTPUT INSERTED. qualification."""
+
+    def test_aliased_update_returning_tsql(self) -> None:
+        out = _t2(
+            "update cv v1 set n = v2.n from cv v2"
+            " where v2.c = 'B' and v1.c = 'L' returning *;",
+            "postgresql",
+            "tsql",
+        )
+        assert re.search(r"(?i)^UPDATE v1 SET", out.strip()), out
+        assert re.search(r"(?i)FROM cv AS v1, cv AS v2", out), out
+        assert "OUTPUT INSERTED.*" in out.upper(), out
+
+    def test_unaliased_update_returning_untouched(self) -> None:
+        out = _t2(
+            "update t set a = 1 where b = 2 returning a;",
+            "postgresql",
+            "tsql",
+        )
+        assert re.search(r"(?i)UPDATE t SET", out), out
+        assert "OUTPUT INSERTED.A" in out.upper(), out

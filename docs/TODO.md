@@ -939,7 +939,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          args['using'] for plain deletes — the first cut broke 5
          tests. Measured: pg→tsql stable **58** (corpus cases are
          WITH-prefixed → passthrough); the fix is silent-loss class.
-         Discovery HOLDS 0. Tests: TestWave196DeleteUsing (5).**
+         Discovery HOLDS 0. Tests: TestWave196DeleteUsing (5).* Wave 197 (2026-07-17): T-SQL
+         takes no AS alias on an UPDATE target (error 156) — the
+         RETURNING passthrough now names the alias and binds it in
+         FROM (``UPDATE v1 SET … FROM cv AS v1, …``), placed AFTER the
+         OUTPUT-prefixer so INSERTED. qualification survives (the
+         early-return first cut lost it). Measured: pg→tsql
+         **58 → 55** (−3). Discovery HOLDS 0. Tests:
+         TestWave197AliasedUpdateReturning (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

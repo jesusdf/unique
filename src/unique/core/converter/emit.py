@@ -1357,6 +1357,18 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                     result,
                     count=1,
                 )
+                # And no AS alias on the UPDATE target (error 156) —
+                # T-SQL names the alias and binds it in FROM (wave 197).
+                m197 = re.match(
+                    r"(?is)^UPDATE\s+([\w.\[\]\"]+)\s+AS\s+(\w+)\s+"
+                    r"SET\s+(.*?)\s+FROM\s+(.*)$",
+                    result,
+                )
+                if m197:
+                    tbl, alias, sets, rest = m197.groups()
+                    result = (
+                        f"UPDATE {alias} SET {sets} " f"FROM {tbl} AS {alias}, {rest}"
+                    )
             if node.kind == "CREATE INDEX":
                 result = _portable_index(result, dialect)
             else:
@@ -1975,6 +1987,17 @@ def _emit_update_tsql_from(
     """T-SQL: UPDATE t SET t.c = s.c FROM t JOIN s ON ... [WHERE ...]."""
     table = _emit_table_ref(node.table, dialect)
     sets = ", ".join(f"{col} = {val}" for col, val in assignments)
+    if node.table.alias and node.from_clause is not None:
+        # T-SQL takes no AS alias on the UPDATE target (error 156) —
+        # its aliased spelling names the alias and binds it in FROM
+        # (wave 197: ``UPDATE v AS v1 SET … FROM v v2`` shipped raw).
+        result = f"UPDATE {node.table.alias}\nSET {sets}"
+        from_sql = _emit_table_ref(node.from_clause, dialect)
+        joins_sql = "".join(f"\n{_emit_join(j, dialect)}" for j in node.joins)
+        result += f"\nFROM {table}, {from_sql}{joins_sql}"
+        if node.where is not None:
+            result += f"\nWHERE {_emit_expression(node.where, dialect)}"
+        return result
     result = f"UPDATE {table}\nSET {sets}"
     if node.from_clause is not None:
         from_sql = _emit_table_ref(node.from_clause, dialect)
