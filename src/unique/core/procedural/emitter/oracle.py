@@ -291,7 +291,7 @@ class OracleEmitter(ProceduralEmitter):
             and re.fullmatch(r"-?\d+", num_text)
             and (50000 <= int(num_text) <= 50999)
         ):
-            code = -(20000 + (int(number) - 50000))
+            code = -(20000 + (int(num_text) - 50000))
         payload = text or number or msg
         return f"RAISE_APPLICATION_ERROR({code}, {payload});"
 
