@@ -1141,7 +1141,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          the boolean; and refcursor declares spell SYS_REFCURSOR there
          (missing (postgresql, oracle) type-map entry). Measured:
          pg→oracle **28 → 25** (−3). Discovery HOLDS 0. Tests:
-         TestWave227OracleBoolReturnRefcursor (3).**
+         TestWave227OracleBoolReturnRefcursor (3)(3).* **CHECKPOINT wave 228
+         (2026-07-17, `4e6d908`, full 6-direction matrix)**:
+         mysql-corpus {tsql **23** (99.6%), pg **15** (99.7%), oracle
+         **13** (99.8%)}; pg-corpus {tsql **33** (99.0%), mysql **34**
+         (98.8%), oracle **25** (99.2%)} — **TOTAL 143** from ~770 at
+         campaign open (121 waves, 108–227). Discovery pg→pg **0**
+         throughout. Remaining: adversarial deep singles (pg_regress
+         shadow/label/custom-aggregate cases) across six fronts.**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
