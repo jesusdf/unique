@@ -922,7 +922,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          one, so the row comparison shipped raw (4145 live). A star
          column now counts as multi when the tuple side is. Measured:
          pg→tsql **64 → 61** (−3). Discovery HOLDS 0. Tests:
-         TestWave194NotTupleInStar (2).**
+         TestWave194NotTupleInStar (2).* Wave 195 (2026-07-17): IN/NOT
+         IN in value position (``SELECT x IN (SELECT …)``) is a
+         predicate — 4145 on T-SQL/Oracle. They join _COMPARISON_OPS,
+         wrapping in the tri-state CASE (the NOT(pred) negation path —
+         no pairwise negation operator exists for IN). Measured:
+         pg→tsql **61 → 58** (−3). Discovery HOLDS 0. Tests:
+         TestWave195InSubqueryValue (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

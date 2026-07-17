@@ -7040,3 +7040,26 @@ class TestWave194NotTupleInStar:
             "tsql",
         )
         assert "UNIQUE:" not in out, out
+
+
+class TestWave195InSubqueryValue:
+    """wave 195 (pg-corpus): IN/NOT IN in value position (``SELECT x
+    IN (SELECT …)``) is a predicate — error 4145 on T-SQL; it wraps in
+    the tri-state CASE like the other comparisons."""
+
+    def test_in_subquery_value_tsql(self) -> None:
+        out = _t2(
+            "SELECT CAST('1' AS TEXT) IN (SELECT 'x' UNION ALL" " SELECT 'y');",
+            "postgresql",
+            "tsql",
+        )
+        up = " ".join(out.upper().split())
+        assert "CASE WHEN" in up and "THEN 1 WHEN NOT" in up, out
+
+    def test_in_condition_untouched(self) -> None:
+        out = _t2(
+            "SELECT * FROM t WHERE a IN (SELECT b FROM u);",
+            "postgresql",
+            "tsql",
+        )
+        assert "CASE WHEN" not in out.upper(), out

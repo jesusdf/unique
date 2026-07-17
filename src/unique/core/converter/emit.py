@@ -643,6 +643,10 @@ _COMPARISON_OPS = frozenset(
         BinaryOperator.LIKE,
         BinaryOperator.AND,
         BinaryOperator.OR,
+        # IN/NOT IN in value position are predicates too (wave 195:
+        # ``SELECT x IN (SELECT …)`` was 4145 on T-SQL).
+        BinaryOperator.IN,
+        BinaryOperator.NOT_IN,
     }
 )
 
