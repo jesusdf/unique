@@ -114,6 +114,9 @@ CREATE TABLE t (id NUMBER DEFAULT s.NEXTVAL, a NUMBER)
 -- CASE[open]: ora-div — fails on postgresql, tsql. FUNC-DIFF: source=(('2.5',),) target=(('2',),)
 SELECT 5 / 2 AS r FROM DUAL
 
+-- CASE[open]: ora-div-mult2 — fails on postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT 1/3*3 AS r FROM DUAL
+
 -- CASE[open]: ora-div-precision — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('0.333333',),) target=(('0',),)
 SELECT 1 / 3 AS r FROM DUAL
 

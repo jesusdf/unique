@@ -45,6 +45,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('1.5',),) target=(('1',),)`
 - src: `SELECT AVG(x) FROM (SELECT 1 x UNION SELECT 2) t`
 
+## my-avg-precision2  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1.6667',),) target=(('1',),)`
+- src: `SELECT AVG(x) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 2) t`
+
 ## my-base64  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TO`
@@ -155,6 +160,16 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(195, b"'JSON_UNQUOTE' is not a recognized built-in function name.DB-Lib error message 200`
 - src: `CREATE TABLE t (data JSON, name VARCHAR(50) AS (JSON_UNQUOTE(JSON_EXTRACT(data, '$.name'))) VIRTUAL)`
 
+## my-concat-bool  (mysql)
+- targets: postgresql(func)
+- live error: `FUNC-DIFF: source=(('10',),) target=(('tf',),)`
+- src: `SELECT CONCAT(TRUE, FALSE) AS r`
+
+## my-concat-date  (mysql)
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('2020-01-01',),) target=(('01-JAN-20',),)`
+- src: `SELECT CONCAT(DATE '2020-01-01', '') AS r`
+
 ## my-concat-null  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('ab',),)`
@@ -224,6 +239,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2.5',),) target=(('2',),)`
 - src: `SELECT 5 / 2 AS r`
+
+## my-div-mult2  (mysql)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT 1/3*3 AS r`
 
 ## my-div-precision  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
@@ -396,6 +416,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `FUNC-DIFF: source=(('5',),) target=(('4',),)`
 - src: `SELECT LENGTH('café') AS r`
 
+## my-length-div  (mysql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('6',),) target=(('1',),)`
+- src: `SELECT LENGTH(1/3) AS r`
+
 ## my-like-ci  (mysql)
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
@@ -546,6 +571,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT 'apple' < 'Banana' AS r`
 
+## my-str-plus-interval  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('2020-01-02',),) target=(('2020-01-02 00:00:00',),)`
+- src: `SELECT '2020-01-01' + INTERVAL 1 DAY AS r`
+
 ## my-strnum-add  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('10',),) target=(('55',),)`
@@ -565,6 +595,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU`
 - src: `SELECT SUBSTRING_INDEX('a,b,c', ',', 2) AS r`
+
+## my-sum-div-count  (mysql)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1.5',),) target=(('1',),)`
+- src: `SELECT SUM(x)/COUNT(x) FROM (SELECT 1 x UNION ALL SELECT 2) t`
 
 ## my-system-funcs  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -862,6 +897,11 @@ CREATE TABLE t (id NUMBER DEFAULT s.NEXTVAL, a NUMBER)`
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2.5',),) target=(('2',),)`
 - src: `SELECT 5 / 2 AS r FROM DUAL`
+
+## ora-div-mult2  (oracle)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT 1/3*3 AS r FROM DUAL`
 
 ## ora-div-precision  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
@@ -2366,6 +2406,11 @@ CREATE TRIGGE`
 - live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
 - src: `SELECT EXTRACT(WEEK FROM DATE '2020-01-05') AS r`
 
+## pg-week-2016  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('53',),) target=(('1',),)`
+- src: `SELECT EXTRACT(WEEK FROM DATE '2016-01-01') AS r`
+
 ## pg-week-jan1  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
@@ -3024,4 +3069,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 585 distinct constructs; defect rows by kind: carrier 135, func 233, invalid 742, semantic 2, silent-drop 73.
+Totals: 594 distinct constructs; defect rows by kind: carrier 135, func 249, invalid 742, semantic 2, silent-drop 73.

@@ -616,6 +616,9 @@ CREATE TABLE t (id INT); CREATE VIEW v AS SELECT id FROM t WITH LOCAL CHECK OPTI
 -- CASE[open]: pg-week — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT EXTRACT(WEEK FROM DATE '2020-01-05') AS r
 
+-- CASE[open]: pg-week-2016 — fails on mysql, tsql. FUNC-DIFF: source=(('53',),) target=(('1',),)
+SELECT EXTRACT(WEEK FROM DATE '2016-01-01') AS r
+
 -- CASE[open]: pg-week-jan1 — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT EXTRACT(WEEK FROM DATE '2020-01-01') AS r
 

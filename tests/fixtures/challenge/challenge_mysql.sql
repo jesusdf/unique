@@ -26,6 +26,9 @@ SELECT ASCII('') AS r
 -- CASE[open]: my-avg-int — fails on tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
 SELECT AVG(x) FROM (SELECT 1 x UNION SELECT 2) t
 
+-- CASE[open]: my-avg-precision2 — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1.6667',),) target=(('1',),)
+SELECT AVG(x) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 2) t
+
 -- CASE[open]: my-base64 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TO
 SELECT TO_BASE64('abc'), FROM_BASE64('YWJj')
 
@@ -92,6 +95,12 @@ SELECT UNCOMPRESS(COMPRESS('data')) AS r
 -- CASE[open]: my-computed-json — fails on postgresql, tsql. (195, b"'JSON_UNQUOTE' is not a recognized built-in function name.DB-Lib error message 200
 CREATE TABLE t (data JSON, name VARCHAR(50) AS (JSON_UNQUOTE(JSON_EXTRACT(data, '$.name'))) VIRTUAL)
 
+-- CASE[open]: my-concat-bool — fails on postgresql. FUNC-DIFF: source=(('10',),) target=(('tf',),)
+SELECT CONCAT(TRUE, FALSE) AS r
+
+-- CASE[open]: my-concat-date — fails on oracle. FUNC-DIFF: source=(('2020-01-01',),) target=(('01-JAN-20',),)
+SELECT CONCAT(DATE '2020-01-01', '') AS r
+
 -- CASE[open]: my-concat-null — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('ab',),)
 SELECT CONCAT('a', NULL, 'b') AS r
 
@@ -133,6 +142,9 @@ SELECT DISTINCT x FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'a'
 
 -- CASE[open]: my-div — fails on postgresql, tsql. FUNC-DIFF: source=(('2.5',),) target=(('2',),)
 SELECT 5 / 2 AS r
+
+-- CASE[open]: my-div-mult2 — fails on postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT 1/3*3 AS r
 
 -- CASE[open]: my-div-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('0.33333',),) target=(('0.333333',),)
 SELECT 1.0 / 3 AS r
@@ -237,6 +249,9 @@ SELECT LEFT('abc', -1) AS r
 -- CASE[open]: my-length-bytes — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('5',),) target=(('4',),)
 SELECT LENGTH('café') AS r
 
+-- CASE[open]: my-length-div — fails on oracle, tsql. FUNC-DIFF: source=(('6',),) target=(('1',),)
+SELECT LENGTH(1/3) AS r
+
 -- CASE[open]: my-like-ci — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'ABC' LIKE 'abc' AS r
 
@@ -328,6 +343,9 @@ SELECT LAST_INSERT_ID(), ROW_COUNT(), FOUND_ROWS()
 -- CASE[open]: my-str-lt — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'apple' < 'Banana' AS r
 
+-- CASE[open]: my-str-plus-interval — fails on tsql. FUNC-DIFF: source=(('2020-01-02',),) target=(('2020-01-02 00:00:00',),)
+SELECT '2020-01-01' + INTERVAL 1 DAY AS r
+
 -- CASE[open]: my-strnum-add — fails on tsql. FUNC-DIFF: source=(('10',),) target=(('55',),)
 SELECT '5'+'5' AS r
 
@@ -339,6 +357,9 @@ SELECT SUBSTRING('abcdef', -3) AS r
 
 -- CASE[open]: my-substring-index — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
 SELECT SUBSTRING_INDEX('a,b,c', ',', 2) AS r
+
+-- CASE[open]: my-sum-div-count — fails on postgresql, tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
+SELECT SUM(x)/COUNT(x) FROM (SELECT 1 x UNION ALL SELECT 2) t
 
 -- CASE[open]: my-system-funcs — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'USER'.DB-Lib error message 20018, severity 15:\
 SELECT CONNECTION_ID(), DATABASE(), USER(), VERSION()
