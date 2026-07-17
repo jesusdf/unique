@@ -1531,13 +1531,20 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             base,
             count=1,
         )
-        base = re.sub(
-            r"(?is)\bUPDATE\s+([\w.`\"]+)\s+SET\s+(.*?)\s+FROM\s+([\w.`\",\s]+?)"
-            r"(\s+WHERE\b)",
-            r"UPDATE \1, \3 SET \2\4",
-            base,
-            count=1,
-        )
+        # An aliased / self-join ``UPDATE t AS v1 SET … FROM t AS v2`` needs
+        # the modeled multi-table rewrite (the bare-name regex below only
+        # handles the simplest shape); re-parse and re-emit that base.
+        remodeled = _remodel_update_from(base, dialect)
+        if remodeled is not None:
+            base = remodeled
+        else:
+            base = re.sub(
+                r"(?is)\bUPDATE\s+([\w.`\"]+)\s+SET\s+(.*?)\s+FROM\s+([\w.`\",\s]+?)"
+                r"(\s+WHERE\b)",
+                r"UPDATE \1, \3 SET \2\4",
+                base,
+                count=1,
+            )
         base = re.sub(
             r"(?is)\bDELETE\s+FROM\s+([\w.`\"]+)\s+USING\s+([\w.`\",\s]+?)"
             r"(\s+WHERE\b)",
@@ -2176,6 +2183,28 @@ def _emit_join_table_ref(table: TableRef | SubqueryExpression, dialect: str) -> 
             inner_sql = re.sub(r"(?is)\s+ORDER\s+BY\s+[^()]*$", "", inner_sql)
         return f"({inner_sql}){alias}"
     return _emit_table_ref(table, dialect)
+
+
+def _remodel_update_from(sql: str, dialect: str) -> str | None:
+    """Re-parse a stripped ``UPDATE … SET … FROM …`` base through the modeled
+    converter so an aliased/self-join source becomes the target's own
+    multi-table UPDATE spelling. Returns None when the base is not an
+    UPDATE-with-source or does not re-parse cleanly."""
+    if not re.search(r"(?is)\bUPDATE\b.*\bSET\b.*\bFROM\b", sql):
+        return None
+    from unique.core.converter.convert import parse_sql
+
+    src = SOURCE_DIALECT.get() or "postgresql"
+    try:
+        parsed = parse_sql(sql, src)
+    except Exception:  # noqa: BLE001 - fall back to the regex rewrite
+        return None
+    node = parsed[0] if isinstance(parsed, list) else parsed
+    if isinstance(node, UpdateStatement) and (
+        node.from_clause is not None or node.joins
+    ):
+        return _emit_cross_table_update(node, dialect)
+    return None
 
 
 def _emit_cross_table_update(node: UpdateStatement, dialect: str) -> str:

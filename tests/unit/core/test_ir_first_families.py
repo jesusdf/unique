@@ -1152,3 +1152,16 @@ class TestZeroPushW3Batch:
         )
         assert "UPDATE city_view v1" in r.sql, r.sql
         assert "FROM city_view v2" in r.sql, r.sql
+
+    def test_self_join_update_from_returning_mysql(self) -> None:
+        r = self._t(
+            "UPDATE city_view v1 SET country_name = v2.country_name"
+            " FROM city_view v2 WHERE v2.city_name = 'B'"
+            " AND v1.city_name = 'L' RETURNING *;",
+            "postgresql",
+            "mysql",
+        )
+        assert "UPDATE city_view v1, city_view v2" in r.sql, r.sql
+        assert "v1.country_name = v2.country_name" in r.sql, r.sql
+        # the executable statement (before the carrier note) has no RETURNING
+        assert "RETURNING" not in r.sql.split(";")[0].upper(), r.sql
