@@ -20,10 +20,20 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
 - src: `SELECT HEX(AES_ENCRYPT('data', 'key')) AS r`
 
+## my-alter-drop-default  (mysql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'DEFAULT'.DB-Lib error message 20018, severity 1`
+- src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP DEFAULT`
+
 ## my-alter-modify  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near 'MODIFY'.DB-Lib error message 20018, severity 15:\nGeneral S`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t MODIFY COLUMN b BIGINT`
+
+## my-alter-set-default  (mysql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'SET'.DB-Lib error message 20018, severity 15:\n`
+- src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DEFAULT 5`
 
 ## my-ascii-empty  (mysql)
 - targets: oracle(func), tsql(func)
@@ -119,6 +129,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: postgresql(func)
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('μ',),)`
 - src: `SELECT CHAR(956 USING utf8mb4) AS r`
+
+## my-check-enforced  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near 'ENFORCED'.DB-Lib error message 20018, severity 15:\nGeneral`
+- src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENFORCED`
 
 ## my-coalesce-empty  (mysql)
 - targets: oracle(func)
@@ -686,6 +701,12 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `SILENT CLAUSE DROP: 'SQL_CALC_FOUND_ROWS|FOUND' absent from valid tsql output, no warning`
 - src: `SELECT SQL_CALC_FOUND_ROWS x FROM (SELECT 1 x) t LIMIT 1`
 
+## ora-add-constraint-state  (oracle)
+- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a NUMBER, b NUMBER);
+ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENABLE NOVALIDATE`
+
 ## ora-add-months  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018`
@@ -1008,6 +1029,12 @@ SELECT LEVEL n FROM DUAL CONNECT BY LEVEL <= 10`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE t (id NUMBER, n NUMBER, s VARCHAR2(50));
 MERGE INTO t d USING (SELECT 1 id, 2 n FROM DUAL) s ON (d.id=s.id) WHEN NOT`
+
+## ora-modify-default  (oracle)
+- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a NUMBER, b NUMBER);
+ALTER TABLE t MODIFY a DEFAULT 5`
 
 ## ora-month-name  (oracle)
 - targets: mysql(func)
@@ -1342,6 +1369,11 @@ CREATE SYNONYM syn FOR t`
 - live error: `ORA-01735: invalid ALTER TABLE option`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a TYPE BIGINT`
 
+## pg-alter-using  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-01735: invalid ALTER TABLE option`
+- src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DATA TYPE BIGINT USING a::bigint`
+
 ## pg-any-array-subquery  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ`
@@ -1433,6 +1465,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
 - src: `CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)`
 
+## pg-caret-assoc  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('64',),) target=()`
+- src: `SELECT 2 ^ 3 ^ 2 AS r`
+
 ## pg-caret-power  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('8',),) target=()`
@@ -1472,6 +1509,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity`
 - src: `SELECT '2020-01-01'::timestamptz AS r`
+
+## pg-check-notvalid  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n`
+- src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) NOT VALID`
 
 ## pg-chr-concat  (postgresql)
 - targets: mysql(func)
@@ -1607,6 +1649,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message`
 - src: `SELECT 123::text::int AS r`
+
+## pg-drop-default  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'DEFAULT'.DB-Lib error message 20018, severity 1`
+- src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP DEFAULT`
 
 ## pg-drop-not-null  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -1792,6 +1839,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S`
 - src: `SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7`
+
+## pg-json-idx  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('20',),) target=()`
+- src: `SELECT ('[10,20,30]'::jsonb)->1 AS r`
 
 ## pg-json-num  (postgresql)
 - targets: mysql(func)
@@ -2932,4 +2984,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 567 distinct constructs; defect rows by kind: carrier 129, func 215, invalid 729, semantic 2, silent-drop 73.
+Totals: 577 distinct constructs; defect rows by kind: carrier 135, func 217, invalid 742, semantic 2, silent-drop 73.

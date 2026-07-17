@@ -22,6 +22,10 @@ END;
 
 -- ===== RED-found open findings (validated live; see FINDINGS.md) =====
 
+-- CASE[open]: ora-add-constraint-state — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a NUMBER, b NUMBER);
+ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENABLE NOVALIDATE
+
 -- CASE[open]: ora-add-months — fails on mysql, postgresql, tsql. (195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT ADD_MONTHS(SYSDATE, 3) AS r FROM DUAL
 
@@ -221,6 +225,10 @@ CREATE MATERIALIZED VIEW mv BUILD DEFERRED REFRESH COMPLETE ON DEMAND AS SELECT 
 -- CASE[open]: ora-merge-insert-only — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id NUMBER, n NUMBER, s VARCHAR2(50));
 MERGE INTO t d USING (SELECT 1 id, 2 n FROM DUAL) s ON (d.id=s.id) WHEN NOT MATCHED THEN INSERT (id, n) VALUES (s.id, s.n)
+
+-- CASE[open]: ora-modify-default — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a NUMBER, b NUMBER);
+ALTER TABLE t MODIFY a DEFAULT 5
 
 -- CASE[open]: ora-month-name — fails on mysql. FUNC-DIFF: source=(('June',),) target=(('Month',),)
 SELECT TO_CHAR(DATE '2020-06-01', 'Month') AS r FROM DUAL

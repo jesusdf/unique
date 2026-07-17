@@ -17,6 +17,9 @@ CREATE TABLE t (a INT); ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT 'x'
 -- CASE[open]: pg-alter-type — fails on oracle. ORA-01735: invalid ALTER TABLE option
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a TYPE BIGINT
 
+-- CASE[open]: pg-alter-using — fails on oracle. ORA-01735: invalid ALTER TABLE option
+CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DATA TYPE BIGINT USING a::bigint
+
 -- CASE[open]: pg-any-array-subquery — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
 CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a WHERE id = ANY(ARRAY(SELECT id FROM b))
 
@@ -73,6 +76,9 @@ SELECT true::text AS r
 -- CASE[open]: pg-bulk-insert — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)
 
+-- CASE[open]: pg-caret-assoc — fails on mysql. FUNC-DIFF: source=(('64',),) target=()
+SELECT 2 ^ 3 ^ 2 AS r
+
 -- CASE[open]: pg-caret-power — fails on mysql. FUNC-DIFF: source=(('8',),) target=()
 SELECT 2 ^ 3 AS r
 
@@ -96,6 +102,9 @@ SELECT 7.5 :: int AS r
 
 -- CASE[open]: pg-cast-tstz — fails on mysql, oracle, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity
 SELECT '2020-01-01'::timestamptz AS r
+
+-- CASE[open]: pg-check-notvalid — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
+CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) NOT VALID
 
 -- CASE[open]: pg-chr-concat — fails on mysql. FUNC-DIFF: source=(('AB',),) target=(('4142',),)
 SELECT chr(65) || chr(66)
@@ -177,6 +186,9 @@ CREATE DOMAIN email AS TEXT CHECK (VALUE ~ '@'); CREATE TABLE t (e email)
 
 -- CASE[open]: pg-double-cast — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
 SELECT 123::text::int AS r
+
+-- CASE[open]: pg-drop-default — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'DEFAULT'.DB-Lib error message 20018, severity 1
+CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP DEFAULT
 
 -- CASE[open]: pg-drop-not-null — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL
@@ -288,6 +300,9 @@ SELECT 1 INTERSECT ALL SELECT 1
 
 -- CASE[open]: pg-interval-arith — fails on mysql, oracle, tsql. (207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S
 SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7
+
+-- CASE[open]: pg-json-idx — fails on mysql. FUNC-DIFF: source=(('20',),) target=()
+SELECT ('[10,20,30]'::jsonb)->1 AS r
 
 -- CASE[open]: pg-json-num — fails on mysql. FUNC-DIFF: source=(('1.5',),) target=()
 SELECT ('{"a":1.5}'::jsonb->>'a')
