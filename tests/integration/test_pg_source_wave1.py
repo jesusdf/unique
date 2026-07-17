@@ -7408,3 +7408,41 @@ class TestWave207SystemReservedNtileNull:
         )
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)NTILE\(4\)", out), out
+
+
+class TestWave208IntervalCastSrfWindow:
+    """wave 208 (pg-corpus): neither MySQL nor T-SQL has an INTERVAL
+    data type (cast degrades whole), and GENERATE_SERIES(…) OVER ()
+    exists only on PG."""
+
+    def test_interval_cast_carrier_mysql(self) -> None:
+        out = _t2(
+            "select avg(cast(v as interval)) over (order by i) from t;",
+            "postgresql",
+            "mysql",
+        )
+        assert "UNIQUE:" in out and "INTERVAL" in out, out
+
+    def test_interval_cast_kept_pg(self) -> None:
+        out = _t2(
+            "select cast(v as interval) from t;",
+            "postgresql",
+            "postgresql",
+        )
+        assert "UNIQUE:" not in out, out
+
+    def test_srf_window_carrier_tsql(self) -> None:
+        out = _t2(
+            "select generate_series(1, 100) over () from empsalary;",
+            "postgresql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out, out
+
+    def test_plain_window_untouched(self) -> None:
+        out = _t2(
+            "select sum(x) over (order by i) from t;",
+            "postgresql",
+            "tsql",
+        )
+        assert "UNIQUE:" not in out, out

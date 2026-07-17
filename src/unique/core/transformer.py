@@ -585,10 +585,13 @@ class Transformer:
         if self.context.target == "postgresql":
             result = [self._gate_pg_setop_order_aggregate(node) for node in result]
         if self.context.target in ("tsql", "mysql", "oracle"):
+            result = [self._gate_srf_window(node) for node in result]
             result = [self._gate_array_constructs(node) for node in result]
             result = [self._gate_empty_select_list(node) for node in result]
             result = [self._gate_zero_column_table(node) for node in result]
             result = [self._gate_composite_row_value(node) for node in result]
+        if self.context.target in ("mysql", "tsql"):
+            result = [self._gate_interval_cast(node) for node in result]
         if self.context.target == "mysql":
             result = [self._gate_mysql_full_join(node) for node in result]
             result = [self._gate_mysql_function_relation(node) for node in result]
@@ -1007,6 +1010,66 @@ class Transformer:
                 if found is not None:
                     return found
         return None
+
+    def _gate_interval_cast(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement casting to INTERVAL — WHOLE, on
+        MySQL/T-SQL (wave 208): neither has an INTERVAL data type."""
+        if not self._contains_interval_cast(node):
+            return node
+        reason = (
+            f"{self.context.target} has no INTERVAL data type; "
+            "statement preserved as a comment"
+        )
+        self.context.warn(reason, "interval_cast")
+        self.context.mark_unsupported("CAST(… AS INTERVAL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _contains_interval_cast(self, value: object) -> bool:
+        if isinstance(
+            value, CastExpression
+        ) and value.target_type.name.upper().startswith("INTERVAL"):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_interval_cast(getattr(value, f.name))
+                for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_interval_cast(item) for item in value)
+        return False
+
+    def _gate_srf_window(self, node: ASTNode) -> ASTNode:
+        """Degrade a set-returning function used with OVER — WHOLE, off
+        PG (wave 208): GENERATE_SERIES(…) OVER () exists nowhere else."""
+        if not self._contains_srf_window(node):
+            return node
+        reason = (
+            "a set-returning function with OVER (GENERATE_SERIES … OVER) "
+            f"has no {self.context.target} form; statement preserved as a comment"
+        )
+        self.context.warn(reason, "srf_window")
+        self.context.mark_unsupported("SRF window (GENERATE_SERIES OVER)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _contains_srf_window(self, value: object) -> bool:
+        from unique.core.ast_nodes import WindowFunction
+
+        if isinstance(value, WindowFunction) and (
+            isinstance(value.function, FunctionCall)
+            and value.function.name.upper() == "GENERATE_SERIES"
+        ):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._contains_srf_window(getattr(value, f.name)) for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._contains_srf_window(item) for item in value)
+        return False
 
     def _gate_mysql_null_ntile(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using NTILE(NULL) — WHOLE, on MySQL

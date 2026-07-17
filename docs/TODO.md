@@ -1011,7 +1011,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          MySQL's NTILE requires a positive integer — NTILE(NULL)
          degrades whole (PG returns NULL rows for it). Measured:
          pg→mysql **54 → 51** (−3). Discovery HOLDS 0. Tests:
-         TestWave207SystemReservedNtileNull (3).**
+         TestWave207SystemReservedNtileNull (3).* Wave 208 (2026-07-17): neither
+         MySQL nor T-SQL has an INTERVAL data type — CAST(… AS
+         INTERVAL) degrades whole; and GENERATE_SERIES(…) OVER ()
+         (an SRF with a window clause) exists only on PG — carrier off
+         it. Measured: pg→mysql **51 → 45** (−6), pg→tsql **47 → 46**
+         (−1). Discovery HOLDS 0. Tests:
+         TestWave208IntervalCastSrfWindow (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
