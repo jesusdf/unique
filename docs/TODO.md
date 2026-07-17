@@ -952,7 +952,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          / MySQL 1248; the double parens are legal once aliased,
          verified live). ``uq_dtN`` aliases inject structurally in the
          PAREN JOIN passthrough. Measured: pg→tsql **55 → 54** (−1).
-         Discovery HOLDS 0. Tests: TestWave198BareDerivedTables (3).**
+         Discovery HOLDS 0. Tests: TestWave198BareDerivedTables (3).* Wave 199 (2026-07-17): DELETE
+         … USING inside a WITH statement spells the multi-table delete
+         on T-SQL (the CTE-DML passthrough post-processes the render);
+         and PG's ALTER COLUMN … USING conversion clause strips when
+         it is the redundant self-cast (T-SQL's implicit conversion IS
+         that cast — sqlglot normalizes to SET DATA TYPE, the pattern
+         covers both spellings) and carriers otherwise. Measured:
+         pg→tsql **54 → 52** (−2). Discovery HOLDS 0. Tests:
+         TestWave199CteDeleteUsingAlterUsing (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

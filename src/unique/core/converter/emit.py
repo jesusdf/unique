@@ -1124,6 +1124,36 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         if aliased is not None:
             node = dataclasses.replace(node, sql=aliased)
 
+    # PG's ALTER COLUMN … TYPE … USING <expr>: no other engine has the
+    # conversion clause (wave 199). A redundant ``USING CAST(col AS
+    # type)`` strips (the engine's implicit conversion IS that cast);
+    # any other expression keeps a documented carrier.
+    if (
+        node.kind == "ALTER"
+        and node.source_dialect == "postgresql"
+        and dialect != "postgresql"
+        and re.search(r"(?i)\bALTER\s+COLUMN\b.*\bUSING\b", node.sql)
+    ):
+        m_red = re.search(
+            r"(?is)\bALTER\s+COLUMN\s+(\w+)\s+(?:SET\s+DATA\s+)?(?:TYPE\s+)?"
+            r"(\w+(?:\([\d,\s]*\))?)\s+USING\s+"
+            r"CAST\s*\(\s*\1\s+AS\s+(\w+(?:\([\d,\s]*\))?)\s*\)\s*$",
+            node.sql.rstrip().rstrip(";"),
+        )
+        if m_red and m_red.group(2).upper() == m_red.group(3).upper():
+            node = dataclasses.replace(
+                node,
+                sql=re.sub(
+                    r"(?is)\s+USING\s+CAST.*$", "", node.sql.rstrip().rstrip(";")
+                ),
+            )
+        else:
+            return (
+                f"-- UNIQUE: {dialect} has no ALTER COLUMN … USING conversion "
+                f"expression; convert the data manually. Statement preserved "
+                f"as a comment\n{_comment_block(node.sql)}"
+            )
+
     # T-SQL ADD CONSTRAINT ... PRIMARY KEY/UNIQUE with storage clauses:
     # rebuilt directly (sqlglot mangles it into comma-joined actions).
     if node.kind == "ALTER" and node.source_dialect == "tsql":
@@ -1373,6 +1403,16 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         ]
         if out and out[0].strip():
             result = out[0]
+            if node.kind == "CTE DML" and dialect == "tsql":
+                # PG's DELETE … USING inside a CTE statement — T-SQL
+                # spells the multi-table delete (wave 199).
+                result = re.sub(
+                    r"(?is)\bDELETE\s+FROM\s+([\w.\[\]\"]+)\s+USING\s+"
+                    r"(.+?)(\s+WHERE\b)",
+                    r"DELETE \1 FROM \1, \2\3",
+                    result,
+                    count=1,
+                )
             if node.kind == "RETURNING" and dialect == "tsql":
                 # sqlglot renders DELETE's OUTPUT before FROM, which not
                 # even its own tsql reader accepts; T-SQL wants it after

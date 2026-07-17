@@ -7139,3 +7139,46 @@ class TestWave198BareDerivedTables:
     def test_bare_kept_pg(self) -> None:
         out = _t2(self._SQL, "postgresql", "postgresql")
         assert "uq_dt" not in out, out
+
+
+class TestWave199CteDeleteUsingAlterUsing:
+    """wave 199 (pg-corpus): DELETE … USING inside a WITH statement
+    spells the multi-table delete on T-SQL; and PG's ALTER COLUMN …
+    USING conversion strips when it is the redundant self-cast,
+    carriers otherwise."""
+
+    def test_cte_delete_using_tsql(self) -> None:
+        out = _t2(
+            "with rcte as (select max(id) as maxid from parent)"
+            " delete from parent using rcte where id = maxid;",
+            "postgresql",
+            "tsql",
+        )
+        assert re.search(r"(?i)DELETE parent FROM parent, rcte", out), out
+        assert "USING" not in out.upper(), out
+
+    def test_alter_using_redundant_cast_strips(self) -> None:
+        out = _t2(
+            "alter table t alter column name integer" " using cast(name as integer);",
+            "postgresql",
+            "tsql",
+        )
+        assert "USING" not in out.upper(), out
+        assert re.search(r"(?i)ALTER COLUMN name INTEGER", out), out
+
+    def test_alter_using_expression_carriers(self) -> None:
+        out = _t2(
+            "alter table t alter column name integer using length(name);",
+            "postgresql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out, out
+
+    def test_alter_using_kept_pg(self) -> None:
+        out = _t2(
+            "alter table t alter column name integer using length(name);",
+            "postgresql",
+            "postgresql",
+        )
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)USING", out), out
