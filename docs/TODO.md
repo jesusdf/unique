@@ -967,7 +967,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          included: DOUBLE on mysql, FLOAT on tsql); and ROW/ROWS are
          reserved in MySQL 8 (``AS row`` was 1064 — now quoted).
          Measured: pg→mysql **67 → 66** (−1). Discovery HOLDS 0.
-         Tests: TestWave200FunctionCastsReservedAlias (4).**
+         Tests: TestWave200FunctionCastsReservedAlias (4).* Wave 201 (2026-07-17): MySQL
+         functions take only IN parameters — a PG void/inferred-return
+         function WITH OUT params IS a procedure there (the wave-142
+         T-SQL rule extended to mysql; the emitter already spells its
+         RETURN as LEAVE proc_exit). Measured: pg→mysql **66 → 63**
+         (−3). Discovery HOLDS 0. Tests:
+         TestWave201MysqlOutParamFunction (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

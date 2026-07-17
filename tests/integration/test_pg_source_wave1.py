@@ -7212,3 +7212,29 @@ class TestWave200FunctionCastsReservedAlias:
             "mysql",
         )
         assert "AS `row`" in out, out
+
+
+class TestWave201MysqlOutParamFunction:
+    """wave 201 (pg-corpus): MySQL functions take only IN parameters —
+    a PG void/inferred-return function WITH OUT params IS a procedure
+    there (the wave-142 T-SQL rule, extended)."""
+
+    _SQL = (
+        "create function f1(in i int, out j int) returns void"
+        " language plpgsql as $$ begin j := i + 1; end $$;"
+    )
+
+    def test_out_param_void_becomes_procedure_mysql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "mysql")
+        assert re.search(r"(?i)CREATE PROCEDURE f1", out), out
+        assert "RETURNS" not in out.upper(), out
+        assert re.search(r"(?i)OUT j int", out), out
+
+    def test_plain_function_untouched_mysql(self) -> None:
+        out = _t2(
+            "create function g1(i int) returns int language plpgsql"
+            " as $$ begin return i + 1; end $$;",
+            "postgresql",
+            "mysql",
+        )
+        assert re.search(r"(?i)CREATE FUNCTION g1", out), out

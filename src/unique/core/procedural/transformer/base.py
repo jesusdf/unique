@@ -1482,15 +1482,16 @@ class ProceduralTransformer:
                 f"has no {self._target} equivalent; documented."
             )
         if (
-            self._target == "tsql"
+            self._target in ("tsql", "mysql")
             and (is_void or node.return_type is None)
             and any(p.direction in ("OUT", "INOUT") for p in new_params)
         ):
             # Also PG's RETURNS-less form: the return is INFERRED from
             # the OUT params there (``function f1(in i int, out j int)``).
-            # T-SQL functions cannot take OUTPUT parameters; a void
-            # function WITH them IS a procedure there (wave 142). The
-            # synthesized trailing RETURN 0 is a valid proc status code.
+            # T-SQL functions cannot take OUTPUT parameters — and MySQL
+            # functions take only IN (wave 201); a void function WITH
+            # them IS a procedure on both. The synthesized trailing
+            # RETURN 0 is a valid proc status code on T-SQL.
             return CreateProcedureStatement(
                 name=self._translate_ident_quoting(node.name) or node.name,
                 parameters=new_params,
