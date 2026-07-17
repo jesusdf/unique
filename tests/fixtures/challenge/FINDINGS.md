@@ -105,6 +105,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')`
 
+## my-length-bytes  (mysql)
+- targets: tsql(semantic)
+- live error: `SEMANTIC: MySQL LENGTH counts BYTES; T-SQL LEN / PG,Oracle LENGTH count CHARACTERS. For mu`
+- src: `SELECT LENGTH('café') AS r`
+
 ## my-makedate  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
@@ -170,6 +175,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL`
 
+## ora-concat-null  (oracle)
+- targets: tsql(semantic)
+- live error: `SEMANTIC: Oracle '||' treats NULL as empty string -> 'ab'; T-SQL/PG/MySQL return NULL. No `
+- src: `SELECT 'a' || NULL || 'b' AS r FROM DUAL`
+
 ## ora-concat-num  (oracle)
 - targets: tsql(invalid)
 - live error: `(245, b"Conversion failed when converting the varchar value 'a' to data type int.DB-Lib er`
@@ -185,10 +195,20 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
 - src: `CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; CLOSE c; END;`
 
+## ora-date-plus-int  (oracle)
+- targets: mysql(semantic), postgresql(invalid)
+- live error: `SEMANTIC: Oracle 'date + 1' adds ONE DAY; MySQL 'CURRENT_TIMESTAMP + 1' does numeric arith`
+- src: `SELECT SYSDATE + 1 AS r FROM DUAL`
+
 ## ora-dump  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU`
 - src: `SELECT DUMP('abc') AS r FROM DUAL`
+
+## ora-empty-string-null  (oracle)
+- targets: postgresql(semantic)
+- live error: `SEMANTIC: Oracle '' IS NULL so NVL returns 'was null'; COALESCE('', ...) on other engines `
+- src: `SELECT NVL('', 'was null') AS r FROM DUAL`
 
 ## ora-from-tz  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -219,6 +239,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'NEXT_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT NEXT_DAY(SYSDATE, 'MONDAY') AS r FROM DUAL`
+
+## ora-numeric-concat  (oracle)
+- targets: tsql(semantic)
+- live error: `SEMANTIC: Oracle '||' concatenates -> '23'; emitted as T-SQL '2 + 3' = 5. Result changed s`
+- src: `SELECT 2 || 3 AS r FROM DUAL`
 
 ## ora-numtodsinterval  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -391,6 +416,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag`
 - src: `CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)`
+
+## pg-numeric-concat  (postgresql)
+- targets: tsql(semantic)
+- live error: `SEMANTIC: PG '||' on numbers concatenates -> '12'; emitted as T-SQL '1 + 2' = 3 (numeric a`
+- src: `SELECT 1 || 2 AS r`
 
 ## pg-overlay  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -611,6 +641,11 @@ CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT 
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT JSON_VALUE('{"a":1}', '$.a')`
 
+## ts-len-trailing-space  (tsql)
+- targets: postgresql(semantic)
+- live error: `SEMANTIC: T-SQL LEN ignores trailing spaces (=3); PG/Oracle LENGTH & MySQL CHAR_LENGTH cou`
+- src: `SELECT LEN('abc   ') AS r`
+
 ## ts-log  (tsql)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -680,6 +715,11 @@ SELECT NEXT VALUE FOR seq`
 - live error: `ORA-00904: "GETUTCDATE": invalid identifier`
 - src: `SELECT SYSDATETIME(), SYSUTCDATETIME(), GETUTCDATE()`
 
+## ts-top-with-ties  (tsql)
+- targets: postgresql(semantic)
+- live error: `SILENT LOSS: TOP n WITH TIES -> plain LIMIT n on PG/MySQL (ties dropped); on Oracle the ro`
+- src: `SELECT TOP 1 WITH TIES x FROM (VALUES (1),(1),(2)) v(x) ORDER BY x`
+
 ## ts-view-check  (tsql)
 - targets: mysql(carrier), oracle(carrier), postgresql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
@@ -693,4 +733,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN SET @n -=`
 ---
 
-Totals: 133 distinct constructs; 277 invalid-output rows, 12 carrier rows.
+Totals: 141 distinct constructs; 278 invalid-output rows, 20 carrier rows.

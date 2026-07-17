@@ -62,6 +62,9 @@ CREATE TABLE t (data JSON)
 -- CASE[open]: my-last-day-name — fails on oracle, postgresql, tsql. (195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')
 
+-- CASE[open]: my-length-bytes — fails on tsql. SEMANTIC: MySQL LENGTH counts BYTES; T-SQL LEN / PG,Oracle LENGTH count CHARACTERS. For mu
+SELECT LENGTH('café') AS r
+
 -- CASE[open]: my-makedate — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)
 

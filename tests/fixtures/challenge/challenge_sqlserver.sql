@@ -105,6 +105,9 @@ CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT 
 -- CASE[open]: ts-json-value — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT JSON_VALUE('{"a":1}', '$.a')
 
+-- CASE[open]: ts-len-trailing-space — fails on postgresql. SEMANTIC: T-SQL LEN ignores trailing spaces (=3); PG/Oracle LENGTH & MySQL CHAR_LENGTH cou
+SELECT LEN('abc   ') AS r
+
 -- CASE[open]: ts-log — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT LOG(2.718), LOG10(100), POWER(2, 8)
 
@@ -147,6 +150,9 @@ SELECT STUFF('abcdef', 2, 3, 'XY') AS r
 
 -- CASE[open]: ts-sysdatetime — fails on mysql, oracle, postgresql. ORA-00904: "GETUTCDATE": invalid identifier
 SELECT SYSDATETIME(), SYSUTCDATETIME(), GETUTCDATE()
+
+-- CASE[open]: ts-top-with-ties — fails on postgresql. SILENT LOSS: TOP n WITH TIES -> plain LIMIT n on PG/MySQL (ties dropped); on Oracle the ro
+SELECT TOP 1 WITH TIES x FROM (VALUES (1),(1),(2)) v(x) ORDER BY x
 
 -- CASE[open]: ts-view-check — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id INT);

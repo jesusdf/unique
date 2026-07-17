@@ -31,6 +31,9 @@ SELECT BITAND(5, 3) AS r FROM DUAL
 -- CASE[open]: ora-cast-expr — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL
 
+-- CASE[open]: ora-concat-null — fails on tsql. SEMANTIC: Oracle '||' treats NULL as empty string -> 'ab'; T-SQL/PG/MySQL return NULL. No 
+SELECT 'a' || NULL || 'b' AS r FROM DUAL
+
 -- CASE[open]: ora-concat-num — fails on tsql. (245, b"Conversion failed when converting the varchar value 'a' to data type int.DB-Lib er
 SELECT 'a' || 5 AS r FROM DUAL
 
@@ -40,8 +43,14 @@ SELECT LEVEL, 1 AS n FROM DUAL CONNECT BY LEVEL <= 5
 -- CASE[open]: ora-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; CLOSE c; END;
 
+-- CASE[open]: ora-date-plus-int — fails on mysql, postgresql. SEMANTIC: Oracle 'date + 1' adds ONE DAY; MySQL 'CURRENT_TIMESTAMP + 1' does numeric arith
+SELECT SYSDATE + 1 AS r FROM DUAL
+
 -- CASE[open]: ora-dump — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU
 SELECT DUMP('abc') AS r FROM DUAL
+
+-- CASE[open]: ora-empty-string-null — fails on postgresql. SEMANTIC: Oracle '' IS NULL so NVL returns 'was null'; COALESCE('', ...) on other engines 
+SELECT NVL('', 'was null') AS r FROM DUAL
 
 -- CASE[open]: ora-from-tz — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR
 SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL
@@ -60,6 +69,9 @@ SELECT MONTHS_BETWEEN(SYSDATE, SYSDATE - 40) AS r FROM DUAL
 
 -- CASE[open]: ora-next-day — fails on mysql, postgresql, tsql. (195, b"'NEXT_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT NEXT_DAY(SYSDATE, 'MONDAY') AS r FROM DUAL
+
+-- CASE[open]: ora-numeric-concat — fails on tsql. SEMANTIC: Oracle '||' concatenates -> '23'; emitted as T-SQL '2 + 3' = 5. Result changed s
+SELECT 2 || 3 AS r FROM DUAL
 
 -- CASE[open]: ora-numtodsinterval — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT NUMTODSINTERVAL(90, 'MINUTE') AS r FROM DUAL

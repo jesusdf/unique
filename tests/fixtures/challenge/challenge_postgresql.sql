@@ -91,6 +91,9 @@ CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; E
 -- CASE[open]: pg-network-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag
 CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)
 
+-- CASE[open]: pg-numeric-concat — fails on tsql. SEMANTIC: PG '||' on numbers concatenates -> '12'; emitted as T-SQL '1 + 2' = 3 (numeric a
+SELECT 1 || 2 AS r
+
 -- CASE[open]: pg-overlay — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV
 SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o
 
