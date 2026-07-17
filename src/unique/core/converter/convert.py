@@ -804,6 +804,14 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         # GENERIC dialect inside routine bodies.
         while isinstance(inner, (exp.Subquery, exp.Paren)):
             inner = inner.this
+        # A scalar ``(VALUES (v[, …]))`` (one row) is PG-only spelling —
+        # ``(SELECT v[, …])`` is the universal equivalent.
+        if isinstance(inner, exp.Values) and len(inner.expressions) == 1:
+            row = inner.expressions[0]
+            cols = tuple(convert_expression(c) for c in row.expressions)
+            return SubqueryExpression(
+                query=SelectStatement(columns=cols), alias=expr.alias or None
+            )
         if isinstance(inner, (exp.Select, exp.SetOperation)):
             return SubqueryExpression(
                 query=_convert_select(inner), alias=expr.alias or None

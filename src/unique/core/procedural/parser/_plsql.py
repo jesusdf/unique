@@ -446,6 +446,14 @@ class PlsqlStatementsMixin(ParserBase):
                 and self._peek(1).upper_value
                 in ("DATABASE", "SCHEMA", "SERVER", "INSTANCE")
             )
+            # MySQL server-side prepared statements (PREPARE name FROM …,
+            # EXECUTE name [USING …], DEALLOCATE PREPARE name) have no
+            # cross-engine session mechanism — the raw PREPARE shipped.
+            or tok.upper_value in ("PREPARE", "DEALLOCATE")
+            or (
+                tok.upper_value == "EXECUTE"
+                and self._peek(1).type == TokenType.IDENTIFIER
+            )
         ):
             # MySQL admin statements — the embedded-DML fallback
             # shredded ``FLUSH QUERY CACHE`` into ``flush AS query``

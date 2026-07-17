@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import argparse
 import contextlib
-import re
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -144,9 +144,7 @@ def filter_mysql(sql: str, url: str) -> tuple[list[str], int]:
     dbname = "unique_filter_tmp"
 
     def connect():  # noqa: ANN202
-        conn = pymysql.connect(
-            host=host, port=int(port), user=user, password=password
-        )
+        conn = pymysql.connect(host=host, port=int(port), user=user, password=password)
         cur = conn.cursor()
         cur.execute(f"CREATE DATABASE IF NOT EXISTS {dbname}")
         cur.execute(f"USE {dbname}")

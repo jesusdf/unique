@@ -30,6 +30,7 @@ from unique.core.ast_nodes import (
     CommentStatement,
     CreateTableStatement,
     CreateViewStatement,
+    CTEDefinition,
     DataType,
     DeleteStatement,
     DropStatement,
@@ -452,6 +453,10 @@ def _collect_defined_aliases(value: object) -> set[str]:
         found.add(value.alias.lower())
     if isinstance(value, SubqueryExpression) and value.alias:
         found.add(value.alias.lower())
+    if isinstance(value, CTEDefinition) and value.name:
+        # A CTE name shadows any same-named (temp) table inside the
+        # statement — references bind to the CTE.
+        found.add(value.name.lower())
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
         for f in dataclasses.fields(value):
             found |= _collect_defined_aliases(getattr(value, f.name))
@@ -2132,13 +2137,13 @@ def _emit_update(node: UpdateStatement, dialect: str) -> str:
     if dialect == "tsql" and alias:
         result = f"UPDATE {alias}\nSET {sets}\nFROM {table}"
         if node.where:
-            result += f"\nWHERE {_emit_expression(node.where, dialect)}"
+            result += f"\nWHERE {_emit_condition(node.where, dialect)}"
         return result
 
     result = f"UPDATE {table}\nSET {sets}"
 
     if node.where:
-        result += f"\nWHERE {_emit_expression(node.where, dialect)}"
+        result += f"\nWHERE {_emit_condition(node.where, dialect)}"
 
     return result
 
@@ -2231,7 +2236,7 @@ def _emit_update_mysql_join(
     sets = ", ".join(f"{col} = {val}" for col, val in assignments)
     result = f"UPDATE {target_sql}{joins_sql}\nSET {sets}"
     if node.where is not None:
-        result += f"\nWHERE {_emit_expression(node.where, dialect)}"
+        result += f"\nWHERE {_emit_condition(node.where, dialect)}"
     return result
 
 
@@ -2252,7 +2257,7 @@ def _emit_update_tsql_from(
         joins_sql = "".join(f"\n{_emit_join(j, dialect)}" for j in node.joins)
         result += f"\nFROM {table}, {from_sql}{joins_sql}"
         if node.where is not None:
-            result += f"\nWHERE {_emit_expression(node.where, dialect)}"
+            result += f"\nWHERE {_emit_condition(node.where, dialect)}"
         return result
     result = f"UPDATE {table}\nSET {sets}"
     if node.from_clause is not None:
@@ -2260,7 +2265,7 @@ def _emit_update_tsql_from(
         joins_sql = "".join(f"\n{_emit_join(j, dialect)}" for j in node.joins)
         result += f"\nFROM {from_sql}{joins_sql}"
     if node.where is not None:
-        result += f"\nWHERE {_emit_expression(node.where, dialect)}"
+        result += f"\nWHERE {_emit_condition(node.where, dialect)}"
     return result
 
 
@@ -2336,7 +2341,7 @@ def _emit_delete(node: DeleteStatement, dialect: str) -> str:
         result = f"DELETE FROM {table}"
 
     if node.where:
-        result += f"\nWHERE {_emit_expression(node.where, dialect)}"
+        result += f"\nWHERE {_emit_condition(node.where, dialect)}"
 
     return result
 
@@ -2488,7 +2493,8 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                         # DOUBLE PRECISION takes no display width (MySQL's
                         # DOUBLE(11,0) is a display hint, not a precision).
                         dialect == "postgresql"
-                        and dtype.upper() in ("BYTEA", "BLOB", "DOUBLE PRECISION")
+                        and dtype.upper()
+                        in ("BYTEA", "BLOB", "DOUBLE PRECISION", "REAL")
                     )
                     or (
                         # Oracle LOB types take no length (BLOB/CLOB, not BLOB(255)).
@@ -3923,6 +3929,15 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # the same passthrough case. Map to each dialect's current-timestamp form.
     if node.name.upper() in ("SYSTIMESTAMP", "SYSDATE", "NOW") and not node.args:
         return CURRENT_TIMESTAMP_EXPR.get(dialect, "CURRENT_TIMESTAMP")
+
+    # CURRENT_USER/SESSION_USER are niladic KEYWORDS on PG/T-SQL (the
+    # parenthesized call is invalid there); Oracle spells it USER.
+    if node.name.upper() in ("CURRENT_USER", "SESSION_USER") and not node.args:
+        if dialect in ("postgresql", "tsql"):
+            return node.name.upper()
+        if dialect == "oracle":
+            return "USER"
+        return f"{node.name.upper()}()"
 
     # Substring position: canonical CHARINDEX(needle, haystack[, start]) maps to
     # each engine's function with its own argument order.

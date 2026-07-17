@@ -907,3 +907,76 @@ class TestZeroPushZ4bBatch:
             "tsql",
         )
         assert "THROW;" in r.sql, r.sql
+
+
+class TestZeroPushW1Batch:
+    """Zero-push batch W1 mechanisms."""
+
+    def _t(self, sql, s, t):
+        from unique.core.transpiler import Transpiler
+
+        return Transpiler().transpile(sql, s, t)
+
+    def test_charset_param_attribute_consumed(self) -> None:
+        r = self._t(
+            "DELIMITER //\ncreate procedure p2(p1 char(10) charset koi8r,"
+            " out p2 char(10) charset cp1251) begin set p2 = p1; end//\n"
+            "DELIMITER ;",
+            "mysql",
+            "tsql",
+        )
+        assert "@charset" not in r.sql.lower(), r.sql
+        assert "@p2 char(10) OUTPUT" in r.sql, r.sql
+
+    def test_real_keeps_no_params_on_postgresql(self) -> None:
+        r = self._t("CREATE TABLE t1 (a FLOAT(9,6));", "mysql", "postgresql")
+        assert "REAL(" not in r.sql.upper(), r.sql
+        assert "REAL" in r.sql.upper(), r.sql
+
+    def test_current_user_niladic(self) -> None:
+        r = self._t("SELECT CURRENT_USER(), SESSION_USER();", "mysql", "postgresql")
+        assert "CURRENT_USER()" not in r.sql, r.sql
+        assert "CURRENT_USER" in r.sql, r.sql
+        r = self._t("SELECT CURRENT_USER();", "mysql", "tsql")
+        assert "CURRENT_USER()" not in r.sql, r.sql
+
+    def test_scalar_values_row_becomes_select(self) -> None:
+        r = self._t("SELECT (VALUES (1));", "mysql", "tsql")
+        assert "(SELECT 1)" in r.sql, r.sql
+        assert "VALUES" not in r.sql.upper(), r.sql
+
+    def test_bare_numeric_where_gets_comparison(self) -> None:
+        r = self._t("UPDATE v1 SET b = 0 WHERE 0;", "mysql", "tsql")
+        assert "WHERE 0 <> 0" in r.sql, r.sql
+
+    def test_information_schema_cast_gated(self) -> None:
+        r = self._t(
+            "SELECT CAST('t' AS information_schema.sql_identifier);",
+            "postgresql",
+            "mysql",
+        )
+        assert r.warnings, r.sql
+        assert "information_schema.sql_identifier" in r.warnings[0].message
+
+    def test_prepare_execute_deallocate_carriers(self) -> None:
+        r = self._t(
+            "DELIMITER //\ncreate procedure p1() begin prepare stmt1 from"
+            " 'update t3 set a=a+2'; execute stmt1; deallocate prepare stmt1;"
+            " end//\nDELIMITER ;",
+            "mysql",
+            "tsql",
+        )
+        assert len(r.warnings) == 3, [w.message for w in r.warnings]
+        assert "-- prepare stmt1" in r.sql, r.sql
+        assert "-- execute stmt1" in r.sql, r.sql
+        assert "-- deallocate prepare stmt1" in r.sql, r.sql
+
+    def test_row_trigger_with_untranslatable_call_degrades(self) -> None:
+        r = self._t(
+            "DELIMITER //\nCREATE TRIGGER t1_bu BEFORE UPDATE ON t1 FOR EACH"
+            " ROW\nBEGIN\n  CALL p1(NEW.i1);\nEND//\nDELIMITER ;",
+            "mysql",
+            "tsql",
+        )
+        assert r.warnings, r.sql
+        assert "NEW./OLD." in r.warnings[0].message, r.warnings[0].message

@@ -671,9 +671,9 @@ class Transformer:
 
     def _find_pg_internal(self, value: object) -> str | None:
         """First PG catalog-internal construct reachable from *value*."""
-        if (
-            isinstance(value, CastExpression)
-            and value.target_type.name.upper() in self._PG_CATALOG_TYPES
+        if isinstance(value, CastExpression) and (
+            value.target_type.name.upper() in self._PG_CATALOG_TYPES
+            or value.target_type.name.lower().startswith("information_schema.")
         ):
             return f"cast to {value.target_type.name}"
         if isinstance(value, DataType) and value.name.upper() in self._PG_CATALOG_TYPES:

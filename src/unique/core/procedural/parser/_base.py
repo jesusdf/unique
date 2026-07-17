@@ -1054,6 +1054,22 @@ class ParserBase:
             name = self._parse_identifier()
             data_type = self._parse_data_type_or_reference()
 
+            # Character-set/collation attributes on a parameter type
+            # (``p1 CHAR(10) CHARSET koi8r COLLATE …``): engine-local
+            # encoding tuning — consumed, the base type carries. (CHARSET
+            # lexes as a plain identifier, not a keyword.)
+            while True:
+                cur = self._current().upper_value
+                if cur in ("CHARSET", "COLLATE"):
+                    self._advance()
+                    self._advance()  # the charset/collation name
+                elif cur == "CHARACTER" and self._peek(1).upper_value == "SET":
+                    self._advance()
+                    self._advance()
+                    self._advance()  # the charset name
+                else:
+                    break
+
             if self._match_keyword("DEFAULT") or self._match_type(TokenType.ASSIGN):
                 default = self._parse_expression_simple()
         elif self._dialect == "postgresql":
