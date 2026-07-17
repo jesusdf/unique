@@ -1296,3 +1296,41 @@ class TestZeroPushW6Batch:
         r = self._t(src, "mysql", "oracle")
         assert "EXECUTE IMMEDIATE 'CREATE INDEX i ON t3(s1)'" in r.sql, r.sql
         assert "NULLS FIRST" not in r.sql, r.sql
+
+
+class TestZeroPushW7Batch:
+    """Zero-push batch W7 — honest carriers for untranslatable constructs."""
+
+    def _t(self, sql, s, t):
+        from unique.core.transpiler import Transpiler
+
+        return Transpiler().transpile(sql, s, t)
+
+    def test_data_modifying_cte_carrier_tsql(self) -> None:
+        r = self._t(
+            "WITH ins(a) AS (INSERT INTO t2 VALUES (1),(2) RETURNING a)"
+            " SELECT a FROM ins;",
+            "postgresql",
+            "tsql",
+        )
+        assert "data-modifying CTE" in r.sql, r.sql
+
+    def test_plain_select_cte_not_carried_tsql(self) -> None:
+        r = self._t("WITH c AS (SELECT 1 AS a) SELECT a FROM c;", "postgresql", "tsql")
+        assert "data-modifying" not in r.sql, r.sql
+
+    def test_setop_order_by_aggregate_carrier_pg(self) -> None:
+        r = self._t(
+            "SELECT 1 AS foo UNION SELECT 2 ORDER BY MAX(42) + MAX(1) ASC;",
+            "mysql",
+            "postgresql",
+        )
+        assert "set-operation ORDER BY" in r.sql, r.sql
+
+    def test_setop_order_by_column_not_carried_pg(self) -> None:
+        r = self._t(
+            "SELECT a FROM t1 UNION SELECT a FROM t2 ORDER BY a;",
+            "mysql",
+            "postgresql",
+        )
+        assert "set-operation ORDER BY" not in r.sql, r.sql

@@ -1201,6 +1201,23 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     read = sqlglot_dialect_name(node.source_dialect)
     write = sqlglot_dialect_name(dialect)
 
+    # T-SQL has no data-modifying CTE — an INSERT/UPDATE/DELETE inside a WITH
+    # (PostgreSQL's ``WITH ins AS (INSERT … RETURNING) …``) is invalid there;
+    # sqlglot re-transpiles it verbatim. Preserve it as a documented carrier.
+    if dialect == "tsql":
+        # sqlglot drops the WITH arg when a CTE body is DML (``RETURNING … *``
+        # defeats its parse), so detect it on scrubbed text: a statement that
+        # starts with WITH and has a CTE body opening with a DML verb.
+        _scrubbed = re.sub(r"'(?:[^']|'')*'", "''", node.sql)
+        if re.match(r"(?is)^\s*WITH\b", _scrubbed) and re.search(
+            r"(?is)\bAS\s*\(\s*(?:INSERT|UPDATE|DELETE|MERGE)\b", _scrubbed
+        ):
+            _cte_reason = (
+                "T-SQL has no data-modifying CTE (INSERT/UPDATE/DELETE "
+                "inside WITH); statement preserved as a comment"
+            )
+            return f"-- UNIQUE: {_cte_reason}\n{_comment_block(node.sql)}"
+
     # MySQL's STRAIGHT_JOIN is INNER JOIN plus a join-order hint no other
     # engine spells — inside a parenthesized join tree it survived the
     # re-transpile verbatim (wave 179; ORA-00907 / error 102 live).

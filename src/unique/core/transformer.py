@@ -1938,16 +1938,10 @@ class Transformer:
         offending = False
         while cur is not None:
             for item in cur.order_by:
-                expr = item.expression
-                if isinstance(expr, SubqueryExpression):
-                    offending = True
-                if isinstance(expr, FunctionCall) and self._SETOP_ORDER_AGG_RE.match(
-                    f"{expr.name}("
-                ):
-                    offending = True
-                if isinstance(expr, RawSQL) and self._SETOP_ORDER_AGG_RE.search(
-                    expr.sql
-                ):
+                # The ordering expression may WRAP the aggregate/subquery in
+                # arithmetic (``MAX(42) + MAX(1)``) — scan the whole tree, not
+                # just a bare top-level FunctionCall.
+                if self._order_expr_offends(item.expression):
                     offending = True
             cur = cur.set_query
         if not offending:
@@ -1962,6 +1956,25 @@ class Transformer:
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _order_expr_offends(self, value: object) -> bool:
+        """An aggregate call or subquery anywhere in a set-op ORDER BY item —
+        both are rejected in a PostgreSQL set-operation ORDER BY."""
+        if isinstance(value, SubqueryExpression):
+            return True
+        if isinstance(value, FunctionCall) and self._SETOP_ORDER_AGG_RE.match(
+            f"{value.name}("
+        ):
+            return True
+        if isinstance(value, RawSQL) and self._SETOP_ORDER_AGG_RE.search(value.sql):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._order_expr_offends(getattr(value, f.name)) for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._order_expr_offends(item) for item in value)
+        return False
 
     def _gate_tsql_agg_distinct(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using STRING_AGG(DISTINCT …) — WHOLE, on
