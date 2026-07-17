@@ -2932,6 +2932,14 @@ class ProceduralTransformer:
             logger.debug("IR parse failed for embedded DML: %s", e)
             return None
         statements = [n for n in nodes if not isinstance(n, IRComment)]
+        # A top-level Alias is not a statement — it is a fragment of shell
+        # machinery text (an EXEC tail like ``sp_executesql @s`` parses as
+        # ``sp_executesql AS @s`` — the validate_source bare-Alias class);
+        # the IR does not apply.
+        from unique.core.ast_nodes import Alias as IRAlias
+
+        if any(isinstance(n, IRAlias) for n in statements):
+            return None
         # An EmbeddedDML node holds exactly one statement; a RawSQL result is
         # a parse failure and a PassthroughSQL an unmodeled construct — the IR
         # would just re-run sqlglot on those, without the target fixups the
