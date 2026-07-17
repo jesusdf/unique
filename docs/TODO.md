@@ -960,7 +960,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          that cast — sqlglot normalizes to SET DATA TYPE, the pattern
          covers both spellings) and carriers otherwise. Measured:
          pg→tsql **54 → 52** (−2). Discovery HOLDS 0. Tests:
-         TestWave199CteDeleteUsingAlterUsing (4).**
+         TestWave199CteDeleteUsingAlterUsing (4).* Wave 200 (2026-07-17,
+         milestone): PG's function-style casts (``float8(x)``,
+         ``int4(x)`` …) exist only there — a name map routes them
+         through the normal CAST machinery (per-dialect type maps
+         included: DOUBLE on mysql, FLOAT on tsql); and ROW/ROWS are
+         reserved in MySQL 8 (``AS row`` was 1064 — now quoted).
+         Measured: pg→mysql **67 → 66** (−1). Discovery HOLDS 0.
+         Tests: TestWave200FunctionCastsReservedAlias (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

@@ -7182,3 +7182,33 @@ class TestWave199CteDeleteUsingAlterUsing:
         )
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)USING", out), out
+
+
+class TestWave200FunctionCastsReservedAlias:
+    """wave 200 (pg-corpus): PG's function-style casts (``float8(x)``)
+    exist only there — CAST elsewhere, through the per-dialect type
+    maps; and ``AS row`` is reserved in MySQL 8 (quoted now)."""
+
+    def test_float8_fn_cast_mysql(self) -> None:
+        out = _t2("select float8(count(*)) / 2 from i8;", "postgresql", "mysql")
+        assert re.search(r"(?i)CAST\(COUNT\(\*\) AS DOUBLE\)", out), out
+
+    def test_float8_fn_cast_tsql(self) -> None:
+        out = _t2("select float8(count(*)) / 2 from i8;", "postgresql", "tsql")
+        assert re.search(r"(?i)CAST\(COUNT\(\*\) AS FLOAT\)", out), out
+
+    def test_float8_fn_kept_pg(self) -> None:
+        out = _t2(
+            "select float8(count(*)) / 2 from i8;",
+            "postgresql",
+            "postgresql",
+        )
+        assert re.search(r"(?i)float8\(COUNT\(\*\)\)", out), out
+
+    def test_reserved_alias_quoted_mysql(self) -> None:
+        out = _t2(
+            "select concat('a','b') as row from t1;",
+            "postgresql",
+            "mysql",
+        )
+        assert "AS `row`" in out, out

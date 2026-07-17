@@ -751,6 +751,10 @@ _RESERVED_IDENTIFIERS: dict[str, frozenset[str]] = {
             "MANUAL",
             "PARALLEL",
             "QUALIFY",
+            # ROW/ROWS are reserved in MySQL 8.0+ (``AS row`` is 1064 —
+            # wave 200).
+            "ROW",
+            "ROWS",
             "TABLESAMPLE",
             "LATERAL",
             "RECURSIVE",

@@ -30,6 +30,7 @@ from unique.core.ast_nodes import (
     CommentStatement,
     CreateTableStatement,
     CreateViewStatement,
+    DataType,
     DeleteStatement,
     DropStatement,
     ExpressionList,
@@ -831,6 +832,18 @@ def _strip_unlimited_order_by(query: SelectStatement) -> SelectStatement:
     if query.order_by and not query.limit:
         query = dataclasses.replace(query, order_by=())
     return query
+
+
+#: PG's function-style cast names and their generic type spellings.
+_PG_FUNCTION_CASTS = {
+    "FLOAT8": "DOUBLE",
+    "FLOAT4": "REAL",
+    "INT2": "SMALLINT",
+    "INT4": "INT",
+    "INT8": "BIGINT",
+    "BOOL": "BOOLEAN",
+    "NUMERIC": "NUMERIC",
+}
 
 
 #: Operators whose BinaryOp is a predicate (truth-valued), not a scalar.
@@ -3145,6 +3158,23 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "tsql":
             return f"TRIM({rem} FROM {s})"
         return f"TRIM(BOTH {rem} FROM {s})"
+
+    # PG's function-style casts (``float8(x)``, ``int4(x)`` …): only PG
+    # has them (wave 200) — everywhere else they are CAST, routed through
+    # the normal cast machinery (per-dialect type maps included).
+    if (
+        fn_name in _PG_FUNCTION_CASTS
+        and len(node.args) == 1
+        and dialect != "postgresql"
+        and SOURCE_DIALECT.get() == "postgresql"
+    ):
+        return _emit_expression(
+            CastExpression(
+                expression=node.args[0],
+                target_type=DataType(name=_PG_FUNCTION_CASTS[fn_name]),
+            ),
+            dialect,
+        )
 
     # MySQL's CONNECTION_ID(): every engine has a session id under a
     # different name (wave 171) — dbo.connection_id shipped as a fake
