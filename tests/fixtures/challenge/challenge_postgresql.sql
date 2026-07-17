@@ -41,6 +41,9 @@ SELECT ARRAY(SELECT generate_series(1,3)) AS r
 -- CASE[open]: pg-array-to-string — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT array_to_string(ARRAY[1,2,3], ',')
 
+-- CASE[open]: pg-ascii-empty — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('NULL',),)
+SELECT ASCII('') AS r
+
 -- CASE[open]: pg-at-time-zone — fails on mysql, oracle, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D
 SELECT TIMESTAMP '2020-01-01 10:00' AT TIME ZONE 'UTC' AS r
 
@@ -291,6 +294,9 @@ SELECT LOG(2, 8) AS r
 
 -- CASE[open]: pg-log-base — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('4.60517',),)
 SELECT LOG(100) AS r
+
+-- CASE[open]: pg-lpad-shrink — fails on tsql. FUNC-DIFF: source=(('hel',),) target=(('llo',),)
+SELECT LPAD('hello', 3) AS r
 
 -- CASE[open]: pg-make-date — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKE_DATE(2020, 6, 15), MAKE_TIME(10, 30, 0)
@@ -561,6 +567,12 @@ CREATE TABLE t (a TEXT COLLATE "en_US")
 
 -- CASE[open]: postgresql-drop4-MATCH\s+FULL — fails on oracle. SILENT CLAUSE DROP: 'MATCH\s+FULL' absent from valid oracle output, no warning
 CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (pid INT REFERENCES p(id) MATCH FULL)
+
+-- CASE[open]: postgresql-drop5-CHECK|IN\s*\ — fails on mysql, oracle, tsql. SILENT CLAUSE DROP: 'CHECK|IN\s*\(' absent from valid tsql output, no warning
+CREATE TABLE t (a INT CHECK (a IN (1,2,3)))
+
+-- CASE[open]: postgresql-drop5-REFERENCES — fails on mysql, oracle, tsql. SILENT CLAUSE DROP: 'REFERENCES' absent from valid tsql output, no warning
+CREATE TABLE t (a INT PRIMARY KEY, b INT REFERENCES t(a))
 
 -- CASE[open]: postgresql-qdrop-FOR\s+UPDATE — fails on tsql. SILENT CLAUSE DROP: 'FOR\s+UPDATE' absent from valid tsql output, no warning
 SELECT x FROM (VALUES (1),(2)) v(x) FOR UPDATE

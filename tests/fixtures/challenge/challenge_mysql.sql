@@ -14,6 +14,9 @@ SELECT HEX(AES_ENCRYPT('data', 'key')) AS r
 -- CASE[open]: my-alter-modify — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'MODIFY'.DB-Lib error message 20018, severity 15:\nGeneral S
 CREATE TABLE t (a INT, b INT); ALTER TABLE t MODIFY COLUMN b BIGINT
 
+-- CASE[open]: my-ascii-empty — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('NULL',),)
+SELECT ASCII('') AS r
+
 -- CASE[open]: my-avg-int — fails on tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
 SELECT AVG(x) FROM (SELECT 1 x UNION SELECT 2) t
 
@@ -191,6 +194,9 @@ CREATE TABLE t (data JSON)
 -- CASE[open]: my-last-day-name — fails on oracle, postgresql, tsql. (195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')
 
+-- CASE[open]: my-least-null2 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1',),)
+SELECT LEAST(1, 2, NULL, 3) AS r
+
 -- CASE[open]: my-left-neg — fails on postgresql. FUNC-DIFF: source=(('',),) target=(('ab',),)
 SELECT LEFT('abc', -1) AS r
 
@@ -254,6 +260,9 @@ CREATE TRIGGER trg BEFORE INSERT ON orders FOR EACH ROW SET NEW.created = NOW();
 
 -- CASE[open]: my-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END
+
+-- CASE[open]: my-repeat-neg — fails on tsql. FUNC-DIFF: source=(('',),) target=(('NULL',),)
+SELECT REPEAT('ab', -1) AS r
 
 -- CASE[open]: my-replace-into — fails on oracle, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (a INT); REPLACE INTO t VALUES (1)
@@ -362,6 +371,9 @@ CREATE TABLE t (a INT UNSIGNED)
 
 -- CASE[open]: mysql-drop4-ZEROFILL|LPA — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ZEROFILL|LPAD' absent from valid postgresql output, no warning
 CREATE TABLE t (a INT ZEROFILL)
+
+-- CASE[open]: mysql-drop5-utf8mb4|CHAR — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'utf8mb4|CHARSET' absent from valid tsql output, no warning
+CREATE TABLE t (a INT AUTO_INCREMENT PRIMARY KEY, b VARCHAR(20)) DEFAULT CHARSET=utf8mb4
 
 -- CASE[open]: mysql-qdrop-ROLLUP — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ROLLUP' absent from valid tsql output, no warning
 SELECT x FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x WITH ROLLUP

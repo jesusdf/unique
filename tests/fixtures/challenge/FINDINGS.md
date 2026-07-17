@@ -25,6 +25,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(102, b"Incorrect syntax near 'MODIFY'.DB-Lib error message 20018, severity 15:\nGeneral S`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t MODIFY COLUMN b BIGINT`
 
+## my-ascii-empty  (mysql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=(('NULL',),)`
+- src: `SELECT ASCII('') AS r`
+
 ## my-avg-int  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('1.5',),) target=(('1',),)`
@@ -320,6 +325,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')`
 
+## my-least-null2  (mysql)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('NULL',),) target=(('1',),)`
+- src: `SELECT LEAST(1, 2, NULL, 3) AS r`
+
 ## my-left-neg  (mysql)
 - targets: postgresql(func)
 - live error: `FUNC-DIFF: source=(('',),) target=(('ab',),)`
@@ -424,6 +434,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: tsql(invalid)
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
 - src: `CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END`
+
+## my-repeat-neg  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('',),) target=(('NULL',),)`
+- src: `SELECT REPEAT('ab', -1) AS r`
 
 ## my-replace-into  (mysql)
 - targets: oracle(carrier), postgresql(invalid), tsql(carrier)
@@ -604,6 +619,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'ZEROFILL|LPAD' absent from valid postgresql output, no warning`
 - src: `CREATE TABLE t (a INT ZEROFILL)`
+
+## mysql-drop5-utf8mb4|CHAR  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'utf8mb4|CHARSET' absent from valid tsql output, no warning`
+- src: `CREATE TABLE t (a INT AUTO_INCREMENT PRIMARY KEY, b VARCHAR(20)) DEFAULT CHARSET=utf8mb4`
 
 ## mysql-qdrop-ROLLUP  (mysql)
 - targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
@@ -1202,6 +1222,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT array_to_string(ARRAY[1,2,3], ',')`
 
+## pg-ascii-empty  (postgresql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=(('NULL',),)`
+- src: `SELECT ASCII('') AS r`
+
 ## pg-at-time-zone  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D`
@@ -1617,6 +1642,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('4.60517',),)`
 - src: `SELECT LOG(100) AS r`
+
+## pg-lpad-shrink  (postgresql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('hel',),) target=(('llo',),)`
+- src: `SELECT LPAD('hello', 3) AS r`
 
 ## pg-make-date  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2060,6 +2090,16 @@ CREATE TRIGGE`
 - targets: oracle(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'MATCH\s+FULL' absent from valid oracle output, no warning`
 - src: `CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (pid INT REFERENCES p(id) MATCH FULL)`
+
+## postgresql-drop5-CHECK|IN\s*\  (postgresql)
+- targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'CHECK|IN\s*\(' absent from valid tsql output, no warning`
+- src: `CREATE TABLE t (a INT CHECK (a IN (1,2,3)))`
+
+## postgresql-drop5-REFERENCES  (postgresql)
+- targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'REFERENCES' absent from valid tsql output, no warning`
+- src: `CREATE TABLE t (a INT PRIMARY KEY, b INT REFERENCES t(a))`
 
 ## postgresql-qdrop-FOR\s+UPDATE  (postgresql)
 - targets: tsql(silent-drop)
@@ -2535,6 +2575,11 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - targets: postgresql(silent-drop)
 - live error: `SILENT CLAUSE DROP: '100|START|IDENTITY' absent from valid postgresql output, no warning`
 - src: `CREATE TABLE t (id INT IDENTITY(100, 5))`
+
+## tsql-drop5-MEMORY_OPTIM  (tsql)
+- targets: mysql(silent-drop), oracle(silent-drop), postgresql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'MEMORY_OPTIMIZED' absent from valid postgresql output, no warning`
+- src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 494 distinct constructs; defect rows by kind: carrier 97, func 193, invalid 652, semantic 2, silent-drop 61.
+Totals: 503 distinct constructs; defect rows by kind: carrier 97, func 201, invalid 652, semantic 2, silent-drop 73.
