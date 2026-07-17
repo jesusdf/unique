@@ -3842,12 +3842,12 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             args_sql = f"{haystack}, {needle}" + (f", {start}" if start else "")
             return f"INSTR({args_sql})"
         # postgresql: STRPOS has no start arg; use POSITION(needle IN haystack)
-        # and add the offset when a start position is given.
+        # and add the offset when a start position is given — guarded so a
+        # not-found still returns 0 (the bare +offset form returned
+        # start - 1, a semantic drift from CHARINDEX).
         if start:
-            return (
-                f"(POSITION({needle} IN SUBSTRING({haystack} FROM {start})) "
-                f"+ {start} - 1)"
-            )
+            pos = f"POSITION({needle} IN SUBSTRING({haystack} FROM {start}))"
+            return f"CASE WHEN {pos} = 0 THEN 0 ELSE {pos} + {start} - 1 END"
         return f"POSITION({needle} IN {haystack})"
 
     # The source's last-identity function is a GLOBAL, not a UDF — it maps

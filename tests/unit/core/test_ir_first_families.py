@@ -430,3 +430,16 @@ class TestNestedSubqueryExpression:
         )
         assert out is not None and "WITHIN GROUP (ORDER BY a)" in out, out
         assert "GROUP_CONCAT" not in out.upper(), out
+
+
+class TestCharindexStartGuardOnPg:
+    """3-arg CHARINDEX on PG must return 0 when not found — the bare
+    POSITION(...) + start - 1 form returned start-1 (semantic drift)."""
+
+    def test_not_found_yields_zero(self) -> None:
+        out = _ir("tsql", "postgresql", "SELECT CHARINDEX('x', s, 5) FROM t")
+        assert out is not None, out
+        assert __import__("re").search(
+            r"(?i)CASE WHEN POSITION\('x' IN SUBSTRING\(s FROM 5\)\) = 0 THEN 0",
+            out,
+        ), out
