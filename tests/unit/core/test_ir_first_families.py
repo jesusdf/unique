@@ -1355,3 +1355,33 @@ class TestZeroPushW7Batch:
         )
         r = self._t(src, "postgresql", "tsql")
         assert not any("whole-row" in w.message for w in r.warnings), r.sql
+
+    def test_comment_on_in_body_carrier_oracle(self) -> None:
+        r = self._t(
+            "create function f() returns int as $$ declare c int := 1;\n"
+            "begin comment on function f() is 'x'; return c; end$$"
+            " language plpgsql;",
+            "postgresql",
+            "oracle",
+        )
+        assert any("COMMENT ON" in w.message for w in r.warnings), r.sql
+
+    def test_open_for_execute_carrier_oracle(self) -> None:
+        r = self._t(
+            "create function f(p int) returns int as $$ declare c refcursor;"
+            " i int;\nbegin open c for execute 'select 1' using p;"
+            " fetch c into i; close c; return i; end$$ language plpgsql;",
+            "postgresql",
+            "oracle",
+        )
+        assert any("OPEN" in w.message for w in r.warnings), r.sql
+
+    def test_plain_open_cursor_not_degraded_oracle(self) -> None:
+        r = self._t(
+            "create function f() returns int as $$ declare c refcursor; i int;\n"
+            "begin open c for select 1; fetch c into i; close c; return i; end$$"
+            " language plpgsql;",
+            "postgresql",
+            "oracle",
+        )
+        assert not any("preserved as a comment" in w.message for w in r.warnings)

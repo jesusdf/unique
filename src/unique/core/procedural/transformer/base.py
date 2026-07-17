@@ -1145,6 +1145,29 @@ class ProceduralTransformer:
                     "equivalent; routine preserved as a comment",
                 )
             )
+            # A COMMENT ON <object> statement is DDL a PL/SQL body cannot run
+            # statically; on Oracle it also collides with a local named
+            # ``comment``. No faithful in-body form.
+            checks.append(
+                (
+                    r"(?i)\bCOMMENT\s+ON\s+(?:TABLE|COLUMN|FUNCTION|VIEW|INDEX|"
+                    r"SCHEMA|CONSTRAINT|TRIGGER|SEQUENCE|TYPE)\b",
+                    f"a COMMENT ON statement in a routine body has no "
+                    f"{self._target} equivalent; routine preserved as a comment",
+                )
+            )
+        if self._source == "postgresql" and self._target == "oracle":
+            # ``OPEN <cur> FOR EXECUTE '<dynamic>' USING …`` is plpgsql dynamic
+            # cursor SQL with ``$n`` placeholders; the faithful Oracle form
+            # (``OPEN … FOR <string> USING`` with ``:n`` binds) needs the whole
+            # dynamic string rewritten — degrade rather than ship invalid SQL.
+            checks.append(
+                (
+                    r"(?i)\bOPEN\s+\w+\s+FOR\s+EXECUTE\b",
+                    "a dynamic OPEN … FOR EXECUTE cursor has no faithful "
+                    "Oracle form; routine preserved as a comment",
+                )
+            )
         if self._source == "mysql" and self._target != "mysql":
             # The MySQL REPLACE *statement* (delete-then-insert on a key
             # clash) has no standard equivalent — distinct from the

@@ -7845,8 +7845,10 @@ class TestWave224ReturnsTableNoBody:
 
 
 class TestWave225CommentOnInBody:
-    """wave 225 (pg-corpus): ``COMMENT ON`` inside a routine body is
-    PG/Oracle SQL — verbatim there, carrier on MySQL/T-SQL."""
+    """wave 225 (pg-corpus): ``COMMENT ON`` inside a routine body is DDL a
+    PL/SQL body cannot run statically — a carrier on every foreign target.
+    (The wave-225 Oracle "verbatim" decision shipped PLS-00103; corrected in
+    batch W9 after a live check — see the zero-reduction campaign.)"""
 
     _SQL = (
         "create function ur() returns int language plpgsql as $$"
@@ -7858,10 +7860,9 @@ class TestWave225CommentOnInBody:
         assert "UNIQUE:" in out and "COMMENT ON" in out, out
         assert re.search(r"(?i)RETURN 1", out), out
 
-    def test_comment_on_verbatim_oracle(self) -> None:
+    def test_comment_on_carrier_oracle(self) -> None:
         out = _t2(self._SQL, "postgresql", "oracle")
-        assert re.search(r"(?i)comment on function ur", out), out
-        assert "UNIQUE:" not in out, out
+        assert "UNIQUE:" in out and "COMMENT ON" in out.upper(), out
 
 
 class TestWave226IntoFirstSelect:
