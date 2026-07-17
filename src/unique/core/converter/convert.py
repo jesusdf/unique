@@ -93,23 +93,27 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
         A list of IR ASTNode instances.
     """
     sg_dialect = sqlglot_dialect_name(dialect)
-    # ``DROP TABLE a, b, c`` — sqlglot cannot parse the multi-table form
-    # (it shredded the statement at the first comma; wave 236). Split
-    # into one DROP per table: valid on every engine (Oracle has no
+    # ``DROP TABLE a, b, c`` — sqlglot cannot parse the multi-object
+    # form (it shredded the statement at the first comma; waves 236,
+    # 239 extend it to FUNCTION/PROCEDURE/VIEW/SEQUENCE/etc.). Split
+    # into one DROP per object: valid on every engine (Oracle has no
     # comma form at all), semantically identical.
     multi_drop = re.match(
-        r"(?is)^\s*DROP\s+TABLE\s+(IF\s+EXISTS\s+)?"
+        r"(?is)^\s*DROP\s+"
+        r"(TABLE|VIEW|SEQUENCE|INDEX|FUNCTION|PROCEDURE|TYPE|DOMAIN)\s+"
+        r"(IF\s+EXISTS\s+)?"
         r'([\w"`.\[\]]+(?:\s*,\s*[\w"`.\[\]]+)+)\s*(CASCADE|RESTRICT)?\s*;?\s*$',
         sql,
     )
     if multi_drop:
-        if_exists = bool(multi_drop.group(1))
-        tail = f" {multi_drop.group(3)}" if multi_drop.group(3) else ""
+        obj = multi_drop.group(1).upper()
+        if_exists = bool(multi_drop.group(2))
+        tail = f" {multi_drop.group(4)}" if multi_drop.group(4) else ""
         out: list[ASTNode] = []
-        for tbl in multi_drop.group(2).split(","):
+        for tbl in multi_drop.group(3).split(","):
             name = tbl.strip()
             ie = "IF EXISTS " if if_exists else ""
-            out.extend(parse_sql(f"DROP TABLE {ie}{name}{tail};", dialect))
+            out.extend(parse_sql(f"DROP {obj} {ie}{name}{tail};", dialect))
         return out
     # ``SAVEPOINT name`` mis-parses in sqlglot as an Alias expression
     # (``SAVEPOINT AS name`` shipped — invalid everywhere; wave 123).

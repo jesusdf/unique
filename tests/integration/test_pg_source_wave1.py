@@ -8154,3 +8154,18 @@ class TestWave238MysqlNonconstNthValue:
         )
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)NTH_VALUE\(ten, 2\)", out), out
+
+
+class TestWave239MultiObjectDrop:
+    """wave 239 (pg-corpus): the wave-236 multi-table DROP split
+    extends to FUNCTION/VIEW/SEQUENCE/etc. — ``DROP FUNCTION a, b``
+    also shredded (shipped as a no-op comment)."""
+
+    def test_multi_drop_function(self) -> None:
+        out = _t2("drop function a, b, c;", "postgresql", "tsql")
+        assert out.upper().count("DROP FUNCTION") == 3, out
+        assert "UNIQUE:" not in out, out
+
+    def test_multi_drop_view(self) -> None:
+        out = _t2("drop view v1, v2;", "postgresql", "mysql")
+        assert out.upper().count("DROP VIEW") == 2, out

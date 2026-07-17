@@ -1234,7 +1234,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          live); it joins the non-constant window-argument gate
          alongside LAG/LEAD. Measured: pg→mysql **33 → 32** (−1).
          Discovery HOLDS 0. Tests: TestWave238MysqlNonconstNthValue
-         (2).**
+         (2).* Wave 239 (2026-07-17,
+         FIDELITY): the wave-236 multi-table DROP split extends to
+         FUNCTION/VIEW/SEQUENCE/INDEX/PROCEDURE/TYPE/DOMAIN — ``DROP
+         FUNCTION a, b`` also shipped as a no-op comment (objects
+         never dropped). Now real per-object DROPs. Measured: pg→tsql
+         stable **29** / oracle **24** (fidelity, not a count mover —
+         the multi-drops were carried comments). Discovery HOLDS 0.
+         Tests: TestWave239MultiObjectDrop (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
