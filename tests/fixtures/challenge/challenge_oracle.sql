@@ -44,6 +44,9 @@ SELECT BITAND(5, 3) AS r FROM DUAL
 CREATE PROCEDURE p (n IN NUMBER) AS BEGIN CASE n WHEN 1 THEN NULL; ELSE NULL; END CASE; END;
 /
 
+-- CASE[open]: ora-cast-datetime3 — fails on mysql, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity
+SELECT CAST(SYSTIMESTAMP AS DATE), CAST(SYSDATE AS TIMESTAMP), CAST(SYSDATE AS TIMESTAMP WITH TIME ZONE) FROM DUAL
+
 -- CASE[open]: ora-cast-expr — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL
 
@@ -74,6 +77,9 @@ CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN 
 -- CASE[open]: ora-cursor-for-loop — fails on tsql. (156, b"Incorrect syntax near the keyword 'END'.DB-Lib error message 20018, severity 15:\n
 CREATE PROCEDURE p AS BEGIN FOR r IN (SELECT 1 AS x FROM DUAL) LOOP NULL; END LOOP; END;
 /
+
+-- CASE[open]: ora-date-arith2 — fails on mysql, postgresql, tsql. (195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018
+SELECT ADD_MONTHS(SYSDATE,3), NEXT_DAY(SYSDATE,'MONDAY'), LAST_DAY(SYSDATE) FROM DUAL
 
 -- CASE[open]: ora-date-diff-days — fails on mysql. FUNC-DIFF: source=(('60',),) target=(('0',),)
 SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r FROM DUAL
@@ -233,6 +239,9 @@ SELECT NLS_INITCAP('word'), NLS_UPPER('word'), NLS_LOWER('WORD') FROM DUAL
 -- CASE[open]: ora-nlssort — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NL
 SELECT NLSSORT('abc', 'NLS_SORT=BINARY_CI') AS r FROM DUAL
 
+-- CASE[open]: ora-now-fns — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
+SELECT SYSDATE, CURRENT_DATE, SYSTIMESTAMP, LOCALTIMESTAMP FROM DUAL
+
 -- CASE[open]: ora-num-concat — fails on tsql. FUNC-DIFF: source=(('23',),) target=(('5',),)
 SELECT 2 || 3 AS r FROM DUAL
 
@@ -247,6 +256,9 @@ SELECT TO_CHAR(1234567.891, '9,999,999.99') AS r FROM DUAL
 
 -- CASE[open]: ora-numtodsinterval — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT NUMTODSINTERVAL(90, 'MINUTE') AS r FROM DUAL
+
+-- CASE[open]: ora-numtointerval — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+SELECT NUMTODSINTERVAL(1.5,'DAY'), NUMTOYMINTERVAL(18,'MONTH') FROM DUAL
 
 -- CASE[open]: ora-ora-hash — fails on mysql, postgresql, tsql. (195, b"'ORA_HASH' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT ORA_HASH('abc') AS r FROM DUAL
@@ -330,6 +342,9 @@ SELECT TO_CHAR(DATE '2020-06-15', 'Day, Month DD, YYYY') AS r FROM DUAL
 -- CASE[open]: ora-tochar-neg — fails on mysql. FUNC-DIFF: source=(('-1234.5',),) target=(('NULL',),)
 SELECT TO_CHAR(-1234.5, '9999.99') AS r FROM DUAL
 
+-- CASE[open]: ora-tonumber2 — fails on mysql, tsql. (195, b"'TO_NUMBER' is not a recognized built-in function name.DB-Lib error message 20018,
+SELECT CAST('123.45' AS NUMBER), TO_NUMBER('1,234.5','9,999.9'), TO_NUMBER('$5','$9') FROM DUAL
+
 -- CASE[open]: ora-trailing-eq — fails on tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT CASE WHEN 'a ' = 'a' THEN 1 ELSE 0 END AS r FROM DUAL
 
@@ -341,6 +356,9 @@ SELECT TRANSLATE('12345', '123', 'abc'), REPLACE('aaa','a') FROM DUAL
 
 -- CASE[open]: ora-trig — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AT
 SELECT ATAN2(1,1), COSH(1), SINH(1), TANH(1) FROM DUAL
+
+-- CASE[open]: ora-tz-fns — fails on mysql, postgresql, tsql. (155, b"'TIMEZONE_HOUR' is not a recognized datepart option.DB-Lib error message 20018, se
+SELECT EXTRACT(TIMEZONE_HOUR FROM SYSTIMESTAMP), TZ_OFFSET('US/Eastern') FROM DUAL
 
 -- CASE[open]: ora-tz-funcs — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 SELECT SYSTIMESTAMP, LOCALTIMESTAMP, SESSIONTIMEZONE FROM DUAL

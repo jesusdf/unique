@@ -54,11 +54,17 @@ SELECT GET_BIT(0x0A, 1), SET_BIT(0x0A, 0, 1)
 -- CASE[open]: ts-cast-bit — fails on mysql, oracle. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT CAST(2 AS BIT) AS r
 
+-- CASE[open]: ts-cast-bit2 — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 't' to a number: 
+SELECT CAST(1 AS BIT), CAST('true' AS BIT), CAST(0.5 AS BIT), TRY_CAST('x' AS BIT)
+
 -- CASE[open]: ts-cast-date-int — fails on oracle, postgresql. ORA-00932: expression is of data type DATE, which is incompatible with expected data type 
 SELECT CAST(GETDATE() AS INT) AS r
 
 -- CASE[open]: ts-cast-int-datetime — fails on oracle, postgresql. ORA-00932: expression is of data type NUMBER, which is incompatible with expected data typ
 SELECT CAST(1 AS DATETIME) AS r
+
+-- CASE[open]: ts-cast-money — fails on oracle, postgresql. ORA-00902: invalid datatype
+SELECT CAST(12.99 AS MONEY), CAST(12.99 AS SMALLMONEY), CONVERT(MONEY, '$12.99')
 
 -- CASE[open]: ts-cast-trycast — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'x' to a number: 
 SELECT CAST(123 AS VARCHAR(10)), TRY_CAST('x' AS INT), CONVERT(DATE, GETDATE())
@@ -202,6 +208,9 @@ CREATE TABLE t (id INT);
 GO
 SELECT * FROM t WITH (NOLOCK)
 
+-- CASE[open]: ts-now-fns — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier
+SELECT GETDATE(), SYSDATETIME(), CURRENT_TIMESTAMP, GETUTCDATE(), SYSDATETIMEOFFSET()
+
 -- CASE[open]: ts-openjson — fails on oracle, postgresql. ORA-00904: "OPEN_J_S_O_N": invalid identifier
 SELECT * FROM OPENJSON('[1,2,3]')
 
@@ -317,6 +326,9 @@ SELECT TRY_CONVERT(INT, 'abc') AS r
 
 -- CASE[open]: ts-try-parse — fails on mysql, oracle, postgresql. ORA-00907: missing right parenthesis
 SELECT TRY_PARSE('2020-01-01' AS DATE) AS r
+
+-- CASE[open]: ts-tz-fns — fails on mysql, oracle, postgresql. ORA-00904: "TODATETIMEOFFSET": invalid identifier
+SELECT SWITCHOFFSET(SYSDATETIMEOFFSET(),'+00:00'), TODATETIMEOFFSET(GETDATE(),'+05:00')
 
 -- CASE[open]: ts-tzoffset — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier
 SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r

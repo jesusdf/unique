@@ -41,6 +41,9 @@ SELECT ASCII('') AS r
 -- CASE[open]: pg-at-time-zone — fails on mysql, oracle, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D
 SELECT TIMESTAMP '2020-01-01 10:00' AT TIME ZONE 'UTC' AS r
 
+-- CASE[open]: pg-attz2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ti
+SELECT now() AT TIME ZONE 'UTC', timezone('UTC', now())
+
 -- CASE[open]: pg-avg-int — fails on tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
 SELECT AVG(x) FROM (VALUES (1),(2)) v(x)
 
@@ -68,11 +71,29 @@ CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)
 -- CASE[open]: pg-case-statement — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS TEXT AS $$ BEGIN CASE n WHEN 1 THEN RETURN 'one'; ELSE RETURN 'other'; END CASE; END; $$ LANGUAGE plpgsql
 
+-- CASE[open]: pg-cast-bool2 — fails on oracle, tsql. (245, b"Conversion failed when converting the varchar value 'yes' to data type bit.DB-Lib 
+SELECT '1'::boolean, 'yes'::boolean, 'off'::boolean, 't'::boolean
+
+-- CASE[open]: pg-cast-chain2 — fails on tsql. (529, b'Explicit conversion from data type time to text is not allowed.DB-Lib error messag
+SELECT '10:00'::time::text, now()::date::text, 42::bit(8)::int
+
+-- CASE[open]: pg-cast-datetime2 — fails on oracle. ORA-01861: literal does not match format string
+SELECT '2020-01-01 10:00'::date, '2020-01-01 10:00'::time, '10:00'::interval
+
 -- CASE[open]: pg-cast-int — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
 SELECT CAST(2.7 AS INT) AS r
 
 -- CASE[open]: pg-cast-interval — fails on oracle. ORA-30089: missing or invalid <datetime field>
 SELECT '1 day'::interval AS r
+
+-- CASE[open]: pg-cast-interval3 — fails on oracle. ORA-30089: missing or invalid <datetime field>
+SELECT '5 days'::interval::text, extract(days from '5 days'::interval)
+
+-- CASE[open]: pg-cast-matrix — fails on oracle, tsql. (529, b'Explicit conversion from data type numeric to text is not allowed.DB-Lib error mes
+SELECT 3.14::int, 3.14::text, 3.14::numeric(10,2), 3.14::double precision
+
+-- CASE[open]: pg-cast-money — fails on oracle. ORA-00902: invalid datatype
+SELECT '12.99'::numeric(4,1), '12.99'::numeric(3,0), 12.99::money
 
 -- CASE[open]: pg-cast-point — fails on oracle, tsql. (243, b'Type POINT is not a defined system type.DB-Lib error message 20018, severity 16:\n
 SELECT '(1,2)'::point AS r
@@ -127,6 +148,9 @@ SELECT DATE '2020-01-01' + 30 AS r
 
 -- CASE[open]: pg-date-trunc — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d
+
+-- CASE[open]: pg-datetrunc-units — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
+SELECT date_trunc('quarter', now()), date_trunc('decade', now())
 
 -- CASE[open]: pg-div-precision — fails on mysql. FUNC-DIFF: source=(('0.333333',),) target=(('0.33333',),)
 SELECT 1.0 / 3 AS r
@@ -338,6 +362,9 @@ CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)
 -- CASE[open]: pg-not-null-is-null — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT (NOT NULL) IS NULL AS r
 
+-- CASE[open]: pg-now-fns — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever
+SELECT now(), current_date, current_time, localtimestamp, clock_timestamp()
+
 -- CASE[open]: pg-num-nonnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT NUM_NONNULLS(1, NULL, 2) AS r
 
@@ -460,6 +487,9 @@ CREATE TABLE t (a INT); CREATE VIEW syn AS SELECT * FROM t
 
 -- CASE[open]: pg-tablesample — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 CREATE TABLE t (id INT); SELECT * FROM t TABLESAMPLE BERNOULLI(50)
+
+-- CASE[open]: pg-tochar-fmts — fails on oracle. SILENT: source literal(s) ["'Day'", "'FMDay'", "'TZ'"] absent from valid output, no warnin
+SELECT to_char(now(),'Day'), to_char(now(),'FMDay'), to_char(now(),'IW'), to_char(now(),'TZ')
 
 -- CASE[open]: pg-tochar-iso — fails on mysql, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of format function.DB-Lib 
 SELECT to_char(TIMESTAMP '2020-06-15 14:30:45', 'YYYY-MM-DD"T"HH24:MI:SS') AS r

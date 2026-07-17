@@ -71,6 +71,9 @@ CREATE TABLE t (data BLOB); INSERT INTO t VALUES (LOAD_FILE('/x')); SELECT LENGT
 -- CASE[open]: my-bool-char — fails on postgresql. FUNC-DIFF: source=(('1',),) target=(('t',),)
 SELECT CAST((1=1) AS CHAR) AS r
 
+-- CASE[open]: my-cast-binary2 — fails on postgresql. type "binary" does not exist
+SELECT CONVERT('abc',BINARY), CONVERT('abc' USING latin1), CAST('abc' AS BINARY)
+
 -- CASE[open]: my-cast-charset — fails on oracle. ORA-25137: Data value out of range
 SELECT CAST(0xC3A9 AS CHAR CHARACTER SET utf8mb4) AS r
 
@@ -80,17 +83,38 @@ SELECT CAST(123 AS CHAR), CONVERT('2020-01-01', DATE), CAST(1 AS UNSIGNED)
 -- CASE[open]: my-cast-datetime — fails on oracle. ORA-01843: An invalid month was specified.
 SELECT CAST('2020-01-01' AS DATETIME) AS r
 
+-- CASE[open]: my-cast-datetime2 — fails on oracle. ORA-01861: literal does not match format string
+SELECT CAST('2020-01-01 10:00' AS DATE), CAST('2020-01-01 10:00' AS TIME), CAST('2020-01-01 10:00' AS DATETIME)
+
+-- CASE[open]: my-cast-decimal2 — fails on oracle, postgresql, tsql. (8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit
+SELECT CAST('12.99' AS DECIMAL(4,1)), CAST('12.99' AS DECIMAL(3,0)), CAST('abc' AS DECIMAL)
+
 -- CASE[open]: my-cast-hex-char — fails on oracle. ORA-25137: Data value out of range
 SELECT CAST(0xFF AS CHAR) AS r
 
 -- CASE[open]: my-cast-int — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
 SELECT CAST(2.7 AS SIGNED) AS r
 
+-- CASE[open]: my-cast-json — fails on oracle, postgresql, tsql. (243, b'Type json is not a defined system type.DB-Lib error message 20018, severity 16:\nG
+SELECT CAST(1 AS JSON), CAST('[1,2]' AS JSON), CAST(NULL AS JSON)
+
+-- CASE[open]: my-cast-matrix — fails on oracle, postgresql. ORA-00902: invalid datatype
+SELECT CAST(3.14 AS DECIMAL(10,2)), CAST(3.14 AS SIGNED), CAST(3.14 AS CHAR), CAST(3.14 AS DOUBLE)
+
 -- CASE[open]: my-cast-num-char — fails on oracle. ORA-25137: Data value out of range
 SELECT CAST(1234.5 AS CHAR) AS r
 
 -- CASE[open]: my-cast-time — fails on oracle. DPY-3006: Oracle data type 178 is not supported
 SELECT CAST('10:00:00' AS TIME) AS r
+
+-- CASE[open]: my-cast-truncate — fails on oracle, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity
+SELECT CAST(TIMESTAMP '2020-01-01 10:30' AS DATE), CAST(TIME '10:30:45' AS CHAR)
+
+-- CASE[open]: my-cast-uns2 — fails on postgresql. type "ubigint" does not exist
+SELECT CAST(0xFFFF AS UNSIGNED), CAST(b'1111' AS UNSIGNED), CAST(TRUE AS UNSIGNED)
+
+-- CASE[open]: my-cast-year — fails on oracle, postgresql. ORA-00902: invalid datatype
+SELECT CAST('2020' AS YEAR), CAST(2020 AS YEAR), CAST('99' AS YEAR)
 
 -- CASE[open]: my-change-column — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'CHANGE'.DB-Lib error message 20018, severity 15:\nGeneral S
 CREATE TABLE t (a INT, b INT); ALTER TABLE t CHANGE a x INT
@@ -167,6 +191,9 @@ SELECT DATE('2020-01-01') = '2020-01-01 00:00:00' AS r
 -- CASE[open]: my-date-format — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
 SELECT DATE_FORMAT('2020-05-17', '%Y/%m/%d') AS r
 
+-- CASE[open]: my-dateadd-units — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of dateadd function.DB-Lib e
+SELECT DATE_ADD(NOW(),INTERVAL 1 QUARTER), DATE_SUB(NOW(),INTERVAL 2 WEEK)
+
 -- CASE[open]: my-dateformat-iso — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
 SELECT DATE_FORMAT('2020-06-15 14:30:45', '%Y-%m-%dT%H:%i:%s') AS r
 
@@ -175,6 +202,9 @@ SELECT DATE_FORMAT('2020-06-15', '%W, %M %D, %Y') AS r
 
 -- CASE[open]: my-datetime-precision — fails on tsql. (2716, b'Column, parameter, or variable #1: Cannot specify a column width on data type dat
 CREATE TABLE t (a DATETIME(6), b TIMESTAMP(3), c YEAR)
+
+-- CASE[open]: my-dayparts — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA
+SELECT DAYOFWEEK(NOW()), WEEKDAY(NOW()), DAYOFYEAR(NOW()), QUARTER(NOW())
 
 -- CASE[open]: my-distinct-case — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('a',), ('B',)) target=(('A',), ('B',))
 SELECT DISTINCT x FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'a' x UNION ALL SELECT 'B' x) t ORDER BY x
@@ -206,6 +236,9 @@ SELECT EXPORT_SET(5, 'Y', 'N', ',', 4) AS r
 -- CASE[open]: my-export-set2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXPORT_SET(5,'Y','N',',',4) AS r
 
+-- CASE[open]: my-extract-compound — fails on oracle, postgresql, tsql. (155, b"'YEAR_MONTH' is not a recognized datepart option.DB-Lib error message 20018, sever
+SELECT EXTRACT(YEAR_MONTH FROM NOW()), EXTRACT(DAY_HOUR FROM NOW())
+
 -- CASE[open]: my-extractvalue — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXTRACTVALUE('<a>1</a>', '/a') AS r
 
@@ -221,6 +254,9 @@ SELECT FLOOR(2.9999999999999999) AS r
 -- CASE[open]: my-for-share — fails on oracle. ORA-02000: missing COMPRESS or UPDATE keyword
 CREATE TABLE t (id INT, INDEX ix (id)); SELECT id FROM t WHERE id = 1 FOR SHARE
 
+-- CASE[open]: my-format-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
+SELECT DATE_FORMAT(NOW(),'%W %M %Y'), TIME_FORMAT(NOW(),'%r')
+
 -- CASE[open]: my-full-select — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t GROUP BY id HAVING COUNT(*) > 1 ORDER BY id LIMIT 10 OFFSET 5
 
@@ -232,6 +268,9 @@ SELECT GET_FORMAT(DATE, 'USA'), GET_FORMAT(DATETIME, 'ISO')
 
 -- CASE[open]: my-get-lock — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT GET_LOCK('l', 0), RELEASE_LOCK('l')
+
+-- CASE[open]: my-getformat2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
+SELECT GET_FORMAT(DATE,'EUR'), GET_FORMAT(TIME,'USA'), GET_FORMAT(DATETIME,'JIS')
 
 -- CASE[open]: my-greatest-null — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('3',),)
 SELECT GREATEST(1, NULL, 3) AS r
@@ -410,6 +449,9 @@ SELECT NAME_CONST('col', 5) AS r
 -- CASE[open]: my-nested-call — fails on oracle. PROCEDURE P compiled INVALID (line 4): PLS-00201: identifier 'OTHER_PROC' must be declared
 CREATE PROCEDURE p() BEGIN CALL other_proc(); END
 
+-- CASE[open]: my-now-fns — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever
+SELECT NOW(), CURDATE(), CURTIME(), UTC_DATE(), UTC_TIME(), SYSDATE()
+
 -- CASE[open]: my-numeric — fails on tsql. (2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se
 CREATE TABLE t (a DECIMAL(20,4), b FLOAT(10,2), c DOUBLE)
 
@@ -424,6 +466,9 @@ SELECT x FROM (SELECT 'banana' x UNION ALL SELECT 'Apple' x UNION ALL SELECT 'ch
 
 -- CASE[open]: my-period-diff — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE
 SELECT PERIOD_DIFF(202006, 202001) AS r
+
+-- CASE[open]: my-period2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE
+SELECT PERIOD_ADD(202001,14), PERIOD_DIFF(202101,202001)
 
 -- CASE[open]: my-pi-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT TRUNCATE(PI(), 4), ROUND(PI(), 4), FORMAT(PI(), 4)
@@ -567,8 +612,14 @@ SELECT TRIM(TRAILING '.' FROM 'abc...') AS r
 -- CASE[open]: my-ts-to-date — fails on postgresql. FUNC-DIFF: source=(('2020-01-01',),) target=(('2020-01-01 14:30:00+00:00',),)
 SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r
 
+-- CASE[open]: my-tsadd-quarter — fails on oracle, postgresql. ORA-00904: "QUARTER": invalid identifier
+SELECT TIMESTAMPADD(QUARTER,1,NOW()), TIMESTAMPDIFF(QUARTER,'2020-01-01',NOW())
+
 -- CASE[open]: my-unix-timestamp — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
 SELECT UNIX_TIMESTAMP('2020-01-01'), FROM_UNIXTIME(1577836800)
+
+-- CASE[open]: my-unixtime2 — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
+SELECT FROM_UNIXTIME(1600000000,'%Y-%m-%d'), UNIX_TIMESTAMP('2020-09-13')
 
 -- CASE[open]: my-update-join — fails on oracle, postgresql, tsql. (4104, b'The multi-part identifier "s.n" could not be bound.DB-Lib error message 20018, se
 CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); UPDATE t JOIN s ON t.id = s.id SET t.n = s.n
@@ -584,6 +635,9 @@ SELECT UPPER('straße') AS r
 
 -- CASE[open]: my-uuid-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
 SELECT UUID(), UUID_SHORT()
+
+-- CASE[open]: my-week-modes — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
+SELECT WEEK(NOW(),0), WEEK(NOW(),3), WEEK(NOW(),5), YEARWEEK(NOW(),3)
 
 -- CASE[open]: my-week-quarter — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEEK('2020-06-15'), QUARTER('2020-06-15'), DAYOFWEEK('2020-06-15')

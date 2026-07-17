@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (356 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (361 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -153,6 +153,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('1',),) target=(('t',),)`
 - src: `SELECT CAST((1=1) AS CHAR) AS r`
 
+## my-cast-binary2  (mysql)
+- targets: postgresql(invalid)
+- live error: `type "binary" does not exist`
+- src: `SELECT CONVERT('abc',BINARY), CONVERT('abc' USING latin1), CAST('abc' AS BINARY)`
+
 ## my-cast-charset  (mysql)
 - targets: oracle(invalid)
 - live error: `ORA-25137: Data value out of range`
@@ -168,6 +173,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `ORA-01843: An invalid month was specified.`
 - src: `SELECT CAST('2020-01-01' AS DATETIME) AS r`
 
+## my-cast-datetime2  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-01861: literal does not match format string`
+- src: `SELECT CAST('2020-01-01 10:00' AS DATE), CAST('2020-01-01 10:00' AS TIME), CAST('2020-01-01 10:00' AS DATETIME)`
+
+## my-cast-decimal2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit`
+- src: `SELECT CAST('12.99' AS DECIMAL(4,1)), CAST('12.99' AS DECIMAL(3,0)), CAST('abc' AS DECIMAL)`
+
 ## my-cast-hex-char  (mysql)
 - targets: oracle(invalid)
 - live error: `ORA-25137: Data value out of range`
@@ -178,6 +193,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
 - src: `SELECT CAST(2.7 AS SIGNED) AS r`
 
+## my-cast-json  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(243, b'Type json is not a defined system type.DB-Lib error message 20018, severity 16:\nG`
+- src: `SELECT CAST(1 AS JSON), CAST('[1,2]' AS JSON), CAST(NULL AS JSON)`
+
+## my-cast-matrix  (mysql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00902: invalid datatype`
+- src: `SELECT CAST(3.14 AS DECIMAL(10,2)), CAST(3.14 AS SIGNED), CAST(3.14 AS CHAR), CAST(3.14 AS DOUBLE)`
+
 ## my-cast-num-char  (mysql)
 - targets: oracle(invalid)
 - live error: `ORA-25137: Data value out of range`
@@ -187,6 +212,21 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid)
 - live error: `DPY-3006: Oracle data type 178 is not supported`
 - src: `SELECT CAST('10:00:00' AS TIME) AS r`
+
+## my-cast-truncate  (mysql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity`
+- src: `SELECT CAST(TIMESTAMP '2020-01-01 10:30' AS DATE), CAST(TIME '10:30:45' AS CHAR)`
+
+## my-cast-uns2  (mysql)
+- targets: postgresql(invalid)
+- live error: `type "ubigint" does not exist`
+- src: `SELECT CAST(0xFFFF AS UNSIGNED), CAST(b'1111' AS UNSIGNED), CAST(TRUE AS UNSIGNED)`
+
+## my-cast-year  (mysql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00902: invalid datatype`
+- src: `SELECT CAST('2020' AS YEAR), CAST(2020 AS YEAR), CAST('99' AS YEAR)`
 
 ## my-change-column  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -313,6 +353,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
 - src: `SELECT DATE_FORMAT('2020-05-17', '%Y/%m/%d') AS r`
 
+## my-dateadd-units  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(8116, b'Argument data type varchar is invalid for argument 2 of dateadd function.DB-Lib e`
+- src: `SELECT DATE_ADD(NOW(),INTERVAL 1 QUARTER), DATE_SUB(NOW(),INTERVAL 2 WEEK)`
+
 ## my-dateformat-iso  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
@@ -327,6 +372,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: tsql(invalid)
 - live error: `(2716, b'Column, parameter, or variable #1: Cannot specify a column width on data type dat`
 - src: `CREATE TABLE t (a DATETIME(6), b TIMESTAMP(3), c YEAR)`
+
+## my-dayparts  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA`
+- src: `SELECT DAYOFWEEK(NOW()), WEEKDAY(NOW()), DAYOFYEAR(NOW()), QUARTER(NOW())`
 
 ## my-distinct-case  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
@@ -378,6 +428,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
 - src: `SELECT EXPORT_SET(5,'Y','N',',',4) AS r`
 
+## my-extract-compound  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(155, b"'YEAR_MONTH' is not a recognized datepart option.DB-Lib error message 20018, sever`
+- src: `SELECT EXTRACT(YEAR_MONTH FROM NOW()), EXTRACT(DAY_HOUR FROM NOW())`
+
 ## my-extractvalue  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
@@ -403,6 +458,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `ORA-02000: missing COMPRESS or UPDATE keyword`
 - src: `CREATE TABLE t (id INT, INDEX ix (id)); SELECT id FROM t WHERE id = 1 FOR SHARE`
 
+## my-format-fns2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI`
+- src: `SELECT DATE_FORMAT(NOW(),'%W %M %Y'), TIME_FORMAT(NOW(),'%r')`
+
 ## my-full-select  (mysql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
@@ -422,6 +482,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
 - src: `SELECT GET_LOCK('l', 0), RELEASE_LOCK('l')`
+
+## my-getformat2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
+- src: `SELECT GET_FORMAT(DATE,'EUR'), GET_FORMAT(TIME,'USA'), GET_FORMAT(DATETIME,'JIS')`
 
 ## my-greatest-null  (mysql)
 - targets: postgresql(func), tsql(func)
@@ -718,6 +783,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `PROCEDURE P compiled INVALID (line 4): PLS-00201: identifier 'OTHER_PROC' must be declared`
 - src: `CREATE PROCEDURE p() BEGIN CALL other_proc(); END`
 
+## my-now-fns  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever`
+- src: `SELECT NOW(), CURDATE(), CURTIME(), UTC_DATE(), UTC_TIME(), SYSDATE()`
+
 ## my-numeric  (mysql)
 - targets: tsql(invalid)
 - live error: `(2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se`
@@ -742,6 +812,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE`
 - src: `SELECT PERIOD_DIFF(202006, 202001) AS r`
+
+## my-period2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE`
+- src: `SELECT PERIOD_ADD(202001,14), PERIOD_DIFF(202101,202001)`
 
 ## my-pi-fns  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -978,10 +1053,20 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('2020-01-01',),) target=(('2020-01-01 14:30:00+00:00',),)`
 - src: `SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r`
 
+## my-tsadd-quarter  (mysql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "QUARTER": invalid identifier`
+- src: `SELECT TIMESTAMPADD(QUARTER,1,NOW()), TIMESTAMPDIFF(QUARTER,'2020-01-01',NOW())`
+
 ## my-unix-timestamp  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2`
 - src: `SELECT UNIX_TIMESTAMP('2020-01-01'), FROM_UNIXTIME(1577836800)`
+
+## my-unixtime2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2`
+- src: `SELECT FROM_UNIXTIME(1600000000,'%Y-%m-%d'), UNIX_TIMESTAMP('2020-09-13')`
 
 ## my-update-join  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -1007,6 +1092,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU`
 - src: `SELECT UUID(), UUID_SHORT()`
+
+## my-week-modes  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE`
+- src: `SELECT WEEK(NOW(),0), WEEK(NOW(),3), WEEK(NOW(),5), YEARWEEK(NOW(),3)`
 
 ## my-week-quarter  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -1139,6 +1229,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - src: `CREATE PROCEDURE p (n IN NUMBER) AS BEGIN CASE n WHEN 1 THEN NULL; ELSE NULL; END CASE; END;
 /`
 
+## ora-cast-datetime3  (oracle)
+- targets: mysql(invalid), tsql(invalid)
+- live error: `(243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity`
+- src: `SELECT CAST(SYSTIMESTAMP AS DATE), CAST(SYSDATE AS TIMESTAMP), CAST(SYSDATE AS TIMESTAMP WITH TIME ZONE) FROM DUAL`
+
 ## ora-cast-expr  (oracle)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -1189,6 +1284,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(156, b"Incorrect syntax near the keyword 'END'.DB-Lib error message 20018, severity 15:\n`
 - src: `CREATE PROCEDURE p AS BEGIN FOR r IN (SELECT 1 AS x FROM DUAL) LOOP NULL; END LOOP; END;
 /`
+
+## ora-date-arith2  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018`
+- src: `SELECT ADD_MONTHS(SYSDATE,3), NEXT_DAY(SYSDATE,'MONDAY'), LAST_DAY(SYSDATE) FROM DUAL`
 
 ## ora-date-diff-days  (oracle)
 - targets: mysql(func)
@@ -1452,6 +1552,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NL`
 - src: `SELECT NLSSORT('abc', 'NLS_SORT=BINARY_CI') AS r FROM DUAL`
 
+## ora-now-fns  (oracle)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO`
+- src: `SELECT SYSDATE, CURRENT_DATE, SYSTIMESTAMP, LOCALTIMESTAMP FROM DUAL`
+
 ## ora-num-concat  (oracle)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('23',),) target=(('5',),)`
@@ -1476,6 +1581,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
 - src: `SELECT NUMTODSINTERVAL(90, 'MINUTE') AS r FROM DUAL`
+
+## ora-numtointerval  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
+- src: `SELECT NUMTODSINTERVAL(1.5,'DAY'), NUMTOYMINTERVAL(18,'MONTH') FROM DUAL`
 
 ## ora-ora-hash  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1613,6 +1723,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `FUNC-DIFF: source=(('-1234.5',),) target=(('NULL',),)`
 - src: `SELECT TO_CHAR(-1234.5, '9999.99') AS r FROM DUAL`
 
+## ora-tonumber2  (oracle)
+- targets: mysql(invalid), tsql(invalid)
+- live error: `(195, b"'TO_NUMBER' is not a recognized built-in function name.DB-Lib error message 20018,`
+- src: `SELECT CAST('123.45' AS NUMBER), TO_NUMBER('1,234.5','9,999.9'), TO_NUMBER('$5','$9') FROM DUAL`
+
 ## ora-trailing-eq  (oracle)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -1632,6 +1747,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AT`
 - src: `SELECT ATAN2(1,1), COSH(1), SINH(1), TANH(1) FROM DUAL`
+
+## ora-tz-fns  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(155, b"'TIMEZONE_HOUR' is not a recognized datepart option.DB-Lib error message 20018, se`
+- src: `SELECT EXTRACT(TIMEZONE_HOUR FROM SYSTIMESTAMP), TZ_OFFSET('US/Eastern') FROM DUAL`
 
 ## ora-tz-funcs  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1755,6 +1875,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D`
 - src: `SELECT TIMESTAMP '2020-01-01 10:00' AT TIME ZONE 'UTC' AS r`
 
+## pg-attz2  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ti`
+- src: `SELECT now() AT TIME ZONE 'UTC', timezone('UTC', now())`
+
 ## pg-avg-int  (postgresql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('1.5',),) target=(('1',),)`
@@ -1800,6 +1925,21 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
 - src: `CREATE FUNCTION f(n INT) RETURNS TEXT AS $$ BEGIN CASE n WHEN 1 THEN RETURN 'one'; ELSE RETURN 'other'; END CASE; END; $$ LANGUAGE`
 
+## pg-cast-bool2  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(245, b"Conversion failed when converting the varchar value 'yes' to data type bit.DB-Lib `
+- src: `SELECT '1'::boolean, 'yes'::boolean, 'off'::boolean, 't'::boolean`
+
+## pg-cast-chain2  (postgresql)
+- targets: tsql(invalid)
+- live error: `(529, b'Explicit conversion from data type time to text is not allowed.DB-Lib error messag`
+- src: `SELECT '10:00'::time::text, now()::date::text, 42::bit(8)::int`
+
+## pg-cast-datetime2  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-01861: literal does not match format string`
+- src: `SELECT '2020-01-01 10:00'::date, '2020-01-01 10:00'::time, '10:00'::interval`
+
 ## pg-cast-int  (postgresql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
@@ -1809,6 +1949,21 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: oracle(invalid)
 - live error: `ORA-30089: missing or invalid <datetime field>`
 - src: `SELECT '1 day'::interval AS r`
+
+## pg-cast-interval3  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-30089: missing or invalid <datetime field>`
+- src: `SELECT '5 days'::interval::text, extract(days from '5 days'::interval)`
+
+## pg-cast-matrix  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(529, b'Explicit conversion from data type numeric to text is not allowed.DB-Lib error mes`
+- src: `SELECT 3.14::int, 3.14::text, 3.14::numeric(10,2), 3.14::double precision`
+
+## pg-cast-money  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-00902: invalid datatype`
+- src: `SELECT '12.99'::numeric(4,1), '12.99'::numeric(3,0), 12.99::money`
 
 ## pg-cast-point  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
@@ -1899,6 +2054,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI`
 - src: `SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d`
+
+## pg-datetrunc-units  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI`
+- src: `SELECT date_trunc('quarter', now()), date_trunc('decade', now())`
 
 ## pg-div-precision  (postgresql)
 - targets: mysql(func)
@@ -2250,6 +2410,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT (NOT NULL) IS NULL AS r`
 
+## pg-now-fns  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever`
+- src: `SELECT now(), current_date, current_time, localtimestamp, clock_timestamp()`
+
 ## pg-num-nonnulls  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
@@ -2445,6 +2610,11 @@ CREATE TABLE ledger (id SERIA`
 - targets: mysql(invalid)
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
 - src: `CREATE TABLE t (id INT); SELECT * FROM t TABLESAMPLE BERNOULLI(50)`
+
+## pg-tochar-fmts  (postgresql)
+- targets: mysql(silent), oracle(invalid), tsql(silent)
+- live error: `SILENT: source literal(s) ["'Day'", "'FMDay'", "'TZ'"] absent from valid output, no warnin`
+- src: `SELECT to_char(now(),'Day'), to_char(now(),'FMDay'), to_char(now(),'IW'), to_char(now(),'TZ')`
 
 ## pg-tochar-iso  (postgresql)
 - targets: mysql(invalid), tsql(invalid)
@@ -2703,6 +2873,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
 - src: `SELECT CAST(2 AS BIT) AS r`
 
+## ts-cast-bit2  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-01722: unable to convert string value containing 't' to a number: `
+- src: `SELECT CAST(1 AS BIT), CAST('true' AS BIT), CAST(0.5 AS BIT), TRY_CAST('x' AS BIT)`
+
 ## ts-cast-date-int  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00932: expression is of data type DATE, which is incompatible with expected data type `
@@ -2712,6 +2887,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00932: expression is of data type NUMBER, which is incompatible with expected data typ`
 - src: `SELECT CAST(1 AS DATETIME) AS r`
+
+## ts-cast-money  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00902: invalid datatype`
+- src: `SELECT CAST(12.99 AS MONEY), CAST(12.99 AS SMALLMONEY), CONVERT(MONEY, '$12.99')`
 
 ## ts-cast-trycast  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
@@ -2943,6 +3123,11 @@ MERGE tgt USING src ON tgt.id = src.id WHEN MAT`
 GO
 SELECT * FROM t WITH (NOLOCK)`
 
+## ts-now-fns  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier`
+- src: `SELECT GETDATE(), SYSDATETIME(), CURRENT_TIMESTAMP, GETUTCDATE(), SYSDATETIMEOFFSET()`
+
 ## ts-openjson  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "OPEN_J_S_O_N": invalid identifier`
@@ -3127,6 +3312,11 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - live error: `ORA-00907: missing right parenthesis`
 - src: `SELECT TRY_PARSE('2020-01-01' AS DATE) AS r`
 
+## ts-tz-fns  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "TODATETIMEOFFSET": invalid identifier`
+- src: `SELECT SWITCHOFFSET(SYSDATETIMEOFFSET(),'+00:00'), TODATETIMEOFFSET(GETDATE(),'+05:00')`
+
 ## ts-tzoffset  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier`
@@ -3167,4 +3357,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 617 distinct constructs; defect rows by kind: func 301, invalid 903, semantic 2, silent-drop 75.
+Totals: 655 distinct constructs; defect rows by kind: func 301, invalid 990, semantic 2, silent-drop 75.
