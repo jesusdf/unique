@@ -1017,7 +1017,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (an SRF with a window clause) exists only on PG — carrier off
          it. Measured: pg→mysql **51 → 45** (−6), pg→tsql **47 → 46**
          (−1). Discovery HOLDS 0. Tests:
-         TestWave208IntervalCastSrfWindow (4).**
+         TestWave208IntervalCastSrfWindow (4).* Wave 209 (2026-07-17): the
+         inline unmapped-operator note still shipped invalid SQL (CORR
+         on T-SQL is error 195 regardless of the comment) —
+         cross-dialect statements carrying an unmapped-operator
+         fragment now degrade WHOLE with the carrier; same-dialect
+         ships verbatim. The wave-141 inline-note contract test
+         updated to the new behavior. Measured: pg→tsql **46 → 39**
+         (−7, validity 98.8%). Discovery HOLDS 0. Tests:
+         TestWave209UnmappedOperatorGate (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

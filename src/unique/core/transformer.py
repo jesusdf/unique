@@ -584,6 +584,8 @@ class Transformer:
             result = [self._gate_pg_internals(node) for node in result]
         if self.context.target == "postgresql":
             result = [self._gate_pg_setop_order_aggregate(node) for node in result]
+        if self.context.source != self.context.target:
+            result = [self._gate_unmapped_operator(node) for node in result]
         if self.context.target in ("tsql", "mysql", "oracle"):
             result = [self._gate_srf_window(node) for node in result]
             result = [self._gate_array_constructs(node) for node in result]
@@ -1007,6 +1009,40 @@ class Transformer:
         if isinstance(value, tuple):
             for item in value:
                 found = self._find_mysql_agg_form(item)
+                if found is not None:
+                    return found
+        return None
+
+    def _gate_unmapped_operator(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement carrying an unmapped-operator fragment —
+        WHOLE, cross-dialect (wave 209): the inline review note still
+        ships invalid SQL (CORR on T-SQL is error 195 regardless)."""
+        found = self._find_unmapped_operator(node)
+        if found is None:
+            return node
+        reason = (
+            f"{found}; no {self.context.target} mapping. "
+            "Statement preserved as a comment"
+        )
+        self.context.warn(reason, "unmapped_operator")
+        self.context.mark_unsupported(found)
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _find_unmapped_operator(self, value: object) -> str | None:
+        if isinstance(value, RawSQL):
+            if value.reason.startswith("unmapped operator"):
+                return value.reason
+            return None
+        if isinstance(value, ASTNode):
+            for f in fields(value):
+                found = self._find_unmapped_operator(getattr(value, f.name))
+                if found is not None:
+                    return found
+        if isinstance(value, tuple):
+            for item in value:
+                found = self._find_unmapped_operator(item)
                 if found is not None:
                     return found
         return None

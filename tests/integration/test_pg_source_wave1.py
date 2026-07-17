@@ -3737,10 +3737,11 @@ class TestForeignBuiltinNote:
     being silent."""
 
     def test_corr_notes_gap(self) -> None:
+        # Wave 209 upgraded the inline note (still invalid SQL: error
+        # 195) to the whole-statement carrier.
         out = _t("SELECT CORR(b, a) FROM aggtest;", "tsql")
-        assert re.search(
-            r"(?i)CORR\(b, a\) /\* UNIQUE: unmapped operator Corr", out
-        ), out
+        assert "UNIQUE:" in out and "Corr" in out, out
+        assert not re.search(r"(?im)^\s*SELECT CORR", out), out
 
     def test_native_builtin_unnoted(self) -> None:
         out = _t2("SELECT GETDATE();", "tsql", "tsql")
@@ -7446,3 +7447,20 @@ class TestWave208IntervalCastSrfWindow:
             "tsql",
         )
         assert "UNIQUE:" not in out, out
+
+
+class TestWave209UnmappedOperatorGate:
+    """wave 209 (pg-corpus): the inline unmapped-operator note still
+    shipped invalid SQL (CORR on T-SQL is error 195 regardless) —
+    cross-dialect statements carrying one degrade WHOLE; same-dialect
+    ships verbatim."""
+
+    def test_corr_carrier_tsql(self) -> None:
+        out = _t2("select corr(b, a) from aggtest;", "postgresql", "tsql")
+        assert "UNIQUE:" in out and "Corr" in out, out
+        assert not re.search(r"(?im)^\s*SELECT CORR", out), out
+
+    def test_corr_verbatim_pg(self) -> None:
+        out = _t2("select corr(b, a) from aggtest;", "postgresql", "postgresql")
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)CORR\(b, a\)", out), out
