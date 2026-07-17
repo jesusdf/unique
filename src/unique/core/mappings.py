@@ -427,6 +427,7 @@ PROCEDURAL_TYPE_MAPS: dict[tuple[str, str], dict[str, str]] = {
         "BIGSERIAL": "BIGINT",
     },
     ("postgresql", "oracle"): {
+        "REFCURSOR": "SYS_REFCURSOR",
         "INT2": "SMALLINT",
         "INT4": "INTEGER",
         "INT8": "NUMBER(19)",

@@ -172,6 +172,14 @@ class OracleEmitter(ProceduralEmitter):
         if getattr(self, "_in_oracle_procedure", False) and node.value:
             val = self._emit_node(node.value)
             return f"RETURN;  -- UNIQUE: discarded procedure RETURN value ({val})"
+        # PG coerces a numeric RETURN into a boolean function; Oracle's
+        # BOOLEAN takes no numbers (PLS-00382) — the comparison IS the
+        # boolean (wave 227).
+        rt_bool = getattr(self, "_oracle_fn_return_type", None)
+        if node.value is not None and rt_bool and rt_bool.upper() == "BOOLEAN":
+            val_b = self._emit_node(node.value).strip()
+            if re.fullmatch(r"\d+(?:\.\d+)?", val_b):
+                return f"RETURN ({val_b} <> 0);"
         # A function RETURN whose value uses a SQL-only operator (CAST, a SQL-only
         # builtin like STANDARD_HASH, a scalar subquery) is invalid in a PL/SQL
         # expression (PLS-00201/00103). Evaluate it in SQL context and return the

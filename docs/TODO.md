@@ -1135,7 +1135,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          with mangled order; the INTO-first vars now normalize through
          the shared tail. Measured: pg→mysql **36 → 34**, pg→tsql
          **34 → 33** (−3). Discovery HOLDS 0. Tests:
-         TestWave226IntoFirstSelect (3).**
+         TestWave226IntoFirstSelect (3).* Wave 227 (2026-07-17): PG
+         coerces a numeric RETURN into a boolean function — Oracle's
+         BOOLEAN takes no numbers (PLS-00382): ``RETURN (n <> 0)`` IS
+         the boolean; and refcursor declares spell SYS_REFCURSOR there
+         (missing (postgresql, oracle) type-map entry). Measured:
+         pg→oracle **28 → 25** (−3). Discovery HOLDS 0. Tests:
+         TestWave227OracleBoolReturnRefcursor (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

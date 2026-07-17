@@ -7875,3 +7875,37 @@ class TestWave226IntoFirstSelect:
             "mysql",
         )
         assert re.search(r"(?i)SELECT id INTO x from users", out), out
+
+
+class TestWave227OracleBoolReturnRefcursor:
+    """wave 227 (pg-corpus): PG coerces a numeric RETURN into a
+    boolean function — Oracle's BOOLEAN takes no numbers (PLS-00382);
+    the comparison IS the boolean. And refcursor declares spell
+    SYS_REFCURSOR there."""
+
+    def test_numeric_bool_return_oracle(self) -> None:
+        out = _t2(
+            "create function st(f1 int) returns boolean language plpgsql"
+            " as $$ begin return 1; end $$;",
+            "postgresql",
+            "oracle",
+        )
+        assert re.search(r"(?i)RETURN \(1 <> 0\);", out), out
+
+    def test_true_return_untouched_oracle(self) -> None:
+        out = _t2(
+            "create function st2() returns boolean language plpgsql"
+            " as $$ begin return true; end $$;",
+            "postgresql",
+            "oracle",
+        )
+        assert re.search(r"(?i)RETURN true;", out), out
+
+    def test_refcursor_declare_oracle(self) -> None:
+        out = _t2(
+            "create function ex(p1 int) returns int language plpgsql"
+            " as $$ declare c refcursor; begin return p1; end $$;",
+            "postgresql",
+            "oracle",
+        )
+        assert re.search(r"(?i)c SYS_REFCURSOR;", out), out
