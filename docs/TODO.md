@@ -72,23 +72,28 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       pipeline, measured 2026-07-09) and the whole M3-prereq arc
       (increments 1–4 + family steps 1–4, archived in
       [`docs/DONE.md`](DONE.md) §38). *Remaining, in dependency order:*
-      1. *Precondition (a) — procedural context into the IR expression
-         pipeline:* cursor state (last-fetch cursor, per-target
-         fetch-status forms), published like STRING_VARIABLES, so the
-         FOUND/@@FETCH_STATUS idioms can migrate.
+      1. *Precondition (a) — DONE 2026-07-17 (`e44ce92`):* cursor state
+         reaches the IR expression pipeline. `FETCH_STATUS_FORMS`
+         ContextVar published around `_ir_transpile_dml` (guarded on the
+         idiom so MySQL's handler-injection flag has no false side
+         effect); the IR BinaryOp emit maps `@@FETCH_STATUS = 0 / <> 0 /
+         = -1|-2` to the per-target forms exactly like the text path.
+         Probe 113 → 109; live FE 16/16 green. Tests:
+         TestIrFetchStatusContext (6).
       2. *Precondition (b) — comment-carrying expression nodes:* the IR
          drops in-expression comments today; the converter/emitters need
-         trivia-bearing expression nodes.
+         trivia-bearing expression nodes. Fresh-session-scale.
       3. *Family-by-family migration* (the increments-1..4a pattern,
          differential text-vs-IR audits per family, live sweeps as the
          net), then flip `_transform_raw_sql` to IR-first and delete the
          rewriters.
-      **Probe re-measured 2026-07-17 (HEAD `5b26d5b`):** IR-first for
-      scalar fragments = **113 test failures** (was 126 at the original
-      probe; waves 98–102 absorbed the difference). Module map:
-      pg_source_wave1 25, procedural/test_transformer 21,
-      oracle_source_m4_wave 15, test_procedural 13, oracle_mysql_tail 9,
-      test2_residue_wave 7, embedded_dml_ir 5, triggers 4+4, singles 10.
+      **Probe measurements 2026-07-17:** IR-first for scalar fragments =
+      **113 failures at `5b26d5b`** (was 126 at the original probe;
+      waves 98–102 absorbed the difference), **109 after precondition
+      (a)**. Module map at 113: pg_source_wave1 25,
+      procedural/test_transformer 21, oracle_source_m4_wave 15,
+      test_procedural 13, oracle_mysql_tail 9, test2_residue_wave 7,
+      embedded_dml_ir 5, triggers 4+4, singles 10.
       Probe recipe (reproducible): guard `UNIQUE_IR_FIRST` in
       `_transform_raw_sql`, calling `self._ir_transpile_dml(node.sql)`
       right after the early-return carriers and returning the replaced
