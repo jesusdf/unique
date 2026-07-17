@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (361 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (364 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -57,6 +57,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
 - src: `SELECT HEX(AES_ENCRYPT('data', 'key')) AS r`
+
+## my-agg-bit  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI`
+- src: `SELECT BIT_AND(x),BIT_OR(x),BIT_XOR(x) FROM (SELECT 3 x UNION ALL SELECT 5 x UNION ALL SELECT 6 x) t`
+
+## my-agg-collect  (mysql)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT GROUP_CONCAT(x),JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION ALL SELECT 2 x) t`
 
 ## my-alter-drop-default  (mysql)
 - targets: oracle(invalid), tsql(invalid)
@@ -252,6 +262,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('NULL',),)`
 - src: `SELECT COALESCE(NULL, 0) = '' AS r`
+
+## my-coalesce-single  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-00938: not enough arguments for function`
+- src: `SELECT COALESCE(x) FROM (SELECT NULL x) t`
 
 ## my-collation-fn  (mysql)
 - targets: oracle(func)
@@ -1207,6 +1222,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018`
 - src: `SELECT ADD_MONTHS(SYSDATE, 3) AS r FROM DUAL`
+
+## ora-agg-collect  (oracle)
+- targets: postgresql(invalid)
+- live error: `function string_agg(integer, unknown) does not exist`
+- src: `SELECT LISTAGG(x,',') WITHIN GROUP(ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 x FROM DUAL)`
+
+## ora-agg-median  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME`
+- src: `SELECT MEDIAN(x),STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT 2 x FROM DUAL)`
 
 ## ora-asciistr  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -2430,6 +2455,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `FUNC-DIFF: source=(('1,234,567.89',),) target=(('9999999123456900',),)`
 - src: `SELECT to_char(1234567.891, '9,999,999.99') AS r`
 
+## pg-numnulls  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.nu`
+- src: `SELECT num_nonnulls(1,NULL,2),num_nulls(1,NULL,2)`
+
 ## pg-order-nulls-default  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))`
@@ -2736,6 +2766,11 @@ CREATE TABLE ledger (id SERIA`
 - live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
 - src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); MERGE INTO t USING s ON t.id=s.id WHEN MATCHED THEN UPD`
 
+## po-agg-bit  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI`
+- src: `SELECT BIT_AND(x),BIT_OR(x),BIT_XOR(x) FROM (VALUES (3),(5),(6)) v(x)`
+
 ## po-distinct-case  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('A',), ('B',), ('a',)) target=(('A',), ('B',))`
@@ -2937,6 +2972,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - targets: oracle(invalid)
 - live error: `ORA-00904: "CONCAT_WS": invalid identifier`
 - src: `SELECT CONCAT_WS(',', 'a', NULL, 'b') AS r`
+
+## ts-cond-all  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "CHOOSE": invalid identifier`
+- src: `SELECT ISNULL(NULL,3),NULLIF(1,1),COALESCE(NULL,3),IIF(1=1,'y','n'),CHOOSE(1,'a','b'),CASE WHEN 1=1 THEN 1 END`
 
 ## ts-conditional  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
@@ -3357,4 +3397,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 655 distinct constructs; defect rows by kind: func 301, invalid 990, semantic 2, silent-drop 75.
+Totals: 663 distinct constructs; defect rows by kind: func 301, invalid 1009, semantic 2, silent-drop 75.

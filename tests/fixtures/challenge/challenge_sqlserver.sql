@@ -93,6 +93,9 @@ SELECT CONCAT_WS('-', 'a', 'b', 'c') AS r
 -- CASE[open]: ts-concatws2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT CONCAT_WS(',', 'a', NULL, 'b') AS r
 
+-- CASE[open]: ts-cond-all — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
+SELECT ISNULL(NULL,3),NULLIF(1,1),COALESCE(NULL,3),IIF(1=1,'y','n'),CHOOSE(1,'a','b'),CASE WHEN 1=1 THEN 1 END
+
 -- CASE[open]: ts-conditional — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
 SELECT IIF(1>0,'y','n'), CHOOSE(2,'a','b','c'), ISNULL(NULL,'x'), NULLIF(1,1)
 

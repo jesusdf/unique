@@ -374,6 +374,9 @@ SELECT to_char(0.5, '0.00') AS r
 -- CASE[open]: pg-numfmt-thousands — fails on mysql, tsql. FUNC-DIFF: source=(('1,234,567.89',),) target=(('9999999123456900',),)
 SELECT to_char(1234567.891, '9,999,999.99') AS r
 
+-- CASE[open]: pg-numnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.nu
+SELECT num_nonnulls(1,NULL,2),num_nulls(1,NULL,2)
+
 -- CASE[open]: pg-order-nulls-default — fails on mysql, tsql. FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))
 SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x
 
@@ -562,6 +565,9 @@ SELECT xpath('/a/text()', '<a>1</a>'::xml)
 
 -- CASE[open]: pg15-merge — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); MERGE INTO t USING s ON t.id=s.id WHEN MATCHED THEN UPDATE SET n=s.n WHEN NOT MATCHED THEN INSERT VALUES (s.id, s.n)
+
+-- CASE[open]: po-agg-bit — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
+SELECT BIT_AND(x),BIT_OR(x),BIT_XOR(x) FROM (VALUES (3),(5),(6)) v(x)
 
 -- CASE[open]: po-distinct-case — fails on mysql, tsql. FUNC-DIFF: source=(('A',), ('B',), ('a',)) target=(('A',), ('B',))
 SELECT DISTINCT x FROM (VALUES ('a'),('A'),('a'),('B')) v(x) ORDER BY x

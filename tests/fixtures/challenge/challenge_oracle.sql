@@ -31,6 +31,12 @@ SELECT x FROM (SELECT 'banana' x FROM DUAL UNION ALL SELECT 'Apple' x FROM DUAL 
 -- CASE[open]: ora-add-months — fails on mysql, postgresql, tsql. (195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT ADD_MONTHS(SYSDATE, 3) AS r FROM DUAL
 
+-- CASE[open]: ora-agg-collect — fails on postgresql. function string_agg(integer, unknown) does not exist
+SELECT LISTAGG(x,',') WITHIN GROUP(ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 x FROM DUAL)
+
+-- CASE[open]: ora-agg-median — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME
+SELECT MEDIAN(x),STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT 2 x FROM DUAL)
+
 -- CASE[open]: ora-asciistr — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AS
 SELECT ASCIISTR('ABÄCD'), UNISTR('\0041') FROM DUAL
 

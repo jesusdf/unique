@@ -14,6 +14,12 @@ SELECT ADDDATE('2020-01-01', 30) AS r
 -- CASE[open]: my-aes — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT HEX(AES_ENCRYPT('data', 'key')) AS r
 
+-- CASE[open]: my-agg-bit — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
+SELECT BIT_AND(x),BIT_OR(x),BIT_XOR(x) FROM (SELECT 3 x UNION ALL SELECT 5 x UNION ALL SELECT 6 x) t
+
+-- CASE[open]: my-agg-collect — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT GROUP_CONCAT(x),JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION ALL SELECT 2 x) t
+
 -- CASE[open]: my-alter-drop-default — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'DEFAULT'.DB-Lib error message 20018, severity 1
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP DEFAULT
 
@@ -130,6 +136,9 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENFOR
 
 -- CASE[open]: my-coalesce-empty — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('NULL',),)
 SELECT COALESCE(NULL, 0) = '' AS r
+
+-- CASE[open]: my-coalesce-single — fails on oracle. ORA-00938: not enough arguments for function
+SELECT COALESCE(x) FROM (SELECT NULL x) t
 
 -- CASE[open]: my-collation-fn — fails on oracle. FUNC-DIFF: source=(('utf8mb4_0900_ai_ci',),) target=(('USING_NLS_COMP',),)
 SELECT COLLATION('abc') AS r
