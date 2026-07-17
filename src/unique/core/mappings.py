@@ -397,6 +397,8 @@ PROCEDURAL_TYPE_MAPS: dict[tuple[str, str], dict[str, str]] = {
     # PG-source maps NEVER EXISTED before wave 149 — the internal
     # aliases (int4…) and PG-only types shipped raw into every target.
     ("postgresql", "tsql"): {
+        "BPCHAR": "VARCHAR",
+        "NAME": "VARCHAR",
         "INT2": "SMALLINT",
         "INT4": "INT",
         "INT8": "BIGINT",
@@ -413,6 +415,8 @@ PROCEDURAL_TYPE_MAPS: dict[tuple[str, str], dict[str, str]] = {
         "JSONB": "NVARCHAR(MAX)",
     },
     ("postgresql", "mysql"): {
+        "BPCHAR": "CHAR",
+        "NAME": "CHAR",
         "INT2": "SMALLINT",
         "INT4": "INT",
         "INT8": "BIGINT",
@@ -427,6 +431,8 @@ PROCEDURAL_TYPE_MAPS: dict[tuple[str, str], dict[str, str]] = {
         "BIGSERIAL": "BIGINT",
     },
     ("postgresql", "oracle"): {
+        "BPCHAR": "VARCHAR2",
+        "NAME": "VARCHAR2",
         "REFCURSOR": "SYS_REFCURSOR",
         "INT2": "SMALLINT",
         "INT4": "INTEGER",

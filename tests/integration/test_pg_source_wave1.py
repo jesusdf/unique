@@ -8060,3 +8060,28 @@ class TestWave234QuantifiedSubquery:
         )
         up = " ".join(out.split())
         assert re.search(r"(?i)> ALL \(SELECT a FROM t2 WHERE b\)", up), out
+
+
+class TestWave235BpcharNameTypes:
+    """wave 235 (pg-corpus): PG's bpchar (blank-padded CHAR) and name
+    types were known scalars but had no procedural type-map entry —
+    they shipped verbatim (unknown type off PG)."""
+
+    def test_bpchar_param_mysql(self) -> None:
+        out = _t2(
+            "create function th(hname bpchar) returns int language plpgsql"
+            " as $$ begin return 1; end $$;",
+            "postgresql",
+            "mysql",
+        )
+        assert re.search(r"(?i)hname CHAR", out), out
+        assert "bpchar" not in out.lower(), out
+
+    def test_bpchar_param_oracle(self) -> None:
+        out = _t2(
+            "create function th(hname bpchar) returns int language plpgsql"
+            " as $$ begin return 1; end $$;",
+            "postgresql",
+            "oracle",
+        )
+        assert re.search(r"(?i)hname IN VARCHAR2", out), out
