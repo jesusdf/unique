@@ -96,6 +96,10 @@ SELECT DUMP('abc') AS r FROM DUAL
 -- CASE[open]: ora-dump2 — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU
 SELECT DUMP('A', 1016) AS r FROM DUAL
 
+-- CASE[open]: ora-dyn-count — fails on tsql. (102, b"Incorrect syntax near '+'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
+CREATE PROCEDURE p (tbl VARCHAR2) AS n NUMBER; BEGIN EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM ' || tbl INTO n; END;
+/
+
 -- CASE[open]: ora-edit-distance — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "UTL_MATCH" or the user-defined function or aggregate "
 SELECT UTL_MATCH.EDIT_DISTANCE('hello', 'hallo') AS r FROM DUAL
 

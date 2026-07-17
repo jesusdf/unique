@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (328 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (335 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -437,6 +437,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN`
 - src: `SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)`
+
+## my-infoschema  (mysql)
+- targets: oracle(invalid)
+- live error: `PROCEDURE P compiled INVALID (line 8): PL/SQL: ORA-00942: table or view does not exist`
+- src: `CREATE PROCEDURE p() BEGIN DECLARE c INT; SELECT COUNT(*) INTO c FROM information_schema.tables; SELECT c; END`
 
 ## my-insert-oob  (mysql)
 - targets: tsql(func)
@@ -1055,6 +1060,12 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU`
 - src: `SELECT DUMP('A', 1016) AS r FROM DUAL`
 
+## ora-dyn-count  (oracle)
+- targets: tsql(invalid)
+- live error: `(102, b"Incorrect syntax near '+'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
+- src: `CREATE PROCEDURE p (tbl VARCHAR2) AS n NUMBER; BEGIN EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM ' || tbl INTO n; END;
+/`
+
 ## ora-edit-distance  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "UTL_MATCH" or the user-defined function or aggregate "`
@@ -1647,6 +1658,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL`
+
+## pg-dyn-count  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near 'SELECT COUNT(*) FROM %I'.DB-Lib error message 20018, severi`
+- src: `CREATE FUNCTION f(tbl TEXT) RETURNS BIGINT AS $$ DECLARE n BIGINT; BEGIN EXECUTE format('SELECT COUNT(*) FROM %I', tbl) INTO n; RE`
 
 ## pg-emoji-len  (postgresql)
 - targets: tsql(func)
@@ -2433,6 +2449,16 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 GO
 CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
 
+## ts-dyn-concat-loop  (tsql)
+- targets: mysql(silent-rt), oracle(invalid)
+- live error: `PROCEDURE P compiled INVALID (line 6): PL/SQL: ORA-00942: table or view does not exist`
+- src: `CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(MAX) = N''; SELECT @sql = @sql + 'DROP TABLE ' + name + ';' FROM sys.tables; EXE`
+
+## ts-dyn-count  (tsql)
+- targets: mysql(silent-rt), oracle(invalid)
+- live error: `PROCEDURE P compiled INVALID (line 6): PLS-00201: identifier 'QUOTENAME' must be declared`
+- src: `CREATE PROCEDURE p @tbl NVARCHAR(128) AS BEGIN DECLARE @sql NVARCHAR(MAX) = N'SELECT COUNT(*) FROM ' + QUOTENAME(@tbl); EXEC(@sql)`
+
 ## ts-emoji-len  (tsql)
 - targets: mysql(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('1',),)`
@@ -2710,6 +2736,11 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - live error: `ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier`
 - src: `SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r`
 
+## ts-waitfor-exec  (tsql)
+- targets: mysql(silent), oracle(invalid), postgresql(silent)
+- live error: `PROCEDURE P compiled INVALID (line 4): PLS-00201: identifier 'DBMS_LOCK' must be declared`
+- src: `CREATE PROCEDURE p AS BEGIN WAITFOR DELAY '00:00:01'; EXEC sp_who; END`
+
 ## ts-while-break-continue  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `PROCEDURE P compiled INVALID (line 11): PLS-00201: identifier 'BREAK' must be declared`
@@ -2731,4 +2762,4 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 531 distinct constructs; defect rows by kind: func 283, invalid 726, semantic 2, silent-drop 75.
+Totals: 537 distinct constructs; defect rows by kind: func 283, invalid 733, semantic 2, silent-drop 75.
