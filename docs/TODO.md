@@ -1200,7 +1200,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (a column whose name collides with a local variable — cannot
          disambiguate without the table's columns). Each further wave
          moves ≈1 statement. Campaign: **128 waves (108–234), ~770 →
-         135**, discovery 287 → 0.**
+         135**, discovery 287 → 0.* Wave 235 (2026-07-17): PG's
+         ``bpchar`` (blank-padded CHAR) and ``name`` types had no
+         procedural type-map entry — added to all three pg-source maps
+         (CHAR/VARCHAR2/VARCHAR); the (postgresql, tsql) entry lives in
+         PROCEDURAL_TYPE_MAPS not the same-keyed FUNC map. Measured:
+         pg→mysql **34 → 33**, pg→oracle 24 (one reclassified). Floor
+         now **134**. Discovery HOLDS 0. Tests:
+         TestWave235BpcharNameTypes (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
