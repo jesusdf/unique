@@ -72,6 +72,7 @@ from unique.core.mappings import (
     ERROR_MESSAGE_SOURCES,
     LAST_IDENTITY_EXPR,
     LAST_IDENTITY_SOURCE_FUNCS,
+    ORACLE_DATE_FORMAT_STYLES,
     TSQL_OBJECT_CONTEXT_WORDS,
     tsql_call_needs_schema,
 )
@@ -3748,6 +3749,14 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "mysql":
             my = _convert_date_format(fmt, "oracle", "mysql")
             return f"DATE_FORMAT({value}, '{my}')"
+        if re.fullmatch(r"\d+", fmt):
+            # A NUMERIC format is client code ported FROM T-SQL:
+            # TO_CHAR(x, 112) means CONVERT style 112.
+            return f"CONVERT(VARCHAR(4000), {value}, {fmt})"
+        if not re.search(r"(?i)YY|MM|DD|HH|MI|SS", fmt):
+            # A numeric mask ('999.99') has no FORMAT equivalent — keep the
+            # call visible for review, like the text path.
+            return f"TO_CHAR({value}, '{fmt}')"
         return f"FORMAT({value}, '{_convert_date_format(fmt, 'oracle', 'tsql')}')"
 
     # TIME_TO_STR: sqlglot's canonical for a date->string format (T-SQL FORMAT and
@@ -3785,8 +3794,16 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return (
                 f"TO_DATE({value}, '{_convert_date_format(fmt, 'python', 'oracle')}')"
             )
-        # T-SQL: an ISO string casts directly; exotic formats would need CONVERT+style.
-        return f"CAST({value} AS DATE)"
+        # T-SQL: the common unambiguous formats map to a fixed CONVERT
+        # style (the shared table); anything else stays visible for review
+        # — a blanket CAST dropped the format AND the time part.
+        ora_fmt = _convert_date_format(fmt, "python", "oracle").upper()
+        known_style = ORACLE_DATE_FORMAT_STYLES.get(
+            re.sub(r"\s*HH24:MI:SS$", "", ora_fmt)
+        )
+        if known_style is not None:
+            return f"CONVERT(DATETIME, {value}, {known_style})"
+        return f"TO_DATE({value}, '{ora_fmt}')"
 
     # A user function may be schema-qualified (dbo.fn_tax). The "dbo" default
     # schema is meaningless on the other engines, so drop it there, as for any

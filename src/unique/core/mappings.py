@@ -96,6 +96,18 @@ LAST_IDENTITY_SOURCE_FUNCS: dict[str, str] = {
     "LAST_INSERT_ID": "mysql",
 }
 
+#: Common unambiguous Oracle date formats with a fixed T-SQL CONVERT style
+#: (a trailing " HH24:MI:SS" upgrades to the style's datetime variant, which
+#: these styles already parse). Shared by both pipelines.
+ORACLE_DATE_FORMAT_STYLES: dict[str, int] = {
+    "DD/MM/YYYY": 103,
+    "MM/DD/YYYY": 101,
+    "YYYY-MM-DD": 120,
+    "YYYYMMDD": 112,
+    "DD-MM-YYYY": 105,
+    "DD.MM.YYYY": 104,
+}
+
 #: plpgsql's FOUND flag (set by the last DML/FETCH) per target — the
 #: row-count predicate where no such flag exists.
 DML_FOUND_EXPR: dict[str, str] = {

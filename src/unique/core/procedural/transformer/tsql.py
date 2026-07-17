@@ -28,7 +28,11 @@ from unique.core.ast_nodes import (
 )
 from unique.core.converter import IDENTITY_COLUMNS, PG_TRIGGER_FN_BODIES, USER_FUNCTIONS
 from unique.core.converter.emit import _convert_date_format
-from unique.core.mappings import TSQL_OBJECT_CONTEXT_WORDS, tsql_call_needs_schema
+from unique.core.mappings import (
+    ORACLE_DATE_FORMAT_STYLES,
+    TSQL_OBJECT_CONTEXT_WORDS,
+    tsql_call_needs_schema,
+)
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
     register_transformer,
@@ -101,14 +105,7 @@ class TSqlTransformer(ProceduralTransformer):
     #: Common unambiguous Oracle TO_DATE formats -> T-SQL CONVERT style
     #: (a trailing HH24:MI:SS is stripped before lookup; the datetime styles
     #: parse an appended time-of-day).
-    _TO_DATE_STYLES = {
-        "DD/MM/YYYY": 103,
-        "MM/DD/YYYY": 101,
-        "YYYY-MM-DD": 120,
-        "YYYYMMDD": 112,
-        "DD-MM-YYYY": 105,
-        "DD.MM.YYYY": 104,
-    }
+    _TO_DATE_STYLES = ORACLE_DATE_FORMAT_STYLES
 
     #: SYS_CONTEXT('USERENV', '<attr>') attributes with a direct T-SQL form.
     _SYS_CONTEXT_MAP = {

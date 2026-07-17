@@ -336,3 +336,24 @@ class TestDateVarsContextInIr:
     def test_numeric_subtraction_untouched(self) -> None:
         out = self._t("oracle", "tsql", "SELECT a - b FROM t", set())
         assert out is not None and "DATEDIFF" not in out.upper()
+
+
+class TestToDateToCharStylesInIr:
+    """Formatted TO_DATE/TO_CHAR keep fidelity on T-SQL (M3 family F7)."""
+
+    def test_to_date_known_format_converts_with_style(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT TO_DATE(x, 'YYYY-MM-DD HH24:MI:SS') FROM t")
+        assert out is not None and "CONVERT(DATETIME, x, 120)" in out, out
+
+    def test_to_date_unknown_format_stays_visible(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT TO_DATE(x, 'J') FROM t")
+        assert out is not None and "TO_DATE" in out.upper(), out
+        assert "CAST(x AS DATE)" not in out, out
+
+    def test_numeric_style_to_char_becomes_convert(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT TO_CHAR(d, 112) FROM t")
+        assert out is not None and "CONVERT(VARCHAR(4000), d, 112)" in out, out
+
+    def test_date_format_to_char_still_formats(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT TO_CHAR(d, 'DD/MM/YYYY') FROM t")
+        assert out is not None and "FORMAT(d, 'dd/MM/yyyy')" in out, out
