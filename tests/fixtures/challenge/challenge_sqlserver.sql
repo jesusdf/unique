@@ -56,6 +56,9 @@ SELECT CAST(2 AS BIT) AS r
 -- CASE[open]: ts-cast-trycast — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'x' to a number: 
 SELECT CAST(123 AS VARCHAR(10)), TRY_CAST('x' AS INT), CONVERT(DATE, GETDATE())
 
+-- CASE[open]: ts-checksum-agg — fails on mysql, oracle, postgresql. ORA-00904: "CHECKSUM_AGG": invalid identifier
+SELECT CHECKSUM_AGG(x) FROM (VALUES (1),(2)) v(x)
+
 -- CASE[open]: ts-choose — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
 SELECT CHOOSE(2, 'a', 'b', 'c') AS r
 
@@ -98,6 +101,17 @@ CREATE TABLE t (a INT, b INT); CREATE NONCLUSTERED INDEX ix ON t (a) INCLUDE (b)
 -- CASE[open]: ts-format-number — fails on mysql, oracle, postgresql. ORA-00904: "NUMBER_TO_STR": invalid identifier
 SELECT FORMAT(1234.5, 'N2') AS r
 
+-- CASE[open]: ts-grant — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (id INT);
+GO
+GRANT SELECT ON t TO PUBLIC
+
+-- CASE[open]: ts-host-db — fails on mysql, oracle, postgresql. ORA-00904: "DB_NAME": invalid identifier
+SELECT HOST_NAME(), DB_NAME(), SUSER_SNAME()
+
+-- CASE[open]: ts-identity-funcs — fails on mysql, oracle, postgresql. ORA-00936: missing expression
+SELECT SCOPE_IDENTITY(), @@IDENTITY, IDENT_CURRENT('t')
+
 -- CASE[open]: ts-insert-output — fails on mysql, oracle. ORA-00925: missing INTO keyword
 CREATE TABLE t (id INT, n INT);
 GO
@@ -129,8 +143,16 @@ CREATE TABLE tgt (id INT PRIMARY KEY, n INT); MERGE tgt USING (VALUES (1, 5)) AS
 -- CASE[open]: ts-money — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (price MONEY, small SMALLMONEY)
 
+-- CASE[open]: ts-nolock-hint — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+CREATE TABLE t (id INT);
+GO
+SELECT * FROM t WITH (NOLOCK)
+
 -- CASE[open]: ts-openjson — fails on mysql, oracle, postgresql. ORA-00904: "OPEN_J_S_O_N": invalid identifier
 SELECT * FROM OPENJSON('[1,2,3]')
+
+-- CASE[open]: ts-patindex — fails on mysql, oracle, postgresql. ORA-00904: "PATINDEX": invalid identifier
+SELECT PATINDEX('%[0-9]%', 'abc123') AS r
 
 -- CASE[open]: ts-quotename — fails on mysql, oracle, postgresql. ORA-00904: "SPLIT_PART": invalid identifier
 SELECT QUOTENAME('my table'), PARSENAME('a.b.c', 2)
@@ -157,6 +179,9 @@ SELECT NEXT VALUE FOR seq
 -- CASE[open]: ts-soundex-diff — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
 SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')
 
+-- CASE[open]: ts-spid-version — fails on mysql, oracle, postgresql. ORA-00936: missing expression
+SELECT @@SPID, @@VERSION
+
 -- CASE[open]: ts-str-plus-num — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('15',),) target=(('105',),)
 SELECT '10' + 5 AS r
 
@@ -172,6 +197,11 @@ SELECT SYSDATETIME(), SYSUTCDATETIME(), GETUTCDATE()
 -- CASE[open]: ts-table-variable — fails on oracle. ORA-06550: line 2, column 5:
 DECLARE @t TABLE (id INT); INSERT INTO @t VALUES (1); SELECT * FROM @t
 
+-- CASE[open]: ts-tablesample — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+CREATE TABLE t (id INT);
+GO
+SELECT * FROM t TABLESAMPLE (10 PERCENT)
+
 -- CASE[open]: ts-top-with-ties — fails on postgresql. SILENT LOSS: TOP n WITH TIES -> plain LIMIT n on PG/MySQL (ties dropped); on Oracle the ro
 SELECT TOP 1 WITH TIES x FROM (VALUES (1),(1),(2)) v(x) ORDER BY x
 
@@ -180,6 +210,12 @@ SELECT IIF('a ' = 'a', 1, 0) AS r
 
 -- CASE[open]: ts-try-convert — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'a' to a number: 
 SELECT TRY_CONVERT(INT, 'abc') AS r
+
+-- CASE[open]: ts-try-parse — fails on mysql, oracle, postgresql. ORA-00907: missing right parenthesis
+SELECT TRY_PARSE('2020-01-01' AS DATE) AS r
+
+-- CASE[open]: ts-tzoffset — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier
+SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r
 
 -- CASE[open]: ts-view-check — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id INT);

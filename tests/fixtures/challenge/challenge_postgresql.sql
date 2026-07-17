@@ -46,6 +46,9 @@ SELECT 'a' < 'B' COLLATE "C" AS r
 -- CASE[open]: pg-comment-on — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (a INT); COMMENT ON COLUMN t.a IS 'the a column'
 
+-- CASE[open]: pg-comment-table — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (id INT); COMMENT ON TABLE t IS 'my table'
+
 -- CASE[open]: pg-composite-type — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TYPE addr AS (street TEXT, city TEXT)
 
@@ -73,8 +76,14 @@ SELECT ENCODE('abc'::bytea, 'base64') AS r
 -- CASE[open]: pg-estring — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT E'line1\nline2' AS r
 
+-- CASE[open]: pg-except-all — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+SELECT 1 EXCEPT ALL SELECT 2
+
 -- CASE[open]: pg-exception-handler — fails on tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
 CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1; EXCEPTION WHEN OTHERS THEN RETURN -1; END; $$ LANGUAGE plpgsql
+
+-- CASE[open]: pg-explain — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+EXPLAIN SELECT 1
 
 -- CASE[open]: pg-expr-index — fails on mysql, oracle. ORA-02327: cannot create index on expression with data type LOB
 CREATE TABLE t (a INT, b TEXT); CREATE INDEX ix ON t (lower(b))
@@ -85,11 +94,20 @@ SELECT EXTRACT(DOW FROM DATE '2020-01-01') AS d
 -- CASE[open]: pg-extract-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1
 SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r
 
+-- CASE[open]: pg-for-update — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+CREATE TABLE t (id INT); SELECT * FROM t FOR UPDATE
+
+-- CASE[open]: pg-format-func — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
+SELECT format('%s=%s', 'a', 1) AS r
+
 -- CASE[open]: pg-fulltext — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT to_tsvector('a cat') @@ to_tsquery('cat') AS r
 
 -- CASE[open]: pg-generate-series — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT generate_series(1, 5) AS r
+
+-- CASE[open]: pg-grant — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (id INT); GRANT SELECT, INSERT ON t TO PUBLIC
 
 -- CASE[open]: pg-greatest-null — fails on mysql, oracle. FUNC-DIFF: source=(('3',),) target=(('NULL',),)
 SELECT GREATEST(1, NULL, 3) AS r
@@ -111,6 +129,9 @@ CREATE TABLE t (id INT, n INT); INSERT INTO t (id, n) VALUES (1, 5) RETURNING id
 
 -- CASE[open]: pg-intdiv — fails on mysql, oracle. FUNC-DIFF: source=(('2',),) target=(('2.5',),)
 SELECT 5 / 2 AS r
+
+-- CASE[open]: pg-intersect-all — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+SELECT 1 INTERSECT ALL SELECT 1
 
 -- CASE[open]: pg-interval-arith — fails on mysql, oracle, tsql. (207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S
 SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7
@@ -135,6 +156,9 @@ SELECT LEFT('abc', -1) AS r
 
 -- CASE[open]: pg-like-cs — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'ABC' LIKE 'abc' AS r
+
+-- CASE[open]: pg-lock-table — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id INT); LOCK TABLE t IN SHARE MODE
 
 -- CASE[open]: pg-log-base — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('4.60517',),)
 SELECT LOG(100) AS r
@@ -187,6 +211,9 @@ CREATE FUNCTION f() RETURNS SETOF INT AS $$ BEGIN RETURN QUERY SELECT 1 UNION SE
 -- CASE[open]: pg-rollup — fails on mysql, oracle, tsql. (8120, b"Column 'v.x' is invalid in the select list because it is not contained in either 
 SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)
 
+-- CASE[open]: pg-savepoint — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG
+BEGIN; SAVEPOINT sp; ROLLBACK TO SAVEPOINT sp; COMMIT
+
 -- CASE[open]: pg-sequence — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne
 CREATE SEQUENCE seq; SELECT nextval('seq'), currval('seq')
 
@@ -195,6 +222,9 @@ CREATE SEQUENCE seq INCREMENT 2 MINVALUE 10 MAXVALUE 100 CACHE 5 CYCLE
 
 -- CASE[open]: pg-serial-bit — fails on mysql, oracle, tsql. (2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit
 CREATE TABLE t (a BIGSERIAL, flags BIT(8), vb VARBIT(16))
+
+-- CASE[open]: pg-set-searchpath — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+SET search_path TO myschema, public
 
 -- CASE[open]: pg-split-part — fails on mysql, oracle, tsql. (195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT SPLIT_PART('a,b,c', ',', 2) AS r
@@ -207,6 +237,15 @@ SELECT SUBSTRING('abcdef', 0, 3) AS r
 
 -- CASE[open]: pg-substring-regex — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib
 SELECT SUBSTRING('a1b2' FROM '[0-9]+') AS r
+
+-- CASE[open]: pg-system-funcs — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT version(), current_database(), current_user, pg_backend_pid()
+
+-- CASE[open]: pg-tablesample — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+CREATE TABLE t (id INT); SELECT * FROM t TABLESAMPLE BERNOULLI(50)
+
+-- CASE[open]: pg-to-hex-typeof — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT to_hex(255), pg_typeof(1)
 
 -- CASE[open]: pg-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'a ' = 'a' AS r
@@ -240,11 +279,17 @@ SELECT UNNEST(ARRAY[1,2,3]) AS r
 -- CASE[open]: pg-update-returning — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id INT, n INT); UPDATE t SET n = 1 RETURNING id, n
 
+-- CASE[open]: pg-values-stmt — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+VALUES (1, 'a'), (2, 'b')
+
 -- CASE[open]: pg-view-check — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id INT); CREATE VIEW v AS SELECT id FROM t WITH LOCAL CHECK OPTION
 
 -- CASE[open]: pg-week — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT EXTRACT(WEEK FROM DATE '2020-01-05') AS r
+
+-- CASE[open]: pg-width-bucket — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI
+SELECT width_bucket(5, 0, 10, 5) AS r
 
 -- CASE[open]: pg-xmlelement — fails on mysql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT XMLELEMENT(NAME foo, 'bar') AS r

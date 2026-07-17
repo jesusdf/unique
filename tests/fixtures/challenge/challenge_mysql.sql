@@ -14,6 +14,9 @@ SELECT AVG(x) FROM (SELECT 1 x UNION SELECT 2) t
 -- CASE[open]: my-base64 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TO
 SELECT TO_BASE64('abc'), FROM_BASE64('YWJj')
 
+-- CASE[open]: my-bit-agg — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
+SELECT BIT_XOR(x), BIT_OR(x) FROM (SELECT 1 x UNION SELECT 2) t
+
 -- CASE[open]: my-bit-count — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT BIT_COUNT(255) AS r
 
@@ -52,6 +55,9 @@ SELECT 5 / 2 AS r
 
 -- CASE[open]: my-elt — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EL
 SELECT ELT(2, 'a', 'b', 'c') AS r
+
+-- CASE[open]: my-export-set — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
+SELECT EXPORT_SET(5, 'Y', 'N', ',', 4) AS r
 
 -- CASE[open]: my-field — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
 SELECT FIELD('b', 'a', 'b', 'c') AS r
@@ -92,6 +98,12 @@ SELECT LENGTH('café') AS r
 -- CASE[open]: my-like-ci — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'ABC' LIKE 'abc' AS r
 
+-- CASE[open]: my-lock-tables — fails on oracle, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (id INT); LOCK TABLES t WRITE
+
+-- CASE[open]: my-make-set — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
+SELECT MAKE_SET(3, 'a', 'b', 'c') AS r
+
 -- CASE[open]: my-makedate — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)
 
@@ -107,11 +119,17 @@ SELECT PERIOD_DIFF(202006, 202001) AS r
 -- CASE[open]: my-soundex-format — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT SOUNDEX('Smith'), FORMAT(1234.5, 2)
 
+-- CASE[open]: my-status-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RO
+SELECT LAST_INSERT_ID(), ROW_COUNT(), FOUND_ROWS()
+
 -- CASE[open]: my-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('def',),) target=(('ab',),)
 SELECT SUBSTRING('abcdef', -3) AS r
 
 -- CASE[open]: my-substring-index — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
 SELECT SUBSTRING_INDEX('a,b,c', ',', 2) AS r
+
+-- CASE[open]: my-system-funcs — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'USER'.DB-Lib error message 20018, severity 15:\
+SELECT CONNECTION_ID(), DATABASE(), USER(), VERSION()
 
 -- CASE[open]: my-timestampadd — fails on oracle, postgresql. ORA-30081: invalid data type for datetime/interval arithmetic
 SELECT TIMESTAMPADD(MINUTE, 30, '2020-01-01 10:00') AS r
@@ -133,6 +151,9 @@ SELECT UNIX_TIMESTAMP('2020-01-01'), FROM_UNIXTIME(1577836800)
 
 -- CASE[open]: my-update-join — fails on oracle, postgresql, tsql. (4104, b'The multi-part identifier "s.n" could not be bound.DB-Lib error message 20018, se
 CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); UPDATE t JOIN s ON t.id = s.id SET t.n = s.n
+
+-- CASE[open]: my-uuid-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
+SELECT UUID(), UUID_SHORT()
 
 -- CASE[open]: my-week-quarter — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEEK('2020-06-15'), QUARTER('2020-06-15'), DAYOFWEEK('2020-06-15')
