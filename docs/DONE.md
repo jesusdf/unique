@@ -4863,7 +4863,13 @@ Cycle-by-cycle (`scripts/validity_sweep.py`, per direction on live engines):
 | z6 | W3 | 3 / 7 / 8 | 6 / 4 / 9 | 36 |
 | z7 | W3-remodel+W4 | 3 / 7 / 6 | 6 / 4 / 5 | 29 |
 | z8 | W5 | 3 / 5 / 4 | 4 / 4 / 5 | 25 |
-| z9 | W6 | 3 / 5 / 4 | 4 / 4 / **2** | **22** |
+| z9 | W6 | 3 / 5 / 4 | 4 / 4 / 2 | 22 |
+| z10 | W7 | 2 / 5 / 4 | 4 / 3 / 2 | 20 |
+| z11 | W8 | 1 / 5 / 4 | 4 / 3 / 2 | 19 |
+| z12 | W9 | 1 / 5 / 2 | 4 / 3 / 2 | 17 |
+| z13 | W10 | 1 / 5 / **1** | 4 / 3 / **2** | **16** |
+
+Both Oracle directions reached **100.0% validity** at z13; discovery pg→pg 0.
 
 Mechanisms (all live-verified where Oracle):
 
@@ -4896,11 +4902,30 @@ Mechanisms (all live-verified where Oracle):
 - **W6** — `NULLS FIRST/LAST` stripped from an embedded Oracle `CREATE INDEX`
   (sqlglot injects it; ORA-00907) — proc_bug19733 compiles clean.
 
-**Remaining 22 are the architectural floor**: adversarial pg_regress/sqlancer
+- **W7** — a data-modifying CTE (`WITH x AS (INSERT/UPDATE/DELETE …) …`)
+  degrades to a carrier on T-SQL (detected on scrubbed text, since sqlglot
+  drops the WITH arg when a CTE body is DML); the pg set-op `ORDER BY`
+  aggregate gate now scans the ordering expression recursively (an aggregate
+  wrapped in arithmetic was missed).
+- **W8** — a whole-row `OLD.*`/`NEW.*` reference in a trigger function degrades
+  the trigger to a carrier (no T-SQL whole-row variable); the inline path had
+  warned but still shipped invalid SQL.
+- **W9** — a `COMMENT ON <object>` statement inside a routine body carriers on
+  every foreign target (DDL a PL/SQL block cannot run statically — the
+  wave-225 Oracle "verbatim" decision was live-checked and corrected here); a
+  plpgsql dynamic `OPEN … FOR EXECUTE` cursor carriers on Oracle.
+- **W10** — Oracle accepts `bool` as BOOLEAN, so a numeric `RETURN 1` in a
+  `RETURN bool` function wraps to `RETURN (1 <> 0)` (the wrap previously fired
+  only for a return type spelled BOOLEAN).
+
+**Remaining 16 are the architectural floor**: adversarial pg_regress/sqlancer
 inputs sqlglot cannot parse (nested-paren join trees `(a CROSS JOIN (b JOIN c
-ON …) ON …)`, chained `a = b = c` comparisons), correlated outer-aggregate
-subqueries, and schema-dependent type inference (`COALESCE` bigint/char,
-aggregate in a set-op `ORDER BY`). Measurement note: the pg→oracle sweep hangs
-at *runtime* on bare `SELECT <dml-fn>()` pg_regress driver calls (DML in a
-SQL-called function / lock wait) — these are not syntax defects (the
-`CREATE FUNCTION` is compiled and counted); the sweep skips them.
+ON …) ON …)` reach 2, chained `a = b = c` comparisons reach 2), a correlated
+outer-aggregate subquery, composite-field access on a function result
+(`(f(x)).field`), schema-dependent type inference (`COALESCE` bigint/char),
+LATERAL derived-table column-alias lists, and a handful of mysql-source
+structural singletons (backslash-escaped literals, EXEC expression-arg hoist,
+handler placement). Measurement note: the pg→oracle sweep hangs at *runtime*
+on bare `SELECT <dml-fn>()` pg_regress driver calls (DML in a SQL-called
+function / lock wait) — these are not syntax defects (the `CREATE FUNCTION` is
+compiled and counted); the sweep skips them.
