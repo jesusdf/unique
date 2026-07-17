@@ -202,6 +202,13 @@ def gate_reason(sql: str, target: str) -> str | None:
             and re.search(r"(?is)\bWITH\s+RECURSIVE\b", stmt)
         ):
             continue
+        if target == "mysql" and re.match(
+            # MySQL 8 functional indexes (double-paren key parts) are
+            # valid MySQL that sqlglot cannot parse (wave 204).
+            r"(?is)^\s*CREATE\s+(?:UNIQUE\s+)?INDEX\s+\S+\s+ON\s+\S+?\s*\(\s*\(",
+            stmt,
+        ):
+            continue
         try:
             sqlglot.parse(stmt, read=dialect, error_level=sqlglot.ErrorLevel.RAISE)
         except Exception as e:

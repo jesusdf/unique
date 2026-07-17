@@ -531,6 +531,19 @@ def _tsql_index_predicate(pred: exp.Expression) -> str | None:
     return None
 
 
+def _balanced_outer(text: str) -> bool:
+    """Whether the leading ``(`` of *text* closes at its final char."""
+    depth = 0
+    for i, ch in enumerate(text):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return i == len(text) - 1
+    return False
+
+
 def _pg_index_rebuild(sql: str, read: str, dialect: str) -> str | None:
     """Rebuild a PostgreSQL CREATE INDEX as valid T-SQL/MySQL, or None
     to let the generic sqlglot path try (expression indexes, exotic
@@ -574,7 +587,29 @@ def _pg_index_rebuild(sql: str, read: str, dialect: str) -> str | None:
         if isinstance(inner, exp.Opclass):
             inner = inner.this
         if not isinstance(inner, exp.Column):
-            return None  # expression index: generic path
+            if dialect == "mysql":
+                # MySQL 8 functional index parts take DOUBLE parens
+                # (wave 204: single-paren expressions were 1064).
+                expr_sql = str(inner.sql(dialect="mysql")).strip()
+                while (
+                    expr_sql.startswith("(")
+                    and expr_sql.endswith(")")
+                    and _balanced_outer(expr_sql)
+                ):
+                    expr_sql = expr_sql[1:-1].strip()
+                col = f"({expr_sql})"
+                if o.args.get("desc"):
+                    col += " DESC"
+                cols.append(col)
+                continue
+            # T-SQL has no expression indexes (computed columns needed);
+            # a whole carrier beats invalid output.
+            reason = (
+                "T-SQL has no expression indexes (add a computed column "
+                "and index it); statement preserved as a comment"
+            )
+            body = "\n".join(f"-- {line}" for line in sql.strip().splitlines())
+            return f"-- UNIQUE: {reason}\n{body}"
         col = str(inner.sql(dialect="mysql" if dialect == "mysql" else "tsql"))
         if o.args.get("desc"):
             col += " DESC"

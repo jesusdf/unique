@@ -985,7 +985,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          ``DELETE … USING`` to its multi-table DELETE (WITH prefixes
          stay legal on MySQL 8). Measured: pg→mysql **58 → 57** (−1).
          Discovery HOLDS 0. Tests: TestWave203ReturningMultiTable
-         (2).**
+         (2).* Wave 204 (2026-07-17): MySQL 8
+         functional index parts take per-part parens — the mixed
+         expression/column rebuild shipped a bare CASE part (1064);
+         parts now wrap once (validated LIVE; the doubled first cut
+         unbalanced parens via strip('()') — replaced with a balanced
+         unwrapper) plus a gate exemption (sqlglot cannot reparse the
+         valid form). T-SQL has no expression indexes at all — honest
+         carrier. Measured: pg→mysql **57 → 54**, pg→tsql **52 → 49**
+         (−6). Discovery HOLDS 0. Tests: TestWave204ExpressionIndexes
+         (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

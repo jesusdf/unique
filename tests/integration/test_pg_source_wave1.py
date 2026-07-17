@@ -7291,3 +7291,33 @@ class TestWave203ReturningMultiTable:
         )
         assert re.search(r"(?i)DELETE y FROM y, t\s+WHERE", out), out
         assert "USING" not in out.upper(), out
+
+
+class TestWave204ExpressionIndexes:
+    """wave 204 (pg-corpus): MySQL 8 functional index parts take
+    DOUBLE parens (single-paren expressions were 1064; sqlglot cannot
+    reparse the valid form — gate exemption); T-SQL has no expression
+    indexes at all — honest carrier."""
+
+    def test_expression_index_mysql(self) -> None:
+        out = _t2(
+            "create index t1_ab_idx on t1((concat(a, b)));",
+            "postgresql",
+            "mysql",
+        )
+        assert re.search(r"(?i)ON t1\s*\(\(CONCAT\(", out), out
+        assert "(((" not in out, out
+        assert "UNIQUE:" not in out, out
+
+    def test_expression_index_carrier_tsql(self) -> None:
+        out = _t2(
+            "create index t1_ab_idx on t1((concat(a, b)));",
+            "postgresql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out and "computed column" in out, out
+
+    def test_column_index_untouched(self) -> None:
+        out = _t2("create index i1 on t1(a, b);", "postgresql", "mysql")
+        assert re.search(r"(?i)ON t1\s*\(a, b\)", out), out
+        assert "((" not in out, out
