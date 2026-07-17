@@ -2970,13 +2970,18 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
 
     if isinstance(node, SubqueryExpression):
         query = node.query
-        if dialect in ("tsql", "oracle"):
+        if dialect in ("tsql", "oracle") and not node.quantifier:
             # Illegal in a T-SQL/Oracle scalar subquery without TOP/FETCH,
             # and with no LIMIT it cannot change the single-row result.
             # A set-op query hangs its ORDER BY on the LAST arm of the
             # set_query chain (wave 163), so strip along the chain.
+            # (A quantified ALL/ANY subquery is multi-row — keep it.)
             query = _strip_unlimited_order_by(query)
-        return f"({_emit_select(query, dialect)})"
+        rendered = f"({_emit_select(query, dialect)})"
+        if node.quantifier:
+            # ``> ALL/ANY (subquery)`` (wave 234).
+            return f"{node.quantifier} {rendered}"
+        return rendered
 
     if isinstance(node, ExpressionList):
         inner = ", ".join(_emit_expression(item, dialect) for item in node.items)

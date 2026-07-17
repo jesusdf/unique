@@ -8026,3 +8026,37 @@ class TestWave233StarIntoMultipleVars:
         )
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)SELECT @x = max", out), out
+
+
+class TestWave234QuantifiedSubquery:
+    """wave 234 (mysql-corpus): ``> ALL/ANY (SELECT …)`` — sqlglot
+    models the quantified subquery but it stayed a RawSQL whose inner
+    WHERE never saw the mapping pipeline (the truthy ``WHERE b`` was
+    4145 on T-SQL). Now a real SubqueryExpression with a quantifier."""
+
+    def test_all_subquery_inner_comparisonized_tsql(self) -> None:
+        out = _t2(
+            "select 1 from t1 where 1 > all (select a from t2 where b);",
+            "mysql",
+            "tsql",
+        )
+        up = " ".join(out.split())
+        assert re.search(r"(?i)> ALL \(SELECT a FROM t2 WHERE b <> 0\)", up), out
+
+    def test_any_subquery_tsql(self) -> None:
+        out = _t2(
+            "select 1 from t1 where x = any (select a from t2);",
+            "mysql",
+            "tsql",
+        )
+        up = " ".join(out.split())
+        assert re.search(r"(?i)= ANY \(SELECT a FROM t2\)", up), out
+
+    def test_all_kept_mysql(self) -> None:
+        out = _t2(
+            "select 1 from t1 where 1 > all (select a from t2 where b);",
+            "mysql",
+            "mysql",
+        )
+        up = " ".join(out.split())
+        assert re.search(r"(?i)> ALL \(SELECT a FROM t2 WHERE b\)", up), out

@@ -1180,7 +1180,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          no schema to expand the star) — the T-SQL select-into emitter
          degrades it honestly. Measured: mysql→tsql **22 → 21** (−1).
          Discovery HOLDS 0. Tests: TestWave233StarIntoMultipleVars
-         (2).**
+         (2).* Wave 234 (2026-07-17): ``> ALL
+         / ANY / SOME (SELECT …)`` — sqlglot models the quantified
+         subquery, but unconverted it stayed a RawSQL whose inner
+         WHERE never saw the mapping pipeline (a truthy ``WHERE b`` was
+         4145 on T-SQL). Now a real SubqueryExpression with a
+         quantifier field; the emitter re-attaches the keyword and the
+         inner query maps fully. Measured: mysql→tsql **21 → 20**
+         (validity 99.7%). Discovery HOLDS 0. Tests:
+         TestWave234QuantifiedSubquery (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

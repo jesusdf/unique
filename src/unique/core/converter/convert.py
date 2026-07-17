@@ -623,6 +623,15 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
                 operand=SubqueryExpression(query=_convert_select(inner)),
             )
         return RawSQL(sql=_source_sql(expr), reason="Complex EXISTS")
+    # ALL/ANY/SOME quantified subquery (``> ALL (SELECT …)``): sqlglot
+    # models the subquery, but unconverted it kept a RawSQL whose inner
+    # WHERE never saw the mapping pipeline (wave 234). Convert the
+    # subquery; the emitter re-attaches the quantifier keyword.
+    if isinstance(expr, (exp.All, exp.Any)):
+        inner = expr.this
+        if isinstance(inner, (exp.Select, exp.SetOperation)):
+            kw = "ALL" if isinstance(expr, exp.All) else "ANY"
+            return SubqueryExpression(query=_convert_select(inner), quantifier=kw)
     if isinstance(expr, exp.Null):
         return Literal(value=None, dtype="null")
     # EXTRACT/DATEPART -> a FunctionCall the emitter renders as EXTRACT(part FROM x).

@@ -259,6 +259,9 @@ class SubqueryExpression(ASTNode):
     # Derived-table alias when the subquery is a FROM/JOIN relation
     # (``(SELECT …) t``); None for a scalar subquery.
     alias: str | None = None
+    # Quantifier keyword for a ``> ALL/ANY/SOME (subquery)`` comparison
+    # operand; None for a plain scalar/derived subquery.
+    quantifier: str | None = None
 
 
 @dataclass(frozen=True)
