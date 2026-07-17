@@ -423,6 +423,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
 - src: `SELECT HEX(255) AS r, BIN(5) AS b`
 
+## my-hex-str-add  (mysql)
+- targets: postgresql(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=(('16',),)`
+- src: `SELECT '0x10' + 0 AS r`
+
+## my-ifnull-empty  (mysql)
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('',),) target=(('NULL',),)`
+- src: `SELECT IFNULL('', NULL) AS r`
+
 ## my-inet  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN`
@@ -577,6 +587,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
 - src: `SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)`
+
+## my-mod-zero  (mysql)
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT 5 MOD 0 IS NULL AS r`
 
 ## my-month-overflow  (mysql)
 - targets: tsql(func)
@@ -2716,4 +2731,4 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 528 distinct constructs; defect rows by kind: func 280, invalid 726, semantic 2, silent-drop 75.
+Totals: 531 distinct constructs; defect rows by kind: func 283, invalid 726, semantic 2, silent-drop 75.

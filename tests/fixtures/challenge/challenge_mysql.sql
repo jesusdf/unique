@@ -233,6 +233,12 @@ SELECT MD5('abc'), SHA1('abc'), SHA2('abc', 256)
 -- CASE[open]: my-hex-bin — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT HEX(255) AS r, BIN(5) AS b
 
+-- CASE[open]: my-hex-str-add — fails on postgresql. FUNC-DIFF: source=(('0',),) target=(('16',),)
+SELECT '0x10' + 0 AS r
+
+-- CASE[open]: my-ifnull-empty — fails on oracle. FUNC-DIFF: source=(('',),) target=(('NULL',),)
+SELECT IFNULL('', NULL) AS r
+
 -- CASE[open]: my-inet — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
 SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)
 
@@ -325,6 +331,9 @@ SELECT MAKE_SET(3, 'a', 'b', 'c') AS r
 
 -- CASE[open]: my-makedate — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)
+
+-- CASE[open]: my-mod-zero — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT 5 MOD 0 IS NULL AS r
 
 -- CASE[open]: my-month-overflow — fails on tsql. FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)
 SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r
