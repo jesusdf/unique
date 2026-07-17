@@ -145,6 +145,9 @@ CREATE TABLE t (a NUMBER); INSERT /*+ APPEND */ INTO t SELECT 1 FROM DUAL
 -- CASE[open]: ora-instr-case — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('1',),)
 SELECT INSTR('aAaA', 'A') AS r FROM DUAL
 
+-- CASE[open]: ora-instr-empty — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('0',),)
+SELECT INSTR('abc', '') AS r FROM DUAL
+
 -- CASE[open]: ora-interval-tochar — fails on postgresql. FUNC-DIFF: source=(('+02 03:04:05.000000',),) target=(('2 days 03:04:05',),)
 SELECT TO_CHAR(INTERVAL '2 3:04:05.000' DAY TO SECOND) AS r FROM DUAL
 

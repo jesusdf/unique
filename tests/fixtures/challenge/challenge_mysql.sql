@@ -47,6 +47,9 @@ SELECT SUBSTRING(UNHEX('48656C6C6F'), 1, 2) AS r
 -- CASE[open]: my-bit-agg — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT BIT_XOR(x), BIT_OR(x) FROM (SELECT 1 x UNION SELECT 2) t
 
+-- CASE[open]: my-bit-char-len — fails on postgresql. FUNC-DIFF: source=(('24', '1', '3'),) target=(('24', '1', '1'),)
+SELECT BIT_LENGTH('€'), CHAR_LENGTH('€'), LENGTH('€')
+
 -- CASE[open]: my-bit-count — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT BIT_COUNT(255) AS r
 
@@ -317,6 +320,9 @@ SELECT LOCATE('a', 'ABC') AS r
 -- CASE[open]: my-locate-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT LOCATE('', '') AS r
 
+-- CASE[open]: my-locate-empty2 — fails on oracle, tsql. FUNC-DIFF: source=(('1', '1'),) target=(('0', '0'),)
+SELECT LOCATE('', 'abc'), INSTR('abc', '')
+
 -- CASE[open]: my-log-2arg — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('0.333333',),)
 SELECT LOG(2, 8) AS r
 
@@ -464,6 +470,9 @@ SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r
 
 -- CASE[open]: my-trim-leading — fails on postgresql, tsql. FUNC-DIFF: source=(('7',),) target=(('',),)
 SELECT TRIM(LEADING '0' FROM '007') AS r
+
+-- CASE[open]: my-trim-trailing — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
+SELECT TRIM(TRAILING '.' FROM 'abc...') AS r
 
 -- CASE[open]: my-ts-to-date — fails on postgresql. FUNC-DIFF: source=(('2020-01-01',),) target=(('2020-01-01 14:30:00+00:00',),)
 SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r
