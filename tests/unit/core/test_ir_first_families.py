@@ -415,3 +415,18 @@ class TestOrderedStringAggInIr:
         assert (
             out is not None and "GROUP_CONCAT(a ORDER BY a SEPARATOR ', ')" in out
         ), out
+
+
+class TestNestedSubqueryExpression:
+    """A double-parenthesized scalar subquery converts structurally: the
+    'Complex subquery' fallback rendered it in sqlglot's GENERIC dialect
+    inside routine bodies (GROUP_CONCAT leaked onto T-SQL)."""
+
+    def test_double_paren_ordered_agg_to_tsql(self) -> None:
+        out = _ir(
+            "postgresql",
+            "tsql",
+            "SELECT 'rows = ' || ((SELECT string_agg(a, ', ' ORDER BY a) FROM t))",
+        )
+        assert out is not None and "WITHIN GROUP (ORDER BY a)" in out, out
+        assert "GROUP_CONCAT" not in out.upper(), out

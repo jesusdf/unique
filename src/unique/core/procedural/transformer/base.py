@@ -3640,7 +3640,10 @@ class ProceduralTransformer:
             sql = re.sub(r"(?i)\bE\s*(?=')", "", sql)
         if self._source == "postgresql" and self._target != "postgresql":
             sql = self._pg_cast_to_ansi(sql)
-            if self._target == "tsql":
+            if self._target == "tsql" and not ir_first:
+                # A TARGET-spelling text step: IR-first handles the in-call
+                # aggregate ORDER BY natively from the ORIGINAL spelling —
+                # pre-rewriting hands the IR an unparseable hybrid.
                 sql = self._string_agg_within_group(sql)
             from unique.core.converter import PG_DOMAIN_TYPES
 

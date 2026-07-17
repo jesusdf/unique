@@ -774,6 +774,11 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return _convert_is(expr)
     if isinstance(expr, exp.Subquery):
         inner = expr.this
+        # A double-parenthesized scalar subquery nests Subquery/Paren:
+        # unwrap — the "Complex subquery" fallback rendered it in sqlglot's
+        # GENERIC dialect inside routine bodies.
+        while isinstance(inner, (exp.Subquery, exp.Paren)):
+            inner = inner.this
         if isinstance(inner, (exp.Select, exp.SetOperation)):
             return SubqueryExpression(
                 query=_convert_select(inner), alias=expr.alias or None
@@ -783,6 +788,11 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return _convert_window(expr)
     if isinstance(expr, exp.Paren):
         return convert_expression(expr.this)
+    # A bare Select in expression position (a double-parenthesized scalar
+    # subquery unwraps to one): model it — the unhandled fallback rendered
+    # it in sqlglot's GENERIC dialect inside routine bodies.
+    if isinstance(expr, (exp.Select, exp.SetOperation)):
+        return SubqueryExpression(query=_convert_select(expr), alias=None)
     if isinstance(expr, exp.Ordered):
         return _convert_ordered(expr)
     # MySQL charset introducer (_utf8'x'): the charset tag is MySQL-only
