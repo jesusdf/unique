@@ -322,6 +322,9 @@ SELECT MAKE_DATE(2020, 6, 15), MAKE_TIME(10, 30, 0)
 -- CASE[open]: pg-math-log — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT LOG(10, 100), LN(2.718), POWER(2, 8), SQRT(16)
 
+-- CASE[open]: pg-matview-nodata — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE MATERIALIZED VIEW mv AS SELECT 1 AS x WITH NO DATA
+
 -- CASE[open]: pg-md5 — fails on oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT MD5('abc') AS r
 
@@ -437,6 +440,9 @@ SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)
 -- CASE[open]: pg-round-2675 — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('2.68',),) target=(('3',),)
 SELECT ROUND(2.675::numeric, 2) AS r
 
+-- CASE[open]: pg-rule — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a INT); CREATE RULE r AS ON DELETE TO t DO INSTEAD NOTHING
+
 -- CASE[open]: pg-savepoint — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG
 BEGIN; SAVEPOINT sp; ROLLBACK TO SAVEPOINT sp; COMMIT
 
@@ -481,6 +487,9 @@ SELECT SUBSTRING('abcdef', 0, 3) AS r
 
 -- CASE[open]: pg-substring-regex — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib
 SELECT SUBSTRING('a1b2' FROM '[0-9]+') AS r
+
+-- CASE[open]: pg-synonym-as-view — fails on oracle. ORA-00955: name is already used by an existing object
+CREATE TABLE t (a INT); CREATE VIEW syn AS SELECT * FROM t
 
 -- CASE[open]: pg-system-funcs — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT version(), current_database(), current_user, pg_backend_pid()

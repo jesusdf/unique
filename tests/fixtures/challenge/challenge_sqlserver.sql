@@ -113,6 +113,14 @@ SELECT DATETIMEFROMPARTS(2020, 6, 15, 10, 30, 0, 0) AS r
 -- CASE[open]: ts-datetimeoffset — fails on mysql, oracle. ORA-03060: Data type TIME is invalid.
 CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))
 
+-- CASE[open]: ts-ddl-trigger — fails on mysql, oracle, postgresql. ORA-00942: table or view "SYSTEM"."DATABASE" does not exist
+CREATE TRIGGER trg ON DATABASE FOR CREATE_TABLE AS BEGIN PRINT 'created'; END
+
+-- CASE[open]: ts-default-nextval — fails on mysql, oracle, postgresql. ORA-04044: procedure, function, package, or type is not allowed here
+CREATE SEQUENCE s AS INT START WITH 1;
+GO
+CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)
+
 -- CASE[open]: ts-emoji-len — fails on mysql, postgresql. FUNC-DIFF: source=(('2',),) target=(('1',),)
 SELECT LEN(N'😀') AS r
 
@@ -302,6 +310,11 @@ SELECT * FROM STRING_SPLIT('a,b,c', ',') WHERE value <> 'b'
 
 -- CASE[open]: ts-stuff — fails on mysql, oracle, postgresql. ORA-00904: "STUFF": invalid identifier
 SELECT STUFF('abcdef', 2, 3, 'XY') AS r
+
+-- CASE[open]: ts-synonym — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a INT);
+GO
+CREATE SYNONYM syn FOR dbo.t
 
 -- CASE[open]: ts-sysdatetime — fails on mysql, oracle, postgresql. ORA-00904: "GETUTCDATE": invalid identifier
 SELECT SYSDATETIME(), SYSUTCDATETIME(), GETUTCDATE()

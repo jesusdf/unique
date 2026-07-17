@@ -93,8 +93,16 @@ SELECT SYSDATE + 1 AS r FROM DUAL
 -- CASE[open]: ora-day-of-week — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('24',),)
 SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL
 
+-- CASE[open]: ora-ddl-trigger — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TRIGGER trg BEFORE CREATE ON SCHEMA BEGIN NULL; END;
+/
+
 -- CASE[open]: ora-decode-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('match',),) target=(('no',),)
 SELECT DECODE(NULL, NULL, 'match', 'no') AS r FROM DUAL
+
+-- CASE[open]: ora-default-nextval — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE SEQUENCE s;
+CREATE TABLE t (id NUMBER DEFAULT s.NEXTVAL, a NUMBER)
 
 -- CASE[open]: ora-div — fails on postgresql, tsql. FUNC-DIFF: source=(('2.5',),) target=(('2',),)
 SELECT 5 / 2 AS r FROM DUAL
@@ -196,6 +204,13 @@ SELECT deptno, LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) OVER (PARTITION BY dept
 -- CASE[open]: ora-lnnvl — fails on mysql, postgresql, tsql. (102, b"Incorrect syntax near '='.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 SELECT LNNVL(1 = 2) AS r FROM DUAL WHERE LNNVL(1 = 2)
 
+-- CASE[open]: ora-logon-trigger — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TRIGGER trg AFTER LOGON ON DATABASE BEGIN NULL; END;
+/
+
+-- CASE[open]: ora-matview-options — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE MATERIALIZED VIEW mv BUILD DEFERRED REFRESH COMPLETE ON DEMAND AS SELECT 1 AS x FROM DUAL
+
 -- CASE[open]: ora-month-name — fails on mysql. FUNC-DIFF: source=(('June',),) target=(('Month',),)
 SELECT TO_CHAR(DATE '2020-06-01', 'Month') AS r FROM DUAL
 
@@ -258,6 +273,9 @@ CREATE FUNCTION f RETURN SYS.ODCINUMBERLIST PIPELINED AS BEGIN PIPE ROW(1); PIPE
 
 -- CASE[open]: ora-pk-using-index — fails on mysql, postgresql, tsql. (1018, b"Incorrect syntax near 'INDEX'. If this is intended as a part of a table hint, A W
 CREATE TABLE t (id NUMBER, CONSTRAINT pk PRIMARY KEY (id) USING INDEX)
+
+-- CASE[open]: ora-public-synonym — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE PUBLIC SYNONYM psyn FOR t
 
 -- CASE[open]: ora-ratio-to-report — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT RATIO_TO_REPORT(x) OVER () FROM (SELECT 1 x FROM DUAL)
@@ -335,6 +353,10 @@ CREATE PROCEDURE p AS BEGIN NULL; EXCEPTION WHEN NO_DATA_FOUND THEN RAISE; WHEN 
 
 -- CASE[open]: ora-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('de',),) target=(('',),)
 SELECT SUBSTR('abcdef', -3, 2) AS r FROM DUAL
+
+-- CASE[open]: ora-synonym — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a NUMBER);
+CREATE SYNONYM syn FOR t
 
 -- CASE[open]: ora-sys-connect-path — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT SYS_CONNECT_BY_PATH(id, '/') AS p FROM (SELECT 1 id, NULL par FROM DUAL) START WITH par IS NULL CONNECT BY PRIOR id = par

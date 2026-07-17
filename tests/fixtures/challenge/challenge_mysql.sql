@@ -131,6 +131,10 @@ SELECT '' = 0 AS r
 -- CASE[open]: my-eq-mix — fails on oracle, tsql. FUNC-DIFF: source=(('1', '0', '1'),) target=(('1', '1', '1'),)
 SELECT 1 = 1.0 AS r, 'a' = 'a ' AS b, 1 = TRUE AS c
 
+-- CASE[open]: my-event-scheduler — fails on oracle, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a INT);
+CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0
+
 -- CASE[open]: my-export-set — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXPORT_SET(5, 'Y', 'N', ',', 4) AS r
 

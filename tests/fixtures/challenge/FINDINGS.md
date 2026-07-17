@@ -220,6 +220,12 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('1', '0', '1'),) target=(('1', '1', '1'),)`
 - src: `SELECT 1 = 1.0 AS r, 'a' = 'a ' AS b, 1 = TRUE AS c`
 
+## my-event-scheduler  (mysql)
+- targets: oracle(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a INT);
+CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
+
 ## my-export-set  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
@@ -759,10 +765,22 @@ CREATE TRIGGER trg FOR UPDATE ON t COMPOUND TRIGGER BEFORE EACH ROW IS BEGIN NUL
 - live error: `FUNC-DIFF: source=(('1',),) target=(('24',),)`
 - src: `SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL`
 
+## ora-ddl-trigger  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TRIGGER trg BEFORE CREATE ON SCHEMA BEGIN NULL; END;
+/`
+
 ## ora-decode-null  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('match',),) target=(('no',),)`
 - src: `SELECT DECODE(NULL, NULL, 'match', 'no') AS r FROM DUAL`
+
+## ora-default-nextval  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE SEQUENCE s;
+CREATE TABLE t (id NUMBER DEFAULT s.NEXTVAL, a NUMBER)`
 
 ## ora-div  (oracle)
 - targets: postgresql(func), tsql(func)
@@ -928,6 +946,17 @@ INSERT ALL WHEN a > 0 THEN INTO t VALUES (a) SELECT 1 a FROM DUAL`
 - live error: `(102, b"Incorrect syntax near '='.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
 - src: `SELECT LNNVL(1 = 2) AS r FROM DUAL WHERE LNNVL(1 = 2)`
 
+## ora-logon-trigger  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TRIGGER trg AFTER LOGON ON DATABASE BEGIN NULL; END;
+/`
+
+## ora-matview-options  (oracle)
+- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE MATERIALIZED VIEW mv BUILD DEFERRED REFRESH COMPLETE ON DEMAND AS SELECT 1 AS x FROM DUAL`
+
 ## ora-month-name  (oracle)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('June',),) target=(('Month',),)`
@@ -1025,6 +1054,11 @@ CREATE PACKAGE BODY pkg AS FUNCTION f(x NUMBER) RETURN NUMBER`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(1018, b"Incorrect syntax near 'INDEX'. If this is intended as a part of a table hint, A W`
 - src: `CREATE TABLE t (id NUMBER, CONSTRAINT pk PRIMARY KEY (id) USING INDEX)`
+
+## ora-public-synonym  (oracle)
+- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE PUBLIC SYNONYM psyn FOR t`
 
 ## ora-ratio-to-report  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1128,6 +1162,12 @@ SELECT seq.NEXTVAL FROM DUAL`
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('de',),) target=(('',),)`
 - src: `SELECT SUBSTR('abcdef', -3, 2) AS r FROM DUAL`
+
+## ora-synonym  (oracle)
+- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a NUMBER);
+CREATE SYNONYM syn FOR t`
 
 ## ora-sys-connect-path  (oracle)
 - targets: mysql(invalid)
@@ -1756,6 +1796,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT LOG(10, 100), LN(2.718), POWER(2, 8), SQRT(16)`
 
+## pg-matview-nodata  (postgresql)
+- targets: mysql(carrier), oracle(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE MATERIALIZED VIEW mv AS SELECT 1 AS x WITH NO DATA`
+
 ## pg-md5  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever`
@@ -1938,6 +1983,11 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - live error: `FUNC-DIFF: source=(('2.68',),) target=(('3',),)`
 - src: `SELECT ROUND(2.675::numeric, 2) AS r`
 
+## pg-rule  (postgresql)
+- targets: mysql(carrier), oracle(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a INT); CREATE RULE r AS ON DELETE TO t DO INSTEAD NOTHING`
+
 ## pg-savepoint  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG`
@@ -2012,6 +2062,11 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib`
 - src: `SELECT SUBSTRING('a1b2' FROM '[0-9]+') AS r`
+
+## pg-synonym-as-view  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-00955: name is already used by an existing object`
+- src: `CREATE TABLE t (a INT); CREATE VIEW syn AS SELECT * FROM t`
 
 ## pg-system-funcs  (postgresql)
 - targets: mysql(invalid)
@@ -2366,6 +2421,18 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - live error: `ORA-03060: Data type TIME is invalid.`
 - src: `CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))`
 
+## ts-ddl-trigger  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00942: table or view "SYSTEM"."DATABASE" does not exist`
+- src: `CREATE TRIGGER trg ON DATABASE FOR CREATE_TABLE AS BEGIN PRINT 'created'; END`
+
+## ts-default-nextval  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-04044: procedure, function, package, or type is not allowed here`
+- src: `CREATE SEQUENCE s AS INT START WITH 1;
+GO
+CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
+
 ## ts-emoji-len  (tsql)
 - targets: mysql(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('1',),)`
@@ -2638,6 +2705,13 @@ EXEC sp_rename 't.a', 'x', 'COLUMN'`
 - live error: `ORA-00904: "STUFF": invalid identifier`
 - src: `SELECT STUFF('abcdef', 2, 3, 'XY') AS r`
 
+## ts-synonym  (tsql)
+- targets: mysql(carrier), oracle(carrier), postgresql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a INT);
+GO
+CREATE SYNONYM syn FOR dbo.t`
+
 ## ts-sysdatetime  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "GETUTCDATE": invalid identifier`
@@ -2739,4 +2813,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 531 distinct constructs; defect rows by kind: carrier 105, func 206, invalid 689, semantic 2, silent-drop 73.
+Totals: 544 distinct constructs; defect rows by kind: carrier 126, func 206, invalid 699, semantic 2, silent-drop 73.
