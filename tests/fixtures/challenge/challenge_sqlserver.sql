@@ -234,6 +234,9 @@ SELECT * FROM t WITH (NOLOCK)
 -- CASE[open]: ts-openjson — fails on mysql, oracle, postgresql. ORA-00904: "OPEN_J_S_O_N": invalid identifier
 SELECT * FROM OPENJSON('[1,2,3]')
 
+-- CASE[open]: ts-order-strings — fails on mysql. FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), 
+SELECT x FROM (VALUES ('banana'),('Apple'),('cherry'),('Banana')) v(x) ORDER BY x
+
 -- CASE[open]: ts-patindex — fails on mysql, oracle, postgresql. ORA-00904: "PATINDEX": invalid identifier
 SELECT PATINDEX('%[0-9]%', 'abc123') AS r
 

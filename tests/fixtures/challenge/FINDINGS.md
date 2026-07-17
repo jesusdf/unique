@@ -215,6 +215,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(2716, b'Column, parameter, or variable #1: Cannot specify a column width on data type dat`
 - src: `CREATE TABLE t (a DATETIME(6), b TIMESTAMP(3), c YEAR)`
 
+## my-distinct-case  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('a',), ('B',)) target=(('A',), ('B',))`
+- src: `SELECT DISTINCT x FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'a' x UNION ALL SELECT 'B' x) t ORDER BY x`
+
 ## my-div  (mysql)
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2.5',),) target=(('2',),)`
@@ -295,6 +300,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('B',),) target=(('a',),)`
 - src: `SELECT GREATEST('a', 'B') AS r`
+
+## my-group-case  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('a', '2'), ('b', '1')) target=(('A', '2'), ('b', '1'))`
+- src: `SELECT x, COUNT(*) FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'b' x) t GROUP BY x ORDER BY x`
 
 ## my-group-concat  (mysql)
 - targets: postgresql(invalid)
@@ -460,6 +470,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - targets: tsql(invalid)
 - live error: `(2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se`
 - src: `CREATE TABLE t (a DECIMAL(20,4), b FLOAT(10,2), c DOUBLE)`
+
+## my-order-strings  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('Apple',), ('banana',), ('Banana',), ('cherry',)) target=(('Apple',), `
+- src: `SELECT x FROM (SELECT 'banana' x UNION ALL SELECT 'Apple' x UNION ALL SELECT 'cherry' x UNION ALL SELECT 'Banana' x) t ORDER BY x`
 
 ## my-partition-hash  (mysql)
 - targets: oracle(carrier), postgresql(carrier), tsql(carrier)
@@ -700,6 +715,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'SQL_CALC_FOUND_ROWS|FOUND' absent from valid tsql output, no warning`
 - src: `SELECT SQL_CALC_FOUND_ROWS x FROM (SELECT 1 x) t LIMIT 1`
+
+## or-order-strings  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), `
+- src: `SELECT x FROM (SELECT 'banana' x FROM DUAL UNION ALL SELECT 'Apple' x FROM DUAL UNION ALL SELECT 'cherry' x FROM DUAL UNION ALL SE`
 
 ## ora-add-constraint-state  (oracle)
 - targets: mysql(carrier), postgresql(carrier), tsql(carrier)
@@ -2371,6 +2391,21 @@ CREATE TRIGGE`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.xp`
 - src: `SELECT xpath('/a/text()', '<a>1</a>'::xml)`
 
+## po-distinct-case  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('A',), ('B',), ('a',)) target=(('A',), ('B',))`
+- src: `SELECT DISTINCT x FROM (VALUES ('a'),('A'),('a'),('B')) v(x) ORDER BY x`
+
+## po-group-case  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('A', '1'), ('a', '1'), ('b', '1')) target=(('A', '2'), ('b', '1'))`
+- src: `SELECT x, COUNT(*) FROM (VALUES ('a'),('A'),('b')) v(x) GROUP BY x ORDER BY x`
+
+## po-order-strings  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), `
+- src: `SELECT x FROM (VALUES ('banana'),('Apple'),('cherry'),('Banana')) v(x) ORDER BY x`
+
 ## postgresql-drop-CHECK  (postgresql)
 - targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'CHECK' absent from valid tsql output, no warning (target supports it)`
@@ -2771,6 +2806,11 @@ SELECT * FROM t WITH (NOLOCK)`
 - live error: `ORA-00904: "OPEN_J_S_O_N": invalid identifier`
 - src: `SELECT * FROM OPENJSON('[1,2,3]')`
 
+## ts-order-strings  (tsql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), `
+- src: `SELECT x FROM (VALUES ('banana'),('Apple'),('cherry'),('Banana')) v(x) ORDER BY x`
+
 ## ts-patindex  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "PATINDEX": invalid identifier`
@@ -2984,4 +3024,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 577 distinct constructs; defect rows by kind: carrier 135, func 217, invalid 742, semantic 2, silent-drop 73.
+Totals: 585 distinct constructs; defect rows by kind: carrier 135, func 233, invalid 742, semantic 2, silent-drop 73.

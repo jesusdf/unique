@@ -22,6 +22,9 @@ END;
 
 -- ===== RED-found open findings (validated live; see FINDINGS.md) =====
 
+-- CASE[open]: or-order-strings — fails on mysql. FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), 
+SELECT x FROM (SELECT 'banana' x FROM DUAL UNION ALL SELECT 'Apple' x FROM DUAL UNION ALL SELECT 'cherry' x FROM DUAL UNION ALL SELECT 'Banana' x FROM DUAL) ORDER BY x
+
 -- CASE[open]: ora-add-constraint-state — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (a NUMBER, b NUMBER);
 ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENABLE NOVALIDATE
