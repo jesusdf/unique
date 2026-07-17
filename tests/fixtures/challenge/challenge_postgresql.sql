@@ -139,6 +139,9 @@ CREATE ROLE r LOGIN PASSWORD 'x'
 -- CASE[open]: pg-cte-cycle — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n<3) CYCLE n SET is_cycle USING path SELECT * FROM r
 
+-- CASE[open]: pg-cte-delete-insert — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id INT, n INT, s VARCHAR(50)); WITH moved AS (DELETE FROM t WHERE n < 0 RETURNING *) INSERT INTO t SELECT * FROM moved
+
 -- CASE[open]: pg-cte-search — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n<3) SEARCH DEPTH FIRST BY n SET ord SELECT * FROM r
 
@@ -229,6 +232,9 @@ CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a 
 -- CASE[open]: pg-fulltext — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT to_tsvector('a cat') @@ to_tsquery('cat') AS r
 
+-- CASE[open]: pg-fulltext2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
+CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id FROM t WHERE to_tsvector('english', s) @@ plainto_tsquery('english', 'term')
+
 -- CASE[open]: pg-generate-series — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT generate_series(1, 5) AS r
 
@@ -253,6 +259,9 @@ SELECT x, SUM(y) FROM (VALUES (1,10)) v(x,y) GROUP BY GROUPING SETS ((x),())
 -- CASE[open]: pg-hex-literal — fails on oracle. ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ
 SELECT x'FF'::int AS h, 1.5e3 AS s
 
+-- CASE[open]: pg-ilike-any — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id, n FROM t WHERE s ILIKE '%abc%' AND n = ANY(ARRAY[1,2,3])
+
 -- CASE[open]: pg-inheritance — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE parent (id INT); CREATE TABLE child () INHERITS (parent)
 
@@ -261,6 +270,9 @@ SELECT INITCAP('hello world') AS r
 
 -- CASE[open]: pg-insert-returning — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id INT, n INT); INSERT INTO t (id, n) VALUES (1, 5) RETURNING id
+
+-- CASE[open]: pg-insert-select-conflict — fails on mysql, oracle, tsql. (208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:
+CREATE TABLE t (id INT, n INT, s VARCHAR(50)); INSERT INTO t (id, n) SELECT g, g*2 FROM generate_series(1,5) g ON CONFLICT DO NOTHING
 
 -- CASE[open]: pg-intdiv — fails on mysql, oracle. FUNC-DIFF: source=(('2',),) target=(('2.5',),)
 SELECT 5 / 2 AS r
@@ -339,6 +351,9 @@ CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; E
 
 -- CASE[open]: pg-named-exception — fails on oracle, tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
 CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1/0; EXCEPTION WHEN division_by_zero THEN RETURN -1; WHEN OTHERS THEN RAISE; END; $$ LANGUAGE plpgsql
+
+-- CASE[open]: pg-named-window2 — fails on oracle. ORA-30485: missing ORDER BY expression in the window specification
+CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id, LAG(n) OVER w, LEAD(n) OVER w FROM t WINDOW w AS (PARTITION BY s ORDER BY id)
 
 -- CASE[open]: pg-nested-call — fails on oracle. PROCEDURE OUTER_P compiled INVALID (line 4): PLS-00201: identifier 'INNER_P' must be decla
 CREATE PROCEDURE outer_p() AS $$ BEGIN CALL inner_p(); END; $$ LANGUAGE plpgsql
@@ -555,6 +570,9 @@ SELECT U&'\0041' AS r
 
 -- CASE[open]: pg-unnest — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT UNNEST(ARRAY[1,2,3]) AS r
+
+-- CASE[open]: pg-update-from-window — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (id INT, n INT, s VARCHAR(50)); UPDATE t SET n = s.rn FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY id) rn FROM t) s WHERE t.id = s.id
 
 -- CASE[open]: pg-update-returning — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id INT, n INT); UPDATE t SET n = 1 RETURNING id, n

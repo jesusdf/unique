@@ -192,6 +192,10 @@ SELECT LAST_VALUE(x IGNORE NULLS) OVER (ORDER BY x) FROM (SELECT 1 x FROM DUAL)
 -- CASE[open]: ora-length-trailing — fails on tsql. FUNC-DIFF: source=(('6',),) target=(('3',),)
 SELECT LENGTH('abc   ') AS r FROM DUAL
 
+-- CASE[open]: ora-level-recursive — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id NUMBER, n NUMBER, s VARCHAR2(50));
+SELECT LEVEL n FROM DUAL CONNECT BY LEVEL <= 10
+
 -- CASE[open]: ora-level2 — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= 3
 
@@ -210,6 +214,10 @@ CREATE TRIGGER trg AFTER LOGON ON DATABASE BEGIN NULL; END;
 
 -- CASE[open]: ora-matview-options — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE MATERIALIZED VIEW mv BUILD DEFERRED REFRESH COMPLETE ON DEMAND AS SELECT 1 AS x FROM DUAL
+
+-- CASE[open]: ora-merge-insert-only — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id NUMBER, n NUMBER, s VARCHAR2(50));
+MERGE INTO t d USING (SELECT 1 id, 2 n FROM DUAL) s ON (d.id=s.id) WHEN NOT MATCHED THEN INSERT (id, n) VALUES (s.id, s.n)
 
 -- CASE[open]: ora-month-name — fails on mysql. FUNC-DIFF: source=(('June',),) target=(('Month',),)
 SELECT TO_CHAR(DATE '2020-06-01', 'Month') AS r FROM DUAL

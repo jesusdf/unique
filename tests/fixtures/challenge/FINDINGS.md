@@ -446,6 +446,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `relation "orders" already exists`
 - src: `CREATE TABLE orders (id INT AUTO_INCREMENT PRIMARY KEY, customer_id INT NOT NULL, total DECIMAL(10,2) DEFAULT 0, created TIMESTAMP`
 
+## my-recursive-cte2  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-32039: missing column alias list in recursive WITH clause element SEQ`
+- src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); WITH RECURSIVE seq AS (SELECT 1 n UNION ALL SELECT n+1 FROM seq WHERE n<10) SELECT`
+
 ## my-recursive-func  (mysql)
 - targets: tsql(invalid)
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
@@ -926,6 +931,12 @@ INSERT ALL WHEN a > 0 THEN INTO t VALUES (a) SELECT 1 a FROM DUAL`
 - live error: `FUNC-DIFF: source=(('6',),) target=(('3',),)`
 - src: `SELECT LENGTH('abc   ') AS r FROM DUAL`
 
+## ora-level-recursive  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id NUMBER, n NUMBER, s VARCHAR2(50));
+SELECT LEVEL n FROM DUAL CONNECT BY LEVEL <= 10`
+
 ## ora-level2  (oracle)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -956,6 +967,12 @@ INSERT ALL WHEN a > 0 THEN INTO t VALUES (a) SELECT 1 a FROM DUAL`
 - targets: mysql(carrier), postgresql(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE MATERIALIZED VIEW mv BUILD DEFERRED REFRESH COMPLETE ON DEMAND AS SELECT 1 AS x FROM DUAL`
+
+## ora-merge-insert-only  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id NUMBER, n NUMBER, s VARCHAR2(50));
+MERGE INTO t d USING (SELECT 1 id, 2 n FROM DUAL) s ON (d.id=s.id) WHEN NOT`
 
 ## ora-month-name  (oracle)
 - targets: mysql(func)
@@ -1491,6 +1508,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n<3) CYCLE n SET is_cycle USING path SELECT * FROM r`
 
+## pg-cte-delete-insert  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); WITH moved AS (DELETE FROM t WHERE n < 0 RETURNING *) INSERT INTO t SELECT * FROM m`
+
 ## pg-cte-search  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -1641,6 +1663,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
 - src: `SELECT to_tsvector('a cat') @@ to_tsquery('cat') AS r`
 
+## pg-fulltext2  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
+- src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id FROM t WHERE to_tsvector('english', s) @@ plainto_tsquery('english', 'ter`
+
 ## pg-generate-series  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
@@ -1681,6 +1708,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ`
 - src: `SELECT x'FF'::int AS h, 1.5e3 AS s`
 
+## pg-ilike-any  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id, n FROM t WHERE s ILIKE '%abc%' AND n = ANY(ARRAY[1,2,3])`
+
 ## pg-inheritance  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -1695,6 +1727,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE t (id INT, n INT); INSERT INTO t (id, n) VALUES (1, 5) RETURNING id`
+
+## pg-insert-select-conflict  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:`
+- src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); INSERT INTO t (id, n) SELECT g, g*2 FROM generate_series(1,5) g ON CONFLICT DO NOTH`
 
 ## pg-intdiv  (postgresql)
 - targets: mysql(func), oracle(func)
@@ -1825,6 +1862,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro`
 - src: `CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1/0; EXCEPTION WHEN division_by_zero THEN RETURN -1; WHEN OTHERS THEN RAISE; EN`
+
+## pg-named-window2  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-30485: missing ORDER BY expression in the window specification`
+- src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id, LAG(n) OVER w, LEAD(n) OVER w FROM t WINDOW w AS (PARTITION BY s ORDER B`
 
 ## pg-nested-call  (postgresql)
 - targets: oracle(invalid)
@@ -2167,6 +2209,11 @@ CREATE TRIGGE`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT UNNEST(ARRAY[1,2,3]) AS r`
 
+## pg-update-from-window  (postgresql)
+- targets: mysql(carrier), oracle(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (id INT, n INT, s VARCHAR(50)); UPDATE t SET n = s.rn FROM (SELECT id, ROW_NUMBER() OVER (ORDER BY id) rn FROM t) s`
+
 ## pg-update-returning  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -2432,6 +2479,13 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - src: `CREATE SEQUENCE s AS INT START WITH 1;
 GO
 CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
+
+## ts-delete-cte  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT, n INT, s NVARCHAR(50));
+GO
+WITH cte AS (SELECT id, ROW_NUMBER() OVER (PARTITION BY n ORDER BY id) rn FROM`
 
 ## ts-emoji-len  (tsql)
 - targets: mysql(func), postgresql(func)
@@ -2813,4 +2867,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 544 distinct constructs; defect rows by kind: carrier 126, func 206, invalid 699, semantic 2, silent-drop 73.
+Totals: 554 distinct constructs; defect rows by kind: carrier 129, func 206, invalid 712, semantic 2, silent-drop 73.

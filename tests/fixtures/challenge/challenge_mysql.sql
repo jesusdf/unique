@@ -268,6 +268,9 @@ SELECT PERIOD_DIFF(202006, 202001) AS r
 CREATE TABLE orders (id INT AUTO_INCREMENT PRIMARY KEY, customer_id INT NOT NULL, total DECIMAL(10,2) DEFAULT 0, created TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX ix_cust (customer_id), CHECK (total >= 0)) ENGINE=InnoDB;
 CREATE TRIGGER trg BEFORE INSERT ON orders FOR EACH ROW SET NEW.created = NOW();
 
+-- CASE[open]: my-recursive-cte2 — fails on oracle. ORA-32039: missing column alias list in recursive WITH clause element SEQ
+CREATE TABLE t (id INT, n INT, s VARCHAR(50)); WITH RECURSIVE seq AS (SELECT 1 n UNION ALL SELECT n+1 FROM seq WHERE n<10) SELECT * FROM seq
+
 -- CASE[open]: my-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END
 

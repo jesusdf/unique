@@ -121,6 +121,11 @@ CREATE SEQUENCE s AS INT START WITH 1;
 GO
 CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)
 
+-- CASE[open]: ts-delete-cte — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id INT, n INT, s NVARCHAR(50));
+GO
+WITH cte AS (SELECT id, ROW_NUMBER() OVER (PARTITION BY n ORDER BY id) rn FROM t) DELETE FROM cte WHERE rn > 1
+
 -- CASE[open]: ts-emoji-len — fails on mysql, postgresql. FUNC-DIFF: source=(('2',),) target=(('1',),)
 SELECT LEN(N'😀') AS r
 
