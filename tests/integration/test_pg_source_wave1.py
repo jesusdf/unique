@@ -7673,3 +7673,30 @@ class TestWave218NoBeginCallBody:
     def test_call_body_tsql(self) -> None:
         out = _t2("create procedure b3() call b1();", "mysql", "tsql")
         assert re.search(r"(?i)EXEC b1;", out), out
+
+
+class TestWave219VarRenameFunctionCalls:
+    """wave 219 (mysql-corpus): the raw-text variable rename hit
+    FUNCTION CALLS — ``count(*)`` became ``@count(*)`` when a local
+    named count existed (semantic mangle); names followed by ``(`` or
+    preceded by ``.`` stay untouched."""
+
+    def test_count_variable_shadow(self) -> None:
+        out = _t2(
+            "create function f1() returns int begin declare count int;"
+            " set count = (select count(*) from t1); return count; end",
+            "mysql",
+            "tsql",
+        )
+        assert "@count (" not in out and "@count(" not in out, out
+        assert re.search(r"(?i)count \( \* \)|count\(\*\)", out), out
+        assert re.search(r"(?i)RETURN @count", out), out
+
+    def test_dotted_column_untouched(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare data int;"
+            " update t1 set id = 2 where t1.data = 5; end",
+            "mysql",
+            "tsql",
+        )
+        assert "t1.@data" not in out, out

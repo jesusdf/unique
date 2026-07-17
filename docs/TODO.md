@@ -1083,7 +1083,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (silent loss); CALL joins the identifier-lexed no-BEGIN
          branch (REPEAT/LOOP family). Measured: mysql→oracle
          **19 → 16** (−3, validity 99.7%). Discovery HOLDS 0. Tests:
-         TestWave218NoBeginCallBody (2).**
+         TestWave218NoBeginCallBody (2).* Wave 219 (2026-07-17): the
+         raw-text variable rename hit FUNCTION CALLS — ``count(*)``
+         became ``@count(*)`` when a local named count existed
+         (semantic mangle); names followed by ``(`` or preceded by
+         ``.``/``@`` stay untouched now. Measured: mysql→tsql
+         **28 → 26** (99.6%; the wave-218 CALL fix had also rippled
+         31 → 28 in the interim remeasure), pg→tsql stable 38.
+         Discovery HOLDS 0. Tests: TestWave219VarRenameFunctionCalls
+         (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

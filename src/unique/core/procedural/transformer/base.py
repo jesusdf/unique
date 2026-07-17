@@ -592,8 +592,14 @@ class ProceduralTransformer:
                     # Case-insensitive: Oracle/PG identifiers fold case, so a
                     # body reference may be spelled differently than its
                     # declaration (live: PRINT referencing v_x vs V_X).
+                    # A name followed by ``(`` is a FUNCTION CALL, not the
+                    # variable — ``count(*)`` became ``@count(*)`` when a
+                    # local named count existed (wave 219). Dotted names
+                    # (t.count) are columns, not the variable either.
                     segment = re.sub(
-                        rf"(?i)\b{re.escape(old_name)}\b", new_name, segment
+                        rf"(?i)(?<![.@\w]){re.escape(old_name)}\b(?!\s*\()",
+                        new_name,
+                        segment,
                     )
                 return segment
 
