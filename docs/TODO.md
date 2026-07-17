@@ -1068,7 +1068,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          (error 4145). Measured: mysql→tsql stable **33** (the corpus
          instance chains further members); the fix stands on its own
          tests. Discovery HOLDS 0. Tests:
-         TestWave216InsertValuesPredicates (2).**
+         TestWave216InsertValuesPredicates (2).* Wave 217 (2026-07-17,
+         structural): embedded routine text is mid-transform — its
+         @names are RENAMED LOCALS, not session variables; the DML
+         user-var gate ate in-body INSERT/UPDATEs and pushed them to
+         the raw fallback, skipping every IR emitter fixup (the
+         alternate-routes lesson, IR_EMBEDDED-guarded now). Measured:
+         mysql→tsql **33 → 31** (validity 99.5%) and warnings 335 →
+         305 (bodies stop over-degrading); top-level @vars still gate.
+         Discovery HOLDS 0. Tests: TestWave217EmbeddedUservarGate
+         (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

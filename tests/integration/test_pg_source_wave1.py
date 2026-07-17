@@ -7637,3 +7637,24 @@ class TestWave216InsertValuesPredicates:
     def test_plain_values_untouched(self) -> None:
         out = _t2("insert into t3 (i) values (1), (2);", "mysql", "tsql")
         assert "CASE" not in out.upper(), out
+
+
+class TestWave217EmbeddedUservarGate:
+    """wave 217 (mysql-corpus): embedded routine text is mid-transform
+    — its @names are RENAMED LOCALS, not session variables; the
+    user-var gate ate in-body INSERTs and pushed them to the raw
+    fallback, skipping the IR emitters' fixups."""
+
+    def test_in_body_predicate_values(self) -> None:
+        out = _t2(
+            "create procedure p() begin declare ld date;"
+            " insert into t3 (i) values ((ld is null)); end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)CASE WHEN @ld IS NULL THEN 1", out), out
+        assert "user variable" not in out, out
+
+    def test_top_level_uservar_still_gated(self) -> None:
+        out = _t2("insert into t1 values (@value);", "mysql", "tsql")
+        assert "UNIQUE:" in out and "@value" in out, out

@@ -1411,6 +1411,14 @@ class Transformer:
         """Degrade a top-level statement referencing a MySQL @user
         variable — WHOLE, off MySQL (no equivalent: session state
         lives in the client there)."""
+        from unique.core.converter import IR_EMBEDDED
+
+        if IR_EMBEDDED.get():
+            # Embedded routine text is mid-transform: its @names are
+            # RENAMED LOCALS, not session variables (wave 217 — the
+            # gate ate in-body INSERTs and pushed them to the raw
+            # fallback, skipping the IR emitters' fixups).
+            return node
         found = self._find_user_var(node)
         if found is None:
             return node
