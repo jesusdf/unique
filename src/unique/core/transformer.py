@@ -814,16 +814,14 @@ class Transformer:
         # A ROW-vs-ROW comparison is expanded pairwise by a later pass —
         # recurse only into the tuples' contents, not the ROW shells.
         if isinstance(value, BinaryOp):
-            left_row = (
-                isinstance(value.left, FunctionCall)
-                and value.left.name.upper() == "ROW"
-            )
-            right_row = (
-                isinstance(value.right, FunctionCall)
-                and value.right.name.upper() == "ROW"
-            )
-            if left_row and right_row:
-                for arg in value.left.args + value.right.args:
+            left, right = value.left, value.right
+            if (
+                isinstance(left, FunctionCall)
+                and left.name.upper() == "ROW"
+                and isinstance(right, FunctionCall)
+                and right.name.upper() == "ROW"
+            ):
+                for arg in left.args + right.args:
                     found = self._find_composite_row_value(arg)
                     if found is not None:
                         return found
