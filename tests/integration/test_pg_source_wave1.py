@@ -6856,3 +6856,25 @@ class TestWave186PgBodySemisSetopOrder:
             "postgresql",
         )
         assert "UNIQUE:" not in out, out
+
+
+class TestWave187BinaryCapCaseTruthiness:
+    """wave 187 (mysql-corpus): MySQL BINARY casts take sizes up to
+    2^32−1 — beyond T-SQL's 8000 the type only exists as MAX; and a
+    CASE as a truth operand under AND is MySQL truthiness."""
+
+    def test_huge_binary_cast_tsql(self) -> None:
+        out = _t2("select cast('a' as binary(4294967295));", "mysql", "tsql")
+        assert re.search(r"(?i)CAST\('a' AS VARBINARY\(MAX\)\)", out), out
+
+    def test_small_binary_cast_untouched(self) -> None:
+        out = _t2("select cast('a' as binary(16));", "mysql", "tsql")
+        assert re.search(r"(?i)BINARY\(16\)", out), out
+
+    def test_case_truth_operand_tsql(self) -> None:
+        out = _t2(
+            "select 1 from t1 where a = 1 and" " case 1 when a then 1 else 1 end;",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?is)AND CASE 1.*END <> 0", out), out

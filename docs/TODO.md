@@ -865,7 +865,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          SubqueryExpression import — the DML-failed warning caught it
          in the wave test. Measured: mysql→pg **22 → 18** (−4,
          validity 99.7%). Discovery HOLDS 0. Tests:
-         TestWave186PgBodySemisSetopOrder (3).**
+         TestWave186PgBodySemisSetopOrder (3).* Wave 187 (2026-07-17): MySQL
+         BINARY casts take sizes up to 2^32−1 — beyond T-SQL's 8000
+         bytes the type only exists as MAX (cast-position cap,
+         mirroring the declare-position one); and a CASE as a truth
+         operand under AND (``a = 1 AND CASE 1 WHEN a …``) is MySQL
+         truthiness — comparisonized ``<> 0``. Measured: mysql→tsql
+         **40 → 36** (−4, validity 99.4%). Discovery HOLDS 0. Tests:
+         TestWave187BinaryCapCaseTruthiness (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

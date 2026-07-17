@@ -797,6 +797,14 @@ def _comparisonize_literals(node: ASTNode) -> ASTNode:
                 left=side.operand,
                 right=Literal(value=0, dtype="integer"),
             )
+        if isinstance(side, CaseExpression):
+            # A CASE as a truth operand (``a = 1 AND CASE 1 WHEN a …``)
+            # is MySQL truthiness too (wave 187).
+            return BinaryOp(
+                operator=BinaryOperator.NEQ,
+                left=side,
+                right=Literal(value=0, dtype="integer"),
+            )
         return _comparisonize_literals(side)
 
     return dataclasses.replace(node, left=fix(node.left), right=fix(node.right))
@@ -2681,6 +2689,21 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                 dtype += f"({', '.join(str(p) for p in node.target_type.params)})"
         elif node.target_type.params:
             dtype += f"({', '.join(str(p) for p in node.target_type.params)})"
+        if dialect == "tsql":
+            # A size beyond T-SQL's 8000-byte page types only exists as
+            # MAX (MySQL BINARY takes sizes up to 2^32-1 — wave 187).
+            m = re.fullmatch(
+                r"(?is)(N?VARCHAR|VARBINARY|BINARY|CHAR)\s*\(\s*(\d+)\s*\)", dtype
+            )
+            if m:
+                base, size = m.group(1).upper(), int(m.group(2))
+                limit = 4000 if base == "NVARCHAR" else 8000
+                if size > limit:
+                    dtype = (
+                        "VARBINARY(MAX)"
+                        if base in ("BINARY", "VARBINARY")
+                        else f"{'N' if base == 'NVARCHAR' else ''}VARCHAR(MAX)"
+                    )
         return f"CAST({inner} AS {dtype})"
 
     if isinstance(node, SubqueryExpression):
