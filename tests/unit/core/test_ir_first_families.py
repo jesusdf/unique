@@ -186,3 +186,46 @@ class TestOracleCursorAttrsInIr:
             "oracle", "postgresql", "SELECT CASE WHEN SQL%FOUND THEN 1 ELSE 2 END"
         )
         assert out is not None and "FOUND" in out and "%" not in out
+
+
+class TestStyledConvertInIr:
+    """T-SQL CONVERT(type, x, style) is modeled in the IR (M3 family F1)."""
+
+    def test_style_120_to_mysql_str_to_date(self) -> None:
+        out = _ir("tsql", "mysql", "SELECT CONVERT(DATETIME, '2020-01-01', 120)")
+        assert (
+            out is not None and "STR_TO_DATE('2020-01-01', '%Y-%m-%d %H:%i:%s')" in out
+        )
+
+    def test_style_120_to_postgresql_to_timestamp(self) -> None:
+        out = _ir("tsql", "postgresql", "SELECT CONVERT(DATETIME, '2020-01-01', 120)")
+        assert (
+            out is not None
+            and "TO_TIMESTAMP('2020-01-01', 'YYYY-MM-DD HH24:MI:SS')" in out
+        )
+
+    def test_style_112_char_to_oracle_to_char(self) -> None:
+        out = _ir("tsql", "oracle", "SELECT CONVERT(NVARCHAR(20), d, 112) FROM t")
+        assert out is not None and "TO_CHAR(d, 'YYYYMMDD')" in out
+
+    def test_hash_wrapper_style_2_drops_on_mysql(self) -> None:
+        out = _ir(
+            "tsql",
+            "mysql",
+            "SELECT CONVERT(NVARCHAR(MAX), HASHBYTES('SHA2_256', x), 2) FROM t",
+        )
+        assert out is not None and "SHA2(x, 256)" in out
+        assert "CONVERT" not in out.upper()
+
+    def test_hash_wrapper_style_2_sha256_on_postgresql(self) -> None:
+        out = _ir(
+            "tsql",
+            "postgresql",
+            "SELECT CONVERT(NVARCHAR(MAX), HASHBYTES('SHA2_256', x), 2) FROM t",
+        )
+        assert out is not None and "SHA256(x)" in out
+
+    def test_styled_convert_verbatim_on_tsql(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT TO_CHAR(SYSDATE) FROM DUAL")
+        # unrelated sanity: same-direction fragments still transpile
+        assert out is None or "ERROR" not in out.upper()

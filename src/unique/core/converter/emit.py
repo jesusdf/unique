@@ -3543,6 +3543,61 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"RIGHT(REPLICATE({pad}, {length}) + {s}, {length})"
         return f"{fn_name}({s}, {length}, {pad})"
 
+    # T-SQL CONVERT(type, value, style): the style is a date-format code
+    # (sqlglot's tsql table) or the hash-stringify wrapper (style 1/2 around
+    # a hash whose target functions already return hex) — M3 family F1.
+    if (
+        fn_name == "CONVERT"
+        and len(node.args) == 3
+        and isinstance(node.args[0], RawSQL)
+        and isinstance(node.args[2], Literal)
+    ):
+        target_type = node.args[0].sql.strip()
+        style = str(node.args[2].value).strip()
+        value = _emit_expression(node.args[1], dialect)
+        if dialect == "tsql":
+            return f"CONVERT({target_type}, {value}, {style})"
+        inner = _unwrap_sqlglot_wrappers(node.args[1])
+        if (
+            style in ("1", "2")
+            and isinstance(inner, FunctionCall)
+            and inner.name.upper() in ("SHA2", "SHA256", "SHA1", "SHA", "MD5")
+        ):
+            # SHA2/SHA256 return the hex string the wrapper asked for.
+            return value
+        from sqlglot.dialects.tsql import TSQL as _TSQL
+
+        fmt = _TSQL.CONVERT_FORMAT_MAPPING.get(style)
+        if fmt is not None:
+            type_up = target_type.upper()
+            to_string = bool(re.match(r"N?(?:VAR)?CHAR|N?TEXT", type_up))
+            if dialect == "mysql":
+                my = _convert_date_format(fmt, "python", "mysql")
+                fn = "DATE_FORMAT" if to_string else "STR_TO_DATE"
+                return f"{fn}({value}, '{my}')"
+            ora = _convert_date_format(fmt, "python", "oracle")
+            if to_string:
+                return f"TO_CHAR({value}, '{ora}')"
+            fn = (
+                "TO_DATE"
+                if type_up.startswith("DATE") and "TIME" not in type_up
+                else "TO_TIMESTAMP"
+            )
+            return f"{fn}({value}, '{ora}')"
+        # Unknown style off T-SQL: keep the call visible (a mapping gap).
+        return f"CONVERT({target_type}, {value}, {style})"
+
+    # T-SQL's SHA2(x, n) spells SHA256/SHA512 etc. on PostgreSQL (the text
+    # path's live form; pg has no two-argument SHA2).
+    if (
+        fn_name == "SHA2"
+        and dialect == "postgresql"
+        and len(node.args) == 2
+        and isinstance(node.args[1], Literal)
+        and str(node.args[1].value) in ("224", "256", "384", "512")
+    ):
+        return f"SHA{node.args[1].value}({_emit_expression(node.args[0], dialect)})"
+
     # T-SQL CONVERT(type, expr): sqlglot keeps the type as raw SQL in arg 0.
     # Everywhere else this is a plain CAST.
     if (

@@ -329,6 +329,39 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
     return nodes
 
 
+def _styled_convert_is_modeled(c: exp.Convert) -> bool:
+    """Whether a styled CONVERT converts structurally (known date style, or
+    the hash-stringify wrapper whose target functions already return hex)."""
+    style = str(c.args["style"].name).strip("'")
+    if style in ("1", "2"):
+        inner = c.args.get("expression")
+        if inner is not None and (isinstance(inner, exp.SHA2) or inner.find(exp.SHA2)):
+            return True
+    from sqlglot.dialects.tsql import TSQL
+
+    return style in TSQL.CONVERT_FORMAT_MAPPING
+
+
+def _convert_styled_convert(expr: exp.Convert) -> FunctionCall | None:
+    """Model CONVERT(type, value, style) when the style is known."""
+    if not _styled_convert_is_modeled(expr):
+        return None
+    type_expr, value_expr = expr.this, expr.expression
+    if not isinstance(type_expr, exp.DataType) and isinstance(value_expr, exp.DataType):
+        type_expr, value_expr = value_expr, type_expr
+    if not isinstance(type_expr, exp.DataType) or value_expr is None:
+        return None
+    style = str(expr.args["style"].name).strip("'")
+    return FunctionCall(
+        name="CONVERT",
+        args=(
+            RawSQL(sql=type_expr.sql(dialect="tsql"), reason="CONVERT type"),
+            convert_expression(value_expr),
+            Literal(value=int(style), dtype="integer"),
+        ),
+    )
+
+
 def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> ASTNode:
     """Convert a single sqlglot expression to an IR node.
 
@@ -476,12 +509,14 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="SELECT",
         )
-    # T-SQL CONVERT(type, value, style) uses numeric style codes for date
-    # formatting that sqlglot maps to TO_CHAR/DATE_FORMAT patterns. Our
-    # expression converter would drop the value and style, so pass the whole
-    # statement through when a styled CONVERT is present.
+    # T-SQL CONVERT(type, value, style): known date-style codes and the
+    # hash-stringify wrapper are modeled (FunctionCall CONVERT with the style
+    # argument — see _convert_styled_convert); a style outside the known
+    # table still passes the whole statement through.
     if isinstance(expr, exp.Select) and any(
-        c.args.get("style") is not None for c in expr.find_all(exp.Convert)
+        not _styled_convert_is_modeled(c)
+        for c in expr.find_all(exp.Convert)
+        if c.args.get("style") is not None
     ):
         return PassthroughSQL(
             sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
@@ -600,6 +635,13 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return _convert_case(expr)
     if isinstance(expr, exp.Cast):
         return _convert_cast(expr)
+    # T-SQL CONVERT(type, value, style) with a modeled style keeps its
+    # structure: FunctionCall("CONVERT", (type RawSQL, value, style Literal))
+    # — the emitter spells each target's date-format/hash form (M3 F1).
+    if isinstance(expr, exp.Convert) and expr.args.get("style") is not None:
+        styled = _convert_styled_convert(expr)
+        if styled is not None:
+            return styled
     # T-SQL CONVERT(type, expr) without a style code is a plain CAST; modeling
     # it as one applies the shared type mappings (VARCHAR2, CHAR for MySQL
     # CAST, …). A styled CONVERT is caught earlier and passed through.
