@@ -398,6 +398,16 @@ class ExpressionRewriter:
                 expr = conv.args.get("expression")
                 if expr is not None:
                     conv.replace(expr.copy())
+            # A tsql-read DATE_ADD/DATE_SUB may carry its whole INTERVAL in
+            # the *expression* slot with no unit; the mysql generator then
+            # invents an implicit DAY around it (``INTERVAL (INTERVAL '-1'
+            # MONTH) DAY`` — invalid and a silent unit change). Hoist the
+            # interval into the expression/unit slots it expects.
+            for da in tree.find_all(exp.DateAdd, exp.DateSub):
+                interval = da.args.get("expression")
+                if isinstance(interval, exp.Interval) and da.args.get("unit") is None:
+                    da.set("expression", interval.this)
+                    da.set("unit", interval.args.get("unit"))
             return tree
 
         for wrap, is_wrapped in ((sql, False), (f"SELECT {sql}", True)):

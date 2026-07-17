@@ -852,3 +852,37 @@ class TestDroppedSetOptionPreserved:
         out = Transpiler().transpile(src, "tsql", "mysql").sql
         # A real body must NOT get a spurious no-op.
         assert "DO 0;" not in out
+
+
+class TestDateAddUnderConvertMySql:
+    """A DATEADD inside a CONVERT chain must not gain a nested INTERVAL.
+
+    The _mysql_normalize_funcs sqlglot round-trip re-emitted a tsql-read
+    DateAdd whose expression slot holds an Interval (and no unit) with the
+    mysql generator's implicit DAY unit: ``DATE_ADD(v_d, INTERVAL (INTERVAL
+    '-1' MONTH) DAY)`` — invalid MySQL and a silent unit change.
+    """
+
+    def test_dateadd_convert_chain_keeps_single_interval(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "CREATE PROCEDURE p1 @d DATETIME AS\n"
+            "BEGIN\n"
+            "    DECLARE @s VARCHAR(20);\n"
+            "    SET @s = 'x' + CONVERT(VARCHAR(10), DATEADD(MONTH, -1, @d));\n"
+            "END\n"
+            "GO\n"
+        )
+        out = Transpiler().transpile(src, "tsql", "mysql").sql
+        assert "INTERVAL (INTERVAL" not in out
+        assert "INTERVAL '-1' MONTH" in out or "INTERVAL -1 MONTH" in out
+        assert "DATEADD" not in out.upper().replace("DATE_ADD", "")
+        import sqlglot
+
+        body = [ln for ln in out.splitlines() if "SET v_s" in ln][0].rstrip(";")
+        sqlglot.parse(
+            f"SELECT {body.split('=', 1)[1]}",
+            read="mysql",
+            error_level=sqlglot.ErrorLevel.RAISE,
+        )
