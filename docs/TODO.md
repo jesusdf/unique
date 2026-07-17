@@ -1170,7 +1170,12 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          un-#'d ``t1.`` on a chained comparison the temp-rename can't
          reach without schema); the fix closes a real qualifier gap on
          its tests. Discovery HOLDS 0. Tests:
-         TestWave231TempQualifierRename (2).**
+         TestWave231TempQualifierRename (2).* Wave 232 (2026-07-17): MySQL's
+         TIMESTAMPADD(unit, n, ts) reorders to the canonical
+         DATE_ADD(ts, n, unit) form (its arg order differs) — DATEADD
+         on T-SQL, interval on Oracle; and CAST(… AS YEAR) is SMALLINT
+         off MySQL. Measured: mysql→tsql **23 → 22** (−1). Discovery
+         HOLDS 0. Tests: TestWave232TimestampaddYearCast (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

@@ -95,7 +95,7 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
     # PG float8 casts parse to DOUBLE — T-SQL's 64-bit float is FLOAT
     # (bare DOUBLE is a syntax error) and Oracle's is BINARY_DOUBLE
     # (ORA-00902).
-    "tsql": {"BOOLEAN": "BIT", "BOOL": "BIT", "DOUBLE": "FLOAT"},
+    "tsql": {"BOOLEAN": "BIT", "BOOL": "BIT", "DOUBLE": "FLOAT", "YEAR": "SMALLINT"},
     # DATETIME/DATETIME2/SMALLDATETIME are T-SQL types; Oracle/PostgreSQL use
     # TIMESTAMP. Passing DATETIME through fails (ORA-00902 / invalid pg type).
     "oracle": {
@@ -3334,6 +3334,18 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         return f"CASE {' '.join(whens)} ELSE {len(node.args) - 1} END"
 
     # Date arithmetic has a distinct spelling per engine.
+    # MySQL's TIMESTAMPADD(unit, n, ts) — argument order differs from
+    # the canonical DATE_ADD(ts, n, unit) (wave 232); reorder, then let
+    # the date-add emitter spell each target.
+    if fn_name == "TIMESTAMPADD" and len(node.args) == 3 and dialect != "mysql":
+        reordered = dataclasses.replace(
+            node,
+            name="DATE_ADD",
+            args=(node.args[2], node.args[1], node.args[0]),
+        )
+        emitted = _emit_date_add(reordered, dialect)
+        if emitted is not None:
+            return emitted
     if fn_name in ("DATE_ADD", "DATE_SUB", "DATEADD"):
         emitted = _emit_date_add(node, dialect)
         if emitted is not None:

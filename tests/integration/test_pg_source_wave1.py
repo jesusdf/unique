@@ -7980,3 +7980,23 @@ class TestWave231TempQualifierRename:
     def test_non_temp_qualifier_untouched(self) -> None:
         out = _t2("select * from t0 join t9 on t9.c0 = 5;", "mysql", "tsql")
         assert re.search(r"(?i)ON t9\.c0 = 5", out), out
+
+
+class TestWave232TimestampaddYearCast:
+    """wave 232 (mysql-corpus): MySQL's TIMESTAMPADD(unit, n, ts)
+    reorders to the canonical DATE_ADD form (T-SQL DATEADD, Oracle
+    interval); and CAST(... AS YEAR) is SMALLINT off MySQL."""
+
+    def test_timestampadd_tsql(self) -> None:
+        out = _t2(
+            "select timestampadd(minute, 1, cast(1988 as year));",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(
+            r"(?i)DATEADD\(MINUTE, 1, CAST\(1988 AS SMALLINT\)\)", out
+        ), out
+
+    def test_timestampadd_kept_mysql(self) -> None:
+        out = _t2("select timestampadd(minute, 1, x);", "mysql", "mysql")
+        assert re.search(r"(?i)timestampadd\(minute, 1, x\)", out), out
