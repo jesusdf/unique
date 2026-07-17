@@ -80,6 +80,14 @@ _DUAL_GUARD_RE = re.compile(
     r"(?is)^SELECT\b.+?\bFROM\s+DUAL\b\s*(?:WHERE\s+(?P<cond>.+))?$"
 )
 
+#: The same guard with its Oracle-only FROM DUAL already dropped (the IR
+#: emitter removes it for engines without DUAL): a FROM-less one-row SELECT
+#: gating on WHERE. The select list must not contain a bare FROM, so a real
+#: table scan never matches.
+_DUAL_GUARD_NO_FROM_RE = re.compile(
+    r"(?is)^SELECT\s+(?:(?!\bFROM\b)[^()]|\([^()]*\))+?" r"(?:WHERE\s+(?P<cond>.+))?$"
+)
+
 
 def _strip_wrapping_parens(s: str) -> str:
     """Drop one balanced pair of parentheses that wraps the whole string."""
@@ -103,7 +111,10 @@ def _dual_guard_condition(cursor_str: str) -> str | None:
     """The WHERE condition of a ``SELECT … FROM DUAL [WHERE <cond>]`` guard cursor
     (``1 = 1`` when there is no WHERE), or ``None`` when *cursor_str* is not that
     shape (so the caller keeps a real cursor loop)."""
-    m = _DUAL_GUARD_RE.match(_strip_wrapping_parens(cursor_str))
+    stripped = _strip_wrapping_parens(cursor_str)
+    m = _DUAL_GUARD_RE.match(stripped)
+    if not m:
+        m = _DUAL_GUARD_NO_FROM_RE.match(stripped)
     if not m:
         return None
     cond = (m.group("cond") or "").strip() or "1 = 1"
