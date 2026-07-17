@@ -1098,7 +1098,12 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          NOT-recursion the shape needs. Measured: mysql→tsql/pg stable
          **26/18** (the corpus instances carry out-of-scope refs);
          fix stands on its tests. Discovery HOLDS 0. Tests:
-         TestWave220ChainedComparison (3).**
+         TestWave220ChainedComparison (3).* Wave 221 (2026-07-17): MySQL
+         cursors bind to a fixed query at declaration — a refcursor
+         VARIABLE (opened later, dynamically) has no form there; the
+         routine degrades whole (sibling of the wave-202 return-type
+         culprit). Measured: pg→mysql **39 → 38** (−1). Discovery
+         HOLDS 0. Tests: TestWave221MysqlRefcursorVariable (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

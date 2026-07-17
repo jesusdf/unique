@@ -1340,6 +1340,15 @@ class ProceduralTransformer:
         ):
             # Neither engine has cursor-valued functions (wave 202).
             culprit = f"cursor-valued return type '{node.return_type.name}'"
+        elif self._target == "mysql" and any(
+            isinstance(s, DeclareStatement)
+            and self._REFCURSOR_TYPE_RE.search(s.data_type.name.strip())
+            for s in node.body
+        ):
+            # MySQL cursors bind to a fixed query at declaration; a
+            # refcursor VARIABLE (opened later, dynamically) has no
+            # form there (wave 221).
+            culprit = "refcursor variable"
         elif "[]" in (
             (node.return_type.name if node.return_type else "")
             + "".join(p.data_type.name for p in node.parameters)

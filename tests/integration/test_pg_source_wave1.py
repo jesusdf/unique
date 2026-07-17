@@ -7728,3 +7728,25 @@ class TestWave220ChainedComparison:
             "postgresql",
         )
         assert "CASE" not in out.upper(), out
+
+
+class TestWave221MysqlRefcursorVariable:
+    """wave 221 (pg-corpus): MySQL cursors bind to a fixed query at
+    declaration — a refcursor VARIABLE (opened later) has no form
+    there; the routine degrades whole."""
+
+    _SQL = (
+        "create function ex1(p1 int) returns int language plpgsql as $$"
+        " declare c refcursor; i int; begin"
+        " open c for select p1; fetch c into i; close c;"
+        " return i; end $$;"
+    )
+
+    def test_refcursor_var_carrier_mysql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "mysql")
+        assert "UNIQUE:" in out and "refcursor" in out, out
+        assert not re.search(r"(?im)^\s*DELIMITER", out), out
+
+    def test_refcursor_var_kept_pg(self) -> None:
+        out = _t2(self._SQL, "postgresql", "postgresql")
+        assert "UNIQUE:" not in out, out
