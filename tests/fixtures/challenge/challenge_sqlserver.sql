@@ -290,3 +290,6 @@ CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (V
 -- CASE[open]: ts-xml-value — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r
 
+-- CASE[open]: tsql-drop2-100|START|ID — fails on postgresql. SILENT CLAUSE DROP: '100|START|IDENTITY' absent from valid postgresql output, no warning
+CREATE TABLE t (id INT IDENTITY(100, 5))
+

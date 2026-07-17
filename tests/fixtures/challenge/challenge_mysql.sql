@@ -83,6 +83,9 @@ SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r
 -- CASE[open]: my-date-diff-minus — fails on oracle, postgresql. FUNC-DIFF: source=(('200',),) target=(('60',),)
 SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r
 
+-- CASE[open]: my-date-eq-dt — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT DATE('2020-01-01') = '2020-01-01 00:00:00' AS r
+
 -- CASE[open]: my-date-format — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
 SELECT DATE_FORMAT('2020-05-17', '%Y/%m/%d') AS r
 
@@ -167,6 +170,12 @@ SELECT LENGTH('café') AS r
 -- CASE[open]: my-like-ci — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'ABC' LIKE 'abc' AS r
 
+-- CASE[open]: my-like-escape — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT 'a_b' LIKE 'a\_b' AS r
+
+-- CASE[open]: my-like-single — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT 'x' LIKE 'X' AS r
+
 -- CASE[open]: my-lock-tables — fails on oracle, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id INT); LOCK TABLES t WRITE
 
@@ -217,6 +226,9 @@ SELECT ST_AsText(ST_GeomFromText('POINT(1 1)')) AS r
 
 -- CASE[open]: my-status-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RO
 SELECT LAST_INSERT_ID(), ROW_COUNT(), FOUND_ROWS()
+
+-- CASE[open]: my-str-lt — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT 'apple' < 'Banana' AS r
 
 -- CASE[open]: my-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('def',),) target=(('ab',),)
 SELECT SUBSTRING('abcdef', -3) AS r
@@ -274,6 +286,15 @@ CREATE TABLE t (email VARCHAR(255) CHECK (email LIKE '%@%'))
 
 -- CASE[open]: mysql-drop-GENERATED|AS\s — fails on tsql. SILENT CLAUSE DROP: 'GENERATED|AS\s*\(' absent from valid tsql output, no warning (target 
 CREATE TABLE t (a INT, b INT AS (a+1) STORED)
+
+-- CASE[open]: mysql-drop2-ON\s+UPDATE — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ON\s+UPDATE' absent from valid tsql output, no warning
+CREATE TABLE t (a INT, ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)
+
+-- CASE[open]: mysql-drop2-latin1|CHARA — fails on oracle, postgresql. SILENT CLAUSE DROP: 'latin1|CHARACTER\s+SET' absent from valid postgresql output, no warni
+CREATE TABLE t (a VARCHAR(10) CHARACTER SET latin1)
+
+-- CASE[open]: mysql-drop2-my table|COM — fails on oracle, postgresql. SILENT CLAUSE DROP: 'my table|COMMENT' absent from valid postgresql output, no warning
+CREATE TABLE t (a INT) COMMENT='my table'
 
 -- CASE[open]: mysql-qdrop-ROLLUP — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ROLLUP' absent from valid tsql output, no warning
 SELECT x FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x WITH ROLLUP

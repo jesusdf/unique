@@ -140,6 +140,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('200',),) target=(('60',),)`
 - src: `SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r`
 
+## my-date-eq-dt  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT DATE('2020-01-01') = '2020-01-01 00:00:00' AS r`
+
 ## my-date-format  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
@@ -280,6 +285,16 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT 'ABC' LIKE 'abc' AS r`
 
+## my-like-escape  (mysql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT 'a_b' LIKE 'a\_b' AS r`
+
+## my-like-single  (mysql)
+- targets: oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT 'x' LIKE 'X' AS r`
+
 ## my-lock-tables  (mysql)
 - targets: oracle(carrier), postgresql(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
@@ -364,6 +379,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RO`
 - src: `SELECT LAST_INSERT_ID(), ROW_COUNT(), FOUND_ROWS()`
+
+## my-str-lt  (mysql)
+- targets: oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT 'apple' < 'Banana' AS r`
 
 ## my-substr-neg  (mysql)
 - targets: postgresql(func), tsql(func)
@@ -459,6 +479,21 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'GENERATED|AS\s*\(' absent from valid tsql output, no warning (target `
 - src: `CREATE TABLE t (a INT, b INT AS (a+1) STORED)`
+
+## mysql-drop2-ON\s+UPDATE  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'ON\s+UPDATE' absent from valid tsql output, no warning`
+- src: `CREATE TABLE t (a INT, ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)`
+
+## mysql-drop2-latin1|CHARA  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'latin1|CHARACTER\s+SET' absent from valid postgresql output, no warni`
+- src: `CREATE TABLE t (a VARCHAR(10) CHARACTER SET latin1)`
+
+## mysql-drop2-my table|COM  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'my table|COMMENT' absent from valid postgresql output, no warning`
+- src: `CREATE TABLE t (a INT) COMMENT='my table'`
 
 ## mysql-qdrop-ROLLUP  (mysql)
 - targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
@@ -572,6 +607,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('24',),)`
 - src: `SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL`
+
+## ora-decode-null  (oracle)
+- targets: mysql(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('match',),) target=(('no',),)`
+- src: `SELECT DECODE(NULL, NULL, 'match', 'no') AS r FROM DUAL`
 
 ## ora-div  (oracle)
 - targets: postgresql(func), tsql(func)
@@ -917,6 +957,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - src: `CREATE PROCEDURE p AS v NUMBER; BEGIN v := 1/0; EXCEPTION WHEN ZERO_DIVIDE THEN v := 0; END;
 /`
 
+## oracle-drop2-100|START  (oracle)
+- targets: postgresql(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: '100|START' absent from valid tsql output, no warning`
+- src: `CREATE TABLE t (id NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100))`
+
 ## pg-age  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(195, b"'AGE' is not a recognized built-in function name.DB-Lib error message 20018, sever`
@@ -1057,6 +1102,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid)
 - live error: `(1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT 'a' < 'B' COLLATE "C" AS r`
+
+## pg-collate-cmp  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=()`
+- src: `SELECT 'A' = 'a' COLLATE "C" AS r`
 
 ## pg-collate2  (postgresql)
 - targets: mysql(invalid)
@@ -1328,6 +1378,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
 - src: `SELECT 'ABC' LIKE 'abc' AS r`
 
+## pg-like-escape  (postgresql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT 'a_b' LIKE 'a\_b' AS r`
+
 ## pg-lock-table  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -1528,6 +1583,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018`
 - src: `SELECT SPLIT_PART('a,b,c', ',', 2) AS r`
 
+## pg-str-lt  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
+- src: `SELECT 'apple' < 'Banana' AS r`
+
 ## pg-string-agg-order  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message`
@@ -1692,6 +1752,26 @@ CREATE TRIGGE`
 - targets: mysql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'ON\s+UPDATE\s+CASCADE' absent from valid mysql output, no warning (ta`
 - src: `CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (pid INT REFERENCES p(id) ON UPDATE CASCADE)`
+
+## postgresql-drop2-100|START  (postgresql)
+- targets: oracle(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: '100|START' absent from valid tsql output, no warning`
+- src: `CREATE TABLE t (id INT GENERATED BY DEFAULT AS IDENTITY (START WITH 100 INCREMENT BY 5))`
+
+## postgresql-drop2-CONCURRENTLY  (postgresql)
+- targets: mysql(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'CONCURRENTLY' absent from valid tsql output, no warning`
+- src: `CREATE TABLE t (a INT); CREATE INDEX CONCURRENTLY ix ON t (a)`
+
+## postgresql-drop2-EXCLUDE  (postgresql)
+- targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'EXCLUDE' absent from valid tsql output, no warning`
+- src: `CREATE TABLE t (a INT, EXCLUDE USING btree (a WITH =))`
+
+## postgresql-drop2-NULLS\s+FIRS  (postgresql)
+- targets: oracle(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'NULLS\s+FIRST' absent from valid oracle output, no warning`
+- src: `CREATE TABLE t (a INT); CREATE INDEX ix ON t (a NULLS FIRST)`
 
 ## postgresql-qdrop-FOR\s+UPDATE  (postgresql)
 - targets: tsql(silent-drop)
@@ -2119,6 +2199,11 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r`
+
+## tsql-drop2-100|START|ID  (tsql)
+- targets: postgresql(silent-drop)
+- live error: `SILENT CLAUSE DROP: '100|START|IDENTITY' absent from valid postgresql output, no warning`
+- src: `CREATE TABLE t (id INT IDENTITY(100, 5))`
 ---
 
-Totals: 414 distinct constructs; defect rows by kind: carrier 64, func 134, invalid 621, semantic 2, silent-drop 24.
+Totals: 431 distinct constructs; defect rows by kind: carrier 64, func 151, invalid 621, semantic 2, silent-drop 42.

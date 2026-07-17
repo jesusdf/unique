@@ -85,6 +85,9 @@ SELECT SYSDATE + 1 AS r FROM DUAL
 -- CASE[open]: ora-day-of-week — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('24',),)
 SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL
 
+-- CASE[open]: ora-decode-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('match',),) target=(('no',),)
+SELECT DECODE(NULL, NULL, 'match', 'no') AS r FROM DUAL
+
 -- CASE[open]: ora-div — fails on postgresql, tsql. FUNC-DIFF: source=(('2.5',),) target=(('2',),)
 SELECT 5 / 2 AS r FROM DUAL
 
@@ -295,4 +298,7 @@ SELECT XMLELEMENT("foo", 'bar') AS r FROM DUAL
 -- CASE[open]: ora-zero-divide — fails on postgresql. unrecognized exception condition "zero_divide"
 CREATE PROCEDURE p AS v NUMBER; BEGIN v := 1/0; EXCEPTION WHEN ZERO_DIVIDE THEN v := 0; END;
 /
+
+-- CASE[open]: oracle-drop2-100|START — fails on postgresql, tsql. SILENT CLAUSE DROP: '100|START' absent from valid tsql output, no warning
+CREATE TABLE t (id NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100))
 
