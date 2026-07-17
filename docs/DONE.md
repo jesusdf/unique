@@ -4627,3 +4627,158 @@ En route finding (filed as its own TODO item): the tsql→mysql procedural
 DATEADD handler emits a nested `INTERVAL (INTERVAL '-1' MONTH) DAY` when the
 DATEADD sits under a CONVERT chain — pre-existing (byte-identical before the
 refactor), P2.
+
+---
+
+## 38. M3-prereq — procedural text-matchers moved onto structure
+
+Archived from `docs/TODO.md` §2 P0 on 2026-07-17: every increment landed and
+the family survey closed; what remains of M3 lives in the consolidated M3
+item (the two IR preconditions + family migration). Original item verbatim:
+
+- [x] **M3-prereq: move the procedural text-matchers onto structure before
+      routing scalar expressions through the IR.** *Increment 1 landed
+      2026-07-11 (`e8196ee`): the IR gains procedural variable types — a
+      STRING_VARIABLES ContextVar published around every IR call lets the
+      shared `_looks_like_string` classify `@a + @b` over declared string
+      variables (fixed a live runtime bug: embedded UPDATE shipped
+      `v_a + v_b` on PG). *Increment 2 landed 2026-07-11
+      (`35c2155`, `33034ab`): the differential text-vs-IR audit found and
+      fixed THREE live semantic bugs in the curated text handlers —
+      DATEADD's '+' turned into '||' by the concat classifier (intervals
+      now neutralize their literals), a token-joined '- 1' losing its
+      sign inside the INTERVAL string (DATEADD(MONTH,-1) silently ADDED a
+      month; literal counts compact, expression counts multiply a unit
+      interval), and DATEDIFF DAY/MONTH/YEAR emitting Oracle-fractional /
+      PG-AGE forms instead of T-SQL's boundary counts (both pipelines now
+      share the boundary-counting forms).* Remaining increments: *(3) DONE 2026-07-17 (wave 96):
+      LastIdentityCapture node landed — producer in both assignment
+      transforms (oracle target, value is only the last-identity
+      call), pairing pass consumes the node, marker constant deleted;
+      the UNPAIRED fallback improves from the invalid `v := /* … */;`
+      to a valid NULL assignment + note. Full gate green on first
+      try; pg-corpus verification cycle at `b073133` identical
+      {163/131/89} — no regression. Tests:
+      TestLastIdentityCaptureNode.* Original analysis
+      (2026-07-17): the marker is the TAIL of the Oracle comment
+      `LAST_IDENTITY_EXPR["oracle"]` produced by
+      `_transform_last_identity`'s text substitution;
+      `_identity_assignment_var` then substring-matches it
+      (`base.py:390`). Design: when the assignment transform detects a
+      LAST_IDENTITY_SOURCE_FUNCS call with target oracle, return a
+      dedicated `LastIdentityCapture(target_var)` node; the pairing
+      pass (`base.py:345`) consumes the node; the emitter renders the
+      documented comment for any UNPAIRED capture (fallback). Keep the
+      non-assignment usages (`SELECT @@IDENTITY` in expressions) on
+      the comment path. This is a fresh-session-sized refactor — the
+      naive attempt broke 18 tests.*; (4) dual-guard→IF and
+      DECLARE-init hoisting consume nodes — *4a landed 2026-07-17
+      (wave 97): Oracle's assignment-via-SELECT-INTO decision now
+      inspects the value NODE first (`_needs_sql_context`: subquery or
+      CAST anywhere in the tree; RawSQL fragments keep the spelling
+      regex). Tests: TestAssignmentViaSelectNodeAware; verification
+      cycle at `129cc6b` identical {163/131/89}. Remaining 4b —
+      *analysis 2026-07-17: the DECLARE-init half is DONE BY
+      CONSTRUCTION after 4a (the hoisting already builds an
+      AssignmentStatement from the initializer NODE, which then takes
+      the node-aware SELECT-INTO path — verified live); the
+      batch-level T-SQL guard recognizer (`_TSQL_GUARD_HEAD_RE`) is
+      PRE-PARSE BY DESIGN (audited M2/P3 single-recognizer decision,
+      runs on batch text before any parsing — unaffected by
+      IR-emitting scalar expressions). The M3b probe RAN 2026-07-17
+      (uncommitted IR-first in `_transform_raw_sql`, full suite):
+      **126 failures** — the text path has GROWN as the expression
+      engine since the original 18. Category map (top offenders):
+      curated DATEADD/DATEDIFF/TRUNC/TO_DATE handlers (16+),
+      function-name mapping & oracle-builtin renames (7+),
+      FOUND/fetch-status cursor idioms (7), string-concat/plus
+      classification (6+), error-global conditions & RAISERROR hoists
+      (8+), comments inside expressions (IR drops them, 6+),
+      SUBSTRING/position arg orders (4). Conclusion: wholesale
+      IR-first is NOT the path — each consumer family must migrate
+      individually (the increments-1..4a pattern), OR the IR
+      expression pipeline must absorb those behaviors first. The
+      probe patch is reproducible: guard `UNIQUE_IR_FIRST` in
+      `_transform_raw_sql` wrapping `_ir_transpile_dml` for scalar
+      fragments. Family migration step 1 (dates) landed 2026-07-17
+      (wave 98): the differential found a live IR bug — DATEADD over
+      a DATEDIFF base added an INTERVAL to a NUMBER (invalid Oracle /
+      wrongly typed PG); the IR now matches the text path's numeric
+      addition. Tests: TestIrNestedDateaddOverDatediff; verification cycle at
+      `6be5038` identical {163/131/89}. Family step 2 (function
+      renames) landed 2026-07-17 (wave 99): the differential found the
+      procedural text path had NO (mysql, postgresql)/(mysql, oracle)
+      function maps — IFNULL shipped raw to PG; both maps added
+      (IFNULL/RAND/CURDATE/UUID + the symmetry round-trips the
+      mapping-contract test enforces). Known cosmetic divergences left
+      documented: NVL→ISNULL (text) vs COALESCE (IR) on tsql — both
+      valid; sqlglot's LEN→LENGTH(CAST AS CLOB) vs text's plain
+      LENGTH — both count trailing spaces that T-SQL LEN ignores
+      (shared caveat, not a divergence). Tests:
+      TestMysqlProceduralFuncMaps; mysql-corpus cycle at `e933b82`
+      stable {166/107/129} (fidelity inside already-counted
+      routines). Family step 3 (concat classification) landed
+      2026-07-17 (wave 100): T-SQL `N'…'` literals parse as
+      exp.National, which `_looks_like_string` did not recognize —
+      `N'pre' + s` shipped raw `+` to Oracle (invalid on strings).
+      The nested-CONCAT shape on mysql (`CONCAT(CONCAT(a,b),'c')` vs
+      flat) is cosmetic, documented not chased. Tests:
+      TestNationalStringConcat; verification cycle at `0a0ad03`
+      identical {163/131/89}. Family step 4 (error-globals) landed
+      2026-07-17 (wave 101): the system globals lived only in the
+      procedural maps — a top-level `SELECT @@ROWCOUNT` shipped raw
+      off T-SQL. New shared `_map_system_global` in the DML expression
+      emit: MySQL gets the real ROW_COUNT(); PG/Oracle top-level get
+      a documented neutral (their forms are PL-context only); Oracle's
+      `SQL%ROWCOUNT` — which parses as a MODULO — maps at the
+      BinaryOp. Tests: TestSystemGlobalsInDml; verification cycle at
+      `63e0d31` identical {163/131/89}. Family survey CLOSED
+      2026-07-17 (wave 102): @@FETCH_STATUS gets the top-level
+      neutral (it is CURSOR-CONTEXTUAL by nature — the procedural
+      path maps it with surrounding state: FOUND on pg, handler
+      flags on mysql, cursor%FOUND on oracle; a context-free IR
+      mapping is impossible today). DESIGN CONCLUSIONS for M3 final:
+      (a) the IR expression pipeline must RECEIVE procedural context
+      (cursor state, like STRING_VARIABLES) before fetch idioms can
+      migrate; (b) in-expression COMMENTS need comment-carrying
+      expression nodes in the IR (they are dropped today) — both are
+      the remaining preconditions for deleting the text rewriters.
+      Tests: TestFetchStatusTopLevel; verification at `2a2dc90`
+      identical {163/131/89}.*; then the text rewriters can
+      shrink. Original blocker analysis:** A first attempt at IR-first
+      for `_transform_raw_sql` expressions (M3b) broke 18 tests and was
+      reverted: downstream machinery pattern-matches on the *transformed
+      expression text* — the Oracle last-identity capture looks for a marker
+      string, the dual-guard→IF and DECLARE-init hoisting match query
+      spellings, `_rewrite_string_concat` uses declared-variable types the
+      standalone IR doesn't have, and the curated DATEADD/DATEDIFF handlers
+      produce live-validated forms the IR emitter doesn't. Those consumers
+      must consume nodes (or the IR must gain procedural context: var types,
+      PROCEDURAL_FUNC_MAPS) before the text rewriters can be deleted (P4's
+      final step). Until then the text path stays the expression engine.
+
+The superseded M3 history (M3a/M3b detail), kept for reference:
+
+- [x] *(superseded by the consolidated M3-final item in TODO)* **M3 — P4 embedded DML through the IR converter**; delete the
+      text-level rewriters (clears D3, D4, D8, A4 by construction).
+      *M3a landed:* `_transform_embedded_dml` now routes through the shared
+      `parse_sql → Transformer → emit_node` IR pipeline (raw sqlglot only as a
+      warned fallback), which cleared D3 and D4 and surfaced+fixed four IR
+      core bugs that also hit standalone DML: pass recursion stopped at
+      top-level SELECTs (generic dataclass-field walker now), `find(exp.Where/
+      Having)` duplicated a derived table's WHERE onto the outer SELECT,
+      dropped parens/precedence on emit (silent `AND`/`OR` re-association),
+      and `nulls_first` never carried (T-SQL DESC row order changed on PG).
+      `exp.In`/unstyled `exp.Convert` are now modeled (IN was a RawSQL
+      passthrough passes couldn't see; CONVERT now shares the CAST type maps).
+      Three head-anchored matchers made trivia-aware via the shared
+      `split_leading_trivia` (result-SELECT→refcursor, identity capture,
+      trigger set-based rewrite). *M3b:* D8's remaining corruption was the
+      T-SQL SELECT-INTO emitter's naive `split(",")` — fixed with the shared
+      `split_top_level_commas`. Tests: `tests/integration/
+      test_embedded_dml_ir.py` (22). **Measured (2026-07-09, live sweep):**
+      test.sql→PG **100.0%** / Oracle 99.6% / MySQL 97.7% (unchanged classes);
+      bigtest (Oracle source)→T-SQL **94.3%** / PG **76.6%** (was 73.1 — D3
+      cleared) / MySQL 75.0%; live-syntax suite 53 passed. Transpile of the
+      13 MB dump ~55 s (+22% vs pre-M3, linear). Still open: deleting the
+      expression-level text rewriters — blocked on the M3-prereq below.
