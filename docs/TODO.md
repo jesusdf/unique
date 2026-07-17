@@ -213,26 +213,29 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
 
 - [ ] **Module growth** — *parser done 2026-07-10:* `procedural/parser` is
       now a package (_base 1.7k + _tsql 0.7k + _plsql 0.8k, explicit
-      cross-family contract). Still to split: `procedural/transformer/
-      base.py` (~3.5k) and `transpiler.py` (~2.2k). *Finding (2026-07-10):*
-      the parser's name-based mixin cut does NOT transfer to the
-      transformer — its shared/node-transform/expression-rewrite families
-      cross-call heavily (an attempted split needed a dozen-plus stub
-      contract and was reverted). **Seam DESIGNED 2026-07-11 (measured):**
-      the expression-rewrite family is 24 methods / ~751 lines with 33
-      node→expr call edges; its instance state is small (class-constant
-      regex/maps + `_source`, `_in_trigger`, `_string_vars`,
-      `_get_func_map`). Design: a composed **`ExpressionRewriter`**
-      object (`transformer/_expr.py`), constructed per transform with a
-      narrow `RewriteContext` protocol (`source`, `target`, `in_trigger`,
-      `string_vars`, `date_vars`, `warn()`, `func_map()`, and ONE
-      `target_fixups(sql)` hook through which the per-target transformer
-      classes keep their overrides — `_fix_raw_sql_target`,
-      `_map_oracle_builtins`, …). The 33 call edges rewire mechanically
-      to `self._expr.X(...)`. Implement as one mechanical commit with the
-      full suite as the net; per-target subclassing of the rewriter can
-      come later. This also unblocks M3-prereq's final step (the rewriter
-      object is what IR-first expressions will eventually replace).
+      cross-family contract). *Transformer done 2026-07-17 (`997f0e8`):*
+      the designed `ExpressionRewriter` seam landed as the planned single
+      mechanical commit — the 36 text-level expression rewriters (the
+      family had grown from the measured 24 during the wave campaign)
+      moved with their 13 class constants to `transformer/_expr.py`,
+      composed per transform as `self._expr`; 13 base + 11 per-target
+      call edges rewired; no override point moved (`_fix_raw_sql_target`
+      & friends stay per-target). `base.py` 5053 → 3735 lines; full gate
+      green; expression-path output verified byte-identical. The rewriter
+      object is what M3's IR-first expressions will eventually replace.
+      Still to split: `transpiler.py` (~2.4k).
+- [ ] **tsql→mysql procedural DATEADD emits a nested INTERVAL (P2, found
+      2026-07-17 during the ExpressionRewriter verification —
+      pre-existing, byte-identical before/after the refactor):**
+      `SET @s = 'x' + CONVERT(VARCHAR(10), DATEADD(MONTH, -1, @d))`
+      inside a procedure ships `DATE_ADD(v_d, INTERVAL (INTERVAL '-1'
+      MONTH) DAY)` on MySQL — the DATEADD handler's unit interval is
+      wrapped again as a DAY interval (invalid MySQL). Mechanism lives in
+      the `_transform_dateadd`/`_transform_datediff` curated family (now
+      `_expr.py`); the plain `DATEADD(MONTH, -1, @d)` without the CONVERT
+      chain maps correctly, so suspect the expression-count branch
+      (wave-M3-prereq increment 2 territory: "expression counts multiply
+      a unit interval").
 
 ## 3. Test-corpus expansion (P3)
 
