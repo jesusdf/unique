@@ -74,6 +74,9 @@ SELECT CONNECT_BY_ROOT id AS root FROM (SELECT 1 id, NULL par FROM DUAL) CONNECT
 -- CASE[open]: ora-connect-by2 — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT id FROM (SELECT 1 id, NULL par FROM DUAL) START WITH par IS NULL CONNECT BY PRIOR id = par
 
+-- CASE[open]: ora-create-role — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE ROLE r
+
 -- CASE[open]: ora-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; CLOSE c; END;
 
@@ -134,12 +137,22 @@ CREATE PROCEDURE p AS BEGIN GOTO done; <<done>> NULL; END;
 -- CASE[open]: ora-grant — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id NUMBER); GRANT SELECT ON t TO PUBLIC
 
+-- CASE[open]: ora-grant-system — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+GRANT CREATE SESSION, CREATE TABLE TO r
+
 -- CASE[open]: ora-initcap — fails on mysql, postgresql, tsql. (195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT INITCAP('hello world') AS r FROM DUAL
 
 -- CASE[open]: ora-insert-all — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE a (id NUMBER); CREATE TABLE b (id NUMBER);
 INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM DUAL
+
+-- CASE[open]: ora-insert-all-cond — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a NUMBER);
+INSERT ALL WHEN a > 0 THEN INTO t VALUES (a) SELECT 1 a FROM DUAL
+
+-- CASE[open]: ora-insert-append — fails on postgresql. validator-crash: sending query failed: another command is already in progress
+CREATE TABLE t (a NUMBER); INSERT /*+ APPEND */ INTO t SELECT 1 FROM DUAL
 
 -- CASE[open]: ora-interval-partition — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id NUMBER, dt DATE) PARTITION BY RANGE (dt) INTERVAL (NUMTOYMINTERVAL(1,'MONTH')) (PARTITION p0 VALUES LESS THAN (DATE '2020-01-01'))
@@ -176,6 +189,9 @@ SELECT deptno, LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) OVER (PARTITION BY dept
 
 -- CASE[open]: ora-lnnvl — fails on mysql, postgresql, tsql. (102, b"Incorrect syntax near '='.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 SELECT LNNVL(1 = 2) AS r FROM DUAL WHERE LNNVL(1 = 2)
+
+-- CASE[open]: ora-month-name — fails on mysql. FUNC-DIFF: source=(('June',),) target=(('Month',),)
+SELECT TO_CHAR(DATE '2020-06-01', 'Month') AS r FROM DUAL
 
 -- CASE[open]: ora-months-between — fails on mysql, postgresql. operator does not exist: timestamp with time zone - integer
 SELECT MONTHS_BETWEEN(SYSDATE, SYSDATE - 40) AS r FROM DUAL
@@ -250,6 +266,9 @@ SELECT REGEXP_LIKE('abc', '^a') AS matched FROM DUAL WHERE REGEXP_LIKE('abc', '^
 -- CASE[open]: ora-reverse-index — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (a NUMBER, b NUMBER);
 CREATE INDEX ix ON t (a) REVERSE
+
+-- CASE[open]: ora-round-date-month — fails on mysql. FUNC-DIFF: source=(('2020-07-01 00:00:00',),) target=(('2020',),)
+SELECT ROUND(DATE '2020-06-16', 'MONTH') AS r FROM DUAL
 
 -- CASE[open]: ora-rtrim-chars — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('a',),) target=(('',),)
 SELECT RTRIM('axxx', 'x') AS r FROM DUAL

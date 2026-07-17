@@ -80,6 +80,9 @@ SELECT CONVERT_TZ('2020-01-01 10:00', '+00:00', '+02:00') AS r
 -- CASE[open]: my-crc32 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR
 SELECT CRC32('abc') AS r
 
+-- CASE[open]: my-create-role — fails on oracle, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE ROLE 'r'
+
 -- CASE[open]: my-date-add-interval — fails on oracle, postgresql. ORA-30081: invalid data type for datetime/interval arithmetic
 SELECT DATE_ADD('2020-01-01', INTERVAL 7 DAY) AS r
 
@@ -242,6 +245,9 @@ CREATE TRIGGER trg BEFORE INSERT ON orders FOR EACH ROW SET NEW.created = NOW();
 
 -- CASE[open]: my-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END
+
+-- CASE[open]: my-replace-into — fails on oracle, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a INT); REPLACE INTO t VALUES (1)
 
 -- CASE[open]: my-scalar-subquery-assign — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
 CREATE PROCEDURE p() BEGIN DECLARE v INT; SET v = (SELECT COUNT(*) FROM (SELECT 1) t); END

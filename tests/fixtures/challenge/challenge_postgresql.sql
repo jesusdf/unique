@@ -61,6 +61,9 @@ SELECT ~0 AS r
 -- CASE[open]: pg-bool-int-cast — fails on oracle. ORA-01722: unable to convert string value containing 't' to a number: 
 SELECT 'true'::boolean::int AS r
 
+-- CASE[open]: pg-bulk-insert — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
+CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)
+
 -- CASE[open]: pg-caret-power — fails on mysql. FUNC-DIFF: source=(('8',),) target=()
 SELECT 2 ^ 3 AS r
 
@@ -111,6 +114,9 @@ CREATE TYPE addr AS (street TEXT, city TEXT)
 
 -- CASE[open]: pg-convert-to — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co
 SELECT convert_to('abc', 'UTF8')
+
+-- CASE[open]: pg-create-role — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE ROLE r LOGIN PASSWORD 'x'
 
 -- CASE[open]: pg-cte-cycle — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n<3) CYCLE n SET is_cycle USING path SELECT * FROM r
@@ -201,6 +207,9 @@ SELECT generate_series(1, 5) AS r
 
 -- CASE[open]: pg-grant — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id INT); GRANT SELECT, INSERT ON t TO PUBLIC
+
+-- CASE[open]: pg-grant-column — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a INT); GRANT SELECT (a) ON t TO PUBLIC
 
 -- CASE[open]: pg-greatest-null — fails on mysql, oracle. FUNC-DIFF: source=(('3',),) target=(('NULL',),)
 SELECT GREATEST(1, NULL, 3) AS r
@@ -370,6 +379,9 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled
 
 -- CASE[open]: pg-returns-table — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE FUNCTION f() RETURNS TABLE(a INT, b TEXT) AS $$ BEGIN RETURN QUERY SELECT 1, 'x'; END; $$ LANGUAGE plpgsql
+
+-- CASE[open]: pg-revoke — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a INT); REVOKE ALL ON t FROM PUBLIC
 
 -- CASE[open]: pg-rollup — fails on mysql, oracle, tsql. (8120, b"Column 'v.x' is invalid in the select list because it is not contained in either 
 SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)

@@ -86,6 +86,9 @@ SELECT CONCAT_WS('-', 'a', 'b', 'c') AS r
 -- CASE[open]: ts-concatws2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT CONCAT_WS(',', 'a', NULL, 'b') AS r
 
+-- CASE[open]: ts-create-role — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE ROLE r AUTHORIZATION dbo
+
 -- CASE[open]: ts-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT FROM c INTO @x; WHILE @@FETCH_STATUS = 0 BEGIN FETCH NEXT FROM c INTO @x; END; CLOSE c; DEALLOCATE c; END
 
@@ -132,6 +135,11 @@ SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r
 CREATE TABLE t (id INT);
 GO
 GRANT SELECT ON t TO PUBLIC
+
+-- CASE[open]: ts-grant-object — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TABLE t (a INT);
+GO
+GRANT SELECT ON OBJECT::t TO PUBLIC
 
 -- CASE[open]: ts-hierarchyid — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT CAST('/1/2/' AS HIERARCHYID).ToString() AS r

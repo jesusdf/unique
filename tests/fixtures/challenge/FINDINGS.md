@@ -135,6 +135,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR`
 - src: `SELECT CRC32('abc') AS r`
 
+## my-create-role  (mysql)
+- targets: oracle(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE ROLE 'r'`
+
 ## my-date-add-interval  (mysql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-30081: invalid data type for datetime/interval arithmetic`
@@ -405,6 +410,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
 - src: `CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END`
 
+## my-replace-into  (mysql)
+- targets: oracle(carrier), postgresql(invalid), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a INT); REPLACE INTO t VALUES (1)`
+
 ## my-scalar-subquery-assign  (mysql)
 - targets: tsql(invalid)
 - live error: `(8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve`
@@ -673,6 +683,11 @@ CREATE TRIGGER trg FOR UPDATE ON t COMPOUND TRIGGER BEFORE EACH ROW IS BEGIN NUL
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT id FROM (SELECT 1 id, NULL par FROM DUAL) START WITH par IS NULL CONNECT BY PRIOR id = par`
 
+## ora-create-role  (oracle)
+- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE ROLE r`
+
 ## ora-cursor  (oracle)
 - targets: mysql(invalid)
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
@@ -771,6 +786,11 @@ CREATE TRIGGER trg FOR UPDATE ON t COMPOUND TRIGGER BEFORE EACH ROW IS BEGIN NUL
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (id NUMBER); GRANT SELECT ON t TO PUBLIC`
 
+## ora-grant-system  (oracle)
+- targets: mysql(carrier), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `GRANT CREATE SESSION, CREATE TABLE TO r`
+
 ## ora-initcap  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s`
@@ -781,6 +801,17 @@ CREATE TRIGGER trg FOR UPDATE ON t COMPOUND TRIGGER BEFORE EACH ROW IS BEGIN NUL
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE a (id NUMBER); CREATE TABLE b (id NUMBER);
 INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
+
+## ora-insert-all-cond  (oracle)
+- targets: mysql(carrier), postgresql(invalid), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a NUMBER);
+INSERT ALL WHEN a > 0 THEN INTO t VALUES (a) SELECT 1 a FROM DUAL`
+
+## ora-insert-append  (oracle)
+- targets: postgresql(invalid)
+- live error: `validator-crash: sending query failed: another command is already in progress`
+- src: `CREATE TABLE t (a NUMBER); INSERT /*+ APPEND */ INTO t SELECT 1 FROM DUAL`
 
 ## ora-interval-partition  (oracle)
 - targets: mysql(carrier), postgresql(carrier), tsql(carrier)
@@ -841,6 +872,11 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near '='.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
 - src: `SELECT LNNVL(1 = 2) AS r FROM DUAL WHERE LNNVL(1 = 2)`
+
+## ora-month-name  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('June',),) target=(('Month',),)`
+- src: `SELECT TO_CHAR(DATE '2020-06-01', 'Month') AS r FROM DUAL`
 
 ## ora-months-between  (oracle)
 - targets: mysql(invalid), postgresql(invalid)
@@ -953,6 +989,11 @@ CREATE PACKAGE BODY pkg AS FUNCTION f(x NUMBER) RETURN NUMBER`
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (a NUMBER, b NUMBER);
 CREATE INDEX ix ON t (a) REVERSE`
+
+## ora-round-date-month  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('2020-07-01 00:00:00',),) target=(('2020',),)`
+- src: `SELECT ROUND(DATE '2020-06-16', 'MONTH') AS r FROM DUAL`
 
 ## ora-rtrim-chars  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
@@ -1172,6 +1213,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `ORA-01722: unable to convert string value containing 't' to a number: `
 - src: `SELECT 'true'::boolean::int AS r`
 
+## pg-bulk-insert  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
+- src: `CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)`
+
 ## pg-caret-power  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('8',),) target=()`
@@ -1256,6 +1302,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co`
 - src: `SELECT convert_to('abc', 'UTF8')`
+
+## pg-create-role  (postgresql)
+- targets: mysql(carrier), oracle(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE ROLE r LOGIN PASSWORD 'x'`
 
 ## pg-cte-cycle  (postgresql)
 - targets: mysql(invalid)
@@ -1406,6 +1457,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (id INT); GRANT SELECT, INSERT ON t TO PUBLIC`
+
+## pg-grant-column  (postgresql)
+- targets: mysql(carrier), oracle(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a INT); GRANT SELECT (a) ON t TO PUBLIC`
 
 ## pg-greatest-null  (postgresql)
 - targets: mysql(func), oracle(func)
@@ -1687,6 +1743,11 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE FUNCTION f() RETURNS TABLE(a INT, b TEXT) AS $$ BEGIN RETURN QUERY SELECT 1, 'x'; END; $$ LANGUAGE plpgsql`
+
+## pg-revoke  (postgresql)
+- targets: mysql(carrier), oracle(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a INT); REVOKE ALL ON t FROM PUBLIC`
 
 ## pg-rollup  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2059,6 +2120,11 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - live error: `ORA-00904: "CONCAT_WS": invalid identifier`
 - src: `SELECT CONCAT_WS(',', 'a', NULL, 'b') AS r`
 
+## ts-create-role  (tsql)
+- targets: mysql(carrier), oracle(carrier), postgresql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE ROLE r AUTHORIZATION dbo`
+
 ## ts-cursor  (tsql)
 - targets: mysql(invalid)
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
@@ -2135,6 +2201,13 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - src: `CREATE TABLE t (id INT);
 GO
 GRANT SELECT ON t TO PUBLIC`
+
+## ts-grant-object  (tsql)
+- targets: mysql(carrier), oracle(carrier), postgresql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
+- src: `CREATE TABLE t (a INT);
+GO
+GRANT SELECT ON OBJECT::t TO PUBLIC`
 
 ## ts-hierarchyid  (tsql)
 - targets: mysql(invalid)
@@ -2424,4 +2497,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (id INT IDENTITY(100, 5))`
 ---
 
-Totals: 472 distinct constructs; defect rows by kind: carrier 69, func 182, invalid 644, semantic 2, silent-drop 61.
+Totals: 486 distinct constructs; defect rows by kind: carrier 97, func 184, invalid 650, semantic 2, silent-drop 61.
