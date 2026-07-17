@@ -1452,10 +1452,34 @@ class ProceduralTransformer:
             from unique.core.procedural.emitter import ProceduralEmitter
 
             original = ProceduralEmitter(self._source).emit(node)
-            if re.search(r"(?is)\bcreate\s+temp(?:orary)?\s+table\b", scrub(original)):
+            scrubbed_fn = scrub(original)
+            if re.search(r"(?is)\bcreate\s+temp(?:orary)?\s+table\b", scrubbed_fn):
                 reason = (
                     "T-SQL functions cannot access temporary tables (2772); "
                     "routine preserved as a comment"
+                )
+                self._warnings.append(reason)
+                self._register_degraded_routine(getattr(node, "name", None))
+                return RawSQL(sql=original, reason=reason)
+            # A PG function may WRITE; T-SQL functions take no
+            # side-effecting DML (error 443) — a writing function IS a
+            # procedure semantically, but its callers use it as a value:
+            # degrade honestly (wave 230). The body scan skips the
+            # CREATE line itself.
+            body_only = re.sub(r"(?is)^.*?\bBEGIN\b", "", scrubbed_fn, count=1)
+            stays_function = (
+                node.return_type is not None
+                and node.return_type.name.upper() not in ("VOID", "TRIGGER")
+                and not any(p_.direction in ("OUT", "INOUT") for p_ in node.parameters)
+            )
+            if stays_function and (
+                re.search(r"(?is)^\s*(INSERT|UPDATE|DELETE|MERGE)\b", body_only)
+                or re.search(r"(?is);\s*(INSERT|UPDATE|DELETE|MERGE)\b", body_only)
+            ):
+                reason = (
+                    "T-SQL functions cannot contain side-effecting DML "
+                    "(443); rewrite as a procedure. Routine preserved as "
+                    "a comment"
                 )
                 self._warnings.append(reason)
                 self._register_degraded_routine(getattr(node, "name", None))

@@ -1611,14 +1611,14 @@ class TestGetDiagnostics:
     T-SQL ERROR_*()/@@ROWCOUNT — via the existing assignment emitters;
     PG keeps the native form."""
 
+    # A procedure since wave 230 (writing functions degrade on T-SQL).
     _ROWS = (
-        "create function gd1() returns int as $$\n"
+        "create procedure gd1() language plpgsql as $$\n"
         "declare n int;\n"
         "begin\n"
         "  update t set a = 1;\n"
         "  get diagnostics n = row_count;\n"
-        "  return n;\n"
-        "end$$ language plpgsql;"
+        "end$$;"
     )
     _STACKED = (
         "create function gd2() returns text as $$\n"
@@ -1782,14 +1782,15 @@ class TestPlpgsqlFoundFlag:
     error 4145 on T-SQL. Per-target predicates: ``(@@ROWCOUNT > 0)``,
     ``(ROW_COUNT() > 0)``, Oracle's native ``SQL%FOUND``."""
 
+    # A procedure since wave 230 (writing functions degrade on T-SQL).
     _SRC = (
-        "create function ff() returns int as $$\n"
+        "create procedure ff() language plpgsql as $$\n"
+        "declare r int;\n"
         "begin\n"
         "  update t set a = 1;\n"
-        "  if found then\n    return 1;\n  end if;\n"
-        "  if not found then\n    return 2;\n  end if;\n"
-        "  return 0;\n"
-        "end$$ language plpgsql;"
+        "  if found then\n    r := 1;\n  end if;\n"
+        "  if not found then\n    r := 2;\n  end if;\n"
+        "end$$;"
     )
 
     def test_found_tsql(self) -> None:
@@ -3989,9 +3990,11 @@ class TestEmbeddedFallbackSpelling:
     the top-level DML path renders in the source dialect."""
 
     def test_embedded_insert_params_keep_at_spelling(self) -> None:
+        # A PROCEDURE since wave 230: T-SQL functions take no
+        # side-effecting DML (443) — a writing function now degrades.
         src = (
-            "create function add_inv(p_customer_id int, p_qty int) "
-            "returns int as $$\n"
+            "create procedure add_inv(p_customer_id int, p_qty int) "
+            "language plpgsql as $$\n"
             "declare new_id int;\n"
             "begin\n"
             "  insert into invoice (customer_id, qty) "
@@ -3999,8 +4002,7 @@ class TestEmbeddedFallbackSpelling:
             "  select max(id) into new_id from invoice;\n"
             "  insert into invoice_line (invoice_id, qty)\n"
             "  select new_id, p_qty from product p where p.id = p_qty;\n"
-            "  return new_id;\n"
-            "end $$ language plpgsql;"
+            "end $$;"
         )
         out = _t(src, "tsql")
         assert "$p_" not in out, out
@@ -7934,3 +7936,29 @@ class TestWave229SubqueryLimitTsql:
             "tsql",
         )
         assert re.search(r"(?i)SELECT TOP 1 @x = id", out), out
+
+
+class TestWave230WritingFunctions:
+    """wave 230 (pg-corpus): PG functions may WRITE; T-SQL functions
+    take no side-effecting DML (error 443) — a writing function
+    degrades honestly; read-only ones pass."""
+
+    def test_writing_function_carrier_tsql(self) -> None:
+        out = _t2(
+            "create function au(a text) returns int language plpgsql"
+            " as $$ begin insert into users values (a);"
+            " return 1; end $$;",
+            "postgresql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out and "side-effecting" in out, out
+
+    def test_readonly_function_untouched(self) -> None:
+        out = _t2(
+            "create function ro(a int) returns int language plpgsql"
+            " as $$ begin return a + 1; end $$;",
+            "postgresql",
+            "tsql",
+        )
+        assert "UNIQUE:" not in out, out
+        assert re.search(r"(?i)RETURN @a \+ 1", out), out

@@ -1154,7 +1154,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          T-SQL (the trailing statement-level form stays the wave-212
          SELECT-assign TOP); the raw-text LIMIT map now covers pg
          source too. Measured: pg→tsql **33 → 31** (−2). Discovery
-         HOLDS 0. Tests: TestWave229SubqueryLimitTsql (2).**
+         HOLDS 0. Tests: TestWave229SubqueryLimitTsql (2).* Wave 230 (2026-07-17): PG
+         functions may WRITE; T-SQL functions take no side-effecting
+         DML (error 443 — the previous outputs were live-invalid): a
+         writing function that STAYS a function (non-void, no OUT
+         params, non-trigger — those become procedures/trigger bodies)
+         degrades honestly. Three legacy test fixtures converted to
+         procedures (their asserted outputs were 443-invalid).
+         Measured: pg→tsql **31 → 29** (validity 99.1%). Discovery
+         HOLDS 0. Tests: TestWave230WritingFunctions (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
