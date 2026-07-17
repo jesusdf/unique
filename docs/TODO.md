@@ -82,11 +82,19 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       = TOTAL 127 vs the declared floor 133 (−6); validity 98.7–99.8%;
       discovery pg→pg 0; FE live 16/16.** Full log in
       [`docs/DONE.md`](DONE.md) §39.
-- [ ] **Prune fallback-only text rewriters (P3):** with IR-first the
-      expression engine, measure which `transformer/_expr.py` rewriters
-      still receive fallback traffic on the corpora (coverage run) and
-      delete the dead ones; the live ones are the honest fallback surface
-      and stay.
+- [x] **Prune fallback-only text rewriters (P3) — CLOSED BY MEASUREMENT
+      2026-07-17:** a coverage run over ALL real material (both corpora,
+      the procedures fixtures and the three private fixtures, every
+      direction) shows **36 of 37 rewriters still receive fallback
+      traffic** — the IR-declined fragments (parse failures, mid-transform
+      hybrids) are real and the text fallback is their working surface.
+      The single zero-traffic method (`_map_mysql_datefmt_to_oracle`, 8
+      lines) is a helper of a live method and reachable by real
+      mysql→oracle date formats outside the corpus — deleting it would
+      break the fallback with no replacement. Conclusion: nothing is
+      safely prunable; the fallback surface stays as-is. (Harness: the
+      scratchpad coverage run with COVERAGE_CORE=sysmon; the timed-out
+      first attempt without sysmon is the reminder to always use it.)
 
 ### P3 — hardening carry-overs (from 2026-07-02, still open)
 
