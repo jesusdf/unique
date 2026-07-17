@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (344 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (355 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -648,6 +648,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
 - src: `SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)`
 
+## my-mod-edge  (mysql)
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('0', '1', '1'),) target=(('0', '0', '0'),)`
+- src: `SELECT MOD(0,5), MOD(5,0) IS NULL, 5%0 IS NULL`
+
 ## my-mod-zero  (mysql)
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
@@ -697,6 +702,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
 - src: `SELECT TRUNCATE(PI(), 4), ROUND(PI(), 4), FORMAT(PI(), 4)`
+
+## my-pi-vals  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('180', '3.14159', '3.14159'),) target=(('180', '3', '3.14159'),)`
+- src: `SELECT DEGREES(PI()), RADIANS(180), PI()`
 
 ## my-rand  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -762,6 +772,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: tsql(invalid)
 - live error: `(1785, b"Introducing FOREIGN KEY constraint 'FK__emp__mgr__790A8C33' on table 'emp' may ca`
 - src: `CREATE TABLE emp (id INT PRIMARY KEY, mgr INT, FOREIGN KEY (mgr) REFERENCES emp(id) ON DELETE SET NULL)`
+
+## my-seq-concat  (mysql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-32039: missing column alias list in recursive WITH clause element SEQ`
+- src: `WITH RECURSIVE seq AS (SELECT 1 n UNION ALL SELECT n+1 FROM seq WHERE n<10) SELECT GROUP_CONCAT(n) FROM seq`
 
 ## my-set-fns  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -1332,6 +1347,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `FUNC-DIFF: source=(('1.83871',),) target=(('2',),)`
 - src: `SELECT MONTHS_BETWEEN(DATE '2020-03-10', DATE '2020-01-15') AS r FROM DUAL`
 
+## ora-multiset-table  (oracle)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:`
+- src: `SELECT COLUMN_VALUE FROM TABLE(CAST(MULTISET(SELECT LEVEL FROM DUAL CONNECT BY LEVEL<=3) AS SYS.ODCINUMBERLIST))`
+
 ## ora-nanvl  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA`
@@ -1472,6 +1492,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:`
 - src: `SELECT * FROM TABLE(SYS.ODCINUMBERLIST(1,2,3))`
+
+## ora-table-fn2  (oracle)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:`
+- src: `SELECT t.COLUMN_VALUE FROM TABLE(SYS.ODCINUMBERLIST(1,2,3)) t`
 
 ## ora-table-varchar-list  (oracle)
 - targets: postgresql(invalid), tsql(invalid)
@@ -1900,6 +1925,21 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(102, b"Incorrect syntax near 'sql'.DB-Lib error message 20018, severity 15:\nGeneral SQL `
 - src: `CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE sql SECURITY DEFINER STABLE PARALLEL SAFE`
 
+## pg-gen-months  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-30089: missing or invalid <datetime field>`
+- src: `SELECT day::date FROM generate_series('2020-01-01', '2020-12-01', '1 month'::interval) day`
+
+## pg-gen-series-date  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ`
+- src: `SELECT generate_series('2020-01-01'::date, '2020-01-05'::date, '1 day') AS d`
+
+## pg-gen-series-ord  (postgresql)
+- targets: tsql(invalid)
+- live error: `(102, b"Incorrect syntax near 'ORDINALITY'.DB-Lib error message 20018, severity 15:\nGener`
+- src: `SELECT * FROM generate_series(1, 10, 2) WITH ORDINALITY AS t(v, n)`
+
 ## pg-generate-series  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
@@ -1994,6 +2034,16 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
 - src: `SELECT JSONB_BUILD_OBJECT('a', 1, 'b', 2)`
+
+## pg-jsonb-each  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(208, b"Invalid object name 'dbo.jsonb_each'.DB-Lib error message 20018, severity 16:\nGen`
+- src: `SELECT key, value FROM jsonb_each('{"a":1,"b":2}'::jsonb)`
+
+## pg-jsonb-elements-ord  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near 'ORDINALITY'.DB-Lib error message 20018, severity 15:\nGener`
+- src: `SELECT * FROM jsonb_array_elements('[1,2,3]'::jsonb) WITH ORDINALITY`
 
 ## pg-jsonb-fns2  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2695,6 +2745,11 @@ CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
 - live error: `ORA-00904: "FORMATMESSAGE": invalid identifier`
 - src: `SELECT FORMATMESSAGE('hi %s', 'x') AS r`
 
+## ts-gen-series-apply  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "GENERATE_SERIES": invalid identifier`
+- src: `SELECT value, ordinal FROM GENERATE_SERIES(1, 5) g CROSS APPLY (SELECT g.value AS ordinal) x`
+
 ## ts-geography  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier`
@@ -2809,6 +2864,11 @@ SELECT * FROM t WITH (NOLOCK)`
 - src: `CREATE TABLE dbo.audit (id INT IDENTITY, msg NVARCHAR(MAX), ts DATETIME2);
 GO
 CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BE`
+
+## ts-recursion-limit  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-32039: missing column alias list in recursive WITH clause element N`
+- src: `WITH n AS (SELECT 1 v UNION ALL SELECT v+1 FROM n WHERE v<100) SELECT COUNT(*) FROM n OPTION (MAXRECURSION 1000)`
 
 ## ts-recursive-cte  (tsql)
 - targets: mysql(invalid), postgresql(invalid)
@@ -2992,4 +3052,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 582 distinct constructs; defect rows by kind: func 294, invalid 832, semantic 2, silent-drop 75.
+Totals: 594 distinct constructs; defect rows by kind: func 296, invalid 852, semantic 2, silent-drop 75.

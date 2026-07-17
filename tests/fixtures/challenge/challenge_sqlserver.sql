@@ -143,6 +143,9 @@ SELECT FORMAT(1234.5, 'N2') AS r
 -- CASE[open]: ts-formatmessage — fails on mysql, oracle, postgresql. ORA-00904: "FORMATMESSAGE": invalid identifier
 SELECT FORMATMESSAGE('hi %s', 'x') AS r
 
+-- CASE[open]: ts-gen-series-apply — fails on oracle, postgresql. ORA-00904: "GENERATE_SERIES": invalid identifier
+SELECT value, ordinal FROM GENERATE_SERIES(1, 5) g CROSS APPLY (SELECT g.value AS ordinal) x
+
 -- CASE[open]: ts-geography — fails on mysql, oracle, postgresql. ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier
 SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r
 
@@ -215,6 +218,9 @@ SELECT QUOTENAME('my table'), PARSENAME('a.b.c', 2)
 CREATE TABLE dbo.audit (id INT IDENTITY, msg NVARCHAR(MAX), ts DATETIME2);
 GO
 CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BEGIN BEGIN TRY INSERT INTO dbo.audit (msg, ts) VALUES (@msg, SYSDATETIME()); END TRY BEGIN CATCH THROW; END CATCH END
+
+-- CASE[open]: ts-recursion-limit — fails on mysql, oracle, postgresql. ORA-32039: missing column alias list in recursive WITH clause element N
+WITH n AS (SELECT 1 v UNION ALL SELECT v+1 FROM n WHERE v<100) SELECT COUNT(*) FROM n OPTION (MAXRECURSION 1000)
 
 -- CASE[open]: ts-recursive-cte — fails on mysql, postgresql. relation "r" does not exist
 WITH r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n < 5) SELECT * FROM r

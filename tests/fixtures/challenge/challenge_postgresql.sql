@@ -194,6 +194,15 @@ CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id FROM t WHERE to_tsvecto
 -- CASE[open]: pg-func-attrs — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'sql'.DB-Lib error message 20018, severity 15:\nGeneral SQL 
 CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE sql SECURITY DEFINER STABLE PARALLEL SAFE
 
+-- CASE[open]: pg-gen-months — fails on oracle. ORA-30089: missing or invalid <datetime field>
+SELECT day::date FROM generate_series('2020-01-01', '2020-12-01', '1 month'::interval) day
+
+-- CASE[open]: pg-gen-series-date — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
+SELECT generate_series('2020-01-01'::date, '2020-01-05'::date, '1 day') AS d
+
+-- CASE[open]: pg-gen-series-ord — fails on tsql. (102, b"Incorrect syntax near 'ORDINALITY'.DB-Lib error message 20018, severity 15:\nGener
+SELECT * FROM generate_series(1, 10, 2) WITH ORDINALITY AS t(v, n)
+
 -- CASE[open]: pg-generate-series — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT generate_series(1, 5) AS r
 
@@ -250,6 +259,12 @@ SELECT JSONB_AGG(x) FROM (VALUES (1),(2)) v(x)
 
 -- CASE[open]: pg-jsonb-build — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSONB_BUILD_OBJECT('a', 1, 'b', 2)
+
+-- CASE[open]: pg-jsonb-each — fails on oracle, tsql. (208, b"Invalid object name 'dbo.jsonb_each'.DB-Lib error message 20018, severity 16:\nGen
+SELECT key, value FROM jsonb_each('{"a":1,"b":2}'::jsonb)
+
+-- CASE[open]: pg-jsonb-elements-ord — fails on oracle, tsql. (102, b"Incorrect syntax near 'ORDINALITY'.DB-Lib error message 20018, severity 15:\nGener
+SELECT * FROM jsonb_array_elements('[1,2,3]'::jsonb) WITH ORDINALITY
 
 -- CASE[open]: pg-jsonb-fns2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
 SELECT jsonb_pretty('{"a":1}'::jsonb), jsonb_strip_nulls('{"a":null}'::jsonb)

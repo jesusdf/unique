@@ -368,6 +368,9 @@ SELECT MAKE_SET(3, 'a', 'b', 'c') AS r
 -- CASE[open]: my-makedate — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)
 
+-- CASE[open]: my-mod-edge — fails on oracle. FUNC-DIFF: source=(('0', '1', '1'),) target=(('0', '0', '0'),)
+SELECT MOD(0,5), MOD(5,0) IS NULL, 5%0 IS NULL
+
 -- CASE[open]: my-mod-zero — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 5 MOD 0 IS NULL AS r
 
@@ -397,6 +400,9 @@ SELECT PERIOD_DIFF(202006, 202001) AS r
 
 -- CASE[open]: my-pi-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT TRUNCATE(PI(), 4), ROUND(PI(), 4), FORMAT(PI(), 4)
+
+-- CASE[open]: my-pi-vals — fails on tsql. FUNC-DIFF: source=(('180', '3.14159', '3.14159'),) target=(('180', '3', '3.14159'),)
+SELECT DEGREES(PI()), RADIANS(180), PI()
 
 -- CASE[open]: my-rand — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT RAND(1), RANDOM_BYTES(4), UUID()
@@ -437,6 +443,9 @@ CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; EN
 
 -- CASE[open]: my-self-fk — fails on tsql. (1785, b"Introducing FOREIGN KEY constraint 'FK__emp__mgr__790A8C33' on table 'emp' may ca
 CREATE TABLE emp (id INT PRIMARY KEY, mgr INT, FOREIGN KEY (mgr) REFERENCES emp(id) ON DELETE SET NULL)
+
+-- CASE[open]: my-seq-concat — fails on oracle, postgresql. ORA-32039: missing column alias list in recursive WITH clause element SEQ
+WITH RECURSIVE seq AS (SELECT 1 n UNION ALL SELECT n+1 FROM seq WHERE n<10) SELECT GROUP_CONCAT(n) FROM seq
 
 -- CASE[open]: my-set-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
 SELECT FIND_IN_SET('b', 'a,b,c'), MAKE_SET(6, 'x','y','z')
