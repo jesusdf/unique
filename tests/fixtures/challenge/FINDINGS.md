@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (411 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (418 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -153,6 +153,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `function bitwise_count(bit) does not exist`
 - src: `SELECT BIT_COUNT(b'1011'), BIT_LENGTH('a'), OCTET_LENGTH('ab')`
 
+## my-bit-prec2  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('2', '14', '8'),) target=(('3', '14', '5'),)`
+- src: `SELECT 10 & 6 + 1, 10 | 2 * 3, 1 << 2 + 1`
+
 ## my-bitand-prec  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('3',),)`
@@ -167,6 +172,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('18446744073709551616',),) target=(('-5',),)`
 - src: `SELECT ~5 + 1 AS r`
+
+## my-bitops  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1', '7', '6', '18446744073709551616', '10', '2'),) target=(('1', '7',`
+- src: `SELECT 5 & 3, 5 | 2, 5 ^ 3, ~5, 5 << 1, 5 >> 1`
 
 ## my-blob-length  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -503,6 +513,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO`
 - src: `SELECT LOAD_FILE('/etc/x'), IS_USED_LOCK('l')`
 
+## my-fk-full  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-03075: unexpected item ON in an out-of-line constraint`
+- src: `CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE t (pid INT, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES p(id) ON DELETE SET NULL`
+
 ## my-flen  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('5', '4', '6', '2'),) target=(('4', '4', '2', '2'),)`
@@ -512,6 +527,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('3',),)`
 - src: `SELECT FLOOR(2.9999999999999999) AS r`
+
+## my-fmt-spec  (mysql)
+- targets: oracle(invalid), postgresql(silent), tsql(silent)
+- live error: `SILENT: source literal(s) ["'%a %b %e %T %Y'", "'%p %l:%i'", "'%j %U %u %V'"] absent from `
+- src: `SELECT DATE_FORMAT(NOW(),'%a %b %e %T %Y'),DATE_FORMAT(NOW(),'%p %l:%i'),DATE_FORMAT(NOW(),'%j %U %u %V')`
+
+## my-fmt-spec2  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er`
+- src: `SELECT DATE_FORMAT('2020-06-15','%D %W %M'),DATE_FORMAT('2020-06-15','%X %V')`
 
 ## my-fmt3  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -542,6 +567,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)`
 - src: `SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t`
+
+## my-gen-constr  (mysql)
+- targets: tsql(invalid)
+- live error: `(1764, b"Computed Column 'b' in table 't' is invalid for use in 'CHECK CONSTRAINT' because`
+- src: `CREATE TABLE t (a INT, b INT GENERATED ALWAYS AS (a+1) VIRTUAL, UNIQUE (b), CHECK (b>a))`
 
 ## my-gencol2  (mysql)
 - targets: postgresql(invalid), tsql(invalid)
@@ -873,6 +903,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
 - src: `SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)`
 
+## my-misc-num  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR`
+- src: `SELECT RAND(),FLOOR(RAND()*100),CRC32('x'),CONV(255,10,2),BIN(10),OCT(64),HEX(255)`
+
 ## my-mod-edge  (mysql)
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('0', '1', '1'),) target=(('0', '0', '0'),)`
@@ -1157,6 +1192,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(174, b'The atan function requires 1 argument(s).DB-Lib error message 20018, severity 15:\`
 - src: `SELECT ATAN2(1,1), ATAN(1,1), DEGREES(PI()), RADIANS(180), COT(1)`
+
+## my-trig-suite  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-00904: "RADIANS": invalid identifier`
+- src: `SELECT ACOS(1),ASIN(0),ATAN(1),COS(0),SIN(0),TAN(0),COT(1),DEGREES(1),RADIANS(1)`
 
 ## my-trim-both  (mysql)
 - targets: postgresql(func), tsql(func)
@@ -1592,6 +1632,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT /*+ FULL(t) */ 1 AS r FROM DUAL t`
 
+## ora-identity-opts  (oracle)
+- targets: mysql(invalid)
+- live error: `(1075, 'Incorrect table definition; there can be only one auto column and it must be defin`
+- src: `CREATE TABLE t (a NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100 INCREMENT BY 10 MAXVALUE 9999 CYCLE))`
+
 ## ora-initcap  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s`
@@ -1687,6 +1732,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME`
 - src: `SELECT MEDIAN(x), STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 FROM DUAL UNION ALL SELECT 2 FROM DUAL)`
 
+## ora-misc-num  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(189, b'The rand function requires 0 to 1 arguments.DB-Lib error message 20018, severity 1`
+- src: `SELECT DBMS_RANDOM.VALUE(1,100),BITAND(12,10),WIDTH_BUCKET(5,0,10,5),ORA_HASH('x') FROM DUAL`
+
 ## ora-month-name  (oracle)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('June',),) target=(('Month',),)`
@@ -1751,6 +1801,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('-42',),) target=(('NULL',),)`
 - src: `SELECT TO_CHAR(-42, 'S999') AS r FROM DUAL`
+
+## ora-numfmt-spec  (oracle)
+- targets: mysql(silent), postgresql(silent-rt), tsql(invalid)
+- live error: `(195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s`
+- src: `SELECT TO_CHAR(1234.5,'L9G999D99MI'),TO_CHAR(0.75,'999PR'),TO_CHAR(255,'0XX') FROM DUAL`
 
 ## ora-numfmt-thousands  (oracle)
 - targets: mysql(func)
@@ -1913,6 +1968,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `FUNC-DIFF: source=(('-1234.5',),) target=(('NULL',),)`
 - src: `SELECT TO_CHAR(-1234.5, '9999.99') AS r FROM DUAL`
 
+## ora-todate2  (oracle)
+- targets: mysql(invalid)
+- live error: `(1305, 'FUNCTION unique_val_9fa2bcf8c36d.STR_TO_TIME does not exist')`
+- src: `SELECT TO_DATE('15-JUN-20','DD-MON-YY'),TO_TIMESTAMP('2020-06-15 10:30:45.123','YYYY-MM-DD HH24:MI:SS.FF3') FROM DUAL`
+
 ## ora-tonumber2  (oracle)
 - targets: mysql(invalid), tsql(invalid)
 - live error: `(195, b"'TO_NUMBER' is not a recognized built-in function name.DB-Lib error message 20018,`
@@ -1937,6 +1997,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AT`
 - src: `SELECT ATAN2(1,1), COSH(1), SINH(1), TANH(1) FROM DUAL`
+
+## ora-trig-suite  (oracle)
+- targets: mysql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
+- src: `SELECT ACOS(1),ASIN(0),ATAN(1),COS(0),SIN(0),TAN(0),COSH(0),SINH(0),TANH(0) FROM DUAL`
 
 ## ora-tz-fns  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -2100,10 +2165,20 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(1305, 'FUNCTION unique_val_ff6c8e4945b4.GETBIT does not exist')`
 - src: `SELECT get_bit(B'1011', 0), set_bit(B'0000', 1, 1)`
 
+## pg-bit-prec2  (postgresql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('2', '8'),) target=(('3', '5'),)`
+- src: `SELECT 10 & 6 + 1, 1 << 2 + 1`
+
 ## pg-bitnot  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('-1',),) target=(('18446744073709551616',),)`
 - src: `SELECT ~0 AS r`
+
+## pg-bitops  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('1', '7', '6', '-6', '10', '2'),) target=(('1', '7', '6', '18446744073`
+- src: `SELECT 5 & 3, 5 | 2, 5 # 3, ~5, 5 << 1, 5 >> 1`
 
 ## pg-blob-length  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2364,6 +2439,16 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: tsql(invalid)
 - live error: `(130, b'Cannot perform an aggregate function on an expression containing an aggregate or a`
 - src: `CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id, COUNT(*) FILTER (WHERE n > (SELECT AVG(v) FROM u)) FROM`
+
+## pg-fk-full  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-03075: unexpected item ON in an out-of-line constraint`
+- src: `CREATE TABLE t (id INT PRIMARY KEY, parent INT, CONSTRAINT fk FOREIGN KEY (parent) REFERENCES t(id) ON DELETE CASCADE ON UPDATE RE`
+
+## pg-fmt-spec  (postgresql)
+- targets: mysql(silent), oracle(invalid), tsql(silent)
+- live error: `SILENT: source literal(s) ["'Dy Mon DD HH24:MI:SS YYYY'", "'AM HH12:MI'", "'DDD WW IW'"] a`
+- src: `SELECT to_char(now(),'Dy Mon DD HH24:MI:SS YYYY'),to_char(now(),'AM HH12:MI'),to_char(now(),'DDD WW IW')`
 
 ## pg-fmt3  (postgresql)
 - targets: mysql(silent), oracle(invalid), tsql(silent)
@@ -2695,6 +2780,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `FUNC-DIFF: source=(('0.5',),) target=(('0',),)`
 - src: `SELECT to_char(0.5, '0.00') AS r`
 
+## pg-numfmt-spec  (postgresql)
+- targets: mysql(silent), oracle(invalid), tsql(silent)
+- live error: `SILENT: source literal(s) ["'L9G999D99MI'"] absent from valid output, no warning`
+- src: `SELECT to_char(1234.5,'L9G999D99MI'),to_char(-5,'999PR'),to_char(255,'FMRN')`
+
 ## pg-numfmt-thousands  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1,234,567.89',),) target=(('9999999123456900',),)`
@@ -2915,6 +3005,11 @@ CREATE TABLE ledger (id SERIA`
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('-1234.5',),) target=(('-9999123599',),)`
 - src: `SELECT to_char(-1234.5, '9999.99') AS r`
+
+## pg-todate2  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1305, 'FUNCTION unique_val_2ac6422f99c6.STR_TO_TIME does not exist')`
+- src: `SELECT to_date('06/15/2020','MM/DD/YYYY'),to_timestamp('2020-06-15 10:30','YYYY-MM-DD HH24:MI')`
 
 ## pg-tohex2  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
@@ -3163,6 +3258,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `ORA-00904: "SET_BIT": invalid identifier`
 - src: `SELECT GET_BIT(0x0A, 1), SET_BIT(0x0A, 0, 1)`
 
+## ts-bitops  (tsql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('1', '7', '6', '-6'),) target=(('1', '7', '6', '18446744073709551616')`
+- src: `SELECT 5 & 3, 5 | 2, 5 ^ 3, ~5`
+
 ## ts-cast-bit  (tsql)
 - targets: mysql(func), oracle(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
@@ -3324,6 +3424,11 @@ CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
 - targets: oracle(invalid)
 - live error: `PROCEDURE P compiled INVALID (line 12): PL/SQL: ORA-00904: "ERROR_LINE": invalid identifie`
 - src: `CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERROR_MESSAGE(), ERROR_NUMBER(), ERROR_LINE(); END CA`
+
+## ts-fmt-spec  (tsql)
+- targets: mysql(silent), oracle(invalid), postgresql(silent)
+- live error: `ORA-01821: date format not recognized`
+- src: `SELECT FORMAT(GETDATE(),'ddd MMM dd HH:mm:ss yyyy'),FORMAT(GETDATE(),'tt hh:mm'),FORMAT(GETDATE(),'D')`
 
 ## ts-format-iso  (tsql)
 - targets: mysql(silent), oracle(invalid), postgresql(silent)
@@ -3694,4 +3799,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 722 distinct constructs; defect rows by kind: func 322, invalid 1123, semantic 2, silent-drop 75.
+Totals: 743 distinct constructs; defect rows by kind: func 329, invalid 1146, semantic 2, silent-drop 75.

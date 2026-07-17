@@ -51,6 +51,9 @@ SELECT DATALENGTH(CAST('hello' AS VARBINARY(MAX))) AS r
 -- CASE[open]: ts-bit-fns — fails on mysql, oracle, postgresql. ORA-00904: "SET_BIT": invalid identifier
 SELECT GET_BIT(0x0A, 1), SET_BIT(0x0A, 0, 1)
 
+-- CASE[open]: ts-bitops — fails on mysql. FUNC-DIFF: source=(('1', '7', '6', '-6'),) target=(('1', '7', '6', '18446744073709551616')
+SELECT 5 & 3, 5 | 2, 5 ^ 3, ~5
+
 -- CASE[open]: ts-cast-bit — fails on mysql, oracle. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT CAST(2 AS BIT) AS r
 
@@ -148,6 +151,9 @@ SELECT DATEADD(MONTH, -1, EOMONTH('2020-03-01')) AS r
 
 -- CASE[open]: ts-error-functions — fails on oracle. PROCEDURE P compiled INVALID (line 12): PL/SQL: ORA-00904: "ERROR_LINE": invalid identifie
 CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERROR_MESSAGE(), ERROR_NUMBER(), ERROR_LINE(); END CATCH END
+
+-- CASE[open]: ts-fmt-spec — fails on oracle. ORA-01821: date format not recognized
+SELECT FORMAT(GETDATE(),'ddd MMM dd HH:mm:ss yyyy'),FORMAT(GETDATE(),'tt hh:mm'),FORMAT(GETDATE(),'D')
 
 -- CASE[open]: ts-format-iso — fails on oracle. ORA-01821: date format not recognized
 SELECT FORMAT(CAST('2020-06-15 14:30:45' AS DATETIME2), 'yyyy-MM-ddTHH:mm:ss') AS r

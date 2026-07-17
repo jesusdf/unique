@@ -71,6 +71,9 @@ SELECT BIT_COUNT(255) AS r
 -- CASE[open]: my-bit-fns — fails on postgresql. function bitwise_count(bit) does not exist
 SELECT BIT_COUNT(b'1011'), BIT_LENGTH('a'), OCTET_LENGTH('ab')
 
+-- CASE[open]: my-bit-prec2 — fails on tsql. FUNC-DIFF: source=(('2', '14', '8'),) target=(('3', '14', '5'),)
+SELECT 10 & 6 + 1, 10 | 2 * 3, 1 << 2 + 1
+
 -- CASE[open]: my-bitand-prec — fails on tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
 SELECT 10 & 6 + 1 AS r
 
@@ -79,6 +82,9 @@ SELECT ~0 AS r
 
 -- CASE[open]: my-bitnot-arith — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('18446744073709551616',),) target=(('-5',),)
 SELECT ~5 + 1 AS r
+
+-- CASE[open]: my-bitops — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1', '7', '6', '18446744073709551616', '10', '2'),) target=(('1', '7',
+SELECT 5 & 3, 5 | 2, 5 ^ 3, ~5, 5 << 1, 5 >> 1
 
 -- CASE[open]: my-blob-length — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 CREATE TABLE t (data BLOB); INSERT INTO t VALUES (LOAD_FILE('/x')); SELECT LENGTH(data) FROM t
@@ -281,11 +287,20 @@ SELECT FIELD('b', 'a', 'b', 'c') AS r
 -- CASE[open]: my-file-lock — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 SELECT LOAD_FILE('/etc/x'), IS_USED_LOCK('l')
 
+-- CASE[open]: my-fk-full — fails on oracle. ORA-03075: unexpected item ON in an out-of-line constraint
+CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE t (pid INT, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES p(id) ON DELETE SET NULL ON UPDATE CASCADE)
+
 -- CASE[open]: my-flen — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('5', '4', '6', '2'),) target=(('4', '4', '2', '2'),)
 SELECT LENGTH('café'),CHAR_LENGTH('café'),LENGTH('日本'),CHAR_LENGTH('日本')
 
 -- CASE[open]: my-floor-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
 SELECT FLOOR(2.9999999999999999) AS r
+
+-- CASE[open]: my-fmt-spec — fails on oracle. SILENT: source literal(s) ["'%a %b %e %T %Y'", "'%p %l:%i'", "'%j %U %u %V'"] absent from 
+SELECT DATE_FORMAT(NOW(),'%a %b %e %T %Y'),DATE_FORMAT(NOW(),'%p %l:%i'),DATE_FORMAT(NOW(),'%j %U %u %V')
+
+-- CASE[open]: my-fmt-spec2 — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
+SELECT DATE_FORMAT('2020-06-15','%D %W %M'),DATE_FORMAT('2020-06-15','%X %V')
 
 -- CASE[open]: my-fmt3 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT FORMAT(1234.5678,2),FORMAT(1234.5678,4,'de_DE'),TRUNCATE(1234.5678,2)
@@ -304,6 +319,9 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 
 -- CASE[open]: my-gc-order — fails on oracle. FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)
 SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t
+
+-- CASE[open]: my-gen-constr — fails on tsql. (1764, b"Computed Column 'b' in table 't' is invalid for use in 'CHECK CONSTRAINT' because
+CREATE TABLE t (a INT, b INT GENERATED ALWAYS AS (a+1) VIRTUAL, UNIQUE (b), CHECK (b>a))
 
 -- CASE[open]: my-gencol2 — fails on postgresql, tsql. (1759, b"Computed column 'b' in table 't' is not allowed to be used in another computed-co
 CREATE TABLE t (a INT, b INT AS (a*2) STORED, c INT AS (a+b) VIRTUAL, KEY(b))
@@ -503,6 +521,9 @@ SELECT MAKE_SET(1|4,'hello','nice','world') AS r
 -- CASE[open]: my-makedate — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)
 
+-- CASE[open]: my-misc-num — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR
+SELECT RAND(),FLOOR(RAND()*100),CRC32('x'),CONV(255,10,2),BIN(10),OCT(64),HEX(255)
+
 -- CASE[open]: my-mod-edge — fails on oracle. FUNC-DIFF: source=(('0', '1', '1'),) target=(('0', '0', '0'),)
 SELECT MOD(0,5), MOD(5,0) IS NULL, 5%0 IS NULL
 
@@ -674,6 +695,9 @@ SELECT 'a ' = 'a' AS r
 
 -- CASE[open]: my-trig — fails on oracle, postgresql, tsql. (174, b'The atan function requires 1 argument(s).DB-Lib error message 20018, severity 15:\
 SELECT ATAN2(1,1), ATAN(1,1), DEGREES(PI()), RADIANS(180), COT(1)
+
+-- CASE[open]: my-trig-suite — fails on oracle. ORA-00904: "RADIANS": invalid identifier
+SELECT ACOS(1),ASIN(0),ATAN(1),COS(0),SIN(0),TAN(0),COT(1),DEGREES(1),RADIANS(1)
 
 -- CASE[open]: my-trim-both — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r

@@ -179,6 +179,9 @@ SELECT STANDARD_HASH('abc', 'SHA256'), ORA_HASH('abc', 100) FROM DUAL
 -- CASE[open]: ora-hint-comment — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT /*+ FULL(t) */ 1 AS r FROM DUAL t
 
+-- CASE[open]: ora-identity-opts — fails on mysql. (1075, 'Incorrect table definition; there can be only one auto column and it must be defin
+CREATE TABLE t (a NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100 INCREMENT BY 10 MAXVALUE 9999 CYCLE))
+
 -- CASE[open]: ora-initcap — fails on mysql, postgresql, tsql. (195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT INITCAP('hello world') AS r FROM DUAL
 
@@ -236,6 +239,9 @@ SELECT LTRIM('xxabc', 'x') AS r FROM DUAL
 -- CASE[open]: ora-median-mode — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME
 SELECT MEDIAN(x), STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 FROM DUAL UNION ALL SELECT 2 FROM DUAL)
 
+-- CASE[open]: ora-misc-num — fails on mysql, postgresql, tsql. (189, b'The rand function requires 0 to 1 arguments.DB-Lib error message 20018, severity 1
+SELECT DBMS_RANDOM.VALUE(1,100),BITAND(12,10),WIDTH_BUCKET(5,0,10,5),ORA_HASH('x') FROM DUAL
+
 -- CASE[open]: ora-month-name — fails on mysql. FUNC-DIFF: source=(('June',),) target=(('Month',),)
 SELECT TO_CHAR(DATE '2020-06-01', 'Month') AS r FROM DUAL
 
@@ -274,6 +280,9 @@ SELECT TO_CHAR(0.5, '0.00') AS r FROM DUAL
 
 -- CASE[open]: ora-numfmt-sign — fails on mysql. FUNC-DIFF: source=(('-42',),) target=(('NULL',),)
 SELECT TO_CHAR(-42, 'S999') AS r FROM DUAL
+
+-- CASE[open]: ora-numfmt-spec — fails on tsql. (195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s
+SELECT TO_CHAR(1234.5,'L9G999D99MI'),TO_CHAR(0.75,'999PR'),TO_CHAR(255,'0XX') FROM DUAL
 
 -- CASE[open]: ora-numfmt-thousands — fails on mysql. FUNC-DIFF: source=(('1,234,567.89',),) target=(('NULL',),)
 SELECT TO_CHAR(1234567.891, '9,999,999.99') AS r FROM DUAL
@@ -372,6 +381,9 @@ SELECT TO_CHAR(DATE '2020-06-15', 'Day, Month DD, YYYY') AS r FROM DUAL
 -- CASE[open]: ora-tochar-neg — fails on mysql. FUNC-DIFF: source=(('-1234.5',),) target=(('NULL',),)
 SELECT TO_CHAR(-1234.5, '9999.99') AS r FROM DUAL
 
+-- CASE[open]: ora-todate2 — fails on mysql. (1305, 'FUNCTION unique_val_9fa2bcf8c36d.STR_TO_TIME does not exist')
+SELECT TO_DATE('15-JUN-20','DD-MON-YY'),TO_TIMESTAMP('2020-06-15 10:30:45.123','YYYY-MM-DD HH24:MI:SS.FF3') FROM DUAL
+
 -- CASE[open]: ora-tonumber2 — fails on mysql, tsql. (195, b"'TO_NUMBER' is not a recognized built-in function name.DB-Lib error message 20018,
 SELECT CAST('123.45' AS NUMBER), TO_NUMBER('1,234.5','9,999.9'), TO_NUMBER('$5','$9') FROM DUAL
 
@@ -386,6 +398,9 @@ SELECT TRANSLATE('12345', '123', 'abc'), REPLACE('aaa','a') FROM DUAL
 
 -- CASE[open]: ora-trig — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AT
 SELECT ATAN2(1,1), COSH(1), SINH(1), TANH(1) FROM DUAL
+
+-- CASE[open]: ora-trig-suite — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
+SELECT ACOS(1),ASIN(0),ATAN(1),COS(0),SIN(0),TAN(0),COSH(0),SINH(0),TANH(0) FROM DUAL
 
 -- CASE[open]: ora-tz-fns — fails on mysql, postgresql, tsql. (155, b"'TIMEZONE_HOUR' is not a recognized datepart option.DB-Lib error message 20018, se
 SELECT EXTRACT(TIMEZONE_HOUR FROM SYSTIMESTAMP), TZ_OFFSET('US/Eastern') FROM DUAL

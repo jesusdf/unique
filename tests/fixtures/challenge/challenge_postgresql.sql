@@ -59,8 +59,14 @@ SELECT 255::bit(8)::text,to_hex(255),255::text
 -- CASE[open]: pg-bit-fns — fails on mysql. (1305, 'FUNCTION unique_val_ff6c8e4945b4.GETBIT does not exist')
 SELECT get_bit(B'1011', 0), set_bit(B'0000', 1, 1)
 
+-- CASE[open]: pg-bit-prec2 — fails on tsql. FUNC-DIFF: source=(('2', '8'),) target=(('3', '5'),)
+SELECT 10 & 6 + 1, 1 << 2 + 1
+
 -- CASE[open]: pg-bitnot — fails on mysql. FUNC-DIFF: source=(('-1',),) target=(('18446744073709551616',),)
 SELECT ~0 AS r
+
+-- CASE[open]: pg-bitops — fails on mysql. FUNC-DIFF: source=(('1', '7', '6', '-6', '10', '2'),) target=(('1', '7', '6', '18446744073
+SELECT 5 & 3, 5 | 2, 5 # 3, ~5, 5 << 1, 5 >> 1
 
 -- CASE[open]: pg-blob-length — fails on mysql, oracle, tsql. (195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT LENGTH(decode('SGVsbG8=', 'base64')) AS r
@@ -217,6 +223,12 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 
 -- CASE[open]: pg-filter-subquery — fails on tsql. (130, b'Cannot perform an aggregate function on an expression containing an aggregate or a
 CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id, COUNT(*) FILTER (WHERE n > (SELECT AVG(v) FROM u)) FROM t GROUP BY id
+
+-- CASE[open]: pg-fk-full — fails on oracle. ORA-03075: unexpected item ON in an out-of-line constraint
+CREATE TABLE t (id INT PRIMARY KEY, parent INT, CONSTRAINT fk FOREIGN KEY (parent) REFERENCES t(id) ON DELETE CASCADE ON UPDATE RESTRICT DEFERRABLE INITIALLY DEFERRED)
+
+-- CASE[open]: pg-fmt-spec — fails on oracle. SILENT: source literal(s) ["'Dy Mon DD HH24:MI:SS YYYY'", "'AM HH12:MI'", "'DDD WW IW'"] a
+SELECT to_char(now(),'Dy Mon DD HH24:MI:SS YYYY'),to_char(now(),'AM HH12:MI'),to_char(now(),'DDD WW IW')
 
 -- CASE[open]: pg-fmt3 — fails on oracle. SILENT: source literal(s) ["'9G999D99'"] absent from valid output, no warning
 SELECT to_char(1234.5678,'9G999D99'),to_char(-5,'S9')
@@ -416,6 +428,9 @@ SELECT NUM_NONNULLS(1, NULL, 2) AS r
 -- CASE[open]: pg-numfmt-lead — fails on mysql. FUNC-DIFF: source=(('0.5',),) target=(('0',),)
 SELECT to_char(0.5, '0.00') AS r
 
+-- CASE[open]: pg-numfmt-spec — fails on oracle. SILENT: source literal(s) ["'L9G999D99MI'"] absent from valid output, no warning
+SELECT to_char(1234.5,'L9G999D99MI'),to_char(-5,'999PR'),to_char(255,'FMRN')
+
 -- CASE[open]: pg-numfmt-thousands — fails on mysql, tsql. FUNC-DIFF: source=(('1,234,567.89',),) target=(('9999999123456900',),)
 SELECT to_char(1234567.891, '9,999,999.99') AS r
 
@@ -553,6 +568,9 @@ SELECT to_char(TIMESTAMP '2020-06-15 14:30:45', 'YYYY-MM-DD"T"HH24:MI:SS') AS r
 
 -- CASE[open]: pg-tochar-neg — fails on mysql, tsql. FUNC-DIFF: source=(('-1234.5',),) target=(('-9999123599',),)
 SELECT to_char(-1234.5, '9999.99') AS r
+
+-- CASE[open]: pg-todate2 — fails on mysql. (1305, 'FUNCTION unique_val_2ac6422f99c6.STR_TO_TIME does not exist')
+SELECT to_date('06/15/2020','MM/DD/YYYY'),to_timestamp('2020-06-15 10:30','YYYY-MM-DD HH24:MI')
 
 -- CASE[open]: pg-tohex2 — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT to_hex(255), to_char(255, 'XX')
