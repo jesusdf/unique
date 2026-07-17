@@ -53,6 +53,9 @@ SELECT HEX(255) AS r, BIN(5) AS b
 -- CASE[open]: my-inet — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
 SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)
 
+-- CASE[open]: my-json-arrayagg — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION SELECT 2) t
+
 -- CASE[open]: my-json-object — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_
 SELECT JSON_OBJECT('a', 1, 'b', 2)
 

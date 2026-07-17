@@ -105,6 +105,9 @@ CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT 
 -- CASE[open]: ts-json-value — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT JSON_VALUE('{"a":1}', '$.a')
 
+-- CASE[open]: ts-lead-ignore-nulls — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT x, LEAD(x, 1) IGNORE NULLS OVER (ORDER BY x) FROM (VALUES (1),(2)) v(x)
+
 -- CASE[open]: ts-len-trailing-space — fails on postgresql. SEMANTIC: T-SQL LEN ignores trailing spaces (=3); PG/Oracle LENGTH & MySQL CHAR_LENGTH cou
 SELECT LEN('abc   ') AS r
 
@@ -119,6 +122,9 @@ CREATE TABLE tgt (id INT PRIMARY KEY, n INT); MERGE tgt USING (VALUES (1, 5)) AS
 
 -- CASE[open]: ts-money — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (price MONEY, small SMALLMONEY)
+
+-- CASE[open]: ts-openjson — fails on mysql, oracle, postgresql. ORA-00904: "OPEN_J_S_O_N": invalid identifier
+SELECT * FROM OPENJSON('[1,2,3]')
 
 -- CASE[open]: ts-quotename — fails on mysql, oracle, postgresql. ORA-00904: "SPLIT_PART": invalid identifier
 SELECT QUOTENAME('my table'), PARSENAME('a.b.c', 2)
@@ -145,14 +151,23 @@ SELECT NEXT VALUE FOR seq
 -- CASE[open]: ts-soundex-diff — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
 SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')
 
+-- CASE[open]: ts-string-agg-within — fails on postgresql. function string_agg(integer, unknown) does not exist
+SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2)) v(x)
+
 -- CASE[open]: ts-stuff — fails on mysql, oracle, postgresql. ORA-00904: "STUFF": invalid identifier
 SELECT STUFF('abcdef', 2, 3, 'XY') AS r
 
 -- CASE[open]: ts-sysdatetime — fails on mysql, oracle, postgresql. ORA-00904: "GETUTCDATE": invalid identifier
 SELECT SYSDATETIME(), SYSUTCDATETIME(), GETUTCDATE()
 
+-- CASE[open]: ts-table-variable — fails on oracle. ORA-06550: line 2, column 5:
+DECLARE @t TABLE (id INT); INSERT INTO @t VALUES (1); SELECT * FROM @t
+
 -- CASE[open]: ts-top-with-ties — fails on postgresql. SILENT LOSS: TOP n WITH TIES -> plain LIMIT n on PG/MySQL (ties dropped); on Oracle the ro
 SELECT TOP 1 WITH TIES x FROM (VALUES (1),(1),(2)) v(x) ORDER BY x
+
+-- CASE[open]: ts-try-convert — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'a' to a number: 
+SELECT TRY_CONVERT(INT, 'abc') AS r
 
 -- CASE[open]: ts-view-check — fails on mysql, oracle, postgresql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id INT);

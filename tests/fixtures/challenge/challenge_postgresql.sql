@@ -14,6 +14,12 @@ CREATE TABLE t (a INT); ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT 'x'
 -- CASE[open]: pg-array-agg — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT ARRAY_AGG(x ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
+-- CASE[open]: pg-array-any — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT 3 = ANY(ARRAY[1,2,3]) AS r
+
+-- CASE[open]: pg-array-concat — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT ARRAY[1,2,3] || ARRAY[4,5] AS r
+
 -- CASE[open]: pg-array-jsonb — fails on mysql, oracle. ORA-03099: unexpected item [ in a column definition
 CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)
 
@@ -31,11 +37,17 @@ SELECT 'a' < 'B' COLLATE "C" AS r
 -- CASE[open]: pg-comment-on — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (a INT); COMMENT ON COLUMN t.a IS 'the a column'
 
+-- CASE[open]: pg-composite-type — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE TYPE addr AS (street TEXT, city TEXT)
+
 -- CASE[open]: pg-date-part — fails on oracle. ORA-00907: missing right parenthesis
 SELECT DATE_PART('week', DATE '2020-06-15'), DATE_PART('quarter', DATE '2020-06-15')
 
 -- CASE[open]: pg-date-trunc — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d
+
+-- CASE[open]: pg-domain — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
+CREATE DOMAIN posint AS INT CHECK (VALUE > 0)
 
 -- CASE[open]: pg-encode-base64 — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT ENCODE('abc'::bytea, 'base64') AS r
@@ -55,6 +67,15 @@ SELECT EXTRACT(DOW FROM DATE '2020-01-01') AS d
 -- CASE[open]: pg-extract-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1
 SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r
 
+-- CASE[open]: pg-fulltext — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
+SELECT to_tsvector('a cat') @@ to_tsquery('cat') AS r
+
+-- CASE[open]: pg-generate-series — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
+SELECT generate_series(1, 5) AS r
+
+-- CASE[open]: pg-grouping-fn — fails on mysql, oracle, tsql. (8161, b'Argument 1 of the GROUPING function does not match any of the expressions in the 
+SELECT x, GROUPING(x) FROM (VALUES (1)) v(x) GROUP BY CUBE (x)
+
 -- CASE[open]: pg-grouping-sets — fails on mysql, oracle, tsql. (8120, b"Column 'v.x' is invalid in the select list because it is not contained in either 
 SELECT x, SUM(y) FROM (VALUES (1,10)) v(x,y) GROUP BY GROUPING SETS ((x),())
 
@@ -70,8 +91,17 @@ CREATE TABLE t (id INT, n INT); INSERT INTO t (id, n) VALUES (1, 5) RETURNING id
 -- CASE[open]: pg-interval-arith — fails on mysql, oracle, tsql. (207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S
 SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7
 
+-- CASE[open]: pg-jsonb-agg — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT JSONB_AGG(x) FROM (VALUES (1),(2)) v(x)
+
 -- CASE[open]: pg-jsonb-arrow — fails on mysql. (1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT '{"a":1}'::jsonb -> 'a'
+
+-- CASE[open]: pg-jsonb-build — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+SELECT JSONB_BUILD_OBJECT('a', 1, 'b', 2)
+
+-- CASE[open]: pg-jsonb-path — fails on mysql. (1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT '{"a":[1,2]}'::jsonb #> '{a,0}'
 
 -- CASE[open]: pg-justify — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 mon 40 days'.DB-Lib error message 20018, severity 15:\nGe
 SELECT JUSTIFY_INTERVAL(INTERVAL '1 mon 40 days') AS r
@@ -84,6 +114,9 @@ SELECT LOG(10, 100), LN(2.718), POWER(2, 8), SQRT(16)
 
 -- CASE[open]: pg-md5 — fails on oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT MD5('abc') AS r
+
+-- CASE[open]: pg-mode — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT MODE() WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(1),(2)) v(x)
 
 -- CASE[open]: pg-multi-out — fails on oracle. FUNCTION F compiled INVALID (line 7): PLS-00201: identifier 'VOID' must be declared
 CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; END; $$ LANGUAGE plpgsql
@@ -106,6 +139,9 @@ SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')
 -- CASE[open]: pg-range-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m
 CREATE TABLE t (rng INT4RANGE, tsr TSRANGE)
 
+-- CASE[open]: pg-regexp-matches — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE
+SELECT REGEXP_MATCHES('a1b2', '[0-9]', 'g') AS r
+
 -- CASE[open]: pg-repeat-left-right — fails on oracle. ORA-00904: "RIGHT": invalid identifier
 SELECT REPEAT('ab', 3), LEFT('abc', 2), RIGHT('abc', 2)
 
@@ -127,6 +163,9 @@ SELECT SPLIT_PART('a,b,c', ',', 2) AS r
 -- CASE[open]: pg-string-agg-order — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
 SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
+-- CASE[open]: pg-substring-regex — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib
+SELECT SUBSTRING('a1b2' FROM '[0-9]+') AS r
+
 -- CASE[open]: pg-translate — fails on mysql. (1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
 
@@ -146,6 +185,9 @@ CREATE TABLE t (a TIMESTAMPTZ, b TIME WITH TIME ZONE, c INTERVAL)
 
 -- CASE[open]: pg-unicode-escape — fails on mysql, oracle, tsql. (207, b"Invalid column name 'U'.DB-Lib error message 20018, severity 16:\nGeneral SQL Serv
 SELECT U&'\0041' AS r
+
+-- CASE[open]: pg-unnest — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT UNNEST(ARRAY[1,2,3]) AS r
 
 -- CASE[open]: pg-update-returning — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id INT, n INT); UPDATE t SET n = 1 RETURNING id, n
