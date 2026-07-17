@@ -357,3 +357,24 @@ class TestToDateToCharStylesInIr:
     def test_date_format_to_char_still_formats(self) -> None:
         out = _ir("oracle", "tsql", "SELECT TO_CHAR(d, 'DD/MM/YYYY') FROM t")
         assert out is not None and "FORMAT(d, 'dd/MM/yyyy')" in out, out
+
+
+class TestTrimPositionAndLobHelpers:
+    """LTRIM/RTRIM keep their side; Oracle LOB helpers map on T-SQL (F6b)."""
+
+    def test_rtrim_ltrim_keep_position(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT RTRIM(LTRIM(x)) FROM t")
+        assert out is not None and "RTRIM(LTRIM(x))" in out, out
+        assert "TRIM(TRIM" not in out.upper(), out
+
+    def test_dbms_lob_substr_reorders(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT DBMS_LOB.SUBSTR(p_c, 4000, 1) FROM t")
+        assert out is not None and "SUBSTRING(P_C, 1, 4000)" in out.upper(), out
+
+    def test_utl_raw_cast_to_varchar2(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT UTL_RAW.CAST_TO_VARCHAR2(x) FROM t")
+        assert out is not None and "CONVERT(VARCHAR(MAX), x)" in out, out
+
+    def test_dbms_lob_getlength(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT DBMS_LOB.GETLENGTH(x) FROM t")
+        assert out is not None and "DATALENGTH(x)" in out, out

@@ -3881,6 +3881,25 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         target_num = "DECIMAL(38, 10)" if dialect != "postgresql" else "NUMERIC"
         return f"CAST({arg} AS {target_num})"
 
+    # Oracle LOB helpers on T-SQL (the text path's live-validated forms):
+    # DBMS_LOB.SUBSTR(x, len, start) is SUBSTRING(x, start, len);
+    # UTL_RAW.CAST_TO_VARCHAR2 a VARCHAR(MAX) CONVERT; GETLENGTH DATALENGTH.
+    if dialect == "tsql" and SOURCE_DIALECT.get() == "oracle":
+        if fn_name in ("DBMS_LOB.SUBSTR", "DBMS_LOB.SUBSTRING") and len(node.args) in (
+            2,
+            3,
+        ):
+            lob = _emit_expression(node.args[0], dialect)
+            length = _emit_expression(node.args[1], dialect)
+            start = (
+                _emit_expression(node.args[2], dialect) if len(node.args) == 3 else "1"
+            )
+            return f"SUBSTRING({lob}, {start}, {length})"
+        if fn_name == "UTL_RAW.CAST_TO_VARCHAR2" and len(node.args) == 1:
+            return f"CONVERT(VARCHAR(MAX), {_emit_expression(node.args[0], dialect)})"
+        if fn_name == "DBMS_LOB.GETLENGTH" and len(node.args) == 1:
+            return f"DATALENGTH({_emit_expression(node.args[0], dialect)})"
+
     # Map canonical function names to dialect-specific names
     name = _map_function_name(node.name, dialect)
 

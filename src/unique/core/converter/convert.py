@@ -639,6 +639,14 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return _convert_case(expr)
     if isinstance(expr, exp.Cast):
         return _convert_cast(expr)
+    # sqlglot canonicalizes LTRIM/RTRIM to Trim(position=LEADING/TRAILING);
+    # dropping the position silently trims BOTH sides. Recover the concrete
+    # one-sided name (a position-less Trim is the plain TRIM).
+    if isinstance(expr, exp.Trim) and expr.args.get("position") and not expr.expression:
+        side = str(expr.args["position"]).upper()
+        name = {"LEADING": "LTRIM", "TRAILING": "RTRIM"}.get(side)
+        if name is not None:
+            return FunctionCall(name=name, args=(convert_expression(expr.this),))
     # T-SQL CONVERT(type, value, style) with a modeled style keeps its
     # structure: FunctionCall("CONVERT", (type RawSQL, value, style Literal))
     # — the emitter spells each target's date-format/hash form (M3 F1).
