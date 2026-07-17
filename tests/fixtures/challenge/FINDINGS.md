@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (380 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (387 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -473,6 +473,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
 - src: `SELECT EXTRACTVALUE('<a>1</a>', '/a') AS r`
 
+## my-fcollate  (mysql)
+- targets: oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('c', 'a', '1'),) target=(('c', 'B', '0'),)`
+- src: `SELECT GREATEST('a','B','c'),LEAST('a','B'),'a'<'B'`
+
+## my-fconcatnum  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('x5', 'x5.5', 'x1', 'NULL'),) target=(('x5', 'x5.5', 'x1', 'x'),)`
+- src: `SELECT CONCAT('x',5),CONCAT('x',5.5),CONCAT('x',TRUE),CONCAT('x',NULL)`
+
 ## my-field  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI`
@@ -482,6 +492,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO`
 - src: `SELECT LOAD_FILE('/etc/x'), IS_USED_LOCK('l')`
+
+## my-flen  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('5', '4', '6', '2'),) target=(('4', '4', '2', '2'),)`
+- src: `SELECT LENGTH('café'),CHAR_LENGTH('café'),LENGTH('日本'),CHAR_LENGTH('日本')`
 
 ## my-floor-precision  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
@@ -503,6 +518,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI`
 - src: `SELECT DATE_FORMAT(NOW(),'%W %M %Y'), TIME_FORMAT(NOW(),'%r')`
 
+## my-fsubstr  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('', 'c', 'bc'),) target=(('ab', 'a', 'bc'),)`
+- src: `SELECT SUBSTRING('abc',0),SUBSTRING('abc',-1),SUBSTRING('abc',2,10)`
+
 ## my-full-select  (mysql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
@@ -512,6 +532,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)`
 - src: `SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t`
+
+## my-gencol2  (mysql)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(1759, b"Computed column 'b' in table 't' is not allowed to be used in another computed-co`
+- src: `CREATE TABLE t (a INT, b INT AS (a*2) STORED, c INT AS (a+b) VIRTUAL, KEY(b))`
 
 ## my-get-format  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -662,6 +687,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
 - src: `SELECT JSON_SEARCH('{"a":"x"}', 'one', 'x'), JSON_DEPTH('[1,[2]]'), JSON_LENGTH('[1,2,3]')`
+
+## my-json-index  (mysql)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #2: Cannot find data type json.DB-Lib error messag`
+- src: `CREATE TABLE t (a INT, b JSON, c INT AS (JSON_EXTRACT(b,'$.x')) STORED, INDEX((CAST(b->'$.x' AS UNSIGNED))))`
 
 ## my-json-keys  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -1481,6 +1511,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
 - src: `SELECT EXTRACTVALUE(XMLTYPE('<a>1</a>'), '/a') AS r FROM DUAL`
 
+## ora-fconcat  (oracle)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('ab', 'a', '23'),) target=(('ab', 'NULL', '5'),)`
+- src: `SELECT 'a'||'b','a'||NULL,2||3 FROM DUAL`
+
 ## ora-fk-and-check  (oracle)
 - targets: mysql(invalid)
 - live error: `(1239, "Incorrect foreign key definition for 'fk': Key reference and table reference don't`
@@ -2285,6 +2320,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1`
 - src: `SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r`
 
+## pg-fcollate  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('c', 'B', '0'),) target=(('c', 'a', '1'),)`
+- src: `SELECT greatest('a','B','c'),least('a','B'),'a'<'B'`
+
 ## pg-fetch-ties2  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
@@ -2314,6 +2354,16 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: oracle(invalid)
 - live error: `ORA-00904: "CONCAT_WS": invalid identifier`
 - src: `SELECT format('%s-%I-%L', 'a', 'col name', 'val'), concat_ws('|', 'a', NULL, 'b')`
+
+## pg-fround  (postgresql)
+- targets: mysql(func), oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1', '2', '3', '2.57'),) target=(('1', '2', '3', '3'),)`
+- src: `SELECT round(0.5::numeric),round(1.5::numeric),round(2.5::numeric),round(2.567::numeric,2)`
+
+## pg-fsubstr  (postgresql)
+- targets: mysql(func), oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('abc', 'abc', 'bc'),) target=(('ab', 'a', 'bc'),)`
+- src: `SELECT substring('abc',0),substring('abc' from -1),substring('abc',2,10)`
 
 ## pg-fulltext  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2345,10 +2395,20 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(102, b"Incorrect syntax near 'ORDINALITY'.DB-Lib error message 20018, severity 15:\nGener`
 - src: `SELECT * FROM generate_series(1, 10, 2) WITH ORDINALITY AS t(v, n)`
 
+## pg-gencol2  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1075, 'Incorrect table definition; there can be only one auto column and it must be defin`
+- src: `CREATE TABLE t (a INT, b INT GENERATED ALWAYS AS (a*2) STORED, c INT GENERATED ALWAYS AS IDENTITY)`
+
 ## pg-generate-series  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
 - src: `SELECT generate_series(1, 5) AS r`
+
+## pg-gin-jsonb  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #2: Cannot find data type JSONB.DB-Lib error messa`
+- src: `CREATE TABLE t (a INT, b JSONB); CREATE INDEX ix ON t USING gin (b jsonb_path_ops)`
 
 ## pg-greatest-null  (postgresql)
 - targets: mysql(func), oracle(func)
@@ -3572,4 +3632,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 698 distinct constructs; defect rows by kind: func 301, invalid 1095, semantic 2, silent-drop 75.
+Totals: 710 distinct constructs; defect rows by kind: func 322, invalid 1103, semantic 2, silent-drop 75.

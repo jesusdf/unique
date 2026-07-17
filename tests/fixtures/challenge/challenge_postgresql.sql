@@ -206,6 +206,9 @@ SELECT EXTRACT(DOW FROM DATE '2020-01-01') AS d
 -- CASE[open]: pg-extract-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1
 SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r
 
+-- CASE[open]: pg-fcollate — fails on mysql, tsql. FUNC-DIFF: source=(('c', 'B', '0'),) target=(('c', 'a', '1'),)
+SELECT greatest('a','B','c'),least('a','B'),'a'<'B'
+
 -- CASE[open]: pg-fetch-ties2 — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t ORDER BY id FETCH FIRST 5 ROWS WITH TIES
 
@@ -223,6 +226,12 @@ SELECT format('%s=%s', 'a', 1) AS r
 
 -- CASE[open]: pg-format2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT format('%s-%I-%L', 'a', 'col name', 'val'), concat_ws('|', 'a', NULL, 'b')
+
+-- CASE[open]: pg-fround — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('1', '2', '3', '2.57'),) target=(('1', '2', '3', '3'),)
+SELECT round(0.5::numeric),round(1.5::numeric),round(2.5::numeric),round(2.567::numeric,2)
+
+-- CASE[open]: pg-fsubstr — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('abc', 'abc', 'bc'),) target=(('ab', 'a', 'bc'),)
+SELECT substring('abc',0),substring('abc' from -1),substring('abc',2,10)
 
 -- CASE[open]: pg-fulltext — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT to_tsvector('a cat') @@ to_tsquery('cat') AS r
@@ -242,8 +251,14 @@ SELECT generate_series('2020-01-01'::date, '2020-01-05'::date, '1 day') AS d
 -- CASE[open]: pg-gen-series-ord — fails on tsql. (102, b"Incorrect syntax near 'ORDINALITY'.DB-Lib error message 20018, severity 15:\nGener
 SELECT * FROM generate_series(1, 10, 2) WITH ORDINALITY AS t(v, n)
 
+-- CASE[open]: pg-gencol2 — fails on mysql. (1075, 'Incorrect table definition; there can be only one auto column and it must be defin
+CREATE TABLE t (a INT, b INT GENERATED ALWAYS AS (a*2) STORED, c INT GENERATED ALWAYS AS IDENTITY)
+
 -- CASE[open]: pg-generate-series — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT generate_series(1, 5) AS r
+
+-- CASE[open]: pg-gin-jsonb — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #2: Cannot find data type JSONB.DB-Lib error messa
+CREATE TABLE t (a INT, b JSONB); CREATE INDEX ix ON t USING gin (b jsonb_path_ops)
 
 -- CASE[open]: pg-greatest-null — fails on mysql, oracle. FUNC-DIFF: source=(('3',),) target=(('NULL',),)
 SELECT GREATEST(1, NULL, 3) AS r

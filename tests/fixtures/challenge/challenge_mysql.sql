@@ -263,11 +263,20 @@ SELECT EXTRACT(YEAR_MONTH FROM NOW()), EXTRACT(DAY_HOUR FROM NOW())
 -- CASE[open]: my-extractvalue — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXTRACTVALUE('<a>1</a>', '/a') AS r
 
+-- CASE[open]: my-fcollate — fails on oracle, postgresql. FUNC-DIFF: source=(('c', 'a', '1'),) target=(('c', 'B', '0'),)
+SELECT GREATEST('a','B','c'),LEAST('a','B'),'a'<'B'
+
+-- CASE[open]: my-fconcatnum — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('x5', 'x5.5', 'x1', 'NULL'),) target=(('x5', 'x5.5', 'x1', 'x'),)
+SELECT CONCAT('x',5),CONCAT('x',5.5),CONCAT('x',TRUE),CONCAT('x',NULL)
+
 -- CASE[open]: my-field — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
 SELECT FIELD('b', 'a', 'b', 'c') AS r
 
 -- CASE[open]: my-file-lock — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 SELECT LOAD_FILE('/etc/x'), IS_USED_LOCK('l')
+
+-- CASE[open]: my-flen — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('5', '4', '6', '2'),) target=(('4', '4', '2', '2'),)
+SELECT LENGTH('café'),CHAR_LENGTH('café'),LENGTH('日本'),CHAR_LENGTH('日本')
 
 -- CASE[open]: my-floor-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
 SELECT FLOOR(2.9999999999999999) AS r
@@ -281,11 +290,17 @@ CREATE TABLE t (id INT, INDEX ix (id)); SELECT id FROM t WHERE id = 1 FOR SHARE
 -- CASE[open]: my-format-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT DATE_FORMAT(NOW(),'%W %M %Y'), TIME_FORMAT(NOW(),'%r')
 
+-- CASE[open]: my-fsubstr — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('', 'c', 'bc'),) target=(('ab', 'a', 'bc'),)
+SELECT SUBSTRING('abc',0),SUBSTRING('abc',-1),SUBSTRING('abc',2,10)
+
 -- CASE[open]: my-full-select — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t GROUP BY id HAVING COUNT(*) > 1 ORDER BY id LIMIT 10 OFFSET 5
 
 -- CASE[open]: my-gc-order — fails on oracle. FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)
 SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t
+
+-- CASE[open]: my-gencol2 — fails on postgresql, tsql. (1759, b"Computed column 'b' in table 't' is not allowed to be used in another computed-co
+CREATE TABLE t (a INT, b INT AS (a*2) STORED, c INT AS (a+b) VIRTUAL, KEY(b))
 
 -- CASE[open]: my-get-format — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT GET_FORMAT(DATE, 'USA'), GET_FORMAT(DATETIME, 'ISO')
@@ -376,6 +391,9 @@ SELECT JSON_ARRAY(1,'a',NULL,TRUE),JSON_OBJECT('k','v','n',1)
 
 -- CASE[open]: my-json-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_SEARCH('{"a":"x"}', 'one', 'x'), JSON_DEPTH('[1,[2]]'), JSON_LENGTH('[1,2,3]')
+
+-- CASE[open]: my-json-index — fails on postgresql, tsql. (2715, b'Column, parameter, or variable #2: Cannot find data type json.DB-Lib error messag
+CREATE TABLE t (a INT, b JSON, c INT AS (JSON_EXTRACT(b,'$.x')) STORED, INDEX((CAST(b->'$.x' AS UNSIGNED))))
 
 -- CASE[open]: my-json-keys — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_KEYS('{"a":1,"b":2}') AS r
