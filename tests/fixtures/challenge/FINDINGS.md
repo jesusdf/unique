@@ -45,6 +45,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BE`
 - src: `SELECT BENCHMARK(1, 1+1) AS r`
 
+## my-binary-substr  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN`
+- src: `SELECT SUBSTRING(UNHEX('48656C6C6F'), 1, 2) AS r`
+
 ## my-bit-agg  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI`
@@ -59,6 +64,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('18446744073709551616',),) target=(('-1',),)`
 - src: `SELECT ~0 AS r`
+
+## my-blob-length  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO`
+- src: `CREATE TABLE t (data BLOB); INSERT INTO t VALUES (LOAD_FILE('/x')); SELECT LENGTH(data) FROM t`
 
 ## my-bool-char  (mysql)
 - targets: postgresql(func)
@@ -977,6 +987,11 @@ SELECT LEVEL n FROM DUAL CONNECT BY LEVEL <= 10`
 - live error: `(102, b"Incorrect syntax near '='.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
 - src: `SELECT LNNVL(1 = 2) AS r FROM DUAL WHERE LNNVL(1 = 2)`
 
+## ora-lob-length  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s`
+- src: `SELECT DBMS_LOB.GETLENGTH(TO_CLOB('hello')) AS r FROM DUAL`
+
 ## ora-logon-trigger  (oracle)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -1398,6 +1413,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `FUNC-DIFF: source=(('-1',),) target=(('18446744073709551616',),)`
 - src: `SELECT ~0 AS r`
 
+## pg-blob-length  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se`
+- src: `SELECT LENGTH(decode('SGVsbG8=', 'base64')) AS r`
+
 ## pg-bool-int-cast  (postgresql)
 - targets: oracle(invalid)
 - live error: `ORA-01722: unable to convert string value containing 't' to a number: `
@@ -1657,6 +1677,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1`
 - src: `SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r`
+
+## pg-filter-subquery  (postgresql)
+- targets: tsql(invalid)
+- live error: `(130, b'Cannot perform an aggregate function on an expression containing an aggregate or a`
+- src: `CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id, COUNT(*) FILTER (WHERE n > (SELECT AVG(v) FROM u)) FROM`
 
 ## pg-for-record-loop  (postgresql)
 - targets: mysql(invalid)
@@ -2055,6 +2080,11 @@ UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 - live error: `FUNC-DIFF: source=(('2.68',),) target=(('3',),)`
 - src: `SELECT ROUND(2.675::numeric, 2) AS r`
 
+## pg-row-constructor  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id FROM t WHERE ROW(n, id) = (SELECT MAX(v), MIN(id) FROM u`
+
 ## pg-rule  (postgresql)
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
@@ -2392,6 +2422,11 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00902: invalid datatype`
 - src: `SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r`
+
+## ts-binary-length  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00902: invalid datatype`
+- src: `SELECT DATALENGTH(CAST('hello' AS VARBINARY(MAX))) AS r`
 
 ## ts-cast-bit  (tsql)
 - targets: mysql(func), oracle(func)
@@ -2897,4 +2932,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 560 distinct constructs; defect rows by kind: carrier 129, func 215, invalid 712, semantic 2, silent-drop 73.
+Totals: 567 distinct constructs; defect rows by kind: carrier 129, func 215, invalid 729, semantic 2, silent-drop 73.

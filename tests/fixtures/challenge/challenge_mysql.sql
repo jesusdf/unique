@@ -26,6 +26,9 @@ SELECT TO_BASE64('abc'), FROM_BASE64('YWJj')
 -- CASE[open]: my-benchmark — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BE
 SELECT BENCHMARK(1, 1+1) AS r
 
+-- CASE[open]: my-binary-substr — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
+SELECT SUBSTRING(UNHEX('48656C6C6F'), 1, 2) AS r
+
 -- CASE[open]: my-bit-agg — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT BIT_XOR(x), BIT_OR(x) FROM (SELECT 1 x UNION SELECT 2) t
 
@@ -34,6 +37,9 @@ SELECT BIT_COUNT(255) AS r
 
 -- CASE[open]: my-bitnot — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('18446744073709551616',),) target=(('-1',),)
 SELECT ~0 AS r
+
+-- CASE[open]: my-blob-length — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
+CREATE TABLE t (data BLOB); INSERT INTO t VALUES (LOAD_FILE('/x')); SELECT LENGTH(data) FROM t
 
 -- CASE[open]: my-bool-char — fails on postgresql. FUNC-DIFF: source=(('1',),) target=(('t',),)
 SELECT CAST((1=1) AS CHAR) AS r

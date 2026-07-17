@@ -208,6 +208,9 @@ SELECT deptno, LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) OVER (PARTITION BY dept
 -- CASE[open]: ora-lnnvl — fails on mysql, postgresql, tsql. (102, b"Incorrect syntax near '='.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 SELECT LNNVL(1 = 2) AS r FROM DUAL WHERE LNNVL(1 = 2)
 
+-- CASE[open]: ora-lob-length — fails on mysql, postgresql, tsql. (195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s
+SELECT DBMS_LOB.GETLENGTH(TO_CLOB('hello')) AS r FROM DUAL
+
 -- CASE[open]: ora-logon-trigger — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TRIGGER trg AFTER LOGON ON DATABASE BEGIN NULL; END;
 /

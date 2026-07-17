@@ -50,6 +50,9 @@ SELECT ASCII('A'), CHAR(65), NCHAR(65)
 -- CASE[open]: ts-at-time-zone — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
 SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r
 
+-- CASE[open]: ts-binary-length — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
+SELECT DATALENGTH(CAST('hello' AS VARBINARY(MAX))) AS r
+
 -- CASE[open]: ts-cast-bit — fails on mysql, oracle. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT CAST(2 AS BIT) AS r
 

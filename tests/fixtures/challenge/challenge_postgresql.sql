@@ -61,6 +61,9 @@ CREATE TRIGGER trg BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION trg_fn();
 -- CASE[open]: pg-bitnot — fails on mysql. FUNC-DIFF: source=(('-1',),) target=(('18446744073709551616',),)
 SELECT ~0 AS r
 
+-- CASE[open]: pg-blob-length — fails on mysql, oracle, tsql. (195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se
+SELECT LENGTH(decode('SGVsbG8=', 'base64')) AS r
+
 -- CASE[open]: pg-bool-int-cast — fails on oracle. ORA-01722: unable to convert string value containing 't' to a number: 
 SELECT 'true'::boolean::int AS r
 
@@ -216,6 +219,9 @@ SELECT EXTRACT(DOW FROM DATE '2020-01-01') AS d
 
 -- CASE[open]: pg-extract-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1
 SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r
+
+-- CASE[open]: pg-filter-subquery — fails on tsql. (130, b'Cannot perform an aggregate function on an expression containing an aggregate or a
+CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id, COUNT(*) FILTER (WHERE n > (SELECT AVG(v) FROM u)) FROM t GROUP BY id
 
 -- CASE[open]: pg-for-record-loop — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE FUNCTION f() RETURNS INT AS $$ DECLARE r RECORD; t INT := 0; BEGIN FOR r IN SELECT generate_series(1,3) AS n LOOP t := t + r.n; END LOOP; RETURN t; END; $$ LANGUAGE plpgsql
@@ -460,6 +466,9 @@ SELECT ROUND(1.005::numeric, 2) AS r
 
 -- CASE[open]: pg-round-2675 — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('2.68',),) target=(('3',),)
 SELECT ROUND(2.675::numeric, 2) AS r
+
+-- CASE[open]: pg-row-constructor — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id FROM t WHERE ROW(n, id) = (SELECT MAX(v), MIN(id) FROM u)
 
 -- CASE[open]: pg-rule — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (a INT); CREATE RULE r AS ON DELETE TO t DO INSTEAD NOTHING
