@@ -165,6 +165,16 @@ class ParserBase:
         self._pos = 0
 
         try:
+            # A character the lexer cannot represent (mojibake latin1 bytes
+            # split into symbol tokens like ``¤``) would shred silently into
+            # fragments; fail the WHOLE unit into the parse carrier instead
+            # (guardrail 4). ``$`` stays — the dollar-quote edge owns it.
+            for tok in self._tokens:
+                if tok.type == TokenType.UNKNOWN and tok.value != "$":
+                    raise ValueError(
+                        f"unrepresentable character {tok.value!r} in source "
+                        f"(line {tok.line})"
+                    )
             node = self._parse_top_level()
             return ParseResult(node=node, errors=self._errors, warnings=self._warnings)
         except Exception as e:

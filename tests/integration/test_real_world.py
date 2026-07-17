@@ -255,7 +255,13 @@ class TestGenericInvariants:
         "postgresql": 0.90,
         "mysql": 0.45,
         "oracle": 0.25,
-        "tsql": 0.30,
+        # 0.30 until 2026-07-17: the XQuery-prolog view (vProductModel
+        # CatalogDescription) used to round-trip as SILENTLY SHREDDED fake
+        # declares (DECLARE @= http://…;) that happened to score higher on
+        # raw token overlap; the parser now fails that unit into an honest
+        # whole-unit carrier (unrepresentable-token guard), which comments
+        # the text and costs similarity. Honesty outranks the metric.
+        "tsql": 0.23,
     }
 
     @pytest.mark.parametrize(

@@ -636,3 +636,39 @@ class TestZeroPushTypeWidths:
         )
         assert "TIME" in out.upper(), out
         assert "TIMETZ" not in out.upper(), out
+
+
+class TestMojibakeUnitCarrier:
+    """A declaration whose type token is not identifier-shaped (mojibake
+    identifiers split by the lexer) fails the WHOLE unit into the parse
+    carrier — never shredded fragments (guardrail 4)."""
+
+    SRC = (
+        "DELIMITER //\n"
+        "create procedure bug7088_2() begin\n"
+        "  declare lÃ¤ int default 1;\n"
+        "end//\n"
+        "DELIMITER ;\n"
+    )
+
+    def test_declare_garbage_degrades_whole(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        r = Transpiler().transpile(self.SRC, "mysql", "tsql")
+        assert "int AS default" not in r.sql, r.sql
+        assert "-- UNIQUE:" in r.sql, r.sql
+        assert r.warnings, r.sql
+
+    def test_body_statement_mojibake_degrades_whole(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "DELIMITER //\n"
+            "create procedure bug6063() begin\n"
+            "  select lÃ¤;\n"
+            "end//\nDELIMITER ;\n"
+        )
+        r = Transpiler().transpile(src, "mysql", "tsql")
+        assert "AS ¤" not in r.sql, r.sql
+        assert "-- UNIQUE:" in r.sql, r.sql
+        assert r.warnings, r.sql

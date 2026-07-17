@@ -321,6 +321,19 @@ class PlsqlStatementsMixin(ParserBase):
             else self._parse_data_type_or_reference()
         )
 
+        # A type that is not identifier-shaped means the LEXER split a
+        # non-representable identifier (mojibake latin1 bytes: ``lÃ¤`` split
+        # into ``lÃ`` + ``¤``) and this "declaration" is shredded garbage —
+        # fail the WHOLE unit into the parse carrier (guardrail 4), never
+        # fragments.
+        if data_type is not None and not re.match(
+            r"[A-Za-z_\"`\[]", getattr(data_type, "name", "") or ""
+        ):
+            raise ValueError(
+                f"declaration type {getattr(data_type, 'name', '')!r} is not "
+                "an identifier (unrepresentable identifier bytes?)"
+            )
+
         # NOT NULL modifier (PG/Oracle). Unconsumed it split the
         # declaration (``i integer;`` + ``NOT NULL := 0;`` — wave 131).
         not_null = False
