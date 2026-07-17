@@ -1175,7 +1175,12 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          DATE_ADD(ts, n, unit) form (its arg order differs) — DATEADD
          on T-SQL, interval on Oracle; and CAST(… AS YEAR) is SMALLINT
          off MySQL. Measured: mysql→tsql **23 → 22** (−1). Discovery
-         HOLDS 0. Tests: TestWave232TimestampaddYearCast (2).**
+         HOLDS 0. Tests: TestWave232TimestampaddYearCast (2).* Wave 233 (2026-07-17):
+         ``SELECT * INTO x, y`` shipped ``@x = *, @y = *`` (error 102,
+         no schema to expand the star) — the T-SQL select-into emitter
+         degrades it honestly. Measured: mysql→tsql **22 → 21** (−1).
+         Discovery HOLDS 0. Tests: TestWave233StarIntoMultipleVars
+         (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
