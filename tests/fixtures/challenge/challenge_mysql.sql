@@ -224,6 +224,9 @@ SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r
 -- CASE[open]: my-name-const — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA
 SELECT NAME_CONST('col', 5) AS r
 
+-- CASE[open]: my-nested-call — fails on oracle. PROCEDURE P compiled INVALID (line 4): PLS-00201: identifier 'OTHER_PROC' must be declared
+CREATE PROCEDURE p() BEGIN CALL other_proc(); END
+
 -- CASE[open]: my-numeric — fails on tsql. (2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se
 CREATE TABLE t (a DECIMAL(20,4), b FLOAT(10,2), c DOUBLE)
 

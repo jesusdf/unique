@@ -173,6 +173,11 @@ SELECT CEILING(4.2), FLOOR(4.8), ROUND(4.555, 2), SQUARE(4)
 -- CASE[open]: ts-merge — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE tgt (id INT PRIMARY KEY, n INT); MERGE tgt USING (VALUES (1, 5)) AS s(id, n) ON tgt.id = s.id WHEN MATCHED THEN UPDATE SET n = s.n WHEN NOT MATCHED THEN INSERT (id, n) VALUES (s.id, s.n);
 
+-- CASE[open]: ts-merge-full — fails on mysql, oracle, postgresql. ORA-02000: missing THEN keyword
+CREATE TABLE tgt (id INT PRIMARY KEY, n INT); CREATE TABLE src (id INT, n INT);
+GO
+MERGE tgt USING src ON tgt.id = src.id WHEN MATCHED AND src.n > 0 THEN UPDATE SET n = src.n WHEN MATCHED THEN DELETE WHEN NOT MATCHED BY TARGET THEN INSERT (id, n) VALUES (src.id, src.n) WHEN NOT MATCHED BY SOURCE THEN DELETE;
+
 -- CASE[open]: ts-metadata-funcs — fails on mysql, oracle, postgresql. ORA-00904: "OBJECT_ID": invalid identifier
 SELECT COL_LENGTH('t', 'c'), OBJECT_ID('t')
 
@@ -280,6 +285,11 @@ SELECT IIF('a ' = 'a', 1, 0) AS r
 
 -- CASE[open]: ts-translate — fails on mysql. (1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
+
+-- CASE[open]: ts-trigger-deleted-inserted — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id INT, n INT);
+GO
+CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN SELECT d.id, i.n FROM deleted d JOIN inserted i ON d.id = i.id; END
 
 -- CASE[open]: ts-trim-chars — fails on oracle. ORA-30001: trim set should have only one character
 SELECT TRIM('x' FROM 'xxabcxx') AS r

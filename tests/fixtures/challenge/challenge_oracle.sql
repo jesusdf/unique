@@ -54,6 +54,11 @@ SELECT CAST(COLLECT(x) AS SYS.ODCINUMBERLIST) FROM (SELECT 1 x FROM DUAL)
 -- CASE[open]: ora-comment-col — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id NUMBER); COMMENT ON COLUMN t.id IS 'the id'
 
+-- CASE[open]: ora-compound-trigger — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id NUMBER, n NUMBER);
+CREATE TRIGGER trg FOR UPDATE ON t COMPOUND TRIGGER BEFORE EACH ROW IS BEGIN NULL; END BEFORE EACH ROW; END trg;
+/
+
 -- CASE[open]: ora-concat-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
 SELECT 'a' || NULL || 'b' AS r FROM DUAL
 
@@ -181,6 +186,10 @@ SELECT MONTHS_BETWEEN(DATE '2020-03-10', DATE '2020-01-15') AS r FROM DUAL
 -- CASE[open]: ora-nanvl — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA
 SELECT NANVL(0/1, 0) AS r FROM DUAL
 
+-- CASE[open]: ora-nested-proc — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE PROCEDURE p AS PROCEDURE helper IS BEGIN NULL; END; BEGIN helper; END;
+/
+
 -- CASE[open]: ora-next-day — fails on mysql, postgresql, tsql. (195, b"'NEXT_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT NEXT_DAY(SYSDATE, 'MONDAY') AS r FROM DUAL
 
@@ -198,6 +207,12 @@ SELECT ORA_HASH('abc') AS r FROM DUAL
 
 -- CASE[open]: ora-order-nulls-default — fails on mysql, tsql. FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))
 SELECT x FROM (SELECT 3 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT NULL x FROM DUAL) ORDER BY x
+
+-- CASE[open]: ora-package-body — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['could not translate']
+CREATE PACKAGE pkg AS FUNCTION f(x NUMBER) RETURN NUMBER; END pkg;
+/
+CREATE PACKAGE BODY pkg AS FUNCTION f(x NUMBER) RETURN NUMBER IS BEGIN RETURN x*2; END; END pkg;
+/
 
 -- CASE[open]: ora-package-spec — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['could not translate']
 CREATE PACKAGE pkg AS PROCEDURE p; FUNCTION f RETURN NUMBER; END pkg;

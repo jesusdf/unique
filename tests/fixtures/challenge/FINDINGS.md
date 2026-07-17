@@ -375,6 +375,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA`
 - src: `SELECT NAME_CONST('col', 5) AS r`
 
+## my-nested-call  (mysql)
+- targets: oracle(invalid)
+- live error: `PROCEDURE P compiled INVALID (line 4): PLS-00201: identifier 'OTHER_PROC' must be declared`
+- src: `CREATE PROCEDURE p() BEGIN CALL other_proc(); END`
+
 ## my-numeric  (mysql)
 - targets: tsql(invalid)
 - live error: `(2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se`
@@ -637,6 +642,12 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (id NUMBER); COMMENT ON COLUMN t.id IS 'the id'`
 
+## ora-compound-trigger  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id NUMBER, n NUMBER);
+CREATE TRIGGER trg FOR UPDATE ON t COMPOUND TRIGGER BEFORE EACH ROW IS BEGIN NULL; END BEFOR`
+
 ## ora-concat-null  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('ab',),) target=(('NULL',),)`
@@ -846,6 +857,12 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA`
 - src: `SELECT NANVL(0/1, 0) AS r FROM DUAL`
 
+## ora-nested-proc  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE PROCEDURE p AS PROCEDURE helper IS BEGIN NULL; END; BEGIN helper; END;
+/`
+
 ## ora-next-day  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'NEXT_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
@@ -875,6 +892,13 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))`
 - src: `SELECT x FROM (SELECT 3 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT NULL x FROM DUAL) ORDER BY x`
+
+## ora-package-body  (oracle)
+- targets: mysql(invalid), postgresql(carrier), tsql(carrier)
+- live error: `UNRECOGNIZED CARRIER: ['could not translate']`
+- src: `CREATE PACKAGE pkg AS FUNCTION f(x NUMBER) RETURN NUMBER; END pkg;
+/
+CREATE PACKAGE BODY pkg AS FUNCTION f(x NUMBER) RETURN NUMBER`
 
 ## ora-package-spec  (oracle)
 - targets: mysql(invalid), postgresql(carrier), tsql(carrier)
@@ -1543,6 +1567,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro`
 - src: `CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1/0; EXCEPTION WHEN division_by_zero THEN RETURN -1; WHEN OTHERS THEN RAISE; EN`
 
+## pg-nested-call  (postgresql)
+- targets: oracle(invalid)
+- live error: `PROCEDURE OUTER_P compiled INVALID (line 4): PLS-00201: identifier 'INNER_P' must be decla`
+- src: `CREATE PROCEDURE outer_p() AS $$ BEGIN CALL inner_p(); END; $$ LANGUAGE plpgsql`
+
 ## pg-network-types  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag`
@@ -1647,6 +1676,12 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE FUNCTION f() RETURNS SETOF INT AS $$ BEGIN RETURN QUERY SELECT 1 UNION SELECT 2; END; $$ LANGUAGE plpgsql`
+
+## pg-returning-expr  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT, n INT);
+UPDATE t SET n = 1 WHERE id = 1 RETURNING id, n, n*2 AS doubled`
 
 ## pg-returns-table  (postgresql)
 - targets: mysql(invalid)
@@ -1757,6 +1792,13 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
 - src: `SELECT 'a ' = 'a' AS r`
+
+## pg-transition-tables  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT, n INT);
+CREATE FUNCTION trg() RETURNS TRIGGER AS $$ BEGIN RETURN NULL; END; $$ LANGUAGE plpgsql;
+CREATE TR`
 
 ## pg-translate  (postgresql)
 - targets: mysql(invalid)
@@ -2158,6 +2200,13 @@ CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT 
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE tgt (id INT PRIMARY KEY, n INT); MERGE tgt USING (VALUES (1, 5)) AS s(id, n) ON tgt.id = s.id WHEN MATCHED THEN UPDAT`
 
+## ts-merge-full  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-02000: missing THEN keyword`
+- src: `CREATE TABLE tgt (id INT PRIMARY KEY, n INT); CREATE TABLE src (id INT, n INT);
+GO
+MERGE tgt USING src ON tgt.id = src.id WHEN MAT`
+
 ## ts-metadata-funcs  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "OBJECT_ID": invalid identifier`
@@ -2320,6 +2369,13 @@ SELECT * FROM t TABLESAMPLE (10 PERCENT)`
 - live error: `(1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')`
 - src: `SELECT TRANSLATE('abc', 'ab', 'xy') AS r`
 
+## ts-trigger-deleted-inserted  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT, n INT);
+GO
+CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN SELECT d.id, i.n FROM deleted d JOIN inserted i O`
+
 ## ts-trim-chars  (tsql)
 - targets: oracle(invalid)
 - live error: `ORA-30001: trim set should have only one character`
@@ -2368,4 +2424,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (id INT IDENTITY(100, 5))`
 ---
 
-Totals: 463 distinct constructs; defect rows by kind: carrier 67, func 182, invalid 633, semantic 2, silent-drop 61.
+Totals: 472 distinct constructs; defect rows by kind: carrier 69, func 182, invalid 644, semantic 2, silent-drop 61.
