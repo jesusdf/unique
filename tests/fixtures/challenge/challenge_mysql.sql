@@ -5,6 +5,9 @@
 
 -- ===== RED-found open findings (validated live; see FINDINGS.md) =====
 
+-- CASE[open]: my-accent-eq — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT 'Ä' = 'A' AS r
+
 -- CASE[open]: my-aes — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT HEX(AES_ENCRYPT('data', 'key')) AS r
 
@@ -49,6 +52,9 @@ SELECT CAST('10:00:00' AS TIME) AS r
 
 -- CASE[open]: my-change-column — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'CHANGE'.DB-Lib error message 20018, severity 15:\nGeneral S
 CREATE TABLE t (a INT, b INT); ALTER TABLE t CHANGE a x INT
+
+-- CASE[open]: my-char-256 — fails on oracle, postgresql. FUNC-DIFF: source=(('0100',),) target=(('\x01\x00',),)
+SELECT CHAR(256) AS r
 
 -- CASE[open]: my-char-unicode — fails on postgresql. FUNC-DIFF: source=(('NULL',),) target=(('μ',),)
 SELECT CHAR(956 USING utf8mb4) AS r
@@ -149,6 +155,9 @@ CREATE TABLE t (a INT, b INT); CREATE INDEX ix ON t (a) USING BTREE
 -- CASE[open]: my-inet — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
 SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)
 
+-- CASE[open]: my-insert-oob — fails on tsql. FUNC-DIFF: source=(('abc',),) target=(('NULL',),)
+SELECT INSERT('abc', 10, 1, 'X') AS r
+
 -- CASE[open]: my-is-true — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'IS'.DB-Lib error message 20018, severity 15:\nG
 SELECT 1 IN (SELECT 1) IS TRUE AS r
 
@@ -184,6 +193,9 @@ SELECT 'a_b' LIKE 'a\_b' AS r
 
 -- CASE[open]: my-like-single — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'x' LIKE 'X' AS r
+
+-- CASE[open]: my-locate-case — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT LOCATE('a', 'ABC') AS r
 
 -- CASE[open]: my-locate-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT LOCATE('', '') AS r
@@ -285,6 +297,12 @@ SELECT UNIX_TIMESTAMP('2020-01-01'), FROM_UNIXTIME(1577836800)
 -- CASE[open]: my-update-join — fails on oracle, postgresql, tsql. (4104, b'The multi-part identifier "s.n" could not be bound.DB-Lib error message 20018, se
 CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); UPDATE t JOIN s ON t.id = s.id SET t.n = s.n
 
+-- CASE[open]: my-upper-sharps — fails on postgresql. FUNC-DIFF: source=(('ß',),) target=(('ẞ',),)
+SELECT UPPER('ß') AS r
+
+-- CASE[open]: my-upper-sharps-len — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('2',),) target=(('1',),)
+SELECT LENGTH(UPPER('ß')) AS r
+
 -- CASE[open]: my-uuid-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
 SELECT UUID(), UUID_SHORT()
 
@@ -314,6 +332,18 @@ CREATE TABLE t (a VARCHAR(10) CHARACTER SET latin1)
 
 -- CASE[open]: mysql-drop2-my table|COM — fails on oracle, postgresql. SILENT CLAUSE DROP: 'my table|COMMENT' absent from valid postgresql output, no warning
 CREATE TABLE t (a INT) COMMENT='my table'
+
+-- CASE[open]: mysql-drop4-50|IDENTITY| — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: '50|IDENTITY|START' absent from valid tsql output, no warning
+CREATE TABLE t (a INT PRIMARY KEY) AUTO_INCREMENT = 50
+
+-- CASE[open]: mysql-drop4-COLLATE|utf8 — fails on oracle, postgresql. SILENT CLAUSE DROP: 'COLLATE|utf8mb4' absent from valid postgresql output, no warning
+CREATE TABLE t (a INT) COLLATE=utf8mb4_unicode_ci
+
+-- CASE[open]: mysql-drop4-UNSIGNED|CHE — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'UNSIGNED|CHECK' absent from valid postgresql output, no warning
+CREATE TABLE t (a INT UNSIGNED)
+
+-- CASE[open]: mysql-drop4-ZEROFILL|LPA — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ZEROFILL|LPAD' absent from valid postgresql output, no warning
+CREATE TABLE t (a INT ZEROFILL)
 
 -- CASE[open]: mysql-qdrop-ROLLUP — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ROLLUP' absent from valid tsql output, no warning
 SELECT x FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x WITH ROLLUP

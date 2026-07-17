@@ -10,6 +10,11 @@ to an `Unhandled`/unrecognized carrier (may be an acceptable degrade — BLUE
 triages); **silent/-rt** = valid output but a source literal vanished (verify manually — the literal detector is noisy).
 
 
+## my-accent-eq  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT 'Ä' = 'A' AS r`
+
 ## my-aes  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
@@ -84,6 +89,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near 'CHANGE'.DB-Lib error message 20018, severity 15:\nGeneral S`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t CHANGE a x INT`
+
+## my-char-256  (mysql)
+- targets: oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('0100',),) target=(('\x01\x00',),)`
+- src: `SELECT CHAR(256) AS r`
 
 ## my-char-unicode  (mysql)
 - targets: postgresql(func)
@@ -250,6 +260,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN`
 - src: `SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)`
 
+## my-insert-oob  (mysql)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('abc',),) target=(('NULL',),)`
+- src: `SELECT INSERT('abc', 10, 1, 'X') AS r`
+
 ## my-is-true  (mysql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'IS'.DB-Lib error message 20018, severity 15:\nG`
@@ -309,6 +324,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT 'x' LIKE 'X' AS r`
+
+## my-locate-case  (mysql)
+- targets: oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT LOCATE('a', 'ABC') AS r`
 
 ## my-locate-empty  (mysql)
 - targets: oracle(func), tsql(func)
@@ -475,6 +495,16 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4104, b'The multi-part identifier "s.n" could not be bound.DB-Lib error message 20018, se`
 - src: `CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); UPDATE t JOIN s ON t.id = s.id SET t.n = s.n`
 
+## my-upper-sharps  (mysql)
+- targets: postgresql(func)
+- live error: `FUNC-DIFF: source=(('ß',),) target=(('ẞ',),)`
+- src: `SELECT UPPER('ß') AS r`
+
+## my-upper-sharps-len  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('2',),) target=(('1',),)`
+- src: `SELECT LENGTH(UPPER('ß')) AS r`
+
 ## my-uuid-funcs  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU`
@@ -524,6 +554,26 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(silent-drop), postgresql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'my table|COMMENT' absent from valid postgresql output, no warning`
 - src: `CREATE TABLE t (a INT) COMMENT='my table'`
+
+## mysql-drop4-50|IDENTITY|  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: '50|IDENTITY|START' absent from valid tsql output, no warning`
+- src: `CREATE TABLE t (a INT PRIMARY KEY) AUTO_INCREMENT = 50`
+
+## mysql-drop4-COLLATE|utf8  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'COLLATE|utf8mb4' absent from valid postgresql output, no warning`
+- src: `CREATE TABLE t (a INT) COLLATE=utf8mb4_unicode_ci`
+
+## mysql-drop4-UNSIGNED|CHE  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'UNSIGNED|CHECK' absent from valid postgresql output, no warning`
+- src: `CREATE TABLE t (a INT UNSIGNED)`
+
+## mysql-drop4-ZEROFILL|LPA  (mysql)
+- targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'ZEROFILL|LPAD' absent from valid postgresql output, no warning`
+- src: `CREATE TABLE t (a INT ZEROFILL)`
 
 ## mysql-qdrop-ROLLUP  (mysql)
 - targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
@@ -1001,6 +1051,16 @@ SELECT seq.NEXTVAL FROM DUAL`
 - targets: postgresql(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: '100|START' absent from valid tsql output, no warning`
 - src: `CREATE TABLE t (id NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100))`
+
+## oracle-drop4-COLLATE  (oracle)
+- targets: mysql(silent-drop), postgresql(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'COLLATE' absent from valid tsql output, no warning`
+- src: `CREATE TABLE t (a VARCHAR2(10) COLLATE BINARY_CI)`
+
+## pg-accent-eq  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
+- src: `SELECT 'Ä' = 'A' AS r`
 
 ## pg-age  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -1523,6 +1583,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(x)`
 
+## pg-position-case  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
+- src: `SELECT POSITION('a' IN 'ABC') AS r`
+
 ## pg-position-empty  (postgresql)
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
@@ -1837,6 +1902,21 @@ CREATE TRIGGE`
 - targets: oracle(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'NULLS\s+FIRST' absent from valid oracle output, no warning`
 - src: `CREATE TABLE t (a INT); CREATE INDEX ix ON t (a NULLS FIRST)`
+
+## postgresql-drop4-BY\s+DEFAULT  (postgresql)
+- targets: tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'BY\s+DEFAULT|GENERATED' absent from valid tsql output, no warning`
+- src: `CREATE TABLE t (a INT GENERATED BY DEFAULT AS IDENTITY)`
+
+## postgresql-drop4-COLLATE  (postgresql)
+- targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'COLLATE' absent from valid tsql output, no warning`
+- src: `CREATE TABLE t (a TEXT COLLATE "en_US")`
+
+## postgresql-drop4-MATCH\s+FULL  (postgresql)
+- targets: oracle(silent-drop)
+- live error: `SILENT CLAUSE DROP: 'MATCH\s+FULL' absent from valid oracle output, no warning`
+- src: `CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (pid INT REFERENCES p(id) MATCH FULL)`
 
 ## postgresql-qdrop-FOR\s+UPDATE  (postgresql)
 - targets: tsql(silent-drop)
@@ -2288,4 +2368,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (id INT IDENTITY(100, 5))`
 ---
 
-Totals: 447 distinct constructs; defect rows by kind: carrier 67, func 167, invalid 633, semantic 2, silent-drop 42.
+Totals: 463 distinct constructs; defect rows by kind: carrier 67, func 182, invalid 633, semantic 2, silent-drop 61.
