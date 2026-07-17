@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (341 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (344 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -438,6 +438,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever`
 - src: `SELECT MD5('abc'), SHA1('abc'), SHA2('abc', 256)`
 
+## my-hash-all  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever`
+- src: `SELECT CRC32('abc'), MD5('abc'), SHA('abc'), SHA2('abc', 512)`
+
 ## my-hex-bin  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
@@ -452,6 +457,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('',),) target=(('NULL',),)`
 - src: `SELECT IFNULL('', NULL) AS r`
+
+## my-index-fns  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI`
+- src: `SELECT INTERVAL(3, 1, 2, 4, 6), FIELD('b','a','b'), ELT(1,'x','y')`
 
 ## my-inet  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -613,6 +623,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('3', '3'),) target=(('0.333333', '0.333333'),)`
 - src: `SELECT LOG2(8), LOG10(1000)`
 
+## my-logexp  (mysql)
+- targets: tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN`
+- src: `SELECT LOG2(8), LOG10(100), LN(2.718), EXP(1)`
+
 ## my-lpad-multichar  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)`
@@ -658,6 +673,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se`
 - src: `CREATE TABLE t (a DECIMAL(20,4), b FLOAT(10,2), c DOUBLE)`
 
+## my-numeric-conv  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI`
+- src: `SELECT BIT_COUNT(255), CONV(255,10,16), OCT(64), HEX(255)`
+
 ## my-optimizer-hints  (mysql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
@@ -672,6 +692,16 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE`
 - src: `SELECT PERIOD_DIFF(202006, 202001) AS r`
+
+## my-pi-fns  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
+- src: `SELECT TRUNCATE(PI(), 4), ROUND(PI(), 4), FORMAT(PI(), 4)`
+
+## my-rand  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA`
+- src: `SELECT RAND(1), RANDOM_BYTES(4), UUID()`
 
 ## my-reads-sql  (mysql)
 - targets: tsql(invalid)
@@ -712,6 +742,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT REPLACE('abc', NULL, 'x') IS NULL AS r`
+
+## my-round-fns  (mysql)
+- targets: tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CE`
+- src: `SELECT FLOOR(3.7), CEILING(3.2), ROUND(3.567, 2), TRUNCATE(3.567, 1)`
 
 ## my-scalar-subquery-assign  (mysql)
 - targets: tsql(invalid)
@@ -842,6 +877,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
 - src: `SELECT 'a ' = 'a' AS r`
+
+## my-trig  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(174, b'The atan function requires 1 argument(s).DB-Lib error message 20018, severity 15:\`
+- src: `SELECT ATAN2(1,1), ATAN(1,1), DEGREES(PI()), RADIANS(180), COT(1)`
 
 ## my-trim-both  (mysql)
 - targets: postgresql(func), tsql(func)
@@ -1182,6 +1222,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(102, b"Incorrect syntax near '*'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
 - src: `CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)`
 
+## ora-hash-all  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'STANDARD_HASH' is not a recognized built-in function name.DB-Lib error message 20`
+- src: `SELECT STANDARD_HASH('abc', 'SHA256'), ORA_HASH('abc', 100) FROM DUAL`
+
 ## ora-hint-comment  (oracle)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -1251,6 +1296,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s`
 - src: `SELECT DBMS_LOB.GETLENGTH(TO_CLOB('hello')) AS r FROM DUAL`
+
+## ora-logexp  (oracle)
+- targets: tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN`
+- src: `SELECT LOG(2, 8), LN(2.718), EXP(1) FROM DUAL`
 
 ## ora-lpad-multichar  (oracle)
 - targets: tsql(func)
@@ -1342,6 +1392,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(1018, b"Incorrect syntax near 'INDEX'. If this is intended as a part of a table hint, A W`
 - src: `CREATE TABLE t (id NUMBER, CONSTRAINT pk PRIMARY KEY (id) USING INDEX)`
 
+## ora-rand  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "DBMS_RANDOM" or the user-defined function or aggregate`
+- src: `SELECT DBMS_RANDOM.VALUE, DBMS_RANDOM.STRING('U', 5) FROM DUAL`
+
 ## ora-ratio-to-report  (oracle)
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA`
@@ -1377,6 +1432,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('2020-07-01 00:00:00',),) target=(('2020',),)`
 - src: `SELECT ROUND(DATE '2020-06-16', 'MONTH') AS r FROM DUAL`
+
+## ora-round-fns  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE`
+- src: `SELECT FLOOR(3.7), CEIL(3.2), ROUND(3.567, 2), TRUNC(3.567, 1), REMAINDER(10,3) FROM DUAL`
 
 ## ora-rtrim-chars  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
@@ -1457,6 +1517,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_6c47c43e12f3.TRANSLATE does not exist')`
 - src: `SELECT TRANSLATE('abc', 'ab', 'xy') AS r FROM DUAL`
+
+## ora-trig  (oracle)
+- targets: mysql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AT`
+- src: `SELECT ATAN2(1,1), COSH(1), SINH(1), TANH(1) FROM DUAL`
 
 ## ora-tz-funcs  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1870,6 +1935,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
 - src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, n, count(*) OVER (ORDER BY id GROUPS BETWEEN`
 
+## pg-hash-all  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever`
+- src: `SELECT md5('abc'), encode(sha256('abc'::bytea), 'hex')`
+
 ## pg-hash-fns  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever`
@@ -2065,6 +2135,11 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV`
 - src: `SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o`
 
+## pg-pi-fns  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-00904: "PI": invalid identifier`
+- src: `SELECT trunc(pi()::numeric, 4), round(pi()::numeric, 4)`
+
 ## pg-position-case  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -2245,6 +2320,11 @@ CREATE TABLE ledger (id SERIA`
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')`
 - src: `SELECT TRANSLATE('abc', 'ab', 'xy') AS r`
+
+## pg-trig  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AT`
+- src: `SELECT atan2(1,1), degrees(pi()), radians(180), cot(1), sind(30)`
 
 ## pg-trim-both-chars  (postgresql)
 - targets: oracle(invalid)
@@ -2620,6 +2700,11 @@ CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
 - live error: `ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier`
 - src: `SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r`
 
+## ts-hash-all  (tsql)
+- targets: mysql(invalid), oracle(silent), postgresql(invalid)
+- live error: `SILENT: source literal(s) ["'SHA2_512'"] absent from valid output, no warning`
+- src: `SELECT HASHBYTES('SHA2_512', 'abc'), CHECKSUM('abc')`
+
 ## ts-host-db  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "DB_NAME": invalid identifier`
@@ -2838,6 +2923,11 @@ SELECT * FROM t TABLESAMPLE (10 PERCENT)`
 - live error: `(1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')`
 - src: `SELECT TRANSLATE('abc', 'ab', 'xy') AS r`
 
+## ts-trig  (tsql)
+- targets: oracle(invalid)
+- live error: `ORA-00904: "COT": invalid identifier`
+- src: `SELECT ATN2(1,1), DEGREES(PI()), RADIANS(180.0), COT(1)`
+
 ## ts-trigger-on-view  (tsql)
 - targets: postgresql(invalid)
 - live error: `INSTEAD OF triggers must be FOR EACH ROW`
@@ -2902,4 +2992,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 564 distinct constructs; defect rows by kind: func 294, invalid 790, semantic 2, silent-drop 75.
+Totals: 582 distinct constructs; defect rows by kind: func 294, invalid 832, semantic 2, silent-drop 75.

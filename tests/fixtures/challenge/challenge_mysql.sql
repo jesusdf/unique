@@ -242,6 +242,9 @@ SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR '|') AS r FROM (SELECT 1 x UNION SELE
 -- CASE[open]: my-hash — fails on oracle, postgresql, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT MD5('abc'), SHA1('abc'), SHA2('abc', 256)
 
+-- CASE[open]: my-hash-all — fails on oracle, postgresql, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
+SELECT CRC32('abc'), MD5('abc'), SHA('abc'), SHA2('abc', 512)
+
 -- CASE[open]: my-hex-bin — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT HEX(255) AS r, BIN(5) AS b
 
@@ -250,6 +253,9 @@ SELECT '0x10' + 0 AS r
 
 -- CASE[open]: my-ifnull-empty — fails on oracle. FUNC-DIFF: source=(('',),) target=(('NULL',),)
 SELECT IFNULL('', NULL) AS r
+
+-- CASE[open]: my-index-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
+SELECT INTERVAL(3, 1, 2, 4, 6), FIELD('b','a','b'), ELT(1,'x','y')
 
 -- CASE[open]: my-inet — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
 SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)
@@ -347,6 +353,9 @@ SELECT LOG(2, 8) AS r
 -- CASE[open]: my-log2-log10 — fails on tsql. FUNC-DIFF: source=(('3', '3'),) target=(('0.333333', '0.333333'),)
 SELECT LOG2(8), LOG10(1000)
 
+-- CASE[open]: my-logexp — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN
+SELECT LOG2(8), LOG10(100), LN(2.718), EXP(1)
+
 -- CASE[open]: my-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)
 SELECT LPAD('ab', 5, 'xy') AS r
 
@@ -374,6 +383,9 @@ CREATE PROCEDURE p() BEGIN CALL other_proc(); END
 -- CASE[open]: my-numeric — fails on tsql. (2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se
 CREATE TABLE t (a DECIMAL(20,4), b FLOAT(10,2), c DOUBLE)
 
+-- CASE[open]: my-numeric-conv — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
+SELECT BIT_COUNT(255), CONV(255,10,16), OCT(64), HEX(255)
+
 -- CASE[open]: my-optimizer-hints — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT /*+ QB_NAME(qb1) */ id FROM t WHERE n > (SELECT /*+ SEMIJOIN(@qb1) */ AVG(n) FROM t)
 
@@ -382,6 +394,12 @@ SELECT x FROM (SELECT 'banana' x UNION ALL SELECT 'Apple' x UNION ALL SELECT 'ch
 
 -- CASE[open]: my-period-diff — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE
 SELECT PERIOD_DIFF(202006, 202001) AS r
+
+-- CASE[open]: my-pi-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+SELECT TRUNCATE(PI(), 4), ROUND(PI(), 4), FORMAT(PI(), 4)
+
+-- CASE[open]: my-rand — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
+SELECT RAND(1), RANDOM_BYTES(4), UUID()
 
 -- CASE[open]: my-reads-sql — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
 CREATE FUNCTION f(a INT) RETURNS INT READS SQL DATA BEGIN RETURN (SELECT COUNT(*) FROM (SELECT a) t); END
@@ -407,6 +425,9 @@ SELECT REPLACE('AbCaBc', 'a', 'X') AS r
 
 -- CASE[open]: my-replace-null2 — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT REPLACE('abc', NULL, 'x') IS NULL AS r
+
+-- CASE[open]: my-round-fns — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CE
+SELECT FLOOR(3.7), CEILING(3.2), ROUND(3.567, 2), TRUNCATE(3.567, 1)
 
 -- CASE[open]: my-scalar-subquery-assign — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
 CREATE PROCEDURE p() BEGIN DECLARE v INT; SET v = (SELECT COUNT(*) FROM (SELECT 1) t); END
@@ -485,6 +506,9 @@ SELECT '12:00:00' + INTERVAL 90 MINUTE AS r
 
 -- CASE[open]: my-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'a ' = 'a' AS r
+
+-- CASE[open]: my-trig — fails on oracle, postgresql, tsql. (174, b'The atan function requires 1 argument(s).DB-Lib error message 20018, severity 15:\
+SELECT ATAN2(1,1), ATAN(1,1), DEGREES(PI()), RADIANS(180), COT(1)
 
 -- CASE[open]: my-trim-both — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r

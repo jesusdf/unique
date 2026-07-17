@@ -146,6 +146,9 @@ SELECT FORMATMESSAGE('hi %s', 'x') AS r
 -- CASE[open]: ts-geography — fails on mysql, oracle, postgresql. ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier
 SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r
 
+-- CASE[open]: ts-hash-all — fails on mysql, postgresql. SILENT: source literal(s) ["'SHA2_512'"] absent from valid output, no warning
+SELECT HASHBYTES('SHA2_512', 'abc'), CHECKSUM('abc')
+
 -- CASE[open]: ts-host-db — fails on mysql, oracle, postgresql. ORA-00904: "DB_NAME": invalid identifier
 SELECT HOST_NAME(), DB_NAME(), SUSER_SNAME()
 
@@ -283,6 +286,9 @@ SELECT IIF('a ' = 'a', 1, 0) AS r
 
 -- CASE[open]: ts-translate — fails on mysql. (1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
+
+-- CASE[open]: ts-trig — fails on oracle. ORA-00904: "COT": invalid identifier
+SELECT ATN2(1,1), DEGREES(PI()), RADIANS(180.0), COT(1)
 
 -- CASE[open]: ts-trigger-on-view — fails on postgresql. INSTEAD OF triggers must be FOR EACH ROW
 CREATE TABLE t (id INT);

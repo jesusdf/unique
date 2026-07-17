@@ -215,6 +215,9 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 -- CASE[open]: pg-groups2 — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, n, count(*) OVER (ORDER BY id GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 
+-- CASE[open]: pg-hash-all — fails on mysql, oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
+SELECT md5('abc'), encode(sha256('abc'::bytea), 'hex')
+
 -- CASE[open]: pg-hash-fns — fails on mysql, oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT lpad('x', 3), md5('x'), sha256('x'::bytea)
 
@@ -332,6 +335,9 @@ SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x
 -- CASE[open]: pg-overlay — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV
 SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o
 
+-- CASE[open]: pg-pi-fns — fails on oracle. ORA-00904: "PI": invalid identifier
+SELECT trunc(pi()::numeric, 4), round(pi()::numeric, 4)
+
 -- CASE[open]: pg-position-case — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT POSITION('a' IN 'ABC') AS r
 
@@ -445,6 +451,9 @@ SELECT 'a ' = 'a' AS r
 
 -- CASE[open]: pg-translate — fails on mysql. (1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
+
+-- CASE[open]: pg-trig — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AT
+SELECT atan2(1,1), degrees(pi()), radians(180), cot(1), sind(30)
 
 -- CASE[open]: pg-trim-both-chars — fails on oracle. ORA-30001: trim set should have only one character
 SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS t

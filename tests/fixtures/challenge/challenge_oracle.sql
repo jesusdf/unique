@@ -140,6 +140,9 @@ SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL
 -- CASE[open]: ora-functional-index — fails on mysql, postgresql, tsql. (102, b"Incorrect syntax near '*'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)
 
+-- CASE[open]: ora-hash-all — fails on mysql, postgresql, tsql. (195, b"'STANDARD_HASH' is not a recognized built-in function name.DB-Lib error message 20
+SELECT STANDARD_HASH('abc', 'SHA256'), ORA_HASH('abc', 100) FROM DUAL
+
 -- CASE[open]: ora-hint-comment — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT /*+ FULL(t) */ 1 AS r FROM DUAL t
 
@@ -181,6 +184,9 @@ SELECT LNNVL(1 = 2) AS r FROM DUAL WHERE LNNVL(1 = 2)
 
 -- CASE[open]: ora-lob-length — fails on mysql, postgresql, tsql. (195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT DBMS_LOB.GETLENGTH(TO_CLOB('hello')) AS r FROM DUAL
+
+-- CASE[open]: ora-logexp — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN
+SELECT LOG(2, 8), LN(2.718), EXP(1) FROM DUAL
 
 -- CASE[open]: ora-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)
 SELECT LPAD('ab', 5, 'xy') AS r FROM DUAL
@@ -236,6 +242,9 @@ SELECT x FROM (SELECT 3 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SEL
 -- CASE[open]: ora-pk-using-index — fails on mysql, postgresql, tsql. (1018, b"Incorrect syntax near 'INDEX'. If this is intended as a part of a table hint, A W
 CREATE TABLE t (id NUMBER, CONSTRAINT pk PRIMARY KEY (id) USING INDEX)
 
+-- CASE[open]: ora-rand — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "DBMS_RANDOM" or the user-defined function or aggregate
+SELECT DBMS_RANDOM.VALUE, DBMS_RANDOM.STRING('U', 5) FROM DUAL
+
 -- CASE[open]: ora-ratio-to-report — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT RATIO_TO_REPORT(x) OVER () FROM (SELECT 1 x FROM DUAL)
 
@@ -257,6 +266,9 @@ SELECT REGEXP_SUBSTR('a1b2c3', '(\d)', 1, 1, NULL, 1) AS r FROM DUAL
 
 -- CASE[open]: ora-round-date-month — fails on mysql. FUNC-DIFF: source=(('2020-07-01 00:00:00',),) target=(('2020',),)
 SELECT ROUND(DATE '2020-06-16', 'MONTH') AS r FROM DUAL
+
+-- CASE[open]: ora-round-fns — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE
+SELECT FLOOR(3.7), CEIL(3.2), ROUND(3.567, 2), TRUNC(3.567, 1), REMAINDER(10,3) FROM DUAL
 
 -- CASE[open]: ora-rtrim-chars — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('a',),) target=(('',),)
 SELECT RTRIM('axxx', 'x') AS r FROM DUAL
@@ -305,6 +317,9 @@ SELECT CASE WHEN 'a ' = 'a' THEN 1 ELSE 0 END AS r FROM DUAL
 
 -- CASE[open]: ora-translate — fails on mysql. (1305, 'FUNCTION unique_val_6c47c43e12f3.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r FROM DUAL
+
+-- CASE[open]: ora-trig — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AT
+SELECT ATAN2(1,1), COSH(1), SINH(1), TANH(1) FROM DUAL
 
 -- CASE[open]: ora-tz-funcs — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 SELECT SYSTIMESTAMP, LOCALTIMESTAMP, SESSIONTIMEZONE FROM DUAL
