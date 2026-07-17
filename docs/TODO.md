@@ -1162,7 +1162,15 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          degrades honestly. Three legacy test fixtures converted to
          procedures (their asserted outputs were 443-invalid).
          Measured: pg→tsql **31 → 29** (validity 99.1%). Discovery
-         HOLDS 0. Tests: TestWave230WritingFunctions (2).**
+         HOLDS 0. Tests: TestWave230WritingFunctions (2).* Wave 231 (2026-07-17): a
+         temp-table QUALIFIER (``JOIN #t1 ON t1.c0 = 5``) left the
+         alias dangling on T-SQL — the ColumnRef emitter renamed
+         temp-table NAMES but not qualifiers; fixed. Measured:
+         mysql→tsql stable **23** (the one corpus instance uses an
+         un-#'d ``t1.`` on a chained comparison the temp-rename can't
+         reach without schema); the fix closes a real qualifier gap on
+         its tests. Discovery HOLDS 0. Tests:
+         TestWave231TempQualifierRename (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

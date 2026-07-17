@@ -2842,7 +2842,14 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
     if isinstance(node, ColumnRef):
         name = _ident(node.name, node.quoted, dialect)
         if node.table:
-            table = _ident(node.table, node.table_quoted, dialect)
+            qual = node.table
+            # A temp-table QUALIFIER must rename too (``JOIN #t1 ON
+            # t1.c0 = 5`` left t1 dangling on T-SQL — wave 231).
+            if dialect == "tsql" and not qual.startswith("#"):
+                temp_tables = TEMP_TABLES.get()
+                if temp_tables and qual.lower() in temp_tables:
+                    qual = f"#{qual}"
+            table = _ident(qual, node.table_quoted, dialect)
             return f"{table}.{name}"
         return name
 

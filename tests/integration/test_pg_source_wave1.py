@@ -7962,3 +7962,21 @@ class TestWave230WritingFunctions:
         )
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)RETURN @a \+ 1", out), out
+
+
+class TestWave231TempQualifierRename:
+    """wave 231 (mysql-corpus): a temp-table QUALIFIER must rename too
+    — ``JOIN #t1 ON t1.c0 = 5`` left t1 dangling on T-SQL."""
+
+    def test_temp_qualifier_renamed(self) -> None:
+        out = _t2(
+            "create temporary table t1(c0 int);"
+            " select * from t0 join t1 on t1.c0 = 5;",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)ON #t1\.c0 = 5", out), out
+
+    def test_non_temp_qualifier_untouched(self) -> None:
+        out = _t2("select * from t0 join t9 on t9.c0 = 5;", "mysql", "tsql")
+        assert re.search(r"(?i)ON t9\.c0 = 5", out), out
