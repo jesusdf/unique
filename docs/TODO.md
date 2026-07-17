@@ -1025,7 +1025,16 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          ships verbatim. The wave-141 inline-note contract test
          updated to the new behavior. Measured: pg→tsql **46 → 39**
          (−7, validity 98.8%). Discovery HOLDS 0. Tests:
-         TestWave209UnmappedOperatorGate (2).**
+         TestWave209UnmappedOperatorGate (2).* Wave 210 (2026-07-17,
+         regression fix): the wave-198 alias injection aliased
+         parenthesized join GROUPS as if they were derived tables
+         (invalid on T-SQL and it hid their table names — mysql→tsql
+         had crept 35 → 38, caught by the four-direction remeasure).
+         Only SELECT/set-op-bodied subqueries take the uq_dtN alias
+         now (via unnest() — double parens nest Subquery). Measured:
+         mysql→tsql **38 → 34** (better than the pre-regression 35),
+         pg→tsql stable 39. Discovery HOLDS 0. Tests:
+         TestWave210ParenGroupNotAliased (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

@@ -7464,3 +7464,22 @@ class TestWave209UnmappedOperatorGate:
         out = _t2("select corr(b, a) from aggtest;", "postgresql", "postgresql")
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)CORR\(b, a\)", out), out
+
+
+class TestWave210ParenGroupNotAliased:
+    """wave 210 (regression fix): the wave-198 alias injection aliased
+    parenthesized join GROUPS as if they were derived tables (invalid,
+    and it hid their table names) — only SELECT-bodied subqueries take
+    the uq_dtN alias now."""
+
+    def test_paren_join_group_untouched(self) -> None:
+        out = _t2(
+            "select t1.a from ((t1 inner join t2 on t1.a = t2.a))" " where t2.a = 1;",
+            "mysql",
+            "tsql",
+        )
+        assert "uq_dt" not in out, out
+
+    def test_derived_select_still_aliased(self) -> None:
+        out = _t2("SELECT * FROM ((SELECT 1 AS x));", "postgresql", "tsql")
+        assert "uq_dt1" in out, out

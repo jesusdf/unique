@@ -1041,7 +1041,14 @@ def _alias_bare_derived_tables(sql: str, source_dialect: str) -> str | None:
         return None
     n = 0
     for sq in tree.find_all(exp.Subquery):
-        if not sq.alias and isinstance(sq.parent, (exp.From, exp.Join)):
+        # Only REAL derived tables (a SELECT body): a parenthesized join
+        # GROUP also models as Subquery, and aliasing one both is
+        # invalid and hides its tables' names (wave 209 regression fix).
+        if (
+            not sq.alias
+            and isinstance(sq.parent, (exp.From, exp.Join))
+            and isinstance(sq.unnest(), (exp.Select, exp.SetOperation))
+        ):
             n += 1
             sq.set("alias", exp.TableAlias(this=exp.to_identifier(f"uq_dt{n}")))
     if n == 0:
