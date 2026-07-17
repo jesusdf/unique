@@ -174,17 +174,23 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
       `tests/integration/test_tsql_keyword_alias.py`. The other two documented
       T-SQL statement abbreviations already work: `EXEC`≡`EXECUTE` and
       `TRAN`≡`TRANSACTION` on `COMMIT`/`ROLLBACK`/`SAVE`.
-- [ ] **`CREATE OR ALTER {PROCEDURE|PROC}` not routed to the procedural engine
-      (P2)** — the T-SQL 2016+ `CREATE OR ALTER` form (distinct from
-      `CREATE OR REPLACE`) falls to the DML path and degrades to an "Unhandled
-      CREATE PROCEDURE" carrier. Needs the routing regex to accept
-      `CREATE\s+OR\s+ALTER` and `parser._parse_create` to consume the
-      `OR ALTER` prefix like it does `OR REPLACE`. Not an alias bug — filed
-      while fixing the `PROC` abbreviation.
-- [ ] **`BEGIN TRAN[SACTION]` unhandled (P2)** — both the abbreviated and full
-      spellings degrade to "Unhandled expression type: Transaction" (so it is
-      *not* an alias asymmetry). `COMMIT`/`ROLLBACK`/`SAVE TRAN` already map;
-      only the transaction-*open* statement is missing a target mapping.
+- [x] **`CREATE OR ALTER {PROCEDURE|PROC}` (P2)** — the T-SQL 2016+
+      `CREATE OR ALTER` form (distinct from `CREATE OR REPLACE`) fell to the DML
+      path and degraded to an "Unhandled CREATE PROCEDURE" carrier. Fixed: the
+      routing regex accepts `CREATE\s+OR\s+ALTER`, `parser._parse_create`
+      consumes the `OR ALTER` prefix like `OR REPLACE` (both set `or_replace`),
+      and the T-SQL emitter now honors `or_replace` — so `CREATE OR ALTER`
+      round-trips and Oracle/PG `CREATE OR REPLACE` ↔ T-SQL `CREATE OR ALTER`.
+      Covered by `tests/integration/test_challenge.py` + `test_procedural.py`.
+- [x] **`BEGIN TRAN[SACTION]` (P2)** — a standalone begin-transaction degraded to
+      "Unhandled expression type: Transaction". Fixed: the converter passes
+      `exp.Transaction` through (kind `BEGIN TRANSACTION`) so sqlglot renders
+      T-SQL `BEGIN TRANSACTION` / PG+MySQL `BEGIN`; Oracle (implicit
+      transactions) drops it to a documented carrier + warning in
+      `emit._emit_passthrough` rather than a bare invalid `BEGIN`.
+      `COMMIT`/`ROLLBACK`/`SAVE` already mapped. Covered by
+      `tests/integration/test_challenge.py`. (A multi-statement `BEGIN TRAN … `
+      `COMMIT` in ONE semicolon-less batch is a separate splitter limitation.)
 
 ## 5. Procedural round-trip fidelity (challenge corpus)
 

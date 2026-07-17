@@ -552,6 +552,16 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
         and isinstance(expr.this, exp.Schema)
     ):
         return _convert_create_table(expr, source_dialect)
+    # BEGIN TRANSACTION: valid on T-SQL/PG/MySQL (sqlglot renders the target's
+    # form); Oracle has no explicit statement (transactions are implicit), so the
+    # emitter degrades it to a documented carrier rather than shipping a bare —
+    # and invalid — ``BEGIN``.
+    if isinstance(expr, exp.Transaction):
+        return PassthroughSQL(
+            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            source_dialect=source_dialect,
+            kind="BEGIN TRANSACTION",
+        )
     # Transaction/DDL control (COMMIT / ROLLBACK / TRUNCATE) is valid on every
     # target — a data-migration dump is full of these — so re-transpile it via
     # the passthrough path instead of degrading each to an "Unhandled" carrier.

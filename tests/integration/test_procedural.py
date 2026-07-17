@@ -161,7 +161,8 @@ class TestOracleToTSQL:
             "END;"
         )
         out = _transpile(sql, "oracle", "tsql")
-        assert "CREATE PROCEDURE" in out
+        # Oracle's idempotent CREATE OR REPLACE maps to T-SQL's CREATE OR ALTER.
+        assert "CREATE OR ALTER PROCEDURE" in out
         # Oracle params converted to T-SQL @variables
         assert "@p_id" in out
         # IF block became T-SQL form
@@ -623,7 +624,9 @@ class TestRoundTripStability:
         )
         oracle = _transpile(sql, "tsql", "oracle")
         back = _transpile(oracle, "oracle", "tsql")
-        assert "CREATE PROCEDURE" in back
+        # The intermediate Oracle form is CREATE OR REPLACE, which maps back to
+        # T-SQL's idempotent CREATE OR ALTER (the procedure structure survives).
+        assert "CREATE OR ALTER PROCEDURE" in back
         assert "DECLARE" in back
 
 

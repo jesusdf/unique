@@ -368,7 +368,7 @@ engines and indicates the transpilation support status for each.
 
 | Feature | T-SQL | Oracle | PostgreSQL | MySQL | Transpile Status |
 |---------|-------|--------|------------|-------|------------------|
-| CREATE / ALTER / DROP PROCEDURE (incl. T-SQL `PROC` abbreviation) | ✓ | ✓ | ✓ | ✓ | ✅ T-SQL `PROC` is normalized to `PROCEDURE` (never leaked to other engines) |
+| CREATE / ALTER / DROP PROCEDURE (incl. T-SQL `PROC` abbreviation, `CREATE OR ALTER`) | ✓ | ✓ | ✓ | ✓ | ✅ T-SQL `PROC` normalized to `PROCEDURE` (never leaked); `CREATE OR ALTER` ↔ `CREATE OR REPLACE` |
 | CREATE FUNCTION (scalar) | ✓ | ✓ | ✓ | ✓ | ✅ |
 | CREATE FUNCTION (table-valued) | ✓ | ✓ (pipelined) | ✓ (RETURNS TABLE) | N/A | ⚠️ → a T-SQL string-split TVF becomes an Oracle `SYS.ODCIVARCHAR2LIST` function (`TABLE(fn(…))` callers); other shapes carrier |
 | IN / OUT / INOUT params | ✓ | ✓ | ✓ | ✓ | ✅ |

@@ -1464,6 +1464,15 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         if reason is not None:
             return f"-- UNIQUE: {reason} Original:\n{_comment_block(node.sql)}"
 
+    # BEGIN TRANSACTION: T-SQL/PG/MySQL have a statement form (rendered by the
+    # sqlglot passthrough below); Oracle starts a transaction implicitly, so drop
+    # it with a documented note instead of a bare — and invalid — ``BEGIN``.
+    if node.kind == "BEGIN TRANSACTION" and dialect == "oracle":
+        return (
+            "-- UNIQUE: BEGIN TRANSACTION dropped -- Oracle starts a "
+            "transaction implicitly"
+        )
+
     # Oracle hierarchical query: keep as-is for Oracle; for others there is
     # no faithful automatic rewrite, so emit a documented comment.
     if node.kind == "CONNECT BY" and dialect != "oracle":

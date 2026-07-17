@@ -383,11 +383,13 @@ class ParserBase:
         return AnonymousBlock(statements=tuple(statements))
 
     def _parse_create(self) -> ASTNode:
-        """Parse CREATE [OR REPLACE] PROCEDURE|FUNCTION|TRIGGER."""
+        """Parse CREATE [OR REPLACE|OR ALTER] PROCEDURE|FUNCTION|TRIGGER."""
         self._expect_keyword("CREATE")
         or_replace = False
         if self._match_keyword("OR"):
-            self._expect_keyword("REPLACE")
+            # ``OR REPLACE`` (Oracle/PG) and ``OR ALTER`` (T-SQL 2016+) are the
+            # same idempotent intent.
+            self._expect_keyword("REPLACE", "ALTER")
             or_replace = True
 
         tok = self._current()

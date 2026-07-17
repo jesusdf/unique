@@ -1021,7 +1021,11 @@ class TestTsqlFunctionEmptyParens:
             "END;\n/"
         )
         out = _t(src, "tsql")
-        assert re.search(r"(?i)CREATE\s+FUNCTION\s+f_now\s*\(\s*\)", out), out
+        # Oracle's idempotent CREATE OR REPLACE maps to T-SQL's CREATE OR ALTER;
+        # the parameterless function still gets its required () parens.
+        assert re.search(
+            r"(?i)CREATE\s+OR\s+ALTER\s+FUNCTION\s+f_now\s*\(\s*\)", out
+        ), out
 
     def test_parameterless_procedure_stays_bare(self) -> None:
         src = "CREATE OR REPLACE PROCEDURE p_now AS\n" "BEGIN\n" "  NULL;\n" "END;\n/"

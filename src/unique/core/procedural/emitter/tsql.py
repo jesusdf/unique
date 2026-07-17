@@ -79,6 +79,16 @@ class TSqlEmitter(ProceduralEmitter):
         # T-SQL functions require the parentheses even with no parameters.
         return True
 
+    def _procedure_header(self, name: str, or_replace: bool) -> str:
+        # T-SQL 2016+ spells the idempotent form ``CREATE OR ALTER`` — the
+        # faithful counterpart of the other engines' ``CREATE OR REPLACE``.
+        verb = "CREATE OR ALTER" if or_replace else "CREATE"
+        return f"{verb} PROCEDURE {name}"
+
+    def _function_header(self, name: str, or_replace: bool) -> str:
+        verb = "CREATE OR ALTER" if or_replace else "CREATE"
+        return f"{verb} FUNCTION {name}"
+
     def _emit_param(
         self,
         p: ParameterDefinition,
