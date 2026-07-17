@@ -546,6 +546,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (a INT); REPLACE INTO t VALUES (1)`
 
+## my-replace-null2  (mysql)
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT REPLACE('abc', NULL, 'x') IS NULL AS r`
+
 ## my-scalar-subquery-assign  (mysql)
 - targets: tsql(invalid)
 - live error: `(8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve`
@@ -556,6 +561,11 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - live error: `(8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve`
 - src: `CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END`
 
+## my-soundex-eq  (mysql)
+- targets: postgresql(invalid)
+- live error: `function soundex(unknown) does not exist`
+- src: `SELECT SOUNDEX('hello') = SOUNDEX('hallo') AS r`
+
 ## my-soundex-format  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
@@ -565,6 +575,16 @@ CREATE EVENT ev ON SCHEDULE EVERY 1 DAY DO DELETE FROM t WHERE a < 0`
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST`
 - src: `SELECT ST_AsText(ST_GeomFromText('POINT(1 1)')) AS r`
+
+## my-st-distance  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST`
+- src: `SELECT ST_Distance(ST_GeomFromText('POINT(0 0)'), ST_GeomFromText('POINT(3 4)')) AS r`
+
+## my-st-geojson  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST`
+- src: `SELECT ST_AsGeoJSON(ST_GeomFromText('POINT(1 1)')) AS r`
 
 ## my-status-funcs  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -939,6 +959,11 @@ CREATE TABLE t (id NUMBER DEFAULT s.NEXTVAL, a NUMBER)`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU`
 - src: `SELECT DUMP('A', 1016) AS r FROM DUAL`
+
+## ora-edit-distance  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "UTL_MATCH" or the user-defined function or aggregate "`
+- src: `SELECT UTL_MATCH.EDIT_DISTANCE('hello', 'hallo') AS r FROM DUAL`
 
 ## ora-empty-is-null  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
@@ -1501,6 +1526,11 @@ CREATE SYNONYM syn FOR t`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT array_to_string(ARRAY[1,2,3], ',')`
+
+## pg-arrayagg-filter-order  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT array_agg(x ORDER BY x DESC) FILTER (WHERE x > 1) FROM (VALUES (1),(2),(3)) v(x)`
 
 ## pg-ascii-empty  (postgresql)
 - targets: oracle(func), tsql(func)
@@ -2399,6 +2429,16 @@ CREATE TRIGGE`
 - live error: `(102, b"Incorrect syntax near 'RESTART'.DB-Lib error message 20018, severity 15:\nGeneral `
 - src: `CREATE TABLE t (id INT); TRUNCATE TABLE t RESTART IDENTITY CASCADE`
 
+## pg-ts-headline  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ts`
+- src: `SELECT ts_headline('the quick fox', to_tsquery('fox')) AS r`
+
+## pg-ts-rank  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ts`
+- src: `SELECT ts_rank(to_tsvector('the cat'), to_tsquery('cat')) AS r`
+
 ## pg-tstzrange  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ`
@@ -2989,6 +3029,11 @@ EXEC sp_rename 't.a', 'x', 'COLUMN'`
 - live error: `ORA-00936: missing expression`
 - src: `SELECT @@SPID, @@VERSION`
 
+## ts-st-distance  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `DPY-4010: a bind variable replacement value for placeholder ":POINT" was not provided`
+- src: `SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)) AS r`
+
 ## ts-str-func  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "STR": invalid identifier`
@@ -3122,4 +3167,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 604 distinct constructs; defect rows by kind: carrier 138, func 249, invalid 754, semantic 2, silent-drop 75.
+Totals: 613 distinct constructs; defect rows by kind: carrier 138, func 250, invalid 774, semantic 2, silent-drop 75.

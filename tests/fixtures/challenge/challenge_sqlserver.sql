@@ -313,6 +313,9 @@ EXEC sp_rename 't.a', 'x', 'COLUMN'
 -- CASE[open]: ts-spid-version — fails on mysql, oracle, postgresql. ORA-00936: missing expression
 SELECT @@SPID, @@VERSION
 
+-- CASE[open]: ts-st-distance — fails on mysql, oracle, postgresql. DPY-4010: a bind variable replacement value for placeholder ":POINT" was not provided
+SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)) AS r
+
 -- CASE[open]: ts-str-func — fails on mysql, oracle, postgresql. ORA-00904: "STR": invalid identifier
 SELECT STR(3.14, 6, 2) AS r
 

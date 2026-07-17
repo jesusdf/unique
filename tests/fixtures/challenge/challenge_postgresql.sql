@@ -44,6 +44,9 @@ SELECT ARRAY(SELECT generate_series(1,3)) AS r
 -- CASE[open]: pg-array-to-string — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT array_to_string(ARRAY[1,2,3], ',')
 
+-- CASE[open]: pg-arrayagg-filter-order — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT array_agg(x ORDER BY x DESC) FILTER (WHERE x > 1) FROM (VALUES (1),(2),(3)) v(x)
+
 -- CASE[open]: pg-ascii-empty — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('NULL',),)
 SELECT ASCII('') AS r
 
@@ -594,6 +597,12 @@ SELECT CHAR_LENGTH('  '), LENGTH(TRIM('  '))
 
 -- CASE[open]: pg-truncate-restart — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'RESTART'.DB-Lib error message 20018, severity 15:\nGeneral 
 CREATE TABLE t (id INT); TRUNCATE TABLE t RESTART IDENTITY CASCADE
+
+-- CASE[open]: pg-ts-headline — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ts
+SELECT ts_headline('the quick fox', to_tsquery('fox')) AS r
+
+-- CASE[open]: pg-ts-rank — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ts
+SELECT ts_rank(to_tsvector('the cat'), to_tsquery('cat')) AS r
 
 -- CASE[open]: pg-tstzrange — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
 SELECT tstzrange(now(), now() + INTERVAL '1 day') AS r

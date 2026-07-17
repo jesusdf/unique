@@ -134,6 +134,9 @@ SELECT DUMP('abc') AS r FROM DUAL
 -- CASE[open]: ora-dump2 — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU
 SELECT DUMP('A', 1016) AS r FROM DUAL
 
+-- CASE[open]: ora-edit-distance — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "UTL_MATCH" or the user-defined function or aggregate "
+SELECT UTL_MATCH.EDIT_DISTANCE('hello', 'hallo') AS r FROM DUAL
+
 -- CASE[open]: ora-empty-is-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT CASE WHEN '' IS NULL THEN 1 ELSE 0 END AS r FROM DUAL
 

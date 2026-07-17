@@ -328,17 +328,29 @@ SELECT REPEAT('ab', -1) AS r
 -- CASE[open]: my-replace-into — fails on oracle, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (a INT); REPLACE INTO t VALUES (1)
 
+-- CASE[open]: my-replace-null2 — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT REPLACE('abc', NULL, 'x') IS NULL AS r
+
 -- CASE[open]: my-scalar-subquery-assign — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
 CREATE PROCEDURE p() BEGIN DECLARE v INT; SET v = (SELECT COUNT(*) FROM (SELECT 1) t); END
 
 -- CASE[open]: my-select-into-out — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
 CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END
 
+-- CASE[open]: my-soundex-eq — fails on postgresql. function soundex(unknown) does not exist
+SELECT SOUNDEX('hello') = SOUNDEX('hallo') AS r
+
 -- CASE[open]: my-soundex-format — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT SOUNDEX('Smith'), FORMAT(1234.5, 2)
 
 -- CASE[open]: my-spatial — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
 SELECT ST_AsText(ST_GeomFromText('POINT(1 1)')) AS r
+
+-- CASE[open]: my-st-distance — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+SELECT ST_Distance(ST_GeomFromText('POINT(0 0)'), ST_GeomFromText('POINT(3 4)')) AS r
+
+-- CASE[open]: my-st-geojson — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+SELECT ST_AsGeoJSON(ST_GeomFromText('POINT(1 1)')) AS r
 
 -- CASE[open]: my-status-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RO
 SELECT LAST_INSERT_ID(), ROW_COUNT(), FOUND_ROWS()
