@@ -605,6 +605,27 @@ class ProceduralEmitter:
         them) although its procedures stay paren-less."""
         return self._wants_empty_parens()
 
+    _NOCOUNT_DIRECTIVE_RE = re.compile(r"(?is)^\s*SET\s+NOCOUNT\b")
+
+    @classmethod
+    def _body_manages_nocount(cls, body_stmts: list[ASTNode]) -> bool:
+        """Whether the body's first executable statement is a ``SET NOCOUNT``.
+
+        The T-SQL emitter injects ``SET NOCOUNT ON`` as a best-practice default,
+        but a body that already opens with ``SET NOCOUNT ON``/``OFF`` — an
+        explicit author directive or the restored ``/* UNIQUE: SET NOCOUNT ON
+        … */`` round-trip carrier — must keep its own; injecting would duplicate
+        the ``ON`` or contradict an explicit ``OFF``. Leading comments are
+        skipped (the directive is still the first real statement).
+        """
+        for stmt in body_stmts:
+            if isinstance(stmt, CommentStatement):
+                continue
+            return isinstance(stmt, RawSQL) and bool(
+                cls._NOCOUNT_DIRECTIVE_RE.match(stmt.sql)
+            )
+        return False
+
     def _emit_procedure_body(
         self,
         header: str,
@@ -615,28 +636,8 @@ class ProceduralEmitter:
         subclass overrides this with its own block structure."""
         lines = [f"{header}\nAS\nBEGIN"]
         self._indent_level = 1
-        lines.append(f"{self._indent()}SET NOCOUNT ON;\n")
-        for decl in declarations:
-            lines.append(f"{self._indent()}{self._emit_node(decl)}")
-        if declarations:
-            lines.append("")
-        for stmt in body_stmts:
-            text = self._emit_node(stmt)
-            for line in text.split("\n"):
-                lines.append(f"{self._indent()}{line}" if line.strip() else "")
-        self._indent_level = 0
-        lines.append("END")
-        return "\n".join(lines)
-
-    def _emit_tsql_procedure_body(
-        self,
-        header: str,
-        declarations: list[ASTNode],
-        body_stmts: list[ASTNode],
-    ) -> str:
-        lines = [f"{header}\nAS\nBEGIN"]
-        self._indent_level = 1
-        lines.append(f"{self._indent()}SET NOCOUNT ON;\n")
+        if not self._body_manages_nocount(body_stmts):
+            lines.append(f"{self._indent()}SET NOCOUNT ON;\n")
         for decl in declarations:
             lines.append(f"{self._indent()}{self._emit_node(decl)}")
         if declarations:
