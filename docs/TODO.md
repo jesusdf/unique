@@ -903,7 +903,11 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          counted as syntax) but output stmts 2939 → 2934 and the
          fragment class is GONE from the dump — no regressions (strict
          subset by diff). Discovery HOLDS 0. Tests:
-         TestWave191PgSearchCte (3).**
+         TestWave191PgSearchCte (3).* Wave 192 (2026-07-17): MySQL
+         has no bare OFFSET — the documented all-rows idiom is
+         ``LIMIT 18446744073709551615 OFFSET n``. Measured: pg→mysql
+         **72 → 68** (−4 — wave 191's fragments also settled here).
+         Discovery HOLDS 0. Tests: TestWave192MysqlBareOffset (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

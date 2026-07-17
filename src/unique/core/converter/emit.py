@@ -3998,6 +3998,10 @@ def _emit_limit(limit: LimitClause, dialect: str) -> str:
 
     # PostgreSQL, MySQL: LIMIT ... OFFSET ...
     parts = []
+    if dialect == "mysql" and limit.offset is not None and limit.limit is None:
+        # MySQL has no bare OFFSET — the documented all-rows idiom is
+        # LIMIT <2^64-1> OFFSET n (wave 192).
+        parts.append("LIMIT 18446744073709551615")
     if limit.limit:
         limit_sql = f"LIMIT {_emit_expression(limit.limit, dialect)}"
         if limit.percent:

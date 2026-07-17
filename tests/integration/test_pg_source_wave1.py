@@ -6962,3 +6962,28 @@ class TestWave191PgSearchCte:
         )
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)WITH RECURSIVE", out), out
+
+
+class TestWave192MysqlBareOffset:
+    """wave 192 (pg-corpus): MySQL has no bare OFFSET — the documented
+    all-rows idiom is ``LIMIT 18446744073709551615 OFFSET n``."""
+
+    def test_bare_offset_mysql(self) -> None:
+        out = _t2(
+            "select foo from (select 1 as foo offset 0) foo;",
+            "postgresql",
+            "mysql",
+        )
+        assert re.search(r"(?i)LIMIT 18446744073709551615\s+OFFSET 0", out), out
+
+    def test_bare_offset_kept_pg(self) -> None:
+        out = _t2(
+            "select foo from (select 1 as foo offset 0) foo;",
+            "postgresql",
+            "postgresql",
+        )
+        assert "18446744073709551615" not in out, out
+
+    def test_limit_offset_untouched_mysql(self) -> None:
+        out = _t2("select * from t1 limit 5 offset 2;", "postgresql", "mysql")
+        assert re.search(r"(?i)LIMIT 5\s+OFFSET 2", out), out
