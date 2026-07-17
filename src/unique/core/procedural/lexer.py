@@ -395,6 +395,26 @@ class Lexer:
     def _emit(self, token_type: TokenType, value: str, line: int, col: int) -> None:
         self._tokens.append(Token(type=token_type, value=value, line=line, column=col))
 
+    def _prev_keyword_in(self, *keywords: str) -> bool:
+        """Whether the last significant token is one of *keywords*.
+
+        Whitespace, newlines and comments are skipped so ``CREATE PROC`` (with
+        any spacing/comment between) is recognized. Used for position-aware
+        keyword normalization (the T-SQL ``PROC`` abbreviation).
+        """
+        wanted = {k.upper() for k in keywords}
+        skip = (
+            TokenType.WHITESPACE,
+            TokenType.NEWLINE,
+            TokenType.LINE_COMMENT,
+            TokenType.BLOCK_COMMENT,
+        )
+        for tok in reversed(self._tokens):
+            if tok.type in skip:
+                continue
+            return tok.type == TokenType.KEYWORD and tok.value.upper() in wanted
+        return False
+
     def _tokenize(self) -> None:
         """Tokenize the entire input."""
         while not self._at_end():
@@ -691,6 +711,16 @@ class Lexer:
             word = self._sql[start : self._pos]
             if word.upper() in KEYWORDS:
                 self._emit(TokenType.KEYWORD, word, line, col)
+            elif (
+                self._dialect == "tsql"
+                and word.upper() == "PROC"
+                and self._prev_keyword_in("CREATE", "ALTER")
+            ):
+                # ``PROC`` is T-SQL's documented abbreviation of ``PROCEDURE``
+                # in CREATE/ALTER (never a reserved word elsewhere, so it is
+                # normalized only in this DDL keyword position — a column or
+                # object named ``proc`` stays an identifier).
+                self._emit(TokenType.KEYWORD, "PROCEDURE", line, col)
             else:
                 self._emit(TokenType.IDENTIFIER, word, line, col)
             return

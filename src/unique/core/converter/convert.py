@@ -1271,9 +1271,19 @@ def _convert_delete(expr: exp.Delete) -> ASTNode:
     return DeleteStatement(table=table, where=where, using=tuple(using))
 
 
+def _normalize_ddl_kind(kind: str) -> str:
+    """Canonicalize a DDL object-type keyword.
+
+    T-SQL accepts ``PROC`` as an abbreviation of ``PROCEDURE`` (sqlglot keeps
+    the abbreviated spelling verbatim); no other engine does, so the canonical
+    form must be emitted regardless of target.
+    """
+    return "PROCEDURE" if kind == "PROC" else kind
+
+
 def _convert_create(expr: exp.Create) -> ASTNode:
     """Convert a sqlglot Create to the appropriate IR node."""
-    kind = (expr.args.get("kind") or "").upper()
+    kind = _normalize_ddl_kind((expr.args.get("kind") or "").upper())
 
     if kind == "TABLE":
         return _convert_create_table(expr)
@@ -1474,7 +1484,7 @@ def _convert_create_view(expr: exp.Create) -> CreateViewStatement:
 
 def _convert_drop(expr: exp.Drop) -> DropStatement:
     """Convert DROP statement."""
-    kind = (expr.args.get("kind") or "TABLE").upper()
+    kind = _normalize_ddl_kind((expr.args.get("kind") or "TABLE").upper())
     table = _convert_table_ref(expr.this) if expr.this else TableRef(name="unknown")
     if_exists = expr.args.get("exists") is not None
 

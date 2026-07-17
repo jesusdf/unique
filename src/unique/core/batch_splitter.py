@@ -49,7 +49,8 @@ class Batch:
 
 _PROCEDURAL_PATTERNS = {
     "tsql": re.compile(
-        r"(?i)^\s*(?:CREATE|ALTER)\s+(?:PROCEDURE|FUNCTION|TRIGGER)\b",
+        # ``PROC`` is T-SQL's documented abbreviation of ``PROCEDURE``.
+        r"(?i)^\s*(?:CREATE|ALTER)\s+(?:PROC(?:EDURE)?|FUNCTION|TRIGGER)\b",
         re.MULTILINE,
     ),
     "oracle": re.compile(
