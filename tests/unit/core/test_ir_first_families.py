@@ -745,3 +745,70 @@ class TestZeroPushMysqlGates:
         ]
         assert not any("regclass" in ln.lower() for ln in code), r.sql
         assert r.warnings, r.sql
+
+
+class TestZeroPushPgOnlyShapes:
+    """pg-only statement shapes gate honestly off PG (zero push Z3a)."""
+
+    def _t(self, sql, tgt="mysql"):
+        from unique.core.transpiler import Transpiler
+
+        return Transpiler().transpile(sql, "postgresql", tgt)
+
+    def _code(self, r):
+        return [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+
+    def test_alter_set_storage_params(self) -> None:
+        r = self._t("ALTER TABLE tenk1 SET (parallel_workers = 4);")
+        assert not any("parallel_workers" in ln for ln in self._code(r)), r.sql
+        assert r.warnings, r.sql
+
+    def test_alter_set_storage_kept_on_pg(self) -> None:
+        r = self._t("ALTER TABLE tenk1 SET (parallel_workers = 4);", "postgresql")
+        assert "SET (parallel_workers = 4)" in r.sql, r.sql
+
+    def test_set_constraints_carrier(self) -> None:
+        r = self._t("SET CONSTRAINTS parted_trig DEFERRED;")
+        assert not any("CONSTRAINTS" in ln.upper() for ln in self._code(r)), r.sql
+        assert r.warnings, r.sql
+
+    def test_deferrable_strips_on_mysql(self) -> None:
+        r = self._t("ALTER TABLE t ADD CONSTRAINT u UNIQUE (a) DEFERRABLE;")
+        assert "DEFERRABLE" not in r.sql.upper().replace(
+            "DEFERRABLE CONSTRAINT", ""
+        ), r.sql
+        assert "UNIQUE" in r.sql.upper(), r.sql
+        assert r.warnings, r.sql
+
+    def test_interval_column_carrier_on_mysql(self) -> None:
+        r = self._t("CREATE TEMPORARY TABLE d (f INTERVAL);")
+        assert not any("INTERVAL" in ln.upper() for ln in self._code(r)), r.sql
+        assert r.warnings, r.sql
+
+    def test_array_column_carrier_on_mysql(self) -> None:
+        r = self._t("CREATE TEMPORARY TABLE rt (id INT, ar TEXT[]);")
+        assert not any("[]" in ln for ln in self._code(r)), r.sql
+        assert r.warnings, r.sql
+
+    def test_row_function_composite_gate(self) -> None:
+        r = self._t("SELECT row(row(1)) = ANY (SELECT ROW(ROW(1)));")
+        assert not any("ROW(" in ln.upper() for ln in self._code(r)), r.sql
+        assert r.warnings, r.sql
+
+    def test_zero_arg_count_becomes_count_star(self) -> None:
+        # PG's own error text: "count(*) must be used to call a
+        # parameterless aggregate" — COUNT(*) IS the faithful spelling.
+        r = self._t("SELECT count() OVER () FROM tenk1;")
+        assert "COUNT(*)" in r.sql.upper(), r.sql
+        assert "COUNT()" not in r.sql.upper().replace(" ", ""), r.sql
+
+    def test_timeofday_internal(self) -> None:
+        r = self._t(
+            "CREATE TABLE log_table (t TIMESTAMP DEFAULT timeofday()::timestamp);"
+        )
+        assert not any("timeofday" in ln.lower() for ln in self._code(r)), r.sql
+        assert r.warnings, r.sql

@@ -1381,6 +1381,33 @@ class Transpiler:
                     ],
                 )
         if source == "postgresql" and target != "postgresql":
+            _, sc_code = split_leading_trivia(sql)
+            # SET CONSTRAINTS is real SQL on PG and Oracle; MySQL/T-SQL have
+            # no deferred-constraint toggling (zero push).
+            if re.match(r"(?is)^\s*SET\s+CONSTRAINTS?\b", sc_code) and target in (
+                "mysql",
+                "tsql",
+            ):
+                commented = "\n".join(
+                    f"-- {line}" if line.strip() else ""
+                    for line in sql.strip().splitlines()
+                )
+                return TranspileResult(
+                    sql=(
+                        f"-- UNIQUE: {target} has no deferred-constraint "
+                        f"toggling (SET CONSTRAINTS); statement preserved "
+                        f"as a comment.\n{commented}"
+                    ),
+                    warnings=[
+                        _warn(
+                            "SET CONSTRAINTS commented out "
+                            f"(no {target} equivalent)",
+                            "set_option",
+                            source,
+                            target,
+                        )
+                    ],
+                )
             # PostgreSQL session GUCs (SET name = v / TO v, RESET name):
             # engine-local knobs with no meaning elsewhere — the largest
             # class of the pg-source baseline (they error on every engine).

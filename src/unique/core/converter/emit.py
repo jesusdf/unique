@@ -3311,6 +3311,10 @@ def _emit_group_concat(node: FunctionCall, dialect: str) -> str | None:
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
+    # A parameterless aggregate call is invalid on every engine — PG's own
+    # error says "count(*) must be used"; that IS the faithful spelling.
+    if fn_name == "COUNT" and not node.args and not node.distinct:
+        return "COUNT(*)"
     # sqlglot-internal cast wrappers must never reach the output.
     if fn_name in _SQLGLOT_WRAPPERS and len(node.args) == 1:
         return _emit_expression(node.args[0], dialect)

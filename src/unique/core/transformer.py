@@ -570,6 +570,9 @@ class Transformer:
     )
     _PG_SYSTEM_COLUMNS = frozenset({"TABLEOID", "CTID", "XMIN", "XMAX", "CMIN", "CMAX"})
 
+    #: PG-only introspection functions with no cross-engine meaning.
+    _PG_INTERNAL_FUNCS = frozenset({"TIMEOFDAY", "PG_TYPEOF", "PG_BACKEND_PID"})
+
     def transform(self, nodes: list[ASTNode]) -> list[ASTNode]:
         """Apply all transformation passes to a list of IR nodes.
 
@@ -603,6 +606,8 @@ class Transformer:
             result = [self._gate_mysql_agg_forms(node) for node in result]
             result = [self._gate_mysql_nonconst_lag(node) for node in result]
             result = [self._gate_mysql_udf_window(node) for node in result]
+            result = [self._gate_untranslatable_columns(node) for node in result]
+            result = [self._gate_deferrable(node) for node in result]
             result = [self._gate_mysql_null_ntile(node) for node in result]
         if self.context.target in ("mysql", "oracle"):
             result = [self._gate_column_alias_ref(node) for node in result]
@@ -635,6 +640,8 @@ class Transformer:
             result = [self._gate_tsql_natural_join(node) for node in result]
             result = [self._gate_tsql_nth_value(node) for node in result]
             result = [self._gate_tsql_tuple_subquery(node) for node in result]
+            result = [self._gate_untranslatable_columns(node) for node in result]
+            result = [self._gate_deferrable(node) for node in result]
         for pass_ in self._passes:
             result = [self._apply_pass(pass_, node) for node in result]
         return result
@@ -672,6 +679,11 @@ class Transformer:
             and value.name.upper() in self._PG_SYSTEM_COLUMNS
         ):
             return f"system column {value.name}"
+        if (
+            isinstance(value, FunctionCall)
+            and value.name.upper() in self._PG_INTERNAL_FUNCS
+        ):
+            return f"function {value.name}()"
         if isinstance(value, FunctionCall):
             for a in value.args:
                 qualified_star = (
@@ -715,6 +727,58 @@ class Transformer:
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
 
+    _UNTRANSLATABLE_COLUMN_TYPES = frozenset({"INTERVAL"})
+
+    def _gate_untranslatable_columns(self, node: ASTNode) -> ASTNode:
+        """A CREATE TABLE column typed INTERVAL (no MySQL/T-SQL data type)
+        or with an array suffix (off PG) has no spelling — WHOLE carrier
+        (zero push; they shipped raw with no warning)."""
+        from unique.core.ast_nodes import CreateTableStatement
+
+        if not isinstance(node, CreateTableStatement):
+            return node
+        culprit: str | None = None
+        for col in node.columns:
+            tname = (col.data_type.name or "").upper()
+            if tname in self._UNTRANSLATABLE_COLUMN_TYPES:
+                culprit = f"column type {col.data_type.name}"
+                break
+            if tname.endswith("[]"):
+                culprit = f"array column type {col.data_type.name}"
+                break
+        if culprit is None:
+            return node
+        reason = (
+            f"{culprit} has no {self.context.target} equivalent; "
+            "statement preserved as a comment"
+        )
+        self.context.warn(reason, "untranslatable_column_type")
+        self.context.mark_unsupported(culprit)
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _gate_deferrable(self, node: ASTNode) -> ASTNode:
+        """DEFERRABLE constraints have no MySQL/T-SQL form: the keywords
+        strip (the constraint stays, enforced immediately — a documented
+        tightening), with a warning."""
+        if not isinstance(node, PassthroughSQL):
+            return node
+        if not re.search(r"(?i)\bDEFERRABLE\b", node.sql):
+            return node
+        stripped = re.sub(
+            r"(?i)\s+(?:NOT\s+)?DEFERRABLE(?:\s+INITIALLY\s+"
+            r"(?:DEFERRED|IMMEDIATE))?",
+            "",
+            node.sql,
+        )
+        self.context.warn(
+            f"DEFERRABLE dropped ({self.context.target} constraints are "
+            "always immediate)",
+            "deferrable_dropped",
+        )
+        return replace(node, sql=stripped)
+
     def _gate_composite_row_value(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using a PG composite/row VALUE — WHOLE.
 
@@ -746,6 +810,30 @@ class Transformer:
             return isinstance(v, RawSQL) and (
                 "Unhandled expression type: Tuple" in v.reason
             )
+
+        # A ROW-vs-ROW comparison is expanded pairwise by a later pass —
+        # recurse only into the tuples' contents, not the ROW shells.
+        if isinstance(value, BinaryOp):
+            left_row = (
+                isinstance(value.left, FunctionCall)
+                and value.left.name.upper() == "ROW"
+            )
+            right_row = (
+                isinstance(value.right, FunctionCall)
+                and value.right.name.upper() == "ROW"
+            )
+            if left_row and right_row:
+                for arg in value.left.args + value.right.args:
+                    found = self._find_composite_row_value(arg)
+                    if found is not None:
+                        return found
+                return None
+
+        # PG's explicit ROW(...) constructor spelled as a function call —
+        # composite anywhere else (zero push; ``= ANY (SELECT ROW(…))``
+        # has no pairwise expansion).
+        if isinstance(value, FunctionCall) and value.name.upper() == "ROW":
+            return "ROW(...) constructor"
 
         if isinstance(value, CaseExpression):
             arms = [w[1] for w in value.whens] + [value.else_expr]
