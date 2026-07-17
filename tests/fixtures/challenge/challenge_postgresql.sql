@@ -77,8 +77,17 @@ SELECT 7.5 :: int AS r
 -- CASE[open]: pg-cast-tstz — fails on mysql, oracle, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity
 SELECT '2020-01-01'::timestamptz AS r
 
+-- CASE[open]: pg-check-array-len — fails on oracle. ORA-03099: unexpected item [ in a column definition
+CREATE TABLE t (a INT PRIMARY KEY, path TEXT[], CONSTRAINT ck CHECK (array_length(path,1) > 0))
+
+-- CASE[open]: pg-check-jsonb — fails on mysql, oracle, tsql. (195, b"'JSONB_TYPEOF' is not a recognized built-in function name.DB-Lib error message 200
+CREATE TABLE t (id INT PRIMARY KEY, data JSONB, CONSTRAINT ck CHECK (jsonb_typeof(data) = 'object'))
+
 -- CASE[open]: pg-check-notvalid — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) NOT VALID
+
+-- CASE[open]: pg-check-xor — fails on tsql. (102, b"Incorrect syntax near '<'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
+CREATE TABLE t (a INT, b INT, c INT, CONSTRAINT ck CHECK ((a IS NULL) != (b IS NULL)))
 
 -- CASE[open]: pg-chr-ascii-unicode — fails on oracle. 'utf-8' codec can't decode byte 0xe9 in position 0: unexpected end of data
 SELECT chr(233), ascii('é')
@@ -436,6 +445,9 @@ CREATE TABLE t (a TIMESTAMPTZ, b TIME WITH TIME ZONE, c INTERVAL)
 
 -- CASE[open]: pg-unicode-escape — fails on mysql, oracle, tsql. (207, b"Invalid column name 'U'.DB-Lib error message 20018, severity 16:\nGeneral SQL Serv
 SELECT U&'\0041' AS r
+
+-- CASE[open]: pg-unique-nulls-notdistinct — fails on mysql, oracle. ORA-03050: invalid identifier: "UNIQUE" is a reserved word
+CREATE TABLE t (a INT, b INT, UNIQUE NULLS NOT DISTINCT (a, b))
 
 -- CASE[open]: pg-week — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT EXTRACT(WEEK FROM DATE '2020-01-05') AS r

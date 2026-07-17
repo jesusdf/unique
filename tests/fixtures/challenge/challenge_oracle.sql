@@ -108,6 +108,9 @@ SELECT NVL('', 'x') AS r FROM DUAL
 -- CASE[open]: ora-extractvalue — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXTRACTVALUE(XMLTYPE('<a>1</a>'), '/a') AS r FROM DUAL
 
+-- CASE[open]: ora-fk-and-check — fails on mysql. (1239, "Incorrect foreign key definition for 'fk': Key reference and table reference don't
+CREATE TABLE parent (id NUMBER PRIMARY KEY); CREATE TABLE child (pid NUMBER, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES parent ON DELETE CASCADE, CONSTRAINT fk2 CHECK (pid > 0))
+
 -- CASE[open]: ora-fmt-dayname — fails on mysql. FUNC-DIFF: source=(('MONDAY',),) target=(('Monday',),)
 SELECT TO_CHAR(DATE '2020-06-15', 'DAY') AS r FROM DUAL
 

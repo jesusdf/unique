@@ -372,6 +372,9 @@ CREATE PROCEDURE p() BEGIN DECLARE v INT; SET v = (SELECT COUNT(*) FROM (SELECT 
 -- CASE[open]: my-select-into-out — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
 CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END
 
+-- CASE[open]: my-self-fk — fails on tsql. (1785, b"Introducing FOREIGN KEY constraint 'FK__emp__mgr__790A8C33' on table 'emp' may ca
+CREATE TABLE emp (id INT PRIMARY KEY, mgr INT, FOREIGN KEY (mgr) REFERENCES emp(id) ON DELETE SET NULL)
+
 -- CASE[open]: my-set-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
 SELECT FIND_IN_SET('b', 'a,b,c'), MAKE_SET(6, 'x','y','z')
 

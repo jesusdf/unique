@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (327 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (328 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -653,6 +653,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve`
 - src: `CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END`
 
+## my-self-fk  (mysql)
+- targets: tsql(invalid)
+- live error: `(1785, b"Introducing FOREIGN KEY constraint 'FK__emp__mgr__790A8C33' on table 'emp' may ca`
+- src: `CREATE TABLE emp (id INT PRIMARY KEY, mgr INT, FOREIGN KEY (mgr) REFERENCES emp(id) ON DELETE SET NULL)`
+
 ## my-set-fns  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI`
@@ -1039,6 +1044,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
 - src: `SELECT EXTRACTVALUE(XMLTYPE('<a>1</a>'), '/a') AS r FROM DUAL`
+
+## ora-fk-and-check  (oracle)
+- targets: mysql(invalid)
+- live error: `(1239, "Incorrect foreign key definition for 'fk': Key reference and table reference don't`
+- src: `CREATE TABLE parent (id NUMBER PRIMARY KEY); CREATE TABLE child (pid NUMBER, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES parent ON`
 
 ## ora-fmt-dayname  (oracle)
 - targets: mysql(func)
@@ -1508,10 +1518,25 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity`
 - src: `SELECT '2020-01-01'::timestamptz AS r`
 
+## pg-check-array-len  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-03099: unexpected item [ in a column definition`
+- src: `CREATE TABLE t (a INT PRIMARY KEY, path TEXT[], CONSTRAINT ck CHECK (array_length(path,1) > 0))`
+
+## pg-check-jsonb  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'JSONB_TYPEOF' is not a recognized built-in function name.DB-Lib error message 200`
+- src: `CREATE TABLE t (id INT PRIMARY KEY, data JSONB, CONSTRAINT ck CHECK (jsonb_typeof(data) = 'object'))`
+
 ## pg-check-notvalid  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) NOT VALID`
+
+## pg-check-xor  (postgresql)
+- targets: tsql(invalid)
+- live error: `(102, b"Incorrect syntax near '<'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
+- src: `CREATE TABLE t (a INT, b INT, c INT, CONSTRAINT ck CHECK ((a IS NULL) != (b IS NULL)))`
 
 ## pg-chr-ascii-unicode  (postgresql)
 - targets: oracle(invalid)
@@ -2099,6 +2124,11 @@ CREATE TABLE ledger (id SERIA`
 - live error: `(207, b"Invalid column name 'U'.DB-Lib error message 20018, severity 16:\nGeneral SQL Serv`
 - src: `SELECT U&'\0041' AS r`
 
+## pg-unique-nulls-notdistinct  (postgresql)
+- targets: mysql(invalid), oracle(invalid)
+- live error: `ORA-03050: invalid identifier: "UNIQUE" is a reserved word`
+- src: `CREATE TABLE t (a INT, b INT, UNIQUE NULLS NOT DISTINCT (a, b))`
+
 ## pg-week  (postgresql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('2',),)`
@@ -2666,4 +2696,4 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 518 distinct constructs; defect rows by kind: func 275, invalid 717, semantic 2, silent-drop 75.
+Totals: 524 distinct constructs; defect rows by kind: func 275, invalid 726, semantic 2, silent-drop 75.
