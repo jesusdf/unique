@@ -65,6 +65,12 @@ SELECT CHOOSE(2, 'a', 'b', 'c') AS r
 -- CASE[open]: ts-collate — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT 'a' COLLATE Latin1_General_CS_AS AS r
 
+-- CASE[open]: ts-collate2 — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT 'abc' COLLATE Latin1_General_BIN AS r
+
+-- CASE[open]: ts-compress — fails on oracle, postgresql. ORA-00936: missing expression
+SELECT COMPRESS('data') AS r
+
 -- CASE[open]: ts-concat-null — fails on mysql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
 SELECT CONCAT('a', NULL, 'b') AS r
 
@@ -139,6 +145,9 @@ SELECT CEILING(4.2), FLOOR(4.8), ROUND(4.555, 2), SQUARE(4)
 
 -- CASE[open]: ts-merge — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE tgt (id INT PRIMARY KEY, n INT); MERGE tgt USING (VALUES (1, 5)) AS s(id, n) ON tgt.id = s.id WHEN MATCHED THEN UPDATE SET n = s.n WHEN NOT MATCHED THEN INSERT (id, n) VALUES (s.id, s.n);
+
+-- CASE[open]: ts-metadata-funcs — fails on mysql, oracle, postgresql. ORA-00904: "OBJECT_ID": invalid identifier
+SELECT COL_LENGTH('t', 'c'), OBJECT_ID('t')
 
 -- CASE[open]: ts-money — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (price MONEY, small SMALLMONEY)
@@ -227,4 +236,7 @@ CREATE PROCEDURE p AS BEGIN DECLARE @i INT = 0; WHILE @i < 5 BEGIN SET @i = @i +
 
 -- CASE[open]: ts-while-loop — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 15): PLS-00103: Encountered the symbol "=" when expecti
 CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN SET @n -= 1; END; END
+
+-- CASE[open]: ts-xml-value — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r
 

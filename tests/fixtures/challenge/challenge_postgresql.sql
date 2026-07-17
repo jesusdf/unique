@@ -23,6 +23,9 @@ SELECT ARRAY[1,2,3] || ARRAY[4,5] AS r
 -- CASE[open]: pg-array-jsonb — fails on mysql, oracle. ORA-03099: unexpected item [ in a column definition
 CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)
 
+-- CASE[open]: pg-array-to-string — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT array_to_string(ARRAY[1,2,3], ',')
+
 -- CASE[open]: pg-at-time-zone — fails on mysql, oracle, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D
 SELECT TIMESTAMP '2020-01-01 10:00' AT TIME ZONE 'UTC' AS r
 
@@ -46,6 +49,9 @@ SELECT CAST(2.7 AS INT) AS r
 -- CASE[open]: pg-collate — fails on mysql. (1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT 'a' < 'B' COLLATE "C" AS r
 
+-- CASE[open]: pg-collate2 — fails on mysql. (1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT 'abc' COLLATE "C" AS r
+
 -- CASE[open]: pg-comment-on — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (a INT); COMMENT ON COLUMN t.a IS 'the a column'
 
@@ -54,6 +60,9 @@ CREATE TABLE t (id INT); COMMENT ON TABLE t IS 'my table'
 
 -- CASE[open]: pg-composite-type — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TYPE addr AS (street TEXT, city TEXT)
+
+-- CASE[open]: pg-convert-to — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co
+SELECT convert_to('abc', 'UTF8')
 
 -- CASE[open]: pg-cte-cycle — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n<3) CYCLE n SET is_cycle USING path SELECT * FROM r
@@ -76,8 +85,14 @@ SELECT DIV(17, 5), 17 % 5
 -- CASE[open]: pg-domain — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE DOMAIN posint AS INT CHECK (VALUE > 0)
 
+-- CASE[open]: pg-empty-is-null — fails on oracle. FUNC-DIFF: source=(('0',),) target=(('1',),)
+SELECT '' IS NULL AS r
+
 -- CASE[open]: pg-encode-base64 — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT ENCODE('abc'::bytea, 'base64') AS r
+
+-- CASE[open]: pg-encode-decode — fails on mysql, oracle, tsql. (195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se
+SELECT ENCODE(DECODE('SGVsbG8=', 'base64'), 'hex')
 
 -- CASE[open]: pg-estring — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT E'line1\nline2' AS r
@@ -241,11 +256,17 @@ CREATE TABLE t (a BIGSERIAL, flags BIT(8), vb VARBIT(16))
 -- CASE[open]: pg-set-searchpath — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 SET search_path TO myschema, public
 
+-- CASE[open]: pg-size-funcs — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.pg
+SELECT pg_size_pretty(1024::bigint), pg_relation_size('pg_class')
+
 -- CASE[open]: pg-split-part — fails on mysql, oracle, tsql. (195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT SPLIT_PART('a,b,c', ',', 2) AS r
 
 -- CASE[open]: pg-string-agg-order — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
 SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)
+
+-- CASE[open]: pg-string-to-array — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
+SELECT string_to_array('a,b,c', ',')
 
 -- CASE[open]: pg-substr-zero — fails on mysql, oracle. FUNC-DIFF: source=(('ab',),) target=(('abc',),)
 SELECT SUBSTRING('abcdef', 0, 3) AS r
@@ -318,4 +339,10 @@ SELECT width_bucket(5, 0, 10, 5) AS r
 
 -- CASE[open]: pg-xmlelement — fails on mysql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT XMLELEMENT(NAME foo, 'bar') AS r
+
+-- CASE[open]: pg-xmlelement2 — fails on mysql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
+SELECT xmlelement(name foo, 'bar')
+
+-- CASE[open]: pg-xpath — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.xp
+SELECT xpath('/a/text()', '<a>1</a>'::xml)
 

@@ -54,6 +54,12 @@ SELECT 'a' || 5 AS r FROM DUAL
 -- CASE[open]: ora-connect-by — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT LEVEL, 1 AS n FROM DUAL CONNECT BY LEVEL <= 5
 
+-- CASE[open]: ora-connect-by-root — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT CONNECT_BY_ROOT id AS root FROM (SELECT 1 id, NULL par FROM DUAL) CONNECT BY PRIOR id = par
+
+-- CASE[open]: ora-connect-by2 — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT id FROM (SELECT 1 id, NULL par FROM DUAL) START WITH par IS NULL CONNECT BY PRIOR id = par
+
 -- CASE[open]: ora-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; CLOSE c; END;
 
@@ -73,12 +79,21 @@ SELECT 5 / 2 AS r FROM DUAL
 -- CASE[open]: ora-dump — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU
 SELECT DUMP('abc') AS r FROM DUAL
 
+-- CASE[open]: ora-dump2 — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU
+SELECT DUMP('A', 1016) AS r FROM DUAL
+
+-- CASE[open]: ora-empty-is-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT CASE WHEN '' IS NULL THEN 1 ELSE 0 END AS r FROM DUAL
+
 -- CASE[open]: ora-empty-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('x',),) target=(('',),)
 SELECT NVL('', 'x') AS r FROM DUAL
 
 -- CASE[open]: ora-exception-init — fails on mysql, postgresql, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type EXCEPTION.DB-Lib error m
 CREATE PROCEDURE p AS e EXCEPTION; PRAGMA EXCEPTION_INIT(e, -20001); BEGIN RAISE e; END;
 /
+
+-- CASE[open]: ora-extractvalue — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
+SELECT EXTRACTVALUE(XMLTYPE('<a>1</a>'), '/a') AS r FROM DUAL
 
 -- CASE[open]: ora-fk-novalidate — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE p (id NUMBER PRIMARY KEY); CREATE TABLE c (pid NUMBER, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES p(id) ON DELETE CASCADE ENABLE NOVALIDATE)
@@ -102,6 +117,9 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM DUAL
 -- CASE[open]: ora-json-object — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT JSON_OBJECT('a' VALUE 1) AS r FROM DUAL
 
+-- CASE[open]: ora-json-table — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT * FROM JSON_TABLE('[1,2]', '$[*]' COLUMNS (v NUMBER PATH '$'))
+
 -- CASE[open]: ora-json-value — fails on postgresql. SILENT-ROUNDTRIP: literal(s) ['\'{"a":1}\'', "'$.a'"] lost after oracle->tsql->oracle
 SELECT JSON_VALUE('{"a":1}', '$.a') AS r FROM DUAL
 
@@ -113,6 +131,9 @@ SELECT LAST_VALUE(x IGNORE NULLS) OVER (ORDER BY x) FROM (SELECT 1 x FROM DUAL)
 
 -- CASE[open]: ora-length-trailing — fails on tsql. FUNC-DIFF: source=(('6',),) target=(('3',),)
 SELECT LENGTH('abc   ') AS r FROM DUAL
+
+-- CASE[open]: ora-level2 — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= 3
 
 -- CASE[open]: ora-listagg — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) AS r FROM (SELECT 1 x FROM DUAL UNION SELECT 2 FROM DUAL)
@@ -128,6 +149,9 @@ SELECT NANVL(0/1, 0) AS r FROM DUAL
 
 -- CASE[open]: ora-next-day — fails on mysql, postgresql, tsql. (195, b"'NEXT_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT NEXT_DAY(SYSDATE, 'MONDAY') AS r FROM DUAL
+
+-- CASE[open]: ora-nlssort — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NL
+SELECT NLSSORT('abc', 'NLS_SORT=BINARY_CI') AS r FROM DUAL
 
 -- CASE[open]: ora-num-concat — fails on tsql. FUNC-DIFF: source=(('23',),) target=(('5',),)
 SELECT 2 || 3 AS r FROM DUAL
@@ -147,6 +171,9 @@ CREATE TABLE t (id NUMBER, CONSTRAINT pk PRIMARY KEY (id) USING INDEX)
 
 -- CASE[open]: ora-ratio-to-report — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT RATIO_TO_REPORT(x) OVER () FROM (SELECT 1 x FROM DUAL)
+
+-- CASE[open]: ora-ratio2 — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
+SELECT RATIO_TO_REPORT(1) OVER () FROM DUAL
 
 -- CASE[open]: ora-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n NUMBER) RETURN NUMBER AS BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END;
@@ -195,9 +222,15 @@ CREATE TABLE t (a TIMESTAMP WITH TIME ZONE, b INTERVAL DAY TO SECOND, c INTERVAL
 -- CASE[open]: ora-user-context — fails on mysql, postgresql, tsql. (195, b"'SYS_CONTEXT' is not a recognized built-in function name.DB-Lib error message 2001
 SELECT USER, SYS_CONTEXT('USERENV','SESSION_USER') FROM DUAL
 
+-- CASE[open]: ora-utl-raw — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "UTL_RAW" or the user-defined function or aggregate "UT
+SELECT UTL_RAW.CAST_TO_RAW('abc') AS r FROM DUAL
+
 -- CASE[open]: ora-vsize — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.VS
 SELECT VSIZE(123) AS r FROM DUAL
 
 -- CASE[open]: ora-width-bucket — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI
 SELECT WIDTH_BUCKET(5, 0, 10, 5) AS r FROM DUAL
+
+-- CASE[open]: ora-xmlelement — fails on mysql, postgresql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
+SELECT XMLELEMENT("foo", 'bar') AS r FROM DUAL
 

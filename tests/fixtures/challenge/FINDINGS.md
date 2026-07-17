@@ -10,6 +10,11 @@ to an `Unhandled`/unrecognized carrier (may be an acceptable degrade — BLUE
 triages); **silent/-rt** = valid output but a source literal vanished (verify manually — the literal detector is noisy).
 
 
+## my-aes  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE`
+- src: `SELECT HEX(AES_ENCRYPT('data', 'key')) AS r`
+
 ## my-alter-modify  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near 'MODIFY'.DB-Lib error message 20018, severity 15:\nGeneral S`
@@ -24,6 +29,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TO`
 - src: `SELECT TO_BASE64('abc'), FROM_BASE64('YWJj')`
+
+## my-benchmark  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BE`
+- src: `SELECT BENCHMARK(1, 1+1) AS r`
 
 ## my-bit-agg  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -44,6 +54,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
 - src: `SELECT CAST(2.7 AS SIGNED) AS r`
+
+## my-coalesce-empty  (mysql)
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('NULL',),)`
+- src: `SELECT COALESCE(NULL, 0) = '' AS r`
 
 ## my-concat-null  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
@@ -95,10 +110,20 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EL`
 - src: `SELECT ELT(2, 'a', 'b', 'c') AS r`
 
+## my-empty-eq-zero  (mysql)
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('NULL',),)`
+- src: `SELECT '' = 0 AS r`
+
 ## my-export-set  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
 - src: `SELECT EXPORT_SET(5, 'Y', 'N', ',', 4) AS r`
+
+## my-extractvalue  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
+- src: `SELECT EXTRACTVALUE('<a>1</a>', '/a') AS r`
 
 ## my-field  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -327,6 +352,16 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT LEVEL, 1 AS n FROM DUAL CONNECT BY LEVEL <= 5`
 
+## ora-connect-by-root  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT CONNECT_BY_ROOT id AS root FROM (SELECT 1 id, NULL par FROM DUAL) CONNECT BY PRIOR id = par`
+
+## ora-connect-by2  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT id FROM (SELECT 1 id, NULL par FROM DUAL) START WITH par IS NULL CONNECT BY PRIOR id = par`
+
 ## ora-cursor  (oracle)
 - targets: mysql(invalid)
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
@@ -358,6 +393,16 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU`
 - src: `SELECT DUMP('abc') AS r FROM DUAL`
 
+## ora-dump2  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU`
+- src: `SELECT DUMP('A', 1016) AS r FROM DUAL`
+
+## ora-empty-is-null  (oracle)
+- targets: mysql(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT CASE WHEN '' IS NULL THEN 1 ELSE 0 END AS r FROM DUAL`
+
 ## ora-empty-null  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('x',),) target=(('',),)`
@@ -368,6 +413,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type EXCEPTION.DB-Lib error m`
 - src: `CREATE PROCEDURE p AS e EXCEPTION; PRAGMA EXCEPTION_INIT(e, -20001); BEGIN RAISE e; END;
 /`
+
+## ora-extractvalue  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
+- src: `SELECT EXTRACTVALUE(XMLTYPE('<a>1</a>'), '/a') AS r FROM DUAL`
 
 ## ora-fk-novalidate  (oracle)
 - targets: mysql(invalid)
@@ -405,6 +455,11 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT JSON_OBJECT('a' VALUE 1) AS r FROM DUAL`
 
+## ora-json-table  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT * FROM JSON_TABLE('[1,2]', '$[*]' COLUMNS (v NUMBER PATH '$'))`
+
 ## ora-json-value  (oracle)
 - targets: postgresql(invalid), tsql(silent-rt)
 - live error: `SILENT-ROUNDTRIP: literal(s) ['\'{"a":1}\'', "'$.a'"] lost after oracle->tsql->oracle`
@@ -424,6 +479,11 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('6',),) target=(('3',),)`
 - src: `SELECT LENGTH('abc   ') AS r FROM DUAL`
+
+## ora-level2  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT LEVEL FROM DUAL CONNECT BY LEVEL <= 3`
 
 ## ora-listagg  (oracle)
 - targets: postgresql(invalid)
@@ -449,6 +509,11 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'NEXT_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
 - src: `SELECT NEXT_DAY(SYSDATE, 'MONDAY') AS r FROM DUAL`
+
+## ora-nlssort  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NL`
+- src: `SELECT NLSSORT('abc', 'NLS_SORT=BINARY_CI') AS r FROM DUAL`
 
 ## ora-num-concat  (oracle)
 - targets: tsql(func)
@@ -480,6 +545,11 @@ INSERT ALL INTO a (id) VALUES (x) INTO b (id) VALUES (x) SELECT 1 x FROM D`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA`
 - src: `SELECT RATIO_TO_REPORT(x) OVER () FROM (SELECT 1 x FROM DUAL)`
+
+## ora-ratio2  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA`
+- src: `SELECT RATIO_TO_REPORT(1) OVER () FROM DUAL`
 
 ## ora-recursive-func  (oracle)
 - targets: tsql(invalid)
@@ -558,6 +628,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - live error: `(195, b"'SYS_CONTEXT' is not a recognized built-in function name.DB-Lib error message 2001`
 - src: `SELECT USER, SYS_CONTEXT('USERENV','SESSION_USER') FROM DUAL`
 
+## ora-utl-raw  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "UTL_RAW" or the user-defined function or aggregate "UT`
+- src: `SELECT UTL_RAW.CAST_TO_RAW('abc') AS r FROM DUAL`
+
 ## ora-vsize  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.VS`
@@ -567,6 +642,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - targets: mysql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI`
 - src: `SELECT WIDTH_BUCKET(5, 0, 10, 5) AS r FROM DUAL`
+
+## ora-xmlelement  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018`
+- src: `SELECT XMLELEMENT("foo", 'bar') AS r FROM DUAL`
 
 ## pg-age  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -597,6 +677,11 @@ SELECT seq.NEXTVAL FROM DUAL`
 - targets: mysql(invalid), oracle(invalid)
 - live error: `ORA-03099: unexpected item [ in a column definition`
 - src: `CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)`
+
+## pg-array-to-string  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT array_to_string(ARRAY[1,2,3], ',')`
 
 ## pg-at-time-zone  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -634,6 +719,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT 'a' < 'B' COLLATE "C" AS r`
 
+## pg-collate2  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT 'abc' COLLATE "C" AS r`
+
 ## pg-comment-on  (postgresql)
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
@@ -648,6 +738,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TYPE addr AS (street TEXT, city TEXT)`
+
+## pg-convert-to  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co`
+- src: `SELECT convert_to('abc', 'UTF8')`
 
 ## pg-cte-cycle  (postgresql)
 - targets: mysql(invalid)
@@ -684,10 +779,20 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE DOMAIN posint AS INT CHECK (VALUE > 0)`
 
+## pg-empty-is-null  (postgresql)
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
+- src: `SELECT '' IS NULL AS r`
+
 ## pg-encode-base64  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se`
 - src: `SELECT ENCODE('abc'::bytea, 'base64') AS r`
+
+## pg-encode-decode  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se`
+- src: `SELECT ENCODE(DECODE('SGVsbG8=', 'base64'), 'hex')`
 
 ## pg-estring  (postgresql)
 - targets: mysql(invalid)
@@ -959,6 +1064,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
 - src: `SET search_path TO myschema, public`
 
+## pg-size-funcs  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.pg`
+- src: `SELECT pg_size_pretty(1024::bigint), pg_relation_size('pg_class')`
+
 ## pg-split-part  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018`
@@ -968,6 +1078,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message`
 - src: `SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)`
+
+## pg-string-to-array  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message `
+- src: `SELECT string_to_array('a,b,c', ',')`
 
 ## pg-substr-zero  (postgresql)
 - targets: mysql(func), oracle(func)
@@ -1084,6 +1199,16 @@ CREATE TRIGGE`
 - live error: `(195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018`
 - src: `SELECT XMLELEMENT(NAME foo, 'bar') AS r`
 
+## pg-xmlelement2  (postgresql)
+- targets: mysql(invalid), tsql(invalid)
+- live error: `(195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018`
+- src: `SELECT xmlelement(name foo, 'bar')`
+
+## pg-xpath  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.xp`
+- src: `SELECT xpath('/a/text()', '<a>1</a>'::xml)`
+
 ## ts-after-delete-count  (tsql)
 - targets: oracle(invalid)
 - live error: `TRIGGER TRG compiled INVALID (line 4): PL/SQL: ORA-00942: table or view does not exist`
@@ -1137,6 +1262,16 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT 'a' COLLATE Latin1_General_CS_AS AS r`
+
+## ts-collate2  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT 'abc' COLLATE Latin1_General_BIN AS r`
+
+## ts-compress  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00936: missing expression`
+- src: `SELECT COMPRESS('data') AS r`
 
 ## ts-concat-null  (tsql)
 - targets: mysql(func)
@@ -1258,6 +1393,11 @@ CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT 
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE tgt (id INT PRIMARY KEY, n INT); MERGE tgt USING (VALUES (1, 5)) AS s(id, n) ON tgt.id = s.id WHEN MATCHED THEN UPDAT`
+
+## ts-metadata-funcs  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "OBJECT_ID": invalid identifier`
+- src: `SELECT COL_LENGTH('t', 'c'), OBJECT_ID('t')`
 
 ## ts-money  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
@@ -1398,6 +1538,11 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `PROCEDURE P compiled INVALID (line 15): PLS-00103: Encountered the symbol "=" when expecti`
 - src: `CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN SET @n -=`
+
+## ts-xml-value  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT CAST('<a>1</a>' AS XML).value('(/a)[1]', 'INT') AS r`
 ---
 
-Totals: 271 distinct constructs; defect rows by kind: carrier 50, func 82, invalid 426, semantic 2.
+Totals: 300 distinct constructs; defect rows by kind: carrier 50, func 88, invalid 483, semantic 2.
