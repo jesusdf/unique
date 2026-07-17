@@ -1116,6 +1116,21 @@ CREATE TABLE t (id NUMBER DEFAULT s.NEXTVAL, a NUMBER)`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE p (id NUMBER PRIMARY KEY); CREATE TABLE c (pid NUMBER, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES p(id) ON DELETE CAS`
 
+## ora-fmt-dayname  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('MONDAY',),) target=(('Monday',),)`
+- src: `SELECT TO_CHAR(DATE '2020-06-15', 'DAY') AS r FROM DUAL`
+
+## ora-fmt-quarter  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('2',),) target=(('Q',),)`
+- src: `SELECT TO_CHAR(DATE '2020-06-15', 'Q') AS r FROM DUAL`
+
+## ora-fmt-week  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('24',),) target=(('Monday',),)`
+- src: `SELECT TO_CHAR(DATE '2020-06-15', 'WW') AS r FROM DUAL`
+
 ## ora-for-update-nowait  (oracle)
 - targets: mysql(invalid)
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
@@ -1318,6 +1333,21 @@ ALTER TABLE t MODIFY a DEFAULT 5`
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('23',),) target=(('5',),)`
 - src: `SELECT 2 || 3 AS r FROM DUAL`
+
+## ora-numfmt-lead  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('0.5',),) target=(('0',),)`
+- src: `SELECT TO_CHAR(0.5, '0.00') AS r FROM DUAL`
+
+## ora-numfmt-sign  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('-42',),) target=(('NULL',),)`
+- src: `SELECT TO_CHAR(-42, 'S999') AS r FROM DUAL`
+
+## ora-numfmt-thousands  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('1,234,567.89',),) target=(('NULL',),)`
+- src: `SELECT TO_CHAR(1234567.891, '9,999,999.99') AS r FROM DUAL`
 
 ## ora-numtodsinterval  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -2343,6 +2373,16 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
 - src: `SELECT NUM_NONNULLS(1, NULL, 2) AS r`
+
+## pg-numfmt-lead  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('0.5',),) target=(('0',),)`
+- src: `SELECT to_char(0.5, '0.00') AS r`
+
+## pg-numfmt-thousands  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1,234,567.89',),) target=(('9999999123456900',),)`
+- src: `SELECT to_char(1234567.891, '9,999,999.99') AS r`
 
 ## pg-order-nulls-default  (postgresql)
 - targets: mysql(func), tsql(func)
@@ -3480,4 +3520,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 669 distinct constructs; defect rows by kind: carrier 138, func 256, invalid 893, semantic 2, silent-drop 75.
+Totals: 677 distinct constructs; defect rows by kind: carrier 138, func 265, invalid 893, semantic 2, silent-drop 75.

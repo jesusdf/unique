@@ -159,6 +159,15 @@ SELECT EXTRACTVALUE(XMLTYPE('<a>1</a>'), '/a') AS r FROM DUAL
 -- CASE[open]: ora-fk-novalidate — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE p (id NUMBER PRIMARY KEY); CREATE TABLE c (pid NUMBER, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES p(id) ON DELETE CASCADE ENABLE NOVALIDATE)
 
+-- CASE[open]: ora-fmt-dayname — fails on mysql. FUNC-DIFF: source=(('MONDAY',),) target=(('Monday',),)
+SELECT TO_CHAR(DATE '2020-06-15', 'DAY') AS r FROM DUAL
+
+-- CASE[open]: ora-fmt-quarter — fails on mysql. FUNC-DIFF: source=(('2',),) target=(('Q',),)
+SELECT TO_CHAR(DATE '2020-06-15', 'Q') AS r FROM DUAL
+
+-- CASE[open]: ora-fmt-week — fails on mysql. FUNC-DIFF: source=(('24',),) target=(('Monday',),)
+SELECT TO_CHAR(DATE '2020-06-15', 'WW') AS r FROM DUAL
+
 -- CASE[open]: ora-for-update-nowait — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 CREATE TABLE t (id NUMBER); SELECT * FROM t FOR UPDATE NOWAIT
 
@@ -283,6 +292,15 @@ SELECT NLSSORT('abc', 'NLS_SORT=BINARY_CI') AS r FROM DUAL
 
 -- CASE[open]: ora-num-concat — fails on tsql. FUNC-DIFF: source=(('23',),) target=(('5',),)
 SELECT 2 || 3 AS r FROM DUAL
+
+-- CASE[open]: ora-numfmt-lead — fails on mysql. FUNC-DIFF: source=(('0.5',),) target=(('0',),)
+SELECT TO_CHAR(0.5, '0.00') AS r FROM DUAL
+
+-- CASE[open]: ora-numfmt-sign — fails on mysql. FUNC-DIFF: source=(('-42',),) target=(('NULL',),)
+SELECT TO_CHAR(-42, 'S999') AS r FROM DUAL
+
+-- CASE[open]: ora-numfmt-thousands — fails on mysql. FUNC-DIFF: source=(('1,234,567.89',),) target=(('NULL',),)
+SELECT TO_CHAR(1234567.891, '9,999,999.99') AS r FROM DUAL
 
 -- CASE[open]: ora-numtodsinterval — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT NUMTODSINTERVAL(90, 'MINUTE') AS r FROM DUAL

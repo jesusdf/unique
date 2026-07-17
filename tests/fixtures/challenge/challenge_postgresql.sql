@@ -433,6 +433,12 @@ SELECT (NOT NULL) IS NULL AS r
 -- CASE[open]: pg-num-nonnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT NUM_NONNULLS(1, NULL, 2) AS r
 
+-- CASE[open]: pg-numfmt-lead — fails on mysql. FUNC-DIFF: source=(('0.5',),) target=(('0',),)
+SELECT to_char(0.5, '0.00') AS r
+
+-- CASE[open]: pg-numfmt-thousands — fails on mysql, tsql. FUNC-DIFF: source=(('1,234,567.89',),) target=(('9999999123456900',),)
+SELECT to_char(1234567.891, '9,999,999.99') AS r
+
 -- CASE[open]: pg-order-nulls-default — fails on mysql, tsql. FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))
 SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x
 
