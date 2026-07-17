@@ -61,6 +61,9 @@ SELECT ~0 AS r
 -- CASE[open]: pg-bool-int-cast — fails on oracle. ORA-01722: unable to convert string value containing 't' to a number: 
 SELECT 'true'::boolean::int AS r
 
+-- CASE[open]: pg-bool-text2 — fails on mysql. FUNC-DIFF: source=(('true',),) target=(('1',),)
+SELECT true::text AS r
+
 -- CASE[open]: pg-bulk-insert — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)
 
@@ -165,6 +168,9 @@ SELECT ENCODE(DECODE('SGVsbG8=', 'base64'), 'hex')
 
 -- CASE[open]: pg-estring — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT E'line1\nline2' AS r
+
+-- CASE[open]: pg-estring-hex — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT E'\x41' AS r
 
 -- CASE[open]: pg-except-all — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 SELECT 1 EXCEPT ALL SELECT 2
@@ -313,6 +319,9 @@ CREATE PROCEDURE outer_p() AS $$ BEGIN CALL inner_p(); END; $$ LANGUAGE plpgsql
 -- CASE[open]: pg-network-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag
 CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)
 
+-- CASE[open]: pg-not-null-is-null — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT (NOT NULL) IS NULL AS r
+
 -- CASE[open]: pg-num-nonnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT NUM_NONNULLS(1, NULL, 2) AS r
 
@@ -360,6 +369,9 @@ CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE R
 
 -- CASE[open]: pg-recursive-view — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (a INT, b INT); CREATE RECURSIVE VIEW v(n) AS SELECT 1 UNION ALL SELECT n+1 FROM v WHERE n < 5
+
+-- CASE[open]: pg-regex-case — fails on mysql. FUNC-DIFF: source=(('0',),) target=()
+SELECT 'abc' ~ '^A' AS r
 
 -- CASE[open]: pg-regexp-matches — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE
 SELECT REGEXP_MATCHES('a1b2', '[0-9]', 'g') AS r

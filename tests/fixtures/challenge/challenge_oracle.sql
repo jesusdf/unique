@@ -140,6 +140,9 @@ CREATE TABLE t (id NUMBER); GRANT SELECT ON t TO PUBLIC
 -- CASE[open]: ora-grant-system — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 GRANT CREATE SESSION, CREATE TABLE TO r
 
+-- CASE[open]: ora-hint-comment — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+SELECT /*+ FULL(t) */ 1 AS r FROM DUAL t
+
 -- CASE[open]: ora-initcap — fails on mysql, postgresql, tsql. (195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT INITCAP('hello world') AS r FROM DUAL
 

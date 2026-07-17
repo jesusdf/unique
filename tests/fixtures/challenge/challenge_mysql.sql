@@ -32,6 +32,9 @@ SELECT BIT_COUNT(255) AS r
 -- CASE[open]: my-bitnot — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('18446744073709551616',),) target=(('-1',),)
 SELECT ~0 AS r
 
+-- CASE[open]: my-bool-char — fails on postgresql. FUNC-DIFF: source=(('1',),) target=(('t',),)
+SELECT CAST((1=1) AS CHAR) AS r
+
 -- CASE[open]: my-cast-convert — fails on oracle, postgresql, tsql. (243, b'Type UBIGINT is not a defined system type.DB-Lib error message 20018, severity 16:
 SELECT CAST(123 AS CHAR), CONVERT('2020-01-01', DATE), CAST(1 AS UNSIGNED)
 
@@ -140,6 +143,9 @@ SELECT GET_LOCK('l', 0), RELEASE_LOCK('l')
 -- CASE[open]: my-greatest-null — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('3',),)
 SELECT GREATEST(1, NULL, 3) AS r
 
+-- CASE[open]: my-greatest-null2 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1',),)
+SELECT GREATEST(NULL, 1) AS r
+
 -- CASE[open]: my-greatest-string — fails on oracle, postgresql. FUNC-DIFF: source=(('B',),) target=(('a',),)
 SELECT GREATEST('a', 'B') AS r
 
@@ -160,6 +166,9 @@ SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)
 
 -- CASE[open]: my-insert-oob — fails on tsql. FUNC-DIFF: source=(('abc',),) target=(('NULL',),)
 SELECT INSERT('abc', 10, 1, 'X') AS r
+
+-- CASE[open]: my-int-or-empty — fails on oracle. FUNC-DIFF: source=(('0',),) target=(('NULL',),)
+SELECT 0 OR '' AS r
 
 -- CASE[open]: my-is-true — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'IS'.DB-Lib error message 20018, severity 15:\nG
 SELECT 1 IN (SELECT 1) IS TRUE AS r

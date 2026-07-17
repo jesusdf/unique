@@ -55,6 +55,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('18446744073709551616',),) target=(('-1',),)`
 - src: `SELECT ~0 AS r`
 
+## my-bool-char  (mysql)
+- targets: postgresql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('t',),)`
+- src: `SELECT CAST((1=1) AS CHAR) AS r`
+
 ## my-cast-convert  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(243, b'Type UBIGINT is not a defined system type.DB-Lib error message 20018, severity 16:`
@@ -235,6 +240,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('3',),)`
 - src: `SELECT GREATEST(1, NULL, 3) AS r`
 
+## my-greatest-null2  (mysql)
+- targets: postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('NULL',),) target=(('1',),)`
+- src: `SELECT GREATEST(NULL, 1) AS r`
+
 ## my-greatest-string  (mysql)
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('B',),) target=(('a',),)`
@@ -269,6 +279,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('abc',),) target=(('NULL',),)`
 - src: `SELECT INSERT('abc', 10, 1, 'X') AS r`
+
+## my-int-or-empty  (mysql)
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=(('NULL',),)`
+- src: `SELECT 0 OR '' AS r`
 
 ## my-is-true  (mysql)
 - targets: oracle(invalid), tsql(invalid)
@@ -791,6 +806,11 @@ CREATE TRIGGER trg FOR UPDATE ON t COMPOUND TRIGGER BEFORE EACH ROW IS BEGIN NUL
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `GRANT CREATE SESSION, CREATE TABLE TO r`
 
+## ora-hint-comment  (oracle)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT /*+ FULL(t) */ 1 AS r FROM DUAL t`
+
 ## ora-initcap  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s`
@@ -1213,6 +1233,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `ORA-01722: unable to convert string value containing 't' to a number: `
 - src: `SELECT 'true'::boolean::int AS r`
 
+## pg-bool-text2  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('true',),) target=(('1',),)`
+- src: `SELECT true::text AS r`
+
 ## pg-bulk-insert  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
@@ -1387,6 +1412,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT E'line1\nline2' AS r`
+
+## pg-estring-hex  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `SELECT E'\x41' AS r`
 
 ## pg-except-all  (postgresql)
 - targets: mysql(invalid)
@@ -1633,6 +1663,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag`
 - src: `CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)`
 
+## pg-not-null-is-null  (postgresql)
+- targets: mysql(func), oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
+- src: `SELECT (NOT NULL) IS NULL AS r`
+
 ## pg-num-nonnulls  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
@@ -1712,6 +1747,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (a INT, b INT); CREATE RECURSIVE VIEW v(n) AS SELECT 1 UNION ALL SELECT n+1 FROM v WHERE n < 5`
+
+## pg-regex-case  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('0',),) target=()`
+- src: `SELECT 'abc' ~ '^A' AS r`
 
 ## pg-regexp-matches  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2497,4 +2537,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (id INT IDENTITY(100, 5))`
 ---
 
-Totals: 486 distinct constructs; defect rows by kind: carrier 97, func 184, invalid 650, semantic 2, silent-drop 61.
+Totals: 494 distinct constructs; defect rows by kind: carrier 97, func 193, invalid 652, semantic 2, silent-drop 61.
