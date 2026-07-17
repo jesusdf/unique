@@ -1336,13 +1336,18 @@ class Transformer:
                 )
             )
         ):
-            # Only multi-column subqueries make this a ROW comparison.
+            # Only multi-column subqueries make this a ROW comparison —
+            # and a lone ``*`` matching a multi-item tuple is one too
+            # (wave 194: ``NOT ((f1, f2) IN (SELECT * FROM i))``).
             sq = (
                 value.right
                 if isinstance(value.right, SubqueryExpression)
                 else value.left
             )
-            if isinstance(sq, SubqueryExpression) and len(sq.query.columns) > 1:
+            if isinstance(sq, SubqueryExpression) and (
+                len(sq.query.columns) > 1
+                or any(isinstance(c, Star) for c in sq.query.columns)
+            ):
                 return True
         if isinstance(value, ASTNode):
             return any(

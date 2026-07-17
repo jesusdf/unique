@@ -7017,3 +7017,26 @@ class TestWave193UpdateFromDerived:
         )
         assert "UNIQUE:" not in out, out
         assert re.search(r"(?i)UPDATE a", out), out
+
+
+class TestWave194NotTupleInStar:
+    """wave 194 (pg-corpus): ``NOT ((f1, f2) IN (SELECT * FROM i))`` —
+    the tuple-subquery gate required >1 subquery columns and a lone
+    ``*`` counted as one, so the row comparison shipped raw (4145)."""
+
+    def test_not_tuple_in_star_gated(self) -> None:
+        out = _t2(
+            "SELECT * FROM o WHERE NOT ((f1, f2) IN (SELECT * FROM i));",
+            "postgresql",
+            "tsql",
+        )
+        assert "UNIQUE:" in out, out
+        assert not re.search(r"(?im)^\s*SELECT \* FROM o", out), out
+
+    def test_scalar_in_star_untouched(self) -> None:
+        out = _t2(
+            "SELECT * FROM o WHERE f1 IN (SELECT f1 FROM i);",
+            "postgresql",
+            "tsql",
+        )
+        assert "UNIQUE:" not in out, out

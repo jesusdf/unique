@@ -916,7 +916,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          procedural cross-table-UPDATE helper takes the documented
          fallback when the conversion degrades. Measured: pg→mysql
          **68 → 67** (−1). Discovery HOLDS 0. Tests:
-         TestWave193UpdateFromDerived (3).**
+         TestWave193UpdateFromDerived (3).* Wave 194 (2026-07-17):
+         ``NOT ((f1, f2) IN (SELECT * FROM i))`` — the tuple-subquery
+         gate required >1 subquery columns and a lone ``*`` counted as
+         one, so the row comparison shipped raw (4145 live). A star
+         column now counts as multi when the tuple side is. Measured:
+         pg→tsql **64 → 61** (−3). Discovery HOLDS 0. Tests:
+         TestWave194NotTupleInStar (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
