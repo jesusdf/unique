@@ -138,3 +138,51 @@ class TestTriggerShellIdiomsIrFirst:
         )
         out = self._probe(monkeypatch, src, "mysql", "oracle")
         assert ":NEW.line_total := :NEW.qty * :NEW.unit_price" in out, out
+
+
+class TestPgFoundFlagInIr:
+    """plpgsql's FOUND flag maps per target in the IR (M3 family F3)."""
+
+    def test_found_to_tsql(self) -> None:
+        out = _ir("postgresql", "tsql", "SELECT CASE WHEN FOUND THEN 1 ELSE 2 END")
+        assert out is not None and "(@@ROWCOUNT > 0)" in out
+
+    def test_found_to_oracle(self) -> None:
+        out = _ir("postgresql", "oracle", "SELECT CASE WHEN FOUND THEN 1 ELSE 2 END")
+        assert out is not None and "SQL%FOUND" in out
+
+    def test_found_to_mysql(self) -> None:
+        out = _ir("postgresql", "mysql", "SELECT CASE WHEN FOUND THEN 1 ELSE 2 END")
+        assert out is not None and "(ROW_COUNT() > 0)" in out
+
+    def test_found_column_untouched_from_other_sources(self) -> None:
+        out = _ir("mysql", "tsql", "SELECT found FROM t")
+        assert out is not None and "@@ROWCOUNT" not in out
+
+
+class TestOracleCursorAttrsInIr:
+    """Oracle cursor attributes map on T-SQL in the IR (M3 family F8b)."""
+
+    def test_sql_found_to_tsql(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT CASE WHEN SQL%FOUND THEN 1 ELSE 2 END")
+        assert out is not None and "@@ROWCOUNT > 0" in out
+        assert "%" not in out
+
+    def test_sql_notfound_to_tsql(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT CASE WHEN SQL%NOTFOUND THEN 1 ELSE 2 END")
+        assert out is not None and "@@ROWCOUNT = 0" in out
+
+    def test_named_cursor_found_to_tsql(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT CASE WHEN c_t%FOUND THEN 1 ELSE 2 END")
+        assert out is not None and "@@FETCH_STATUS = 0" in out
+        assert "%" not in out
+
+    def test_named_cursor_notfound_to_tsql(self) -> None:
+        out = _ir("oracle", "tsql", "SELECT CASE WHEN c_t%NOTFOUND THEN 1 ELSE 2 END")
+        assert out is not None and "@@FETCH_STATUS <> 0" in out
+
+    def test_sql_found_to_postgresql(self) -> None:
+        out = _ir(
+            "oracle", "postgresql", "SELECT CASE WHEN SQL%FOUND THEN 1 ELSE 2 END"
+        )
+        assert out is not None and "FOUND" in out and "%" not in out

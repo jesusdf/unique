@@ -67,6 +67,7 @@ from unique.core.converter.harvest import (  # noqa: F401
 from unique.core.mappings import (
     CURRENT_DATE_EXPR,
     CURRENT_TIMESTAMP_EXPR,
+    DML_FOUND_EXPR,
     ERROR_MESSAGE_EXPR,
     ERROR_MESSAGE_SOURCES,
     LAST_IDENTITY_EXPR,
@@ -2857,6 +2858,13 @@ def _map_system_global(sql: str, dialect: str) -> str | None:
 def _emit_expression(node: ASTNode, dialect: str) -> str:
     """Emit an expression node as SQL text."""
     if isinstance(node, ColumnRef):
+        # plpgsql's bare FOUND flag (statement state, not a column).
+        if (
+            not node.table
+            and node.name.upper() == "FOUND"
+            and SOURCE_DIALECT.get() == "postgresql"
+        ):
+            return DML_FOUND_EXPR.get(dialect, node.name)
         # Bare SQLERRM (PL/SQL and plpgsql spell it without parens) is the
         # current-error-message global, not a column (exception context).
         if (
@@ -3986,7 +3994,32 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             return fail_form
 
     # Oracle's SQL%ROWCOUNT parses as ``SQL % ROWCOUNT`` (modulo) — map
-    # the global before emitting a bogus arithmetic expression.
+    # the global before emitting a bogus arithmetic expression. The other
+    # cursor attributes (SQL%FOUND / <cursor>%[NOT]FOUND) parse the same
+    # way and map like the text path: statement state to the row-count
+    # predicate, named-cursor state to the fetch-status idiom.
+    if (
+        node.operator == BinaryOperator.MOD
+        and isinstance(node.left, ColumnRef)
+        and not node.left.table
+        and isinstance(node.right, ColumnRef)
+        and node.right.name.upper() in ("FOUND", "NOTFOUND")
+        and SOURCE_DIALECT.get() == "oracle"
+        and dialect != "oracle"
+    ):
+        negated = node.right.name.upper() == "NOTFOUND"
+        if node.left.name.upper() == "SQL":
+            if dialect == "tsql":
+                return "@@ROWCOUNT = 0" if negated else "@@ROWCOUNT > 0"
+            if dialect == "mysql":
+                return "(ROW_COUNT() = 0)" if negated else "(ROW_COUNT() > 0)"
+            return "NOT FOUND" if negated else "FOUND"
+        if dialect == "tsql":
+            return "@@FETCH_STATUS <> 0" if negated else "@@FETCH_STATUS = 0"
+        if dialect == "postgresql":
+            return "NOT FOUND" if negated else "FOUND"
+        # MySQL named-cursor state needs the handler-flag machinery the
+        # statement-level transformer owns; keep the attribute visible.
     if (
         node.operator == BinaryOperator.MOD
         and isinstance(node.left, ColumnRef)

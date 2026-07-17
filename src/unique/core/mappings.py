@@ -96,6 +96,15 @@ LAST_IDENTITY_SOURCE_FUNCS: dict[str, str] = {
     "LAST_INSERT_ID": "mysql",
 }
 
+#: plpgsql's FOUND flag (set by the last DML/FETCH) per target — the
+#: row-count predicate where no such flag exists.
+DML_FOUND_EXPR: dict[str, str] = {
+    "tsql": "(@@ROWCOUNT > 0)",
+    "oracle": "SQL%FOUND",
+    "mysql": "(ROW_COUNT() > 0)",
+    "postgresql": "FOUND",
+}
+
 #: The current-error-message expression per dialect (exception-handler
 #: context). MySQL has no expression form (GET DIAGNOSTICS is a statement;
 #: the procedural transformer handles assignments) — absent means "no
