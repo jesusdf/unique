@@ -42,11 +42,24 @@ does **not** touch `src/`.
    and exercising a real dialect feature (a scripting construct, a function, a
    type, an operator, a DDL form, a transaction/cursor/trigger shape). Draw
    ideas from each engine's reference docs and from real migration patterns.
-2. **Prove it is syntactically valid source** before using it (a mis-transpile
-   of invalid input is not a finding — see the earlier `IF NOT EXISTS`
-   report). Validate with `sqlglot.parse(sql, read=<dialect>)` and/or the live
-   engine (`docker compose -f docker-compose.test.yaml`, the live-syntax
-   harness). Discard anything the source engine itself would reject.
+2. **Prove the original is valid on a LIVE database** before using it — this is
+   mandatory, not optional (a mis-transpile of invalid input is not a finding;
+   see the earlier `IF NOT EXISTS` report). `sqlglot.parse` is too lenient to
+   trust on its own. Bring up the engines and validate the source against the
+   **real engine it is written for**:
+   ```bash
+   docker compose -f docker-compose.test.yaml up -d    # pg, mysql, mssql, oracle
+   ```
+   Use `tests/helpers/live_validation.py` — `make_validator(dialect, url).validate(sql)`
+   parses/compiles without committing (T-SQL rolled-back txn, PG rolled-back txn,
+   MySQL throwaway DB, Oracle create-drop + `USER_ERRORS`). Connection URLs:
+   `postgresql://unique:unique@localhost:5433/unique`,
+   `mysql://root:root@localhost:3307/unique`,
+   `mssql://sa:Unique_Strong!Pass1@127.0.0.1:1433/master`,
+   `oracle://system:oracle@localhost:1521/FREEPDB1`
+   (`docker update --memory 3g unique-oracle-1` before an Oracle run). Discard
+   anything the source engine rejects. Standalone statements, procedures,
+   triggers, functions, views, and any other object all count as source.
 3. **Transpile it to the other three engines** and look for a defect:
    - invalid **target** SQL (fails `sqlglot.parse` in the target / the live
      engine);

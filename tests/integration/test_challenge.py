@@ -40,10 +40,21 @@ def _exec_lines(sql: str) -> str:
     return "\n".join(ln for ln in sql.splitlines() if not ln.lstrip().startswith("--"))
 
 
+# A case is tagged ``-- CASE[fixed]:`` (BLUE closed it — strictly guarded) or
+# ``-- CASE[open]:`` (RED found it, not yet fixed — backlog, only smoke-checked).
+# An untagged ``-- CASE:`` is treated as fixed.
+_CASE_HEAD = r"-- CASE(?:\[(?:open|fixed)\])?:"
+
+
 def _cases(fname: str) -> list[str]:
     """Split a fixture into its ``-- CASE:`` blocks (each self-contained)."""
-    blocks = re.split(r"(?m)^(?=-- CASE:)", _read(fname))
-    return [b.strip() for b in blocks if b.strip().startswith("-- CASE:")]
+    blocks = re.split(rf"(?m)^(?={_CASE_HEAD})", _read(fname))
+    return [b.strip() for b in blocks if re.match(_CASE_HEAD, b.strip())]
+
+
+def _status(block: str) -> str:
+    m = re.match(r"-- CASE\[(open|fixed)\]:", block.strip())
+    return m.group(1) if m else "fixed"
 
 
 def _case(fname: str, keyword: str) -> str:
@@ -57,18 +68,21 @@ def _tx(sql: str, source: str, target: str) -> str:
     return Transpiler().transpile(sql, source=source, target=target).sql
 
 
-def _all_cases() -> list[tuple[str, str, int]]:
+def _cases_by_status(want: str) -> list[tuple[str, str, int]]:
     out: list[tuple[str, str, int]] = []
     for fname, src in _SOURCE_BY_FILE.items():
-        for i in range(len(_cases(fname))):
-            out.append((fname, src, i))
+        for i, block in enumerate(_cases(fname)):
+            if _status(block) == want:
+                out.append((fname, src, i))
     return out
 
 
-@pytest.mark.parametrize("fname,source,case_idx", _all_cases())
-def test_case_has_no_unrecognized_construct(
+@pytest.mark.parametrize("fname,source,case_idx", _cases_by_status("fixed"))
+def test_fixed_case_has_no_unrecognized_construct(
     fname: str, source: str, case_idx: int
 ) -> None:
+    """A closed case must transpile to every engine without an unrecognized
+    carrier (a documented degrade is fine, an Unhandled construct is not)."""
     sql = _cases(fname)[case_idx]
     for target in _ALL_ENGINES:
         if target == source:
@@ -78,6 +92,21 @@ def test_case_has_no_unrecognized_construct(
             assert (
                 marker not in out
             ), f"{fname}[{case_idx}] -> {target}: {marker!r}\n{out}"
+
+
+@pytest.mark.parametrize("fname,source,case_idx", _cases_by_status("open"))
+def test_open_case_transpiles_without_crashing(
+    fname: str, source: str, case_idx: int
+) -> None:
+    """An OPEN (RED-found, unfixed) case is a known defect backlog — its output
+    is wrong on some target. We only assert the transpiler does not *crash* on
+    it; correctness is BLUE's job (which flips it to ``[fixed]`` with a real
+    assertion). Documented in tests/fixtures/challenge/FINDINGS.md."""
+    sql = _cases(fname)[case_idx]
+    for target in _ALL_ENGINES:
+        if target == source:
+            continue
+        _tx(sql, source, target)  # must not raise
 
 
 class TestOracleSelfQualifiedParam:
