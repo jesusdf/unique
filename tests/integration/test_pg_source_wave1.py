@@ -7844,3 +7844,34 @@ class TestWave225CommentOnInBody:
         out = _t2(self._SQL, "postgresql", "oracle")
         assert re.search(r"(?i)comment on function ur", out), out
         assert "UNIQUE:" not in out, out
+
+
+class TestWave226IntoFirstSelect:
+    """wave 226 (pg-corpus): plpgsql's INTO may come FIRST (``SELECT
+    INTO x id FROM …``) — the list-first capture shredded it into
+    ``SELECT  INTO x id`` (empty list, mangled order)."""
+
+    _SQL = (
+        "create function sp1(a_login text) returns int as $$"
+        " declare x int; begin"
+        " select into x id from users where login = a_login;"
+        " return x; end$$ language plpgsql;"
+    )
+
+    def test_into_first_mysql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "mysql")
+        assert re.search(r"(?i)SELECT id INTO x from users", out), out
+
+    def test_into_first_tsql(self) -> None:
+        out = _t2(self._SQL, "postgresql", "tsql")
+        assert re.search(r"(?i)SELECT @x = id from users", out), out
+
+    def test_list_first_untouched(self) -> None:
+        out = _t2(
+            "create function sp2() returns int as $$ declare x int;"
+            " begin select id into x from users; return x; end$$"
+            " language plpgsql;",
+            "postgresql",
+            "mysql",
+        )
+        assert re.search(r"(?i)SELECT id INTO x from users", out), out

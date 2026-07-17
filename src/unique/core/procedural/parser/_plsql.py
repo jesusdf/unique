@@ -1507,10 +1507,23 @@ class PlsqlStatementsMixin(ParserBase):
                     break
         self._expect_keyword("SELECT")
 
+        # plpgsql's INTO may come FIRST (``SELECT INTO x id FROM …``) —
+        # the list-first capture shredded it (wave 226). Normalize by
+        # consuming the INTO vars here; the shared tail handles the rest.
+        into_first_vars: list[str] = []
+        if self._dialect == "postgresql" and self._current().is_keyword("INTO"):
+            self._advance()
+            while not self._at_end():
+                into_first_vars.append(self._parse_identifier())
+                if self._current().type == TokenType.COMMA:
+                    self._advance()
+                    continue
+                break
+
         # Capture select list up to INTO or FROM
         select_parts: list[str] = []
         paren_depth = 0
-        has_into = False
+        has_into = bool(into_first_vars)
         while not self._at_end():
             tok = self._current()
             if paren_depth == 0 and tok.is_keyword("INTO"):
@@ -1568,9 +1581,12 @@ class PlsqlStatementsMixin(ParserBase):
         # trigger pseudo-row field (``:NEW.col`` — lexed as ':' 'NEW' '.'
         # 'col') or any dotted name; collect the whole reference, or the tail
         # leaks into the FROM remainder.
-        self._expect_keyword("INTO")
         into_vars: list[str] = []
-        while not self._at_end():
+        if into_first_vars:
+            into_vars = list(into_first_vars)
+        else:
+            self._expect_keyword("INTO")
+        while not into_first_vars and not self._at_end():
             tok = self._current()
             if tok.is_keyword("FROM") or tok.type == TokenType.SEMICOLON:
                 break

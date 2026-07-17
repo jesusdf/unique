@@ -1129,7 +1129,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          discovery to 1 before the in-wave verification caught it),
          carrier on MySQL/T-SQL. Measured: pg→mysql **37 → 36** (−1).
          Discovery HOLDS 0 (recovered in-wave). Tests:
-         TestWave225CommentOnInBody (2).**
+         TestWave225CommentOnInBody (2).* Wave 226 (2026-07-17):
+         plpgsql's INTO may come FIRST (``SELECT INTO x id FROM …``) —
+         the list-first capture shredded it into an empty select list
+         with mangled order; the INTO-first vars now normalize through
+         the shared tail. Measured: pg→mysql **36 → 34**, pg→tsql
+         **34 → 33** (−3). Discovery HOLDS 0. Tests:
+         TestWave226IntoFirstSelect (3).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping
