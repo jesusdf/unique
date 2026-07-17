@@ -3664,16 +3664,21 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # Unknown style off T-SQL: keep the call visible (a mapping gap).
         return f"CONVERT({target_type}, {value}, {style})"
 
-    # T-SQL's SHA2(x, n) spells SHA256/SHA512 etc. on PostgreSQL (the text
-    # path's live form; pg has no two-argument SHA2).
+    # T-SQL's SHA2(x, n) spells SHA256/SHA512 etc. on PostgreSQL and
+    # RAWTOHEX(STANDARD_HASH(x, 'SHAn')) on Oracle (the text path's
+    # live-validated forms; neither engine has a two-argument SHA2 —
+    # PLS-00201 live in CI's Oracle validator).
     if (
         fn_name == "SHA2"
-        and dialect == "postgresql"
+        and dialect in ("postgresql", "oracle")
         and len(node.args) == 2
         and isinstance(node.args[1], Literal)
-        and str(node.args[1].value) in ("224", "256", "384", "512")
+        and str(node.args[1].value) in ("256", "384", "512")
     ):
-        return f"SHA{node.args[1].value}({_emit_expression(node.args[0], dialect)})"
+        arg = _emit_expression(node.args[0], dialect)
+        if dialect == "postgresql":
+            return f"SHA{node.args[1].value}({arg})"
+        return f"RAWTOHEX(STANDARD_HASH({arg}, 'SHA{node.args[1].value}'))"
 
     # T-SQL CONVERT(type, expr): sqlglot keeps the type as raw SQL in arg 0.
     # Everywhere else this is a plain CAST.

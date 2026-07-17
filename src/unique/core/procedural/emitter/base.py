@@ -70,7 +70,9 @@ logger = logging.getLogger(__name__)
 #: A SQL-only operator that Oracle rejects in a *procedural* expression — a scalar
 #: subquery (PLS-00405) or CAST (PLS-00103). An assignment/declaration whose value
 #: contains one must be evaluated in SQL context (``SELECT … INTO v FROM DUAL``).
-_SQL_ONLY_IN_PLSQL = re.compile(r"(?i)\(\s*SELECT\b|\bCAST\s*\(")
+# STANDARD_HASH is likewise SQL-only (PLS-00201 in a PL/SQL expression —
+# CI's live Oracle validator caught the IR-first form).
+_SQL_ONLY_IN_PLSQL = re.compile(r"(?i)\(\s*SELECT\b|\bCAST\s*\(|\bSTANDARD_HASH\s*\(")
 
 #: A guard idiom: ``FOR <var> IN (SELECT … FROM DUAL [WHERE <cond>]) LOOP … END``
 #: runs its body 0 or 1 times, gating on <cond>. On engines whose IF takes a SQL

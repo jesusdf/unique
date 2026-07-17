@@ -546,3 +546,9 @@ class TestTempReferenceFunctionGate:
         )
         r = Transpiler().transpile(src, "mysql", "tsql")
         assert "CREATE FUNCTION" in r.sql, r.sql
+
+    def test_sha2_spells_standard_hash_on_oracle(self) -> None:
+        out = _ir("tsql", "oracle", "SELECT SHA2(x, 256) FROM t")
+        assert out is not None, out
+        assert "RAWTOHEX(STANDARD_HASH(x, 'SHA256'))" in out, out
+        assert "SHA2" not in out.upper().replace("'SHA256'", ""), out
