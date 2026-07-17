@@ -872,7 +872,14 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          operand under AND (``a = 1 AND CASE 1 WHEN a …``) is MySQL
          truthiness — comparisonized ``<> 0``. Measured: mysql→tsql
          **40 → 36** (−4, validity 99.4%). Discovery HOLDS 0. Tests:
-         TestWave187BinaryCapCaseTruthiness (3).**
+         TestWave187BinaryCapCaseTruthiness (3).* Wave 188 (2026-07-17): ``IF
+         level THEN`` takes MySQL numeric truthiness (PLS-00382) —
+         the wave-184 bare-condition wrap is now shared by IF and
+         WHILE (``_wrap_bare_truth_condition``); and the comma 2-arg
+         TRIM spells ``TRIM([BOTH] x FROM y)`` off MySQL (error 174 /
+         ORA-00907). Measured: mysql→oracle **30 → 28**, tsql
+         **36 → 35**. Discovery HOLDS 0. Tests:
+         TestWave188IfBareCondTrimTwoArg (4).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

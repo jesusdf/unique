@@ -3009,6 +3009,15 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         a0 = _emit_expression(node.args[0], dialect)
         a1 = _emit_expression(node.args[1], dialect)
         return f"SUBSTRING({a0}, {a1}, LEN({a0}))"
+    # MySQL's comma 2-arg TRIM(remstr, s): every engine (MySQL included)
+    # accepts the standard ``TRIM(BOTH remstr FROM s)`` — the comma form
+    # is error 174 / ORA-00907 off MySQL (wave 188).
+    if fn_name == "TRIM" and len(node.args) == 2:
+        rem = _emit_expression(node.args[0], dialect)
+        s = _emit_expression(node.args[1], dialect)
+        if dialect == "tsql":
+            return f"TRIM({rem} FROM {s})"
+        return f"TRIM(BOTH {rem} FROM {s})"
 
     # MySQL's CONNECTION_ID(): every engine has a session id under a
     # different name (wave 171) — dbo.connection_id shipped as a fake
