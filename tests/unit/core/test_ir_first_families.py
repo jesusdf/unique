@@ -672,3 +672,76 @@ class TestMojibakeUnitCarrier:
         assert "AS ¤" not in r.sql, r.sql
         assert "-- UNIQUE:" in r.sql, r.sql
         assert r.warnings, r.sql
+
+
+class TestZeroPushMysqlGates:
+    """pg->mysql residue: reserved-type aliases, UDF windows, diagnostics."""
+
+    def test_reserved_type_alias_quotes_on_mysql(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        out = (
+            Transpiler()
+            .transpile("SELECT f1(42) AS int, f1(4.5) AS num;", "postgresql", "mysql")
+            .sql
+        )
+        assert "`int`" in out, out
+
+    def test_udf_window_degrades_on_mysql(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        r = Transpiler().transpile(
+            "SELECT logging_agg_strict(v) OVER () FROM t;", "postgresql", "mysql"
+        )
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not any("OVER" in ln.upper() for ln in code), r.sql
+        assert r.warnings, r.sql
+
+    def test_builtin_window_stays_on_mysql(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        r = Transpiler().transpile(
+            "SELECT sum(v) OVER (), row_number() OVER () FROM t;",
+            "postgresql",
+            "mysql",
+        )
+        assert "OVER" in r.sql.upper(), r.sql
+
+    def test_sqlstate_routine_degrades_on_mysql(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "create function excpt_test1() returns int language plpgsql as $$\n"
+            "begin\n  raise notice '% %', sqlstate, sqlerrm;\n  return 0;\n"
+            "end $$;"
+        )
+        r = Transpiler().transpile(src, "postgresql", "mysql")
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not any("sqlstate" in ln.lower() for ln in code), r.sql
+        assert r.warnings, r.sql
+
+    def test_pg_internal_type_in_body_degrades(self) -> None:
+        from unique.core.transpiler import Transpiler
+
+        src = (
+            "create function error1(p1 text) returns text language plpgsql as $$\n"
+            "begin\n"
+            "  return (select relname from pg_class c where c.oid = p1::regclass);\n"
+            "end $$;"
+        )
+        r = Transpiler().transpile(src, "postgresql", "mysql")
+        code = [
+            ln
+            for ln in r.sql.splitlines()
+            if ln.strip() and not ln.strip().startswith("--")
+        ]
+        assert not any("regclass" in ln.lower() for ln in code), r.sql
+        assert r.warnings, r.sql

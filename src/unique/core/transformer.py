@@ -602,6 +602,7 @@ class Transformer:
             result = [self._gate_mysql_function_relation(node) for node in result]
             result = [self._gate_mysql_agg_forms(node) for node in result]
             result = [self._gate_mysql_nonconst_lag(node) for node in result]
+            result = [self._gate_mysql_udf_window(node) for node in result]
             result = [self._gate_mysql_null_ntile(node) for node in result]
         if self.context.target in ("mysql", "oracle"):
             result = [self._gate_column_alias_ref(node) for node in result]
@@ -1219,6 +1220,80 @@ class Transformer:
         if isinstance(value, tuple):
             return any(self._contains_null_ntile(item) for item in value)
         return False
+
+    #: The window functions MySQL 8 accepts an OVER clause on — its own
+    #: builtins plus the aggregates it windows. A user-defined function
+    #: with OVER is a hard 1064 (MySQL has no user-defined window functions).
+    _MYSQL_WINDOW_FUNCS = frozenset(
+        {
+            "ROW_NUMBER",
+            "RANK",
+            "DENSE_RANK",
+            "PERCENT_RANK",
+            "CUME_DIST",
+            "NTILE",
+            "LAG",
+            "LEAD",
+            "FIRST_VALUE",
+            "LAST_VALUE",
+            "NTH_VALUE",
+            "COUNT",
+            "SUM",
+            "AVG",
+            "MIN",
+            "MAX",
+            "STDDEV",
+            "STDDEV_POP",
+            "STDDEV_SAMP",
+            "VARIANCE",
+            "VAR_POP",
+            "VAR_SAMP",
+            "BIT_AND",
+            "BIT_OR",
+            "BIT_XOR",
+            "GROUP_CONCAT",
+            "JSON_ARRAYAGG",
+            "JSON_OBJECTAGG",
+        }
+    )
+
+    def _gate_mysql_udf_window(self, node: ASTNode) -> ASTNode:
+        """A user-defined function with an OVER clause — MySQL has no
+        user-defined window functions in any spelling (hard 1064); the
+        statement degrades WHOLE (zero push)."""
+        found = self._find_udf_window(node)
+        if found is None:
+            return node
+        reason = (
+            f"MySQL supports OVER only on its builtin window functions; "
+            f"{found}() OVER has no MySQL spelling. Statement preserved "
+            "as a comment"
+        )
+        self.context.warn(reason, "mysql_udf_window")
+        self.context.mark_unsupported(f"{found}() OVER (MySQL)")
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _find_udf_window(self, value: object) -> str | None:
+        from unique.core.ast_nodes import WindowFunction
+
+        if isinstance(value, WindowFunction):
+            name = value.function.name.upper()
+            if name not in self._MYSQL_WINDOW_FUNCS:
+                return value.function.name
+        if isinstance(value, ASTNode):
+            for f in fields(value):
+                found = self._find_udf_window(getattr(value, f.name))
+                if found is not None:
+                    return found
+            return None
+        if isinstance(value, tuple):
+            for item in value:
+                found = self._find_udf_window(item)
+                if found is not None:
+                    return found
+        return None
 
     def _gate_mysql_nonconst_lag(self, node: ASTNode) -> ASTNode:
         """LAG/LEAD with a NON-CONSTANT offset — MySQL requires a constant

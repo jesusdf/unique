@@ -1110,10 +1110,57 @@ class ProceduralTransformer:
         original = ProceduralEmitter(self._source).emit(node)
         return RawSQL(sql=original, reason=reason)
 
+    def _degrade_untranslatable_body(self, node: ASTNode) -> RawSQL | None:
+        """Degrade a routine whose body carries a construct with NO target
+        spelling in any form (zero push): plpgsql/PLSQL diagnostics globals
+        on MySQL (GET DIAGNOSTICS is a statement, not an expression), and
+        PostgreSQL catalog internals off PG (regclass & friends, pg_class,
+        ctid). Scans SCRUBBED source text (string contents cannot
+        false-positive) — the wave-138 recipe."""
+        checks: list[tuple[str, str]] = []
+        if self._target == "mysql" and self._source in ("postgresql", "oracle"):
+            checks.append(
+                (
+                    r"(?i)\b(SQLSTATE|SQLERRM)\b",
+                    "MySQL reads error diagnostics only via GET DIAGNOSTICS "
+                    "(no SQLSTATE/SQLERRM expression); routine preserved "
+                    "as a comment",
+                )
+            )
+        if self._source == "postgresql" and self._target != "postgresql":
+            checks.append(
+                (
+                    r"(?i)\b(regclass|regprocedure|regproc|regtype|regoper|"
+                    r"regnamespace|pg_class|pg_proc|pg_type|ctid|xmin|"
+                    r"tableoid)\b",
+                    f"PostgreSQL catalog internal has no {self._target} "
+                    "equivalent; routine preserved as a comment",
+                )
+            )
+        if not checks:
+            return None
+        from unique.core.output_gate import scrub
+        from unique.core.procedural.emitter import ProceduralEmitter
+
+        try:
+            original = ProceduralEmitter(self._source).emit(node)
+        except Exception:  # noqa: BLE001 - a diagnostic scan must not break
+            return None
+        scrubbed = scrub(original)
+        for pattern, reason in checks:
+            if re.search(pattern, scrubbed):
+                self._warnings.append(reason)
+                self._register_degraded_routine(getattr(node, "name", None))
+                return RawSQL(sql=original, reason=reason)
+        return None
+
     def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
         degraded_uv = self._degrade_mysql_uservar(node)
         if degraded_uv is not None:
             return degraded_uv
+        degraded_body = self._degrade_untranslatable_body(node)
+        if degraded_body is not None:
+            return degraded_body
         folded_body, handler_culprit = self._fold_mysql_handlers(node.body)
         if handler_culprit is not None:
             return self._degrade_for_handler(node, handler_culprit)
@@ -1469,6 +1516,9 @@ class ProceduralTransformer:
         degraded_uv = self._degrade_mysql_uservar(node)
         if degraded_uv is not None:
             return degraded_uv
+        degraded_body = self._degrade_untranslatable_body(node)
+        if degraded_body is not None:
+            return degraded_body
         # T-SQL functions cannot access temporary tables (error 2772);
         # a routine creating one — or REFERENCING a session temp table the
         # script declared (the emit renames it #name script-wide) —

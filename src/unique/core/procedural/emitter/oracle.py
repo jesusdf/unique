@@ -284,7 +284,13 @@ class OracleEmitter(ProceduralEmitter):
         # onto Oracle's -20000..-20999 user range (audit 2026-07-02, S2-2).
         text, number, _ = self._raise_parts(msg)
         code = -20001
-        if number is not None and 50000 <= int(number) <= 50999:
+        # Token-joined negatives arrive spaced ('- 20001'); parse tolerantly.
+        num_text = str(number).replace(" ", "") if number is not None else None
+        if (
+            num_text is not None
+            and re.fullmatch(r"-?\d+", num_text)
+            and (50000 <= int(num_text) <= 50999)
+        ):
             code = -(20000 + (int(number) - 50000))
         payload = text or number or msg
         return f"RAISE_APPLICATION_ERROR({code}, {payload});"
