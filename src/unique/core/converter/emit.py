@@ -1825,13 +1825,14 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         top = f"TOP {_emit_expression(node.limit.limit, dialect)}{pct} "
     distinct = "DISTINCT " if node.distinct else ""
     if (
-        dialect == "oracle"
+        dialect in ("oracle", "mysql")
         and len(node.columns) > 1
         and any(isinstance(c, Star) and not c.table for c in node.columns)
         and isinstance(node.from_clause, TableRef)
     ):
-        # Oracle rejects a BARE ``*`` alongside other select items
-        # (ORA-00923); qualify it with the FROM relation (wave 150).
+        # Oracle AND MySQL reject a BARE ``*`` alongside other select
+        # items (ORA-00923 / 1064); qualify it with the FROM relation
+        # (waves 150, 213).
         qual = node.from_clause.alias or node.from_clause.name
         node = dataclasses.replace(
             node,

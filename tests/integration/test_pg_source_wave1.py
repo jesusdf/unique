@@ -7546,3 +7546,21 @@ class TestWave212TsqlTwoArgLimit:
             "tsql",
         )
         assert re.search(r"(?i)SELECT TOP 1 @x = id", out), out
+
+
+class TestWave213MysqlBareStarSiblings:
+    """wave 213 (pg-corpus): MySQL also rejects a bare ``*`` alongside
+    other select items (1064) — the wave-150 Oracle qualification
+    extends to it."""
+
+    def test_bare_star_qualified_mysql(self) -> None:
+        out = _t2(
+            "select name as root_name, * from department;",
+            "postgresql",
+            "mysql",
+        )
+        assert re.search(r"(?i)root_name, department\.\*", out), out
+
+    def test_lone_star_untouched_mysql(self) -> None:
+        out = _t2("select * from department;", "postgresql", "mysql")
+        assert re.search(r"(?i)SELECT \*", out), out
