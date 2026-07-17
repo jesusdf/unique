@@ -59,6 +59,9 @@ SELECT CHOOSE(2, 'a', 'b', 'c') AS r
 -- CASE[open]: ts-collate — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT 'a' COLLATE Latin1_General_CS_AS AS r
 
+-- CASE[open]: ts-concat-null — fails on mysql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
+SELECT CONCAT('a', NULL, 'b') AS r
+
 -- CASE[open]: ts-concat-ws — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT CONCAT_WS('-', 'a', 'b', 'c') AS r
 
@@ -108,7 +111,7 @@ SELECT JSON_VALUE('{"a":1}', '$.a')
 -- CASE[open]: ts-lead-ignore-nulls — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT x, LEAD(x, 1) IGNORE NULLS OVER (ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
--- CASE[open]: ts-len-trailing-space — fails on postgresql. SEMANTIC: T-SQL LEN ignores trailing spaces (=3); PG/Oracle LENGTH & MySQL CHAR_LENGTH cou
+-- CASE[open]: ts-len-trailing — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('3',),) target=(('6',),)
 SELECT LEN('abc   ') AS r
 
 -- CASE[open]: ts-log — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My

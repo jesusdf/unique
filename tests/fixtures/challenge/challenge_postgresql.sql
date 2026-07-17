@@ -31,6 +31,9 @@ CREATE TABLE t (id INT PRIMARY KEY, n INT, updated TIMESTAMP);
 CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated := now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg BEFORE UPDATE ON t FOR EACH ROW EXECUTE FUNCTION trg_fn();
 
+-- CASE[open]: pg-cast-int — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
+SELECT CAST(2.7 AS INT) AS r
+
 -- CASE[open]: pg-collate — fails on mysql. (1064, 'You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT 'a' < 'B' COLLATE "C" AS r
 
@@ -39,6 +42,12 @@ CREATE TABLE t (a INT); COMMENT ON COLUMN t.a IS 'the a column'
 
 -- CASE[open]: pg-composite-type — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TYPE addr AS (street TEXT, city TEXT)
+
+-- CASE[open]: pg-cte-cycle — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n<3) CYCLE n SET is_cycle USING path SELECT * FROM r
+
+-- CASE[open]: pg-cte-search — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+WITH RECURSIVE r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n<3) SEARCH DEPTH FIRST BY n SET ord SELECT * FROM r
 
 -- CASE[open]: pg-date-part — fails on oracle. ORA-00907: missing right parenthesis
 SELECT DATE_PART('week', DATE '2020-06-15'), DATE_PART('quarter', DATE '2020-06-15')
@@ -73,6 +82,9 @@ SELECT to_tsvector('a cat') @@ to_tsquery('cat') AS r
 -- CASE[open]: pg-generate-series — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT generate_series(1, 5) AS r
 
+-- CASE[open]: pg-greatest-null — fails on mysql, oracle. FUNC-DIFF: source=(('3',),) target=(('NULL',),)
+SELECT GREATEST(1, NULL, 3) AS r
+
 -- CASE[open]: pg-grouping-fn — fails on mysql, oracle, tsql. (8161, b'Argument 1 of the GROUPING function does not match any of the expressions in the 
 SELECT x, GROUPING(x) FROM (VALUES (1)) v(x) GROUP BY CUBE (x)
 
@@ -87,6 +99,9 @@ SELECT INITCAP('hello world') AS r
 
 -- CASE[open]: pg-insert-returning — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id INT, n INT); INSERT INTO t (id, n) VALUES (1, 5) RETURNING id
+
+-- CASE[open]: pg-intdiv — fails on mysql, oracle. FUNC-DIFF: source=(('2',),) target=(('2.5',),)
+SELECT 5 / 2 AS r
 
 -- CASE[open]: pg-interval-arith — fails on mysql, oracle, tsql. (207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S
 SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7
@@ -106,6 +121,9 @@ SELECT '{"a":[1,2]}'::jsonb #> '{a,0}'
 -- CASE[open]: pg-justify — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 mon 40 days'.DB-Lib error message 20018, severity 15:\nGe
 SELECT JUSTIFY_INTERVAL(INTERVAL '1 mon 40 days') AS r
 
+-- CASE[open]: pg-like-cs — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+SELECT 'ABC' LIKE 'abc' AS r
+
 -- CASE[open]: pg-make-date — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKE_DATE(2020, 6, 15), MAKE_TIME(10, 30, 0)
 
@@ -124,14 +142,14 @@ CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; E
 -- CASE[open]: pg-network-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag
 CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)
 
--- CASE[open]: pg-numeric-concat — fails on tsql. SEMANTIC: PG '||' on numbers concatenates -> '12'; emitted as T-SQL '1 + 2' = 3 (numeric a
-SELECT 1 || 2 AS r
-
 -- CASE[open]: pg-overlay — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV
 SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o
 
 -- CASE[open]: pg-percentile — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2),(3)) v(x)
+
+-- CASE[open]: pg-position-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+SELECT POSITION('' IN 'abc') AS r
 
 -- CASE[open]: pg-quote — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
 SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')
@@ -154,6 +172,9 @@ SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)
 -- CASE[open]: pg-sequence — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne
 CREATE SEQUENCE seq; SELECT nextval('seq'), currval('seq')
 
+-- CASE[open]: pg-sequence-options — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE SEQUENCE seq INCREMENT 2 MINVALUE 10 MAXVALUE 100 CACHE 5 CYCLE
+
 -- CASE[open]: pg-serial-bit — fails on mysql, oracle, tsql. (2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit
 CREATE TABLE t (a BIGSERIAL, flags BIT(8), vb VARBIT(16))
 
@@ -162,6 +183,9 @@ SELECT SPLIT_PART('a,b,c', ',', 2) AS r
 
 -- CASE[open]: pg-string-agg-order — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
 SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)
+
+-- CASE[open]: pg-substr-zero — fails on mysql, oracle. FUNC-DIFF: source=(('ab',),) target=(('abc',),)
+SELECT SUBSTRING('abcdef', 0, 3) AS r
 
 -- CASE[open]: pg-substring-regex — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib
 SELECT SUBSTRING('a1b2' FROM '[0-9]+') AS r

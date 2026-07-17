@@ -35,7 +35,7 @@ CREATE PROCEDURE p AS TYPE t_tab IS TABLE OF NUMBER; v t_tab; BEGIN SELECT 1 BUL
 -- CASE[open]: ora-cast-expr — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL
 
--- CASE[open]: ora-concat-null — fails on tsql. SEMANTIC: Oracle '||' treats NULL as empty string -> 'ab'; T-SQL/PG/MySQL return NULL. No 
+-- CASE[open]: ora-concat-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
 SELECT 'a' || NULL || 'b' AS r FROM DUAL
 
 -- CASE[open]: ora-concat-num — fails on tsql. (245, b"Conversion failed when converting the varchar value 'a' to data type int.DB-Lib er
@@ -50,15 +50,21 @@ CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN 
 -- CASE[open]: ora-date-plus-int — fails on mysql, postgresql. SEMANTIC: Oracle 'date + 1' adds ONE DAY; MySQL 'CURRENT_TIMESTAMP + 1' does numeric arith
 SELECT SYSDATE + 1 AS r FROM DUAL
 
+-- CASE[open]: ora-div — fails on postgresql, tsql. FUNC-DIFF: source=(('2.5',),) target=(('2',),)
+SELECT 5 / 2 AS r FROM DUAL
+
 -- CASE[open]: ora-dump — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU
 SELECT DUMP('abc') AS r FROM DUAL
 
--- CASE[open]: ora-empty-string-null — fails on postgresql. SEMANTIC: Oracle '' IS NULL so NVL returns 'was null'; COALESCE('', ...) on other engines 
-SELECT NVL('', 'was null') AS r FROM DUAL
+-- CASE[open]: ora-empty-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('x',),) target=(('',),)
+SELECT NVL('', 'x') AS r FROM DUAL
 
 -- CASE[open]: ora-exception-init — fails on mysql, postgresql, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type EXCEPTION.DB-Lib error m
 CREATE PROCEDURE p AS e EXCEPTION; PRAGMA EXCEPTION_INIT(e, -20001); BEGIN RAISE e; END;
 /
+
+-- CASE[open]: ora-fk-novalidate — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE p (id NUMBER PRIMARY KEY); CREATE TABLE c (pid NUMBER, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES p(id) ON DELETE CASCADE ENABLE NOVALIDATE)
 
 -- CASE[open]: ora-from-tz — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR
 SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL
@@ -82,6 +88,9 @@ SELECT LAST_DAY(SYSDATE) AS r FROM DUAL
 -- CASE[open]: ora-last-value-ignore — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT LAST_VALUE(x IGNORE NULLS) OVER (ORDER BY x) FROM (SELECT 1 x FROM DUAL)
 
+-- CASE[open]: ora-length-trailing — fails on tsql. FUNC-DIFF: source=(('6',),) target=(('3',),)
+SELECT LENGTH('abc   ') AS r FROM DUAL
+
 -- CASE[open]: ora-listagg — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) AS r FROM (SELECT 1 x FROM DUAL UNION SELECT 2 FROM DUAL)
 
@@ -91,7 +100,7 @@ SELECT MONTHS_BETWEEN(SYSDATE, SYSDATE - 40) AS r FROM DUAL
 -- CASE[open]: ora-next-day — fails on mysql, postgresql, tsql. (195, b"'NEXT_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT NEXT_DAY(SYSDATE, 'MONDAY') AS r FROM DUAL
 
--- CASE[open]: ora-numeric-concat — fails on tsql. SEMANTIC: Oracle '||' concatenates -> '23'; emitted as T-SQL '2 + 3' = 5. Result changed s
+-- CASE[open]: ora-num-concat — fails on tsql. FUNC-DIFF: source=(('23',),) target=(('5',),)
 SELECT 2 || 3 AS r FROM DUAL
 
 -- CASE[open]: ora-numtodsinterval — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
@@ -100,6 +109,9 @@ SELECT NUMTODSINTERVAL(90, 'MINUTE') AS r FROM DUAL
 -- CASE[open]: ora-package-spec — fails on mysql, postgresql, tsql. UNRECOGNIZED CARRIER: ['could not translate']
 CREATE PACKAGE pkg AS PROCEDURE p; FUNCTION f RETURN NUMBER; END pkg;
 /
+
+-- CASE[open]: ora-pk-using-index — fails on mysql, postgresql, tsql. (1018, b"Incorrect syntax near 'INDEX'. If this is intended as a part of a table hint, A W
+CREATE TABLE t (id NUMBER, CONSTRAINT pk PRIMARY KEY (id) USING INDEX)
 
 -- CASE[open]: ora-ratio-to-report — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT RATIO_TO_REPORT(x) OVER () FROM (SELECT 1 x FROM DUAL)
@@ -111,8 +123,14 @@ SELECT REGEXP_COUNT('a1b2c3', '[0-9]') AS r FROM DUAL
 CREATE SEQUENCE seq START WITH 1;
 SELECT seq.NEXTVAL FROM DUAL
 
+-- CASE[open]: ora-sequence-options — fails on mysql, postgresql, tsql. (102, b"Incorrect syntax near 'NOCYCLE'.DB-Lib error message 20018, severity 15:\nGeneral 
+CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1 CACHE 20 NOCYCLE ORDER
+
 -- CASE[open]: ora-soundex — fails on postgresql. function soundex(unknown) does not exist
 SELECT SOUNDEX('Smith') AS r FROM DUAL
+
+-- CASE[open]: ora-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('de',),) target=(('',),)
+SELECT SUBSTR('abcdef', -3, 2) AS r FROM DUAL
 
 -- CASE[open]: ora-sys-connect-path — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT SYS_CONNECT_BY_PATH(id, '/') AS p FROM (SELECT 1 id, NULL par FROM DUAL) START WITH par IS NULL CONNECT BY PRIOR id = par

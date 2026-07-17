@@ -72,9 +72,21 @@ RED's only job is to **discover source SQL that transpiles incorrectly**.
 3. **Transpile it to the other three engines** and look for a defect:
    - invalid **target** SQL (fails `sqlglot.parse` in the target / the live
      engine);
-   - **silent loss or semantic drift** (a construct dropped, an operator or
-     type changed meaning, an outer join inner-joined) — round-trip A→B→A to
-     surface it;
+   - **a different result — this is a defect even when nothing errors.** For a
+     standalone query, transpiled output that runs cleanly but returns a
+     *different result set* (different rows, values, order when ordered, or
+     types) than the original is a **functional-equivalence defect**, full stop.
+     The strongest RED check is therefore to **execute both and compare**: run
+     the original on its engine, run the transpiled output on the target
+     engine, and diff the result sets. Example: `SELECT 1` must return one row
+     with value `1` on every target; `SELECT 1 || 2` (PostgreSQL) must return
+     `'12'`, so emitting `1 + 2` (= `3`) on T-SQL is a defect even though it
+     runs. Live *syntax* validation passes these — only executing and comparing
+     catches them.
+   - **silent loss or semantic drift** (a construct/clause dropped — a FK
+     `ON DELETE` action, a `CHECK`, an ENUM's values, a `WITH TIES`, a
+     collation; an operator or type that changed meaning; an outer join
+     inner-joined) — round-trip A→B→A to surface it, then confirm by executing.
    - an **unrecognized-construct carrier** (`UNIQUE: Unhandled`,
      `could not translate`) where a real translation is possible;
    - a **mislabeled or missing warning** (a lying warning is a defect too).
@@ -121,6 +133,12 @@ a regression test and updated docs.
 
 ## Rules every case must obey
 
+- **"Runs without error" is NOT the bar — same result is.** For a standalone
+  query, correctness means the transpiled output returns the *same result set*
+  as the original on the target engine. Output that compiles and runs but yields
+  a different value/row set/order is a **defect** (a functional-equivalence
+  failure), not a pass. Confirm by executing both and comparing, not by eyeing
+  the SQL. (`SELECT 1` → one row, value `1`, everywhere.)
 - **Syntactically correct source.** Validate before adding; invalid input is not
   a finding.
 - **Non-repeated.** One construct per `-- CASE:`; skip anything whose mechanism
