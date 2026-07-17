@@ -7618,3 +7618,22 @@ class TestWave215BeginAtomic:
             "tsql",
         )
         assert re.search(r"(?i)RETURN @x", out), out
+
+
+class TestWave216InsertValuesPredicates:
+    """wave 216 (mysql-corpus): INSERT VALUES cells are value position
+    too — a predicate cell (``(ld IS NULL)``) needs the tri-state CASE
+    off MySQL (error 4145)."""
+
+    def test_predicate_values_tsql(self) -> None:
+        out = _t2(
+            "insert into t3 (i, f, s) values ((ld is null), 1, 'x');",
+            "mysql",
+            "tsql",
+        )
+        up = " ".join(out.upper().split())
+        assert "CASE WHEN LD IS NULL THEN 1" in up, out
+
+    def test_plain_values_untouched(self) -> None:
+        out = _t2("insert into t3 (i) values (1), (2);", "mysql", "tsql")
+        assert "CASE" not in out.upper(), out

@@ -1062,7 +1062,13 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          keyword match missed). Measured: pg→tsql stable **38** (the
          corpus instances fail at the sqlglot source parse for other
          reasons); the fix is silent-loss class. Discovery HOLDS 0.
-         Tests: TestWave215BeginAtomic (2).**
+         Tests: TestWave215BeginAtomic (2).* Wave 216 (2026-07-17): INSERT
+         VALUES cells are value position too — a predicate cell
+         (``(ld IS NULL)``) now takes the tri-state CASE off MySQL
+         (error 4145). Measured: mysql→tsql stable **33** (the corpus
+         instance chains further members); the fix stands on its own
+         tests. Discovery HOLDS 0. Tests:
+         TestWave216InsertValuesPredicates (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

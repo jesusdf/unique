@@ -1965,7 +1965,10 @@ def _emit_insert(node: InsertStatement, dialect: str) -> str:
                 if node.columns and i < len(node.columns):
                     v = _coerce_bit_literal(node.table, node.columns[i], v, dialect)
                     v = _coerce_date_literal(node.table, node.columns[i], v, dialect)
-                cells.append(_emit_expression(v, dialect))
+                # VALUES cells are value position too: a predicate cell
+                # (``(ld IS NULL)``) needs the tri-state CASE off MySQL
+                # (wave 216).
+                cells.append(_emit_value_expression(v, dialect))
             rows.append(f"({', '.join(cells)})")
         values = ", ".join(rows)
         return f"INSERT INTO {table}{cols}\nVALUES {values}"
