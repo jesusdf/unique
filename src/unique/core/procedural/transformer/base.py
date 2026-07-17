@@ -4299,7 +4299,18 @@ class ProceduralTransformer:
     _LIMIT_ONE_RE = re.compile(r"(?i)\bLIMIT\s+(@?\w+)")
 
     def _map_limit_in_sql(self, sql: str) -> str:
-        if self._target != "oracle" or self._source != "mysql":
+        if self._source != "mysql":
+            return sql
+        if self._target == "tsql":
+            # Two-arg LIMIT only: the single-arg trailing form is the
+            # SELECT-assign emitter's TOP. T-SQL's OFFSET/FETCH needs an
+            # ORDER BY — (SELECT NULL) is the standard no-order idiom
+            # (wave 212).
+            return self._LIMIT_TWO_RE.sub(
+                r"ORDER BY (SELECT NULL) OFFSET \1 ROWS FETCH NEXT \2 ROWS ONLY",
+                sql,
+            )
+        if self._target != "oracle":
             return sql
         sql = self._LIMIT_TWO_RE.sub(r"OFFSET \1 ROWS FETCH NEXT \2 ROWS ONLY", sql)
         return self._LIMIT_ONE_RE.sub(r"FETCH FIRST \1 ROWS ONLY", sql)

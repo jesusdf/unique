@@ -1042,7 +1042,12 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
          no PL/SQL BOOLEANs, so the rewrite is safe). Measured:
          mysql→oracle **27 → 19** (−8, validity 99.7%). Discovery
          HOLDS 0. Tests: TestWave211OracleBinaryCastBoolLiterals
-         (3).**
+         (3).*** Wave 212 (2026-07-17): a two-arg ``LIMIT o, n`` in
+         embedded T-SQL text spells OFFSET/FETCH with the ``ORDER BY
+         (SELECT NULL)`` no-order idiom (the single-arg trailing form
+         stays the SELECT-assign TOP of wave 164). Measured:
+         mysql→tsql **34 → 33** (−1). Discovery HOLDS 0. Tests:
+         TestWave212TsqlTwoArgLimit (2).**
          **Scope decision
          (user, 2026-07-17): live validation is a CODE-REFINEMENT
          tool only — used by the sweeps/tuning loops to find mapping

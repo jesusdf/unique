@@ -7518,3 +7518,31 @@ class TestWave211OracleBinaryCastBoolLiterals:
             "postgresql",
         )
         assert re.search(r"(?i)false", out), out
+
+
+class TestWave212TsqlTwoArgLimit:
+    """wave 212 (mysql-corpus): a two-arg ``LIMIT o, n`` in embedded
+    T-SQL text spells OFFSET/FETCH with the (SELECT NULL) no-order
+    idiom; the single-arg trailing form stays the SELECT-assign TOP."""
+
+    def test_two_arg_limit_tsql(self) -> None:
+        out = _t2(
+            "create function f1(p1 int, p2 int) returns int begin"
+            " declare c int; set c = (select count(*) from"
+            " (select * from t1 limit p1, p2) a); return c; end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(
+            r"(?i)ORDER BY \(SELECT NULL\) OFFSET @p1 ROWS"
+            r" FETCH NEXT @p2 ROWS ONLY",
+            out,
+        ), out
+
+    def test_single_arg_limit_stays_top(self) -> None:
+        out = _t2(
+            "create procedure q(x int) begin" " select id into x from t1 limit 1; end",
+            "mysql",
+            "tsql",
+        )
+        assert re.search(r"(?i)SELECT TOP 1 @x = id", out), out
