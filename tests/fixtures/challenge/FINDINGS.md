@@ -125,6 +125,11 @@ triages); **silent/-rt** = valid output but a source literal vanished (verify ma
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN`
 - src: `SELECT UNCOMPRESS(COMPRESS('data')) AS r`
 
+## my-computed-json  (mysql)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'JSON_UNQUOTE' is not a recognized built-in function name.DB-Lib error message 200`
+- src: `CREATE TABLE t (data JSON, name VARCHAR(50) AS (JSON_UNQUOTE(JSON_EXTRACT(data, '$.name'))) VIRTUAL)`
+
 ## my-concat-null  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('ab',),)`
@@ -815,6 +820,11 @@ CREATE TRIGGER trg FOR UPDATE ON t COMPOUND TRIGGER BEFORE EACH ROW IS BEGIN NUL
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR`
 - src: `SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL`
 
+## ora-functional-index  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near '*'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
+- src: `CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)`
+
 ## ora-goto  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG`
@@ -1359,10 +1369,30 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TABLE t (id INT); COMMENT ON TABLE t IS 'my table'`
 
+## pg-composite-in-table  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type money_amt.DB-Lib error m`
+- src: `CREATE TYPE money_amt AS (amount NUMERIC, currency TEXT); CREATE TABLE t (price money_amt)`
+
 ## pg-composite-type  (postgresql)
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE TYPE addr AS (street TEXT, city TEXT)`
+
+## pg-computed-array  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (dims INT[], area INT GENERATED ALWAYS AS (dims[1] * dims[2]) STORED)`
+
+## pg-computed-func  (postgresql)
+- targets: tsql(invalid)
+- live error: `(8116, b'Argument data type text is invalid for argument 1 of lower function.DB-Lib error `
+- src: `CREATE TABLE t (a TEXT, b TEXT GENERATED ALWAYS AS (lower(a)) STORED)`
+
+## pg-computed-jsonb  (postgresql)
+- targets: mysql(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type JSONB.DB-Lib error messa`
+- src: `CREATE TABLE t (data JSONB, name TEXT GENERATED ALWAYS AS (data->>'name') STORED)`
 
 ## pg-convert-to  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -1423,6 +1453,11 @@ CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN NEW.updated :=`
 - targets: mysql(carrier), oracle(carrier), tsql(carrier)
 - live error: `UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']`
 - src: `CREATE DOMAIN posint AS INT CHECK (VALUE > 0)`
+
+## pg-domain-in-table  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type email.DB-Lib error messa`
+- src: `CREATE DOMAIN email AS TEXT CHECK (VALUE ~ '@'); CREATE TABLE t (e email)`
 
 ## pg-double-cast  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
@@ -1975,6 +2010,13 @@ CREATE TR`
 CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
 CREATE`
 
+## pg-trigger-on-view  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT);
+CREATE VIEW v AS SELECT id FROM t;
+CREATE FUNCTION f() RETURNS TRIGGER AS $$ BEGIN INSERT INTO t VALUES (`
+
 ## pg-trigger-raise  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
@@ -2217,6 +2259,16 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - live error: `ORA-00936: missing expression`
 - src: `SELECT COMPRESS('data') AS r`
 
+## ts-computed-chain  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (price DECIMAL(10,2), tax AS (price * 0.21), total AS (price * 1.21) PERSISTED)`
+
+## ts-computed-func  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (a NVARCHAR(50), b AS (UPPER(a)) PERSISTED)`
+
 ## ts-concat-null  (tsql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('ab',),) target=(('NULL',),)`
@@ -2291,6 +2343,11 @@ CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN UPDATE t SET update`
 - targets: mysql(invalid), oracle(invalid)
 - live error: `ORA-02158: invalid CREATE INDEX option`
 - src: `CREATE TABLE t (a INT, b INT); CREATE NONCLUSTERED INDEX ix ON t (a) INCLUDE (b) WHERE a > 0`
+
+## ts-filtered-index2  (tsql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (a INT, b INT); CREATE INDEX ix ON t (a) WHERE b IS NOT NULL`
 
 ## ts-format-number  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
@@ -2568,6 +2625,15 @@ SELECT * FROM t TABLESAMPLE (10 PERCENT)`
 GO
 CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN SELECT d.id, i.n FROM deleted d JOIN inserted i O`
 
+## ts-trigger-on-view  (tsql)
+- targets: mysql(invalid), postgresql(invalid)
+- live error: `INSTEAD OF triggers must be FOR EACH ROW`
+- src: `CREATE TABLE t (id INT);
+GO
+CREATE VIEW v AS SELECT id FROM t;
+GO
+CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
+
 ## ts-trim-chars  (tsql)
 - targets: oracle(invalid)
 - live error: `ORA-30001: trim set should have only one character`
@@ -2621,4 +2687,4 @@ CREATE VIEW v AS SELECT id FROM t WHERE id > 0 WITH CHECK OPTION`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 510 distinct constructs; defect rows by kind: carrier 97, func 206, invalid 657, semantic 2, silent-drop 73.
+Totals: 522 distinct constructs; defect rows by kind: carrier 97, func 206, invalid 678, semantic 2, silent-drop 73.

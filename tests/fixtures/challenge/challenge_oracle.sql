@@ -130,6 +130,9 @@ CREATE TABLE t (id NUMBER); SELECT * FROM t FOR UPDATE NOWAIT
 -- CASE[open]: ora-from-tz — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR
 SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL
 
+-- CASE[open]: ora-functional-index — fails on mysql, postgresql, tsql. (102, b"Incorrect syntax near '*'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
+CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)
+
 -- CASE[open]: ora-goto — fails on mysql, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG
 CREATE PROCEDURE p AS BEGIN GOTO done; <<done>> NULL; END;
 /

@@ -115,8 +115,20 @@ CREATE TABLE t (a INT); COMMENT ON COLUMN t.a IS 'the a column'
 -- CASE[open]: pg-comment-table — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TABLE t (id INT); COMMENT ON TABLE t IS 'my table'
 
+-- CASE[open]: pg-composite-in-table — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type money_amt.DB-Lib error m
+CREATE TYPE money_amt AS (amount NUMERIC, currency TEXT); CREATE TABLE t (price money_amt)
+
 -- CASE[open]: pg-composite-type — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE TYPE addr AS (street TEXT, city TEXT)
+
+-- CASE[open]: pg-computed-array — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (dims INT[], area INT GENERATED ALWAYS AS (dims[1] * dims[2]) STORED)
+
+-- CASE[open]: pg-computed-func — fails on tsql. (8116, b'Argument data type text is invalid for argument 1 of lower function.DB-Lib error 
+CREATE TABLE t (a TEXT, b TEXT GENERATED ALWAYS AS (lower(a)) STORED)
+
+-- CASE[open]: pg-computed-jsonb — fails on mysql, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type JSONB.DB-Lib error messa
+CREATE TABLE t (data JSONB, name TEXT GENERATED ALWAYS AS (data->>'name') STORED)
 
 -- CASE[open]: pg-convert-to — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co
 SELECT convert_to('abc', 'UTF8')
@@ -153,6 +165,9 @@ SELECT 1.0 / 3 AS r
 
 -- CASE[open]: pg-domain — fails on mysql, oracle, tsql. UNRECOGNIZED CARRIER: ['UNIQUE: Unhandled']
 CREATE DOMAIN posint AS INT CHECK (VALUE > 0)
+
+-- CASE[open]: pg-domain-in-table — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type email.DB-Lib error messa
+CREATE DOMAIN email AS TEXT CHECK (VALUE ~ '@'); CREATE TABLE t (e email)
 
 -- CASE[open]: pg-double-cast — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
 SELECT 123::text::int AS r
@@ -491,6 +506,12 @@ SELECT TRANSLATE('abc', 'ab', 'xy') AS r
 CREATE TABLE t (id INT, n INT);
 CREATE FUNCTION trg_fn() RETURNS TRIGGER AS $$ BEGIN RETURN NEW; END; $$ LANGUAGE plpgsql;
 CREATE TRIGGER trg AFTER INSERT OR UPDATE OR DELETE ON t FOR EACH ROW EXECUTE FUNCTION trg_fn();
+
+-- CASE[open]: pg-trigger-on-view — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id INT);
+CREATE VIEW v AS SELECT id FROM t;
+CREATE FUNCTION f() RETURNS TRIGGER AS $$ BEGIN INSERT INTO t VALUES (NEW.id); RETURN NEW; END; $$ LANGUAGE plpgsql;
+CREATE TRIGGER trg INSTEAD OF INSERT ON v FOR EACH ROW EXECUTE FUNCTION f();
 
 -- CASE[open]: pg-trigger-raise — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 CREATE TABLE t (id INT PRIMARY KEY, n INT);

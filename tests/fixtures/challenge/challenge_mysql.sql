@@ -74,6 +74,9 @@ SELECT COLLATION('abc') AS r
 -- CASE[open]: my-compress — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
 SELECT UNCOMPRESS(COMPRESS('data')) AS r
 
+-- CASE[open]: my-computed-json — fails on postgresql, tsql. (195, b"'JSON_UNQUOTE' is not a recognized built-in function name.DB-Lib error message 200
+CREATE TABLE t (data JSON, name VARCHAR(50) AS (JSON_UNQUOTE(JSON_EXTRACT(data, '$.name'))) VIRTUAL)
+
 -- CASE[open]: my-concat-null — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('ab',),)
 SELECT CONCAT('a', NULL, 'b') AS r
 

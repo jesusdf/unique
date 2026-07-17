@@ -77,6 +77,12 @@ SELECT 'abc' COLLATE Latin1_General_BIN AS r
 -- CASE[open]: ts-compress — fails on oracle, postgresql. ORA-00936: missing expression
 SELECT COMPRESS('data') AS r
 
+-- CASE[open]: ts-computed-chain — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (price DECIMAL(10,2), tax AS (price * 0.21), total AS (price * 1.21) PERSISTED)
+
+-- CASE[open]: ts-computed-func — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (a NVARCHAR(50), b AS (UPPER(a)) PERSISTED)
+
 -- CASE[open]: ts-concat-null — fails on mysql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
 SELECT CONCAT('a', NULL, 'b') AS r
 
@@ -121,6 +127,9 @@ CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERR
 
 -- CASE[open]: ts-filtered-index — fails on mysql, oracle. ORA-02158: invalid CREATE INDEX option
 CREATE TABLE t (a INT, b INT); CREATE NONCLUSTERED INDEX ix ON t (a) INCLUDE (b) WHERE a > 0
+
+-- CASE[open]: ts-filtered-index2 — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (a INT, b INT); CREATE INDEX ix ON t (a) WHERE b IS NOT NULL
 
 -- CASE[open]: ts-format-number — fails on mysql, oracle, postgresql. ORA-00904: "NUMBER_TO_STR": invalid identifier
 SELECT FORMAT(1234.5, 'N2') AS r
@@ -315,6 +324,13 @@ SELECT TRANSLATE('abc', 'ab', 'xy') AS r
 CREATE TABLE t (id INT, n INT);
 GO
 CREATE TRIGGER trg ON t AFTER UPDATE AS BEGIN SELECT d.id, i.n FROM deleted d JOIN inserted i ON d.id = i.id; END
+
+-- CASE[open]: ts-trigger-on-view — fails on mysql, postgresql. INSTEAD OF triggers must be FOR EACH ROW
+CREATE TABLE t (id INT);
+GO
+CREATE VIEW v AS SELECT id FROM t;
+GO
+CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t SELECT id FROM inserted; END
 
 -- CASE[open]: ts-trim-chars — fails on oracle. ORA-30001: trim set should have only one character
 SELECT TRIM('x' FROM 'xxabcxx') AS r
