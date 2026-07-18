@@ -387,6 +387,9 @@ class ColumnDefinition(ASTNode):
     unique: bool = False
     check: ASTNode | None = None
     quoted: bool = False
+    #: Column comment (MySQL inline ``COMMENT '…'``). Emitted inline on MySQL,
+    #: as a trailing ``COMMENT ON COLUMN`` statement on PG/Oracle. Quoted literal.
+    comment: str | None = None
 
 
 # ---------------------------------------------------------------------------

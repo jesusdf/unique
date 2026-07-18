@@ -1360,6 +1360,7 @@ def _convert_create_table(
                 identity_step: int | None = None
                 primary_key = False
                 unique = False
+                col_comment: str | None = None
                 default: ASTNode | None = None
                 for constraint in col_def.args.get("constraints", []):
                     kind = getattr(constraint, "kind", None)
@@ -1398,6 +1399,12 @@ def _convert_create_table(
                         )
                     elif isinstance(kind, exp.AutoIncrementColumnConstraint):
                         identity = True
+                    elif isinstance(kind, exp.CommentColumnConstraint):
+                        # Preserve the column comment (RC-3 — was dropped).
+                        if kind.this is not None:
+                            col_comment = kind.this.sql(
+                                dialect=sqlglot_dialect_name(source_dialect)
+                            )
                     elif isinstance(kind, exp.Reference):
                         # Inline column FK (``c INT REFERENCES p(id) ON DELETE …``)
                         # is equivalent to a table-level FOREIGN KEY; route it
@@ -1440,6 +1447,7 @@ def _convert_create_table(
                         identity_step=identity_step,
                         primary_key=primary_key,
                         unique=unique,
+                        comment=col_comment,
                         quoted=_identifier_quoted(col_def.this),
                     )
                 )

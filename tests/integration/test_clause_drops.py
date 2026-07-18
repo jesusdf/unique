@@ -76,3 +76,12 @@ def test_identity_default_still_serial() -> None:
     # The (1, 1) default keeps the idiomatic SERIAL on PostgreSQL.
     out = _t("CREATE TABLE t (a INT IDENTITY(1, 1))", "tsql", "postgresql")
     assert "SERIAL" in out and "START WITH" not in out, out
+
+
+def test_column_comment_preserved() -> None:
+    src = "CREATE TABLE t (a INT COMMENT 'the id')"
+    assert "COMMENT ON COLUMN t.a IS 'the id'" in _t(src, "mysql", "postgresql")
+    assert "COMMENT ON COLUMN t.a IS 'the id'" in _t(src, "mysql", "oracle")
+    assert "COMMENT 'the id'" in _t(src, "mysql", "mysql")
+    tsql = _t(src, "mysql", "tsql")
+    assert "the id" in tsql and "-- UNIQUE:" not in tsql, tsql  # plain note, not a carrier

@@ -279,12 +279,16 @@ workflow.
     on tsql `IDENTITY(s,t)`, oracle/pg `GENERATED … (START WITH s INCREMENT BY t)`
     (live: pg yields 100, 105); the (1,1) default keeps idiomatic SERIAL. MySQL
     keeps `AUTO_INCREMENT` — it has no per-column step and the seed is a table
-    option (documented limit). **Still dropped silently (RC-3 backlog):** column
-    `COLLATE` (collation names differ per engine → map or honest degrade), column
-    `COMMENT` (PG/Oracle need a separate `COMMENT ON COLUMN`), `UNSIGNED` (widened
-    to BIGINT, the ≥0 constraint lost), window `ROWS/RANGE` frame, `WITH ROLLUP`,
-    `EXCLUDE`. Also **Oracle has no `ON UPDATE`** FK action — now preserved (was
-    dropped) but ships invalid on Oracle; needs a target gate.
+    option (documented limit).
+  - **RC-3 column COMMENT landed.** A column comment was dropped; now inline on
+    MySQL, a trailing `COMMENT ON COLUMN t.c IS '…'` on PG/Oracle, and a plain
+    note on T-SQL (sp_addextendedproperty is too verbose to synthesise safely).
+    `ColumnDefinition.comment`, converter reads `CommentColumnConstraint`.
+    **Still dropped silently (RC-3 backlog):** column `COLLATE` (collation names
+    differ per engine → map or honest degrade), `UNSIGNED` (widened to BIGINT,
+    the ≥0 constraint lost — could add `CHECK (c >= 0)`), window `ROWS/RANGE`
+    frame, `WITH ROLLUP`, `EXCLUDE`. Also **Oracle has no `ON UPDATE`** FK action
+    — now preserved (was dropped) but ships invalid on Oracle; needs a target gate.
   - **RC-2 (func-diffs) — LOG arg order fixed; rest is the delicate floor.**
     The IR is canonical `LOG(base, x)`; T-SQL spells it `LOG(x, base)`, so the
     emitter swaps only when the target is T-SQL (a lossless correctness fix — the
