@@ -594,6 +594,9 @@ CREATE TABLE t (a BYTEA, b BIT(8), c VARBIT(16), d BOOLEAN, e UUID, f XML, g JSO
 -- CASE[open]: pg-split-part — fails on mysql, oracle, tsql. (195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT SPLIT_PART('a,b,c', ',', 2) AS r
 
+-- CASE[open]: pg-srf-in-select — fails on oracle, tsql. (208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:
+SELECT g, g*g FROM generate_series(1,3) g
+
 -- CASE[open]: pg-str-lt — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'apple' < 'Banana' AS r
 

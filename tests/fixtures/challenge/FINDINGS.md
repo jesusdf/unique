@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (542 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (546 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -649,6 +649,11 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `function string_agg(integer, unknown) does not exist`
 - src: `SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR '|') AS r FROM (SELECT 1 x UNION SELECT 2) t`
 
+## my-groupconcat-distinct  (mysql)
+- targets: oracle(silent-rt), postgresql(invalid)
+- live error: `SILENT-ROUNDTRIP: literal(s) ["'|'"] lost after mysql->oracle->mysql`
+- src: `SELECT GROUP_CONCAT(DISTINCT x ORDER BY x DESC SEPARATOR '|') FROM (SELECT 1 x UNION ALL SELECT 1 UNION ALL SELECT 2) t`
+
 ## my-groupconcat-order  (mysql)
 - targets: postgresql(invalid)
 - live error: `function string_agg(integer, unknown) does not exist`
@@ -743,6 +748,11 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'IS'.DB-Lib error message 20018, severity 15:\nG`
 - src: `SELECT 1 IN (SELECT 1) IS TRUE AS r`
+
+## my-json-agg  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
+- src: `SELECT JSON_ARRAYAGG(x), JSON_OBJECTAGG(x,x*10) FROM (SELECT 1 x UNION ALL SELECT 2) t`
 
 ## my-json-aggs  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -1841,6 +1851,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `SILENT-ROUNDTRIP: literal(s) ['\'{"a":1}\'', "'$.a'", '\'{"a":[1]}\'', "'$.a'"] lost after`
 - src: `SELECT JSON_VALUE('{"a":1}','$.a'),JSON_QUERY('{"a":[1]}','$.a') FROM DUAL`
 
+## ora-json-xml-agg  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018`
+- src: `SELECT JSON_ARRAYAGG(x), XMLAGG(XMLELEMENT("i",x)) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 FROM DUAL) t`
+
 ## ora-last-day  (oracle)
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, `
@@ -1865,6 +1880,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4113, b"The function 'STRING_AGG' is not a valid windowing function, and cannot be used w`
 - src: `SELECT deptno, LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) OVER (PARTITION BY deptno) FROM (SELECT 1 deptno, 2 x FROM DUAL)`
+
+## ora-listagg-overflow  (oracle)
+- targets: mysql(silent), postgresql(invalid), tsql(silent)
+- live error: `SILENT: source literal(s) ["'...'"] absent from valid output, no warning`
+- src: `SELECT LISTAGG(x,',' ON OVERFLOW TRUNCATE '...') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x FROM DUAL) t`
 
 ## ora-lnnvl  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -3262,6 +3282,11 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - live error: `(195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018`
 - src: `SELECT SPLIT_PART('a,b,c', ',', 2) AS r`
 
+## pg-srf-in-select  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:`
+- src: `SELECT g, g*g FROM generate_series(1,3) g`
+
 ## pg-str-lt  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -4106,6 +4131,11 @@ SELECT NEXT VALUE FOR seq`
 - live error: `FUNC-DIFF: source=(('15',),) target=(('105',),)`
 - src: `SELECT '10' + 5 AS r`
 
+## ts-stragg-order  (tsql)
+- targets: postgresql(invalid)
+- live error: `function string_agg(integer, unknown) does not exist`
+- src: `SELECT STRING_AGG(x,',') WITHIN GROUP (ORDER BY x DESC) FROM (SELECT 1 x UNION ALL SELECT 2) t`
+
 ## ts-stragg-within  (tsql)
 - targets: postgresql(invalid)
 - live error: `function string_agg(integer, unknown) does not exist`
@@ -4271,4 +4301,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 835 distinct constructs; defect rows by kind: func 368, invalid 1311, semantic 2, silent-drop 75.
+Totals: 841 distinct constructs; defect rows by kind: func 368, invalid 1322, semantic 2, silent-drop 75.
