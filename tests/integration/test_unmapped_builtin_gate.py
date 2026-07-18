@@ -74,6 +74,35 @@ def test_degrade_is_per_target_not_blanket() -> None:
         assert "SOUNDEX" in out.upper(), (tgt, out)
 
 
+def test_sqlglot_internal_name_leak_degrades() -> None:
+    """sqlglot renders a function it can't map to an internal canonical that no
+    engine has (DATETIMEFROMPARTS -> TIMESTAMP_FROM_PARTS, FORMAT ->
+    NUMBER_TO_STR). Those bypass the source-built-in check (they are not a source
+    built-in), so the gate degrades them as unmapped rather than ship them live."""
+    for sql in (
+        "SELECT DATETIMEFROMPARTS(2020, 6, 15, 10, 30, 0, 0) AS r",
+        "SELECT FORMAT(1234.5, 'N2') AS r",
+    ):
+        r = _t(sql, "tsql", "oracle")
+        assert "-- UNIQUE:" in r.sql and r.warnings, (sql, r.sql)
+        live = "\n".join(
+            ln for ln in r.sql.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "_FROM_PARTS" not in live.upper() and "NUMBER_TO_STR" not in live.upper()
+
+
+def test_keyword_operators_not_treated_as_leaks() -> None:
+    """AND/OR/APPLY/ARRAY/CASE are ``exp.Func`` in sqlglot but appear in valid
+    output as keywords — they must never trip the synthetic-name gate."""
+    out = _t(
+        "SELECT 1 FROM t WHERE a = 1 AND (b IS NULL OR (c = 1 AND d = 2))",
+        "tsql",
+        "postgresql",
+    ).sql
+    assert "-- UNIQUE:" not in out, out
+    assert "AND (" in out.upper(), out
+
+
 def test_mapped_aggregate_not_degraded() -> None:
     """GROUP_CONCAT emits STRING_AGG on PostgreSQL — a target form, not a gap.
 

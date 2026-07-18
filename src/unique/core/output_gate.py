@@ -29,9 +29,88 @@ entry in the validity sweep — the fix belongs in the AST paths (guardrails in
 from __future__ import annotations
 
 import re
+from functools import cache
 
 from unique.core.builtins import is_builtin
 from unique.core.sql_split import is_executable, split_statements
+
+
+@cache
+def _synthetic_sqlglot_functions() -> frozenset[str]:
+    """sqlglot canonical function names that are a built-in in NO supported
+    engine. sqlglot renders these internal names for functions it cannot map to
+    the target dialect (DATETIMEFROMPARTS→TIMESTAMP_FROM_PARTS, FORMAT→
+    NUMBER_TO_STR, STR_TO_TIME, GETBIT, BITWISE_COUNT, …); any that reaches the
+    output runs on no engine, so it is an unmapped leak — degrade it honestly
+    rather than ship silent-invalid. A user object never collides with sqlglot's
+    canonical set, so this cannot mistake a UDF for a leak."""
+    from sqlglot import expressions as _exp
+
+    names: set[str] = set()
+    for cls in vars(_exp).values():
+        if (
+            isinstance(cls, type)
+            and issubclass(cls, _exp.Func)
+            and cls is not _exp.Func
+        ):
+            for n in cls.sql_names():
+                names.add(n.upper())
+    engines = ("tsql", "oracle", "postgresql", "mysql")
+    return frozenset(
+        n
+        for n in names
+        if n not in _KEYWORD_FUNC_NAMES and not any(is_builtin(n, e) for e in engines)
+    )
+
+
+#: sqlglot models these operators / constructs / clauses as ``exp.Func``
+#: subclasses, but they appear in valid output as keywords (``a AND (b OR c)``,
+#: ``CROSS APPLY (…)``, ``ARRAY(SELECT …)``, ``… FILTER (WHERE …)``) — never as a
+#: callable function — so they must not be mistaken for an unmapped leak.
+_KEYWORD_FUNC_NAMES = frozenset(
+    {
+        "AND",
+        "OR",
+        "XOR",
+        "NOT",
+        "APPLY",
+        "ARRAY",
+        "CASE",
+        "FILTER",
+        "MAP",
+        "STRUCT",
+        "IN",
+        "IS",
+        "LIKE",
+        "ILIKE",
+        "RLIKE",
+        "GLOB",
+        "SIMILAR",
+        "BETWEEN",
+        "EXISTS",
+        "ALL",
+        "ANY",
+        "SOME",
+        "INTERVAL",
+        "COLLATE",
+        "DISTINCT",
+        "OVER",
+        "OVERLAPS",
+        "PRIOR",
+        "CONNECTBYROOT",
+        "PLACEHOLDER",
+        "STAR",
+        "COLUMN",
+        "TABLE",
+        "TUPLE",
+        "SLICE",
+        "BRACKET",
+        "PAREN",
+        "KWARG",
+        "JSONPATH",
+    }
+)
+
 
 # A procedural unit marker: any of these anywhere in the executable text means
 # sqlglot cannot be trusted to parse the output, so only the leftover scan
@@ -279,6 +358,11 @@ def _untranslated_source_builtin(scrubbed: str, source: str, target: str) -> str
             continue
         if is_builtin(name, source) and not is_builtin(name, target):
             return name
+        # sqlglot rendered a function it could not map to an internal canonical
+        # that no engine has (never a source built-in, so the check above misses
+        # it): an unmapped leak that runs nowhere.
+        if name in _synthetic_sqlglot_functions() and not is_builtin(name, target):
+            return name
     return None
 
 
@@ -303,7 +387,9 @@ def gate_reason(sql: str, target: str, source: str | None = None) -> str | None:
         # proc calls, cursors, declarations — from tripping it.
         leaked = _untranslated_source_builtin(scrubbed, source, target)
         if leaked is not None:
-            return f"untranslated {source} built-in {leaked}() (no {target} form)"
+            if is_builtin(leaked, source):
+                return f"untranslated {source} built-in {leaked}() (no {target} form)"
+            return f"unmapped function {leaked}() (no {target} form)"
     if _PROCEDURAL_MARKER_RE.search(scrubbed):
         return None
     import sqlglot
