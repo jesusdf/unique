@@ -113,3 +113,11 @@ def test_stuff_median_jsonarrayagg() -> None:
     assert "JSON_AGG(x)" in _t(
         "SELECT JSON_ARRAYAGG(x) AS r FROM t", "mysql", "postgresql"
     )
+
+
+def test_elt_and_field_to_case_chains() -> None:
+    elt = _t("SELECT ELT(2, 'a', 'b', 'c') AS r", "mysql", "postgresql")
+    assert "CASE 2 WHEN 1 THEN 'a' WHEN 2 THEN 'b'" in elt, elt
+    assert "ELT" not in elt.upper(), elt
+    field = _t("SELECT FIELD('b', 'a', 'b') AS r", "mysql", "oracle")
+    assert "CASE 'b' WHEN 'a' THEN 1 WHEN 'b' THEN 2 ELSE 0 END" in field, field

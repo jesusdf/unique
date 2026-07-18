@@ -4219,6 +4219,21 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         return f"PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {x})"
     if dialect == "postgresql" and up == "JSON_ARRAYAGG" and len(node.args) == 1:
         return f"JSON_AGG({_emit_expression(node.args[0], dialect)})"
+    # MySQL ELT(n, a, b, …)/FIELD(v, a, b, …) → portable CASE chains (RC-1a).
+    if up == "ELT" and len(node.args) >= 2 and dialect != "mysql":
+        n = _emit_expression(node.args[0], dialect)
+        arms = " ".join(
+            f"WHEN {i} THEN {_emit_expression(a, dialect)}"
+            for i, a in enumerate(node.args[1:], start=1)
+        )
+        return f"CASE {n} {arms} END"
+    if up == "FIELD" and len(node.args) >= 2 and dialect != "mysql":
+        v = _emit_expression(node.args[0], dialect)
+        arms = " ".join(
+            f"WHEN {_emit_expression(a, dialect)} THEN {i}"
+            for i, a in enumerate(node.args[1:], start=1)
+        )
+        return f"CASE {v} {arms} ELSE 0 END"
 
     # Map canonical function names to dialect-specific names
     name = _map_function_name(node.name, dialect)
