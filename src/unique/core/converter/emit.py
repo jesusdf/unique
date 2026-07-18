@@ -4404,6 +4404,28 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
     left = _emit_operand(node.left, node.operator, dialect)
     right = _emit_operand(node.right, node.operator, dialect, right=True)
 
+    # Integer division diverges: PG/T-SQL truncate two integer operands
+    # (5 / 2 = 2), MySQL/Oracle return a decimal (2.5). For integer LITERAL
+    # operands the value is knowable, so compensate to keep the source's result
+    # (columns need declared types — handled only in the procedural pipeline).
+    if (
+        node.operator == BinaryOperator.DIV
+        and isinstance(node.left, Literal)
+        and node.left.dtype == "integer"
+        and isinstance(node.right, Literal)
+        and node.right.dtype == "integer"
+    ):
+        src = SOURCE_DIALECT.get()
+        int_div = ("postgresql", "tsql")
+        if src and (src in int_div) != (dialect in int_div):
+            if src in int_div:  # source truncated toward zero — match it
+                return (
+                    f"({left} DIV {right})"
+                    if dialect == "mysql"
+                    else f"TRUNC({left} / {right})"
+                )
+            return f"({left} * 1.0 / {right})"  # source decimal — force it
+
     # Interval arithmetic: T-SQL has no INTERVAL literal — lower
     # ``expr ± INTERVAL 'n' UNIT`` to DATEADD(UNIT, ±n, expr).
     if dialect == "tsql" and node.operator in (
