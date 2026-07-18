@@ -66,3 +66,10 @@ def test_power_translates_everywhere() -> None:
 def test_cot_and_pi_on_oracle() -> None:
     assert "1 / TAN(1)" in _t("SELECT COT(1) AS r", "mysql", "oracle")
     assert "ACOS(-1)" in _t("SELECT PI() AS r", "mysql", "oracle")
+
+
+def test_ln_and_atan2_to_tsql() -> None:
+    # T-SQL has no LN (its 1-arg LOG is natural log) and spells atan2 ATN2.
+    out = _t("SELECT LN(2) AS r", "mysql", "tsql")
+    assert "LOG(2)" in out and "LN(" not in out.upper(), out
+    assert "ATN2(1, 1)" in _t("SELECT ATAN2(1, 1) AS r", "mysql", "tsql")

@@ -4155,6 +4155,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         return f"(1 / TAN({_emit_expression(node.args[0], dialect)}))"
     if dialect == "oracle" and up == "PI" and not node.args:
         return "ACOS(-1)"  # Oracle has no PI(); ACOS(-1) is exactly pi.
+    if dialect == "tsql" and up == "LN" and len(node.args) == 1:
+        # T-SQL has no LN; its 1-arg LOG(x) is the natural logarithm.
+        return f"LOG({_emit_expression(node.args[0], dialect)})"
+    if dialect == "tsql" and up == "ATAN2" and len(node.args) == 2:
+        a = _emit_expression(node.args[0], dialect)
+        b = _emit_expression(node.args[1], dialect)
+        return f"ATN2({a}, {b})"  # T-SQL spells atan2 as ATN2, same arg order.
 
     # Map canonical function names to dialect-specific names
     name = _map_function_name(node.name, dialect)
