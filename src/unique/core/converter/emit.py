@@ -4399,21 +4399,29 @@ def _emit_operand(
     return text
 
 
+def _is_integer_operand(node: object) -> bool:
+    """An integer literal, or a procedural variable declared as an integer type."""
+    if isinstance(node, Literal):
+        return node.dtype == "integer"
+    if isinstance(node, ColumnRef):
+        ints = INTEGER_VARIABLES.get()
+        return ints is not None and node.name.lstrip("@").lower() in ints
+    return False
+
+
 def _emit_binary(node: BinaryOp, dialect: str) -> str:
     """Emit a binary operation."""
     left = _emit_operand(node.left, node.operator, dialect)
     right = _emit_operand(node.right, node.operator, dialect, right=True)
 
     # Integer division diverges: PG/T-SQL truncate two integer operands
-    # (5 / 2 = 2), MySQL/Oracle return a decimal (2.5). For integer LITERAL
-    # operands the value is knowable, so compensate to keep the source's result
-    # (columns need declared types — handled only in the procedural pipeline).
+    # (5 / 2 = 2), MySQL/Oracle return a decimal (2.5). Compensate when both
+    # operands are known integers — a literal, or (in the procedural pipeline) a
+    # variable declared with an integer type — to keep the source's result.
     if (
         node.operator == BinaryOperator.DIV
-        and isinstance(node.left, Literal)
-        and node.left.dtype == "integer"
-        and isinstance(node.right, Literal)
-        and node.right.dtype == "integer"
+        and _is_integer_operand(node.left)
+        and _is_integer_operand(node.right)
     ):
         src = SOURCE_DIALECT.get()
         int_div = ("postgresql", "tsql")

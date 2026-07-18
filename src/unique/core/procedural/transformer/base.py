@@ -200,6 +200,10 @@ class ProceduralTransformer:
         # rewrite ``d2 - d1`` (legal date subtraction on the source) to
         # ``DATEDIFF(DAY, d1, d2)`` for the T-SQL target, which rejects the ``-``.
         self._date_vars: set[str] = set()
+        # Names (transformed form) of INTEGER variables/parameters. Integer
+        # division (a / b) truncates on PG/T-SQL but not MySQL/Oracle; the
+        # compensation needs to know the operands are integers.
+        self._integer_vars: set[str] = set()
         # True while transforming a trigger body, so embedded DML maps the
         # T-SQL inserted/deleted pseudo-tables to NEW/OLD (or documents a
         # set-based use that has no row-level equivalent).
@@ -241,6 +245,38 @@ class ProceduralTransformer:
             "TIMESTAMP",
             "TIMESTAMPTZ",
         }
+
+    @staticmethod
+    def _is_integer_type(dt: DataType) -> bool:
+        base = dt.name.split("(")[0].strip().upper()
+        if base in {
+            "INT",
+            "INTEGER",
+            "BIGINT",
+            "SMALLINT",
+            "TINYINT",
+            "MEDIUMINT",
+            "INT2",
+            "INT4",
+            "INT8",
+        }:
+            return True
+        # NUMBER(p)/NUMERIC(p)/DECIMAL(p) with no scale is integer-valued; a
+        # non-zero scale (params[1]) makes it a decimal. The scale lives in
+        # DataType.params, never in the name, so inspect params — not the text.
+        if base not in {"NUMBER", "NUMERIC", "DECIMAL", "DEC"}:
+            return False
+        params = dt.params or ()
+        if len(params) >= 2:
+            try:
+                return int(str(params[1]).strip()) == 0
+            except (ValueError, TypeError):
+                return False
+        if len(params) == 1:
+            return True  # precision only → scale defaults to 0 → integer
+        # No params: DECIMAL/NUMERIC default to scale 0, but Oracle's bare
+        # NUMBER holds fractional values, so it is not safely an integer.
+        return base != "NUMBER"
 
     @property
     def warnings(self) -> list[str]:
@@ -488,6 +524,8 @@ class ProceduralTransformer:
                 self._string_vars.add(new_name)
             if self._is_date_type(p.data_type):
                 self._date_vars.add(new_name)
+            if self._is_integer_type(p.data_type):
+                self._integer_vars.add(new_name)
             new_direction = p.direction
             if self._target == "oracle" and self._REFCURSOR_TYPE_RE.search(
                 p.data_type.name.strip()
@@ -2119,6 +2157,8 @@ class ProceduralTransformer:
             self._string_vars.add(new_name)
         if self._is_date_type(node.data_type):
             self._date_vars.add(new_name)
+        if self._is_integer_type(node.data_type):
+            self._integer_vars.add(new_name)
         return DeclareStatement(name=new_name, data_type=new_type, default=new_default)
 
     def _is_self_init(self, default: ASTNode | None, name: str) -> bool:
@@ -3257,6 +3297,9 @@ class ProceduralTransformer:
         date_token = _conv.DATE_VARIABLES.set(
             frozenset(v.lstrip("@").lower() for v in self._date_vars)
         )
+        int_token = _conv.INTEGER_VARIABLES.set(
+            frozenset(v.lstrip("@").lower() for v in self._integer_vars)
+        )
         # The source dialect drives shared-map lookups (pair renames,
         # source-owned globals). The transpiler publishes it per run; set it
         # here too so direct IR calls (tests, tools) see the same context.
@@ -3278,6 +3321,7 @@ class ProceduralTransformer:
             _conv.FETCH_STATUS_FORMS.reset(fetch_token)
             _conv.SOURCE_DIALECT.reset(src_token)
             _conv.DATE_VARIABLES.reset(date_token)
+            _conv.INTEGER_VARIABLES.reset(int_token)
 
     def _ir_transpile_dml_inner(self, sql: str) -> str | None:
         from unique.core import converter as _conv

@@ -36,6 +36,31 @@ def test_integer_division_same_class_unchanged() -> None:
     assert "DIV" not in out and "TRUNC" not in out and "1.0" not in out, out
 
 
+def test_integer_division_declared_variables_procedural() -> None:
+    # In a stored procedure the operand types are known from the DECLAREs, so
+    # integer division over integer-declared variables is compensated too.
+    proc = (
+        "CREATE PROCEDURE p AS BEGIN "
+        "DECLARE @a INT; DECLARE @b INT; DECLARE @r INT; "
+        "SET @r = @a / @b; END"
+    )
+    out = _t(proc, "tsql", "oracle")
+    assert "TRUNC(V_A / V_B)" in out, out
+    assert "DIV" in _t(proc, "tsql", "mysql")
+
+
+def test_integer_division_decimal_variable_not_compensated() -> None:
+    # A DECIMAL(p, s>0) operand is not integer — the scale lives in
+    # DataType.params, so it must not be mistaken for an integer and wrapped.
+    proc = (
+        "CREATE PROCEDURE p AS BEGIN "
+        "DECLARE @a DECIMAL(10,2); DECLARE @b INT; DECLARE @r DECIMAL(10,2); "
+        "SET @r = @a / @b; END"
+    )
+    out = _t(proc, "tsql", "oracle")
+    assert "V_A / V_B" in out and "TRUNC(V_A / V_B)" not in out, out
+
+
 def test_oracle_concat_null_literal_dropped() -> None:
     # Oracle || treats NULL as '' ('a'||NULL||'b' = 'ab'); other engines
     # propagate NULL, so the NULL literal is dropped to keep the value.

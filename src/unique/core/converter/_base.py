@@ -223,6 +223,14 @@ DATE_VARIABLES: contextvars.ContextVar[frozenset[str] | None] = contextvars.Cont
     "date_variables", default=None
 )
 
+# Names (lowercased) of procedural variables/parameters declared with an INTEGER
+# type. Integer division diverges (PG/T-SQL truncate, MySQL/Oracle don't); the
+# compensation needs the operands' declared types, which only the procedural
+# shell knows.
+INTEGER_VARIABLES: contextvars.ContextVar[frozenset[str] | None] = (
+    contextvars.ContextVar("integer_variables", default=None)
+)
+
 # Aliases defined by the statement being emitted (set per emit_node): the
 # temp-table qualifier rename must not capture them.
 DEFINED_ALIASES: contextvars.ContextVar[frozenset[str] | None] = contextvars.ContextVar(
@@ -1009,6 +1017,7 @@ __all__ = [
     "STRING_VARIABLES",
     "FETCH_STATUS_FORMS",
     "DATE_VARIABLES",
+    "INTEGER_VARIABLES",
     "DEFINED_ALIASES",
     "SOURCE_DIALECT",
     "IR_EMBEDDED",
