@@ -4162,6 +4162,63 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         a = _emit_expression(node.args[0], dialect)
         b = _emit_expression(node.args[1], dialect)
         return f"ATN2({a}, {b})"  # T-SQL spells atan2 as ATN2, same arg order.
+    # Date built-ins with no target name but a faithful rewrite (RC-1a). NOTE:
+    # ADD_MONTHS is deliberately NOT here — Oracle's sticky last-day rule
+    # (ADD_MONTHS('2020-02-29',1) = '2020-03-31') diverges from plain interval
+    # arithmetic, so it keeps degrading until a CASE-based rewrite lands.
+    if up == "LAST_DAY" and len(node.args) == 1 and dialect in ("tsql", "postgresql"):
+        d = _emit_expression(node.args[0], dialect)
+        if dialect == "tsql":
+            return f"EOMONTH({d})"
+        return (
+            f"CAST(DATE_TRUNC('month', {d}) + INTERVAL '1 month' "
+            f"- INTERVAL '1 day' AS DATE)"
+        )
+    if up == "QUARTER" and len(node.args) == 1 and dialect != "mysql":
+        d = _emit_expression(node.args[0], dialect)
+        if dialect == "tsql":
+            return f"DATEPART(QUARTER, {d})"
+        if dialect == "oracle":
+            return f"TO_NUMBER(TO_CHAR({d}, 'Q'))"
+        return f"EXTRACT(QUARTER FROM {d})"  # postgresql
+    if up == "DAYNAME" and len(node.args) == 1 and dialect != "mysql":
+        d = _emit_expression(node.args[0], dialect)
+        if dialect == "tsql":
+            return f"DATENAME(WEEKDAY, {d})"
+        # Oracle/PG pad the day name to 9 chars; fm/FM trims it to match MySQL.
+        return (
+            f"TO_CHAR({d}, 'fmDay')"
+            if dialect == "oracle"
+            else f"TO_CHAR({d}, 'FMDay')"
+        )
+    # Math built-ins Oracle lacks (RC-1a).
+    if dialect == "oracle" and up == "DEGREES" and len(node.args) == 1:
+        return f"({_emit_expression(node.args[0], dialect)} * 180 / ACOS(-1))"
+    if dialect == "oracle" and up == "RADIANS" and len(node.args) == 1:
+        return f"({_emit_expression(node.args[0], dialect)} * ACOS(-1) / 180)"
+    if dialect == "oracle" and up == "RAND" and not node.args:
+        return "DBMS_RANDOM.VALUE"  # both yield a uniform value in [0, 1).
+    if dialect == "oracle" and up == "REPEAT" and len(node.args) == 2:
+        s = _emit_expression(node.args[0], dialect)
+        n = _emit_expression(node.args[1], dialect)
+        return f"RPAD({s}, LENGTH({s}) * {n}, {s})"  # exact, incl. n=0 -> '' (NULL).
+    # STUFF(s, start, len, new): delete `len` chars at `start`, insert `new`.
+    # PG has OVERLAY, MySQL has INSERT(); Oracle has neither, so SUBSTR-concat.
+    # T-SQL keeps STUFF natively.
+    if up == "STUFF" and len(node.args) == 4 and dialect != "tsql":
+        s, start, length, new = (_emit_expression(a, dialect) for a in node.args)
+        if dialect == "mysql":
+            return f"INSERT({s}, {start}, {length}, {new})"
+        if dialect == "postgresql":
+            return f"OVERLAY({s} PLACING {new} FROM {start} FOR {length})"
+        return (
+            f"(SUBSTR({s}, 1, {start} - 1) || {new} || SUBSTR({s}, {start} + {length}))"
+        )
+    if dialect == "postgresql" and up == "MEDIAN" and len(node.args) == 1:
+        x = _emit_expression(node.args[0], dialect)
+        return f"PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {x})"
+    if dialect == "postgresql" and up == "JSON_ARRAYAGG" and len(node.args) == 1:
+        return f"JSON_AGG({_emit_expression(node.args[0], dialect)})"
 
     # Map canonical function names to dialect-specific names
     name = _map_function_name(node.name, dialect)

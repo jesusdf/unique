@@ -61,7 +61,9 @@ class TestArgumentsPreserved:
 
     @pytest.mark.parametrize("target", _TARGETS)
     def test_stuff_keeps_four_args(self, target: str) -> None:
-        out = _expr(_t("SELECT STUFF(a, 1, 2, 'xy') FROM t", target))
+        # Full output (not _expr): PostgreSQL's OVERLAY(... FROM 1 FOR 2) rewrite
+        # contains a FROM that the naive expr-splitter would cut on.
+        out = _t("SELECT STUFF(a, 1, 2, 'xy') FROM t", target)
         assert "1" in out and "2" in out and "'xy'" in out
 
     @pytest.mark.parametrize("target", _TARGETS)

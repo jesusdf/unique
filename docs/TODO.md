@@ -276,33 +276,30 @@ workflow.
     warn-on-divergence pass, not a per-spelling rewrite — the user's own caution
     ("RC-2 es delicado"); handling one wrong ships silent bad data.
 
-  - [ ] **RC-1a mapping opportunities — functions that DO have a faithful target
-        form (systematic 2026-07-18 sweep; every proposed form parses on target).**
-        These degrade today but are cleanly mappable — implement, don't leave as
-        carriers. Grouped by confidence:
-    - **Date (high value):**
-      - `ADD_MONTHS(d,n)` (oracle) → pg `d + n * INTERVAL '1 month'`, mysql
-        `DATE_ADD(d, INTERVAL n MONTH)`, tsql `DATEADD(MONTH, n, d)`.
-      - `LAST_DAY(d)` → tsql `EOMONTH(d)`, pg
-        `(DATE_TRUNC('month',d) + INTERVAL '1 month' - INTERVAL '1 day')`.
-      - `QUARTER(d)` (mysql) → tsql `DATEPART(QUARTER,d)`, pg `EXTRACT(QUARTER FROM d)`,
-        oracle `CEIL(EXTRACT(MONTH FROM d)/3)`.
-      - `MONTHNAME(d)`/`DAYNAME(d)` (mysql) → tsql `DATENAME(MONTH/WEEKDAY,d)`,
-        oracle/pg `TO_CHAR(d,'Month'/'Day')` (trim the padding).
-    - **Math (high value, exact):**
-      - `DEGREES(x)`/`RADIANS(x)` → oracle `(x*180/ACOS(-1))` / `(x*ACOS(-1)/180)`.
-      - `CBRT(x)` (pg) → `SIGN(x) * POWER(ABS(x), 1.0/3)` (the sign wrapper makes it
-        exact for negatives — the reason it was left degrading before).
-      - `RAND()` (mysql) → oracle `DBMS_RANDOM.VALUE`.
-      - `REPEAT(s,n)` (mysql) → oracle `RPAD(s, LENGTH(s)*n, s)`.
-    - **String / aggregate:**
-      - `STUFF(s,start,len,new)` (tsql) → pg/oracle `OVERLAY(s PLACING new FROM start FOR len)`.
-      - `MEDIAN(x)` (oracle) → pg `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x)`
-        (tsql only has the window form — degrade there).
-      - `JSON_ARRAYAGG(x)` (mysql) → pg `JSON_AGG(x)`.
-      - `ELT(n,…)`/`FIELD(v,…)` (mysql) → CASE chains.
-    - **Mappable with a caveat (verify semantics live):** `NEXT_DAY`,
-      `UNIX_TIMESTAMP`/`FROM_UNIXTIME` (epoch), `WEEK` (mode differs).
+  - **RC-1a mapping opportunities — systematic 2026-07-18 sweep, all
+        LIVE-VERIFIED (value, not just parse). LANDED:**
+    - [x] `LAST_DAY(d)` → tsql `EOMONTH(d)`, pg
+        `CAST(DATE_TRUNC('month',d) + INTERVAL '1 month' - INTERVAL '1 day' AS DATE)`
+        (live: 2020-05-31, leap 2020-02-29).
+    - [x] `QUARTER(d)` (mysql) → tsql `DATEPART(QUARTER,d)`, pg `EXTRACT(QUARTER FROM d)`,
+        oracle `TO_NUMBER(TO_CHAR(d,'Q'))` (live: 2).
+    - [x] `DAYNAME(d)` (mysql) → tsql `DATENAME(WEEKDAY,d)`, oracle `TO_CHAR(d,'fmDay')`,
+        pg `TO_CHAR(d,'FMDay')` (live: 'Friday'; locale = session NLS, like collation).
+    - [x] `DEGREES`/`RADIANS` → oracle `(x*180/ACOS(-1))` / `(x*ACOS(-1)/180)` (live exact).
+    - [x] `RAND()` → oracle `DBMS_RANDOM.VALUE`; `REPEAT(s,n)` → oracle `RPAD(s,LENGTH(s)*n,s)`.
+    - [x] `STUFF(s,start,len,new)` (tsql) → pg `OVERLAY(...)`, mysql `INSERT(...)`,
+        oracle `SUBSTR(s,1,start-1)||new||SUBSTR(s,start+len)` (Oracle has no OVERLAY —
+        caught live; live: 'aXYZef').
+    - [x] `MEDIAN(x)` (oracle) → pg `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x)`
+        (live: 2.5); `JSON_ARRAYAGG(x)` (mysql) → pg `JSON_AGG(x)` (live: [1,2]).
+    - **Still open (mappable but needs more than a one-liner):** `MONTHNAME`
+      (sqlglot decomposes it to TIME_TO_STR — handle upstream), `ELT`/`FIELD` (CASE
+      chains), `NEXT_DAY`, `UNIX_TIMESTAMP`/`FROM_UNIXTIME` (epoch), `WEEK` (mode),
+      `MEDIAN`→tsql (window-only form).
+    - **Moved to floor after LIVE checks proved a value divergence (NOT
+      one-liner-mappable):** `ADD_MONTHS` (Oracle's sticky-last-day rule:
+      `ADD_MONTHS('2020-02-29',1)`=`2020-03-31` ≠ plain interval — needs a CASE),
+      `CBRT` (`POWER(ABS,1/3)` is `2.9999…` not `3` — float precision).
     - **Confirmed floor (no faithful equivalent — keep degrading honestly):**
       `TRANSLATE`→mysql/tsql (char map+delete), `INITCAP`→mysql/tsql, `SOUNDEX`→pg
       (needs fuzzystrmatch), `QUOTENAME`→others, `FORMAT` (locale), `SUBSTRING_INDEX`,

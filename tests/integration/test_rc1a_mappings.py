@@ -73,3 +73,43 @@ def test_ln_and_atan2_to_tsql() -> None:
     out = _t("SELECT LN(2) AS r", "mysql", "tsql")
     assert "LOG(2)" in out and "LN(" not in out.upper(), out
     assert "ATN2(1, 1)" in _t("SELECT ATAN2(1, 1) AS r", "mysql", "tsql")
+
+
+def test_date_functions_map_faithfully() -> None:
+    # LAST_DAY/QUARTER/DAYNAME have exact target forms (live-verified).
+    assert "EOMONTH(d)" in _t("SELECT LAST_DAY(d) AS r FROM t", "oracle", "tsql")
+    assert "DATE_TRUNC('month'" in _t(
+        "SELECT LAST_DAY(d) AS r FROM t", "oracle", "postgresql"
+    )
+    assert "DATEPART(QUARTER, d)" in _t(
+        "SELECT QUARTER(d) AS r FROM t", "mysql", "tsql"
+    )
+    assert "TO_CHAR(d, 'Q')" in _t("SELECT QUARTER(d) AS r FROM t", "mysql", "oracle")
+    assert "DATENAME(WEEKDAY, d)" in _t(
+        "SELECT DAYNAME(d) AS r FROM t", "mysql", "tsql"
+    )
+
+
+def test_oracle_math_gaps() -> None:
+    assert "180 / ACOS(-1)" in _t("SELECT DEGREES(x) AS r FROM t", "mysql", "oracle")
+    assert "ACOS(-1) / 180" in _t("SELECT RADIANS(x) AS r FROM t", "mysql", "oracle")
+    assert "DBMS_RANDOM.VALUE" in _t("SELECT RAND() AS r", "mysql", "oracle")
+    assert "RPAD(s, LENGTH(s) * 3, s)" in _t(
+        "SELECT REPEAT(s, 3) AS r FROM t", "mysql", "oracle"
+    )
+
+
+def test_stuff_median_jsonarrayagg() -> None:
+    assert "OVERLAY('abcdef' PLACING 'XYZ' FROM 2 FOR 3)" in _t(
+        "SELECT STUFF('abcdef', 2, 3, 'XYZ') AS r", "tsql", "postgresql"
+    )
+    assert "INSERT('abcdef', 2, 3, 'XYZ')" in _t(
+        "SELECT STUFF('abcdef', 2, 3, 'XYZ') AS r", "tsql", "mysql"
+    )
+    assert "SUBSTR(" in _t("SELECT STUFF('abcdef', 2, 3, 'XYZ') AS r", "tsql", "oracle")
+    assert "PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x)" in _t(
+        "SELECT MEDIAN(x) AS r FROM t", "oracle", "postgresql"
+    )
+    assert "JSON_AGG(x)" in _t(
+        "SELECT JSON_ARRAYAGG(x) AS r FROM t", "mysql", "postgresql"
+    )
