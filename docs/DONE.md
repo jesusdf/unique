@@ -5111,3 +5111,63 @@ Archived from `docs/TODO.md §5`. The RC-1..4 root-cause plan for the 862 RED fi
       the routine's own name and the suffix is a known parameter (a real
       table/alias of the same name is untouched). Covered by
       `tests/integration/test_challenge.py`.
+
+## 42. Items archived from TODO on 2026-07-18 (completed checkboxes)
+
+### From: §2 Audit follow-ups (P3)
+
+- [x] **Prune fallback-only text rewriters (P3) — CLOSED BY MEASUREMENT
+      2026-07-17:** a coverage run over ALL real material (both corpora,
+      the procedures fixtures and the three private fixtures, every
+      direction) shows **36 of 37 rewriters still receive fallback
+      traffic** — the IR-declined fragments (parse failures, mid-transform
+      hybrids) are real and the text fallback is their working surface.
+      The single zero-traffic method (`_map_mysql_datefmt_to_oracle`, 8
+      lines) is a helper of a live method and reachable by real
+      mysql→oracle date formats outside the corpus — deleting it would
+      break the fallback with no replacement. Conclusion: nothing is
+      safely prunable; the fallback surface stays as-is. (Harness: the
+      scratchpad coverage run with COVERAGE_CORE=sysmon; the timed-out
+      first attempt without sysmon is the reminder to always use it.)
+
+- [x] **tsql→mysql procedural DATEADD nested INTERVAL — FIXED 2026-07-17**
+      (same day it was filed): `_mysql_normalize_funcs`'s sqlglot
+      round-trip re-emitted a tsql-read `DateAdd` carrying its whole
+      `Interval` in the *expression* slot through the mysql generator,
+      which invents an implicit DAY unit (`INTERVAL (INTERVAL '-1'
+      MONTH) DAY` — invalid MySQL and a silent unit change). The
+      normalize walk hoists the interval into the expression/unit
+      slots. Test: TestDateAddUnderConvertMySql.
+
+### From: §4 T-SQL keyword coverage (all complete)
+
+- [x] **`PROC` abbreviation of `PROCEDURE` (P2)** — T-SQL accepts `PROC` in
+      `CREATE`/`ALTER`/`DROP`; the abbreviated spelling was mishandled while the
+      full one worked (`CREATE PROC`/`ALTER PROC` degraded to an "Unhandled
+      CREATE" carrier; `DROP PROC` leaked the T-SQL-only `PROC` keyword into
+      PG/Oracle/MySQL output — invalid there). Fixed at three layers: the
+      procedural-routing regex (`batch_splitter._PROCEDURAL_PATTERNS["tsql"]`)
+      matches `PROC(?:EDURE)?`; the procedural lexer normalizes `PROC` →
+      `PROCEDURE` only in the `CREATE`/`ALTER` keyword position (a column/object
+      named `proc` stays an identifier); and `converter._normalize_ddl_kind`
+      canonicalizes the DROP/CREATE `kind`. Covered by
+      `tests/integration/test_tsql_keyword_alias.py`. The other two documented
+      T-SQL statement abbreviations already work: `EXEC`≡`EXECUTE` and
+      `TRAN`≡`TRANSACTION` on `COMMIT`/`ROLLBACK`/`SAVE`.
+- [x] **`CREATE OR ALTER {PROCEDURE|PROC}` (P2)** — the T-SQL 2016+
+      `CREATE OR ALTER` form (distinct from `CREATE OR REPLACE`) fell to the DML
+      path and degraded to an "Unhandled CREATE PROCEDURE" carrier. Fixed: the
+      routing regex accepts `CREATE\s+OR\s+ALTER`, `parser._parse_create`
+      consumes the `OR ALTER` prefix like `OR REPLACE` (both set `or_replace`),
+      and the T-SQL emitter now honors `or_replace` — so `CREATE OR ALTER`
+      round-trips and Oracle/PG `CREATE OR REPLACE` ↔ T-SQL `CREATE OR ALTER`.
+      Covered by `tests/integration/test_challenge.py` + `test_procedural.py`.
+- [x] **`BEGIN TRAN[SACTION]` (P2)** — a standalone begin-transaction degraded to
+      "Unhandled expression type: Transaction". Fixed: the converter passes
+      `exp.Transaction` through (kind `BEGIN TRANSACTION`) so sqlglot renders
+      T-SQL `BEGIN TRANSACTION` / PG+MySQL `BEGIN`; Oracle (implicit
+      transactions) drops it to a documented carrier + warning in
+      `emit._emit_passthrough` rather than a bare invalid `BEGIN`.
+      `COMMIT`/`ROLLBACK`/`SAVE` already mapped. Covered by
+      `tests/integration/test_challenge.py`. (A multi-statement `BEGIN TRAN … `
+      `COMMIT` in ONE semicolon-less batch is a separate splitter limitation.)

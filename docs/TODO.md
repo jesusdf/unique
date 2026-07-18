@@ -46,100 +46,18 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
 
 ### P1 — silent semantic changes (no-silent-loss violations)
 
-- [x] **Residual invalid output ships WITHOUT a warning (P1) — CLOSED at the
-      architectural floor (2026-07-17, user declaration at `469917a`).** The
-      direction-residue campaign (waves 103–239) took the six-direction residue
-      from ~770 invalid-silent statements to **133 pending** (mysql-corpus
-      {tsql 20, pg 15, oracle 13}, pg-corpus {tsql 29, mysql 32, oracle 24}),
-      validity **98.9–99.8%**, and the pg→pg silent-gap discovery channel from
-      **287 to 0** (`scripts/discover_silent_gaps.py`). Every statement now
-      transpiles validly or carries a warning/carrier; the remainder is three
-      non-wave classes (adversarial pg_regress error-path inputs,
-      schema-dependent ambiguity, RETURN QUERY table functions) that need
-      schema-aware transpilation — declared out of scope for statement-level
-      transpilation. Full per-wave log (mechanisms, measured commit hashes,
-      tests) archived in [`docs/DONE.md`](DONE.md) §36; the floor declaration
-      and scope decisions are reproduced there verbatim. Standing decisions:
-      live validation stays a development-only tool (never CLI/API), and no
-      new waves on these corpora without a new corpus or a fidelity target.
+- [x] **Residual invalid output ships WITHOUT a warning (P1) — CLOSED at the architectural floor (2026-07-17, `469917a`).** Six-direction residue driven ~770→133; every statement transpiles validly or carries a warning; pg→pg discovery 287→0. Remainder needs schema-aware transpilation. Full log [`docs/DONE.md`](DONE.md) §36.
 
 ### P0 — architecture plan (audit doc 04 — ADOPTED 2026-07-08)
 
-- [x] **M3 final — DONE 2026-07-17 (`86f7c11`): IR-first is the expression
-      engine.** The LAST architecture-plan milestone (audit doc-04 P4)
-      closed: scalar fragments route through the shared IR pipeline by
-      default; the text rewriters serve only IR-declined fragments (parse
-      failures, shell-machinery text) — the same primary+fallback shape
-      M3a gave embedded DML. `UNIQUE_NO_IR_FIRST` is the kill-switch.
-      Arc: probe 126 → 113 → 109 → … → 0-real via ~15 family commits
-      (shared func/error/diagnostic tables consumed by BOTH pipelines,
-      cursor+FOUND state context, styled CONVERT + TO_DATE/TO_CHAR format
-      bridge, trigger-shell guards, comment line→block carrying, national
-      literals, Trim positions, nested subqueries, LOB helpers, concat
-      classification+flattening) + 23 assertions strengthened to exact IR
-      forms at the flip. **Measured (definitive cycle): pg-corpus {tsql
-      20, mysql 37, oracle 25}, mysql-corpus {tsql 17, pg 13, oracle 15}
-      = TOTAL 127 vs the declared floor 133 (−6); validity 98.7–99.8%;
-      discovery pg→pg 0; FE live 16/16.** Full log in
-      [`docs/DONE.md`](DONE.md) §39.
-- [x] **Zero-reduction campaign (P2) — CLOSED at the floor, residue 133 →
-      16 (2026-07-17, batches W1–W10, `34d7338`).** The user-declared floor
-      was 133; the M3-final flip measured 127, and this campaign drove it to
-      **16** — a further −88% below the declared floor, with **both Oracle
-      directions at 100.0% validity**. After the M3-final flip, drove the
-      six-direction live syntax residue down with mechanism fixes (not
-      waves), each a commit with always-on tests + full gate + live-syntax
-      + FE 16/16. Cycles: 127 → 58 → 48 → 40 → 36 → 29 → 25 → 22 → 20 → 19
-      → 17 → **16 (z13)**: pg-corpus {tsql 1, mysql 5, oracle **1**},
-      mysql-corpus {tsql 4, pg 3, oracle **2**} — **both Oracle directions
-      at 100.0% validity**. Discovery pg→pg held 0; overall 99.8–100.0%.
-      Highlights: IR-routed trigger predicates (ISNULL), self-join
-      `UPDATE…FROM` multi-table (pg + mysql), Oracle refcursor IN OUT /
-      named-cursor `=>` / BLOB / unsafe-local rename / self-init drop /
-      embedded CREATE INDEX NULLS strip / bool-return wrap, and honest
-      carriers (REPLACE, RETURN QUERY, comment-only trigger body,
-      data-modifying CTE, whole-row OLD.*/NEW.* trigger, COMMENT ON in body,
-      OPEN FOR EXECUTE, set-op ORDER aggregate). Full log:
-      [`docs/DONE.md`](DONE.md) §40. **Remaining 16 are the architectural
-      floor** — adversarial pg_regress/sqlancer inputs sqlglot cannot parse
-      (nested-paren join trees, chained `a=b=c`), a correlated
-      outer-aggregate subquery, composite-field access (`(f(x)).field`),
-      schema-dependent type inference (COALESCE bigint/char), LATERAL
-      column-alias lists, mysql-source structural singletons. Measurement
-      gotcha recorded: the pg→oracle sweep hangs at runtime on bare
-      `SELECT <dml-fn>()` pg_regress driver calls (not syntax defects).
-- [x] **Prune fallback-only text rewriters (P3) — CLOSED BY MEASUREMENT
-      2026-07-17:** a coverage run over ALL real material (both corpora,
-      the procedures fixtures and the three private fixtures, every
-      direction) shows **36 of 37 rewriters still receive fallback
-      traffic** — the IR-declined fragments (parse failures, mid-transform
-      hybrids) are real and the text fallback is their working surface.
-      The single zero-traffic method (`_map_mysql_datefmt_to_oracle`, 8
-      lines) is a helper of a live method and reachable by real
-      mysql→oracle date formats outside the corpus — deleting it would
-      break the fallback with no replacement. Conclusion: nothing is
-      safely prunable; the fallback surface stays as-is. (Harness: the
-      scratchpad coverage run with COVERAGE_CORE=sysmon; the timed-out
-      first attempt without sysmon is the reminder to always use it.)
+- [x] **M3 final — DONE 2026-07-17 (`86f7c11`): IR-first is the expression engine.** The last architecture-plan milestone; scalar fragments route through the shared IR pipeline, text rewriters are the fallback (`UNIQUE_NO_IR_FIRST` kill-switch). Full log [`docs/DONE.md`](DONE.md) §39.
+- [x] **Zero-reduction campaign (P2) — CLOSED at the floor, residue 133 → 16 (2026-07-17, `34d7338`).** Mechanism fixes (not waves) drove the six-direction live-syntax residue to 16, both Oracle directions 100.0% validity; remainder is the architectural floor (adversarial pg_regress, schema-dependent inference). Full log [`docs/DONE.md`](DONE.md) §40.
+- [x] **Prune fallback-only text rewriters (P3) — CLOSED BY MEASUREMENT 2026-07-17.** 36/37 rewriters carry live fallback traffic; nothing safely prunable. Archived [`docs/DONE.md`](DONE.md) §42.
 
 ### P3 — hardening carry-overs (from 2026-07-02, still open)
 
-- [x] **Module growth — DONE 2026-07-17.** All three oversized modules are
-      split: `procedural/parser` package (2026-07-10), the transformer's
-      `ExpressionRewriter` seam (`transformer/_expr.py`, `997f0e8` —
-      base.py 5053 → 3735 lines), and `transpiler.py` → the
-      `core/transpiler/` package (`_text_rules.py` + `_core.py` +
-      re-exporting `__init__`, `0e6ead0`). Full detail archived in
-      [`docs/DONE.md`](DONE.md) §37; the rewriter object is what M3's
-      IR-first expressions will eventually replace.
-- [x] **tsql→mysql procedural DATEADD nested INTERVAL — FIXED 2026-07-17**
-      (same day it was filed): `_mysql_normalize_funcs`'s sqlglot
-      round-trip re-emitted a tsql-read `DateAdd` carrying its whole
-      `Interval` in the *expression* slot through the mysql generator,
-      which invents an implicit DAY unit (`INTERVAL (INTERVAL '-1'
-      MONTH) DAY` — invalid MySQL and a silent unit change). The
-      normalize walk hoists the interval into the expression/unit
-      slots. Test: TestDateAddUnderConvertMySql.
+- [x] **Module growth — DONE 2026-07-17.** All three oversized modules split (procedural/parser package, transformer `_expr.py` seam, `core/transpiler/` package). Full detail [`docs/DONE.md`](DONE.md) §37.
+- [x] **tsql→mysql procedural DATEADD nested INTERVAL — FIXED 2026-07-17.** The normalize walk hoists a tsql `DateAdd`'s interval into the unit slot (was `INTERVAL (INTERVAL '-1' MONTH) DAY`). Archived [`docs/DONE.md`](DONE.md) §42.
 
 ## 3. Test-corpus expansion (P3)
 
@@ -159,39 +77,9 @@ Findings from [`audit/2026-07-08/02-new-findings.md`](../audit/2026-07-08/02-new
     buys ~−1); do not resume waves on these corpora without a new
     corpus or a fidelity target.
 
-## 4. T-SQL keyword coverage
+## 4. T-SQL keyword coverage — ✅ DONE (archived [`docs/DONE.md`](DONE.md) §42)
 
-- [x] **`PROC` abbreviation of `PROCEDURE` (P2)** — T-SQL accepts `PROC` in
-      `CREATE`/`ALTER`/`DROP`; the abbreviated spelling was mishandled while the
-      full one worked (`CREATE PROC`/`ALTER PROC` degraded to an "Unhandled
-      CREATE" carrier; `DROP PROC` leaked the T-SQL-only `PROC` keyword into
-      PG/Oracle/MySQL output — invalid there). Fixed at three layers: the
-      procedural-routing regex (`batch_splitter._PROCEDURAL_PATTERNS["tsql"]`)
-      matches `PROC(?:EDURE)?`; the procedural lexer normalizes `PROC` →
-      `PROCEDURE` only in the `CREATE`/`ALTER` keyword position (a column/object
-      named `proc` stays an identifier); and `converter._normalize_ddl_kind`
-      canonicalizes the DROP/CREATE `kind`. Covered by
-      `tests/integration/test_tsql_keyword_alias.py`. The other two documented
-      T-SQL statement abbreviations already work: `EXEC`≡`EXECUTE` and
-      `TRAN`≡`TRANSACTION` on `COMMIT`/`ROLLBACK`/`SAVE`.
-- [x] **`CREATE OR ALTER {PROCEDURE|PROC}` (P2)** — the T-SQL 2016+
-      `CREATE OR ALTER` form (distinct from `CREATE OR REPLACE`) fell to the DML
-      path and degraded to an "Unhandled CREATE PROCEDURE" carrier. Fixed: the
-      routing regex accepts `CREATE\s+OR\s+ALTER`, `parser._parse_create`
-      consumes the `OR ALTER` prefix like `OR REPLACE` (both set `or_replace`),
-      and the T-SQL emitter now honors `or_replace` — so `CREATE OR ALTER`
-      round-trips and Oracle/PG `CREATE OR REPLACE` ↔ T-SQL `CREATE OR ALTER`.
-      Covered by `tests/integration/test_challenge.py` + `test_procedural.py`.
-- [x] **`BEGIN TRAN[SACTION]` (P2)** — a standalone begin-transaction degraded to
-      "Unhandled expression type: Transaction". Fixed: the converter passes
-      `exp.Transaction` through (kind `BEGIN TRANSACTION`) so sqlglot renders
-      T-SQL `BEGIN TRANSACTION` / PG+MySQL `BEGIN`; Oracle (implicit
-      transactions) drops it to a documented carrier + warning in
-      `emit._emit_passthrough` rather than a bare invalid `BEGIN`.
-      `COMMIT`/`ROLLBACK`/`SAVE` already mapped. Covered by
-      `tests/integration/test_challenge.py`. (A multi-statement `BEGIN TRAN … `
-      `COMMIT` in ONE semicolon-less batch is a separate splitter limitation.)
-
+`PROC`≡`PROCEDURE`, `CREATE OR ALTER`, and `BEGIN TRAN[SACTION]` all route and translate; covered by `tests/integration/test_tsql_keyword_alias.py` + `test_challenge.py` + `test_procedural.py`.
 ## 5. Procedural round-trip fidelity (challenge corpus)
 
 New regression corpus at [`tests/fixtures/challenge/`](../../tests/fixtures/challenge/)
