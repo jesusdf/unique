@@ -44,12 +44,31 @@ _PROCEDURAL_MARKER_RE = re.compile(
     r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE)\b|DECLARE\b|BEGIN\b|IF\b)"
 )
 
+#: Engine-specific types with no cross-engine equivalent — a whole-statement
+#: carrier is the honest outcome (the skill's documented degrade), never a
+#: silent invalid type. Grouped by native engine and added to the targets that
+#: lack them.
+_PG_ONLY_TYPE = (
+    re.compile(
+        r"(?i)\b(?:INET|CIDR|MACADDR8?|(?:INT4|INT8|NUM|TS|TSTZ|DATE)RANGE"
+        r"|TSVECTOR|TSQUERY)\b"
+    ),
+    "PostgreSQL-only type",
+)
+_TSQL_ONLY_TYPE = (
+    re.compile(r"(?i)\b(?:ROWVERSION|SQL_VARIANT|HIERARCHYID)\b"),
+    "T-SQL-only type",
+)
+_ORACLE_ONLY_TYPE = (re.compile(r"(?i)\bXMLTYPE\b"), "XMLTYPE (Oracle)")
+
 #: Per-target deny-list: (compiled pattern, human label). A hit outside
 #: comments/strings is a source-dialect leftover that cannot run on the
 #: target. Keep this list conservative — every entry must be impossible in
 #: valid output for that target.
 _LEFTOVERS: dict[str, list[tuple[re.Pattern[str], str]]] = {
     "postgresql": [
+        _TSQL_ONLY_TYPE,
+        _ORACLE_ONLY_TYPE,
         (re.compile(r"(?i)\bROWNUM\b"), "ROWNUM"),
         (re.compile(r"(?i)\bN?VARCHAR2\b"), "VARCHAR2"),
         (re.compile(r"(?i)\bEXECUTE\s+IMMEDIATE\b"), "EXECUTE IMMEDIATE"),
@@ -61,6 +80,9 @@ _LEFTOVERS: dict[str, list[tuple[re.Pattern[str], str]]] = {
         (re.compile(r"(?m)^\s*/\s*$"), "slash terminator"),
     ],
     "mysql": [
+        _PG_ONLY_TYPE,
+        _TSQL_ONLY_TYPE,
+        _ORACLE_ONLY_TYPE,
         (re.compile(r"(?i)\bROWNUM\b"), "ROWNUM"),
         (re.compile(r"(?i)\bN?VARCHAR2\b"), "VARCHAR2"),
         (re.compile(r"(?i)\bEXECUTE\s+IMMEDIATE\b"), "EXECUTE IMMEDIATE"),
@@ -71,6 +93,8 @@ _LEFTOVERS: dict[str, list[tuple[re.Pattern[str], str]]] = {
         (re.compile(r"(?m)^\s*/\s*$"), "slash terminator"),
     ],
     "tsql": [
+        _PG_ONLY_TYPE,
+        _ORACLE_ONLY_TYPE,
         (re.compile(r"(?i)\bROWNUM\b"), "ROWNUM"),
         # No REGEXP_* functions before SQL Server 2025; the project targets
         # 2012+ (live validation runs 2022).
@@ -94,6 +118,8 @@ _LEFTOVERS: dict[str, list[tuple[re.Pattern[str], str]]] = {
         ),
     ],
     "oracle": [
+        _PG_ONLY_TYPE,
+        _TSQL_ONLY_TYPE,
         (re.compile(r"(?i)\bGETDATE\s*\("), "GETDATE()"),
         (re.compile(r"(?i)\bISNULL\s*\("), "ISNULL()"),
         (re.compile(r"\[\w+\]"), "[bracket] identifier"),

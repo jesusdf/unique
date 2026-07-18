@@ -478,7 +478,7 @@ SELECT 'NaN'::numeric > 1 AS r
 -- CASE[open]: pg-nested-call — fails on oracle. PROCEDURE OUTER_P compiled INVALID (line 4): PLS-00201: identifier 'INNER_P' must be decla
 CREATE PROCEDURE outer_p() AS $$ BEGIN CALL inner_p(); END; $$ LANGUAGE plpgsql
 
--- CASE[open]: pg-network-types — fails on oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag
+-- CASE[fixed]: pg-network-types — fails on oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag
 CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)
 
 -- CASE[open]: pg-not-null-is-null — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
@@ -538,7 +538,7 @@ SELECT POSITION('' IN 'abc') AS r
 -- CASE[fixed]: pg-quote — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
 SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')
 
--- CASE[open]: pg-range-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m
+-- CASE[fixed]: pg-range-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m
 CREATE TABLE t (rng INT4RANGE, tsr TSRANGE)
 
 -- CASE[open]: pg-realworld-transfer — fails on oracle, tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro

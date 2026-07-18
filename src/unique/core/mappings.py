@@ -300,6 +300,7 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "SMALLDATETIME": "TIMESTAMP",
         "TINYINT": "SMALLINT",
         "MONEY": "NUMERIC(19,4)",
+        "SMALLMONEY": "NUMERIC(10,4)",
         "BIT": "BOOLEAN",
         "UNIQUEIDENTIFIER": "UUID",
         "VARBINARY": "BYTEA",
@@ -351,6 +352,7 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "UNIQUEIDENTIFIER": "CHAR(36)",
         "UUID": "CHAR(36)",
         "MONEY": "DECIMAL(19,4)",
+        "SMALLMONEY": "DECIMAL(10,4)",
         "IMAGE": "LONGBLOB",
         # sqlglot parses MySQL's own unsigned/timestamp types into internal
         # names; map them back to real MySQL spellings.
@@ -387,6 +389,7 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "UNIQUEIDENTIFIER": "RAW(16)",
         "UUID": "RAW(16)",
         "MONEY": "NUMBER(19,4)",
+        "SMALLMONEY": "NUMBER(10,4)",
         # Oracle has no DOUBLE (BINARY_DOUBLE is the 64-bit float); FLOAT is a
         # valid Oracle type, so it is left as-is.
         "DOUBLE": "BINARY_DOUBLE",

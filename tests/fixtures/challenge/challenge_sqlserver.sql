@@ -300,7 +300,7 @@ WITH r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n < 5) SELECT * FROM r
 -- CASE[open]: ts-replicate-space — fails on oracle, postgresql. ORA-00904: "SPACE": invalid identifier
 SELECT REPLICATE('ab', 3), SPACE(5), REVERSE('abc')
 
--- CASE[open]: ts-rowversion — fails on oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[fixed]: ts-rowversion — fails on oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (row_ver ROWVERSION, flags BINARY(8))
 
 -- CASE[open]: ts-scroll-cursor — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 9): PLS-00103: Encountered the symbol ";" when expectin

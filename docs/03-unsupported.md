@@ -124,6 +124,9 @@ transpilation target:
 | FK `ON UPDATE` action → Oracle | Oracle | Oracle has **no** `ON UPDATE` referential action (only `ON DELETE CASCADE`/`SET NULL`); the clause is stripped, the FK + `ON DELETE` kept |
 | `INT UNSIGNED` → PG/Oracle/T-SQL | MySQL | No unsigned integer type; widened to the next signed size (BIGINT) so the full range fits — the ≥0 constraint is not re-added |
 | Column `COMMENT` → T-SQL | MySQL/PG/Oracle | Carried inline (MySQL) or as `COMMENT ON COLUMN` (PG/Oracle); T-SQL's only vehicle is `sp_addextendedproperty`, so it is noted rather than synthesised |
+| PostgreSQL-only types: `INET`, `CIDR`, `MACADDR`, range types (`INT4RANGE`, `TSRANGE`, …), `TSVECTOR`/`TSQUERY` | PostgreSQL | No cross-engine equivalent — a statement declaring one degrades to a documented carrier + warning (no silent invalid type). `SMALLMONEY`/`MONEY` **do** map (→ `DECIMAL`) |
+| T-SQL-only types: `ROWVERSION`, `SQL_VARIANT`, `HIERARCHYID` | T-SQL | No equivalent elsewhere (the `ROWVERSION` auto-update semantic especially) — carrier + warning |
+| Oracle `XMLTYPE` → MySQL | Oracle | MySQL has no XML type — carrier + warning (PG/T-SQL keep it as `XML`) |
 
 ### 2.1 Unmapped built-in scalar functions
 

@@ -2209,11 +2209,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `PROCEDURE OUTER_P compiled INVALID (line 4): PLS-00201: identifier 'INNER_P' must be decla`
 - src: `CREATE PROCEDURE outer_p() AS $$ BEGIN CALL inner_p(); END; $$ LANGUAGE plpgsql`
 
-## pg-network-types  (postgresql)
-- targets: oracle(invalid), tsql(invalid)
-- live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag`
-- src: `CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)`
-
 ## pg-not-null-is-null  (postgresql)
 - targets: mysql(func), oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
@@ -2283,11 +2278,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT POSITION('' IN 'abc') AS r`
-
-## pg-range-types  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m`
-- src: `CREATE TABLE t (rng INT4RANGE, tsr TSRANGE)`
 
 ## pg-realworld-transfer  (postgresql)
 - targets: mysql(silent-rt), oracle(invalid), tsql(invalid)
@@ -2935,11 +2925,6 @@ CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BE`
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "SPACE": invalid identifier`
 - src: `SELECT REPLICATE('ab', 3), SPACE(5), REVERSE('abc')`
-
-## ts-rowversion  (tsql)
-- targets: oracle(invalid), postgresql(invalid)
-- live error: `ORA-00902: invalid datatype`
-- src: `CREATE TABLE t (row_ver ROWVERSION, flags BINARY(8))`
 
 ## ts-scroll-cursor  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
