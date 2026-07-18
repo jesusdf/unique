@@ -511,6 +511,9 @@ SELECT num_nonnulls(1,NULL,2),num_nulls(1,NULL,2)
 -- CASE[open]: pg-numtypes — fails on mysql. (1075, 'Incorrect table definition; there can be only one auto column and it must be defin
 CREATE TABLE t (a SMALLINT, b INT, c BIGINT, d NUMERIC(10,2), e REAL, f DOUBLE PRECISION, g SERIAL, h MONEY)
 
+-- CASE[open]: pg-order-case-sens — fails on mysql, tsql. FUNC-DIFF: source=(('Apple',), ('Cherry',), ('banana',)) target=(('Apple',), ('banana',), 
+SELECT x FROM (SELECT 'Apple' x UNION SELECT 'banana' UNION SELECT 'Cherry') t ORDER BY x
+
 -- CASE[open]: pg-order-nulls-default — fails on mysql, tsql. FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))
 SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x
 

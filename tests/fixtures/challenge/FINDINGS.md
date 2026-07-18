@@ -1034,6 +1034,11 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
 - src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT /*+ QB_NAME(qb1) */ id FROM t WHERE n > (SELECT`
 
+## my-order-case-sens  (mysql)
+- targets: oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('Apple',), ('banana',), ('Cherry',)) target=(('Apple',), ('Cherry',), `
+- src: `SELECT x FROM (SELECT 'Apple' x UNION SELECT 'banana' UNION SELECT 'Cherry') t ORDER BY x`
+
 ## my-order-strings  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('Apple',), ('banana',), ('Banana',), ('cherry',)) target=(('Apple',), `
@@ -3199,6 +3204,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `(1075, 'Incorrect table definition; there can be only one auto column and it must be defin`
 - src: `CREATE TABLE t (a SMALLINT, b INT, c BIGINT, d NUMERIC(10,2), e REAL, f DOUBLE PRECISION, g SERIAL, h MONEY)`
 
+## pg-order-case-sens  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('Apple',), ('Cherry',), ('banana',)) target=(('Apple',), ('banana',), `
+- src: `SELECT x FROM (SELECT 'Apple' x UNION SELECT 'banana' UNION SELECT 'Cherry') t ORDER BY x`
+
 ## pg-order-nulls-default  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))`
@@ -4386,4 +4396,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 858 distinct constructs; defect rows by kind: func 393, invalid 1322, semantic 2, silent-drop 75.
+Totals: 860 distinct constructs; defect rows by kind: func 397, invalid 1322, semantic 2, silent-drop 75.
