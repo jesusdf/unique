@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import re
 
+from unique.core.builtins import is_builtin
 from unique.core.sql_split import is_executable, split_statements
 
 # A procedural unit marker: any of these anywhere in the executable text means
@@ -164,11 +165,95 @@ _TSQL_OUTPUT_CLAUSE_RE = re.compile(
 )
 
 
-def gate_reason(sql: str, target: str) -> str | None:
+#: Type names that appear as ``TYPE(n)`` constructors (in a CAST or a column
+#: definition) and so read like a function call in text but are not. Excluded
+#: from the built-in leak scan so a cast/column type never false-trips it.
+_TYPE_CONSTRUCTOR_NAMES = frozenset(
+    {
+        "CHAR",
+        "NCHAR",
+        "VARCHAR",
+        "NVARCHAR",
+        "VARCHAR2",
+        "NVARCHAR2",
+        "CHARACTER",
+        "NUMBER",
+        "NUMERIC",
+        "DECIMAL",
+        "DEC",
+        "FLOAT",
+        "DOUBLE",
+        "REAL",
+        "BINARY",
+        "VARBINARY",
+        "BLOB",
+        "CLOB",
+        "NCLOB",
+        "RAW",
+        "DATETIME",
+        "DATETIME2",
+        "SMALLDATETIME",
+        "TIMESTAMP",
+        "TIME",
+        "DATETIMEOFFSET",
+    }
+)
+
+#: SQL keywords that are followed by ``(`` but are not function calls. ``VALUES``
+#: is the trap — it heads the ``INSERT … VALUES (…)`` clause yet is also a
+#: catalogued MySQL function; the rest are cheap insurance.
+_KEYWORD_HEADS = frozenset(
+    {
+        "VALUES",
+        "IN",
+        "EXISTS",
+        "ALL",
+        "ANY",
+        "SOME",
+        "OVER",
+        "FILTER",
+        "WITHIN",
+        "ROW",
+        "ROWS",
+        "USING",
+        "RETURNING",
+    }
+)
+
+#: A function-call head: an identifier (its last segment, so ``dbo.SOUNDEX``
+#: matches ``SOUNDEX``) immediately followed by ``(``.
+_FUNC_CALL_RE = re.compile(r"(?<!\w)([A-Za-z_][A-Za-z0-9_$]*)\s*\(")
+
+
+def _untranslated_source_builtin(scrubbed: str, source: str, target: str) -> str | None:
+    """First source built-in that leaked into the output untranslated.
+
+    A call whose emitted name is a built-in of *source* but not of *target*
+    can never run there — it is an unmapped built-in the emit paths passed
+    through verbatim (sqlglot parses it happily, being lenient across dialects,
+    so the target-parse check alone misses it). A name that is *not* a source
+    built-in is a user object (UDF / stored proc) and is left alone. The scan
+    reads the emitted **text** (not sqlglot's canonicalised AST name, which
+    turns a valid ``STRING_AGG`` back into ``GROUP_CONCAT``), on
+    comment/string-scrubbed output, skipping ``TYPE(n)`` constructors.
+    """
+    for m in _FUNC_CALL_RE.finditer(scrubbed):
+        name = m.group(1).upper()
+        if name in _TYPE_CONSTRUCTOR_NAMES or name in _KEYWORD_HEADS:
+            continue
+        if is_builtin(name, source) and not is_builtin(name, target):
+            return name
+    return None
+
+
+def gate_reason(sql: str, target: str, source: str | None = None) -> str | None:
     """Why *sql* must not ship as ``target`` output, or None if it may.
 
     Runs the leftover scan on everything, and the sqlglot target-dialect parse
     only on output with no procedural markers (sqlglot cannot judge those).
+    When *source* is given, the parsed output is also scanned for a source
+    built-in that leaked through untranslated (invalid on the target, no
+    warning) — the class the sqlglot leniency lets slip past the parse check.
     """
     leftovers = find_leftover_tokens(sql, target)
     if leftovers:
@@ -176,6 +261,13 @@ def gate_reason(sql: str, target: str) -> str | None:
     scrubbed = scrub(sql)
     if _PROCEDURAL_MARKER_RE.search(scrubbed):
         return None
+    if source is not None and source != target:
+        # Non-procedural output only (procedural bodies carry constructs the
+        # simple text scan would misread); an unmapped built-in inside a routine
+        # is covered separately.
+        leaked = _untranslated_source_builtin(scrubbed, source, target)
+        if leaked is not None:
+            return f"untranslated {source} built-in {leaked}() (no {target} form)"
     import sqlglot
 
     dialect = _SQLGLOT_DIALECT.get(target)

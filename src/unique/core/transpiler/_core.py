@@ -376,7 +376,7 @@ class Transpiler:
                 if batch.batch_type != BatchType.COMMENT and not _is_comment_only(
                     result.sql
                 ):
-                    gate = gate_reason(result.sql, target)
+                    gate = gate_reason(result.sql, target, source)
                     if gate is not None:
                         message = (
                             f"output failed the {target} validity check "

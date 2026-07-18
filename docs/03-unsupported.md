@@ -122,6 +122,25 @@ transpilation target:
 | T-SQL PIVOT/UNPIVOT | T-SQL | ⚠️ Partially supported → CASE/UNION |
 | REGEXP_LIKE/REGEXP_REPLACE/… → T-SQL | Oracle/PG/MySQL | SQL Server gained REGEXP_* only in 2025; targeting 2012+, a statement using them degrades to a documented carrier + warning (rewrite with LIKE/PATINDEX manually) |
 
+### 2.1 Unmapped built-in scalar functions
+
+A scalar function that is a **built-in of the source engine** but has no form on
+the target (and no mapping/handler) — `SOUNDEX`→PostgreSQL, `GENERATE_SERIES`→
+Oracle, `LISTAGG`→MySQL when no aggregate rewrite applies, and the long tail of
+engine-specific functions — degrades the whole statement to a documented carrier
++ `validity_gate` warning + `unsupported` entry, rather than shipping the call
+verbatim (which the target engine rejects). The gate distinguishes a source
+built-in from a **user object**: a name that is *not* a source built-in (a UDF,
+stored procedure, or user type) is passed through untouched, because the target
+schema is expected to define it. The per-engine built-in catalogs are sourced
+authoritatively (live `pg_proc` / `V$SQLFN_METADATA` / `mysql.help_topic` + a
+curated T-SQL list) by `scripts/gen_builtins.py`; the runtime reads the static
+snapshot (`unique.core.builtins`). This covers standalone DML output; unmapped
+built-ins inside routine bodies are handled by the procedural pipeline.
+
+Adding a real mapping for such a function (so it transpiles instead of
+degrading) is always preferable — the carrier is the honest floor, not the goal.
+
 ---
 
 ## 3. Partially Supported (⚠️) — Known Limitations

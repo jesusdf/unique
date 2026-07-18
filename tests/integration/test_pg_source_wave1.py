@@ -2948,8 +2948,11 @@ class TestBareValueConditionsAndTupleIn:
     63's tuple = subquery)."""
 
     def test_bare_function_condition(self) -> None:
-        out = _t2("select * from t3 where dayname('1995-01-01');", "mysql", "tsql")
-        assert re.search(r"(?is)WHERE .*DAYNAME.* <> 0", out), out
+        # A bare function in a WHERE gets the truthiness wrap (func <> 0), like a
+        # bare column. Uses a portable built-in so the wrap is observable; an
+        # unmapped source built-in (e.g. DAYNAME on T-SQL) now honestly degrades.
+        out = _t2("select a from t1 where abs(a);", "mysql", "tsql")
+        assert re.search(r"(?is)WHERE ABS\(a\) <> 0", out), out
 
     def test_bare_column_condition(self) -> None:
         out = _t2("select a from t1 where b;", "mysql", "tsql")
@@ -4220,8 +4223,11 @@ class TestFunctionRelationTargets:
         assert re.search(r"(?i)generate_series", r.sql), r.sql
 
     def test_srf_relation_table_wrapped_on_oracle(self) -> None:
-        out = _t("select * from generate_series(1,3) g;", "oracle")
-        assert re.search(r"(?i)TABLE\(GENERATE_SERIES\(1, 3\)\) g", out), out
+        # A set-returning function used as a relation is wrapped in Oracle's
+        # TABLE(...) operator. Uses a user function (valid when wrapped); a
+        # source built-in with no Oracle form (e.g. generate_series) degrades.
+        out = _t("select * from my_table_fn(1,3) g;", "oracle")
+        assert re.search(r"(?i)TABLE\(my_table_fn\(1, 3\)\) g", out), out
         assert "UNIQUE:" not in out, out
 
     def test_srf_relation_kept_on_tsql(self) -> None:
