@@ -12,13 +12,13 @@ SELECT 'Ä' = 'A' AS r
 CREATE TABLE t (id INT PRIMARY KEY, n INT);
 ALTER TABLE t ADD COLUMN big BIGINT GENERATED ALWAYS AS IDENTITY
 
--- CASE[open]: pg-admin-fns — fails on mysql, oracle, tsql. (195, b"'pg_sleep' is not a recognized built-in function name.DB-Lib error message 20018, 
+-- CASE[fixed]: pg-admin-fns — fails on mysql, oracle, tsql. (195, b"'pg_sleep' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT pg_sleep(0), pg_advisory_lock(1), txid_current()
 
--- CASE[open]: pg-age — fails on mysql, oracle, tsql. (195, b"'AGE' is not a recognized built-in function name.DB-Lib error message 20018, sever
+-- CASE[fixed]: pg-age — fails on mysql, oracle, tsql. (195, b"'AGE' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT AGE(TIMESTAMP '2020-01-01', TIMESTAMP '2019-01-01') AS a
 
--- CASE[open]: pg-age-epoch — fails on mysql, oracle, tsql. (195, b"'age' is not a recognized built-in function name.DB-Lib error message 20018, sever
+-- CASE[fixed]: pg-age-epoch — fails on mysql, oracle, tsql. (195, b"'age' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT age(now(), '2020-01-01'), date_part('epoch', now())
 
 -- CASE[open]: pg-all-values — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
@@ -49,7 +49,7 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DATA TYPE BIGINT
 -- CASE[open]: pg-any-array-subquery — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
 CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a WHERE id = ANY(ARRAY(SELECT id FROM b))
 
--- CASE[open]: pg-arr-str-roundtrip — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
+-- CASE[fixed]: pg-arr-str-roundtrip — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
 SELECT array_to_string(string_to_array('a,b,c',','),'|')
 
 -- CASE[open]: pg-array-jsonb — fails on oracle. ORA-03099: unexpected item [ in a column definition
@@ -61,7 +61,7 @@ SELECT ASCII('') AS r
 -- CASE[open]: pg-at-time-zone — fails on mysql, oracle, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D
 SELECT TIMESTAMP '2020-01-01 10:00' AT TIME ZONE 'UTC' AS r
 
--- CASE[open]: pg-attz2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ti
+-- CASE[fixed]: pg-attz2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ti
 SELECT now() AT TIME ZONE 'UTC', timezone('UTC', now())
 
 -- CASE[open]: pg-avg-int — fails on mysql, tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
@@ -70,10 +70,10 @@ SELECT AVG(x) FROM (VALUES (1),(2)) v(x)
 -- CASE[open]: pg-avg-null — fails on mysql, tsql. FUNC-DIFF: source=(('2.33333',),) target=(('2',),)
 SELECT AVG(x) FROM (VALUES (1),(2),(NULL),(4)) v(x)
 
--- CASE[open]: pg-baseconv — fails on tsql. (291, b"CAST or CONVERT: invalid attributes specified for type 'bit'DB-Lib error message 2
+-- CASE[fixed]: pg-baseconv — fails on tsql. (291, b"CAST or CONVERT: invalid attributes specified for type 'bit'DB-Lib error message 2
 SELECT 255::bit(8)::text,to_hex(255),255::text
 
--- CASE[open]: pg-bit-fns — fails on mysql. (1305, 'FUNCTION unique_val_ff6c8e4945b4.GETBIT does not exist')
+-- CASE[fixed]: pg-bit-fns — fails on mysql. (1305, 'FUNCTION unique_val_ff6c8e4945b4.GETBIT does not exist')
 SELECT get_bit(B'1011', 0), set_bit(B'0000', 1, 1)
 
 -- CASE[open]: pg-bit-negative — fails on mysql. FUNC-DIFF: source=(('-1', '-6', '3', '5'),) target=(('18446744073709551616', '184467440737
@@ -112,7 +112,7 @@ CREATE FUNCTION f(n INT) RETURNS TEXT AS $$ BEGIN CASE n WHEN 1 THEN RETURN 'one
 -- CASE[open]: pg-cast-bool2 — fails on oracle, tsql. (245, b"Conversion failed when converting the varchar value 'yes' to data type bit.DB-Lib 
 SELECT '1'::boolean, 'yes'::boolean, 'off'::boolean, 't'::boolean
 
--- CASE[open]: pg-cast-chain2 — fails on tsql. (529, b'Explicit conversion from data type time to text is not allowed.DB-Lib error messag
+-- CASE[fixed]: pg-cast-chain2 — fails on tsql. (529, b'Explicit conversion from data type time to text is not allowed.DB-Lib error messag
 SELECT '10:00'::time::text, now()::date::text, 42::bit(8)::int
 
 -- CASE[open]: pg-cast-datetime2 — fails on oracle. ORA-01861: literal does not match format string
@@ -142,13 +142,13 @@ SELECT 7.5 :: int AS r
 -- CASE[open]: pg-cast-tstz — fails on mysql, oracle, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity
 SELECT '2020-01-01'::timestamptz AS r
 
--- CASE[open]: pg-char-encoding — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se
+-- CASE[fixed]: pg-char-encoding — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT ascii('A'),chr(65),encode('AB','hex'),decode('4142','hex'),encode('AB','base64'),octet_length('AB')
 
--- CASE[open]: pg-check-array-len — fails on oracle. ORA-03099: unexpected item [ in a column definition
+-- CASE[fixed]: pg-check-array-len — fails on oracle. ORA-03099: unexpected item [ in a column definition
 CREATE TABLE t (a INT PRIMARY KEY, path TEXT[], CONSTRAINT ck CHECK (array_length(path,1) > 0))
 
--- CASE[open]: pg-check-jsonb — fails on mysql, oracle, tsql. (195, b"'JSONB_TYPEOF' is not a recognized built-in function name.DB-Lib error message 200
+-- CASE[fixed]: pg-check-jsonb — fails on mysql, oracle, tsql. (195, b"'JSONB_TYPEOF' is not a recognized built-in function name.DB-Lib error message 200
 CREATE TABLE t (id INT PRIMARY KEY, data JSONB, CONSTRAINT ck CHECK (jsonb_typeof(data) = 'object'))
 
 -- CASE[open]: pg-check-notvalid — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
@@ -175,13 +175,13 @@ CREATE TABLE t (data JSONB, name TEXT GENERATED ALWAYS AS (data->>'name') STORED
 -- CASE[open]: pg-concat-null — fails on mysql. FUNC-DIFF: source=(('NULL', 'ab', 'a-b'),) target=(('NULL', 'NULL', 'a-b'),)
 SELECT 'a'||NULL||'b', concat('a',NULL,'b'), concat_ws('-','a',NULL,'b')
 
--- CASE[open]: pg-convert-roundtrip — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co
+-- CASE[fixed]: pg-convert-roundtrip — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co
 SELECT convert_from(convert_to('héllo','UTF8'),'UTF8')
 
--- CASE[open]: pg-convert-to — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co
+-- CASE[fixed]: pg-convert-to — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.co
 SELECT convert_to('abc', 'UTF8')
 
--- CASE[open]: pg-date-bin — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA
+-- CASE[fixed]: pg-date-bin — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA
 SELECT date_bin('15 minutes', TIMESTAMP '2020-01-01 00:07', TIMESTAMP '2020-01-01')
 
 -- CASE[open]: pg-date-diff-days — fails on mysql. FUNC-DIFF: source=(('60',),) target=(('200',),)
@@ -226,10 +226,10 @@ SELECT LENGTH('😀') AS r
 -- CASE[open]: pg-empty-is-null — fails on oracle. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT '' IS NULL AS r
 
--- CASE[open]: pg-encode-base64 — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se
+-- CASE[fixed]: pg-encode-base64 — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT ENCODE('abc'::bytea, 'base64') AS r
 
--- CASE[open]: pg-encode-decode — fails on mysql, oracle, tsql. (195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se
+-- CASE[fixed]: pg-encode-decode — fails on mysql, oracle, tsql. (195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT ENCODE(DECODE('SGVsbG8=', 'base64'), 'hex')
 
 -- CASE[open]: pg-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1
@@ -259,13 +259,13 @@ SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r
 -- CASE[open]: pg-fcollate — fails on mysql, tsql. FUNC-DIFF: source=(('c', 'B', '0'),) target=(('c', 'a', '1'),)
 SELECT greatest('a','B','c'),least('a','B'),'a'<'B'
 
--- CASE[open]: pg-fetch-ties2 — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+-- CASE[fixed]: pg-fetch-ties2 — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t ORDER BY id FETCH FIRST 5 ROWS WITH TIES
 
--- CASE[open]: pg-filter-subquery — fails on tsql. (130, b'Cannot perform an aggregate function on an expression containing an aggregate or a
+-- CASE[fixed]: pg-filter-subquery — fails on tsql. (130, b'Cannot perform an aggregate function on an expression containing an aggregate or a
 CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id, COUNT(*) FILTER (WHERE n > (SELECT AVG(v) FROM u)) FROM t GROUP BY id
 
--- CASE[open]: pg-fk-full — fails on oracle. ORA-03075: unexpected item ON in an out-of-line constraint
+-- CASE[fixed]: pg-fk-full — fails on oracle. ORA-03075: unexpected item ON in an out-of-line constraint
 CREATE TABLE t (id INT PRIMARY KEY, parent INT, CONSTRAINT fk FOREIGN KEY (parent) REFERENCES t(id) ON DELETE CASCADE ON UPDATE RESTRICT DEFERRABLE INITIALLY DEFERRED)
 
 -- CASE[open]: pg-float-precision — fails on mysql. FUNC-DIFF: source=(('0.3', '0.3', '0.333333', '0.333333', '0.666667'),) target=(('0.3', '0
@@ -286,7 +286,7 @@ SELECT to_char(1234567.891,'FM999,999,990.00'), to_char(1234567.891,'FML999G999G
 -- CASE[open]: pg-format-func — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
 SELECT format('%s=%s', 'a', 1) AS r
 
--- CASE[open]: pg-format2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
+-- CASE[fixed]: pg-format2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT format('%s-%I-%L', 'a', 'col name', 'val'), concat_ws('|', 'a', NULL, 'b')
 
 -- CASE[open]: pg-frac-seconds — fails on mysql, oracle, tsql. (155, b"'MICROSECONDS' is not a recognized datepart option.DB-Lib error message 20018, sev
@@ -298,16 +298,16 @@ SELECT round(0.5::numeric),round(1.5::numeric),round(2.5::numeric),round(2.567::
 -- CASE[open]: pg-fsubstr — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('abc', 'abc', 'bc'),) target=(('ab', 'a', 'bc'),)
 SELECT substring('abc',0),substring('abc' from -1),substring('abc',2,10)
 
--- CASE[open]: pg-fulltext — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
+-- CASE[fixed]: pg-fulltext — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT to_tsvector('a cat') @@ to_tsquery('cat') AS r
 
--- CASE[open]: pg-fulltext2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
+-- CASE[fixed]: pg-fulltext2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id FROM t WHERE to_tsvector('english', s) @@ plainto_tsquery('english', 'term')
 
 -- CASE[open]: pg-func-attrs — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'sql'.DB-Lib error message 20018, severity 15:\nGeneral SQL 
 CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE sql SECURITY DEFINER STABLE PARALLEL SAFE
 
--- CASE[open]: pg-gen-months — fails on oracle. ORA-30089: missing or invalid <datetime field>
+-- CASE[fixed]: pg-gen-months — fails on oracle. ORA-30089: missing or invalid <datetime field>
 SELECT day::date FROM generate_series('2020-01-01', '2020-12-01', '1 month'::interval) day
 
 -- CASE[open]: pg-gen-series-date — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
@@ -343,10 +343,10 @@ SELECT x, SUM(y) FROM (VALUES (1,10)) v(x,y) GROUP BY GROUPING SETS ((x),())
 -- CASE[open]: pg-grouping-sets2 — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, n, GROUPING(id), GROUPING(n) FROM t GROUP BY GROUPING SETS ((id),(n),())
 
--- CASE[open]: pg-groups2 — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+-- CASE[fixed]: pg-groups2 — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, n, count(*) OVER (ORDER BY id GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM t
 
--- CASE[open]: pg-hash-all — fails on mysql, oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
+-- CASE[fixed]: pg-hash-all — fails on mysql, oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT md5('abc'), encode(sha256('abc'::bytea), 'hex')
 
 -- CASE[open]: pg-hash-fns — fails on mysql, oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
@@ -355,16 +355,16 @@ SELECT lpad('x', 3), md5('x'), sha256('x'::bytea)
 -- CASE[open]: pg-hex-literal — fails on oracle. ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ
 SELECT x'FF'::int AS h, 1.5e3 AS s
 
--- CASE[open]: pg-hexcast — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se
+-- CASE[fixed]: pg-hexcast — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT encode('Hello'::bytea,'hex'),decode('48656c6c6f','hex')::text
 
--- CASE[open]: pg-inet-ops — fails on oracle, tsql. (243, b'Type cidr is not a defined system type.DB-Lib error message 20018, severity 16:\nG
+-- CASE[fixed]: pg-inet-ops — fails on oracle, tsql. (243, b'Type cidr is not a defined system type.DB-Lib error message 20018, severity 16:\nG
 SELECT '192.168.1.0/24'::cidr >> '192.168.1.5'::inet, abbrev('10.0.0.0/8'::cidr)
 
 -- CASE[open]: pg-initcap — fails on mysql, oracle, tsql. (195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT INITCAP('hello world') AS r
 
--- CASE[open]: pg-insert-select-conflict — fails on oracle, tsql. (208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:
+-- CASE[fixed]: pg-insert-select-conflict — fails on oracle, tsql. (208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:
 CREATE TABLE t (id INT, n INT, s VARCHAR(50)); INSERT INTO t (id, n) SELECT g, g*2 FROM generate_series(1,5) g ON CONFLICT DO NOTHING
 
 -- CASE[open]: pg-intdiv — fails on mysql, oracle. FUNC-DIFF: source=(('2',),) target=(('2.5',),)
@@ -376,49 +376,49 @@ SELECT 1 INTERSECT ALL SELECT 1
 -- CASE[open]: pg-interval-arith — fails on mysql, oracle, tsql. (207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S
 SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7
 
--- CASE[open]: pg-interval-out — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '400 DAYS'.DB-Lib error message 20018, severity 15:\nGeneral
+-- CASE[fixed]: pg-interval-out — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '400 DAYS'.DB-Lib error message 20018, severity 15:\nGeneral
 SELECT INTERVAL '1 year 2 months 3 days', INTERVAL '1.5 hours', justify_interval(INTERVAL '400 days')
 
 -- CASE[open]: pg-json-aggs — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_
 SELECT json_agg(x), json_object_agg(x::text, x*2) FROM (VALUES (1),(2)) v(x)
 
--- CASE[open]: pg-json-build — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+-- CASE[fixed]: pg-json-build — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
 SELECT jsonb_build_array(1,'a',NULL,true),jsonb_build_object('k','v')
 
--- CASE[open]: pg-json-meta — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+-- CASE[fixed]: pg-json-meta — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
 SELECT jsonb_typeof('[1]'),jsonb_array_length('[1,2,3]'),jsonb_pretty('{"a":1}')
 
--- CASE[open]: pg-json-mod — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+-- CASE[fixed]: pg-json-mod — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
 SELECT jsonb_set('{}','{a}','1'),jsonb_insert('{}','{a}','1'),'{"a":1}'::jsonb-'a','{"a":1}'::jsonb||'{"b":2}'
 
--- CASE[open]: pg-json-path — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+-- CASE[fixed]: pg-json-path — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
 SELECT jsonb_path_query('{"a":[1,2]}','$.a[*]'),jsonb_path_exists('{"a":1}','$.a')
 
--- CASE[open]: pg-jsonb-agg — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: pg-jsonb-agg — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSONB_AGG(x) FROM (VALUES (1),(2)) v(x)
 
--- CASE[open]: pg-jsonb-build — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: pg-jsonb-build — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSONB_BUILD_OBJECT('a', 1, 'b', 2)
 
--- CASE[open]: pg-jsonb-each — fails on oracle, tsql. (208, b"Invalid object name 'dbo.jsonb_each'.DB-Lib error message 20018, severity 16:\nGen
+-- CASE[fixed]: pg-jsonb-each — fails on oracle, tsql. (208, b"Invalid object name 'dbo.jsonb_each'.DB-Lib error message 20018, severity 16:\nGen
 SELECT key, value FROM jsonb_each('{"a":1,"b":2}'::jsonb)
 
--- CASE[open]: pg-jsonb-elements-ord — fails on oracle, tsql. (102, b"Incorrect syntax near 'ORDINALITY'.DB-Lib error message 20018, severity 15:\nGener
+-- CASE[fixed]: pg-jsonb-elements-ord — fails on oracle, tsql. (102, b"Incorrect syntax near 'ORDINALITY'.DB-Lib error message 20018, severity 15:\nGener
 SELECT * FROM jsonb_array_elements('[1,2,3]'::jsonb) WITH ORDINALITY
 
--- CASE[open]: pg-jsonb-fns2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+-- CASE[fixed]: pg-jsonb-fns2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
 SELECT jsonb_pretty('{"a":1}'::jsonb), jsonb_strip_nulls('{"a":null}'::jsonb)
 
--- CASE[open]: pg-jsonb-modify — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+-- CASE[fixed]: pg-jsonb-modify — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
 SELECT jsonb_set('{}', '{a}', '1'), '{"a":1}'::jsonb - 'a'
 
--- CASE[open]: pg-jsonb-path-query — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
+-- CASE[fixed]: pg-jsonb-path-query — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js
 SELECT jsonb_path_query('{"a":[1,2]}', '$.a[*]') AS r
 
--- CASE[open]: pg-jsonb-recordset — fails on tsql. (317, b"Table-valued function 'jsonb_to_recordset' cannot have a column alias.DB-Lib error
+-- CASE[fixed]: pg-jsonb-recordset — fails on tsql. (317, b"Table-valued function 'jsonb_to_recordset' cannot have a column alias.DB-Lib error
 SELECT * FROM jsonb_to_recordset('[{"a":1}]') AS x(a INT)
 
--- CASE[open]: pg-justify — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 mon 40 days'.DB-Lib error message 20018, severity 15:\nGe
+-- CASE[fixed]: pg-justify — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 mon 40 days'.DB-Lib error message 20018, severity 15:\nGe
 SELECT JUSTIFY_INTERVAL(INTERVAL '1 mon 40 days') AS r
 
 -- CASE[open]: pg-left-neg — fails on mysql. FUNC-DIFF: source=(('ab',),) target=(('',),)
@@ -448,10 +448,10 @@ SELECT LPAD('hello', 3) AS r
 -- CASE[open]: pg-ltrim-set — fails on mysql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT ltrim('xxabc', 'x') AS r
 
--- CASE[open]: pg-make-date — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
+-- CASE[fixed]: pg-make-date — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKE_DATE(2020, 6, 15), MAKE_TIME(10, 30, 0)
 
--- CASE[open]: pg-md5 — fails on oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
+-- CASE[fixed]: pg-md5 — fails on oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT MD5('abc') AS r
 
 -- CASE[open]: pg-mod-decimal — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
@@ -469,7 +469,7 @@ CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1/0; EXCEPTION WHEN division_
 -- CASE[open]: pg-named-window — fails on oracle. ORA-30485: missing ORDER BY expression in the window specification
 SELECT x,sum(x) OVER w,rank() OVER w FROM (SELECT 1 x UNION ALL SELECT 2) t WINDOW w AS (ORDER BY x)
 
--- CASE[open]: pg-named-window2 — fails on oracle. ORA-30485: missing ORDER BY expression in the window specification
+-- CASE[fixed]: pg-named-window2 — fails on oracle. ORA-30485: missing ORDER BY expression in the window specification
 CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id, LAG(n) OVER w, LEAD(n) OVER w FROM t WINDOW w AS (PARTITION BY s ORDER BY id)
 
 -- CASE[open]: pg-nan-cmp — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('0',),)
@@ -484,16 +484,16 @@ CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)
 -- CASE[open]: pg-not-null-is-null — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT (NOT NULL) IS NULL AS r
 
--- CASE[open]: pg-now-fns — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever
+-- CASE[fixed]: pg-now-fns — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever
 SELECT now(), current_date, current_time, localtimestamp, clock_timestamp()
 
--- CASE[open]: pg-now-variants — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
+-- CASE[fixed]: pg-now-variants — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 SELECT now(), current_timestamp, current_timestamp(3), current_date, current_time, localtimestamp, clock_timestamp()
 
 -- CASE[open]: pg-num-literals — fails on mysql. FUNC-DIFF: source=(('1000', '0.015', '0.5', '5', '31'),) target=(('1000', '0.015', '0.5', 
 SELECT 1e3, 1.5e-2, .5, 5., 0x1F::text
 
--- CASE[open]: pg-num-nonnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+-- CASE[fixed]: pg-num-nonnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT NUM_NONNULLS(1, NULL, 2) AS r
 
 -- CASE[open]: pg-num-to-str — fails on mysql. FUNC-DIFF: source=(('n=5', 'x=5.50', 'd=0.33333333333333333333', '5.5'),) target=(('n=5', 
@@ -508,7 +508,7 @@ SELECT to_char(1234.5,'L9G999D99MI'),to_char(-5,'999PR'),to_char(255,'FMRN')
 -- CASE[open]: pg-numfmt-thousands — fails on mysql, tsql. FUNC-DIFF: source=(('1,234,567.89',),) target=(('9999999123456900',),)
 SELECT to_char(1234567.891, '9,999,999.99') AS r
 
--- CASE[open]: pg-numnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.nu
+-- CASE[fixed]: pg-numnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.nu
 SELECT num_nonnulls(1,NULL,2),num_nulls(1,NULL,2)
 
 -- CASE[open]: pg-numtypes — fails on mysql. (1075, 'Incorrect table definition; there can be only one auto column and it must be defin
@@ -535,7 +535,7 @@ SELECT POSITION('a' IN 'ABC') AS r
 -- CASE[open]: pg-position-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT POSITION('' IN 'abc') AS r
 
--- CASE[open]: pg-quote — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
+-- CASE[fixed]: pg-quote — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
 SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')
 
 -- CASE[open]: pg-range-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m
@@ -556,16 +556,16 @@ CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE R
 -- CASE[open]: pg-regexp-backref — fails on mysql, oracle. ORA-01722: unable to convert string value containing 'g' to a number: 
 SELECT regexp_replace('a1b2', '(\d)', '[\1]', 'g') AS r
 
--- CASE[open]: pg-regexp-cnt — fails on mysql. (1305, 'FUNCTION unique_val_a1fe6b8252a9.REGEXP_COUNT does not exist')
+-- CASE[fixed]: pg-regexp-cnt — fails on mysql. (1305, 'FUNCTION unique_val_a1fe6b8252a9.REGEXP_COUNT does not exist')
 SELECT regexp_count('a1b2','[0-9]'),regexp_instr('a1b2','[0-9]',1,2)
 
--- CASE[open]: pg-regexp-matches — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE
+-- CASE[fixed]: pg-regexp-matches — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE
 SELECT REGEXP_MATCHES('a1b2', '[0-9]', 'g') AS r
 
--- CASE[open]: pg-regexp-split-table — fails on oracle, tsql. (208, b"Invalid object name 'dbo.regexp_split_to_table'.DB-Lib error message 20018, severi
+-- CASE[fixed]: pg-regexp-split-table — fails on oracle, tsql. (208, b"Invalid object name 'dbo.regexp_split_to_table'.DB-Lib error message 20018, severi
 SELECT * FROM regexp_split_to_table('a,b,c', ',')
 
--- CASE[open]: pg-repeat-left-right — fails on oracle. ORA-00904: "RIGHT": invalid identifier
+-- CASE[fixed]: pg-repeat-left-right — fails on oracle. ORA-00904: "RIGHT": invalid identifier
 SELECT REPEAT('ab', 3), LEFT('abc', 2), RIGHT('abc', 2)
 
 -- CASE[open]: pg-rollup — fails on mysql, oracle, tsql. (8120, b"Column 'v.x' is invalid in the select list because it is not contained in either 
@@ -583,7 +583,7 @@ SELECT ROUND(2.675::numeric, 2) AS r
 -- CASE[open]: pg-savepoint — fails on mysql, tsql. (156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG
 BEGIN; SAVEPOINT sp; ROLLBACK TO SAVEPOINT sp; COMMIT
 
--- CASE[open]: pg-scale — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.sc
+-- CASE[fixed]: pg-scale — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.sc
 SELECT scale(1.230), trim_scale(1.230)
 
 -- CASE[open]: pg-scientific — fails on mysql. FUNC-DIFF: source=(('100000000000000000000', '1e-20', '123456789012345677877719597056'),) 
@@ -594,28 +594,28 @@ CREATE TABLE t (id INT);
 SELECT id INTO TEMP t2 FROM t;
 CREATE TABLE t3 AS SELECT * FROM t;
 
--- CASE[open]: pg-seq-use — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne
+-- CASE[fixed]: pg-seq-use — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne
 CREATE SEQUENCE s; SELECT nextval('s'),currval('s'),setval('s',10)
 
--- CASE[open]: pg-sequence — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne
+-- CASE[fixed]: pg-sequence — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ne
 CREATE SEQUENCE seq; SELECT nextval('seq'), currval('seq')
 
--- CASE[open]: pg-serial-bit — fails on oracle, tsql. (2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit
+-- CASE[fixed]: pg-serial-bit — fails on oracle, tsql. (2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit
 CREATE TABLE t (a BIGSERIAL, flags BIT(8), vb VARBIT(16))
 
 -- CASE[open]: pg-set-default — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'SET'.DB-Lib error message 20018, severity 15:\n
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DEFAULT 5
 
--- CASE[open]: pg-setweight — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.se
+-- CASE[fixed]: pg-setweight — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.se
 SELECT setweight(to_tsvector('cat'), 'A') AS r
 
--- CASE[open]: pg-size-funcs — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.pg
+-- CASE[fixed]: pg-size-funcs — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.pg
 SELECT pg_size_pretty(1024::bigint), pg_relation_size('pg_class')
 
--- CASE[open]: pg-spectypes — fails on oracle, tsql. (2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit
+-- CASE[fixed]: pg-spectypes — fails on oracle, tsql. (2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit
 CREATE TABLE t (a BYTEA, b BIT(8), c VARBIT(16), d BOOLEAN, e UUID, f XML, g JSON, h JSONB)
 
--- CASE[open]: pg-split-part — fails on mysql, oracle, tsql. (195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018
+-- CASE[fixed]: pg-split-part — fails on mysql, oracle, tsql. (195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT SPLIT_PART('a,b,c', ',', 2) AS r
 
 -- CASE[open]: pg-srf-in-select — fails on oracle, tsql. (208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:
@@ -630,16 +630,16 @@ SELECT string_agg(x::text,',' ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2) t
 -- CASE[open]: pg-string-agg-order — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
 SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
--- CASE[open]: pg-string-fns2 — fails on mysql, oracle, tsql. (195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018
+-- CASE[fixed]: pg-string-fns2 — fails on mysql, oracle, tsql. (195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT split_part('a,b,c', ',', 2), left('abc',-1), right('abc',-1)
 
--- CASE[open]: pg-string-fns3 — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
+-- CASE[fixed]: pg-string-fns3 — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
 SELECT starts_with('abc','ab'), string_to_array('a.b.c','.')
 
--- CASE[open]: pg-string-split-fns — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.st
+-- CASE[fixed]: pg-string-split-fns — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.st
 SELECT string_to_table('a,b,c', ','), regexp_split_to_array('a1b2', '\d')
 
--- CASE[open]: pg-string-to-array — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
+-- CASE[fixed]: pg-string-to-array — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
 SELECT string_to_array('a,b,c', ',')
 
 -- CASE[open]: pg-strpos-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
@@ -687,10 +687,10 @@ SELECT 'a ' = 'a' AS r
 -- CASE[open]: pg-trailing-space-cmp — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('0', '1', '0'),) target=(('1', '1', '1'),)
 SELECT 'a'='a ', 'a'::char(2)='a'::char(2), 'abc'='ABC'
 
--- CASE[open]: pg-translate — fails on mysql. (1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')
+-- CASE[fixed]: pg-translate — fails on mysql. (1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
 
--- CASE[open]: pg-trig — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AT
+-- CASE[fixed]: pg-trig — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AT
 SELECT atan2(1,1), degrees(pi()), radians(180), cot(1), sind(30)
 
 -- CASE[open]: pg-trim-both-chars — fails on oracle. ORA-30001: trim set should have only one character
@@ -705,13 +705,13 @@ SELECT trim(both 'x' from 'xxhixx'), ltrim('007','0'), translate('abc','ac','XZ'
 -- CASE[open]: pg-truncate-restart — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'RESTART'.DB-Lib error message 20018, severity 15:\nGeneral 
 CREATE TABLE t (id INT); TRUNCATE TABLE t RESTART IDENTITY CASCADE
 
--- CASE[open]: pg-ts-headline — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ts
+-- CASE[fixed]: pg-ts-headline — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ts
 SELECT ts_headline('the quick fox', to_tsquery('fox')) AS r
 
--- CASE[open]: pg-ts-rank — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ts
+-- CASE[fixed]: pg-ts-rank — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ts
 SELECT ts_rank(to_tsvector('the cat'), to_tsquery('cat')) AS r
 
--- CASE[open]: pg-tstzrange — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
+-- CASE[fixed]: pg-tstzrange — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
 SELECT tstzrange(now(), now() + INTERVAL '1 day') AS r
 
 -- CASE[open]: pg-tz-convert — fails on mysql, oracle, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D
@@ -735,7 +735,7 @@ SELECT EXTRACT(WEEK FROM DATE '2016-01-01') AS r
 -- CASE[open]: pg-week-jan1 — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT EXTRACT(WEEK FROM DATE '2020-01-01') AS r
 
--- CASE[open]: pg-width-bucket — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI
+-- CASE[fixed]: pg-width-bucket — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI
 SELECT width_bucket(5, 0, 10, 5) AS r
 
 -- CASE[open]: pg-xmlelement — fails on mysql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
@@ -744,10 +744,10 @@ SELECT XMLELEMENT(NAME foo, 'bar') AS r
 -- CASE[open]: pg-xmlelement2 — fails on mysql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT xmlelement(name foo, 'bar')
 
--- CASE[open]: pg-xpath — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.xp
+-- CASE[fixed]: pg-xpath — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.xp
 SELECT xpath('/a/text()', '<a>1</a>'::xml)
 
--- CASE[open]: pg15-merge — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+-- CASE[fixed]: pg15-merge — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); MERGE INTO t USING s ON t.id=s.id WHEN MATCHED THEN UPDATE SET n=s.n WHEN NOT MATCHED THEN INSERT VALUES (s.id, s.n)
 
 -- CASE[open]: po-agg-bit — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI

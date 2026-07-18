@@ -72,43 +72,43 @@ SELECT CAST(1 AS DATETIME) AS r
 -- CASE[open]: ts-cast-money — fails on oracle, postgresql. ORA-00902: invalid datatype
 SELECT CAST(12.99 AS MONEY), CAST(12.99 AS SMALLMONEY), CONVERT(MONEY, '$12.99')
 
--- CASE[open]: ts-cast-suite — fails on mysql, oracle, postgresql. ORA-00906: missing left parenthesis
+-- CASE[fixed]: ts-cast-suite — fails on mysql, oracle, postgresql. ORA-00906: missing left parenthesis
 SELECT CAST('123' AS INT),CONVERT(INT,'123'),CONVERT(VARCHAR,123),TRY_CAST('x' AS INT),TRY_CONVERT(INT,'x'),PARSE('123' AS INT)
 
 -- CASE[open]: ts-cast-trycast — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'x' to a number: 
 SELECT CAST(123 AS VARCHAR(10)), TRY_CAST('x' AS INT), CONVERT(DATE, GETDATE())
 
--- CASE[open]: ts-char-encoding — fails on mysql, oracle, postgresql. ORA-00906: missing left parenthesis
+-- CASE[fixed]: ts-char-encoding — fails on mysql, oracle, postgresql. ORA-00906: missing left parenthesis
 SELECT ASCII('A'),CHAR(65),UNICODE(N'é'),NCHAR(233),CONVERT(VARBINARY,'AB'),CONVERT(VARCHAR,0x4142)
 
--- CASE[open]: ts-checksum-agg — fails on mysql, oracle, postgresql. ORA-00904: "CHECKSUM_AGG": invalid identifier
+-- CASE[fixed]: ts-checksum-agg — fails on mysql, oracle, postgresql. ORA-00904: "CHECKSUM_AGG": invalid identifier
 SELECT CHECKSUM_AGG(x) FROM (VALUES (1),(2)) v(x)
 
--- CASE[open]: ts-checksum-fns — fails on mysql, oracle, postgresql. ORA-00909: invalid number of arguments
+-- CASE[fixed]: ts-checksum-fns — fails on mysql, oracle, postgresql. ORA-00909: invalid number of arguments
 SELECT CHECKSUM('a','b'), BINARY_CHECKSUM('x'), HASHBYTES('MD5','x')
 
--- CASE[open]: ts-choose — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
+-- CASE[fixed]: ts-choose — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
 SELECT CHOOSE(2, 'a', 'b', 'c') AS r
 
--- CASE[open]: ts-compress — fails on oracle, postgresql. ORA-00936: missing expression
+-- CASE[fixed]: ts-compress — fails on oracle, postgresql. ORA-00936: missing expression
 SELECT COMPRESS('data') AS r
 
--- CASE[open]: ts-compress2 — fails on mysql, oracle, postgresql. ORA-00936: missing expression
+-- CASE[fixed]: ts-compress2 — fails on mysql, oracle, postgresql. ORA-00936: missing expression
 SELECT COMPRESS('x'), DECOMPRESS(COMPRESS('x'))
 
 -- CASE[open]: ts-concat-null — fails on mysql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
 SELECT CONCAT('a', NULL, 'b') AS r
 
--- CASE[open]: ts-concat-ws — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
+-- CASE[fixed]: ts-concat-ws — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT CONCAT_WS('-', 'a', 'b', 'c') AS r
 
--- CASE[open]: ts-concatws2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
+-- CASE[fixed]: ts-concatws2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT CONCAT_WS(',', 'a', NULL, 'b') AS r
 
--- CASE[open]: ts-cond-all — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
+-- CASE[fixed]: ts-cond-all — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
 SELECT ISNULL(NULL,3),NULLIF(1,1),COALESCE(NULL,3),IIF(1=1,'y','n'),CHOOSE(1,'a','b'),CASE WHEN 1=1 THEN 1 END
 
--- CASE[open]: ts-conditional — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
+-- CASE[fixed]: ts-conditional — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
 SELECT IIF(1>0,'y','n'), CHOOSE(2,'a','b','c'), ISNULL(NULL,'x'), NULLIF(1,1)
 
 -- CASE[open]: ts-continue-break — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol "=" when expectin
@@ -120,13 +120,13 @@ SELECT CONVERT(VARCHAR,GETDATE(),101),CONVERT(VARCHAR,GETDATE(),112),CONVERT(VAR
 -- CASE[open]: ts-cube — fails on mysql, oracle, postgresql. ORA-00937: not a single-group group function
 SELECT a,b,SUM(c) FROM (SELECT 1 a,2 b,3 c) t GROUP BY CUBE(a,b)
 
--- CASE[open]: ts-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
+-- CASE[fixed]: ts-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT FROM c INTO @x; WHILE @@FETCH_STATUS = 0 BEGIN FETCH NEXT FROM c INTO @x; END; CLOSE c; DEALLOCATE c; END
 
 -- CASE[open]: ts-cursor-attr — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol ";" when expectin
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT 1; OPEN c; FETCH NEXT FROM c; IF @@FETCH_STATUS=0 PRINT CAST(@@CURSOR_ROWS AS VARCHAR); CLOSE c; DEALLOCATE c; END
 
--- CASE[open]: ts-date-bucket2 — fails on mysql, oracle, postgresql. ORA-01861: literal does not match format string
+-- CASE[fixed]: ts-date-bucket2 — fails on mysql, oracle, postgresql. ORA-01861: literal does not match format string
 SELECT DATE_BUCKET(MINUTE, 15, CAST('2020-01-01 00:07' AS DATETIME2))
 
 -- CASE[open]: ts-dateadd — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('2020-02-29 00:00:00', '2020-01-02 00:00:00', '2020-02-29'),) target=(
@@ -158,7 +158,7 @@ CREATE TABLE t (a DATE, b TIME, c DATETIME, d DATETIME2, e SMALLDATETIME, f DATE
 -- CASE[open]: ts-dyn-concat-loop — fails on oracle. PROCEDURE P compiled INVALID (line 6): PL/SQL: ORA-00942: table or view does not exist
 CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(MAX) = N''; SELECT @sql = @sql + 'DROP TABLE ' + name + ';' FROM sys.tables; EXEC(@sql); END
 
--- CASE[open]: ts-dyn-count — fails on oracle. PROCEDURE P compiled INVALID (line 6): PLS-00201: identifier 'QUOTENAME' must be declared
+-- CASE[fixed]: ts-dyn-count — fails on oracle. PROCEDURE P compiled INVALID (line 6): PLS-00201: identifier 'QUOTENAME' must be declared
 CREATE PROCEDURE p @tbl NVARCHAR(128) AS BEGIN DECLARE @sql NVARCHAR(MAX) = N'SELECT COUNT(*) FROM ' + QUOTENAME(@tbl); EXEC(@sql); END
 
 -- CASE[open]: ts-emoji-len — fails on mysql, postgresql. FUNC-DIFF: source=(('2',),) target=(('1',),)
@@ -170,7 +170,7 @@ SELECT EOMONTH('2020-02-15') AS r
 -- CASE[open]: ts-eomonth-nested — fails on oracle, postgresql. ORA-01861: literal does not match format string
 SELECT DATEADD(MONTH, -1, EOMONTH('2020-03-01')) AS r
 
--- CASE[open]: ts-error-functions — fails on oracle. PROCEDURE P compiled INVALID (line 12): PL/SQL: ORA-00904: "ERROR_LINE": invalid identifie
+-- CASE[fixed]: ts-error-functions — fails on oracle. PROCEDURE P compiled INVALID (line 12): PL/SQL: ORA-00904: "ERROR_LINE": invalid identifie
 CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERROR_MESSAGE(), ERROR_NUMBER(), ERROR_LINE(); END CATCH END
 
 -- CASE[open]: ts-float-precision — fails on mysql. FUNC-DIFF: source=(('0.3', '0.3', '0.333333', '0.333333'),) target=(('0.3', '0.3', '0.3333
@@ -188,7 +188,7 @@ SELECT FORMAT(CAST('2020-06-15 14:30:45' AS DATETIME2), 'yyyy-MM-ddTHH:mm:ss') A
 -- CASE[open]: ts-format-number — fails on mysql, oracle, postgresql. ORA-00904: "NUMBER_TO_STR": invalid identifier
 SELECT FORMAT(1234.5, 'N2') AS r
 
--- CASE[open]: ts-formatmessage — fails on mysql, oracle, postgresql. ORA-00904: "FORMATMESSAGE": invalid identifier
+-- CASE[fixed]: ts-formatmessage — fails on mysql, oracle, postgresql. ORA-00904: "FORMATMESSAGE": invalid identifier
 SELECT FORMATMESSAGE('hi %s', 'x') AS r
 
 -- CASE[open]: ts-frac-seconds — fails on oracle. ORA-01843: An invalid month was specified.
@@ -212,7 +212,7 @@ SELECT HASHBYTES('SHA2_512', 'abc'), CHECKSUM('abc')
 -- CASE[open]: ts-hexcast — fails on oracle, postgresql. ORA-00906: missing left parenthesis
 SELECT CONVERT(VARCHAR,0x48656C6C6F),CONVERT(VARBINARY,'Hello',0)
 
--- CASE[open]: ts-host-db — fails on mysql, oracle, postgresql. ORA-00904: "DB_NAME": invalid identifier
+-- CASE[fixed]: ts-host-db — fails on mysql, oracle, postgresql. ORA-00904: "DB_NAME": invalid identifier
 SELECT HOST_NAME(), DB_NAME(), SUSER_SNAME()
 
 -- CASE[open]: ts-identity-funcs — fails on mysql, oracle, postgresql. ORA-00936: missing expression
@@ -231,7 +231,7 @@ CREATE TABLE t (id INT PRIMARY KEY, n INT);
 GO
 CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT id, n FROM inserted; END
 
--- CASE[open]: ts-is-fns — fails on mysql, oracle, postgresql. ORA-00904: "ISJSON": invalid identifier
+-- CASE[fixed]: ts-is-fns — fails on mysql, oracle, postgresql. ORA-00904: "ISJSON": invalid identifier
 SELECT ISNUMERIC('12.3'), ISDATE('2020-01-01'), ISJSON('{}')
 
 -- CASE[open]: ts-len-trailing — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('3',),) target=(('6',),)
@@ -245,7 +245,7 @@ CREATE TABLE tgt (id INT PRIMARY KEY, n INT); CREATE TABLE src (id INT, n INT);
 GO
 MERGE tgt USING src ON tgt.id = src.id WHEN MATCHED AND src.n > 0 THEN UPDATE SET n = src.n WHEN MATCHED THEN DELETE WHEN NOT MATCHED BY TARGET THEN INSERT (id, n) VALUES (src.id, src.n) WHEN NOT MATCHED BY SOURCE THEN DELETE;
 
--- CASE[open]: ts-metadata-funcs — fails on mysql, oracle, postgresql. ORA-00904: "OBJECT_ID": invalid identifier
+-- CASE[fixed]: ts-metadata-funcs — fails on mysql, oracle, postgresql. ORA-00904: "OBJECT_ID": invalid identifier
 SELECT COL_LENGTH('t', 'c'), OBJECT_ID('t')
 
 -- CASE[open]: ts-money — fails on oracle, postgresql. ORA-00902: invalid datatype
@@ -268,7 +268,7 @@ SELECT * FROM t WITH (NOLOCK)
 -- CASE[open]: ts-now-fns — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier
 SELECT GETDATE(), SYSDATETIME(), CURRENT_TIMESTAMP, GETUTCDATE(), SYSDATETIMEOFFSET()
 
--- CASE[open]: ts-now-variants — fails on mysql, oracle, postgresql. ORA-00904: "SYSUTCDATETIME": invalid identifier
+-- CASE[fixed]: ts-now-variants — fails on mysql, oracle, postgresql. ORA-00904: "SYSUTCDATETIME": invalid identifier
 SELECT GETDATE(), GETUTCDATE(), SYSDATETIME(), SYSUTCDATETIME(), CURRENT_TIMESTAMP
 
 -- CASE[open]: ts-openjson — fails on oracle, postgresql. ORA-00904: "OPEN_J_S_O_N": invalid identifier
@@ -277,13 +277,13 @@ SELECT * FROM OPENJSON('[1,2,3]')
 -- CASE[open]: ts-order-strings — fails on mysql. FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), 
 SELECT x FROM (VALUES ('banana'),('Apple'),('cherry'),('Banana')) v(x) ORDER BY x
 
--- CASE[open]: ts-pad-repeat — fails on mysql, oracle, postgresql. ORA-00904: "STR": invalid identifier
+-- CASE[fixed]: ts-pad-repeat — fails on mysql, oracle, postgresql. ORA-00904: "STR": invalid identifier
 SELECT REPLICATE('ab',3),REVERSE('abc'),SPACE(3),RIGHT('000'+'7',3),STR(7,3)
 
--- CASE[open]: ts-patindex — fails on mysql, oracle, postgresql. ORA-00904: "PATINDEX": invalid identifier
+-- CASE[fixed]: ts-patindex — fails on mysql, oracle, postgresql. ORA-00904: "PATINDEX": invalid identifier
 SELECT PATINDEX('%[0-9]%', 'abc123') AS r
 
--- CASE[open]: ts-quotename — fails on mysql, oracle, postgresql. ORA-00904: "SPLIT_PART": invalid identifier
+-- CASE[fixed]: ts-quotename — fails on mysql, oracle, postgresql. ORA-00904: "SPLIT_PART": invalid identifier
 SELECT QUOTENAME('my table'), PARSENAME('a.b.c', 2)
 
 -- CASE[open]: ts-realworld-audit — fails on mysql, oracle, postgresql. PROCEDURE LOG_IT compiled INVALID (line 11): PLS-00103: Encountered the symbol ")" when ex
@@ -323,13 +323,13 @@ CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1;
 GO
 SELECT NEXT VALUE FOR seq
 
--- CASE[open]: ts-session-ctx — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TRANSACTION_ID": invalid identifier
+-- CASE[fixed]: ts-session-ctx — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TRANSACTION_ID": invalid identifier
 SELECT SESSION_CONTEXT(N'k'), CURRENT_TRANSACTION_ID()
 
--- CASE[open]: ts-soundex-diff — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
+-- CASE[fixed]: ts-soundex-diff — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
 SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')
 
--- CASE[open]: ts-soundex3 — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
+-- CASE[fixed]: ts-soundex3 — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
 SELECT SOUNDEX('Smith'),DIFFERENCE('Smith','Smyth')
 
 -- CASE[open]: ts-sp-executesql — fails on oracle. PROCEDURE P compiled INVALID (line 5): PLS-00103: Encountered the symbol ">" when expectin
@@ -338,22 +338,22 @@ CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(200)=N'SELECT * FROM t WHERE i
 -- CASE[open]: ts-spatial — fails on oracle, postgresql. DPY-4010: a bind variable replacement value for placeholder ":POINT" was not provided
 SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)), geography::Point(47,-122,4326).ToString()
 
--- CASE[open]: ts-spectypes — fails on oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[fixed]: ts-spectypes — fails on oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (a BINARY(16), b VARBINARY(MAX), c IMAGE, d BIT, e UNIQUEIDENTIFIER, f XML, g SQL_VARIANT, h ROWVERSION, i HIERARCHYID, j GEOGRAPHY)
 
 -- CASE[open]: ts-spid-version — fails on mysql, oracle, postgresql. ORA-00936: missing expression
 SELECT @@SPID, @@VERSION
 
--- CASE[open]: ts-split-agg — fails on oracle, postgresql. ORA-00904: "STRING_SPLIT": invalid identifier
+-- CASE[fixed]: ts-split-agg — fails on oracle, postgresql. ORA-00904: "STRING_SPLIT": invalid identifier
 SELECT STRING_AGG(value,',') FROM STRING_SPLIT('a,b,c',',')
 
 -- CASE[open]: ts-st-distance — fails on oracle, postgresql. DPY-4010: a bind variable replacement value for placeholder ":POINT" was not provided
 SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)) AS r
 
--- CASE[open]: ts-str-func — fails on mysql, oracle, postgresql. ORA-00904: "STR": invalid identifier
+-- CASE[fixed]: ts-str-func — fails on mysql, oracle, postgresql. ORA-00904: "STR": invalid identifier
 SELECT STR(3.14, 6, 2) AS r
 
--- CASE[open]: ts-str-misc — fails on mysql, oracle, postgresql. ORA-00904: "QUOTENAME": invalid identifier
+-- CASE[fixed]: ts-str-misc — fails on mysql, oracle, postgresql. ORA-00904: "QUOTENAME": invalid identifier
 SELECT SOUNDEX('Robert'),DIFFERENCE('Robert','Rupert'),FORMAT(1234567.891,'N2'),QUOTENAME('a]b')
 
 -- CASE[open]: ts-str-plus-num — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('15',),) target=(('105',),)
@@ -373,19 +373,19 @@ SELECT STRING_AGG(CAST(n AS VARCHAR), ',') WITHIN GROUP (ORDER BY id) FROM t
 -- CASE[open]: ts-string-agg-within — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
--- CASE[open]: ts-string-fns2 — fails on mysql, oracle, postgresql. ORA-00904: "STUFF": invalid identifier
+-- CASE[fixed]: ts-string-fns2 — fails on mysql, oracle, postgresql. ORA-00904: "STUFF": invalid identifier
 SELECT STRING_ESCAPE('a"b', 'json'), STUFF('abcdef',2,3,'XYZ')
 
--- CASE[open]: ts-string-fns3 — fails on mysql, oracle, postgresql. ORA-00904: "QUOTENAME": invalid identifier
+-- CASE[fixed]: ts-string-fns3 — fails on mysql, oracle, postgresql. ORA-00904: "QUOTENAME": invalid identifier
 SELECT TRANSLATE('abc','ab','xy'), REPLICATE('ab',3), QUOTENAME('a]b')
 
--- CASE[open]: ts-string-split2 — fails on oracle, postgresql. ORA-00904: "STRING_SPLIT": invalid identifier
+-- CASE[fixed]: ts-string-split2 — fails on oracle, postgresql. ORA-00904: "STRING_SPLIT": invalid identifier
 SELECT * FROM STRING_SPLIT('a,b,c', ',') WHERE value <> 'b'
 
 -- CASE[open]: ts-stuff — fails on mysql, oracle, postgresql. ORA-00904: "STUFF": invalid identifier
 SELECT STUFF('abcdef', 2, 3, 'XY') AS r
 
--- CASE[open]: ts-sysdatetime — fails on mysql, oracle, postgresql. ORA-00904: "GETUTCDATE": invalid identifier
+-- CASE[fixed]: ts-sysdatetime — fails on mysql, oracle, postgresql. ORA-00904: "GETUTCDATE": invalid identifier
 SELECT SYSDATETIME(), SYSUTCDATETIME(), GETUTCDATE()
 
 -- CASE[open]: ts-tablesample — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
@@ -402,7 +402,7 @@ SELECT IIF('a ' = 'a', 1, 0) AS r
 -- CASE[open]: ts-trailing-space-cmp — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('eq', 'eq'),) target=(('ne', 'ne'),)
 SELECT CASE WHEN 'a'='a ' THEN 'eq' ELSE 'ne' END, CASE WHEN 'a '='a' THEN 'eq' ELSE 'ne' END
 
--- CASE[open]: ts-translate — fails on mysql. (1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')
+-- CASE[fixed]: ts-translate — fails on mysql. (1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
 
 -- CASE[open]: ts-trg-instead-delete — fails on postgresql. "t" is a table
@@ -423,19 +423,19 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t SELECT id FROM 
 -- CASE[open]: ts-trim-chars — fails on oracle. ORA-30001: trim set should have only one character
 SELECT TRIM('x' FROM 'xxabcxx') AS r
 
--- CASE[open]: ts-try-catch-raiserror — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 8): PLS-00103: Encountered the symbol "RAISERROR" when 
+-- CASE[fixed]: ts-try-catch-raiserror — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 8): PLS-00103: Encountered the symbol "RAISERROR" when 
 CREATE PROCEDURE p AS BEGIN BEGIN TRY INSERT INTO t VALUES(1); END TRY BEGIN CATCH IF ERROR_NUMBER()=2627 RAISERROR('dup',16,1); END CATCH END
 
 -- CASE[open]: ts-try-convert — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'a' to a number: 
 SELECT TRY_CONVERT(INT, 'abc') AS r
 
--- CASE[open]: ts-try-parse — fails on mysql, oracle, postgresql. ORA-00907: missing right parenthesis
+-- CASE[fixed]: ts-try-parse — fails on mysql, oracle, postgresql. ORA-00907: missing right parenthesis
 SELECT TRY_PARSE('2020-01-01' AS DATE) AS r
 
--- CASE[open]: ts-tz-fns — fails on mysql, oracle, postgresql. ORA-00904: "TODATETIMEOFFSET": invalid identifier
+-- CASE[fixed]: ts-tz-fns — fails on mysql, oracle, postgresql. ORA-00904: "TODATETIMEOFFSET": invalid identifier
 SELECT SWITCHOFFSET(SYSDATETIMEOFFSET(),'+00:00'), TODATETIMEOFFSET(GETDATE(),'+05:00')
 
--- CASE[open]: ts-tz-offset — fails on mysql, oracle, postgresql. ORA-00904: "TODATETIMEOFFSET": invalid identifier
+-- CASE[fixed]: ts-tz-offset — fails on mysql, oracle, postgresql. ORA-00904: "TODATETIMEOFFSET": invalid identifier
 SELECT CONVERT(VARCHAR,SYSDATETIMEOFFSET(),121), SWITCHOFFSET(SYSDATETIMEOFFSET(),'+05:30'), TODATETIMEOFFSET(GETDATE(),'-08:00')
 
 -- CASE[open]: ts-tzoffset — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier

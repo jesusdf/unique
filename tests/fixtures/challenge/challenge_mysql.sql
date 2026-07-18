@@ -11,7 +11,7 @@ SELECT 'Ä' = 'A' AS r
 -- CASE[open]: my-adddate — fails on tsql. FUNC-DIFF: source=(('2020-01-31',),) target=(('2020-01-31 00:00:00',),)
 SELECT ADDDATE('2020-01-01', 30) AS r
 
--- CASE[open]: my-aes — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
+-- CASE[fixed]: my-aes — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT HEX(AES_ENCRYPT('data', 'key')) AS r
 
 -- CASE[open]: my-agg-bit — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
@@ -35,7 +35,7 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DEFAULT 5
 -- CASE[open]: my-any-value — fails on postgresql, tsql. (102, b"Incorrect syntax near '>'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 SELECT ANY_VALUE(x), GROUP_CONCAT(x) FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x>0
 
--- CASE[open]: my-arr-json — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: my-arr-json — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_ARRAY(1,2,3),JSON_ARRAY_APPEND('[1]','$',2),JSON_ARRAY_INSERT('[1,2]','$[0]',0)
 
 -- CASE[open]: my-ascii-empty — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('NULL',),)
@@ -47,16 +47,16 @@ SELECT AVG(x) FROM (SELECT 1 x UNION SELECT 2) t
 -- CASE[open]: my-avg-precision2 — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1.6667',),) target=(('1',),)
 SELECT AVG(x) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 2) t
 
--- CASE[open]: my-base64 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TO
+-- CASE[fixed]: my-base64 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TO
 SELECT TO_BASE64('abc'), FROM_BASE64('YWJj')
 
--- CASE[open]: my-baseconv — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
+-- CASE[fixed]: my-baseconv — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT BIN(255),OCT(255),HEX(255),CONV(255,10,36)
 
--- CASE[open]: my-benchmark — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BE
+-- CASE[fixed]: my-benchmark — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BE
 SELECT BENCHMARK(1, 1+1) AS r
 
--- CASE[open]: my-binary-substr — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
+-- CASE[fixed]: my-binary-substr — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
 SELECT SUBSTRING(UNHEX('48656C6C6F'), 1, 2) AS r
 
 -- CASE[open]: my-bintypes — fails on tsql. (2716, b'Column, parameter, or variable #7: Cannot specify a column width on data type bit
@@ -92,7 +92,7 @@ SELECT ~5 + 1 AS r
 -- CASE[open]: my-bitops — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1', '7', '6', '18446744073709551616', '10', '2'),) target=(('1', '7',
 SELECT 5 & 3, 5 | 2, 5 ^ 3, ~5, 5 << 1, 5 >> 1
 
--- CASE[open]: my-blob-length — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
+-- CASE[fixed]: my-blob-length — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 CREATE TABLE t (data BLOB); INSERT INTO t VALUES (LOAD_FILE('/x')); SELECT LENGTH(data) FROM t
 
 -- CASE[open]: my-bool-char — fails on postgresql. FUNC-DIFF: source=(('1',),) target=(('t',),)
@@ -152,13 +152,13 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t CHANGE a x INT
 -- CASE[open]: my-char-256 — fails on oracle, postgresql. FUNC-DIFF: source=(('0100',),) target=(('\x01\x00',),)
 SELECT CHAR(256) AS r
 
--- CASE[open]: my-char-encoding — fails on oracle, postgresql, tsql. (195, b"'CHR' is not a recognized built-in function name.DB-Lib error message 20018, sever
+-- CASE[fixed]: my-char-encoding — fails on oracle, postgresql, tsql. (195, b"'CHR' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT ASCII('A'),CHAR(65),ORD('é'),HEX('AB'),UNHEX('4142'),TO_BASE64('AB'),FROM_BASE64('QUI='),BIT_LENGTH('AB')
 
 -- CASE[open]: my-char-unicode — fails on postgresql. FUNC-DIFF: source=(('NULL',),) target=(('μ',),)
 SELECT CHAR(956 USING utf8mb4) AS r
 
--- CASE[open]: my-char-unicode2 — fails on oracle, postgresql, tsql. (195, b"'CHR' is not a recognized built-in function name.DB-Lib error message 20018, sever
+-- CASE[fixed]: my-char-unicode2 — fails on oracle, postgresql, tsql. (195, b"'CHR' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT CHAR(0x41,0x42 USING utf8mb4),ORD('中')
 
 -- CASE[open]: my-check-enforced — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'ENFORCED'.DB-Lib error message 20018, severity 15:\nGeneral
@@ -173,13 +173,13 @@ SELECT COALESCE(x) FROM (SELECT NULL x) t
 -- CASE[open]: my-collation-fn — fails on oracle. FUNC-DIFF: source=(('utf8mb4_0900_ai_ci',),) target=(('USING_NLS_COMP',),)
 SELECT COLLATION('abc') AS r
 
--- CASE[open]: my-compress — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
+-- CASE[fixed]: my-compress — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
 SELECT UNCOMPRESS(COMPRESS('data')) AS r
 
--- CASE[open]: my-compress2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
+-- CASE[fixed]: my-compress2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
 SELECT COMPRESS('x'), UNCOMPRESSED_LENGTH(COMPRESS('x'))
 
--- CASE[open]: my-computed-json — fails on postgresql, tsql. (195, b"'JSON_UNQUOTE' is not a recognized built-in function name.DB-Lib error message 200
+-- CASE[fixed]: my-computed-json — fails on postgresql, tsql. (195, b"'JSON_UNQUOTE' is not a recognized built-in function name.DB-Lib error message 200
 CREATE TABLE t (data JSON, name VARCHAR(50) AS (JSON_UNQUOTE(JSON_EXTRACT(data, '$.name'))) VIRTUAL)
 
 -- CASE[open]: my-concat-bool — fails on postgresql. FUNC-DIFF: source=(('10',),) target=(('tf',),)
@@ -194,13 +194,13 @@ SELECT CONCAT('a', NULL, 'b') AS r
 -- CASE[open]: my-concat-null3 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL', 'a,b'),) target=(('a', 'a,b'),)
 SELECT CONCAT('a',NULL), CONCAT_WS(',','a',NULL,'b')
 
--- CASE[open]: my-concat-ws — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
+-- CASE[fixed]: my-concat-ws — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT CONCAT_WS('-', 'a', 'b', NULL, 'c') AS r
 
--- CASE[open]: my-concatws3 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
+-- CASE[fixed]: my-concatws3 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT CONCAT_WS('-', a, b) FROM (SELECT 'x' a, 'y' b) t
 
--- CASE[open]: my-conv2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
+-- CASE[fixed]: my-conv2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT CONV('7F', 16, 2), CONV(255, 10, 16)
 
 -- CASE[open]: my-convert-signed — fails on oracle. ORA-00902: invalid datatype
@@ -212,10 +212,10 @@ SELECT CONVERT_TZ('2020-01-01 10:00', '+00:00', '+02:00') AS r
 -- CASE[open]: my-convert-using2 — fails on oracle, postgresql. FUNC-DIFF: source=(('2020-06-15 14:30',),) target=(('2',),)
 SELECT CONVERT('2020-06-15 14:30' USING utf8mb4) AS r
 
--- CASE[open]: my-crc32 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR
+-- CASE[fixed]: my-crc32 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR
 SELECT CRC32('abc') AS r
 
--- CASE[open]: my-crypto2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR
+-- CASE[fixed]: my-crypto2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR
 SELECT FROM_BASE64(TO_BASE64('hello')),HEX(AES_DECRYPT(AES_ENCRYPT('d','k'),'k'))
 
 -- CASE[open]: my-date-add-interval — fails on oracle, postgresql. ORA-30081: invalid data type for datetime/interval arithmetic
@@ -233,7 +233,7 @@ SELECT DATE('2020-01-01') = '2020-01-01 00:00:00' AS r
 -- CASE[open]: my-date-format — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
 SELECT DATE_FORMAT('2020-05-17', '%Y/%m/%d') AS r
 
--- CASE[open]: my-dateadd — fails on tsql. FUNC-DIFF: source=(('2020-02-29', '2020-01-02', '2020-02-29', '2020-01-01 01:00:00'),) tar
+-- CASE[fixed]: my-dateadd — fails on tsql. FUNC-DIFF: source=(('2020-02-29', '2020-01-02', '2020-02-29', '2020-01-01 01:00:00'),) tar
 SELECT DATE_ADD('2020-01-31',INTERVAL 1 MONTH), DATE_ADD('2020-01-01',INTERVAL 1 DAY), DATE_SUB('2020-03-01',INTERVAL 1 DAY), '2020-01-01'+INTERVAL 1 HOUR
 
 -- CASE[open]: my-dateadd-units — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of dateadd function.DB-Lib e
@@ -248,7 +248,7 @@ SELECT DATE_FORMAT('2020-06-15', '%W, %M %D, %Y') AS r
 -- CASE[open]: my-datetime-precision — fails on tsql. (2716, b'Column, parameter, or variable #1: Cannot specify a column width on data type dat
 CREATE TABLE t (a DATETIME(6), b TIMESTAMP(3), c YEAR)
 
--- CASE[open]: my-dayparts — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA
+-- CASE[fixed]: my-dayparts — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA
 SELECT DAYOFWEEK(NOW()), WEEKDAY(NOW()), DAYOFYEAR(NOW()), QUARTER(NOW())
 
 -- CASE[open]: my-decimal-scale — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('3.33333', '3.3333', '3.33333', '2.25', '0.01'),) target=(('3.33333', 
@@ -278,16 +278,16 @@ SELECT CHAR_LENGTH('😀') AS r
 -- CASE[open]: my-empty-eq-zero — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('NULL',),)
 SELECT '' = 0 AS r
 
--- CASE[open]: my-epoch — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
+-- CASE[fixed]: my-epoch — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
 SELECT UNIX_TIMESTAMP('2020-01-01 00:00:00'), FROM_UNIXTIME(1577836800), TIME_TO_SEC('01:00:00')
 
 -- CASE[open]: my-eq-mix — fails on oracle, tsql. FUNC-DIFF: source=(('1', '0', '1'),) target=(('1', '1', '1'),)
 SELECT 1 = 1.0 AS r, 'a' = 'a ' AS b, 1 = TRUE AS c
 
--- CASE[open]: my-export-set — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
+-- CASE[fixed]: my-export-set — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXPORT_SET(5, 'Y', 'N', ',', 4) AS r
 
--- CASE[open]: my-export-set2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
+-- CASE[fixed]: my-export-set2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXPORT_SET(5,'Y','N',',',4) AS r
 
 -- CASE[open]: my-extract-compound — fails on oracle, postgresql, tsql. (155, b"'YEAR_MONTH' is not a recognized datepart option.DB-Lib error message 20018, sever
@@ -305,10 +305,10 @@ SELECT CONCAT('x',5),CONCAT('x',5.5),CONCAT('x',TRUE),CONCAT('x',NULL)
 -- CASE[open]: my-field — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
 SELECT FIELD('b', 'a', 'b', 'c') AS r
 
--- CASE[open]: my-file-lock — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
+-- CASE[fixed]: my-file-lock — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 SELECT LOAD_FILE('/etc/x'), IS_USED_LOCK('l')
 
--- CASE[open]: my-fk-full — fails on oracle. ORA-03075: unexpected item ON in an out-of-line constraint
+-- CASE[fixed]: my-fk-full — fails on oracle. ORA-03075: unexpected item ON in an out-of-line constraint
 CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE t (pid INT, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES p(id) ON DELETE SET NULL ON UPDATE CASCADE)
 
 -- CASE[open]: my-flen — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('5', '4', '6', '2'),) target=(('4', '4', '2', '2'),)
@@ -332,13 +332,13 @@ SELECT FORMAT(1234.5678,2),FORMAT(1234.5678,4,'de_DE'),TRUNCATE(1234.5678,2)
 -- CASE[open]: my-for-share — fails on oracle. ORA-02000: missing COMPRESS or UPDATE keyword
 CREATE TABLE t (id INT, INDEX ix (id)); SELECT id FROM t WHERE id = 1 FOR SHARE
 
--- CASE[open]: my-format-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
+-- CASE[fixed]: my-format-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT DATE_FORMAT(NOW(),'%W %M %Y'), TIME_FORMAT(NOW(),'%r')
 
 -- CASE[open]: my-fsubstr — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('', 'c', 'bc'),) target=(('ab', 'a', 'bc'),)
 SELECT SUBSTRING('abc',0),SUBSTRING('abc',-1),SUBSTRING('abc',2,10)
 
--- CASE[open]: my-full-select — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+-- CASE[fixed]: my-full-select — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t GROUP BY id HAVING COUNT(*) > 1 ORDER BY id LIMIT 10 OFFSET 5
 
 -- CASE[open]: my-fulltext — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
@@ -354,13 +354,13 @@ CREATE TABLE t (a INT, b INT GENERATED ALWAYS AS (a+1) VIRTUAL, UNIQUE (b), CHEC
 -- CASE[open]: my-gencol2 — fails on postgresql, tsql. (1759, b"Computed column 'b' in table 't' is not allowed to be used in another computed-co
 CREATE TABLE t (a INT, b INT AS (a*2) STORED, c INT AS (a+b) VIRTUAL, KEY(b))
 
--- CASE[open]: my-get-format — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
+-- CASE[fixed]: my-get-format — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT GET_FORMAT(DATE, 'USA'), GET_FORMAT(DATETIME, 'ISO')
 
--- CASE[open]: my-get-lock — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
+-- CASE[fixed]: my-get-lock — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT GET_LOCK('l', 0), RELEASE_LOCK('l')
 
--- CASE[open]: my-getformat2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
+-- CASE[fixed]: my-getformat2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT GET_FORMAT(DATE,'EUR'), GET_FORMAT(TIME,'USA'), GET_FORMAT(DATETIME,'JIS')
 
 -- CASE[open]: my-greatest-null — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('3',),)
@@ -384,22 +384,22 @@ SELECT GROUP_CONCAT(DISTINCT x ORDER BY x DESC SEPARATOR '|') FROM (SELECT 1 x U
 -- CASE[open]: my-groupconcat-order — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR ',') FROM (SELECT 1 x UNION ALL SELECT 2) t
 
--- CASE[open]: my-hash — fails on oracle, postgresql, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
+-- CASE[fixed]: my-hash — fails on oracle, postgresql, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT MD5('abc'), SHA1('abc'), SHA2('abc', 256)
 
--- CASE[open]: my-hash-all — fails on oracle, postgresql, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
+-- CASE[fixed]: my-hash-all — fails on oracle, postgresql, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT CRC32('abc'), MD5('abc'), SHA('abc'), SHA2('abc', 512)
 
 -- CASE[open]: my-having-noagg — fails on oracle, postgresql, tsql. (8121, b"Column 't.x' is invalid in the HAVING clause because it is not contained in eithe
 SELECT x, RANK() OVER (ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2) t HAVING x>0
 
--- CASE[open]: my-hex-bin — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
+-- CASE[fixed]: my-hex-bin — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT HEX(255) AS r, BIN(5) AS b
 
 -- CASE[open]: my-hex-str-add — fails on postgresql. FUNC-DIFF: source=(('0',),) target=(('16',),)
 SELECT '0x10' + 0 AS r
 
--- CASE[open]: my-hexcast — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
+-- CASE[fixed]: my-hexcast — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT CAST(x'48656C6C6F' AS CHAR),HEX('Hello'),UNHEX('48656C6C6F')
 
 -- CASE[open]: my-ifnull-empty — fails on oracle. FUNC-DIFF: source=(('',),) target=(('NULL',),)
@@ -408,13 +408,13 @@ SELECT IFNULL('', NULL) AS r
 -- CASE[open]: my-index-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
 SELECT INTERVAL(3, 1, 2, 4, 6), FIELD('b','a','b'), ELT(1,'x','y')
 
--- CASE[open]: my-inet — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
+-- CASE[fixed]: my-inet — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
 SELECT INET_ATON('127.0.0.1'), INET_NTOA(2130706433)
 
--- CASE[open]: my-inet3 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
+-- CASE[fixed]: my-inet3 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
 SELECT INET_ATON('10.0.0.1'),INET_NTOA(167772161),INET6_ATON('::1')
 
--- CASE[open]: my-inet6 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
+-- CASE[fixed]: my-inet6 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
 SELECT INET6_ATON('::1'), INET6_NTOA(INET6_ATON('::1'))
 
 -- CASE[open]: my-infoschema — fails on oracle. PROCEDURE P compiled INVALID (line 8): PL/SQL: ORA-00942: table or view does not exist
@@ -444,43 +444,43 @@ SELECT JSON_ARRAYAGG(x), JSON_OBJECTAGG(x,x*10) FROM (SELECT 1 x UNION ALL SELEC
 -- CASE[open]: my-json-aggs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_ARRAYAGG(x), JSON_OBJECTAGG(x, x*2) FROM (SELECT 1 x UNION SELECT 2) t
 
--- CASE[open]: my-json-array-ops — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: my-json-array-ops — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_ARRAY_APPEND('[1,2]', '$', 3), JSON_ARRAY_INSERT('[1,2]', '$[0]', 0)
 
--- CASE[open]: my-json-arrayagg — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: my-json-arrayagg — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION SELECT 2) t
 
 -- CASE[open]: my-json-build — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_ARRAY(1,'a',NULL,TRUE),JSON_OBJECT('k','v','n',1)
 
--- CASE[open]: my-json-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: my-json-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_SEARCH('{"a":"x"}', 'one', 'x'), JSON_DEPTH('[1,[2]]'), JSON_LENGTH('[1,2,3]')
 
 -- CASE[open]: my-json-index — fails on postgresql, tsql. (2715, b'Column, parameter, or variable #2: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (a INT, b JSON, c INT AS (JSON_EXTRACT(b,'$.x')) STORED, INDEX((CAST(b->'$.x' AS UNSIGNED))))
 
--- CASE[open]: my-json-keys — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: my-json-keys — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_KEYS('{"a":1,"b":2}') AS r
 
 -- CASE[open]: my-json-merge — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_MERGE_PATCH('{"a":1}', '{"b":2}') AS r
 
--- CASE[open]: my-json-meta — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: my-json-meta — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_TYPE('[1]'),JSON_LENGTH('[1,2,3]'),JSON_DEPTH('[[1]]'),JSON_VALID('{a}')
 
--- CASE[open]: my-json-mod — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: my-json-mod — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_SET('{}','$.a',1),JSON_INSERT('{}','$.a',1),JSON_REPLACE('{"a":1}','$.a',2),JSON_REMOVE('{"a":1,"b":2}','$.a')
 
--- CASE[open]: my-json-modify — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: my-json-modify — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_SET('{}', '$.a', 1), JSON_REMOVE('{"a":1}', '$.a'), JSON_REPLACE('{"a":1}', '$.a', 2)
 
 -- CASE[open]: my-json-object — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_
 SELECT JSON_OBJECT('a', 1, 'b', 2)
 
--- CASE[open]: my-json-search — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: my-json-search — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_KEYS('{"a":1,"b":2}'),JSON_CONTAINS('[1,2]','1'),JSON_CONTAINS_PATH('{"a":1}','one','$.a')
 
--- CASE[open]: my-json-search2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: my-json-search2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_SEARCH('{"a":"x","b":"x"}','all','x'),JSON_OVERLAPS('[1,2]','[2,3]')
 
 -- CASE[open]: my-json-type — fails on oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type json.DB-Lib error messag
@@ -504,7 +504,7 @@ SELECT LEFT('hello', 2.9) AS r
 -- CASE[open]: my-left-neg — fails on postgresql. FUNC-DIFF: source=(('',),) target=(('ab',),)
 SELECT LEFT('abc', -1) AS r
 
--- CASE[open]: my-len-trio — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
+-- CASE[fixed]: my-len-trio — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT CHAR_LENGTH(s), LENGTH(s), BIT_LENGTH(s) FROM (SELECT 'héllo' s) t
 
 -- CASE[open]: my-length-bytes — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('5',),) target=(('4',),)
@@ -525,7 +525,7 @@ SELECT 'a_b' LIKE 'a\_b' AS r
 -- CASE[open]: my-like-single — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'x' LIKE 'X' AS r
 
--- CASE[open]: my-loadfile — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
+-- CASE[fixed]: my-loadfile — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 SELECT LOAD_FILE('/nonexist') IS NULL AS r
 
 -- CASE[open]: my-locate-case — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
@@ -546,7 +546,7 @@ SELECT LOG2(8), LOG10(1000)
 -- CASE[open]: my-logexp — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN
 SELECT LOG2(8), LOG10(100), LN(2.718), EXP(1)
 
--- CASE[open]: my-lpad-conv — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
+-- CASE[fixed]: my-lpad-conv — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT LPAD(CONV(5,10,2), 8, '0') AS r
 
 -- CASE[open]: my-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)
@@ -555,16 +555,16 @@ SELECT LPAD('ab', 5, 'xy') AS r
 -- CASE[open]: my-lpad-trunc — fails on tsql. FUNC-DIFF: source=(('ab',),) target=(('bc',),)
 SELECT LPAD('abc', 2, 'x') AS r
 
--- CASE[open]: my-make-set — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
+-- CASE[fixed]: my-make-set — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKE_SET(3, 'a', 'b', 'c') AS r
 
--- CASE[open]: my-make-set2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
+-- CASE[fixed]: my-make-set2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKE_SET(1|4,'hello','nice','world') AS r
 
--- CASE[open]: my-makedate — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
+-- CASE[fixed]: my-makedate — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)
 
--- CASE[open]: my-misc-num — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR
+-- CASE[fixed]: my-misc-num — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR
 SELECT RAND(),FLOOR(RAND()*100),CRC32('x'),CONV(255,10,2),BIN(10),OCT(64),HEX(255)
 
 -- CASE[open]: my-mod-edge — fails on oracle. FUNC-DIFF: source=(('0', '1', '1'),) target=(('0', '0', '0'),)
@@ -576,16 +576,16 @@ SELECT 5 MOD 0 IS NULL AS r
 -- CASE[open]: my-month-overflow — fails on tsql. FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)
 SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r
 
--- CASE[open]: my-name-const — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA
+-- CASE[fixed]: my-name-const — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA
 SELECT NAME_CONST('col', 5) AS r
 
 -- CASE[open]: my-nested-call — fails on oracle. PROCEDURE P compiled INVALID (line 4): PLS-00201: identifier 'OTHER_PROC' must be declared
 CREATE PROCEDURE p() BEGIN CALL other_proc(); END
 
--- CASE[open]: my-now-fns — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever
+-- CASE[fixed]: my-now-fns — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever
 SELECT NOW(), CURDATE(), CURTIME(), UTC_DATE(), UTC_TIME(), SYSDATE()
 
--- CASE[open]: my-now-variants — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
+-- CASE[fixed]: my-now-variants — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 SELECT NOW(), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(3), CURDATE(), CURTIME(), SYSDATE(), UNIX_TIMESTAMP()
 
 -- CASE[open]: my-num-to-str — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('n=5', 'x=5.50', 'd=0.33333', 'b=1', '5.5'),) target=(('n=5', 'x=5.5',
@@ -594,10 +594,10 @@ SELECT CONCAT('n=',5), CONCAT('x=',5.50), CONCAT('d=',1.0/3), CONCAT('b=',TRUE),
 -- CASE[open]: my-numeric — fails on tsql. (2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se
 CREATE TABLE t (a DECIMAL(20,4), b FLOAT(10,2), c DOUBLE)
 
--- CASE[open]: my-numeric-conv — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
+-- CASE[fixed]: my-numeric-conv — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT BIT_COUNT(255), CONV(255,10,16), OCT(64), HEX(255)
 
--- CASE[open]: my-optimizer-hints — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+-- CASE[fixed]: my-optimizer-hints — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT /*+ QB_NAME(qb1) */ id FROM t WHERE n > (SELECT /*+ SEMIJOIN(@qb1) */ AVG(n) FROM t)
 
 -- CASE[open]: my-order-case-sens — fails on oracle, postgresql. FUNC-DIFF: source=(('Apple',), ('banana',), ('Cherry',)) target=(('Apple',), ('Cherry',), 
@@ -609,10 +609,10 @@ SELECT x FROM (SELECT 'banana' x UNION ALL SELECT 'Apple' x UNION ALL SELECT 'ch
 -- CASE[open]: my-pad-repeat — fails on oracle, postgresql. ORA-00904: "SPACE": invalid identifier
 SELECT LPAD('7',3,'0'),RPAD('7',3,'x'),REPEAT('ab',3),REVERSE('abc'),SPACE(3),CONCAT('[',SPACE(2),']')
 
--- CASE[open]: my-period-diff — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE
+-- CASE[fixed]: my-period-diff — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE
 SELECT PERIOD_DIFF(202006, 202001) AS r
 
--- CASE[open]: my-period2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE
+-- CASE[fixed]: my-period2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE
 SELECT PERIOD_ADD(202001,14), PERIOD_DIFF(202101,202001)
 
 -- CASE[open]: my-pi-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
@@ -621,20 +621,20 @@ SELECT TRUNCATE(PI(), 4), ROUND(PI(), 4), FORMAT(PI(), 4)
 -- CASE[open]: my-pi-vals — fails on tsql. FUNC-DIFF: source=(('180', '3.14159', '3.14159'),) target=(('180', '3', '3.14159'),)
 SELECT DEGREES(PI()), RADIANS(180), PI()
 
--- CASE[open]: my-quote2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
+-- CASE[fixed]: my-quote2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
 SELECT QUOTE('Don\'t!') AS r
 
--- CASE[open]: my-rand — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
+-- CASE[fixed]: my-rand — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT RAND(1), RANDOM_BYTES(4), UUID()
 
 -- CASE[open]: my-reads-sql — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
 CREATE FUNCTION f(a INT) RETURNS INT READS SQL DATA BEGIN RETURN (SELECT COUNT(*) FROM (SELECT a) t); END
 
--- CASE[open]: my-realworld-orders — fails on postgresql. relation "orders" already exists
+-- CASE[fixed]: my-realworld-orders — fails on postgresql. relation "orders" already exists
 CREATE TABLE orders (id INT AUTO_INCREMENT PRIMARY KEY, customer_id INT NOT NULL, total DECIMAL(10,2) DEFAULT 0, created TIMESTAMP DEFAULT CURRENT_TIMESTAMP, INDEX ix_cust (customer_id), CHECK (total >= 0)) ENGINE=InnoDB;
 CREATE TRIGGER trg BEFORE INSERT ON orders FOR EACH ROW SET NEW.created = NOW();
 
--- CASE[open]: my-recursive-cte2 — fails on oracle. ORA-32039: missing column alias list in recursive WITH clause element SEQ
+-- CASE[fixed]: my-recursive-cte2 — fails on oracle. ORA-32039: missing column alias list in recursive WITH clause element SEQ
 CREATE TABLE t (id INT, n INT, s VARCHAR(50)); WITH RECURSIVE seq AS (SELECT 1 n UNION ALL SELECT n+1 FROM seq WHERE n<10) SELECT * FROM seq
 
 -- CASE[open]: my-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
@@ -655,7 +655,7 @@ SELECT REPLACE('abc', NULL, 'x') IS NULL AS r
 -- CASE[open]: my-round-cast — fails on oracle. ORA-00902: invalid datatype
 SELECT CAST(3.99 AS SIGNED),CAST(-3.99 AS SIGNED),CONVERT(3.99,SIGNED)
 
--- CASE[open]: my-round-fns — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CE
+-- CASE[fixed]: my-round-fns — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CE
 SELECT FLOOR(3.7), CEILING(3.2), ROUND(3.567, 2), TRUNCATE(3.567, 1)
 
 -- CASE[open]: my-scalar-subquery-assign — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
@@ -670,40 +670,40 @@ CREATE TABLE emp (id INT PRIMARY KEY, mgr INT, FOREIGN KEY (mgr) REFERENCES emp(
 -- CASE[open]: my-seq-concat — fails on oracle, postgresql. ORA-32039: missing column alias list in recursive WITH clause element SEQ
 WITH RECURSIVE seq AS (SELECT 1 n UNION ALL SELECT n+1 FROM seq WHERE n<10) SELECT GROUP_CONCAT(n) FROM seq
 
--- CASE[open]: my-session-fns — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'USER'.DB-Lib error message 20018, severity 15:\
+-- CASE[fixed]: my-session-fns — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'USER'.DB-Lib error message 20018, severity 15:\
 CREATE TABLE t (id INT); SELECT LAST_INSERT_ID(),ROW_COUNT(),CONNECTION_ID(),DATABASE(),VERSION(),USER(),CURRENT_USER()
 
--- CASE[open]: my-set-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
+-- CASE[fixed]: my-set-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
 SELECT FIND_IN_SET('b', 'a,b,c'), MAKE_SET(6, 'x','y','z')
 
 -- CASE[open]: my-set-transaction — fails on oracle. ORA-00900: invalid SQL statement
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION READ ONLY; COMMIT;
 
--- CASE[open]: my-soundex-eq — fails on postgresql. function soundex(unknown) does not exist
+-- CASE[fixed]: my-soundex-eq — fails on postgresql. function soundex(unknown) does not exist
 SELECT SOUNDEX('hello') = SOUNDEX('hallo') AS r
 
 -- CASE[open]: my-soundex-format — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT SOUNDEX('Smith'), FORMAT(1234.5, 2)
 
--- CASE[open]: my-spatial — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+-- CASE[fixed]: my-spatial — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
 SELECT ST_AsText(ST_GeomFromText('POINT(1 1)')) AS r
 
--- CASE[open]: my-st-distance — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+-- CASE[fixed]: my-st-distance — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
 SELECT ST_Distance(ST_GeomFromText('POINT(0 0)'), ST_GeomFromText('POINT(3 4)')) AS r
 
--- CASE[open]: my-st-geojson — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+-- CASE[fixed]: my-st-geojson — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
 SELECT ST_AsGeoJSON(ST_GeomFromText('POINT(1 1)')) AS r
 
--- CASE[open]: my-status-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RO
+-- CASE[fixed]: my-status-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RO
 SELECT LAST_INSERT_ID(), ROW_COUNT(), FOUND_ROWS()
 
--- CASE[open]: my-stmt-digest — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+-- CASE[fixed]: my-stmt-digest — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
 SELECT STATEMENT_DIGEST('SELECT 1'), STATEMENT_DIGEST_TEXT('SELECT 1')
 
 -- CASE[open]: my-str-lt — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'apple' < 'Banana' AS r
 
--- CASE[open]: my-str-misc — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+-- CASE[fixed]: my-str-misc — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT SOUNDEX('Robert'),FORMAT(1234567.891,2),INSERT('abcd',2,2,'XY'),QUOTE('a''b')
 
 -- CASE[open]: my-str-null — fails on oracle, postgresql. FUNC-DIFF: source=(('NULL', 'NULL', 'NULL', 'NULL', 'NULL', 'NULL'),) target=(('NULL', 'a'
@@ -727,22 +727,22 @@ SELECT SUBSTRING('abcdef', -3) AS r
 -- CASE[open]: my-substr3 — fails on postgresql, tsql. FUNC-DIFF: source=(('bcdef', 'bcd', 'ef'),) target=(('bcdef', 'bcd', 'abc'),)
 SELECT SUBSTR('abcdef',2), SUBSTR('abcdef',2,3), SUBSTR('abcdef',-2)
 
--- CASE[open]: my-substridx-agg — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
+-- CASE[fixed]: my-substridx-agg — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
 SELECT SUBSTRING_INDEX(GROUP_CONCAT(x),',',2) FROM (SELECT 1 x UNION SELECT 2 UNION SELECT 3) t
 
--- CASE[open]: my-substridx-nested — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
+-- CASE[fixed]: my-substridx-nested — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
 SELECT SUBSTRING_INDEX(SUBSTRING_INDEX('a,b,c,d', ',', 3), ',', -1) AS r
 
--- CASE[open]: my-substring-index — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
+-- CASE[fixed]: my-substring-index — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
 SELECT SUBSTRING_INDEX('a,b,c', ',', 2) AS r
 
 -- CASE[open]: my-sum-div-count — fails on postgresql, tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
 SELECT SUM(x)/COUNT(x) FROM (SELECT 1 x UNION ALL SELECT 2) t
 
--- CASE[open]: my-system-funcs — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'USER'.DB-Lib error message 20018, severity 15:\
+-- CASE[fixed]: my-system-funcs — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'USER'.DB-Lib error message 20018, severity 15:\
 SELECT CONNECTION_ID(), DATABASE(), USER(), VERSION()
 
--- CASE[open]: my-time-build — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
+-- CASE[fixed]: my-time-build — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT CAST('2020-01-01' AS DATETIME) + INTERVAL 90 MINUTE, MAKETIME(10,20,30), SEC_TO_TIME(3661)
 
 -- CASE[open]: my-timestampadd — fails on oracle, postgresql. ORA-30081: invalid data type for datetime/interval arithmetic
@@ -790,16 +790,16 @@ SELECT TRIM(TRAILING '.' FROM 'abc...') AS r
 -- CASE[open]: my-ts-to-date — fails on postgresql. FUNC-DIFF: source=(('2020-01-01',),) target=(('2020-01-01 14:30:00+00:00',),)
 SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r
 
--- CASE[open]: my-tsadd-quarter — fails on oracle, postgresql. ORA-00904: "QUARTER": invalid identifier
+-- CASE[fixed]: my-tsadd-quarter — fails on oracle, postgresql. ORA-00904: "QUARTER": invalid identifier
 SELECT TIMESTAMPADD(QUARTER,1,NOW()), TIMESTAMPDIFF(QUARTER,'2020-01-01',NOW())
 
 -- CASE[open]: my-tz-convert — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT CONVERT_TZ('2020-06-15 10:00:00','+00:00','+05:30'), CONVERT_TZ('2020-06-15 10:00:00','UTC','America/New_York')
 
--- CASE[open]: my-unix-timestamp — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
+-- CASE[fixed]: my-unix-timestamp — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
 SELECT UNIX_TIMESTAMP('2020-01-01'), FROM_UNIXTIME(1577836800)
 
--- CASE[open]: my-unixtime2 — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
+-- CASE[fixed]: my-unixtime2 — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
 SELECT FROM_UNIXTIME(1600000000,'%Y-%m-%d'), UNIX_TIMESTAMP('2020-09-13')
 
 -- CASE[open]: my-upd-selfjoin — fails on oracle, postgresql, tsql. (4104, b'The multi-part identifier "t2.n" could not be bound.DB-Lib error message 20018, s
@@ -820,31 +820,31 @@ SELECT UPPER('straße') AS r
 -- CASE[open]: my-using-join — fails on tsql. (209, b"Ambiguous column name 'x'.DB-Lib error message 20018, severity 16:\nGeneral SQL Se
 SELECT x FROM (SELECT 1 x) a JOIN (SELECT 1 x) b USING (x)
 
--- CASE[open]: my-uuid-bin — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
+-- CASE[fixed]: my-uuid-bin — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
 SELECT UUID_TO_BIN(UUID()),BIN_TO_UUID(UUID_TO_BIN('6ccd780c-baba-1026-9564-5b8c656024db'))
 
--- CASE[open]: my-uuid-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
+-- CASE[fixed]: my-uuid-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
 SELECT UUID(), UUID_SHORT()
 
--- CASE[open]: my-week-mode — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
+-- CASE[fixed]: my-week-mode — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEEK('2020-01-01',0), WEEK('2020-01-01',3), WEEKOFYEAR('2020-01-01'), YEARWEEK('2020-01-01')
 
--- CASE[open]: my-week-modes — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
+-- CASE[fixed]: my-week-modes — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEEK(NOW(),0), WEEK(NOW(),3), WEEK(NOW(),5), YEARWEEK(NOW(),3)
 
--- CASE[open]: my-week-quarter — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
+-- CASE[fixed]: my-week-quarter — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEEK('2020-06-15'), QUARTER('2020-06-15'), DAYOFWEEK('2020-06-15')
 
--- CASE[open]: my-weight-string — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
+-- CASE[fixed]: my-weight-string — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEIGHT_STRING('abc') AS r
 
 -- CASE[open]: my-xml-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.Ex
 SELECT ExtractValue('<r><a>1</a></r>','/r/a'), UpdateXML('<r><a>1</a></r>','/r/a','<a>2</a>')
 
--- CASE[open]: my8-lag-nth — fails on oracle. ORA-43853: JSON type cannot be used in non-automatic segment space management tablespace "
+-- CASE[fixed]: my8-lag-nth — fails on oracle. ORA-43853: JSON type cannot be used in non-automatic segment space management tablespace "
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, LAG(n, 1, 0) OVER (ORDER BY id), NTH_VALUE(n, 2) OVER (ORDER BY id) FROM t
 
--- CASE[open]: my8-recursive — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+-- CASE[fixed]: my8-recursive — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); WITH RECURSIVE cte AS (SELECT 1 n UNION ALL SELECT n+1 FROM cte WHERE n<5) SELECT * FROM cte
 
 -- CASE[open]: my8-window — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
