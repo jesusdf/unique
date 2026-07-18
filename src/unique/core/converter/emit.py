@@ -3604,15 +3604,29 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         a0 = _emit_expression(node.args[0], dialect)
         a1 = _emit_expression(node.args[1], dialect)
         return f"SUBSTRING({a0}, {a1}, LEN({a0}))"
-    # MySQL's comma 2-arg TRIM(remstr, s): every engine (MySQL included)
-    # accepts the standard ``TRIM(BOTH remstr FROM s)`` — the comma form
-    # is error 174 / ORA-00907 off MySQL (wave 188).
-    if fn_name == "TRIM" and len(node.args) == 2:
+    # Character-set TRIM. Canonical IR: TRIM(remset, string[, position]) — the
+    # set to strip first, the string second, an optional keyword literal
+    # (BOTH/LEADING/TRAILING) last. Covers MySQL's comma form and the standard
+    # ``TRIM([pos] set FROM s)`` (the comma form is error 174 / ORA-00907 off
+    # MySQL — wave 188).
+    if fn_name == "TRIM" and len(node.args) in (2, 3):
         rem = _emit_expression(node.args[0], dialect)
         s = _emit_expression(node.args[1], dialect)
-        if dialect == "tsql":
+        position = "BOTH"
+        if len(node.args) == 3 and isinstance(node.args[2], Literal):
+            position = str(node.args[2].value).upper()
+        # Oracle's TRIM(BOTH c FROM s) accepts only a SINGLE trim character
+        # (ORA-30001); LTRIM/RTRIM accept a multi-character set on every side,
+        # matching the PG/MySQL "trim any char in the set" semantics.
+        if dialect == "oracle":
+            if position == "LEADING":
+                return f"LTRIM({s}, {rem})"
+            if position == "TRAILING":
+                return f"RTRIM({s}, {rem})"
+            return f"LTRIM(RTRIM({s}, {rem}), {rem})"
+        if dialect == "tsql" and position == "BOTH":
             return f"TRIM({rem} FROM {s})"
-        return f"TRIM(BOTH {rem} FROM {s})"
+        return f"TRIM({position} {rem} FROM {s})"
 
     # PG's function-style casts (``float8(x)``, ``int4(x)`` …): only PG
     # has them (wave 200) — everywhere else they are CAST, routed through

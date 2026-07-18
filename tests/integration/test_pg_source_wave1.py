@@ -6898,8 +6898,9 @@ class TestWave187BinaryCapCaseTruthiness:
 
 class TestWave188IfBareCondTrimTwoArg:
     """wave 188 (mysql-corpus): ``IF level THEN`` takes MySQL numeric
-    truthiness (PLS-00382 on Oracle) — same wrap as WHILE; and the
-    comma 2-arg TRIM spells ``TRIM(BOTH x FROM y)`` off MySQL."""
+    truthiness (PLS-00382 on Oracle) — same wrap as WHILE; and character-set
+    ``TRIM('x' FROM col)`` keeps its operands in order (the set is stripped from
+    the column, never the reverse) and uses LTRIM/RTRIM into Oracle."""
 
     def test_if_bare_var_oracle(self) -> None:
         out = _t2(
@@ -6910,11 +6911,13 @@ class TestWave188IfBareCondTrimTwoArg:
         assert re.search(r"(?i)IF lvl <> 0 THEN", out), out
 
     def test_two_arg_trim_oracle(self) -> None:
-        out = _t2("select trim('x', col) from t1;", "mysql", "oracle")
-        assert re.search(r"(?i)TRIM\(BOTH 'x' FROM col\)", out), out
+        # 'x' is stripped from col — Oracle uses LTRIM/RTRIM (its TRIM(BOTH ...)
+        # allows only a single set character, ORA-30001).
+        out = _t2("select trim('x' FROM col) from t1;", "mysql", "oracle")
+        assert re.search(r"(?i)LTRIM\(RTRIM\(col, 'x'\), 'x'\)", out), out
 
     def test_two_arg_trim_tsql(self) -> None:
-        out = _t2("select trim('x', col) from t1;", "mysql", "tsql")
+        out = _t2("select trim('x' FROM col) from t1;", "mysql", "tsql")
         assert re.search(r"(?i)TRIM\('x' FROM col\)", out), out
 
     def test_one_arg_trim_untouched(self) -> None:

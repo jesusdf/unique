@@ -289,7 +289,7 @@ SELECT LPAD('ab', 5, 'xy') AS r FROM DUAL
 -- CASE[fixed]: ora-lpad-tochar — fails on tsql. (195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT LPAD(TO_CHAR(5,'FMB'), 8, '0') FROM DUAL
 
--- CASE[open]: ora-ltrim-set — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
+-- CASE[fixed]: ora-ltrim-set — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT LTRIM('xxabc', 'x') AS r FROM DUAL
 
 -- CASE[fixed]: ora-median-mode — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME
@@ -404,7 +404,7 @@ SELECT ROUND(DATE '2020-06-16', 'MONTH') AS r FROM DUAL
 -- CASE[fixed]: ora-round-fns — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE
 SELECT FLOOR(3.7), CEIL(3.2), ROUND(3.567, 2), TRUNC(3.567, 1), REMAINDER(10,3) FROM DUAL
 
--- CASE[open]: ora-rtrim-chars — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('a',),) target=(('',),)
+-- CASE[fixed]: ora-rtrim-chars — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('a',),) target=(('',),)
 SELECT RTRIM('axxx', 'x') AS r FROM DUAL
 
 -- CASE[open]: ora-seq-use — fails on tsql. (4104, b'The multi-part identifier "s.CURRVAL" could not be bound.DB-Lib error message 200
@@ -485,7 +485,7 @@ SELECT ATAN2(1,1), COSH(1), SINH(1), TANH(1) FROM DUAL
 -- CASE[fixed]: ora-trig-suite — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT ACOS(1),ASIN(0),ATAN(1),COS(0),SIN(0),TAN(0),COSH(0),SINH(0),TANH(0) FROM DUAL
 
--- CASE[open]: ora-trim-translate — fails on postgresql, tsql. FUNC-DIFF: source=(('7', '7', 'hi', 'XbZ'),) target=(('', '', '', 'XbZ'),)
+-- CASE[fixed]: ora-trim-translate — fails on postgresql, tsql. FUNC-DIFF: source=(('7', '7', 'hi', 'XbZ'),) target=(('', '', '', 'XbZ'),)
 SELECT TRIM(LEADING '0' FROM '007'), LTRIM('007','0'), RTRIM('hi!!','!'), TRANSLATE('abc','ac','XZ') FROM DUAL
 
 -- CASE[fixed]: ora-tz-fns — fails on mysql, postgresql, tsql. (155, b"'TIMEZONE_HOUR' is not a recognized datepart option.DB-Lib error message 20018, se

@@ -162,6 +162,29 @@ class TestTsqlCreateOrAlter:
         assert "CREATE OR ALTER PROCEDURE" in out, out
 
 
+class TestTrimCharacterSet:
+    """``TRIM([BOTH|LEADING|TRAILING] chars FROM string)`` keeps its operands in
+    order (a swap silently trimmed the wrong argument on every target) and, into
+    Oracle, uses LTRIM/RTRIM so a multi-character set never hits ORA-30001."""
+
+    def test_tsql_both_into_oracle_uses_ltrim_rtrim(self) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-trim-chars"), "tsql", "oracle")
+        # set 'x' stripped from 'xxabcxx' — operands must not be swapped, and
+        # Oracle must not receive TRIM(BOTH set FROM s) (ORA-30001 on >1 char).
+        assert "LTRIM(RTRIM('xxabcxx', 'x'), 'x')" in out, out
+        assert "TRIM(BOTH" not in out, out
+
+    @pytest.mark.parametrize("target", ("postgresql", "mysql"))
+    def test_tsql_both_keeps_operand_order(self, target: str) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-trim-chars"), "tsql", target)
+        # 'x' is the trim set, 'xxabcxx' the string — the string follows FROM.
+        assert "TRIM(BOTH 'x' FROM 'xxabcxx')" in out, out
+
+    def test_mysql_leading_into_oracle_uses_ltrim(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-trim-leading"), "mysql", "oracle")
+        assert "LTRIM('007', '0')" in _exec_lines(out), out
+
+
 class TestTsqlBeginTransaction:
     """``BEGIN TRANSACTION`` maps to each engine's transaction-open form; Oracle
     (implicit transactions) drops it with a documented carrier + warning."""

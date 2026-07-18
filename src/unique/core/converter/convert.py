@@ -697,6 +697,22 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         name = {"LEADING": "LTRIM", "TRAILING": "RTRIM"}.get(side)
         if name is not None:
             return FunctionCall(name=name, args=(convert_expression(expr.this),))
+    # TRIM([BOTH|LEADING|TRAILING] chars FROM string): sqlglot puts the string
+    # in ``this`` and the trim SET in ``expression`` (LTRIM/RTRIM with a set
+    # canonicalize here too). Emit the set FIRST so the downstream
+    # ``TRIM(set FROM string)`` keeps operands in order — a swap silently trims
+    # the wrong argument (wrong result on every target). The position rides as a
+    # keyword literal the TRIM emitter reads and never prints as a value.
+    if isinstance(expr, exp.Trim) and expr.expression is not None:
+        position = str(expr.args.get("position") or "BOTH").upper()
+        return FunctionCall(
+            name="TRIM",
+            args=(
+                convert_expression(expr.expression),
+                convert_expression(expr.this),
+                Literal(value=position, dtype="keyword"),
+            ),
+        )
     # T-SQL CONVERT(type, value, style) with a modeled style keeps its
     # structure: FunctionCall("CONVERT", (type RawSQL, value, style Literal))
     # — the emitter spells each target's date-format/hash form (M3 F1).

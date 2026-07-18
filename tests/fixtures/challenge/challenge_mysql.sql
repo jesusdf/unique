@@ -772,19 +772,19 @@ SELECT ATAN2(1,1), ATAN(1,1), DEGREES(PI()), RADIANS(180), COT(1)
 -- CASE[open]: my-trig-suite — fails on oracle. ORA-00904: "RADIANS": invalid identifier
 SELECT ACOS(1),ASIN(0),ATAN(1),COS(0),SIN(0),TAN(0),COT(1),DEGREES(1),RADIANS(1)
 
--- CASE[open]: my-trim-both — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
+-- CASE[fixed]: my-trim-both — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r
 
--- CASE[open]: my-trim-edge — fails on postgresql, tsql. FUNC-DIFF: source=(('hi', '7', 'hi'),) target=(('', '', ''),)
+-- CASE[fixed]: my-trim-edge — fails on postgresql, tsql. FUNC-DIFF: source=(('hi', '7', 'hi'),) target=(('', '', ''),)
 SELECT TRIM(BOTH 'x' FROM 'xxhixx'), TRIM(LEADING '0' FROM '007'), TRIM(TRAILING '!' FROM 'hi!!')
 
--- CASE[open]: my-trim-leading — fails on postgresql, tsql. FUNC-DIFF: source=(('7',),) target=(('',),)
+-- CASE[fixed]: my-trim-leading — fails on postgresql, tsql. FUNC-DIFF: source=(('7',),) target=(('',),)
 SELECT TRIM(LEADING '0' FROM '007') AS r
 
--- CASE[open]: my-trim-len — fails on oracle. ORA-30001: trim set should have only one character
+-- CASE[fixed]: my-trim-len — fails on oracle. ORA-30001: trim set should have only one character
 SELECT LENGTH(TRIM(BOTH ' ' FROM '  hi  ')),CHAR_LENGTH(RTRIM(' hi '))
 
--- CASE[open]: my-trim-trailing — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
+-- CASE[fixed]: my-trim-trailing — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT TRIM(TRAILING '.' FROM 'abc...') AS r
 
 -- CASE[open]: my-ts-to-date — fails on postgresql. FUNC-DIFF: source=(('2020-01-01',),) target=(('2020-01-01 14:30:00+00:00',),)

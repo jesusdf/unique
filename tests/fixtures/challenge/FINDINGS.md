@@ -939,31 +939,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `ORA-00904: "RADIANS": invalid identifier`
 - src: `SELECT ACOS(1),ASIN(0),ATAN(1),COS(0),SIN(0),TAN(0),COT(1),DEGREES(1),RADIANS(1)`
 
-## my-trim-both  (mysql)
-- targets: postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('abc',),) target=(('',),)`
-- src: `SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS r`
-
-## my-trim-edge  (mysql)
-- targets: postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('hi', '7', 'hi'),) target=(('', '', ''),)`
-- src: `SELECT TRIM(BOTH 'x' FROM 'xxhixx'), TRIM(LEADING '0' FROM '007'), TRIM(TRAILING '!' FROM 'hi!!')`
-
-## my-trim-leading  (mysql)
-- targets: postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('7',),) target=(('',),)`
-- src: `SELECT TRIM(LEADING '0' FROM '007') AS r`
-
-## my-trim-len  (mysql)
-- targets: oracle(invalid)
-- live error: `ORA-30001: trim set should have only one character`
-- src: `SELECT LENGTH(TRIM(BOTH ' ' FROM '  hi  ')),CHAR_LENGTH(RTRIM(' hi '))`
-
-## my-trim-trailing  (mysql)
-- targets: postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('abc',),) target=(('',),)`
-- src: `SELECT TRIM(TRAILING '.' FROM 'abc...') AS r`
-
 ## my-ts-to-date  (mysql)
 - targets: postgresql(func)
 - live error: `FUNC-DIFF: source=(('2020-01-01',),) target=(('2020-01-01 14:30:00+00:00',),)`
@@ -1401,11 +1376,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)`
 - src: `SELECT LPAD('ab', 5, 'xy') AS r FROM DUAL`
 
-## ora-ltrim-set  (oracle)
-- targets: mysql(func), postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('abc',),) target=(('',),)`
-- src: `SELECT LTRIM('xxabc', 'x') AS r FROM DUAL`
-
 ## ora-month-name  (oracle)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('June',),) target=(('Month',),)`
@@ -1497,11 +1467,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `FUNC-DIFF: source=(('2020-07-01 00:00:00',),) target=(('2020',),)`
 - src: `SELECT ROUND(DATE '2020-06-16', 'MONTH') AS r FROM DUAL`
 
-## ora-rtrim-chars  (oracle)
-- targets: mysql(func), postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('a',),) target=(('',),)`
-- src: `SELECT RTRIM('axxx', 'x') AS r FROM DUAL`
-
 ## ora-seq-use  (oracle)
 - targets: tsql(invalid)
 - live error: `(4104, b'The multi-part identifier "s.CURRVAL" could not be bound.DB-Lib error message 200`
@@ -1586,11 +1551,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(174, b'The replace function requires 3 argument(s).DB-Lib error message 20018, severity 1`
 - src: `SELECT TRANSLATE('12345', '123', 'abc'), REPLACE('aaa','a') FROM DUAL`
-
-## ora-trim-translate  (oracle)
-- targets: postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('7', '7', 'hi', 'XbZ'),) target=(('', '', '', 'XbZ'),)`
-- src: `SELECT TRIM(LEADING '0' FROM '007'), LTRIM('007','0'), RTRIM('hi!!','!'), TRANSLATE('abc','ac','XZ') FROM DUAL`
 
 ## ora-tz-funcs  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -2169,11 +2129,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `FUNC-DIFF: source=(('hel',),) target=(('llo',),)`
 - src: `SELECT LPAD('hello', 3) AS r`
 
-## pg-ltrim-set  (postgresql)
-- targets: mysql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('abc',),) target=(('',),)`
-- src: `SELECT ltrim('xxabc', 'x') AS r`
-
 ## pg-mod-decimal  (postgresql)
 - targets: mysql(func), oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('2',),)`
@@ -2432,20 +2387,10 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - live error: `FUNC-DIFF: source=(('0', '1', '0'),) target=(('1', '1', '1'),)`
 - src: `SELECT 'a'='a ', 'a'::char(2)='a'::char(2), 'abc'='ABC'`
 
-## pg-trim-both-chars  (postgresql)
-- targets: oracle(invalid)
-- live error: `ORA-30001: trim set should have only one character`
-- src: `SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS t`
-
 ## pg-trim-len  (postgresql)
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2', '0'),) target=(('0', '0'),)`
 - src: `SELECT CHAR_LENGTH('  '), LENGTH(TRIM('  '))`
-
-## pg-trim-translate  (postgresql)
-- targets: tsql(func)
-- live error: `FUNC-DIFF: source=(('hi', '7', 'XbZ'),) target=(('', '', 'XbZ'),)`
-- src: `SELECT trim(both 'x' from 'xxhixx'), ltrim('007','0'), translate('abc','ac','XZ')`
 
 ## pg-truncate-restart  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -3050,11 +2995,6 @@ GO
 CREATE VIEW v AS SELECT id FROM t;
 GO
 CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
-
-## ts-trim-chars  (tsql)
-- targets: oracle(invalid)
-- live error: `ORA-30001: trim set should have only one character`
-- src: `SELECT TRIM('x' FROM 'xxabcxx') AS r`
 
 ## ts-try-convert  (tsql)
 - targets: oracle(invalid), postgresql(invalid)

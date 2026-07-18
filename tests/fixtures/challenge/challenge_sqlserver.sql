@@ -420,7 +420,7 @@ CREATE VIEW v AS SELECT id FROM t;
 GO
 CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t SELECT id FROM inserted; END
 
--- CASE[open]: ts-trim-chars — fails on oracle. ORA-30001: trim set should have only one character
+-- CASE[fixed]: ts-trim-chars — fails on oracle. ORA-30001: trim set should have only one character
 SELECT TRIM('x' FROM 'xxabcxx') AS r
 
 -- CASE[fixed]: ts-try-catch-raiserror — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 8): PLS-00103: Encountered the symbol "RAISERROR" when 
