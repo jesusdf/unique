@@ -2765,16 +2765,6 @@ CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT 
 GO
 MERGE tgt USING src ON tgt.id = src.id WHEN MAT`
 
-## ts-money  (tsql)
-- targets: oracle(invalid), postgresql(invalid)
-- live error: `ORA-00902: invalid datatype`
-- src: `CREATE TABLE t (price MONEY, small SMALLMONEY)`
-
-## ts-money-arith  (tsql)
-- targets: postgresql(func)
-- live error: `FUNC-DIFF: source=(('12.8',),) target=(('$12.80',),)`
-- src: `SELECT CAST(10.5 AS MONEY) + CAST(2.3 AS MONEY) AS r`
-
 ## ts-month-overflow  (tsql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('2020-02-29 00:00:00',),) target=(('2020-02-29',),)`

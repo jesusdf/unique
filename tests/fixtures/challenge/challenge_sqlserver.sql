@@ -248,10 +248,10 @@ MERGE tgt USING src ON tgt.id = src.id WHEN MATCHED AND src.n > 0 THEN UPDATE SE
 -- CASE[fixed]: ts-metadata-funcs — fails on mysql, oracle, postgresql. ORA-00904: "OBJECT_ID": invalid identifier
 SELECT COL_LENGTH('t', 'c'), OBJECT_ID('t')
 
--- CASE[open]: ts-money — fails on oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[fixed]: ts-money — fails on oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (price MONEY, small SMALLMONEY)
 
--- CASE[open]: ts-money-arith — fails on postgresql. FUNC-DIFF: source=(('12.8',),) target=(('$12.80',),)
+-- CASE[fixed]: ts-money-arith — fails on postgresql. FUNC-DIFF: source=(('12.8',),) target=(('$12.80',),)
 SELECT CAST(10.5 AS MONEY) + CAST(2.3 AS MONEY) AS r
 
 -- CASE[open]: ts-month-overflow — fails on mysql. FUNC-DIFF: source=(('2020-02-29 00:00:00',),) target=(('2020-02-29',),)

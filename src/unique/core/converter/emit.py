@@ -96,6 +96,9 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         # T-SQL's precise datetime types -> MySQL's DATETIME.
         "DATETIME2": "DATETIME",
         "SMALLDATETIME": "DATETIME",
+        # T-SQL money types are fixed-scale decimals (DECIMAL(19,4)/(10,4)).
+        "MONEY": "DECIMAL(19,4)",
+        "SMALLMONEY": "DECIMAL(10,4)",
         # MySQL CAST has no VARCHAR spelling — character casts use CHAR.
         "VARCHAR": "CHAR",
         "NVARCHAR": "CHAR",
@@ -112,6 +115,8 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "DATETIME": "TIMESTAMP",
         "DATETIME2": "TIMESTAMP",
         "SMALLDATETIME": "TIMESTAMP",
+        "MONEY": "NUMBER(19,4)",
+        "SMALLMONEY": "NUMBER(10,4)",
         "VARCHAR": "VARCHAR2",
         "NVARCHAR": "NVARCHAR2",
         "DOUBLE": "BINARY_DOUBLE",
@@ -120,6 +125,8 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "DATETIME": "TIMESTAMP",
         "DATETIME2": "TIMESTAMP",
         "SMALLDATETIME": "TIMESTAMP",
+        "MONEY": "NUMERIC(19,4)",
+        "SMALLMONEY": "NUMERIC(10,4)",
     },
 }
 

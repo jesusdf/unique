@@ -219,6 +219,18 @@ class TestStringAggTextCastIntoPg:
         assert "STRING_AGG(CAST(x AS TEXT), ',' ORDER BY x)" in out, out
 
 
+class TestMoneyCastType:
+    """T-SQL MONEY/SMALLMONEY are fixed-scale decimals — mapped in a CAST target
+    too (not only as a column type): NUMBER(19,4)/(10,4) on Oracle, NUMERIC on
+    PG, DECIMAL on MySQL."""
+
+    def test_money_arith_cast_into_oracle_pg(self) -> None:
+        src = _case("challenge_sqlserver.sql", "ts-money-arith")
+        assert "CAST(10.5 AS NUMBER(19,4))" in _tx(src, "tsql", "oracle")
+        assert "NUMERIC(19,4)" in _tx(src, "tsql", "postgresql")
+        assert "AS MONEY" not in _tx(src, "tsql", "oracle").upper()
+
+
 class TestInitcapSingleArg:
     """PG/Oracle INITCAP take one argument; sqlglot's appended delimiter set
     (a 2-arg Snowflake form) is dropped. T-SQL/MySQL have none → degrade."""
