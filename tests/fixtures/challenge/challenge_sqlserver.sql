@@ -147,7 +147,7 @@ CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))
 -- CASE[open]: ts-decimal-scale — fails on mysql. FUNC-DIFF: source=(('3.33333', '3.33333', '3.33333', '2.25'),) target=(('3.33333', '3.3333
 SELECT 10.00/3, 10/3.0, CAST(10 AS DECIMAL(10,4))/3, 1.5*1.5
 
--- CASE[open]: ts-default-nextval — fails on oracle, postgresql. ORA-04044: procedure, function, package, or type is not allowed here
+-- CASE[fixed]: ts-default-nextval — fails on oracle, postgresql. ORA-04044: procedure, function, package, or type is not allowed here
 CREATE SEQUENCE s AS INT START WITH 1;
 GO
 CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)
@@ -315,10 +315,10 @@ SELECT id INTO dst FROM src
 SELECT id INTO #t2 FROM (SELECT 1 id) s;
 SELECT * FROM #t2;
 
--- CASE[open]: ts-seq-use — fails on oracle, postgresql. ORA-00904: "NEXT_VALUE_FOR": invalid identifier
+-- CASE[fixed]: ts-seq-use — fails on oracle, postgresql. ORA-00904: "NEXT_VALUE_FOR": invalid identifier
 CREATE SEQUENCE s START WITH 1; SELECT NEXT VALUE FOR s
 
--- CASE[open]: ts-sequence-next — fails on oracle, postgresql. ORA-00904: "NEXT_VALUE_FOR": invalid identifier
+-- CASE[fixed]: ts-sequence-next — fails on oracle, postgresql. ORA-00904: "NEXT_VALUE_FOR": invalid identifier
 CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1;
 GO
 SELECT NEXT VALUE FOR seq

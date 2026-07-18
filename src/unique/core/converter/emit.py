@@ -4280,6 +4280,23 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         s = _emit_expression(node.args[0], dialect)
         n = _emit_expression(node.args[1], dialect)
         return f"SUBSTR({s}, 1, {n})"
+    if (
+        up == "NEXT_VALUE_FOR"
+        and len(node.args) == 1
+        and dialect
+        in (
+            "oracle",
+            "postgresql",
+        )
+    ):
+        # T-SQL ``NEXT VALUE FOR seq``: Oracle spells it ``seq.NEXTVAL``, PG
+        # ``nextval('seq')`` (regclass string). MySQL has no sequences, so it
+        # falls through to the gate's honest degrade.
+        seq = _emit_expression(node.args[0], dialect)
+        if dialect == "oracle":
+            return f"{seq}.NEXTVAL"
+        bare = node.args[0].name if isinstance(node.args[0], ColumnRef) else seq
+        return f"nextval('{bare}')"
     if up == "CHR" and len(node.args) == 1 and dialect == "mysql":
         # MySQL has no CHR (Oracle/PG spelling). Bare CHAR(n) returns a BINARY
         # string; a charset makes it a character string — latin1 matches T-SQL

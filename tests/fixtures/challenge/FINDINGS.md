@@ -2649,13 +2649,6 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `FUNC-DIFF: source=(('3.33333', '3.33333', '3.33333', '2.25'),) target=(('3.33333', '3.3333`
 - src: `SELECT 10.00/3, 10/3.0, CAST(10 AS DECIMAL(10,4))/3, 1.5*1.5`
 
-## ts-default-nextval  (tsql)
-- targets: oracle(invalid), postgresql(invalid)
-- live error: `ORA-04044: procedure, function, package, or type is not allowed here`
-- src: `CREATE SEQUENCE s AS INT START WITH 1;
-GO
-CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
-
 ## ts-dttypes  (tsql)
 - targets: oracle(invalid)
 - live error: `ORA-03060: Data type TIME is invalid.`
@@ -2863,18 +2856,6 @@ SELECT id INTO dst FROM src`
 - live error: `ORA-00905: missing keyword`
 - src: `SELECT id INTO #t2 FROM (SELECT 1 id) s;
 SELECT * FROM #t2;`
-
-## ts-seq-use  (tsql)
-- targets: oracle(invalid), postgresql(invalid)
-- live error: `ORA-00904: "NEXT_VALUE_FOR": invalid identifier`
-- src: `CREATE SEQUENCE s START WITH 1; SELECT NEXT VALUE FOR s`
-
-## ts-sequence-next  (tsql)
-- targets: oracle(invalid), postgresql(invalid)
-- live error: `ORA-00904: "NEXT_VALUE_FOR": invalid identifier`
-- src: `CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1;
-GO
-SELECT NEXT VALUE FOR seq`
 
 ## ts-sp-executesql  (tsql)
 - targets: oracle(invalid)

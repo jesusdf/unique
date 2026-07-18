@@ -219,6 +219,22 @@ class TestStringAggTextCastIntoPg:
         assert "STRING_AGG(CAST(x AS TEXT), ',' ORDER BY x)" in out, out
 
 
+class TestSequenceNextValue:
+    """T-SQL ``NEXT VALUE FOR seq`` maps to Oracle ``seq.NEXTVAL`` and PG
+    ``nextval('seq')``; MySQL (no sequences) degrades with a warning."""
+
+    def test_next_value_for_into_oracle_and_pg(self) -> None:
+        src = _case("challenge_sqlserver.sql", "ts-sequence-next")
+        assert "seq.NEXTVAL" in _tx(src, "tsql", "oracle")
+        assert "nextval('seq')" in _tx(src, "tsql", "postgresql")
+
+    def test_next_value_for_mysql_degrades(self) -> None:
+        r = Transpiler().transpile(
+            _case("challenge_sqlserver.sql", "ts-seq-use"), "tsql", "mysql"
+        )
+        assert "-- UNIQUE:" in r.sql and r.warnings, r.sql
+
+
 class TestNcharCharCodePoint:
     """T-SQL ``CHAR(n)``/``NCHAR(n)`` (code point → character) map to each
     engine's spelling: Oracle CHR/NCHR, PG CHR, MySQL CHAR(... USING cs) — and
