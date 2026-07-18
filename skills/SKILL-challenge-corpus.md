@@ -166,6 +166,21 @@ removes it from `FINDINGS.md`.
 > Weakening a test assertion, widening a regex, or adding an `xfail` to go green
 > is not a fix either.
 
+> **HARD RULE — THE BLUE BATCH ENDS ONLY WHEN NOTHING IS LEFT TO FIX.** BLUE may
+> not declare its batch finished while any finding is still pending a fix or
+> modification: every `[open]` case in the `challenge_*.sql` scripts must be
+> flipped to `[fixed]` and every row in `FINDINGS.md` cleared. "Ran out of easy
+> ones", "the rest are rare", or "the suite is already green" do NOT end the
+> batch — an `[open]` case left standing is unfinished work. The **only** way a
+> case may remain unclosed is if it is genuinely impossible to fix within the
+> rules and architecture (the escalation path above): then it does not just get
+> dropped — **surface it to the human and obtain their explicit approval to
+> accept that limit** before counting the batch done, and record the approved
+> limit (a `docs/03-unsupported.md` entry + TODO/FINDINGS note) so it is a
+> documented, accepted degradation, not a silent gap. Until every finding is
+> either fixed or explicitly approved-as-a-limit by the user, the batch is not
+> over — keep working.
+
 1. **Fix at the right layer**, obeying the architecture guardrails in the
    [development-workflow skill](SKILL-development-workflow.md): route through the
    AST paths (lexer / parser / transformer / IR converter / emitter), never a
