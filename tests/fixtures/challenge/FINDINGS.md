@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (540 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (542 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -663,6 +663,11 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever`
 - src: `SELECT CRC32('abc'), MD5('abc'), SHA('abc'), SHA2('abc', 512)`
+
+## my-having-noagg  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(8121, b"Column 't.x' is invalid in the HAVING clause because it is not contained in eithe`
+- src: `SELECT x, RANK() OVER (ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2) t HAVING x>0`
 
 ## my-hex-bin  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -3069,6 +3074,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `(102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
 - src: `SELECT now(), current_timestamp, current_timestamp(3), current_date, current_time, localtimestamp, clock_timestamp()`
 
+## pg-num-literals  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('1000', '0.015', '0.5', '5', '31'),) target=(('1000', '0.015', '0.5', `
+- src: `SELECT 1e3, 1.5e-2, .5, 5., 0x1F::text`
+
 ## pg-num-nonnulls  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
@@ -4261,4 +4271,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 833 distinct constructs; defect rows by kind: func 367, invalid 1308, semantic 2, silent-drop 75.
+Totals: 835 distinct constructs; defect rows by kind: func 368, invalid 1311, semantic 2, silent-drop 75.

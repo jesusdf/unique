@@ -475,6 +475,9 @@ SELECT now(), current_date, current_time, localtimestamp, clock_timestamp()
 -- CASE[open]: pg-now-variants — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 SELECT now(), current_timestamp, current_timestamp(3), current_date, current_time, localtimestamp, clock_timestamp()
 
+-- CASE[open]: pg-num-literals — fails on mysql. FUNC-DIFF: source=(('1000', '0.015', '0.5', '5', '31'),) target=(('1000', '0.015', '0.5', 
+SELECT 1e3, 1.5e-2, .5, 5., 0x1F::text
+
 -- CASE[open]: pg-num-nonnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT NUM_NONNULLS(1, NULL, 2) AS r
 
