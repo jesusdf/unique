@@ -63,6 +63,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI`
 - src: `SELECT BIT_AND(x),BIT_OR(x),BIT_XOR(x) FROM (SELECT 3 x UNION ALL SELECT 5 x UNION ALL SELECT 6 x) t`
 
+## my-agg-boolean  (mysql)
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('2', '3', '0.6667', '1'),) target=(('2', '3', '0.666667', '1'),)`
+- src: `SELECT SUM(x>1), COUNT(x>1), AVG(x>1), MAX(x>1) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 3) t`
+
 ## my-agg-collect  (mysql)
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
@@ -4381,4 +4386,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 857 distinct constructs; defect rows by kind: func 392, invalid 1322, semantic 2, silent-drop 75.
+Totals: 858 distinct constructs; defect rows by kind: func 393, invalid 1322, semantic 2, silent-drop 75.

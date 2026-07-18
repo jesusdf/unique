@@ -17,6 +17,9 @@ SELECT HEX(AES_ENCRYPT('data', 'key')) AS r
 -- CASE[open]: my-agg-bit — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT BIT_AND(x),BIT_OR(x),BIT_XOR(x) FROM (SELECT 3 x UNION ALL SELECT 5 x UNION ALL SELECT 6 x) t
 
+-- CASE[open]: my-agg-boolean — fails on oracle. FUNC-DIFF: source=(('2', '3', '0.6667', '1'),) target=(('2', '3', '0.666667', '1'),)
+SELECT SUM(x>1), COUNT(x>1), AVG(x>1), MAX(x>1) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 3) t
+
 -- CASE[open]: my-agg-collect — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT GROUP_CONCAT(x),JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION ALL SELECT 2 x) t
 
