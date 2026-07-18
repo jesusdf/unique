@@ -91,3 +91,28 @@ def test_values_clause_and_cast_not_flagged() -> None:
     assert "-- UNIQUE:" not in r.sql, r.sql
     r2 = _t("SELECT CAST(a AS CHAR(10)) AS r FROM t", "mysql", "postgresql")
     assert "-- UNIQUE:" not in r2.sql, r2.sql
+
+
+def test_table_name_colliding_with_builtin_not_flagged() -> None:
+    """A table named `line`/`point` (PostgreSQL geometric built-ins) is not a call."""
+    for tbl in ("line", "point"):
+        r = _t(f"INSERT INTO {tbl} (a) VALUES (1)", "postgresql", "mysql")
+        assert "-- UNIQUE:" not in r.sql, (tbl, r.sql)
+
+
+def test_unmapped_builtin_in_procedure_body_degrades() -> None:
+    """An unmapped built-in inside a routine body degrades too (not only DML)."""
+    r = _t(
+        "CREATE PROCEDURE p() BEGIN SELECT SOUNDEX('x'); END", "mysql", "postgresql"
+    )
+    assert "-- UNIQUE:" in r.sql, r.sql
+    assert r.warnings, r
+
+
+def test_user_function_in_procedure_body_passes_through() -> None:
+    """A user function inside a routine body is preserved (not a source built-in)."""
+    r = _t(
+        "CREATE PROCEDURE p() BEGIN SELECT my_custom_fn(1); END", "mysql", "postgresql"
+    )
+    assert "my_custom_fn" in r.sql, r.sql
+    assert "-- UNIQUE:" not in r.sql, r.sql

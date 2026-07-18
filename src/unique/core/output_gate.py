@@ -224,6 +224,13 @@ _KEYWORD_HEADS = frozenset(
 #: matches ``SOUNDEX``) immediately followed by ``(``.
 _FUNC_CALL_RE = re.compile(r"(?<!\w)([A-Za-z_][A-Za-z0-9_$]*)\s*\(")
 
+#: The ``(`` after a table-position name heads a column list, not call args —
+#: ``INSERT INTO line (…)`` / ``CREATE TABLE point (…)`` — and such a table name
+#: may collide with a built-in (PostgreSQL ``line``/``point``). Matched against
+#: the text immediately before the name (a schema qualifier is allowed). A
+#: function relation ``FROM generate_series(…)`` is never in this position.
+_TABLE_POSITION_RE = re.compile(r"(?i)\b(?:INTO|TABLE|UPDATE)\s+[\w.]*$")
+
 
 def _untranslated_source_builtin(scrubbed: str, source: str, target: str) -> str | None:
     """First source built-in that leaked into the output untranslated.
@@ -240,6 +247,9 @@ def _untranslated_source_builtin(scrubbed: str, source: str, target: str) -> str
     for m in _FUNC_CALL_RE.finditer(scrubbed):
         name = m.group(1).upper()
         if name in _TYPE_CONSTRUCTOR_NAMES or name in _KEYWORD_HEADS:
+            continue
+        # A bounded look-back is enough for ``INTO <schema.>?name (``.
+        if _TABLE_POSITION_RE.search(scrubbed[max(0, m.start() - 64) : m.start()]):
             continue
         if is_builtin(name, source) and not is_builtin(name, target):
             return name
@@ -259,15 +269,17 @@ def gate_reason(sql: str, target: str, source: str | None = None) -> str | None:
     if leftovers:
         return f"source-dialect leftovers: {', '.join(leftovers)}"
     scrubbed = scrub(sql)
-    if _PROCEDURAL_MARKER_RE.search(scrubbed):
-        return None
     if source is not None and source != target:
-        # Non-procedural output only (procedural bodies carry constructs the
-        # simple text scan would misread); an unmapped built-in inside a routine
-        # is covered separately.
+        # Runs on all output, procedural bodies included: an unmapped built-in
+        # is equally invalid inside a routine, and sqlglot cannot parse those to
+        # catch it. The name-based filter (source built-in and not target
+        # built-in, minus type/keyword heads) keeps procedural constructs — user
+        # proc calls, cursors, declarations — from tripping it.
         leaked = _untranslated_source_builtin(scrubbed, source, target)
         if leaked is not None:
             return f"untranslated {source} built-in {leaked}() (no {target} form)"
+    if _PROCEDURAL_MARKER_RE.search(scrubbed):
+        return None
     import sqlglot
 
     dialect = _SQLGLOT_DIALECT.get(target)

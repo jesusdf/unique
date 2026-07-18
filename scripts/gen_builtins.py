@@ -50,6 +50,32 @@ MYSQL = dict(
 )
 ORACLE = dict(user="system", password="oracle", dsn="localhost:1521/FREEPDB1")
 
+# MySQL's help_topic files a function under a *statement* or *type* category when
+# its name collides (REPLACE→"Data Manipulation", DATE→"Data Types", IF→"Compound
+# Statements"), so the Function-category query misses them. These are all genuine
+# MySQL built-in functions — over-inclusion only ever *under*-degrades (safe).
+_MYSQL_SUPPLEMENT: frozenset[str] = frozenset(
+    {
+        "REPLACE",
+        "REPEAT",
+        "INSERT",
+        "IF",
+        "ISNULL",
+        "SHA",
+        "DATE",
+        "TIME",
+        "TIMESTAMP",
+        "INTERVAL",
+        "CHAR",
+        "TRUNCATE",
+        "MOD",
+        "LEFT",
+        "RIGHT",
+        "MID",
+        "TRIM",
+    }
+)
+
 # SQL Server has no queryable catalog of built-in functions. Curated from the
 # official "Built-in functions (Transact-SQL)" reference, SQL Server 2012+.
 _TSQL_CURATED: frozenset[str] = frozenset(
@@ -278,9 +304,9 @@ def _mysql() -> set[str]:
         cur.execute(
             "SELECT DISTINCT UPPER(t.name) FROM help_topic t "
             "JOIN help_category c ON t.help_category_id = c.help_category_id "
-            "WHERE c.name LIKE '%Function%'"
+            "WHERE c.name LIKE '%Function%' OR c.name = 'Comparison Operators'"
         )
-        return {r[0] for r in cur.fetchall()}
+        return {r[0] for r in cur.fetchall()} | _MYSQL_SUPPLEMENT
     finally:
         c.close()
 

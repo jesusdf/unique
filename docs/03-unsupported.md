@@ -135,8 +135,10 @@ stored procedure, or user type) is passed through untouched, because the target
 schema is expected to define it. The per-engine built-in catalogs are sourced
 authoritatively (live `pg_proc` / `V$SQLFN_METADATA` / `mysql.help_topic` + a
 curated T-SQL list) by `scripts/gen_builtins.py`; the runtime reads the static
-snapshot (`unique.core.builtins`). This covers standalone DML output; unmapped
-built-ins inside routine bodies are handled by the procedural pipeline.
+snapshot (`unique.core.builtins`). The scan covers both standalone DML and
+routine bodies (it skips `TYPE(n)` constructors, the `VALUES` keyword, and
+table-position names like `INSERT INTO line (…)` that may collide with a
+built-in name).
 
 Adding a real mapping for such a function (so it transpiles instead of
 degrading) is always preferable — the carrier is the honest floor, not the goal.
