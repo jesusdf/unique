@@ -69,6 +69,9 @@ SELECT CAST(SYSTIMESTAMP AS DATE), CAST(SYSDATE AS TIMESTAMP), CAST(SYSDATE AS T
 -- CASE[open]: ora-cast-expr — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL
 
+-- CASE[open]: ora-cast-int-edge — fails on mysql. FUNC-DIFF: source=(('4', '3', '4', '4'),) target=(('3', '3', '4', '4'),)
+SELECT CAST('3.9' AS INT), TRUNC(3.9), ROUND(3.9), CAST(3.9 AS NUMBER(1)) FROM DUAL
+
 -- CASE[open]: ora-cast-onerror — fails on postgresql, tsql. (8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit
 SELECT CAST('abc' AS NUMBER DEFAULT -1 ON CONVERSION ERROR) AS r FROM DUAL
 
@@ -303,6 +306,9 @@ SELECT NLSSORT('abc', 'NLS_SORT=BINARY_CI') AS r FROM DUAL
 -- CASE[open]: ora-now-fns — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 SELECT SYSDATE, CURRENT_DATE, SYSTIMESTAMP, LOCALTIMESTAMP FROM DUAL
 
+-- CASE[open]: ora-now-variants — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
+SELECT SYSDATE, SYSTIMESTAMP, CURRENT_TIMESTAMP, CURRENT_DATE, LOCALTIMESTAMP FROM DUAL
+
 -- CASE[open]: ora-num-concat — fails on tsql. FUNC-DIFF: source=(('23',),) target=(('5',),)
 SELECT 2 || 3 AS r FROM DUAL
 
@@ -435,6 +441,9 @@ SELECT CAST('123.45' AS NUMBER), TO_NUMBER('1,234.5','9,999.9'), TO_NUMBER('$5',
 
 -- CASE[open]: ora-trailing-eq — fails on tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT CASE WHEN 'a ' = 'a' THEN 1 ELSE 0 END AS r FROM DUAL
+
+-- CASE[open]: ora-trailing-space-cmp — fails on tsql. FUNC-DIFF: source=(('0', '0'),) target=(('1', '1'),)
+SELECT CASE WHEN 'a'='a ' THEN 1 ELSE 0 END, CASE WHEN 'a'=RPAD('a',2) THEN 1 ELSE 0 END FROM DUAL
 
 -- CASE[open]: ora-translate — fails on mysql. (1305, 'FUNCTION unique_val_6c47c43e12f3.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r FROM DUAL

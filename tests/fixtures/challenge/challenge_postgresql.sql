@@ -219,6 +219,9 @@ SELECT ENCODE('abc'::bytea, 'base64') AS r
 -- CASE[open]: pg-encode-decode — fails on mysql, oracle, tsql. (195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT ENCODE(DECODE('SGVsbG8=', 'base64'), 'hex')
 
+-- CASE[open]: pg-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1
+SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01 00:00:00'), EXTRACT(EPOCH FROM INTERVAL '1 day')
+
 -- CASE[open]: pg-except-all — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 SELECT 1 EXCEPT ALL SELECT 2
 
@@ -408,8 +411,8 @@ SELECT LEFT('hello', 2.9::int) AS r
 -- CASE[open]: pg-like-cs — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'ABC' LIKE 'abc' AS r
 
--- CASE[open]: pg-like-escape — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
-SELECT 'a_b' LIKE 'a\_b' AS r
+-- CASE[open]: pg-like-escape — fails on oracle. FUNC-DIFF: source=(('1', '0', '1'),) target=(('0', '0', '1'),)
+SELECT 'a%b' LIKE 'a\%b', 'AbC' LIKE 'abc', 'AbC' ILIKE 'abc'
 
 -- CASE[open]: pg-log-2arg — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('0.333333',),)
 SELECT LOG(2, 8) AS r
@@ -458,6 +461,9 @@ SELECT (NOT NULL) IS NULL AS r
 
 -- CASE[open]: pg-now-fns — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever
 SELECT now(), current_date, current_time, localtimestamp, clock_timestamp()
+
+-- CASE[open]: pg-now-variants — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
+SELECT now(), current_timestamp, current_timestamp(3), current_date, current_time, localtimestamp, clock_timestamp()
 
 -- CASE[open]: pg-num-nonnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT NUM_NONNULLS(1, NULL, 2) AS r
@@ -638,6 +644,9 @@ SELECT to_timestamp('June 15 2020', 'Month DD YYYY') AS r
 -- CASE[open]: pg-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'a ' = 'a' AS r
 
+-- CASE[open]: pg-trailing-space-cmp — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('0', '1', '0'),) target=(('1', '1', '1'),)
+SELECT 'a'='a ', 'a'::char(2)='a'::char(2), 'abc'='ABC'
+
 -- CASE[open]: pg-translate — fails on mysql. (1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
 
@@ -664,6 +673,9 @@ SELECT ts_rank(to_tsvector('the cat'), to_tsquery('cat')) AS r
 
 -- CASE[open]: pg-tstzrange — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
 SELECT tstzrange(now(), now() + INTERVAL '1 day') AS r
+
+-- CASE[open]: pg-tz-convert — fails on mysql, oracle, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D
+SELECT TIMESTAMP '2020-06-15 10:00:00' AT TIME ZONE 'America/New_York', now() AT TIME ZONE 'UTC'
 
 -- CASE[open]: pg-tz-interval — fails on oracle. ORA-30089: missing or invalid <datetime field>
 CREATE TABLE t (a TIMESTAMPTZ, b TIME WITH TIME ZONE, c INTERVAL)

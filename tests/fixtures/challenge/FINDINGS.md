@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (525 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (531 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -482,6 +482,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('NULL',),)`
 - src: `SELECT '' = 0 AS r`
+
+## my-epoch  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2`
+- src: `SELECT UNIX_TIMESTAMP('2020-01-01 00:00:00'), FROM_UNIXTIME(1577836800), TIME_TO_SEC('01:00:00')`
 
 ## my-eq-mix  (mysql)
 - targets: oracle(func), tsql(func)
@@ -969,6 +974,11 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `(156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever`
 - src: `SELECT NOW(), CURDATE(), CURTIME(), UTC_DATE(), UTC_TIME(), SYSDATE()`
 
+## my-now-variants  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
+- src: `SELECT NOW(), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(3), CURDATE(), CURTIME(), SYSDATE(), UNIX_TIMESTAMP()`
+
 ## my-numeric  (mysql)
 - targets: tsql(invalid)
 - live error: `(2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se`
@@ -1244,6 +1254,11 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
 - src: `SELECT 'a ' = 'a' AS r`
 
+## my-trailing-space-cmp  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('0', '1', '1'),) target=(('1', '0', '1'),)`
+- src: `SELECT 'a'='a ', 'a'<'a ', 'abc'='ABC'`
+
 ## my-trig  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(174, b'The atan function requires 1 argument(s).DB-Lib error message 20018, severity 15:\`
@@ -1288,6 +1303,11 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "QUARTER": invalid identifier`
 - src: `SELECT TIMESTAMPADD(QUARTER,1,NOW()), TIMESTAMPDIFF(QUARTER,'2020-01-01',NOW())`
+
+## my-tz-convert  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
+- src: `SELECT CONVERT_TZ('2020-06-15 10:00:00','+00:00','+05:30'), CONVERT_TZ('2020-06-15 10:00:00','UTC','America/New_York')`
 
 ## my-unix-timestamp  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -1522,6 +1542,11 @@ ALTER`
 - targets: mysql(invalid)
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL`
+
+## ora-cast-int-edge  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('4', '3', '4', '4'),) target=(('3', '3', '4', '4'),)`
+- src: `SELECT CAST('3.9' AS INT), TRUNC(3.9), ROUND(3.9), CAST(3.9 AS NUMBER(1)) FROM DUAL`
 
 ## ora-cast-onerror  (oracle)
 - targets: postgresql(invalid), tsql(invalid)
@@ -1911,6 +1936,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO`
 - src: `SELECT SYSDATE, CURRENT_DATE, SYSTIMESTAMP, LOCALTIMESTAMP FROM DUAL`
 
+## ora-now-variants  (oracle)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO`
+- src: `SELECT SYSDATE, SYSTIMESTAMP, CURRENT_TIMESTAMP, CURRENT_DATE, LOCALTIMESTAMP FROM DUAL`
+
 ## ora-num-concat  (oracle)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('23',),) target=(('5',),)`
@@ -2131,6 +2161,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
 - src: `SELECT CASE WHEN 'a ' = 'a' THEN 1 ELSE 0 END AS r FROM DUAL`
+
+## ora-trailing-space-cmp  (oracle)
+- targets: tsql(func)
+- live error: `FUNC-DIFF: source=(('0', '0'),) target=(('1', '1'),)`
+- src: `SELECT CASE WHEN 'a'='a ' THEN 1 ELSE 0 END, CASE WHEN 'a'=RPAD('a',2) THEN 1 ELSE 0 END FROM DUAL`
 
 ## ora-translate  (oracle)
 - targets: mysql(invalid)
@@ -2593,6 +2628,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `(195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se`
 - src: `SELECT ENCODE(DECODE('SGVsbG8=', 'base64'), 'hex')`
 
+## pg-epoch  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1`
+- src: `SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01 00:00:00'), EXTRACT(EPOCH FROM INTERVAL '1 day')`
+
 ## pg-except-all  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
@@ -2909,9 +2949,9 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - src: `SELECT 'ABC' LIKE 'abc' AS r`
 
 ## pg-like-escape  (postgresql)
-- targets: oracle(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
-- src: `SELECT 'a_b' LIKE 'a\_b' AS r`
+- targets: oracle(func)
+- live error: `FUNC-DIFF: source=(('1', '0', '1'),) target=(('0', '0', '1'),)`
+- src: `SELECT 'a%b' LIKE 'a\%b', 'AbC' LIKE 'abc', 'AbC' ILIKE 'abc'`
 
 ## pg-log-2arg  (postgresql)
 - targets: tsql(func)
@@ -2992,6 +3032,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever`
 - src: `SELECT now(), current_date, current_time, localtimestamp, clock_timestamp()`
+
+## pg-now-variants  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
+- src: `SELECT now(), current_timestamp, current_timestamp(3), current_date, current_time, localtimestamp, clock_timestamp()`
 
 ## pg-num-nonnulls  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -3281,6 +3326,11 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
 - src: `SELECT 'a ' = 'a' AS r`
 
+## pg-trailing-space-cmp  (postgresql)
+- targets: mysql(func), oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('0', '1', '0'),) target=(('1', '1', '1'),)`
+- src: `SELECT 'a'='a ', 'a'::char(2)='a'::char(2), 'abc'='ABC'`
+
 ## pg-translate  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')`
@@ -3325,6 +3375,11 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ`
 - src: `SELECT tstzrange(now(), now() + INTERVAL '1 day') AS r`
+
+## pg-tz-convert  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D`
+- src: `SELECT TIMESTAMP '2020-06-15 10:00:00' AT TIME ZONE 'America/New_York', now() AT TIME ZONE 'UTC'`
 
 ## pg-tz-interval  (postgresql)
 - targets: oracle(invalid)
@@ -3858,6 +3913,11 @@ SELECT * FROM t WITH (NOLOCK)`
 - live error: `ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier`
 - src: `SELECT GETDATE(), SYSDATETIME(), CURRENT_TIMESTAMP, GETUTCDATE(), SYSDATETIMEOFFSET()`
 
+## ts-now-variants  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "SYSUTCDATETIME": invalid identifier`
+- src: `SELECT GETDATE(), GETUTCDATE(), SYSDATETIME(), SYSUTCDATETIME(), CURRENT_TIMESTAMP`
+
 ## ts-openjson  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "OPEN_J_S_O_N": invalid identifier`
@@ -4059,6 +4119,11 @@ SELECT * FROM t TABLESAMPLE (10 PERCENT)`
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT IIF('a ' = 'a', 1, 0) AS r`
 
+## ts-trailing-space-cmp  (tsql)
+- targets: mysql(func), oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('eq', 'eq'),) target=(('ne', 'ne'),)`
+- src: `SELECT CASE WHEN 'a'='a ' THEN 'eq' ELSE 'ne' END, CASE WHEN 'a '='a' THEN 'eq' ELSE 'ne' END`
+
 ## ts-translate  (tsql)
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')`
@@ -4110,6 +4175,11 @@ CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 - live error: `ORA-00904: "TODATETIMEOFFSET": invalid identifier`
 - src: `SELECT SWITCHOFFSET(SYSDATETIMEOFFSET(),'+00:00'), TODATETIMEOFFSET(GETDATE(),'+05:00')`
 
+## ts-tz-offset  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "TODATETIMEOFFSET": invalid identifier`
+- src: `SELECT CONVERT(VARCHAR,SYSDATETIMEOFFSET(),121), SWITCHOFFSET(SYSDATETIMEOFFSET(),'+05:30'), TODATETIMEOFFSET(GETDATE(),'-08:00')`
+
 ## ts-tzoffset  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier`
@@ -4155,4 +4225,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 812 distinct constructs; defect rows by kind: func 353, invalid 1274, semantic 2, silent-drop 75.
+Totals: 826 distinct constructs; defect rows by kind: func 363, invalid 1300, semantic 2, silent-drop 75.

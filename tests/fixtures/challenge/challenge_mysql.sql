@@ -269,6 +269,9 @@ SELECT CHAR_LENGTH('😀') AS r
 -- CASE[open]: my-empty-eq-zero — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('NULL',),)
 SELECT '' = 0 AS r
 
+-- CASE[open]: my-epoch — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
+SELECT UNIX_TIMESTAMP('2020-01-01 00:00:00'), FROM_UNIXTIME(1577836800), TIME_TO_SEC('01:00:00')
+
 -- CASE[open]: my-eq-mix — fails on oracle, tsql. FUNC-DIFF: source=(('1', '0', '1'),) target=(('1', '1', '1'),)
 SELECT 1 = 1.0 AS r, 'a' = 'a ' AS b, 1 = TRUE AS c
 
@@ -561,6 +564,9 @@ CREATE PROCEDURE p() BEGIN CALL other_proc(); END
 -- CASE[open]: my-now-fns — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever
 SELECT NOW(), CURDATE(), CURTIME(), UTC_DATE(), UTC_TIME(), SYSDATE()
 
+-- CASE[open]: my-now-variants — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
+SELECT NOW(), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(3), CURDATE(), CURTIME(), SYSDATE(), UNIX_TIMESTAMP()
+
 -- CASE[open]: my-numeric — fails on tsql. (2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se
 CREATE TABLE t (a DECIMAL(20,4), b FLOAT(10,2), c DOUBLE)
 
@@ -727,6 +733,9 @@ SELECT '12:00:00' + INTERVAL 90 MINUTE AS r
 -- CASE[open]: my-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'a ' = 'a' AS r
 
+-- CASE[open]: my-trailing-space-cmp — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('0', '1', '1'),) target=(('1', '0', '1'),)
+SELECT 'a'='a ', 'a'<'a ', 'abc'='ABC'
+
 -- CASE[open]: my-trig — fails on oracle, postgresql, tsql. (174, b'The atan function requires 1 argument(s).DB-Lib error message 20018, severity 15:\
 SELECT ATAN2(1,1), ATAN(1,1), DEGREES(PI()), RADIANS(180), COT(1)
 
@@ -753,6 +762,9 @@ SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r
 
 -- CASE[open]: my-tsadd-quarter — fails on oracle, postgresql. ORA-00904: "QUARTER": invalid identifier
 SELECT TIMESTAMPADD(QUARTER,1,NOW()), TIMESTAMPDIFF(QUARTER,'2020-01-01',NOW())
+
+-- CASE[open]: my-tz-convert — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
+SELECT CONVERT_TZ('2020-06-15 10:00:00','+00:00','+05:30'), CONVERT_TZ('2020-06-15 10:00:00','UTC','America/New_York')
 
 -- CASE[open]: my-unix-timestamp — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
 SELECT UNIX_TIMESTAMP('2020-01-01'), FROM_UNIXTIME(1577836800)

@@ -259,6 +259,9 @@ SELECT * FROM t WITH (NOLOCK)
 -- CASE[open]: ts-now-fns — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier
 SELECT GETDATE(), SYSDATETIME(), CURRENT_TIMESTAMP, GETUTCDATE(), SYSDATETIMEOFFSET()
 
+-- CASE[open]: ts-now-variants — fails on mysql, oracle, postgresql. ORA-00904: "SYSUTCDATETIME": invalid identifier
+SELECT GETDATE(), GETUTCDATE(), SYSDATETIME(), SYSUTCDATETIME(), CURRENT_TIMESTAMP
+
 -- CASE[open]: ts-openjson — fails on oracle, postgresql. ORA-00904: "OPEN_J_S_O_N": invalid identifier
 SELECT * FROM OPENJSON('[1,2,3]')
 
@@ -384,6 +387,9 @@ SELECT TOP 1 WITH TIES x FROM (VALUES (1),(1),(2)) v(x) ORDER BY x
 -- CASE[open]: ts-trailing-eq — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT IIF('a ' = 'a', 1, 0) AS r
 
+-- CASE[open]: ts-trailing-space-cmp — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('eq', 'eq'),) target=(('ne', 'ne'),)
+SELECT CASE WHEN 'a'='a ' THEN 'eq' ELSE 'ne' END, CASE WHEN 'a '='a' THEN 'eq' ELSE 'ne' END
+
 -- CASE[open]: ts-translate — fails on mysql. (1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
 
@@ -416,6 +422,9 @@ SELECT TRY_PARSE('2020-01-01' AS DATE) AS r
 
 -- CASE[open]: ts-tz-fns — fails on mysql, oracle, postgresql. ORA-00904: "TODATETIMEOFFSET": invalid identifier
 SELECT SWITCHOFFSET(SYSDATETIMEOFFSET(),'+00:00'), TODATETIMEOFFSET(GETDATE(),'+05:00')
+
+-- CASE[open]: ts-tz-offset — fails on mysql, oracle, postgresql. ORA-00904: "TODATETIMEOFFSET": invalid identifier
+SELECT CONVERT(VARCHAR,SYSDATETIMEOFFSET(),121), SWITCHOFFSET(SYSDATETIMEOFFSET(),'+05:30'), TODATETIMEOFFSET(GETDATE(),'-08:00')
 
 -- CASE[open]: ts-tzoffset — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier
 SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r
