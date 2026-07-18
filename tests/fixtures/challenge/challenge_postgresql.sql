@@ -427,6 +427,9 @@ SELECT LOG(2, 8) AS r
 -- CASE[open]: pg-log-base — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('4.60517',),)
 SELECT LOG(100) AS r
 
+-- CASE[open]: pg-loop-notice — fails on tsql. (443, b"Invalid use of a side-effecting operator 'PRINT' within a function.DB-Lib error me
+CREATE FUNCTION f() RETURNS void AS $$ DECLARE i INT:=0; BEGIN LOOP i:=i+1; EXIT WHEN i>=3; END LOOP; RAISE NOTICE 'done'; END; $$ LANGUAGE plpgsql
+
 -- CASE[open]: pg-lpad-shrink — fails on tsql. FUNC-DIFF: source=(('hel',),) target=(('llo',),)
 SELECT LPAD('hello', 3) AS r
 

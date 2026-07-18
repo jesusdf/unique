@@ -8,17 +8,17 @@ ledger obeys the RED rules before BLUE picks it up.
 
 | Outcome | Count | Meaning |
 |---|---:|---|
-| **REJECTED** (silent) | 1308 | live target rejects the output, **no warning** — confirmed silent defect (the corpus's reason to exist) |
-| **ACCEPTS** (review) | 909 | live target accepts the output, no warning — a `func` wrong-result case, or a non-filed target that legitimately works |
+| **REJECTED** (silent) | 1428 | live target rejects the output, **no warning** — confirmed silent defect (the corpus's reason to exist) |
+| **ACCEPTS** (review) | 947 | live target accepts the output, no warning — a `func` wrong-result case, or a non-filed target that legitimately works |
 | **CARRIER** (no warn) | 0 | no silent `Unhandled` carriers remain |
-| **WARNED** | 114 | transpile emitted a warning — **all on non-filed targets** |
-| checks total | 2331 | across all open cases × their other engines |
+| **WARNED** | 124 | transpile emitted a warning — **all on non-filed targets** |
+| checks total | 2499 | across all open cases × their other engines |
 | harness errors | 0 | |
 
 ## Rule compliance
 
 - **Warned degradation ≠ defect.** A case is filed only under the target(s) where
-  it fails **silently**. The 114 warned combinations are every one on a target the
+  it fails **silently**. The 124 warned combinations are every one on a target the
   case is *not* filed against (documented degradations elsewhere) — **0** warned
   results fall on a filed target. The ledger contains no warned degradations.
 - **Live-validated.** Every filed target is either a live REJECT (silent invalid)

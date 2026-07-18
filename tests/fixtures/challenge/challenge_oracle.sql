@@ -99,6 +99,10 @@ SELECT 'a' || 5 AS r FROM DUAL
 -- CASE[open]: ora-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; CLOSE c; END;
 
+-- CASE[open]: ora-cursor-attr — fails on mysql, tsql. (128, b'The name "c" is not permitted in this context. Valid expressions are constants, co
+CREATE PROCEDURE p AS CURSOR c IS SELECT 1 FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; IF c%FOUND THEN DBMS_OUTPUT.PUT_LINE(c%ROWCOUNT); END IF; CLOSE c; END;
+/
+
 -- CASE[open]: ora-cursor-for-loop — fails on tsql. (156, b"Incorrect syntax near the keyword 'END'.DB-Lib error message 20018, severity 15:\n
 CREATE PROCEDURE p AS BEGIN FOR r IN (SELECT 1 AS x FROM DUAL) LOOP NULL; END LOOP; END;
 /

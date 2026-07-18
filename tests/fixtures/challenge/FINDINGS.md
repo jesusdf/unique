@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (533 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (540 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -1598,6 +1598,11 @@ ALTER`
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
 - src: `CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; CLOSE c; END;`
 
+## ora-cursor-attr  (oracle)
+- targets: mysql(invalid), tsql(invalid)
+- live error: `(128, b'The name "c" is not permitted in this context. Valid expressions are constants, co`
+- src: `CREATE PROCEDURE p AS CURSOR c IS SELECT 1 FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; IF c%FOUND THEN DBMS_OUTPUT.PUT_LINE`
+
 ## ora-cursor-for-loop  (oracle)
 - targets: tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'END'.DB-Lib error message 20018, severity 15:\n`
@@ -2984,6 +2989,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `FUNC-DIFF: source=(('2',),) target=(('4.60517',),)`
 - src: `SELECT LOG(100) AS r`
 
+## pg-loop-notice  (postgresql)
+- targets: tsql(invalid)
+- live error: `(443, b"Invalid use of a side-effecting operator 'PRINT' within a function.DB-Lib error me`
+- src: `CREATE FUNCTION f() RETURNS void AS $$ DECLARE i INT:=0; BEGIN LOOP i:=i+1; EXIT WHEN i>=3; END LOOP; RAISE NOTICE 'done'; END; $$`
+
 ## pg-lpad-shrink  (postgresql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('hel',),) target=(('llo',),)`
@@ -3714,6 +3724,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
 - src: `CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT FROM c IN`
 
+## ts-cursor-attr  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol ";" when expectin`
+- src: `CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT 1; OPEN c; FETCH NEXT FROM c; IF @@FETCH_STATUS=0 PRINT CAST(@@CURSOR_ROWS`
+
 ## ts-date-bucket2  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-01861: literal does not match format string`
@@ -4246,4 +4261,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 830 distinct constructs; defect rows by kind: func 367, invalid 1302, semantic 2, silent-drop 75.
+Totals: 833 distinct constructs; defect rows by kind: func 367, invalid 1308, semantic 2, silent-drop 75.
