@@ -276,6 +276,39 @@ workflow.
     warn-on-divergence pass, not a per-spelling rewrite — the user's own caution
     ("RC-2 es delicado"); handling one wrong ships silent bad data.
 
+  - [ ] **RC-1a mapping opportunities — functions that DO have a faithful target
+        form (systematic 2026-07-18 sweep; every proposed form parses on target).**
+        These degrade today but are cleanly mappable — implement, don't leave as
+        carriers. Grouped by confidence:
+    - **Date (high value):**
+      - `ADD_MONTHS(d,n)` (oracle) → pg `d + n * INTERVAL '1 month'`, mysql
+        `DATE_ADD(d, INTERVAL n MONTH)`, tsql `DATEADD(MONTH, n, d)`.
+      - `LAST_DAY(d)` → tsql `EOMONTH(d)`, pg
+        `(DATE_TRUNC('month',d) + INTERVAL '1 month' - INTERVAL '1 day')`.
+      - `QUARTER(d)` (mysql) → tsql `DATEPART(QUARTER,d)`, pg `EXTRACT(QUARTER FROM d)`,
+        oracle `CEIL(EXTRACT(MONTH FROM d)/3)`.
+      - `MONTHNAME(d)`/`DAYNAME(d)` (mysql) → tsql `DATENAME(MONTH/WEEKDAY,d)`,
+        oracle/pg `TO_CHAR(d,'Month'/'Day')` (trim the padding).
+    - **Math (high value, exact):**
+      - `DEGREES(x)`/`RADIANS(x)` → oracle `(x*180/ACOS(-1))` / `(x*ACOS(-1)/180)`.
+      - `CBRT(x)` (pg) → `SIGN(x) * POWER(ABS(x), 1.0/3)` (the sign wrapper makes it
+        exact for negatives — the reason it was left degrading before).
+      - `RAND()` (mysql) → oracle `DBMS_RANDOM.VALUE`.
+      - `REPEAT(s,n)` (mysql) → oracle `RPAD(s, LENGTH(s)*n, s)`.
+    - **String / aggregate:**
+      - `STUFF(s,start,len,new)` (tsql) → pg/oracle `OVERLAY(s PLACING new FROM start FOR len)`.
+      - `MEDIAN(x)` (oracle) → pg `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x)`
+        (tsql only has the window form — degrade there).
+      - `JSON_ARRAYAGG(x)` (mysql) → pg `JSON_AGG(x)`.
+      - `ELT(n,…)`/`FIELD(v,…)` (mysql) → CASE chains.
+    - **Mappable with a caveat (verify semantics live):** `NEXT_DAY`,
+      `UNIX_TIMESTAMP`/`FROM_UNIXTIME` (epoch), `WEEK` (mode differs).
+    - **Confirmed floor (no faithful equivalent — keep degrading honestly):**
+      `TRANSLATE`→mysql/tsql (char map+delete), `INITCAP`→mysql/tsql, `SOUNDEX`→pg
+      (needs fuzzystrmatch), `QUOTENAME`→others, `FORMAT` (locale), `SUBSTRING_INDEX`,
+      `HEX`/`BIN`/`OCT`/`CONV`/`CRC32` (base conv), `WEEKDAY` (DATEFIRST-dependent),
+      `MONTHS_BETWEEN`→mysql/pg (fractional).
+
 - [x] **Duplicate `SET NOCOUNT ON` on `oracle`/`pg`/`mysql` → T-SQL (P2)** — the
       T-SQL procedure emitter injects `SET NOCOUNT ON` as a best-practice
       default, but did so even when the body already opened with one (an
