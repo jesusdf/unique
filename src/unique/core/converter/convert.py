@@ -1382,6 +1382,30 @@ def _convert_create_table(
                         )
                     elif isinstance(kind, exp.AutoIncrementColumnConstraint):
                         identity = True
+                    elif isinstance(kind, exp.Reference):
+                        # Inline column FK (``c INT REFERENCES p(id) ON DELETE …``)
+                        # is equivalent to a table-level FOREIGN KEY; route it
+                        # there so it emits per-target instead of being silently
+                        # dropped (RC-3 — referential integrity).
+                        sg = sqlglot_dialect_name(source_dialect)
+                        col_ref = col_def.this.sql(dialect=sg)
+                        constraints.append(
+                            PassthroughSQL(
+                                sql=f"FOREIGN KEY ({col_ref}) {kind.sql(dialect=sg)}",
+                                source_dialect=source_dialect,
+                                kind="CONSTRAINT",
+                            )
+                        )
+                    elif isinstance(kind, exp.CheckColumnConstraint):
+                        # Inline column CHECK — keep it as a table-level CHECK
+                        # rather than drop the data-integrity rule.
+                        constraints.append(
+                            PassthroughSQL(
+                                sql=kind.sql(dialect=sqlglot_dialect_name(source_dialect)),
+                                source_dialect=source_dialect,
+                                kind="CONSTRAINT",
+                            )
+                        )
 
                 columns.append(
                     ColumnDefinition(

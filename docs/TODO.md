@@ -244,6 +244,23 @@ workflow.
     add real mappings so built-ins with a target form *translate* instead of
     degrading; then RC-2 (func compensations, annotated) and RC-3 (clause-drops).
 
+  - **Block 2 landed (`d24c27c`)** — the scan now covers routine bodies too;
+    MySQL catalog completeness fixed (help_topic miscategorises REPLACE/IF/…),
+    table-position names (`INSERT INTO line`) excluded.
+  - **RC-3 FK/CHECK landed (Block 3).** Inline column-level constraints
+    (`c INT REFERENCES p(id) ON DELETE …`, `c INT CHECK (…)`) were dropped by the
+    CREATE TABLE converter (it read only NOT NULL/IDENTITY/PK/UNIQUE/DEFAULT) —
+    silent loss of referential integrity / validation. Now routed to the
+    table-level constraint path and emitted per-target
+    (`tests/integration/test_clause_drops.py`). **Still dropped silently (RC-3
+    backlog):** column `COLLATE` (collation names differ per engine → needs a
+    map or an honest degrade), column `COMMENT` (PG/Oracle need a separate
+    `COMMENT ON COLUMN`), `IDENTITY(seed,step)` seed (→ `GENERATED … START WITH`),
+    `UNSIGNED` (widened to BIGINT but the ≥0 constraint is lost), window
+    `ROWS/RANGE` frame, `WITH ROLLUP`, `EXCLUDE`. Also **Oracle has no
+    `ON UPDATE`** FK action — now preserved (was dropped) but ships invalid on
+    Oracle; needs a target gate.
+
 - [x] **Duplicate `SET NOCOUNT ON` on `oracle`/`pg`/`mysql` → T-SQL (P2)** — the
       T-SQL procedure emitter injects `SET NOCOUNT ON` as a best-practice
       default, but did so even when the body already opened with one (an
