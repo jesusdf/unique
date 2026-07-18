@@ -132,10 +132,10 @@ SELECT DATE_BUCKET(MINUTE, 15, CAST('2020-01-01 00:07' AS DATETIME2))
 -- CASE[open]: ts-dateadd — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('2020-02-29 00:00:00', '2020-01-02 00:00:00', '2020-02-29'),) target=(
 SELECT DATEADD(MONTH,1,'2020-01-31'), DATEADD(DAY,1,'2020-01-01'), EOMONTH('2020-02-15')
 
--- CASE[open]: ts-datediff — fails on oracle. ORA-01861: literal does not match format string
+-- CASE[fixed]: ts-datediff — fails on oracle. ORA-01861: literal does not match format string
 SELECT DATEDIFF(DAY, '2020-01-01', '2020-01-10') AS r
 
--- CASE[open]: ts-datediff-big — fails on oracle, postgresql. ORA-01861: literal does not match format string
+-- CASE[fixed]: ts-datediff-big — fails on oracle, postgresql. ORA-01861: literal does not match format string
 SELECT DATEDIFF_BIG(SECOND, '2020-01-01', '2020-01-02') AS r
 
 -- CASE[open]: ts-datetimefromparts — fails on mysql, oracle, postgresql. ORA-00904: "TIMESTAMP_FROM_PARTS": invalid identifier

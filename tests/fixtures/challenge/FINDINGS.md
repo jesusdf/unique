@@ -2649,16 +2649,6 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `FUNC-DIFF: source=(('2020-02-29 00:00:00', '2020-01-02 00:00:00', '2020-02-29'),) target=(`
 - src: `SELECT DATEADD(MONTH,1,'2020-01-31'), DATEADD(DAY,1,'2020-01-01'), EOMONTH('2020-02-15')`
 
-## ts-datediff  (tsql)
-- targets: oracle(invalid)
-- live error: `ORA-01861: literal does not match format string`
-- src: `SELECT DATEDIFF(DAY, '2020-01-01', '2020-01-10') AS r`
-
-## ts-datediff-big  (tsql)
-- targets: oracle(invalid), postgresql(invalid)
-- live error: `ORA-01861: literal does not match format string`
-- src: `SELECT DATEDIFF_BIG(SECOND, '2020-01-01', '2020-01-02') AS r`
-
 ## ts-datetimefromparts  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "TIMESTAMP_FROM_PARTS": invalid identifier`

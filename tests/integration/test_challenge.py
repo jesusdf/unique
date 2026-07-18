@@ -185,6 +185,23 @@ class TestTrimCharacterSet:
         assert "LTRIM('007', '0')" in _exec_lines(out), out
 
 
+class TestDateLiteralIntoOracle:
+    """Date built-ins over ISO string literals emit the ANSI ``DATE '…'`` literal
+    for Oracle/PG date math — Oracle can't implicitly convert an ISO string to a
+    DATE (NLS_DATE_FORMAT, ORA-01861), and a bare CAST(str AS DATE) inherits it."""
+
+    def test_datediff_into_oracle_uses_ansi_date_literal(self) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-datediff "), "tsql", "oracle")
+        assert "DATE '2020-01-10'" in out and "DATE '2020-01-01'" in out, out
+        # the raw string must not be handed to CAST(... AS DATE) unwrapped.
+        assert "CAST('2020-01-10'" not in out, out
+
+    @pytest.mark.parametrize("target", ("oracle", "postgresql"))
+    def test_datediff_big_faithful(self, target: str) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-datediff-big"), "tsql", target)
+        assert re.search(r"DATE '\d{4}-\d\d-\d\d'", out), out
+
+
 class TestTsqlBeginTransaction:
     """``BEGIN TRANSACTION`` maps to each engine's transaction-open form; Oracle
     (implicit transactions) drops it with a documented carrier + warning."""

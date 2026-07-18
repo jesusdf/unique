@@ -64,6 +64,7 @@ from unique.core.converter.harvest import (  # noqa: F401
     _coerce_bit_literal,
     _coerce_date_literal,
     _oracle_date_literal,
+    wrap_oracle_date_arg,
 )
 from unique.core.mappings import (
     CURRENT_DATE_EXPR,
@@ -3389,6 +3390,9 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
         if dialect == "tsql":
             return f"DATEDIFF(DAY, {start}, {end})"
         # PostgreSQL / Oracle: subtracting two dates yields the day count.
+        # Oracle can't CAST an ISO string to DATE (NLS_DATE_FORMAT, ORA-01861);
+        # the ANSI ``DATE '…'`` literal is valid on both engines.
+        end, start = wrap_oracle_date_arg(end), wrap_oracle_date_arg(start)
         return f"(CAST({end} AS DATE) - CAST({start} AS DATE))"
     if len(node.args) != 3:
         return None
@@ -3424,6 +3428,8 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
             f"FLOOR(UNIX_TIMESTAMP({start}) / {k}))"
         )
     if dialect == "postgresql":
+        # ISO string literals need the ANSI ``DATE '…'`` form for date math.
+        end, start = wrap_oracle_date_arg(end), wrap_oracle_date_arg(start)
         if unit == "DAY":
             return f"(CAST({end} AS DATE) - CAST({start} AS DATE))"
         if unit == "WEEK":
@@ -3441,6 +3447,9 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
             f"FLOOR(EXTRACT(EPOCH FROM {start}) / {k}))"
         )
     if dialect == "oracle":
+        # Oracle rejects an implicit ISO-string→DATE conversion (ORA-01861);
+        # emit the ANSI ``DATE '…'`` literal for a string operand.
+        end, start = wrap_oracle_date_arg(end), wrap_oracle_date_arg(start)
         if unit == "DAY":
             return f"(TRUNC(CAST({end} AS DATE)) - TRUNC(CAST({start} AS DATE)))"
         if unit == "WEEK":
@@ -4242,10 +4251,16 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         ld_d = f"CAST(DATE_TRUNC('month', {d}) {eom}"
         ld_add = f"CAST(DATE_TRUNC('month', {add}) {eom}"
         return f"CASE WHEN {d} = {ld_d} THEN {ld_add} ELSE CAST({add} AS DATE) END"
-    if up == "LAST_DAY" and len(node.args) == 1 and dialect in ("tsql", "postgresql"):
+    if up == "LAST_DAY" and len(node.args) == 1 and dialect != "mysql":
         d = _emit_expression(node.args[0], dialect)
         if dialect == "tsql":
             return f"EOMONTH({d})"
+        # PG/Oracle can't implicitly convert an ISO string to a date here
+        # (ORA-01861 / PG unknown type); the ANSI ``DATE '…'`` literal is valid
+        # on both. Oracle has LAST_DAY natively; PG builds the month end.
+        d = wrap_oracle_date_arg(d)
+        if dialect == "oracle":
+            return f"LAST_DAY({d})"
         return (
             f"CAST(DATE_TRUNC('month', {d}) + INTERVAL '1 month' "
             f"- INTERVAL '1 day' AS DATE)"
