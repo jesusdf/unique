@@ -189,6 +189,9 @@ SELECT TO_CHAR(1234.5678,'9G999D99'),TO_CHAR(-5,'S9') FROM DUAL
 -- CASE[open]: ora-for-update-nowait — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 CREATE TABLE t (id NUMBER); SELECT * FROM t FOR UPDATE NOWAIT
 
+-- CASE[open]: ora-format-currency — fails on mysql, postgresql. FUNC-DIFF: source=(('1,234,567.89', '$1,234,567.89'),) target=(('1,234,567.89', '1,234,567
+SELECT TO_CHAR(1234567.891,'FM999,999,990.00'), TO_CHAR(1234567.891,'FML999G999G990D00') FROM DUAL
+
 -- CASE[open]: ora-forupdate-wait — fails on mysql, postgresql. syntax error at or near "WAIT"
 CREATE TABLE t (id NUMBER); CREATE INDEX ix ON t (id);
 SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5

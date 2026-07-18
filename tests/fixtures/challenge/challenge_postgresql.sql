@@ -280,6 +280,9 @@ SELECT to_char(1234.5678,'9G999D99'),to_char(-5,'S9')
 -- CASE[open]: pg-for-update — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 CREATE TABLE t (id INT); SELECT * FROM t FOR UPDATE
 
+-- CASE[open]: pg-format-currency — fails on mysql, tsql. FUNC-DIFF: source=(('1,234,567.89', '1,234,567.89'),) target=(('FM999999991234567.89', 'FM
+SELECT to_char(1234567.891,'FM999,999,990.00'), to_char(1234567.891,'FML999G999G990D00')
+
 -- CASE[open]: pg-format-func — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
 SELECT format('%s=%s', 'a', 1) AS r
 

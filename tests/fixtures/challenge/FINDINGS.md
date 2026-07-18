@@ -1790,6 +1790,11 @@ ALTER`
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
 - src: `CREATE TABLE t (id NUMBER); SELECT * FROM t FOR UPDATE NOWAIT`
 
+## ora-format-currency  (oracle)
+- targets: mysql(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('1,234,567.89', '$1,234,567.89'),) target=(('1,234,567.89', '1,234,567`
+- src: `SELECT TO_CHAR(1234567.891,'FM999,999,990.00'), TO_CHAR(1234567.891,'FML999G999G990D00') FROM DUAL`
+
 ## ora-forupdate-wait  (oracle)
 - targets: mysql(invalid), postgresql(invalid)
 - live error: `syntax error at or near "WAIT"`
@@ -2818,6 +2823,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(invalid)
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
 - src: `CREATE TABLE t (id INT); SELECT * FROM t FOR UPDATE`
+
+## pg-format-currency  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('1,234,567.89', '1,234,567.89'),) target=(('FM999999991234567.89', 'FM`
+- src: `SELECT to_char(1234567.891,'FM999,999,990.00'), to_char(1234567.891,'FML999G999G990D00')`
 
 ## pg-format-func  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
@@ -4396,4 +4406,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 860 distinct constructs; defect rows by kind: func 397, invalid 1322, semantic 2, silent-drop 75.
+Totals: 862 distinct constructs; defect rows by kind: func 401, invalid 1322, semantic 2, silent-drop 75.
