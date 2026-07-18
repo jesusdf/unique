@@ -102,9 +102,7 @@ def test_table_name_colliding_with_builtin_not_flagged() -> None:
 
 def test_unmapped_builtin_in_procedure_body_degrades() -> None:
     """An unmapped built-in inside a routine body degrades too (not only DML)."""
-    r = _t(
-        "CREATE PROCEDURE p() BEGIN SELECT SOUNDEX('x'); END", "mysql", "postgresql"
-    )
+    r = _t("CREATE PROCEDURE p() BEGIN SELECT SOUNDEX('x'); END", "mysql", "postgresql")
     assert "-- UNIQUE:" in r.sql, r.sql
     assert r.warnings, r
 

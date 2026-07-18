@@ -1401,7 +1401,9 @@ def _convert_create_table(
                         # rather than drop the data-integrity rule.
                         constraints.append(
                             PassthroughSQL(
-                                sql=kind.sql(dialect=sqlglot_dialect_name(source_dialect)),
+                                sql=kind.sql(
+                                    dialect=sqlglot_dialect_name(source_dialect)
+                                ),
                                 source_dialect=source_dialect,
                                 kind="CONSTRAINT",
                             )
