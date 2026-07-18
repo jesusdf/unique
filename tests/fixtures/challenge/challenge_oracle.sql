@@ -31,7 +31,7 @@ SELECT x FROM (SELECT 'banana' x FROM DUAL UNION ALL SELECT 'Apple' x FROM DUAL 
 -- CASE[open]: ora-add-months — fails on mysql, postgresql, tsql. (195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT ADD_MONTHS(SYSDATE, 3) AS r FROM DUAL
 
--- CASE[open]: ora-agg-collect — fails on postgresql. function string_agg(integer, unknown) does not exist
+-- CASE[fixed]: ora-agg-collect — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT LISTAGG(x,',') WITHIN GROUP(ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 x FROM DUAL)
 
 -- CASE[fixed]: ora-agg-median — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME
@@ -265,7 +265,7 @@ SELECT LAST_DAY(DATE '2020-02-01') AS r FROM DUAL
 -- CASE[open]: ora-length-trailing — fails on tsql. FUNC-DIFF: source=(('6',),) target=(('3',),)
 SELECT LENGTH('abc   ') AS r FROM DUAL
 
--- CASE[open]: ora-listagg — fails on postgresql. function string_agg(integer, unknown) does not exist
+-- CASE[fixed]: ora-listagg — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT LISTAGG(x,',') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 FROM DUAL)
 
 -- CASE[open]: ora-listagg-over — fails on mysql, postgresql, tsql. (4113, b"The function 'STRING_AGG' is not a valid windowing function, and cannot be used w

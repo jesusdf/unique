@@ -56,7 +56,8 @@ class TestStringAggregation:
         out = self.t.transpile(
             "SELECT GROUP_CONCAT(name SEPARATOR ', ') FROM t", "mysql", "postgresql"
         ).sql
-        assert "STRING_AGG(name, ', ')" in out
+        # PG string_agg won't implicitly stringify — the value is cast to text.
+        assert "STRING_AGG(CAST(name AS TEXT), ', ')" in out
         assert "GROUP_CONCAT" not in out
         _valid(out, "postgresql")
 
@@ -64,8 +65,8 @@ class TestStringAggregation:
         out = self.t.transpile(
             "SELECT GROUP_CONCAT(name) FROM t", "mysql", "postgresql"
         ).sql
-        # MySQL's default separator is ','.
-        assert "STRING_AGG(name, ',')" in out
+        # MySQL's default separator is ','; PG needs the value cast to text.
+        assert "STRING_AGG(CAST(name AS TEXT), ',')" in out
         _valid(out, "postgresql")
 
     def test_string_agg_to_mysql_uses_separator_keyword(self) -> None:

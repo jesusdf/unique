@@ -3475,6 +3475,59 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
     return None
 
 
+_TEXT_TYPE_NAMES = frozenset(
+    {
+        "TEXT",
+        "VARCHAR",
+        "VARCHAR2",
+        "NVARCHAR",
+        "CHAR",
+        "NCHAR",
+        "CHARACTER",
+        "CHARACTER VARYING",
+        "STRING",
+        "CLOB",
+        "NTEXT",
+        "NVARCHAR2",
+    }
+)
+_TEXT_RETURNING_FUNCS = frozenset(
+    {
+        "CONCAT",
+        "SUBSTR",
+        "SUBSTRING",
+        "UPPER",
+        "LOWER",
+        "TRIM",
+        "LTRIM",
+        "RTRIM",
+        "LPAD",
+        "RPAD",
+        "REPLACE",
+        "LEFT",
+        "RIGHT",
+        "TO_CHAR",
+        "CHR",
+        "INITCAP",
+    }
+)
+
+
+def _is_text_valued(node: object) -> bool:
+    """True when an expression is already text — no PG ``::text`` cast needed."""
+    if isinstance(node, Literal):
+        return node.dtype in ("string", "national")
+    if isinstance(node, CastExpression):
+        base = node.target_type.name.split("(")[0].strip().upper()
+        return base in _TEXT_TYPE_NAMES
+    if isinstance(node, FunctionCall):
+        return node.name.upper() in _TEXT_RETURNING_FUNCS
+    if isinstance(node, ColumnRef):
+        strs = STRING_VARIABLES.get()
+        return strs is not None and node.name.lstrip("@").lower() in strs
+    return False
+
+
 def _emit_group_concat(node: FunctionCall, dialect: str) -> str | None:
     """Emit the string-aggregation family in the target's own spelling.
 
@@ -3535,8 +3588,19 @@ def _emit_group_concat(node: FunctionCall, dialect: str) -> str | None:
             separator = f" SEPARATOR {quoted(sep)}" if sep is not None else ""
         return f"GROUP_CONCAT({distinct}{expr_sql}{order}{separator})"
     if dialect == "postgresql":
+        # PG string_agg(value, sep) demands a text value and will NOT implicitly
+        # stringify — unlike T-SQL STRING_AGG / Oracle LISTAGG / MySQL
+        # GROUP_CONCAT — so ``string_agg(int, …)`` errors "function does not
+        # exist". Cast the value to text (text→text is a no-op) unless it is
+        # already text. With DISTINCT, an ORDER BY must match the argument, so
+        # order by the cast value too.
+        value = expr_sql
+        if not _is_text_valued(first):
+            value = f"CAST({expr_sql} AS TEXT)"
+            if node.distinct and order_sql == expr_sql:
+                order_sql = value
         order = f" ORDER BY {order_sql}" if order_sql else ""
-        return f"STRING_AGG({distinct}{expr_sql}, {sep_sql(',')}{order})"
+        return f"STRING_AGG({distinct}{value}, {sep_sql(',')}{order})"
     if dialect == "tsql":
         within = f" WITHIN GROUP (ORDER BY {order_sql})" if order_sql else ""
         return f"STRING_AGG({expr_sql}, {sep_sql(',')}){within}"

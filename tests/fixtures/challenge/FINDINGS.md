@@ -1064,11 +1064,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `(195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018`
 - src: `SELECT ADD_MONTHS(SYSDATE, 3) AS r FROM DUAL`
 
-## ora-agg-collect  (oracle)
-- targets: postgresql(invalid)
-- live error: `function string_agg(integer, unknown) does not exist`
-- src: `SELECT LISTAGG(x,',') WITHIN GROUP(ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 x FROM DUAL)`
-
 ## ora-alter-suite  (oracle)
 - targets: tsql(invalid)
 - live error: `(5074, b"The object 'DF__t__name__6D63CF5D' is dependent on column 'nm'.DB-Lib error messa`
@@ -1350,11 +1345,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('6',),) target=(('3',),)`
 - src: `SELECT LENGTH('abc   ') AS r FROM DUAL`
-
-## ora-listagg  (oracle)
-- targets: postgresql(invalid)
-- live error: `function string_agg(integer, unknown) does not exist`
-- src: `SELECT LISTAGG(x,',') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 FROM DUAL)`
 
 ## ora-listagg-over  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -2916,27 +2906,12 @@ SELECT NEXT VALUE FOR seq`
 - live error: `FUNC-DIFF: source=(('15',),) target=(('105',),)`
 - src: `SELECT '10' + 5 AS r`
 
-## ts-stragg-order  (tsql)
-- targets: postgresql(invalid)
-- live error: `function string_agg(integer, unknown) does not exist`
-- src: `SELECT STRING_AGG(x,',') WITHIN GROUP (ORDER BY x DESC) FROM (SELECT 1 x UNION ALL SELECT 2) t`
-
-## ts-stragg-within  (tsql)
-- targets: postgresql(invalid)
-- live error: `function string_agg(integer, unknown) does not exist`
-- src: `SELECT STRING_AGG(x,',') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2 x) t`
-
 ## ts-stragg-within2  (tsql)
 - targets: mysql(invalid), oracle(invalid)
 - live error: `ORA-00906: missing left parenthesis`
 - src: `CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); CREATE TABLE data (data NVARCHAR(MAX));
 GO
 SELECT STRING_AGG(CAST(`
-
-## ts-string-agg-within  (tsql)
-- targets: postgresql(invalid)
-- live error: `function string_agg(integer, unknown) does not exist`
-- src: `SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2)) v(x)`
 
 ## ts-stuff  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)

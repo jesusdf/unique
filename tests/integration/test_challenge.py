@@ -202,6 +202,23 @@ class TestDateLiteralIntoOracle:
         assert re.search(r"DATE '\d{4}-\d\d-\d\d'", out), out
 
 
+class TestStringAggTextCastIntoPg:
+    """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL
+    STRING_AGG / Oracle LISTAGG); an integer value is cast to text so PG doesn't
+    reject ``string_agg(integer, unknown)``, and the WITHIN GROUP order folds
+    into the aggregate call."""
+
+    def test_tsql_within_group_into_pg_casts_value(self) -> None:
+        out = _tx(
+            _case("challenge_sqlserver.sql", "ts-stragg-within"), "tsql", "postgresql"
+        )
+        assert "STRING_AGG(CAST(x AS TEXT), ',' ORDER BY x)" in out, out
+
+    def test_oracle_listagg_into_pg_casts_value(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "ora-listagg "), "oracle", "postgresql")
+        assert "STRING_AGG(CAST(x AS TEXT), ',' ORDER BY x)" in out, out
+
+
 class TestTsqlBeginTransaction:
     """``BEGIN TRANSACTION`` maps to each engine's transaction-open form; Oracle
     (implicit transactions) drops it with a documented carrier + warning."""

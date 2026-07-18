@@ -359,10 +359,10 @@ SELECT SOUNDEX('Robert'),DIFFERENCE('Robert','Rupert'),FORMAT(1234567.891,'N2'),
 -- CASE[open]: ts-str-plus-num — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('15',),) target=(('105',),)
 SELECT '10' + 5 AS r
 
--- CASE[open]: ts-stragg-order — fails on postgresql. function string_agg(integer, unknown) does not exist
+-- CASE[fixed]: ts-stragg-order — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT STRING_AGG(x,',') WITHIN GROUP (ORDER BY x DESC) FROM (SELECT 1 x UNION ALL SELECT 2) t
 
--- CASE[open]: ts-stragg-within — fails on postgresql. function string_agg(integer, unknown) does not exist
+-- CASE[fixed]: ts-stragg-within — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT STRING_AGG(x,',') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2 x) t
 
 -- CASE[open]: ts-stragg-within2 — fails on mysql, oracle. ORA-00906: missing left parenthesis
@@ -370,7 +370,7 @@ CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); CREATE TABLE dat
 GO
 SELECT STRING_AGG(CAST(n AS VARCHAR), ',') WITHIN GROUP (ORDER BY id) FROM t
 
--- CASE[open]: ts-string-agg-within — fails on postgresql. function string_agg(integer, unknown) does not exist
+-- CASE[fixed]: ts-string-agg-within — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT STRING_AGG(x, ',') WITHIN GROUP (ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
 -- CASE[fixed]: ts-string-fns2 — fails on mysql, oracle, postgresql. ORA-00904: "STUFF": invalid identifier

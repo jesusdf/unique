@@ -5871,7 +5871,8 @@ class TestWave157HavingAliasStringAggDistinct:
             "mysql",
             "postgresql",
         )
-        assert re.search(r"(?i)STRING_AGG\(DISTINCT col1", out), out
+        # PG string_agg needs a text value — col1 is cast (DISTINCT preserved).
+        assert re.search(r"(?i)STRING_AGG\(DISTINCT CAST\(col1 AS TEXT\)", out), out
 
 
 class TestWave158LabeledBeginBlock:
