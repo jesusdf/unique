@@ -383,6 +383,9 @@ class ColumnDefinition(ASTNode):
     #: not silently restart at 1 on the target.
     identity_seed: int | None = None
     identity_step: int | None = None
+    #: ``GENERATED ALWAYS`` (immutable — forbids explicit inserts) vs the default
+    #: ``BY DEFAULT``. Only PG/Oracle distinguish the two.
+    identity_always: bool = False
     primary_key: bool = False
     unique: bool = False
     check: ASTNode | None = None

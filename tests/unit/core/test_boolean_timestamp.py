@@ -307,8 +307,10 @@ class TestOracleBareNumberToInteger:
 
     def test_identity_and_fk_to_postgresql(self) -> None:
         out = self.t.transpile(self._DDL, "oracle", "postgresql").sql
-        # BIGSERIAL (int8) so the BIGINT FK column matches.
-        assert "id BIGSERIAL" in out
+        # GENERATED ALWAYS (immutable) is preserved, not flattened to BIGSERIAL
+        # (which would silently allow explicit inserts); the BIGINT base still
+        # matches the BIGINT FK column.
+        assert "id BIGINT GENERATED ALWAYS AS IDENTITY" in out
         assert "customer_id BIGINT" in out
         assert "unit_price DECIMAL(10, 2)" in out or "unit_price NUMERIC(10, 2)" in out
         _valid(out, "postgresql")

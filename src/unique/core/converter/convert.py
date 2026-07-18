@@ -1358,6 +1358,7 @@ def _convert_create_table(
                 identity = False
                 identity_seed: int | None = None
                 identity_step: int | None = None
+                identity_always = False
                 primary_key = False
                 unique = False
                 col_comment: str | None = None
@@ -1370,6 +1371,7 @@ def _convert_create_table(
                         nullable = bool(getattr(kind, "args", {}).get("allow_null"))
                     elif isinstance(kind, exp.GeneratedAsIdentityColumnConstraint):
                         identity = True
+                        identity_always = bool(kind.args.get("this"))
                         # Preserve the seed/step (T-SQL IDENTITY(100, 5), PG
                         # GENERATED … START WITH …) so the sequence doesn't
                         # silently restart at 1 on the target (RC-3).
@@ -1445,6 +1447,7 @@ def _convert_create_table(
                         identity=identity,
                         identity_seed=identity_seed,
                         identity_step=identity_step,
+                        identity_always=identity_always,
                         primary_key=primary_key,
                         unique=unique,
                         comment=col_comment,
