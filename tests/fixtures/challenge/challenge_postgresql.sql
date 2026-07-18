@@ -94,6 +94,9 @@ SELECT LENGTH(decode('SGVsbG8=', 'base64')) AS r
 -- CASE[open]: pg-bool-int-cast — fails on oracle. ORA-01722: unable to convert string value containing 't' to a number: 
 SELECT 'true'::boolean::int AS r
 
+-- CASE[open]: pg-bool-repr — fails on mysql. FUNC-DIFF: source=(('1', '1', 'true', '0', 'NULL'),) target=(('1', '1', '1', '0', 'NULL'),
+SELECT (1>0), (1>0)::int, (1>0)::text, NOT (1>0), true AND NULL
+
 -- CASE[open]: pg-bool-text2 — fails on mysql. FUNC-DIFF: source=(('true',),) target=(('1',),)
 SELECT true::text AS r
 
@@ -261,6 +264,9 @@ CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id, COUNT
 
 -- CASE[open]: pg-fk-full — fails on oracle. ORA-03075: unexpected item ON in an out-of-line constraint
 CREATE TABLE t (id INT PRIMARY KEY, parent INT, CONSTRAINT fk FOREIGN KEY (parent) REFERENCES t(id) ON DELETE CASCADE ON UPDATE RESTRICT DEFERRABLE INITIALLY DEFERRED)
+
+-- CASE[open]: pg-float-precision — fails on mysql. FUNC-DIFF: source=(('0.3', '0.3', '0.333333', '0.333333', '0.666667'),) target=(('0.3', '0
+SELECT 0.1+0.2, 0.1::float+0.2::float, 1.0/3, (1.0/3)::float, 2::float/3
 
 -- CASE[open]: pg-fmt-spec — fails on oracle. SILENT: source literal(s) ["'Dy Mon DD HH24:MI:SS YYYY'", "'AM HH12:MI'", "'DDD WW IW'"] a
 SELECT to_char(now(),'Dy Mon DD HH24:MI:SS YYYY'),to_char(now(),'AM HH12:MI'),to_char(now(),'DDD WW IW')
@@ -481,6 +487,9 @@ SELECT 1e3, 1.5e-2, .5, 5., 0x1F::text
 -- CASE[open]: pg-num-nonnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT NUM_NONNULLS(1, NULL, 2) AS r
 
+-- CASE[open]: pg-num-to-str — fails on mysql. FUNC-DIFF: source=(('n=5', 'x=5.50', 'd=0.33333333333333333333', '5.5'),) target=(('n=5', 
+SELECT 'n='||5, 'x='||5.50, 'd='||(1.0/3), 5.50::text
+
 -- CASE[open]: pg-numfmt-lead — fails on mysql. FUNC-DIFF: source=(('0.5',),) target=(('0',),)
 SELECT to_char(0.5, '0.00') AS r
 
@@ -564,6 +573,9 @@ BEGIN; SAVEPOINT sp; ROLLBACK TO SAVEPOINT sp; COMMIT
 
 -- CASE[open]: pg-scale — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.sc
 SELECT scale(1.230), trim_scale(1.230)
+
+-- CASE[open]: pg-scientific — fails on mysql. FUNC-DIFF: source=(('100000000000000000000', '1e-20', '123456789012345677877719597056'),) 
+SELECT 1e20::float, 1e-20::float, 123456789012345678901234567890::numeric
 
 -- CASE[open]: pg-select-into-ctas — fails on oracle. ORA-00905: missing keyword
 CREATE TABLE t (id INT);

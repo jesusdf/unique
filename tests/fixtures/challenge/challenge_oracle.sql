@@ -168,6 +168,9 @@ SELECT 'a'||'b','a'||NULL,2||3 FROM DUAL
 -- CASE[open]: ora-fk-and-check — fails on mysql. (1239, "Incorrect foreign key definition for 'fk': Key reference and table reference don't
 CREATE TABLE parent (id NUMBER PRIMARY KEY); CREATE TABLE child (pid NUMBER, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES parent ON DELETE CASCADE, CONSTRAINT fk2 CHECK (pid > 0))
 
+-- CASE[open]: ora-float-precision — fails on mysql. FUNC-DIFF: source=(('0.3', '0.3', '0.333333'),) target=(('0.3', '0.3', '0.33333'),)
+SELECT 0.1+0.2, CAST(0.1 AS BINARY_DOUBLE)+CAST(0.2 AS BINARY_DOUBLE), 1.0/3 FROM DUAL
+
 -- CASE[open]: ora-fmt-dayname — fails on mysql. FUNC-DIFF: source=(('MONDAY',),) target=(('Monday',),)
 SELECT TO_CHAR(DATE '2020-06-15', 'DAY') AS r FROM DUAL
 
@@ -324,6 +327,9 @@ SELECT SYSDATE, SYSTIMESTAMP, CURRENT_TIMESTAMP, CURRENT_DATE, LOCALTIMESTAMP FR
 
 -- CASE[open]: ora-num-concat — fails on tsql. FUNC-DIFF: source=(('23',),) target=(('5',),)
 SELECT 2 || 3 AS r FROM DUAL
+
+-- CASE[open]: ora-num-to-str — fails on mysql, postgresql. FUNC-DIFF: source=(('n=5', 'x=5.5', 'd=.333333333333333333333333333333333333333', '5.5'),)
+SELECT 'n='||5, 'x='||5.50, 'd='||(1.0/3), TO_CHAR(5.50) FROM DUAL
 
 -- CASE[open]: ora-numfmt-lead — fails on mysql. FUNC-DIFF: source=(('0.5',),) target=(('0',),)
 SELECT TO_CHAR(0.5, '0.00') AS r FROM DUAL

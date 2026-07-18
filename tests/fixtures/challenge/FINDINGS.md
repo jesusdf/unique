@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (546 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (548 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -548,6 +548,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('5', '4', '6', '2'),) target=(('4', '4', '2', '2'),)`
 - src: `SELECT LENGTH('café'),CHAR_LENGTH('café'),LENGTH('日本'),CHAR_LENGTH('日本')`
 
+## my-float-precision  (mysql)
+- targets: oracle(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('0.3', '0.3', '0.33333', '0.6667'),) target=(('0.3', '0.3', '0.333333'`
+- src: `SELECT 0.1+0.2, CAST(0.1 AS DOUBLE)+CAST(0.2 AS DOUBLE), 1.0/3, 2/3`
+
 ## my-floor-precision  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('3',),)`
@@ -998,6 +1003,11 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
 - src: `SELECT NOW(), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(3), CURDATE(), CURTIME(), SYSDATE(), UNIX_TIMESTAMP()`
+
+## my-num-to-str  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('n=5', 'x=5.50', 'd=0.33333', 'b=1', '5.5'),) target=(('n=5', 'x=5.5',`
+- src: `SELECT CONCAT('n=',5), CONCAT('x=',5.50), CONCAT('d=',1.0/3), CONCAT('b=',TRUE), 5.50+0`
 
 ## my-numeric  (mysql)
 - targets: tsql(invalid)
@@ -1725,6 +1735,11 @@ ALTER`
 - live error: `(1239, "Incorrect foreign key definition for 'fk': Key reference and table reference don't`
 - src: `CREATE TABLE parent (id NUMBER PRIMARY KEY); CREATE TABLE child (pid NUMBER, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES parent ON`
 
+## ora-float-precision  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('0.3', '0.3', '0.333333'),) target=(('0.3', '0.3', '0.33333'),)`
+- src: `SELECT 0.1+0.2, CAST(0.1 AS BINARY_DOUBLE)+CAST(0.2 AS BINARY_DOUBLE), 1.0/3 FROM DUAL`
+
 ## ora-fmt-dayname  (oracle)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('MONDAY',),) target=(('Monday',),)`
@@ -1985,6 +2000,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('23',),) target=(('5',),)`
 - src: `SELECT 2 || 3 AS r FROM DUAL`
+
+## ora-num-to-str  (oracle)
+- targets: mysql(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('n=5', 'x=5.5', 'd=.333333333333333333333333333333333333333', '5.5'),)`
+- src: `SELECT 'n='||5, 'x='||5.50, 'd='||(1.0/3), TO_CHAR(5.50) FROM DUAL`
 
 ## ora-numfmt-lead  (oracle)
 - targets: mysql(func)
@@ -2459,6 +2479,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `ORA-01722: unable to convert string value containing 't' to a number: `
 - src: `SELECT 'true'::boolean::int AS r`
 
+## pg-bool-repr  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('1', '1', 'true', '0', 'NULL'),) target=(('1', '1', '1', '0', 'NULL'),`
+- src: `SELECT (1>0), (1>0)::int, (1>0)::text, NOT (1>0), true AND NULL`
+
 ## pg-bool-text2  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('true',),) target=(('1',),)`
@@ -2738,6 +2763,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: oracle(invalid)
 - live error: `ORA-03075: unexpected item ON in an out-of-line constraint`
 - src: `CREATE TABLE t (id INT PRIMARY KEY, parent INT, CONSTRAINT fk FOREIGN KEY (parent) REFERENCES t(id) ON DELETE CASCADE ON UPDATE RE`
+
+## pg-float-precision  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('0.3', '0.3', '0.333333', '0.333333', '0.666667'),) target=(('0.3', '0`
+- src: `SELECT 0.1+0.2, 0.1::float+0.2::float, 1.0/3, (1.0/3)::float, 2::float/3`
 
 ## pg-fmt-spec  (postgresql)
 - targets: mysql(silent), oracle(invalid), tsql(silent)
@@ -3104,6 +3134,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
 - src: `SELECT NUM_NONNULLS(1, NULL, 2) AS r`
 
+## pg-num-to-str  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('n=5', 'x=5.50', 'd=0.33333333333333333333', '5.5'),) target=(('n=5', `
+- src: `SELECT 'n='||5, 'x='||5.50, 'd='||(1.0/3), 5.50::text`
+
 ## pg-numfmt-lead  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('0.5',),) target=(('0',),)`
@@ -3234,6 +3269,11 @@ CREATE TABLE ledger (id SERIA`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.sc`
 - src: `SELECT scale(1.230), trim_scale(1.230)`
+
+## pg-scientific  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('100000000000000000000', '1e-20', '123456789012345677877719597056'),) `
+- src: `SELECT 1e20::float, 1e-20::float, 123456789012345678901234567890::numeric`
 
 ## pg-select-into-ctas  (postgresql)
 - targets: oracle(invalid)
@@ -3836,6 +3876,11 @@ CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
 - live error: `PROCEDURE P compiled INVALID (line 12): PL/SQL: ORA-00904: "ERROR_LINE": invalid identifie`
 - src: `CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERROR_MESSAGE(), ERROR_NUMBER(), ERROR_LINE(); END CA`
 
+## ts-float-precision  (tsql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('0.3', '0.3', '0.333333', '0.333333'),) target=(('0.3', '0.3', '0.3333`
+- src: `SELECT 0.1+0.2, CAST(0.1 AS FLOAT)+CAST(0.2 AS FLOAT), 1.0/3, CAST(1 AS FLOAT)/3`
+
 ## ts-fmt-spec  (tsql)
 - targets: mysql(silent), oracle(invalid), postgresql(silent)
 - live error: `ORA-01821: date format not recognized`
@@ -4301,4 +4346,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 841 distinct constructs; defect rows by kind: func 368, invalid 1322, semantic 2, silent-drop 75.
+Totals: 850 distinct constructs; defect rows by kind: func 381, invalid 1322, semantic 2, silent-drop 75.

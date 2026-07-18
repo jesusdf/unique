@@ -170,6 +170,9 @@ SELECT DATEADD(MONTH, -1, EOMONTH('2020-03-01')) AS r
 -- CASE[open]: ts-error-functions — fails on oracle. PROCEDURE P compiled INVALID (line 12): PL/SQL: ORA-00904: "ERROR_LINE": invalid identifie
 CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERROR_MESSAGE(), ERROR_NUMBER(), ERROR_LINE(); END CATCH END
 
+-- CASE[open]: ts-float-precision — fails on mysql. FUNC-DIFF: source=(('0.3', '0.3', '0.333333', '0.333333'),) target=(('0.3', '0.3', '0.3333
+SELECT 0.1+0.2, CAST(0.1 AS FLOAT)+CAST(0.2 AS FLOAT), 1.0/3, CAST(1 AS FLOAT)/3
+
 -- CASE[open]: ts-fmt-spec — fails on oracle. ORA-01821: date format not recognized
 SELECT FORMAT(GETDATE(),'ddd MMM dd HH:mm:ss yyyy'),FORMAT(GETDATE(),'tt hh:mm'),FORMAT(GETDATE(),'D')
 
