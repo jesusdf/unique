@@ -1976,6 +1976,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:`
 - src: `SELECT COLUMN_VALUE FROM TABLE(CAST(MULTISET(SELECT LEVEL FROM DUAL CONNECT BY LEVEL<=3) AS SYS.ODCINUMBERLIST))`
 
+## ora-name-locale  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('Monday', 'June', 'MONDAY'),) target=(('25ay', 'Month', 'Monday'),)`
+- src: `SELECT TO_CHAR(DATE '2020-06-15','Day'), TO_CHAR(DATE '2020-06-15','Month'), TRIM(TO_CHAR(DATE '2020-06-15','DAY')) FROM DUAL`
+
 ## ora-nanvl  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA`
@@ -3098,6 +3103,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: oracle(invalid)
 - live error: `FUNCTION F compiled INVALID (line 7): PLS-00201: identifier 'VOID' must be declared`
 - src: `CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; END; $$ LANGUAGE plpgsql`
+
+## pg-name-locale  (postgresql)
+- targets: mysql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('Monday', 'June', 'Monday'),) target=(('ua20', '6onA12', '6ua20'),)`
+- src: `SELECT to_char(DATE '2020-06-15','Day'), to_char(DATE '2020-06-15','Month'), trim(to_char(DATE '2020-06-15','FMDay'))`
 
 ## pg-named-exception  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
@@ -4371,4 +4381,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 855 distinct constructs; defect rows by kind: func 389, invalid 1322, semantic 2, silent-drop 75.
+Totals: 857 distinct constructs; defect rows by kind: func 392, invalid 1322, semantic 2, silent-drop 75.

@@ -307,6 +307,9 @@ SELECT MONTHS_BETWEEN(DATE '2020-03-10', DATE '2020-01-15') AS r FROM DUAL
 -- CASE[open]: ora-multiset-table — fails on postgresql, tsql. (156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:
 SELECT COLUMN_VALUE FROM TABLE(CAST(MULTISET(SELECT LEVEL FROM DUAL CONNECT BY LEVEL<=3) AS SYS.ODCINUMBERLIST))
 
+-- CASE[open]: ora-name-locale — fails on mysql. FUNC-DIFF: source=(('Monday', 'June', 'MONDAY'),) target=(('25ay', 'Month', 'Monday'),)
+SELECT TO_CHAR(DATE '2020-06-15','Day'), TO_CHAR(DATE '2020-06-15','Month'), TRIM(TO_CHAR(DATE '2020-06-15','DAY')) FROM DUAL
+
 -- CASE[open]: ora-nanvl — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA
 SELECT NANVL(0/1, 0) AS r FROM DUAL
 
