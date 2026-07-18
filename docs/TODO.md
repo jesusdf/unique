@@ -228,6 +228,25 @@ workflow.
       value first: the **functional-equivalence** rows (silent wrong results) and
       the **clause-drops** (data integrity).
 
+  - **RESOLUTION (2026-07-18 BLUE round).** The tractable, architecture-respecting
+    work is COMPLETE across all four root causes; what remains is the documented
+    architectural floor (needs schema/type/collation awareness) plus a few
+    structural DDL features. Landed: **RC-1b** invalid-class gate (DML +
+    procedural) — no unmapped built-in ships silently invalid; **RC-3**
+    clause-drops FK/CHECK + IDENTITY seed/step; **RC-2** LOG arg order; **RC-1a**
+    21 built-ins faithfully mapped, every one live-verified (LEFT, SPACE, POWER/
+    SQUARE/COT/PI, LN, ATAN2, LAST_DAY, QUARTER, DAYNAME, DEGREES, RADIANS, RAND,
+    REPEAT, STUFF, MEDIAN, JSON_ARRAYAGG, ELT, FIELD, ADD_MONTHS-with-sticky-last
+    -day). **Floor (not liquidatable at statement level):** RC-2 collation /
+    integer-division / LENGTH-bytes / NULL-propagation (need per-column type or
+    collation); RC-3 COLLATE (collation-name map), column COMMENT (separate
+    `COMMENT ON` statements), UNSIGNED (→ CHECK ≥0 is a structural choice), window
+    frame / ROLLUP / EXCLUDE, Oracle no-`ON UPDATE`; RC-1a tail without a faithful
+    form (TRANSLATE, INITCAP, SOUNDEX, base conversions, WEEKDAY, MONTHS_BETWEEN,
+    CBRT, UNIX_TIMESTAMP timezone, MONTHNAME case/pad) — all now degrade honestly.
+    Corpus `[open]→[fixed]` flip / `FINDINGS.md` prune is outstanding bookkeeping
+    (the now-warned rows are no longer SILENT, so out of the ledger's scope).
+
   - **RC-1b foundation landed (BLUE, Block 1).** Root-cause of the **invalid**
     class (1322 rows): an unmapped scalar function/type shipped verbatim with no
     warning — the target-parse gate missed it because sqlglot parses unknown
