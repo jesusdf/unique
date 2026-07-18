@@ -201,7 +201,7 @@ are found; guarded by `tests/integration/test_challenge.py`. Cases are tagged
 [challenge-corpus skill](../skills/SKILL-challenge-corpus.md) for the red/blue
 workflow.
 
-- [ ] **BLUE backlog: 564 open RED findings — SILENT defects only (P1/P2/P3)** —
+- [ ] **BLUE backlog: 862 open RED findings — SILENT defects only (P1/P2/P3)** —
       a RED batch (2026-07-17/18; start commit `dac260f`) generated valid
       per-engine source, validated each original on a live DB, transpiled to the
       other three engines, and validated/**executed** the output. **Only silent
@@ -209,15 +209,17 @@ workflow.
       documented, acceptable outcome and was excluded** (~335 warned rows
       dropped; the `carrier` kind is intentionally gone). Ledger in
       [`tests/fixtures/challenge/FINDINGS.md`](../../tests/fixtures/challenge/FINDINGS.md),
-      which opens with a **prioritized class list**. **1161 silent-defect rows**:
-      **790 invalid-output** (unmapped function/type → the target engine rejects
-      it, no warning), **294 functional-equivalence** (runs clean but returns a
+      which opens with a **prioritized class list**. **1800 silent-defect rows**:
+      **1322 invalid-output** (unmapped function/type → the target engine rejects
+      it, no warning), **401 functional-equivalence** (runs clean but returns a
       *different result* — executed on both engines: integer division, NULL/
       collation ordering, `LOG` base, `CAST(x AS INT)` round-vs-truncate,
-      `ROUND(x,n)` precision drop, `LENGTH` bytes-vs-chars, `LEN` trailing-space,
-      `GREATEST/LEAST/CONCAT` NULL, Oracle `||`-null / `''`-is-NULL, `TOP … WITH
-      TIES`, MySQL `date-date` numeric, `'5'+'5'`, bitwise sign/precedence,
-      TO_CHAR format masks, LTRIM/RTRIM char-set), **75 silent clause-drops**
+      `ROUND(x,n)` precision + half-even, `LENGTH` bytes-vs-chars, `LEN` trailing
+      -space, `GREATEST/LEAST/CONCAT` NULL, Oracle `||`-null / `''`-is-NULL, `TOP
+      … WITH TIES`, MySQL `date-date` numeric, `'5'+'5'`, bitwise sign/precedence,
+      float precision, decimal scale, CHAR-pad WHERE filtering, int=varchar JOIN
+      coercion, UNION/CASE type resolution, TO_CHAR format masks), **75 silent
+      clause-drops**
       (FK `ON DELETE/UPDATE`, CHECK, COLLATE, IDENTITY/sequence seed, UNSIGNED,
       window frame, ROLLUP, EXCLUDE, column COMMENT, BIT-width), **2 semantic**.
       Each is a `-- CASE[open]:` in the per-engine scripts. **BLUE** works these
