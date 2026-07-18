@@ -138,7 +138,7 @@ SELECT DATEDIFF(DAY, '2020-01-01', '2020-01-10') AS r
 -- CASE[fixed]: ts-datediff-big — fails on oracle, postgresql. ORA-01861: literal does not match format string
 SELECT DATEDIFF_BIG(SECOND, '2020-01-01', '2020-01-02') AS r
 
--- CASE[open]: ts-datetimefromparts — fails on mysql, oracle, postgresql. ORA-00904: "TIMESTAMP_FROM_PARTS": invalid identifier
+-- CASE[fixed]: ts-datetimefromparts — fails on mysql, oracle, postgresql. ORA-00904: "TIMESTAMP_FROM_PARTS": invalid identifier
 SELECT DATETIMEFROMPARTS(2020, 6, 15, 10, 30, 0, 0) AS r
 
 -- CASE[open]: ts-datetimeoffset — fails on mysql, oracle. ORA-03060: Data type TIME is invalid.

@@ -4280,6 +4280,35 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         s = _emit_expression(node.args[0], dialect)
         n = _emit_expression(node.args[1], dialect)
         return f"SUBSTR({s}, 1, {n})"
+    if up == "INITCAP" and node.args and dialect in ("oracle", "postgresql"):
+        # Oracle and PG INITCAP take a single argument; sqlglot appends a
+        # default word-delimiter set (Snowflake's 2-arg form) that neither
+        # accepts — emit just the string.
+        return f"INITCAP({_emit_expression(node.args[0], dialect)})"
+    if up == "TIMESTAMP_FROM_PARTS" and len(node.args) == 7 and dialect != "tsql":
+        # T-SQL DATETIMEFROMPARTS(y, mo, d, h, mi, s, ms) → a constructed
+        # timestamp. The ms rides as an arithmetic interval (no fractional-second
+        # format string to zero-pad). sqlglot canonicalises the name.
+        p = [_emit_expression(x, dialect) for x in node.args]
+        if dialect == "postgresql":
+            return (
+                f"make_timestamp({p[0]}, {p[1]}, {p[2]}, {p[3]}, {p[4]}, "
+                f"{p[5]} + {p[6]} / 1000.0)"
+            )
+        if dialect == "oracle":
+            base = (
+                f"{p[0]} || '-' || {p[1]} || '-' || {p[2]} || ' ' || "
+                f"{p[3]} || ':' || {p[4]} || ':' || {p[5]}"
+            )
+            return (
+                f"(TO_TIMESTAMP({base}, 'YYYY-MM-DD HH24:MI:SS') "
+                f"+ NUMTODSINTERVAL({p[6]} / 1000, 'SECOND'))"
+            )
+        base = (
+            f"CONCAT({p[0]}, '-', {p[1]}, '-', {p[2]}, ' ', "
+            f"{p[3]}, ':', {p[4]}, ':', {p[5]})"
+        )  # mysql
+        return f"(TIMESTAMP({base}) + INTERVAL ({p[6]}) * 1000 MICROSECOND)"
     if (
         up == "NEXT_VALUE_FOR"
         and len(node.args) == 1

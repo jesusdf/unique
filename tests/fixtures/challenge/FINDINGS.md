@@ -2054,11 +2054,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ`
 - src: `SELECT x'FF'::int AS h, 1.5e3 AS s`
 
-## pg-initcap  (postgresql)
-- targets: oracle(invalid)
-- live error: `(195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s`
-- src: `SELECT INITCAP('hello world') AS r`
-
 ## pg-intdiv  (postgresql)
 - targets: mysql(func), oracle(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('2.5',),)`
@@ -2633,11 +2628,6 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - targets: mysql(func), oracle(invalid), postgresql(invalid)
 - live error: `FUNC-DIFF: source=(('2020-02-29 00:00:00', '2020-01-02 00:00:00', '2020-02-29'),) target=(`
 - src: `SELECT DATEADD(MONTH,1,'2020-01-31'), DATEADD(DAY,1,'2020-01-01'), EOMONTH('2020-02-15')`
-
-## ts-datetimefromparts  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
-- live error: `ORA-00904: "TIMESTAMP_FROM_PARTS": invalid identifier`
-- src: `SELECT DATETIMEFROMPARTS(2020, 6, 15, 10, 30, 0, 0) AS r`
 
 ## ts-datetimeoffset  (tsql)
 - targets: mysql(invalid), oracle(invalid)

@@ -76,19 +76,21 @@ def test_degrade_is_per_target_not_blanket() -> None:
 
 def test_sqlglot_internal_name_leak_degrades() -> None:
     """sqlglot renders a function it can't map to an internal canonical that no
-    engine has (DATETIMEFROMPARTS -> TIMESTAMP_FROM_PARTS, FORMAT ->
-    NUMBER_TO_STR). Those bypass the source-built-in check (they are not a source
-    built-in), so the gate degrades them as unmapped rather than ship them live."""
-    for sql in (
-        "SELECT DATETIMEFROMPARTS(2020, 6, 15, 10, 30, 0, 0) AS r",
-        "SELECT FORMAT(1234.5, 'N2') AS r",
+    engine has (FORMAT -> NUMBER_TO_STR, GET_BIT -> GETBIT). Those bypass the
+    source-built-in check (they are not a source built-in), so the gate degrades
+    them as unmapped rather than ship them live. (A function that DOES get a
+    faithful mapping — e.g. DATETIMEFROMPARTS — emits a real name and bypasses
+    this net.)"""
+    for sql, leak in (
+        ("SELECT FORMAT(1234.5, 'N2') AS r", "NUMBER_TO_STR"),
+        ("SELECT GET_BIT(0x0A, 1) AS r", "GETBIT"),
     ):
         r = _t(sql, "tsql", "oracle")
         assert "-- UNIQUE:" in r.sql and r.warnings, (sql, r.sql)
         live = "\n".join(
             ln for ln in r.sql.splitlines() if not ln.lstrip().startswith("--")
         )
-        assert "_FROM_PARTS" not in live.upper() and "NUMBER_TO_STR" not in live.upper()
+        assert leak not in live.upper(), (sql, live)
 
 
 def test_keyword_operators_not_treated_as_leaks() -> None:

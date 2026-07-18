@@ -134,10 +134,16 @@ transpilation target:
 
 A scalar function that is a **built-in of the source engine** but has no form on
 the target (and no mapping/handler) — `SOUNDEX`→PostgreSQL, `GENERATE_SERIES`→
-Oracle, `LISTAGG`→MySQL when no aggregate rewrite applies, and the long tail of
-engine-specific functions — degrades the whole statement to a documented carrier
-+ `validity_gate` warning + `unsupported` entry, rather than shipping the call
-verbatim (which the target engine rejects). The gate distinguishes a source
+Oracle, `LISTAGG`→MySQL when no aggregate rewrite applies, `INITCAP`→T-SQL/MySQL
+(word-boundary capitalisation, no built-in), and the long tail of engine-specific
+functions — degrades the whole statement to a documented carrier + `validity_gate`
+warning + `unsupported` entry, rather than shipping the call verbatim (which the
+target engine rejects). A second safety net covers **sqlglot internal-name
+leaks**: when sqlglot cannot map a function to the target it renders an internal
+canonical that no engine has (`DATETIMEFROMPARTS`→`TIMESTAMP_FROM_PARTS`,
+`FORMAT`→`NUMBER_TO_STR`, …); such a name — a sqlglot function canonical that is a
+built-in in no supported engine — is degraded the same way (it is never a source
+built-in, so the source-side check alone would let it slip through). The gate distinguishes a source
 built-in from a **user object**: a name that is *not* a source built-in (a UDF,
 stored procedure, or user type) is passed through untouched, because the target
 schema is expected to define it. The per-engine built-in catalogs are sourced

@@ -219,6 +219,38 @@ class TestStringAggTextCastIntoPg:
         assert "STRING_AGG(CAST(x AS TEXT), ',' ORDER BY x)" in out, out
 
 
+class TestInitcapSingleArg:
+    """PG/Oracle INITCAP take one argument; sqlglot's appended delimiter set
+    (a 2-arg Snowflake form) is dropped. T-SQL/MySQL have none → degrade."""
+
+    def test_initcap_into_oracle_single_arg(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-initcap"), "postgresql", "oracle"
+        )
+        assert "INITCAP('hello world')" in out, out
+
+    def test_initcap_into_tsql_degrades(self) -> None:
+        r = Transpiler().transpile(
+            _case("challenge_postgresql.sql", "pg-initcap"), "postgresql", "tsql"
+        )
+        assert "-- UNIQUE:" in r.sql and r.warnings, r.sql
+
+
+class TestDatetimeFromParts:
+    """T-SQL ``DATETIMEFROMPARTS(y,mo,d,h,mi,s,ms)`` constructs a timestamp:
+    PG make_timestamp, Oracle TO_TIMESTAMP + interval, MySQL TIMESTAMP + interval
+    — no leaked TIMESTAMP_FROM_PARTS."""
+
+    def test_datetimefromparts_per_engine(self) -> None:
+        src = _case("challenge_sqlserver.sql", "ts-datetimefromparts")
+        assert "make_timestamp(" in _tx(src, "tsql", "postgresql")
+        oracle = _tx(src, "tsql", "oracle")
+        assert "TO_TIMESTAMP(" in oracle and "NUMTODSINTERVAL(" in oracle
+        assert "TIMESTAMP(CONCAT(" in _tx(src, "tsql", "mysql")
+        for tgt in ("postgresql", "oracle", "mysql"):
+            assert "_FROM_PARTS" not in _exec_lines(_tx(src, "tsql", tgt)).upper()
+
+
 class TestSequenceNextValue:
     """T-SQL ``NEXT VALUE FOR seq`` maps to Oracle ``seq.NEXTVAL`` and PG
     ``nextval('seq')``; MySQL (no sequences) degrades with a warning."""
