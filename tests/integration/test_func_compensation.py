@@ -5,9 +5,14 @@
 """RC-2 — functional-equivalence compensations (silent wrong results).
 
 Integer division: PG/T-SQL truncate two integer operands (5 / 2 = 2), MySQL/
-Oracle return a decimal (2.5). For integer *literal* operands the value is
-knowable without schema, so the emitter compensates. (Column/variable operands
-need declared types — only reachable in the procedural pipeline.)
+Oracle return a decimal (2.5). Integer *literal* operands are compensated
+without schema; declared integer variables are compensated in the procedural
+pipeline, where their types are known.
+
+Concat NULL handling: T-SQL '+', PG '||' and MySQL CONCAT propagate NULL, but
+Oracle's || treats NULL as ''. A NULL literal from an Oracle source is dropped;
+a nullable string variable into an Oracle target is guarded with a CASE so the
+source's NULL result survives.
 """
 
 from __future__ import annotations
@@ -59,6 +64,41 @@ def test_integer_division_decimal_variable_not_compensated() -> None:
     )
     out = _t(proc, "tsql", "oracle")
     assert "V_A / V_B" in out and "TRUNC(V_A / V_B)" not in out, out
+
+
+def test_concat_null_propagation_preserved_into_oracle() -> None:
+    # T-SQL '+', PG '||' and MySQL CONCAT yield NULL when any operand is NULL;
+    # Oracle's || treats NULL as ''. When a nullable string variable is an
+    # operand, the concat is guarded so Oracle reproduces the source's NULL.
+    proc = (
+        "CREATE PROCEDURE p AS BEGIN "
+        "DECLARE @a VARCHAR(10); DECLARE @b VARCHAR(10); DECLARE @r VARCHAR(20); "
+        "SET @r = @a + @b; END"
+    )
+    out = _t(proc, "tsql", "oracle")
+    assert (
+        "CASE WHEN V_A IS NULL OR V_B IS NULL THEN NULL ELSE V_A || V_B END" in out
+    ), out
+
+
+def test_concat_literals_not_guarded_into_oracle() -> None:
+    # String literals are never NULL — no guard, just a plain concat.
+    proc = (
+        "CREATE PROCEDURE p AS BEGIN " "DECLARE @r VARCHAR(20); SET @r = 'x' + 'y'; END"
+    )
+    out = _t(proc, "tsql", "oracle")
+    assert "'x' || 'y'" in out and "CASE" not in out, out
+
+
+def test_concat_null_propagation_native_on_pg_target() -> None:
+    # PG's || already propagates NULL, so no guard is added.
+    proc = (
+        "CREATE PROCEDURE p AS BEGIN "
+        "DECLARE @a VARCHAR(10); DECLARE @b VARCHAR(10); DECLARE @r VARCHAR(20); "
+        "SET @r = @a + @b; END"
+    )
+    out = _t(proc, "tsql", "postgresql")
+    assert "v_a || v_b" in out and "CASE" not in out, out
 
 
 def test_oracle_concat_null_literal_dropped() -> None:

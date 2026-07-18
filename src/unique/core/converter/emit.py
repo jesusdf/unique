@@ -4409,6 +4409,17 @@ def _is_integer_operand(node: object) -> bool:
     return False
 
 
+def _nullable_string_operand(node: object) -> bool:
+    """An operand a concat could see as NULL: a NULL literal, or a procedural
+    string variable (always nullable — unassigned locals start NULL)."""
+    if isinstance(node, Literal):
+        return node.dtype == "null"
+    if isinstance(node, ColumnRef):
+        strs = STRING_VARIABLES.get()
+        return strs is not None and node.name.lstrip("@").lower() in strs
+    return False
+
+
 def _emit_binary(node: BinaryOp, dialect: str) -> str:
     """Emit a binary operation."""
     left = _emit_operand(node.left, node.operator, dialect)
@@ -4666,6 +4677,31 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
 
     # Dialect-specific overrides
     if node.operator == BinaryOperator.CONCAT:
+        if dialect == "oracle":
+            # Oracle's || treats NULL as '' (no propagation), unlike T-SQL '+',
+            # PG '||' and MySQL CONCAT, which all yield NULL when any operand is
+            # NULL. When the source propagates and a nullable string variable is
+            # an operand, guard the concat so Oracle reproduces the source's
+            # NULL result (RC-2 compensation).
+            src = SOURCE_DIALECT.get()
+            if src and src != "oracle":
+                operands: list[ASTNode] = []
+
+                def _gather_ops(n: ASTNode) -> None:
+                    if isinstance(n, BinaryOp) and n.operator == BinaryOperator.CONCAT:
+                        _gather_ops(n.left)
+                        _gather_ops(n.right)
+                    else:
+                        operands.append(n)
+
+                _gather_ops(node)
+                nullable = [p for p in operands if _nullable_string_operand(p)]
+                if nullable:
+                    joined = " || ".join(_emit_expression(p, dialect) for p in operands)
+                    guard = " OR ".join(
+                        f"{_emit_expression(p, dialect)} IS NULL" for p in nullable
+                    )
+                    return f"CASE WHEN {guard} THEN NULL ELSE {joined} END"
         if dialect == "tsql":
             op = "+"
         elif dialect == "mysql":
