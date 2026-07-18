@@ -4149,7 +4149,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         name = f"dbo.{name}"
 
     distinct = "DISTINCT " if node.distinct else ""
-    args = ", ".join(_emit_expression(a, dialect) for a in node.args)
+    arg_nodes = node.args
+    # The IR is canonical ``LOG(base, x)`` (every source is normalised to it, T-SQL
+    # included); T-SQL spells it ``LOG(x, base)``, so swap on the way out or it
+    # silently computes a different logarithm (RC-2).
+    if dialect == "tsql" and name.upper() == "LOG" and len(arg_nodes) == 2:
+        arg_nodes = (arg_nodes[1], arg_nodes[0])
+    args = ", ".join(_emit_expression(a, dialect) for a in arg_nodes)
     # T-SQL's ROUND requires the scale argument (error 189).
     if dialect == "tsql" and name.upper() == "ROUND" and len(node.args) == 1:
         args += ", 0"

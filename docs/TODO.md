@@ -260,6 +260,21 @@ workflow.
     `ROWS/RANGE` frame, `WITH ROLLUP`, `EXCLUDE`. Also **Oracle has no
     `ON UPDATE`** FK action — now preserved (was dropped) but ships invalid on
     Oracle; needs a target gate.
+  - **RC-2 (func-diffs) — LOG arg order fixed; rest is the delicate floor.**
+    The IR is canonical `LOG(base, x)`; T-SQL spells it `LOG(x, base)`, so the
+    emitter swaps only when the target is T-SQL (a lossless correctness fix — the
+    naive source-keyed transform double-swapped because the parser already
+    canonicalises T-SQL's order; sqlglot handles LOG end-to-end, the IR emit path
+    did not). `tests/integration/test_log_arg_order.py`. **The remaining func-diff
+    classes are the delicate/architectural floor** and need per-column type or
+    collation knowledge that is undecidable at statement level: string collation
+    (`'Ä'='A'`, case/accent — 94 rows, the largest cluster), integer division
+    (`5/2` — needs operand types), `LENGTH` bytes-vs-chars (a semantic judgement —
+    forcing `OCTET_LENGTH`/`DATALENGTH` everywhere over-reaches; warn instead),
+    NULL-propagation in `GREATEST`/`LEAST`/`CONCAT`, Oracle `''`-is-NULL and
+    `||`-null, `CAST` float→int round-vs-truncate. These want a schema-aware /
+    warn-on-divergence pass, not a per-spelling rewrite — the user's own caution
+    ("RC-2 es delicado"); handling one wrong ships silent bad data.
 
 - [x] **Duplicate `SET NOCOUNT ON` on `oracle`/`pg`/`mysql` → T-SQL (P2)** — the
       T-SQL procedure emitter injects `SET NOCOUNT ON` as a best-practice
