@@ -378,6 +378,11 @@ class ColumnDefinition(ASTNode):
     nullable: bool = True
     default: ASTNode | None = None
     identity: bool = False
+    #: Identity/auto-increment seed and step (e.g. T-SQL ``IDENTITY(100, 5)``).
+    #: ``None`` means the engine default (1, 1); preserved so the sequence does
+    #: not silently restart at 1 on the target.
+    identity_seed: int | None = None
+    identity_step: int | None = None
     primary_key: bool = False
     unique: bool = False
     check: ASTNode | None = None

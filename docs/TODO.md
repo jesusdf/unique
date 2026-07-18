@@ -252,14 +252,20 @@ workflow.
     CREATE TABLE converter (it read only NOT NULL/IDENTITY/PK/UNIQUE/DEFAULT) —
     silent loss of referential integrity / validation. Now routed to the
     table-level constraint path and emitted per-target
-    (`tests/integration/test_clause_drops.py`). **Still dropped silently (RC-3
-    backlog):** column `COLLATE` (collation names differ per engine → needs a
-    map or an honest degrade), column `COMMENT` (PG/Oracle need a separate
-    `COMMENT ON COLUMN`), `IDENTITY(seed,step)` seed (→ `GENERATED … START WITH`),
-    `UNSIGNED` (widened to BIGINT but the ≥0 constraint is lost), window
-    `ROWS/RANGE` frame, `WITH ROLLUP`, `EXCLUDE`. Also **Oracle has no
-    `ON UPDATE`** FK action — now preserved (was dropped) but ships invalid on
-    Oracle; needs a target gate.
+    (`tests/integration/test_clause_drops.py`).
+  - **RC-3 IDENTITY seed/step landed.** `IDENTITY(100, 5)` dropped its seed/step
+    (→ `SERIAL`/`AUTO_INCREMENT`/bare `GENERATED`, all restarting at 1) — silent
+    data loss. `ColumnDefinition` gained `identity_seed`/`identity_step`, the
+    converter reads sqlglot's `start`/`increment`, and the emitter preserves them
+    on tsql `IDENTITY(s,t)`, oracle/pg `GENERATED … (START WITH s INCREMENT BY t)`
+    (live: pg yields 100, 105); the (1,1) default keeps idiomatic SERIAL. MySQL
+    keeps `AUTO_INCREMENT` — it has no per-column step and the seed is a table
+    option (documented limit). **Still dropped silently (RC-3 backlog):** column
+    `COLLATE` (collation names differ per engine → map or honest degrade), column
+    `COMMENT` (PG/Oracle need a separate `COMMENT ON COLUMN`), `UNSIGNED` (widened
+    to BIGINT, the ≥0 constraint lost), window `ROWS/RANGE` frame, `WITH ROLLUP`,
+    `EXCLUDE`. Also **Oracle has no `ON UPDATE`** FK action — now preserved (was
+    dropped) but ships invalid on Oracle; needs a target gate.
   - **RC-2 (func-diffs) — LOG arg order fixed; rest is the delicate floor.**
     The IR is canonical `LOG(base, x)`; T-SQL spells it `LOG(x, base)`, so the
     emitter swaps only when the target is T-SQL (a lossless correctness fix — the

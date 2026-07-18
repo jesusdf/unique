@@ -1356,6 +1356,8 @@ def _convert_create_table(
 
                 nullable = True
                 identity = False
+                identity_seed: int | None = None
+                identity_step: int | None = None
                 primary_key = False
                 unique = False
                 default: ASTNode | None = None
@@ -1367,6 +1369,20 @@ def _convert_create_table(
                         nullable = bool(getattr(kind, "args", {}).get("allow_null"))
                     elif isinstance(kind, exp.GeneratedAsIdentityColumnConstraint):
                         identity = True
+                        # Preserve the seed/step (T-SQL IDENTITY(100, 5), PG
+                        # GENERATED … START WITH …) so the sequence doesn't
+                        # silently restart at 1 on the target (RC-3).
+                        for arg, setter in (("start", "seed"), ("increment", "step")):
+                            lit = kind.args.get(arg)
+                            if lit is not None:
+                                try:
+                                    val = int(lit.name)
+                                except (ValueError, AttributeError):
+                                    continue
+                                if setter == "seed":
+                                    identity_seed = val
+                                else:
+                                    identity_step = val
                     elif isinstance(kind, exp.PrimaryKeyColumnConstraint):
                         primary_key = True
                     elif isinstance(kind, exp.UniqueColumnConstraint):
@@ -1420,6 +1436,8 @@ def _convert_create_table(
                         nullable=nullable,
                         default=default,
                         identity=identity,
+                        identity_seed=identity_seed,
+                        identity_step=identity_step,
                         primary_key=primary_key,
                         unique=unique,
                         quoted=_identifier_quoted(col_def.this),
