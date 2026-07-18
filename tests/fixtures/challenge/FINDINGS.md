@@ -2549,11 +2549,6 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `ORA-30649: missing DIRECTORY keyword`
 - src: `CREATE TABLE t (a INT); ALTER TABLE t ADD b NVARCHAR(10) NOT NULL DEFAULT 'x'`
 
-## ts-ascii-char  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
-- live error: `ORA-00904: "NCHAR": invalid identifier`
-- src: `SELECT ASCII('A'), CHAR(65), NCHAR(65)`
-
 ## ts-at-time-zone  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00902: invalid datatype`

@@ -4280,6 +4280,21 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         s = _emit_expression(node.args[0], dialect)
         n = _emit_expression(node.args[1], dialect)
         return f"SUBSTR({s}, 1, {n})"
+    if up == "CHR" and len(node.args) == 1 and dialect == "mysql":
+        # MySQL has no CHR (Oracle/PG spelling). Bare CHAR(n) returns a BINARY
+        # string; a charset makes it a character string — latin1 matches T-SQL
+        # CHAR's code-page byte semantics. (sqlglot canonicalises CHAR to Chr.)
+        return f"CHAR({_emit_expression(node.args[0], dialect)} USING latin1)"
+    if up == "NCHAR" and len(node.args) == 1 and dialect != "tsql":
+        # T-SQL NCHAR(n) is the Unicode code point → character function (not the
+        # NCHAR type here — that arrives as a DataType). Oracle spells it NCHR;
+        # PG's CHR takes a code point; MySQL builds the char in a Unicode set.
+        n = _emit_expression(node.args[0], dialect)
+        if dialect == "oracle":
+            return f"NCHR({n})"
+        if dialect == "postgresql":
+            return f"CHR({n})"
+        return f"CHAR({n} USING utf16)"  # mysql
     if up == "SPACE" and len(node.args) == 1 and dialect in ("oracle", "postgresql"):
         # Neither engine has SPACE(n); n spaces is RPAD(' ', n) / REPEAT(' ', n).
         n = _emit_expression(node.args[0], dialect)

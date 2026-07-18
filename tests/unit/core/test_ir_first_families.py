@@ -28,8 +28,10 @@ class TestSharedFuncMapInIr:
         assert "CHR(" not in out
 
     def test_oracle_chr_to_mysql_char(self) -> None:
+        # MySQL has no CHR; bare CHAR(n) is a BINARY string, so a charset makes
+        # it a character string (latin1 matches the code-page byte semantics).
         out = _ir("oracle", "mysql", "SELECT CHR(13) FROM DUAL")
-        assert out is not None and "CHAR(13)" in out
+        assert out is not None and "CHAR(13 USING latin1)" in out
 
 
 class TestLastIdentityInIr:

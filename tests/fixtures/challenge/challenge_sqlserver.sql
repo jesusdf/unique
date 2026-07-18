@@ -39,7 +39,7 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 -- CASE[open]: ts-alter-add — fails on oracle. ORA-30649: missing DIRECTORY keyword
 CREATE TABLE t (a INT); ALTER TABLE t ADD b NVARCHAR(10) NOT NULL DEFAULT 'x'
 
--- CASE[open]: ts-ascii-char — fails on mysql, oracle, postgresql. ORA-00904: "NCHAR": invalid identifier
+-- CASE[fixed]: ts-ascii-char — fails on mysql, oracle, postgresql. ORA-00904: "NCHAR": invalid identifier
 SELECT ASCII('A'), CHAR(65), NCHAR(65)
 
 -- CASE[open]: ts-at-time-zone — fails on oracle, postgresql. ORA-00902: invalid datatype

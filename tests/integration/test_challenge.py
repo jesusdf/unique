@@ -219,6 +219,19 @@ class TestStringAggTextCastIntoPg:
         assert "STRING_AGG(CAST(x AS TEXT), ',' ORDER BY x)" in out, out
 
 
+class TestNcharCharCodePoint:
+    """T-SQL ``CHAR(n)``/``NCHAR(n)`` (code point → character) map to each
+    engine's spelling: Oracle CHR/NCHR, PG CHR, MySQL CHAR(... USING cs) — and
+    MySQL needs a charset so the result is a character, not a BINARY string."""
+
+    def test_char_nchar_into_each_engine(self) -> None:
+        src = _case("challenge_sqlserver.sql", "ts-ascii-char")
+        assert "NCHR(65)" in _tx(src, "tsql", "oracle"), _tx(src, "tsql", "oracle")
+        my = _tx(src, "tsql", "mysql")
+        assert "CHAR(65 USING latin1)" in my and "CHAR(65 USING utf16)" in my, my
+        assert "NCHAR(" not in _exec_lines(my), my  # no leaked NCHAR
+
+
 class TestTsqlBeginTransaction:
     """``BEGIN TRANSACTION`` maps to each engine's transaction-open form; Oracle
     (implicit transactions) drops it with a documented carrier + warning."""
