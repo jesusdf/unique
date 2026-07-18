@@ -589,6 +589,11 @@ class Transformer:
             result = [self._gate_pg_setop_order_aggregate(node) for node in result]
         if self.context.source != self.context.target:
             result = [self._gate_unmapped_operator(node) for node in result]
+        if self.context.source == "oracle" and self.context.target != "oracle":
+            result = [
+                self._drop_oracle_concat_nulls(node)  # type: ignore[misc]
+                for node in result
+            ]
         if self.context.source == "mysql" and self.context.target != "mysql":
             result = [self._gate_column_position(node) for node in result]
         if self.context.target in ("tsql", "mysql", "oracle"):
@@ -1873,6 +1878,29 @@ class Transformer:
             return node
         assert isinstance(having, ASTNode)
         return replace(node, having=having)
+
+    def _drop_oracle_concat_nulls(self, value: object) -> object:
+        """Oracle's ``||`` treats NULL as the empty string (``'a'||NULL||'b'`` =
+        ``'ab'``); the other engines propagate NULL. When the source is Oracle,
+        drop a NULL *literal* operand from a concat so the target keeps Oracle's
+        value (RC-2 compensation, annotated). Runtime NULLs in columns/variables
+        are schema/scope-dependent and out of reach here."""
+        if isinstance(value, BinaryOp) and value.operator == BinaryOperator.CONCAT:
+            left = self._drop_oracle_concat_nulls(value.left)
+            right = self._drop_oracle_concat_nulls(value.right)
+            left_null = isinstance(left, Literal) and left.dtype == "null"
+            right_null = isinstance(right, Literal) and right.dtype == "null"
+            if left_null != right_null:  # exactly one NULL literal — drop it
+                self.context.warn(
+                    "Oracle || treats NULL as '' (a NULL concat operand was "
+                    "dropped to preserve the value)",
+                    "oracle_concat_null",
+                )
+                return right if left_null else left
+            if left is not value.left or right is not value.right:
+                return replace(value, left=left, right=right)  # type: ignore[arg-type]
+            return value
+        return self._map_children(value, self._drop_oracle_concat_nulls)
 
     def _map_children(self, value: object, fn: Callable[[object], object]) -> object:
         """Rebuild ``value`` with ``fn`` mapped over its child nodes

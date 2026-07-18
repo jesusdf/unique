@@ -34,3 +34,15 @@ def test_integer_division_same_class_unchanged() -> None:
     # Both decimal-division engines: no compensation.
     out = _t("SELECT 5 / 2 AS r", "mysql", "oracle")
     assert "DIV" not in out and "TRUNC" not in out and "1.0" not in out, out
+
+
+def test_oracle_concat_null_literal_dropped() -> None:
+    # Oracle || treats NULL as '' ('a'||NULL||'b' = 'ab'); other engines
+    # propagate NULL, so the NULL literal is dropped to keep the value.
+    from unique.core.transpiler import Transpiler
+
+    r = Transpiler().transpile(
+        "SELECT 'a' || NULL || 'b' AS r FROM DUAL", "oracle", "postgresql"
+    )
+    assert "'a' || 'b'" in r.sql and "NULL" not in r.sql.upper(), r.sql
+    assert r.warnings, "the compensation must be annotated"

@@ -127,6 +127,8 @@ transpilation target:
 | PostgreSQL-only types: `INET`, `CIDR`, `MACADDR`, range types (`INT4RANGE`, `TSRANGE`, …), `TSVECTOR`/`TSQUERY` | PostgreSQL | No cross-engine equivalent — a statement declaring one degrades to a documented carrier + warning (no silent invalid type). `SMALLMONEY`/`MONEY` **do** map (→ `DECIMAL`) |
 | T-SQL-only types: `ROWVERSION`, `SQL_VARIANT`, `HIERARCHYID` | T-SQL | No equivalent elsewhere (the `ROWVERSION` auto-update semantic especially) — carrier + warning |
 | Oracle `XMLTYPE` → MySQL | Oracle | MySQL has no XML type — carrier + warning (PG/T-SQL keep it as `XML`) |
+| String collation in `=`/`ORDER BY`/`DISTINCT`/`LIKE` | all | Case/accent sensitivity is a per-**column** collation property, absent from a statement like `SELECT 'Ä' = 'A'`; the result can differ and cannot be compensated at the statement level. **User-approved limit (2026-07-18).** |
+| `LENGTH` bytes-vs-chars | MySQL vs others | MySQL `LENGTH` counts bytes, others count characters, and the byte count itself depends on each engine's default encoding (UTF-8 vs UTF-16) — not reconcilable without the column encoding. **User-approved limit (2026-07-18).** Use `CHAR_LENGTH`/`OCTET_LENGTH` explicitly for a defined semantic. |
 
 ### 2.1 Unmapped built-in scalar functions
 
