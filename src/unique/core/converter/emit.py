@@ -2875,6 +2875,16 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
         # T-SQL reader itself rejects them once the CLUSTERED keyword is gone.
         if re.match(r"(?i)\s*(CONSTRAINT|PRIMARY\s+KEY|UNIQUE)\b", fragment_sql):
             fragment_sql = re.sub(r"(?i)\s+(?:ASC|DESC)\b", "", fragment_sql)
+    if dialect == "oracle":
+        # Oracle has NO ``ON UPDATE`` referential action at all (only ON DELETE
+        # CASCADE/SET NULL); keeping it ships invalid DDL. Strip it — a
+        # documented engine limitation (docs/03-unsupported.md).
+        fragment_sql = re.sub(
+            r"(?i)\s+ON\s+UPDATE\s+(?:CASCADE|SET\s+NULL|SET\s+DEFAULT|"
+            r"RESTRICT|NO\s+ACTION)",
+            "",
+            fragment_sql,
+        )
     try:
         wrapped = f"CREATE TABLE __c__ (x INT, {fragment_sql})"
         out = sqlglot.transpile(wrapped, read=read, write=write)[0]

@@ -284,11 +284,15 @@ workflow.
     MySQL, a trailing `COMMENT ON COLUMN t.c IS '…'` on PG/Oracle, and a plain
     note on T-SQL (sp_addextendedproperty is too verbose to synthesise safely).
     `ColumnDefinition.comment`, converter reads `CommentColumnConstraint`.
-    **Still dropped silently (RC-3 backlog):** column `COLLATE` (collation names
-    differ per engine → map or honest degrade), `UNSIGNED` (widened to BIGINT,
-    the ≥0 constraint lost — could add `CHECK (c >= 0)`), window `ROWS/RANGE`
-    frame, `WITH ROLLUP`, `EXCLUDE`. Also **Oracle has no `ON UPDATE`** FK action
-    — now preserved (was dropped) but ships invalid on Oracle; needs a target gate.
+  - **RC-3 Oracle `ON UPDATE` fixed + `UNSIGNED` documented.** Oracle has no
+    `ON UPDATE` referential action; the emitter now strips it (keeps FK +
+    `ON DELETE`) instead of shipping invalid DDL — documented in
+    `docs/03-unsupported.md`. `UNSIGNED` widens to BIGINT (range preserved); the
+    ≥0 constraint is a documented partial (auto-`CHECK` would over-reach).
+    **Still dropped silently (RC-3 backlog, delicate):** column `COLLATE`
+    (collation names differ per engine → needs a name map or honest degrade),
+    window `ROWS/RANGE` frame, `WITH ROLLUP`, `EXCLUDE` — each needs modelling
+    beyond a one-liner.
   - **RC-2 (func-diffs) — LOG arg order fixed; rest is the delicate floor.**
     The IR is canonical `LOG(base, x)`; T-SQL spells it `LOG(x, base)`, so the
     emitter swaps only when the target is T-SQL (a lossless correctness fix — the

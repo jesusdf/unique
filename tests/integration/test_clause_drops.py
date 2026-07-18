@@ -84,4 +84,20 @@ def test_column_comment_preserved() -> None:
     assert "COMMENT ON COLUMN t.a IS 'the id'" in _t(src, "mysql", "oracle")
     assert "COMMENT 'the id'" in _t(src, "mysql", "mysql")
     tsql = _t(src, "mysql", "tsql")
-    assert "the id" in tsql and "-- UNIQUE:" not in tsql, tsql  # plain note, not a carrier
+    assert (
+        "the id" in tsql and "-- UNIQUE:" not in tsql
+    ), tsql  # plain note, not a carrier
+
+
+def test_oracle_fk_on_update_stripped() -> None:
+    # Oracle has no ON UPDATE referential action; keep the FK + ON DELETE, drop
+    # ON UPDATE (rather than ship invalid DDL). Documented limitation.
+    out = _t(
+        "CREATE TABLE t (a INT, b INT, CONSTRAINT fk FOREIGN KEY (b) "
+        "REFERENCES p(id) ON DELETE CASCADE ON UPDATE CASCADE)",
+        "postgresql",
+        "oracle",
+    )
+    assert "ON UPDATE" not in out.upper(), out
+    assert "ON DELETE CASCADE" in out.upper(), out
+    assert _parses(out, "oracle"), out
