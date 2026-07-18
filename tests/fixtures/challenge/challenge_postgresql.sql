@@ -8,6 +8,10 @@
 -- CASE[open]: pg-accent-eq — fails on mysql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'Ä' = 'A' AS r
 
+-- CASE[open]: pg-add-identity — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+CREATE TABLE t (id INT PRIMARY KEY, n INT);
+ALTER TABLE t ADD COLUMN big BIGINT GENERATED ALWAYS AS IDENTITY
+
 -- CASE[open]: pg-admin-fns — fails on mysql, oracle, tsql. (195, b"'pg_sleep' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT pg_sleep(0), pg_advisory_lock(1), txid_current()
 
@@ -71,6 +75,9 @@ SELECT 255::bit(8)::text,to_hex(255),255::text
 
 -- CASE[open]: pg-bit-fns — fails on mysql. (1305, 'FUNCTION unique_val_ff6c8e4945b4.GETBIT does not exist')
 SELECT get_bit(B'1011', 0), set_bit(B'0000', 1, 1)
+
+-- CASE[open]: pg-bit-negative — fails on mysql. FUNC-DIFF: source=(('-1', '-6', '3', '5'),) target=(('18446744073709551616', '184467440737
+SELECT ~0, ~5, (-5) & 3, 5 & (-1)
 
 -- CASE[open]: pg-bit-prec2 — fails on tsql. FUNC-DIFF: source=(('2', '8'),) target=(('3', '5'),)
 SELECT 10 & 6 + 1, 1 << 2 + 1

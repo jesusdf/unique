@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (531 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (533 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -152,6 +152,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: postgresql(invalid)
 - live error: `function bitwise_count(bit) does not exist`
 - src: `SELECT BIT_COUNT(b'1011'), BIT_LENGTH('a'), OCTET_LENGTH('ab')`
+
+## my-bit-negative  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('18446744073709551616', '18446744073709551616', '3', '9223372036854775`
+- src: `SELECT ~0, ~5, -5 & 3, -1 >> 1, 5 & -1`
 
 ## my-bit-prec2  (mysql)
 - targets: tsql(func)
@@ -1746,6 +1751,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(102, b"Incorrect syntax near '*'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
 - src: `CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)`
 
+## ora-gen-expr  (oracle)
+- targets: mysql(invalid)
+- live error: `(1075, 'Incorrect table definition; there can be only one auto column and it must be defin`
+- src: `CREATE TABLE t (a NUMBER, b NUMBER, hyp NUMBER GENERATED ALWAYS AS (SQRT(a*a+b*b)))`
+
 ## ora-grouping-id  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(8120, b"Column 'uq_dt.deptno' is invalid in the select list because it is not contained i`
@@ -2284,6 +2294,12 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
 - src: `SELECT 'Ä' = 'A' AS r`
 
+## pg-add-identity  (postgresql)
+- targets: mysql(invalid)
+- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
+- src: `CREATE TABLE t (id INT PRIMARY KEY, n INT);
+ALTER TABLE t ADD COLUMN big BIGINT GENERATED ALWAYS AS IDENTITY`
+
 ## pg-admin-fns  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(195, b"'pg_sleep' is not a recognized built-in function name.DB-Lib error message 20018, `
@@ -2382,6 +2398,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(invalid)
 - live error: `(1305, 'FUNCTION unique_val_ff6c8e4945b4.GETBIT does not exist')`
 - src: `SELECT get_bit(B'1011', 0), set_bit(B'0000', 1, 1)`
+
+## pg-bit-negative  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('-1', '-6', '3', '5'),) target=(('18446744073709551616', '184467440737`
+- src: `SELECT ~0, ~5, (-5) & 3, 5 & (-1)`
 
 ## pg-bit-prec2  (postgresql)
 - targets: tsql(func)
@@ -4225,4 +4246,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 826 distinct constructs; defect rows by kind: func 363, invalid 1300, semantic 2, silent-drop 75.
+Totals: 830 distinct constructs; defect rows by kind: func 367, invalid 1302, semantic 2, silent-drop 75.

@@ -192,6 +192,9 @@ SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL
 -- CASE[open]: ora-functional-index — fails on mysql, postgresql, tsql. (102, b"Incorrect syntax near '*'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)
 
+-- CASE[open]: ora-gen-expr — fails on mysql. (1075, 'Incorrect table definition; there can be only one auto column and it must be defin
+CREATE TABLE t (a NUMBER, b NUMBER, hyp NUMBER GENERATED ALWAYS AS (SQRT(a*a+b*b)))
+
 -- CASE[open]: ora-grouping-id — fails on mysql, postgresql, tsql. (8120, b"Column 'uq_dt.deptno' is invalid in the select list because it is not contained i
 SELECT deptno,job,SUM(sal),GROUPING(deptno),GROUPING_ID(deptno,job) FROM (SELECT 10 deptno,'X' job,100 sal FROM DUAL) GROUP BY ROLLUP(deptno,job)
 
