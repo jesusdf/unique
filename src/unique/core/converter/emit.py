@@ -4150,6 +4150,11 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # Neither engine has SPACE(n); n spaces is RPAD(' ', n) / REPEAT(' ', n).
         n = _emit_expression(node.args[0], dialect)
         return f"RPAD(' ', {n})" if dialect == "oracle" else f"REPEAT(' ', {n})"
+    if dialect == "oracle" and up == "COT" and len(node.args) == 1:
+        # Oracle has no COT; cot(x) = 1 / tan(x).
+        return f"(1 / TAN({_emit_expression(node.args[0], dialect)}))"
+    if dialect == "oracle" and up == "PI" and not node.args:
+        return "ACOS(-1)"  # Oracle has no PI(); ACOS(-1) is exactly pi.
 
     # Map canonical function names to dialect-specific names
     name = _map_function_name(node.name, dialect)

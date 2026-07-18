@@ -49,3 +49,20 @@ def test_left_unchanged_where_native() -> None:
     # PostgreSQL/MySQL/T-SQL have LEFT natively — do not rewrite it.
     out = _t("SELECT LEFT('h', 2) AS r", "mysql", "postgresql")
     assert "LEFT('h', 2)" in out, out
+
+
+def test_power_translates_everywhere() -> None:
+    # POWER/`^`/SQUARE model exponentiation; every engine has POWER(x, y).
+    for src, expr in [
+        ("mysql", "POWER(2, 3)"),
+        ("postgresql", "2 ^ 3"),
+        ("tsql", "SQUARE(3)"),
+    ]:
+        out = _t(f"SELECT {expr} AS r", src, "oracle")
+        assert "POWER(" in out.upper(), (src, out)
+        assert _ok(out, "oracle"), (src, out)
+
+
+def test_cot_and_pi_on_oracle() -> None:
+    assert "1 / TAN(1)" in _t("SELECT COT(1) AS r", "mysql", "oracle")
+    assert "ACOS(-1)" in _t("SELECT PI() AS r", "mysql", "oracle")

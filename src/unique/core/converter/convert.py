@@ -1899,6 +1899,17 @@ def _convert_binary(expr: exp.Binary) -> ASTNode:
     ``=``). Instead the original expression is preserved as ``RawSQL`` so the
     emitter re-renders it via sqlglot, which knows the per-dialect spelling.
     """
+    if isinstance(expr, exp.Pow):
+        # Every engine spells exponentiation POWER(x, y); model it as a call so
+        # it is not treated as an unmapped operator — which degraded on Oracle
+        # even though POWER exists there — and emits portably (RC-1a).
+        return FunctionCall(
+            name="POWER",
+            args=(
+                convert_expression(expr.this),
+                convert_expression(expr.expression),
+            ),
+        )
     op_map: dict[type, BinaryOperator] = {
         exp.EQ: BinaryOperator.EQ,
         exp.NEQ: BinaryOperator.NEQ,
