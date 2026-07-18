@@ -292,14 +292,19 @@ workflow.
         caught live; live: 'aXYZef').
     - [x] `MEDIAN(x)` (oracle) → pg `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x)`
         (live: 2.5); `JSON_ARRAYAGG(x)` (mysql) → pg `JSON_AGG(x)` (live: [1,2]).
+    - [x] `ELT(n,…)`/`FIELD(v,…)` (mysql) → portable CASE chains (live: ELT
+        out-of-range→NULL, FIELD not-found→0).
+    - [x] `ADD_MONTHS(d,n)` (oracle) — the sticky-last-day CASE lands after all:
+        `CASE WHEN d = lastday(d) THEN lastday(d+n·mo) ELSE d+n·mo END`, using each
+        target's last-day primitive (mysql `LAST_DAY`, tsql `EOMONTH`, pg
+        DATE_TRUNC). Live-verified vs Oracle on all three targets across the sticky
+        Feb-29→Mar-31 edge, clamps, negative n, leap years — all exact.
     - **Still open (mappable but needs more than a one-liner):** `MONTHNAME`
-      (sqlglot decomposes it to TIME_TO_STR — handle upstream), `ELT`/`FIELD` (CASE
-      chains), `NEXT_DAY`, `UNIX_TIMESTAMP`/`FROM_UNIXTIME` (epoch), `WEEK` (mode),
+      (sqlglot decomposes it to TIME_TO_STR — handle upstream), `NEXT_DAY`,
+      `UNIX_TIMESTAMP`/`FROM_UNIXTIME` (epoch), `WEEK` (mode),
       `MEDIAN`→tsql (window-only form).
-    - **Moved to floor after LIVE checks proved a value divergence (NOT
-      one-liner-mappable):** `ADD_MONTHS` (Oracle's sticky-last-day rule:
-      `ADD_MONTHS('2020-02-29',1)`=`2020-03-31` ≠ plain interval — needs a CASE),
-      `CBRT` (`POWER(ABS,1/3)` is `2.9999…` not `3` — float precision).
+    - **Floor after LIVE checks proved a value divergence:** `CBRT`
+      (`POWER(ABS,1/3)` is `2.9999…` not `3` — float precision).
     - **Confirmed floor (no faithful equivalent — keep degrading honestly):**
       `TRANSLATE`→mysql/tsql (char map+delete), `INITCAP`→mysql/tsql, `SOUNDEX`→pg
       (needs fuzzystrmatch), `QUOTENAME`→others, `FORMAT` (locale), `SUBSTRING_INDEX`,

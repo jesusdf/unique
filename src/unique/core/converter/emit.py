@@ -4162,10 +4162,25 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         a = _emit_expression(node.args[0], dialect)
         b = _emit_expression(node.args[1], dialect)
         return f"ATN2({a}, {b})"  # T-SQL spells atan2 as ATN2, same arg order.
-    # Date built-ins with no target name but a faithful rewrite (RC-1a). NOTE:
-    # ADD_MONTHS is deliberately NOT here — Oracle's sticky last-day rule
-    # (ADD_MONTHS('2020-02-29',1) = '2020-03-31') diverges from plain interval
-    # arithmetic, so it keeps degrading until a CASE-based rewrite lands.
+    # Date built-ins with no target name but a faithful rewrite (RC-1a).
+    # ADD_MONTHS carries Oracle's sticky last-day rule (ADD_MONTHS('2020-02-29',1)
+    # = '2020-03-31'): if d is its month's last day, the result is the result
+    # month's last day; otherwise plain interval arithmetic (which already clamps
+    # a too-large day down). Each target has a last-day primitive to express it.
+    if up == "ADD_MONTHS" and len(node.args) == 2 and dialect != "oracle":
+        d = _emit_expression(node.args[0], dialect)
+        n = _emit_expression(node.args[1], dialect)
+        if dialect == "mysql":
+            add = f"DATE_ADD({d}, INTERVAL {n} MONTH)"
+            return f"CASE WHEN {d} = LAST_DAY({d}) THEN LAST_DAY({add}) ELSE {add} END"
+        if dialect == "tsql":
+            add = f"DATEADD(MONTH, {n}, {d})"
+            return f"CASE WHEN {d} = EOMONTH({d}) THEN EOMONTH({add}) ELSE {add} END"
+        add = f"({d} + {n} * INTERVAL '1 month')"  # postgresql
+        eom = "+ INTERVAL '1 month' - INTERVAL '1 day' AS DATE)"
+        ld_d = f"CAST(DATE_TRUNC('month', {d}) {eom}"
+        ld_add = f"CAST(DATE_TRUNC('month', {add}) {eom}"
+        return f"CASE WHEN {d} = {ld_d} THEN {ld_add} ELSE CAST({add} AS DATE) END"
     if up == "LAST_DAY" and len(node.args) == 1 and dialect in ("tsql", "postgresql"):
         d = _emit_expression(node.args[0], dialect)
         if dialect == "tsql":

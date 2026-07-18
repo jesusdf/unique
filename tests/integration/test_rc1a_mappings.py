@@ -121,3 +121,15 @@ def test_elt_and_field_to_case_chains() -> None:
     assert "ELT" not in elt.upper(), elt
     field = _t("SELECT FIELD('b', 'a', 'b') AS r", "mysql", "oracle")
     assert "CASE 'b' WHEN 'a' THEN 1 WHEN 'b' THEN 2 ELSE 0 END" in field, field
+
+
+def test_add_months_preserves_sticky_last_day() -> None:
+    # Oracle's sticky last-day rule (live-verified vs Oracle on pg/mysql/tsql).
+    for tgt, marker in [
+        ("mysql", "LAST_DAY"),
+        ("tsql", "EOMONTH"),
+        ("postgresql", "DATE_TRUNC"),
+    ]:
+        out = _t("SELECT ADD_MONTHS(d, 1) AS r FROM t", "oracle", tgt)
+        assert "CASE WHEN" in out and marker in out, (tgt, out)
+        assert "ADD_MONTHS" not in out.upper(), (tgt, out)
