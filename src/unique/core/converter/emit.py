@@ -4138,6 +4138,19 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if fn_name == "DBMS_LOB.GETLENGTH" and len(node.args) == 1:
             return f"DATALENGTH({_emit_expression(node.args[0], dialect)})"
 
+    # Functions with no name on the target but a faithful rewrite (RC-1a).
+    up = node.name.upper()
+    if dialect == "oracle" and up == "LEFT" and len(node.args) == 2:
+        # Oracle has no LEFT; SUBSTR(s, 1, n) is exact (n>len returns the whole
+        # string, n=0 returns '' which Oracle treats as NULL either way).
+        s = _emit_expression(node.args[0], dialect)
+        n = _emit_expression(node.args[1], dialect)
+        return f"SUBSTR({s}, 1, {n})"
+    if up == "SPACE" and len(node.args) == 1 and dialect in ("oracle", "postgresql"):
+        # Neither engine has SPACE(n); n spaces is RPAD(' ', n) / REPEAT(' ', n).
+        n = _emit_expression(node.args[0], dialect)
+        return f"RPAD(' ', {n})" if dialect == "oracle" else f"REPEAT(' ', {n})"
+
     # Map canonical function names to dialect-specific names
     name = _map_function_name(node.name, dialect)
 
