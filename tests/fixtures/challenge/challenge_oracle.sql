@@ -122,6 +122,9 @@ SELECT DATE '2020-01-01' + 30 AS r FROM DUAL
 -- CASE[open]: ora-day-of-week — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('24',),)
 SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL
 
+-- CASE[open]: ora-decimal-scale — fails on mysql. FUNC-DIFF: source=(('3.33333', '3.33333', '3.33333', '2.25'),) target=(('3.33333', '3.3333
+SELECT 10.00/3, 10/3.0, CAST(10 AS NUMBER(10,4))/3, 1.5*1.5 FROM DUAL
+
 -- CASE[open]: ora-decode-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('match',),) target=(('no',),)
 SELECT DECODE(NULL, NULL, 'match', 'no') AS r FROM DUAL
 

@@ -248,6 +248,9 @@ CREATE TABLE t (a DATETIME(6), b TIMESTAMP(3), c YEAR)
 -- CASE[open]: my-dayparts — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA
 SELECT DAYOFWEEK(NOW()), WEEKDAY(NOW()), DAYOFYEAR(NOW()), QUARTER(NOW())
 
+-- CASE[open]: my-decimal-scale — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('3.33333', '3.3333', '3.33333', '2.25', '0.01'),) target=(('3.33333', 
+SELECT 10.00/3, 10/3.0, CAST(10 AS DECIMAL(10,4))/3, 1.5*1.5, 0.1*0.1
+
 -- CASE[open]: my-distinct-case — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('a',), ('B',)) target=(('A',), ('B',))
 SELECT DISTINCT x FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'a' x UNION ALL SELECT 'B' x) t ORDER BY x
 
@@ -696,6 +699,9 @@ SELECT 'apple' < 'Banana' AS r
 
 -- CASE[open]: my-str-misc — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT SOUNDEX('Robert'),FORMAT(1234567.891,2),INSERT('abcd',2,2,'XY'),QUOTE('a''b')
+
+-- CASE[open]: my-str-null — fails on oracle, postgresql. FUNC-DIFF: source=(('NULL', 'NULL', 'NULL', 'NULL', 'NULL', 'NULL'),) target=(('NULL', 'a'
+SELECT LENGTH(NULL), CONCAT('a',NULL), REPLACE(NULL,'a','b'), SUBSTRING(NULL,1,2), UPPER(NULL), TRIM(NULL)
 
 -- CASE[open]: my-str-plus-interval — fails on tsql. FUNC-DIFF: source=(('2020-01-02',),) target=(('2020-01-02 00:00:00',),)
 SELECT '2020-01-01' + INTERVAL 1 DAY AS r

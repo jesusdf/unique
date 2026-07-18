@@ -448,6 +448,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA`
 - src: `SELECT DAYOFWEEK(NOW()), WEEKDAY(NOW()), DAYOFYEAR(NOW()), QUARTER(NOW())`
 
+## my-decimal-scale  (mysql)
+- targets: oracle(func), postgresql(func), tsql(func)
+- live error: `FUNC-DIFF: source=(('3.33333', '3.3333', '3.33333', '2.25', '0.01'),) target=(('3.33333', `
+- src: `SELECT 10.00/3, 10/3.0, CAST(10 AS DECIMAL(10,4))/3, 1.5*1.5, 0.1*0.1`
+
 ## my-distinct-case  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('a',), ('B',)) target=(('A',), ('B',))`
@@ -1194,6 +1199,11 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
 - src: `SELECT SOUNDEX('Robert'),FORMAT(1234567.891,2),INSERT('abcd',2,2,'XY'),QUOTE('a''b')`
 
+## my-str-null  (mysql)
+- targets: oracle(func), postgresql(func)
+- live error: `FUNC-DIFF: source=(('NULL', 'NULL', 'NULL', 'NULL', 'NULL', 'NULL'),) target=(('NULL', 'a'`
+- src: `SELECT LENGTH(NULL), CONCAT('a',NULL), REPLACE(NULL,'a','b'), SUBSTRING(NULL,1,2), UPPER(NULL), TRIM(NULL)`
+
 ## my-str-plus-interval  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('2020-01-02',),) target=(('2020-01-02 00:00:00',),)`
@@ -1658,6 +1668,11 @@ ALTER`
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('24',),)`
 - src: `SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL`
+
+## ora-decimal-scale  (oracle)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('3.33333', '3.33333', '3.33333', '2.25'),) target=(('3.33333', '3.3333`
+- src: `SELECT 10.00/3, 10/3.0, CAST(10 AS NUMBER(10,4))/3, 1.5*1.5 FROM DUAL`
 
 ## ora-decode-null  (oracle)
 - targets: mysql(func), postgresql(func), tsql(func)
@@ -2653,6 +2668,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI`
 - src: `SELECT date_trunc('quarter', now()), date_trunc('decade', now())`
+
+## pg-decimal-scale  (postgresql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('3.33333', '3.33333', '3.33333', '2.25'),) target=(('3.33333', '3.3333`
+- src: `SELECT 10.00/3, 10/3.0, 10::numeric(10,4)/3, 1.5*1.5`
 
 ## pg-div-precision  (postgresql)
 - targets: mysql(func)
@@ -3834,6 +3854,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `ORA-03060: Data type TIME is invalid.`
 - src: `CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))`
 
+## ts-decimal-scale  (tsql)
+- targets: mysql(func)
+- live error: `FUNC-DIFF: source=(('3.33333', '3.33333', '3.33333', '2.25'),) target=(('3.33333', '3.3333`
+- src: `SELECT 10.00/3, 10/3.0, CAST(10 AS DECIMAL(10,4))/3, 1.5*1.5`
+
 ## ts-default-nextval  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-04044: procedure, function, package, or type is not allowed here`
@@ -4346,4 +4371,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 850 distinct constructs; defect rows by kind: func 381, invalid 1322, semantic 2, silent-drop 75.
+Totals: 855 distinct constructs; defect rows by kind: func 389, invalid 1322, semantic 2, silent-drop 75.

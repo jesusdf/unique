@@ -199,6 +199,9 @@ SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d
 -- CASE[open]: pg-datetrunc-units — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT date_trunc('quarter', now()), date_trunc('decade', now())
 
+-- CASE[open]: pg-decimal-scale — fails on mysql. FUNC-DIFF: source=(('3.33333', '3.33333', '3.33333', '2.25'),) target=(('3.33333', '3.3333
+SELECT 10.00/3, 10/3.0, 10::numeric(10,4)/3, 1.5*1.5
+
 -- CASE[open]: pg-div-precision — fails on mysql. FUNC-DIFF: source=(('0.333333',),) target=(('0.33333',),)
 SELECT 1.0 / 3 AS r
 

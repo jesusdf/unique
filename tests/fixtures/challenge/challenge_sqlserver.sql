@@ -144,6 +144,9 @@ SELECT DATETIMEFROMPARTS(2020, 6, 15, 10, 30, 0, 0) AS r
 -- CASE[open]: ts-datetimeoffset — fails on mysql, oracle. ORA-03060: Data type TIME is invalid.
 CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))
 
+-- CASE[open]: ts-decimal-scale — fails on mysql. FUNC-DIFF: source=(('3.33333', '3.33333', '3.33333', '2.25'),) target=(('3.33333', '3.3333
+SELECT 10.00/3, 10/3.0, CAST(10 AS DECIMAL(10,4))/3, 1.5*1.5
+
 -- CASE[open]: ts-default-nextval — fails on oracle, postgresql. ORA-04044: procedure, function, package, or type is not allowed here
 CREATE SEQUENCE s AS INT START WITH 1;
 GO
