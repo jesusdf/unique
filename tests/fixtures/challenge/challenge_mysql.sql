@@ -326,6 +326,10 @@ SELECT SUBSTRING('abc',0),SUBSTRING('abc',-1),SUBSTRING('abc',2,10)
 -- CASE[open]: my-full-select — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t GROUP BY id HAVING COUNT(*) > 1 ORDER BY id LIMIT 10 OFFSET 5
 
+-- CASE[open]: my-fulltext — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
+CREATE TABLE t (txt TEXT, FULLTEXT(txt));
+SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)
+
 -- CASE[open]: my-gc-order — fails on oracle. FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)
 SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t
 
@@ -639,6 +643,9 @@ CREATE TABLE t (id INT); SELECT LAST_INSERT_ID(),ROW_COUNT(),CONNECTION_ID(),DAT
 -- CASE[open]: my-set-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
 SELECT FIND_IN_SET('b', 'a,b,c'), MAKE_SET(6, 'x','y','z')
 
+-- CASE[open]: my-set-transaction — fails on oracle. ORA-00900: invalid SQL statement
+SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION READ ONLY; COMMIT;
+
 -- CASE[open]: my-soundex-eq — fails on postgresql. function soundex(unknown) does not exist
 SELECT SOUNDEX('hello') = SOUNDEX('hallo') AS r
 
@@ -698,6 +705,9 @@ SELECT SUM(x)/COUNT(x) FROM (SELECT 1 x UNION ALL SELECT 2) t
 
 -- CASE[open]: my-system-funcs — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'USER'.DB-Lib error message 20018, severity 15:\
 SELECT CONNECTION_ID(), DATABASE(), USER(), VERSION()
+
+-- CASE[open]: my-time-build — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
+SELECT CAST('2020-01-01' AS DATETIME) + INTERVAL 90 MINUTE, MAKETIME(10,20,30), SEC_TO_TIME(3661)
 
 -- CASE[open]: my-timestampadd — fails on oracle, postgresql. ORA-30081: invalid data type for datetime/interval arithmetic
 SELECT TIMESTAMPADD(MINUTE, 30, '2020-01-01 10:00') AS r
@@ -774,6 +784,9 @@ SELECT UUID_TO_BIN(UUID()),BIN_TO_UUID(UUID_TO_BIN('6ccd780c-baba-1026-9564-5b8c
 -- CASE[open]: my-uuid-funcs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU
 SELECT UUID(), UUID_SHORT()
 
+-- CASE[open]: my-week-mode — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
+SELECT WEEK('2020-01-01',0), WEEK('2020-01-01',3), WEEKOFYEAR('2020-01-01'), YEARWEEK('2020-01-01')
+
 -- CASE[open]: my-week-modes — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEEK(NOW(),0), WEEK(NOW(),3), WEEK(NOW(),5), YEARWEEK(NOW(),3)
 
@@ -782,6 +795,9 @@ SELECT WEEK('2020-06-15'), QUARTER('2020-06-15'), DAYOFWEEK('2020-06-15')
 
 -- CASE[open]: my-weight-string — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEIGHT_STRING('abc') AS r
+
+-- CASE[open]: my-xml-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.Ex
+SELECT ExtractValue('<r><a>1</a></r>','/r/a'), UpdateXML('<r><a>1</a></r>','/r/a','<a>2</a>')
 
 -- CASE[open]: my8-lag-nth — fails on oracle. ORA-43853: JSON type cannot be used in non-automatic segment space management tablespace "
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, LAG(n, 1, 0) OVER (ORDER BY id), NTH_VALUE(n, 2) OVER (ORDER BY id) FROM t

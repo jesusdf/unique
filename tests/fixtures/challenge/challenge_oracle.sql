@@ -180,11 +180,17 @@ CREATE TABLE t (id NUMBER); SELECT * FROM t FOR UPDATE NOWAIT
 CREATE TABLE t (id NUMBER); CREATE INDEX ix ON t (id);
 SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5
 
+-- CASE[open]: ora-frac-seconds — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+SELECT TO_TIMESTAMP('2020-01-01 10:20:30.123456','YYYY-MM-DD HH24:MI:SS.FF6'), EXTRACT(SECOND FROM TIMESTAMP '2020-01-01 10:20:30.123456') FROM DUAL
+
 -- CASE[open]: ora-from-tz — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR
 SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL
 
 -- CASE[open]: ora-functional-index — fails on mysql, postgresql, tsql. (102, b"Incorrect syntax near '*'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)
+
+-- CASE[open]: ora-grouping-id — fails on mysql, postgresql, tsql. (8120, b"Column 'uq_dt.deptno' is invalid in the select list because it is not contained i
+SELECT deptno,job,SUM(sal),GROUPING(deptno),GROUPING_ID(deptno,job) FROM (SELECT 10 deptno,'X' job,100 sal FROM DUAL) GROUP BY ROLLUP(deptno,job)
 
 -- CASE[open]: ora-grouping-sets — fails on mysql, postgresql, tsql. (8120, b"Column 'uq_dt.deptno' is invalid in the select list because it is not contained i
 SELECT deptno,job,SUM(sal) FROM (SELECT 10 deptno,'X' job,100 sal FROM DUAL) GROUP BY GROUPING SETS ((deptno),(job),())
@@ -215,6 +221,9 @@ SELECT INSTR('hello','l'), INSTR('hello','l',1,2), INSTR('hello','l',-1) FROM DU
 
 -- CASE[open]: ora-instr-empty — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('0',),)
 SELECT INSTR('abc', '') AS r FROM DUAL
+
+-- CASE[open]: ora-interval-out — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+SELECT NUMTOYMINTERVAL(14,'MONTH'), NUMTODSINTERVAL(90000,'SECOND') FROM DUAL
 
 -- CASE[open]: ora-interval-tochar — fails on postgresql. FUNC-DIFF: source=(('+02 03:04:05.000000',),) target=(('2 days 03:04:05',),)
 SELECT TO_CHAR(INTERVAL '2 3:04:05.000' DAY TO SECOND) AS r FROM DUAL
@@ -477,6 +486,9 @@ SELECT XMLAGG(XMLELEMENT("e", dummy)) FROM DUAL
 
 -- CASE[open]: ora-xmlelement — fails on mysql, postgresql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT XMLELEMENT("foo", 'bar') AS r FROM DUAL
+
+-- CASE[open]: ora-xmltable — fails on postgresql, tsql. (208, b"Invalid object name 'dbo.X_M_L_TABLE'.DB-Lib error message 20018, severity 16:\nGe
+SELECT x.a,x.b FROM XMLTABLE('/r' PASSING XMLTYPE('<r><a>1</a><b>2</b></r>') COLUMNS a INT PATH 'a', b INT PATH 'b') x
 
 -- CASE[open]: ora-zero-divide — fails on postgresql. unrecognized exception condition "zero_divide"
 CREATE PROCEDURE p AS v NUMBER; BEGIN v := 1/0; EXCEPTION WHEN ZERO_DIVIDE THEN v := 0; END;

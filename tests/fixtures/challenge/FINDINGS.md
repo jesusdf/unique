@@ -6,7 +6,7 @@ target engine, or degraded to an unrecognized carrier). Tagged `[open]` in
 the `challenge_<engine>.sql` scripts; BLUE fixes and flips to `[fixed]`.
 
 
-> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (494 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
+> **Scope: SILENT defects only.** A construct that degrades WITH a warning is a documented, acceptable outcome — NOT an error — and is excluded (525 warned rows dropped: `Unhandled` carriers and warned-invalid preservations). What remains transpiles wrong with NO warning.
 
 Kinds: **invalid** = live target rejected the output; **func** = runs clean but returns a DIFFERENT result (executed on both engines); **silent-drop** = a clause the target supports vanished, no warning; **carrier** = degraded to an `Unhandled` carrier (BLUE triages); **semantic** = documented divergence.
 
@@ -578,6 +578,12 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
 - src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t GROUP BY id HAVING COUNT(*) > 1 ORDER`
 
+## my-fulltext  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA`
+- src: `CREATE TABLE t (txt TEXT, FULLTEXT(txt));
+SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
+
 ## my-gc-order  (mysql)
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)`
@@ -1098,6 +1104,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI`
 - src: `SELECT FIND_IN_SET('b', 'a,b,c'), MAKE_SET(6, 'x','y','z')`
 
+## my-set-transaction  (mysql)
+- targets: oracle(invalid)
+- live error: `ORA-00900: invalid SQL statement`
+- src: `SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION READ ONLY; COMMIT;`
+
 ## my-soundex-eq  (mysql)
 - targets: postgresql(invalid)
 - live error: `function soundex(unknown) does not exist`
@@ -1197,6 +1208,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'USER'.DB-Lib error message 20018, severity 15:\`
 - src: `SELECT CONNECTION_ID(), DATABASE(), USER(), VERSION()`
+
+## my-time-build  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI`
+- src: `SELECT CAST('2020-01-01' AS DATETIME) + INTERVAL 90 MINUTE, MAKETIME(10,20,30), SEC_TO_TIME(3661)`
 
 ## my-timestampadd  (mysql)
 - targets: oracle(invalid), postgresql(invalid)
@@ -1323,6 +1339,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU`
 - src: `SELECT UUID(), UUID_SHORT()`
 
+## my-week-mode  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE`
+- src: `SELECT WEEK('2020-01-01',0), WEEK('2020-01-01',3), WEEKOFYEAR('2020-01-01'), YEARWEEK('2020-01-01')`
+
 ## my-week-modes  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE`
@@ -1337,6 +1358,11 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE`
 - src: `SELECT WEIGHT_STRING('abc') AS r`
+
+## my-xml-fns  (mysql)
+- targets: oracle(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.Ex`
+- src: `SELECT ExtractValue('<r><a>1</a></r>','/r/a'), UpdateXML('<r><a>1</a></r>','/r/a','<a>2</a>')`
 
 ## my8-lag-nth  (mysql)
 - targets: oracle(invalid)
@@ -1680,6 +1706,11 @@ ALTER`
 - src: `CREATE TABLE t (id NUMBER); CREATE INDEX ix ON t (id);
 SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 
+## ora-frac-seconds  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST`
+- src: `SELECT TO_TIMESTAMP('2020-01-01 10:20:30.123456','YYYY-MM-DD HH24:MI:SS.FF6'), EXTRACT(SECOND FROM TIMESTAMP '2020-01-01 10:20:30.`
+
 ## ora-from-tz  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR`
@@ -1689,6 +1720,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(102, b"Incorrect syntax near '*'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
 - src: `CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)`
+
+## ora-grouping-id  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(8120, b"Column 'uq_dt.deptno' is invalid in the select list because it is not contained i`
+- src: `SELECT deptno,job,SUM(sal),GROUPING(deptno),GROUPING_ID(deptno,job) FROM (SELECT 10 deptno,'X' job,100 sal FROM DUAL) GROUP BY ROL`
 
 ## ora-grouping-sets  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1739,6 +1775,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('0',),)`
 - src: `SELECT INSTR('abc', '') AS r FROM DUAL`
+
+## ora-interval-out  (oracle)
+- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
+- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
+- src: `SELECT NUMTOYMINTERVAL(14,'MONTH'), NUMTODSINTERVAL(90000,'SECOND') FROM DUAL`
 
 ## ora-interval-tochar  (oracle)
 - targets: postgresql(func)
@@ -2176,6 +2217,11 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018`
 - src: `SELECT XMLELEMENT("foo", 'bar') AS r FROM DUAL`
 
+## ora-xmltable  (oracle)
+- targets: postgresql(invalid), tsql(invalid)
+- live error: `(208, b"Invalid object name 'dbo.X_M_L_TABLE'.DB-Lib error message 20018, severity 16:\nGe`
+- src: `SELECT x.a,x.b FROM XMLTABLE('/r' PASSING XMLTYPE('<r><a>1</a><b>2</b></r>') COLUMNS a INT PATH 'a', b INT PATH 'b') x`
+
 ## ora-zero-divide  (oracle)
 - targets: postgresql(invalid)
 - live error: `unrecognized exception condition "zero_divide"`
@@ -2331,6 +2377,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('true',),) target=(('1',),)`
 - src: `SELECT true::text AS r`
+
+## pg-bool-week  (postgresql)
+- targets: oracle(invalid), tsql(invalid)
+- live error: `(245, b"Conversion failed when converting the varchar value 't' to data type bit.DB-Lib er`
+- src: `SELECT 'true'::boolean, 't'::boolean, 1::boolean, EXTRACT(WEEK FROM DATE '2020-01-01')`
 
 ## pg-bulk-insert  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2622,6 +2673,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `ORA-00904: "CONCAT_WS": invalid identifier`
 - src: `SELECT format('%s-%I-%L', 'a', 'col name', 'val'), concat_ws('|', 'a', NULL, 'b')`
 
+## pg-frac-seconds  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(155, b"'MICROSECONDS' is not a recognized datepart option.DB-Lib error message 20018, sev`
+- src: `SELECT TIMESTAMP '2020-01-01 10:20:30.123456', EXTRACT(MICROSECONDS FROM TIME '10:20:30.123456')`
+
 ## pg-fround  (postgresql)
 - targets: mysql(func), oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1', '2', '3', '2.57'),) target=(('1', '2', '3', '3'),)`
@@ -2686,6 +2742,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('a',),) target=(('B',),)`
 - src: `SELECT GREATEST('a', 'B') AS r`
+
+## pg-grouping  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(8120, b"Column 't.a' is invalid in the select list because it is not contained in either `
+- src: `SELECT a,sum(c),grouping(a) FROM (SELECT 1 a,3 c) t GROUP BY GROUPING SETS ((a),())`
 
 ## pg-grouping-fn  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2756,6 +2817,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S`
 - src: `SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7`
+
+## pg-interval-out  (postgresql)
+- targets: mysql(invalid), oracle(invalid), tsql(invalid)
+- live error: `(102, b"Incorrect syntax near '400 DAYS'.DB-Lib error message 20018, severity 15:\nGeneral`
+- src: `SELECT INTERVAL '1 year 2 months 3 days', INTERVAL '1.5 hours', justify_interval(INTERVAL '400 days')`
 
 ## pg-json-aggs  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2891,6 +2957,11 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro`
 - src: `CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1/0; EXCEPTION WHEN division_by_zero THEN RETURN -1; WHEN OTHERS THEN RAISE; EN`
+
+## pg-named-window  (postgresql)
+- targets: oracle(invalid)
+- live error: `ORA-30485: missing ORDER BY expression in the window specification`
+- src: `SELECT x,sum(x) OVER w,rank() OVER w FROM (SELECT 1 x UNION ALL SELECT 2) t WINDOW w AS (ORDER BY x)`
 
 ## pg-named-window2  (postgresql)
 - targets: oracle(invalid)
@@ -3442,6 +3513,11 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `ORA-00902: invalid datatype`
 - src: `SELECT DATALENGTH(CAST('hello' AS VARBINARY(MAX))) AS r`
 
+## ts-bit-cast  (tsql)
+- targets: oracle(invalid)
+- live error: `ORA-01722: unable to convert string value containing 't' to a number: `
+- src: `SELECT CAST(1 AS BIT), CAST('true' AS BIT), CAST(0 AS BIT)`
+
 ## ts-bit-fns  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "SET_BIT": invalid identifier`
@@ -3639,6 +3715,11 @@ CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
 - live error: `ORA-01821: date format not recognized`
 - src: `SELECT FORMAT(GETDATE(),'ddd MMM dd HH:mm:ss yyyy'),FORMAT(GETDATE(),'tt hh:mm'),FORMAT(GETDATE(),'D')`
 
+## ts-for-xml  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-00913: too many values`
+- src: `SELECT (SELECT 1 a,2 b FOR XML PATH('row'),ROOT('rows')) AS xmlcol`
+
 ## ts-format-iso  (tsql)
 - targets: mysql(silent), oracle(invalid), postgresql(silent)
 - live error: `ORA-01821: date format not recognized`
@@ -3654,15 +3735,30 @@ CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)`
 - live error: `ORA-00904: "FORMATMESSAGE": invalid identifier`
 - src: `SELECT FORMATMESSAGE('hi %s', 'x') AS r`
 
+## ts-frac-seconds  (tsql)
+- targets: oracle(invalid)
+- live error: `ORA-01843: An invalid month was specified.`
+- src: `SELECT CAST('2020-01-01 10:20:30.1234567' AS DATETIME2), CAST('2020-01-01 10:20:30.123' AS DATETIME)`
+
 ## ts-gen-series-apply  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "GENERATE_SERIES": invalid identifier`
 - src: `SELECT value, ordinal FROM GENERATE_SERIES(1, 5) g CROSS APPLY (SELECT g.value AS ordinal) x`
 
+## ts-generate-series  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `ORA-00904: "GENERATE_SERIES": invalid identifier`
+- src: `SELECT value FROM GENERATE_SERIES(1,5)`
+
 ## ts-geography  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier`
 - src: `SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r`
+
+## ts-grouping-id  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-30481: GROUPING, GROUPING_ID, and GROUP_ID cannot be used without GROUP BY`
+- src: `SELECT a,b,SUM(c),GROUPING(a),GROUPING_ID(a,b) FROM (SELECT 1 a,2 b,3 c) t GROUP BY ROLLUP(a,b)`
 
 ## ts-hash-all  (tsql)
 - targets: mysql(invalid), oracle(silent), postgresql(invalid)
@@ -3712,6 +3808,11 @@ CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT 
 - targets: mysql(func), oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('6',),)`
 - src: `SELECT LEN('abc   ') AS r`
+
+## ts-maxrecursion  (tsql)
+- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
+- live error: `ORA-32039: missing column alias list in recursive WITH clause element S`
+- src: `WITH s AS (SELECT 1 n UNION ALL SELECT n+1 FROM s WHERE n<5) SELECT n FROM s OPTION (MAXRECURSION 10)`
 
 ## ts-merge-full  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
@@ -3858,6 +3959,11 @@ SELECT NEXT VALUE FOR seq`
 - targets: oracle(invalid)
 - live error: `PROCEDURE P compiled INVALID (line 5): PLS-00103: Encountered the symbol ">" when expectin`
 - src: `CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(200)=N'SELECT * FROM t WHERE id=@i'; EXEC sp_executesql @sql,N'@i INT',@i=5; END`
+
+## ts-spatial  (tsql)
+- targets: oracle(invalid), postgresql(invalid)
+- live error: `DPY-4010: a bind variable replacement value for placeholder ":POINT" was not provided`
+- src: `SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)), geography::Point(47,-122,4326).ToString()`
 
 ## ts-spectypes  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
@@ -4049,4 +4155,4 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
 - src: `CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)`
 ---
 
-Totals: 791 distinct constructs; defect rows by kind: func 353, invalid 1223, semantic 2, silent-drop 75.
+Totals: 812 distinct constructs; defect rows by kind: func 353, invalid 1274, semantic 2, silent-drop 75.

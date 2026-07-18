@@ -48,6 +48,9 @@ SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r
 -- CASE[open]: ts-binary-length — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
 SELECT DATALENGTH(CAST('hello' AS VARBINARY(MAX))) AS r
 
+-- CASE[open]: ts-bit-cast — fails on oracle. ORA-01722: unable to convert string value containing 't' to a number: 
+SELECT CAST(1 AS BIT), CAST('true' AS BIT), CAST(0 AS BIT)
+
 -- CASE[open]: ts-bit-fns — fails on mysql, oracle, postgresql. ORA-00904: "SET_BIT": invalid identifier
 SELECT GET_BIT(0x0A, 1), SET_BIT(0x0A, 0, 1)
 
@@ -167,6 +170,9 @@ CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERR
 -- CASE[open]: ts-fmt-spec — fails on oracle. ORA-01821: date format not recognized
 SELECT FORMAT(GETDATE(),'ddd MMM dd HH:mm:ss yyyy'),FORMAT(GETDATE(),'tt hh:mm'),FORMAT(GETDATE(),'D')
 
+-- CASE[open]: ts-for-xml — fails on mysql, oracle, postgresql. ORA-00913: too many values
+SELECT (SELECT 1 a,2 b FOR XML PATH('row'),ROOT('rows')) AS xmlcol
+
 -- CASE[open]: ts-format-iso — fails on oracle. ORA-01821: date format not recognized
 SELECT FORMAT(CAST('2020-06-15 14:30:45' AS DATETIME2), 'yyyy-MM-ddTHH:mm:ss') AS r
 
@@ -176,11 +182,20 @@ SELECT FORMAT(1234.5, 'N2') AS r
 -- CASE[open]: ts-formatmessage — fails on mysql, oracle, postgresql. ORA-00904: "FORMATMESSAGE": invalid identifier
 SELECT FORMATMESSAGE('hi %s', 'x') AS r
 
+-- CASE[open]: ts-frac-seconds — fails on oracle. ORA-01843: An invalid month was specified.
+SELECT CAST('2020-01-01 10:20:30.1234567' AS DATETIME2), CAST('2020-01-01 10:20:30.123' AS DATETIME)
+
 -- CASE[open]: ts-gen-series-apply — fails on oracle, postgresql. ORA-00904: "GENERATE_SERIES": invalid identifier
 SELECT value, ordinal FROM GENERATE_SERIES(1, 5) g CROSS APPLY (SELECT g.value AS ordinal) x
 
+-- CASE[open]: ts-generate-series — fails on oracle, postgresql. ORA-00904: "GENERATE_SERIES": invalid identifier
+SELECT value FROM GENERATE_SERIES(1,5)
+
 -- CASE[open]: ts-geography — fails on mysql, oracle, postgresql. ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier
 SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r
+
+-- CASE[open]: ts-grouping-id — fails on mysql, oracle, postgresql. ORA-30481: GROUPING, GROUPING_ID, and GROUP_ID cannot be used without GROUP BY
+SELECT a,b,SUM(c),GROUPING(a),GROUPING_ID(a,b) FROM (SELECT 1 a,2 b,3 c) t GROUP BY ROLLUP(a,b)
 
 -- CASE[open]: ts-hash-all — fails on mysql, postgresql. SILENT: source literal(s) ["'SHA2_512'"] absent from valid output, no warning
 SELECT HASHBYTES('SHA2_512', 'abc'), CHECKSUM('abc')
@@ -212,6 +227,9 @@ SELECT ISNUMERIC('12.3'), ISDATE('2020-01-01'), ISJSON('{}')
 
 -- CASE[open]: ts-len-trailing — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('3',),) target=(('6',),)
 SELECT LEN('abc   ') AS r
+
+-- CASE[open]: ts-maxrecursion — fails on mysql, oracle, postgresql. ORA-32039: missing column alias list in recursive WITH clause element S
+WITH s AS (SELECT 1 n UNION ALL SELECT n+1 FROM s WHERE n<5) SELECT n FROM s OPTION (MAXRECURSION 10)
 
 -- CASE[open]: ts-merge-full — fails on oracle, postgresql. ORA-02000: missing THEN keyword
 CREATE TABLE tgt (id INT PRIMARY KEY, n INT); CREATE TABLE src (id INT, n INT);
@@ -304,6 +322,9 @@ SELECT SOUNDEX('Smith'),DIFFERENCE('Smith','Smyth')
 
 -- CASE[open]: ts-sp-executesql — fails on oracle. PROCEDURE P compiled INVALID (line 5): PLS-00103: Encountered the symbol ">" when expectin
 CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(200)=N'SELECT * FROM t WHERE id=@i'; EXEC sp_executesql @sql,N'@i INT',@i=5; END
+
+-- CASE[open]: ts-spatial — fails on oracle, postgresql. DPY-4010: a bind variable replacement value for placeholder ":POINT" was not provided
+SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)), geography::Point(47,-122,4326).ToString()
 
 -- CASE[open]: ts-spectypes — fails on oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (a BINARY(16), b VARBINARY(MAX), c IMAGE, d BIT, e UNIQUEIDENTIFIER, f XML, g SQL_VARIANT, h ROWVERSION, i HIERARCHYID, j GEOGRAPHY)

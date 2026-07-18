@@ -90,6 +90,9 @@ SELECT 'true'::boolean::int AS r
 -- CASE[open]: pg-bool-text2 — fails on mysql. FUNC-DIFF: source=(('true',),) target=(('1',),)
 SELECT true::text AS r
 
+-- CASE[open]: pg-bool-week — fails on oracle, tsql. (245, b"Conversion failed when converting the varchar value 't' to data type bit.DB-Lib er
+SELECT 'true'::boolean, 't'::boolean, 1::boolean, EXTRACT(WEEK FROM DATE '2020-01-01')
+
 -- CASE[open]: pg-bulk-insert — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)
 
@@ -264,6 +267,9 @@ SELECT format('%s=%s', 'a', 1) AS r
 -- CASE[open]: pg-format2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT format('%s-%I-%L', 'a', 'col name', 'val'), concat_ws('|', 'a', NULL, 'b')
 
+-- CASE[open]: pg-frac-seconds — fails on mysql, oracle, tsql. (155, b"'MICROSECONDS' is not a recognized datepart option.DB-Lib error message 20018, sev
+SELECT TIMESTAMP '2020-01-01 10:20:30.123456', EXTRACT(MICROSECONDS FROM TIME '10:20:30.123456')
+
 -- CASE[open]: pg-fround — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('1', '2', '3', '2.57'),) target=(('1', '2', '3', '3'),)
 SELECT round(0.5::numeric),round(1.5::numeric),round(2.5::numeric),round(2.567::numeric,2)
 
@@ -302,6 +308,9 @@ SELECT GREATEST(1, NULL, 3) AS r
 
 -- CASE[open]: pg-greatest-string — fails on mysql, tsql. FUNC-DIFF: source=(('a',),) target=(('B',),)
 SELECT GREATEST('a', 'B') AS r
+
+-- CASE[open]: pg-grouping — fails on mysql, oracle, tsql. (8120, b"Column 't.a' is invalid in the select list because it is not contained in either 
+SELECT a,sum(c),grouping(a) FROM (SELECT 1 a,3 c) t GROUP BY GROUPING SETS ((a),())
 
 -- CASE[open]: pg-grouping-fn — fails on mysql, oracle, tsql. (8161, b'Argument 1 of the GROUPING function does not match any of the expressions in the 
 SELECT x, GROUPING(x) FROM (VALUES (1)) v(x) GROUP BY CUBE (x)
@@ -344,6 +353,9 @@ SELECT 1 INTERSECT ALL SELECT 1
 
 -- CASE[open]: pg-interval-arith — fails on mysql, oracle, tsql. (207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S
 SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7
+
+-- CASE[open]: pg-interval-out — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '400 DAYS'.DB-Lib error message 20018, severity 15:\nGeneral
+SELECT INTERVAL '1 year 2 months 3 days', INTERVAL '1.5 hours', justify_interval(INTERVAL '400 days')
 
 -- CASE[open]: pg-json-aggs — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_
 SELECT json_agg(x), json_object_agg(x::text, x*2) FROM (VALUES (1),(2)) v(x)
@@ -425,6 +437,9 @@ CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; E
 
 -- CASE[open]: pg-named-exception — fails on oracle, tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
 CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1/0; EXCEPTION WHEN division_by_zero THEN RETURN -1; WHEN OTHERS THEN RAISE; END; $$ LANGUAGE plpgsql
+
+-- CASE[open]: pg-named-window — fails on oracle. ORA-30485: missing ORDER BY expression in the window specification
+SELECT x,sum(x) OVER w,rank() OVER w FROM (SELECT 1 x UNION ALL SELECT 2) t WINDOW w AS (ORDER BY x)
 
 -- CASE[open]: pg-named-window2 — fails on oracle. ORA-30485: missing ORDER BY expression in the window specification
 CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id, LAG(n) OVER w, LEAD(n) OVER w FROM t WINDOW w AS (PARTITION BY s ORDER BY id)
