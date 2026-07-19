@@ -3890,6 +3890,18 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"CASE WHEN {_asc_x} = '' THEN 0 ELSE ASCII({_asc_x}) END"
         return f"COALESCE(ASCII({_asc_x}), 0)"
 
+    # MySQL CONCAT returns NULL if ANY argument is NULL (it propagates NULL);
+    # PG/Oracle/T-SQL CONCAT ignore NULL. When a MySQL CONCAT has a literal NULL
+    # argument, the whole result is NULL — fold it (MySQL target keeps native
+    # CONCAT, which already propagates).
+    if (
+        fn_name == "CONCAT"
+        and SOURCE_DIALECT.get() == "mysql"
+        and dialect != "mysql"
+        and any(isinstance(a, Literal) and a.value is None for a in node.args)
+    ):
+        return "NULL"
+
     # MySQL booleans are integers, so CONCAT(TRUE, FALSE) is '10'; PostgreSQL
     # renders the boolean literals 't'/'f'. Emit them as 1/0 in this string
     # context (only PG needs it — T-SQL/Oracle already render boolean 1/0).

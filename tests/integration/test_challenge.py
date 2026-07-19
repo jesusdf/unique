@@ -986,3 +986,19 @@ class TestMysqlStringPlusIsArithmetic:
     def test_numeric_string_add_casts(self) -> None:
         out = _tx(_case("challenge_mysql.sql", "my-strnum-add"), "mysql", "tsql")
         assert "CAST('5' AS FLOAT) + CAST('5' AS FLOAT)" in out, out
+
+
+class TestMysqlConcatNullPropagates:
+    """MySQL CONCAT returns NULL if any argument is NULL; PG/Oracle/T-SQL ignore
+    NULL. A MySQL CONCAT with a literal NULL is always NULL — fold it. Only fires
+    for a literal NULL, so plain CONCAT (and its roundtrip) is untouched."""
+
+    @pytest.mark.parametrize("target", ("oracle", "postgresql", "tsql"))
+    def test_concat_literal_null_is_null(self, target: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-concat-null"), "mysql", target)
+        assert re.search(r"(?i)SELECT\s+NULL\s+AS\s+r", out), out
+
+    def test_concat_without_null_is_unchanged(self) -> None:
+        # Roundtrip-safety: a CONCAT with no NULL literal keeps CONCAT.
+        out = _tx("SELECT CONCAT('a', 'b') AS r", "mysql", "postgresql")
+        assert "CONCAT('a', 'b')" in out, out

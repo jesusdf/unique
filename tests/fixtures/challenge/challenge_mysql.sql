@@ -188,10 +188,10 @@ SELECT CONCAT(TRUE, FALSE) AS r
 -- CASE[open]: my-concat-date — fails on oracle. FUNC-DIFF: source=(('2020-01-01',),) target=(('01-JAN-20',),)
 SELECT CONCAT(DATE '2020-01-01', '') AS r
 
--- CASE[open]: my-concat-null — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('ab',),)
+-- CASE[fixed]: my-concat-null — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('ab',),)
 SELECT CONCAT('a', NULL, 'b') AS r
 
--- CASE[open]: my-concat-null3 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL', 'a,b'),) target=(('a', 'a,b'),)
+-- CASE[fixed]: my-concat-null3 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL', 'a,b'),) target=(('a', 'a,b'),)
 SELECT CONCAT('a',NULL), CONCAT_WS(',','a',NULL,'b')
 
 -- CASE[fixed]: my-concat-ws — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
@@ -706,7 +706,7 @@ SELECT 'apple' < 'Banana' AS r
 -- CASE[fixed]: my-str-misc — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT SOUNDEX('Robert'),FORMAT(1234567.891,2),INSERT('abcd',2,2,'XY'),QUOTE('a''b')
 
--- CASE[open]: my-str-null — fails on oracle, postgresql. FUNC-DIFF: source=(('NULL', 'NULL', 'NULL', 'NULL', 'NULL', 'NULL'),) target=(('NULL', 'a'
+-- CASE[fixed]: my-str-null — fails on oracle, postgresql. FUNC-DIFF: source=(('NULL', 'NULL', 'NULL', 'NULL', 'NULL', 'NULL'),) target=(('NULL', 'a'
 SELECT LENGTH(NULL), CONCAT('a',NULL), REPLACE(NULL,'a','b'), SUBSTRING(NULL,1,2), UPPER(NULL), TRIM(NULL)
 
 -- CASE[fixed]: my-str-plus-interval — fails on tsql. FUNC-DIFF: source=(('2020-01-02',),) target=(('2020-01-02 00:00:00',),)
