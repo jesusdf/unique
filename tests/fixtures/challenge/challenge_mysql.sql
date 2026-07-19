@@ -649,7 +649,7 @@ SELECT REPEAT('ab', -1) AS r
 -- CASE[open]: my-replace-case — fails on tsql. FUNC-DIFF: source=(('AbCXBc',),) target=(('XbCXBc',),)
 SELECT REPLACE('AbCaBc', 'a', 'X') AS r
 
--- CASE[open]: my-replace-null2 — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[fixed]: my-replace-null2 — MySQL REPLACE propagates NULL (literal-NULL arg -> NULL); Oracle ignores it. Fold to NULL.
 SELECT REPLACE('abc', NULL, 'x') IS NULL AS r
 
 -- CASE[open]: my-round-cast — fails on oracle. ORA-00902: invalid datatype

@@ -3902,6 +3902,18 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     ):
         return "NULL"
 
+    # MySQL REPLACE propagates NULL — REPLACE(str, NULL, x) is NULL — while
+    # Oracle's REPLACE ignores a NULL search/replace and returns the subject
+    # unchanged. With a literal NULL argument the MySQL result is NULL; fold it
+    # (PG already propagates; MySQL target keeps native REPLACE).
+    if (
+        fn_name == "REPLACE"
+        and SOURCE_DIALECT.get() == "mysql"
+        and dialect != "mysql"
+        and any(isinstance(a, Literal) and a.value is None for a in node.args)
+    ):
+        return "NULL"
+
     # The reverse: T-SQL/PG/Oracle CONCAT() *ignore* a NULL argument, so a
     # literal NULL contributes nothing. Drop it (otherwise MySQL's NULL-
     # propagating CONCAT would turn the whole result NULL). The ``||`` operator

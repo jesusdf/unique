@@ -1016,6 +1016,24 @@ class TestMysqlConcatNullPropagates:
         assert "CONCAT('a', 'b')" in out, out
 
 
+class TestMysqlReplaceNullPropagates:
+    """MySQL REPLACE propagates NULL — REPLACE(str, NULL, x) is NULL — while
+    Oracle ignores a NULL search/replace and returns the subject unchanged. A
+    literal-NULL arg makes the MySQL result NULL; fold it. Only fires for a
+    literal NULL, so plain REPLACE (and its roundtrip) is untouched."""
+
+    @pytest.mark.parametrize("target", ("oracle", "postgresql", "tsql"))
+    def test_replace_literal_null_is_null(self, target: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-replace-null2"), "mysql", target)
+        # The REPLACE call collapsed to a bare NULL (no REPLACE call survives).
+        assert "REPLACE(" not in out.upper(), out
+        assert re.search(r"(?i)\bNULL\s+IS\s+NULL\b", out), out
+
+    def test_replace_without_null_is_unchanged(self) -> None:
+        out = _tx("SELECT REPLACE('abc', 'a', 'x') AS r", "mysql", "oracle")
+        assert "REPLACE('abc', 'a', 'x')" in out, out
+
+
 class TestMysqlConcatNumBool:
     """MySQL CONCAT stringifies numbers, floats and booleans (5->'5', TRUE->'1')
     and propagates NULL. Cured by the CONCAT boolean->int and NULL-fold handlers:
