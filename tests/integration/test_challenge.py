@@ -219,6 +219,30 @@ class TestStringAggTextCastIntoPg:
         assert "STRING_AGG(CAST(x AS TEXT), ',' ORDER BY x)" in out, out
 
 
+class TestDdlConstraintClausesSurvive:
+    """Inline CHECK and FK REFERENCES/ON DELETE constraints survive to every
+    target (they were once silently dropped; the RC-3 constraint path keeps
+    them). Guarded so a regression to the silent-drop is caught."""
+
+    @pytest.mark.parametrize("target", ("mysql", "oracle", "tsql"))
+    def test_inline_check_survives(self, target: str) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "postgresql-drop-CHECK"),
+            "postgresql",
+            target,
+        )
+        assert re.search(r"(?i)CHECK\s*\(", _exec_lines(out)), out
+
+    @pytest.mark.parametrize("target", ("mysql", "oracle", "tsql"))
+    def test_fk_references_survives(self, target: str) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "postgresql-drop5-REFERENCES"),
+            "postgresql",
+            target,
+        )
+        assert re.search(r"(?i)REFERENCES\b", _exec_lines(out)), out
+
+
 class TestSetOperationAll:
     """INTERSECT ALL / EXCEPT ALL keep duplicates — the ALL was dropped (the row
     multiset silently changed). MySQL (8.0.31+) and PG preserve it; Oracle/T-SQL

@@ -974,11 +974,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `SILENT CLAUSE DROP: ''note'|note' absent from valid oracle output, no warning (target supp`
 - src: `CREATE TABLE t (a INT COMMENT 'note')`
 
-## mysql-drop-CHECK  (mysql)
-- targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
-- live error: `SILENT CLAUSE DROP: 'CHECK' absent from valid tsql output, no warning (target supports it)`
-- src: `CREATE TABLE t (email VARCHAR(255) CHECK (email LIKE '%@%'))`
-
 ## mysql-drop-GENERATED|AS\s  (mysql)
 - targets: tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'GENERATED|AS\s*\(' absent from valid tsql output, no warning (target `
@@ -2417,25 +2412,10 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - live error: `FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), `
 - src: `SELECT x FROM (VALUES ('banana'),('Apple'),('cherry'),('Banana')) v(x) ORDER BY x`
 
-## postgresql-drop-CHECK  (postgresql)
-- targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
-- live error: `SILENT CLAUSE DROP: 'CHECK' absent from valid tsql output, no warning (target supports it)`
-- src: `CREATE TABLE t (age INT CHECK (age >= 0))`
-
 ## postgresql-drop-DEFERRABLE  (postgresql)
 - targets: oracle(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'DEFERRABLE' absent from valid oracle output, no warning (target suppo`
 - src: `CREATE TABLE t (id INT PRIMARY KEY DEFERRABLE INITIALLY DEFERRED)`
-
-## postgresql-drop-ON\s+DELETE\s+  (postgresql)
-- targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
-- live error: `SILENT CLAUSE DROP: 'ON\s+DELETE\s+CASCADE' absent from valid tsql output, no warning (tar`
-- src: `CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (pid INT REFERENCES p(id) ON DELETE CASCADE)`
-
-## postgresql-drop-ON\s+UPDATE\s+  (postgresql)
-- targets: mysql(silent-drop)
-- live error: `SILENT CLAUSE DROP: 'ON\s+UPDATE\s+CASCADE' absent from valid mysql output, no warning (ta`
-- src: `CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (pid INT REFERENCES p(id) ON UPDATE CASCADE)`
 
 ## postgresql-drop2-100|START  (postgresql)
 - targets: oracle(silent-drop), tsql(silent-drop)
@@ -2476,11 +2456,6 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'CHECK|IN\s*\(' absent from valid tsql output, no warning`
 - src: `CREATE TABLE t (a INT CHECK (a IN (1,2,3)))`
-
-## postgresql-drop5-REFERENCES  (postgresql)
-- targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
-- live error: `SILENT CLAUSE DROP: 'REFERENCES' absent from valid tsql output, no warning`
-- src: `CREATE TABLE t (a INT PRIMARY KEY, b INT REFERENCES t(a))`
 
 ## postgresql-qdrop-FOR\s+UPDATE  (postgresql)
 - targets: tsql(silent-drop)
