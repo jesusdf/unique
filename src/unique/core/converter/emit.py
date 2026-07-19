@@ -2058,10 +2058,17 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     if node.where:
         parts.append(f"WHERE {_emit_condition(node.where, dialect)}")
 
-    # GROUP BY
+    # GROUP BY (with its ROLLUP super-aggregate modifier — MySQL trails it as
+    # ``WITH ROLLUP``, every other engine wraps the columns as ``ROLLUP(cols)``).
     if node.group_by:
         group_cols = ", ".join(_emit_expression(g, dialect) for g in node.group_by)
-        parts.append(f"GROUP BY {group_cols}")
+        if node.group_modifier == "ROLLUP":
+            if dialect == "mysql":
+                parts.append(f"GROUP BY {group_cols} WITH ROLLUP")
+            else:
+                parts.append(f"GROUP BY ROLLUP({group_cols})")
+        else:
+            parts.append(f"GROUP BY {group_cols}")
 
     # HAVING
     if node.having:

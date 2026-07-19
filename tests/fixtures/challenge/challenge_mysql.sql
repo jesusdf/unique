@@ -886,7 +886,7 @@ CREATE TABLE t (a INT AUTO_INCREMENT PRIMARY KEY, b VARCHAR(20)) DEFAULT CHARSET
 -- CASE[open]: mysql-prec-64|BIGINT| — fails on oracle, postgresql. SILENT PRECISION CHANGE: '64|BIGINT|BINARY' not preserved in valid oracle output, no warni
 CREATE TABLE t (a BIT(64))
 
--- CASE[open]: mysql-qdrop-ROLLUP — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ROLLUP' absent from valid tsql output, no warning
+-- CASE[fixed]: mysql-qdrop-ROLLUP — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ROLLUP' absent from valid tsql output, no warning
 SELECT x FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x WITH ROLLUP
 
 -- CASE[open]: mysql-qdrop-SQL_CALC_FOU — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'SQL_CALC_FOUND_ROWS|FOUND' absent from valid tsql output, no warning

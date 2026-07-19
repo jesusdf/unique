@@ -956,12 +956,23 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     if where_expr:
         where = convert_expression(where_expr.this)
 
-    # GROUP BY
+    # GROUP BY, plus its ROLLUP super-aggregate modifier. sqlglot keeps ROLLUP
+    # in a separate ``rollup`` arg — either wrapping the columns (the standard
+    # ``ROLLUP(x)`` spelling) or empty with the columns in ``expressions`` (the
+    # MySQL ``x WITH ROLLUP`` spelling). Both were dropped, silently discarding
+    # the subtotal rows (or, for ``ROLLUP(x)``, the entire GROUP BY).
     group_by_expr = expr.args.get("group")
-    group_by = tuple(
-        convert_expression(g)
-        for g in (group_by_expr.expressions if group_by_expr else [])
-    )
+    group_modifier: str | None = None
+    group_source: list[exp.Expression] = []
+    if group_by_expr is not None:
+        rollup = group_by_expr.args.get("rollup")
+        if rollup:
+            group_modifier = "ROLLUP"
+            inner = [c for r in rollup for c in r.expressions]
+            group_source = inner or list(group_by_expr.expressions)
+        else:
+            group_source = list(group_by_expr.expressions)
+    group_by = tuple(convert_expression(g) for g in group_source)
 
     # HAVING — direct arg, for the same reason as WHERE.
     having = None
@@ -1012,6 +1023,7 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
         joins=joins,
         where=where,
         group_by=group_by,
+        group_modifier=group_modifier,
         having=having,
         order_by=order_by,
         limit=limit,

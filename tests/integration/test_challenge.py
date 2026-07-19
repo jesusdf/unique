@@ -486,3 +486,27 @@ class TestWindowFramePreserved:
     def test_rows_frame_survives(self, target: str) -> None:
         out = _tx(_case("challenge_postgresql.sql", "qdrop-ROWS"), "postgresql", target)
         assert "ROWS BETWEEN 1 PRECEDING AND CURRENT ROW" in out, out
+
+
+class TestGroupByRollup:
+    """GROUP BY ROLLUP was dropped by the IR — MySQL's ``x WITH ROLLUP`` lost the
+    subtotal rows and, worse, the standard ``ROLLUP(x)`` spelling lost the entire
+    GROUP BY. MySQL trails ``WITH ROLLUP``; every other engine wraps the columns.
+    Live-verified: the super-aggregate (NULL) rows are reproduced on all engines
+    (multiset compare — the cases carry no ORDER BY)."""
+
+    @pytest.mark.parametrize("target", ("tsql", "oracle", "postgresql"))
+    def test_mysql_with_rollup_becomes_standard_rollup(self, target: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", "qdrop-ROLLUP"), "mysql", target)
+        assert "GROUP BY ROLLUP(x)" in out, out
+
+    @pytest.mark.parametrize("target", ("tsql", "oracle"))
+    def test_pg_rollup_survives_as_standard(self, target: str) -> None:
+        out = _tx(_case("challenge_postgresql.sql", "pg-rollup2"), "postgresql", target)
+        assert "GROUP BY ROLLUP(a, b)" in out, out
+
+    def test_pg_rollup_to_mysql_uses_with_rollup(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-rollup2"), "postgresql", "mysql"
+        )
+        assert "GROUP BY a, b WITH ROLLUP" in out, out

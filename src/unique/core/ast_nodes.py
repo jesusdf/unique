@@ -418,6 +418,10 @@ class SelectStatement(ASTNode):
     joins: tuple[JoinClause, ...] = ()
     where: ASTNode | None = None
     group_by: tuple[ASTNode, ...] = ()
+    #: A GROUP BY super-aggregate modifier over ``group_by`` (currently
+    #: ``"ROLLUP"``). MySQL spells it ``GROUP BY cols WITH ROLLUP``; every other
+    #: engine ``GROUP BY ROLLUP(cols)``. Dropping it discards the subtotal rows.
+    group_modifier: str | None = None
     having: ASTNode | None = None
     order_by: tuple[OrderByItem, ...] = ()
     limit: LimitClause | None = None

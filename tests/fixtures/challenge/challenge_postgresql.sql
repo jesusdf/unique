@@ -568,10 +568,10 @@ SELECT * FROM regexp_split_to_table('a,b,c', ',')
 -- CASE[fixed]: pg-repeat-left-right — fails on oracle. ORA-00904: "RIGHT": invalid identifier
 SELECT REPEAT('ab', 3), LEFT('abc', 2), RIGHT('abc', 2)
 
--- CASE[open]: pg-rollup — fails on mysql, oracle, tsql. (8120, b"Column 'v.x' is invalid in the select list because it is not contained in either 
+-- CASE[fixed]: pg-rollup — fails on mysql, oracle, tsql. (8120, b"Column 'v.x' is invalid in the select list because it is not contained in either 
 SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)
 
--- CASE[open]: pg-rollup2 — fails on mysql, oracle, tsql. (8120, b"Column 't.a' is invalid in the select list because it is not contained in either 
+-- CASE[fixed]: pg-rollup2 — fails on mysql, oracle, tsql. (8120, b"Column 't.a' is invalid in the select list because it is not contained in either 
 SELECT a,b,sum(c) FROM (SELECT 1 a,2 b,3 c) t GROUP BY ROLLUP(a,b)
 
 -- CASE[open]: pg-round-1005 — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('1.01',),) target=(('1',),)
