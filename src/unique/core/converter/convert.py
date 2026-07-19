@@ -1380,6 +1380,7 @@ def _convert_create_table(
                 primary_key = False
                 unique = False
                 col_comment: str | None = None
+                deferrable: str | None = None
                 default: ASTNode | None = None
                 for constraint in col_def.args.get("constraints", []):
                     kind = getattr(constraint, "kind", None)
@@ -1406,6 +1407,13 @@ def _convert_create_table(
                                     identity_step = val
                     elif isinstance(kind, exp.PrimaryKeyColumnConstraint):
                         primary_key = True
+                        dm = re.search(
+                            r"(?i)\b((?:NOT\s+)?DEFERRABLE"
+                            r"(?:\s+INITIALLY\s+(?:DEFERRED|IMMEDIATE))?)",
+                            kind.sql(),
+                        )
+                        if dm:
+                            deferrable = dm.group(1)
                     elif isinstance(kind, exp.UniqueColumnConstraint):
                         unique = True
                     elif isinstance(kind, exp.DefaultColumnConstraint):
@@ -1469,6 +1477,7 @@ def _convert_create_table(
                         primary_key=primary_key,
                         unique=unique,
                         comment=col_comment,
+                        deferrable=deferrable,
                         quoted=_identifier_quoted(col_def.this),
                     )
                 )

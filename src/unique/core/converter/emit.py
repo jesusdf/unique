@@ -2665,6 +2665,14 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     ):
                         dtype = "BLOB"
             pk = " PRIMARY KEY" if col.primary_key else ""
+            # DEFERRABLE INITIALLY DEFERRED is valid on PG and Oracle only;
+            # T-SQL/MySQL constraints are never deferrable, so drop it there.
+            if (
+                col.primary_key
+                and col.deferrable
+                and dialect in ("postgresql", "oracle")
+            ):
+                pk += f" {col.deferrable}"
             unique = " UNIQUE" if col.unique else ""
             default = ""
             if col.default is not None:

@@ -395,6 +395,10 @@ class ColumnDefinition(ASTNode):
     #: Column comment (MySQL inline ``COMMENT '…'``). Emitted inline on MySQL,
     #: as a trailing ``COMMENT ON COLUMN`` statement on PG/Oracle. Quoted literal.
     comment: str | None = None
+    #: A constraint deferrability clause (``DEFERRABLE INITIALLY DEFERRED``, …)
+    #: on an inline PRIMARY KEY/UNIQUE. PG and Oracle support it; T-SQL/MySQL do
+    #: not, so it is dropped there. Stored as the raw clause text.
+    deferrable: str | None = None
 
 
 # ---------------------------------------------------------------------------

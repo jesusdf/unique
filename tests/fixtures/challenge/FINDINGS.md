@@ -2312,11 +2312,6 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - live error: `FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), `
 - src: `SELECT x FROM (VALUES ('banana'),('Apple'),('cherry'),('Banana')) v(x) ORDER BY x`
 
-## postgresql-drop-DEFERRABLE  (postgresql)
-- targets: oracle(silent-drop)
-- live error: `SILENT CLAUSE DROP: 'DEFERRABLE' absent from valid oracle output, no warning (target suppo`
-- src: `CREATE TABLE t (id INT PRIMARY KEY DEFERRABLE INITIALLY DEFERRED)`
-
 ## postgresql-drop2-100|START  (postgresql)
 - targets: oracle(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: '100|START' absent from valid tsql output, no warning`
