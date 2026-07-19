@@ -552,7 +552,7 @@ SELECT LPAD(CONV(5,10,2), 8, '0') AS r
 -- CASE[fixed]: my-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)
 SELECT LPAD('ab', 5, 'xy') AS r
 
--- CASE[open]: my-lpad-trunc — fails on tsql. FUNC-DIFF: source=(('ab',),) target=(('bc',),)
+-- CASE[fixed]: my-lpad-trunc — fails on tsql. FUNC-DIFF: source=(('ab',),) target=(('bc',),)
 SELECT LPAD('abc', 2, 'x') AS r
 
 -- CASE[fixed]: my-make-set — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA

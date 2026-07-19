@@ -435,3 +435,42 @@ class TestTsqlBeginTransaction:
         assert any("BEGIN TRANSACTION dropped" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
+
+
+class TestLpadShrink:
+    """LPAD whose target length is shorter than the string truncates it to the
+    LEFT n chars (LPAD('hello', 3) = 'hel'); the T-SQL LEFT(REPLICATE(...)) form
+    pads nothing (CASE ... ELSE 0) and keeps only LEFT(s, n) (live-verified)."""
+
+    def test_pg_lpad_shrink_keeps_left_chars(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-lpad-shrink"), "postgresql", "tsql"
+        )
+        assert "ELSE 0 END) + LEFT('hello', 3)" in out, out
+
+    def test_mysql_lpad_trunc_keeps_left_chars(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-lpad-trunc"), "mysql", "tsql")
+        assert "ELSE 0 END) + LEFT('abc', 2)" in out, out
+
+
+class TestLogBase10:
+    """A 1-arg LOG in the IR only ever comes from PostgreSQL, whose LOG(x) is
+    base-10 (MySQL/T-SQL LOG(x) is the natural log → LN; Oracle's LOG needs two
+    args). The base-10 sense must be named explicitly, and T-SQL's native LOG10
+    is used for the two-arg base-10 case to avoid LOG(x, 10)'s float drift."""
+
+    def test_pg_single_arg_log_is_base_10(self) -> None:
+        assert "LOG10(100)" in _tx(
+            _case("challenge_postgresql.sql", "pg-log-base"), "postgresql", "tsql"
+        )
+        assert "LOG10(100)" in _tx(
+            _case("challenge_postgresql.sql", "pg-log-base"), "postgresql", "mysql"
+        )
+        assert "LOG(10, 100)" in _tx(
+            _case("challenge_postgresql.sql", "pg-log-base"), "postgresql", "oracle"
+        )
+
+    def test_tsql_base_10_uses_native_log10(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-log2-log10"), "mysql", "tsql")
+        assert "LOG10(1000)" in out, out
+        assert "LOG(8, 2)" in out, out  # LOG2 keeps the general arg-swapped form
