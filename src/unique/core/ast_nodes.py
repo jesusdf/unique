@@ -409,6 +409,10 @@ class ColumnDefinition(ASTNode):
     #: on an inline PRIMARY KEY/UNIQUE. PG and Oracle support it; T-SQL/MySQL do
     #: not, so it is dropped there. Stored as the raw clause text.
     deferrable: str | None = None
+    #: MySQL's ``ON UPDATE CURRENT_TIMESTAMP`` auto-update column attribute. Only
+    #: MySQL has it inline; the other engines need a trigger, so it degrades to a
+    #: documented carrier rather than vanishing. Stored as the raw clause text.
+    on_update: str | None = None
 
 
 # ---------------------------------------------------------------------------

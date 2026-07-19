@@ -1407,6 +1407,7 @@ def _convert_create_table(
                 identity_always = False
                 generated_expr: ASTNode | None = None
                 generated_stored = False
+                on_update: str | None = None
                 primary_key = False
                 unique = False
                 col_comment: str | None = None
@@ -1472,6 +1473,12 @@ def _convert_create_table(
                             col_comment = kind.this.sql(
                                 dialect=sqlglot_dialect_name(source_dialect)
                             )
+                    elif isinstance(kind, exp.OnUpdateColumnConstraint):
+                        # MySQL's ON UPDATE CURRENT_TIMESTAMP auto-update — kept
+                        # inline on MySQL, carried as a documented note elsewhere.
+                        on_update = kind.sql(
+                            dialect=sqlglot_dialect_name(source_dialect)
+                        )
                     elif isinstance(kind, exp.Reference):
                         # Inline column FK (``c INT REFERENCES p(id) ON DELETE …``)
                         # is equivalent to a table-level FOREIGN KEY; route it
@@ -1519,6 +1526,7 @@ def _convert_create_table(
                         unique=unique,
                         comment=col_comment,
                         deferrable=deferrable,
+                        on_update=on_update,
                         quoted=_identifier_quoted(col_def.this),
                     )
                 )

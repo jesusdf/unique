@@ -2640,6 +2640,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
         col_defs = []
         set_type_notes: list[str] = []
         column_comments: list[tuple[str, str]] = []
+        on_update_notes: list[str] = []
         for col in node.columns:
             check = ""
             if col.data_type.name.upper() in ("ENUM", "SET") and col.data_type.values:
@@ -2888,6 +2889,17 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             )
             if col.comment and dialect in ("postgresql", "oracle", "tsql"):
                 column_comments.append((col_name, col.comment))
+            # MySQL's ON UPDATE CURRENT_TIMESTAMP auto-update: keep it inline on
+            # MySQL; the other engines need a trigger, so carry a documented note.
+            on_update_inline = (
+                f" {col.on_update}" if dialect == "mysql" and col.on_update else ""
+            )
+            if col.on_update and dialect != "mysql":
+                on_update_notes.append(
+                    f"-- UNIQUE: MySQL's {col.on_update} on column {col_name} has "
+                    f"no {dialect} column-level equivalent; add an ON UPDATE "
+                    "trigger to refresh it"
+                )
             # A computed column carries no identity/default; T-SQL derives the
             # type from the expression, so it omits the declared type entirely.
             if col.generated_expr is not None:
@@ -2909,13 +2921,14 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 nullable = "" if col.nullable else " NOT NULL"
                 col_defs.append(
                     f"  {col_name} {dtype}{identity}{nullable}{default}{pk}"
-                    f"{unique}{check}{comment_inline}"
+                    f"{unique}{check}{on_update_inline}{comment_inline}"
                 )
         # Table-level constraints (PK/FK/UNIQUE/CHECK), re-transpiled.
         # A fragment may come back as a documented comment (e.g. a generated
         # column with no portable type); those can't live inside the
         # parenthesized column list, so collect them and append afterwards.
         trailing_comments: list[str] = list(set_type_notes)
+        trailing_comments.extend(on_update_notes)
         for constraint in node.table_constraints:
             emitted = _emit_passthrough_inline(constraint, dialect)
             if emitted.lstrip().startswith("--"):

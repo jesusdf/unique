@@ -688,3 +688,21 @@ class TestExcludeConstraintCarrier:
         assert any("EXCLUDE" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
+
+
+class TestOnUpdateTimestampCarrier:
+    """MySQL's ``ON UPDATE CURRENT_TIMESTAMP`` auto-update column attribute has no
+    column-level equivalent on T-SQL/Oracle/PG (they need a trigger); it was
+    dropped silently and now degrades to a documented carrier + warning while the
+    table stays valid. MySQL keeps the clause inline."""
+
+    @pytest.mark.parametrize("target", ("tsql", "oracle", "postgresql"))
+    def test_on_update_degrades_with_carrier(self, target: str) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_mysql.sql", "drop2-ON"), "mysql", target
+        )
+        assert "ON UPDATE" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE: MySQL's" in result.sql and "ON UPDATE" in result.sql, result.sql
+        assert any("ON UPDATE" in w.message for w in result.warnings), [
+            w.message for w in result.warnings
+        ]
