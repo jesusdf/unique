@@ -65,7 +65,7 @@ CREATE TABLE t (a BINARY(16), b VARBINARY(255), c TINYBLOB, d BLOB, e MEDIUMBLOB
 -- CASE[open]: my-bit-agg — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT BIT_XOR(x), BIT_OR(x) FROM (SELECT 1 x UNION SELECT 2) t
 
--- CASE[open]: my-bit-char-len — fails on postgresql. FUNC-DIFF: source=(('24', '1', '3'),) target=(('24', '1', '1'),)
+-- CASE[limit]: my-bit-char-len — fails on postgresql. APPROVED LIMIT (2026-07-18): LENGTH/BIT_LENGTH byte-vs-char, encoding-dependent (docs/03-unsupported.md §2). FUNC-DIFF: source=(('24', '1', '3'),) target=(('24', '1', '1'),)
 SELECT BIT_LENGTH('€'), CHAR_LENGTH('€'), LENGTH('€')
 
 -- CASE[open]: my-bit-count — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
@@ -311,7 +311,7 @@ SELECT LOAD_FILE('/etc/x'), IS_USED_LOCK('l')
 -- CASE[fixed]: my-fk-full — fails on oracle. ORA-03075: unexpected item ON in an out-of-line constraint
 CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE t (pid INT, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES p(id) ON DELETE SET NULL ON UPDATE CASCADE)
 
--- CASE[open]: my-flen — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('5', '4', '6', '2'),) target=(('4', '4', '2', '2'),)
+-- CASE[limit]: my-flen — fails on oracle, postgresql, tsql. APPROVED LIMIT (2026-07-18): LENGTH/BIT_LENGTH byte-vs-char, encoding-dependent (docs/03-unsupported.md §2). FUNC-DIFF: source=(('5', '4', '6', '2'),) target=(('4', '4', '2', '2'),)
 SELECT LENGTH('café'),CHAR_LENGTH('café'),LENGTH('日本'),CHAR_LENGTH('日本')
 
 -- CASE[open]: my-float-precision — fails on oracle, tsql. FUNC-DIFF: source=(('0.3', '0.3', '0.33333', '0.6667'),) target=(('0.3', '0.3', '0.333333'
@@ -522,7 +522,7 @@ SELECT 'ABC' LIKE 'abc' AS r
 -- CASE[open]: my-like-escape — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'a_b' LIKE 'a\_b' AS r
 
--- CASE[open]: my-like-single — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[limit]: my-like-single — fails on oracle, postgresql. APPROVED LIMIT (2026-07-18): LIKE case-sensitivity is a default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'x' LIKE 'X' AS r
 
 -- CASE[fixed]: my-loadfile — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO

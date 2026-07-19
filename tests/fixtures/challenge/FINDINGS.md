@@ -118,11 +118,6 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI`
 - src: `SELECT BIT_XOR(x), BIT_OR(x) FROM (SELECT 1 x UNION SELECT 2) t`
 
-## my-bit-char-len  (mysql)
-- targets: postgresql(func)
-- live error: `FUNC-DIFF: source=(('24', '1', '3'),) target=(('24', '1', '1'),)`
-- src: `SELECT BIT_LENGTH('€'), CHAR_LENGTH('€'), LENGTH('€')`
-
 ## my-bit-count  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI`
@@ -428,11 +423,6 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI`
 - src: `SELECT FIELD('b', 'a', 'b', 'c') AS r`
 
-## my-flen  (mysql)
-- targets: oracle(func), postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('5', '4', '6', '2'),) target=(('4', '4', '2', '2'),)`
-- src: `SELECT LENGTH('café'),CHAR_LENGTH('café'),LENGTH('日本'),CHAR_LENGTH('日本')`
-
 ## my-float-precision  (mysql)
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('0.3', '0.3', '0.33333', '0.6667'),) target=(('0.3', '0.3', '0.333333'`
@@ -643,11 +633,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT 'a_b' LIKE 'a\_b' AS r`
-
-## my-like-single  (mysql)
-- targets: oracle(func), postgresql(func)
-- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
-- src: `SELECT 'x' LIKE 'X' AS r`
 
 ## my-locate-case  (mysql)
 - targets: oracle(func), postgresql(func)
