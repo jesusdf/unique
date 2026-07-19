@@ -1343,6 +1343,15 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     ):
         rebuilt = _pg_index_rebuild(node.sql, read, dialect)
         if rebuilt is not None:
+            # PG's CONCURRENTLY builds the index without locking the table; no
+            # other engine has the option (the index is identical). The rebuild
+            # already omits it — surface the loss so it is never silent.
+            if re.search(r"(?i)\bCONCURRENTLY\b", node.sql):
+                rebuilt = (
+                    "-- UNIQUE: CONCURRENTLY (PostgreSQL's non-locking index "
+                    f"build) has no {dialect} equivalent; the index is created "
+                    "with the target's default locking\n" + rebuilt
+                )
             return rebuilt
 
     if (

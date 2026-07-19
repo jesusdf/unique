@@ -587,3 +587,22 @@ class TestAlterNotValidStripped:
         assert any("NOT VALID" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
+
+
+class TestCreateIndexConcurrently:
+    """PostgreSQL's CREATE INDEX CONCURRENTLY (non-locking build) has no T-SQL or
+    MySQL equivalent; the index is identical, so the option is dropped but never
+    silently — a carrier + warning documents the target's default locking."""
+
+    @pytest.mark.parametrize("target", ("tsql", "mysql"))
+    def test_concurrently_dropped_with_carrier(self, target: str) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_postgresql.sql", "drop2-CONCURRENTLY"),
+            "postgresql",
+            target,
+        )
+        assert "CONCURRENTLY" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE: CONCURRENTLY" in result.sql, result.sql
+        assert any("CONCURRENTLY" in w.message for w in result.warnings), [
+            w.message for w in result.warnings
+        ]
