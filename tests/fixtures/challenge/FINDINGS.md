@@ -894,21 +894,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `(4104, b'The multi-part identifier "s.n" could not be bound.DB-Lib error message 20018, se`
 - src: `CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); UPDATE t JOIN s ON t.id = s.id SET t.n = s.n`
 
-## my-upper-sharps  (mysql)
-- targets: postgresql(func)
-- live error: `FUNC-DIFF: source=(('ß',),) target=(('ẞ',),)`
-- src: `SELECT UPPER('ß') AS r`
-
-## my-upper-sharps-len  (mysql)
-- targets: oracle(func), postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('2',),) target=(('1',),)`
-- src: `SELECT LENGTH(UPPER('ß')) AS r`
-
-## my-upper-strasse  (mysql)
-- targets: postgresql(func)
-- live error: `FUNC-DIFF: source=(('STRAßE',),) target=(('STRAẞE',),)`
-- src: `SELECT UPPER('straße') AS r`
-
 ## my-using-join  (mysql)
 - targets: tsql(invalid)
 - live error: `(209, b"Ambiguous column name 'x'.DB-Lib error message 20018, severity 16:\nGeneral SQL Se`

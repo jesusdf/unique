@@ -808,13 +808,13 @@ CREATE TABLE t (id INT, n INT);UPDATE t t1 JOIN t t2 ON t1.id=t2.id+1 SET t1.n=t
 -- CASE[open]: my-update-join — fails on oracle, postgresql, tsql. (4104, b'The multi-part identifier "s.n" could not be bound.DB-Lib error message 20018, se
 CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); UPDATE t JOIN s ON t.id = s.id SET t.n = s.n
 
--- CASE[open]: my-upper-sharps — fails on postgresql. FUNC-DIFF: source=(('ß',),) target=(('ẞ',),)
+-- CASE[limit]: my-upper-sharps — fails on postgresql. APPROVED LIMIT (2026-07-18): non-ASCII case-folding (ß, accents) is locale/collation-dependent, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('ß',),) target=(('ẞ',),)
 SELECT UPPER('ß') AS r
 
--- CASE[open]: my-upper-sharps-len — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('2',),) target=(('1',),)
+-- CASE[limit]: my-upper-sharps-len — fails on oracle, postgresql, tsql. APPROVED LIMIT (2026-07-18): non-ASCII case-folding (ß, accents) is locale/collation-dependent, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('2',),) target=(('1',),)
 SELECT LENGTH(UPPER('ß')) AS r
 
--- CASE[open]: my-upper-strasse — fails on postgresql. FUNC-DIFF: source=(('STRAßE',),) target=(('STRAẞE',),)
+-- CASE[limit]: my-upper-strasse — fails on postgresql. APPROVED LIMIT (2026-07-18): non-ASCII case-folding (ß, accents) is locale/collation-dependent, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('STRAßE',),) target=(('STRAẞE',),)
 SELECT UPPER('straße') AS r
 
 -- CASE[open]: my-using-join — fails on tsql. (209, b"Ambiguous column name 'x'.DB-Lib error message 20018, severity 16:\nGeneral SQL Se

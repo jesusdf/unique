@@ -461,6 +461,12 @@ _DIVERGENCE_RULES: list[tuple[str, re.Pattern[str], str]] = [
 ]
 
 
+#: Case-folding of non-ASCII text is locale/collation-dependent (MySQL leaves
+#: ``ß`` as-is, others may fold ``ß``→``SS`` or vary by accent) — needs the
+#: ORIGINAL text (scrub blanks the literal), so it is checked separately.
+_CASEFOLD_NONASCII_RE = re.compile(r"(?i)(?:UPPER|LOWER)\s*\(\s*'[^']*[^\x00-\x7f]")
+
+
 def annotate_divergence(source_sql: str, source: str, target: str) -> str | None:
     """A human-approved value divergence with no statement-level fix — return the
     reason to flag (a warning + a ``UNIQUE:`` output comment), or None. The SQL
@@ -471,6 +477,12 @@ def annotate_divergence(source_sql: str, source: str, target: str) -> str | None
     for eng, pat, reason in _DIVERGENCE_RULES:
         if source == eng and pat.search(scrubbed):
             return reason.format(target=target) + " (docs/03-unsupported.md)"
+    if source == "mysql" and _CASEFOLD_NONASCII_RE.search(source_sql):
+        return (
+            "MySQL case-folding of non-ASCII text (e.g. ß→ß, accents) is "
+            f"locale/collation-dependent and differs from {target}'s (ß→SS, …) "
+            "— the result may differ (docs/03-unsupported.md)"
+        )
     return None
 
 
