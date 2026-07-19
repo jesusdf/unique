@@ -531,10 +531,10 @@ SELECT LOAD_FILE('/nonexist') IS NULL AS r
 -- CASE[open]: my-locate-case — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT LOCATE('a', 'ABC') AS r
 
--- CASE[open]: my-locate-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[fixed]: my-locate-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT LOCATE('', '') AS r
 
--- CASE[open]: my-locate-empty2 — fails on oracle, tsql. FUNC-DIFF: source=(('1', '1'),) target=(('0', '0'),)
+-- CASE[fixed]: my-locate-empty2 — fails on oracle, tsql. FUNC-DIFF: source=(('1', '1'),) target=(('0', '0'),)
 SELECT LOCATE('', 'abc'), INSTR('abc', '')
 
 -- CASE[fixed]: my-log-2arg — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('0.333333',),)

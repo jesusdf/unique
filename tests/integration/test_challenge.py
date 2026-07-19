@@ -954,3 +954,19 @@ class TestMysqlAsciiEmpty:
     def test_oracle_coalesce(self) -> None:
         out = _tx(_case("challenge_mysql.sql", "my-ascii-empty"), "mysql", "oracle")
         assert "COALESCE(ASCII(" in out and ", 0)" in out, out
+
+
+class TestMysqlLocateEmpty:
+    """MySQL LOCATE/INSTR with an empty needle returns 1; Oracle INSTR returns
+    NULL ('' -> NULL) and T-SQL CHARINDEX returns 0. Recover the 1 (Oracle
+    COALESCE(INSTR, 1); T-SQL CASE WHEN needle = '' THEN 1). Live-verified."""
+
+    @pytest.mark.parametrize("keyword", ("my-locate-empty", "my-locate-empty2"))
+    def test_oracle_coalesces_to_one(self, keyword: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", keyword), "mysql", "oracle")
+        assert re.search(r"(?i)COALESCE\(\s*INSTR\(.*\)\s*,\s*1\)", out), out
+
+    @pytest.mark.parametrize("keyword", ("my-locate-empty", "my-locate-empty2"))
+    def test_tsql_case_to_one(self, keyword: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", keyword), "mysql", "tsql")
+        assert re.search(r"(?i)CASE\s+WHEN\b.*=\s*''\s+THEN\s+1", out), out

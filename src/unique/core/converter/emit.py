@@ -4544,9 +4544,25 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         needle = _emit_expression(node.args[0], dialect)
         haystack = _emit_expression(node.args[1], dialect)
         start = _emit_expression(node.args[2], dialect) if len(node.args) > 2 else None
+        # MySQL LOCATE/INSTR with an empty needle returns 1; Oracle INSTR returns
+        # NULL (empty string -> NULL) and T-SQL CHARINDEX returns 0. Recover the 1
+        # when the needle could be empty (skip a provably non-empty literal).
+        _n0 = node.args[0]
+        _needle_maybe_empty = (
+            SOURCE_DIALECT.get() == "mysql"
+            and start is None
+            and not (
+                isinstance(_n0, Literal)
+                and isinstance(_n0.value, str)
+                and _n0.value != ""
+            )
+        )
         if dialect == "tsql":
             args_sql = f"{needle}, {haystack}" + (f", {start}" if start else "")
-            return f"CHARINDEX({args_sql})"
+            base = f"CHARINDEX({args_sql})"
+            if _needle_maybe_empty:
+                return f"CASE WHEN {needle} = '' THEN 1 ELSE {base} END"
+            return base
         if dialect == "mysql":
             # LOCATE(needle, haystack[, start])
             args_sql = f"{needle}, {haystack}" + (f", {start}" if start else "")
@@ -4554,7 +4570,10 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "oracle":
             # INSTR(haystack, needle[, start])
             args_sql = f"{haystack}, {needle}" + (f", {start}" if start else "")
-            return f"INSTR({args_sql})"
+            base = f"INSTR({args_sql})"
+            if _needle_maybe_empty:
+                return f"COALESCE({base}, 1)"
+            return base
         # postgresql: STRPOS has no start arg; use POSITION(needle IN haystack)
         # and add the offset when a start position is given — guarded so a
         # not-found still returns 0 (the bare +offset form returned
