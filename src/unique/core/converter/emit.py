@@ -3889,9 +3889,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # REPLICATE truncates the float and returns NULL for a negative. Round
         # (T-SQL ROUND needs an explicit scale — error 189) and clamp, for a
         # MySQL source, skipping a provably integer non-negative literal.
-        if SOURCE_DIALECT.get() == "mysql" and not _is_nonneg_int_literal(
-            node.args[1]
-        ):
+        if SOURCE_DIALECT.get() == "mysql" and not _is_nonneg_int_literal(node.args[1]):
             _rp_n = f"ROUND({_rp_n}, 0)"
             _rp_n = f"CASE WHEN {_rp_n} < 0 THEN 0 ELSE {_rp_n} END"
         return f"REPLICATE({_rp_s}, {_rp_n})"
