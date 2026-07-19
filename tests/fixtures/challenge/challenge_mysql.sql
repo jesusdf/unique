@@ -549,7 +549,7 @@ SELECT LOG2(8), LOG10(100), LN(2.718), EXP(1)
 -- CASE[fixed]: my-lpad-conv — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT LPAD(CONV(5,10,2), 8, '0') AS r
 
--- CASE[open]: my-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)
+-- CASE[fixed]: my-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)
 SELECT LPAD('ab', 5, 'xy') AS r
 
 -- CASE[open]: my-lpad-trunc — fails on tsql. FUNC-DIFF: source=(('ab',),) target=(('bc',),)

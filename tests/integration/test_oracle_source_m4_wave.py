@@ -578,7 +578,8 @@ class TestOracleScalarsOnTsqlWave16:
         assert re.search(r"(?i)REPLICATE\s*\(", out), out
         assert "PAD" not in re.sub(r"(?i)REPLICATE", "", out).upper(), out
         out_l = _t("SELECT LPAD(c, 5, '0') FROM t;", "tsql")
-        assert re.search(r"(?i)RIGHT\s*\(", out_l), out_l
+        # LPAD builds from LEFT(REPLICATE(...)) so a multi-char pad aligns.
+        assert re.search(r"(?i)LEFT\s*\(\s*REPLICATE", out_l), out_l
         # PG/MySQL keep the native spelling — never the canonical PAD().
         out_pg = _t("SELECT RPAD(c, 5, 'x') FROM t;", "postgresql")
         assert re.search(r"(?i)RPAD\s*\(", out_pg), out_pg
@@ -949,7 +950,7 @@ class TestRpadLpadInRawExpressions:
         )
         out = _t(src, "tsql")
         assert "LPAD" not in out.upper(), out
-        assert re.search(r"(?i)RIGHT\s*\(\s*REPLICATE\s*\(\s*' '", out), out
+        assert re.search(r"(?i)LEFT\s*\(\s*REPLICATE\s*\(\s*' '", out), out
 
 
 class TestBareReturnInPgTriggerFunction:

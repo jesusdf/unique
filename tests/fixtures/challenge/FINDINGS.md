@@ -649,11 +649,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `FUNC-DIFF: source=(('3', '3'),) target=(('0.333333', '0.333333'),)`
 - src: `SELECT LOG2(8), LOG10(1000)`
 
-## my-lpad-multichar  (mysql)
-- targets: tsql(func)
-- live error: `FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)`
-- src: `SELECT LPAD('ab', 5, 'xy') AS r`
-
 ## my-lpad-trunc  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('ab',),) target=(('bc',),)`
@@ -1225,11 +1220,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(silent), postgresql(invalid), tsql(silent)
 - live error: `SILENT: source literal(s) ["'...'"] absent from valid output, no warning`
 - src: `SELECT LISTAGG(x,',' ON OVERFLOW TRUNCATE '...') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x FROM DUAL) t`
-
-## ora-lpad-multichar  (oracle)
-- targets: tsql(func)
-- live error: `FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)`
-- src: `SELECT LPAD('ab', 5, 'xy') AS r FROM DUAL`
 
 ## ora-month-name  (oracle)
 - targets: mysql(func)

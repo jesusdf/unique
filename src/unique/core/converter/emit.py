@@ -4024,7 +4024,14 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "tsql":
             if fn_name == "RPAD":
                 return f"LEFT({s} + REPLICATE({pad}, {length}), {length})"
-            return f"RIGHT(REPLICATE({pad}, {length}) + {s}, {length})"
+            # LPAD must take the pad's LEADING chars (a RIGHT() of the repeated
+            # pad misaligns a multi-char pad, e.g. LPAD('ab',5,'xy')='xyxab' not
+            # 'yxyab'); guard the truncation case (input longer than length).
+            return (
+                f"LEFT(REPLICATE({pad}, {length}), "
+                f"CASE WHEN {length} > LEN({s}) THEN {length} - LEN({s}) "
+                f"ELSE 0 END) + LEFT({s}, {length})"
+            )
         return f"{fn_name}({s}, {length}, {pad})"
 
     # T-SQL CONVERT(type, value, style): the style is a date-format code

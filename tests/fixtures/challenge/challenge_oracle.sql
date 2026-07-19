@@ -283,7 +283,7 @@ SELECT DBMS_LOB.GETLENGTH(TO_CLOB('hello')) AS r FROM DUAL
 -- CASE[fixed]: ora-logexp — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN
 SELECT LOG(2, 8), LN(2.718), EXP(1) FROM DUAL
 
--- CASE[open]: ora-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)
+-- CASE[fixed]: ora-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)
 SELECT LPAD('ab', 5, 'xy') AS r FROM DUAL
 
 -- CASE[fixed]: ora-lpad-tochar — fails on tsql. (195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s
