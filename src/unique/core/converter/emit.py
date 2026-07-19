@@ -3879,11 +3879,14 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if fn_name == "REPEAT" and dialect == "tsql" and len(node.args) == 2:
         _rp_s = _emit_expression(node.args[0], dialect)
         _rp_n = _emit_expression(node.args[1], dialect)
-        # MySQL REPEAT with a negative count returns '' ; T-SQL REPLICATE returns
-        # NULL — clamp the count to 0 so the empty string is preserved. Only for
-        # a MySQL source, and only when the count could actually be negative (a
-        # non-negative literal needs no guard).
-        if SOURCE_DIALECT.get() == "mysql" and not _is_nonneg_literal(node.args[1]):
+        # MySQL rounds a float count and returns '' for a negative one; T-SQL
+        # REPLICATE truncates the float and returns NULL for a negative. Round
+        # (T-SQL ROUND needs an explicit scale — error 189) and clamp, for a
+        # MySQL source, skipping a provably integer non-negative literal.
+        if SOURCE_DIALECT.get() == "mysql" and not _is_nonneg_int_literal(
+            node.args[1]
+        ):
+            _rp_n = f"ROUND({_rp_n}, 0)"
             _rp_n = f"CASE WHEN {_rp_n} < 0 THEN 0 ELSE {_rp_n} END"
         return f"REPLICATE({_rp_s}, {_rp_n})"
     # MySQL LEFT with a negative length returns '' ; PostgreSQL reads a negative
@@ -4917,6 +4920,19 @@ def _is_nonneg_literal(node: ASTNode) -> bool:
         and isinstance(node.value, (int, float))
         and not isinstance(node.value, bool)
         and node.value >= 0
+    )
+
+
+def _is_nonneg_int_literal(node: ASTNode) -> bool:
+    """True if node is a non-negative, integer-valued numeric literal — so both a
+    negative-value guard AND a round-the-float guard are provably unnecessary. A
+    ``-1`` parses as a UnaryOp (not a Literal); ``2.9`` is a non-integer float."""
+    return (
+        isinstance(node, Literal)
+        and isinstance(node.value, (int, float))
+        and not isinstance(node.value, bool)
+        and node.value >= 0
+        and node.value == int(node.value)
     )
 
 
