@@ -716,3 +716,21 @@ class TestByDefaultIdentityIntoTsql:
     def test_identity_survives_into_tsql(self) -> None:
         out = _tx(_case("challenge_postgresql.sql", "drop4-BY"), "postgresql", "tsql")
         assert "IDENTITY(1,1)" in out, out
+
+
+class TestMemoryOptimizedCarrier:
+    """T-SQL's WITH (MEMORY_OPTIMIZED = ON) is a physical In-Memory OLTP storage
+    option (no logical/value impact) with no equivalent elsewhere; it was dropped
+    silently. Off T-SQL it now degrades to a documented carrier + warning while
+    the table stays valid (a regular disk table)."""
+
+    @pytest.mark.parametrize("target", ("postgresql", "mysql", "oracle"))
+    def test_memory_optimized_degrades_with_carrier(self, target: str) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_sqlserver.sql", "drop5-MEMORY"), "tsql", target
+        )
+        assert "MEMORY_OPTIMIZED" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE: T-SQL In-Memory OLTP" in result.sql, result.sql
+        assert any("MEMORY_OPTIMIZED" in w.message for w in result.warnings), [
+            w.message for w in result.warnings
+        ]

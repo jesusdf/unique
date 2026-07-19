@@ -2943,6 +2943,19 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
         # the clause beats losing the table's defining structure.
         if node.inherits_clause:
             result += f"\n{node.inherits_clause}"
+        # T-SQL In-Memory OLTP storage options (MEMORY_OPTIMIZED / DURABILITY):
+        # re-emit on T-SQL, carry a documented note elsewhere — the table becomes
+        # a regular disk table with no logical/value difference (RC-2).
+        if node.unsupported_options:
+            if dialect == "tsql":
+                result += " WITH (" + ", ".join(node.unsupported_options) + ")"
+            else:
+                opts = ", ".join(node.unsupported_options)
+                trailing_comments.append(
+                    f"-- UNIQUE: T-SQL In-Memory OLTP storage option(s) [{opts}] "
+                    f"have no {dialect} equivalent; the table is created as a "
+                    "regular disk-based table (no logical/value difference)"
+                )
         # Column comments: PG/Oracle take a trailing COMMENT ON COLUMN statement;
         # T-SQL has only sp_addextendedproperty, so note the drop rather than
         # lose it silently.

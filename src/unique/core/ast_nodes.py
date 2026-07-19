@@ -520,6 +520,11 @@ class CreateTableStatement(ASTNode):
     # MySQL's CREATE TABLE t2 LIKE t1 / PG's (LIKE t1): the source table
     # whose structure is cloned.
     like_source: str | None = None
+    # Physical-storage table options with no logical/value impact and no
+    # cross-engine equivalent (T-SQL ``WITH (MEMORY_OPTIMIZED = ON)`` /
+    # ``DURABILITY``): re-emitted on their home engine, carried as a documented
+    # note elsewhere rather than dropped silently.
+    unsupported_options: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -1572,6 +1572,7 @@ def _convert_create_table(
     inherits_clause: str | None = None
     partition_of_clause: str | None = None
     like_source: str | None = None
+    unsupported_options: list[str] = []
     sg = sqlglot_dialect_name(source_dialect)
     props = expr.args.get("properties")
     if props is not None:
@@ -1582,6 +1583,11 @@ def _convert_create_table(
                 partition_of_clause = prop.sql(dialect=sg)
             elif isinstance(prop, exp.LikeProperty):
                 like_source = prop.this.sql(dialect=sg)
+            elif re.search(r"(?i)MEMORY_OPTIMIZED|DURABILITY", prop.sql(dialect=sg)):
+                # T-SQL In-Memory OLTP storage options — physical only (no
+                # logical/value impact) and T-SQL-specific; kept for T-SQL,
+                # carried as a note elsewhere (RC-2 — was dropped silently).
+                unsupported_options.append(prop.sql(dialect=sg))
     # PG's ``CREATE TABLE x (LIKE y)`` parks the LikeProperty INSIDE the
     # column schema, not in properties; missing it dropped the whole
     # clause and emitted an empty ``CREATE TABLE x`` (silent data loss).
@@ -1615,6 +1621,7 @@ def _convert_create_table(
         inherits_clause=inherits_clause,
         partition_of_clause=partition_of_clause,
         like_source=like_source,
+        unsupported_options=tuple(unsupported_options),
         as_select=as_select,
     )
 
