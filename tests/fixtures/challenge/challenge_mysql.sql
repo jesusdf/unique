@@ -8,7 +8,7 @@
 -- CASE[limit]: my-accent-eq — fails on oracle, postgresql, tsql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'Ä' = 'A' AS r
 
--- CASE[open]: my-adddate — fails on tsql. FUNC-DIFF: source=(('2020-01-31',),) target=(('2020-01-31 00:00:00',),)
+-- CASE[fixed]: my-adddate — fails on tsql. FUNC-DIFF: source=(('2020-01-31',),) target=(('2020-01-31 00:00:00',),)
 SELECT ADDDATE('2020-01-01', 30) AS r
 
 -- CASE[fixed]: my-aes — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
@@ -709,13 +709,13 @@ SELECT SOUNDEX('Robert'),FORMAT(1234567.891,2),INSERT('abcd',2,2,'XY'),QUOTE('a'
 -- CASE[open]: my-str-null — fails on oracle, postgresql. FUNC-DIFF: source=(('NULL', 'NULL', 'NULL', 'NULL', 'NULL', 'NULL'),) target=(('NULL', 'a'
 SELECT LENGTH(NULL), CONCAT('a',NULL), REPLACE(NULL,'a','b'), SUBSTRING(NULL,1,2), UPPER(NULL), TRIM(NULL)
 
--- CASE[open]: my-str-plus-interval — fails on tsql. FUNC-DIFF: source=(('2020-01-02',),) target=(('2020-01-02 00:00:00',),)
+-- CASE[fixed]: my-str-plus-interval — fails on tsql. FUNC-DIFF: source=(('2020-01-02',),) target=(('2020-01-02 00:00:00',),)
 SELECT '2020-01-01' + INTERVAL 1 DAY AS r
 
 -- CASE[open]: my-strnum-add — fails on tsql. FUNC-DIFF: source=(('10',),) target=(('55',),)
 SELECT '5'+'5' AS r
 
--- CASE[open]: my-subdate — fails on tsql. FUNC-DIFF: source=(('2019-12-31',),) target=(('2019-12-31 00:00:00',),)
+-- CASE[fixed]: my-subdate — fails on tsql. FUNC-DIFF: source=(('2019-12-31',),) target=(('2019-12-31 00:00:00',),)
 SELECT SUBDATE('2020-01-31', INTERVAL 1 MONTH) AS r
 
 -- CASE[open]: my-substr-float — fails on oracle, tsql. FUNC-DIFF: source=(('llo',),) target=(('el',),)

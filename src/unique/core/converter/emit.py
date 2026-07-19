@@ -3563,7 +3563,13 @@ def _emit_date_add(node: FunctionCall, dialect: str) -> str | None:
         return f"{fn}({ts}, INTERVAL {n} {unit})"
     if dialect == "tsql":
         signed = (f"-{n}" if literal_n is not None else f"-({n})") if sub else n
-        return f"DATEADD({unit}, {signed}, {ts})"
+        result = f"DATEADD({unit}, {signed}, {ts})"
+        # MySQL date arithmetic on a DATE returns a DATE; T-SQL DATEADD returns a
+        # DATETIME (…00:00:00). Cast back to DATE when the base is a date-only
+        # literal so the value's type/repr matches (a datetime base keeps time).
+        if SOURCE_DIALECT.get() == "mysql" and _is_date_only_literal(base):
+            result = f"CAST({result} AS DATE)"
+        return result
     if dialect == "postgresql":
         op = "-" if sub else "+"
         if literal_n is not None:
@@ -4936,6 +4942,15 @@ def _is_nonneg_literal(node: ASTNode) -> bool:
     )
 
 
+def _is_date_only_literal(node: ASTNode) -> bool:
+    """True if node is a ``YYYY-MM-DD`` (date-only, no time) string literal."""
+    return (
+        isinstance(node, Literal)
+        and isinstance(node.value, str)
+        and re.fullmatch(r"\d{4}-\d{2}-\d{2}", node.value.strip()) is not None
+    )
+
+
 def _is_nonneg_int_literal(node: ASTNode) -> bool:
     """True if node is a non-negative, integer-valued numeric literal — so both a
     negative-value guard AND a round-the-float guard are provably unnecessary. A
@@ -5034,7 +5049,12 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             unit = interval_side.group(2).upper()
             amount = n if node.operator == BinaryOperator.ADD else f"-{n}"
             other_sql = _emit_expression(other_side, dialect)
-            return f"DATEADD({unit}, {amount}, {other_sql})"
+            result = f"DATEADD({unit}, {amount}, {other_sql})"
+            # MySQL date + INTERVAL on a DATE returns a DATE; cast the T-SQL
+            # DATEADD back to DATE when the base is a date-only literal.
+            if SOURCE_DIALECT.get() == "mysql" and _is_date_only_literal(other_side):
+                result = f"CAST({result} AS DATE)"
+            return result
 
     # Null-safe comparison: PG spells IS [NOT] DISTINCT FROM, MySQL <=>;
     # T-SQL/Oracle use the version-safe EXISTS-INTERSECT form (INTERSECT

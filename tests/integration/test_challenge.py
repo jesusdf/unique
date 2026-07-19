@@ -907,3 +907,17 @@ class TestMysqlInsertBounds:
     def test_bounds_guarded(self, keyword: str) -> None:
         out = _tx(_case("challenge_mysql.sql", keyword), "mysql", "tsql")
         assert re.search(r"(?i)CASE\s+WHEN\b.*<\s*1\s+OR\b.*>\s+LEN\(", out), out
+
+
+class TestMysqlDateArithReturnsDate:
+    """MySQL date arithmetic on a DATE returns a DATE ('2020-01-31'); T-SQL
+    DATEADD returns a DATETIME ('… 00:00:00'). For a MySQL source with a
+    date-only literal base, the T-SQL output is cast back to DATE. Live-verified
+    the value/repr matches on all three (ADDDATE, SUBDATE, string + INTERVAL)."""
+
+    @pytest.mark.parametrize(
+        "keyword", ("my-adddate", "my-subdate", "my-str-plus-interval")
+    )
+    def test_cast_back_to_date(self, keyword: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", keyword), "mysql", "tsql")
+        assert re.search(r"(?i)CAST\(\s*DATEADD\(.*\)\s+AS\s+DATE\)", out), out
