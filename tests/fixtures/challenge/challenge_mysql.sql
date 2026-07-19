@@ -221,7 +221,7 @@ SELECT FROM_BASE64(TO_BASE64('hello')),HEX(AES_DECRYPT(AES_ENCRYPT('d','k'),'k')
 -- CASE[open]: my-date-add-interval — fails on oracle, postgresql. ORA-30081: invalid data type for datetime/interval arithmetic
 SELECT DATE_ADD('2020-01-01', INTERVAL 7 DAY) AS r
 
--- CASE[open]: my-date-add-month — fails on tsql. FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)
+-- CASE[fixed]: my-date-add-month — fails on tsql. FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)
 SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r
 
 -- CASE[open]: my-date-diff-minus — fails on oracle, postgresql. FUNC-DIFF: source=(('200',),) target=(('60',),)
@@ -573,7 +573,7 @@ SELECT MOD(0,5), MOD(5,0) IS NULL, 5%0 IS NULL
 -- CASE[fixed]: my-mod-zero — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 5 MOD 0 IS NULL AS r
 
--- CASE[open]: my-month-overflow — fails on tsql. FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)
+-- CASE[fixed]: my-month-overflow — fails on tsql. FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)
 SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r
 
 -- CASE[fixed]: my-name-const — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA

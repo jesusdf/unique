@@ -916,7 +916,14 @@ class TestMysqlDateArithReturnsDate:
     the value/repr matches on all three (ADDDATE, SUBDATE, string + INTERVAL)."""
 
     @pytest.mark.parametrize(
-        "keyword", ("my-adddate", "my-subdate", "my-str-plus-interval")
+        "keyword",
+        (
+            "my-adddate",
+            "my-subdate",
+            "my-str-plus-interval",
+            "my-month-overflow",
+            "my-date-add-month",
+        ),
     )
     def test_cast_back_to_date(self, keyword: str) -> None:
         out = _tx(_case("challenge_mysql.sql", keyword), "mysql", "tsql")
