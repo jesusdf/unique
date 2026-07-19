@@ -439,9 +439,11 @@ def gate_reason(sql: str, target: str, source: str | None = None) -> str | None:
 #: not ship silently, so it is flagged with a warning + a leading UNIQUE comment.
 #: Each rule: (source engine, source-SQL pattern, reason template). ``{target}``
 #: is filled per target.
-_DIVERGENCE_RULES: list[tuple[str, re.Pattern[str], str]] = [
+#: ``(source_engine, target_engine, pattern, reason)`` — ``"*"`` = any engine.
+_DIVERGENCE_RULES: list[tuple[str, str, re.Pattern[str], str]] = [
     (
         "mysql",
+        "*",
         # LENGTH (not CHAR_/OCTET_/BIT_LENGTH) counts BYTES on MySQL.
         re.compile(r"(?<![_\w])LENGTH\s*\(", re.I),
         "MySQL LENGTH() counts bytes; {target} counts characters — the result "
@@ -453,10 +455,22 @@ _DIVERGENCE_RULES: list[tuple[str, re.Pattern[str], str]] = [
         # scrubbed text so the blanked-content quotes still show ``'…' <op> '``.
         # A literal-vs-column (``'x' = col``) does NOT match — kept narrow.
         "*",
+        "*",
         re.compile(r"'[^']*'\s*(?:<=|>=|<>|!=|=|<|>|(?:NOT\s+)?I?R?LIKE)\s*'", re.I),
         "string comparison result depends on each engine's default collation "
         "(case/accent sensitivity) and trailing-space handling, which differ "
         "between {source} and {target} — the boolean result may differ",
+    ),
+    (
+        # IFNULL/NVL/COALESCE of an empty string: Oracle stores '' AS NULL, so
+        # the empty string cannot survive as a distinct return value there. Only
+        # Oracle diverges (T-SQL/PG return '' faithfully).
+        "mysql",
+        "oracle",
+        re.compile(r"(?i)IFNULL\s*\(\s*''"),
+        "MySQL IFNULL of an empty string returns '', but Oracle stores '' as "
+        "NULL, so the result is NULL on {target} — Oracle cannot represent an "
+        "empty string distinct from NULL, so there is no faithful workaround",
     ),
 ]
 
@@ -474,8 +488,12 @@ def annotate_divergence(source_sql: str, source: str, target: str) -> str | None
     if source == target:
         return None
     scrubbed = scrub(source_sql)
-    for eng, pat, reason in _DIVERGENCE_RULES:
-        if (eng == "*" or source == eng) and pat.search(scrubbed):
+    for src_eng, tgt_eng, pat, reason in _DIVERGENCE_RULES:
+        if (
+            (src_eng == "*" or source == src_eng)
+            and (tgt_eng == "*" or target == tgt_eng)
+            and pat.search(scrubbed)
+        ):
             return (
                 reason.format(source=source, target=target)
                 + " (docs/03-unsupported.md)"

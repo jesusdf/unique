@@ -112,11 +112,6 @@ workflow.
       `SOURCE_DIALECT`-gated compensation, verify on the real engines, run the
       full **8-shard** suite (grep ALL for failures), flip + add an assertion.
 
-## 6. Packaging (P3)
-
-- [ ] **PyPI publication** — deferred until the tool has been used in real
-      projects for a few months and proven stable. Not before then.
-
 ---
 
 ## Continuously tracked (not a discrete backlog)

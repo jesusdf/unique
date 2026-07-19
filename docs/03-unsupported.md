@@ -130,6 +130,7 @@ transpilation target:
 | Oracle `XMLTYPE` → MySQL | Oracle | MySQL has no XML type — carrier + warning (PG/T-SQL keep it as `XML`) |
 | String collation in `=`/`ORDER BY`/`DISTINCT`/`LIKE` | all | Case/accent sensitivity is a per-**column** collation property, absent from a statement like `SELECT 'Ä' = 'A'`; the result can differ and cannot be compensated at the statement level. **User-approved limit (2026-07-18).** |
 | `LENGTH` bytes-vs-chars | MySQL vs others | MySQL `LENGTH` counts bytes, others count characters, and the byte count itself depends on each engine's default encoding (UTF-8 vs UTF-16) — not reconcilable without the column encoding. **User-approved limit (2026-07-18).** Use `CHAR_LENGTH`/`OCTET_LENGTH` explicitly for a defined semantic. |
+| Empty string as a distinct value → Oracle | Oracle | Oracle stores `''` as `NULL`, so an empty-string *result* (e.g. `IFNULL('', NULL)` = `''` on MySQL) becomes `NULL` on Oracle — Oracle cannot represent an empty string distinct from NULL, so there is no faithful workaround. Function inputs are recovered where possible (`ASCII('')`→0, `LOCATE('',…)`→1 via `COALESCE`); a divergent *result* degrades to a documented warning. **User-approved limit (2026-07-19).** |
 
 ### 2.1 Unmapped built-in scalar functions
 

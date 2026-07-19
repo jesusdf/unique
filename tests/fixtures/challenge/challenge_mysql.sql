@@ -402,7 +402,7 @@ SELECT '0x10' + 0 AS r
 -- CASE[fixed]: my-hexcast — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT CAST(x'48656C6C6F' AS CHAR),HEX('Hello'),UNHEX('48656C6C6F')
 
--- CASE[open]: my-ifnull-empty — fails on oracle. FUNC-DIFF: source=(('',),) target=(('NULL',),)
+-- CASE[limit]: my-ifnull-empty — fails on oracle. Oracle stores '' as NULL, so an empty-string result cannot survive (docs/03-unsupported.md). FUNC-DIFF: source=(('',),) target=(('NULL',),)
 SELECT IFNULL('', NULL) AS r
 
 -- CASE[open]: my-index-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
