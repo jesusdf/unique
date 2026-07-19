@@ -4849,8 +4849,40 @@ def _nullable_string_operand(node: object) -> bool:
     return False
 
 
+def _date_literal_sql(node: ASTNode, dialect: str) -> str | None:
+    """Emit a sqlglot ``DATE '…'`` literal (a DATE_STR_TO_DATE wrapper around a
+    string) as the target's date literal, or None if node is not one."""
+    if (
+        isinstance(node, FunctionCall)
+        and node.name.upper() == "DATE_STR_TO_DATE"
+        and len(node.args) == 1
+        and isinstance(node.args[0], Literal)
+    ):
+        s = node.args[0].value
+        if dialect in ("oracle", "postgresql"):
+            return f"DATE '{s}'"
+        return f"CAST('{s}' AS DATE)"
+    return None
+
+
 def _emit_binary(node: BinaryOp, dialect: str) -> str:
     """Emit a binary operation."""
+    # ``DATE 'a' - DATE 'b'`` is a day count on every engine, but spelled
+    # differently: Oracle/PostgreSQL subtract dates natively (yielding days),
+    # T-SQL/MySQL need DATEDIFF. sqlglot models each DATE literal as a
+    # DATE_STR_TO_DATE wrapper whose default unwrap is a bare string, so a plain
+    # ``str - str`` computes nothing — detect the two date literals and spell the
+    # difference per dialect (Oracle source d1 - d2 = days from d2 to d1).
+    if node.operator == BinaryOperator.SUB:
+        ld = _date_literal_sql(node.left, dialect)
+        rd = _date_literal_sql(node.right, dialect)
+        if ld is not None and rd is not None:
+            if dialect in ("oracle", "postgresql"):
+                return f"({ld} - {rd})"
+            if dialect == "tsql":
+                return f"DATEDIFF(DAY, {rd}, {ld})"
+            return f"DATEDIFF({ld}, {rd})"  # MySQL
+
     left = _emit_operand(node.left, node.operator, dialect)
     right = _emit_operand(node.right, node.operator, dialect, right=True)
 

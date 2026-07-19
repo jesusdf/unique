@@ -805,3 +805,24 @@ class TestUnsignedCheck:
     def test_mysql_keeps_unsigned(self) -> None:
         out = _tx(_case("challenge_mysql.sql", "drop4-UNSIGNED"), "mysql", "mysql")
         assert "UNSIGNED" in out.upper(), out
+
+
+class TestDateLiteralSubtraction:
+    """``DATE 'a' - DATE 'b'`` is a day count: Oracle/PG subtract dates natively,
+    T-SQL/MySQL need DATEDIFF. sqlglot's DATE_STR_TO_DATE wrapper unwrapped to a
+    bare string, so ``str - str`` computed nothing. Live-verified: 60 days on all
+    four engines."""
+
+    def test_tsql_uses_datediff(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "date-diff-days"), "oracle", "tsql")
+        assert "DATEDIFF(DAY," in out and "AS DATE)" in out, out
+
+    def test_pg_subtracts_dates(self) -> None:
+        out = _tx(
+            _case("challenge_oracle.sql", "date-diff-days"), "oracle", "postgresql"
+        )
+        assert "DATE '2020-03-01' - DATE '2020-01-01'" in out, out
+
+    def test_mysql_uses_datediff(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "date-diff-days"), "oracle", "mysql")
+        assert "DATEDIFF(CAST(" in out, out
