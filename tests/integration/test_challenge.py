@@ -976,3 +976,13 @@ class TestMysqlLocateEmpty:
     def test_tsql_case_to_one(self, keyword: str) -> None:
         out = _tx(_case("challenge_mysql.sql", keyword), "mysql", "tsql")
         assert re.search(r"(?i)CASE\s+WHEN\b.*=\s*''\s+THEN\s+1", out), out
+
+
+class TestMysqlStringPlusIsArithmetic:
+    """MySQL '+' is always arithmetic, so '5' + '5' is 10; T-SQL '+' on strings
+    concatenates ('55'). For a MySQL source adding numeric string literals, cast
+    them so T-SQL does the arithmetic. Live-verified 10.0 (not '55')."""
+
+    def test_numeric_string_add_casts(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-strnum-add"), "mysql", "tsql")
+        assert "CAST('5' AS FLOAT) + CAST('5' AS FLOAT)" in out, out

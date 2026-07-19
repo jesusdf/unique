@@ -712,7 +712,7 @@ SELECT LENGTH(NULL), CONCAT('a',NULL), REPLACE(NULL,'a','b'), SUBSTRING(NULL,1,2
 -- CASE[fixed]: my-str-plus-interval — fails on tsql. FUNC-DIFF: source=(('2020-01-02',),) target=(('2020-01-02 00:00:00',),)
 SELECT '2020-01-01' + INTERVAL 1 DAY AS r
 
--- CASE[open]: my-strnum-add — fails on tsql. FUNC-DIFF: source=(('10',),) target=(('55',),)
+-- CASE[fixed]: my-strnum-add — fails on tsql. FUNC-DIFF: source=(('10',),) target=(('55',),)
 SELECT '5'+'5' AS r
 
 -- CASE[fixed]: my-subdate — fails on tsql. FUNC-DIFF: source=(('2019-12-31',),) target=(('2019-12-31 00:00:00',),)

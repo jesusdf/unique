@@ -5006,6 +5006,18 @@ def _is_nonneg_literal(node: ASTNode) -> bool:
     )
 
 
+def _is_numeric_str_literal(node: ASTNode) -> bool:
+    """True if node is a string literal whose text is a plain number ('5',
+    '5.5', '-3') — so MySQL's numeric '+' can be reproduced with a CAST without
+    risking MySQL's lenient leading-prefix conversion ('10abc' -> 10)."""
+    return (
+        isinstance(node, Literal)
+        and node.dtype == "string"
+        and isinstance(node.value, str)
+        and re.fullmatch(r"\s*-?\d+(?:\.\d+)?\s*", node.value) is not None
+    )
+
+
 def _is_date_only_literal(node: ASTNode) -> bool:
     """True if node is a ``YYYY-MM-DD`` (date-only, no time) string literal."""
     return (
@@ -5061,6 +5073,20 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             if dialect == "tsql":
                 return f"DATEDIFF(DAY, {rd}, {ld})"
             return f"DATEDIFF({ld}, {rd})"  # MySQL
+
+    # MySQL '+' is always arithmetic; T-SQL '+' on strings concatenates
+    # ('5' + '5' = '55', not 10). When a MySQL source adds numeric string
+    # literals, cast them so T-SQL does the arithmetic (10.0, matching MySQL).
+    if (
+        node.operator == BinaryOperator.ADD
+        and dialect == "tsql"
+        and SOURCE_DIALECT.get() == "mysql"
+        and _is_numeric_str_literal(node.left)
+        and _is_numeric_str_literal(node.right)
+    ):
+        _sl = _emit_expression(node.left, dialect)
+        _sr = _emit_expression(node.right, dialect)
+        return f"CAST({_sl} AS FLOAT) + CAST({_sr} AS FLOAT)"
 
     left = _emit_operand(node.left, node.operator, dialect)
     right = _emit_operand(node.right, node.operator, dialect, right=True)
