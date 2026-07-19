@@ -510,3 +510,25 @@ class TestGroupByRollup:
             _case("challenge_postgresql.sql", "pg-rollup2"), "postgresql", "mysql"
         )
         assert "GROUP BY a, b WITH ROLLUP" in out, out
+
+
+class TestForUpdateLockCarrier:
+    """PostgreSQL's FOR UPDATE row lock has no trailing-clause form on T-SQL
+    (sqlglot drops it silently); Oracle/MySQL keep it. On T-SQL the loss is now
+    surfaced as a documented carrier + warning, and the SQL stays valid."""
+
+    def test_tsql_surfaces_a_warning_and_carrier(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_postgresql.sql", "qdrop-FOR"), "postgresql", "tsql"
+        )
+        assert "FOR UPDATE" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE: T-SQL has no FOR UPDATE" in result.sql, result.sql
+        assert any("FOR UPDATE" in w.message for w in result.warnings), [
+            w.message for w in result.warnings
+        ]
+
+    @pytest.mark.parametrize("target", ("oracle", "mysql"))
+    def test_oracle_mysql_keep_the_lock(self, target: str) -> None:
+        out = _tx(_case("challenge_postgresql.sql", "qdrop-FOR"), "postgresql", target)
+        assert "FOR UPDATE" in out.upper(), out
+        assert "UNIQUE:" not in out, out

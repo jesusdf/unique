@@ -807,7 +807,7 @@ CREATE TABLE t (a INT CHECK (a IN (1,2,3)))
 -- CASE[fixed]: postgresql-drop5-REFERENCES — fails on mysql, oracle, tsql. SILENT CLAUSE DROP: 'REFERENCES' absent from valid tsql output, no warning
 CREATE TABLE t (a INT PRIMARY KEY, b INT REFERENCES t(a))
 
--- CASE[open]: postgresql-qdrop-FOR\s+UPDATE — fails on tsql. SILENT CLAUSE DROP: 'FOR\s+UPDATE' absent from valid tsql output, no warning
+-- CASE[fixed]: postgresql-qdrop-FOR\s+UPDATE — fails on tsql. SILENT CLAUSE DROP: 'FOR\s+UPDATE' absent from valid tsql output, no warning
 SELECT x FROM (VALUES (1),(2)) v(x) FOR UPDATE
 
 -- CASE[fixed]: postgresql-qdrop-ROWS\s+BETWE — fails on mysql, oracle, tsql. SILENT CLAUSE DROP: 'ROWS\s+BETWEEN' absent from valid tsql output, no warning

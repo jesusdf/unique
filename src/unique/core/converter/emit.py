@@ -1698,6 +1698,21 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 result = _portable_alter_add(result, dialect)
             if dialect in ("oracle", "mysql", "postgresql"):
                 result = _strip_dbo_schema_qualifier(result)
+            # T-SQL has no trailing row-lock clause (FOR UPDATE / FOR SHARE);
+            # sqlglot drops it silently. Surface the loss as a documented
+            # carrier so the no-silent-loss invariant mirrors it as a warning
+            # (Oracle/MySQL keep the clause, so this only bites T-SQL).
+            if (
+                dialect == "tsql"
+                and node.kind == "SELECT"
+                and any(e.args.get("locks") for e in parsed)
+                and not re.search(r"(?i)\bFOR\s+(?:UPDATE|SHARE)\b", result)
+            ):
+                result = (
+                    "-- UNIQUE: T-SQL has no FOR UPDATE/FOR SHARE row-lock "
+                    "clause; lock the rows with a WITH (UPDLOCK, ROWLOCK) "
+                    "table hint\n" + result
+                )
             return result
     except Exception as e:  # noqa: BLE001 - report and fall back
         logger.warning("passthrough transpile error (%s): %s", node.kind, e)
