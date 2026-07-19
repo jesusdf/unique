@@ -413,6 +413,11 @@ class ColumnDefinition(ASTNode):
     #: MySQL has it inline; the other engines need a trigger, so it degrades to a
     #: documented carrier rather than vanishing. Stored as the raw clause text.
     on_update: str | None = None
+    #: A column ``COLLATE <name>`` clause. Collation names are engine-specific
+    #: (Oracle BINARY_CI, PG "en_US", MySQL utf8mb4_…) with no portable mapping;
+    #: kept on the source engine, and carried as a documented warning elsewhere
+    #: (a live DB connection could resolve the actual collation). Raw clause text.
+    collate: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -525,6 +530,9 @@ class CreateTableStatement(ASTNode):
     # ``DURABILITY``): re-emitted on their home engine, carried as a documented
     # note elsewhere rather than dropped silently.
     unsupported_options: tuple[str, ...] = ()
+    # MySQL's table-level default ``COLLATE=<name>``: engine-specific, no portable
+    # mapping; kept on MySQL, carried as a warning elsewhere. Raw ``COLLATE=…``.
+    table_collate: str | None = None
 
 
 @dataclass(frozen=True)

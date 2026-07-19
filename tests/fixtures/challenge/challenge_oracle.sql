@@ -538,6 +538,6 @@ SELECT JSON_OBJECT(*) FROM t
 -- CASE[fixed]: oracle-drop2-100|START — fails on postgresql, tsql. SILENT CLAUSE DROP: '100|START' absent from valid tsql output, no warning
 CREATE TABLE t (id NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100))
 
--- CASE[open]: oracle-drop4-COLLATE — fails on mysql, postgresql, tsql. SILENT CLAUSE DROP: 'COLLATE' absent from valid tsql output, no warning
+-- CASE[fixed]: oracle-drop4-COLLATE — fails on mysql, postgresql, tsql. SILENT CLAUSE DROP: 'COLLATE' absent from valid tsql output, no warning
 CREATE TABLE t (a VARCHAR2(10) COLLATE BINARY_CI)
 

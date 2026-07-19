@@ -2641,6 +2641,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
         set_type_notes: list[str] = []
         column_comments: list[tuple[str, str]] = []
         on_update_notes: list[str] = []
+        collate_notes: list[str] = []
         for col in node.columns:
             check = ""
             if col.data_type.name.upper() in ("ENUM", "SET") and col.data_type.values:
@@ -2900,6 +2901,21 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     f"no {dialect} column-level equivalent; add an ON UPDATE "
                     "trigger to refresh it"
                 )
+            # A column COLLATE clause is engine-specific: keep it on the source
+            # engine, carry a warning elsewhere (its name has no portable
+            # mapping — a live DB connection could resolve the actual collation).
+            collate_inline = (
+                f" {col.collate}"
+                if col.collate and dialect == SOURCE_DIALECT.get()
+                else ""
+            )
+            if col.collate and dialect != SOURCE_DIALECT.get():
+                collate_notes.append(
+                    f"-- UNIQUE: column {col_name} collation ({col.collate}) has "
+                    f"no portable {dialect} equivalent; the column uses the "
+                    "default collation (comparisons/ordering may differ) — set it "
+                    "explicitly on the target or supply the source DB connection"
+                )
             # A computed column carries no identity/default; T-SQL derives the
             # type from the expression, so it omits the declared type entirely.
             if col.generated_expr is not None:
@@ -2914,14 +2930,14 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 # explicitly after AS IDENTITY can cause parser errors in some versions.
                 nullable = "" if (col.nullable or col.identity) else " NOT NULL"
                 col_defs.append(
-                    f"  {col_name} {dtype}{identity}{default}{nullable}{pk}"
-                    f"{unique}{check}"
+                    f"  {col_name} {dtype}{collate_inline}{identity}{default}"
+                    f"{nullable}{pk}{unique}{check}"
                 )
             else:
                 nullable = "" if col.nullable else " NOT NULL"
                 col_defs.append(
-                    f"  {col_name} {dtype}{identity}{nullable}{default}{pk}"
-                    f"{unique}{check}{on_update_inline}{comment_inline}"
+                    f"  {col_name} {dtype}{collate_inline}{identity}{nullable}"
+                    f"{default}{pk}{unique}{check}{on_update_inline}{comment_inline}"
                 )
         # Table-level constraints (PK/FK/UNIQUE/CHECK), re-transpiled.
         # A fragment may come back as a documented comment (e.g. a generated
@@ -2929,6 +2945,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
         # parenthesized column list, so collect them and append afterwards.
         trailing_comments: list[str] = list(set_type_notes)
         trailing_comments.extend(on_update_notes)
+        trailing_comments.extend(collate_notes)
         for constraint in node.table_constraints:
             emitted = _emit_passthrough_inline(constraint, dialect)
             if emitted.lstrip().startswith("--"):
@@ -2955,6 +2972,20 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     f"-- UNIQUE: T-SQL In-Memory OLTP storage option(s) [{opts}] "
                     f"have no {dialect} equivalent; the table is created as a "
                     "regular disk-based table (no logical/value difference)"
+                )
+        # MySQL's table-level default COLLATE: keep it on MySQL, carry a warning
+        # elsewhere (engine-specific name, no portable mapping — a live DB
+        # connection could resolve the actual collation).
+        if node.table_collate:
+            if dialect == "mysql":
+                result += f" {node.table_collate}"
+            else:
+                trailing_comments.append(
+                    f"-- UNIQUE: MySQL table default collation "
+                    f"({node.table_collate}) has no portable {dialect} "
+                    "equivalent; string columns use the default collation "
+                    "(comparisons/ordering may differ) — set it explicitly on "
+                    "the target or supply the source DB connection"
                 )
         # Column comments: PG/Oracle take a trailing COMMENT ON COLUMN statement;
         # T-SQL has only sp_addextendedproperty, so note the drop rather than

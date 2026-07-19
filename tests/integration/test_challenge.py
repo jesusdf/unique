@@ -734,3 +734,34 @@ class TestMemoryOptimizedCarrier:
         assert any("MEMORY_OPTIMIZED" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
+
+
+class TestCollationCarrier:
+    """Collation names are engine-specific (Oracle BINARY_CI, PG "en_US", MySQL
+    utf8mb4_…) with no portable mapping; a dropped COLLATE was silent. Off the
+    source engine it now degrades to a documented carrier + warning (a live DB
+    connection could resolve the actual collation), and the table stays valid."""
+
+    def test_oracle_column_collate_carried(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_oracle.sql", "drop4-COLLATE"), "oracle", "tsql"
+        )
+        assert "COLLATE" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE:" in result.sql and "collation" in result.sql, result.sql
+        assert any("collation" in w.message for w in result.warnings), result.sql
+
+    def test_pg_column_collate_carried(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_postgresql.sql", "drop4-COLLATE"), "postgresql", "mysql"
+        )
+        assert "UNIQUE:" in result.sql and "collation" in result.sql, result.sql
+        assert result.warnings, result.sql
+
+    @pytest.mark.parametrize("target", ("oracle", "postgresql"))
+    def test_mysql_table_collate_carried(self, target: str) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_mysql.sql", "drop4-COLLATE|utf8"), "mysql", target
+        )
+        assert "COLLATE" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE:" in result.sql and "collation" in result.sql, result.sql
+        assert any("collation" in w.message for w in result.warnings), result.sql

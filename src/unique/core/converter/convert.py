@@ -1408,6 +1408,7 @@ def _convert_create_table(
                 generated_expr: ASTNode | None = None
                 generated_stored = False
                 on_update: str | None = None
+                collate: str | None = None
                 primary_key = False
                 unique = False
                 col_comment: str | None = None
@@ -1479,6 +1480,10 @@ def _convert_create_table(
                         on_update = kind.sql(
                             dialect=sqlglot_dialect_name(source_dialect)
                         )
+                    elif isinstance(kind, exp.CollateColumnConstraint):
+                        # A column COLLATE clause — engine-specific name, kept on
+                        # the source engine and carried as a warning elsewhere.
+                        collate = kind.sql(dialect=sqlglot_dialect_name(source_dialect))
                     elif isinstance(kind, exp.Reference):
                         # Inline column FK (``c INT REFERENCES p(id) ON DELETE …``)
                         # is equivalent to a table-level FOREIGN KEY; route it
@@ -1527,6 +1532,7 @@ def _convert_create_table(
                         comment=col_comment,
                         deferrable=deferrable,
                         on_update=on_update,
+                        collate=collate,
                         quoted=_identifier_quoted(col_def.this),
                     )
                 )
@@ -1573,6 +1579,7 @@ def _convert_create_table(
     partition_of_clause: str | None = None
     like_source: str | None = None
     unsupported_options: list[str] = []
+    table_collate: str | None = None
     sg = sqlglot_dialect_name(source_dialect)
     props = expr.args.get("properties")
     if props is not None:
@@ -1583,6 +1590,9 @@ def _convert_create_table(
                 partition_of_clause = prop.sql(dialect=sg)
             elif isinstance(prop, exp.LikeProperty):
                 like_source = prop.this.sql(dialect=sg)
+            elif isinstance(prop, exp.CollateProperty):
+                # MySQL table-level default collation — engine-specific name.
+                table_collate = prop.sql(dialect=sg)
             elif re.search(r"(?i)MEMORY_OPTIMIZED|DURABILITY", prop.sql(dialect=sg)):
                 # T-SQL In-Memory OLTP storage options — physical only (no
                 # logical/value impact) and T-SQL-specific; kept for T-SQL,
@@ -1622,6 +1632,7 @@ def _convert_create_table(
         partition_of_clause=partition_of_clause,
         like_source=like_source,
         unsupported_options=tuple(unsupported_options),
+        table_collate=table_collate,
         as_select=as_select,
     )
 
