@@ -447,6 +447,17 @@ _DIVERGENCE_RULES: list[tuple[str, re.Pattern[str], str]] = [
         "MySQL LENGTH() counts bytes; {target} counts characters — the result "
         "differs for multi-byte/encoded text",
     ),
+    (
+        "mysql",
+        # Two string literals compared: ``'Ä' = 'A'``, ``'apple' < 'Banana'``,
+        # ``'ABC' LIKE 'abc'``, ``'a ' = 'a'``. Runs on scrubbed text so the
+        # blanked-content quotes still show ``'…' <op> '``. A literal-vs-column
+        # (``'x' = col``) does NOT match — kept narrow to avoid false flags.
+        re.compile(r"'[^']*'\s*(?:<=|>=|<>|!=|=|<|>|(?:NOT\s+)?R?LIKE)\s*'", re.I),
+        "MySQL's default collation compares strings case- and "
+        "accent-insensitively and ignores trailing spaces; {target} compares "
+        "case/accent/space-sensitively — the boolean result may differ",
+    ),
 ]
 
 

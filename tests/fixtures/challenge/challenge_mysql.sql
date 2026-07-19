@@ -5,7 +5,7 @@
 
 -- ===== RED-found open findings (validated live; see FINDINGS.md) =====
 
--- CASE[open]: my-accent-eq — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[limit]: my-accent-eq — fails on oracle, postgresql, tsql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'Ä' = 'A' AS r
 
 -- CASE[open]: my-adddate — fails on tsql. FUNC-DIFF: source=(('2020-01-31',),) target=(('2020-01-31 00:00:00',),)
@@ -281,7 +281,7 @@ SELECT '' = 0 AS r
 -- CASE[fixed]: my-epoch — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
 SELECT UNIX_TIMESTAMP('2020-01-01 00:00:00'), FROM_UNIXTIME(1577836800), TIME_TO_SEC('01:00:00')
 
--- CASE[open]: my-eq-mix — fails on oracle, tsql. FUNC-DIFF: source=(('1', '0', '1'),) target=(('1', '1', '1'),)
+-- CASE[limit]: my-eq-mix — fails on oracle, tsql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('1', '0', '1'),) target=(('1', '1', '1'),)
 SELECT 1 = 1.0 AS r, 'a' = 'a ' AS b, 1 = TRUE AS c
 
 -- CASE[fixed]: my-export-set — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
@@ -296,7 +296,7 @@ SELECT EXTRACT(YEAR_MONTH FROM NOW()), EXTRACT(DAY_HOUR FROM NOW())
 -- CASE[open]: my-extractvalue — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXTRACTVALUE('<a>1</a>', '/a') AS r
 
--- CASE[open]: my-fcollate — fails on oracle, postgresql. FUNC-DIFF: source=(('c', 'a', '1'),) target=(('c', 'B', '0'),)
+-- CASE[limit]: my-fcollate — fails on oracle, postgresql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('c', 'a', '1'),) target=(('c', 'B', '0'),)
 SELECT GREATEST('a','B','c'),LEAST('a','B'),'a'<'B'
 
 -- CASE[open]: my-fconcatnum — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('x5', 'x5.5', 'x1', 'NULL'),) target=(('x5', 'x5.5', 'x1', 'x'),)
@@ -516,7 +516,7 @@ SELECT LENGTH(1/3) AS r
 -- CASE[limit]: my-length-unicode — fails on oracle, postgresql, tsql. APPROVED LIMIT (2026-07-18): LENGTH bytes-vs-chars, encoding-dependent, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('5', '4', '5'),) target=(('4', '4', '3'),)
 SELECT LENGTH('café'), CHAR_LENGTH('café'), LENGTH('  x  ')
 
--- CASE[open]: my-like-ci — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[limit]: my-like-ci — fails on oracle, postgresql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'ABC' LIKE 'abc' AS r
 
 -- CASE[open]: my-like-escape — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
@@ -700,7 +700,7 @@ SELECT LAST_INSERT_ID(), ROW_COUNT(), FOUND_ROWS()
 -- CASE[fixed]: my-stmt-digest — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
 SELECT STATEMENT_DIGEST('SELECT 1'), STATEMENT_DIGEST_TEXT('SELECT 1')
 
--- CASE[open]: my-str-lt — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[limit]: my-str-lt — fails on oracle, postgresql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'apple' < 'Banana' AS r
 
 -- CASE[fixed]: my-str-misc — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
@@ -760,10 +760,10 @@ SELECT TIMESTAMPDIFF(YEAR, '2019-12-31', '2020-01-01') AS r
 -- CASE[open]: my-timestr-plus — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1900-01-01 13:30:00',),)
 SELECT '12:00:00' + INTERVAL 90 MINUTE AS r
 
--- CASE[open]: my-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+-- CASE[limit]: my-trailing-eq — fails on oracle, tsql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'a ' = 'a' AS r
 
--- CASE[open]: my-trailing-space-cmp — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('0', '1', '1'),) target=(('1', '0', '1'),)
+-- CASE[limit]: my-trailing-space-cmp — fails on oracle, postgresql, tsql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0', '1', '1'),) target=(('1', '0', '1'),)
 SELECT 'a'='a ', 'a'<'a ', 'abc'='ABC'
 
 -- CASE[open]: my-trig — fails on oracle, postgresql, tsql. (174, b'The atan function requires 1 argument(s).DB-Lib error message 20018, severity 15:\

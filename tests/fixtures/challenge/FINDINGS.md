@@ -53,11 +53,6 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 ---
 
 
-## my-accent-eq  (mysql)
-- targets: oracle(func), postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
-- src: `SELECT 'Ä' = 'A' AS r`
-
 ## my-adddate  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('2020-01-31',),) target=(('2020-01-31 00:00:00',),)`
@@ -413,11 +408,6 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `FUNC-DIFF: source=(('1',),) target=(('NULL',),)`
 - src: `SELECT '' = 0 AS r`
 
-## my-eq-mix  (mysql)
-- targets: oracle(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('1', '0', '1'),) target=(('1', '1', '1'),)`
-- src: `SELECT 1 = 1.0 AS r, 'a' = 'a ' AS b, 1 = TRUE AS c`
-
 ## my-extract-compound  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(155, b"'YEAR_MONTH' is not a recognized datepart option.DB-Lib error message 20018, sever`
@@ -427,11 +417,6 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX`
 - src: `SELECT EXTRACTVALUE('<a>1</a>', '/a') AS r`
-
-## my-fcollate  (mysql)
-- targets: oracle(func), postgresql(func)
-- live error: `FUNC-DIFF: source=(('c', 'a', '1'),) target=(('c', 'B', '0'),)`
-- src: `SELECT GREATEST('a','B','c'),LEAST('a','B'),'a'<'B'`
 
 ## my-fconcatnum  (mysql)
 - targets: oracle(func), postgresql(func), tsql(func)
@@ -654,11 +639,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `FUNC-DIFF: source=(('6',),) target=(('1',),)`
 - src: `SELECT LENGTH(1/3) AS r`
 
-## my-like-ci  (mysql)
-- targets: oracle(func), postgresql(func)
-- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
-- src: `SELECT 'ABC' LIKE 'abc' AS r`
-
 ## my-like-escape  (mysql)
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
@@ -819,11 +799,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
 - src: `SELECT SOUNDEX('Smith'), FORMAT(1234.5, 2)`
 
-## my-str-lt  (mysql)
-- targets: oracle(func), postgresql(func)
-- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
-- src: `SELECT 'apple' < 'Banana' AS r`
-
 ## my-str-null  (mysql)
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('NULL', 'NULL', 'NULL', 'NULL', 'NULL', 'NULL'),) target=(('NULL', 'a'`
@@ -888,16 +863,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('1900-01-01 13:30:00',),)`
 - src: `SELECT '12:00:00' + INTERVAL 90 MINUTE AS r`
-
-## my-trailing-eq  (mysql)
-- targets: oracle(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
-- src: `SELECT 'a ' = 'a' AS r`
-
-## my-trailing-space-cmp  (mysql)
-- targets: oracle(func), postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('0', '1', '1'),) target=(('1', '0', '1'),)`
-- src: `SELECT 'a'='a ', 'a'<'a ', 'abc'='ABC'`
 
 ## my-trig  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
