@@ -1046,6 +1046,17 @@ class TestIntegerDivisionSemantics:
         assert "TRUNC(" in out, out
 
 
+class TestLogArgumentOrder:
+    """PostgreSQL ``LOG(base, x)`` takes the base first; T-SQL ``LOG(x, base)``
+    takes it last, so the two arguments must be swapped (LOG(2, 8) = 3)."""
+
+    def test_pg_log_two_arg_swaps_for_tsql(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-log-2arg"), "postgresql", "tsql"
+        )
+        assert re.search(r"(?i)LOG\(\s*8\s*,\s*2\s*\)", out), out
+
+
 class TestNullOrderingEmulation:
     """Oracle/PostgreSQL sort NULLs HIGH by default (LAST ascending); MySQL and
     T-SQL sort them LOW and lack a NULLS FIRST/LAST keyword. The emitter restores

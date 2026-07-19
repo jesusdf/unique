@@ -433,7 +433,7 @@ SELECT 'ABC' LIKE 'abc' AS r
 -- CASE[fixed]: pg-like-escape — fails on oracle. FUNC-DIFF: source=(('1', '0', '1'),) target=(('0', '0', '1'),)
 SELECT 'a%b' LIKE 'a\%b', 'AbC' LIKE 'abc', 'AbC' ILIKE 'abc'
 
--- CASE[open]: pg-log-2arg — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('0.333333',),)
+-- CASE[fixed]: pg-log-2arg — PostgreSQL LOG(base, x); T-SQL LOG(x, base) — args swapped so LOG(2,8)=3 on both.
 SELECT LOG(2, 8) AS r
 
 -- CASE[fixed]: pg-log-base — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('4.60517',),)
