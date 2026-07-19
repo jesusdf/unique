@@ -164,7 +164,7 @@ SELECT CHAR(0x41,0x42 USING utf8mb4),ORD('中')
 -- CASE[open]: my-check-enforced — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'ENFORCED'.DB-Lib error message 20018, severity 15:\nGeneral
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENFORCED
 
--- CASE[open]: my-coalesce-empty — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('NULL',),)
+-- CASE[limit]: my-coalesce-empty — fails on oracle. Oracle stores '' as NULL (docs/03-unsupported.md). FUNC-DIFF: source=(('1',),) target=(('NULL',),)
 SELECT COALESCE(NULL, 0) = '' AS r
 
 -- CASE[open]: my-coalesce-single — fails on oracle. ORA-00938: not enough arguments for function
@@ -275,7 +275,7 @@ SELECT ELT(2, 'a', 'b', 'c') AS r
 -- CASE[open]: my-emoji-len — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT CHAR_LENGTH('😀') AS r
 
--- CASE[open]: my-empty-eq-zero — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('NULL',),)
+-- CASE[limit]: my-empty-eq-zero — fails on oracle. Oracle stores '' as NULL (docs/03-unsupported.md). FUNC-DIFF: source=(('1',),) target=(('NULL',),)
 SELECT '' = 0 AS r
 
 -- CASE[fixed]: my-epoch — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
@@ -432,7 +432,7 @@ SELECT INSERT('Quadratic', 3, 4, 'What') AS r
 -- CASE[open]: my-instr-case — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT INSTR('aAaA', 'A') AS r
 
--- CASE[open]: my-int-or-empty — fails on oracle. FUNC-DIFF: source=(('0',),) target=(('NULL',),)
+-- CASE[limit]: my-int-or-empty — fails on oracle. Oracle stores '' as NULL (docs/03-unsupported.md). FUNC-DIFF: source=(('0',),) target=(('NULL',),)
 SELECT 0 OR '' AS r
 
 -- CASE[open]: my-is-true — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'IS'.DB-Lib error message 20018, severity 15:\nG

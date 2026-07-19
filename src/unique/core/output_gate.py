@@ -472,6 +472,20 @@ _DIVERGENCE_RULES: list[tuple[str, str, re.Pattern[str], str]] = [
         "NULL, so the result is NULL on {target} — Oracle cannot represent an "
         "empty string distinct from NULL, so there is no faithful workaround",
     ),
+    (
+        # An empty string literal in a numeric/boolean context: ``'' = 0``,
+        # ``x = ''``, ``0 OR ''``. MySQL implicitly reads '' as 0/false; Oracle
+        # stores '' as NULL, so the comparison/OR is NULL there.
+        "mysql",
+        "oracle",
+        re.compile(
+            r"(?i)''\s*(?:=|<>|!=|<|>|<=|>=)|"
+            r"(?:=|<>|!=|<|>|<=|>=|\bOR\b|\bAND\b)\s*''"
+        ),
+        "MySQL reads an empty string as 0/false in a numeric/boolean context, "
+        "but Oracle stores '' as NULL, so the result is NULL on {target} — no "
+        "faithful workaround (Oracle's '' = NULL)",
+    ),
 ]
 
 
