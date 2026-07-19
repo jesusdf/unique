@@ -567,7 +567,7 @@ SELECT MAKEDATE(2020, 100), MAKETIME(10, 30, 0)
 -- CASE[fixed]: my-misc-num — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR
 SELECT RAND(),FLOOR(RAND()*100),CRC32('x'),CONV(255,10,2),BIN(10),OCT(64),HEX(255)
 
--- CASE[open]: my-mod-edge — fails on oracle. FUNC-DIFF: source=(('0', '1', '1'),) target=(('0', '0', '0'),)
+-- CASE[fixed]: my-mod-edge — fails on oracle. FUNC-DIFF: source=(('0', '1', '1'),) target=(('0', '0', '0'),)
 SELECT MOD(0,5), MOD(5,0) IS NULL, 5%0 IS NULL
 
 -- CASE[fixed]: my-mod-zero — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('0',),)

@@ -834,9 +834,10 @@ class TestMysqlModByZero:
     ``CASE WHEN divisor = 0 THEN NULL`` so the value matches. Live-verified:
     ``5 MOD 0 IS NULL`` is 1 on Oracle."""
 
+    @pytest.mark.parametrize("keyword", ("my-mod-zero", "my-mod-edge"))
     @pytest.mark.parametrize("target", ("oracle", "postgresql", "tsql"))
-    def test_mod_zero_guarded(self, target: str) -> None:
-        out = _tx(_case("challenge_mysql.sql", "my-mod-zero"), "mysql", target)
+    def test_mod_zero_guarded(self, keyword: str, target: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", keyword), "mysql", target)
         assert re.search(r"(?i)CASE\s+WHEN\s+0\s*=\s*0\s+THEN\s+NULL", out), out
 
 
