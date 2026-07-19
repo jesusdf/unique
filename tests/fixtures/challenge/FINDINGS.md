@@ -2347,11 +2347,6 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - live error: `SILENT CLAUSE DROP: 'COLLATE' absent from valid tsql output, no warning`
 - src: `CREATE TABLE t (a TEXT COLLATE "en_US")`
 
-## postgresql-drop4-MATCH\s+FULL  (postgresql)
-- targets: oracle(silent-drop)
-- live error: `SILENT CLAUSE DROP: 'MATCH\s+FULL' absent from valid oracle output, no warning`
-- src: `CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (pid INT REFERENCES p(id) MATCH FULL)`
-
 ## postgresql-drop5-CHECK|IN\s*\  (postgresql)
 - targets: mysql(silent-drop), oracle(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'CHECK|IN\s*\(' absent from valid tsql output, no warning`

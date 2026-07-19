@@ -122,6 +122,7 @@ transpilation target:
 | T-SQL PIVOT/UNPIVOT | T-SQL | ⚠️ Partially supported → CASE/UNION |
 | REGEXP_LIKE/REGEXP_REPLACE/… → T-SQL | Oracle/PG/MySQL | SQL Server gained REGEXP_* only in 2025; targeting 2012+, a statement using them degrades to a documented carrier + warning (rewrite with LIKE/PATINDEX manually) |
 | FK `ON UPDATE` action → Oracle | Oracle | Oracle has **no** `ON UPDATE` referential action (only `ON DELETE CASCADE`/`SET NULL`); the clause is stripped, the FK + `ON DELETE` kept |
+| FK `MATCH FULL/PARTIAL/SIMPLE` → Oracle | Oracle | Oracle FKs are always simple-match; the `MATCH` clause (PostgreSQL) is stripped, the FK kept (ORA-03075 otherwise) |
 | `INT UNSIGNED` → PG/Oracle/T-SQL | MySQL | No unsigned integer type; widened to the next signed size (BIGINT) so the full range fits — the ≥0 constraint is not re-added |
 | Column `COMMENT` → T-SQL | MySQL/PG/Oracle | Carried inline (MySQL) or as `COMMENT ON COLUMN` (PG/Oracle); T-SQL's only vehicle is `sp_addextendedproperty`, so it is noted rather than synthesised |
 | PostgreSQL-only types: `INET`, `CIDR`, `MACADDR`, range types (`INT4RANGE`, `TSRANGE`, …), `TSVECTOR`/`TSQUERY` | PostgreSQL | No cross-engine equivalent — a statement declaring one degrades to a documented carrier + warning (no silent invalid type). `SMALLMONEY`/`MONEY` **do** map (→ `DECIMAL`) |

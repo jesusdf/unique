@@ -2905,6 +2905,11 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
             "",
             fragment_sql,
         )
+        # Nor a FK ``MATCH FULL|PARTIAL|SIMPLE`` clause (PG only, ORA-03075);
+        # Oracle FKs are always simple-match. Strip it (documented limitation).
+        fragment_sql = re.sub(
+            r"(?i)\s+MATCH\s+(?:FULL|PARTIAL|SIMPLE)", "", fragment_sql
+        )
     try:
         wrapped = f"CREATE TABLE __c__ (x INT, {fragment_sql})"
         out = sqlglot.transpile(wrapped, read=read, write=write)[0]
