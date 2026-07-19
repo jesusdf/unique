@@ -27,7 +27,7 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 -- CASE[open]: pg-alter-add — fails on mysql, oracle. ORA-30649: missing DIRECTORY keyword
 CREATE TABLE t (a INT); ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT 'x'
 
--- CASE[open]: pg-alter-notvalid — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
+-- CASE[fixed]: pg-alter-notvalid — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
 CREATE TABLE t (id INT);
 ALTER TABLE t RENAME TO tbl;
 ALTER TABLE tbl ADD CONSTRAINT ck CHECK (id>0) NOT VALID;
@@ -151,7 +151,7 @@ CREATE TABLE t (a INT PRIMARY KEY, path TEXT[], CONSTRAINT ck CHECK (array_lengt
 -- CASE[fixed]: pg-check-jsonb — fails on mysql, oracle, tsql. (195, b"'JSONB_TYPEOF' is not a recognized built-in function name.DB-Lib error message 200
 CREATE TABLE t (id INT PRIMARY KEY, data JSONB, CONSTRAINT ck CHECK (jsonb_typeof(data) = 'object'))
 
--- CASE[open]: pg-check-notvalid — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
+-- CASE[fixed]: pg-check-notvalid — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) NOT VALID
 
 -- CASE[open]: pg-check-xor — fails on tsql. (102, b"Incorrect syntax near '<'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se

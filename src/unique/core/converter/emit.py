@@ -1257,6 +1257,28 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             ),
         )
 
+    # PG's NOT VALID (add the constraint but skip validating existing rows) has
+    # no equivalent on the other engines, which validate immediately. Strip it —
+    # the constraint definition is identical — and document the difference so the
+    # loss is never silent.
+    if (
+        node.kind == "ALTER"
+        and node.source_dialect == "postgresql"
+        and dialect != "postgresql"
+        and re.search(r"(?is)\bNOT\s+VALID\b\s*;?\s*$", node.sql)
+    ):
+        stripped = re.sub(r"(?is)\s*\bNOT\s+VALID\b\s*;?\s*$", "", node.sql).rstrip()
+        try:
+            rendered = sqlglot.transpile(stripped, read=read, write=write)
+            base = rendered[0] if rendered and rendered[0].strip() else stripped
+        except Exception:  # noqa: BLE001 - keep the source spelling
+            base = stripped
+        base = _portable_types_in_sql(base, dialect)
+        return (
+            f"-- UNIQUE: {dialect} has no ALTER … NOT VALID; the constraint is "
+            f"validated immediately (PostgreSQL defers it)\n{base}"
+        )
+
     # Oracle rejects parenthesized join trees in FROM (ORA-00907). For a
     # pure INNER/CROSS tree the flat CROSS-chain + ANDed WHERE is exactly
     # equivalent (wave 185); outer joins keep the paren carrier.

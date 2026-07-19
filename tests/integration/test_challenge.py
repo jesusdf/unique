@@ -566,3 +566,24 @@ class TestForUpdateLockCarrier:
         out = _tx(_case("challenge_postgresql.sql", "qdrop-FOR"), "postgresql", target)
         assert "FOR UPDATE" in out.upper(), out
         assert "UNIQUE:" not in out, out
+
+
+class TestAlterNotValidStripped:
+    """PostgreSQL's ADD CONSTRAINT … NOT VALID (defer validating existing rows)
+    has no equivalent elsewhere and passed through as a syntax error. It is now
+    stripped — the constraint definition is identical — leaving valid SQL, with a
+    carrier + warning documenting the target's immediate validation."""
+
+    @pytest.mark.parametrize("keyword", ("pg-alter-notvalid", "pg-check-notvalid"))
+    @pytest.mark.parametrize("target", ("tsql", "oracle", "mysql"))
+    def test_not_valid_is_stripped_with_carrier(
+        self, keyword: str, target: str
+    ) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_postgresql.sql", keyword), "postgresql", target
+        )
+        assert "NOT VALID" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE:" in result.sql and "NOT VALID" in result.sql, result.sql
+        assert any("NOT VALID" in w.message for w in result.warnings), [
+            w.message for w in result.warnings
+        ]
