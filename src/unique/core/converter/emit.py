@@ -3842,6 +3842,20 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if fn_name in _SQLGLOT_WRAPPERS and len(node.args) == 1:
         return _emit_expression(node.args[0], dialect)
 
+    # MySQL's GREATEST/LEAST return NULL if ANY argument is NULL; PostgreSQL and
+    # T-SQL ignore NULLs (GREATEST(1, NULL, 3) = 3 there). Preserve MySQL's
+    # NULL-propagation with a guard (Oracle already propagates, so it is left).
+    if (
+        fn_name in ("GREATEST", "LEAST")
+        and SOURCE_DIALECT.get() == "mysql"
+        and dialect in ("postgresql", "tsql")
+        and node.args
+    ):
+        _gl_args = [_emit_expression(a, dialect) for a in node.args]
+        _gl_null = " OR ".join(f"{a} IS NULL" for a in _gl_args)
+        _gl_call = f"{fn_name}({', '.join(_gl_args)})"
+        return f"CASE WHEN {_gl_null} THEN NULL ELSE {_gl_call} END"
+
     # PG's binary DECODE(text, 'hex') — not Oracle's conditional DECODE
     # (that one has 3+ args and became a CASE upstream). Faithful hex
     # mappings exist everywhere (wave 139); other formats stay put.
@@ -3863,8 +3877,23 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # REPEAT). And a single-argument CONCAT — valid MySQL/PG — needs 2+
     # on T-SQL/Oracle: it IS its argument (wave 154).
     if fn_name == "REPEAT" and dialect == "tsql" and len(node.args) == 2:
-        args = ", ".join(_emit_expression(a, dialect) for a in node.args)
-        return f"REPLICATE({args})"
+        _rp_s = _emit_expression(node.args[0], dialect)
+        _rp_n = _emit_expression(node.args[1], dialect)
+        # MySQL/PG REPEAT with a negative count return '' ; T-SQL REPLICATE
+        # returns NULL — clamp the count to 0 so the empty string is preserved.
+        _rp_n = f"CASE WHEN {_rp_n} < 0 THEN 0 ELSE {_rp_n} END"
+        return f"REPLICATE({_rp_s}, {_rp_n})"
+    # MySQL LEFT with a negative length returns '' ; PostgreSQL reads a negative
+    # length as "all but the last |n|". Clamp to 0 to preserve the empty string.
+    if (
+        fn_name == "LEFT"
+        and SOURCE_DIALECT.get() == "mysql"
+        and dialect == "postgresql"
+        and len(node.args) == 2
+    ):
+        _lf_s = _emit_expression(node.args[0], dialect)
+        _lf_n = _emit_expression(node.args[1], dialect)
+        return f"LEFT({_lf_s}, CASE WHEN {_lf_n} < 0 THEN 0 ELSE {_lf_n} END)"
     if fn_name == "CONCAT" and len(node.args) == 1 and dialect in ("tsql", "oracle"):
         return _emit_expression(node.args[0], dialect)
     # A CONCAT chain emits ONE flat call on MySQL (nested CONCATs are valid

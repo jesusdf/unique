@@ -363,7 +363,7 @@ SELECT GET_LOCK('l', 0), RELEASE_LOCK('l')
 -- CASE[fixed]: my-getformat2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 SELECT GET_FORMAT(DATE,'EUR'), GET_FORMAT(TIME,'USA'), GET_FORMAT(DATETIME,'JIS')
 
--- CASE[open]: my-greatest-null — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('3',),)
+-- CASE[fixed]: my-greatest-null — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('3',),)
 SELECT GREATEST(1, NULL, 3) AS r
 
 -- CASE[open]: my-greatest-null2 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1',),)
@@ -495,13 +495,13 @@ SELECT LAST_DAY('2020-02-15'), EXTRACT(DAY FROM LAST_DAY('2020-02-15'))
 -- CASE[open]: my-least-greatest-null — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL', 'NULL'),) target=(('a', '1'),)
 SELECT LEAST(NULL, 'a') AS r, GREATEST(NULL, 1) AS b
 
--- CASE[open]: my-least-null2 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1',),)
+-- CASE[fixed]: my-least-null2 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1',),)
 SELECT LEAST(1, 2, NULL, 3) AS r
 
 -- CASE[open]: my-left-float — fails on tsql. FUNC-DIFF: source=(('hel',),) target=(('he',),)
 SELECT LEFT('hello', 2.9) AS r
 
--- CASE[open]: my-left-neg — fails on postgresql. FUNC-DIFF: source=(('',),) target=(('ab',),)
+-- CASE[fixed]: my-left-neg — fails on postgresql. FUNC-DIFF: source=(('',),) target=(('ab',),)
 SELECT LEFT('abc', -1) AS r
 
 -- CASE[fixed]: my-len-trio — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
@@ -643,7 +643,7 @@ CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1
 -- CASE[open]: my-repeat-float — fails on tsql. FUNC-DIFF: source=(('ababab',),) target=(('abab',),)
 SELECT REPEAT('ab', 2.9) AS r
 
--- CASE[open]: my-repeat-neg — fails on tsql. FUNC-DIFF: source=(('',),) target=(('NULL',),)
+-- CASE[fixed]: my-repeat-neg — fails on tsql. FUNC-DIFF: source=(('',),) target=(('NULL',),)
 SELECT REPEAT('ab', -1) AS r
 
 -- CASE[open]: my-replace-case — fails on tsql. FUNC-DIFF: source=(('AbCXBc',),) target=(('XbCXBc',),)

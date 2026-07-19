@@ -848,3 +848,36 @@ class TestOracleCastIntRounds:
     def test_mysql_rounds_the_cast(self) -> None:
         out = _tx(_case("challenge_oracle.sql", "cast-int-edge"), "oracle", "mysql")
         assert "CAST(ROUND('3.9') AS SIGNED)" in out, out
+
+
+class TestGreatestLeastNullPropagation:
+    """MySQL's GREATEST/LEAST return NULL if any argument is NULL; PG and T-SQL
+    ignore NULLs. The MySQL->PG/T-SQL emit guards with CASE WHEN <any> IS NULL
+    THEN NULL. Live-verified NULL, not 3/1."""
+
+    @pytest.mark.parametrize(
+        "keyword,target",
+        [
+            ("my-greatest-null", "postgresql"),
+            ("my-greatest-null", "tsql"),
+            ("my-least-null2", "postgresql"),
+            ("my-least-null2", "tsql"),
+        ],
+    )
+    def test_null_propagates(self, keyword: str, target: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", keyword), "mysql", target)
+        assert re.search(r"(?i)CASE\s+WHEN\b.*\bIS\s+NULL\b.*THEN\s+NULL", out), out
+
+
+class TestNegativeLengthStringFns:
+    """MySQL LEFT / REPEAT with a negative count return '' ; PostgreSQL LEFT
+    reads it as "all but the last |n|" and T-SQL REPLICATE returns NULL. The
+    MySQL-source emit clamps the count to 0. Live-verified empty string."""
+
+    def test_left_negative_clamps(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-left-neg"), "mysql", "postgresql")
+        assert re.search(r"(?i)LEFT\(.*CASE\s+WHEN\b.*<\s*0\s+THEN\s+0", out), out
+
+    def test_repeat_negative_clamps(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-repeat-neg"), "mysql", "tsql")
+        assert re.search(r"(?i)REPLICATE\(.*CASE\s+WHEN\b.*<\s*0\s+THEN\s+0", out), out
