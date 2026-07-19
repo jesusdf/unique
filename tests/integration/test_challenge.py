@@ -284,6 +284,18 @@ class TestDdlConstraintClausesSurvive:
         assert re.search(r"(?i)REFERENCES\b", _exec_lines(out)), out
 
 
+class TestNegativeSubstr:
+    """Oracle/MySQL SUBSTR(s, -n, len) counts from the END; PG/T-SQL SUBSTRING is
+    1-indexed and reads -n literally. The start is rewritten to LENGTH(s)-n+1."""
+
+    @pytest.mark.parametrize("target", ("postgresql", "tsql"))
+    def test_negative_start_uses_length_offset(self, target: str) -> None:
+        out = _tx(_case("challenge_oracle.sql", "ora-substr-neg"), "oracle", target)
+        assert re.search(
+            r"(?i)(LEN|LENGTH)\('abcdef'\)\s*\+\s*\(-3\)\s*\+\s*1", out
+        ), out
+
+
 class TestConcatNumberIntoTsql:
     """Oracle/PG ``||`` (and MySQL CONCAT) stringify numeric operands; T-SQL
     ``+`` would do arithmetic (2||3 → 5) or error (string+number). A concat with

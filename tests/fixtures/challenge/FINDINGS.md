@@ -1342,11 +1342,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `FUNC-DIFF: source=(('llo', 'el', 'he'),) target=(('h', 'el', 'h'),)`
 - src: `SELECT SUBSTR('hello',-3), SUBSTR('hello',2,2), SUBSTR('hello',0,2) FROM DUAL`
 
-## ora-substr-neg  (oracle)
-- targets: postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('de',),) target=(('',),)`
-- src: `SELECT SUBSTR('abcdef', -3, 2) AS r FROM DUAL`
-
 ## ora-table-collection  (oracle)
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:`

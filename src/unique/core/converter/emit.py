@@ -3704,6 +3704,24 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # two arguments) — it IS its argument (wave 161).
     if fn_name == "COALESCE" and len(node.args) == 1 and dialect == "tsql":
         return _emit_expression(node.args[0], dialect)
+    # Oracle/MySQL SUBSTR(s, -n, len) counts the start position from the END;
+    # PG/T-SQL SUBSTRING is 1-indexed from the start and reads -n literally (an
+    # empty/left-of-string result). Convert a negative literal start:
+    # start = LENGTH(s) + (-n) + 1. (Only the 3-arg form; the 0-start and
+    # |n|>len edges are left for a dedicated pass.)
+    if (
+        fn_name == "SUBSTRING"
+        and dialect in ("postgresql", "tsql")
+        and len(node.args) == 3
+        and SOURCE_DIALECT.get() in ("oracle", "mysql")
+        and isinstance(node.args[1], UnaryOp)
+        and node.args[1].operator == UnaryOperator.NEGATIVE
+    ):
+        s = _emit_expression(node.args[0], dialect)
+        neg = _emit_expression(node.args[1], dialect)
+        length = _emit_expression(node.args[2], dialect)
+        lenfn = "LEN" if dialect == "tsql" else "LENGTH"
+        return f"SUBSTRING({s}, {lenfn}({s}) + ({neg}) + 1, {length})"
     # T-SQL's SUBSTRING requires the length argument (error 174); the
     # 2-argument form means "to the end" — LEN(x) always covers it.
     if fn_name == "SUBSTRING" and dialect == "tsql" and len(node.args) == 2:

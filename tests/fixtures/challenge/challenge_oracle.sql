@@ -425,7 +425,7 @@ SELECT SOUNDEX('Robert'),TO_CHAR(1234567.891,'999G999G999D99'),NVL(NULLIF('a','a
 -- CASE[open]: ora-substr-edge — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('llo', 'el', 'he'),) target=(('h', 'el', 'h'),)
 SELECT SUBSTR('hello',-3), SUBSTR('hello',2,2), SUBSTR('hello',0,2) FROM DUAL
 
--- CASE[open]: ora-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('de',),) target=(('',),)
+-- CASE[fixed]: ora-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('de',),) target=(('',),)
 SELECT SUBSTR('abcdef', -3, 2) AS r FROM DUAL
 
 -- CASE[fixed]: ora-sys-extract-utc — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SY
