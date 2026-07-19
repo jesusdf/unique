@@ -2079,9 +2079,11 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     # super-aggregate rows; every other engine wraps the columns natively.
     if node.group_by:
         group_cols = ", ".join(_emit_expression(g, dialect) for g in node.group_by)
-        if dialect == "mysql" and node.group_modifier == "ROLLUP":
+        if node.group_modifier == "GROUPING SETS" and dialect != "mysql":
+            parts.append(f"GROUP BY {node.grouping_sets_sql}")
+        elif dialect == "mysql" and node.group_modifier == "ROLLUP":
             parts.append(f"GROUP BY {group_cols} WITH ROLLUP")
-        elif dialect == "mysql" and node.group_modifier == "CUBE":
+        elif dialect == "mysql" and node.group_modifier in ("CUBE", "GROUPING SETS"):
             parts.append(f"GROUP BY {group_cols}")
         elif node.group_modifier in ("ROLLUP", "CUBE"):
             parts.append(f"GROUP BY {node.group_modifier}({group_cols})")
@@ -2109,13 +2111,18 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
 
     result = "\n".join(parts)
 
-    # MySQL has no GROUP BY CUBE; the base grouping above is valid but omits the
-    # super-aggregate rows, so surface the loss (the no-silent-loss scan mirrors
-    # this carrier as a warning).
-    if dialect == "mysql" and node.group_modifier == "CUBE" and node.group_by:
+    # MySQL has neither GROUP BY CUBE nor GROUPING SETS; the base grouping above
+    # is valid but omits the super-aggregate rows, so surface the loss (the
+    # no-silent-loss scan mirrors this carrier as a warning).
+    if (
+        dialect == "mysql"
+        and node.group_modifier in ("CUBE", "GROUPING SETS")
+        and node.group_by
+    ):
         result = (
-            "-- UNIQUE: MySQL has no GROUP BY CUBE; the base grouping is kept "
-            "and the super-aggregate (subtotal) rows are omitted\n" + result
+            f"-- UNIQUE: MySQL has no GROUP BY {node.group_modifier}; the base "
+            "grouping is kept and the super-aggregate (subtotal) rows are "
+            "omitted\n" + result
         )
 
     # Set operation

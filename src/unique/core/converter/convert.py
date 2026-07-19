@@ -963,15 +963,28 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     # the subtotal rows (or, for ``ROLLUP(x)``, the entire GROUP BY).
     group_by_expr = expr.args.get("group")
     group_modifier: str | None = None
+    grouping_sets_sql: str | None = None
     group_source: list[exp.Expression] = []
     if group_by_expr is not None:
         rollup = group_by_expr.args.get("rollup")
         cube = group_by_expr.args.get("cube")
+        gsets = group_by_expr.args.get("grouping_sets")
         mod_nodes = rollup or cube
         if mod_nodes:
             group_modifier = "ROLLUP" if rollup else "CUBE"
             inner = [c for r in mod_nodes for c in r.expressions]
             group_source = inner or list(group_by_expr.expressions)
+        elif gsets:
+            # GROUPING SETS is standard SQL on T-SQL/Oracle/PG — render it once
+            # and emit verbatim; MySQL has no equivalent, so keep the distinct
+            # columns as a base GROUP BY (a carrier documents the omission).
+            group_modifier = "GROUPING SETS"
+            grouping_sets_sql = " ".join(g.sql() for g in gsets)
+            seen: dict[str, exp.Expression] = {}
+            for g in gsets:
+                for col in g.find_all(exp.Column):
+                    seen.setdefault(col.sql(), col)
+            group_source = list(seen.values())
         else:
             group_source = list(group_by_expr.expressions)
     group_by = tuple(convert_expression(g) for g in group_source)
@@ -1026,6 +1039,7 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
         where=where,
         group_by=group_by,
         group_modifier=group_modifier,
+        grouping_sets_sql=grouping_sets_sql,
         having=having,
         order_by=order_by,
         limit=limit,

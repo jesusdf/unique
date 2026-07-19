@@ -528,6 +528,23 @@ class TestGroupByRollup:
             w.message for w in result.warnings
         ]
 
+    @pytest.mark.parametrize("target", ("oracle", "tsql"))
+    def test_grouping_sets_survives_natively(self, target: str) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-grouping-sets"), "postgresql", target
+        )
+        assert "GROUP BY GROUPING SETS ((x), ())" in out, out
+
+    def test_grouping_sets_to_mysql_degrades_with_carrier(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_oracle.sql", "ora-grouping-sets"), "oracle", "mysql"
+        )
+        assert "GROUPING SETS" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE: MySQL has no GROUP BY GROUPING SETS" in result.sql, result.sql
+        assert any("GROUPING SETS" in w.message for w in result.warnings), [
+            w.message for w in result.warnings
+        ]
+
 
 class TestForUpdateLockCarrier:
     """PostgreSQL's FOR UPDATE row lock has no trailing-clause form on T-SQL
