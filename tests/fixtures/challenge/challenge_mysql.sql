@@ -366,7 +366,7 @@ SELECT GET_FORMAT(DATE,'EUR'), GET_FORMAT(TIME,'USA'), GET_FORMAT(DATETIME,'JIS'
 -- CASE[fixed]: my-greatest-null — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('3',),)
 SELECT GREATEST(1, NULL, 3) AS r
 
--- CASE[open]: my-greatest-null2 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1',),)
+-- CASE[fixed]: my-greatest-null2 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1',),)
 SELECT GREATEST(NULL, 1) AS r
 
 -- CASE[open]: my-greatest-string — fails on oracle, postgresql. FUNC-DIFF: source=(('B',),) target=(('a',),)
@@ -492,7 +492,7 @@ SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')
 -- CASE[open]: my-lastday-extract — fails on oracle, postgresql, tsql. (195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT LAST_DAY('2020-02-15'), EXTRACT(DAY FROM LAST_DAY('2020-02-15'))
 
--- CASE[open]: my-least-greatest-null — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL', 'NULL'),) target=(('a', '1'),)
+-- CASE[fixed]: my-least-greatest-null — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL', 'NULL'),) target=(('a', '1'),)
 SELECT LEAST(NULL, 'a') AS r, GREATEST(NULL, 1) AS b
 
 -- CASE[fixed]: my-least-null2 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1',),)

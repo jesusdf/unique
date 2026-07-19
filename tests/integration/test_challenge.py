@@ -862,6 +862,8 @@ class TestGreatestLeastNullPropagation:
             ("my-greatest-null", "tsql"),
             ("my-least-null2", "postgresql"),
             ("my-least-null2", "tsql"),
+            ("my-greatest-null2", "postgresql"),
+            ("my-least-greatest-null", "tsql"),
         ],
     )
     def test_null_propagates(self, keyword: str, target: str) -> None:
