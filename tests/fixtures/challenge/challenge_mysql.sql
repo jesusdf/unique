@@ -257,7 +257,7 @@ SELECT 10.00/3, 10/3.0, CAST(10 AS DECIMAL(10,4))/3, 1.5*1.5, 0.1*0.1
 -- CASE[open]: my-distinct-case — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('a',), ('B',)) target=(('A',), ('B',))
 SELECT DISTINCT x FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'a' x UNION ALL SELECT 'B' x) t ORDER BY x
 
--- CASE[open]: my-div — fails on postgresql, tsql. FUNC-DIFF: source=(('2.5',),) target=(('2',),)
+-- CASE[fixed]: my-div — MySQL / is decimal (2.5); PG/T-SQL truncate two ints. Force decimal via (a * 1.0 / b). Value 2.5 (repr differs by decimal scale).
 SELECT 5 / 2 AS r
 
 -- CASE[open]: my-div-mult2 — fails on postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)

@@ -367,7 +367,7 @@ SELECT INITCAP('hello world') AS r
 -- CASE[fixed]: pg-insert-select-conflict — fails on oracle, tsql. (208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:
 CREATE TABLE t (id INT, n INT, s VARCHAR(50)); INSERT INTO t (id, n) SELECT g, g*2 FROM generate_series(1,5) g ON CONFLICT DO NOTHING
 
--- CASE[open]: pg-intdiv — fails on mysql, oracle. FUNC-DIFF: source=(('2',),) target=(('2.5',),)
+-- CASE[fixed]: pg-intdiv — PostgreSQL / truncates two ints (2); MySQL/Oracle divide as decimal. Match with DIV (MySQL) / TRUNC (Oracle).
 SELECT 5 / 2 AS r
 
 -- CASE[fixed]: pg-intersect-all — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active

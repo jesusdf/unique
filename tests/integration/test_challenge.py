@@ -1016,6 +1016,36 @@ class TestMysqlConcatNullPropagates:
         assert "CONCAT('a', 'b')" in out, out
 
 
+class TestIntegerDivisionSemantics:
+    """MySQL/Oracle ``/`` is decimal division (5/2 = 2.5); PG/T-SQL truncate two
+    integer operands (5/2 = 2). The emitter forces the source's semantics when
+    both operands are known integers."""
+
+    @pytest.mark.parametrize(
+        "fixture,source,keyword",
+        [
+            ("challenge_mysql.sql", "mysql", "my-div"),
+            ("challenge_oracle.sql", "oracle", "ora-div"),
+        ],
+    )
+    @pytest.mark.parametrize("target", ("postgresql", "tsql"))
+    def test_decimal_div_forced_on_pg_tsql(
+        self, fixture: str, source: str, keyword: str, target: str
+    ) -> None:
+        out = _tx(_case(fixture, keyword), source, target)
+        assert "* 1.0 /" in out, out
+
+    def test_pg_intdiv_truncates_on_mysql(self) -> None:
+        out = _tx(_case("challenge_postgresql.sql", "pg-intdiv"), "postgresql", "mysql")
+        assert "DIV" in out, out
+
+    def test_pg_intdiv_truncates_on_oracle(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-intdiv"), "postgresql", "oracle"
+        )
+        assert "TRUNC(" in out, out
+
+
 class TestNullOrderingEmulation:
     """Oracle/PostgreSQL sort NULLs HIGH by default (LAST ascending); MySQL and
     T-SQL sort them LOW and lack a NULLS FIRST/LAST keyword. The emitter restores

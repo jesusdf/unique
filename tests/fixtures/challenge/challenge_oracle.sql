@@ -128,7 +128,7 @@ SELECT 10.00/3, 10/3.0, CAST(10 AS NUMBER(10,4))/3, 1.5*1.5 FROM DUAL
 -- CASE[open]: ora-decode-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('match',),) target=(('no',),)
 SELECT DECODE(NULL, NULL, 'match', 'no') AS r FROM DUAL
 
--- CASE[open]: ora-div — fails on postgresql, tsql. FUNC-DIFF: source=(('2.5',),) target=(('2',),)
+-- CASE[fixed]: ora-div — Oracle / is decimal (2.5); PG/T-SQL truncate two ints. Force decimal via (a * 1.0 / b). Value 2.5 (repr differs by decimal scale).
 SELECT 5 / 2 AS r FROM DUAL
 
 -- CASE[open]: ora-div-mult2 — fails on postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
