@@ -3879,9 +3879,12 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if fn_name == "REPEAT" and dialect == "tsql" and len(node.args) == 2:
         _rp_s = _emit_expression(node.args[0], dialect)
         _rp_n = _emit_expression(node.args[1], dialect)
-        # MySQL/PG REPEAT with a negative count return '' ; T-SQL REPLICATE
-        # returns NULL — clamp the count to 0 so the empty string is preserved.
-        _rp_n = f"CASE WHEN {_rp_n} < 0 THEN 0 ELSE {_rp_n} END"
+        # MySQL REPEAT with a negative count returns '' ; T-SQL REPLICATE returns
+        # NULL — clamp the count to 0 so the empty string is preserved. Only for
+        # a MySQL source, and only when the count could actually be negative (a
+        # non-negative literal needs no guard).
+        if SOURCE_DIALECT.get() == "mysql" and not _is_nonneg_literal(node.args[1]):
+            _rp_n = f"CASE WHEN {_rp_n} < 0 THEN 0 ELSE {_rp_n} END"
         return f"REPLICATE({_rp_s}, {_rp_n})"
     # MySQL LEFT with a negative length returns '' ; PostgreSQL reads a negative
     # length as "all but the last |n|". Clamp to 0 to preserve the empty string.
@@ -3890,6 +3893,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         and SOURCE_DIALECT.get() == "mysql"
         and dialect == "postgresql"
         and len(node.args) == 2
+        and not _is_nonneg_literal(node.args[1])
     ):
         _lf_s = _emit_expression(node.args[0], dialect)
         _lf_n = _emit_expression(node.args[1], dialect)
@@ -4711,6 +4715,23 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         s = _emit_expression(node.args[0], dialect)
         n = _emit_expression(node.args[1], dialect)
         return f"RPAD({s}, LENGTH({s}) * {n}, {s})"  # exact, incl. n=0 -> '' (NULL).
+    # MySQL INSERT() returns the original string when the position is 0 or past
+    # the string's end; T-SQL STUFF returns NULL there. Guard the bounds so the
+    # MySQL value is preserved (the in-bounds case is identical).
+    if (
+        up == "STUFF"
+        and len(node.args) == 4
+        and dialect == "tsql"
+        and SOURCE_DIALECT.get() == "mysql"
+    ):
+        _st_s, _st_pos, _st_len, _st_new = (
+            _emit_expression(a, dialect) for a in node.args
+        )
+        _stuff = f"STUFF({_st_s}, {_st_pos}, {_st_len}, {_st_new})"
+        return (
+            f"CASE WHEN {_st_pos} < 1 OR {_st_pos} > LEN({_st_s}) "
+            f"THEN {_st_s} ELSE {_stuff} END"
+        )
     # STUFF(s, start, len, new): delete `len` chars at `start`, insert `new`.
     # PG has OVERLAY, MySQL has INSERT(); Oracle has neither, so SUBSTR-concat.
     # T-SQL keeps STUFF natively.
@@ -4886,6 +4907,17 @@ def _nullable_string_operand(node: object) -> bool:
         strs = STRING_VARIABLES.get()
         return strs is not None and node.name.lstrip("@").lower() in strs
     return False
+
+
+def _is_nonneg_literal(node: ASTNode) -> bool:
+    """True if node is a non-negative numeric literal (so a negative-value guard
+    is provably unnecessary). A ``-1`` parses as a UnaryOp, not a Literal."""
+    return (
+        isinstance(node, Literal)
+        and isinstance(node.value, (int, float))
+        and not isinstance(node.value, bool)
+        and node.value >= 0
+    )
 
 
 def _date_literal_sql(node: ASTNode, dialect: str) -> str | None:

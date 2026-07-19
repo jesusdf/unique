@@ -884,3 +884,14 @@ class TestNegativeLengthStringFns:
     def test_repeat_negative_clamps(self) -> None:
         out = _tx(_case("challenge_mysql.sql", "my-repeat-neg"), "mysql", "tsql")
         assert re.search(r"(?i)REPLICATE\(.*CASE\s+WHEN\b.*<\s*0\s+THEN\s+0", out), out
+
+
+class TestMysqlInsertBounds:
+    """MySQL INSERT() returns the original string when the position is 0 or past
+    the end; T-SQL STUFF returns NULL there. The MySQL->T-SQL emit guards the
+    bounds. Live-verified: out-of-bounds and position-0 keep the original."""
+
+    @pytest.mark.parametrize("keyword", ("my-insert-oob", "my-insert-zeropos"))
+    def test_bounds_guarded(self, keyword: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", keyword), "mysql", "tsql")
+        assert re.search(r"(?i)CASE\s+WHEN\b.*<\s*1\s+OR\b.*>\s+LEN\(", out), out

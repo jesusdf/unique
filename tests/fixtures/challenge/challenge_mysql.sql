@@ -420,10 +420,10 @@ SELECT INET6_ATON('::1'), INET6_NTOA(INET6_ATON('::1'))
 -- CASE[open]: my-infoschema — fails on oracle. PROCEDURE P compiled INVALID (line 8): PL/SQL: ORA-00942: table or view does not exist
 CREATE PROCEDURE p() BEGIN DECLARE c INT; SELECT COUNT(*) INTO c FROM information_schema.tables; SELECT c; END
 
--- CASE[open]: my-insert-oob — fails on tsql. FUNC-DIFF: source=(('abc',),) target=(('NULL',),)
+-- CASE[fixed]: my-insert-oob — fails on tsql. FUNC-DIFF: source=(('abc',),) target=(('NULL',),)
 SELECT INSERT('abc', 10, 1, 'X') AS r
 
--- CASE[open]: my-insert-zeropos — fails on tsql. FUNC-DIFF: source=(('abcdef',),) target=(('NULL',),)
+-- CASE[fixed]: my-insert-zeropos — fails on tsql. FUNC-DIFF: source=(('abcdef',),) target=(('NULL',),)
 SELECT INSERT('abcdef', 0, 2, 'XY') AS r
 
 -- CASE[open]: my-insert2 — fails on oracle, postgresql. ORA-00904: "STUFF": invalid identifier
