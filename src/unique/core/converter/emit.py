@@ -5224,6 +5224,17 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             _gather_concat(node)
             return f"CONCAT({', '.join(parts)})"
 
+    # MySQL's ``x MOD 0`` returns NULL; every other engine either errors (PG/
+    # T-SQL divide-by-zero) or returns the dividend (Oracle). Preserve MySQL's
+    # NULL-on-zero-divisor so the value matches on the other engines.
+    if (
+        node.operator == BinaryOperator.MOD
+        and SOURCE_DIALECT.get() == "mysql"
+        and dialect != "mysql"
+    ):
+        mod = f"MOD({left}, {right})" if dialect == "oracle" else f"{left} % {right}"
+        return f"CASE WHEN {right} = 0 THEN NULL ELSE {mod} END"
+
     if node.operator == BinaryOperator.MOD and dialect == "oracle":
         return f"MOD({left}, {right})"
 

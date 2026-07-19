@@ -570,7 +570,7 @@ SELECT RAND(),FLOOR(RAND()*100),CRC32('x'),CONV(255,10,2),BIN(10),OCT(64),HEX(25
 -- CASE[open]: my-mod-edge — fails on oracle. FUNC-DIFF: source=(('0', '1', '1'),) target=(('0', '0', '0'),)
 SELECT MOD(0,5), MOD(5,0) IS NULL, 5%0 IS NULL
 
--- CASE[open]: my-mod-zero — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[fixed]: my-mod-zero — fails on oracle. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 5 MOD 0 IS NULL AS r
 
 -- CASE[open]: my-month-overflow — fails on tsql. FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)
