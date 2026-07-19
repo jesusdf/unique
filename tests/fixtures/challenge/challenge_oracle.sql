@@ -535,7 +535,7 @@ CREATE PROCEDURE p AS v NUMBER; BEGIN v := 1/0; EXCEPTION WHEN ZERO_DIVIDE THEN 
 CREATE TABLE t (id NUMBER, n NUMBER); CREATE TABLE s (id NUMBER, n NUMBER);
 SELECT JSON_OBJECT(*) FROM t
 
--- CASE[open]: oracle-drop2-100|START — fails on postgresql, tsql. SILENT CLAUSE DROP: '100|START' absent from valid tsql output, no warning
+-- CASE[fixed]: oracle-drop2-100|START — fails on postgresql, tsql. SILENT CLAUSE DROP: '100|START' absent from valid tsql output, no warning
 CREATE TABLE t (id NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100))
 
 -- CASE[open]: oracle-drop4-COLLATE — fails on mysql, postgresql, tsql. SILENT CLAUSE DROP: 'COLLATE' absent from valid tsql output, no warning

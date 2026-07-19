@@ -638,3 +638,36 @@ class TestCreateIndexConcurrently:
         assert any("CONCURRENTLY" in w.message for w in result.warnings), [
             w.message for w in result.warnings
         ]
+
+
+class TestIdentitySeedPreserved:
+    """An IDENTITY seed/step (T-SQL ``IDENTITY(100, 5)``, PG/Oracle ``START WITH
+    100 INCREMENT BY 5``) must survive so the sequence does not silently restart
+    at 1 on the target (RC-3). Live-verified: the first inserted row gets id 100."""
+
+    def test_tsql_seed_into_pg(self) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "drop2-100"), "tsql", "postgresql")
+        assert "START WITH 100 INCREMENT BY 5" in out, out
+
+    def test_oracle_seed_into_tsql(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "drop2-100"), "oracle", "tsql")
+        assert "IDENTITY(100," in out, out
+
+    @pytest.mark.parametrize("target", ("oracle", "tsql"))
+    def test_pg_seed_and_step_survive(self, target: str) -> None:
+        out = _tx(_case("challenge_postgresql.sql", "drop2-100"), "postgresql", target)
+        assert "100" in _exec_lines(out) and (
+            "START WITH 100 INCREMENT BY 5" in out or "IDENTITY(100,5)" in out
+        ), out
+
+
+class TestCheckInConstraintPreserved:
+    """A ``CHECK (a IN (…))`` constraint must survive to every engine and keep
+    enforcing (live-verified: a value outside the set is rejected)."""
+
+    @pytest.mark.parametrize("target", ("tsql", "mysql", "oracle"))
+    def test_check_in_survives(self, target: str) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "drop5-CHECK"), "postgresql", target
+        )
+        assert "CHECK (a IN (1, 2, 3))" in out, out
