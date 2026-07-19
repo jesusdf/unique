@@ -874,7 +874,7 @@ CREATE TABLE t (a INT PRIMARY KEY) AUTO_INCREMENT = 50
 -- CASE[fixed]: mysql-drop4-COLLATE|utf8 — fails on oracle, postgresql. SILENT CLAUSE DROP: 'COLLATE|utf8mb4' absent from valid postgresql output, no warning
 CREATE TABLE t (a INT) COLLATE=utf8mb4_unicode_ci
 
--- CASE[open]: mysql-drop4-UNSIGNED|CHE — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'UNSIGNED|CHECK' absent from valid postgresql output, no warning
+-- CASE[fixed]: mysql-drop4-UNSIGNED|CHE — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'UNSIGNED|CHECK' absent from valid postgresql output, no warning
 CREATE TABLE t (a INT UNSIGNED)
 
 -- CASE[open]: mysql-drop4-ZEROFILL|LPA — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ZEROFILL|LPAD' absent from valid postgresql output, no warning

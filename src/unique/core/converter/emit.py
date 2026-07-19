@@ -177,6 +177,10 @@ _DATE_FMT_TOKENS: list[tuple[str, str, str, str]] = [
 ]
 _FMT_MODEL_IDX = {"oracle": 0, "mysql": 1, "tsql": 2, "python": 3}
 
+# MySQL unsigned integer types. Their range is preserved by widening (UINT ->
+# BIGINT, etc.); the non-negativity is preserved with a CHECK on other engines.
+_UNSIGNED_INT_TYPES = {"UTINYINT", "USMALLINT", "UMEDIUMINT", "UINT", "UBIGINT"}
+
 
 def _convert_date_format(fmt: str, src_model: str, dst_model: str) -> str:
     """Translate a date format string between the Oracle, strftime and .NET
@@ -2885,6 +2889,15 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             # Column comment (RC-3): inline on MySQL, a trailing COMMENT ON
             # statement on PG/Oracle, dropped-with-a-note on T-SQL.
             col_name = _ident(col.name, col.quoted, dialect)
+            # A MySQL UNSIGNED integer widens to a type that holds its range
+            # (UINT -> BIGINT, etc.), but the other engines can't enforce
+            # non-negativity in the type — preserve it with CHECK (col >= 0).
+            unsigned_check = (
+                f" CHECK ({col_name} >= 0)"
+                if col.data_type.name.upper() in _UNSIGNED_INT_TYPES
+                and dialect != "mysql"
+                else ""
+            )
             comment_inline = (
                 f" COMMENT {col.comment}" if dialect == "mysql" and col.comment else ""
             )
@@ -2932,13 +2945,14 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 nullable = "" if (col.nullable or col.identity) else " NOT NULL"
                 col_defs.append(
                     f"  {col_name} {dtype}{collate_inline}{identity}{default}"
-                    f"{nullable}{pk}{unique}{check}"
+                    f"{nullable}{pk}{unique}{check}{unsigned_check}"
                 )
             else:
                 nullable = "" if col.nullable else " NOT NULL"
                 col_defs.append(
                     f"  {col_name} {dtype}{collate_inline}{identity}{nullable}"
-                    f"{default}{pk}{unique}{check}{on_update_inline}{comment_inline}"
+                    f"{default}{pk}{unique}{check}{unsigned_check}"
+                    f"{on_update_inline}{comment_inline}"
                 )
         # Table-level constraints (PK/FK/UNIQUE/CHECK), re-transpiled.
         # A fragment may come back as a documented comment (e.g. a generated

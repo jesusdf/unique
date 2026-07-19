@@ -789,3 +789,19 @@ class TestCharacterSetCarrier:
         assert "CHARSET" not in _exec_lines(result.sql).upper(), result.sql
         assert "UNIQUE:" in result.sql and "charset" in result.sql, result.sql
         assert result.warnings, result.sql
+
+
+class TestUnsignedCheck:
+    """A MySQL UNSIGNED integer widens to a type that holds its range (INT
+    UNSIGNED -> BIGINT), and the non-negativity — which the other engines can't
+    put in the type — is preserved with CHECK (col >= 0). Live-verified: the max
+    unsigned value stores and a negative is rejected."""
+
+    @pytest.mark.parametrize("target", ("tsql", "oracle", "postgresql"))
+    def test_unsigned_adds_nonnegative_check(self, target: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", "drop4-UNSIGNED"), "mysql", target)
+        assert re.search(r"(?i)CHECK\s*\(\s*a\s*>=\s*0\s*\)", out), out
+
+    def test_mysql_keeps_unsigned(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "drop4-UNSIGNED"), "mysql", "mysql")
+        assert "UNSIGNED" in out.upper(), out
