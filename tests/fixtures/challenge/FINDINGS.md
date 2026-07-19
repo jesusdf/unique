@@ -1013,11 +1013,6 @@ ALTER`
 - live error: `FUNC-DIFF: source=(('ab',),) target=(('NULL',),)`
 - src: `SELECT 'a' || NULL || 'b' AS r FROM DUAL`
 
-## ora-concat-num  (oracle)
-- targets: tsql(invalid)
-- live error: `(245, b"Conversion failed when converting the varchar value 'a' to data type int.DB-Lib er`
-- src: `SELECT 'a' || 5 AS r FROM DUAL`
-
 ## ora-cursor  (oracle)
 - targets: mysql(invalid)
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
@@ -1285,11 +1280,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO`
 - src: `SELECT SYSDATE, SYSTIMESTAMP, CURRENT_TIMESTAMP, CURRENT_DATE, LOCALTIMESTAMP FROM DUAL`
-
-## ora-num-concat  (oracle)
-- targets: tsql(func)
-- live error: `FUNC-DIFF: source=(('23',),) target=(('5',),)`
-- src: `SELECT 2 || 3 AS r FROM DUAL`
 
 ## ora-num-to-str  (oracle)
 - targets: mysql(func), postgresql(func)

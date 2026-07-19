@@ -284,6 +284,20 @@ class TestDdlConstraintClausesSurvive:
         assert re.search(r"(?i)REFERENCES\b", _exec_lines(out)), out
 
 
+class TestConcatNumberIntoTsql:
+    """Oracle/PG ``||`` (and MySQL CONCAT) stringify numeric operands; T-SQL
+    ``+`` would do arithmetic (2||3 → 5) or error (string+number). A concat with
+    a numeric operand emits T-SQL CONCAT()."""
+
+    def test_number_concat_uses_concat(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "ora-num-concat"), "oracle", "tsql")
+        assert "CONCAT(2, 3)" in out and "2 + 3" not in out, out
+
+    def test_string_number_concat_uses_concat(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "ora-concat-num"), "oracle", "tsql")
+        assert "CONCAT('a', 5)" in out, out
+
+
 class TestLikeBackslashEscape:
     """PG/MySQL LIKE use backslash as the default escape char; Oracle/T-SQL have
     none. A backslash pattern gets an explicit ``ESCAPE '\\'`` so the literal

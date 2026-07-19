@@ -4904,6 +4904,27 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
                     )
                     return f"CASE WHEN {guard} THEN NULL ELSE {joined} END"
         if dialect == "tsql":
+            # T-SQL '+' does ARITHMETIC on numeric operands (2 + 3 = 5, not the
+            # '23' that Oracle/PG || and MySQL CONCAT produce) and errors on
+            # string + number. When any operand is numeric, use CONCAT(), which
+            # converts every argument to a string — matching || semantics.
+            tparts: list[ASTNode] = []
+
+            def _gather_tsql(n: ASTNode) -> None:
+                if isinstance(n, BinaryOp) and n.operator == BinaryOperator.CONCAT:
+                    _gather_tsql(n.left)
+                    _gather_tsql(n.right)
+                else:
+                    tparts.append(n)
+
+            _gather_tsql(node)
+            if any(
+                (isinstance(p, Literal) and p.dtype in ("integer", "number", "float"))
+                or _is_integer_operand(p)
+                for p in tparts
+            ):
+                joined = ", ".join(_emit_expression(p, dialect) for p in tparts)
+                return f"CONCAT({joined})"
             op = "+"
         elif dialect == "mysql":
             # MySQL has no concat operator at all — and a chain must emit
