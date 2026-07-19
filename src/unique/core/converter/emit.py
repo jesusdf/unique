@@ -5125,6 +5125,9 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
         # standard neutral idiom preserves "no meaningful order".
         spec_parts.append("ORDER BY (SELECT NULL)")
 
+    if node.window.frame:
+        spec_parts.append(node.window.frame)
+
     spec = " ".join(spec_parts)
     return f"{func} OVER ({spec})"
 

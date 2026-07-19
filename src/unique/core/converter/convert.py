@@ -2182,7 +2182,13 @@ def _convert_window(expr: exp.Window) -> WindowFunction:
             for o in (order.expressions if hasattr(order, "expressions") else [order])
         )
 
-    window_spec = WindowSpec(partition_by=partition_by, order_by=order_by)
+    # The frame (ROWS/RANGE BETWEEN …) is standard SQL on every target; capture
+    # it verbatim rather than dropping it (which silently turns a running total
+    # into a grand total).
+    spec = expr.args.get("spec")
+    frame = spec.sql() if isinstance(spec, exp.WindowSpec) else None
+
+    window_spec = WindowSpec(partition_by=partition_by, order_by=order_by, frame=frame)
     return WindowFunction(function=function, window=window_spec)
 
 

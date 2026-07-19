@@ -474,3 +474,15 @@ class TestLogBase10:
         out = _tx(_case("challenge_mysql.sql", "my-log2-log10"), "mysql", "tsql")
         assert "LOG10(1000)" in out, out
         assert "LOG(8, 2)" in out, out  # LOG2 keeps the general arg-swapped form
+
+
+class TestWindowFramePreserved:
+    """A window frame (ROWS/RANGE BETWEEN …) is standard SQL on every engine, but
+    the IR dropped it — silently turning a running total into a grand total. It is
+    now captured and emitted verbatim (live-verified: PG's [1, 3] running sum is
+    reproduced on T-SQL, Oracle and MySQL)."""
+
+    @pytest.mark.parametrize("target", ("tsql", "oracle", "mysql"))
+    def test_rows_frame_survives(self, target: str) -> None:
+        out = _tx(_case("challenge_postgresql.sql", "qdrop-ROWS"), "postgresql", target)
+        assert "ROWS BETWEEN 1 PRECEDING AND CURRENT ROW" in out, out

@@ -279,8 +279,11 @@ class WindowSpec(ASTNode):
 
     partition_by: tuple[ASTNode, ...] = ()
     order_by: tuple[OrderByItem, ...] = ()
-    frame_start: str | None = None
-    frame_end: str | None = None
+    # The full frame clause (``ROWS BETWEEN 1 PRECEDING AND CURRENT ROW``,
+    # ``RANGE UNBOUNDED PRECEDING``); standard SQL, spelled identically on every
+    # engine we target, so it is captured once and emitted verbatim. Dropping it
+    # silently changes results (a running total becomes a grand total).
+    frame: str | None = None
 
 
 @dataclass(frozen=True)
