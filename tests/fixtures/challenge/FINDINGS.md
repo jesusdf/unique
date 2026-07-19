@@ -1437,16 +1437,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(1305, 'FUNCTION unique_val_9fa2bcf8c36d.STR_TO_TIME does not exist')`
 - src: `SELECT TO_DATE('15-JUN-20','DD-MON-YY'),TO_TIMESTAMP('2020-06-15 10:30:45.123','YYYY-MM-DD HH24:MI:SS.FF3') FROM DUAL`
 
-## ora-trailing-eq  (oracle)
-- targets: tsql(func)
-- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
-- src: `SELECT CASE WHEN 'a ' = 'a' THEN 1 ELSE 0 END AS r FROM DUAL`
-
-## ora-trailing-space-cmp  (oracle)
-- targets: tsql(func)
-- live error: `FUNC-DIFF: source=(('0', '0'),) target=(('1', '1'),)`
-- src: `SELECT CASE WHEN 'a'='a ' THEN 1 ELSE 0 END, CASE WHEN 'a'=RPAD('a',2) THEN 1 ELSE 0 END FROM DUAL`
-
 ## ora-translate3  (oracle)
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(174, b'The replace function requires 3 argument(s).DB-Lib error message 20018, severity 1`
@@ -1513,11 +1503,6 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(silent-drop), postgresql(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'COLLATE' absent from valid tsql output, no warning`
 - src: `CREATE TABLE t (a VARCHAR2(10) COLLATE BINARY_CI)`
-
-## pg-accent-eq  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
-- src: `SELECT 'Ä' = 'A' AS r`
 
 ## pg-add-identity  (postgresql)
 - targets: mysql(invalid)
@@ -1834,11 +1819,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `(155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1`
 - src: `SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r`
 
-## pg-fcollate  (postgresql)
-- targets: mysql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('c', 'B', '0'),) target=(('c', 'a', '1'),)`
-- src: `SELECT greatest('a','B','c'),least('a','B'),'a'<'B'`
-
 ## pg-float-precision  (postgresql)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('0.3', '0.3', '0.333333', '0.333333', '0.666667'),) target=(('0.3', '0`
@@ -1978,11 +1958,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('hel',),) target=(('he',),)`
 - src: `SELECT LEFT('hello', 2.9::int) AS r`
-
-## pg-like-cs  (postgresql)
-- targets: mysql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
-- src: `SELECT 'ABC' LIKE 'abc' AS r`
 
 ## pg-like-escape  (postgresql)
 - targets: oracle(func)
@@ -2177,11 +2152,6 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - live error: `(208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:`
 - src: `SELECT g, g*g FROM generate_series(1,3) g`
 
-## pg-str-lt  (postgresql)
-- targets: mysql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
-- src: `SELECT 'apple' < 'Banana' AS r`
-
 ## pg-stragg-order  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message`
@@ -2256,16 +2226,6 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST`
 - src: `SELECT to_timestamp('June 15 2020', 'Month DD YYYY') AS r`
-
-## pg-trailing-eq  (postgresql)
-- targets: oracle(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
-- src: `SELECT 'a ' = 'a' AS r`
-
-## pg-trailing-space-cmp  (postgresql)
-- targets: mysql(func), oracle(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('0', '1', '0'),) target=(('1', '1', '1'),)`
-- src: `SELECT 'a'='a ', 'a'::char(2)='a'::char(2), 'abc'='ABC'`
 
 ## pg-trim-len  (postgresql)
 - targets: oracle(func), tsql(func)
@@ -2760,16 +2720,6 @@ SELECT * FROM t TABLESAMPLE (10 PERCENT)`
 - targets: postgresql(semantic)
 - live error: `SILENT LOSS: TOP n WITH TIES -> plain LIMIT n on PG/MySQL (ties dropped); on Oracle the ro`
 - src: `SELECT TOP 1 WITH TIES x FROM (VALUES (1),(1),(2)) v(x) ORDER BY x`
-
-## ts-trailing-eq  (tsql)
-- targets: mysql(func), oracle(func), postgresql(func)
-- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
-- src: `SELECT IIF('a ' = 'a', 1, 0) AS r`
-
-## ts-trailing-space-cmp  (tsql)
-- targets: mysql(func), oracle(func), postgresql(func)
-- live error: `FUNC-DIFF: source=(('eq', 'eq'),) target=(('ne', 'ne'),)`
-- src: `SELECT CASE WHEN 'a'='a ' THEN 'eq' ELSE 'ne' END, CASE WHEN 'a '='a' THEN 'eq' ELSE 'ne' END`
 
 ## ts-trg-instead-delete  (tsql)
 - targets: postgresql(invalid)

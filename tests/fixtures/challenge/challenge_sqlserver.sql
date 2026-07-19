@@ -396,10 +396,10 @@ SELECT * FROM t TABLESAMPLE (10 PERCENT)
 -- CASE[open]: ts-top-with-ties — fails on postgresql. SILENT LOSS: TOP n WITH TIES -> plain LIMIT n on PG/MySQL (ties dropped); on Oracle the ro
 SELECT TOP 1 WITH TIES x FROM (VALUES (1),(1),(2)) v(x) ORDER BY x
 
--- CASE[open]: ts-trailing-eq — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[limit]: ts-trailing-eq — fails on mysql, oracle, postgresql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT IIF('a ' = 'a', 1, 0) AS r
 
--- CASE[open]: ts-trailing-space-cmp — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('eq', 'eq'),) target=(('ne', 'ne'),)
+-- CASE[limit]: ts-trailing-space-cmp — fails on mysql, oracle, postgresql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('eq', 'eq'),) target=(('ne', 'ne'),)
 SELECT CASE WHEN 'a'='a ' THEN 'eq' ELSE 'ne' END, CASE WHEN 'a '='a' THEN 'eq' ELSE 'ne' END
 
 -- CASE[fixed]: ts-translate — fails on mysql. (1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')

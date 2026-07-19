@@ -448,15 +448,15 @@ _DIVERGENCE_RULES: list[tuple[str, re.Pattern[str], str]] = [
         "differs for multi-byte/encoded text",
     ),
     (
-        "mysql",
-        # Two string literals compared: ``'Ä' = 'A'``, ``'apple' < 'Banana'``,
-        # ``'ABC' LIKE 'abc'``, ``'a ' = 'a'``. Runs on scrubbed text so the
-        # blanked-content quotes still show ``'…' <op> '``. A literal-vs-column
-        # (``'x' = col``) does NOT match — kept narrow to avoid false flags.
-        re.compile(r"'[^']*'\s*(?:<=|>=|<>|!=|=|<|>|(?:NOT\s+)?R?LIKE)\s*'", re.I),
-        "MySQL's default collation compares strings case- and "
-        "accent-insensitively and ignores trailing spaces; {target} compares "
-        "case/accent/space-sensitively — the boolean result may differ",
+        # ``*`` = any source. Two string literals compared: ``'Ä' = 'A'``,
+        # ``'apple' < 'Banana'``, ``'ABC' LIKE 'abc'``, ``'a ' = 'a'``. Runs on
+        # scrubbed text so the blanked-content quotes still show ``'…' <op> '``.
+        # A literal-vs-column (``'x' = col``) does NOT match — kept narrow.
+        "*",
+        re.compile(r"'[^']*'\s*(?:<=|>=|<>|!=|=|<|>|(?:NOT\s+)?I?R?LIKE)\s*'", re.I),
+        "string comparison result depends on each engine's default collation "
+        "(case/accent sensitivity) and trailing-space handling, which differ "
+        "between {source} and {target} — the boolean result may differ",
     ),
 ]
 
@@ -475,8 +475,11 @@ def annotate_divergence(source_sql: str, source: str, target: str) -> str | None
         return None
     scrubbed = scrub(source_sql)
     for eng, pat, reason in _DIVERGENCE_RULES:
-        if source == eng and pat.search(scrubbed):
-            return reason.format(target=target) + " (docs/03-unsupported.md)"
+        if (eng == "*" or source == eng) and pat.search(scrubbed):
+            return (
+                reason.format(source=source, target=target)
+                + " (docs/03-unsupported.md)"
+            )
     if source == "mysql" and _CASEFOLD_NONASCII_RE.search(source_sql):
         return (
             "MySQL case-folding of non-ASCII text (e.g. ß→ß, accents) is "

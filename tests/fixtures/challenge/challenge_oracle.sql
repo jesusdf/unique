@@ -467,10 +467,10 @@ SELECT TO_DATE('15-JUN-20','DD-MON-YY'),TO_TIMESTAMP('2020-06-15 10:30:45.123','
 -- CASE[fixed]: ora-tonumber2 — fails on mysql, tsql. (195, b"'TO_NUMBER' is not a recognized built-in function name.DB-Lib error message 20018,
 SELECT CAST('123.45' AS NUMBER), TO_NUMBER('1,234.5','9,999.9'), TO_NUMBER('$5','$9') FROM DUAL
 
--- CASE[open]: ora-trailing-eq — fails on tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+-- CASE[limit]: ora-trailing-eq — fails on tsql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT CASE WHEN 'a ' = 'a' THEN 1 ELSE 0 END AS r FROM DUAL
 
--- CASE[open]: ora-trailing-space-cmp — fails on tsql. FUNC-DIFF: source=(('0', '0'),) target=(('1', '1'),)
+-- CASE[limit]: ora-trailing-space-cmp — fails on tsql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0', '0'),) target=(('1', '1'),)
 SELECT CASE WHEN 'a'='a ' THEN 1 ELSE 0 END, CASE WHEN 'a'=RPAD('a',2) THEN 1 ELSE 0 END FROM DUAL
 
 -- CASE[fixed]: ora-translate — fails on mysql. (1305, 'FUNCTION unique_val_6c47c43e12f3.TRANSLATE does not exist')

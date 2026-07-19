@@ -5,7 +5,7 @@
 
 -- ===== RED-found open findings (validated live; see FINDINGS.md) =====
 
--- CASE[open]: pg-accent-eq — fails on mysql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+-- CASE[limit]: pg-accent-eq — fails on mysql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'Ä' = 'A' AS r
 
 -- CASE[open]: pg-add-identity — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
@@ -256,7 +256,7 @@ SELECT EXTRACT(DOW FROM DATE '2020-01-01') AS d
 -- CASE[open]: pg-extract-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1
 SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r
 
--- CASE[open]: pg-fcollate — fails on mysql, tsql. FUNC-DIFF: source=(('c', 'B', '0'),) target=(('c', 'a', '1'),)
+-- CASE[limit]: pg-fcollate — fails on mysql, tsql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('c', 'B', '0'),) target=(('c', 'a', '1'),)
 SELECT greatest('a','B','c'),least('a','B'),'a'<'B'
 
 -- CASE[fixed]: pg-fetch-ties2 — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
@@ -427,7 +427,7 @@ SELECT LEFT('abc', -1) AS r
 -- CASE[open]: pg-left-round — fails on tsql. FUNC-DIFF: source=(('hel',),) target=(('he',),)
 SELECT LEFT('hello', 2.9::int) AS r
 
--- CASE[open]: pg-like-cs — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+-- CASE[limit]: pg-like-cs — fails on mysql, tsql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'ABC' LIKE 'abc' AS r
 
 -- CASE[open]: pg-like-escape — fails on oracle. FUNC-DIFF: source=(('1', '0', '1'),) target=(('0', '0', '1'),)
@@ -621,7 +621,7 @@ SELECT SPLIT_PART('a,b,c', ',', 2) AS r
 -- CASE[open]: pg-srf-in-select — fails on oracle, tsql. (208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:
 SELECT g, g*g FROM generate_series(1,3) g
 
--- CASE[open]: pg-str-lt — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+-- CASE[limit]: pg-str-lt — fails on mysql, tsql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'apple' < 'Banana' AS r
 
 -- CASE[open]: pg-stragg-order — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
@@ -681,10 +681,10 @@ SELECT to_hex(255), to_char(255, 'XX')
 -- CASE[open]: pg-totimestamp-long — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
 SELECT to_timestamp('June 15 2020', 'Month DD YYYY') AS r
 
--- CASE[open]: pg-trailing-eq — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+-- CASE[limit]: pg-trailing-eq — fails on oracle, tsql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'a ' = 'a' AS r
 
--- CASE[open]: pg-trailing-space-cmp — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('0', '1', '0'),) target=(('1', '1', '1'),)
+-- CASE[limit]: pg-trailing-space-cmp — fails on mysql, oracle, tsql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0', '1', '0'),) target=(('1', '1', '1'),)
 SELECT 'a'='a ', 'a'::char(2)='a'::char(2), 'abc'='ABC'
 
 -- CASE[fixed]: pg-translate — fails on mysql. (1305, 'FUNCTION unique_val_5e892bc4b99a.TRANSLATE does not exist')
