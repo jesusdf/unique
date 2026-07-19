@@ -94,7 +94,7 @@ workflow.
       documented limit).** Landed so far (recorded in [`docs/DONE.md`](DONE.md)
       §41): RC-1b gate (DML+procedural), 21 built-in mappings, RC-3
       FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG.
-      **2026-07-19 continuation — 462 `[open]` / 29 `[limit]` / ~371 `[fixed]`
+      **2026-07-19 continuation — 456 `[open]` / 29 `[limit]` / ~377 `[fixed]`
       (down from ~600 open).** Structural IR-drop fixes (window frame, GROUP BY
       ROLLUP/CUBE/GROUPING SETS, computed columns), base-10 LOG, silent-clause
       carriers (FOR UPDATE/NOT VALID/CONCURRENTLY/EXCLUDE/ON UPDATE/
@@ -107,10 +107,14 @@ workflow.
       `blue-rc1b-builtin-gate` memory): mysql-unsigned-bit family, Oracle
       empty-string=NULL (not faithfully reproducible → surface to user),
       collation func-diffs (`[limit]`), procedural WHILE/CURSOR→PG, GROUPING_ID
-      emulation, JSON/XML, SUBSTRING-float, and the `--db-url` live collation
-      resolver (approved, not yet built). Method: check src-vs-tgt live, write a
-      `SOURCE_DIALECT`-gated compensation, verify on the real engines, run the
-      full **8-shard** suite (grep ALL for failures), flip + add an assertion.
+      emulation, JSON/XML, SUBSTRING-float, concat-null (bidirectional), CONCAT
+      number/bool/NULL stringification, unsigned-bit (2⁶⁴). Method: check
+      src-vs-tgt live, write a `SOURCE_DIALECT`-gated compensation, verify on the
+      real engines, run the full **8-shard** suite (grep ALL for failures), flip
+      + add an assertion. **`--db-url` live collation resolver: SKIPPED per user
+      (2026-07-19) — no corpus impact (collations are explicit literals, not
+      column refs; cross-engine collation map is approximate); the warn+comment
+      fallback stands.**
 
 ---
 
