@@ -96,7 +96,7 @@ SELECT COMPRESS('data') AS r
 -- CASE[fixed]: ts-compress2 — fails on mysql, oracle, postgresql. ORA-00936: missing expression
 SELECT COMPRESS('x'), DECOMPRESS(COMPRESS('x'))
 
--- CASE[open]: ts-concat-null — fails on mysql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
+-- CASE[fixed]: ts-concat-null — fails on mysql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
 SELECT CONCAT('a', NULL, 'b') AS r
 
 -- CASE[fixed]: ts-concat-ws — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier

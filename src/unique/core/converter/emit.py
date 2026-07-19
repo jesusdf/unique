@@ -3902,6 +3902,21 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     ):
         return "NULL"
 
+    # The reverse: T-SQL/PG/Oracle CONCAT() *ignore* a NULL argument, so a
+    # literal NULL contributes nothing. Drop it (otherwise MySQL's NULL-
+    # propagating CONCAT would turn the whole result NULL). The ``||`` operator
+    # is a separate BinaryOp and is untouched.
+    if (
+        fn_name == "CONCAT"
+        and SOURCE_DIALECT.get() in ("tsql", "postgresql", "oracle")
+        and any(isinstance(a, Literal) and a.value is None for a in node.args)
+    ):
+        _kept = tuple(
+            a for a in node.args if not (isinstance(a, Literal) and a.value is None)
+        )
+        if _kept:
+            return _emit_function(dataclasses.replace(node, args=_kept), dialect)
+
     # MySQL booleans are integers, so CONCAT(TRUE, FALSE) is '10'; PostgreSQL
     # renders the boolean literals 't'/'f'. Emit them as 1/0 in this string
     # context (only PG needs it — T-SQL/Oracle already render boolean 1/0).

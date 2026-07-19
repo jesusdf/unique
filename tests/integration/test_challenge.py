@@ -1002,3 +1002,15 @@ class TestMysqlConcatNullPropagates:
         # Roundtrip-safety: a CONCAT with no NULL literal keeps CONCAT.
         out = _tx("SELECT CONCAT('a', 'b') AS r", "mysql", "postgresql")
         assert "CONCAT('a', 'b')" in out, out
+
+    def test_tsql_source_drops_null_arg(self) -> None:
+        # The reverse: T-SQL CONCAT ignores NULL, so the literal NULL is dropped
+        # (else MySQL's propagating CONCAT would turn the result NULL).
+        out = _tx(_case("challenge_sqlserver.sql", "ts-concat-null"), "tsql", "mysql")
+        assert "CONCAT('a', 'b')" in out, out
+
+    def test_pg_source_drops_null_arg(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-concat-null"), "postgresql", "mysql"
+        )
+        assert "CONCAT('a', 'b')" in out, out
