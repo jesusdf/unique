@@ -517,7 +517,7 @@ CREATE TABLE t (a SMALLINT, b INT, c BIGINT, d NUMERIC(10,2), e REAL, f DOUBLE P
 -- CASE[open]: pg-order-case-sens — fails on mysql, tsql. FUNC-DIFF: source=(('Apple',), ('Cherry',), ('banana',)) target=(('Apple',), ('banana',), 
 SELECT x FROM (SELECT 'Apple' x UNION SELECT 'banana' UNION SELECT 'Cherry') t ORDER BY x
 
--- CASE[open]: pg-order-nulls-default — fails on mysql, tsql. FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))
+-- CASE[fixed]: pg-order-nulls-default — PostgreSQL sorts NULLs high by default; MySQL/T-SQL sort them low. Emulate with a null-priority key.
 SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x
 
 -- CASE[open]: pg-overlay — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV
@@ -756,13 +756,13 @@ SELECT BIT_AND(x),BIT_OR(x),BIT_XOR(x) FROM (VALUES (3),(5),(6)) v(x)
 -- CASE[open]: po-distinct-case — fails on mysql, tsql. FUNC-DIFF: source=(('A',), ('B',), ('a',)) target=(('A',), ('B',))
 SELECT DISTINCT x FROM (VALUES ('a'),('A'),('a'),('B')) v(x) ORDER BY x
 
--- CASE[open]: po-distinct-null — fails on mysql, tsql. FUNC-DIFF: source=(('1',), ('2',), ('NULL',)) target=(('NULL',), ('1',), ('2',))
+-- CASE[open]: po-distinct-null — fails on mysql, tsql. FUNC-DIFF: source=((1,),(2,),(NULL,)) target=((NULL,),(1,),(2,)). MySQL-fixable, but T-SQL forbids the null-priority key under DISTINCT.
 SELECT DISTINCT x FROM (VALUES (1),(NULL),(1),(NULL),(2)) v(x) ORDER BY x
 
 -- CASE[open]: po-group-case — fails on mysql, tsql. FUNC-DIFF: source=(('A', '1'), ('a', '1'), ('b', '1')) target=(('A', '2'), ('b', '1'))
 SELECT x, COUNT(*) FROM (VALUES ('a'),('A'),('b')) v(x) GROUP BY x ORDER BY x
 
--- CASE[open]: po-group-null — fails on mysql, tsql. FUNC-DIFF: source=(('1', '2'), ('NULL', '2')) target=(('NULL', '2'), ('1', '2'))
+-- CASE[fixed]: po-group-null — PostgreSQL NULLS-LAST default preserved via a null-priority ORDER BY key on MySQL/T-SQL.
 SELECT x, COUNT(*) FROM (VALUES (1),(NULL),(1),(NULL)) v(x) GROUP BY x ORDER BY x
 
 -- CASE[open]: po-order-strings — fails on mysql. FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), 

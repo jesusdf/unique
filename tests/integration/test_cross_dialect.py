@@ -67,7 +67,18 @@ class TestCrossDialectSelect:
     ) -> None:
         sql = "SELECT * FROM users ORDER BY name ASC"
         result = transpiler.transpile(sql, source, target)
-        assert_translated(result.sql, target, present=("ORDER BY name",))
+        # Oracle/PostgreSQL sort NULLs high (LAST ascending); MySQL/T-SQL sort
+        # them low and have no NULLS FIRST/LAST keyword, so the emitter emulates
+        # the source default with a leading null-priority key to preserve the
+        # row order.
+        if source in ("oracle", "postgresql") and target in ("mysql", "tsql"):
+            assert_translated(
+                result.sql,
+                target,
+                present=("CASE WHEN name IS NULL THEN 1 ELSE 0 END", "name ASC"),
+            )
+        else:
+            assert_translated(result.sql, target, present=("ORDER BY name",))
 
     @pytest.mark.parametrize("source,target", ALL_PAIRS)
     def test_select_group_by(

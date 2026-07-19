@@ -361,7 +361,7 @@ SELECT NUMTODSINTERVAL(1.5,'DAY'), NUMTOYMINTERVAL(18,'MONTH') FROM DUAL
 -- CASE[fixed]: ora-ora-hash — fails on mysql, postgresql, tsql. (195, b"'ORA_HASH' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT ORA_HASH('abc') AS r FROM DUAL
 
--- CASE[open]: ora-order-nulls-default — fails on mysql, tsql. FUNC-DIFF: source=(('1',), ('3',), ('NULL',)) target=(('NULL',), ('1',), ('3',))
+-- CASE[fixed]: ora-order-nulls-default — Oracle sorts NULLs high by default; MySQL/T-SQL sort them low. Emulate with a null-priority key.
 SELECT x FROM (SELECT 3 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT NULL x FROM DUAL) ORDER BY x
 
 -- CASE[fixed]: ora-percentile — fails on postgresql. function median(integer) does not exist

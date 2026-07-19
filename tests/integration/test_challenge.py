@@ -1016,6 +1016,57 @@ class TestMysqlConcatNullPropagates:
         assert "CONCAT('a', 'b')" in out, out
 
 
+class TestNullOrderingEmulation:
+    """Oracle/PostgreSQL sort NULLs HIGH by default (LAST ascending); MySQL and
+    T-SQL sort them LOW and lack a NULLS FIRST/LAST keyword. The emitter restores
+    the source order with a leading ``CASE WHEN col IS NULL`` priority key."""
+
+    @pytest.mark.parametrize("target", ("mysql", "tsql"))
+    def test_oracle_nulls_last_default_emulated(self, target: str) -> None:
+        out = _tx(
+            _case("challenge_oracle.sql", "ora-order-nulls-default"), "oracle", target
+        )
+        assert re.search(r"(?i)CASE WHEN .*IS NULL THEN 1 ELSE 0 END", out), out
+
+    @pytest.mark.parametrize("target", ("mysql", "tsql"))
+    def test_pg_nulls_last_default_emulated(self, target: str) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-order-nulls-default"),
+            "postgresql",
+            target,
+        )
+        assert re.search(r"(?i)CASE WHEN .*IS NULL THEN 1 ELSE 0 END", out), out
+
+    @pytest.mark.parametrize("target", ("mysql", "tsql"))
+    def test_pg_group_by_nulls_last_emulated(self, target: str) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "po-group-null"), "postgresql", target
+        )
+        assert re.search(r"(?i)CASE WHEN .*IS NULL THEN 1 ELSE 0 END", out), out
+
+    def test_tsql_distinct_omits_key_to_stay_valid(self) -> None:
+        # T-SQL forbids an ORDER BY expression outside the select list under
+        # DISTINCT, so the null-priority key is skipped there (valid, divergent).
+        out = _tx(
+            _case("challenge_postgresql.sql", "po-distinct-null"), "postgresql", "tsql"
+        )
+        assert "IS NULL THEN" not in out.upper(), out
+
+    def test_mysql_distinct_keeps_key(self) -> None:
+        # MySQL allows a non-selected ORDER BY expression under DISTINCT, so the
+        # emulation still applies there.
+        out = _tx(
+            _case("challenge_postgresql.sql", "po-distinct-null"), "postgresql", "mysql"
+        )
+        assert re.search(r"(?i)CASE WHEN .*IS NULL THEN 1 ELSE 0 END", out), out
+
+    def test_window_order_by_untouched(self) -> None:
+        # A window ORDER BY must NOT get a null-priority key (it would change the
+        # frame's peer groups).
+        out = _tx("SELECT ROW_NUMBER() OVER (ORDER BY x) FROM t", "postgresql", "mysql")
+        assert "IS NULL THEN" not in out.upper(), out
+
+
 class TestMysqlReplaceNullPropagates:
     """MySQL REPLACE propagates NULL — REPLACE(str, NULL, x) is NULL — while
     Oracle ignores a NULL search/replace and returns the subject unchanged. A

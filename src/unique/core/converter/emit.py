@@ -2131,8 +2131,17 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
 
     # ORDER BY
     if node.order_by:
-        order_items = ", ".join(_emit_order_item(o, dialect) for o in node.order_by)
-        parts.append(f"ORDER BY {order_items}")
+        # Preserve the source's implicit NULL ordering on MySQL/T-SQL with a
+        # leading null-priority key. T-SQL forbids an ORDER BY expression that is
+        # not in the select list under DISTINCT, so skip the emulation there
+        # (the divergence stays, but the SQL stays valid).
+        emulate_nulls = not (dialect == "tsql" and node.distinct)
+        rendered = []
+        for o in node.order_by:
+            key = _order_null_priority_key(o, dialect) if emulate_nulls else None
+            item_sql = _emit_order_item(o, dialect)
+            rendered.append(f"{key}, {item_sql}" if key else item_sql)
+        parts.append(f"ORDER BY {', '.join(rendered)}")
     elif dialect == "tsql" and node.limit is not None and node.limit.offset is not None:
         # OFFSET…FETCH requires an ORDER BY on T-SQL; the source had
         # none, so the arbitrary-order marker is faithful.
@@ -5811,6 +5820,33 @@ def _emit_order_item(item: OrderByItem, dialect: str) -> str:
         if item.nulls_first != target_default_first:
             out += " NULLS FIRST" if item.nulls_first else " NULLS LAST"
     return out
+
+
+def _order_null_priority_key(item: OrderByItem, dialect: str) -> str | None:
+    """Emulate a source's implicit NULL ordering on MySQL/T-SQL.
+
+    Oracle/PostgreSQL sort NULLs HIGH by default (LAST ascending, FIRST
+    descending); MySQL/T-SQL sort them LOW and have no NULLS FIRST/LAST keyword.
+    When the source placement (carried in ``nulls_first``) differs from the
+    MySQL/T-SQL default, the row order silently flips. Return a leading
+    null-priority ORDER BY key (``CASE WHEN expr IS NULL THEN …``) that restores
+    it, or ``None`` when no emulation is needed. Positional ordinals carry no
+    NULLs to reorder, so they are skipped.
+
+    Only sound for a *statement-level* ORDER BY — never a window ORDER BY (it
+    would change the frame's peer groups) and never under T-SQL ``DISTINCT`` (the
+    added expression is not in the select list); callers gate those out.
+    """
+    if item.nulls_first is None or dialect not in ("mysql", "tsql"):
+        return None
+    if isinstance(item.expression, Literal) and _is_nonneg_int_literal(item.expression):
+        return None
+    target_default_first = item.direction != OrderDirection.DESC
+    if item.nulls_first == target_default_first:
+        return None
+    expr = _emit_expression(item.expression, dialect)
+    priority = "0 ELSE 1" if item.nulls_first else "1 ELSE 0"
+    return f"CASE WHEN {expr} IS NULL THEN {priority} END"
 
 
 def _emit_limit(limit: LimitClause, dialect: str) -> str:
