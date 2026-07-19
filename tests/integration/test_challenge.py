@@ -838,3 +838,13 @@ class TestMysqlModByZero:
     def test_mod_zero_guarded(self, target: str) -> None:
         out = _tx(_case("challenge_mysql.sql", "my-mod-zero"), "mysql", target)
         assert re.search(r"(?i)CASE\s+WHEN\s+0\s*=\s*0\s+THEN\s+NULL", out), out
+
+
+class TestOracleCastIntRounds:
+    """Oracle CAST-to-integer ROUNDS (CAST('3.9' AS INT) = 4); MySQL's
+    CAST(... AS SIGNED) truncates a string. The Oracle->MySQL emit rounds first
+    so the value matches (live-verified: 4, not 3)."""
+
+    def test_mysql_rounds_the_cast(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "cast-int-edge"), "oracle", "mysql")
+        assert "CAST(ROUND('3.9') AS SIGNED)" in out, out

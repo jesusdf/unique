@@ -3415,6 +3415,16 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             inner = f"CASE WHEN {operand} = 0 THEN 1 " f"WHEN {operand} <> 0 THEN 0 END"
         else:
             inner = _emit_expression(node.expression, dialect)
+        # Oracle CAST-to-integer ROUNDS the value (CAST('3.9' AS INT) = 4), but
+        # MySQL's CAST(... AS SIGNED) truncates a string ('3.9' -> 3). Round
+        # first so the value matches (a no-op for an already-integer value).
+        if (
+            dialect == "mysql"
+            and SOURCE_DIALECT.get() == "oracle"
+            and node.target_type.name.split("(")[0].strip().upper()
+            in ("INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT")
+        ):
+            inner = f"ROUND({inner})"
         # MySQL CAST only accepts a fixed set of target types (SIGNED, not INT;
         # no BOOLEAN); T-SQL has no BOOLEAN (it is BIT).
         dtype = node.target_type.name
