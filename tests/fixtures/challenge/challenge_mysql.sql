@@ -721,7 +721,7 @@ SELECT SUBDATE('2020-01-31', INTERVAL 1 MONTH) AS r
 -- CASE[open]: my-substr-float — fails on oracle, tsql. FUNC-DIFF: source=(('llo',),) target=(('el',),)
 SELECT SUBSTRING('hello', 2.9, 2.9) AS r
 
--- CASE[open]: my-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('def',),) target=(('ab',),)
+-- CASE[fixed]: my-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('def',),) target=(('ab',),)
 SELECT SUBSTRING('abcdef', -3) AS r
 
 -- CASE[open]: my-substr3 — fails on postgresql, tsql. FUNC-DIFF: source=(('bcdef', 'bcd', 'ef'),) target=(('bcdef', 'bcd', 'abc'),)

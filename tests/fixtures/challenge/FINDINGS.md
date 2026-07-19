@@ -804,11 +804,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `FUNC-DIFF: source=(('llo',),) target=(('el',),)`
 - src: `SELECT SUBSTRING('hello', 2.9, 2.9) AS r`
 
-## my-substr-neg  (mysql)
-- targets: postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('def',),) target=(('ab',),)`
-- src: `SELECT SUBSTRING('abcdef', -3) AS r`
-
 ## my-substr3  (mysql)
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('bcdef', 'bcd', 'ef'),) target=(('bcdef', 'bcd', 'abc'),)`
