@@ -90,7 +90,7 @@ SELECT CAST(COLLECT(x) AS SYS.ODCINUMBERLIST) FROM (SELECT 1 x FROM DUAL)
 -- CASE[fixed]: ora-compose — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT COMPOSE('a'||UNISTR('\0301')), DECOMPOSE('á') FROM DUAL
 
--- CASE[open]: ora-concat-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
+-- CASE[fixed]: ora-concat-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('ab',),) target=(('NULL',),)
 SELECT 'a' || NULL || 'b' AS r FROM DUAL
 
 -- CASE[fixed]: ora-concat-num — fails on tsql. (245, b"Conversion failed when converting the varchar value 'a' to data type int.DB-Lib er
@@ -165,7 +165,7 @@ SELECT EXTRACT(YEAR FROM DATE '2020-06-15'), EXTRACT(MONTH FROM DATE '2020-06-15
 -- CASE[fixed]: ora-extractvalue — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXTRACTVALUE(XMLTYPE('<a>1</a>'), '/a') AS r FROM DUAL
 
--- CASE[open]: ora-fconcat — fails on mysql, tsql. FUNC-DIFF: source=(('ab', 'a', '23'),) target=(('ab', 'NULL', '5'),)
+-- CASE[fixed]: ora-fconcat — fails on mysql, tsql. FUNC-DIFF: source=(('ab', 'a', '23'),) target=(('ab', 'NULL', '5'),)
 SELECT 'a'||'b','a'||NULL,2||3 FROM DUAL
 
 -- CASE[fixed]: ora-fk-and-check — fails on mysql. (1239, "Incorrect foreign key definition for 'fk': Key reference and table reference don't

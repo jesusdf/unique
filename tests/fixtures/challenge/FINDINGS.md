@@ -1008,11 +1008,6 @@ ALTER`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO`
 - src: `SELECT CAST(COLLECT(x) AS SYS.ODCINUMBERLIST) FROM (SELECT 1 x FROM DUAL)`
 
-## ora-concat-null  (oracle)
-- targets: mysql(func), postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('ab',),) target=(('NULL',),)`
-- src: `SELECT 'a' || NULL || 'b' AS r FROM DUAL`
-
 ## ora-cursor  (oracle)
 - targets: mysql(invalid)
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
@@ -1094,11 +1089,6 @@ ALTER`
 - targets: mysql(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('x',),) target=(('',),)`
 - src: `SELECT NVL('', 'x') AS r FROM DUAL`
-
-## ora-fconcat  (oracle)
-- targets: mysql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('ab', 'a', '23'),) target=(('ab', 'NULL', '5'),)`
-- src: `SELECT 'a'||'b','a'||NULL,2||3 FROM DUAL`
 
 ## ora-float-precision  (oracle)
 - targets: mysql(func)

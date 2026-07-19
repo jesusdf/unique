@@ -4918,9 +4918,17 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
                     tparts.append(n)
 
             _gather_tsql(node)
+            _arith = (
+                BinaryOperator.ADD,
+                BinaryOperator.SUB,
+                BinaryOperator.MUL,
+                BinaryOperator.DIV,
+                BinaryOperator.MOD,
+            )
             if any(
                 (isinstance(p, Literal) and p.dtype in ("integer", "number", "float"))
                 or _is_integer_operand(p)
+                or (isinstance(p, BinaryOp) and p.operator in _arith)
                 for p in tparts
             ):
                 joined = ", ".join(_emit_expression(p, dialect) for p in tparts)
