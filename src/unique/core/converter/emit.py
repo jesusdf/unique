@@ -2973,6 +2973,14 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
     read = sqlglot_dialect_name(node.source_dialect)
     write = sqlglot_dialect_name(dialect)
     fragment_sql = node.sql
+    # PostgreSQL EXCLUDE has no equivalent on any other engine; keep it on PG,
+    # degrade it to a documented carrier elsewhere (never silently drop it).
+    if node.kind == "EXCLUDE" and dialect != "postgresql":
+        return (
+            f"-- UNIQUE: PostgreSQL EXCLUDE constraint has no {dialect} "
+            f"equivalent; enforce the exclusion with a trigger. Original: "
+            f"{node.sql}"
+        )
     if (
         node.source_dialect == "mysql"
         and dialect != "mysql"

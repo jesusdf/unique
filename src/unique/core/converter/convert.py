@@ -1522,6 +1522,17 @@ def _convert_create_table(
                         quoted=_identifier_quoted(col_def.this),
                     )
                 )
+            elif isinstance(col_def, exp.ExcludeColumnConstraint):
+                # PostgreSQL EXCLUDE is a pg-only exclusion constraint with no
+                # equivalent elsewhere; keep it as a fragment (kind tags it so the
+                # emitter degrades it to a carrier off PG rather than dropping it).
+                constraints.append(
+                    PassthroughSQL(
+                        sql=col_def.sql(dialect=sqlglot_dialect_name(source_dialect)),
+                        source_dialect=source_dialect,
+                        kind="EXCLUDE",
+                    )
+                )
             elif isinstance(
                 col_def,
                 (

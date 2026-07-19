@@ -671,3 +671,20 @@ class TestCheckInConstraintPreserved:
             _case("challenge_postgresql.sql", "drop5-CHECK"), "postgresql", target
         )
         assert "CHECK (a IN (1, 2, 3))" in out, out
+
+
+class TestExcludeConstraintCarrier:
+    """PostgreSQL's EXCLUDE exclusion constraint has no equivalent on any other
+    engine; it was dropped silently. It now degrades to a documented carrier +
+    warning (the table itself stays valid), never a silent loss."""
+
+    @pytest.mark.parametrize("target", ("tsql", "mysql", "oracle"))
+    def test_exclude_degrades_with_carrier(self, target: str) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_postgresql.sql", "drop2-EXCLUDE"), "postgresql", target
+        )
+        assert "EXCLUDE" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE: PostgreSQL EXCLUDE" in result.sql, result.sql
+        assert any("EXCLUDE" in w.message for w in result.warnings), [
+            w.message for w in result.warnings
+        ]
