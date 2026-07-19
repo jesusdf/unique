@@ -284,6 +284,17 @@ class TestDdlConstraintClausesSurvive:
         assert re.search(r"(?i)REFERENCES\b", _exec_lines(out)), out
 
 
+class TestLikeBackslashEscape:
+    """PG/MySQL LIKE use backslash as the default escape char; Oracle/T-SQL have
+    none. A backslash pattern gets an explicit ``ESCAPE '\\'`` so the literal
+    wildcard match is preserved."""
+
+    @pytest.mark.parametrize("target", ("oracle", "tsql"))
+    def test_backslash_pattern_gets_escape(self, target: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-like-escape"), "mysql", target)
+        assert "ESCAPE '\\'" in out, out
+
+
 class TestSetOperationAll:
     """INTERSECT ALL / EXCEPT ALL keep duplicates — the ALL was dropped (the row
     multiset silently changed). MySQL (8.0.31+) and PG preserve it; Oracle/T-SQL

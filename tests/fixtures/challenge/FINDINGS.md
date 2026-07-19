@@ -629,11 +629,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `FUNC-DIFF: source=(('6',),) target=(('1',),)`
 - src: `SELECT LENGTH(1/3) AS r`
 
-## my-like-escape  (mysql)
-- targets: oracle(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
-- src: `SELECT 'a_b' LIKE 'a\_b' AS r`
-
 ## my-locate-case  (mysql)
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
@@ -1943,11 +1938,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('hel',),) target=(('he',),)`
 - src: `SELECT LEFT('hello', 2.9::int) AS r`
-
-## pg-like-escape  (postgresql)
-- targets: oracle(func)
-- live error: `FUNC-DIFF: source=(('1', '0', '1'),) target=(('0', '0', '1'),)`
-- src: `SELECT 'a%b' LIKE 'a\%b', 'AbC' LIKE 'abc', 'AbC' ILIKE 'abc'`
 
 ## pg-log-2arg  (postgresql)
 - targets: tsql(func)

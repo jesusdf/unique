@@ -4862,6 +4862,20 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
 
     op = op_map[node.operator]
 
+    # PG/MySQL LIKE treat backslash as the default escape character; Oracle and
+    # T-SQL have NO default escape, so a pattern like ``'a\%b'`` matches a
+    # literal ``%`` on the source but a wildcard on the target. Preserve the
+    # source semantics with an explicit ``ESCAPE '\'`` for a backslash pattern.
+    if (
+        node.operator == BinaryOperator.LIKE
+        and dialect in ("oracle", "tsql")
+        and SOURCE_DIALECT.get() in ("postgresql", "mysql")
+        and isinstance(node.right, Literal)
+        and isinstance(node.right.value, str)
+        and "\\" in node.right.value
+    ):
+        return f"{left} LIKE {right} ESCAPE '\\'"
+
     # Dialect-specific overrides
     if node.operator == BinaryOperator.CONCAT:
         if dialect == "oracle":

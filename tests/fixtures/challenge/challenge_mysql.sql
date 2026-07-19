@@ -519,7 +519,7 @@ SELECT LENGTH('café'), CHAR_LENGTH('café'), LENGTH('  x  ')
 -- CASE[limit]: my-like-ci — fails on oracle, postgresql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'ABC' LIKE 'abc' AS r
 
--- CASE[open]: my-like-escape — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[fixed]: my-like-escape — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT 'a_b' LIKE 'a\_b' AS r
 
 -- CASE[limit]: my-like-single — fails on oracle, postgresql. APPROVED LIMIT (2026-07-18): LIKE case-sensitivity is a default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('1',),) target=(('0',),)
