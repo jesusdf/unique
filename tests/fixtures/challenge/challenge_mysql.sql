@@ -299,7 +299,7 @@ SELECT EXTRACTVALUE('<a>1</a>', '/a') AS r
 -- CASE[limit]: my-fcollate — fails on oracle, postgresql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('c', 'a', '1'),) target=(('c', 'B', '0'),)
 SELECT GREATEST('a','B','c'),LEAST('a','B'),'a'<'B'
 
--- CASE[open]: my-fconcatnum — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('x5', 'x5.5', 'x1', 'NULL'),) target=(('x5', 'x5.5', 'x1', 'x'),)
+-- CASE[fixed]: my-fconcatnum — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('x5', 'x5.5', 'x1', 'NULL'),) target=(('x5', 'x5.5', 'x1', 'x'),)
 SELECT CONCAT('x',5),CONCAT('x',5.5),CONCAT('x',TRUE),CONCAT('x',NULL)
 
 -- CASE[open]: my-field — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI

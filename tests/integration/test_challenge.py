@@ -1014,3 +1014,15 @@ class TestMysqlConcatNullPropagates:
             _case("challenge_postgresql.sql", "pg-concat-null"), "postgresql", "mysql"
         )
         assert "CONCAT('a', 'b')" in out, out
+
+
+class TestMysqlConcatNumBool:
+    """MySQL CONCAT stringifies numbers, floats and booleans (5->'5', TRUE->'1')
+    and propagates NULL. Cured by the CONCAT boolean->int and NULL-fold handlers:
+    CONCAT('x',5), CONCAT('x',5.5), CONCAT('x',TRUE)->CONCAT('x',1),
+    CONCAT('x',NULL)->NULL all match. Live-verified on all three."""
+
+    @pytest.mark.parametrize("target", ("oracle", "postgresql", "tsql"))
+    def test_concat_num_bool_null(self, target: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-fconcatnum"), "mysql", target)
+        assert "CONCAT('x', 1)" in out and "NULL" in out, out
