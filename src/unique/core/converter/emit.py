@@ -3889,6 +3889,19 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             _rp_n = f"ROUND({_rp_n}, 0)"
             _rp_n = f"CASE WHEN {_rp_n} < 0 THEN 0 ELSE {_rp_n} END"
         return f"REPLICATE({_rp_s}, {_rp_n})"
+    # MySQL rounds a float LEFT length (LEFT('hello', 2.9) = 'hel') and returns
+    # '' for a negative one; T-SQL LEFT truncates the float and errors on a
+    # negative. Round (with the scale T-SQL needs) and clamp.
+    if (
+        fn_name == "LEFT"
+        and SOURCE_DIALECT.get() == "mysql"
+        and dialect == "tsql"
+        and len(node.args) == 2
+        and not _is_nonneg_int_literal(node.args[1])
+    ):
+        _lf_s = _emit_expression(node.args[0], dialect)
+        _lf_n = f"ROUND({_emit_expression(node.args[1], dialect)}, 0)"
+        return f"LEFT({_lf_s}, CASE WHEN {_lf_n} < 0 THEN 0 ELSE {_lf_n} END)"
     # MySQL LEFT with a negative length returns '' ; PostgreSQL reads a negative
     # length as "all but the last |n|". Clamp to 0 to preserve the empty string.
     if (

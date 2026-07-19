@@ -891,6 +891,12 @@ class TestNegativeLengthStringFns:
         out = _tx(_case("challenge_mysql.sql", "my-repeat-float"), "mysql", "tsql")
         assert re.search(r"(?i)ROUND\([^)]*,\s*0\)", out), out
 
+    def test_left_float_rounds(self) -> None:
+        # MySQL rounds a float length (LEFT('hello', 2.9) = 'hel'); T-SQL LEFT
+        # truncates it.
+        out = _tx(_case("challenge_mysql.sql", "my-left-float"), "mysql", "tsql")
+        assert re.search(r"(?i)LEFT\(.*ROUND\([^)]*,\s*0\)", out), out
+
 
 class TestMysqlInsertBounds:
     """MySQL INSERT() returns the original string when the position is 0 or past

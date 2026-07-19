@@ -498,7 +498,7 @@ SELECT LEAST(NULL, 'a') AS r, GREATEST(NULL, 1) AS b
 -- CASE[fixed]: my-least-null2 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1',),)
 SELECT LEAST(1, 2, NULL, 3) AS r
 
--- CASE[open]: my-left-float — fails on tsql. FUNC-DIFF: source=(('hel',),) target=(('he',),)
+-- CASE[fixed]: my-left-float — fails on tsql. FUNC-DIFF: source=(('hel',),) target=(('he',),)
 SELECT LEFT('hello', 2.9) AS r
 
 -- CASE[fixed]: my-left-neg — fails on postgresql. FUNC-DIFF: source=(('',),) target=(('ab',),)
