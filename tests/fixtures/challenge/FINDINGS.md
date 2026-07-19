@@ -524,20 +524,10 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `FUNC-DIFF: source=(('a', '2'), ('b', '1')) target=(('A', '2'), ('b', '1'))`
 - src: `SELECT x, COUNT(*) FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'b' x) t GROUP BY x ORDER BY x`
 
-## my-group-concat  (mysql)
-- targets: postgresql(invalid)
-- live error: `function string_agg(integer, unknown) does not exist`
-- src: `SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR '|') AS r FROM (SELECT 1 x UNION SELECT 2) t`
-
 ## my-groupconcat-distinct  (mysql)
 - targets: oracle(silent-rt), postgresql(invalid)
 - live error: `SILENT-ROUNDTRIP: literal(s) ["'|'"] lost after mysql->oracle->mysql`
 - src: `SELECT GROUP_CONCAT(DISTINCT x ORDER BY x DESC SEPARATOR '|') FROM (SELECT 1 x UNION ALL SELECT 1 UNION ALL SELECT 2) t`
-
-## my-groupconcat-order  (mysql)
-- targets: postgresql(invalid)
-- live error: `function string_agg(integer, unknown) does not exist`
-- src: `SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR ',') FROM (SELECT 1 x UNION ALL SELECT 2) t`
 
 ## my-having-noagg  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
@@ -704,20 +694,10 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `FUNC-DIFF: source=(('1', '1'),) target=(('0', '0'),)`
 - src: `SELECT LOCATE('', 'abc'), INSTR('abc', '')`
 
-## my-log-2arg  (mysql)
-- targets: tsql(func)
-- live error: `FUNC-DIFF: source=(('3',),) target=(('0.333333',),)`
-- src: `SELECT LOG(2, 8) AS r`
-
 ## my-log2-log10  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('3', '3'),) target=(('0.333333', '0.333333'),)`
 - src: `SELECT LOG2(8), LOG10(1000)`
-
-## my-logexp  (mysql)
-- targets: tsql(invalid)
-- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN`
-- src: `SELECT LOG2(8), LOG10(100), LN(2.718), EXP(1)`
 
 ## my-lpad-multichar  (mysql)
 - targets: tsql(func)
@@ -1356,11 +1336,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `SILENT: source literal(s) ["'...'"] absent from valid output, no warning`
 - src: `SELECT LISTAGG(x,',' ON OVERFLOW TRUNCATE '...') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x FROM DUAL) t`
 
-## ora-logexp  (oracle)
-- targets: tsql(invalid)
-- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN`
-- src: `SELECT LOG(2, 8), LN(2.718), EXP(1) FROM DUAL`
-
 ## ora-lpad-multichar  (oracle)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)`
@@ -1799,11 +1774,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `'utf-8' codec can't decode byte 0xe9 in position 0: unexpected end of data`
 - src: `SELECT chr(233), ascii('é')`
 
-## pg-chr-concat  (postgresql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('AB',),) target=(('4142',),)`
-- src: `SELECT chr(65) || chr(66)`
-
 ## pg-chr-unicode  (postgresql)
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('μ',),) target=(('NULL',),)`
@@ -1898,11 +1868,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1`
 - src: `SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01 00:00:00'), EXTRACT(EPOCH FROM INTERVAL '1 day')`
-
-## pg-except-all  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
-- src: `SELECT 1 EXCEPT ALL SELECT 2`
 
 ## pg-exception-handler  (postgresql)
 - targets: tsql(invalid)
@@ -2058,11 +2023,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(func), oracle(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('2.5',),)`
 - src: `SELECT 5 / 2 AS r`
-
-## pg-intersect-all  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
-- src: `SELECT 1 INTERSECT ALL SELECT 1`
 
 ## pg-interval-arith  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)

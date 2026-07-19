@@ -1025,13 +1025,15 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
 
 
 def _set_op_type(node: exp.SetOperation) -> SetOperationType:
+    # ``distinct is False`` means the ALL variant (INTERSECT ALL / EXCEPT ALL /
+    # UNION ALL) — keeping duplicates. Dropping it silently changes the row
+    # multiset (a defect); the emitter renders ALL where the target supports it.
+    is_all = node.args.get("distinct") is False
     if isinstance(node, exp.Intersect):
-        return SetOperationType.INTERSECT
+        return SetOperationType.INTERSECT_ALL if is_all else SetOperationType.INTERSECT
     if isinstance(node, exp.Except):
-        return SetOperationType.EXCEPT
-    if node.args.get("distinct") is False:
-        return SetOperationType.UNION_ALL
-    return SetOperationType.UNION
+        return SetOperationType.EXCEPT_ALL if is_all else SetOperationType.EXCEPT
+    return SetOperationType.UNION_ALL if is_all else SetOperationType.UNION
 
 
 def _convert_union(expr: exp.SetOperation) -> SelectStatement:

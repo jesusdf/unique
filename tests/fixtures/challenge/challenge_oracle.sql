@@ -280,7 +280,7 @@ SELECT LNNVL(1 = 2) AS r FROM DUAL WHERE LNNVL(1 = 2)
 -- CASE[fixed]: ora-lob-length — fails on mysql, postgresql, tsql. (195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT DBMS_LOB.GETLENGTH(TO_CLOB('hello')) AS r FROM DUAL
 
--- CASE[open]: ora-logexp — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN
+-- CASE[fixed]: ora-logexp — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN
 SELECT LOG(2, 8), LN(2.718), EXP(1) FROM DUAL
 
 -- CASE[open]: ora-lpad-multichar — fails on tsql. FUNC-DIFF: source=(('xyxab',),) target=(('yxyab',),)

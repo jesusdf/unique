@@ -219,6 +219,24 @@ class TestStringAggTextCastIntoPg:
         assert "STRING_AGG(CAST(x AS TEXT), ',' ORDER BY x)" in out, out
 
 
+class TestSetOperationAll:
+    """INTERSECT ALL / EXCEPT ALL keep duplicates — the ALL was dropped (the row
+    multiset silently changed). MySQL (8.0.31+) and PG preserve it; Oracle/T-SQL
+    (no ALL form) fall back to the distinct spelling."""
+
+    def test_except_all_preserved_into_mysql(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-except-all"), "postgresql", "mysql"
+        )
+        assert "EXCEPT ALL" in out, out
+
+    def test_intersect_all_preserved_into_mysql(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-intersect-all"), "postgresql", "mysql"
+        )
+        assert "INTERSECT ALL" in out, out
+
+
 class TestMoneyCastType:
     """T-SQL MONEY/SMALLMONEY are fixed-scale decimals — mapped in a CAST target
     too (not only as a column type): NUMBER(19,4)/(10,4) on Oracle, NUMERIC on

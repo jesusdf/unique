@@ -160,7 +160,7 @@ CREATE TABLE t (a INT, b INT, c INT, CONSTRAINT ck CHECK ((a IS NULL) != (b IS N
 -- CASE[open]: pg-chr-ascii-unicode — fails on oracle. 'utf-8' codec can't decode byte 0xe9 in position 0: unexpected end of data
 SELECT chr(233), ascii('é')
 
--- CASE[open]: pg-chr-concat — fails on mysql. FUNC-DIFF: source=(('AB',),) target=(('4142',),)
+-- CASE[fixed]: pg-chr-concat — fails on mysql. FUNC-DIFF: source=(('AB',),) target=(('4142',),)
 SELECT chr(65) || chr(66)
 
 -- CASE[open]: pg-chr-unicode — fails on mysql, tsql. FUNC-DIFF: source=(('μ',),) target=(('NULL',),)
@@ -235,7 +235,7 @@ SELECT ENCODE(DECODE('SGVsbG8=', 'base64'), 'hex')
 -- CASE[open]: pg-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1
 SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01 00:00:00'), EXTRACT(EPOCH FROM INTERVAL '1 day')
 
--- CASE[open]: pg-except-all — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+-- CASE[fixed]: pg-except-all — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 SELECT 1 EXCEPT ALL SELECT 2
 
 -- CASE[open]: pg-exception-handler — fails on tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
@@ -370,7 +370,7 @@ CREATE TABLE t (id INT, n INT, s VARCHAR(50)); INSERT INTO t (id, n) SELECT g, g
 -- CASE[open]: pg-intdiv — fails on mysql, oracle. FUNC-DIFF: source=(('2',),) target=(('2.5',),)
 SELECT 5 / 2 AS r
 
--- CASE[open]: pg-intersect-all — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+-- CASE[fixed]: pg-intersect-all — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 SELECT 1 INTERSECT ALL SELECT 1
 
 -- CASE[open]: pg-interval-arith — fails on mysql, oracle, tsql. (207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S

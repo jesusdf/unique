@@ -65,7 +65,9 @@ class SetOperationType(Enum):
     UNION = auto()
     UNION_ALL = auto()
     INTERSECT = auto()
+    INTERSECT_ALL = auto()
     EXCEPT = auto()
+    EXCEPT_ALL = auto()
 
 
 class UnaryOperator(Enum):

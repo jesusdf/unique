@@ -375,13 +375,13 @@ SELECT GREATEST('a', 'B') AS r
 -- CASE[open]: my-group-case — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('a', '2'), ('b', '1')) target=(('A', '2'), ('b', '1'))
 SELECT x, COUNT(*) FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'b' x) t GROUP BY x ORDER BY x
 
--- CASE[open]: my-group-concat — fails on postgresql. function string_agg(integer, unknown) does not exist
+-- CASE[fixed]: my-group-concat — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR '|') AS r FROM (SELECT 1 x UNION SELECT 2) t
 
 -- CASE[open]: my-groupconcat-distinct — fails on postgresql. SILENT-ROUNDTRIP: literal(s) ["'|'"] lost after mysql->oracle->mysql
 SELECT GROUP_CONCAT(DISTINCT x ORDER BY x DESC SEPARATOR '|') FROM (SELECT 1 x UNION ALL SELECT 1 UNION ALL SELECT 2) t
 
--- CASE[open]: my-groupconcat-order — fails on postgresql. function string_agg(integer, unknown) does not exist
+-- CASE[fixed]: my-groupconcat-order — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR ',') FROM (SELECT 1 x UNION ALL SELECT 2) t
 
 -- CASE[fixed]: my-hash — fails on oracle, postgresql, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
@@ -537,13 +537,13 @@ SELECT LOCATE('', '') AS r
 -- CASE[open]: my-locate-empty2 — fails on oracle, tsql. FUNC-DIFF: source=(('1', '1'),) target=(('0', '0'),)
 SELECT LOCATE('', 'abc'), INSTR('abc', '')
 
--- CASE[open]: my-log-2arg — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('0.333333',),)
+-- CASE[fixed]: my-log-2arg — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('0.333333',),)
 SELECT LOG(2, 8) AS r
 
 -- CASE[open]: my-log2-log10 — fails on tsql. FUNC-DIFF: source=(('3', '3'),) target=(('0.333333', '0.333333'),)
 SELECT LOG2(8), LOG10(1000)
 
--- CASE[open]: my-logexp — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN
+-- CASE[fixed]: my-logexp — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN
 SELECT LOG2(8), LOG10(100), LN(2.718), EXP(1)
 
 -- CASE[fixed]: my-lpad-conv — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO

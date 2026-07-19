@@ -2086,11 +2086,24 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
 
     # Set operation
     if node.set_op and node.set_query:
+        # INTERSECT ALL / EXCEPT ALL keep duplicates. MySQL (8.0.31+) and PG
+        # support them; Oracle < 21c has only MINUS/INTERSECT (distinct) and
+        # T-SQL has no ALL form, so those fall back to the distinct spelling
+        # (the ALL cannot be honoured there — a documented version limit).
+        _all_ok = dialect in ("mysql", "postgresql")
         op_map = {
             SetOperationType.UNION: "UNION",
             SetOperationType.UNION_ALL: "UNION ALL",
             SetOperationType.INTERSECT: "INTERSECT",
+            SetOperationType.INTERSECT_ALL: (
+                "INTERSECT ALL" if _all_ok else "INTERSECT"
+            ),
             SetOperationType.EXCEPT: "EXCEPT" if dialect != "oracle" else "MINUS",
+            SetOperationType.EXCEPT_ALL: (
+                "EXCEPT ALL"
+                if _all_ok
+                else ("MINUS" if dialect == "oracle" else "EXCEPT")
+            ),
         }
         op = op_map.get(node.set_op, "UNION")
         right = _emit_select(node.set_query, dialect)
