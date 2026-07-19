@@ -40,7 +40,9 @@ def test_log_between_non_tsql_is_unchanged() -> None:
     assert "LOG(2, 8)" in out, out
 
 
-def test_single_arg_log_is_not_swapped() -> None:
-    # One-arg LOG (natural log) has no base argument to reorder.
+def test_single_arg_log_is_base_10() -> None:
+    # PostgreSQL's one-arg LOG(x) is base-10 (MySQL/T-SQL LOG(x) is the natural
+    # log and parses to LN). T-SQL reads a bare LOG(x) as the natural log, so the
+    # base-10 sense must be named explicitly with LOG10 or it silently diverges.
     out = _t("SELECT LOG(x) AS r FROM t", "postgresql", "tsql")
-    assert "LOG(x)" in out, out
+    assert "LOG10(x)" in out, out

@@ -4544,6 +4544,27 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
 
     distinct = "DISTINCT " if node.distinct else ""
     arg_nodes = node.args
+    # A 1-arg LOG in the IR is always base-10: only PostgreSQL spells log-base-10
+    # as LOG(x) — MySQL/T-SQL LOG(x) is the natural log and parses to LN, and
+    # Oracle's LOG needs two args. Emitting a bare LOG(x) would silently be read
+    # as the natural log on MySQL/T-SQL, so name the base-10 form explicitly.
+    if name.upper() == "LOG" and len(arg_nodes) == 1:
+        x = _emit_expression(arg_nodes[0], dialect)
+        if dialect == "oracle":
+            return f"LOG(10, {x})"
+        if dialect in ("mysql", "tsql"):
+            return f"LOG10({x})"
+        return f"LOG({x})"  # PostgreSQL: native base-10
+    # T-SQL computes LOG(x, 10) with a floating-point error (LOG(1000, 10) yields
+    # 2.9999999999999996); its native LOG10 is exact, so prefer it for base 10.
+    if (
+        dialect == "tsql"
+        and name.upper() == "LOG"
+        and len(arg_nodes) == 2
+        and isinstance(arg_nodes[0], Literal)
+        and str(arg_nodes[0].value) in ("10", "10.0")
+    ):
+        return f"LOG10({_emit_expression(arg_nodes[1], dialect)})"
     # The IR is canonical ``LOG(base, x)`` (every source is normalised to it, T-SQL
     # included); T-SQL spells it ``LOG(x, base)``, so swap on the way out or it
     # silently computes a different logarithm (RC-2).

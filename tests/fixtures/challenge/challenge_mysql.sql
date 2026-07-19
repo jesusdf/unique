@@ -540,7 +540,7 @@ SELECT LOCATE('', 'abc'), INSTR('abc', '')
 -- CASE[fixed]: my-log-2arg — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('0.333333',),)
 SELECT LOG(2, 8) AS r
 
--- CASE[open]: my-log2-log10 — fails on tsql. FUNC-DIFF: source=(('3', '3'),) target=(('0.333333', '0.333333'),)
+-- CASE[fixed]: my-log2-log10 — fails on tsql. FUNC-DIFF: source=(('3', '3'),) target=(('0.333333', '0.333333'),)
 SELECT LOG2(8), LOG10(1000)
 
 -- CASE[fixed]: my-logexp — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LN

@@ -436,7 +436,7 @@ SELECT 'a%b' LIKE 'a\%b', 'AbC' LIKE 'abc', 'AbC' ILIKE 'abc'
 -- CASE[open]: pg-log-2arg — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('0.333333',),)
 SELECT LOG(2, 8) AS r
 
--- CASE[open]: pg-log-base — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('4.60517',),)
+-- CASE[fixed]: pg-log-base — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('4.60517',),)
 SELECT LOG(100) AS r
 
 -- CASE[open]: pg-loop-notice — fails on tsql. (443, b"Invalid use of a side-effecting operator 'PRINT' within a function.DB-Lib error me
