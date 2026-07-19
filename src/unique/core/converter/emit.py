@@ -3890,6 +3890,25 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"CASE WHEN {_asc_x} = '' THEN 0 ELSE ASCII({_asc_x}) END"
         return f"COALESCE(ASCII({_asc_x}), 0)"
 
+    # MySQL booleans are integers, so CONCAT(TRUE, FALSE) is '10'; PostgreSQL
+    # renders the boolean literals 't'/'f'. Emit them as 1/0 in this string
+    # context (only PG needs it — T-SQL/Oracle already render boolean 1/0).
+    if (
+        fn_name == "CONCAT"
+        and dialect == "postgresql"
+        and SOURCE_DIALECT.get() == "mysql"
+        and any(isinstance(a, Literal) and a.dtype == "boolean" for a in node.args)
+    ):
+        _cb_parts = [
+            (
+                ("1" if a.value else "0")
+                if isinstance(a, Literal) and a.dtype == "boolean"
+                else _emit_expression(a, dialect)
+            )
+            for a in node.args
+        ]
+        return f"CONCAT({', '.join(_cb_parts)})"
+
     # PG's binary DECODE(text, 'hex') — not Oracle's conditional DECODE
     # (that one has 3+ args and became a CASE upstream). Faithful hex
     # mappings exist everywhere (wave 139); other formats stay put.

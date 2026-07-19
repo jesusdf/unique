@@ -182,7 +182,7 @@ SELECT COMPRESS('x'), UNCOMPRESSED_LENGTH(COMPRESS('x'))
 -- CASE[fixed]: my-computed-json — fails on postgresql, tsql. (195, b"'JSON_UNQUOTE' is not a recognized built-in function name.DB-Lib error message 200
 CREATE TABLE t (data JSON, name VARCHAR(50) AS (JSON_UNQUOTE(JSON_EXTRACT(data, '$.name'))) VIRTUAL)
 
--- CASE[open]: my-concat-bool — fails on postgresql. FUNC-DIFF: source=(('10',),) target=(('tf',),)
+-- CASE[fixed]: my-concat-bool — fails on postgresql. FUNC-DIFF: source=(('10',),) target=(('tf',),)
 SELECT CONCAT(TRUE, FALSE) AS r
 
 -- CASE[open]: my-concat-date — fails on oracle. FUNC-DIFF: source=(('2020-01-01',),) target=(('01-JAN-20',),)

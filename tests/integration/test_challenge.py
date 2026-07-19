@@ -939,6 +939,12 @@ class TestMysqlBooleanCast:
         out = _tx(_case("challenge_mysql.sql", "my-bool-char"), "mysql", "postgresql")
         assert re.search(r"(?i)CASE\s+WHEN\b.*THEN\s+1\s+ELSE\s+0\s+END", out), out
 
+    def test_concat_bool_is_int(self) -> None:
+        # CONCAT(TRUE, FALSE) is '10' on MySQL; PG must emit CONCAT(1, 0), not
+        # CONCAT(TRUE, FALSE) (which is 'tf').
+        out = _tx(_case("challenge_mysql.sql", "my-concat-bool"), "mysql", "postgresql")
+        assert "CONCAT(1, 0)" in out, out
+
 
 class TestMysqlAsciiEmpty:
     """MySQL ASCII('') is 0; Oracle/T-SQL return NULL ('' -> NULL). T-SQL can tell
