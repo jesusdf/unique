@@ -3728,6 +3728,23 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         else:
             length = f"{lenfn}({s})"  # T-SQL needs a length; to the end
         return f"SUBSTRING({s}, {startpos}, {length})"
+    # Oracle SUBSTR treats a start position of 0 as 1; the other engines read 0
+    # literally (PG/T-SQL a char short, MySQL an empty string). Oracle-source
+    # only — MySQL's own SUBSTR(s, 0) is '' by design, so don't touch that.
+    if (
+        fn_name == "SUBSTRING"
+        and dialect in ("postgresql", "tsql", "mysql")
+        and len(node.args) in (2, 3)
+        and SOURCE_DIALECT.get() == "oracle"
+        and isinstance(node.args[1], Literal)
+        and node.args[1].value == 0
+    ):
+        s = _emit_expression(node.args[0], dialect)
+        if len(node.args) == 3:
+            return f"SUBSTRING({s}, 1, {_emit_expression(node.args[2], dialect)})"
+        if dialect == "tsql":
+            return f"SUBSTRING({s}, 1, LEN({s}))"
+        return f"SUBSTRING({s}, 1)"  # PG/MySQL 2-arg runs to the end
     # T-SQL's SUBSTRING requires the length argument (error 174); the
     # 2-argument form means "to the end" — LEN(x) always covers it.
     if fn_name == "SUBSTRING" and dialect == "tsql" and len(node.args) == 2:

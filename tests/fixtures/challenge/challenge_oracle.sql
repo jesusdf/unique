@@ -422,7 +422,7 @@ SELECT SOUNDEX('Smith') FROM DUAL
 -- CASE[fixed]: ora-str-misc — fails on postgresql, tsql. (195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT SOUNDEX('Robert'),TO_CHAR(1234567.891,'999G999G999D99'),NVL(NULLIF('a','a'),'x') FROM DUAL
 
--- CASE[open]: ora-substr-edge — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('llo', 'el', 'he'),) target=(('h', 'el', 'h'),)
+-- CASE[fixed]: ora-substr-edge — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('llo', 'el', 'he'),) target=(('h', 'el', 'h'),)
 SELECT SUBSTR('hello',-3), SUBSTR('hello',2,2), SUBSTR('hello',0,2) FROM DUAL
 
 -- CASE[fixed]: ora-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('de',),) target=(('',),)

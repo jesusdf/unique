@@ -1332,11 +1332,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(102, b"Incorrect syntax near 'NOCYCLE'.DB-Lib error message 20018, severity 15:\nGeneral `
 - src: `CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1 CACHE 20 NOCYCLE ORDER`
 
-## ora-substr-edge  (oracle)
-- targets: mysql(func), postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('llo', 'el', 'he'),) target=(('h', 'el', 'h'),)`
-- src: `SELECT SUBSTR('hello',-3), SUBSTR('hello',2,2), SUBSTR('hello',0,2) FROM DUAL`
-
 ## ora-table-collection  (oracle)
 - targets: postgresql(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:`
