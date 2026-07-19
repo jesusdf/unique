@@ -117,7 +117,7 @@ CREATE PROCEDURE p AS BEGIN DECLARE @i INT=1; WHILE @i<=3 BEGIN SET @i+=1; IF @i
 -- CASE[open]: ts-convert-style — fails on oracle. ORA-01821: date format not recognized
 SELECT CONVERT(VARCHAR,GETDATE(),101),CONVERT(VARCHAR,GETDATE(),112),CONVERT(VARCHAR,GETDATE(),120),CONVERT(VARCHAR,GETDATE(),126)
 
--- CASE[open]: ts-cube — fails on mysql, oracle, postgresql. ORA-00937: not a single-group group function
+-- CASE[fixed]: ts-cube — fails on mysql, oracle, postgresql. ORA-00937: not a single-group group function
 SELECT a,b,SUM(c) FROM (SELECT 1 a,2 b,3 c) t GROUP BY CUBE(a,b)
 
 -- CASE[fixed]: ts-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')

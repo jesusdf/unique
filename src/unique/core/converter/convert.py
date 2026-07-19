@@ -966,9 +966,11 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     group_source: list[exp.Expression] = []
     if group_by_expr is not None:
         rollup = group_by_expr.args.get("rollup")
-        if rollup:
-            group_modifier = "ROLLUP"
-            inner = [c for r in rollup for c in r.expressions]
+        cube = group_by_expr.args.get("cube")
+        mod_nodes = rollup or cube
+        if mod_nodes:
+            group_modifier = "ROLLUP" if rollup else "CUBE"
+            inner = [c for r in mod_nodes for c in r.expressions]
             group_source = inner or list(group_by_expr.expressions)
         else:
             group_source = list(group_by_expr.expressions)

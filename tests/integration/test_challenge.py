@@ -511,6 +511,23 @@ class TestGroupByRollup:
         )
         assert "GROUP BY a, b WITH ROLLUP" in out, out
 
+    @pytest.mark.parametrize("target", ("oracle", "postgresql"))
+    def test_cube_survives_natively(self, target: str) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-cube"), "tsql", target)
+        assert "GROUP BY CUBE(a, b)" in out, out
+
+    def test_cube_to_mysql_degrades_with_carrier(self) -> None:
+        # MySQL has no CUBE: keep the base grouping, but never silently — a
+        # carrier + warning must document the omitted super-aggregate rows.
+        result = Transpiler().transpile(
+            _case("challenge_sqlserver.sql", "ts-cube"), "tsql", "mysql"
+        )
+        assert "CUBE" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE: MySQL has no GROUP BY CUBE" in result.sql, result.sql
+        assert any("CUBE" in w.message for w in result.warnings), [
+            w.message for w in result.warnings
+        ]
+
 
 class TestForUpdateLockCarrier:
     """PostgreSQL's FOR UPDATE row lock has no trailing-clause form on T-SQL

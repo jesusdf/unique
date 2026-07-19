@@ -2073,15 +2073,18 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     if node.where:
         parts.append(f"WHERE {_emit_condition(node.where, dialect)}")
 
-    # GROUP BY (with its ROLLUP super-aggregate modifier — MySQL trails it as
-    # ``WITH ROLLUP``, every other engine wraps the columns as ``ROLLUP(cols)``).
+    # GROUP BY with its ROLLUP/CUBE super-aggregate modifier. MySQL trails ROLLUP
+    # as ``WITH ROLLUP`` and has neither CUBE nor GROUPING SETS — so a CUBE keeps
+    # the base grouping and a carrier (prepended below) documents the omitted
+    # super-aggregate rows; every other engine wraps the columns natively.
     if node.group_by:
         group_cols = ", ".join(_emit_expression(g, dialect) for g in node.group_by)
-        if node.group_modifier == "ROLLUP":
-            if dialect == "mysql":
-                parts.append(f"GROUP BY {group_cols} WITH ROLLUP")
-            else:
-                parts.append(f"GROUP BY ROLLUP({group_cols})")
+        if dialect == "mysql" and node.group_modifier == "ROLLUP":
+            parts.append(f"GROUP BY {group_cols} WITH ROLLUP")
+        elif dialect == "mysql" and node.group_modifier == "CUBE":
+            parts.append(f"GROUP BY {group_cols}")
+        elif node.group_modifier in ("ROLLUP", "CUBE"):
+            parts.append(f"GROUP BY {node.group_modifier}({group_cols})")
         else:
             parts.append(f"GROUP BY {group_cols}")
 
@@ -2105,6 +2108,15 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
             parts.append(limit_sql)
 
     result = "\n".join(parts)
+
+    # MySQL has no GROUP BY CUBE; the base grouping above is valid but omits the
+    # super-aggregate rows, so surface the loss (the no-silent-loss scan mirrors
+    # this carrier as a warning).
+    if dialect == "mysql" and node.group_modifier == "CUBE" and node.group_by:
+        result = (
+            "-- UNIQUE: MySQL has no GROUP BY CUBE; the base grouping is kept "
+            "and the super-aggregate (subtotal) rows are omitted\n" + result
+        )
 
     # Set operation
     if node.set_op and node.set_query:
