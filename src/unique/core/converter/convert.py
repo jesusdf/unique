@@ -1480,9 +1480,16 @@ def _convert_create_table(
                         on_update = kind.sql(
                             dialect=sqlglot_dialect_name(source_dialect)
                         )
-                    elif isinstance(kind, exp.CollateColumnConstraint):
-                        # A column COLLATE clause — engine-specific name, kept on
-                        # the source engine and carried as a warning elsewhere.
+                    elif isinstance(
+                        kind,
+                        (
+                            exp.CollateColumnConstraint,
+                            exp.CharacterSetColumnConstraint,
+                        ),
+                    ):
+                        # A column COLLATE / CHARACTER SET clause — engine-specific
+                        # name, kept on the source engine and carried as a warning
+                        # elsewhere (no portable mapping).
                         collate = kind.sql(dialect=sqlglot_dialect_name(source_dialect))
                     elif isinstance(kind, exp.Reference):
                         # Inline column FK (``c INT REFERENCES p(id) ON DELETE …``)
@@ -1590,8 +1597,8 @@ def _convert_create_table(
                 partition_of_clause = prop.sql(dialect=sg)
             elif isinstance(prop, exp.LikeProperty):
                 like_source = prop.this.sql(dialect=sg)
-            elif isinstance(prop, exp.CollateProperty):
-                # MySQL table-level default collation — engine-specific name.
+            elif isinstance(prop, (exp.CollateProperty, exp.CharacterSetProperty)):
+                # MySQL table-level default collation / charset — engine-specific.
                 table_collate = prop.sql(dialect=sg)
             elif re.search(r"(?i)MEMORY_OPTIMIZED|DURABILITY", prop.sql(dialect=sg)):
                 # T-SQL In-Memory OLTP storage options — physical only (no

@@ -862,7 +862,7 @@ CREATE TABLE t (a INT, b INT AS (a+1) STORED)
 -- CASE[fixed]: mysql-drop2-ON\s+UPDATE — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ON\s+UPDATE' absent from valid tsql output, no warning
 CREATE TABLE t (a INT, ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP)
 
--- CASE[open]: mysql-drop2-latin1|CHARA — fails on oracle, postgresql. SILENT CLAUSE DROP: 'latin1|CHARACTER\s+SET' absent from valid postgresql output, no warni
+-- CASE[fixed]: mysql-drop2-latin1|CHARA — fails on oracle, postgresql. SILENT CLAUSE DROP: 'latin1|CHARACTER\s+SET' absent from valid postgresql output, no warni
 CREATE TABLE t (a VARCHAR(10) CHARACTER SET latin1)
 
 -- CASE[open]: mysql-drop2-my table|COM — fails on oracle, postgresql. SILENT CLAUSE DROP: 'my table|COMMENT' absent from valid postgresql output, no warning
@@ -880,7 +880,7 @@ CREATE TABLE t (a INT UNSIGNED)
 -- CASE[open]: mysql-drop4-ZEROFILL|LPA — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ZEROFILL|LPAD' absent from valid postgresql output, no warning
 CREATE TABLE t (a INT ZEROFILL)
 
--- CASE[open]: mysql-drop5-utf8mb4|CHAR — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'utf8mb4|CHARSET' absent from valid tsql output, no warning
+-- CASE[fixed]: mysql-drop5-utf8mb4|CHAR — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'utf8mb4|CHARSET' absent from valid tsql output, no warning
 CREATE TABLE t (a INT AUTO_INCREMENT PRIMARY KEY, b VARCHAR(20)) DEFAULT CHARSET=utf8mb4
 
 -- CASE[open]: mysql-prec-64|BIGINT| — fails on oracle, postgresql. SILENT PRECISION CHANGE: '64|BIGINT|BINARY' not preserved in valid oracle output, no warni

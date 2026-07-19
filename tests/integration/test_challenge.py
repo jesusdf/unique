@@ -765,3 +765,27 @@ class TestCollationCarrier:
         assert "COLLATE" not in _exec_lines(result.sql).upper(), result.sql
         assert "UNIQUE:" in result.sql and "collation" in result.sql, result.sql
         assert any("collation" in w.message for w in result.warnings), result.sql
+
+
+class TestCharacterSetCarrier:
+    """MySQL CHARACTER SET / DEFAULT CHARSET (column and table level) is
+    engine-specific with no portable mapping; a dropped charset was silent. Off
+    MySQL it degrades to a documented carrier + warning while the table stays
+    valid (same contract as a dropped COLLATE)."""
+
+    def test_column_character_set_carried(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_mysql.sql", "drop2-latin1"), "mysql", "oracle"
+        )
+        assert "CHARACTER SET" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE:" in result.sql and "charset" in result.sql, result.sql
+        assert result.warnings, result.sql
+
+    @pytest.mark.parametrize("target", ("oracle", "postgresql", "tsql"))
+    def test_table_default_charset_carried(self, target: str) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_mysql.sql", "drop5-utf8mb4"), "mysql", target
+        )
+        assert "CHARSET" not in _exec_lines(result.sql).upper(), result.sql
+        assert "UNIQUE:" in result.sql and "charset" in result.sql, result.sql
+        assert result.warnings, result.sql

@@ -2911,10 +2911,11 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             )
             if col.collate and dialect != SOURCE_DIALECT.get():
                 collate_notes.append(
-                    f"-- UNIQUE: column {col_name} collation ({col.collate}) has "
-                    f"no portable {dialect} equivalent; the column uses the "
-                    "default collation (comparisons/ordering may differ) — set it "
-                    "explicitly on the target or supply the source DB connection"
+                    f"-- UNIQUE: column {col_name} collation/charset "
+                    f"({col.collate}) has no portable {dialect} equivalent; the "
+                    "column uses the default collation (comparisons/ordering may "
+                    "differ) — set it explicitly on the target or supply the "
+                    "source DB connection"
                 )
             # A computed column carries no identity/default; T-SQL derives the
             # type from the expression, so it omits the declared type entirely.
@@ -2981,7 +2982,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 result += f" {node.table_collate}"
             else:
                 trailing_comments.append(
-                    f"-- UNIQUE: MySQL table default collation "
+                    f"-- UNIQUE: MySQL table default collation/charset "
                     f"({node.table_collate}) has no portable {dialect} "
                     "equivalent; string columns use the default collation "
                     "(comparisons/ordering may differ) — set it explicitly on "
