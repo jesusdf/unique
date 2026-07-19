@@ -1046,6 +1046,30 @@ class TestIntegerDivisionSemantics:
         assert "TRUNC(" in out, out
 
 
+class TestTsqlAvgIntegerPromotion:
+    """T-SQL ``AVG`` returns the input type, so ``AVG`` over an integer column
+    truncates (AVG of 1, 2 = 1); MySQL/Oracle/PostgreSQL always average as a
+    decimal (1.5). The emitter promotes the argument (``AVG((x) * 1.0)``)."""
+
+    @pytest.mark.parametrize(
+        "fixture,source,keyword",
+        [
+            ("challenge_mysql.sql", "mysql", "my-avg-int"),
+            ("challenge_postgresql.sql", "postgresql", "pg-avg-int"),
+        ],
+    )
+    def test_avg_promoted_to_decimal_on_tsql(
+        self, fixture: str, source: str, keyword: str
+    ) -> None:
+        out = _tx(_case(fixture, keyword), source, "tsql")
+        assert re.search(r"(?i)AVG\(\s*\(.*\)\s*\*\s*1\.0\s*\)", out), out
+
+    def test_avg_not_promoted_on_pg(self) -> None:
+        # The promotion is T-SQL-only; PG already averages as decimal.
+        out = _tx(_case("challenge_mysql.sql", "my-avg-int"), "mysql", "postgresql")
+        assert "* 1.0" not in out, out
+
+
 class TestLogArgumentOrder:
     """PostgreSQL ``LOG(base, x)`` takes the base first; T-SQL ``LOG(x, base)``
     takes it last, so the two arguments must be swapped (LOG(2, 8) = 3)."""

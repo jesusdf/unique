@@ -3869,6 +3869,19 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if fn_name in _SQLGLOT_WRAPPERS and len(node.args) == 1:
         return _emit_expression(node.args[0], dialect)
 
+    # T-SQL AVG returns the *input* type, so AVG over an integer column truncates
+    # (AVG of 1, 2 = 1), whereas MySQL/Oracle/PostgreSQL always average as a
+    # decimal (1.5). Promote the argument so T-SQL averages as a decimal too.
+    if (
+        fn_name == "AVG"
+        and dialect == "tsql"
+        and SOURCE_DIALECT.get() in ("mysql", "oracle", "postgresql")
+        and len(node.args) == 1
+    ):
+        _avg_distinct = "DISTINCT " if node.distinct else ""
+        _avg_arg = _emit_expression(node.args[0], dialect)
+        return f"AVG({_avg_distinct}({_avg_arg}) * 1.0)"
+
     # MySQL's GREATEST/LEAST return NULL if ANY argument is NULL; PostgreSQL and
     # T-SQL ignore NULLs (GREATEST(1, NULL, 3) = 3 there). Preserve MySQL's
     # NULL-propagation with a guard (Oracle already propagates, so it is left).

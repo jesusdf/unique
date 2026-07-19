@@ -64,7 +64,7 @@ SELECT TIMESTAMP '2020-01-01 10:00' AT TIME ZONE 'UTC' AS r
 -- CASE[fixed]: pg-attz2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ti
 SELECT now() AT TIME ZONE 'UTC', timezone('UTC', now())
 
--- CASE[open]: pg-avg-int — fails on mysql, tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
+-- CASE[fixed]: pg-avg-int — T-SQL AVG(int) truncates to 1; promote the argument so it averages as decimal (1.5) like PostgreSQL.
 SELECT AVG(x) FROM (VALUES (1),(2)) v(x)
 
 -- CASE[open]: pg-avg-null — fails on mysql, tsql. FUNC-DIFF: source=(('2.33333',),) target=(('2',),)

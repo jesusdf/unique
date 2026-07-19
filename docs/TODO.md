@@ -94,7 +94,7 @@ workflow.
       documented limit).** Landed so far (recorded in [`docs/DONE.md`](DONE.md)
       §41): RC-1b gate (DML+procedural), 21 built-in mappings, RC-3
       FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG.
-      **2026-07-19 continuation — 448 `[open]` / 29 `[limit]` / ~385 `[fixed]`
+      **2026-07-19 continuation — 446 `[open]` / 29 `[limit]` / ~387 `[fixed]`
       (down from ~600 open).** Structural IR-drop fixes (window frame, GROUP BY
       ROLLUP/CUBE/GROUPING SETS, computed columns), base-10 LOG, silent-clause
       carriers (FOR UPDATE/NOT VALID/CONCURRENTLY/EXCLUDE/ON UPDATE/

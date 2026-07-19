@@ -41,7 +41,7 @@ SELECT JSON_ARRAY(1,2,3),JSON_ARRAY_APPEND('[1]','$',2),JSON_ARRAY_INSERT('[1,2]
 -- CASE[fixed]: my-ascii-empty — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('NULL',),)
 SELECT ASCII('') AS r
 
--- CASE[open]: my-avg-int — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
+-- CASE[fixed]: my-avg-int — T-SQL AVG returns the input type (integer -> truncates to 1); MySQL/Oracle/PG average as decimal. Promote arg (AVG((x)*1.0)) -> 1.5.
 SELECT AVG(x) FROM (SELECT 1 x UNION SELECT 2) t
 
 -- CASE[open]: my-avg-precision2 — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1.6667',),) target=(('1',),)
