@@ -95,7 +95,7 @@ SELECT 5 & 3, 5 | 2, 5 ^ 3, ~5, 5 << 1, 5 >> 1
 -- CASE[fixed]: my-blob-length — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 CREATE TABLE t (data BLOB); INSERT INTO t VALUES (LOAD_FILE('/x')); SELECT LENGTH(data) FROM t
 
--- CASE[open]: my-bool-char — fails on postgresql. FUNC-DIFF: source=(('1',),) target=(('t',),)
+-- CASE[fixed]: my-bool-char — fails on postgresql. FUNC-DIFF: source=(('1',),) target=(('t',),)
 SELECT CAST((1=1) AS CHAR) AS r
 
 -- CASE[open]: my-cast-binary2 — fails on postgresql. type "binary" does not exist

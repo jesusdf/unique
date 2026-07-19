@@ -928,3 +928,13 @@ class TestMysqlDateArithReturnsDate:
     def test_cast_back_to_date(self, keyword: str) -> None:
         out = _tx(_case("challenge_mysql.sql", keyword), "mysql", "tsql")
         assert re.search(r"(?i)CAST\(\s*DATEADD\(.*\)\s+AS\s+DATE\)", out), out
+
+
+class TestMysqlBooleanCast:
+    """MySQL CAST of a boolean (a comparison) to a character type yields '1'/'0'
+    (MySQL booleans are integers); PostgreSQL renders the boolean 't'/'f'. The
+    MySQL->PG emit converts the boolean to an integer first. Live-verified '1'."""
+
+    def test_bool_cast_to_char_is_int(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-bool-char"), "mysql", "postgresql")
+        assert re.search(r"(?i)CASE\s+WHEN\b.*THEN\s+1\s+ELSE\s+0\s+END", out), out
