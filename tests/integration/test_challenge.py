@@ -40,10 +40,15 @@ def _exec_lines(sql: str) -> str:
     return "\n".join(ln for ln in sql.splitlines() if not ln.lstrip().startswith("--"))
 
 
-# A case is tagged ``-- CASE[fixed]:`` (BLUE closed it — strictly guarded) or
-# ``-- CASE[open]:`` (RED found it, not yet fixed — backlog, only smoke-checked).
-# An untagged ``-- CASE:`` is treated as fixed.
-_CASE_HEAD = r"-- CASE(?:\[(?:open|fixed)\])?:"
+# A case is tagged ``-- CASE[fixed]:`` (BLUE faithfully corrected it — strictly
+# guarded), ``-- CASE[open]:`` (RED found it, not yet fixed — backlog, only
+# smoke-checked), or ``-- CASE[limit]:`` (a genuine no-statement-level-
+# compensation divergence the human APPROVED as a documented limit — e.g.
+# collation case/accent sensitivity, LENGTH bytes-vs-chars: it produces valid
+# output with a different value, so it is neither a defect nor a faithful fix;
+# it must cite docs/03-unsupported.md). An untagged ``-- CASE:`` is treated as
+# fixed. "Corpus done" means zero ``[open]``.
+_CASE_HEAD = r"-- CASE(?:\[(?:open|fixed|limit)\])?:"
 
 
 def _cases(fname: str) -> list[str]:
@@ -53,7 +58,7 @@ def _cases(fname: str) -> list[str]:
 
 
 def _status(block: str) -> str:
-    m = re.match(r"-- CASE\[(open|fixed)\]:", block.strip())
+    m = re.match(r"-- CASE\[(open|fixed|limit)\]:", block.strip())
     return m.group(1) if m else "fixed"
 
 
@@ -113,6 +118,42 @@ def test_open_cases_transpile_without_crashing() -> None:
             if target == source:
                 continue
             _tx(sql, source, target)  # must not raise
+
+
+def test_limit_cases_warn_and_annotate_on_every_failing_target() -> None:
+    """A ``[limit]`` case is a human-APPROVED divergence with no statement-level
+    compensation (collation, LENGTH bytes-vs-chars). It must NEVER ship silently:
+    on each target where the value diverges the transpiler must (1) emit a
+    ``validity_gate``/warning AND (2) annotate the output with a ``UNIQUE:``
+    comment naming the divergence, while keeping the SQL valid (no unrecognized
+    carrier). The case comment must also cite ``03-unsupported`` for traceability.
+
+    The divergent targets are read from the case's ``fails on <engines>`` note.
+    """
+    failures: list[str] = []
+    for fname, source, i in _cases_by_status("limit"):
+        block = _cases(fname)[i]
+        head = block.splitlines()[0]
+        if "03-unsupported" not in head.lower():
+            failures.append(f"{fname}[{i}]: [limit] case must cite 03-unsupported")
+        m = re.search(r"fails on ([^.—]+)", head)
+        diverging = (
+            {t.strip() for t in m.group(1).replace("sqlserver", "tsql").split(",")}
+            if m
+            else set()
+        )
+        for target in _ALL_ENGINES:
+            if target == source or target not in diverging:
+                continue
+            result = Transpiler().transpile(block, source=source, target=target)
+            if not result.warnings:
+                failures.append(f"{fname}[{i}] -> {target}: no warning for a limit")
+            if "UNIQUE:" not in result.sql:
+                failures.append(f"{fname}[{i}] -> {target}: no UNIQUE annotation")
+            for marker in _UNRECOGNIZED_MARKERS:
+                if marker in result.sql:
+                    failures.append(f"{fname}[{i}] -> {target}: {marker!r}")
+    assert not failures, "\n".join(failures[:20])
 
 
 class TestOracleSelfQualifiedParam:

@@ -50,7 +50,7 @@ from unique.core.converter import (
 )
 from unique.core.dialect import Dialect
 from unique.core.errors import UnsupportedFeatureError
-from unique.core.output_gate import degrade_to_carrier, gate_reason
+from unique.core.output_gate import annotate_divergence, degrade_to_carrier, gate_reason
 from unique.core.procedural.emitter import ProceduralEmitter
 from unique.core.procedural.parser import ProceduralParser
 from unique.core.procedural.transformer import ProceduralTransformer
@@ -390,6 +390,21 @@ class Transpiler:
                             ],
                             unsupported=[*result.unsupported, message],
                         )
+                    else:
+                        # Valid output, but a known human-approved value
+                        # divergence with no statement-level fix (collation /
+                        # encoding): keep the SQL, flag it non-silently with a
+                        # leading UNIQUE comment + a warning.
+                        reason = annotate_divergence(batch.sql, source, target)
+                        if reason is not None:
+                            result = TranspileResult(
+                                sql=f"-- UNIQUE: {reason}\n{result.sql}",
+                                warnings=[
+                                    *result.warnings,
+                                    _warn(reason, "value_divergence", source, target),
+                                ],
+                                unsupported=result.unsupported,
+                            )
 
                 terminated = self._ensure_terminated(
                     result.sql, target, batch.batch_type

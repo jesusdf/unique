@@ -649,20 +649,10 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `FUNC-DIFF: source=(('',),) target=(('ab',),)`
 - src: `SELECT LEFT('abc', -1) AS r`
 
-## my-length-bytes  (mysql)
-- targets: oracle(func), postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('5',),) target=(('4',),)`
-- src: `SELECT LENGTH('café') AS r`
-
 ## my-length-div  (mysql)
 - targets: oracle(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('6',),) target=(('1',),)`
 - src: `SELECT LENGTH(1/3) AS r`
-
-## my-length-unicode  (mysql)
-- targets: oracle(func), postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('5', '4', '5'),) target=(('4', '4', '3'),)`
-- src: `SELECT LENGTH('café'), CHAR_LENGTH('café'), LENGTH('  x  ')`
 
 ## my-like-ci  (mysql)
 - targets: oracle(func), postgresql(func)

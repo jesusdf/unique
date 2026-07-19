@@ -507,13 +507,13 @@ SELECT LEFT('abc', -1) AS r
 -- CASE[fixed]: my-len-trio — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
 SELECT CHAR_LENGTH(s), LENGTH(s), BIT_LENGTH(s) FROM (SELECT 'héllo' s) t
 
--- CASE[open]: my-length-bytes — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('5',),) target=(('4',),)
+-- CASE[limit]: my-length-bytes — fails on oracle, postgresql, tsql. APPROVED LIMIT (2026-07-18): LENGTH bytes-vs-chars, encoding-dependent, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('5',),) target=(('4',),)
 SELECT LENGTH('café') AS r
 
 -- CASE[open]: my-length-div — fails on oracle, tsql. FUNC-DIFF: source=(('6',),) target=(('1',),)
 SELECT LENGTH(1/3) AS r
 
--- CASE[open]: my-length-unicode — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('5', '4', '5'),) target=(('4', '4', '3'),)
+-- CASE[limit]: my-length-unicode — fails on oracle, postgresql, tsql. APPROVED LIMIT (2026-07-18): LENGTH bytes-vs-chars, encoding-dependent, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('5', '4', '5'),) target=(('4', '4', '3'),)
 SELECT LENGTH('café'), CHAR_LENGTH('café'), LENGTH('  x  ')
 
 -- CASE[open]: my-like-ci — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)

@@ -433,6 +433,36 @@ def gate_reason(sql: str, target: str, source: str | None = None) -> str | None:
     return None
 
 
+#: Known value divergences with NO statement-level compensation (a per-column
+#: collation / encoding property is absent from the statement text), approved as
+#: documented limits in docs/03-unsupported.md. The output stays VALID; it must
+#: not ship silently, so it is flagged with a warning + a leading UNIQUE comment.
+#: Each rule: (source engine, source-SQL pattern, reason template). ``{target}``
+#: is filled per target.
+_DIVERGENCE_RULES: list[tuple[str, re.Pattern[str], str]] = [
+    (
+        "mysql",
+        # LENGTH (not CHAR_/OCTET_/BIT_LENGTH) counts BYTES on MySQL.
+        re.compile(r"(?<![_\w])LENGTH\s*\(", re.I),
+        "MySQL LENGTH() counts bytes; {target} counts characters — the result "
+        "differs for multi-byte/encoded text",
+    ),
+]
+
+
+def annotate_divergence(source_sql: str, source: str, target: str) -> str | None:
+    """A human-approved value divergence with no statement-level fix — return the
+    reason to flag (a warning + a ``UNIQUE:`` output comment), or None. The SQL
+    itself stays valid; this only makes the known difference non-silent."""
+    if source == target:
+        return None
+    scrubbed = scrub(source_sql)
+    for eng, pat, reason in _DIVERGENCE_RULES:
+        if source == eng and pat.search(scrubbed):
+            return reason.format(target=target) + " (docs/03-unsupported.md)"
+    return None
+
+
 def degrade_to_carrier(original_sql: str, reason: str, source: str, target: str) -> str:
     """Build the carrier comment that replaces invalid output.
 
