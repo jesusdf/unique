@@ -3874,6 +3874,22 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _gl_call = f"{fn_name}({', '.join(_gl_args)})"
         return f"CASE WHEN {_gl_null} THEN NULL ELSE {_gl_call} END"
 
+    # MySQL ASCII('') is 0; Oracle/T-SQL return NULL (Oracle stores '' as NULL,
+    # T-SQL's ASCII('') is NULL). Recover the 0: T-SQL distinguishes '' from NULL
+    # (a faithful CASE — ASCII(NULL) stays NULL); Oracle cannot, so COALESCE
+    # picks the empty-string reading (the inherent Oracle '' = NULL edge means a
+    # genuine NULL argument also reads as 0 there).
+    if (
+        fn_name == "ASCII"
+        and SOURCE_DIALECT.get() == "mysql"
+        and len(node.args) == 1
+        and dialect in ("oracle", "tsql")
+    ):
+        _asc_x = _emit_expression(node.args[0], dialect)
+        if dialect == "tsql":
+            return f"CASE WHEN {_asc_x} = '' THEN 0 ELSE ASCII({_asc_x}) END"
+        return f"COALESCE(ASCII({_asc_x}), 0)"
+
     # PG's binary DECODE(text, 'hex') — not Oracle's conditional DECODE
     # (that one has 3+ args and became a CASE upstream). Faithful hex
     # mappings exist everywhere (wave 139); other formats stay put.

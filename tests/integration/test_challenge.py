@@ -938,3 +938,19 @@ class TestMysqlBooleanCast:
     def test_bool_cast_to_char_is_int(self) -> None:
         out = _tx(_case("challenge_mysql.sql", "my-bool-char"), "mysql", "postgresql")
         assert re.search(r"(?i)CASE\s+WHEN\b.*THEN\s+1\s+ELSE\s+0\s+END", out), out
+
+
+class TestMysqlAsciiEmpty:
+    """MySQL ASCII('') is 0; Oracle/T-SQL return NULL ('' -> NULL). T-SQL can tell
+    '' from NULL (faithful CASE, ASCII(NULL) stays NULL); Oracle can't, so
+    COALESCE picks the empty-string reading. Live-verified 0 on both."""
+
+    def test_tsql_faithful_case(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-ascii-empty"), "mysql", "tsql")
+        assert re.search(
+            r"(?i)CASE\s+WHEN\b.*=\s*''\s+THEN\s+0\s+ELSE\s+ASCII", out
+        ), out
+
+    def test_oracle_coalesce(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-ascii-empty"), "mysql", "oracle")
+        assert "COALESCE(ASCII(" in out and ", 0)" in out, out
