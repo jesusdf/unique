@@ -856,7 +856,7 @@ CREATE TABLE t (a INT COMMENT 'note')
 -- CASE[fixed]: mysql-drop-CHECK — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'CHECK' absent from valid tsql output, no warning (target supports it)
 CREATE TABLE t (email VARCHAR(255) CHECK (email LIKE '%@%'))
 
--- CASE[open]: mysql-drop-GENERATED|AS\s — fails on tsql. SILENT CLAUSE DROP: 'GENERATED|AS\s*\(' absent from valid tsql output, no warning (target 
+-- CASE[fixed]: mysql-drop-GENERATED|AS\s — fails on tsql. SILENT CLAUSE DROP: 'GENERATED|AS\s*\(' absent from valid tsql output, no warning (target 
 CREATE TABLE t (a INT, b INT AS (a+1) STORED)
 
 -- CASE[open]: mysql-drop2-ON\s+UPDATE — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ON\s+UPDATE' absent from valid tsql output, no warning

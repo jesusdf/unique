@@ -391,6 +391,13 @@ class ColumnDefinition(ASTNode):
     #: ``GENERATED ALWAYS`` (immutable — forbids explicit inserts) vs the default
     #: ``BY DEFAULT``. Only PG/Oracle distinguish the two.
     identity_always: bool = False
+    #: A computed/generated column expression (``GENERATED ALWAYS AS (expr)``).
+    #: Distinct from ``identity`` — sqlglot models both with one node, but a
+    #: generated column *computes* a value rather than auto-incrementing; treating
+    #: it as IDENTITY corrupts the column. ``generated_stored`` records STORED
+    #: (materialized) vs the default VIRTUAL.
+    generated_expr: ASTNode | None = None
+    generated_stored: bool = False
     primary_key: bool = False
     unique: bool = False
     check: ASTNode | None = None

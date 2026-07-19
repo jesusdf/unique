@@ -2866,6 +2866,20 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     identity = f" IDENTITY({seed},{step})"
                 else:
                     identity = f" GENERATED {kind} AS IDENTITY{span}"
+            # A computed/generated column (``GENERATED ALWAYS AS (expr)``): T-SQL
+            # spells it ``col AS (expr)`` (no type, PERSISTED = STORED); PG only
+            # has STORED; Oracle/MySQL default VIRTUAL and keep STORED if present.
+            generated = ""
+            if col.generated_expr is not None:
+                expr = _emit_expression(col.generated_expr, dialect)
+                if dialect == "tsql":
+                    persisted = " PERSISTED" if col.generated_stored else ""
+                    generated = f" AS ({expr}){persisted}"
+                elif dialect == "postgresql":
+                    generated = f" GENERATED ALWAYS AS ({expr}) STORED"
+                else:
+                    store = " STORED" if col.generated_stored else ""
+                    generated = f" GENERATED ALWAYS AS ({expr}){store}"
             # Column comment (RC-3): inline on MySQL, a trailing COMMENT ON
             # statement on PG/Oracle, dropped-with-a-note on T-SQL.
             col_name = _ident(col.name, col.quoted, dialect)
@@ -2874,6 +2888,13 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             )
             if col.comment and dialect in ("postgresql", "oracle", "tsql"):
                 column_comments.append((col_name, col.comment))
+            # A computed column carries no identity/default; T-SQL derives the
+            # type from the expression, so it omits the declared type entirely.
+            if col.generated_expr is not None:
+                nullable = "" if col.nullable else " NOT NULL"
+                body = generated if dialect == "tsql" else f" {dtype}{generated}"
+                col_defs.append(f"  {col_name}{body}{nullable}{pk}{unique}{check}")
+                continue
             # Oracle column attribute order: type [identity] [DEFAULT val] [NOT NULL].
             # Other dialects: type [identity] [NOT NULL] [DEFAULT val].
             if dialect == "oracle":

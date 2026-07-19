@@ -1405,6 +1405,8 @@ def _convert_create_table(
                 identity_seed: int | None = None
                 identity_step: int | None = None
                 identity_always = False
+                generated_expr: ASTNode | None = None
+                generated_stored = False
                 primary_key = False
                 unique = False
                 col_comment: str | None = None
@@ -1417,6 +1419,15 @@ def _convert_create_table(
                         # explicit "NULL" (allow_null=True).
                         nullable = bool(getattr(kind, "args", {}).get("allow_null"))
                     elif isinstance(kind, exp.GeneratedAsIdentityColumnConstraint):
+                        gen_expr = kind.args.get("expression")
+                        if gen_expr is not None:
+                            # GENERATED ALWAYS AS (expr) is a COMPUTED column, not
+                            # an identity — sqlglot models both with this node.
+                            generated_expr = convert_expression(gen_expr)
+                            generated_stored = bool(
+                                re.search(r"(?i)\bSTORED\b", kind.sql())
+                            )
+                            continue
                         identity = True
                         identity_always = bool(kind.args.get("this"))
                         # Preserve the seed/step (T-SQL IDENTITY(100, 5), PG
@@ -1502,6 +1513,8 @@ def _convert_create_table(
                         identity_seed=identity_seed,
                         identity_step=identity_step,
                         identity_always=identity_always,
+                        generated_expr=generated_expr,
+                        generated_stored=generated_stored,
                         primary_key=primary_key,
                         unique=unique,
                         comment=col_comment,

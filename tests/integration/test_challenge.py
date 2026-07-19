@@ -589,6 +589,38 @@ class TestAlterNotValidStripped:
         ]
 
 
+class TestGeneratedColumn:
+    """``GENERATED ALWAYS AS (expr)`` is a COMPUTED column, but sqlglot models it
+    with the identity node — it was corrupted into ``IDENTITY(1,1)`` (an
+    auto-increment). It now emits each engine's computed-column form: T-SQL
+    ``b AS (expr)`` (no declared type), PG ``… GENERATED ALWAYS AS (expr) STORED``,
+    Oracle/MySQL the VIRTUAL form. Live-verified: a=5 yields b=6 on all three."""
+
+    _GEN = "CREATE TABLE t (a INT, b INT GENERATED ALWAYS AS (a + 1))"
+
+    def test_generated_always_is_computed_not_identity(self) -> None:
+        out = _tx(self._GEN, "mysql", "tsql")
+        assert "b AS (a + 1)" in out, out
+        assert "IDENTITY" not in out.upper(), out
+
+    def test_pg_uses_stored_generated(self) -> None:
+        out = _tx(self._GEN, "mysql", "postgresql")
+        assert "GENERATED ALWAYS AS (a + 1) STORED" in out, out
+
+    def test_oracle_keeps_generated_expression(self) -> None:
+        out = _tx(self._GEN, "mysql", "oracle")
+        assert "GENERATED ALWAYS AS (a + 1)" in out, out
+        assert "IDENTITY" not in out.upper(), out
+
+    def test_mysql_shorthand_computed_column_survives_on_tsql(self) -> None:
+        # The corpus case uses MySQL's ``AS (expr) STORED`` shorthand (a distinct
+        # sqlglot node); its computed column reaches T-SQL as ``AS … PERSISTED``
+        # (live-verified valid) rather than being dropped.
+        out = _tx(_case("challenge_mysql.sql", "drop-GENERATED"), "mysql", "tsql")
+        assert re.search(r"(?i)\bb\s+AS\b.*\ba\s*\+\s*1", _exec_lines(out)), out
+        assert "IDENTITY" not in out.upper(), out
+
+
 class TestCreateIndexConcurrently:
     """PostgreSQL's CREATE INDEX CONCURRENTLY (non-locking build) has no T-SQL or
     MySQL equivalent; the index is identical, so the option is dropped but never
