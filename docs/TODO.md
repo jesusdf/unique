@@ -93,16 +93,24 @@ workflow.
       batch ends only when every `[open]` case is `[fixed]` or user-approved as a
       documented limit).** Landed so far (recorded in [`docs/DONE.md`](DONE.md)
       §41): RC-1b gate (DML+procedural), 21 built-in mappings, RC-3
-      FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG; 703 finding-rows
-      resolved, `FINDINGS.md` pruned, 259 cases flipped `[open]→[fixed]`.
-      **Correction:** I wrongly self-declared the ~600 residual `[open]` cases an
-      "architectural floor" and archived the item as done — that violated the
-      skill (only the USER may approve a limit) and mislabelled tractable work
-      (MONEY→DECIMAL, INET→VARCHAR, GENERATED ALWAYS, ALTER COLUMN DEFAULT, …) as
-      floor. **Resuming**: fix the tractable residual (flip each as fixed), then
-      surface only the genuinely-impossible cases to the user for explicit
-      approval. Residual: 1127 finding-rows (func 396, invalid 625, silent-drop
-      75, silent 21, silent-rt 8, semantic 2) across ~600 `[open]` cases.
+      FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG.
+      **2026-07-19 continuation — 472 `[open]` / 25 `[limit]` / ~365 `[fixed]`
+      (down from ~600 open).** Structural IR-drop fixes (window frame, GROUP BY
+      ROLLUP/CUBE/GROUPING SETS, computed columns), base-10 LOG, silent-clause
+      carriers (FOR UPDATE/NOT VALID/CONCURRENTLY/EXCLUDE/ON UPDATE/
+      MEMORY_OPTIMIZED), collation/charset drops (carrier + warning — the
+      **`--db-url` %TYPE-style fallback the user approved**: resolve live when a
+      DB connection is given, else warn), UNSIGNED→widen+`CHECK(≥0)`, and a
+      source-gated FUNC-DIFF wave (MOD-by-zero, Oracle CAST-to-int rounding,
+      GREATEST/LEAST NULL-propagation, negative/float LEFT·REPEAT, INSERT bounds,
+      MySQL date-arith→DATE). **Remaining ~472 are the hard tail** (mapped in the
+      `blue-rc1b-builtin-gate` memory): mysql-unsigned-bit family, Oracle
+      empty-string=NULL (not faithfully reproducible → surface to user),
+      collation func-diffs (`[limit]`), procedural WHILE/CURSOR→PG, GROUPING_ID
+      emulation, JSON/XML, SUBSTRING-float, and the `--db-url` live collation
+      resolver (approved, not yet built). Method: check src-vs-tgt live, write a
+      `SOURCE_DIALECT`-gated compensation, verify on the real engines, run the
+      full **8-shard** suite (grep ALL for failures), flip + add an assertion.
 
 ## 6. Packaging (P3)
 
