@@ -702,7 +702,7 @@ SELECT CHAR_LENGTH('  '), LENGTH(TRIM('  '))
 -- CASE[fixed]: pg-trim-translate — fails on tsql. FUNC-DIFF: source=(('hi', '7', 'XbZ'),) target=(('', '', 'XbZ'),)
 SELECT trim(both 'x' from 'xxhixx'), ltrim('007','0'), translate('abc','ac','XZ')
 
--- CASE[open]: pg-truncate-restart — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'RESTART'.DB-Lib error message 20018, severity 15:\nGeneral 
+-- CASE[fixed]: pg-truncate-restart — TRUNCATE … RESTART IDENTITY is the default on MySQL/Oracle/T-SQL (strip it, faithful); CASCADE is kept on Oracle, stripped with a carrier on MySQL/T-SQL. Live-verified valid on all targets. 
 CREATE TABLE t (id INT); TRUNCATE TABLE t RESTART IDENTITY CASCADE
 
 -- CASE[fixed]: pg-ts-headline — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ts

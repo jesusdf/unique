@@ -841,6 +841,34 @@ class TestMysqlModByZero:
         assert re.search(r"(?i)CASE\s+WHEN\s+0\s*=\s*0\s+THEN\s+NULL", out), out
 
 
+class TestTruncateRestartIdentity:
+    """PG TRUNCATE … RESTART IDENTITY / CASCADE: RESTART IDENTITY is the default
+    on MySQL/Oracle/T-SQL (strip it), CASCADE is kept on Oracle but carriered on
+    MySQL/T-SQL. Live-verified valid on all targets."""
+
+    @pytest.mark.parametrize("target", ("mysql", "oracle", "tsql"))
+    def test_restart_identity_stripped(self, target: str) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-truncate-restart"),
+            "postgresql",
+            target,
+        )
+        sql_only = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert not re.search(r"(?i)RESTART\s+IDENTITY", sql_only), out
+
+    def test_cascade_kept_on_oracle_stripped_elsewhere(self) -> None:
+        ora = _tx("TRUNCATE TABLE t RESTART IDENTITY CASCADE", "postgresql", "oracle")
+        assert re.search(r"(?i)TRUNCATE\s+TABLE\s+t\s+CASCADE", ora), ora
+        res = Transpiler().transpile(
+            "TRUNCATE TABLE t RESTART IDENTITY CASCADE",
+            source="postgresql",
+            target="mysql",
+        )
+        assert re.search(r"(?i)UNIQUE:.*CASCADE", res.sql) and res.warnings, res.sql
+
+
 class TestIndexNullsOrderCarrier:
     """NULLS FIRST/LAST on an index column has no equivalent on Oracle (ORA-00907
     in an index), T-SQL or MySQL; the drop (physical null-order only, no query

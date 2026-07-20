@@ -1312,6 +1312,34 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             f"validated immediately (PostgreSQL defers it)\n{base}"
         )
 
+    # PG's TRUNCATE … RESTART IDENTITY / CASCADE. RESTART IDENTITY is the
+    # DEFAULT TRUNCATE behavior on MySQL/Oracle/T-SQL (they always reset the
+    # identity), so strip it — faithful, no divergence. CASCADE (also truncate
+    # FK-dependent tables) exists on Oracle but not MySQL/T-SQL; strip it there
+    # with a carrier so the semantic loss is not silent.
+    if (
+        dialect != "postgresql"
+        and re.search(r"(?is)^\s*TRUNCATE\b", node.sql)
+        and re.search(r"(?i)\bRESTART\s+IDENTITY\b|\bCASCADE\b", node.sql)
+    ):
+        stripped = re.sub(r"(?i)\s+RESTART\s+IDENTITY\b", "", node.sql)
+        carrier = ""
+        if dialect in ("mysql", "tsql") and re.search(r"(?i)\bCASCADE\b", stripped):
+            stripped = re.sub(r"(?i)\s+CASCADE\b", "", stripped)
+            carrier = (
+                f"-- UNIQUE: TRUNCATE … CASCADE (also truncates FK-dependent "
+                f"tables) has no {dialect} equivalent; only this table is "
+                "truncated — truncate any dependents explicitly\n"
+            )
+        try:
+            rendered = sqlglot.transpile(stripped, read=read, write=write)
+            base = rendered[0] if rendered and rendered[0].strip() else stripped
+        except Exception:  # noqa: BLE001 - keep the stripped spelling
+            base = stripped
+        return (
+            carrier + base.rstrip().rstrip(";") if dialect == "tsql" else carrier + base
+        )
+
     # Oracle rejects parenthesized join trees in FROM (ORA-00907). For a
     # pure INNER/CROSS tree the flat CROSS-chain + ANDed WHERE is exactly
     # equivalent (wave 185); outer joins keep the paren carrier.
