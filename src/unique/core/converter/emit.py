@@ -5201,6 +5201,23 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
                 return f"DATEDIFF(DAY, {rd}, {ld})"
             return f"DATEDIFF({ld}, {rd})"  # MySQL
 
+    # ``date + n`` adds n days on PostgreSQL/Oracle (yielding a date), but MySQL
+    # reads it as a NUMERIC addition (2020-01-01 + 30 = 20200131) and T-SQL
+    # rejects it. From a PG/Oracle source, spell a date-literal-plus-integer as
+    # DATE_ADD / DATEADD on those targets so the day arithmetic is preserved.
+    if (
+        node.operator == BinaryOperator.ADD
+        and dialect in ("mysql", "tsql")
+        and SOURCE_DIALECT.get() in ("postgresql", "oracle")
+    ):
+        for dside, nside in ((node.left, node.right), (node.right, node.left)):
+            dlit = _date_literal_sql(dside, dialect)
+            if dlit is not None and _is_nonneg_int_literal(nside):
+                n = _emit_expression(nside, dialect)
+                if dialect == "mysql":
+                    return f"DATE_ADD({dlit}, INTERVAL {n} DAY)"
+                return f"DATEADD(DAY, {n}, {dlit})"
+
     # MySQL '+' is always arithmetic; T-SQL '+' on strings concatenates
     # ('5' + '5' = '55', not 10). When a MySQL source adds numeric string
     # literals, cast them so T-SQL does the arithmetic (10.0, matching MySQL).

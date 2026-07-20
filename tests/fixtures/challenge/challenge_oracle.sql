@@ -116,7 +116,7 @@ SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r FROM DUAL
 -- CASE[open]: ora-date-plus-int — fails on mysql, postgresql. SEMANTIC: Oracle 'date + 1' adds ONE DAY; MySQL 'CURRENT_TIMESTAMP + 1' does numeric arith
 SELECT SYSDATE + 1 AS r FROM DUAL
 
--- CASE[open]: ora-date-plus-int2 — fails on mysql. FUNC-DIFF: source=(('2020-01-31 00:00:00',),) target=(('2050',),)
+-- CASE[fixed]: ora-date-plus-int2 — Oracle date + n adds n days; MySQL numeric-coerced it (2050.0). Emit DATE_ADD(date, INTERVAL n DAY).
 SELECT DATE '2020-01-01' + 30 AS r FROM DUAL
 
 -- CASE[open]: ora-day-of-week — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('24',),)

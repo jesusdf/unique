@@ -1064,6 +1064,30 @@ class TestMysqlCaseInsensitiveSearch:
         assert "LOWER(" not in out.upper(), out
 
 
+class TestDatePlusInteger:
+    """PostgreSQL/Oracle ``date + n`` adds n days (yielding a date); MySQL reads
+    it as a numeric addition (2020-01-01 + 30 = 20200131) and T-SQL rejects it.
+    From a PG/Oracle source the emitter spells it as DATE_ADD / DATEADD."""
+
+    def test_pg_date_plus_int_mysql(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-date-plus-int"), "postgresql", "mysql"
+        )
+        assert re.search(r"(?i)DATE_ADD\(.*INTERVAL\s+30\s+DAY\)", out), out
+
+    def test_pg_date_plus_int_tsql(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-date-plus-int"), "postgresql", "tsql"
+        )
+        assert re.search(r"(?i)DATEADD\(\s*DAY\s*,\s*30", out), out
+
+    def test_oracle_date_plus_int_mysql(self) -> None:
+        out = _tx(
+            _case("challenge_oracle.sql", "ora-date-plus-int2"), "oracle", "mysql"
+        )
+        assert re.search(r"(?i)DATE_ADD\(.*INTERVAL\s+30\s+DAY\)", out), out
+
+
 class TestPgDateDifference:
     """PostgreSQL ``DATE - DATE`` is a day count (60); MySQL does a numeric
     subtraction (200) and T-SQL rejects it. The PG date literal parses as
