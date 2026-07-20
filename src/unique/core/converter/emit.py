@@ -4118,12 +4118,12 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         and node.args[1].value <= 0
     ):
         s = _emit_expression(node.args[0], dialect)
-        start = node.args[1].value
+        _sub_start = node.args[1].value
         if isinstance(node.args[2], Literal) and isinstance(node.args[2].value, int):
-            adj = str(node.args[2].value + start - 1)  # fold to a constant
+            adj = str(node.args[2].value + _sub_start - 1)  # fold to a constant
         else:
             length = _emit_expression(node.args[2], dialect)
-            adj = f"{length} + ({start - 1})"
+            adj = f"{length} + ({_sub_start - 1})"
         return f"SUBSTR({s}, 1, {adj})"
     # T-SQL's SUBSTRING requires the length argument (error 174); the
     # 2-argument form means "to the end" — LEN(x) always covers it.
