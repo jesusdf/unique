@@ -4385,7 +4385,15 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"DECODE({', '.join(parts)})"
         subject, whens, i = parts[0], [], 1
         while i + 1 < len(parts):
-            whens.append(f"WHEN {subject} = {parts[i]} THEN {parts[i + 1]}")
+            # Oracle DECODE uses NULL-safe equality (NULL matches NULL), unlike
+            # SQL '=' where NULL = NULL is unknown. A NULL search matches exactly
+            # when the subject IS NULL.
+            _dc_search = node.args[i]
+            if isinstance(_dc_search, Literal) and _dc_search.value is None:
+                cond = f"{subject} IS NULL"
+            else:
+                cond = f"{subject} = {parts[i]}"
+            whens.append(f"WHEN {cond} THEN {parts[i + 1]}")
             i += 2
         default = f" ELSE {parts[i]}" if i < len(parts) else ""
         return f"CASE {' '.join(whens)}{default} END"

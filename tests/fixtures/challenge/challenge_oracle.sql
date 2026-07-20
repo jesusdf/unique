@@ -125,7 +125,7 @@ SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL
 -- CASE[fixed]: ora-decimal-scale — same value at each engine's default decimal scale (10/3 = 3.3333...). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 10.00/3, 10/3.0, CAST(10 AS NUMBER(10,4))/3, 1.5*1.5 FROM DUAL
 
--- CASE[open]: ora-decode-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('match',),) target=(('no',),)
+-- CASE[fixed]: ora-decode-null — Oracle DECODE uses NULL-safe equality (NULL matches NULL); a NULL search emits CASE WHEN subject IS NULL (SQL equality on a NULL yields unknown).
 SELECT DECODE(NULL, NULL, 'match', 'no') AS r FROM DUAL
 
 -- CASE[fixed]: ora-div — Oracle / is decimal (2.5); PG/T-SQL truncate two ints. Force decimal via (a * 1.0 / b). Value 2.5 (repr differs by decimal scale).

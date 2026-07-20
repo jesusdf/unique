@@ -841,6 +841,24 @@ class TestMysqlModByZero:
         assert re.search(r"(?i)CASE\s+WHEN\s+0\s*=\s*0\s+THEN\s+NULL", out), out
 
 
+class TestOracleDecodeNullSafe:
+    """Oracle DECODE uses NULL-safe equality (a NULL search matches a NULL
+    subject), unlike SQL '=' where NULL = NULL is unknown. The DECODE_CASE emit
+    spells a NULL search as ``subject IS NULL`` (not ``= NULL``). Live-verified
+    'match', not 'no'."""
+
+    @pytest.mark.parametrize("target", ("mysql", "postgresql", "tsql"))
+    def test_null_search_is_null(self, target: str) -> None:
+        out = _tx(_case("challenge_oracle.sql", "ora-decode-null"), "oracle", target)
+        assert re.search(r"(?i)WHEN\s+NULL\s+IS\s+NULL\s+THEN", out), out
+        assert not re.search(r"(?i)WHEN\s+NULL\s*=\s*NULL", out), out
+
+    def test_nonnull_search_uses_equality(self) -> None:
+        # A non-NULL search keeps plain '=' (no IS NULL rewrite).
+        out = _tx("SELECT DECODE(x, 1, 'a', 'b') AS r FROM t", "oracle", "tsql")
+        assert re.search(r"(?i)WHEN\s+x\s*=\s*1\s+THEN", out), out
+
+
 class TestOracleCastIntRounds:
     """Oracle CAST-to-integer ROUNDS (CAST('3.9' AS INT) = 4); MySQL's
     CAST(... AS SIGNED) truncates a string. The Oracle->MySQL emit rounds first
