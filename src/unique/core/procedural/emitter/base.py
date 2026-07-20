@@ -1909,6 +1909,8 @@ class ProceduralEmitter:
         serves the forward-only engines (Oracle/MySQL): a non-NEXT
         direction has no equivalent and degrades to the documented
         carrier."""
+        if not into_str.strip():
+            return self._fetch_without_into_carrier(cursor_name)
         if direction and direction.upper() != "NEXT":
             return (
                 f"-- UNIQUE: FETCH {direction} has no {self._dialect} "
@@ -1917,6 +1919,17 @@ class ProceduralEmitter:
                 f"-- FETCH {direction} FROM {cursor_name} INTO {into_str};"
             )
         return f"FETCH {cursor_name} INTO {into_str};"
+
+    def _fetch_without_into_carrier(self, cursor_name: str) -> str:
+        """A T-SQL ``FETCH NEXT FROM c`` with no INTO discards the row; every
+        other engine requires target variables, and the cursor's column list
+        is not known here, so document the drop rather than emit an invalid
+        empty ``INTO``."""
+        return (
+            f"-- UNIQUE: FETCH without INTO — {self._dialect} requires target "
+            "variables (the source discarded the fetched row); preserved as a "
+            f"comment:\n-- FETCH {cursor_name};"
+        )
 
     def _emit_cursor_deallocate(self, cursor_name: str) -> str:
         """DEALLOCATE a cursor. Only T-SQL needs it; default documents the

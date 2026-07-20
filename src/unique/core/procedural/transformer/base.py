@@ -725,7 +725,11 @@ class ProceduralTransformer:
         mapping = self._system_var_map()
         if not mapping:
             return var
-        return mapping.get(upper, f"/* {var} */")
+        # An unmapped global (e.g. @@CURSOR_ROWS) has no equivalent; a bare
+        # ``/* … */`` comment leaves an invalid expression in an inline context
+        # (``CAST(/* … */ AS …)``). Use the neutral ``0`` carrier so the routine
+        # stays syntactically valid and the limitation is documented.
+        return mapping.get(upper, self._neutral_global(var, "no direct equivalent"))
 
     def _neutral_global(self, name: str, hint: str) -> str:
         """A neutral, syntactically-valid placeholder for a global with no

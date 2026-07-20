@@ -85,6 +85,8 @@ class PostgresEmitter(ProceduralEmitter):
         self, cursor_name: str, into_str: str, direction: str | None = None
     ) -> str:
         # PG keeps the direction: FETCH [direction FROM] c INTO vars.
+        if not into_str.strip():
+            return self._fetch_without_into_carrier(cursor_name)
         if direction:
             return f"FETCH {direction} FROM {cursor_name} INTO {into_str};"
         return f"FETCH {cursor_name} INTO {into_str};"

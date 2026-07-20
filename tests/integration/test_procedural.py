@@ -1764,3 +1764,40 @@ class TestOracleCatalogDropBlock:
         result = Transpiler().transpile(self.BLOCK, source="oracle", target="mysql")
         assert "user_tables" not in self._code(result.sql).lower()
         assert result.warnings or result.unsupported
+
+
+class TestUnsupportedCursorConstructsAreValidCarriers:
+    """T-SQL cursor constructs with no target equivalent must degrade to VALID,
+    documented output — never invalid SQL (empty CAST / empty INTO)."""
+
+    _CURSOR_ATTR = (
+        "CREATE PROCEDURE p AS BEGIN "
+        "DECLARE c CURSOR FOR SELECT 1; OPEN c; FETCH NEXT FROM c; "
+        "IF @@FETCH_STATUS=0 PRINT CAST(@@CURSOR_ROWS AS VARCHAR); "
+        "CLOSE c; DEALLOCATE c; END"
+    )
+
+    def test_unmapped_global_becomes_valid_neutral_carrier(self) -> None:
+        # @@CURSOR_ROWS has no equivalent: a bare /* … */ would leave an empty
+        # CAST, so it becomes the neutral ``0 /* UNIQUE: … */`` carrier.
+        for target in ("oracle", "postgresql", "mysql"):
+            out = _transpile(self._CURSOR_ATTR, "tsql", target)
+            assert re.search(r"(?i)0\s*/\*\s*UNIQUE:\s*@@CURSOR_ROWS", out), (
+                target,
+                out,
+            )
+            # never a bare comment where an expression is required
+            assert "( /* @@CURSOR_ROWS" not in out, (target, out)
+
+    def test_fetch_without_into_is_documented_not_empty(self) -> None:
+        # FETCH NEXT FROM c with no INTO: other engines need target variables,
+        # so it degrades to a documented comment, not ``FETCH c INTO ;``.
+        for target in ("oracle", "postgresql", "mysql"):
+            out = _transpile(self._CURSOR_ATTR, "tsql", target)
+            assert "INTO ;" not in out, (target, out)
+            assert re.search(r"(?i)UNIQUE:\s*FETCH without INTO", out), (target, out)
+
+    def test_tsql_roundtrip_keeps_bare_fetch(self) -> None:
+        # T-SQL itself allows FETCH without INTO — it must stay valid, no carrier.
+        out = _transpile(self._CURSOR_ATTR, "tsql", "tsql")
+        assert "FETCH without INTO" not in out, out

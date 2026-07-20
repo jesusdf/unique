@@ -123,7 +123,7 @@ SELECT a,b,SUM(c) FROM (SELECT 1 a,2 b,3 c) t GROUP BY CUBE(a,b)
 -- CASE[fixed]: ts-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT FROM c INTO @x; WHILE @@FETCH_STATUS = 0 BEGIN FETCH NEXT FROM c INTO @x; END; CLOSE c; DEALLOCATE c; END
 
--- CASE[open]: ts-cursor-attr — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol ";" when expectin
+-- CASE[open]: ts-cursor-attr — @@CURSOR_ROWS + FETCH-without-INTO now degrade to valid carriers (pg/mysql compile). Oracle still fails: a bare character CAST gets a length that PL/SQL rejects (PLS-00103) — separate context-dependent CAST issue.
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT 1; OPEN c; FETCH NEXT FROM c; IF @@FETCH_STATUS=0 PRINT CAST(@@CURSOR_ROWS AS VARCHAR); CLOSE c; DEALLOCATE c; END
 
 -- CASE[fixed]: ts-date-bucket2 — fails on mysql, oracle, postgresql. ORA-01861: literal does not match format string
