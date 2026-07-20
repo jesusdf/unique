@@ -1591,6 +1591,7 @@ def _convert_create_table(
     like_source: str | None = None
     unsupported_options: list[str] = []
     table_collate: str | None = None
+    table_comment: str | None = None
     sg = sqlglot_dialect_name(source_dialect)
     props = expr.args.get("properties")
     if props is not None:
@@ -1604,6 +1605,10 @@ def _convert_create_table(
             elif isinstance(prop, (exp.CollateProperty, exp.CharacterSetProperty)):
                 # MySQL table-level default collation / charset — engine-specific.
                 table_collate = prop.sql(dialect=sg)
+            elif isinstance(prop, exp.SchemaCommentProperty):
+                # MySQL table COMMENT='…' — materialized as COMMENT ON TABLE on
+                # PG/Oracle rather than dropped silently.
+                table_comment = prop.this.sql(dialect=sg)
             elif re.search(r"(?i)MEMORY_OPTIMIZED|DURABILITY", prop.sql(dialect=sg)):
                 # T-SQL In-Memory OLTP storage options — physical only (no
                 # logical/value impact) and T-SQL-specific; kept for T-SQL,
@@ -1644,6 +1649,7 @@ def _convert_create_table(
         like_source=like_source,
         unsupported_options=tuple(unsupported_options),
         table_collate=table_collate,
+        table_comment=table_comment,
         as_select=as_select,
     )
 

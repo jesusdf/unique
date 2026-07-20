@@ -841,6 +841,21 @@ class TestMysqlModByZero:
         assert re.search(r"(?i)CASE\s+WHEN\s+0\s*=\s*0\s+THEN\s+NULL", out), out
 
 
+class TestMysqlComments:
+    """MySQL column and table COMMENT materialize on PG/Oracle (COMMENT ON
+    COLUMN / COMMENT ON TABLE) rather than being dropped silently."""
+
+    @pytest.mark.parametrize("target", ("oracle", "postgresql"))
+    def test_column_comment_materializes(self, target: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", "mysql-drop-'note'"), "mysql", target)
+        assert re.search(r"(?i)COMMENT\s+ON\s+COLUMN\s+t\.a\s+IS\s+'note'", out), out
+
+    @pytest.mark.parametrize("target", ("oracle", "postgresql"))
+    def test_table_comment_materializes(self, target: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", "mysql-drop2-my"), "mysql", target)
+        assert re.search(r"(?i)COMMENT\s+ON\s+TABLE\s+t\s+IS\s+'my table'", out), out
+
+
 class TestMysqlSqlCalcFoundRows:
     """MySQL SQL_CALC_FOUND_ROWS has no equivalent on other engines; the drop is
     surfaced as a carrier + warning (mirrored by the no-silent-loss scan) rather

@@ -3061,6 +3061,19 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 f"-- column {cn} comment (T-SQL: sp_addextendedproperty): {cmt}"
                 for cn, cmt in column_comments
             )
+        # Table comment (MySQL COMMENT='…'): inline on MySQL, a trailing
+        # COMMENT ON TABLE on PG/Oracle, a plain note on T-SQL (no executable
+        # form) — rather than dropped silently.
+        if node.table_comment:
+            if dialect == "mysql":
+                result += f" COMMENT={node.table_comment}"
+            elif dialect in ("postgresql", "oracle"):
+                result += f";\nCOMMENT ON TABLE {table} IS {node.table_comment}"
+            else:  # tsql
+                trailing_comments.append(
+                    "-- table comment (T-SQL: sp_addextendedproperty): "
+                    f"{node.table_comment}"
+                )
         if trailing_comments:
             result += "\n" + "\n".join(trailing_comments)
         return result

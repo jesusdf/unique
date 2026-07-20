@@ -538,6 +538,9 @@ class CreateTableStatement(ASTNode):
     # MySQL's table-level default ``COLLATE=<name>``: engine-specific, no portable
     # mapping; kept on MySQL, carried as a warning elsewhere. Raw ``COLLATE=…``.
     table_collate: str | None = None
+    #: A table-level comment (MySQL ``COMMENT='…'``). Kept inline on MySQL; PG and
+    #: Oracle take a trailing ``COMMENT ON TABLE`` statement. Quoted literal.
+    table_comment: str | None = None
 
 
 @dataclass(frozen=True)

@@ -850,7 +850,7 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); WITH 
 -- CASE[open]: my8-window — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, ROW_NUMBER() OVER w, SUM(n) OVER w FROM t WINDOW w AS (ORDER BY id)
 
--- CASE[open]: mysql-drop-'note'|note — fails on oracle, postgresql. SILENT CLAUSE DROP: ''note'|note' absent from valid oracle output, no warning (target supp
+-- CASE[fixed]: mysql-drop-'note'|note — MySQL column COMMENT now materializes as COMMENT ON COLUMN on PG/Oracle (RC-3); stale tag, live-verified the COMMENT executes.
 CREATE TABLE t (a INT COMMENT 'note')
 
 -- CASE[fixed]: mysql-drop-CHECK — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'CHECK' absent from valid tsql output, no warning (target supports it)
@@ -865,7 +865,7 @@ CREATE TABLE t (a INT, ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_
 -- CASE[fixed]: mysql-drop2-latin1|CHARA — fails on oracle, postgresql. SILENT CLAUSE DROP: 'latin1|CHARACTER\s+SET' absent from valid postgresql output, no warni
 CREATE TABLE t (a VARCHAR(10) CHARACTER SET latin1)
 
--- CASE[open]: mysql-drop2-my table|COM — fails on oracle, postgresql. SILENT CLAUSE DROP: 'my table|COMMENT' absent from valid postgresql output, no warning
+-- CASE[fixed]: mysql-drop2-my table|COM — MySQL table COMMENT='…' now materializes as COMMENT ON TABLE on PG/Oracle (a note on T-SQL); live-verified the COMMENT executes.
 CREATE TABLE t (a INT) COMMENT='my table'
 
 -- CASE[open]: mysql-drop4-50|IDENTITY| — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: '50|IDENTITY|START' absent from valid tsql output, no warning
