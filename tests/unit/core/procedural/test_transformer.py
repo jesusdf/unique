@@ -465,7 +465,9 @@ class TestSubstringPosition:
         out = t._transform_node(RawSQL(sql="LOCATE(n, h)", reason="x"))
         # The reorder is preserved inside a COALESCE guard: a MySQL empty needle
         # returns 1, but Oracle INSTR('' -> NULL) returns NULL — recover the 1.
-        assert out.sql == "COALESCE(INSTR(h, n), 1)"
+        # Both operands are lower-cased because MySQL's default collation is
+        # case-insensitive while Oracle's is not.
+        assert out.sql == "COALESCE(INSTR(LOWER(h), LOWER(n)), 1)"
 
     def test_start_position_preserved(self) -> None:
         t = ProceduralTransformer("tsql", "oracle")

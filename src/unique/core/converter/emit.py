@@ -4669,6 +4669,14 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if node.name.upper() == "CHARINDEX" and len(node.args) >= 2:
         needle = _emit_expression(node.args[0], dialect)
         haystack = _emit_expression(node.args[1], dialect)
+        # MySQL's default collation is case-insensitive, so LOCATE/INSTR match
+        # regardless of case (INSTR('aAaA', 'A') = 1); Oracle and PostgreSQL
+        # compare case-sensitively. Fold both operands to lower case there to
+        # preserve MySQL's result (T-SQL's default collation is already
+        # case-insensitive, so it needs no change).
+        if SOURCE_DIALECT.get() == "mysql" and dialect in ("oracle", "postgresql"):
+            needle = f"LOWER({needle})"
+            haystack = f"LOWER({haystack})"
         start = _emit_expression(node.args[2], dialect) if len(node.args) > 2 else None
         # MySQL LOCATE/INSTR with an empty needle returns 1; Oracle INSTR returns
         # NULL (empty string -> NULL) and T-SQL CHARINDEX returns 0. Recover the 1

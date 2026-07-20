@@ -429,7 +429,7 @@ SELECT INSERT('abcdef', 0, 2, 'XY') AS r
 -- CASE[open]: my-insert2 — fails on oracle, postgresql. ORA-00904: "STUFF": invalid identifier
 SELECT INSERT('Quadratic', 3, 4, 'What') AS r
 
--- CASE[open]: my-instr-case — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('2',),)
+-- CASE[fixed]: my-instr-case — MySQL's default collation is case-insensitive (INSTR('aAaA','A')=1); Oracle/PG compare case-sensitively. LOWER both operands there.
 SELECT INSTR('aAaA', 'A') AS r
 
 -- CASE[limit]: my-int-or-empty — fails on oracle. Oracle stores '' as NULL (docs/03-unsupported.md). FUNC-DIFF: source=(('0',),) target=(('NULL',),)
@@ -528,7 +528,7 @@ SELECT 'x' LIKE 'X' AS r
 -- CASE[fixed]: my-loadfile — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 SELECT LOAD_FILE('/nonexist') IS NULL AS r
 
--- CASE[open]: my-locate-case — fails on oracle, postgresql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[fixed]: my-locate-case — MySQL LOCATE is case-insensitive by default (LOCATE('a','ABC')=1); LOWER both operands on Oracle/PG.
 SELECT LOCATE('a', 'ABC') AS r
 
 -- CASE[fixed]: my-locate-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)

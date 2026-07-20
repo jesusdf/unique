@@ -1046,6 +1046,24 @@ class TestIntegerDivisionSemantics:
         assert "TRUNC(" in out, out
 
 
+class TestMysqlCaseInsensitiveSearch:
+    """MySQL's default collation is case-insensitive, so LOCATE/INSTR match
+    regardless of case (INSTR('aAaA', 'A') = 1); Oracle and PostgreSQL compare
+    case-sensitively. The emitter lower-cases both operands there (T-SQL's
+    default collation is already case-insensitive, so it is untouched)."""
+
+    @pytest.mark.parametrize("keyword", ("my-instr-case", "my-locate-case"))
+    @pytest.mark.parametrize("target", ("oracle", "postgresql"))
+    def test_search_lowercased_on_cs_targets(self, keyword: str, target: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", keyword), "mysql", target)
+        assert out.upper().count("LOWER(") >= 2, out
+
+    def test_tsql_not_lowercased(self) -> None:
+        # T-SQL is case-insensitive by default — no LOWER needed.
+        out = _tx(_case("challenge_mysql.sql", "my-instr-case"), "mysql", "tsql")
+        assert "LOWER(" not in out.upper(), out
+
+
 class TestPgUnboundedNumericCastScale:
     """PostgreSQL's unbounded ``numeric`` is arbitrary-precision, but a bare
     DECIMAL cast defaults to scale 0 on MySQL/Oracle/T-SQL and silently
