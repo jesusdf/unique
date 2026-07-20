@@ -1801,3 +1801,21 @@ class TestUnsupportedCursorConstructsAreValidCarriers:
         # T-SQL itself allows FETCH without INTO — it must stay valid, no carrier.
         out = _transpile(self._CURSOR_ATTR, "tsql", "tsql")
         assert "FETCH without INTO" not in out, out
+
+    def test_oracle_plsql_char_cast_is_lengthless(self) -> None:
+        # A character CAST in a PL/SQL expression (here a PUT_LINE argument) must
+        # NOT carry a length — CAST(x AS VARCHAR2(4000)) is PLS-00103; the bare
+        # VARCHAR2 form is required.
+        out = _transpile(self._CURSOR_ATTR, "tsql", "oracle")
+        assert re.search(r"(?i)AS\s+VARCHAR2?\s*\)", out), out
+        assert not re.search(r"(?i)AS\s+VARCHAR2?\s*\(\s*\d", out), out
+
+    def test_sql_context_char_cast_keeps_length(self) -> None:
+        # A character CAST inside a SQL statement still needs a length (ORA-00906).
+        out = _transpile(
+            "CREATE PROCEDURE p AS BEGIN "
+            "INSERT INTO t (x) VALUES (CAST(1 AS VARCHAR)); END",
+            "tsql",
+            "oracle",
+        )
+        assert re.search(r"(?i)AS\s+VARCHAR2\s*\(\s*\d", out), out

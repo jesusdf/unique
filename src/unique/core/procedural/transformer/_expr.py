@@ -237,21 +237,33 @@ class ExpressionRewriter:
         sql = re.sub(r"(?i)\bNVARCHAR2?\s*\(\s*MAX\s*\)", "NVARCHAR2(2000)", sql)
         sql = re.sub(r"(?i)\bVARCHAR2?\s*\(\s*MAX\s*\)", "VARCHAR2(4000)", sql)
 
-        # A character CAST needs a length in Oracle (`CAST(x AS VARCHAR2)` ->
-        # ORA-00906). sqlglot keeps CONVERT(VARCHAR(n), …)'s length, but a later
-        # concat re-pass drops it; restore a bounded one.
-        def _char_cast_size(m: re.Match[str]) -> str:
-            base = m.group(1)
-            b = base.upper()
-            if b in ("VARCHAR2", "VARCHAR"):
-                size = "4000"
-            elif b == "NCHAR":
-                size = "1000"
-            else:  # NVARCHAR2/NVARCHAR/CHAR
-                size = "2000"
-            return f"AS {base}({size}))"
+        # A character CAST needs a length in a SQL statement (``CAST(x AS
+        # VARCHAR2)`` -> ORA-00906), but a PL/SQL *expression* CAST *rejects* the
+        # length (``CAST(x AS VARCHAR2(4000))`` -> PLS-00103). The context tells
+        # them apart: a fragment with a DML verb is a SQL statement; a bare scalar
+        # expression (a PUT_LINE argument, an assignment value, a condition) is
+        # PL/SQL and takes the length-less form.
+        if re.search(r"(?i)\b(SELECT|INSERT|UPDATE|DELETE|MERGE)\b", sql):
 
-        sql = re.sub(r"(?i)\bAS\s+(N?VARCHAR2?|N?CHAR)\s*\)", _char_cast_size, sql)
+            def _char_cast_size(m: re.Match[str]) -> str:
+                base = m.group(1)
+                b = base.upper()
+                if b in ("VARCHAR2", "VARCHAR"):
+                    size = "4000"
+                elif b == "NCHAR":
+                    size = "1000"
+                else:  # NVARCHAR2/NVARCHAR/CHAR
+                    size = "2000"
+                return f"AS {base}({size}))"
+
+            sql = re.sub(r"(?i)\bAS\s+(N?VARCHAR2?|N?CHAR)\s*\)", _char_cast_size, sql)
+        else:
+            # PL/SQL scalar: strip any length from a character CAST target.
+            sql = re.sub(
+                r"(?i)(\bAS\s+N?(?:VARCHAR2?|CHAR))\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\)",
+                r"\1",
+                sql,
+            )
 
         # TRY_CAST(x AS type) -> CAST(x AS type DEFAULT NULL ON CONVERSION ERROR)
         # (Oracle 12.2+): returns NULL on a bad value instead of raising. Oracle
