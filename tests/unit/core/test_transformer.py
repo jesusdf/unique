@@ -114,13 +114,27 @@ class TestTypeMapper:
 
     def test_cast_expression_type_mapped(self) -> None:
         cast = CastExpression(
-            expression=Literal(value=1),
-            target_type=DataType(name="BIT"),
+            expression=Literal(value="x"),
+            target_type=DataType(name="UNIQUEIDENTIFIER"),
         )
         ctx = _ctx(source="tsql", target="postgresql")
         result = TypeMapper().visit(cast, ctx)
         assert isinstance(result, CastExpression)
-        assert result.target_type.name == "BOOLEAN"
+        assert result.target_type.name == "UUID"
+
+    def test_bit_cast_normalizes_to_sign_abs(self) -> None:
+        # T-SQL CAST(x AS BIT) is a 0/1 normalization, not a plain type change;
+        # emit SIGN(ABS(x)) so a non-zero value becomes 1 (0 -> 0, NULL -> NULL).
+        cast = CastExpression(
+            expression=Literal(value=2),
+            target_type=DataType(name="BIT"),
+        )
+        ctx = _ctx(source="tsql", target="oracle")
+        result = TypeMapper().visit(cast, ctx)
+        assert isinstance(result, FunctionCall)
+        assert result.name == "SIGN"
+        assert isinstance(result.args[0], FunctionCall)
+        assert result.args[0].name == "ABS"
 
     def test_unknown_type_unchanged(self) -> None:
         dt = DataType(name="INT")

@@ -57,7 +57,7 @@ SELECT GET_BIT(0x0A, 1), SET_BIT(0x0A, 0, 1)
 -- CASE[open]: ts-bitops — fails on mysql. FUNC-DIFF: source=(('1', '7', '6', '-6'),) target=(('1', '7', '6', '18446744073709551616')
 SELECT 5 & 3, 5 | 2, 5 ^ 3, ~5
 
--- CASE[open]: ts-cast-bit — fails on mysql, oracle. FUNC-DIFF: source=(('1',),) target=(('2',),)
+-- CASE[fixed]: ts-cast-bit — T-SQL CAST(x AS BIT) normalizes non-zero to 1; other engines keep the value. Emit SIGN(ABS(x)) (0->0, non-zero->1, NULL->NULL) in the TypeMapper pass.
 SELECT CAST(2 AS BIT) AS r
 
 -- CASE[open]: ts-cast-bit2 — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 't' to a number: 

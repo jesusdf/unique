@@ -221,6 +221,25 @@ class TypeMapper(TransformPass):
             return node
 
         if isinstance(node, CastExpression):
+            # T-SQL ``CAST(x AS BIT)`` normalizes any non-zero numeric to 1 (0 ->
+            # 0, NULL -> NULL); every other engine keeps the value (a plain
+            # ``CAST(2 AS NUMBER(1))`` stays 2). ``SIGN(ABS(x))`` reproduces the
+            # bit value (and preserves NULL) referencing x once. A string operand
+            # ('true'/'false') is T-SQL's own boolean-word parse, left to the
+            # plain type map.
+            if (
+                node.target_type.name.upper() == "BIT"
+                and ctx.source == "tsql"
+                and ctx.target != "tsql"
+                and not (
+                    isinstance(node.expression, Literal)
+                    and isinstance(node.expression.value, str)
+                )
+            ):
+                return FunctionCall(
+                    name="SIGN",
+                    args=(FunctionCall(name="ABS", args=(node.expression,)),),
+                )
             mapped_type = self._map_type(node.target_type, ctx.target)
             if mapped_type != node.target_type:
                 return CastExpression(

@@ -1123,6 +1123,19 @@ class TestTsqlLoopControl:
         assert "loop_lbl: WHILE" in out, out
 
 
+class TestTsqlBitCast:
+    """T-SQL ``CAST(x AS BIT)`` maps any non-zero numeric to 1 (0 -> 0, NULL ->
+    NULL); other engines keep the value. The emitter normalizes via SIGN(ABS(x))."""
+
+    @pytest.mark.parametrize("target", ("oracle", "postgresql", "mysql"))
+    def test_bit_cast_uses_sign_abs(self, target: str) -> None:
+        body = _exec_lines(
+            _tx(_case("challenge_sqlserver.sql", "ts-cast-bit"), "tsql", target)
+        )
+        assert re.search(r"(?i)SIGN\s*\(\s*ABS\s*\(", body), body
+        assert "AS BIT" not in body.upper(), body
+
+
 class TestPgDateDifference:
     """PostgreSQL ``DATE - DATE`` is a day count (60); MySQL does a numeric
     subtraction (200) and T-SQL rejects it. The PG date literal parses as
