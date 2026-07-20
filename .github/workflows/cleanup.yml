@@ -1,0 +1,42 @@
+name: Maintenance — prune run history
+
+# GitHub keeps every workflow run until it is explicitly deleted, so without
+# pruning they accumulate without bound (this repo had reached ~1800 runs, each
+# carrying its logs). Keep only the 50 most recent runs. Runs weekly and can be
+# triggered on demand; it never deletes an in-progress run.
+
+on:
+  schedule:
+    - cron: "23 4 * * 0" # Sundays 04:23 UTC — off-peak, distinct minute
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write # delete workflow runs
+
+concurrency:
+  group: prune-run-history
+  cancel-in-progress: false
+
+jobs:
+  prune-runs:
+    name: Keep the 50 most recent runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Delete old completed runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          # List every run newest-first, keep the 50 newest (any status), and of
+          # the remainder delete only the completed ones (an in-progress run is
+          # never touched). Failures on individual deletes are ignored.
+          gh api --paginate "repos/$REPO/actions/runs?per_page=100" \
+            --jq '.workflow_runs[] | "\(.created_at)\t\(.id)\t\(.status)"' \
+            | sort -r | tail -n +51 \
+            | awk -F '\t' '$3 == "completed" { print $2 }' \
+            | while read -r id; do
+                echo "deleting run $id"
+                gh api -X DELETE "repos/$REPO/actions/runs/$id" || true
+              done
