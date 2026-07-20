@@ -645,10 +645,25 @@ optionally left as comments in the output SQL.
 ## CI Pipeline and Diagnosing Failures
 
 CI is defined in `.github/workflows/ci.yaml` with these jobs: **Lint &
-Format** (black + ruff), **Type Check** (mypy), **Test** (Python 3.12), **Live
+Format** (black + ruff), **Type Check** (mypy), **Test** (Python 3.13), **Live
 Metadata Tests** (Postgres + MySQL service containers), **Live Syntax
-Validation** (Postgres + MySQL + SQL Server, validates transpiler output against
-the real engines' grammar), and **Docker Build & Push** (only on a `v*` tag).
+Validation** (Postgres + MySQL + SQL Server + Oracle, validates transpiler output
+against the real engines' grammar), and **Docker Build & Push** (only on a `v*`
+tag, to **Docker Hub** — not GHCR). Two more workflows run alongside:
+`.github/workflows/codeql.yml` (security scan) and `.github/workflows/mutation.yml`
+(nightly mutation testing).
+
+**Actions storage is self-maintained (2026-07-19).** CodeQL writes a per-commit
+`codeql-overlay-base-database-*` cache that never self-expires, so it piled up to
+~7.5 GB (near the 10 GB cap); `codeql.yml` has a post-analysis step that prunes
+all but the two newest overlay caches (needs `permissions: actions: write`).
+Workflow runs also accumulate unbounded (they had reached ~1800), so
+`.github/workflows/cleanup.yml` runs daily and keeps only the 50 most recent runs
+(never touching an in-progress one). Note: the Actions **billing** storage
+("Storage for Actions and Packages", 0.5 GB free) counts artifacts + GHCR
+packages — **not** the cache — so pruning the cache does not change that number;
+inspect it at `GET /repos/jesusdf/unique/actions/cache/usage`,
+`.../actions/artifacts`, and Settings → Billing → Usage.
 
 ### Checking CI status from the API
 
@@ -733,22 +748,39 @@ the reliable channel from this sandbox.
 
 ### Validating output against real engines
 
-The Live Syntax Validation job (and `tests/integration/test_live_syntax.py`)
-checks transpiled SQL against the real target engine instead of our own
-assumptions — the robust way to catch dialect violations (e.g. T-SQL
-`CREATE TABLE IF NOT EXISTS`, stray `;` before `GO`). SQL Server and PostgreSQL
-run the batches inside a rolled-back transaction (so dependent DDL resolves);
-MySQL (which auto-commits DDL) runs in a throwaway database that is dropped
-after. Oracle is validated with a drop-before/drop-after cleanup. Run locally
-with:
+The Live Syntax Validation job checks transpiled SQL against the real target
+engine instead of our own assumptions — the robust way to catch dialect
+violations (e.g. T-SQL `CREATE TABLE IF NOT EXISTS`, stray `;` before `GO`).
+SQL Server and PostgreSQL run the batches inside a rolled-back transaction (so
+dependent DDL resolves); MySQL (which auto-commits DDL) runs in a throwaway
+database that is dropped after. Oracle is validated with a drop-before/drop-after
+cleanup.
+
+> **The local suite (`pytest` / `scripts/test-parallel.sh` 8-shard) does NOT run
+> this job.** It needs the `UNIQUE_TEST_*_URL` env vars, which the plain suite
+> leaves unset (the live tests skip). So a change can be fully green locally and
+> still fail CI here. This bit a char-CAST fix (`c8e5f5f`): the 8-shard + mypy
+> passed, but Live Syntax Validation caught `test_procedures_fixture_is_valid_live[oracle]`
+> compiling INVALID. **For any procedural, Oracle-CAST, type-mapping, or
+> DDL-shape change, run the live suite locally BEFORE pushing.** The CI job runs
+> the whole set (`ci.yaml` step "Run live syntax validation"):
 
 ```bash
-docker compose -f docker-compose.test.yaml up -d   # postgres, mysql, mssql
+docker compose -f docker-compose.test.yaml up -d   # postgres, mysql, mssql, oracle
+UNIQUE_TEST_ORACLE_URL="oracle://system:oracle@localhost:1521/FREEPDB1" \
 UNIQUE_TEST_MSSQL_URL="mssql://sa:Unique_Strong!Pass1@localhost:1433/master" \
 UNIQUE_TEST_PG_URL="postgresql://unique:unique@localhost:5433/unique" \
-UNIQUE_TEST_MYSQL_URL="mysql://unique:unique@localhost:3307/unique" \
-pytest tests/integration/test_live_syntax.py -v
+UNIQUE_TEST_MYSQL_URL="mysql://root:root@localhost:3307/mysql" \
+pytest tests/integration/test_live_syntax.py \
+       tests/integration/test_corpus_live.py \
+       tests/integration/test_corpus_results_live.py -q
 ```
+
+(Match the URLs to your local stack — see the `unique-test-databases` memory;
+credentials differ from CI's.) `test_corpus_live` sweeps the SQL corpus
+(transpile → execute on the real engine); `test_corpus_results_live` goes
+further and compares the *result* of source vs transpiled output, catching
+wrong-answer bugs a permissive parser would miss.
 
 The Microsoft ODBC Driver 18 (needed by `pyodbc` for SQL Server) must match
 the runner's Ubuntu version; the CI step detects `VERSION_ID` and falls back
