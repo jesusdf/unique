@@ -103,18 +103,32 @@ workflow.
       DB connection is given, else warn), UNSIGNED→widen+`CHECK(≥0)`, and a
       source-gated FUNC-DIFF wave (MOD-by-zero, Oracle CAST-to-int rounding,
       GREATEST/LEAST NULL-propagation, negative/float LEFT·REPEAT, INSERT bounds,
-      MySQL date-arith→DATE). **Remaining ~472 are the hard tail** (mapped in the
-      `blue-rc1b-builtin-gate` memory): mysql-unsigned-bit family, Oracle
-      empty-string=NULL (not faithfully reproducible → surface to user),
-      collation func-diffs (`[limit]`), procedural WHILE/CURSOR→PG, GROUPING_ID
-      emulation, JSON/XML, SUBSTRING-float, concat-null (bidirectional), CONCAT
-      number/bool/NULL stringification, unsigned-bit (2⁶⁴). Method: check
-      src-vs-tgt live, write a `SOURCE_DIALECT`-gated compensation, verify on the
-      real engines, run the full **8-shard** suite (grep ALL for failures), flip
-      + add an assertion. **`--db-url` live collation resolver: SKIPPED per user
-      (2026-07-19) — no corpus impact (collations are explicit literals, not
-      column refs; cross-engine collation map is approximate); the warn+comment
-      fallback stands.**
+      MySQL date-arith→DATE). Later waves (all live-verified, full log in the
+      `blue-rc1b-builtin-gate` memory): division/AVG-int/LOG/precision, NULL
+      ordering emulation (MySQL/T-SQL null-priority key), T-SQL `LEN`
+      trailing-space (`RTRIM`), PG `SUBSTRING` start≤0, PG unbounded numeric cast
+      scale (`(38,10)` — cured the pg-round-* "banker's" mirage), MySQL
+      case-insensitive `INSTR`/`LOCATE`→`LOWER` on CS targets, and two `[limit]`
+      batches (Oracle `''`=NULL, MySQL unsigned-64 bitwise). **Maintainer policy
+      2026-07-19: a correct value that differs only in decimal PRECISION/scale is
+      `[fixed]`** (trailing zeros AND scale-rounding).
+      **Remaining hard tail by family** (directives from the maintainer, given
+      2026-07-19): (1) **format** (~41 — TO_CHAR/FORMAT date & number masks):
+      implement the reproducible mask translations, `[limit]` where there is no
+      equivalent (currency symbol, locale month/day names, week numbering). This
+      is a *format-mask translation layer*, the largest remaining piece. (2)
+      **collation** remainder (DISTINCT/GROUP/ORDER/GREATEST case): ORDER-BY may
+      take `LOWER()` on CS targets; DISTINCT/GROUP/GREATEST change returned
+      values → `[limit]`; CS-source→CI-target ignored per policy. (3) **date/
+      string edges**: implement the faithful ones (INSTR 4-arg occurrence/reverse,
+      TIMESTAMPDIFF complete-months, date+int→DATE_ADD, emoji UTF-16 len),
+      `[limit]` the rest. (4) remaining **unsigned/bit** that emit carriers
+      (BIT_AND/OR/XOR agg, BIT_COUNT) need function-mapping to valid first.
+      Method: check src-vs-tgt live, write a `SOURCE_DIALECT`-gated compensation
+      OR a narrow `_DIVERGENCE_RULES` entry (measure churn — broad regexes
+      over-fire), verify on the real engines, run the full **8-shard** suite (grep
+      ALL for failures; `mypy src/` whole-project, not single-file), flip + add an
+      assertion. **`--db-url` live collation resolver: SKIPPED per user.**
 
 ---
 
