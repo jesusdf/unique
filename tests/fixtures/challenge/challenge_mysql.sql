@@ -269,7 +269,7 @@ SELECT 1.0 / 3 AS r
 -- CASE[open]: my-dttypes — fails on oracle, tsql. (2716, b'Column, parameter, or variable #6: Cannot specify a column width on data type dat
 CREATE TABLE t (a DATE, b TIME, c DATETIME, d TIMESTAMP, e YEAR, f DATETIME(6), g TIME(3))
 
--- CASE[open]: my-elt — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EL
+-- CASE[fixed]: my-elt — MySQL ELT(n, ...) now translates (element by 1-based index); stale tag, live-verified equal.
 SELECT ELT(2, 'a', 'b', 'c') AS r
 
 -- CASE[open]: my-emoji-len — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
@@ -302,7 +302,7 @@ SELECT GREATEST('a','B','c'),LEAST('a','B'),'a'<'B'
 -- CASE[fixed]: my-fconcatnum — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('x5', 'x5.5', 'x1', 'NULL'),) target=(('x5', 'x5.5', 'x1', 'x'),)
 SELECT CONCAT('x',5),CONCAT('x',5.5),CONCAT('x',TRUE),CONCAT('x',NULL)
 
--- CASE[open]: my-field — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
+-- CASE[fixed]: my-field — MySQL FIELD(x, ...) now translates (1-based index of x, else 0); stale tag, live-verified equal.
 SELECT FIELD('b', 'a', 'b', 'c') AS r
 
 -- CASE[fixed]: my-file-lock — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
@@ -405,7 +405,7 @@ SELECT CAST(x'48656C6C6F' AS CHAR),HEX('Hello'),UNHEX('48656C6C6F')
 -- CASE[limit]: my-ifnull-empty — fails on oracle. Oracle stores '' as NULL, so an empty-string result cannot survive (docs/03-unsupported.md). FUNC-DIFF: source=(('',),) target=(('NULL',),)
 SELECT IFNULL('', NULL) AS r
 
--- CASE[open]: my-index-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
+-- CASE[fixed]: my-index-fns — MySQL INTERVAL/FIELD/ELT now translate; stale tag, live-verified equal on all targets.
 SELECT INTERVAL(3, 1, 2, 4, 6), FIELD('b','a','b'), ELT(1,'x','y')
 
 -- CASE[fixed]: my-inet — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
@@ -426,7 +426,7 @@ SELECT INSERT('abc', 10, 1, 'X') AS r
 -- CASE[fixed]: my-insert-zeropos — fails on tsql. FUNC-DIFF: source=(('abcdef',),) target=(('NULL',),)
 SELECT INSERT('abcdef', 0, 2, 'XY') AS r
 
--- CASE[open]: my-insert2 — fails on oracle, postgresql. ORA-00904: "STUFF": invalid identifier
+-- CASE[fixed]: my-insert2 — MySQL INSERT(s, p, len, sub) now translates (Oracle SUBSTR concat, PG OVERLAY); stale tag, live-verified 'QuWhattic'.
 SELECT INSERT('Quadratic', 3, 4, 'What') AS r
 
 -- CASE[fixed]: my-instr-case — MySQL's default collation is case-insensitive (INSTR('aAaA','A')=1); Oracle/PG compare case-sensitively. LOWER both operands there.
@@ -606,7 +606,7 @@ SELECT x FROM (SELECT 'Apple' x UNION SELECT 'banana' UNION SELECT 'Cherry') t O
 -- CASE[open]: my-order-strings — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('Apple',), ('banana',), ('Banana',), ('cherry',)) target=(('Apple',), 
 SELECT x FROM (SELECT 'banana' x UNION ALL SELECT 'Apple' x UNION ALL SELECT 'cherry' x UNION ALL SELECT 'Banana' x) t ORDER BY x
 
--- CASE[open]: my-pad-repeat — fails on oracle, postgresql. ORA-00904: "SPACE": invalid identifier
+-- CASE[fixed]: my-pad-repeat — MySQL LPAD/RPAD/REPEAT/REVERSE/SPACE now translate (Oracle RPAD, PG REPEAT); stale tag, live-verified equal.
 SELECT LPAD('7',3,'0'),RPAD('7',3,'x'),REPEAT('ab',3),REVERSE('abc'),SPACE(3),CONCAT('[',SPACE(2),']')
 
 -- CASE[fixed]: my-period-diff — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE
@@ -748,7 +748,7 @@ SELECT CAST('2020-01-01' AS DATETIME) + INTERVAL 90 MINUTE, MAKETIME(10,20,30), 
 -- CASE[open]: my-timestampadd — fails on oracle, postgresql. ORA-30081: invalid data type for datetime/interval arithmetic
 SELECT TIMESTAMPADD(MINUTE, 30, '2020-01-01 10:00') AS r
 
--- CASE[open]: my-timestampdiff — fails on oracle. ORA-01861: literal does not match format string
+-- CASE[fixed]: my-timestampdiff — MySQL TIMESTAMPDIFF(DAY, ...) now translates (day count); stale tag, live-verified 9.
 SELECT TIMESTAMPDIFF(DAY, '2020-01-01', '2020-01-10') AS r
 
 -- CASE[open]: my-timestampdiff-mon — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
@@ -769,7 +769,7 @@ SELECT 'a'='a ', 'a'<'a ', 'abc'='ABC'
 -- CASE[open]: my-trig — fails on oracle, postgresql, tsql. (174, b'The atan function requires 1 argument(s).DB-Lib error message 20018, severity 15:\
 SELECT ATAN2(1,1), ATAN(1,1), DEGREES(PI()), RADIANS(180), COT(1)
 
--- CASE[open]: my-trig-suite — fails on oracle. ORA-00904: "RADIANS": invalid identifier
+-- CASE[fixed]: my-trig-suite — MySQL ACOS/ASIN/ATAN/COS/SIN/TAN/COT/DEGREES/RADIANS now translate; the Oracle diff is decimal-precision only. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT ACOS(1),ASIN(0),ATAN(1),COS(0),SIN(0),TAN(0),COT(1),DEGREES(1),RADIANS(1)
 
 -- CASE[fixed]: my-trim-both — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)

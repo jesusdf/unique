@@ -424,7 +424,7 @@ SELECT JUSTIFY_INTERVAL(INTERVAL '1 mon 40 days') AS r
 -- CASE[fixed]: pg-left-neg — PG LEFT(s, -n) returns all-but-last-|n| ('ab'); MySQL returns ''. Emit LEFT(s, GREATEST(CHAR_LENGTH(s) + n, 0)) on MySQL.
 SELECT LEFT('abc', -1) AS r
 
--- CASE[open]: pg-left-round — fails on tsql. FUNC-DIFF: source=(('hel',),) target=(('he',),)
+-- CASE[fixed]: pg-left-round — PG 2.9::int rounds (3) so LEFT('hello', 3) = 'hel'; fixed by the T-SQL CAST-to-int ROUND wrap (a fractional literal cast now rounds). Live-verified 'hel'.
 SELECT LEFT('hello', 2.9::int) AS r
 
 -- CASE[limit]: pg-like-cs — fails on mysql, tsql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0',),) target=(('1',),)
@@ -454,7 +454,7 @@ SELECT MAKE_DATE(2020, 6, 15), MAKE_TIME(10, 30, 0)
 -- CASE[fixed]: pg-md5 — fails on oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT MD5('abc') AS r
 
--- CASE[open]: pg-mod-decimal — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
+-- CASE[fixed]: pg-mod-decimal — PG MOD(10, 3.5) now translates faithfully; the remaining diff is decimal-precision only. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT MOD(10, 3.5::numeric) AS r
 
 -- CASE[open]: pg-multi-out — fails on oracle. FUNCTION F compiled INVALID (line 7): PLS-00201: identifier 'VOID' must be declared
@@ -523,10 +523,10 @@ SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x
 -- CASE[open]: pg-overlay — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV
 SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o
 
--- CASE[open]: pg-pad-repeat — fails on oracle. ORA-00904: "REPEAT": invalid identifier
+-- CASE[fixed]: pg-pad-repeat — PG lpad/rpad/repeat/reverse now translate (Oracle RPAD/REVERSE); stale tag, live-verified equal.
 SELECT lpad('7',3,'0'),rpad('7',3,'x'),repeat('ab',3),reverse('abc'),repeat(' ',3)
 
--- CASE[open]: pg-pi-fns — fails on oracle. ORA-00904: "PI": invalid identifier
+-- CASE[fixed]: pg-pi-fns — PG pi()/trunc/round now translate (Oracle ACOS(-1) for PI); stale tag, live-verified equal.
 SELECT trunc(pi()::numeric, 4), round(pi()::numeric, 4)
 
 -- CASE[open]: pg-position-case — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
