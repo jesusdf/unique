@@ -3446,6 +3446,25 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             in ("INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT")
         ):
             inner = f"ROUND({inner})"
+        # The reverse target: Oracle/PG/MySQL CAST-to-integer ROUNDS a numeric
+        # literal half-away-from-zero (CAST(2.7 AS INT) = 3, 7.5 -> 8), but T-SQL
+        # CAST truncates (2, 7). Round first so the value matches — T-SQL ROUND is
+        # half-away-from-zero too. Gated to a fractional numeric literal: PG rounds
+        # a float *column* half-to-even, which would not match, so leave those.
+        _ci_frac_lit = (
+            isinstance(node.expression, Literal)
+            and isinstance(node.expression.value, (int, float))
+            and not isinstance(node.expression.value, bool)
+            and float(node.expression.value) != int(node.expression.value)
+        )
+        if (
+            dialect == "tsql"
+            and SOURCE_DIALECT.get() in ("oracle", "postgresql", "mysql")
+            and _ci_frac_lit
+            and node.target_type.name.split("(")[0].strip().upper()
+            in ("INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT")
+        ):
+            inner = f"ROUND({inner}, 0)"
         # MySQL CAST only accepts a fixed set of target types (SIGNED, not INT;
         # no BOOLEAN); T-SQL has no BOOLEAN (it is BIT).
         dtype = node.target_type.name

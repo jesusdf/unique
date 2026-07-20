@@ -118,7 +118,7 @@ SELECT '10:00'::time::text, now()::date::text, 42::bit(8)::int
 -- CASE[open]: pg-cast-datetime2 — fails on oracle. ORA-01861: literal does not match format string
 SELECT '2020-01-01 10:00'::date, '2020-01-01 10:00'::time, '10:00'::interval
 
--- CASE[open]: pg-cast-int — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
+-- CASE[fixed]: pg-cast-int — PG CAST(2.7 AS INT) rounds (3); T-SQL CAST truncates (2). Wrap ROUND(x, 0) on a T-SQL target (both round half-away-from-zero).
 SELECT CAST(2.7 AS INT) AS r
 
 -- CASE[open]: pg-cast-interval — fails on oracle. ORA-30089: missing or invalid <datetime field>
@@ -136,7 +136,7 @@ SELECT '12.99'::numeric(4,1), '12.99'::numeric(3,0), 12.99::money
 -- CASE[open]: pg-cast-point — fails on oracle, tsql. (243, b'Type POINT is not a defined system type.DB-Lib error message 20018, severity 16:\n
 SELECT '(1,2)'::point AS r
 
--- CASE[open]: pg-cast-round-half — fails on tsql. FUNC-DIFF: source=(('8',),) target=(('7',),)
+-- CASE[fixed]: pg-cast-round-half — PG 7.5::int rounds half-away-from-zero (8); T-SQL CAST truncates (7). ROUND(x, 0) on T-SQL matches (also half-away-from-zero).
 SELECT 7.5 :: int AS r
 
 -- CASE[open]: pg-cast-tstz — fails on mysql, oracle, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity

@@ -119,7 +119,7 @@ SELECT CAST('12.99' AS DECIMAL(4,1)), CAST('12.99' AS DECIMAL(3,0)), CAST('abc' 
 -- CASE[open]: my-cast-hex-char — fails on oracle. ORA-25137: Data value out of range
 SELECT CAST(0xFF AS CHAR) AS r
 
--- CASE[open]: my-cast-int — fails on tsql. FUNC-DIFF: source=(('3',),) target=(('2',),)
+-- CASE[fixed]: my-cast-int — MySQL CAST(2.7 AS SIGNED) rounds (3); T-SQL CAST truncates (2). Wrap ROUND(x, 0) on a T-SQL target (both round half-away-from-zero).
 SELECT CAST(2.7 AS SIGNED) AS r
 
 -- CASE[open]: my-cast-json — fails on oracle, postgresql, tsql. (243, b'Type json is not a defined system type.DB-Lib error message 20018, severity 16:\nG

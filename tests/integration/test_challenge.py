@@ -851,6 +851,30 @@ class TestOracleCastIntRounds:
         assert "CAST(ROUND('3.9') AS SIGNED)" in out, out
 
 
+class TestTsqlCastIntRounds:
+    """PG/MySQL CAST-to-integer round a numeric literal half-away-from-zero
+    (CAST(2.7 AS INT) = 3, 7.5 -> 8); T-SQL CAST truncates. The emit wraps
+    ROUND(x, 0) on a T-SQL target (T-SQL ROUND is half-away-from-zero too).
+    Live-verified 3/8, not 2/7."""
+
+    @pytest.mark.parametrize(
+        "src_file,src,keyword",
+        [
+            ("challenge_postgresql.sql", "postgresql", "pg-cast-int"),
+            ("challenge_postgresql.sql", "postgresql", "pg-cast-round-half"),
+            ("challenge_mysql.sql", "mysql", "my-cast-int"),
+        ],
+    )
+    def test_tsql_rounds_the_cast(self, src_file: str, src: str, keyword: str) -> None:
+        out = _tx(_case(src_file, keyword), src, "tsql")
+        assert re.search(r"(?i)CAST\(\s*ROUND\(.*,\s*0\)\s*AS\b", out), out
+
+    def test_integer_literal_cast_not_wrapped(self) -> None:
+        # A non-fractional literal must not get a ROUND wrapper (no churn).
+        out = _tx("SELECT CAST(5 AS INT) AS r", "postgresql", "tsql")
+        assert "ROUND" not in out.upper(), out
+
+
 class TestGreatestLeastNullPropagation:
     """MySQL's GREATEST/LEAST return NULL if any argument is NULL; PG and T-SQL
     ignore NULLs. The MySQL->PG/T-SQL emit guards with CASE WHEN <any> IS NULL
