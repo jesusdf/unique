@@ -94,8 +94,8 @@ workflow.
       documented limit).** Landed so far (recorded in [`docs/DONE.md`](DONE.md)
       §41): RC-1b gate (DML+procedural), 21 built-in mappings, RC-3
       FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG.
-      **2026-07-19 continuation — 415 `[open]` / 36 `[limit]` / ~411 `[fixed]`
-      (down from ~600 open).** Structural IR-drop fixes (window frame, GROUP BY
+      **2026-07-19 continuation — 413 `[open]` / 36 `[limit]` / 413 `[fixed]`
+      (down from ~600 open; HEAD `88e5bf5`, CI green).** Structural IR-drop fixes (window frame, GROUP BY
       ROLLUP/CUBE/GROUPING SETS, computed columns), base-10 LOG, silent-clause
       carriers (FOR UPDATE/NOT VALID/CONCURRENTLY/EXCLUDE/ON UPDATE/
       MEMORY_OPTIMIZED), collation/charset drops (carrier + warning — the
@@ -108,27 +108,46 @@ workflow.
       ordering emulation (MySQL/T-SQL null-priority key), T-SQL `LEN`
       trailing-space (`RTRIM`), PG `SUBSTRING` start≤0, PG unbounded numeric cast
       scale (`(38,10)` — cured the pg-round-* "banker's" mirage), MySQL
-      case-insensitive `INSTR`/`LOCATE`→`LOWER` on CS targets, and two `[limit]`
-      batches (Oracle `''`=NULL, MySQL unsigned-64 bitwise). **Maintainer policy
-      2026-07-19: a correct value that differs only in decimal PRECISION/scale is
-      `[fixed]`** (trailing zeros AND scale-rounding).
-      **Remaining hard tail by family** (directives from the maintainer, given
-      2026-07-19): (1) **format** (~41 — TO_CHAR/FORMAT date & number masks):
-      implement the reproducible mask translations, `[limit]` where there is no
-      equivalent (currency symbol, locale month/day names, week numbering). This
-      is a *format-mask translation layer*, the largest remaining piece. (2)
-      **collation** remainder (DISTINCT/GROUP/ORDER/GREATEST case): ORDER-BY may
-      take `LOWER()` on CS targets; DISTINCT/GROUP/GREATEST change returned
-      values → `[limit]`; CS-source→CI-target ignored per policy. (3) **date/
-      string edges**: implement the faithful ones (INSTR 4-arg occurrence/reverse,
-      TIMESTAMPDIFF complete-months, date+int→DATE_ADD, emoji UTF-16 len),
-      `[limit]` the rest. (4) remaining **unsigned/bit** that emit carriers
-      (BIT_AND/OR/XOR agg, BIT_COUNT) need function-mapping to valid first.
-      Method: check src-vs-tgt live, write a `SOURCE_DIALECT`-gated compensation
-      OR a narrow `_DIVERGENCE_RULES` entry (measure churn — broad regexes
-      over-fire), verify on the real engines, run the full **8-shard** suite (grep
-      ALL for failures; `mypy src/` whole-project, not single-file), flip + add an
-      assertion. **`--db-url` live collation resolver: SKIPPED per user.**
+      case-insensitive `INSTR`/`LOCATE`→`LOWER` on CS targets, PG `DATE-DATE`
+      & PG/Oracle `date+int`→DATE_ADD, date-precision flips, and two `[limit]`
+      batches (Oracle `''`=NULL, MySQL unsigned-64 bitwise). Procedural:
+      `ts-continue-break` (compound assignment + `BREAK`/`CONTINUE`→EXIT/LEAVE +
+      labeled MySQL loop), `@@`-global neutral carrier + FETCH-without-INTO
+      carrier, `ts-cast-bit`→`SIGN(ABS(x))` (via the `TypeMapper` IR pass).
+      **Maintainer policies 2026-07-19:** (a) a correct value differing only in
+      decimal/date PRECISION/scale is `[fixed]` (trailing zeros AND
+      scale-rounding AND datetime-vs-date zero-time); (b) per-family directives
+      below.
+      **Remaining hard tail by family** (each is a mini-project, not a quick
+      flip): (1) **format** (~41 — TO_CHAR/FORMAT date & number masks): implement
+      the reproducible mask translations, `[limit]` the no-equivalent ones
+      (currency symbol, locale month/day names, week numbering). A
+      *format-mask translation layer* generalizing `_map_oracle_datefmt_to_mysql`
+      (currently oracle→mysql + procedural-path only) to all pairs + wiring into
+      the DML/IR emit path. Largest piece — **PAUSED by the maintainer**, do as a
+      dedicated fresh session. (2) **type-cast bucket** (ts-cast-money/
+      datetimeoffset/binary-length/cast-date-int/cast-int-datetime, string
+      bit-casts): all route through **`transformer.py` `TypeMapper.visit`** (the
+      interception point, found via a `DataType.__init__` stack-trace breakpoint;
+      `ctx.source`/`ctx.target` available). Date↔int is T-SQL's 1900-01-01 epoch
+      (needs operand type inference); money needs currency-string parsing. The
+      **Oracle char-CAST-in-PL/SQL** issue (`CAST(x AS VARCHAR2(n))` is PLS-00103
+      in an expression but ORA-00906 without the length in SQL) needs an explicit
+      SQL-vs-PL/SQL context flag threaded to each CAST — a fragment-text heuristic
+      is UNSOUND (reverted `88e5bf5`; select-list sub-exprs lose the SELECT
+      keyword). (3) **collation** remainder (DISTINCT/GROUP/ORDER/GREATEST case):
+      DISTINCT/GROUP/GREATEST change returned values → `[limit]`; ORDER-BY tie-break
+      is fragile; CS-source→CI-target ignored per policy. (4) **date/string edges**:
+      INSTR 4-arg occurrence/reverse, TIMESTAMPDIFF complete-months, emoji UTF-16
+      len. (5) remaining **unsigned/bit** carriers (BIT_AND/OR/XOR agg, BIT_COUNT)
+      need function-mapping to valid first. Method: check src-vs-tgt live, write a
+      `SOURCE_DIALECT`-gated compensation OR a narrow `_DIVERGENCE_RULES` entry
+      (measure churn — broad regexes over-fire), verify on the real engines, run
+      the full **8-shard** suite AND (for procedural/CAST changes) the **live-syntax
+      suite locally** with the `UNIQUE_TEST_*_URL` env vars (the 8-shard does NOT
+      run it — it caught a char-CAST regression `c8e5f5f`), `mypy src/`
+      whole-project, flip + add an assertion. **`--db-url` live collation resolver:
+      SKIPPED per user.**
 
 ---
 
