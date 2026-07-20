@@ -22,6 +22,7 @@ construct must arrive in the target idiom.
 from __future__ import annotations
 
 import re
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,7 @@ from helpers.invariants import assert_no_silent_loss, jaccard_similarity
 from helpers.validity import assert_statements_parse, executable_body
 
 from unique.core.batch_splitter import BatchSplitter, BatchType
-from unique.core.transpiler import transpile
+from unique.core.transpiler import TranspileResult, transpile
 
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "real_world"
 
@@ -49,6 +50,29 @@ def _load(filename: str) -> str:
     if not path.exists():
         pytest.skip(f"fixture missing: {filename}")
     return path.read_text(encoding="utf-8", errors="replace")
+
+
+@cache
+def _transpiled(filename: str, source: str, target: str) -> TranspileResult:
+    """Transpile a fixture once per (file, source, target), shared across tests.
+
+    The forward direction of each pair is asserted by ~7 different test methods
+    (crash/output/table-count/no-silent-loss/parse/quoting/signature) and the
+    real-world corpora are large, so re-transpiling per method dominated the
+    suite runtime. Caching collapses it to one transpile per pair. (Transpiling
+    is a pure function of the inputs and the results are only read, so sharing is
+    safe. The performance-budget test deliberately calls ``transpile`` directly.)
+    """
+    return transpile(_load(filename), source, target)
+
+
+@cache
+def _round_tripped(filename: str, source: str, via: str) -> tuple[str, str]:
+    """A -> via -> A round-trip SQL (forward, back), cached — both round-trip
+    test classes re-run identical legs."""
+    forward = _transpiled(filename, source, via).sql
+    back = transpile(forward, via, source).sql
+    return forward, back
 
 
 def _count_create_table(sql: str) -> int:
@@ -73,8 +97,7 @@ class TestRealWorldTranspilation:
     def test_does_not_crash_and_outputs(
         self, filename: str, source: str, target: str, n_tables: int
     ) -> None:
-        sql = _load(filename)
-        result = transpile(sql, source, target)
+        result = _transpiled(filename, source, target)
         assert result.sql is not None
         assert result.sql.strip()
 
@@ -85,7 +108,7 @@ class TestRealWorldTranspilation:
         # never a near-empty collapse (which would indicate a parser/
         # emitter swallowing the script).
         sql = _load(filename)
-        result = transpile(sql, source, target)
+        result = _transpiled(filename, source, target)
         assert len(result.sql) > len(sql) * 0.3
 
     def test_create_table_count_preserved(
@@ -94,8 +117,7 @@ class TestRealWorldTranspilation:
         # The transpiler must not drop table definitions. Allow a small
         # tolerance for dialect rewrites that fold or comment a table, but
         # the vast majority must survive.
-        sql = _load(filename)
-        result = transpile(sql, source, target)
+        result = _transpiled(filename, source, target)
         out_tables = _count_create_table(result.sql)
         assert out_tables >= max(1, int(n_tables * 0.8))
 
@@ -190,9 +212,7 @@ class TestRoundTripPreservation:
     ) -> None:
         if via == source:
             pytest.skip("round-trip via the same dialect is trivial")
-        sql = _load(filename)
-        forward = transpile(sql, source, via).sql
-        back = transpile(forward, via, source).sql
+        _forward, back = _round_tripped(filename, source, via)
         # Most table definitions must survive the round-trip. The threshold is
         # lenient (50%) because schemas with heavy engine-specific DDL (e.g.
         # AdventureWorks index WITH (PAD_INDEX = ...) options) lose some
@@ -273,7 +293,7 @@ class TestGenericInvariants:
         self, filename: str, source: str, target: str, _n: int
     ) -> None:
         sql = _load(filename)
-        out = transpile(sql, source, target).sql
+        out = _transpiled(filename, source, target).sql
         # Tables and key constraints must survive or be explicitly documented.
         violations = assert_no_silent_loss(
             sql,
@@ -295,8 +315,7 @@ class TestGenericInvariants:
         if via == source:
             pytest.skip("round-trip via same dialect is trivial")
         sql = _load(filename)
-        forward = transpile(sql, source, via).sql
-        back = transpile(forward, via, source).sql
+        _forward, back = _round_tripped(filename, source, via)
         sim = jaccard_similarity(sql, back)
         floor = self._RT_FLOOR[source]
         assert sim >= floor, (
@@ -323,8 +342,7 @@ class TestOutputValidity:
     def test_statements_parse_in_target_dialect(
         self, filename: str, source: str, target: str, _n: int
     ) -> None:
-        sql = _load(filename)
-        out = transpile(sql, source, target).sql
+        out = _transpiled(filename, source, target).sql
         assert_statements_parse(out, target, context=f"{source}->{target}")
 
     @pytest.mark.parametrize(
@@ -335,8 +353,7 @@ class TestOutputValidity:
     def test_no_foreign_quoting_or_separators(
         self, filename: str, source: str, target: str, _n: int
     ) -> None:
-        sql = _load(filename)
-        out = transpile(sql, source, target).sql
+        out = _transpiled(filename, source, target).sql
         body = executable_body(out)
         if target != "tsql":
             leaked = [
@@ -386,8 +403,7 @@ class TestOutputValidity:
     def test_signature_construct_translated(
         self, filename: str, source: str, target: str, _n: int
     ) -> None:
-        sql = _load(filename)
-        out = transpile(sql, source, target).sql
+        out = _transpiled(filename, source, target).sql
         body = executable_body(out).upper()
         present, absent = self._IDIOMS[(source, target)]
         for needle in present:
