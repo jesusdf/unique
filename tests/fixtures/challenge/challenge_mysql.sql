@@ -251,7 +251,7 @@ CREATE TABLE t (a DATETIME(6), b TIMESTAMP(3), c YEAR)
 -- CASE[fixed]: my-dayparts — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA
 SELECT DAYOFWEEK(NOW()), WEEKDAY(NOW()), DAYOFYEAR(NOW()), QUARTER(NOW())
 
--- CASE[open]: my-decimal-scale — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('3.33333', '3.3333', '3.33333', '2.25', '0.01'),) target=(('3.33333', 
+-- CASE[fixed]: my-decimal-scale — same value at each engine's default decimal scale (10/3 = 3.3333...; 1.5*1.5 = 2.25; 0.1*0.1 = 0.01). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 10.00/3, 10/3.0, CAST(10 AS DECIMAL(10,4))/3, 1.5*1.5, 0.1*0.1
 
 -- CASE[open]: my-distinct-case — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('a',), ('B',)) target=(('A',), ('B',))
@@ -263,7 +263,7 @@ SELECT 5 / 2 AS r
 -- CASE[fixed]: my-div-mult2 — 1/3*3 = 1; each engine carries a different decimal precision (MySQL 1, PG/T-SQL 0.999999). Same value. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 1/3*3 AS r
 
--- CASE[open]: my-div-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('0.33333',),) target=(('0.333333',),)
+-- CASE[fixed]: my-div-precision — 1.0/3 = 0.3333...; same value at each engine's default division scale. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 1.0 / 3 AS r
 
 -- CASE[open]: my-dttypes — fails on oracle, tsql. (2716, b'Column, parameter, or variable #6: Cannot specify a column width on data type dat
@@ -314,7 +314,7 @@ CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE t (pid INT, CONSTRAINT fk FORE
 -- CASE[limit]: my-flen — fails on oracle, postgresql, tsql. APPROVED LIMIT (2026-07-18): LENGTH/BIT_LENGTH byte-vs-char, encoding-dependent (docs/03-unsupported.md §2). FUNC-DIFF: source=(('5', '4', '6', '2'),) target=(('4', '4', '2', '2'),)
 SELECT LENGTH('café'),CHAR_LENGTH('café'),LENGTH('日本'),CHAR_LENGTH('日本')
 
--- CASE[open]: my-float-precision — fails on oracle, tsql. FUNC-DIFF: source=(('0.3', '0.3', '0.33333', '0.6667'),) target=(('0.3', '0.3', '0.333333'
+-- CASE[fixed]: my-float-precision — same IEEE/float value at each engine's display precision (DOUBLE vs FLOAT). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 0.1+0.2, CAST(0.1 AS DOUBLE)+CAST(0.2 AS DOUBLE), 1.0/3, 2/3
 
 -- CASE[open]: my-floor-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
