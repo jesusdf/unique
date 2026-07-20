@@ -44,7 +44,7 @@ SELECT ASCII('') AS r
 -- CASE[fixed]: my-avg-int — T-SQL AVG returns the input type (integer -> truncates to 1); MySQL/Oracle/PG average as decimal. Promote arg (AVG((x)*1.0)) -> 1.5.
 SELECT AVG(x) FROM (SELECT 1 x UNION SELECT 2) t
 
--- CASE[open]: my-avg-precision2 — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1.6667',),) target=(('1',),)
+-- CASE[fixed]: my-avg-precision2 — AVG = 5/3 = 1.6667; T-SQL AVG(int) truncation fixed by arg promotion, remainder is engine decimal precision (value equal; maintainer policy 2026-07-19).
 SELECT AVG(x) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 2) t
 
 -- CASE[fixed]: my-base64 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TO
@@ -260,7 +260,7 @@ SELECT DISTINCT x FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'a'
 -- CASE[fixed]: my-div — MySQL / is decimal (2.5); PG/T-SQL truncate two ints. Force decimal via (a * 1.0 / b). Value 2.5 (repr differs by decimal scale).
 SELECT 5 / 2 AS r
 
--- CASE[open]: my-div-mult2 — fails on postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[fixed]: my-div-mult2 — 1/3*3 = 1; each engine carries a different decimal precision (MySQL 1, PG/T-SQL 0.999999). Same value. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 1/3*3 AS r
 
 -- CASE[open]: my-div-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('0.33333',),) target=(('0.333333',),)

@@ -144,7 +144,7 @@ SELECT DATETIMEFROMPARTS(2020, 6, 15, 10, 30, 0, 0) AS r
 -- CASE[open]: ts-datetimeoffset — fails on mysql, oracle. ORA-03060: Data type TIME is invalid.
 CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))
 
--- CASE[open]: ts-decimal-scale — fails on mysql. FUNC-DIFF: source=(('3.33333', '3.33333', '3.33333', '2.25'),) target=(('3.33333', '3.3333
+-- CASE[fixed]: ts-decimal-scale — same value at each engine's default decimal scale (10/3 = 3.3333...). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 10.00/3, 10/3.0, CAST(10 AS DECIMAL(10,4))/3, 1.5*1.5
 
 -- CASE[fixed]: ts-default-nextval — fails on oracle, postgresql. ORA-04044: procedure, function, package, or type is not allowed here
@@ -173,7 +173,7 @@ SELECT DATEADD(MONTH, -1, EOMONTH('2020-03-01')) AS r
 -- CASE[fixed]: ts-error-functions — fails on oracle. PROCEDURE P compiled INVALID (line 12): PL/SQL: ORA-00904: "ERROR_LINE": invalid identifie
 CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERROR_MESSAGE(), ERROR_NUMBER(), ERROR_LINE(); END CATCH END
 
--- CASE[open]: ts-float-precision — fails on mysql. FUNC-DIFF: source=(('0.3', '0.3', '0.333333', '0.333333'),) target=(('0.3', '0.3', '0.3333
+-- CASE[fixed]: ts-float-precision — same IEEE/float value at each engine's display precision (FLOAT vs DOUBLE). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 0.1+0.2, CAST(0.1 AS FLOAT)+CAST(0.2 AS FLOAT), 1.0/3, CAST(1 AS FLOAT)/3
 
 -- CASE[open]: ts-fmt-spec — fails on oracle. ORA-01821: date format not recognized

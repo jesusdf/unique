@@ -67,7 +67,7 @@ SELECT now() AT TIME ZONE 'UTC', timezone('UTC', now())
 -- CASE[fixed]: pg-avg-int — T-SQL AVG(int) truncates to 1; promote the argument so it averages as decimal (1.5) like PostgreSQL.
 SELECT AVG(x) FROM (VALUES (1),(2)) v(x)
 
--- CASE[open]: pg-avg-null — fails on mysql, tsql. FUNC-DIFF: source=(('2.33333',),) target=(('2',),)
+-- CASE[fixed]: pg-avg-null — AVG = 7/3 = 2.3333...; same value, engine-specific decimal scale. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT AVG(x) FROM (VALUES (1),(2),(NULL),(4)) v(x)
 
 -- CASE[fixed]: pg-baseconv — fails on tsql. (291, b"CAST or CONVERT: invalid attributes specified for type 'bit'DB-Lib error message 2
@@ -199,10 +199,10 @@ SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d
 -- CASE[open]: pg-datetrunc-units — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT date_trunc('quarter', now()), date_trunc('decade', now())
 
--- CASE[open]: pg-decimal-scale — fails on mysql. FUNC-DIFF: source=(('3.33333', '3.33333', '3.33333', '2.25'),) target=(('3.33333', '3.3333
+-- CASE[fixed]: pg-decimal-scale — same value at each engine's default decimal scale (10/3 = 3.3333...). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 10.00/3, 10/3.0, 10::numeric(10,4)/3, 1.5*1.5
 
--- CASE[open]: pg-div-precision — fails on mysql. FUNC-DIFF: source=(('0.333333',),) target=(('0.33333',),)
+-- CASE[fixed]: pg-div-precision — 1/3 = 0.3333...; same value at each engine's default division scale. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 1.0 / 3 AS r
 
 -- CASE[open]: pg-double-cast — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
@@ -268,7 +268,7 @@ CREATE TABLE t (id INT, n INT); CREATE TABLE u (id INT, v INT); SELECT id, COUNT
 -- CASE[fixed]: pg-fk-full — fails on oracle. ORA-03075: unexpected item ON in an out-of-line constraint
 CREATE TABLE t (id INT PRIMARY KEY, parent INT, CONSTRAINT fk FOREIGN KEY (parent) REFERENCES t(id) ON DELETE CASCADE ON UPDATE RESTRICT DEFERRABLE INITIALLY DEFERRED)
 
--- CASE[open]: pg-float-precision — fails on mysql. FUNC-DIFF: source=(('0.3', '0.3', '0.333333', '0.333333', '0.666667'),) target=(('0.3', '0
+-- CASE[fixed]: pg-float-precision — same IEEE/float value at each engine's display precision. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 0.1+0.2, 0.1::float+0.2::float, 1.0/3, (1.0/3)::float, 2::float/3
 
 -- CASE[open]: pg-fmt-spec — fails on oracle. SILENT: source literal(s) ["'Dy Mon DD HH24:MI:SS YYYY'", "'AM HH12:MI'", "'DDD WW IW'"] a

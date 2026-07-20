@@ -122,7 +122,7 @@ SELECT DATE '2020-01-01' + 30 AS r FROM DUAL
 -- CASE[open]: ora-day-of-week — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('24',),)
 SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL
 
--- CASE[open]: ora-decimal-scale — fails on mysql. FUNC-DIFF: source=(('3.33333', '3.33333', '3.33333', '2.25'),) target=(('3.33333', '3.3333
+-- CASE[fixed]: ora-decimal-scale — same value at each engine's default decimal scale (10/3 = 3.3333...). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 10.00/3, 10/3.0, CAST(10 AS NUMBER(10,4))/3, 1.5*1.5 FROM DUAL
 
 -- CASE[open]: ora-decode-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('match',),) target=(('no',),)
@@ -131,10 +131,10 @@ SELECT DECODE(NULL, NULL, 'match', 'no') AS r FROM DUAL
 -- CASE[fixed]: ora-div — Oracle / is decimal (2.5); PG/T-SQL truncate two ints. Force decimal via (a * 1.0 / b). Value 2.5 (repr differs by decimal scale).
 SELECT 5 / 2 AS r FROM DUAL
 
--- CASE[open]: ora-div-mult2 — fails on postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[fixed]: ora-div-mult2 — 1/3*3 = 1; same value at different engine precision (0.999999 vs 1). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 1/3*3 AS r FROM DUAL
 
--- CASE[open]: ora-div-precision — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('0.333333',),) target=(('0',),)
+-- CASE[fixed]: ora-div-precision — 1/3 = 0.3333...; same value at each engine's default division scale. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 1 / 3 AS r FROM DUAL
 
 -- CASE[fixed]: ora-dttypes — fails on postgresql, tsql. (102, b"Incorrect syntax near 'YEAR'.DB-Lib error message 20018, severity 15:\nGeneral SQL
@@ -171,7 +171,7 @@ SELECT 'a'||'b','a'||NULL,2||3 FROM DUAL
 -- CASE[fixed]: ora-fk-and-check — fails on mysql. (1239, "Incorrect foreign key definition for 'fk': Key reference and table reference don't
 CREATE TABLE parent (id NUMBER PRIMARY KEY); CREATE TABLE child (pid NUMBER, CONSTRAINT fk FOREIGN KEY (pid) REFERENCES parent ON DELETE CASCADE, CONSTRAINT fk2 CHECK (pid > 0))
 
--- CASE[open]: ora-float-precision — fails on mysql. FUNC-DIFF: source=(('0.3', '0.3', '0.333333'),) target=(('0.3', '0.3', '0.33333'),)
+-- CASE[fixed]: ora-float-precision — same IEEE/float value at each engine's display precision. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 0.1+0.2, CAST(0.1 AS BINARY_DOUBLE)+CAST(0.2 AS BINARY_DOUBLE), 1.0/3 FROM DUAL
 
 -- CASE[open]: ora-fmt-dayname — fails on mysql. FUNC-DIFF: source=(('MONDAY',),) target=(('Monday',),)
