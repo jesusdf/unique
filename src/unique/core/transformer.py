@@ -894,7 +894,7 @@ class Transformer:
         if isinstance(value, FunctionCall) and any(
             isinstance(a, RawSQL)
             and "Unhandled expression type: Distinct" in a.reason
-            and re.search(r"(?is)\b(?:then|else)\s*\((?:[^()]+,)+[^()]+\)", a.sql)
+            and re.search(r"(?is)\b(?:then|else)\s*\([^(),]*,[^()]*\)", a.sql)
             for a in value.args
         ):
             # DISTINCT wraps the whole argument in one RawSQL; a CASE

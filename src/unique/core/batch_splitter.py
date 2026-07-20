@@ -202,7 +202,35 @@ _CALL_PROC_PATTERN = re.compile(r"(?i)^\s*CALL\s+\w")
 
 # A ``GO`` batch terminator on its own line (case-insensitive, optional surrounding
 # horizontal whitespace). Matched only at true top level by _split_on_toplevel_go.
-_GO_LINE = re.compile(r"[ \t]*GO[ \t]*(?:\r?\n|\Z)", re.IGNORECASE)
+# The whitespace runs are possessive (``*+``) so a long run of tabs that is not a
+# ``GO`` line cannot drive backtracking (giving a tab back never exposes a ``G``).
+_GO_LINE = re.compile(r"[ \t]*+GO[ \t]*+(?:\r?\n|\Z)", re.IGNORECASE)
+
+
+def _strip_block_comments(text: str) -> str:
+    """Replace each complete ``/* … */`` block comment with a single space.
+
+    A single left-to-right pass (O(n)) rather than ``re.sub(r"/\\*.*?\\*/", …)``:
+    the regex retries the match at every ``/*`` and each retry scans ahead for a
+    closing ``*/``, so an input with many unterminated ``/*`` (e.g. ``/*a/*a/*…``)
+    is O(n²) — a denial-of-service vector on untrusted SQL. Like the lazy regex,
+    an unterminated ``/*`` (no closing ``*/``) is left untouched, and nesting is
+    not honoured (the first ``*/`` closes the comment).
+    """
+    out: list[str] = []
+    i = 0
+    while True:
+        start = text.find("/*", i)
+        if start == -1:
+            out.append(text[i:])
+            return "".join(out)
+        end = text.find("*/", start + 2)
+        if end == -1:  # unterminated — leave the remainder as-is
+            out.append(text[i:])
+            return "".join(out)
+        out.append(text[i:start])
+        out.append(" ")
+        i = end + 2
 
 
 def _split_on_toplevel_go(sql: str) -> list[str]:
@@ -270,8 +298,8 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
     # ``/* header */ SET ANSI_NULLS ON`` or ``/* header */ IF OBJECT_ID(…) DROP``
     # is mis-typed (its real statement isn't the first line) and emitted as mangled
     # code. Classify against the comment-stripped text; the batch is emitted whole.
-    without_comments = re.sub(r"/\*.*?\*/", " ", stripped, flags=re.S)
-    without_comments = re.sub(r"(?m)^[ \t]*--.*$", "", without_comments)
+    without_comments = _strip_block_comments(stripped)
+    without_comments = re.sub(r"(?m)^[ \t]*+--.*$", "", without_comments)
     if not without_comments.strip():
         return BatchType.COMMENT
 
