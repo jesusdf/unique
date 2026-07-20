@@ -63,23 +63,21 @@ jobs:
       - name: Install GNU parallel
         run: sudo apt-get update && sudo apt-get install -y parallel
 
-      - name: Run tests with coverage (parallel across cores)
+      - name: Run tests (parallel across cores)
         # Splits the suite at test granularity across CPUs (a single heavy file,
-        # test_real_world.py, dominates a serial run). COVERAGE_CORE=sysmon keeps
-        # coverage near-free; the runner combines per-worker data into
-        # coverage.xml. See scripts/test-parallel.sh.
-        run: COV=1 PYTEST_PYTHON=python scripts/test-parallel.sh
+        # test_real_world.py, dominates a serial run). See scripts/test-parallel.sh.
+        # Coverage is intentionally NOT enabled here: as the suite grew, running
+        # coverage over the whole suite accumulates memory past the runner's RAM
+        # (both parallel per-worker and a single serial process OOM-kill the job —
+        # "runner received a shutdown signal"). The tests are the gate; the
+        # coverage report is a separate concern, tracked to re-add once the
+        # coverage memory growth is bounded.
+        run: PYTEST_PYTHON=python scripts/test-parallel.sh
 
       - name: Identity-mutation gate (test-assertion quality)
         # Fails if too few integration tests detect a no-op transpiler; see
         # audit/2026-07-02/02-test-quality.md and scripts/identity_mutation_check.py.
         run: python scripts/identity_mutation_check.py
-
-      - name: Upload coverage
-        uses: actions/upload-artifact@v5
-        with:
-          name: coverage-report
-          path: coverage.xml
 
   metadata-live:
     name: Live Metadata Tests
