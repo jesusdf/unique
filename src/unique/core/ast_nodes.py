@@ -455,6 +455,11 @@ class SelectStatement(ASTNode):
     #: ``*`` default is load-bearing; only genuinely-empty source lists set
     #: this. PG re-emits the bare SELECT; no other engine has the form.
     empty_select_list: bool = False
+    #: MySQL's ``SQL_CALC_FOUND_ROWS`` modifier — it makes the server count the
+    #: full result set (ignoring LIMIT) for a following ``FOUND_ROWS()`` call. No
+    #: other engine has it; dropping it silently breaks that pattern, so a
+    #: non-MySQL target surfaces the loss as a carrier + warning.
+    calc_found_rows: bool = False
 
 
 @dataclass(frozen=True)

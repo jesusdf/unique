@@ -841,6 +841,26 @@ class TestMysqlModByZero:
         assert re.search(r"(?i)CASE\s+WHEN\s+0\s*=\s*0\s+THEN\s+NULL", out), out
 
 
+class TestMysqlSqlCalcFoundRows:
+    """MySQL SQL_CALC_FOUND_ROWS has no equivalent on other engines; the drop is
+    surfaced as a carrier + warning (mirrored by the no-silent-loss scan) rather
+    than dropped silently. The underlying SELECT stays valid."""
+
+    @pytest.mark.parametrize("target", ("oracle", "postgresql", "tsql"))
+    def test_carrier_and_warning(self, target: str) -> None:
+        res = Transpiler().transpile(
+            _case("challenge_mysql.sql", "mysql-qdrop-SQL_CALC_FOU"),
+            source="mysql",
+            target=target,
+        )
+        assert "SQL_CALC_FOUND_ROWS" in res.sql, res.sql  # in the carrier comment
+        assert res.warnings, "expected a value/loss warning"
+
+    def test_plain_select_has_no_carrier(self) -> None:
+        res = Transpiler().transpile("SELECT x FROM t", source="mysql", target="tsql")
+        assert "UNIQUE:" not in res.sql, res.sql
+
+
 class TestMysqlDatetimePrecision:
     """MySQL DATETIME(n)/TIMESTAMP(n) carry fractional-seconds precision. T-SQL
     DATETIME takes no width (error 2716), so DATETIME(n) -> DATETIME2(n); Oracle

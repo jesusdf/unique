@@ -889,6 +889,6 @@ CREATE TABLE t (a BIT(64))
 -- CASE[fixed]: mysql-qdrop-ROLLUP — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ROLLUP' absent from valid tsql output, no warning
 SELECT x FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x WITH ROLLUP
 
--- CASE[open]: mysql-qdrop-SQL_CALC_FOU — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'SQL_CALC_FOUND_ROWS|FOUND' absent from valid tsql output, no warning
+-- CASE[fixed]: mysql-qdrop-SQL_CALC_FOU — SQL_CALC_FOUND_ROWS has no equivalent on other engines; the drop is now surfaced as a carrier + warning (mirrored by the no-silent-loss scan), no longer silent.
 SELECT SQL_CALC_FOUND_ROWS x FROM (SELECT 1 x) t LIMIT 1
 

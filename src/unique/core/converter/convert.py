@@ -1049,6 +1049,10 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
         # gain a ``*`` (wave 124) — flagged so the emitter distinguishes
         # it from fallback-built empty tuples where ``*`` is load-bearing.
         empty_select_list=not (expr.expressions or []),
+        calc_found_rows=any(
+            isinstance(m, exp.Var) and m.name.upper() == "SQL_CALC_FOUND_ROWS"
+            for m in (expr.args.get("operation_modifiers") or [])
+        ),
     )
 
 

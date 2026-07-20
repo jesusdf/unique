@@ -2213,6 +2213,16 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
             right = f"({right})"
         result = f"{result}\n{op}\n{right}"
 
+    # MySQL's SQL_CALC_FOUND_ROWS has no equivalent elsewhere; sqlglot drops it
+    # silently. Surface the loss as a carrier (mirrored to a warning by the
+    # no-silent-loss scan) so a following FOUND_ROWS() is not silently broken.
+    if node.calc_found_rows and dialect != "mysql":
+        result = (
+            "-- UNIQUE: MySQL SQL_CALC_FOUND_ROWS has no equivalent here; the "
+            "full row count for a following FOUND_ROWS() is not computed — run "
+            "a separate COUNT(*) query\n" + result
+        )
+
     return result
 
 
