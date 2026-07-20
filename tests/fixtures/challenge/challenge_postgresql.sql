@@ -223,7 +223,7 @@ CREATE FUNCTION f(tbl TEXT) RETURNS BIGINT AS $$ DECLARE n BIGINT; BEGIN EXECUTE
 -- CASE[open]: pg-emoji-len — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
 SELECT LENGTH('😀') AS r
 
--- CASE[open]: pg-empty-is-null — fails on oracle. FUNC-DIFF: source=(('0',),) target=(('1',),)
+-- CASE[limit]: pg-empty-is-null — fails on oracle. APPROVED LIMIT (2026-07-19): Oracle stores '' as NULL so `'' IS NULL` is true (false on PostgreSQL) — no faithful workaround (docs/03-unsupported.md). Warns + annotates UNIQUE: on Oracle. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT '' IS NULL AS r
 
 -- CASE[fixed]: pg-encode-base64 — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se

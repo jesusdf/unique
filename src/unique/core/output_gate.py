@@ -506,6 +506,19 @@ _DIVERGENCE_RULES: list[tuple[str, str, re.Pattern[str], str]] = [
         "results diverge, and there is no faithful workaround (Oracle '' = NULL)",
     ),
     (
+        # The mirror: a NON-Oracle source whose '' is a real empty string (so
+        # ``'' IS NULL`` is false) sent to Oracle, where '' is stored as NULL
+        # (so it is true). Oracle can't represent '' apart from NULL, so the
+        # boolean result has no faithful workaround. (oracle->oracle is excluded
+        # by the source==target guard; a MySQL source also matches here.)
+        "*",
+        "oracle",
+        re.compile(r"(?i)''\s+IS\s+(?:NOT\s+)?NULL"),
+        "an empty string is a real value on {source} (so '' IS NULL is false), "
+        "but Oracle stores '' as NULL (so it is true) — the boolean result "
+        "diverges on {target}, with no faithful workaround (Oracle '' = NULL)",
+    ),
+    (
         # MySQL evaluates bitwise operators on an UNSIGNED 64-bit integer, so
         # ``~0`` is 18446744073709551615 and ``~5`` is 18446744073709551610;
         # every other engine uses a signed integer (~0 = -1, ~5 = -6). The
