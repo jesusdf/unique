@@ -3905,6 +3905,19 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _len_fn = "CHAR_LENGTH" if dialect == "mysql" else "LENGTH"
         return f"{_len_fn}(RTRIM({_len_arg}))"
 
+    # The reverse: Oracle/PostgreSQL LENGTH counts trailing spaces, but T-SQL LEN
+    # drops them (LEN('abc   ') = 3 vs LENGTH = 6). Preserve the count on a T-SQL
+    # target with the standard LEN(x + '.') - 1 trick — the sentinel char anchors
+    # the trailing run (NULL stays NULL: NULL + '.' = NULL).
+    if (
+        fn_name == "LENGTH"
+        and SOURCE_DIALECT.get() in ("oracle", "postgresql")
+        and dialect == "tsql"
+        and len(node.args) == 1
+    ):
+        _lt_arg = _emit_expression(node.args[0], dialect)
+        return f"LEN({_lt_arg} + '.') - 1"
+
     # MySQL's GREATEST/LEAST return NULL if ANY argument is NULL; PostgreSQL and
     # T-SQL ignore NULLs (GREATEST(1, NULL, 3) = 3 there). Preserve MySQL's
     # NULL-propagation with a guard (Oracle already propagates, so it is left).
@@ -3919,14 +3932,14 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _gl_call = f"{fn_name}({', '.join(_gl_args)})"
         return f"CASE WHEN {_gl_null} THEN NULL ELSE {_gl_call} END"
 
-    # MySQL ASCII('') is 0; Oracle/T-SQL return NULL (Oracle stores '' as NULL,
-    # T-SQL's ASCII('') is NULL). Recover the 0: T-SQL distinguishes '' from NULL
-    # (a faithful CASE — ASCII(NULL) stays NULL); Oracle cannot, so COALESCE
-    # picks the empty-string reading (the inherent Oracle '' = NULL edge means a
-    # genuine NULL argument also reads as 0 there).
+    # MySQL/PostgreSQL ASCII('') is 0; Oracle/T-SQL return NULL (Oracle stores ''
+    # as NULL, T-SQL's ASCII('') is NULL). Recover the 0: T-SQL distinguishes ''
+    # from NULL (a faithful CASE — ASCII(NULL) stays NULL); Oracle cannot, so
+    # COALESCE picks the empty-string reading (the inherent Oracle '' = NULL edge
+    # means a genuine NULL argument also reads as 0 there).
     if (
         fn_name == "ASCII"
-        and SOURCE_DIALECT.get() == "mysql"
+        and SOURCE_DIALECT.get() in ("mysql", "postgresql")
         and len(node.args) == 1
         and dialect in ("oracle", "tsql")
     ):
@@ -4049,6 +4062,20 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _lf_s = _emit_expression(node.args[0], dialect)
         _lf_n = _emit_expression(node.args[1], dialect)
         return f"LEFT({_lf_s}, CASE WHEN {_lf_n} < 0 THEN 0 ELSE {_lf_n} END)"
+    # The reverse: PostgreSQL LEFT with a negative length returns "all but the
+    # last |n|" (LEFT('abc', -1) = 'ab'); MySQL returns '' for a negative length.
+    # Reproduce PostgreSQL's semantics: LEFT(s, GREATEST(CHAR_LENGTH(s) + n, 0)).
+    if (
+        fn_name == "LEFT"
+        and SOURCE_DIALECT.get() == "postgresql"
+        and dialect == "mysql"
+        and len(node.args) == 2
+        and isinstance(node.args[1], UnaryOp)
+        and node.args[1].operator == UnaryOperator.NEGATIVE
+    ):
+        _lf_s = _emit_expression(node.args[0], dialect)
+        _lf_n = _emit_expression(node.args[1], dialect)
+        return f"LEFT({_lf_s}, GREATEST(CHAR_LENGTH({_lf_s}) + {_lf_n}, 0))"
     if fn_name == "CONCAT" and len(node.args) == 1 and dialect in ("tsql", "oracle"):
         return _emit_expression(node.args[0], dialect)
     # A CONCAT chain emits ONE flat call on MySQL (nested CONCATs are valid
@@ -4678,12 +4705,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             needle = f"LOWER({needle})"
             haystack = f"LOWER({haystack})"
         start = _emit_expression(node.args[2], dialect) if len(node.args) > 2 else None
-        # MySQL LOCATE/INSTR with an empty needle returns 1; Oracle INSTR returns
-        # NULL (empty string -> NULL) and T-SQL CHARINDEX returns 0. Recover the 1
-        # when the needle could be empty (skip a provably non-empty literal).
+        # MySQL LOCATE/INSTR and PostgreSQL POSITION/STRPOS with an empty needle
+        # return 1; Oracle INSTR returns NULL (empty string -> NULL) and T-SQL
+        # CHARINDEX returns 0. Recover the 1 when the needle could be empty (skip
+        # a provably non-empty literal).
         _n0 = node.args[0]
         _needle_maybe_empty = (
-            SOURCE_DIALECT.get() == "mysql"
+            SOURCE_DIALECT.get() in ("mysql", "postgresql")
             and start is None
             and not (
                 isinstance(_n0, Literal)

@@ -961,6 +961,21 @@ class TestMysqlAsciiEmpty:
         out = _tx(_case("challenge_mysql.sql", "my-ascii-empty"), "mysql", "oracle")
         assert "COALESCE(ASCII(" in out and ", 0)" in out, out
 
+    def test_pg_source_tsql_case(self) -> None:
+        # PostgreSQL ASCII('') is also 0 — same recovery on a PG source.
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-ascii-empty"), "postgresql", "tsql"
+        )
+        assert re.search(
+            r"(?i)CASE\s+WHEN\b.*=\s*''\s+THEN\s+0\s+ELSE\s+ASCII", out
+        ), out
+
+    def test_pg_source_oracle_coalesce(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-ascii-empty"), "postgresql", "oracle"
+        )
+        assert "COALESCE(ASCII(" in out and ", 0)" in out, out
+
 
 class TestMysqlLocateEmpty:
     """MySQL LOCATE/INSTR with an empty needle returns 1; Oracle INSTR returns
@@ -975,6 +990,17 @@ class TestMysqlLocateEmpty:
     @pytest.mark.parametrize("keyword", ("my-locate-empty", "my-locate-empty2"))
     def test_tsql_case_to_one(self, keyword: str) -> None:
         out = _tx(_case("challenge_mysql.sql", keyword), "mysql", "tsql")
+        assert re.search(r"(?i)CASE\s+WHEN\b.*=\s*''\s+THEN\s+1", out), out
+
+    @pytest.mark.parametrize("keyword", ("pg-position-empty", "pg-strpos-empty"))
+    def test_pg_oracle_coalesces_to_one(self, keyword: str) -> None:
+        # PostgreSQL POSITION/STRPOS with an empty needle also returns 1.
+        out = _tx(_case("challenge_postgresql.sql", keyword), "postgresql", "oracle")
+        assert re.search(r"(?i)COALESCE\(\s*INSTR\(.*\)\s*,\s*1\)", out), out
+
+    @pytest.mark.parametrize("keyword", ("pg-position-empty", "pg-strpos-empty"))
+    def test_pg_tsql_case_to_one(self, keyword: str) -> None:
+        out = _tx(_case("challenge_postgresql.sql", keyword), "postgresql", "tsql")
         assert re.search(r"(?i)CASE\s+WHEN\b.*=\s*''\s+THEN\s+1", out), out
 
 
@@ -1204,6 +1230,33 @@ class TestTsqlLenTrailingSpaces:
     def test_len_unchanged_on_tsql(self) -> None:
         out = _tx("SELECT LEN('abc   ') AS r", "tsql", "tsql")
         assert "RTRIM" not in out.upper(), out
+
+    def test_len_counts_trailing_from_oracle(self) -> None:
+        # Reverse direction: Oracle/PG LENGTH counts trailing spaces, so on a
+        # T-SQL target emit LEN(x + '.') - 1 to preserve the count.
+        out = _tx(
+            _case("challenge_oracle.sql", "ora-length-trailing"), "oracle", "tsql"
+        )
+        assert re.search(r"(?i)LEN\(.*\+\s*'\.'\)\s*-\s*1", out), out
+
+
+class TestPgLeftNegative:
+    """PostgreSQL ``LEFT(s, -n)`` returns "all but the last |n|" characters
+    (LEFT('abc', -1) = 'ab'); MySQL returns '' for a negative length. The emitter
+    rebases to LEFT(s, GREATEST(CHAR_LENGTH(s) + n, 0)) on a MySQL target."""
+
+    def test_negative_length_rebased(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-left-neg"), "postgresql", "mysql"
+        )
+        assert re.search(
+            r"(?i)LEFT\(.*GREATEST\(\s*CHAR_LENGTH\(.*\)\s*\+\s*-1,\s*0\)\)", out
+        ), out
+
+    def test_positive_length_unchanged(self) -> None:
+        # A positive length is not rebased — LEFT('abc', 2) stays as-is.
+        out = _tx("SELECT LEFT('abc', 2) AS r", "postgresql", "mysql")
+        assert "GREATEST" not in out.upper(), out
 
 
 class TestTsqlAvgIntegerPromotion:

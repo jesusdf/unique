@@ -262,7 +262,7 @@ SELECT LAST_DAY(SYSDATE) AS r FROM DUAL
 -- CASE[fixed]: ora-lastday-leap — LAST_DAY(2020-02-01)=2020-02-29 on both; Oracle returns a DATE (shown with 00:00:00), MySQL a date — same value, precision-only (maintainer policy 2026-07-19).
 SELECT LAST_DAY(DATE '2020-02-01') AS r FROM DUAL
 
--- CASE[open]: ora-length-trailing — fails on tsql. FUNC-DIFF: source=(('6',),) target=(('3',),)
+-- CASE[fixed]: ora-length-trailing — Oracle/PG LENGTH counts trailing spaces (6); T-SQL LEN drops them. Emit LEN(x + '.') - 1 on T-SQL to preserve the count.
 SELECT LENGTH('abc   ') AS r FROM DUAL
 
 -- CASE[fixed]: ora-listagg — fails on postgresql. function string_agg(integer, unknown) does not exist

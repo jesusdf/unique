@@ -55,7 +55,7 @@ SELECT array_to_string(string_to_array('a,b,c',','),'|')
 -- CASE[open]: pg-array-jsonb — fails on oracle. ORA-03099: unexpected item [ in a column definition
 CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)
 
--- CASE[open]: pg-ascii-empty — fails on oracle, tsql. FUNC-DIFF: source=(('0',),) target=(('NULL',),)
+-- CASE[fixed]: pg-ascii-empty — PG ASCII('') is 0; Oracle/T-SQL return NULL. Recover 0 (T-SQL CASE, Oracle COALESCE) — shared with the MySQL-source handler.
 SELECT ASCII('') AS r
 
 -- CASE[open]: pg-at-time-zone — fails on mysql, oracle, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D
@@ -421,7 +421,7 @@ SELECT * FROM jsonb_to_recordset('[{"a":1}]') AS x(a INT)
 -- CASE[fixed]: pg-justify — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 mon 40 days'.DB-Lib error message 20018, severity 15:\nGe
 SELECT JUSTIFY_INTERVAL(INTERVAL '1 mon 40 days') AS r
 
--- CASE[open]: pg-left-neg — fails on mysql. FUNC-DIFF: source=(('ab',),) target=(('',),)
+-- CASE[fixed]: pg-left-neg — PG LEFT(s, -n) returns all-but-last-|n| ('ab'); MySQL returns ''. Emit LEFT(s, GREATEST(CHAR_LENGTH(s) + n, 0)) on MySQL.
 SELECT LEFT('abc', -1) AS r
 
 -- CASE[open]: pg-left-round — fails on tsql. FUNC-DIFF: source=(('hel',),) target=(('he',),)
@@ -532,7 +532,7 @@ SELECT trunc(pi()::numeric, 4), round(pi()::numeric, 4)
 -- CASE[open]: pg-position-case — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT POSITION('a' IN 'ABC') AS r
 
--- CASE[open]: pg-position-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[fixed]: pg-position-empty — PG POSITION('' IN x) is 1; Oracle INSTR -> NULL, T-SQL CHARINDEX -> 0. Recover 1 (Oracle COALESCE, T-SQL CASE) — shared empty-needle handler.
 SELECT POSITION('' IN 'abc') AS r
 
 -- CASE[fixed]: pg-quote — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
@@ -642,7 +642,7 @@ SELECT string_to_table('a,b,c', ','), regexp_split_to_array('a1b2', '\d')
 -- CASE[fixed]: pg-string-to-array — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
 SELECT string_to_array('a,b,c', ',')
 
--- CASE[open]: pg-strpos-empty — fails on oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[fixed]: pg-strpos-empty — PG STRPOS(x, '') is 1; Oracle INSTR -> NULL, T-SQL CHARINDEX -> 0. Recover 1 (Oracle COALESCE, T-SQL CASE) — shared empty-needle handler.
 SELECT STRPOS('', '') AS r
 
 -- CASE[open]: pg-substr-edge — fails on mysql. FUNC-DIFF: source=(('hello', 'el', 'hell', 'ello'),) target=(('llo', 'el', '', ''),)
