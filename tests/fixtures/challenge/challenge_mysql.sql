@@ -74,7 +74,7 @@ SELECT BIT_COUNT(255) AS r
 -- CASE[open]: my-bit-fns — fails on postgresql. function bitwise_count(bit) does not exist
 SELECT BIT_COUNT(b'1011'), BIT_LENGTH('a'), OCTET_LENGTH('ab')
 
--- CASE[open]: my-bit-negative — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('18446744073709551616', '18446744073709551616', '3', '9223372036854775
+-- CASE[limit]: my-bit-negative — fails on oracle, postgresql, tsql. MySQL treats bitwise operands as unsigned 64-bit, so ~ and negative-operand bit ops diverge from signed engines. No faithful mapping (docs/03-unsupported.md).
 SELECT ~0, ~5, -5 & 3, -1 >> 1, 5 & -1
 
 -- CASE[open]: my-bit-prec2 — fails on tsql. FUNC-DIFF: source=(('2', '14', '8'),) target=(('3', '14', '5'),)
@@ -83,13 +83,13 @@ SELECT 10 & 6 + 1, 10 | 2 * 3, 1 << 2 + 1
 -- CASE[open]: my-bitand-prec — fails on tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
 SELECT 10 & 6 + 1 AS r
 
--- CASE[open]: my-bitnot — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('18446744073709551616',),) target=(('-1',),)
+-- CASE[limit]: my-bitnot — fails on oracle, postgresql, tsql. MySQL bitwise NOT is unsigned 64-bit (~0=18446744073709551615); other engines are signed (-1). No faithful unsigned-64 type (docs/03-unsupported.md).
 SELECT ~0 AS r
 
--- CASE[open]: my-bitnot-arith — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('18446744073709551616',),) target=(('-5',),)
+-- CASE[limit]: my-bitnot-arith — fails on oracle, postgresql, tsql. MySQL bitwise ops are unsigned 64-bit, so ~5+1 overflows into a big unsigned value vs a signed -5 elsewhere. No faithful unsigned-64 mapping (docs/03-unsupported.md).
 SELECT ~5 + 1 AS r
 
--- CASE[open]: my-bitops — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1', '7', '6', '18446744073709551616', '10', '2'),) target=(('1', '7',
+-- CASE[limit]: my-bitops — fails on oracle, postgresql, tsql. MySQL bitwise NOT/shift are unsigned 64-bit (~5=18446744073709551610); other engines signed. The high-bit results diverge (docs/03-unsupported.md).
 SELECT 5 & 3, 5 | 2, 5 ^ 3, ~5, 5 << 1, 5 >> 1
 
 -- CASE[fixed]: my-blob-length — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO

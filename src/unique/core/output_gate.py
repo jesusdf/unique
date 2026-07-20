@@ -505,6 +505,21 @@ _DIVERGENCE_RULES: list[tuple[str, str, re.Pattern[str], str]] = [
         "Oracle but a real empty string on {target} — IS NULL / NVL / INSTR "
         "results diverge, and there is no faithful workaround (Oracle '' = NULL)",
     ),
+    (
+        # MySQL evaluates bitwise operators on an UNSIGNED 64-bit integer, so
+        # ``~0`` is 18446744073709551615 and ``~5`` is 18446744073709551610;
+        # every other engine uses a signed integer (~0 = -1, ~5 = -6). The
+        # high-bit results differ and there is no faithful unsigned-64 type to
+        # map onto. Keyed on the ``~`` (bitwise NOT) operator, which is where the
+        # sign bit always shows.
+        "mysql",
+        "*",
+        re.compile(r"~\s*[\d(]"),
+        "MySQL bitwise operators return an unsigned 64-bit integer (bitwise NOT "
+        "of 0 is 18446744073709551615), but {target} uses a signed integer (it "
+        "is -1) — results using the high bit differ, with no faithful "
+        "unsigned-64 mapping",
+    ),
 ]
 
 
