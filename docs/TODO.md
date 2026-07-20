@@ -94,8 +94,12 @@ workflow.
       documented limit).** Landed so far (recorded in [`docs/DONE.md`](DONE.md)
       §41): RC-1b gate (DML+procedural), 21 built-in mappings, RC-3
       FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG.
-      **2026-07-20 continuation — 384 `[open]` / 36 `[limit]` / 442 `[fixed]`
-      (down from ~600 open). 2026-07-20 waves: faithful string-fn edges
+      **2026-07-21 — 372 `[open]` / 37 `[limit]` / 453 `[fixed]` (down from ~600
+      open); released `v0.29.0`. The clean single-fn/stale/precision/simple-
+      type-map corrections are now EXHAUSTED — the remaining `[open]` are
+      features (UPDATE/USING-JOIN, procedural→PG, IS-TRUE-in-value, format masks,
+      JSON/XML) or judgment calls (BIT(64) precision, MySQL TIME→Oracle type
+      gap, collation DISTINCT/GROUP → [limit]). 2026-07-20/21 waves: faithful string-fn edges
       (LENGTH-trailing, ASCII/POSITION/STRPOS empty-needle, PG LEFT-neg), T-SQL
       CAST-to-int fractional-literal ROUND, Oracle DECODE NULL-safe equality,
       Oracle exception-name → PL/pgSQL condition map, PG GREATEST/LEAST literal-
@@ -174,3 +178,38 @@ comments/warnings (see `docs/03-unsupported.md`):
   engine — verified for `%TYPE` via the procedural path and for physical index
   clauses via the DML path (`%TYPE` is PL/SQL-only, so it never appears in a
   DML/DDL statement).
+
+---
+
+## 6. Test-suite memory growth (P2) — surfaced 2026-07-21
+
+As the corpus grew (RED added 862+ challenge cases), the test suite's memory
+footprint crossed thresholds that break CI's coverage run and a local serial
+full run. Two related items; **both are test-infrastructure, not code defects**
+(the tests themselves pass, and `v0.29.0` shipped with the code verified via the
+gate tools + unit/challenge + CI's parallel test run):
+
+- [ ] **Re-add coverage to CI once its memory is bounded.** `COV=1
+      scripts/test-parallel.sh` runs coverage over the whole suite and exhausts
+      the runner's RAM — the Test job was OOM-killed ("runner received a shutdown
+      signal", an OOM, not a test failure). Reproduced locally: parallel *and* a
+      single serial coverage process OOM (continuous accumulation under coverage
+      instrumentation), so worker caps don't fix it. **Interim fix (commit
+      `3a2029e`): dropped `COV=1` from the CI Test job** (`.github/workflows/ci.yaml`);
+      nothing gated on the coverage report. Re-add via a bounded approach (e.g.
+      `--cov-context`-free per-shard with a lower worker cap, or `coverage`
+      `--parallel` with periodic `.combine`, or exclude the heavy files) once the
+      growth below is understood.
+- [ ] **Find/bound the serial-run memory accumulation.** A plain serial
+      `pytest -q` with the live DBs up OOMs at ~22% (`test_embedded_dml_ir`) —
+      memory climbs roughly **linearly** across the suite (~9 GB by 22%, still
+      climbing with `functional_equivalence` excluded), so it is cumulative, not
+      one test (a single COPY transpile completes fine in isolation, <6 GB). CI
+      does **not** hit this (no DBs → live `functional_equivalence` tests skip;
+      parallel shards each run only 1/nproc, bounding per-process memory).
+      Candidates: a session-lived sqlglot/module-level cache that grows with
+      distinct inputs, or live-DB connection/result objects not released between
+      tests. Investigate with `ulimit -v` + a memory-tracing plugin; consider a
+      per-file cache reset fixture. **Process note:** `pytest … | tail` reports
+      the *pipe's* exit, not pytest's — capture `> file; echo "EXIT=$?" >> file`
+      for a trustworthy full-suite result.
