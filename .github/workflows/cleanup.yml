@@ -2,7 +2,11 @@ name: Maintenance — prune run history
 
 # GitHub keeps every workflow run until it is explicitly deleted, so without
 # pruning they accumulate without bound (this repo had reached ~1800 runs, each
-# carrying its logs). Keep only the 50 most recent runs. Runs weekly and can be
+# carrying its logs). Keep the 50 most recent runs of every OTHER workflow, plus
+# — pruned SEPARATELY — the 10 most recent runs of this prune workflow itself.
+# The separate cap matters on an idle repo: this job runs daily, so its own runs
+# are always the newest and would otherwise fill the global keep-50 and crowd
+# out real CI history, never getting pruned themselves. Runs daily and can be
 # triggered on demand; it never deletes an in-progress run.
 
 on:
@@ -20,7 +24,7 @@ concurrency:
 
 jobs:
   prune-runs:
-    name: Keep the 50 most recent runs
+    name: Keep 50 recent runs (10 for this prune job)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -28,15 +32,32 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
+          # This prune workflow's own name — its runs are pruned separately so
+          # the daily cadence can't crowd out real CI history on an idle repo.
+          SELF: ${{ github.workflow }}
+          KEEP_SELF: "10"
+          KEEP_OTHER: "50"
         run: |
-          # List every run newest-first, keep the 50 newest (any status), and of
-          # the remainder delete only the completed ones (an in-progress run is
-          # never touched). Failures on individual deletes are ignored.
-          gh api --paginate "repos/$REPO/actions/runs?per_page=100" \
-            --jq '.workflow_runs[] | "\(.created_at)\t\(.id)\t\(.status)"' \
-            | sort -r | tail -n +51 \
-            | awk -F '\t' '$3 == "completed" { print $2 }' \
-            | while read -r id; do
-                echo "deleting run $id"
-                gh api -X DELETE "repos/$REPO/actions/runs/$id" || true
-              done
+          # Delete every completed run in $2's list past the first $1 (newest
+          # first). An in-progress run is never touched; per-delete failures are
+          # ignored. $2 is a jq stream of "<created_at>\t<id>\t<status>" lines.
+          prune() {
+            local keep="$1"; shift
+            sort -r | tail -n "+$((keep + 1))" \
+              | awk -F '\t' '$3 == "completed" { print $2 }' \
+              | while read -r id; do
+                  echo "deleting run $id"
+                  gh api -X DELETE "repos/$REPO/actions/runs/$id" || true
+                done
+          }
+
+          runs="$(gh api --paginate "repos/$REPO/actions/runs?per_page=100" \
+            --jq '.workflow_runs[] | "\(.created_at)\t\(.id)\t\(.status)\t\(.name)"')"
+
+          # This prune job's own runs: keep the newest $KEEP_SELF.
+          echo "$runs" | awk -F '\t' -v self="$SELF" '$4 == self' \
+            | cut -f1-3 | prune "$KEEP_SELF"
+
+          # Every other workflow's runs: keep the newest $KEEP_OTHER.
+          echo "$runs" | awk -F '\t' -v self="$SELF" '$4 != self' \
+            | cut -f1-3 | prune "$KEEP_OTHER"
