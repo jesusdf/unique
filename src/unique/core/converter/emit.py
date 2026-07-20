@@ -5168,6 +5168,18 @@ def _date_literal_sql(node: ASTNode, dialect: str) -> str | None:
         if dialect in ("oracle", "postgresql"):
             return f"DATE '{s}'"
         return f"CAST('{s}' AS DATE)"
+    # PostgreSQL ``DATE '…'`` parses as CAST('…' AS DATE) rather than the
+    # sqlglot wrapper, so recognize that shape too.
+    if (
+        isinstance(node, CastExpression)
+        and node.target_type.name.split("(")[0].strip().upper() == "DATE"
+        and isinstance(node.expression, Literal)
+        and isinstance(node.expression.value, str)
+    ):
+        s = node.expression.value
+        if dialect in ("oracle", "postgresql"):
+            return f"DATE '{s}'"
+        return f"CAST('{s}' AS DATE)"
     return None
 
 

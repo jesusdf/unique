@@ -1064,6 +1064,27 @@ class TestMysqlCaseInsensitiveSearch:
         assert "LOWER(" not in out.upper(), out
 
 
+class TestPgDateDifference:
+    """PostgreSQL ``DATE - DATE`` is a day count (60); MySQL does a numeric
+    subtraction (200) and T-SQL rejects it. The PG date literal parses as
+    ``CAST(... AS DATE)``; recognizing that shape lets the emitter spell the
+    difference as DATEDIFF on MySQL/T-SQL."""
+
+    def test_mysql_uses_datediff(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-date-diff-days"),
+            "postgresql",
+            "mysql",
+        )
+        assert re.search(r"(?i)DATEDIFF\(", out), out
+
+    def test_tsql_uses_datediff_day(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-date-diff-days"), "postgresql", "tsql"
+        )
+        assert re.search(r"(?i)DATEDIFF\(\s*DAY", out), out
+
+
 class TestPgUnboundedNumericCastScale:
     """PostgreSQL's unbounded ``numeric`` is arbitrary-precision, but a bare
     DECIMAL cast defaults to scale 0 on MySQL/Oracle/T-SQL and silently

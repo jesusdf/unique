@@ -184,7 +184,7 @@ SELECT convert_to('abc', 'UTF8')
 -- CASE[fixed]: pg-date-bin — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA
 SELECT date_bin('15 minutes', TIMESTAMP '2020-01-01 00:07', TIMESTAMP '2020-01-01')
 
--- CASE[open]: pg-date-diff-days — fails on mysql. FUNC-DIFF: source=(('60',),) target=(('200',),)
+-- CASE[fixed]: pg-date-diff-days — PostgreSQL DATE-DATE is a day count (60); MySQL does numeric subtraction and T-SQL errors. Recognize the PG CAST(... AS DATE) literal shape and emit DATEDIFF.
 SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r
 
 -- CASE[open]: pg-date-part — fails on oracle. ORA-00907: missing right parenthesis
