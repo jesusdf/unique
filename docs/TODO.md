@@ -94,8 +94,13 @@ workflow.
       documented limit).** Landed so far (recorded in [`docs/DONE.md`](DONE.md)
       §41): RC-1b gate (DML+procedural), 21 built-in mappings, RC-3
       FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG.
-      **2026-07-19 continuation — 413 `[open]` / 36 `[limit]` / 413 `[fixed]`
-      (down from ~600 open; HEAD `88e5bf5`, CI green).** Structural IR-drop fixes (window frame, GROUP BY
+      **2026-07-20 continuation — 384 `[open]` / 36 `[limit]` / 442 `[fixed]`
+      (down from ~600 open). 2026-07-20 waves: faithful string-fn edges
+      (LENGTH-trailing, ASCII/POSITION/STRPOS empty-needle, PG LEFT-neg), T-SQL
+      CAST-to-int fractional-literal ROUND, Oracle DECODE NULL-safe equality,
+      Oracle exception-name → PL/pgSQL condition map, PG GREATEST/LEAST literal-
+      NULL drop, Oracle single-arg COALESCE, and a vc7 stale/precision harvest
+      (ELT/FIELD/INSERT/pad/REPEAT/PI/trig, TIMESTAMPDIFF-day).** Structural IR-drop fixes (window frame, GROUP BY
       ROLLUP/CUBE/GROUPING SETS, computed columns), base-10 LOG, silent-clause
       carriers (FOR UPDATE/NOT VALID/CONCURRENTLY/EXCLUDE/ON UPDATE/
       MEMORY_OPTIMIZED), collation/charset drops (carrier + warning — the
