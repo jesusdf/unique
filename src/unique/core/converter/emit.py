@@ -3882,6 +3882,19 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _avg_arg = _emit_expression(node.args[0], dialect)
         return f"AVG({_avg_distinct}({_avg_arg}) * 1.0)"
 
+    # T-SQL LEN excludes trailing spaces (LEN('abc   ') = 3); MySQL CHAR_LENGTH
+    # and Oracle/PG LENGTH count them (6). LEN normalizes to a LENGTH node, so on
+    # a T-SQL source trim trailing spaces to preserve the count on other targets.
+    if (
+        fn_name == "LENGTH"
+        and SOURCE_DIALECT.get() == "tsql"
+        and dialect != "tsql"
+        and len(node.args) == 1
+    ):
+        _len_arg = _emit_expression(node.args[0], dialect)
+        _len_fn = "CHAR_LENGTH" if dialect == "mysql" else "LENGTH"
+        return f"{_len_fn}(RTRIM({_len_arg}))"
+
     # MySQL's GREATEST/LEAST return NULL if ANY argument is NULL; PostgreSQL and
     # T-SQL ignore NULLs (GREATEST(1, NULL, 3) = 3 there). Preserve MySQL's
     # NULL-propagation with a guard (Oracle already propagates, so it is left).

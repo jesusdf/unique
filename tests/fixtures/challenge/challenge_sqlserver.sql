@@ -234,7 +234,7 @@ CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT 
 -- CASE[fixed]: ts-is-fns — fails on mysql, oracle, postgresql. ORA-00904: "ISJSON": invalid identifier
 SELECT ISNUMERIC('12.3'), ISDATE('2020-01-01'), ISJSON('{}')
 
--- CASE[open]: ts-len-trailing — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('3',),) target=(('6',),)
+-- CASE[fixed]: ts-len-trailing — T-SQL LEN excludes trailing spaces (LEN('abc   ')=3); other engines count them. Trim the argument (RTRIM) on non-T-SQL targets.
 SELECT LEN('abc   ') AS r
 
 -- CASE[open]: ts-maxrecursion — fails on mysql, oracle, postgresql. ORA-32039: missing column alias list in recursive WITH clause element S

@@ -1046,6 +1046,21 @@ class TestIntegerDivisionSemantics:
         assert "TRUNC(" in out, out
 
 
+class TestTsqlLenTrailingSpaces:
+    """T-SQL ``LEN`` excludes trailing spaces (LEN('abc   ') = 3); MySQL
+    CHAR_LENGTH and Oracle/PostgreSQL LENGTH count them (6). The emitter trims
+    the argument (RTRIM) on non-T-SQL targets to preserve the count."""
+
+    @pytest.mark.parametrize("target", ("mysql", "oracle", "postgresql"))
+    def test_len_trims_trailing_on_other_engines(self, target: str) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-len-trailing"), "tsql", target)
+        assert "RTRIM(" in out.upper(), out
+
+    def test_len_unchanged_on_tsql(self) -> None:
+        out = _tx("SELECT LEN('abc   ') AS r", "tsql", "tsql")
+        assert "RTRIM" not in out.upper(), out
+
+
 class TestTsqlAvgIntegerPromotion:
     """T-SQL ``AVG`` returns the input type, so ``AVG`` over an integer column
     truncates (AVG of 1, 2 = 1); MySQL/Oracle/PostgreSQL always average as a
