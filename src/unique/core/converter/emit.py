@@ -3463,6 +3463,16 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                 dtype += f"({', '.join(str(p) for p in node.target_type.params)})"
         elif node.target_type.params:
             dtype += f"({', '.join(str(p) for p in node.target_type.params)})"
+        # PostgreSQL's unbounded ``numeric``/``decimal`` (no precision/scale) is
+        # arbitrary-precision, but a bare DECIMAL defaults to scale 0 on
+        # MySQL/Oracle/T-SQL — it silently truncates the fraction (2.675::numeric
+        # would become 3 before a later ROUND). Give the cast a scale there.
+        if (
+            not node.target_type.params
+            and dialect in ("mysql", "oracle", "tsql")
+            and re.fullmatch(r"(?i)(DECIMAL|NUMERIC|NUMBER|DEC)", dtype.strip())
+        ):
+            dtype = f"{dtype}(38, 10)"
         if dialect == "tsql":
             # A size beyond T-SQL's 8000-byte page types only exists as
             # MAX (MySQL BINARY takes sizes up to 2^32-1 — wave 187).

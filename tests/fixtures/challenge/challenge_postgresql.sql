@@ -292,7 +292,7 @@ SELECT format('%s-%I-%L', 'a', 'col name', 'val'), concat_ws('|', 'a', NULL, 'b'
 -- CASE[open]: pg-frac-seconds — fails on mysql, oracle, tsql. (155, b"'MICROSECONDS' is not a recognized datepart option.DB-Lib error message 20018, sev
 SELECT TIMESTAMP '2020-01-01 10:20:30.123456', EXTRACT(MICROSECONDS FROM TIME '10:20:30.123456')
 
--- CASE[open]: pg-fround — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('1', '2', '3', '2.57'),) target=(('1', '2', '3', '3'),)
+-- CASE[fixed]: pg-fround — PG numeric ROUND half-up (0.5->1,1.5->2,2.5->3); unbounded ::numeric cast now scaled (was truncating to integer).
 SELECT round(0.5::numeric),round(1.5::numeric),round(2.5::numeric),round(2.567::numeric,2)
 
 -- CASE[open]: pg-fsubstr — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('abc', 'abc', 'bc'),) target=(('ab', 'a', 'bc'),)
@@ -574,10 +574,10 @@ SELECT x, SUM(y) FROM (VALUES (1,10),(1,20)) v(x,y) GROUP BY ROLLUP (x)
 -- CASE[fixed]: pg-rollup2 — fails on mysql, oracle, tsql. (8120, b"Column 't.a' is invalid in the select list because it is not contained in either 
 SELECT a,b,sum(c) FROM (SELECT 1 a,2 b,3 c) t GROUP BY ROLLUP(a,b)
 
--- CASE[open]: pg-round-1005 — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('1.01',),) target=(('1',),)
+-- CASE[fixed]: pg-round-1005 — PG numeric ROUND half-up (1.005->1.01); the unbounded ::numeric cast now carries a scale so the fraction survives.
 SELECT ROUND(1.005::numeric, 2) AS r
 
--- CASE[open]: pg-round-2675 — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('2.68',),) target=(('3',),)
+-- CASE[fixed]: pg-round-2675 — PG numeric ROUND is half-up (2.675->2.68), same on all; the divergence was a bare DECIMAL cast truncating to scale 0 (fixed: scale the unbounded numeric cast).
 SELECT ROUND(2.675::numeric, 2) AS r
 
 -- CASE[open]: pg-savepoint — fails on mysql, tsql. (156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG

@@ -1046,6 +1046,21 @@ class TestIntegerDivisionSemantics:
         assert "TRUNC(" in out, out
 
 
+class TestPgUnboundedNumericCastScale:
+    """PostgreSQL's unbounded ``numeric`` is arbitrary-precision, but a bare
+    DECIMAL cast defaults to scale 0 on MySQL/Oracle/T-SQL and silently
+    truncates the fraction (2.675::numeric became 3 before a later ROUND). The
+    emitter gives the unbounded cast a scale so the value survives."""
+
+    @pytest.mark.parametrize("keyword", ("pg-round-2675", "pg-round-1005", "pg-fround"))
+    @pytest.mark.parametrize("target", ("mysql", "oracle", "tsql"))
+    def test_unbounded_numeric_cast_keeps_scale(
+        self, keyword: str, target: str
+    ) -> None:
+        out = _tx(_case("challenge_postgresql.sql", keyword), "postgresql", target)
+        assert re.search(r"(?i)AS\s+(?:DECIMAL|NUMERIC|NUMBER)\(38,\s*10\)", out), out
+
+
 class TestPgSubstringZeroStart:
     """PostgreSQL SUBSTRING(s, start, len) with a start <= 0 counts the
     out-of-range leading positions toward the length (SUBSTRING('abcdef', 0, 3)
