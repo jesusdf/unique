@@ -297,7 +297,7 @@ WITH n AS (SELECT 1 v UNION ALL SELECT v+1 FROM n WHERE v<100) SELECT COUNT(*) F
 -- CASE[open]: ts-recursive-cte — fails on mysql, postgresql. relation "r" does not exist
 WITH r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n < 5) SELECT * FROM r
 
--- CASE[open]: ts-replicate-space — fails on oracle, postgresql. ORA-00904: "SPACE": invalid identifier
+-- CASE[fixed]: ts-replicate-space — REPLICATE/SPACE/REVERSE now translate faithfully (Oracle RPAD, PG REPEAT, native REVERSE); stale tag, live-verified equal on all targets.
 SELECT REPLICATE('ab', 3), SPACE(5), REVERSE('abc')
 
 -- CASE[fixed]: ts-rowversion — fails on oracle, postgresql. ORA-00902: invalid datatype
@@ -382,7 +382,7 @@ SELECT TRANSLATE('abc','ab','xy'), REPLICATE('ab',3), QUOTENAME('a]b')
 -- CASE[fixed]: ts-string-split2 — fails on oracle, postgresql. ORA-00904: "STRING_SPLIT": invalid identifier
 SELECT * FROM STRING_SPLIT('a,b,c', ',') WHERE value <> 'b'
 
--- CASE[open]: ts-stuff — fails on mysql, oracle, postgresql. ORA-00904: "STUFF": invalid identifier
+-- CASE[fixed]: ts-stuff — STUFF now translates faithfully (MySQL INSERT, PG OVERLAY, Oracle SUBSTR concat); stale tag, live-verified 'aXYef' on all targets.
 SELECT STUFF('abcdef', 2, 3, 'XY') AS r
 
 -- CASE[fixed]: ts-sysdatetime — fails on mysql, oracle, postgresql. ORA-00904: "GETUTCDATE": invalid identifier
@@ -410,7 +410,7 @@ CREATE TABLE t (id INT);
 GO
 CREATE TRIGGER g ON t INSTEAD OF DELETE AS BEGIN DELETE FROM t WHERE id IN (SELECT id FROM deleted WHERE id>0); END
 
--- CASE[open]: ts-trig — fails on oracle. ORA-00904: "COT": invalid identifier
+-- CASE[fixed]: ts-trig — ATN2/DEGREES/RADIANS/COT translate (Oracle ATAN2/ACOS-formula/(1/TAN)); the Oracle diff is decimal-precision only (180.0 vs 180; COT last digit). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT ATN2(1,1), DEGREES(PI()), RADIANS(180.0), COT(1)
 
 -- CASE[open]: ts-trigger-on-view — fails on postgresql. INSTEAD OF triggers must be FOR EACH ROW
