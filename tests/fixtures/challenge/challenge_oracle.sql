@@ -66,7 +66,7 @@ CREATE PROCEDURE p (n IN NUMBER) AS BEGIN CASE n WHEN 1 THEN NULL; ELSE NULL; EN
 -- CASE[open]: ora-cast-datetime3 — fails on mysql, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity
 SELECT CAST(SYSTIMESTAMP AS DATE), CAST(SYSDATE AS TIMESTAMP), CAST(SYSDATE AS TIMESTAMP WITH TIME ZONE) FROM DUAL
 
--- CASE[open]: ora-cast-expr — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+-- CASE[fixed]: ora-cast-expr — CAST(x AS TIMESTAMP) maps to MySQL DATETIME (MySQL has no TIMESTAMP cast target, 1064) and T-SQL DATETIME2 (T-SQL TIMESTAMP is a rowversion, not a datetime).
 SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL
 
 -- CASE[fixed]: ora-cast-int-edge — fails on mysql. FUNC-DIFF: source=(('4', '3', '4', '4'),) target=(('3', '3', '4', '4'),)

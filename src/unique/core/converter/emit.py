@@ -93,9 +93,12 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "TINYINT": "SIGNED",
         "BOOLEAN": "SIGNED",
         "BOOL": "SIGNED",
-        # T-SQL's precise datetime types -> MySQL's DATETIME.
+        # T-SQL's precise datetime types -> MySQL's DATETIME. MySQL's CAST has
+        # no TIMESTAMP target either (that spelling is 1064) — DATETIME holds the
+        # same value.
         "DATETIME2": "DATETIME",
         "SMALLDATETIME": "DATETIME",
+        "TIMESTAMP": "DATETIME",
         # T-SQL money types are fixed-scale decimals (DECIMAL(19,4)/(10,4)).
         "MONEY": "DECIMAL(19,4)",
         "SMALLMONEY": "DECIMAL(10,4)",
@@ -108,7 +111,15 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
     # PG float8 casts parse to DOUBLE — T-SQL's 64-bit float is FLOAT
     # (bare DOUBLE is a syntax error) and Oracle's is BINARY_DOUBLE
     # (ORA-00902).
-    "tsql": {"BOOLEAN": "BIT", "BOOL": "BIT", "DOUBLE": "FLOAT", "YEAR": "SMALLINT"},
+    # T-SQL TIMESTAMP is a rowversion (binary), NOT a datetime — an Oracle/PG/
+    # MySQL TIMESTAMP cast must become DATETIME2 to keep the value.
+    "tsql": {
+        "BOOLEAN": "BIT",
+        "BOOL": "BIT",
+        "DOUBLE": "FLOAT",
+        "YEAR": "SMALLINT",
+        "TIMESTAMP": "DATETIME2",
+    },
     # DATETIME/DATETIME2/SMALLDATETIME are T-SQL types; Oracle/PostgreSQL use
     # TIMESTAMP. Passing DATETIME through fails (ORA-00902 / invalid pg type).
     "oracle": {

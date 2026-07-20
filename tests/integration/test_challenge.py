@@ -841,6 +841,20 @@ class TestMysqlModByZero:
         assert re.search(r"(?i)CASE\s+WHEN\s+0\s*=\s*0\s+THEN\s+NULL", out), out
 
 
+class TestOracleTimestampCast:
+    """Oracle CAST(x AS TIMESTAMP): MySQL has no TIMESTAMP cast target (1064) so
+    it must be DATETIME, and T-SQL TIMESTAMP is a rowversion (binary), not a
+    datetime, so it must be DATETIME2 to keep the value."""
+
+    @pytest.mark.parametrize(
+        "target,ty", [("mysql", "DATETIME"), ("tsql", "DATETIME2")]
+    )
+    def test_timestamp_cast_maps(self, target: str, ty: str) -> None:
+        out = _tx("SELECT CAST(SYSDATE AS TIMESTAMP) AS r", "oracle", target)
+        assert re.search(rf"(?i)CAST\(.*AS {ty}\)", out), out
+        assert not re.search(r"(?i)AS\s+TIMESTAMP\)", out), out
+
+
 class TestOracleAddMonthsPgTypedLiteral:
     """Oracle ADD_MONTHS(DATE 'lit', n) on a PG target: the ISO date literal must
     be typed (DATE '…'), else PG's DATE_TRUNC has no unique overload for an
