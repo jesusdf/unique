@@ -3972,6 +3972,19 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _gl_keep_sql = ", ".join(_emit_expression(a, dialect) for a in _gl_kept)
         return f"{fn_name}({_gl_keep_sql})"
 
+    # Oracle BITAND(a, b) is a bitwise AND; the other engines spell it with the
+    # & operator (Oracle keeps BITAND, which it has natively; PG has no BITAND).
+    if fn_name == "BITAND" and len(node.args) == 2 and dialect != "oracle":
+        _ba = _emit_expression(node.args[0], dialect)
+        _bb = _emit_expression(node.args[1], dialect)
+        return f"({_ba} & {_bb})"
+
+    # MySQL ATAN(y, x) is the 2-argument arctangent (= ATAN2); Oracle/PG have
+    # ATAN2 and T-SQL has ATN2. (1-arg ATAN and a MySQL target are unchanged.)
+    if fn_name == "ATAN" and len(node.args) == 2 and dialect != "mysql":
+        _at_args = ", ".join(_emit_expression(a, dialect) for a in node.args)
+        return f"{'ATN2' if dialect == 'tsql' else 'ATAN2'}({_at_args})"
+
     # MySQL/PostgreSQL ASCII('') is 0; Oracle/T-SQL return NULL (Oracle stores ''
     # as NULL, T-SQL's ASCII('') is NULL). Recover the 0: T-SQL distinguishes ''
     # from NULL (a faithful CASE — ASCII(NULL) stays NULL); Oracle cannot, so

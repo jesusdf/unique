@@ -56,7 +56,7 @@ SELECT TO_CHAR(255,'XXX'),BIN_TO_NUM(1,1,1,1,1,1,1,1) FROM DUAL
 -- CASE[fixed]: ora-bit-fns — fails on mysql, postgresql, tsql. (195, b"'BITAND' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT BITAND(12, 10), BIN_TO_NUM(1,1,0) FROM DUAL
 
--- CASE[open]: ora-bitand — fails on mysql, postgresql, tsql. (195, b"'BITAND' is not a recognized built-in function name.DB-Lib error message 20018, se
+-- CASE[fixed]: ora-bitand — Oracle BITAND(a, b) is a bitwise AND; emit the & operator on MySQL/PG/T-SQL (none have BITAND, incl. PG). Live-verified 1 (5 & 3).
 SELECT BITAND(5, 3) AS r FROM DUAL
 
 -- CASE[open]: ora-case-statement — fails on tsql. (156, b"Incorrect syntax near the keyword 'ELSE'.DB-Lib error message 20018, severity 15:\
@@ -256,7 +256,7 @@ SELECT JSON_VALUE('{"a":1}','$.a'),JSON_QUERY('{"a":[1]}','$.a') FROM DUAL
 -- CASE[open]: ora-json-xml-agg — fails on mysql, postgresql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT JSON_ARRAYAGG(x), XMLAGG(XMLELEMENT("i",x)) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 FROM DUAL) t
 
--- CASE[open]: ora-last-day — fails on postgresql, tsql. (195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
+-- CASE[fixed]: ora-last-day — LAST_DAY now translates (PG DATE_TRUNC month-end formula, T-SQL EOMONTH); stale tag, live-verified 2020-02-29 (date-vs-datetime display is precision-only).
 SELECT LAST_DAY(SYSDATE) AS r FROM DUAL
 
 -- CASE[fixed]: ora-lastday-leap — LAST_DAY(2020-02-01)=2020-02-29 on both; Oracle returns a DATE (shown with 00:00:00), MySQL a date — same value, precision-only (maintainer policy 2026-07-19).

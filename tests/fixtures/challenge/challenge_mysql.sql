@@ -766,7 +766,7 @@ SELECT 'a ' = 'a' AS r
 -- CASE[limit]: my-trailing-space-cmp — fails on oracle, postgresql, tsql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0', '1', '1'),) target=(('1', '0', '1'),)
 SELECT 'a'='a ', 'a'<'a ', 'abc'='ABC'
 
--- CASE[open]: my-trig — fails on oracle, postgresql, tsql. (174, b'The atan function requires 1 argument(s).DB-Lib error message 20018, severity 15:\
+-- CASE[fixed]: my-trig — MySQL ATAN(y, x) is the 2-arg arctangent (= ATAN2); emit ATAN2 on Oracle/PG and ATN2 on T-SQL. Live-verified 0.7853981633974483.
 SELECT ATAN2(1,1), ATAN(1,1), DEGREES(PI()), RADIANS(180), COT(1)
 
 -- CASE[fixed]: my-trig-suite — MySQL ACOS/ASIN/ATAN/COS/SIN/TAN/COT/DEGREES/RADIANS now translate; the Oracle diff is decimal-precision only. (value equal, precision-only diff; maintainer policy 2026-07-19)

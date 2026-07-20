@@ -841,6 +841,32 @@ class TestMysqlModByZero:
         assert re.search(r"(?i)CASE\s+WHEN\s+0\s*=\s*0\s+THEN\s+NULL", out), out
 
 
+class TestOracleBitand:
+    """Oracle BITAND(a, b) is a bitwise AND; the other engines (including PG,
+    which has no BITAND) spell it with the & operator. Live-verified 2."""
+
+    @pytest.mark.parametrize("target", ("mysql", "postgresql", "tsql"))
+    def test_bitand_becomes_operator(self, target: str) -> None:
+        out = _tx(_case("challenge_oracle.sql", "ora-bitand"), "oracle", target)
+        sql_only = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert re.search(r"\(\s*5\s*&\s*3\s*\)", sql_only), out
+        assert not re.search(r"(?i)BITAND\s*\(", sql_only), out
+
+
+class TestMysqlTwoArgAtan:
+    """MySQL ATAN(y, x) is the 2-argument arctangent (= ATAN2); Oracle/PG use
+    ATAN2 and T-SQL uses ATN2. Live-verified pi/4."""
+
+    @pytest.mark.parametrize(
+        "target,fn", [("oracle", "ATAN2"), ("postgresql", "ATAN2"), ("tsql", "ATN2")]
+    )
+    def test_two_arg_atan_maps(self, target: str, fn: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-trig"), "mysql", target)
+        assert re.search(rf"(?i){fn}\(\s*1,\s*1\s*\)", out), out
+
+
 class TestOracleExceptionConditionMapsToPg:
     """Oracle predefined exception names differ from PL/pgSQL condition names
     (ZERO_DIVIDE vs division_by_zero); emitting the Oracle spelling verbatim is
