@@ -153,10 +153,10 @@ CREATE PROCEDURE p (tbl VARCHAR2) AS n NUMBER; BEGIN EXECUTE IMMEDIATE 'SELECT C
 -- CASE[open]: ora-edit-distance — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "UTL_MATCH" or the user-defined function or aggregate "
 SELECT UTL_MATCH.EDIT_DISTANCE('hello', 'hallo') AS r FROM DUAL
 
--- CASE[open]: ora-empty-is-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[limit]: ora-empty-is-null — fails on mysql, postgresql, tsql. Oracle stores '' as NULL so '' IS NULL is true (1) only on Oracle; other engines see a real empty string (0). No faithful workaround (docs/03-unsupported.md).
 SELECT CASE WHEN '' IS NULL THEN 1 ELSE 0 END AS r FROM DUAL
 
--- CASE[open]: ora-empty-null — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('x',),) target=(('',),)
+-- CASE[limit]: ora-empty-null — fails on mysql, postgresql, tsql. Oracle NVL('','x')='x' because '' is NULL there; COALESCE('','x')='' elsewhere. Oracle can't represent '' apart from NULL (docs/03-unsupported.md).
 SELECT NVL('', 'x') AS r FROM DUAL
 
 -- CASE[fixed]: ora-extract — fails on mysql. FUNC-DIFF: source=(('2020', '6', '2', '2'),) target=(('2020', '6', '25', 'Q'),)
@@ -238,7 +238,7 @@ SELECT INSTR('aAaA', 'A') AS r FROM DUAL
 -- CASE[open]: ora-instr-edge — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('3', '4', '4'),) target=(('3', '3', '3'),)
 SELECT INSTR('hello','l'), INSTR('hello','l',1,2), INSTR('hello','l',-1) FROM DUAL
 
--- CASE[open]: ora-instr-empty — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('0',),)
+-- CASE[limit]: ora-instr-empty — fails on mysql, postgresql, tsql. Oracle INSTR(s,'') is NULL ('' is NULL); other engines return 0. No faithful workaround (docs/03-unsupported.md).
 SELECT INSTR('abc', '') AS r FROM DUAL
 
 -- CASE[fixed]: ora-interval-out — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU

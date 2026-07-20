@@ -486,6 +486,25 @@ _DIVERGENCE_RULES: list[tuple[str, str, re.Pattern[str], str]] = [
         "but Oracle stores '' as NULL, so the result is NULL on {target} — no "
         "faithful workaround (Oracle's '' = NULL)",
     ),
+    (
+        # The reverse: an Oracle source whose empty-string literal is read as
+        # NULL. ``'' IS NULL`` is true, ``NVL('', x)`` is x, ``INSTR(s, '')`` is
+        # NULL on Oracle — but on every other engine '' is a real empty string,
+        # so those results differ. Narrowed to those three contexts (a bare ''
+        # elsewhere often does not diverge). Scrub keeps a genuine '' empty (a
+        # blanked non-empty literal shows '…'). Oracle can't represent '' apart
+        # from NULL, so there is no faithful workaround.
+        "oracle",
+        "*",
+        re.compile(
+            r"(?i)''\s+IS\s+(?:NOT\s+)?NULL"
+            r"|(?:NVL|COALESCE|IFNULL)\s*\(\s*''"
+            r"|INSTR\s*\([^)]*,\s*''\s*\)"
+        ),
+        "Oracle stores an empty string as NULL, so the '' literal is NULL on "
+        "Oracle but a real empty string on {target} — IS NULL / NVL / INSTR "
+        "results diverge, and there is no faithful workaround (Oracle '' = NULL)",
+    ),
 ]
 
 
