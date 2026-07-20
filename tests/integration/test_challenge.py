@@ -1046,6 +1046,25 @@ class TestIntegerDivisionSemantics:
         assert "TRUNC(" in out, out
 
 
+class TestPgSubstringZeroStart:
+    """PostgreSQL SUBSTRING(s, start, len) with a start <= 0 counts the
+    out-of-range leading positions toward the length (SUBSTRING('abcdef', 0, 3)
+    = 'ab'); Oracle clamps 0 to 1 and MySQL returns ''. The emitter rebases to
+    start 1 with an adjusted length."""
+
+    @pytest.mark.parametrize("target", ("mysql", "oracle"))
+    def test_zero_start_rebased(self, target: str) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-substr-zero"), "postgresql", target
+        )
+        assert re.search(r"(?i)SUBSTR\('abcdef',\s*1,\s*2\)", out), out
+
+    def test_positive_start_unchanged(self) -> None:
+        # A positive start is not rebased — the args stay (2, 3).
+        out = _tx("SELECT SUBSTRING('abcdef', 2, 3) AS r", "postgresql", "mysql")
+        assert re.search(r"(?i)'abcdef',\s*2,\s*3\)", out), out
+
+
 class TestTsqlLenTrailingSpaces:
     """T-SQL ``LEN`` excludes trailing spaces (LEN('abc   ') = 3); MySQL
     CHAR_LENGTH and Oracle/PostgreSQL LENGTH count them (6). The emitter trims

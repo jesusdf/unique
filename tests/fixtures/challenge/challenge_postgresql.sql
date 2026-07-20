@@ -648,7 +648,7 @@ SELECT STRPOS('', '') AS r
 -- CASE[open]: pg-substr-edge — fails on mysql. FUNC-DIFF: source=(('hello', 'el', 'hell', 'ello'),) target=(('llo', 'el', '', ''),)
 SELECT substring('hello',-3), substr('hello',2,2), left('hello',-1), right('hello',-1)
 
--- CASE[open]: pg-substr-zero — fails on mysql, oracle. FUNC-DIFF: source=(('ab',),) target=(('abc',),)
+-- CASE[fixed]: pg-substr-zero — PostgreSQL SUBSTRING with start<=0 counts out-of-range positions toward the length ('ab'); rebase to start 1 with length start+len-1 on Oracle/MySQL.
 SELECT SUBSTRING('abcdef', 0, 3) AS r
 
 -- CASE[open]: pg-substring-escape — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib

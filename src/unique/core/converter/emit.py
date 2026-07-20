@@ -4102,6 +4102,29 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "tsql":
             return f"SUBSTRING({s}, 1, LEN({s}))"
         return f"SUBSTRING({s}, 1)"  # PG/MySQL 2-arg runs to the end
+    # PostgreSQL (and T-SQL) SUBSTRING(s, start, len) with a start <= 0 count the
+    # out-of-range leading positions toward the length: SUBSTRING('abcdef', 0, 3)
+    # is 'ab' (positions 0,1,2 -> the two real chars). Oracle clamps 0 to 1
+    # ('abc') and MySQL returns '' for start 0, so reproduce PG's length
+    # reduction with a 1-based start and an adjusted length (start + len - 1).
+    if (
+        fn_name == "SUBSTRING"
+        and dialect in ("oracle", "mysql")
+        and len(node.args) == 3
+        and SOURCE_DIALECT.get() == "postgresql"
+        and isinstance(node.args[1], Literal)
+        and isinstance(node.args[1].value, int)
+        and not isinstance(node.args[1].value, bool)
+        and node.args[1].value <= 0
+    ):
+        s = _emit_expression(node.args[0], dialect)
+        start = node.args[1].value
+        if isinstance(node.args[2], Literal) and isinstance(node.args[2].value, int):
+            adj = str(node.args[2].value + start - 1)  # fold to a constant
+        else:
+            length = _emit_expression(node.args[2], dialect)
+            adj = f"{length} + ({start - 1})"
+        return f"SUBSTR({s}, 1, {adj})"
     # T-SQL's SUBSTRING requires the length argument (error 174); the
     # 2-argument form means "to the end" — LEN(x) always covers it.
     if fn_name == "SUBSTRING" and dialect == "tsql" and len(node.args) == 2:
