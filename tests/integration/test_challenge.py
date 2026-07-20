@@ -841,6 +841,24 @@ class TestMysqlModByZero:
         assert re.search(r"(?i)CASE\s+WHEN\s+0\s*=\s*0\s+THEN\s+NULL", out), out
 
 
+class TestOracleAddMonthsPgTypedLiteral:
+    """Oracle ADD_MONTHS(DATE 'lit', n) on a PG target: the ISO date literal must
+    be typed (DATE '…'), else PG's DATE_TRUNC has no unique overload for an
+    untyped string ("date_trunc(unknown, unknown) is not unique"). Live-verified
+    2020-02-29 (sticky last-day). A column operand is left untyped."""
+
+    def test_pg_types_the_date_literal(self) -> None:
+        out = _tx(
+            "SELECT ADD_MONTHS(DATE '2020-01-31', 1) AS r", "oracle", "postgresql"
+        )
+        assert re.search(r"(?i)DATE_TRUNC\('month',\s*DATE\s*'", out), out
+
+    def test_pg_leaves_a_column_untyped(self) -> None:
+        # A column operand needs no DATE wrapper (it is already typed).
+        out = _tx("SELECT ADD_MONTHS(d, 1) AS r FROM t", "oracle", "postgresql")
+        assert re.search(r"(?i)DATE_TRUNC\('month',\s*d\)", out), out
+
+
 class TestOracleBitand:
     """Oracle BITAND(a, b) is a bitwise AND; the other engines (including PG,
     which has no BITAND) spell it with the & operator. Live-verified 2."""

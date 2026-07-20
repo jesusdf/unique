@@ -4958,6 +4958,10 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "tsql":
             add = f"DATEADD(MONTH, {n}, {d})"
             return f"CASE WHEN {d} = EOMONTH({d}) THEN EOMONTH({add}) ELSE {add} END"
+        # PG DATE_TRUNC has no unique overload for an untyped string literal
+        # ("date_trunc(unknown, unknown) is not unique") — type the ISO literal
+        # as an ANSI DATE (a column/expression is left untouched).
+        d = wrap_oracle_date_arg(d)
         add = f"({d} + {n} * INTERVAL '1 month')"  # postgresql
         eom = "+ INTERVAL '1 month' - INTERVAL '1 day' AS DATE)"
         ld_d = f"CAST(DATE_TRUNC('month', {d}) {eom}"

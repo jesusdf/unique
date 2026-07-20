@@ -28,7 +28,7 @@ SELECT DISTINCT x FROM (SELECT 1 x FROM DUAL UNION ALL SELECT NULL x FROM DUAL U
 -- CASE[fixed]: or-order-strings — fails on mysql. FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), 
 SELECT x FROM (SELECT 'banana' x FROM DUAL UNION ALL SELECT 'Apple' x FROM DUAL UNION ALL SELECT 'cherry' x FROM DUAL UNION ALL SELECT 'Banana' x FROM DUAL) ORDER BY x
 
--- CASE[open]: ora-add-months — fails on mysql, postgresql, tsql. (195, b"'ADD_MONTHS' is not a recognized built-in function name.DB-Lib error message 20018
+-- CASE[fixed]: ora-add-months — ADD_MONTHS (sticky last-day) translates on all targets; the PG branch now types the ISO date literal (DATE '…') so DATE_TRUNC is unambiguous. Live-verified 2020-02-29.
 SELECT ADD_MONTHS(SYSDATE, 3) AS r FROM DUAL
 
 -- CASE[fixed]: ora-agg-collect — fails on postgresql. function string_agg(integer, unknown) does not exist
