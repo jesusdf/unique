@@ -11,12 +11,14 @@ import re
 
 from unique.core.ast_nodes import (
     ASTNode,
+    BeginEndBlock,
     CallStatement,
     ContinueStatement,
     CreateTriggerStatement,
     CursorDeclaration,
     DataType,
     ExitStatement,
+    IfStatement,
     NullStatement,
     ParameterDefinition,
     ReturnStatement,
@@ -413,15 +415,36 @@ class MySqlEmitter(ProceduralEmitter):
     def _sleep_call(self, secs: str) -> str:
         return f"DO SLEEP({secs});"
 
+    @classmethod
+    def _has_loop_control(cls, stmts: tuple[ASTNode, ...]) -> bool:
+        """Whether ``stmts`` contain a LEAVE/ITERATE (from BREAK/CONTINUE) that
+        belongs to *this* loop — i.e. reachable without crossing a nested loop
+        (a break inside a nested loop targets that inner loop)."""
+        for s in stmts:
+            if isinstance(s, (ExitStatement, ContinueStatement)):
+                return True
+            if isinstance(s, IfStatement):
+                if cls._has_loop_control(s.then_body) or cls._has_loop_control(
+                    s.else_body
+                ):
+                    return True
+            elif isinstance(s, BeginEndBlock) and cls._has_loop_control(s.statements):
+                return True
+        return False
+
     def _emit_while(self, node: WhileStatement) -> str:
         # MySQL spells it WHILE … DO … END WHILE; (the PL/SQL LOOP form is a
-        # syntax error here — audit 2026-07-08, C3).
+        # syntax error here — audit 2026-07-08, C3). A LEAVE/ITERATE needs a loop
+        # label, so label the loop ``loop_lbl`` (matching _emit_exit/_emit_continue)
+        # when the body contains one.
         cond = self._emit_node(node.condition)
-        lines = [f"WHILE {cond} DO"]
+        labeled = self._has_loop_control(node.body)
+        prefix = "loop_lbl: " if labeled else ""
+        lines = [f"{prefix}WHILE {cond} DO"]
         self._indent_level += 1
         lines.extend(self._emit_indented_stmts(node.body))
         self._indent_level -= 1
-        lines.append("END WHILE;")
+        lines.append(f"END WHILE{' loop_lbl' if labeled else ''};")
         return "\n".join(lines)
 
     def _emit_call(self, node: CallStatement) -> str:

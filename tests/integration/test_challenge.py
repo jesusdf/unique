@@ -1088,6 +1088,41 @@ class TestDatePlusInteger:
         assert re.search(r"(?i)DATE_ADD\(.*INTERVAL\s+30\s+DAY\)", out), out
 
 
+class TestTsqlLoopControl:
+    """T-SQL loop body: ``SET @i += 1`` compound assignment, ``BREAK`` and
+    ``CONTINUE`` all have to translate to valid PL/SQL, PL/pgSQL and MySQL
+    (the procedure would not compile otherwise)."""
+
+    def test_compound_assignment_expands(self) -> None:
+        # @i += 1  ->  V_I := V_I + 1 (Oracle), no leftover '= 1'.
+        out = _tx(
+            _case("challenge_sqlserver.sql", "ts-continue-break"), "tsql", "oracle"
+        )
+        assert re.search(r"(?i)V_I\s*:=\s*V_I\s*\+\s*\(?1\)?", out), out
+        assert ":= =" not in out, out
+
+    @pytest.mark.parametrize(
+        "target,brk,cont",
+        [
+            ("oracle", "EXIT;", "CONTINUE;"),
+            ("postgresql", "EXIT;", "CONTINUE;"),
+            ("mysql", "LEAVE loop_lbl;", "ITERATE loop_lbl;"),
+        ],
+    )
+    def test_break_continue_map(self, target: str, brk: str, cont: str) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-continue-break"), "tsql", target)
+        body = _exec_lines(out)
+        assert brk in body, out
+        assert cont in body, out
+        assert "BREAK" not in body.upper(), out  # no leftover T-SQL BREAK
+
+    def test_mysql_loop_is_labeled(self) -> None:
+        out = _tx(
+            _case("challenge_sqlserver.sql", "ts-continue-break"), "tsql", "mysql"
+        )
+        assert "loop_lbl: WHILE" in out, out
+
+
 class TestPgDateDifference:
     """PostgreSQL ``DATE - DATE`` is a day count (60); MySQL does a numeric
     subtraction (200) and T-SQL rejects it. The PG date literal parses as

@@ -1397,9 +1397,27 @@ class ParserBase:
         # SET @variable = expression
         if tok.type == TokenType.VARIABLE:
             var_name = self._advance().value
+            # T-SQL compound assignment (``@x += 1``, ``@x -= 1``, ``@x *= 2`` …)
+            # lexes as two operator tokens — the arithmetic op then ``=``. Expand
+            # it to ``@x = @x <op> (expr)`` so every target emits a plain
+            # assignment (Oracle/PG have no ``+=``).
+            compound_op = None
+            if (
+                self._current().type == TokenType.OPERATOR
+                and self._current().value in ("+", "-", "*", "/", "%", "&", "|", "^")
+                and self._peek(1).type == TokenType.OPERATOR
+                and self._peek(1).value == "="
+            ):
+                compound_op = self._advance().value
             self._match_type(TokenType.OPERATOR)  # =
             expr = self._parse_expression_until_semicolon()
             self._match_type(TokenType.SEMICOLON)
+            if compound_op is not None:
+                inner = expr.sql if isinstance(expr, RawSQL) else "NULL"
+                expr = RawSQL(
+                    sql=f"{var_name} {compound_op} ({inner})",
+                    reason="compound assignment",
+                )
             return SetVariableStatement(name=var_name, value=expr)
 
         return self._parse_embedded_dml()

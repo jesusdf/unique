@@ -17,10 +17,12 @@ import re
 from unique.core.ast_nodes import (
     ASTNode,
     BeginEndBlock,
+    ContinueStatement,
     CursorDeclaration,
     CursorOperation,
     DeclareStatement,
     ExecuteStatement,
+    ExitStatement,
     IfStatement,
     SelectIntoStatement,
     StatementList,
@@ -96,6 +98,16 @@ class TsqlStatementsMixin(ParserBase):
             return self._parse_tsql_exec()
         elif tok.is_keyword("PRINT"):
             return self._parse_print()
+        elif tok.is_keyword("BREAK"):
+            # Loop exit: Oracle/PG EXIT, MySQL LEAVE, T-SQL BREAK.
+            self._advance()
+            self._match_type(TokenType.SEMICOLON)
+            return ExitStatement()
+        elif tok.is_keyword("CONTINUE"):
+            # Loop skip: Oracle/PG CONTINUE, MySQL ITERATE, T-SQL CONTINUE.
+            self._advance()
+            self._match_type(TokenType.SEMICOLON)
+            return ContinueStatement()
         elif tok.is_keyword("RAISERROR", "THROW"):
             return self._parse_raiserror()
         elif tok.is_keyword("TRY"):

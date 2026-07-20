@@ -111,7 +111,7 @@ SELECT ISNULL(NULL,3),NULLIF(1,1),COALESCE(NULL,3),IIF(1=1,'y','n'),CHOOSE(1,'a'
 -- CASE[fixed]: ts-conditional — fails on mysql, oracle, postgresql. ORA-00904: "CHOOSE": invalid identifier
 SELECT IIF(1>0,'y','n'), CHOOSE(2,'a','b','c'), ISNULL(NULL,'x'), NULLIF(1,1)
 
--- CASE[open]: ts-continue-break — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol "=" when expectin
+-- CASE[fixed]: ts-continue-break — compound assignment (@i+=1) expanded to @i=@i+1; BREAK->EXIT/LEAVE, CONTINUE->CONTINUE/ITERATE; MySQL loop labeled. Compiles on oracle/pg/mysql.
 CREATE PROCEDURE p AS BEGIN DECLARE @i INT=1; WHILE @i<=3 BEGIN SET @i+=1; IF @i=2 CONTINUE; IF @i=5 BREAK; END; END
 
 -- CASE[open]: ts-convert-style — fails on oracle. ORA-01821: date format not recognized
