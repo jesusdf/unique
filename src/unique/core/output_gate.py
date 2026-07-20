@@ -246,7 +246,11 @@ def scrub(sql: str) -> str:
                         continue
                     break
                 j += 1
-            out.append("''")
+            # Preserve the empty-vs-non-empty distinction: a genuinely empty ''
+            # stays '' (the empty-string divergence rules key on it), but a
+            # non-empty literal becomes 'x' so those rules don't false-fire on
+            # an ordinary string (e.g. COMMENT='my table', 'abc' IS NULL).
+            out.append("''" if j == i + 1 else "'x'")
             i = j + 1
             continue
         out.append(ch)
