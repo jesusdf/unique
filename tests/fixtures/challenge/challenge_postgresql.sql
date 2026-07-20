@@ -789,7 +789,7 @@ CREATE TABLE t (a INT); CREATE INDEX CONCURRENTLY ix ON t (a)
 -- CASE[fixed]: postgresql-drop2-EXCLUDE — fails on mysql, oracle, tsql. SILENT CLAUSE DROP: 'EXCLUDE' absent from valid tsql output, no warning
 CREATE TABLE t (a INT, EXCLUDE USING btree (a WITH =))
 
--- CASE[open]: postgresql-drop2-NULLS\s+FIRS — fails on oracle. SILENT CLAUSE DROP: 'NULLS\s+FIRST' absent from valid oracle output, no warning
+-- CASE[fixed]: postgresql-drop2-NULLS\s+FIRS — Oracle rejects NULLS FIRST/LAST in an index (ORA-00907) and T-SQL/MySQL have no such clause; the drop (physical null-order only, no query-result impact) is now a carrier + warning, no longer silent.
 CREATE TABLE t (a INT); CREATE INDEX ix ON t (a NULLS FIRST)
 
 -- CASE[fixed]: postgresql-drop4-BY\s+DEFAULT — fails on tsql. SILENT CLAUSE DROP: 'BY\s+DEFAULT|GENERATED' absent from valid tsql output, no warning

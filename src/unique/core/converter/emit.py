@@ -606,6 +606,24 @@ def _balanced_outer(text: str) -> bool:
     return False
 
 
+def _carry_index_nulls_order(source_sql: str, result: str, dialect: str) -> str:
+    """Surface a dropped ``NULLS FIRST/LAST`` index-column ordering as a carrier.
+
+    Oracle rejects it in an index (ORA-00907) and T-SQL/MySQL have no such
+    clause, so sqlglot drops it. It affects only the index's physical null
+    ordering, never query results, so a carrier (mirrored to a warning) is the
+    faithful outcome rather than a silent drop.
+    """
+    nulls = re.compile(r"(?i)\bNULLS\s+(?:FIRST|LAST)\b")
+    if nulls.search(source_sql) and not nulls.search(result):
+        return (
+            f"-- UNIQUE: NULLS FIRST/LAST index ordering has no {dialect} "
+            "equivalent; dropped (it affects only the index's physical null "
+            "order, not query results)\n" + result
+        )
+    return result
+
+
 def _pg_index_rebuild(sql: str, read: str, dialect: str) -> str | None:
     """Rebuild a PostgreSQL CREATE INDEX as valid T-SQL/MySQL, or None
     to let the generic sqlglot path try (expression indexes, exotic
@@ -1367,6 +1385,7 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                     f"build) has no {dialect} equivalent; the index is created "
                     "with the target's default locking\n" + rebuilt
                 )
+            rebuilt = _carry_index_nulls_order(node.sql, rebuilt, dialect)
             return rebuilt
 
     if (
@@ -1700,6 +1719,7 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                     )
             if node.kind == "CREATE INDEX":
                 result = _portable_index(result, dialect)
+                result = _carry_index_nulls_order(node.sql, result, dialect)
             else:
                 result = _portable_types_in_sql(result, dialect)
             if node.kind == "CREATE SEQUENCE" and dialect == "oracle":

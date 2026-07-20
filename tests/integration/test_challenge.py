@@ -841,6 +841,28 @@ class TestMysqlModByZero:
         assert re.search(r"(?i)CASE\s+WHEN\s+0\s*=\s*0\s+THEN\s+NULL", out), out
 
 
+class TestIndexNullsOrderCarrier:
+    """NULLS FIRST/LAST on an index column has no equivalent on Oracle (ORA-00907
+    in an index), T-SQL or MySQL; the drop (physical null-order only, no query
+    result impact) is surfaced as a carrier + warning, not dropped silently."""
+
+    @pytest.mark.parametrize("target", ("oracle", "tsql", "mysql"))
+    def test_carrier_and_warning(self, target: str) -> None:
+        res = Transpiler().transpile(
+            _case("challenge_postgresql.sql", "postgresql-drop2-NULLS"),
+            source="postgresql",
+            target=target,
+        )
+        assert re.search(r"(?i)UNIQUE:.*NULLS\s+FIRST/LAST", res.sql), res.sql
+        assert res.warnings, "expected a loss warning"
+
+    def test_plain_index_has_no_carrier(self) -> None:
+        res = Transpiler().transpile(
+            "CREATE INDEX ix ON t (a)", source="postgresql", target="oracle"
+        )
+        assert "UNIQUE:" not in res.sql, res.sql
+
+
 class TestMysqlComments:
     """MySQL column and table COMMENT materialize on PG/Oracle (COMMENT ON
     COLUMN / COMMENT ON TABLE) rather than being dropped silently."""
