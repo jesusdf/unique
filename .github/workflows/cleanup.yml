@@ -7,7 +7,7 @@ name: Maintenance — prune run history
 
 on:
   schedule:
-    - cron: "23 4 * * 0" # Sundays 04:23 UTC — off-peak, distinct minute
+    - cron: "23 4 * * *" # daily at 04:23 UTC — off-peak, distinct minute
   workflow_dispatch:
 
 permissions:
