@@ -3951,6 +3951,27 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _gl_call = f"{fn_name}({', '.join(_gl_args)})"
         return f"CASE WHEN {_gl_null} THEN NULL ELSE {_gl_call} END"
 
+    # The reverse: PostgreSQL (and T-SQL) GREATEST/LEAST IGNORE NULL arguments
+    # (GREATEST(1, NULL, 3) = 3), while MySQL/Oracle propagate NULL. Drop a
+    # literal NULL argument so the max/min over the remaining values matches
+    # (all-NULL collapses to NULL; a single survivor is that value — MySQL
+    # rejects a 1-arg GREATEST/LEAST).
+    if (
+        fn_name in ("GREATEST", "LEAST")
+        and SOURCE_DIALECT.get() == "postgresql"
+        and dialect in ("mysql", "oracle")
+        and any(isinstance(a, Literal) and a.value is None for a in node.args)
+    ):
+        _gl_kept = [
+            a for a in node.args if not (isinstance(a, Literal) and a.value is None)
+        ]
+        if not _gl_kept:
+            return "NULL"
+        if len(_gl_kept) == 1:
+            return _emit_expression(_gl_kept[0], dialect)
+        _gl_keep_sql = ", ".join(_emit_expression(a, dialect) for a in _gl_kept)
+        return f"{fn_name}({_gl_keep_sql})"
+
     # MySQL/PostgreSQL ASCII('') is 0; Oracle/T-SQL return NULL (Oracle stores ''
     # as NULL, T-SQL's ASCII('') is NULL). Recover the 0: T-SQL distinguishes ''
     # from NULL (a faithful CASE — ASCII(NULL) stays NULL); Oracle cannot, so
@@ -4113,9 +4134,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         for concat_arg in node.args:
             _gather_concat_args(concat_arg)
         return f"CONCAT({', '.join(flat)})"
-    # Same for a single-argument COALESCE (T-SQL error 1088: at least
-    # two arguments) — it IS its argument (wave 161).
-    if fn_name == "COALESCE" and len(node.args) == 1 and dialect == "tsql":
+    # Same for a single-argument COALESCE (T-SQL error 1088 / Oracle ORA-00938:
+    # at least two arguments) — it IS its argument (wave 161).
+    if fn_name == "COALESCE" and len(node.args) == 1 and dialect in ("tsql", "oracle"):
         return _emit_expression(node.args[0], dialect)
     # Oracle/MySQL SUBSTR(s, -n[, len]) counts the start position from the END;
     # PG/T-SQL SUBSTRING is 1-indexed from the start and reads -n literally (an

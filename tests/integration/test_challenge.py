@@ -927,6 +927,33 @@ class TestGreatestLeastNullPropagation:
         assert re.search(r"(?i)CASE\s+WHEN\b.*\bIS\s+NULL\b.*THEN\s+NULL", out), out
 
 
+class TestGreatestLeastDropsNullFromPg:
+    """PG/T-SQL GREATEST/LEAST ignore NULL args (GREATEST(1, NULL, 3) = 3);
+    MySQL/Oracle propagate NULL. A literal NULL arg is dropped on those targets
+    so the max/min over the survivors matches. Live-verified 3, not NULL."""
+
+    @pytest.mark.parametrize("target", ("mysql", "oracle"))
+    def test_literal_null_dropped(self, target: str) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-greatest-null"), "postgresql", target
+        )
+        # GREATEST(1, 3) proves the NULL arg was dropped (it is not in the call).
+        assert re.search(r"(?i)GREATEST\(\s*1,\s*3\s*\)", out), out
+
+
+class TestSingleArgCoalesce:
+    """A 1-arg COALESCE(x) is its argument; Oracle (ORA-00938) and T-SQL reject
+    a single-argument COALESCE, so it is reduced to the argument."""
+
+    @pytest.mark.parametrize("target", ("oracle", "tsql"))
+    def test_reduced_to_argument(self, target: str) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-coalesce-single"), "mysql", target)
+        sql_only = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert not re.search(r"(?i)COALESCE\s*\(", sql_only), out
+
+
 class TestNegativeLengthStringFns:
     """MySQL LEFT / REPEAT with a negative count return '' ; PostgreSQL LEFT
     reads it as "all but the last |n|" and T-SQL REPLICATE returns NULL. The

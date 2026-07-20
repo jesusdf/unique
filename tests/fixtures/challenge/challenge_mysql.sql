@@ -167,7 +167,7 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENFOR
 -- CASE[limit]: my-coalesce-empty — fails on oracle. Oracle stores '' as NULL (docs/03-unsupported.md). FUNC-DIFF: source=(('1',),) target=(('NULL',),)
 SELECT COALESCE(NULL, 0) = '' AS r
 
--- CASE[open]: my-coalesce-single — fails on oracle. ORA-00938: not enough arguments for function
+-- CASE[fixed]: my-coalesce-single — a single-argument COALESCE(x) is its argument; Oracle (ORA-00938) and T-SQL reject a 1-arg COALESCE, so reduce it to the argument.
 SELECT COALESCE(x) FROM (SELECT NULL x) t
 
 -- CASE[open]: my-collation-fn — fails on oracle. FUNC-DIFF: source=(('utf8mb4_0900_ai_ci',),) target=(('USING_NLS_COMP',),)

@@ -325,7 +325,7 @@ SELECT generate_series(1, 5) AS r
 -- CASE[open]: pg-gin-jsonb — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #2: Cannot find data type JSONB.DB-Lib error messa
 CREATE TABLE t (a INT, b JSONB); CREATE INDEX ix ON t USING gin (b jsonb_path_ops)
 
--- CASE[open]: pg-greatest-null — fails on mysql, oracle. FUNC-DIFF: source=(('3',),) target=(('NULL',),)
+-- CASE[fixed]: pg-greatest-null — PG/T-SQL GREATEST/LEAST ignore NULL args (GREATEST(1, NULL, 3) = 3); MySQL/Oracle propagate NULL. Drop a literal NULL arg on those targets.
 SELECT GREATEST(1, NULL, 3) AS r
 
 -- CASE[open]: pg-greatest-string — fails on mysql, tsql. FUNC-DIFF: source=(('a',),) target=(('B',),)
