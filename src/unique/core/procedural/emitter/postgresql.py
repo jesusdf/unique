@@ -36,6 +36,20 @@ class PostgresEmitter(ProceduralEmitter):
     #: return there (NEW row-level, NULL set-based); None elsewhere.
     _trigger_return_value: str | None = None
 
+    #: Oracle predefined exception names → PL/pgSQL condition names (the ones
+    #: that differ; unknowns pass through — PG's own snake_case names and
+    #: OTHERS are already valid and never collide with these UPPER spellings).
+    _ORACLE_EXCEPTION_CONDITIONS = {
+        "ZERO_DIVIDE": "division_by_zero",
+        "DUP_VAL_ON_INDEX": "unique_violation",
+        "TOO_MANY_ROWS": "too_many_rows",
+        "NO_DATA_FOUND": "no_data_found",
+        "CASE_NOT_FOUND": "case_not_found",
+    }
+
+    def _map_exception_name(self, name: str) -> str:
+        return self._ORACLE_EXCEPTION_CONDITIONS.get(name.upper(), name)
+
     def _emit_numeric_for_loop(
         self, variable: str, start: str, end: str, reverse: bool, body_lines: list[str]
     ) -> str:

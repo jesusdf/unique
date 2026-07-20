@@ -841,6 +841,19 @@ class TestMysqlModByZero:
         assert re.search(r"(?i)CASE\s+WHEN\s+0\s*=\s*0\s+THEN\s+NULL", out), out
 
 
+class TestOracleExceptionConditionMapsToPg:
+    """Oracle predefined exception names differ from PL/pgSQL condition names
+    (ZERO_DIVIDE vs division_by_zero); emitting the Oracle spelling verbatim is
+    rejected by PostgreSQL. The PG emitter maps the standard ones."""
+
+    def test_zero_divide_maps_to_division_by_zero(self) -> None:
+        out = _tx(
+            _case("challenge_oracle.sql", "ora-zero-divide"), "oracle", "postgresql"
+        )
+        assert re.search(r"(?i)WHEN\s+division_by_zero\s+THEN", out), out
+        assert not re.search(r"(?i)WHEN\s+ZERO_DIVIDE", out), out
+
+
 class TestOracleDecodeNullSafe:
     """Oracle DECODE uses NULL-safe equality (a NULL search matches a NULL
     subject), unlike SQL '=' where NULL = NULL is unknown. The DECODE_CASE emit

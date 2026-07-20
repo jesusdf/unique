@@ -527,7 +527,7 @@ SELECT XMLELEMENT("foo", 'bar') AS r FROM DUAL
 -- CASE[open]: ora-xmltable — fails on postgresql, tsql. (208, b"Invalid object name 'dbo.X_M_L_TABLE'.DB-Lib error message 20018, severity 16:\nGe
 SELECT x.a,x.b FROM XMLTABLE('/r' PASSING XMLTYPE('<r><a>1</a><b>2</b></r>') COLUMNS a INT PATH 'a', b INT PATH 'b') x
 
--- CASE[open]: ora-zero-divide — fails on postgresql. unrecognized exception condition "zero_divide"
+-- CASE[fixed]: ora-zero-divide — Oracle predefined exception ZERO_DIVIDE maps to the PL/pgSQL condition division_by_zero (was emitted verbatim, which PG rejects).
 CREATE PROCEDURE p AS v NUMBER; BEGIN v := 1/0; EXCEPTION WHEN ZERO_DIVIDE THEN v := 0; END;
 /
 

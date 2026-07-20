@@ -1418,10 +1418,18 @@ class ProceduralEmitter:
         lines.append("END;")
         return "\n".join(lines)
 
+    def _map_exception_name(self, name: str) -> str:
+        """Translate a source predefined-exception name to this dialect's
+        condition name. The default keeps it unchanged (Oracle target); the
+        PostgreSQL emitter overrides it (ZERO_DIVIDE -> division_by_zero, …)."""
+        return name
+
     def _emit_exception_block(self, node: ExceptionBlock) -> str:
         lines = ["EXCEPTION"]
         for handler in node.handlers:
-            lines.append(f"WHEN {handler.exception_name} THEN")
+            lines.append(
+                f"WHEN {self._map_exception_name(handler.exception_name)} THEN"
+            )
             self._indent_level += 1
             for stmt in handler.body:
                 text = self._emit_node(stmt)
