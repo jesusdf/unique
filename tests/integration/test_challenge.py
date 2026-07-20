@@ -841,6 +841,30 @@ class TestMysqlModByZero:
         assert re.search(r"(?i)CASE\s+WHEN\s+0\s*=\s*0\s+THEN\s+NULL", out), out
 
 
+class TestMysqlDatetimePrecision:
+    """MySQL DATETIME(n)/TIMESTAMP(n) carry fractional-seconds precision. T-SQL
+    DATETIME takes no width (error 2716), so DATETIME(n) -> DATETIME2(n); Oracle
+    TIMESTAMP's precision goes inside the type (TIMESTAMP(n) WITH TIME ZONE, not
+    ...WITH TIME ZONE(n)). Live-verified valid on all targets."""
+
+    def test_tsql_datetime_precision_uses_datetime2(self) -> None:
+        out = _tx(
+            _case("challenge_mysql.sql", "my-datetime-precision"), "mysql", "tsql"
+        )
+        assert re.search(r"(?i)DATETIME2\(6\)", out), out
+
+    def test_oracle_timestamp_precision_inside_type(self) -> None:
+        out = _tx(
+            _case("challenge_mysql.sql", "my-datetime-precision"), "mysql", "oracle"
+        )
+        assert re.search(r"(?i)TIMESTAMP\(3\)\s+WITH\s+TIME\s+ZONE", out), out
+
+    def test_tsql_bare_datetime_unchanged(self) -> None:
+        # A DATETIME with no precision must stay DATETIME (no width, no churn).
+        out = _tx("CREATE TABLE t (a DATETIME)", "mysql", "tsql")
+        assert re.search(r"(?i)\bDATETIME\b", out) and "DATETIME2" not in out.upper()
+
+
 class TestOracleTimestampCast:
     """Oracle CAST(x AS TIMESTAMP): MySQL has no TIMESTAMP cast target (1064) so
     it must be DATETIME, and T-SQL TIMESTAMP is a rowversion (binary), not a

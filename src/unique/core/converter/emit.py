@@ -2701,6 +2701,11 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     and len(col.data_type.params) == 2
                 ):
                     dtype = "REAL"
+                # T-SQL DATETIME takes no fractional-seconds precision (error
+                # 2716: "Cannot specify a column width on data type datetime");
+                # a MySQL DATETIME(n) needs DATETIME2(n) to keep the precision.
+                if dialect == "tsql" and _tn == "DATETIME" and col.data_type.params:
+                    dtype = "DATETIME2"
                 # If the mapped name already carries a length (e.g. CHAR(36)),
                 # don't append the caller's params on top of it. PostgreSQL and
                 # T-SQL integer types take no parameters at all — a MySQL display
@@ -2739,7 +2744,15 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     # carried its width along — wave 131).
                     params = ()
                 if params and "(" not in dtype and not skip_params:
-                    dtype += f"({', '.join(str(p) for p in params)})"
+                    _params_sql = ", ".join(str(p) for p in params)
+                    # Oracle's TIMESTAMP [WITH [LOCAL] TIME ZONE]: the precision
+                    # belongs on TIMESTAMP, not after the whole multi-word type
+                    # (``TIMESTAMP WITH TIME ZONE(3)`` does not parse).
+                    _wtz = re.match(r"(?i)^(TIMESTAMP)\s+(WITH\b.*)$", dtype)
+                    if _wtz:
+                        dtype = f"{_wtz.group(1)}({_params_sql}) {_wtz.group(2)}"
+                    else:
+                        dtype += f"({_params_sql})"
                 # A character type with no length is invalid DDL in most engines
                 # (MySQL/Oracle reject it; PostgreSQL treats bare VARCHAR as
                 # unlimited but that is not what was meant). It originates from a

@@ -245,7 +245,7 @@ SELECT DATE_FORMAT('2020-06-15 14:30:45', '%Y-%m-%dT%H:%i:%s') AS r
 -- CASE[open]: my-dateformat-long — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
 SELECT DATE_FORMAT('2020-06-15', '%W, %M %D, %Y') AS r
 
--- CASE[open]: my-datetime-precision — fails on tsql. (2716, b'Column, parameter, or variable #1: Cannot specify a column width on data type dat
+-- CASE[fixed]: my-datetime-precision — MySQL DATETIME(n)/TIMESTAMP(n) with fractional precision: T-SQL DATETIME takes no width (error 2716) so DATETIME(n)->DATETIME2(n); Oracle TIMESTAMP(n) WITH TIME ZONE keeps the precision inside the type name. Live-verified valid on all targets.
 CREATE TABLE t (a DATETIME(6), b TIMESTAMP(3), c YEAR)
 
 -- CASE[fixed]: my-dayparts — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DA
