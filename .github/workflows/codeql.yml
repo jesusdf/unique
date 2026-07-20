@@ -17,7 +17,7 @@ on:
 permissions:
   contents: read
   security-events: write # upload results to the Security tab
-  actions: read
+  actions: write # prune old overlay-base-database caches (see the cleanup step)
 
 jobs:
   analyze:
@@ -39,3 +39,25 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:python"
+
+      # CodeQL writes a fresh ``codeql-overlay-base-database-*`` cache on every
+      # push to main; the keys are per-commit and never expire on their own, so
+      # they pile up unbounded (they had reached ~600 caches / 7.5 GB, near the
+      # 10 GB Actions cache cap). Keep only the two newest and delete the rest so
+      # the cache stays bounded. Skipped on PRs (a fork lacks the write token and
+      # PR caches are isolated to the PR ref anyway).
+      - name: Prune old CodeQL overlay caches
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh api --paginate "repos/$REPO/actions/caches?per_page=100" \
+            --jq '.actions_caches[]
+                  | select(.key | startswith("codeql-overlay-base-database"))
+                  | "\(.created_at)\t\(.id)"' \
+            | sort -r | tail -n +3 | cut -f2 \
+            | while read -r id; do
+                echo "deleting stale CodeQL cache $id"
+                gh api -X DELETE "repos/$REPO/actions/caches/$id" || true
+              done
