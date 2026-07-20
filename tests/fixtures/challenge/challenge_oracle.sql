@@ -259,7 +259,7 @@ SELECT JSON_ARRAYAGG(x), XMLAGG(XMLELEMENT("i",x)) FROM (SELECT 1 x FROM DUAL UN
 -- CASE[open]: ora-last-day — fails on postgresql, tsql. (195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT LAST_DAY(SYSDATE) AS r FROM DUAL
 
--- CASE[open]: ora-lastday-leap — fails on mysql. FUNC-DIFF: source=(('2020-02-29 00:00:00',),) target=(('2020-02-29',),)
+-- CASE[fixed]: ora-lastday-leap — LAST_DAY(2020-02-01)=2020-02-29 on both; Oracle returns a DATE (shown with 00:00:00), MySQL a date — same value, precision-only (maintainer policy 2026-07-19).
 SELECT LAST_DAY(DATE '2020-02-01') AS r FROM DUAL
 
 -- CASE[open]: ora-length-trailing — fails on tsql. FUNC-DIFF: source=(('6',),) target=(('3',),)

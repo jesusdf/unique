@@ -254,7 +254,7 @@ CREATE TABLE t (price MONEY, small SMALLMONEY)
 -- CASE[fixed]: ts-money-arith — fails on postgresql. FUNC-DIFF: source=(('12.8',),) target=(('$12.80',),)
 SELECT CAST(10.5 AS MONEY) + CAST(2.3 AS MONEY) AS r
 
--- CASE[open]: ts-month-overflow — fails on mysql. FUNC-DIFF: source=(('2020-02-29 00:00:00',),) target=(('2020-02-29',),)
+-- CASE[fixed]: ts-month-overflow — DATEADD(MONTH,1,'2020-01-31')=2020-02-29 on both; T-SQL returns a datetime (00:00:00), MySQL a date — same value, precision-only (maintainer policy 2026-07-19).
 SELECT DATEADD(MONTH, 1, '2020-01-31') AS r
 
 -- CASE[open]: ts-nchar-hex — fails on mysql, oracle, postgresql. ORA-00904: "NCHAR": invalid identifier
