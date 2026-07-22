@@ -370,7 +370,7 @@ SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x),PERCENTILE_DISC(0.5) WITHI
 -- CASE[open]: ora-pk-using-index — fails on mysql, postgresql, tsql. (1018, b"Incorrect syntax near 'INDEX'. If this is intended as a part of a table hint, A W
 CREATE TABLE t (id NUMBER, CONSTRAINT pk PRIMARY KEY (id) USING INDEX)
 
--- CASE[open]: ora-rand — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "DBMS_RANDOM" or the user-defined function or aggregate
+-- CASE[limit]: ora-rand — fails on mysql, postgresql, tsql. DBMS_RANDOM.VALUE/STRING is non-deterministic (values cannot match cross-engine) and DBMS_RANDOM.STRING has no equivalent random-string builtin elsewhere (docs/03-unsupported.md §2). Warned carrier on all three.
 SELECT DBMS_RANDOM.VALUE, DBMS_RANDOM.STRING('U', 5) FROM DUAL
 
 -- CASE[fixed]: ora-ratio-to-report — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA

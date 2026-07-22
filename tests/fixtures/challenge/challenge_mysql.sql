@@ -341,7 +341,7 @@ SELECT SUBSTRING('abc',0),SUBSTRING('abc',-1),SUBSTRING('abc',2,10)
 -- CASE[fixed]: my-full-select — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t GROUP BY id HAVING COUNT(*) > 1 ORDER BY id LIMIT 10 OFFSET 5
 
--- CASE[open]: my-fulltext — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
+-- CASE[limit]: my-fulltext — fails on oracle, postgresql, tsql. MySQL FULLTEXT index + MATCH()..AGAINST() has no faithful cross-engine equivalent (Oracle Text, PG tsvector/GIN, T-SQL full-text catalog are all different engines with different syntax) (docs/03-unsupported.md §2). Warned carrier on all three.
 CREATE TABLE t (txt TEXT, FULLTEXT(txt));
 SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)
 
