@@ -726,13 +726,13 @@ SELECT U&'\0041' AS r
 -- CASE[open]: pg-unique-nulls-notdistinct — fails on mysql, oracle. ORA-03050: invalid identifier: "UNIQUE" is a reserved word
 CREATE TABLE t (a INT, b INT, UNIQUE NULLS NOT DISTINCT (a, b))
 
--- CASE[open]: pg-week — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
+-- CASE[fixed]: pg-week — EXTRACT(WEEK) ISO 8601. T-SQL DATEPART(WEEK) gave 2; DATEPART(ISO_WEEK,d) gives PG's 1. live-verified.
 SELECT EXTRACT(WEEK FROM DATE '2020-01-05') AS r
 
--- CASE[open]: pg-week-2016 — fails on mysql, tsql. FUNC-DIFF: source=(('53',),) target=(('1',),)
+-- CASE[fixed]: pg-week-2016 — EXTRACT(WEEK) ISO year-boundary: 2016-01-01 is ISO week 53 of 2015 (PG=53). MySQL WEEK(d,3) and T-SQL DATEPART(ISO_WEEK,d) both give 53; native gave 1. live-verified.
 SELECT EXTRACT(WEEK FROM DATE '2016-01-01') AS r
 
--- CASE[open]: pg-week-jan1 — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[fixed]: pg-week-jan1 — EXTRACT(WEEK) ISO: 2020-01-01 is ISO week 1 (PG=1). MySQL WEEK(d,3) gives 1; native EXTRACT(WEEK) (mode 0) gave 0. live-verified.
 SELECT EXTRACT(WEEK FROM DATE '2020-01-01') AS r
 
 -- CASE[fixed]: pg-width-bucket — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI

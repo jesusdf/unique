@@ -289,6 +289,35 @@ class TestExtractFieldTranslation:
         )
         assert expected in out, out
 
+    @pytest.mark.parametrize(
+        "case,mysql_expr,tsql_expr",
+        [
+            # ISO-week edge dates: same mechanism, verified values (PG 1/53/1).
+            (
+                "pg-week ",
+                "WEEK(CAST('2020-01-05' AS DATE), 3)",
+                "ISO_WEEK, CAST('2020-01-05'",
+            ),
+            (
+                "pg-week-2016 ",
+                "WEEK(CAST('2016-01-01' AS DATE), 3)",
+                "ISO_WEEK, CAST('2016-01-01'",
+            ),
+            (
+                "pg-week-jan1 ",
+                "WEEK(CAST('2020-01-01' AS DATE), 3)",
+                "ISO_WEEK, CAST('2020-01-01'",
+            ),
+        ],
+    )
+    def test_iso_week_edge_dates(
+        self, case: str, mysql_expr: str, tsql_expr: str
+    ) -> None:
+        my = _tx(_case("challenge_postgresql.sql", case), "postgresql", "mysql")
+        assert mysql_expr in my, my
+        ts = _tx(_case("challenge_postgresql.sql", case), "postgresql", "tsql")
+        assert tsql_expr in ts, ts
+
 
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL
