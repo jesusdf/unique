@@ -187,7 +187,7 @@ SELECT date_bin('15 minutes', TIMESTAMP '2020-01-01 00:07', TIMESTAMP '2020-01-0
 -- CASE[fixed]: pg-date-diff-days — PostgreSQL DATE-DATE is a day count (60); MySQL does numeric subtraction and T-SQL errors. Recognize the PG CAST(... AS DATE) literal shape and emit DATEDIFF.
 SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r
 
--- CASE[open]: pg-date-part — fails on oracle. ORA-00907: missing right parenthesis
+-- CASE[fixed]: pg-date-part — EXTRACT/DATE_PART WEEK and QUARTER. Oracle's EXTRACT rejects both -> TO_CHAR(d,'IW'/'Q'). WEEK is ISO 8601: MySQL EXTRACT(WEEK) uses default_week_format and T-SQL DATEPART(WEEK) is DATEFIRST-bound (both off), so emit WEEK(d,3) / DATEPART(ISO_WEEK,d). live-verified value on all four.
 SELECT DATE_PART('week', DATE '2020-06-15'), DATE_PART('quarter', DATE '2020-06-15')
 
 -- CASE[fixed]: pg-date-plus-int — PostgreSQL date + n adds n days; MySQL does numeric addition (20200131) and T-SQL errors. Emit DATE_ADD / DATEADD from a PG/Oracle source.
@@ -250,7 +250,7 @@ CREATE FUNCTION f() RETURNS VOID AS $$ BEGIN EXECUTE 'INSERT INTO t VALUES ($1)'
 -- CASE[open]: pg-expr-index — fails on mysql, oracle. ORA-02327: cannot create index on expression with data type LOB
 CREATE TABLE t (a INT, b TEXT); CREATE INDEX ix ON t (lower(b))
 
--- CASE[open]: pg-extract-dow — fails on mysql, oracle, tsql. (155, b"'DOW' is not a recognized datepart option.DB-Lib error message 20018, severity 15:
+-- CASE[fixed]: pg-extract-dow — EXTRACT(DOW), PG Sunday=0..Saturday=6. No target's native EXTRACT/DATEPART matches: MySQL DAYOFWEEK(d)-1, Oracle MOD over a known Sunday (1970-01-04), T-SQL DATEDIFF over a known Sunday (1900-01-07) — all NLS-/DATEFIRST-independent. live-verified value on all four.
 SELECT EXTRACT(DOW FROM DATE '2020-01-01') AS d
 
 -- CASE[open]: pg-extract-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1

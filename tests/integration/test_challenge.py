@@ -243,6 +243,53 @@ class TestDateLiteralIntoOracle:
         assert re.search(r"DATE '\d{4}-\d\d-\d\d'", out), out
 
 
+class TestExtractFieldTranslation:
+    """PG ``EXTRACT``/``DATE_PART`` fields the target's native EXTRACT/DATEPART
+    either rejects (Oracle WEEK/QUARTER/DOW) or computes with different semantics
+    (WEEK's numbering on MySQL/T-SQL, DOW on every engine). Each maps to a
+    value-preserving, ISO-8601 / DATEFIRST- / NLS-independent equivalent
+    (live-verified on all four engines: PG week=25 quarter=2, DOW=3)."""
+
+    def test_week_quarter_into_oracle(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-date-part "), "postgresql", "oracle"
+        )
+        assert "TO_NUMBER(TO_CHAR(DATE '2020-06-15', 'IW'))" in out, out
+        assert "TO_NUMBER(TO_CHAR(DATE '2020-06-15', 'Q'))" in out, out
+        # no invalid Oracle EXTRACT(WEEK/QUARTER) survives in the SQL itself.
+        assert "EXTRACT(" not in _exec_lines(out), out
+
+    def test_week_is_iso_on_mysql_and_tsql(self) -> None:
+        my = _tx(
+            _case("challenge_postgresql.sql", "pg-date-part "), "postgresql", "mysql"
+        )
+        assert "WEEK(CAST('2020-06-15' AS DATE), 3)" in my, my
+        ts = _tx(
+            _case("challenge_postgresql.sql", "pg-date-part "), "postgresql", "tsql"
+        )
+        assert "DATEPART(ISO_WEEK, CAST('2020-06-15' AS DATE))" in ts, ts
+
+    @pytest.mark.parametrize(
+        "target,expected",
+        [
+            ("mysql", "(DAYOFWEEK(CAST('2020-01-01' AS DATE)) - 1)"),
+            (
+                "oracle",
+                "MOD(MOD(TRUNC(DATE '2020-01-01') - DATE '1970-01-04', 7) + 7, 7)",
+            ),
+            (
+                "tsql",
+                "(DATEDIFF(DAY, '19000107', CAST('2020-01-01' AS DATE)) % 7 + 7) % 7",
+            ),
+        ],
+    )
+    def test_dow_maps_per_engine(self, target: str, expected: str) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-extract-dow "), "postgresql", target
+        )
+        assert expected in out, out
+
+
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL
     STRING_AGG / Oracle LISTAGG); an integer value is cast to text so PG doesn't

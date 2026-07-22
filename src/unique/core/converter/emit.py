@@ -4495,6 +4495,34 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if fn_name == "EXTRACT" and len(node.args) == 2:
         part = _emit_expression(node.args[0], dialect).strip("'\"").upper()
         value = _emit_expression(node.args[1], dialect)
+        # Fields the target's native EXTRACT/DATEPART either rejects or computes
+        # with different semantics, mapped to a value-preserving, NLS-/DATEFIRST-
+        # /week-mode-independent equivalent. PostgreSQL semantics: DOW is
+        # Sunday=0..Saturday=6, WEEK is the ISO 8601 week (1-53), QUARTER is 1-4.
+        if part == "DOW":
+            if dialect == "mysql":
+                # DAYOFWEEK is 1(Sun)..7(Sat); shift to PG's 0..6.
+                return f"(DAYOFWEEK({value}) - 1)"
+            if dialect == "oracle":
+                # 1970-01-04 was a Sunday; the outer MOD keeps it 0..6 for dates
+                # before that reference too (Oracle MOD carries the sign).
+                return f"MOD(MOD(TRUNC({value}) - DATE '1970-01-04', 7) + 7, 7)"
+            if dialect == "tsql":
+                # 1900-01-07 was a Sunday; DATEFIRST-independent (T-SQL % carries
+                # the sign, so the +7/%7 wrap keeps pre-1900 dates 0..6).
+                return f"(DATEDIFF(DAY, '19000107', {value}) % 7 + 7) % 7"
+        if part == "WEEK":
+            # PG's WEEK is ISO 8601. Oracle's EXTRACT rejects it; MySQL's native
+            # EXTRACT(WEEK) follows default_week_format (mode 0, off by one) and
+            # T-SQL's DATEPART(WEEK) is DATEFIRST-dependent — all wrong for ISO.
+            if dialect == "oracle":
+                return f"TO_NUMBER(TO_CHAR({value}, 'IW'))"
+            if dialect == "mysql":
+                return f"WEEK({value}, 3)"  # mode 3 = ISO 8601
+            if dialect == "tsql":
+                return f"DATEPART(ISO_WEEK, {value})"
+        if part == "QUARTER" and dialect == "oracle":
+            return f"TO_NUMBER(TO_CHAR({value}, 'Q'))"
         if dialect == "tsql":
             return f"DATEPART({part}, {value})"
         return f"EXTRACT({part} FROM {value})"
