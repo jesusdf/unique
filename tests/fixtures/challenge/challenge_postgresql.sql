@@ -738,10 +738,10 @@ SELECT EXTRACT(WEEK FROM DATE '2020-01-01') AS r
 -- CASE[fixed]: pg-width-bucket — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WI
 SELECT width_bucket(5, 0, 10, 5) AS r
 
--- CASE[open]: pg-xmlelement — fails on mysql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
+-- CASE[limit]: pg-xmlelement — fails on mysql, tsql. XMLELEMENT maps faithfully between PostgreSQL & Oracle, but MySQL/T-SQL have no XMLELEMENT (docs/03-unsupported.md §5, §2). Warned carrier on mysql/tsql.
 SELECT XMLELEMENT(NAME foo, 'bar') AS r
 
--- CASE[open]: pg-xmlelement2 — fails on mysql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
+-- CASE[limit]: pg-xmlelement2 — fails on mysql, tsql. Lowercase spelling of pg-xmlelement; XMLELEMENT has no MySQL/T-SQL equivalent (docs/03-unsupported.md §5, §2). Warned carrier on mysql/tsql.
 SELECT xmlelement(name foo, 'bar')
 
 -- CASE[fixed]: pg-xpath — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.xp

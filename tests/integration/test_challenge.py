@@ -344,6 +344,29 @@ class TestMonthEndFunctions:
         assert "EXTRACT(DAY FROM LAST_DAY(DATE '2020-02-15'))" in o4, o4
 
 
+class TestXmlElementBetweenOracleAndPg:
+    """XMLELEMENT is faithful between Oracle and PostgreSQL: PG requires the
+    ``NAME`` keyword, Oracle does not, and the element name is quoted on both so
+    neither re-folds its case (a PG ``NAME foo`` must stay ``<foo>`` on Oracle,
+    not ``<FOO>``). MySQL/T-SQL have no XMLELEMENT — a documented [limit].
+    (Live-verified: all three cases return ``<foo>bar</foo>`` on Oracle and PG.)"""
+
+    def test_oracle_source_into_pg_uses_name_keyword(self) -> None:
+        pg = _tx(
+            _case("challenge_oracle.sql", "ora-xmlelement "), "oracle", "postgresql"
+        )
+        assert 'XMLELEMENT(NAME "foo", ' in pg, pg
+
+    def test_pg_source_into_oracle_quotes_name(self) -> None:
+        # PG's unquoted ``NAME foo`` must become quoted ``"foo"`` on Oracle so it
+        # is not upper-folded to FOO.
+        o4 = _tx(
+            _case("challenge_postgresql.sql", "pg-xmlelement "), "postgresql", "oracle"
+        )
+        assert 'XMLELEMENT("foo", ' in o4, o4
+        assert "NAME" not in _exec_lines(o4), o4
+
+
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL
     STRING_AGG / Oracle LISTAGG); an integer value is cast to text so PG doesn't

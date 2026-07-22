@@ -60,6 +60,19 @@ _SQL_STANDARD = frozenset(
 )
 
 
+#: Grammar-level SQL/XML functions that only *some* engines implement in their
+#: parser (so introspection misses them), unlike the universal _SQL_STANDARD.
+#: XMLELEMENT/XMLAGG are SQL/XML built-ins on Oracle and PostgreSQL but do not
+#: exist on MySQL/T-SQL, so they must stay engine-scoped — union them globally
+#: and the gate would stop degrading them (a genuine limit) where they are
+#: absent. Only names whose emitter renders a valid call on the listed engine
+#: belong here (adding one the emitter mis-spells would ship silently invalid).
+_ENGINE_STANDARD: dict[str, frozenset[str]] = {
+    "oracle": frozenset({"XMLELEMENT", "XMLAGG"}),
+    "postgresql": frozenset({"XMLELEMENT"}),  # XMLAGG is already introspected
+}
+
+
 @cache
 def _load(engine: str) -> frozenset[str]:
     """Load the upper-cased built-in name set for *engine* from its data file."""
@@ -73,7 +86,7 @@ def _load(engine: str) -> frozenset[str]:
         for line in data.splitlines()
         if line.strip() and not line.startswith("#")
     }
-    return frozenset(names | _SQL_STANDARD)
+    return frozenset(names | _SQL_STANDARD | _ENGINE_STANDARD.get(engine, frozenset()))
 
 
 def _bare_name(name: str) -> str:

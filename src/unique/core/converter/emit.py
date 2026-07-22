@@ -4527,6 +4527,21 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"DATEPART({part}, {value})"
         return f"EXTRACT({part} FROM {value})"
 
+    # XMLELEMENT(name, value...): SQL/XML built-in on Oracle and PostgreSQL.
+    # Oracle spells the element name as a (usually quoted) identifier;
+    # PostgreSQL requires the ``NAME`` keyword before it. MySQL and T-SQL have
+    # no XMLELEMENT — the gate degrades those to a carrier (a documented limit).
+    if fn_name == "XMLELEMENT" and node.args:
+        # Quote the element name on both engines so neither re-folds its case
+        # (Oracle upper-folds an unquoted identifier, PostgreSQL lower-folds it):
+        # a PG ``NAME foo`` must stay ``<foo>`` on Oracle, not ``<FOO>``.
+        bare = _emit_expression(node.args[0], dialect).strip('"')
+        name = f'"{bare}"'
+        vals = [_emit_expression(a, dialect) for a in node.args[1:]]
+        if dialect == "postgresql":
+            return f"XMLELEMENT({', '.join([f'NAME {name}', *vals])})"
+        return f"XMLELEMENT({', '.join([name, *vals])})"
+
     # Oracle NVL2(a, b, c): b when a is not null, else c. Only Oracle has it.
     if fn_name == "NVL2" and len(node.args) == 3:
         a, b, c = (_emit_expression(x, dialect) for x in node.args)

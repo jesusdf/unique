@@ -521,7 +521,7 @@ SELECT x,RATIO_TO_REPORT(x) OVER (),NTILE(2) OVER (ORDER BY x),CUME_DIST() OVER 
 -- CASE[open]: ora-xmlagg — fails on mysql, postgresql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT XMLAGG(XMLELEMENT("e", dummy)) FROM DUAL
 
--- CASE[open]: ora-xmlelement — fails on mysql, postgresql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
+-- CASE[limit]: ora-xmlelement — fails on mysql, tsql. XMLELEMENT is an SQL/XML built-in on Oracle & PostgreSQL (transpiled faithfully, element-name case preserved); MySQL has no XML type and T-SQL has no XMLELEMENT (only FOR XML) — no cross-engine mapping (docs/03-unsupported.md §5, §2). Warned carrier on mysql/tsql.
 SELECT XMLELEMENT("foo", 'bar') AS r FROM DUAL
 
 -- CASE[open]: ora-xmltable — fails on postgresql, tsql. (208, b"Invalid object name 'dbo.X_M_L_TABLE'.DB-Lib error message 20018, severity 16:\nGe
