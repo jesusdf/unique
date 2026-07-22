@@ -412,6 +412,23 @@ class TestJsonAggregates:
         assert r.warnings and "UNIQUE:" in r.sql, r.sql
 
 
+class TestDateTruncMonth:
+    """PG date_trunc parses to TimestampTrunc (fake sql_name); it is canonicalized
+    to DATE_TRUNC and mapped per engine — Oracle TRUNC(ts,'MM'), T-SQL
+    DATETRUNC(month, …), MySQL DATE_FORMAT. Also exercises the Oracle
+    TIMESTAMP-literal seconds padding. (Live-verified 2020-05-01 on all four.)"""
+
+    def test_pg_month_trunc_per_engine(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-date-trunc ")
+        o4 = _tx(case, "postgresql", "oracle")
+        assert "TRUNC(" in o4 and "'MM'" in o4, o4
+        assert "TIMESTAMP '2020-05-17 10:00:00'" in o4, o4  # seconds padded
+        ts = _tx(case, "postgresql", "tsql")
+        assert "DATETRUNC(month," in ts, ts
+        my = _tx(case, "postgresql", "mysql")
+        assert "DATE_FORMAT(" in my and "%Y-%m-01" in my, my
+
+
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL
     STRING_AGG / Oracle LISTAGG); an integer value is cast to text so PG doesn't

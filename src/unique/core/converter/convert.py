@@ -1980,6 +1980,22 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
                 args=(convert_expression(key), convert_expression(val)),
             )
 
+    # PostgreSQL date_trunc('unit', ts) parses to TimestampTrunc/DateTrunc whose
+    # sql_name() is the internal "TIMESTAMP_TRUNC" (no engine has it).
+    # Canonicalize to the DATE_TRUNC FunctionCall the emitter already maps per
+    # engine (Oracle TRUNC, T-SQL DATETRUNC, MySQL DATE_FORMAT); an unmapped unit
+    # (e.g. 'decade') falls through there and degrades via the gate.
+    if isinstance(expr, (exp.TimestampTrunc, exp.DateTrunc)):
+        unit = expr.args.get("unit")
+        if unit is not None:
+            return FunctionCall(
+                name="DATE_TRUNC",
+                args=(
+                    RawSQL(sql=unit.name.upper(), reason="date_trunc unit"),
+                    convert_expression(expr.this),
+                ),
+            )
+
     # exp.Anonymous is an unrecognized function: its real name is in `this`
     # (a string), not in sql_name() which returns "ANONYMOUS". Its arguments
     # live in `expressions`.

@@ -193,7 +193,7 @@ SELECT DATE_PART('week', DATE '2020-06-15'), DATE_PART('quarter', DATE '2020-06-
 -- CASE[fixed]: pg-date-plus-int — PostgreSQL date + n adds n days; MySQL does numeric addition (20200131) and T-SQL errors. Emit DATE_ADD / DATEADD from a PG/Oracle source.
 SELECT DATE '2020-01-01' + 30 AS r
 
--- CASE[open]: pg-date-trunc — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
+-- CASE[fixed]: pg-date-trunc — DATE_TRUNC(unit, ts). PG date_trunc parses to TimestampTrunc (fake sql_name); canonicalized to DATE_TRUNC -> Oracle TRUNC(ts,'MM'), T-SQL DATETRUNC(month,ts), MySQL DATE_FORMAT. (Also fixed: Oracle TIMESTAMP literal needs padded seconds.) live-verified 2020-05-01 on all four.
 SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d
 
 -- CASE[open]: pg-datetrunc-units — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI

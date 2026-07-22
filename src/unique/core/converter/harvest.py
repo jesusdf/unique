@@ -229,7 +229,12 @@ def _oracle_date_literal(text: str) -> str | None:
         return f"DATE '{text}'"
     dt = _ISO_DATETIME_RE.match(text)
     if dt:
-        return f"TIMESTAMP '{dt.group(1)} {dt.group(2)}'"
+        time_part = dt.group(2)
+        # Oracle's TIMESTAMP literal needs a full HH24:MI:SS; a seconds-less
+        # time (PostgreSQL accepts ``TIMESTAMP '… 10:00'``) is ORA-01861.
+        if re.fullmatch(r"\d{2}:\d{2}", time_part):
+            time_part += ":00"
+        return f"TIMESTAMP '{dt.group(1)} {time_part}'"
     return None
 
 
