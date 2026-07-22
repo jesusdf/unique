@@ -489,7 +489,7 @@ CREATE TABLE t (data JSON)
 -- CASE[open]: my-last-day-name — fails on oracle, postgresql, tsql. (195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')
 
--- CASE[open]: my-lastday-extract — fails on oracle, postgresql, tsql. (195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
+-- CASE[fixed]: my-lastday-extract — LAST_DAY + EXTRACT(DAY). Oracle LAST_DAY / PG month-end via DATE_TRUNC / T-SQL EOMONTH; the extracted day = 29 on all. Oracle's DATE renders a 00:00:00 time (same value, precision-only; policy 2026-07-19). live-verified.
 SELECT LAST_DAY('2020-02-15'), EXTRACT(DAY FROM LAST_DAY('2020-02-15'))
 
 -- CASE[fixed]: my-least-greatest-null — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL', 'NULL'),) target=(('a', '1'),)

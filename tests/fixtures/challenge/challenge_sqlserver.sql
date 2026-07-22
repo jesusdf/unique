@@ -164,10 +164,10 @@ CREATE PROCEDURE p @tbl NVARCHAR(128) AS BEGIN DECLARE @sql NVARCHAR(MAX) = N'SE
 -- CASE[open]: ts-emoji-len — fails on mysql, postgresql. FUNC-DIFF: source=(('2',),) target=(('1',),)
 SELECT LEN(N'😀') AS r
 
--- CASE[open]: ts-eomonth — fails on oracle, postgresql. ORA-01861: literal does not match format string
+-- CASE[fixed]: ts-eomonth — EOMONTH -> Oracle LAST_DAY(DATE '..'), PG month-end via DATE_TRUNC, MySQL LAST_DAY. All = 2020-02-29; Oracle's DATE renders a 00:00:00 time (same value, precision-only; maintainer policy 2026-07-19). live-verified.
 SELECT EOMONTH('2020-02-15') AS r
 
--- CASE[open]: ts-eomonth-nested — fails on oracle, postgresql. ORA-01861: literal does not match format string
+-- CASE[fixed]: ts-eomonth-nested — DATEADD(MONTH,-1,EOMONTH(..)) -> Oracle ADD_MONTHS(LAST_DAY,-1), PG/MySQL month-end +/- 1 month. All = 2020-02-29; DATE / timestamp-midnight rendering differs (same value, precision-only; policy 2026-07-19). live-verified.
 SELECT DATEADD(MONTH, -1, EOMONTH('2020-03-01')) AS r
 
 -- CASE[fixed]: ts-error-functions — fails on oracle. PROCEDURE P compiled INVALID (line 12): PL/SQL: ORA-00904: "ERROR_LINE": invalid identifie

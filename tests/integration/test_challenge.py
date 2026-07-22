@@ -319,6 +319,31 @@ class TestExtractFieldTranslation:
         assert tsql_expr in ts, ts
 
 
+class TestMonthEndFunctions:
+    """End-of-month built-ins (T-SQL EOMONTH, MySQL LAST_DAY) map to each
+    engine's idiom and agree on the date (2020-02-29). Oracle's DATE type
+    renders a 00:00:00 time component — same value, precision-only per the
+    2026-07-19 maintainer policy (live-verified on all four engines)."""
+
+    def test_eomonth_into_oracle_and_pg(self) -> None:
+        o4 = _tx(_case("challenge_sqlserver.sql", "ts-eomonth "), "tsql", "oracle")
+        assert "LAST_DAY(DATE '2020-02-15')" in o4, o4
+        pg = _tx(_case("challenge_sqlserver.sql", "ts-eomonth "), "tsql", "postgresql")
+        assert "DATE_TRUNC('month', DATE '2020-02-15')" in pg, pg
+
+    def test_eomonth_nested_keeps_month_end(self) -> None:
+        o4 = _tx(
+            _case("challenge_sqlserver.sql", "ts-eomonth-nested "), "tsql", "oracle"
+        )
+        assert "ADD_MONTHS(LAST_DAY(DATE '2020-03-01'), -1)" in o4, o4
+
+    def test_mysql_last_day_extract_day(self) -> None:
+        ts = _tx(_case("challenge_mysql.sql", "my-lastday-extract "), "mysql", "tsql")
+        assert "EOMONTH('2020-02-15')" in ts and "DATEPART(DAY, EOMONTH(" in ts, ts
+        o4 = _tx(_case("challenge_mysql.sql", "my-lastday-extract "), "mysql", "oracle")
+        assert "EXTRACT(DAY FROM LAST_DAY(DATE '2020-02-15'))" in o4, o4
+
+
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL
     STRING_AGG / Oracle LISTAGG); an integer value is cast to text so PG doesn't
