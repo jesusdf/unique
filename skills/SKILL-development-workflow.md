@@ -392,6 +392,28 @@ When adding or fixing any function/type/literal/pseudo-table mapping:
 3. Mirror test structure in `tests/unit/dialects/`.
 4. Add integration test files for all transpilation directions.
 
+## Work in parallel where independent (save time)
+
+Don't serialize steps that have no dependency between them — it wastes
+wall-clock time. Be **reasonable** (don't parallelize work that races on the
+same file, DB rows, or a fixed port), but by default:
+
+- **Batch independent tool calls into one message** — read several files at
+  once, or run `black` + `isort` + `ruff` + `mypy` together, rather than
+  one-at-a-time round-trips.
+- **Run long jobs in the background** (`run_in_background`) — the full suite, a
+  live-DB sweep, a CI poll — and keep working while they run; you are
+  re-invoked when they finish. Capture the real exit
+  (`> file; echo "EXIT=$?" >> file`), never `… | tail` (that reports the pipe's
+  exit, not pytest's).
+- **Use the core-parallel test runner** — `scripts/test-parallel.sh` (nproc
+  workers) over a serial `pytest`; it is the CI command too.
+- **Live-verify a whole batch in one pass** — a single script that transpiles
+  every case and runs each output on the four Docker engines, not a round-trip
+  per case.
+- **Fan out only when it pays** — a genuinely large, independent sweep is worth
+  parallelizing; two quick reads are not worth the ceremony.
+
 ## Running Tests
 
 ```bash
