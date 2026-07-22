@@ -201,12 +201,13 @@ comments/warnings (see `docs/03-unsupported.md`):
       hang now dumps its stack instead of surfacing only as a runner shutdown).
       Verified: the 4-worker parallel suite (the CI config) passes clean, no OOM;
       CI green on `02f483b`.
-- [ ] **Re-test coverage on CI (`COV=1`).** Coverage was dropped from the Test
-      job (commit `3a2029e`) when the OOM was still mis-attributed to coverage
-      accumulation. With the real cause (above) fixed, the whole-suite peak is now
-      bounded (serial ends ~291 MB, per-file peaks ~60–70 MB), so `COV=1
-      scripts/test-parallel.sh` may now fit — re-measure before re-adding. Nothing
-      is gated on the coverage report, so this is low priority.
+- [x] **Coverage re-added to CI (`COV=1`) — 2026-07-23.** With the real cause
+      (above) fixed, measured `COV=1 PYTEST_WORKERS=4 scripts/test-parallel.sh`
+      locally: **peak total RSS across all workers = 1.19 GB** (all shards green,
+      91% coverage, `coverage.xml` produced) — far under a runner's ~16 GB. Memory
+      is tied to the core count (nproc workers, ~0.3 GB/worker), so it stays
+      bounded. Restored the `COV=1` Test-job step + the `Upload coverage` artifact
+      in `.github/workflows/ci.yaml` (reverting `3a2029e`).
       **Process note:** `pytest … | tail` reports the *pipe's* exit, not pytest's
       — capture `> file; echo "EXIT=$?" >> file` for a trustworthy full-suite
       result; use `ulimit -v` so a runaway `MemoryError`s instead of OOM-killing
