@@ -127,6 +127,11 @@ disable_error_code = ["unused-ignore"]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
 pythonpath = ["tests"]
+# Safety net: if any single test runs longer than this, dump every thread's
+# traceback to stderr so a silent hang is diagnosable in the CI log instead of
+# manifesting only as "the runner received a shutdown signal". Survives the
+# parallel runner's ``-o addopts=""`` reset (that clears addopts, not this key).
+faulthandler_timeout = 120
 markers = [
     "integration: tests that require a live external database (skipped by default)",
 ]

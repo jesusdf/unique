@@ -221,10 +221,12 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
     if dialect == "postgresql" and re.search(r":'\w+'|:\"\w+\"", sql):
         from unique.core.output_gate import scrub
 
-        # scrub() empties string contents, so on scrubbed text the
-        # signature is a colon directly before a string start (a PG cast
-        # is ``::type`` — excluded by the lookbehind).
-        if re.search(r"(?<!:):\s*''", scrub(sql)):
+        # scrub() replaces string contents with a placeholder, so on
+        # scrubbed text the signature is a colon directly before a string
+        # start (a real ``:'var'`` survives as ``:'…'`` while a ``:'`` that
+        # sat *inside* a string is collapsed away; a PG cast is ``::type`` —
+        # excluded by the lookbehind).
+        if re.search(r"(?<!:):\s*'", scrub(sql)):
             # psql client-side variable substitution (:'var') is never
             # server SQL — and sqlglot's COPY-parameter parser loops
             # unboundedly on it until MemoryError (30 bytes of input
