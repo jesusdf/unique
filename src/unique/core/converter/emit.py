@@ -5179,8 +5179,32 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if dialect == "postgresql" and up == "MEDIAN" and len(node.args) == 1:
         x = _emit_expression(node.args[0], dialect)
         return f"PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY {x})"
-    if dialect == "postgresql" and up == "JSON_ARRAYAGG" and len(node.args) == 1:
-        return f"JSON_AGG({_emit_expression(node.args[0], dialect)})"
+    # JSON aggregates map faithfully across PostgreSQL, MySQL and Oracle (same
+    # JSON value); T-SQL has no JSON aggregate, so its emission degrades through
+    # the gate (output_gate._CROSS_ENGINE_AGG).
+    if up == "JSON_ARRAYAGG" and len(node.args) == 1:
+        x = _emit_expression(node.args[0], dialect)
+        if dialect == "postgresql":
+            return f"JSON_AGG({x})"  # PG spells the array aggregate json_agg
+        return f"JSON_ARRAYAGG({x})"  # MySQL/Oracle native; T-SQL degrades
+    if up == "JSON_OBJECTAGG" and len(node.args) == 2:
+        key_node, val_node = node.args
+        v = _emit_expression(val_node, dialect)
+        if dialect == "postgresql":
+            return f"JSON_OBJECT_AGG({_emit_expression(key_node, dialect)}, {v})"
+        if dialect == "oracle":
+            # Oracle's KEY..VALUE syntax; the key must be VARCHAR2 (a NUMBER key
+            # raises ORA-00932, and a text key mapped to CLOB — e.g. PG's
+            # ``x::text`` — raises ORA-22849 even wrapped). Cast the *inner*
+            # value straight to VARCHAR2, past any text→CLOB cast.
+            inner = (
+                key_node.expression
+                if isinstance(key_node, CastExpression)
+                else key_node
+            )
+            k = f"CAST({_emit_expression(inner, dialect)} AS VARCHAR2(4000))"
+            return f"JSON_OBJECTAGG({k} VALUE {v})"
+        return f"JSON_OBJECTAGG({_emit_expression(key_node, dialect)}, {v})"
     # MySQL ELT(n, a, b, …)/FIELD(v, a, b, …) → portable CASE chains (RC-1a).
     if up == "ELT" and len(node.args) >= 2 and dialect != "mysql":
         n = _emit_expression(node.args[0], dialect)

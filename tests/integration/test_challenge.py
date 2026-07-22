@@ -385,6 +385,33 @@ class TestBitAggregatesBetweenMysqlAndPg:
         assert "BIT_AND(x)" in my and "BIT_OR(x)" in my and "BIT_XOR(x)" in my, my
 
 
+class TestJsonAggregates:
+    """JSON aggregates map faithfully across MySQL, PostgreSQL and Oracle (same
+    JSON value): PG spells them json_agg / json_object_agg, MySQL/Oracle
+    JSON_ARRAYAGG / JSON_OBJECTAGG (Oracle needs KEY..VALUE and a VARCHAR2 key).
+    T-SQL has no JSON aggregate, so it degrades to a documented [limit].
+    (Live-verified: my-json-agg = ([1,2], {"1":10,"2":20}) on all three.)"""
+
+    def test_mysql_source_into_pg_and_oracle(self) -> None:
+        pg = _tx(_case("challenge_mysql.sql", "my-json-agg "), "mysql", "postgresql")
+        assert "JSON_AGG(x)" in pg and "JSON_OBJECT_AGG(" in pg, pg
+        o4 = _tx(_case("challenge_mysql.sql", "my-json-agg "), "mysql", "oracle")
+        assert "JSON_ARRAYAGG(x)" in o4, o4
+        assert "VALUE" in o4 and "VARCHAR2" in o4, o4  # Oracle KEY..VALUE, VARCHAR2 key
+
+    def test_pg_source_into_mysql(self) -> None:
+        my = _tx(
+            _case("challenge_postgresql.sql", "pg-json-aggs "), "postgresql", "mysql"
+        )
+        assert "JSON_ARRAYAGG(x)" in my and "JSON_OBJECTAGG(" in my, my
+
+    def test_tsql_degrades(self) -> None:
+        r = Transpiler().transpile(
+            _case("challenge_mysql.sql", "my-json-agg "), source="mysql", target="tsql"
+        )
+        assert r.warnings and "UNIQUE:" in r.sql, r.sql
+
+
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL
     STRING_AGG / Oracle LISTAGG); an integer value is cast to text so PG doesn't

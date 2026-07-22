@@ -112,6 +112,15 @@ _KEYWORD_FUNC_NAMES = frozenset(
 )
 
 
+#: Canonical cross-engine built-in names the emitter renders that are valid on
+#: several engines but which a source may spell differently (PostgreSQL's
+#: ``json_agg``/``json_object_agg`` emit as ``JSON_ARRAYAGG``/``JSON_OBJECTAGG``,
+#: the MySQL/Oracle spelling). They are real built-ins (never user objects), so
+#: the gate degrades them where the *target* lacks them (T-SQL has no JSON
+#: aggregate) even though they are not built-ins of the source's own catalog.
+_CROSS_ENGINE_AGG = frozenset({"JSON_ARRAYAGG", "JSON_OBJECTAGG"})
+
+
 # A procedural unit marker: any of these anywhere in the executable text means
 # sqlglot cannot be trusted to parse the output, so only the leftover scan
 # applies. Matched on comment/string-scrubbed text.
@@ -361,6 +370,14 @@ def _untranslated_source_builtin(scrubbed: str, source: str, target: str) -> str
         if _TABLE_POSITION_RE.search(scrubbed[max(0, m.start() - 64) : m.start()]):
             continue
         if is_builtin(name, source) and not is_builtin(name, target):
+            return name
+        # A canonical cross-engine built-in the emitter renders (JSON_ARRAYAGG →
+        # PG json_agg, MySQL/Oracle native): valid on several engines but not the
+        # source's own catalog, so the source-built-in check above misses it when
+        # the source spells it differently (PG json_agg → JSON_ARRAYAGG). Still a
+        # real built-in name, never a user object — degrade where the target
+        # lacks it (T-SQL has no JSON aggregate).
+        if name in _CROSS_ENGINE_AGG and not is_builtin(name, target):
             return name
         # sqlglot rendered a function it could not map to an internal canonical
         # that no engine has (never a source built-in, so the check above misses

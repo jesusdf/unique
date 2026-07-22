@@ -379,7 +379,7 @@ SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7
 -- CASE[fixed]: pg-interval-out — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '400 DAYS'.DB-Lib error message 20018, severity 15:\nGeneral
 SELECT INTERVAL '1 year 2 months 3 days', INTERVAL '1.5 hours', justify_interval(INTERVAL '400 days')
 
--- CASE[open]: pg-json-aggs — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_
+-- CASE[limit]: pg-json-aggs — fails on tsql. json_agg/json_object_agg map faithfully to MySQL/Oracle JSON_ARRAYAGG/JSON_OBJECTAGG (Oracle key cast to VARCHAR2; value-verified); T-SQL has no JSON aggregate (docs/03-unsupported.md §3.9). Warned carrier on tsql.
 SELECT json_agg(x), json_object_agg(x::text, x*2) FROM (VALUES (1),(2)) v(x)
 
 -- CASE[fixed]: pg-json-build — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.js

@@ -438,10 +438,10 @@ SELECT 0 OR '' AS r
 -- CASE[open]: my-is-true — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'IS'.DB-Lib error message 20018, severity 15:\nG
 SELECT 1 IN (SELECT 1) IS TRUE AS r
 
--- CASE[open]: my-json-agg — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[limit]: my-json-agg — fails on tsql. JSON_ARRAYAGG/JSON_OBJECTAGG map faithfully across MySQL, PostgreSQL (json_agg/json_object_agg) and Oracle (value-verified); T-SQL has no JSON aggregate (docs/03-unsupported.md §3.9). Warned carrier on tsql.
 SELECT JSON_ARRAYAGG(x), JSON_OBJECTAGG(x,x*10) FROM (SELECT 1 x UNION ALL SELECT 2) t
 
--- CASE[open]: my-json-aggs — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[limit]: my-json-aggs — fails on tsql. Same as my-json-agg (JSON_ARRAYAGG/JSON_OBJECTAGG faithful MySQL<->PG<->Oracle); T-SQL has no JSON aggregate (docs/03-unsupported.md §3.9). Warned carrier on tsql.
 SELECT JSON_ARRAYAGG(x), JSON_OBJECTAGG(x, x*2) FROM (SELECT 1 x UNION SELECT 2) t
 
 -- CASE[fixed]: my-json-array-ops — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS

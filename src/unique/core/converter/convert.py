@@ -1958,6 +1958,28 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
         )
         return FunctionCall(name=bit_name, args=(convert_expression(expr.this),))
 
+    # JSON aggregates: sqlglot canonicalizes json_agg/JSON_ARRAYAGG to
+    # JSONArrayAgg and json_object_agg/JSON_OBJECTAGG to JSONObjectAgg, whose
+    # sql_name() is a fake internal "J_S_O_N_ARRAY_AGG"; recover a canonical
+    # name (the emitter spells the per-engine form; T-SQL has no JSON aggregate,
+    # so the gate degrades that emission — see output_gate._CROSS_ENGINE_AGG).
+    if isinstance(expr, exp.JSONArrayAgg):
+        return FunctionCall(name="JSON_ARRAYAGG", args=(convert_expression(expr.this),))
+    if isinstance(expr, exp.JSONObjectAgg):
+        # MySQL wraps the pair in one JSONKeyValue; PostgreSQL keeps two args.
+        exprs = expr.expressions
+        if len(exprs) == 1 and isinstance(exprs[0], exp.JSONKeyValue):
+            key, val = exprs[0].this, exprs[0].expression
+        elif len(exprs) >= 2:
+            key, val = exprs[0], exprs[1]
+        else:
+            key = val = None
+        if key is not None and val is not None:
+            return FunctionCall(
+                name="JSON_OBJECTAGG",
+                args=(convert_expression(key), convert_expression(val)),
+            )
+
     # exp.Anonymous is an unrecognized function: its real name is in `this`
     # (a string), not in sql_name() which returns "ANONYMOUS". Its arguments
     # live in `expressions`.
