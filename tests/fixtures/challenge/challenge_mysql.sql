@@ -14,7 +14,7 @@ SELECT ADDDATE('2020-01-01', 30) AS r
 -- CASE[fixed]: my-aes — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT HEX(AES_ENCRYPT('data', 'key')) AS r
 
--- CASE[open]: my-agg-bit — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
+-- CASE[limit]: my-agg-bit — fails on oracle, tsql. BIT_AND/BIT_OR/BIT_XOR are aggregates on MySQL & PostgreSQL (transpiled faithfully, value-verified) but Oracle and T-SQL have no bit-aggregate function (docs/03-unsupported.md §3.10). Warned carrier on oracle/tsql.
 SELECT BIT_AND(x),BIT_OR(x),BIT_XOR(x) FROM (SELECT 3 x UNION ALL SELECT 5 x UNION ALL SELECT 6 x) t
 
 -- CASE[open]: my-agg-boolean — fails on oracle. FUNC-DIFF: source=(('2', '3', '0.6667', '1'),) target=(('2', '3', '0.666667', '1'),)
@@ -62,7 +62,7 @@ SELECT SUBSTRING(UNHEX('48656C6C6F'), 1, 2) AS r
 -- CASE[open]: my-bintypes — fails on tsql. (2716, b'Column, parameter, or variable #7: Cannot specify a column width on data type bit
 CREATE TABLE t (a BINARY(16), b VARBINARY(255), c TINYBLOB, d BLOB, e MEDIUMBLOB, f LONGBLOB, g BIT(8), h BOOL)
 
--- CASE[open]: my-bit-agg — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
+-- CASE[limit]: my-bit-agg — fails on oracle, tsql. BIT_XOR/BIT_OR aggregates map faithfully MySQL<->PostgreSQL; Oracle/T-SQL have no bit aggregate (docs/03-unsupported.md §3.10). Warned carrier on oracle/tsql.
 SELECT BIT_XOR(x), BIT_OR(x) FROM (SELECT 1 x UNION SELECT 2) t
 
 -- CASE[limit]: my-bit-char-len — fails on postgresql. APPROVED LIMIT (2026-07-18): LENGTH/BIT_LENGTH byte-vs-char, encoding-dependent (docs/03-unsupported.md §2). FUNC-DIFF: source=(('24', '1', '3'),) target=(('24', '1', '1'),)

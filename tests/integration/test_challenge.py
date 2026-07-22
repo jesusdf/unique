@@ -367,6 +367,24 @@ class TestXmlElementBetweenOracleAndPg:
         assert "NAME" not in _exec_lines(o4), o4
 
 
+class TestBitAggregatesBetweenMysqlAndPg:
+    """BIT_AND/BIT_OR/BIT_XOR aggregates exist on both MySQL and PostgreSQL.
+    sqlglot canonicalizes them to BitwiseAndAgg/… whose sql_name is not a real
+    function, so the converter recovers the real name; otherwise the gate
+    degraded valid MySQL/PG output. Oracle and T-SQL have no bit aggregate — a
+    documented [limit]. (Live-verified: my-agg-bit = (0,7,0) on MySQL and PG.)"""
+
+    def test_mysql_source_into_pg(self) -> None:
+        pg = _tx(_case("challenge_mysql.sql", "my-agg-bit "), "mysql", "postgresql")
+        assert "BIT_AND(x)" in pg and "BIT_OR(x)" in pg and "BIT_XOR(x)" in pg, pg
+
+    def test_pg_source_into_mysql(self) -> None:
+        my = _tx(
+            _case("challenge_postgresql.sql", "po-agg-bit "), "postgresql", "mysql"
+        )
+        assert "BIT_AND(x)" in my and "BIT_OR(x)" in my and "BIT_XOR(x)" in my, my
+
+
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL
     STRING_AGG / Oracle LISTAGG); an integer value is cast to text so PG doesn't

@@ -1944,6 +1944,20 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
             args=tuple(pad_args),
         )
 
+    # sqlglot canonicalizes the BIT_AND/BIT_OR/BIT_XOR *aggregates* to
+    # BitwiseAndAgg/BitwiseOrAgg/BitwiseXorAgg, whose sql_name() is the internal
+    # "BITWISE_AND_AGG" (not a real function). The generic path would emit that
+    # and the gate would degrade it even on PostgreSQL/MySQL, which both have
+    # these aggregates. Recover the real name; Oracle and T-SQL have no bit
+    # aggregate, so the gate degrades those to a documented carrier.
+    if isinstance(expr, (exp.BitwiseAndAgg, exp.BitwiseOrAgg, exp.BitwiseXorAgg)):
+        bit_name = (
+            "BIT_AND"
+            if isinstance(expr, exp.BitwiseAndAgg)
+            else "BIT_OR" if isinstance(expr, exp.BitwiseOrAgg) else "BIT_XOR"
+        )
+        return FunctionCall(name=bit_name, args=(convert_expression(expr.this),))
+
     # exp.Anonymous is an unrecognized function: its real name is in `this`
     # (a string), not in sql_name() which returns "ANONYMOUS". Its arguments
     # live in `expressions`.
