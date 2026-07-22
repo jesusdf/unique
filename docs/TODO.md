@@ -181,35 +181,33 @@ comments/warnings (see `docs/03-unsupported.md`):
 
 ---
 
-## 6. Test-suite memory growth (P2) — surfaced 2026-07-21
+## 6. Test-suite memory blow-up (P2) — surfaced 2026-07-21, RESOLVED 2026-07-22
 
-As the corpus grew (RED added 862+ challenge cases), the test suite's memory
-footprint crossed thresholds that break CI's coverage run and a local serial
-full run. Two related items; **both are test-infrastructure, not code defects**
-(the tests themselves pass, and `v0.29.0` shipped with the code verified via the
-gate tools + unit/challenge + CI's parallel test run):
-
-- [ ] **Re-add coverage to CI once its memory is bounded.** `COV=1
-      scripts/test-parallel.sh` runs coverage over the whole suite and exhausts
-      the runner's RAM — the Test job was OOM-killed ("runner received a shutdown
-      signal", an OOM, not a test failure). Reproduced locally: parallel *and* a
-      single serial coverage process OOM (continuous accumulation under coverage
-      instrumentation), so worker caps don't fix it. **Interim fix (commit
-      `3a2029e`): dropped `COV=1` from the CI Test job** (`.github/workflows/ci.yaml`);
-      nothing gated on the coverage report. Re-add via a bounded approach (e.g.
-      `--cov-context`-free per-shard with a lower worker cap, or `coverage`
-      `--parallel` with periodic `.combine`, or exclude the heavy files) once the
-      growth below is understood.
-- [ ] **Find/bound the serial-run memory accumulation.** A plain serial
-      `pytest -q` with the live DBs up OOMs at ~22% (`test_embedded_dml_ir`) —
-      memory climbs roughly **linearly** across the suite (~9 GB by 22%, still
-      climbing with `functional_equivalence` excluded), so it is cumulative, not
-      one test (a single COPY transpile completes fine in isolation, <6 GB). CI
-      does **not** hit this (no DBs → live `functional_equivalence` tests skip;
-      parallel shards each run only 1/nproc, bounding per-process memory).
-      Candidates: a session-lived sqlglot/module-level cache that grows with
-      distinct inputs, or live-DB connection/result objects not released between
-      tests. Investigate with `ulimit -v` + a memory-tracing plugin; consider a
-      per-file cache reset fixture. **Process note:** `pytest … | tail` reports
-      the *pipe's* exit, not pytest's — capture `> file; echo "EXIT=$?" >> file`
-      for a trustworthy full-suite result.
+- [x] **Root cause found + fixed (commit `02f483b`).** The "memory growth" was
+      **not** linear accumulation and **not** a coverage-only problem — it was a
+      single pathological test whose guard had regressed. This cycle's `scrub()`
+      lying-warning fix changed scrubbed non-empty literals from `''` to `'x'`,
+      which broke the psql-`:'var'` parse guard in `convert.py` (its signature
+      `(?<!:):\s*''` no longer matched). So `COPY t FROM :'filename'` fell through
+      to sqlglot, whose `_parse_copy_parameters` **loops unboundedly allocating
+      memory**. Serially the `MemoryError` is *caught* and the statement still
+      degrades — but only after a multi-GB transient spike (the "~9 GB by 22% at
+      `test_embedded_dml_ir`" and the misread "linear climb" were this one test).
+      Under the parallel runner four such spikes coincide and the OS OOM-killer
+      SIGKILLs a worker (EXIT=137) before Python can raise → **the CI Test job's
+      4th shard went silent ~6 min then "the runner has received a shutdown
+      signal".** Fix: match the new scrub output, `(?<!:):\s*'`. Diagnostic aid
+      added: `faulthandler_timeout=120` in `pyproject.toml` (a future single-test
+      hang now dumps its stack instead of surfacing only as a runner shutdown).
+      Verified: the 4-worker parallel suite (the CI config) passes clean, no OOM;
+      CI green on `02f483b`.
+- [ ] **Re-test coverage on CI (`COV=1`).** Coverage was dropped from the Test
+      job (commit `3a2029e`) when the OOM was still mis-attributed to coverage
+      accumulation. With the real cause (above) fixed, the whole-suite peak is now
+      bounded (serial ends ~291 MB, per-file peaks ~60–70 MB), so `COV=1
+      scripts/test-parallel.sh` may now fit — re-measure before re-adding. Nothing
+      is gated on the coverage report, so this is low priority.
+      **Process note:** `pytest … | tail` reports the *pipe's* exit, not pytest's
+      — capture `> file; echo "EXIT=$?" >> file` for a trustworthy full-suite
+      result; use `ulimit -v` so a runaway `MemoryError`s instead of OOM-killing
+      the host.
