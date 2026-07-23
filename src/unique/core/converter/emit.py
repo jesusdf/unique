@@ -3892,7 +3892,10 @@ def _map_system_global(sql: str, dialect: str) -> str | None:
         # (needs a query + privileges) — a documented NULL is the honest neutral.
         fn = {"postgresql": "version()", "mysql": "VERSION()"}.get(dialect)
         if fn:
-            return f"{fn} /* UNIQUE: @@VERSION -> {fn}; version string differs per engine */"
+            return (
+                f"{fn} /* UNIQUE: @@VERSION -> {fn}; "
+                "version string differs per engine */"
+            )
         return "NULL /* UNIQUE: @@VERSION has no Oracle equivalent outside v$version */"
     if upper == "@@SPID" and dialect != "tsql":
         # Session/connection id — every engine spells it differently and the
