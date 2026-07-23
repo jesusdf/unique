@@ -293,7 +293,7 @@ SELECT EXPORT_SET(5,'Y','N',',',4) AS r
 -- CASE[open]: my-extract-compound — fails on oracle, postgresql, tsql. (155, b"'YEAR_MONTH' is not a recognized datepart option.DB-Lib error message 20018, sever
 SELECT EXTRACT(YEAR_MONTH FROM NOW()), EXTRACT(DAY_HOUR FROM NOW())
 
--- CASE[open]: my-extractvalue — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
+-- CASE[fixed]: my-extractvalue — EXTRACTVALUE(xml,xpath) maps to Oracle EXTRACTVALUE(XMLTYPE(..)), PG XPATH(..'/text()')[1], T-SQL XML .value(). Live-verified '1'.
 SELECT EXTRACTVALUE('<a>1</a>', '/a') AS r
 
 -- CASE[limit]: my-fcollate — fails on oracle, postgresql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('c', 'a', '1'),) target=(('c', 'B', '0'),)

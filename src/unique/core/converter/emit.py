@@ -4952,6 +4952,24 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _parts[0] = f"{_parts[0]} COLLATE {_coll}"
         return f"{fn_name}({', '.join(_parts)})"
 
+    # MySQL EXTRACTVALUE(xml_string, xpath) returns the text of the first matching
+    # node. Oracle's own EXTRACTVALUE needs an XMLTYPE (a bare string is ORA-00932);
+    # PG uses XPATH(...'/text()')[1], T-SQL an XML .value(). A literal xpath is
+    # required for T-SQL's compile-time .value() path.
+    if fn_name == "EXTRACTVALUE" and len(node.args) == 2 and dialect != "mysql":
+        _xml = _emit_expression(node.args[0], dialect)
+        _xp = node.args[1]
+        if dialect == "oracle":
+            return f"EXTRACTVALUE(XMLTYPE({_xml}), {_emit_expression(_xp, dialect)})"
+        if isinstance(_xp, Literal) and isinstance(_xp.value, str):
+            if dialect == "postgresql":
+                return f"(XPATH('{_xp.value}/text()', {_xml}::XML))[1]::TEXT"
+            if dialect == "tsql":
+                return (
+                    f"CAST({_xml} AS XML).value("
+                    f"'({_xp.value}/text())[1]', 'NVARCHAR(MAX)')"
+                )
+
     # COLLATION(x) returns the argument's collation NAME, which is engine-specific
     # (MySQL 'utf8mb4_0900_ai_ci' vs Oracle 'USING_NLS_COMP') — the function
     # exists on both but can never return the same value. Flag it.

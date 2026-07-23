@@ -2260,6 +2260,17 @@ class TestHexLiteralToInt:
         assert "TO_NUMBER('FF', 'XX')" in out, out
 
 
+class TestExtractValue:
+    """MySQL EXTRACTVALUE(xml, xpath) maps per engine: Oracle EXTRACTVALUE over an
+    XMLTYPE, PG XPATH(...'/text()')[1], T-SQL an XML .value(). Live-verified '1'."""
+
+    def test_extractvalue_per_engine(self) -> None:
+        case = _case("challenge_mysql.sql", "my-extractvalue ")
+        assert "EXTRACTVALUE(XMLTYPE('<a>1</a>'), '/a')" in _tx(case, "mysql", "oracle")
+        assert "XPATH('/a/text()', '<a>1</a>'::XML)" in _tx(case, "mysql", "postgresql")
+        assert ".value('(/a/text())[1]', 'NVARCHAR(MAX)')" in _tx(case, "mysql", "tsql")
+
+
 class TestCollationFn:
     """COLLATION(x) returns the argument's collation name, which is engine-specific
     (MySQL 'utf8mb4_0900_ai_ci' vs Oracle 'USING_NLS_COMP') and can never match.
