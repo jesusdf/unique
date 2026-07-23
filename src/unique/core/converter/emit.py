@@ -2710,13 +2710,15 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
                 for c in node.columns
             ),
         )
-    # SELECT DISTINCT over a case-sensitive source's string column dedups in the
-    # target's case-insensitive collation on MySQL/T-SQL (merging 'a'/'A'); a
-    # binary collation on a provably-string bare column keeps them distinct.
+    # SELECT DISTINCT / GROUP BY over a case-sensitive source's string column
+    # dedups/groups in the target's case-insensitive collation on MySQL/T-SQL
+    # (merging 'a'/'A'); a binary collation on the provably-string key — applied
+    # consistently to the SELECT column, GROUP BY key and ORDER BY key — keeps
+    # them distinct.
     _dstr: frozenset[str] = frozenset()
     _dcoll = "utf8mb4_bin" if dialect == "mysql" else "Latin1_General_BIN2"
     if (
-        node.distinct
+        (node.distinct or node.group_by)
         and SOURCE_DIALECT.get() in ("postgresql", "oracle")
         and dialect in ("mysql", "tsql")
     ):
@@ -2795,7 +2797,19 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     # the base grouping and a carrier (prepended below) documents the omitted
     # super-aggregate rows; every other engine wraps the columns natively.
     if node.group_by:
-        group_cols = ", ".join(_emit_expression(g, dialect) for g in node.group_by)
+
+        def _group_key(g: ASTNode) -> str:
+            _gs = _emit_expression(g, dialect)
+            if (
+                _dstr
+                and isinstance(g, ColumnRef)
+                and g.table is None
+                and g.name.lower() in _dstr
+            ):
+                return f"{_gs} COLLATE {_dcoll}"
+            return _gs
+
+        group_cols = ", ".join(_group_key(g) for g in node.group_by)
         if node.group_modifier == "GROUPING SETS" and dialect != "mysql":
             parts.append(f"GROUP BY {node.grouping_sets_sql}")
         elif dialect == "mysql" and node.group_modifier == "ROLLUP":
@@ -2818,8 +2832,13 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         # expression under DISTINCT; MySQL forbids one only when it references a
         # column that isn't in the (here collated) select list (error 3065). Skip
         # the emulation in those cases so the SQL stays valid.
-        emulate_nulls = not (dialect == "tsql" and node.distinct) and not (
-            dialect == "mysql" and node.distinct and _dstr
+        emulate_nulls = not (
+            (dialect == "tsql" and node.distinct)
+            or (
+                dialect in ("mysql", "tsql")
+                and (node.distinct or node.group_by)
+                and _dstr
+            )
         )
         # A case-sensitive source (PG/Oracle) ordering a string column comes back
         # in the target's default (case-insensitive) collation on MySQL/T-SQL; a

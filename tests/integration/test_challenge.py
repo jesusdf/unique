@@ -2038,6 +2038,13 @@ class TestOrderByCaseSensitive:
         out = _tx(case, "postgresql", "mysql")
         assert "DISTINCT x COLLATE utf8mb4_bin" in out, out
 
+    def test_pg_group_case_sensitive(self) -> None:
+        # SELECT, GROUP BY and ORDER BY keys are all collated consistently.
+        out = _tx(
+            _case("challenge_postgresql.sql", "po-group-case "), "postgresql", "mysql"
+        )
+        assert out.count("COLLATE utf8mb4_bin") >= 3, out
+
 
 class TestGreatestCaseSensitive:
     """GREATEST/LEAST compare strings by collation: PG/Oracle are case-sensitive

@@ -759,7 +759,7 @@ SELECT DISTINCT x FROM (VALUES ('a'),('A'),('a'),('B')) v(x) ORDER BY x
 -- CASE[open]: po-distinct-null — fails on mysql, tsql. FUNC-DIFF: source=((1,),(2,),(NULL,)) target=((NULL,),(1,),(2,)). MySQL-fixable, but T-SQL forbids the null-priority key under DISTINCT.
 SELECT DISTINCT x FROM (VALUES (1),(NULL),(1),(NULL),(2)) v(x) ORDER BY x
 
--- CASE[open]: po-group-case — fails on mysql, tsql. FUNC-DIFF: source=(('A', '1'), ('a', '1'), ('b', '1')) target=(('A', '2'), ('b', '1'))
+-- CASE[fixed]: po-group-case — force a binary collation consistently on the SELECT/GROUP BY/ORDER BY string key so MySQL/T-SQL group case-sensitively like PG (A,a,b each once).
 SELECT x, COUNT(*) FROM (VALUES ('a'),('A'),('b')) v(x) GROUP BY x ORDER BY x
 
 -- CASE[fixed]: po-group-null — PostgreSQL NULLS-LAST default preserved via a null-priority ORDER BY key on MySQL/T-SQL.
