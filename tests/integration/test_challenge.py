@@ -1960,6 +1960,19 @@ class TestTopWithTies:
         assert "WITH TIES" in result.sql and "LIMIT 1" in result.sql, result.sql
 
 
+class TestTsqlFracSeconds:
+    """T-SQL CAST(... AS DATETIME2/DATETIME) over a fractional-second string maps
+    to an Oracle TIMESTAMP literal (a bare string tripped ORA-01843). Live-verified
+    10:20:30.123456 / .123000 on Oracle."""
+
+    def test_oracle_timestamp_literal(self) -> None:
+        out = _tx(
+            _case("challenge_sqlserver.sql", "ts-frac-seconds "), "tsql", "oracle"
+        )
+        assert "TIMESTAMP '2020-01-01 10:20:30.1234567'" in out, out
+        assert "TIMESTAMP '2020-01-01 10:20:30.123'" in out, out
+
+
 class TestTsqlDateAddEomonth:
     """T-SQL DATEADD / EOMONTH over date-string literals map to each engine's
     idiom (ADD_MONTHS/LAST_DAY on Oracle, DATE_ADD/LAST_DAY on MySQL, interval

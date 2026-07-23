@@ -191,7 +191,7 @@ SELECT FORMAT(1234.5, 'N2') AS r
 -- CASE[fixed]: ts-formatmessage — fails on mysql, oracle, postgresql. ORA-00904: "FORMATMESSAGE": invalid identifier
 SELECT FORMATMESSAGE('hi %s', 'x') AS r
 
--- CASE[open]: ts-frac-seconds — fails on oracle. ORA-01843: An invalid month was specified.
+-- CASE[fixed]: ts-frac-seconds — CAST AS DATETIME2/DATETIME maps to an Oracle TIMESTAMP literal; live-verified 10:20:30.123456 / .123000.
 SELECT CAST('2020-01-01 10:20:30.1234567' AS DATETIME2), CAST('2020-01-01 10:20:30.123' AS DATETIME)
 
 -- CASE[open]: ts-gen-series-apply — fails on oracle, postgresql. ORA-00904: "GENERATE_SERIES": invalid identifier
