@@ -524,7 +524,7 @@ SELECT XMLAGG(XMLELEMENT("e", dummy)) FROM DUAL
 -- CASE[limit]: ora-xmlelement — fails on mysql, tsql. XMLELEMENT is an SQL/XML built-in on Oracle & PostgreSQL (transpiled faithfully, element-name case preserved); MySQL has no XML type and T-SQL has no XMLELEMENT (only FOR XML) — no cross-engine mapping (docs/03-unsupported.md §5, §2). Warned carrier on mysql/tsql.
 SELECT XMLELEMENT("foo", 'bar') AS r FROM DUAL
 
--- CASE[open]: ora-xmltable — fails on postgresql, tsql. (208, b"Invalid object name 'dbo.X_M_L_TABLE'.DB-Lib error message 20018, severity 16:\nGe
+-- CASE[limit]: ora-xmltable — XMLTABLE is a table-valued XML shredder; PostgreSQL's XMLTABLE has a different column-spec shape and T-SQL has no equivalent (it uses .nodes()/.value()), so the statement degrades to a carrier + warning rather than shipping the undefined function (docs/03-unsupported.md). fails on postgresql, tsql
 SELECT x.a,x.b FROM XMLTABLE('/r' PASSING XMLTYPE('<r><a>1</a><b>2</b></r>') COLUMNS a INT PATH 'a', b INT PATH 'b') x
 
 -- CASE[fixed]: ora-zero-divide — Oracle predefined exception ZERO_DIVIDE maps to the PL/pgSQL condition division_by_zero (was emitted verbatim, which PG rejects).
