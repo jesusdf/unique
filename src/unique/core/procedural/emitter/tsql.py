@@ -147,6 +147,17 @@ class TSqlEmitter(ProceduralEmitter):
             for line in text.split("\n"):
                 lines.append(f"{self._indent()}{line}" if line.strip() else "")
         self._indent_level = 0
+        # A T-SQL scalar function's LAST statement must be a RETURN (error 455).
+        # When the body ends in control flow whose branches all return (an
+        # IF/ELSE) the parser still rejects it, so add an unreachable trailing
+        # RETURN NULL. (A multi-statement TVF — RETURNS @t TABLE — is exempt.)
+        real = [s for s in body_stmts if not isinstance(s, CommentStatement)]
+        if (
+            not re.search(r"(?i)\bRETURNS\s+(?:@\w+\s+)?TABLE\b", header)
+            and real
+            and not isinstance(real[-1], ReturnStatement)
+        ):
+            lines.append("    RETURN NULL;")
         lines.append("END")
         return "\n".join(lines)
 

@@ -874,6 +874,26 @@ class TestGroupingCube:
         assert "GROUPING" not in body.upper(), body
 
 
+class TestTsqlScalarFunctionTrailingReturn:
+    """A T-SQL scalar function's last statement must be a RETURN (error 455); a
+    body ending in an all-branches-return IF/ELSE now gets an unreachable trailing
+    RETURN NULL. Live-verified: f(1)='one', recursive f(5)=120."""
+
+    def test_case_and_recursive_get_trailing_return(self) -> None:
+        for fname, src, cid in (
+            ("challenge_postgresql.sql", "postgresql", "pg-case-statement "),
+            ("challenge_oracle.sql", "oracle", "ora-recursive-func "),
+        ):
+            out = _tx(_case(fname, cid), src, "tsql")
+            # The final executable line before END is a RETURN.
+            lines = [
+                ln.strip()
+                for ln in out.splitlines()
+                if ln.strip() and not ln.lstrip().startswith("--")
+            ]
+            assert lines[-1] == "END" and lines[-2].upper().startswith("RETURN"), out
+
+
 class TestVoidFunctionToProcedure:
     """A PG function with only OUT params and no RETURNS returns void; on Oracle a
     FUNCTION must RETURN a type (RETURN void = PLS-00201), so it emits a

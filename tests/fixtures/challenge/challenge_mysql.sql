@@ -637,7 +637,7 @@ CREATE TRIGGER trg BEFORE INSERT ON orders FOR EACH ROW SET NEW.created = NOW();
 -- CASE[fixed]: my-recursive-cte2 — fails on oracle. ORA-32039: missing column alias list in recursive WITH clause element SEQ
 CREATE TABLE t (id INT, n INT, s VARCHAR(50)); WITH RECURSIVE seq AS (SELECT 1 n UNION ALL SELECT n+1 FROM seq WHERE n<10) SELECT * FROM seq
 
--- CASE[open]: my-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
+-- CASE[fixed]: my-recursive-func — T-SQL requires a scalar function's LAST statement to be RETURN (error 455); an all-branches-return IF/ELSE body now gets a trailing RETURN NULL; recursive f(5)=120 verified
 CREATE FUNCTION f(n INT) RETURNS INT DETERMINISTIC BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END
 
 -- CASE[fixed]: my-repeat-float — fails on tsql. FUNC-DIFF: source=(('ababab',),) target=(('abab',),)

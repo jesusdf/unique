@@ -106,7 +106,7 @@ SELECT 'true'::boolean, 't'::boolean, 1::boolean, EXTRACT(WEEK FROM DATE '2020-0
 -- CASE[open]: pg-bulk-insert — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
 CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)
 
--- CASE[open]: pg-case-statement — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
+-- CASE[fixed]: pg-case-statement — T-SQL scalar functions require the LAST statement to be a RETURN (error 455); a body ending in an all-branches-return IF/ELSE now gets an unreachable trailing RETURN NULL; f(1)='one' verified
 CREATE FUNCTION f(n INT) RETURNS TEXT AS $$ BEGIN CASE n WHEN 1 THEN RETURN 'one'; ELSE RETURN 'other'; END CASE; END; $$ LANGUAGE plpgsql
 
 -- CASE[fixed]: pg-cast-bool2 — PG word-spelled boolean literals ('1'/'yes'/'off'/'t') fold to 1/0/0/1 on Oracle/T-SQL; live-verified (1,1,0,1). 

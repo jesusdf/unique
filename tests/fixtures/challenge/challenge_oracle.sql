@@ -382,7 +382,7 @@ SELECT RATIO_TO_REPORT(1) OVER () FROM DUAL
 -- CASE[fixed]: ora-rawtohex — fails on mysql, postgresql, tsql. (195, b"'RAWTOHEX' is not a recognized built-in function name.DB-Lib error message 20018, 
 SELECT RAWTOHEX('AB'), HEXTORAW('4142') FROM DUAL
 
--- CASE[open]: ora-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
+-- CASE[fixed]: ora-recursive-func — T-SQL requires a scalar function's LAST statement to be RETURN (error 455); an all-branches-return IF/ELSE body now gets a trailing RETURN NULL; recursive f(5)=120 (5!) verified
 CREATE FUNCTION f(n NUMBER) RETURN NUMBER AS BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END;
 /
 
