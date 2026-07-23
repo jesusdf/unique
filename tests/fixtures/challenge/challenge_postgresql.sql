@@ -553,7 +553,7 @@ EXCEPTION WHEN check_violation THEN RAISE EXCEPTION 'insufficient funds'; END; $
 -- CASE[open]: pg-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END; $$ LANGUAGE plpgsql
 
--- CASE[open]: pg-regexp-backref — fails on mysql, oracle. ORA-01722: unable to convert string value containing 'g' to a number: 
+-- CASE[fixed]: pg-regexp-backref — PG regexp_replace flags normalized: drop the 'g' (Oracle/MySQL are global by default, so 'g' was mis-read as Oracle's numeric position), map no-flags to occurrence 1, carry 'i', and for MySQL double the pattern's backslashes + rewrite \N backrefs to $N; 'a[1]b[2]' verified on both
 SELECT regexp_replace('a1b2', '(\d)', '[\1]', 'g') AS r
 
 -- CASE[fixed]: pg-regexp-cnt — fails on mysql. (1305, 'FUNCTION unique_val_a1fe6b8252a9.REGEXP_COUNT does not exist')

@@ -545,6 +545,26 @@ class TestUnpivot:
             assert "'A' AS col" in out and "'B' AS col" in out, out
 
 
+class TestRegexpReplaceFlags:
+    """PG regexp_replace's 4th arg is a FLAGS string (g/i); Oracle/MySQL take
+    numeric position/occurrence and are global by default. Drop 'g', and for
+    MySQL double the pattern backslashes and spell backrefs $N. Live-verified
+    'a[1]b[2]'."""
+
+    def test_global_backref(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-regexp-backref ")
+        ora = _tx(case, "postgresql", "oracle")
+        assert r"REGEXP_REPLACE('a1b2', '(\d)', '[\1]')" in ora, ora
+        my = _tx(case, "postgresql", "mysql")
+        assert r"REGEXP_REPLACE('a1b2', '(\\d)', '[$1]')" in my, my
+        # The 'g' flag must not leak as a positional argument (ignore header prose).
+        for out in (ora, my):
+            body = "\n".join(
+                ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "'g'" not in body, body
+
+
 class TestTextCastTarget:
     """A CAST to text (PG's ``::text``) lands on CLOB (Oracle) / TEXT (T-SQL),
     neither a legal CAST target; both remap to a castable large-string type so a

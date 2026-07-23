@@ -5814,6 +5814,54 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             f"SUBSTR({ov_s}, ({ov_pos}) + ({ov_len or f'LENGTH({ov_r})'}))"
         )
 
+    # PG regexp_replace(src, pat, repl [, flags]): the 4th arg is a FLAGS string
+    # (``g`` = global, ``i`` = case-insensitive); with no flags PG replaces only
+    # the FIRST match. Oracle/MySQL take numeric position/occurrence instead and
+    # are global by default, so PG's ``g`` was mis-passed as Oracle's position
+    # (ORA-01722 on 'g'). Normalize: drop ``g``, map first-only to occurrence 1,
+    # carry ``i`` as the match-param, and rewrite \N backrefs to $N for MySQL.
+    if (
+        fn_name == "REGEXP_REPLACE"
+        and SOURCE_DIALECT.get() == "postgresql"
+        and dialect in ("oracle", "mysql")
+        and len(node.args) >= 3
+    ):
+        rr_src = _emit_expression(node.args[0], dialect)
+        rr_pat_node = node.args[1]
+        rr_pat = _emit_expression(rr_pat_node, dialect)
+        rr_repl_node = node.args[2]
+        rr_flags = ""
+        if (
+            len(node.args) >= 4
+            and isinstance(node.args[3], Literal)
+            and isinstance(node.args[3].value, str)
+        ):
+            rr_flags = node.args[3].value
+        rr_global = "g" in rr_flags
+        rr_icase = "i" in rr_flags
+        rr_repl = _emit_expression(rr_repl_node, dialect)
+        if dialect == "mysql":
+            # MySQL unescapes ``\`` inside a string literal before the regex
+            # engine sees it (so ``'\d'`` becomes ``d``, matching a literal d) and
+            # spells backrefs ``$N`` not ``\N``. Double the pattern's backslashes
+            # and rewrite \N -> $N in the replacement.
+            if isinstance(rr_pat_node, Literal) and isinstance(rr_pat_node.value, str):
+                pv = rr_pat_node.value.replace("\\", "\\\\")
+                rr_pat = "'" + pv.replace("'", "''") + "'"
+            if isinstance(rr_repl_node, Literal) and isinstance(
+                rr_repl_node.value, str
+            ):
+                conv = re.sub(r"\\(\d)", r"$\1", rr_repl_node.value)
+                conv = conv.replace("\\", "\\\\")
+                rr_repl = "'" + conv.replace("'", "''") + "'"
+        if rr_icase:
+            rr_tail = ", 1, 0, 'i'" if rr_global else ", 1, 1, 'i'"
+        elif not rr_global:
+            rr_tail = ", 1, 1"
+        else:
+            rr_tail = ""
+        return f"REGEXP_REPLACE({rr_src}, {rr_pat}, {rr_repl}{rr_tail})"
+
     # XMLELEMENT(name, value...): SQL/XML built-in on Oracle and PostgreSQL.
     # Oracle spells the element name as a (usually quoted) identifier;
     # PostgreSQL requires the ``NAME`` keyword before it. MySQL and T-SQL have
