@@ -3886,6 +3886,23 @@ def _map_system_global(sql: str, dialect: str) -> str | None:
             f"0 /* UNIQUE: @@ERROR has no top-level {dialect} equivalent; "
             "use an exception handler */"
         )
+    if upper == "@@VERSION" and dialect != "tsql":
+        # PG/MySQL have a version function; the string it returns is engine
+        # specific, so the value cannot match T-SQL's. Oracle's is in v$version
+        # (needs a query + privileges) — a documented NULL is the honest neutral.
+        fn = {"postgresql": "version()", "mysql": "VERSION()"}.get(dialect)
+        if fn:
+            return f"{fn} /* UNIQUE: @@VERSION -> {fn}; version string differs per engine */"
+        return "NULL /* UNIQUE: @@VERSION has no Oracle equivalent outside v$version */"
+    if upper == "@@SPID" and dialect != "tsql":
+        # Session/connection id — every engine spells it differently and the
+        # value is per-connection, so it can never equal T-SQL's @@SPID.
+        fn = {
+            "postgresql": "pg_backend_pid()",
+            "mysql": "CONNECTION_ID()",
+            "oracle": "SYS_CONTEXT('USERENV', 'SID')",
+        }[dialect]
+        return f"{fn} /* UNIQUE: @@SPID -> {fn}; session id differs per engine */"
     if re.fullmatch(r"(?i)SQL\s*%\s*ROWCOUNT", stripped) and dialect != "oracle":
         if dialect == "tsql":
             return "@@ROWCOUNT"

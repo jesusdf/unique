@@ -341,7 +341,7 @@ SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)), geography::Poi
 -- CASE[fixed]: ts-spectypes — fails on oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (a BINARY(16), b VARBINARY(MAX), c IMAGE, d BIT, e UNIQUEIDENTIFIER, f XML, g SQL_VARIANT, h ROWVERSION, i HIERARCHYID, j GEOGRAPHY)
 
--- CASE[open]: ts-spid-version — fails on mysql, oracle, postgresql. ORA-00936: missing expression
+-- CASE[limit]: ts-spid-version — @@SPID/@@VERSION map to each engine's own session-id/version function, but the values are server- and connection-specific and can never equal T-SQL's; mapped + annotated (docs/03-unsupported.md). fails on mysql, oracle, postgresql
 SELECT @@SPID, @@VERSION
 
 -- CASE[fixed]: ts-split-agg — fails on oracle, postgresql. ORA-00904: "STRING_SPLIT": invalid identifier
