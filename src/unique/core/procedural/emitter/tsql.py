@@ -672,7 +672,7 @@ class TSqlEmitter(ProceduralEmitter):
         cond = self._boolean_var_condition(cond)
         lines = [f"IF {cond}", "BEGIN"]
         self._indent_level += 1
-        lines.extend(self._emit_indented_stmts(then_body))
+        lines.extend(self._filled_block(then_body))
         self._indent_level -= 1
         lines.append("END")
 
@@ -683,11 +683,22 @@ class TSqlEmitter(ProceduralEmitter):
                 lines.append("ELSE")
                 lines.append("BEGIN")
                 self._indent_level += 1
-                lines.extend(self._emit_indented_stmts(else_body))
+                lines.extend(self._filled_block(else_body))
                 self._indent_level -= 1
                 lines.append("END")
 
         return "\n".join(lines)
+
+    def _filled_block(self, body: tuple[ASTNode, ...]) -> list[str]:
+        """Emit a block body, adding a no-op filler when it has no executable
+        statement — an empty BEGIN/END is a T-SQL syntax error (a PL/SQL NULL;
+        no-op renders as a bare comment, error 156 near the following ELSE/END)."""
+        body_lines = self._emit_indented_stmts(body)
+        if not any(
+            line.strip() and not line.lstrip().startswith("--") for line in body_lines
+        ):
+            body_lines.append(f"{self._indent()}{self._empty_block_filler()}")
+        return body_lines
 
     def _hoist_dynamic_sql(self, expr: str) -> tuple[str, str]:
         """``sp_executesql`` requires its statement argument to be a variable or a

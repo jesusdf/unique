@@ -1105,6 +1105,19 @@ class TestExtractMicroseconds:
         assert result.warnings and "UNIQUE:" in result.sql
 
 
+class TestCaseStatementEmptyBlock:
+    """An Oracle CASE statement maps to a T-SQL IF/ELSE; a PL/SQL NULL; no-op must
+    not leave an empty BEGIN/END (error 156 near ELSE) — the empty block gets a
+    no-op filler (ora-case-statement)."""
+
+    def test_empty_if_blocks_filled(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-case-statement ")
+        out = _tx(case, "oracle", "tsql")
+        # both the IF and ELSE blocks carry an executable statement, not just a
+        # comment (the filler keeps the BEGIN/END non-empty).
+        assert out.count("SET NOCOUNT ON;") >= 3, out  # proc prelude + 2 fillers
+
+
 class TestRecursiveCteKeyword:
     """A T-SQL CTE that references its own name is recursive, but T-SQL omits the
     RECURSIVE keyword that PG/MySQL require. The self-reference is detected and

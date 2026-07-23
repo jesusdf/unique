@@ -59,7 +59,7 @@ SELECT BITAND(12, 10), BIN_TO_NUM(1,1,0) FROM DUAL
 -- CASE[fixed]: ora-bitand — Oracle BITAND(a, b) is a bitwise AND; emit the & operator on MySQL/PG/T-SQL (none have BITAND, incl. PG). Live-verified 1 (5 & 3).
 SELECT BITAND(5, 3) AS r FROM DUAL
 
--- CASE[open]: ora-case-statement — fails on tsql. (156, b"Incorrect syntax near the keyword 'ELSE'.DB-Lib error message 20018, severity 15:\
+-- CASE[fixed]: ora-case-statement — Oracle CASE statement maps to a T-SQL IF/ELSE; the PL/SQL NULL; no-op used to leave an empty BEGIN/END (error 156 near ELSE). Empty T-SQL blocks now get a no-op filler; compiles valid.
 CREATE PROCEDURE p (n IN NUMBER) AS BEGIN CASE n WHEN 1 THEN NULL; ELSE NULL; END CASE; END;
 /
 
