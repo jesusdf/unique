@@ -69,7 +69,7 @@ SELECT CAST(GETDATE() AS INT) AS r
 -- CASE[fixed]: ts-cast-int-datetime — T-SQL CAST(n AS DATETIME) reads n as days since the 1900-01-01 epoch (no other engine has that implicit conversion); reproduce as DATE 1900-01-01 + n (Oracle/PG add days to a DATE). live-verified 1900-01-02.
 SELECT CAST(1 AS DATETIME) AS r
 
--- CASE[open]: ts-cast-money — fails on oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[fixed]: ts-cast-money — MONEY/SMALLMONEY -> NUMBER/NUMERIC(19,4)/(10,4) (same value, precision-only). CONVERT(MONEY, currency-string) strips $ and commas before the numeric cast (Oracle/PG cannot parse "$12.99"). live-verified 12.99.
 SELECT CAST(12.99 AS MONEY), CAST(12.99 AS SMALLMONEY), CONVERT(MONEY, '$12.99')
 
 -- CASE[fixed]: ts-cast-suite — fails on mysql, oracle, postgresql. ORA-00906: missing left parenthesis

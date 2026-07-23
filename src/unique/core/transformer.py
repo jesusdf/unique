@@ -260,6 +260,36 @@ class TypeMapper(TransformPass):
                 return BinaryOp(
                     operator=BinaryOperator.ADD, left=epoch, right=node.expression
                 )
+            # A currency string cast to MONEY (``CONVERT(MONEY, '$12.99')``):
+            # strip the currency symbol and grouping commas before the numeric
+            # cast — Oracle/PG cannot parse ``'$12.99'`` as a number.
+            if (
+                node.target_type.name.upper() in ("MONEY", "SMALLMONEY")
+                and ctx.source == "tsql"
+                and ctx.target != "tsql"
+                and isinstance(node.expression, Literal)
+                and isinstance(node.expression.value, str)
+            ):
+                empty = Literal(value="", dtype="string")
+                stripped = FunctionCall(
+                    name="REPLACE",
+                    args=(
+                        FunctionCall(
+                            name="REPLACE",
+                            args=(
+                                node.expression,
+                                Literal(value="$", dtype="string"),
+                                empty,
+                            ),
+                        ),
+                        Literal(value=",", dtype="string"),
+                        empty,
+                    ),
+                )
+                return CastExpression(
+                    expression=stripped,
+                    target_type=self._map_type(node.target_type, ctx.target),
+                )
             mapped_type = self._map_type(node.target_type, ctx.target)
             if mapped_type != node.target_type:
                 return CastExpression(

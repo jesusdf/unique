@@ -529,6 +529,13 @@ class TestTsqlIntToDatetime:
         assert "LENGTHB('hello')" in _tx(case, "tsql", "oracle")
         assert "OCTET_LENGTH('hello')" in _tx(case, "tsql", "postgresql")
 
+    def test_money_cast_and_currency_string(self) -> None:
+        # MONEY -> NUMBER/NUMERIC(19,4); CONVERT(MONEY, '$12.99') strips $/commas.
+        case = _case("challenge_sqlserver.sql", "ts-cast-money ")
+        o4 = _tx(case, "tsql", "oracle")
+        assert "CAST(12.99 AS NUMBER(19,4))" in o4, o4
+        assert "REPLACE(REPLACE('$12.99', '$', ''), ',', '')" in o4, o4
+
 
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL
