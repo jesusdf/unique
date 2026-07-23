@@ -793,7 +793,7 @@ SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r
 -- CASE[fixed]: my-tsadd-quarter — fails on oracle, postgresql. ORA-00904: "QUARTER": invalid identifier
 SELECT TIMESTAMPADD(QUARTER,1,NOW()), TIMESTAMPDIFF(QUARTER,'2020-01-01',NOW())
 
--- CASE[open]: my-tz-convert — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
+-- CASE[limit]: my-tz-convert — CONVERT_TZ with a named IANA zone (America/New_York) has no faithful cross-engine equivalent (T-SQL uses Windows zone names, and DST rules differ), so the whole statement is gated + annotated (docs/03-unsupported.md). fails on oracle, postgresql, tsql
 SELECT CONVERT_TZ('2020-06-15 10:00:00','+00:00','+05:30'), CONVERT_TZ('2020-06-15 10:00:00','UTC','America/New_York')
 
 -- CASE[fixed]: my-unix-timestamp — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
