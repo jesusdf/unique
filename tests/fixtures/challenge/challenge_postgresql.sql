@@ -163,7 +163,7 @@ SELECT chr(233), ascii('é')
 -- CASE[fixed]: pg-chr-concat — fails on mysql. FUNC-DIFF: source=(('AB',),) target=(('4142',),)
 SELECT chr(65) || chr(66)
 
--- CASE[open]: pg-chr-unicode — fails on mysql, tsql. FUNC-DIFF: source=(('μ',),) target=(('NULL',),)
+-- CASE[fixed]: pg-chr-unicode — CHR(n>127) is a Unicode code point; MySQL CHAR(n USING utf16) / T-SQL NCHAR(n) build the char (byte CHAR gave wrong bytes / NULL). Live-verified μ.
 SELECT CHR(956) AS r
 
 -- CASE[open]: pg-computed-func — fails on tsql. (8116, b'Argument data type text is invalid for argument 1 of lower function.DB-Lib error 

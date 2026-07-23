@@ -1974,6 +1974,17 @@ class TestReplaceCaseSensitive:
         assert "REPLACE('AbCaBc' COLLATE Latin1_General_BIN2, 'a', 'X')" in out, out
 
 
+class TestChrUnicode:
+    """PG/Oracle CHR(n) is a Unicode code point; above ASCII (n > 127) MySQL's
+    byte CHAR gives the wrong bytes and T-SQL's CHAR returns NULL. Build the
+    Unicode char — MySQL CHAR(n USING utf16), T-SQL NCHAR(n). Live-verified μ."""
+
+    def test_chr_unicode(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-chr-unicode ")
+        assert "CHAR(956 USING utf16)" in _tx(case, "postgresql", "mysql")
+        assert "NCHAR(956)" in _tx(case, "postgresql", "tsql")
+
+
 class TestPositionCaseSensitive:
     """POSITION goes through the CHARINDEX path, so the INSTR case-sensitivity fix
     (BINARY/BIN2 on the literal haystack) applies — POSITION('a' IN 'ABC') = 0 on

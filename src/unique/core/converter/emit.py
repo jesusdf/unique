@@ -6083,6 +6083,18 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"{seq}.NEXTVAL"
         bare = node.args[0].name if isinstance(node.args[0], ColumnRef) else seq
         return f"nextval('{bare}')"
+    if up == "CHR" and len(node.args) == 1 and dialect in ("mysql", "tsql"):
+        # PG/Oracle CHR(n) is a Unicode code point; above ASCII (n > 127) MySQL's
+        # byte CHAR(n USING latin1) gives the wrong bytes and T-SQL's CHAR(n)
+        # returns NULL (0-255 only). Build the Unicode character instead — MySQL
+        # in a Unicode set, T-SQL via NCHAR.
+        _cn = node.args[0]
+        if isinstance(_cn, Literal) and isinstance(_cn.value, int) and _cn.value > 127:
+            return (
+                f"CHAR({_cn.value} USING utf16)"
+                if dialect == "mysql"
+                else f"NCHAR({_cn.value})"
+            )
     if up == "CHR" and len(node.args) == 1 and dialect == "mysql":
         # MySQL has no CHR (Oracle/PG spelling). Bare CHAR(n) returns a BINARY
         # string; a charset makes it a character string — latin1 matches T-SQL
