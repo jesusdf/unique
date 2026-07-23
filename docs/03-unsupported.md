@@ -215,6 +215,21 @@ Functions that require argument reordering (e.g. `CHARINDEX`↔`INSTR`↔
 than a guessed conversion. Unknown date parts or non-standard call shapes are
 left intact for manual handling.
 
+**Non-reproducible date/number masks (⚠️ degrade to a carrier + warning).** A
+**reproducible** mask — standard date fields, or a plain grouping/decimal number
+mask (`TO_CHAR(x,'9G999D99')` ↔ T-SQL `FORMAT(x,'N2')` ↔ MySQL `FORMAT(x,2)`) —
+is translated across all four engines. A mask with **no faithful cross-engine
+equivalent** is *not* guessed; it emits a `UNIQUE:` carrier + warning instead of
+a wrong value:
+
+- **Number masks**: currency (`L`, `$`, `C`), hex (`X`), Roman (`RN`), angle-
+  bracket negatives (`PR`), scientific (`EEEE`), and Oracle's leading pad space
+  (a mask without `FM`, e.g. `' 1,234.57'`) — which `FORMAT` cannot reproduce.
+- **Date masks**: locale month/day **names** (`MONTH`/`DAY`/`%W`) and quarter/
+  ISO-week tokens (`Q`/`IW`) whose value depends on `NLS`/collation; a bare-letter
+  literal (MySQL's unquoted `%Y-%m-%dT…`) that Oracle/PostgreSQL need quoted; and
+  any exotic `.NET`/`TO_CHAR` token outside the table above.
+
 ### 3.2 Collation & Character Sets
 
 Collation names and behaviors are engine-specific. The transpiler strips

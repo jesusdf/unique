@@ -239,10 +239,10 @@ SELECT DATE_ADD('2020-01-31',INTERVAL 1 MONTH), DATE_ADD('2020-01-01',INTERVAL 1
 -- CASE[open]: my-dateadd-units — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of dateadd function.DB-Lib e
 SELECT DATE_ADD(NOW(),INTERVAL 1 QUARTER), DATE_SUB(NOW(),INTERVAL 2 WEEK)
 
--- CASE[open]: my-dateformat-iso — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
+-- CASE[limit]: my-dateformat-iso — fails on oracle, postgresql, tsql. date format mask uses a bare-letter literal / locale name / exotic token that cannot round-trip to a quoted cross-engine mask (docs/03-unsupported.md §3.1).
 SELECT DATE_FORMAT('2020-06-15 14:30:45', '%Y-%m-%dT%H:%i:%s') AS r
 
--- CASE[open]: my-dateformat-long — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
+-- CASE[limit]: my-dateformat-long — fails on oracle, postgresql, tsql. date format mask uses a bare-letter literal / locale name / exotic token that cannot round-trip to a quoted cross-engine mask (docs/03-unsupported.md §3.1).
 SELECT DATE_FORMAT('2020-06-15', '%W, %M %D, %Y') AS r
 
 -- CASE[fixed]: my-datetime-precision — MySQL DATETIME(n)/TIMESTAMP(n) with fractional precision: T-SQL DATETIME takes no width (error 2716) so DATETIME(n)->DATETIME2(n); Oracle TIMESTAMP(n) WITH TIME ZONE keeps the precision inside the type name. Live-verified valid on all targets.
@@ -320,13 +320,13 @@ SELECT 0.1+0.2, CAST(0.1 AS DOUBLE)+CAST(0.2 AS DOUBLE), 1.0/3, 2/3
 -- CASE[open]: my-floor-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
 SELECT FLOOR(2.9999999999999999) AS r
 
--- CASE[open]: my-fmt-spec — fails on oracle. SILENT: source literal(s) ["'%a %b %e %T %Y'", "'%p %l:%i'", "'%j %U %u %V'"] absent from 
+-- CASE[limit]: my-fmt-spec — fails on oracle. date format mask uses a bare-letter literal / locale name / exotic token that cannot round-trip to a quoted cross-engine mask (docs/03-unsupported.md §3.1).
 SELECT DATE_FORMAT(NOW(),'%a %b %e %T %Y'),DATE_FORMAT(NOW(),'%p %l:%i'),DATE_FORMAT(NOW(),'%j %U %u %V')
 
--- CASE[open]: my-fmt-spec2 — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
+-- CASE[limit]: my-fmt-spec2 — fails on oracle, postgresql, tsql. date format mask uses a bare-letter literal / locale name / exotic token that cannot round-trip to a quoted cross-engine mask (docs/03-unsupported.md §3.1).
 SELECT DATE_FORMAT('2020-06-15','%D %W %M'),DATE_FORMAT('2020-06-15','%X %V')
 
--- CASE[open]: my-fmt3 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+-- CASE[limit]: my-fmt3 — fails on oracle, postgresql, tsql. FORMAT with a locale (de_DE) has no cross-engine equivalent (docs/03-unsupported.md §3.1).
 SELECT FORMAT(1234.5678,2),FORMAT(1234.5678,4,'de_DE'),TRUNCATE(1234.5678,2)
 
 -- CASE[open]: my-for-share — fails on oracle. ORA-02000: missing COMPRESS or UPDATE keyword

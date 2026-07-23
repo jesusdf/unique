@@ -271,16 +271,16 @@ CREATE TABLE t (id INT PRIMARY KEY, parent INT, CONSTRAINT fk FOREIGN KEY (paren
 -- CASE[fixed]: pg-float-precision — same IEEE/float value at each engine's display precision. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 0.1+0.2, 0.1::float+0.2::float, 1.0/3, (1.0/3)::float, 2::float/3
 
--- CASE[open]: pg-fmt-spec — fails on oracle. SILENT: source literal(s) ["'Dy Mon DD HH24:MI:SS YYYY'", "'AM HH12:MI'", "'DDD WW IW'"] a
+-- CASE[limit]: pg-fmt-spec — fails on oracle. date format mask uses a bare-letter literal / locale name / exotic token that cannot round-trip to a quoted cross-engine mask (docs/03-unsupported.md §3.1).
 SELECT to_char(now(),'Dy Mon DD HH24:MI:SS YYYY'),to_char(now(),'AM HH12:MI'),to_char(now(),'DDD WW IW')
 
--- CASE[open]: pg-fmt3 — fails on oracle. SILENT: source literal(s) ["'9G999D99'"] absent from valid output, no warning
+-- CASE[limit]: pg-fmt3 — fails on oracle. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT to_char(1234.5678,'9G999D99'),to_char(-5,'S9')
 
 -- CASE[open]: pg-for-update — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 CREATE TABLE t (id INT); SELECT * FROM t FOR UPDATE
 
--- CASE[open]: pg-format-currency — fails on mysql, tsql. FUNC-DIFF: source=(('1,234,567.89', '1,234,567.89'),) target=(('FM999999991234567.89', 'FM
+-- CASE[limit]: pg-format-currency — fails on mysql, tsql. currency-symbol number formatting has no cross-engine equivalent (docs/03-unsupported.md §3.1).
 SELECT to_char(1234567.891,'FM999,999,990.00'), to_char(1234567.891,'FML999G999G990D00')
 
 -- CASE[open]: pg-format-func — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
@@ -499,13 +499,13 @@ SELECT NUM_NONNULLS(1, NULL, 2) AS r
 -- CASE[open]: pg-num-to-str — fails on mysql. FUNC-DIFF: source=(('n=5', 'x=5.50', 'd=0.33333333333333333333', '5.5'),) target=(('n=5', 
 SELECT 'n='||5, 'x='||5.50, 'd='||(1.0/3), 5.50::text
 
--- CASE[open]: pg-numfmt-lead — fails on mysql. FUNC-DIFF: source=(('0.5',),) target=(('0',),)
+-- CASE[limit]: pg-numfmt-lead — fails on mysql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT to_char(0.5, '0.00') AS r
 
--- CASE[open]: pg-numfmt-spec — fails on oracle. SILENT: source literal(s) ["'L9G999D99MI'"] absent from valid output, no warning
+-- CASE[limit]: pg-numfmt-spec — fails on oracle. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT to_char(1234.5,'L9G999D99MI'),to_char(-5,'999PR'),to_char(255,'FMRN')
 
--- CASE[open]: pg-numfmt-thousands — fails on mysql, tsql. FUNC-DIFF: source=(('1,234,567.89',),) target=(('9999999123456900',),)
+-- CASE[limit]: pg-numfmt-thousands — fails on mysql, tsql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT to_char(1234567.891, '9,999,999.99') AS r
 
 -- CASE[fixed]: pg-numnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.nu
@@ -663,13 +663,13 @@ CREATE TABLE t (a INT); CREATE VIEW syn AS SELECT * FROM t
 -- CASE[open]: pg-tablesample — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 CREATE TABLE t (id INT); SELECT * FROM t TABLESAMPLE BERNOULLI(50)
 
--- CASE[open]: pg-tochar-fmts — fails on oracle. SILENT: source literal(s) ["'Day'", "'FMDay'", "'TZ'"] absent from valid output, no warnin
+-- CASE[limit]: pg-tochar-fmts — fails on oracle. date format mask uses a bare-letter literal / locale name / exotic token that cannot round-trip to a quoted cross-engine mask (docs/03-unsupported.md §3.1).
 SELECT to_char(now(),'Day'), to_char(now(),'FMDay'), to_char(now(),'IW'), to_char(now(),'TZ')
 
 -- CASE[fixed]: pg-tochar-iso — to_char(ts, mask) date formatting -> MySQL DATE_FORMAT, T-SQL FORMAT (via the strftime-model mask translation). live-verified 2020-06-15T14:30:45 on all four.
 SELECT to_char(TIMESTAMP '2020-06-15 14:30:45', 'YYYY-MM-DD"T"HH24:MI:SS') AS r
 
--- CASE[open]: pg-tochar-neg — fails on mysql, tsql. FUNC-DIFF: source=(('-1234.5',),) target=(('-9999123599',),)
+-- CASE[limit]: pg-tochar-neg — fails on mysql, tsql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT to_char(-1234.5, '9999.99') AS r
 
 -- CASE[open]: pg-todate2 — fails on mysql. (1305, 'FUNCTION unique_val_2ac6422f99c6.STR_TO_TIME does not exist')

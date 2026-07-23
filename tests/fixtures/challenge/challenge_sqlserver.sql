@@ -176,13 +176,13 @@ CREATE PROCEDURE p AS BEGIN BEGIN TRY SELECT 1/0; END TRY BEGIN CATCH SELECT ERR
 -- CASE[fixed]: ts-float-precision — same IEEE/float value at each engine's display precision (FLOAT vs DOUBLE). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 0.1+0.2, CAST(0.1 AS FLOAT)+CAST(0.2 AS FLOAT), 1.0/3, CAST(1 AS FLOAT)/3
 
--- CASE[open]: ts-fmt-spec — fails on oracle. ORA-01821: date format not recognized
+-- CASE[limit]: ts-fmt-spec — fails on oracle. date format mask uses a bare-letter literal / locale name / exotic token that cannot round-trip to a quoted cross-engine mask (docs/03-unsupported.md §3.1).
 SELECT FORMAT(GETDATE(),'ddd MMM dd HH:mm:ss yyyy'),FORMAT(GETDATE(),'tt hh:mm'),FORMAT(GETDATE(),'D')
 
 -- CASE[open]: ts-for-xml — fails on mysql, oracle, postgresql. ORA-00913: too many values
 SELECT (SELECT 1 a,2 b FOR XML PATH('row'),ROOT('rows')) AS xmlcol
 
--- CASE[open]: ts-format-iso — fails on oracle. ORA-01821: date format not recognized
+-- CASE[limit]: ts-format-iso — fails on oracle. T-SQL FORMAT numeric/date .NET mask with no reproducible cross-engine equivalent (docs/03-unsupported.md §3.1).
 SELECT FORMAT(CAST('2020-06-15 14:30:45' AS DATETIME2), 'yyyy-MM-ddTHH:mm:ss') AS r
 
 -- CASE[fixed]: ts-format-number — FORMAT(num, .NET-mask) numeric. A reproducible grouping/decimal mask (N2) maps to each engine: Oracle/PG TO_CHAR with an FM mask (no leading pad, matches FORMAT), MySQL FORMAT(n,decimals). Currency/hex/locale masks degrade. live-verified 1,234.50 on all four.

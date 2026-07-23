@@ -174,16 +174,16 @@ CREATE TABLE parent (id NUMBER PRIMARY KEY); CREATE TABLE child (pid NUMBER, CON
 -- CASE[fixed]: ora-float-precision — same IEEE/float value at each engine's display precision. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 0.1+0.2, CAST(0.1 AS BINARY_DOUBLE)+CAST(0.2 AS BINARY_DOUBLE), 1.0/3 FROM DUAL
 
--- CASE[open]: ora-fmt-dayname — fails on mysql. FUNC-DIFF: source=(('MONDAY',),) target=(('Monday',),)
+-- CASE[limit]: ora-fmt-dayname — fails on mysql. locale month/day names and Oracle Q quarter token have no reproducible cross-engine format token (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(DATE '2020-06-15', 'DAY') AS r FROM DUAL
 
--- CASE[open]: ora-fmt-quarter — fails on mysql. FUNC-DIFF: source=(('2',),) target=(('Q',),)
+-- CASE[limit]: ora-fmt-quarter — fails on mysql. locale month/day names and Oracle Q quarter token have no reproducible cross-engine format token (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(DATE '2020-06-15', 'Q') AS r FROM DUAL
 
 -- CASE[open]: ora-fmt-week — fails on mysql. FUNC-DIFF: source=(('24',),) target=(('Monday',),)
 SELECT TO_CHAR(DATE '2020-06-15', 'WW') AS r FROM DUAL
 
--- CASE[open]: ora-fmt3 — fails on tsql. (195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s
+-- CASE[limit]: ora-fmt3 — fails on tsql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(1234.5678,'9G999D99'),TO_CHAR(-5,'S9') FROM DUAL
 
 -- CASE[open]: ora-for-update-nowait — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
@@ -340,16 +340,16 @@ SELECT 2 || 3 AS r FROM DUAL
 -- CASE[open]: ora-num-to-str — fails on mysql, postgresql. FUNC-DIFF: source=(('n=5', 'x=5.5', 'd=.333333333333333333333333333333333333333', '5.5'),)
 SELECT 'n='||5, 'x='||5.50, 'd='||(1.0/3), TO_CHAR(5.50) FROM DUAL
 
--- CASE[open]: ora-numfmt-lead — fails on mysql. FUNC-DIFF: source=(('0.5',),) target=(('0',),)
+-- CASE[limit]: ora-numfmt-lead — fails on mysql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(0.5, '0.00') AS r FROM DUAL
 
--- CASE[open]: ora-numfmt-sign — fails on mysql. FUNC-DIFF: source=(('-42',),) target=(('NULL',),)
+-- CASE[limit]: ora-numfmt-sign — fails on mysql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(-42, 'S999') AS r FROM DUAL
 
--- CASE[open]: ora-numfmt-spec — fails on tsql. (195, b"'TO_CHAR' is not a recognized built-in function name.DB-Lib error message 20018, s
+-- CASE[limit]: ora-numfmt-spec — fails on tsql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(1234.5,'L9G999D99MI'),TO_CHAR(0.75,'999PR'),TO_CHAR(255,'0XX') FROM DUAL
 
--- CASE[open]: ora-numfmt-thousands — fails on mysql. FUNC-DIFF: source=(('1,234,567.89',),) target=(('NULL',),)
+-- CASE[limit]: ora-numfmt-thousands — fails on mysql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(1234567.891, '9,999,999.99') AS r FROM DUAL
 
 -- CASE[fixed]: ora-numtodsinterval — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
@@ -455,10 +455,10 @@ SELECT TO_TIMESTAMP('2020-01-01 10:00:00.123', 'YYYY-MM-DD HH24:MI:SS.FF') AS r 
 -- CASE[fixed]: ora-tochar-iso — TO_CHAR(ts, mask) date formatting. sqlglot canonicalizes the mask to python strftime; the emitter translates it per engine model -> PG TO_CHAR, MySQL DATE_FORMAT, T-SQL FORMAT (literal "T" preserved). live-verified 2020-06-15T14:30:45 on all four.
 SELECT TO_CHAR(TIMESTAMP '2020-06-15 14:30:45', 'YYYY-MM-DD"T"HH24:MI:SS') AS r FROM DUAL
 
--- CASE[open]: ora-tochar-long — fails on postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
+-- CASE[limit]: ora-tochar-long — fails on postgresql, tsql. date format mask uses a bare-letter literal / locale name / exotic token that cannot round-trip to a quoted cross-engine mask (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(DATE '2020-06-15', 'Day, Month DD, YYYY') AS r FROM DUAL
 
--- CASE[open]: ora-tochar-neg — fails on mysql. FUNC-DIFF: source=(('-1234.5',),) target=(('NULL',),)
+-- CASE[limit]: ora-tochar-neg — fails on mysql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(-1234.5, '9999.99') AS r FROM DUAL
 
 -- CASE[open]: ora-todate2 — fails on mysql. (1305, 'FUNCTION unique_val_9fa2bcf8c36d.STR_TO_TIME does not exist')
