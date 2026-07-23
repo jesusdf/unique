@@ -290,7 +290,7 @@ SELECT EXPORT_SET(5, 'Y', 'N', ',', 4) AS r
 -- CASE[fixed]: my-export-set2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.EX
 SELECT EXPORT_SET(5,'Y','N',',',4) AS r
 
--- CASE[open]: my-extract-compound — fails on oracle, postgresql, tsql. (155, b"'YEAR_MONTH' is not a recognized datepart option.DB-Lib error message 20018, sever
+-- CASE[fixed]: my-extract-compound — MySQL compound EXTRACT units (YEAR_MONTH -> YYYYMM, DAY_HOUR -> DDHH, DAY_SECOND -> DDHHMMSS, ...) have no equivalent on any other engine; rebuilt from the component fields with the same positional weights (EXTRACT/DATEPART * 10^k). Live 202403 / 1510 on all four.
 SELECT EXTRACT(YEAR_MONTH FROM NOW()), EXTRACT(DAY_HOUR FROM NOW())
 
 -- CASE[fixed]: my-extractvalue — EXTRACTVALUE(xml,xpath) maps to Oracle EXTRACTVALUE(XMLTYPE(..)), PG XPATH(..'/text()')[1], T-SQL XML .value(). Live-verified '1'.

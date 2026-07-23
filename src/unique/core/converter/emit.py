@@ -6092,6 +6092,36 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if fn_name == "EXTRACT" and len(node.args) == 2:
         part = _emit_expression(node.args[0], dialect).strip("'\"").upper()
         value = _emit_expression(node.args[1], dialect)
+        # MySQL's compound EXTRACT units (YEAR_MONTH -> YYYYMM, DAY_SECOND ->
+        # DDHHMMSS, …) concatenate the component fields into one number; no other
+        # engine has them (error 155 / ORA / PG). Rebuild the value from the
+        # component fields with the same positional weights.
+        _compound = {
+            "YEAR_MONTH": [("YEAR", 100), ("MONTH", 1)],
+            "DAY_HOUR": [("DAY", 100), ("HOUR", 1)],
+            "DAY_MINUTE": [("DAY", 10000), ("HOUR", 100), ("MINUTE", 1)],
+            "DAY_SECOND": [
+                ("DAY", 1000000),
+                ("HOUR", 10000),
+                ("MINUTE", 100),
+                ("SECOND", 1),
+            ],
+            "HOUR_MINUTE": [("HOUR", 100), ("MINUTE", 1)],
+            "HOUR_SECOND": [("HOUR", 10000), ("MINUTE", 100), ("SECOND", 1)],
+            "MINUTE_SECOND": [("MINUTE", 100), ("SECOND", 1)],
+        }
+        if part in _compound and dialect != "mysql":
+
+            def _field(fld: str) -> str:
+                if dialect == "tsql":
+                    return f"DATEPART({fld}, {value})"
+                return f"EXTRACT({fld} FROM {value})"
+
+            terms = [
+                f"{_field(f)} * {m}" if m != 1 else _field(f)
+                for f, m in _compound[part]
+            ]
+            return "(" + " + ".join(terms) + ")"
         # Fields the target's native EXTRACT/DATEPART either rejects or computes
         # with different semantics, mapped to a value-preserving, NLS-/DATEFIRST-
         # /week-mode-independent equivalent. PostgreSQL semantics: DOW is

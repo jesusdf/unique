@@ -1135,6 +1135,21 @@ class TestCaseStatementEmptyBlock:
         assert out.count("SET NOCOUNT ON;") >= 3, out  # proc prelude + 2 fillers
 
 
+class TestCompoundExtract:
+    """MySQL compound EXTRACT units (YEAR_MONTH, DAY_HOUR, …) have no equivalent
+    elsewhere; they are rebuilt from the component fields with positional weights
+    (my-extract-compound)."""
+
+    def test_compound_units_rebuilt(self) -> None:
+        case = _case("challenge_mysql.sql", "my-extract-compound ")
+        for target in ("postgresql", "oracle"):
+            out = _tx(case, "mysql", target)
+            assert "EXTRACT(YEAR FROM" in out and "* 100" in out, out
+            assert "YEAR_MONTH" not in _exec_lines(out), out
+        ts = _tx(case, "mysql", "tsql")
+        assert "DATEPART(YEAR," in ts and "YEAR_MONTH" not in _exec_lines(ts), ts
+
+
 class TestDateLiteralComparison:
     """DATE('2020-01-01') = '2020-01-01 00:00:00' is a DATE comparison (true), but
     the DATE() of a literal was dropped to a bare string (a false text compare).
