@@ -86,6 +86,7 @@ _ENGINE_STANDARD: dict[str, frozenset[str]] = {
             "ODCINUMBERLIST",  # SYS collection types (no cross-engine array/table type)
             "ODCIVARCHAR2LIST",
             "ODCIDATELIST",
+            "COLLECT",  # aggregates rows into a nested-table collection (no equivalent)
         }
     ),
     "postgresql": frozenset({"XMLELEMENT"}),  # XMLAGG is already introspected

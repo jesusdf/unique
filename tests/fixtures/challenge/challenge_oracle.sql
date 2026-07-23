@@ -84,7 +84,7 @@ SELECT COALESCE(TO_CLOB('a'), TO_CLOB('b')) AS r FROM DUAL
 -- CASE[fixed]: ora-clob-ops — fails on mysql, postgresql, tsql. (195, b"'TO_CLOB' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT TO_CLOB('x') || TO_CLOB('y'), DBMS_LOB.SUBSTR(TO_CLOB('hello'), 3) FROM DUAL
 
--- CASE[open]: ora-collect — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
+-- CASE[limit]: ora-collect — Oracle's COLLECT aggregate builds a nested-table collection (paired with a SYS.ODCI* type) — no cross-engine equivalent (PG array_agg yields an array, not an Oracle collection); the gate now recognizes it and degrades + annotates (docs/03-unsupported.md). fails on postgresql, tsql
 SELECT CAST(COLLECT(x) AS SYS.ODCINUMBERLIST) FROM (SELECT 1 x FROM DUAL)
 
 -- CASE[fixed]: ora-compose — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
