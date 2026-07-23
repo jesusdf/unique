@@ -2584,6 +2584,38 @@ def _has_aggregate(node: object) -> bool:
     return False
 
 
+def _ir_is_string_expr(node: object) -> bool:
+    """True if an IR expression is provably a string value (a string literal or a
+    cast to a character type)."""
+    if isinstance(node, Literal):
+        return isinstance(node.value, str)
+    if isinstance(node, CastExpression):
+        return node.target_type.name.split("(")[0].strip().upper() in (
+            "CHAR",
+            "VARCHAR",
+            "VARCHAR2",
+            "NCHAR",
+            "NVARCHAR",
+            "TEXT",
+            "CLOB",
+        )
+    return False
+
+
+def _from_string_columns(node: SelectStatement) -> frozenset[str]:
+    """Lower-cased names of the FROM subquery's columns that are provably string
+    typed (all-string projection), so a bare ORDER BY/GROUP key on one can safely
+    take a COLLATE without erroring on a non-string column."""
+    fc = node.from_clause
+    if not isinstance(fc, SubqueryExpression):
+        return frozenset()
+    out: set[str] = set()
+    for c in fc.query.columns:
+        if isinstance(c, Alias) and _ir_is_string_expr(c.expression):
+            out.add(c.name.lower())
+    return frozenset(out)
+
+
 def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -> str:
     """Emit a SELECT statement.
 
@@ -2766,10 +2798,30 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         # not in the select list under DISTINCT, so skip the emulation there
         # (the divergence stays, but the SQL stays valid).
         emulate_nulls = not (dialect == "tsql" and node.distinct)
+        # A case-sensitive source (PG/Oracle) ordering a string column comes back
+        # in the target's default (case-insensitive) collation on MySQL/T-SQL; a
+        # binary collation on a provably-string key preserves the source order.
+        _cs_str_cols: frozenset[str] = frozenset()
+        if SOURCE_DIALECT.get() in ("postgresql", "oracle") and dialect in (
+            "mysql",
+            "tsql",
+        ):
+            _cs_str_cols = _from_string_columns(node)
+        _bin_coll = "utf8mb4_bin" if dialect == "mysql" else "Latin1_General_BIN2"
         rendered = []
         for o in node.order_by:
             key = _order_null_priority_key(o, dialect) if emulate_nulls else None
-            item_sql = _emit_order_item(o, dialect)
+            _oc = (
+                _bin_coll
+                if (
+                    _cs_str_cols
+                    and isinstance(o.expression, ColumnRef)
+                    and o.expression.table is None
+                    and o.expression.name.lower() in _cs_str_cols
+                )
+                else None
+            )
+            item_sql = _emit_order_item(o, dialect, collate=_oc)
             rendered.append(f"{key}, {item_sql}" if key else item_sql)
         parts.append(f"ORDER BY {', '.join(rendered)}")
     elif dialect == "tsql" and node.limit is not None and node.limit.offset is not None:
@@ -7501,16 +7553,20 @@ def _emit_join(
     return result
 
 
-def _emit_order_item(item: OrderByItem, dialect: str) -> str:
+def _emit_order_item(
+    item: OrderByItem, dialect: str, collate: str | None = None
+) -> str:
     """Emit an ORDER BY item.
 
     PostgreSQL/Oracle default to NULLS LAST ascending and NULLS FIRST
     descending; when the source's NULL ordering (carried in ``nulls_first``)
     differs, it must be spelled out or the row order silently changes.
     T-SQL/MySQL have no NULLS FIRST/LAST syntax, so it is omitted there
-    (same as a raw sqlglot transpile).
+    (same as a raw sqlglot transpile). ``collate`` forces a collation on the key.
     """
     expr = _emit_expression(item.expression, dialect)
+    if collate:
+        expr = f"{expr} COLLATE {collate}"
     direction = "DESC" if item.direction == OrderDirection.DESC else "ASC"
     out = f"{expr} {direction}"
     if item.nulls_first is not None and dialect in ("postgresql", "oracle"):

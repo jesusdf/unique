@@ -2023,6 +2023,17 @@ class TestPositionCaseSensitive:
         assert "'ABC' COLLATE Latin1_General_BIN2" in _tx(case, "postgresql", "tsql")
 
 
+class TestOrderByCaseSensitive:
+    """A case-sensitive source (PG/Oracle) ordering a provably-string column comes
+    back in the target's case-insensitive collation on MySQL/T-SQL; a binary
+    collation on the key preserves the case-sensitive order. Live-verified."""
+
+    def test_pg_order_case_sensitive(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-order-case-sens ")
+        assert "COLLATE utf8mb4_bin" in _tx(case, "postgresql", "mysql")
+        assert "COLLATE Latin1_General_BIN2" in _tx(case, "postgresql", "tsql")
+
+
 class TestGreatestCaseSensitive:
     """GREATEST/LEAST compare strings by collation: PG/Oracle are case-sensitive
     (GREATEST('a','B') = 'a'), MySQL/T-SQL default case-insensitive ('B'). Force a

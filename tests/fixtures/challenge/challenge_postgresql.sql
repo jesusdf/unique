@@ -514,7 +514,7 @@ SELECT num_nonnulls(1,NULL,2),num_nulls(1,NULL,2)
 -- CASE[fixed]: pg-numtypes — PostgreSQL SERIAL maps to a MySQL AUTO_INCREMENT column, which MySQL requires to be indexed (error 1075); a KEY is added when nothing already covers it. live-verified CREATE runs.
 CREATE TABLE t (a SMALLINT, b INT, c BIGINT, d NUMERIC(10,2), e REAL, f DOUBLE PRECISION, g SERIAL, h MONEY)
 
--- CASE[open]: pg-order-case-sens — fails on mysql, tsql. FUNC-DIFF: source=(('Apple',), ('Cherry',), ('banana',)) target=(('Apple',), ('banana',), 
+-- CASE[fixed]: pg-order-case-sens — force a binary collation on the (provably-string) ORDER BY key so MySQL/T-SQL sort case-sensitively like PG (Apple, Cherry, banana).
 SELECT x FROM (SELECT 'Apple' x UNION SELECT 'banana' UNION SELECT 'Cherry') t ORDER BY x
 
 -- CASE[fixed]: pg-order-nulls-default — PostgreSQL sorts NULLs high by default; MySQL/T-SQL sort them low. Emulate with a null-priority key.
@@ -765,7 +765,7 @@ SELECT x, COUNT(*) FROM (VALUES ('a'),('A'),('b')) v(x) GROUP BY x ORDER BY x
 -- CASE[fixed]: po-group-null — PostgreSQL NULLS-LAST default preserved via a null-priority ORDER BY key on MySQL/T-SQL.
 SELECT x, COUNT(*) FROM (VALUES (1),(NULL),(1),(NULL)) v(x) GROUP BY x ORDER BY x
 
--- CASE[open]: po-order-strings — fails on mysql. FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), 
+-- CASE[fixed]: po-order-strings — force a binary collation on the (provably-string) ORDER BY key so MySQL sorts case-sensitively like PG (Apple, Banana, banana, cherry). 
 SELECT x FROM (VALUES ('banana'),('Apple'),('cherry'),('Banana')) v(x) ORDER BY x
 
 -- CASE[fixed]: postgresql-drop-CHECK — fails on mysql, oracle, tsql. SILENT CLAUSE DROP: 'CHECK' absent from valid tsql output, no warning (target supports it)
