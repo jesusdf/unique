@@ -2003,6 +2003,24 @@ class TestTablesample:
         assert "UNIQUE:" in result.sql and "TABLESAMPLE" in result.sql, result.sql
 
 
+class TestNamedWindowInlined:
+    """A named WINDOW clause (OVER w ... WINDOW w AS (ORDER BY x)) is inlined into
+    each OVER reference, since the IR has no named-window concept — an un-inlined
+    reference emitted an empty OVER () (ORA-30485). Live-verified on Oracle."""
+
+    def test_window_spec_inlined(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-named-window "),
+            "postgresql",
+            "oracle",
+        )
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "OVER (ORDER BY x" in body, body
+        assert "OVER ()" not in body, body
+
+
 class TestToDateToMysql:
     """Oracle/PG TO_DATE / TO_TIMESTAMP map to MySQL STR_TO_DATE with a translated
     format mask (a DATETIME literal when the input is already ISO). Live-verified

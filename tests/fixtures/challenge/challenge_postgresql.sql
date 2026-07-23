@@ -466,7 +466,7 @@ SELECT to_char(DATE '2020-06-15','Day'), to_char(DATE '2020-06-15','Month'), tri
 -- CASE[open]: pg-named-exception — fails on oracle, tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
 CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1/0; EXCEPTION WHEN division_by_zero THEN RETURN -1; WHEN OTHERS THEN RAISE; END; $$ LANGUAGE plpgsql
 
--- CASE[open]: pg-named-window — fails on oracle. ORA-30485: missing ORDER BY expression in the window specification
+-- CASE[fixed]: pg-named-window — the WINDOW clause is inlined into each OVER (ORDER BY x) so no OVER () is emitted; live-verified (1,1,1),(2,3,2) on Oracle.
 SELECT x,sum(x) OVER w,rank() OVER w FROM (SELECT 1 x UNION ALL SELECT 2) t WINDOW w AS (ORDER BY x)
 
 -- CASE[fixed]: pg-named-window2 — fails on oracle. ORA-30485: missing ORDER BY expression in the window specification

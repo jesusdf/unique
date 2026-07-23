@@ -69,6 +69,32 @@ _INSERT_COLS_RE = re.compile(
 )
 
 
+def _inline_named_windows(root: exp.Expression) -> None:
+    """Substitute each ``OVER <name>`` reference with the spec from the SELECT's
+    ``WINDOW <name> AS (…)`` clause, then drop the clause. The IR models no named
+    window, so a reference would otherwise emit an empty ``OVER ()``."""
+    for sel in root.find_all(exp.Select):
+        windows = sel.args.get("windows")
+        if not windows:
+            continue
+        defs = {w.this.name: w for w in windows if isinstance(w.this, exp.Identifier)}
+        for ref in sel.find_all(exp.Window):
+            # A definition node (its ``this`` is the name) is not a reference.
+            if isinstance(ref.this, exp.Identifier):
+                continue
+            alias = ref.args.get("alias")
+            if not isinstance(alias, exp.Identifier):
+                continue
+            spec = defs.get(alias.name)
+            if spec is None:
+                continue
+            for key in ("partition_by", "order", "spec", "first"):
+                if ref.args.get(key) is None and spec.args.get(key) is not None:
+                    ref.set(key, spec.args[key].copy())
+            ref.set("alias", None)
+        sel.set("windows", None)
+
+
 def _strip_insert_column_qualifiers(sql: str) -> str:
     """Drop redundant ``tbl.`` prefixes inside an INSERT's column list.
 
@@ -320,6 +346,11 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
             expression = _rewrite_tsql_string_concat(
                 expression  # type: ignore[arg-type]
             )
+        # Inline a named WINDOW clause (``… OVER w … WINDOW w AS (…)``): the IR
+        # has no named-window concept, so an un-inlined ``OVER w`` reference loses
+        # its spec and emits ``OVER ()`` (silent loss / invalid on engines with a
+        # mandatory ORDER BY).
+        _inline_named_windows(expression)  # type: ignore[arg-type]
         if (
             isinstance(expression, exp.Select)
             and isinstance(expression.args.get("into"), exp.Into)
