@@ -1943,6 +1943,16 @@ class TestStringAggTextCastIntoPg:
         assert "STRING_AGG(CAST(x AS TEXT), ',' ORDER BY x)" in out, out
 
 
+class TestTsqlDerivedColumnName:
+    """T-SQL requires every derived-table column to be named (error 8155); an
+    unnamed projection (a parameter -> @a) gets a synthesized alias (my-reads-sql)."""
+
+    def test_unnamed_derived_column_aliased(self) -> None:
+        case = _case("challenge_mysql.sql", "my-reads-sql ")
+        out = _tx(case, "mysql", "tsql")
+        assert "(SELECT @a AS uq_col1) t" in out, out
+
+
 class TestSavepointBatch:
     """SAVEPOINT in a batch is sqlglot-misparsed as an Alias (SAVEPOINT AS sp);
     modeled as a passthrough so T-SQL gets SAVE TRANSACTION and ROLLBACK TO

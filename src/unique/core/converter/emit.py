@@ -2776,6 +2776,34 @@ def _cte_anchor_column_names(query: SelectStatement) -> list[str]:
     return names
 
 
+def _name_tsql_derived_columns(query: SelectStatement) -> SelectStatement:
+    """Alias every unnamed projection of a T-SQL derived table (error 8155). A
+    bare column reference already has a name; a literal, function call, expression
+    or ``@parameter`` does not. A ``*`` projection is named by the source table."""
+    new_cols: list[ASTNode] = []
+    changed = False
+    for i, col in enumerate(query.columns):
+        if isinstance(col, Alias):
+            new_cols.append(col)
+            continue
+        emitted = _emit_expression(col, "tsql").strip()
+        named = (
+            emitted == "*"
+            or emitted.endswith(".*")
+            or (
+                re.fullmatch(r'[\w]+(?:\.[\w]+)*|"[^"]+"|\[[^\]]+\]', emitted)
+                is not None
+                and not emitted.startswith("@")
+            )
+        )
+        if named:
+            new_cols.append(col)
+        else:
+            new_cols.append(Alias(expression=col, name=f"uq_col{i + 1}"))
+            changed = True
+    return dataclasses.replace(query, columns=tuple(new_cols)) if changed else query
+
+
 def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -> str:
     """Emit a SELECT statement.
 
@@ -2927,7 +2955,12 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
             if not alias and dialect != "oracle":
                 alias = "uq_dt"
             sub_alias = f" {_ident(alias, False, dialect)}" if alias else ""
-            inner_sql = _emit_select(node.from_clause.query, dialect)
+            dt_query = node.from_clause.query
+            if dialect == "tsql":
+                # T-SQL requires every derived-table column to be named (error
+                # 8155) — a literal/function/@parameter projection has none.
+                dt_query = _name_tsql_derived_columns(dt_query)
+            inner_sql = _emit_select(dt_query, dialect)
             if dialect == "tsql":
                 # A derived table may not carry ORDER BY without TOP
                 # (error 1033); without a limit the ordering is meaningless.

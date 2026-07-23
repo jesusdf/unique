@@ -627,7 +627,7 @@ SELECT QUOTE('Don\'t!') AS r
 -- CASE[fixed]: my-rand — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT RAND(1), RANDOM_BYTES(4), UUID()
 
--- CASE[open]: my-reads-sql — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
+-- CASE[fixed]: my-reads-sql — a derived table (SELECT a) t has an unnamed column (the parameter -> @a); T-SQL requires every derived-table column to be named (error 8155). Unnamed derived-table projections now get a synthesized alias on T-SQL. Compiles on T-SQL.
 CREATE FUNCTION f(a INT) RETURNS INT READS SQL DATA BEGIN RETURN (SELECT COUNT(*) FROM (SELECT a) t); END
 
 -- CASE[fixed]: my-realworld-orders — fails on postgresql. relation "orders" already exists
