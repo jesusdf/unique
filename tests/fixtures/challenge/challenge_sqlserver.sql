@@ -197,7 +197,7 @@ SELECT CAST('2020-01-01 10:20:30.1234567' AS DATETIME2), CAST('2020-01-01 10:20:
 -- CASE[open]: ts-gen-series-apply — fails on oracle, postgresql. ORA-00904: "GENERATE_SERIES": invalid identifier
 SELECT value, ordinal FROM GENERATE_SERIES(1, 5) g CROSS APPLY (SELECT g.value AS ordinal) x
 
--- CASE[open]: ts-generate-series — fails on oracle, postgresql. ORA-00904: "GENERATE_SERIES": invalid identifier
+-- CASE[fixed]: ts-generate-series — GENERATE_SERIES(start,stop) maps to PG generate_series (column aliased 'value') / Oracle CONNECT BY LEVEL. Live-verified 1..5.
 SELECT value FROM GENERATE_SERIES(1,5)
 
 -- CASE[open]: ts-geography — fails on mysql, oracle, postgresql. ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier

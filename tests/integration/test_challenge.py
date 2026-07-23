@@ -2049,6 +2049,20 @@ class TestInstrCaseSensitive:
         assert "'aAaA' COLLATE Latin1_General_BIN2" in _tx(case, "oracle", "tsql")
 
 
+class TestGenerateSeries:
+    """T-SQL GENERATE_SERIES(start, stop) (column 'value') maps to PG
+    generate_series with the column aliased to 'value', and Oracle a CONNECT BY
+    LEVEL subquery. Live-verified 1..5 on both."""
+
+    def test_from_position_generate_series(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-generate-series ")
+        assert "generate_series(1, 5) AS uq_gs(value)" in _tx(
+            case, "tsql", "postgresql"
+        )
+        ora = _tx(case, "tsql", "oracle")
+        assert "CONNECT BY LEVEL <= (5) - (1) + 1" in ora, ora
+
+
 class TestTopWithTies:
     """T-SQL TOP n WITH TIES also returns rows tying the last one. PG (13+) and
     Oracle carry it as FETCH FIRST n ROWS WITH TIES (a plain LIMIT would silently

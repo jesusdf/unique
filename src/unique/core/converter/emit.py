@@ -7232,6 +7232,27 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
     reference verbatim (used where the schema must be preserved, e.g. a T-SQL
     OBJECT_ID guard).
     """
+    if (
+        isinstance(node.function, FunctionCall)
+        and node.function.name.upper() == "GENERATE_SERIES"
+        and len(node.function.args) == 2
+        and dialect in ("oracle", "postgresql")
+        and SOURCE_DIALECT.get() == "tsql"
+        and not node.column_aliases
+    ):
+        # T-SQL's GENERATE_SERIES(start, stop) table function yields a column
+        # named ``value``. PostgreSQL's generate_series names it after the
+        # function, and Oracle has none — spell each so ``value`` resolves.
+        _gs = node.function.args
+        _gstart = _emit_expression(_gs[0], dialect)
+        _gstop = _emit_expression(_gs[1], dialect)
+        _gal = node.alias or "uq_gs"
+        if dialect == "postgresql":
+            return f"generate_series({_gstart}, {_gstop}) AS {_gal}(value)"
+        return (
+            f"(SELECT ({_gstart}) + LEVEL - 1 AS value FROM DUAL "
+            f"CONNECT BY LEVEL <= ({_gstop}) - ({_gstart}) + 1) {_gal}"
+        )
     if node.function is not None:
         # A function IS the relation (``FROM fn(args) alias``); targets
         # without the construct degrade in the transformer, so this only
