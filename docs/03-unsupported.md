@@ -335,6 +335,14 @@ rejects). Both are validated live. Only date parts outside the common
 year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
 still need review.
 
+### 3.17 Sequence `CURRVAL` → T-SQL
+
+Oracle/PostgreSQL expose a sequence's last-issued value (`seq.CURRVAL` /
+`currval('seq')`) without advancing it. T-SQL has no such function — `NEXT VALUE
+FOR seq` only *advances* and returns. `NEXTVAL` maps cleanly; `CURRVAL` degrades to
+a documented carrier (the pattern is to capture `NEXT VALUE FOR` into a variable
+and reuse it).
+
 ### 3.16 `NCHAR(n)` Unicode Code Point (handled)
 
 T-SQL `NCHAR(n)` returns the character for Unicode code point `n` (an integer — a

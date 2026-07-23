@@ -1105,6 +1105,23 @@ class TestExtractMicroseconds:
         assert result.warnings and "UNIQUE:" in result.sql
 
 
+class TestSequenceCurrval:
+    """Oracle NEXTVAL -> T-SQL NEXT VALUE FOR; CURRVAL has no T-SQL equivalent and
+    degrades to a carrier rather than leaking the unbindable seq.CURRVAL
+    (ora-seq-use)."""
+
+    def test_currval_degrades_nextval_kept(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_oracle.sql", "ora-seq-use "),
+            source="oracle",
+            target="tsql",
+        )
+        assert result.warnings and "UNIQUE:" in result.sql
+        assert "NEXT VALUE FOR s" in result.sql
+        # no residual seq.CURRVAL in the executable text (only inside the carrier)
+        assert "CURRVAL" not in _exec_lines(result.sql).upper().split("/*")[0]
+
+
 class TestCaseStatementEmptyBlock:
     """An Oracle CASE statement maps to a T-SQL IF/ELSE; a PL/SQL NULL; no-op must
     not leave an empty BEGIN/END (error 156 near ELSE) — the empty block gets a

@@ -407,7 +407,7 @@ SELECT FLOOR(3.7), CEIL(3.2), ROUND(3.567, 2), TRUNC(3.567, 1), REMAINDER(10,3) 
 -- CASE[fixed]: ora-rtrim-chars — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('a',),) target=(('',),)
 SELECT RTRIM('axxx', 'x') AS r FROM DUAL
 
--- CASE[open]: ora-seq-use — fails on tsql. (4104, b'The multi-part identifier "s.CURRVAL" could not be bound.DB-Lib error message 200
+-- CASE[limit]: ora-seq-use — fails on tsql. NEXTVAL maps to NEXT VALUE FOR; T-SQL has no CURRVAL (current value without advancing) — degrades to a carrier (docs/03-unsupported.md §3.17).
 CREATE SEQUENCE s START WITH 1; SELECT s.NEXTVAL,s.CURRVAL FROM DUAL
 
 -- CASE[fixed]: ora-sequence-options — Oracle's one-word sequence negatives (NOCYCLE/NOCACHE/...) map to PostgreSQL/T-SQL two-word NO CYCLE etc., and the ORDER/NOORDER RAC option (no other engine) is dropped. live-verified CREATE SEQUENCE runs. 

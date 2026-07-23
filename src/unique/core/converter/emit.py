@@ -571,6 +571,17 @@ def map_sequence_refs(sql: str, dialect: str) -> str:
     """
     if dialect == "tsql":
         sql = _SEQ_NEXTVAL_RE.sub(r"NEXT VALUE FOR \1", sql)
+        # T-SQL has no CURRVAL (current value without advancing); capture NEXT
+        # VALUE FOR in a variable instead. No inline equivalent — degrade to a
+        # documented carrier rather than ship the unbindable ``seq.CURRVAL``.
+        sql = _SEQ_CURRVAL_RE.sub(
+            lambda m: (
+                "NULL /* UNIQUE: T-SQL has no sequence CURRVAL; capture "
+                f"NEXT VALUE FOR {m.group(1)} in a variable — see "
+                "docs/03-unsupported.md */"
+            ),
+            sql,
+        )
     elif dialect == "postgresql":
         sql = _SEQ_NEXTVAL_RE.sub(lambda m: f"nextval('{m.group(1).lower()}')", sql)
         sql = _SEQ_CURRVAL_RE.sub(lambda m: f"currval('{m.group(1).lower()}')", sql)
