@@ -2787,14 +2787,15 @@ def _name_tsql_derived_columns(query: SelectStatement) -> SelectStatement:
             new_cols.append(col)
             continue
         emitted = _emit_expression(col, "tsql").strip()
+        # A column identifier must start with a letter/underscore — a numeric
+        # literal (``1``) is \w+ but is NOT a named column and must be aliased.
         named = (
             emitted == "*"
             or emitted.endswith(".*")
-            or (
-                re.fullmatch(r'[\w]+(?:\.[\w]+)*|"[^"]+"|\[[^\]]+\]', emitted)
-                is not None
-                and not emitted.startswith("@")
+            or re.fullmatch(
+                r'[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*|"[^"]+"|\[[^\]]+\]', emitted
             )
+            is not None
         )
         if named:
             new_cols.append(col)

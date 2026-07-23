@@ -3336,8 +3336,12 @@ class TestNestedChainMidOrderStrip:
             "(SELECT 1,2,3 UNION SELECT 4,5,6 ORDER BY 1,2) " "INTERSECT SELECT 4,5,6;",
             "tsql",
         )
+        # The derived table's unnamed literal columns are aliased (T-SQL error
+        # 8155 without names); the UNION link and the derived-table shield remain.
         assert re.search(
-            r"(?is)FROM \(SELECT 1, 2, 3\s+UNION\s+SELECT 4, 5, 6\)", out
+            r"(?is)FROM \(SELECT 1 AS \w+, 2 AS \w+, 3 AS \w+\s+UNION\s+"
+            r"SELECT 4, 5, 6\)",
+            out,
         ), out
         assert re.search(r"(?is)uq_setarm\s+INTERSECT\s+SELECT 4, 5, 6", out), out
 

@@ -1952,6 +1952,11 @@ class TestTsqlDerivedColumnName:
         out = _tx(case, "mysql", "tsql")
         assert "(SELECT @a AS uq_col1) t" in out, out
 
+    def test_literal_derived_column_aliased(self) -> None:
+        # a numeric-literal projection must be aliased too (1 is \w+ but not a name)
+        case = _case("challenge_mysql.sql", "my-scalar-subquery-assign ")
+        assert "(SELECT 1 AS uq_col1) t" in _tx(case, "mysql", "tsql")
+
 
 class TestSavepointBatch:
     """SAVEPOINT in a batch is sqlglot-misparsed as an Alias (SAVEPOINT AS sp);

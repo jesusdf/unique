@@ -658,7 +658,7 @@ SELECT CAST(3.99 AS SIGNED),CAST(-3.99 AS SIGNED),CONVERT(3.99,SIGNED)
 -- CASE[fixed]: my-round-fns — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CE
 SELECT FLOOR(3.7), CEILING(3.2), ROUND(3.567, 2), TRUNCATE(3.567, 1)
 
--- CASE[open]: my-scalar-subquery-assign — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
+-- CASE[fixed]: my-scalar-subquery-assign — a derived table (SELECT 1) t has an unnamed literal column; T-SQL requires derived-table columns named (error 8155). The IR-path derived table now aliases the unnamed projection -> (SELECT 1 AS uq_col1) t. Compiles on T-SQL.
 CREATE PROCEDURE p() BEGIN DECLARE v INT; SET v = (SELECT COUNT(*) FROM (SELECT 1) t); END
 
 -- CASE[open]: my-select-into-out — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
