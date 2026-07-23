@@ -545,6 +545,26 @@ class TestUnpivot:
             assert "'A' AS col" in out and "'B' AS col" in out, out
 
 
+class TestSubstringRegex:
+    """PG SUBSTRING(x FROM POSIX pattern) extracts the first regex match. Oracle
+    and MySQL have REGEXP_SUBSTR (live-verified '1'); T-SQL has no POSIX regex
+    engine, so it degrades to NULL + carrier + warning (a documented limit)."""
+
+    def test_oracle_mysql_regexp_substr(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-substring-regex ")
+        for target in ("oracle", "mysql"):
+            assert "REGEXP_SUBSTR('a1b2', '[0-9]+')" in _tx(case, "postgresql", target)
+
+    def test_tsql_degrades(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-substring-regex ")
+        result = Transpiler().transpile(case, source="postgresql", target="tsql")
+        assert result.warnings and "UNIQUE:" in result.sql
+        body = "\n".join(
+            ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "REGEXP_SUBSTR" not in body and "NULL" in body, body
+
+
 class TestRegexpReplaceFlags:
     """PG regexp_replace's 4th arg is a FLAGS string (g/i); Oracle/MySQL take
     numeric position/occurrence and are global by default. Drop 'g', and for

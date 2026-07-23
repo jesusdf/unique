@@ -654,7 +654,7 @@ SELECT SUBSTRING('abcdef', 0, 3) AS r
 -- CASE[open]: pg-substring-escape — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib
 SELECT substring('a1b2' from '([a-z])([0-9])' for '#') AS r
 
--- CASE[open]: pg-substring-regex — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib
+-- CASE[limit]: pg-substring-regex — SUBSTRING(x FROM POSIX pattern) → Oracle/MySQL REGEXP_SUBSTR ('1' verified live); T-SQL has no POSIX regex engine (2012+ target) so it degrades to NULL + annotation (docs/03-unsupported.md). fails on tsql
 SELECT SUBSTRING('a1b2' FROM '[0-9]+') AS r
 
 -- CASE[open]: pg-synonym-as-view — fails on oracle. ORA-00955: name is already used by an existing object

@@ -5453,6 +5453,32 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # at least two arguments) — it IS its argument (wave 161).
     if fn_name == "COALESCE" and len(node.args) == 1 and dialect in ("tsql", "oracle"):
         return _emit_expression(node.args[0], dialect)
+    # PG SUBSTRING(text FROM posix_pattern) — extract the first regex match — is
+    # modelled as a 2-arg SUBSTRING whose 2nd arg is a STRING (a numeric 2nd arg
+    # is an ordinary start position). Oracle/MySQL have REGEXP_SUBSTR; T-SQL has
+    # no POSIX regex engine, so it degrades to NULL + a documented carrier. Must
+    # run before the T-SQL 2-arg->3-arg LEN rewrite below (which would treat the
+    # pattern as a start position).
+    if (
+        fn_name in ("SUBSTRING", "SUBSTR")
+        and SOURCE_DIALECT.get() == "postgresql"
+        and len(node.args) == 2
+        and isinstance(node.args[1], Literal)
+        and node.args[1].dtype == "string"
+    ):
+        rs_x = _emit_expression(node.args[0], dialect)
+        rs_pat_node = node.args[1]
+        if dialect == "tsql":
+            return (
+                "NULL /* UNIQUE: SUBSTRING(x FROM POSIX pattern) has no T-SQL "
+                "regex equivalent — see docs/03-unsupported.md */"
+            )
+        rs_pat = _emit_expression(rs_pat_node, dialect)
+        if dialect == "mysql" and isinstance(rs_pat_node.value, str):
+            pv = rs_pat_node.value.replace("\\", "\\\\")
+            rs_pat = "'" + pv.replace("'", "''") + "'"
+        return f"REGEXP_SUBSTR({rs_x}, {rs_pat})"
+
     # MySQL SUBSTRING rounds a fractional position/length (2.9 -> 3), but
     # Oracle/PG/T-SQL truncate it (2). Pre-round a fractional numeric-literal
     # argument on a MySQL source so the result matches.
