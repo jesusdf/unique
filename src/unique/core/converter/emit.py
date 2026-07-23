@@ -3602,7 +3602,8 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         # ``DATE '…'`` / ``TIMESTAMP '…'`` directly, so emit that instead.
         if (
             dialect == "oracle"
-            and node.target_type.name.upper() in ("DATE", "TIMESTAMP")
+            and node.target_type.name.upper()
+            in ("DATE", "TIMESTAMP", "DATETIME", "DATETIME2", "SMALLDATETIME")
             and isinstance(node.expression, Literal)
             and isinstance(node.expression.value, str)
         ):

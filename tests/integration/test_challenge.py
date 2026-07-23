@@ -550,6 +550,12 @@ class TestTsqlIntToDatetime:
         assert "CAST(-3.99 AS INTEGER)" in _tx(case, "mysql", "oracle")
         assert "CAST(ROUND(-3.99, 0) AS BIGINT)" in _tx(case, "mysql", "tsql")
 
+    def test_mysql_cast_datetime_iso_literal(self) -> None:
+        # CAST(iso-string AS DATETIME) -> Oracle ANSI DATE/TIMESTAMP literal (a
+        # bare CAST to TIMESTAMP applies NLS and fails).
+        case = _case("challenge_mysql.sql", "my-cast-datetime ")
+        assert "DATE '2020-01-01'" in _tx(case, "mysql", "oracle")
+
 
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL

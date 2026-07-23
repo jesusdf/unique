@@ -107,7 +107,7 @@ SELECT CAST(0xC3A9 AS CHAR CHARACTER SET utf8mb4) AS r
 -- CASE[open]: my-cast-convert — fails on oracle, postgresql, tsql. (243, b'Type UBIGINT is not a defined system type.DB-Lib error message 20018, severity 16:
 SELECT CAST(123 AS CHAR), CONVERT('2020-01-01', DATE), CAST(1 AS UNSIGNED)
 
--- CASE[open]: my-cast-datetime — fails on oracle. ORA-01843: An invalid month was specified.
+-- CASE[fixed]: my-cast-datetime — CAST('2020-01-01' AS DATETIME) -> Oracle can't cast an ISO string to TIMESTAMP (ORA-01843); emit the ANSI DATE/TIMESTAMP literal (the Oracle-literal path now covers the DATETIME* type names too). live-verified 2020-01-01.
 SELECT CAST('2020-01-01' AS DATETIME) AS r
 
 -- CASE[open]: my-cast-datetime2 — fails on oracle. ORA-01861: literal does not match format string
