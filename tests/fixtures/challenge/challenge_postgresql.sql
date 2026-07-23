@@ -472,7 +472,7 @@ SELECT x,sum(x) OVER w,rank() OVER w FROM (SELECT 1 x UNION ALL SELECT 2) t WIND
 -- CASE[fixed]: pg-named-window2 — fails on oracle. ORA-30485: missing ORDER BY expression in the window specification
 CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id, LAG(n) OVER w, LEAD(n) OVER w FROM t WINDOW w AS (PARTITION BY s ORDER BY id)
 
--- CASE[open]: pg-nan-cmp — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[limit]: pg-nan-cmp — PostgreSQL numeric NaN (NaN > 1 = true) has no MySQL equivalent (CAST('NaN' AS DECIMAL) collapses to 0); emit the cast + a documented carrier (docs/03-unsupported.md). fails on mysql
 SELECT 'NaN'::numeric > 1 AS r
 
 -- CASE[open]: pg-nested-call — fails on oracle. PROCEDURE OUTER_P compiled INVALID (line 4): PLS-00201: identifier 'INNER_P' must be decla

@@ -2093,6 +2093,18 @@ class TestHexLiteralToInt:
         assert "TO_NUMBER('FF', 'XX')" in out, out
 
 
+class TestNanCast:
+    """PostgreSQL numeric represents NaN (NaN > 1 = true); MySQL DECIMAL does not
+    (CAST('NaN' AS DECIMAL) is 0), so the comparison diverges. Emit the cast plus
+    a documented carrier + warning."""
+
+    def test_mysql_nan_cast_carries(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-nan-cmp ")
+        result = Transpiler().transpile(case, source="postgresql", target="mysql")
+        assert result.warnings, "NaN cast must warn"
+        assert "UNIQUE:" in result.sql and "NaN" in result.sql, result.sql
+
+
 class TestRegexpSubstrGroup:
     """Oracle REGEXP_SUBSTR's 6th arg (capture group) has no MySQL equivalent
     (and would ship an invalid 6-arg call). Emit the portable 4-arg subset plus a

@@ -4271,6 +4271,24 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                         if base in ("BINARY", "VARBINARY")
                         else f"{'N' if base == 'NVARCHAR' else ''}VARCHAR(MAX)"
                     )
+        # PostgreSQL numeric represents NaN / ±Infinity; MySQL/T-SQL/Oracle
+        # DECIMAL do not (CAST('NaN' AS DECIMAL) collapses to 0), so a comparison
+        # silently diverges. Emit the cast with a documented carrier.
+        _nan = node.expression
+        if (
+            dialect in ("mysql", "tsql", "oracle")
+            and SOURCE_DIALECT.get() == "postgresql"
+            and isinstance(_nan, Literal)
+            and isinstance(_nan.value, str)
+            and _nan.value.strip().lstrip("+-").upper() in ("NAN", "INFINITY", "INF")
+            and re.match(
+                r"(?i)(DECIMAL|NUMERIC|NUMBER|DEC|FLOAT|DOUBLE|REAL|INT)", dtype.strip()
+            )
+        ):
+            return (
+                f"CAST({inner} AS {dtype}) /* UNIQUE: PostgreSQL NaN/Infinity has "
+                f"no {dialect} numeric equivalent (docs/03-unsupported.md) */"
+            )
         return f"CAST({inner} AS {dtype})"
 
     if isinstance(node, SubqueryExpression):
