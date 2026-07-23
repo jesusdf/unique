@@ -110,7 +110,7 @@ SELECT CAST(123 AS CHAR), CONVERT('2020-01-01', DATE), CAST(1 AS UNSIGNED)
 -- CASE[fixed]: my-cast-datetime — CAST('2020-01-01' AS DATETIME) -> Oracle can't cast an ISO string to TIMESTAMP (ORA-01843); emit the ANSI DATE/TIMESTAMP literal (the Oracle-literal path now covers the DATETIME* type names too). live-verified 2020-01-01.
 SELECT CAST('2020-01-01' AS DATETIME) AS r
 
--- CASE[open]: my-cast-datetime2 — fails on oracle. ORA-01861: literal does not match format string
+-- CASE[limit]: my-cast-datetime2 — the CAST(... AS TIME) part has no Oracle type; kept as text with a documented carrier (docs/03-unsupported.md). fails on oracle
 SELECT CAST('2020-01-01 10:00' AS DATE), CAST('2020-01-01 10:00' AS TIME), CAST('2020-01-01 10:00' AS DATETIME)
 
 -- CASE[open]: my-cast-decimal2 — fails on oracle, postgresql, tsql. (8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit

@@ -115,7 +115,7 @@ SELECT '1'::boolean, 'yes'::boolean, 'off'::boolean, 't'::boolean
 -- CASE[fixed]: pg-cast-chain2 — fails on tsql. (529, b'Explicit conversion from data type time to text is not allowed.DB-Lib error messag
 SELECT '10:00'::time::text, now()::date::text, 42::bit(8)::int
 
--- CASE[open]: pg-cast-datetime2 — fails on oracle. ORA-01861: literal does not match format string
+-- CASE[limit]: pg-cast-datetime2 — the ::time and ::interval casts have no Oracle type; kept as text with documented carriers (docs/03-unsupported.md). fails on oracle
 SELECT '2020-01-01 10:00'::date, '2020-01-01 10:00'::time, '10:00'::interval
 
 -- CASE[fixed]: pg-cast-int — PG CAST(2.7 AS INT) rounds (3); T-SQL CAST truncates (2). Wrap ROUND(x, 0) on a T-SQL target (both round half-away-from-zero).
