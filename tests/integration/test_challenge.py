@@ -1135,6 +1135,19 @@ class TestCaseStatementEmptyBlock:
         assert out.count("SET NOCOUNT ON;") >= 3, out  # proc prelude + 2 fillers
 
 
+class TestHighPrecisionDecimalLiteral:
+    """A decimal literal a Python float cannot hold (2.9999999999999999 -> 3.0) is
+    emitted from its exact source text, so FLOOR stays 2 rather than folding to 3
+    (my-floor-precision)."""
+
+    def test_exact_literal_preserved(self) -> None:
+        case = _case("challenge_mysql.sql", "my-floor-precision ")
+        for target in ("postgresql", "oracle", "tsql"):
+            out = _exec_lines(_tx(case, "mysql", target))
+            assert "2.9999999999999999" in out, out
+            assert "3.0" not in out, out
+
+
 class TestNotOperandParens:
     """``(NOT x) IS NULL`` — NOT binds looser than IS, so the source parens are
     load-bearing; the IR unwrapped them, re-associating to ``NOT (x IS NULL)`` (the

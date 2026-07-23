@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import decimal
 import re
 from typing import cast
 
@@ -1987,7 +1988,18 @@ def _convert_literal(expr: exp.Literal) -> Literal:
     if expr.is_int:
         return Literal(value=int(expr.this), dtype="integer")
     if expr.is_number:
-        return Literal(value=float(expr.this), dtype="number")
+        text = str(expr.this)
+        fval = float(text)
+        # A double cannot hold every decimal (``2.9999999999999999`` -> 3.0), so
+        # keep the exact source text when the value the float would EMIT
+        # (``str(fval)``) differs from the source decimal. Comparing the emitted
+        # form (not the float's exact bits) leaves ordinary decimals like ``0.10``
+        # untouched — only a genuinely rounded value is preserved.
+        raw: str | None = None
+        with contextlib.suppress(decimal.InvalidOperation):
+            if decimal.Decimal(str(fval)) != decimal.Decimal(text):
+                raw = text
+        return Literal(value=fval, dtype="number", raw=raw)
     if expr.is_string:
         return Literal(value=str(expr.this), dtype="string")
     return Literal(value=expr.this, dtype="unknown")

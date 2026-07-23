@@ -129,6 +129,10 @@ class Literal(ASTNode):
 
     value: Any
     dtype: str = "unknown"
+    #: The exact source text, kept only for a numeric literal whose value a
+    #: Python float cannot represent (``2.9999999999999999`` folds to ``3.0``);
+    #: emitted verbatim so the target parses the exact decimal.
+    raw: str | None = None
 
 
 @dataclass(frozen=True)

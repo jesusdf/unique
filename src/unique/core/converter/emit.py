@@ -4471,6 +4471,9 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         ):
             escaped = str(node.value).replace("'", "''")
             return f"'{escaped}'"
+        if node.dtype == "number" and node.raw is not None:
+            # A high-precision decimal a float rounded away — emit the exact text.
+            return node.raw
         return str(node.value)
 
     if isinstance(node, Alias):

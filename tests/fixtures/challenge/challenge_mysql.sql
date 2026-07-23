@@ -317,7 +317,7 @@ SELECT LENGTH('café'),CHAR_LENGTH('café'),LENGTH('日本'),CHAR_LENGTH('日本
 -- CASE[fixed]: my-float-precision — same IEEE/float value at each engine's display precision (DOUBLE vs FLOAT). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 0.1+0.2, CAST(0.1 AS DOUBLE)+CAST(0.2 AS DOUBLE), 1.0/3, 2/3
 
--- CASE[open]: my-floor-precision — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
+-- CASE[fixed]: my-floor-precision — the converter folded the literal through a Python float, rounding 2.9999999999999999 to 3.0 (FLOOR -> 3); the exact source text is now preserved for a precision-losing decimal literal. Live 2 on all four (the engines parse it as an exact numeric).
 SELECT FLOOR(2.9999999999999999) AS r
 
 -- CASE[limit]: my-fmt-spec — fails on oracle. date format mask uses a bare-letter literal / locale name / exotic token that cannot round-trip to a quoted cross-engine mask (docs/03-unsupported.md §3.1).
