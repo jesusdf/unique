@@ -221,6 +221,24 @@ class TypeMapper(TransformPass):
             return node
 
         if isinstance(node, CastExpression):
+            # PostgreSQL string-literal -> boolean cast accepts many spellings
+            # ('t'/'true'/'yes'/'y'/'on'/'1' -> true; 'f'/'false'/'no'/'n'/
+            # 'off'/'0' -> false). Other engines can't cast 'yes'/'t' to a
+            # number/bit (ORA-01722 / T-SQL bit conversion error), so fold the
+            # literal to 1/0 — the value PG stores, which a downstream ::int or
+            # BIT/NUMBER(1) then represents faithfully.
+            if (
+                node.target_type.name.upper() in ("BOOLEAN", "BOOL")
+                and ctx.source == "postgresql"
+                and ctx.target != "postgresql"
+                and isinstance(node.expression, Literal)
+                and isinstance(node.expression.value, str)
+            ):
+                _bv = node.expression.value.strip().lower()
+                if _bv in ("t", "true", "yes", "y", "on", "1"):
+                    return Literal(value=1, dtype="integer")
+                if _bv in ("f", "false", "no", "n", "off", "0"):
+                    return Literal(value=0, dtype="integer")
             # T-SQL ``CAST(x AS BIT)`` normalizes any non-zero numeric to 1 (0 ->
             # 0, NULL -> NULL); every other engine keeps the value (a plain
             # ``CAST(2 AS NUMBER(1))`` stays 2). ``SIGN(ABS(x))`` reproduces the

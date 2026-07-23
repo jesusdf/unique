@@ -91,7 +91,7 @@ SELECT 5 & 3, 5 | 2, 5 # 3, ~5, 5 << 1, 5 >> 1
 -- CASE[open]: pg-blob-length — fails on mysql, oracle, tsql. (195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT LENGTH(decode('SGVsbG8=', 'base64')) AS r
 
--- CASE[open]: pg-bool-int-cast — fails on oracle. ORA-01722: unable to convert string value containing 't' to a number: 
+-- CASE[fixed]: pg-bool-int-cast — PostgreSQL 'true'::boolean accepts word spellings other engines can't cast to a number ('t'/'true'/'yes'/'on' -> 1); the string literal folds to 1, so ::int matches. live-verified 1.
 SELECT 'true'::boolean::int AS r
 
 -- CASE[open]: pg-bool-repr — fails on mysql. FUNC-DIFF: source=(('1', '1', 'true', '0', 'NULL'),) target=(('1', '1', '1', '0', 'NULL'),

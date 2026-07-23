@@ -412,6 +412,24 @@ class TestJsonAggregates:
         assert r.warnings and "UNIQUE:" in r.sql, r.sql
 
 
+class TestPgBooleanWordCast:
+    """PostgreSQL casts many word spellings to boolean ('t'/'true'/'yes'/'on' ->
+    true), which other engines cannot cast to a number or bit. A string-literal
+    ::boolean folds to 1/0, so a downstream ::int matches. Live-verified 1."""
+
+    def test_true_word_folds_to_one(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-bool-int-cast "),
+            "postgresql",
+            "oracle",
+        )
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "CAST(1 AS INT)" in body, body
+        assert "'t'" not in body and "'true'" not in body, body
+
+
 class TestConvertUsingCharset:
     """MySQL CONVERT(x USING charset) is a per-value charset conversion that
     leaves the string value unchanged; no other engine has per-value charsets,
