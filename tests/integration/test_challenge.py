@@ -2093,6 +2093,19 @@ class TestHexLiteralToInt:
         assert "TO_NUMBER('FF', 'XX')" in out, out
 
 
+class TestRoundDateMonth:
+    """Oracle ROUND(date,'MONTH') rounds to the nearest month start (day>=16 ->
+    1st of next month); MySQL's ROUND is numeric, so emulate with month
+    arithmetic. Live-verified 2020-07-01."""
+
+    def test_mysql_month_round_emulated(self) -> None:
+        out = _tx(
+            _case("challenge_oracle.sql", "ora-round-date-month "), "oracle", "mysql"
+        )
+        assert "DAYOFMONTH('2020-06-16') < 16" in out, out
+        assert "DATE_ADD(" in out and "INTERVAL 1 MONTH" in out, out
+
+
 class TestToNumberScientific:
     """Oracle TO_NUMBER of a scientific-notation string ('1.234E2') can't CAST to
     a T-SQL DECIMAL (error 8114); FLOAT parses the exponent. Live-verified 123.4."""

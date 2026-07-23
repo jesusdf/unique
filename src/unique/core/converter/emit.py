@@ -4693,6 +4693,25 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"CAST({_emit_expression(inner, dialect)} AS DATE)"
         return _emit_expression(inner, dialect)
 
+    # Oracle ROUND(date, 'MONTH') rounds to the nearest month start (day >= 16
+    # rounds up to the 1st of next month) — MySQL's ROUND is numeric and would
+    # ship an invalid ``ROUND('2020-06-16', 'MONTH')``. Emulate with month
+    # arithmetic (live-verified against Oracle across the 15/16 boundary).
+    if (
+        fn_name == "ROUND"
+        and dialect == "mysql"
+        and len(node.args) == 2
+        and isinstance(node.args[1], Literal)
+        and isinstance(node.args[1].value, str)
+        and node.args[1].value.upper() in ("MONTH", "MM")
+    ):
+        _d = _emit_expression(_unwrap_sqlglot_wrappers(node.args[0]), dialect)
+        _first = f"DATE_SUB({_d}, INTERVAL DAYOFMONTH({_d}) - 1 DAY)"
+        return (
+            f"CASE WHEN DAYOFMONTH({_d}) < 16 THEN {_first} "
+            f"ELSE DATE_ADD({_first}, INTERVAL 1 MONTH) END"
+        )
+
     # T-SQL AVG returns the *input* type, so AVG over an integer column truncates
     # (AVG of 1, 2 = 1), whereas MySQL/Oracle/PostgreSQL always average as a
     # decimal (1.5). Promote the argument so T-SQL averages as a decimal too.

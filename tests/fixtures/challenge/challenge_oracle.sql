@@ -398,7 +398,7 @@ SELECT REGEXP_COUNT('a1b2c3', '[0-9]') AS r FROM DUAL
 -- CASE[open]: ora-regexp-group — fails on mysql. (1582, "Incorrect parameter count in the call to native function 'REGEXP_SUBSTR'")
 SELECT REGEXP_SUBSTR('a1b2c3', '(\d)', 1, 1, NULL, 1) AS r FROM DUAL
 
--- CASE[open]: ora-round-date-month — fails on mysql. FUNC-DIFF: source=(('2020-07-01 00:00:00',),) target=(('2020',),)
+-- CASE[fixed]: ora-round-date-month — MySQL has no ROUND(date,'MONTH'); emulate the month rounding (day>=16 -> 1st of next month) with a CASE. Live-verified 2020-07-01.
 SELECT ROUND(DATE '2020-06-16', 'MONTH') AS r FROM DUAL
 
 -- CASE[fixed]: ora-round-fns — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RE
