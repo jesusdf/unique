@@ -1960,6 +1960,24 @@ class TestTopWithTies:
         assert "WITH TIES" in result.sql and "LIMIT 1" in result.sql, result.sql
 
 
+class TestPgBooleanCastFolds:
+    """PostgreSQL word-spelled boolean casts ('true'/'t'/'1'/'yes'/'off') fold to
+    1/0 on Oracle/T-SQL (which have no boolean text). Live-verified (1,1,1,1) and
+    (1,1,0,1) — True==1, False==0."""
+
+    def test_bool_literals_fold_to_ints(self) -> None:
+        for target in ("oracle", "tsql"):
+            out = _tx(
+                _case("challenge_postgresql.sql", "pg-cast-bool2 "),
+                "postgresql",
+                target,
+            )
+            body = "\n".join(
+                ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "1, 1, 0, 1" in body, body
+
+
 class TestTsqlFracSeconds:
     """T-SQL CAST(... AS DATETIME2/DATETIME) over a fractional-second string maps
     to an Oracle TIMESTAMP literal (a bare string tripped ORA-01843). Live-verified

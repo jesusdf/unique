@@ -100,7 +100,7 @@ SELECT (1>0), (1>0)::int, (1>0)::text, NOT (1>0), true AND NULL
 -- CASE[open]: pg-bool-text2 — fails on mysql. FUNC-DIFF: source=(('true',),) target=(('1',),)
 SELECT true::text AS r
 
--- CASE[open]: pg-bool-week — fails on oracle, tsql. (245, b"Conversion failed when converting the varchar value 't' to data type bit.DB-Lib er
+-- CASE[fixed]: pg-bool-week — word/'t'/1 boolean casts fold to 1/0 and EXTRACT(WEEK) maps per engine; live-verified (1,1,1,1) (True==1).
 SELECT 'true'::boolean, 't'::boolean, 1::boolean, EXTRACT(WEEK FROM DATE '2020-01-01')
 
 -- CASE[open]: pg-bulk-insert — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
@@ -109,7 +109,7 @@ CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)
 -- CASE[open]: pg-case-statement — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
 CREATE FUNCTION f(n INT) RETURNS TEXT AS $$ BEGIN CASE n WHEN 1 THEN RETURN 'one'; ELSE RETURN 'other'; END CASE; END; $$ LANGUAGE plpgsql
 
--- CASE[open]: pg-cast-bool2 — fails on oracle, tsql. (245, b"Conversion failed when converting the varchar value 'yes' to data type bit.DB-Lib 
+-- CASE[fixed]: pg-cast-bool2 — PG word-spelled boolean literals ('1'/'yes'/'off'/'t') fold to 1/0/0/1 on Oracle/T-SQL; live-verified (1,1,0,1). 
 SELECT '1'::boolean, 'yes'::boolean, 'off'::boolean, 't'::boolean
 
 -- CASE[fixed]: pg-cast-chain2 — fails on tsql. (529, b'Explicit conversion from data type time to text is not allowed.DB-Lib error messag
