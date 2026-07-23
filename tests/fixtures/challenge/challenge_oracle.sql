@@ -146,7 +146,7 @@ SELECT DUMP('abc') AS r FROM DUAL
 -- CASE[fixed]: ora-dump2 — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.DU
 SELECT DUMP('A', 1016) AS r FROM DUAL
 
--- CASE[open]: ora-dyn-count — fails on tsql. (102, b"Incorrect syntax near '+'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
+-- CASE[fixed]: ora-dyn-count — EXECUTE IMMEDIATE '...' || tbl INTO n: T-SQL sp_executesql needs its statement as a variable/literal, not a concat ('...' + @t = error near '+'); the compound dynamic SQL is hoisted into a local first. Compiles + EXEC ok on T-SQL
 CREATE PROCEDURE p (tbl VARCHAR2) AS n NUMBER; BEGIN EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM ' || tbl INTO n; END;
 /
 

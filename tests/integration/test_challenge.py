@@ -963,6 +963,17 @@ class TestVoidFunctionExecuteUsing:
         assert "$1" not in body and "VALUES (?)" in body, body
 
 
+class TestDynamicSqlHoist:
+    """T-SQL sp_executesql needs its statement as a variable/literal, not a
+    concat expression ('...' + @t is a syntax error near '+'); a compound dynamic
+    SQL string is hoisted into a local first."""
+
+    def test_concat_dynamic_sql_hoisted(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "ora-dyn-count "), "oracle", "tsql")
+        assert "DECLARE @_dyn_sql_1 NVARCHAR(MAX) =" in out, out
+        assert "EXEC sp_executesql @_dyn_sql_1" in out, out
+
+
 class TestEmptyGuardIfBody:
     """A FROM DUAL cursor FOR-loop maps to a T-SQL guard IF; a no-op (NULL-only)
     body would leave an empty BEGIN..END (error 156), so it gets a side-effect-

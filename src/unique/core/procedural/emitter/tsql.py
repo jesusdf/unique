@@ -405,7 +405,8 @@ class TSqlEmitter(ProceduralEmitter):
         if not any(
             ln.strip() and not ln.lstrip().startswith("--") for ln in body_lines
         ):
-            indent = re.match(r"\s*", body_lines[0]).group() if body_lines else "    "
+            first = body_lines[0] if body_lines else "    "
+            indent = first[: len(first) - len(first.lstrip())] or "    "
             body_lines = [*body_lines, f"{indent}DECLARE @uq_noop BIT;"]
         return "\n".join([f"IF ({cond})", "BEGIN", *body_lines, "END"])
 
@@ -688,6 +689,17 @@ class TSqlEmitter(ProceduralEmitter):
 
         return "\n".join(lines)
 
+    def _hoist_dynamic_sql(self, expr: str) -> tuple[str, str]:
+        """``sp_executesql`` requires its statement argument to be a variable or a
+        string literal — a concat expression (``'…' + @t``) is a syntax error
+        (near '+'). Hoist any compound expression into a local and return the
+        variable plus its declaration prelude."""
+        if re.fullmatch(r"(?is)\s*(?:@\w+|N?'(?:[^']|'')*')\s*", expr):
+            return expr.strip(), ""
+        self._dyn_sql_seq = getattr(self, "_dyn_sql_seq", 0) + 1
+        var = f"@_dyn_sql_{self._dyn_sql_seq}"
+        return var, f"DECLARE {var} NVARCHAR(MAX) = {expr};\n"
+
     def _emit_execute_into(
         self,
         expr: str,
@@ -710,15 +722,17 @@ class TSqlEmitter(ProceduralEmitter):
                 "\n-- UNIQUE: EXECUTE IMMEDIATE USING bindings dropped; "
                 "inline them or use sp_executesql parameters: " + ", ".join(params)
             )
+        sql_arg, prelude = self._hoist_dynamic_sql(expr)
         return (
-            f"DECLARE {tbl} TABLE ({col_defs});\n"
-            f"INSERT INTO {tbl} EXEC sp_executesql {expr};\n"
+            f"{prelude}DECLARE {tbl} TABLE ({col_defs});\n"
+            f"INSERT INTO {tbl} EXEC sp_executesql {sql_arg};\n"
             f"SELECT TOP (1) {assigns} FROM {tbl};{note}"
         )
 
     def _emit_execute_stmt(
         self, expr: str, params: list[str], immediate: bool = False
     ) -> str:
+        sql_arg, prelude = self._hoist_dynamic_sql(expr)
         if params:
             # Map Oracle USING binds to sp_executesql positional params.
             # The dynamic SQL placeholders (:1, :2 / ?) should be replaced
@@ -730,11 +744,11 @@ class TSqlEmitter(ProceduralEmitter):
                 f"{n} = {val}" for n, val in zip(names, params, strict=False)
             )
             return (
-                f"EXEC sp_executesql {expr}, N'{decl}', {assigns}; "
+                f"{prelude}EXEC sp_executesql {sql_arg}, N'{decl}', {assigns}; "
                 f"-- UNIQUE: verify dynamic SQL placeholders match "
                 f"{', '.join(names)}"
             )
-        return f"EXEC sp_executesql {expr};"
+        return f"{prelude}EXEC sp_executesql {sql_arg};"
 
 
 register_emitter(TSqlEmitter.dialect_name, TSqlEmitter)
