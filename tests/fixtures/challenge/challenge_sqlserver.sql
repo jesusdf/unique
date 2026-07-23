@@ -271,7 +271,7 @@ SELECT GETDATE(), SYSDATETIME(), CURRENT_TIMESTAMP, GETUTCDATE(), SYSDATETIMEOFF
 -- CASE[fixed]: ts-now-variants — fails on mysql, oracle, postgresql. ORA-00904: "SYSUTCDATETIME": invalid identifier
 SELECT GETDATE(), GETUTCDATE(), SYSDATETIME(), SYSUTCDATETIME(), CURRENT_TIMESTAMP
 
--- CASE[open]: ts-openjson — fails on oracle, postgresql. ORA-00904: "OPEN_J_S_O_N": invalid identifier
+-- CASE[limit]: ts-openjson — OPENJSON is a T-SQL table-valued JSON shredder with no simple cross-engine form (Oracle JSON_TABLE, PostgreSQL json_array_elements have different shapes); the statement degrades to a carrier + warning rather than shipping the undefined function (docs/03-unsupported.md). fails on oracle, postgresql
 SELECT * FROM OPENJSON('[1,2,3]')
 
 -- CASE[open]: ts-order-strings — fails on mysql. FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), 
