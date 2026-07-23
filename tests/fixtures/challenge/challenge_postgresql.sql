@@ -133,7 +133,7 @@ SELECT 3.14::int, 3.14::text, 3.14::numeric(10,2), 3.14::double precision
 -- CASE[open]: pg-cast-money — fails on oracle. ORA-00902: invalid datatype
 SELECT '12.99'::numeric(4,1), '12.99'::numeric(3,0), 12.99::money
 
--- CASE[open]: pg-cast-point — fails on oracle, tsql. (243, b'Type POINT is not a defined system type.DB-Lib error message 20018, severity 16:\n
+-- CASE[limit]: pg-cast-point — PostgreSQL's geometric point type has no cross-engine equivalent (MySQL's spatial POINT is a different WKB type); the cast keeps the source's text value '(1,2)' + annotation (docs/03-unsupported.md). fails on oracle, tsql
 SELECT '(1,2)'::point AS r
 
 -- CASE[fixed]: pg-cast-round-half — PG 7.5::int rounds half-away-from-zero (8); T-SQL CAST truncates (7). ROUND(x, 0) on T-SQL matches (also half-away-from-zero).

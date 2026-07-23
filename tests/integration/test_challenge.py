@@ -497,6 +497,22 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestCastPointGeometric:
+    """PG's geometric ``point`` type has no cross-engine equivalent; a cast to it
+    degrades to the source's text value plus a carrier + warning. The kept text
+    ('(1,2)') happens to equal PG's own text rendering of the point."""
+
+    def test_point_kept_as_text(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-cast-point ")
+        for target in ("oracle", "tsql"):
+            result = Transpiler().transpile(case, source="postgresql", target=target)
+            assert result.warnings and "UNIQUE:" in result.sql
+            body = "\n".join(
+                ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "'(1,2)'" in body and "AS POINT" not in body.upper(), body
+
+
 class TestTryCast:
     """TRY_CAST/TRY_CONVERT (a cast that yields NULL on a conversion error) is
     carried via the CastExpression ``safe`` flag: Oracle DEFAULT NULL ON

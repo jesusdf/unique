@@ -86,6 +86,13 @@ from unique.core.sql_split import qualify_function_calls
 
 # Per-dialect CAST target-type overrides: MySQL CAST accepts only a fixed set
 # (SIGNED/UNSIGNED/CHAR/DATE/…), not INT/BOOLEAN; T-SQL has no BOOLEAN (it is BIT).
+# PostgreSQL's built-in geometric types have no equivalent on the other engines
+# (MySQL's spatial POINT is a different, WKB-based type). A cast to one degrades
+# to the source's text value plus a carrier.
+_PG_GEOMETRIC_TYPES = frozenset(
+    {"POINT", "LINE", "LSEG", "BOX", "PATH", "POLYGON", "CIRCLE"}
+)
+
 _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
     "mysql": {
         "INT": "SIGNED",
@@ -4556,6 +4563,18 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             return (
                 f"{inner} /* UNIQUE: Oracle has no {_what} type — value kept as "
                 "text (docs/03-unsupported.md) */"
+            )
+        # PostgreSQL geometric types (point/line/box/…) have no cross-engine
+        # equivalent; keep the source's text value with a documented carrier.
+        if (
+            dialect != "postgresql"
+            and SOURCE_DIALECT.get() == "postgresql"
+            and _cast_to in _PG_GEOMETRIC_TYPES
+        ):
+            return (
+                f"{inner} /* UNIQUE: PostgreSQL geometric type "
+                f"{_cast_to.lower()} has no cross-engine equivalent — value kept "
+                "as text (docs/03-unsupported.md) */"
             )
         # PostgreSQL numeric represents NaN / ±Infinity; MySQL/T-SQL/Oracle
         # DECIMAL do not (CAST('NaN' AS DECIMAL) collapses to 0), so a comparison
