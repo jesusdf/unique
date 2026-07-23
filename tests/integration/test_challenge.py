@@ -2003,6 +2003,24 @@ class TestTablesample:
         assert "UNIQUE:" in result.sql and "TABLESAMPLE" in result.sql, result.sql
 
 
+class TestPgBooleanToText:
+    """PostgreSQL renders a boolean cast to text as 'true'/'false'; MySQL has no
+    boolean text and would give '1'/'0'. Emit CASE WHEN <bool> THEN 'true' ELSE
+    'false' for a comparison or a true/false literal. Live-verified 'true'."""
+
+    def test_bool_literal_to_text(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-bool-text2 "), "postgresql", "mysql"
+        )
+        assert "CASE WHEN TRUE THEN 'true' ELSE 'false' END" in out, out
+
+    def test_comparison_to_text(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-bool-repr "), "postgresql", "mysql"
+        )
+        assert "CASE WHEN 1 > 0 THEN 'true' ELSE 'false' END" in out, out
+
+
 class TestPgBooleanCastFolds:
     """PostgreSQL word-spelled boolean casts ('true'/'t'/'1'/'yes'/'off') fold to
     1/0 on Oracle/T-SQL (which have no boolean text). Live-verified (1,1,1,1) and

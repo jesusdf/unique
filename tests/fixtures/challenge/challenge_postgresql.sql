@@ -94,10 +94,10 @@ SELECT LENGTH(decode('SGVsbG8=', 'base64')) AS r
 -- CASE[fixed]: pg-bool-int-cast — PostgreSQL 'true'::boolean accepts word spellings other engines can't cast to a number ('t'/'true'/'yes'/'on' -> 1); the string literal folds to 1, so ::int matches. live-verified 1.
 SELECT 'true'::boolean::int AS r
 
--- CASE[open]: pg-bool-repr — fails on mysql. FUNC-DIFF: source=(('1', '1', 'true', '0', 'NULL'),) target=(('1', '1', '1', '0', 'NULL'),
+-- CASE[fixed]: pg-bool-repr — boolean::text renders 'true'/'false' on MySQL (CASE), the boolean cols are True==1/False==0; live-verified (1,1,'true',0,NULL).
 SELECT (1>0), (1>0)::int, (1>0)::text, NOT (1>0), true AND NULL
 
--- CASE[open]: pg-bool-text2 — fails on mysql. FUNC-DIFF: source=(('true',),) target=(('1',),)
+-- CASE[fixed]: pg-bool-text2 — PG boolean::text is 'true'/'false'; MySQL has no boolean text, so emit CASE WHEN ... THEN 'true' ELSE 'false'. Live-verified 'true'.
 SELECT true::text AS r
 
 -- CASE[fixed]: pg-bool-week — word/'t'/1 boolean casts fold to 1/0 and EXTRACT(WEEK) maps per engine; live-verified (1,1,1,1) (True==1).

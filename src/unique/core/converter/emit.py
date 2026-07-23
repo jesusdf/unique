@@ -4070,6 +4070,24 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             in ("CHAR", "VARCHAR", "TEXT", "NCHAR", "NVARCHAR")
         ):
             inner = f"CASE WHEN {inner} THEN 1 ELSE 0 END"
+        # The reverse: PostgreSQL renders a boolean cast to text as 'true'/'false',
+        # but MySQL has no boolean text and would give '1'/'0'. Emit the words so
+        # the value matches (a boolean is a comparison predicate or a true/false
+        # literal).
+        if (
+            dialect == "mysql"
+            and SOURCE_DIALECT.get() == "postgresql"
+            and (
+                _is_predicate_node(node.expression)
+                or (
+                    isinstance(node.expression, Literal)
+                    and node.expression.dtype == "boolean"
+                )
+            )
+            and node.target_type.name.split("(")[0].strip().upper()
+            in ("CHAR", "VARCHAR", "TEXT", "NCHAR", "NVARCHAR")
+        ):
+            return f"CASE WHEN {inner} THEN 'true' ELSE 'false' END"
         # Oracle CAST-to-integer ROUNDS the value (CAST('3.9' AS INT) = 4), but
         # MySQL's CAST(... AS SIGNED) truncates a string ('3.9' -> 3). Round
         # first so the value matches (a no-op for an already-integer value).
