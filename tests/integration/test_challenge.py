@@ -2295,6 +2295,19 @@ class TestRoundDateMonth:
         assert "DATE_ADD(" in out and "INTERVAL 1 MONTH" in out, out
 
 
+class TestCastUnsigned:
+    """MySQL's UNSIGNED integer cast has no signed-engine type; map it to a wide
+    NUMERIC/NUMBER (value preserved) with a carrier flagging the lost unsigned
+    wraparound. Live-verified."""
+
+    def test_unsigned_cast_carries(self) -> None:
+        case = _case("challenge_mysql.sql", "my-cast-convert ")
+        for target in ("oracle", "postgresql", "tsql"):
+            result = Transpiler().transpile(case, source="mysql", target=target)
+            assert result.warnings, "UNSIGNED must warn"
+            assert "UNIQUE:" in result.sql and "UBIGINT" not in result.sql, result.sql
+
+
 class TestCastBinary:
     """PG has no BINARY/VARBINARY type; CAST AS BINARY maps to BYTEA.
     Live-verified b'abc'."""

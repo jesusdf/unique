@@ -104,7 +104,7 @@ SELECT CONVERT('abc',BINARY), CONVERT('abc' USING latin1), CAST('abc' AS BINARY)
 -- CASE[open]: my-cast-charset — fails on oracle. ORA-25137: Data value out of range
 SELECT CAST(0xC3A9 AS CHAR CHARACTER SET utf8mb4) AS r
 
--- CASE[open]: my-cast-convert — fails on oracle, postgresql, tsql. (243, b'Type UBIGINT is not a defined system type.DB-Lib error message 20018, severity 16:
+-- CASE[limit]: my-cast-convert — CAST AS UNSIGNED has no signed-engine type; mapped to NUMERIC/NUMBER (value 1 exact) with a carrier flagging the lost unsigned wraparound (docs/03-unsupported.md). fails on oracle, postgresql, tsql
 SELECT CAST(123 AS CHAR), CONVERT('2020-01-01', DATE), CAST(1 AS UNSIGNED)
 
 -- CASE[fixed]: my-cast-datetime — CAST('2020-01-01' AS DATETIME) -> Oracle can't cast an ISO string to TIMESTAMP (ORA-01843); emit the ANSI DATE/TIMESTAMP literal (the Oracle-literal path now covers the DATETIME* type names too). live-verified 2020-01-01.

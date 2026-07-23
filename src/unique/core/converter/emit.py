@@ -4385,6 +4385,25 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                 f"CAST({inner} AS {dtype}) /* UNIQUE: PostgreSQL NaN/Infinity has "
                 f"no {dialect} numeric equivalent (docs/03-unsupported.md) */"
             )
+        # MySQL's UNSIGNED integer cast (sqlglot: UBIGINT/UINT/…) has no signed-
+        # engine equivalent — map to a wide numeric that holds the value and flag
+        # that the unsigned wraparound semantics aren't preserved.
+        if dialect in ("oracle", "postgresql", "tsql") and node.target_type.name.split(
+            "("
+        )[0].strip().upper() in (
+            "UBIGINT",
+            "UINT",
+            "UINTEGER",
+            "USMALLINT",
+            "UTINYINT",
+            "UMEDIUMINT",
+        ):
+            _signed = "NUMBER" if dialect == "oracle" else "NUMERIC"
+            return (
+                f"CAST({inner} AS {_signed}) /* UNIQUE: MySQL UNSIGNED has no "
+                f"{dialect} equivalent; unsigned wraparound not preserved "
+                "(docs/03-unsupported.md) */"
+            )
         return f"CAST({inner} AS {dtype})"
 
     if isinstance(node, SubqueryExpression):
