@@ -791,6 +791,29 @@ class TestOverlay:
         assert "SUBSTR('abcdef', 1, (2) - 1)" in ora and "|| 'XY' ||" in ora, ora
 
 
+class TestAtTimeZone:
+    """AT TIME ZONE is not portable (Oracle/MySQL lack the operator; PG↔T-SQL
+    semantics and session-tz display differ), so it degrades to NULL + carrier +
+    warning off its own dialect and stays verbatim on it."""
+
+    def test_pg_source_degrades(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-at-time-zone ")
+        for target in ("oracle", "tsql", "mysql"):
+            result = Transpiler().transpile(case, source="postgresql", target=target)
+            assert result.warnings and "UNIQUE:" in result.sql, target
+            # Both the -- header and the /* carrier */ name "AT TIME ZONE"; strip
+            # comment lines then the carrier and check the executable text.
+            body = "\n".join(
+                ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "AT TIME ZONE" not in body.split("/*")[0].upper(), result.sql
+
+    def test_verbatim_on_own_dialect(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-at-time-zone ")
+        out = _tx(case, "postgresql", "postgresql")
+        assert "AT TIME ZONE 'UTC'" in out and "UNIQUE:" not in out, out
+
+
 class TestExtractEpochInterval:
     """EXTRACT(EPOCH FROM timestamp) is a literal date-diff, but EXTRACT(EPOCH
     FROM interval) has no portable form (T-SQL/MySQL have no interval value type)

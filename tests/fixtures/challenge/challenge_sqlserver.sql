@@ -42,7 +42,7 @@ CREATE TABLE t (a INT); ALTER TABLE t ADD b NVARCHAR(10) NOT NULL DEFAULT 'x'
 -- CASE[fixed]: ts-ascii-char — fails on mysql, oracle, postgresql. ORA-00904: "NCHAR": invalid identifier
 SELECT ASCII('A'), CHAR(65), NCHAR(65)
 
--- CASE[open]: ts-at-time-zone — fails on oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[limit]: ts-at-time-zone — AT TIME ZONE is not portable (Oracle/MySQL have no such operator; the session-tz-dependent display differs on PG/T-SQL), so it degrades to NULL + annotation off T-SQL (docs/03-unsupported.md). fails on oracle, postgresql
 SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r
 
 -- CASE[fixed]: ts-binary-length — DATALENGTH(x) is the byte length -> Oracle LENGTHB, PG/MySQL OCTET_LENGTH; the VARBINARY(MAX) cast is unwrapped (byte length of a string is the same). live-verified 5.

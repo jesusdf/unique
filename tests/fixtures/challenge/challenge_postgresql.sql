@@ -58,7 +58,7 @@ CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)
 -- CASE[fixed]: pg-ascii-empty — PG ASCII('') is 0; Oracle/T-SQL return NULL. Recover 0 (T-SQL CASE, Oracle COALESCE) — shared with the MySQL-source handler.
 SELECT ASCII('') AS r
 
--- CASE[open]: pg-at-time-zone — fails on mysql, oracle, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D
+-- CASE[limit]: pg-at-time-zone — AT TIME ZONE is not portable (Oracle/MySQL have no such operator; the session-tz-dependent display differs on PG/T-SQL), so it degrades to NULL + annotation off PG (docs/03-unsupported.md). fails on mysql, oracle, tsql
 SELECT TIMESTAMP '2020-01-01 10:00' AT TIME ZONE 'UTC' AS r
 
 -- CASE[fixed]: pg-attz2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ti

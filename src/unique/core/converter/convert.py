@@ -478,6 +478,20 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
                 "T-SQL spatial/CLR type method (::) has no cross-engine equivalent"
             ),
         )
+    # ``x AT TIME ZONE 'zone'`` is not portable: Oracle/MySQL have no such
+    # operator (ORA-00902), and the PG<->T-SQL semantics plus the session-tz
+    # dependent display differ, so the value can't be guaranteed equal. Keep it
+    # verbatim on its own dialect and degrade (carrier + warning) elsewhere.
+    if isinstance(expr, exp.AtTimeZone):
+        return UnsupportedInline(
+            source_sql=" ".join(
+                expr.sql(dialect=sqlglot_dialect_name(source_dialect)).split()
+            ),
+            detail=(
+                "AT TIME ZONE is not portable (Oracle/MySQL have no such operator; "
+                "session-tz-dependent display differs on PG/T-SQL)"
+            ),
+        )
     # INSERT/UPDATE/DELETE with a RETURNING clause: our DML IR drops it, so
     # pass through to sqlglot (which maps RETURNING <-> OUTPUT) to preserve
     # the returned columns.
