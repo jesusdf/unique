@@ -433,6 +433,24 @@ class TestJsonConstructors:
         assert "CAST(1 AS BIT)" in ts and "NULL ON NULL" in ts, ts
 
 
+class TestTimestampDiffCompletePeriods:
+    """MySQL TIMESTAMPDIFF counts COMPLETE periods; T-SQL DATEDIFF counts
+    unit-boundary crossings. For month/quarter/year the transpiler drops the
+    incomplete final period (DATEADD(unit, boundary, start) > end). A
+    DATEDIFF-sourced batch keeps pure boundary counting. Live-verified 1 and 0."""
+
+    def test_month_complete_period_on_tsql(self) -> None:
+        ts = _tx(_case("challenge_mysql.sql", "my-timestampdiff-mon "), "mysql", "tsql")
+        assert "DATEADD(MONTH, DATEDIFF(MONTH" in ts and "THEN 1 ELSE 0 END" in ts, ts
+
+    def test_datediff_source_stays_boundary(self) -> None:
+        # A T-SQL DATEDIFF must NOT gain the complete-period adjustment.
+        out = _tx(
+            "SELECT DATEDIFF(MONTH, '2020-01-15', '2020-03-10') AS r", "tsql", "tsql"
+        )
+        assert "CASE WHEN DATEADD" not in out, out
+
+
 class TestPiMathFunctions:
     """PI() math across engines. T-SQL RADIANS/DEGREES echo the argument's type,
     so an integer arg truncates (RADIANS(180)=3) — the integer is cast to FLOAT.

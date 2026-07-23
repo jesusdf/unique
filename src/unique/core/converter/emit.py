@@ -3885,7 +3885,22 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
     start = _emit_expression(_unwrap_sqlglot_wrappers(args[1]), dialect)
 
     if dialect == "tsql":
-        return f"DATEDIFF({unit}, {start}, {end})"
+        boundary = f"DATEDIFF({unit}, {start}, {end})"
+        # MySQL TIMESTAMPDIFF counts COMPLETE periods; T-SQL DATEDIFF counts
+        # unit-boundary crossings. For month/quarter/year they diverge when the
+        # end's day/time has not yet reached the start's (2020-01-15 -> 2020-03-10
+        # is 1 whole month, not 2): drop the incomplete final period. A
+        # DATEDIFF-sourced batch keeps pure boundary counting.
+        if node.name.upper() == "TIMESTAMPDIFF" and unit in (
+            "YEAR",
+            "QUARTER",
+            "MONTH",
+        ):
+            return (
+                f"({boundary} - CASE WHEN DATEADD({unit}, {boundary}, {start}) "
+                f"> {end} THEN 1 ELSE 0 END)"
+            )
+        return boundary
     if dialect == "mysql":
         if unit == "DAY":
             return f"DATEDIFF({end}, {start})"

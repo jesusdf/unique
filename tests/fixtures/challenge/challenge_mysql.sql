@@ -751,10 +751,10 @@ SELECT TIMESTAMPADD(MINUTE, 30, '2020-01-01 10:00') AS r
 -- CASE[fixed]: my-timestampdiff — MySQL TIMESTAMPDIFF(DAY, ...) now translates (day count); stale tag, live-verified 9.
 SELECT TIMESTAMPDIFF(DAY, '2020-01-01', '2020-01-10') AS r
 
--- CASE[open]: my-timestampdiff-mon — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
+-- CASE[fixed]: my-timestampdiff-mon — MySQL TIMESTAMPDIFF counts COMPLETE months; T-SQL DATEDIFF counts month boundaries (2020-01-15..2020-03-10 = 1, not 2). Drop the incomplete final period via DATEADD > end. live-verified 1.
 SELECT TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10') AS r
 
--- CASE[open]: my-timestampdiff-year — fails on tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+-- CASE[fixed]: my-timestampdiff-year — same complete-vs-boundary divergence for YEAR (2019-12-31..2020-01-01 = 0 complete years, not 1). live-verified 0.
 SELECT TIMESTAMPDIFF(YEAR, '2019-12-31', '2020-01-01') AS r
 
 -- CASE[open]: my-timestr-plus — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1900-01-01 13:30:00',),)
