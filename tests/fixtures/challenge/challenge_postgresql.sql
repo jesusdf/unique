@@ -313,7 +313,7 @@ SELECT day::date FROM generate_series('2020-01-01', '2020-12-01', '1 month'::int
 -- CASE[open]: pg-gen-series-date — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
 SELECT generate_series('2020-01-01'::date, '2020-01-05'::date, '1 day') AS d
 
--- CASE[open]: pg-gen-series-ord — fails on tsql. (102, b"Incorrect syntax near 'ORDINALITY'.DB-Lib error message 20018, severity 15:\nGener
+-- CASE[fixed]: pg-gen-series-ord — FROM generate_series(1,10,2) WITH ORDINALITY rewritten for T-SQL to a numbers source (TOP over sys.all_objects; value = start+(rn-1)*step, ordinality = ROW_NUMBER); rows (1,1)..(9,5) verified
 SELECT * FROM generate_series(1, 10, 2) WITH ORDINALITY AS t(v, n)
 
 -- CASE[fixed]: pg-gencol2 — a STORED generated column plus a GENERATED AS IDENTITY column now transpiles to MySQL (the AUTO_INCREMENT column gets a KEY, error 1075 otherwise). live-verified a=5 -> b=10 (a*2), c=1 (identity).
@@ -618,7 +618,7 @@ CREATE TABLE t (a BYTEA, b BIT(8), c VARBIT(16), d BOOLEAN, e UUID, f XML, g JSO
 -- CASE[fixed]: pg-split-part — fails on mysql, oracle, tsql. (195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018
 SELECT SPLIT_PART('a,b,c', ',', 2) AS r
 
--- CASE[open]: pg-srf-in-select — fails on oracle, tsql. (208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:
+-- CASE[fixed]: pg-srf-in-select — FROM generate_series(1,3) rewritten to Oracle CONNECT BY (SELECT start+(LEVEL-1) FROM DUAL CONNECT BY LEVEL <= count) and a T-SQL numbers source; the correlation alias doubles as the value column so outer refs resolve; rows (1,1)/(2,4)/(3,9) verified
 SELECT g, g*g FROM generate_series(1,3) g
 
 -- CASE[limit]: pg-str-lt — fails on mysql, tsql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0',),) target=(('1',),)

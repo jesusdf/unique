@@ -814,6 +814,29 @@ class TestAtTimeZone:
         assert "AT TIME ZONE 'UTC'" in out and "UNIQUE:" not in out, out
 
 
+class TestGenerateSeriesFrom:
+    """PG FROM generate_series(start, stop[, step]) as a relation is rewritten to
+    Oracle CONNECT BY and a T-SQL numbers source (sys.all_objects + ROW_NUMBER);
+    the correlation alias doubles as the value column, WITH ORDINALITY adds the
+    row index. Live-verified rows."""
+
+    def test_srf_in_from(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-srf-in-select ")
+        ora = _tx(case, "postgresql", "oracle")
+        assert "CONNECT BY LEVEL <=" in ora and "AS g FROM DUAL" in ora, ora
+        tsql = _tx(case, "postgresql", "tsql")
+        assert "sys.all_objects" in tsql and "ROW_NUMBER()" in tsql, tsql
+
+    def test_ordinality_step_tsql(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-gen-series-ord ")
+        out = _tx(case, "postgresql", "tsql")
+        assert "sys.all_objects" in out and "AS v" in out and "AS n" in out, out
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "ORDINALITY" not in body.upper(), body
+
+
 class TestChrAsciiUnicode:
     """PG chr(n) and ascii() are Unicode code-point operations. Oracle CHR(n>127)
     returns a raw byte and ASCII of a multibyte char returns its raw encoding, so

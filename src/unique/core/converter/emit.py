@@ -7844,6 +7844,18 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
     return f"{func} OVER ({spec})"
 
 
+def _is_numeric_series(args: tuple[ASTNode, ...]) -> bool:
+    """True when a generate_series' bounds are plain integers (not a date/
+    timestamp range, whose arithmetic and step interval need a different
+    rewrite). Only literal integer bounds are treated as the numeric form."""
+    return all(
+        isinstance(a, Literal)
+        and isinstance(a.value, int)
+        and not isinstance(a.value, bool)
+        for a in args[:2]
+    )
+
+
 def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
     """Emit a table reference.
 
@@ -7853,6 +7865,52 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
     reference verbatim (used where the schema must be preserved, e.g. a T-SQL
     OBJECT_ID guard).
     """
+    if (
+        isinstance(node.function, FunctionCall)
+        and node.function.name.upper() == "GENERATE_SERIES"
+        and len(node.function.args) in (2, 3)
+        and dialect in ("oracle", "tsql")
+        and SOURCE_DIALECT.get() == "postgresql"
+        and _is_numeric_series(node.function.args)
+    ):
+        # PG ``FROM generate_series(start, stop[, step])`` as a relation. The
+        # single value column is named after the correlation alias (PG lets the
+        # table alias double as the column name); an explicit ``AS t(v[, n])``
+        # renames it, and ``WITH ORDINALITY`` adds a 1-based row number.
+        _gs = node.function.args
+        _gstart = _emit_expression(_gs[0], dialect)
+        _gstop = _emit_expression(_gs[1], dialect)
+        _gstep = _emit_expression(_gs[2], dialect) if len(_gs) == 3 else "1"
+        _talias = node.alias or "uq_gs"
+        _vcol = node.column_aliases[0] if node.column_aliases else _talias
+        _ord = (
+            node.column_aliases[1]
+            if node.ordinality and len(node.column_aliases) > 1
+            else "ordinality"
+        )
+        # count = floor((stop-start)/step) + 1
+        _cnt = (
+            f"({_gstop}) - ({_gstart}) + 1"
+            if _gstep == "1"
+            else f"FLOOR((({_gstop}) - ({_gstart})) / ({_gstep})) + 1"
+        )
+        _mul = "" if _gstep == "1" else f" * ({_gstep})"
+        if dialect == "oracle":
+            _ord_sel = f", LEVEL AS {_ord}" if node.ordinality else ""
+            _inner = (
+                f"SELECT ({_gstart}) + (LEVEL - 1){_mul} AS {_vcol}{_ord_sel} "
+                f"FROM DUAL CONNECT BY LEVEL <= {_cnt}"
+            )
+            return f"({_inner}) {_talias}"
+        # T-SQL: a numbers source (sys.all_objects has plenty of rows for the
+        # small ranges these series cover); ROW_NUMBER gives the 1-based index.
+        _rn = "ROW_NUMBER() OVER (ORDER BY (SELECT NULL))"
+        _ord_sel = f", {_rn} AS {_ord}" if node.ordinality else ""
+        _inner = (
+            f"SELECT TOP ({_cnt}) ({_gstart}) + ({_rn} - 1){_mul} AS {_vcol}"
+            f"{_ord_sel} FROM sys.all_objects"
+        )
+        return f"({_inner}) {_talias}"
     if (
         isinstance(node.function, FunctionCall)
         and node.function.name.upper() == "GENERATE_SERIES"

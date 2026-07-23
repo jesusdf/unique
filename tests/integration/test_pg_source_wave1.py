@@ -4232,10 +4232,13 @@ class TestFunctionRelationTargets:
         assert re.search(r"(?i)TABLE\(my_table_fn\(1, 3\)\) g", out), out
         assert "UNIQUE:" not in out, out
 
-    def test_srf_relation_kept_on_tsql(self) -> None:
-        # T-SQL has table functions (and GENERATE_SERIES since 2022).
+    def test_srf_relation_rewritten_on_tsql(self) -> None:
+        # PG generate_series() as a relation has no built-in T-SQL form on the
+        # 2012+ target (a bare GENERATE_SERIES resolves as an invalid dbo.UDF), so
+        # it is rewritten to a numbers source over sys.all_objects.
         out = _t("select * from generate_series(1,3) g;", "tsql")
-        assert re.search(r"(?i)GENERATE_SERIES\(1, 3\) g", out), out
+        assert "sys.all_objects" in out and "ROW_NUMBER()" in out, out
+        assert "GENERATE_SERIES" not in out.upper(), out
 
     def test_json_table_not_degraded_on_mysql(self) -> None:
         # JSON_TABLE is MySQL's own table function — it must keep its path.
