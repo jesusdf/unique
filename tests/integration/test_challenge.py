@@ -524,6 +524,24 @@ class TestWindowedStringAgg:
         assert "SUM(x) OVER" in out and "UNIQUE:" not in out, out
 
 
+class TestFormatFunc:
+    """PG printf-style format() has no cross-engine equivalent (T-SQL/MySQL FORMAT
+    is a value formatter). A %s-only template rewrites to concatenation (Oracle
+    ||, T-SQL/MySQL CONCAT); complex specs (%I/%L/width) degrade. Live 'a=1'."""
+
+    def test_percent_s_concatenation(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-format-func ")
+        assert "'a' || '=' || 1" in _tx(case, "postgresql", "oracle")
+        assert "CONCAT('a', '=', 1)" in _tx(case, "postgresql", "tsql")
+        assert "CONCAT('a', '=', 1)" in _tx(case, "postgresql", "mysql")
+
+    def test_complex_spec_degrades(self) -> None:
+        result = Transpiler().transpile(
+            "SELECT format('%I', 'tbl') AS r;", source="postgresql", target="tsql"
+        )
+        assert result.warnings and "UNIQUE:" in result.sql
+
+
 class TestOracleTwoArgReplaceTranslate:
     """Oracle 2-arg REPLACE(s, search) removes all matches and returns NULL when
     the result is empty; it becomes NULLIF(REPLACE(s, search, ''), '') so PG/

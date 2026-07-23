@@ -283,7 +283,7 @@ CREATE TABLE t (id INT); SELECT * FROM t FOR UPDATE
 -- CASE[limit]: pg-format-currency — fails on mysql, tsql. currency-symbol number formatting has no cross-engine equivalent (docs/03-unsupported.md §3.1).
 SELECT to_char(1234567.891,'FM999,999,990.00'), to_char(1234567.891,'FML999G999G990D00')
 
--- CASE[open]: pg-format-func — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
+-- CASE[fixed]: pg-format-func — PG printf-style format() with a %s-only template rewritten to concatenation (Oracle ||, T-SQL/MySQL CONCAT; %% -> literal %); 'a=1' verified on all three (complex %I/%L/width specs degrade to a carrier)
 SELECT format('%s=%s', 'a', 1) AS r
 
 -- CASE[fixed]: pg-format2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier

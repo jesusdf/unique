@@ -5951,6 +5951,46 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             rr_tail = ""
         return f"REGEXP_REPLACE({rr_src}, {rr_pat}, {rr_repl}{rr_tail})"
 
+    # PG format(template, args…) is printf-style (T-SQL/MySQL FORMAT is a totally
+    # different value/number formatter; Oracle has none). A ``%s``-only template
+    # (with ``%%`` for a literal percent) rewrites faithfully to concatenation —
+    # the engines auto-stringify a numeric arg in ``||``/CONCAT. Any other spec
+    # (%I, %L, width, positional %1$s) has no portable equivalent — degrade.
+    if (
+        fn_name == "FORMAT"
+        and SOURCE_DIALECT.get() == "postgresql"
+        and dialect != "postgresql"
+        and node.args
+        and isinstance(node.args[0], Literal)
+        and isinstance(node.args[0].value, str)
+    ):
+        tmpl = node.args[0].value
+        specs = re.findall(r"%(.)", tmpl)
+        if (
+            not all(c in ("s", "%") for c in specs)
+            or specs.count("s") != len(node.args) - 1
+        ):
+            return (
+                "NULL /* UNIQUE: PG format() with %I/%L/width/positional "
+                "specifiers has no cross-engine equivalent — "
+                "see docs/03-unsupported.md */"
+            )
+        fmt_args = [_emit_expression(a, dialect) for a in node.args[1:]]
+        pieces: list[str] = []
+        for i, part in enumerate(re.split(r"%s", tmpl)):
+            lit = part.replace("%%", "%")
+            if lit:
+                pieces.append("'" + lit.replace("'", "''") + "'")
+            if i < len(fmt_args):
+                pieces.append(fmt_args[i])
+        if not pieces:
+            return "''"
+        if len(pieces) == 1:
+            return pieces[0]
+        if dialect == "oracle":
+            return " || ".join(pieces)
+        return f"CONCAT({', '.join(pieces)})"
+
     # XMLELEMENT(name, value...): SQL/XML built-in on Oracle and PostgreSQL.
     # Oracle spells the element name as a (usually quoted) identifier;
     # PostgreSQL requires the ``NAME`` keyword before it. MySQL and T-SQL have
