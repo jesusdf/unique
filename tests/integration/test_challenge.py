@@ -497,6 +497,15 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestBitWidthType:
+    """MySQL BIT(M) maps to T-SQL BIT with no width (error 2716 on a width),
+    consistent with Oracle NUMBER(1) / PG BOOLEAN treating BIT as a boolean."""
+
+    def test_bit_width_dropped_on_tsql(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-bintypes "), "mysql", "tsql")
+        assert "g BIT" in out and "BIT(" not in out, out
+
+
 class TestFloatDisplayScale:
     """MySQL FLOAT(M,D) is a 4-byte float with a display scale; PostgreSQL and
     T-SQL FLOAT take at most a bit-precision, so it maps to REAL with no width."""

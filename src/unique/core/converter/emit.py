@@ -3121,9 +3121,11 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     )
                     or (
                         # T-SQL REAL takes no width (a MySQL FLOAT(M,D) mapped to
-                        # REAL must not keep its display scale — error 2724).
+                        # REAL must not keep its display scale — error 2724). BIT
+                        # is a single bit (error 2716 on a width): a MySQL BIT(M)
+                        # maps to BIT, as it does to Oracle NUMBER(1) / PG BOOLEAN.
                         dialect == "tsql"
-                        and dtype.upper() == "REAL"
+                        and dtype.upper() in ("REAL", "BIT")
                     )
                 )
                 params = col.data_type.params

@@ -59,7 +59,7 @@ SELECT BENCHMARK(1, 1+1) AS r
 -- CASE[fixed]: my-binary-substr — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
 SELECT SUBSTRING(UNHEX('48656C6C6F'), 1, 2) AS r
 
--- CASE[open]: my-bintypes — fails on tsql. (2716, b'Column, parameter, or variable #7: Cannot specify a column width on data type bit
+-- CASE[fixed]: my-bintypes — MySQL BIT(M) maps to T-SQL BIT with no width (error 2716 otherwise), consistent with Oracle NUMBER(1) / PG BOOLEAN treating BIT as a boolean; the BLOB family maps to VARBINARY(MAX). live-verified CREATE runs.
 CREATE TABLE t (a BINARY(16), b VARBINARY(255), c TINYBLOB, d BLOB, e MEDIUMBLOB, f LONGBLOB, g BIT(8), h BOOL)
 
 -- CASE[limit]: my-bit-agg — fails on oracle, tsql. BIT_XOR/BIT_OR aggregates map faithfully MySQL<->PostgreSQL; Oracle/T-SQL have no bit aggregate (docs/03-unsupported.md §3.10). Warned carrier on oracle/tsql.
