@@ -68,10 +68,10 @@ SELECT BIT_XOR(x), BIT_OR(x) FROM (SELECT 1 x UNION SELECT 2) t
 -- CASE[limit]: my-bit-char-len — fails on postgresql. APPROVED LIMIT (2026-07-18): LENGTH/BIT_LENGTH byte-vs-char, encoding-dependent (docs/03-unsupported.md §2). FUNC-DIFF: source=(('24', '1', '3'),) target=(('24', '1', '1'),)
 SELECT BIT_LENGTH('€'), CHAR_LENGTH('€'), LENGTH('€')
 
--- CASE[open]: my-bit-count — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI
+-- CASE[limit]: my-bit-count — BIT_COUNT (population count) has no cross-engine builtin; gated + annotated (docs/03-unsupported.md). fails on oracle, postgresql, tsql
 SELECT BIT_COUNT(255) AS r
 
--- CASE[open]: my-bit-fns — fails on postgresql. function bitwise_count(bit) does not exist
+-- CASE[limit]: my-bit-fns — BIT_COUNT (population count) has no cross-engine builtin; gated + annotated (docs/03-unsupported.md). fails on postgresql
 SELECT BIT_COUNT(b'1011'), BIT_LENGTH('a'), OCTET_LENGTH('ab')
 
 -- CASE[limit]: my-bit-negative — fails on oracle, postgresql, tsql. MySQL treats bitwise operands as unsigned 64-bit, so ~ and negative-operand bit ops diverge from signed engines. No faithful mapping (docs/03-unsupported.md).
@@ -510,7 +510,7 @@ SELECT CHAR_LENGTH(s), LENGTH(s), BIT_LENGTH(s) FROM (SELECT 'héllo' s) t
 -- CASE[limit]: my-length-bytes — fails on oracle, postgresql, tsql. APPROVED LIMIT (2026-07-18): LENGTH bytes-vs-chars, encoding-dependent, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('5',),) target=(('4',),)
 SELECT LENGTH('café') AS r
 
--- CASE[open]: my-length-div — fails on oracle, tsql. FUNC-DIFF: source=(('6',),) target=(('1',),)
+-- CASE[limit]: my-length-div — MySQL LENGTH() counts bytes and the division result's representation differs across engines; annotated bytes-vs-chars divergence (docs/03-unsupported.md). fails on oracle, tsql
 SELECT LENGTH(1/3) AS r
 
 -- CASE[limit]: my-length-unicode — fails on oracle, postgresql, tsql. APPROVED LIMIT (2026-07-18): LENGTH bytes-vs-chars, encoding-dependent, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('5', '4', '5'),) target=(('4', '4', '3'),)

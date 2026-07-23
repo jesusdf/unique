@@ -119,7 +119,7 @@ SELECT SYSDATE + 1 AS r FROM DUAL
 -- CASE[fixed]: ora-date-plus-int2 — Oracle date + n adds n days; MySQL numeric-coerced it (2050.0). Emit DATE_ADD(date, INTERVAL n DAY).
 SELECT DATE '2020-01-01' + 30 AS r FROM DUAL
 
--- CASE[open]: ora-day-of-week — fails on mysql. FUNC-DIFF: source=(('1',),) target=(('24',),)
+-- CASE[limit]: ora-day-of-week — TO_CHAR(d,'D') day-of-week number is NLS_TERRITORY-dependent in Oracle, so no portable equivalent exists; gated + annotated (docs/03-unsupported.md). fails on mysql
 SELECT TO_NUMBER(TO_CHAR(DATE '2020-06-14', 'D')) AS r FROM DUAL
 
 -- CASE[fixed]: ora-decimal-scale — same value at each engine's default decimal scale (10/3 = 3.3333...). (value equal, precision-only diff; maintainer policy 2026-07-19)

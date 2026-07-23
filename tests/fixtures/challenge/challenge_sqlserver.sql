@@ -51,7 +51,7 @@ SELECT DATALENGTH(CAST('hello' AS VARBINARY(MAX))) AS r
 -- CASE[open]: ts-bit-cast — fails on oracle. ORA-01722: unable to convert string value containing 't' to a number: 
 SELECT CAST(1 AS BIT), CAST('true' AS BIT), CAST(0 AS BIT)
 
--- CASE[open]: ts-bit-fns — fails on mysql, oracle, postgresql. ORA-00904: "SET_BIT": invalid identifier
+-- CASE[limit]: ts-bit-fns — GET_BIT/SET_BIT have no cross-engine builtin; gated + annotated (docs/03-unsupported.md). fails on mysql, oracle, postgresql
 SELECT GET_BIT(0x0A, 1), SET_BIT(0x0A, 0, 1)
 
 -- CASE[open]: ts-bitops — fails on mysql. FUNC-DIFF: source=(('1', '7', '6', '-6'),) target=(('1', '7', '6', '18446744073709551616')
@@ -206,7 +206,7 @@ SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r
 -- CASE[open]: ts-grouping-id — fails on mysql, oracle, postgresql. ORA-30481: GROUPING, GROUPING_ID, and GROUP_ID cannot be used without GROUP BY
 SELECT a,b,SUM(c),GROUPING(a),GROUPING_ID(a,b) FROM (SELECT 1 a,2 b,3 c) t GROUP BY ROLLUP(a,b)
 
--- CASE[open]: ts-hash-all — fails on mysql, postgresql. SILENT: source literal(s) ["'SHA2_512'"] absent from valid output, no warning
+-- CASE[limit]: ts-hash-all — CHECKSUM is a proprietary T-SQL row hash with no cross-engine equivalent; gated + annotated (docs/03-unsupported.md). fails on mysql, postgresql
 SELECT HASHBYTES('SHA2_512', 'abc'), CHECKSUM('abc')
 
 -- CASE[open]: ts-hexcast — fails on oracle, postgresql. ORA-00906: missing left parenthesis
