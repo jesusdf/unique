@@ -217,7 +217,7 @@ SELECT deptno,job,SUM(sal) FROM (SELECT 10 deptno,'X' job,100 sal FROM DUAL) GRO
 -- CASE[fixed]: ora-hash-all — fails on mysql, postgresql, tsql. (195, b"'STANDARD_HASH' is not a recognized built-in function name.DB-Lib error message 20
 SELECT STANDARD_HASH('abc', 'SHA256'), ORA_HASH('abc', 100) FROM DUAL
 
--- CASE[open]: ora-hint-comment — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+-- CASE[fixed]: ora-hint-comment — MySQL rejects an alias on DUAL (it was only for the dropped Oracle hint); drop the alias. Live-verified 1.
 SELECT /*+ FULL(t) */ 1 AS r FROM DUAL t
 
 -- CASE[limit]: ora-identity-opts — MySQL AUTO_INCREMENT has no per-column START/INCREMENT/MAXVALUE/CYCLE; emits AUTO_INCREMENT (keyed) + a documented carrier + warning (docs/03-unsupported.md). fails on mysql

@@ -7224,7 +7224,9 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
             return f"(SELECT * FROM {result}) AS {node.alias}({cols})"
         return f"{result} AS {node.alias}({cols})"
 
-    if node.alias:
+    # MySQL rejects an alias on the DUAL pseudo-table (error 1064); the alias is
+    # only ever load-bearing for an Oracle hint, which is dropped anyway.
+    if node.alias and not (dialect == "mysql" and node.name.upper() == "DUAL"):
         result += f" {node.alias}"
 
     if node.sample_method or node.sample_percent or node.sample_rows:

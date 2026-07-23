@@ -2147,6 +2147,18 @@ class TestNamedWindowInlined:
         assert "OVER ()" not in body, body
 
 
+class TestDualAliasDropped:
+    """MySQL rejects an alias on the DUAL pseudo-table (error 1064); the alias was
+    only load-bearing for the Oracle hint, which is dropped. Drop it. Verified 1."""
+
+    def test_mysql_dual_alias_dropped(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "ora-hint-comment "), "oracle", "mysql")
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "FROM DUAL" in body and "DUAL t" not in body, body
+
+
 class TestToDateToMysql:
     """Oracle/PG TO_DATE / TO_TIMESTAMP map to MySQL STR_TO_DATE with a translated
     format mask (a DATETIME literal when the input is already ISO). Live-verified
