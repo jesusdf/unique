@@ -2045,6 +2045,12 @@ class TestOrderByCaseSensitive:
         )
         assert out.count("COLLATE utf8mb4_bin") >= 3, out
 
+    def test_mysql_order_case_insensitive(self) -> None:
+        # The reverse: a CI source on a CS target wraps the key in LOWER().
+        case = _case("challenge_mysql.sql", "my-order-case-sens ")
+        assert "ORDER BY LOWER(x)" in _tx(case, "mysql", "oracle")
+        assert "ORDER BY LOWER(x)" in _tx(case, "mysql", "postgresql")
+
 
 class TestGreatestCaseSensitive:
     """GREATEST/LEAST compare strings by collation: PG/Oracle are case-sensitive

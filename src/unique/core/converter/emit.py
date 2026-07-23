@@ -2843,27 +2843,33 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         # A case-sensitive source (PG/Oracle) ordering a string column comes back
         # in the target's default (case-insensitive) collation on MySQL/T-SQL; a
         # binary collation on a provably-string key preserves the source order.
+        # The reverse — a case-INsensitive source (MySQL/T-SQL) ordering a string
+        # column comes back case-sensitively on PG/Oracle; LOWER() on the key
+        # approximates the source's case-insensitive order (maintainer policy).
         _cs_str_cols: frozenset[str] = frozenset()
+        _ci_str_cols: frozenset[str] = frozenset()
         if SOURCE_DIALECT.get() in ("postgresql", "oracle") and dialect in (
             "mysql",
             "tsql",
         ):
             _cs_str_cols = _from_string_columns(node)
+        elif SOURCE_DIALECT.get() in ("mysql", "tsql") and dialect in (
+            "postgresql",
+            "oracle",
+        ):
+            _ci_str_cols = _from_string_columns(node)
         _bin_coll = "utf8mb4_bin" if dialect == "mysql" else "Latin1_General_BIN2"
         rendered = []
         for o in node.order_by:
             key = _order_null_priority_key(o, dialect) if emulate_nulls else None
-            _oc = (
-                _bin_coll
-                if (
-                    _cs_str_cols
-                    and isinstance(o.expression, ColumnRef)
-                    and o.expression.table is None
-                    and o.expression.name.lower() in _cs_str_cols
-                )
+            _str_key = (
+                o.expression.name.lower()
+                if isinstance(o.expression, ColumnRef) and o.expression.table is None
                 else None
             )
-            item_sql = _emit_order_item(o, dialect, collate=_oc)
+            _oc = _bin_coll if (_str_key in _cs_str_cols) else None
+            _lower = _str_key is not None and _str_key in _ci_str_cols
+            item_sql = _emit_order_item(o, dialect, collate=_oc, lower=_lower)
             rendered.append(f"{key}, {item_sql}" if key else item_sql)
         parts.append(f"ORDER BY {', '.join(rendered)}")
     elif dialect == "tsql" and node.limit is not None and node.limit.offset is not None:
@@ -7596,7 +7602,10 @@ def _emit_join(
 
 
 def _emit_order_item(
-    item: OrderByItem, dialect: str, collate: str | None = None
+    item: OrderByItem,
+    dialect: str,
+    collate: str | None = None,
+    lower: bool = False,
 ) -> str:
     """Emit an ORDER BY item.
 
@@ -7604,10 +7613,13 @@ def _emit_order_item(
     descending; when the source's NULL ordering (carried in ``nulls_first``)
     differs, it must be spelled out or the row order silently changes.
     T-SQL/MySQL have no NULLS FIRST/LAST syntax, so it is omitted there
-    (same as a raw sqlglot transpile). ``collate`` forces a collation on the key.
+    (same as a raw sqlglot transpile). ``collate`` forces a collation on the key;
+    ``lower`` wraps it in LOWER() (a case-insensitive source on a CS target).
     """
     expr = _emit_expression(item.expression, dialect)
-    if collate:
+    if lower:
+        expr = f"LOWER({expr})"
+    elif collate:
         expr = f"{expr} COLLATE {collate}"
     direction = "DESC" if item.direction == OrderDirection.DESC else "ASC"
     out = f"{expr} {direction}"

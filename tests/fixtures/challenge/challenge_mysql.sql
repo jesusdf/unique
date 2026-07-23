@@ -600,7 +600,7 @@ SELECT BIT_COUNT(255), CONV(255,10,16), OCT(64), HEX(255)
 -- CASE[fixed]: my-optimizer-hints — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT /*+ QB_NAME(qb1) */ id FROM t WHERE n > (SELECT /*+ SEMIJOIN(@qb1) */ AVG(n) FROM t)
 
--- CASE[open]: my-order-case-sens — fails on oracle, postgresql. FUNC-DIFF: source=(('Apple',), ('banana',), ('Cherry',)) target=(('Apple',), ('Cherry',), 
+-- CASE[fixed]: my-order-case-sens — MySQL orders case-insensitively; LOWER() on the (provably-string) ORDER BY key reproduces that order on Oracle/PG (Apple, banana, Cherry). 
 SELECT x FROM (SELECT 'Apple' x UNION SELECT 'banana' UNION SELECT 'Cherry') t ORDER BY x
 
 -- CASE[open]: my-order-strings — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('Apple',), ('banana',), ('Banana',), ('cherry',)) target=(('Apple',), 
