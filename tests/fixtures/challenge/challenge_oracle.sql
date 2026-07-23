@@ -232,7 +232,7 @@ SELECT INITCAP('hello world') AS r FROM DUAL
 -- CASE[fixed]: ora-insert-append — the Oracle /*+ APPEND */ direct-path hint is advisory (result-identical) and is dropped for PostgreSQL; the INSERT … SELECT runs unchanged. The RED "crash" was a harness connection-state artifact. live-verified 1 row inserted.
 CREATE TABLE t (a NUMBER); INSERT /*+ APPEND */ INTO t SELECT 1 FROM DUAL
 
--- CASE[open]: ora-instr-case — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('1',),)
+-- CASE[fixed]: ora-instr-case — Oracle INSTR is case-sensitive; force BINARY (MySQL) / BIN2 collation (T-SQL) on the haystack so the match position is 2, not 1.
 SELECT INSTR('aAaA', 'A') AS r FROM DUAL
 
 -- CASE[open]: ora-instr-edge — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('3', '4', '4'),) target=(('3', '3', '3'),)

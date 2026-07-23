@@ -5618,6 +5618,23 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if SOURCE_DIALECT.get() == "mysql" and dialect in ("oracle", "postgresql"):
             needle = f"LOWER({needle})"
             haystack = f"LOWER({haystack})"
+        # The reverse: Oracle/PostgreSQL search case-sensitively, but MySQL's and
+        # T-SQL's default collations are case-insensitive (INSTR('aAaA','A') = 1
+        # not 2). When the haystack is a *string literal* — where the intended
+        # comparison is unambiguous — force a binary / case-sensitive collation so
+        # the match position matches the source. A column keeps its own collation
+        # (forcing one there is the broader, unsupported collation question).
+        elif (
+            SOURCE_DIALECT.get() in ("oracle", "postgresql")
+            and dialect in ("mysql", "tsql")
+            and isinstance(node.args[1], Literal)
+            and isinstance(node.args[1].value, str)
+        ):
+            haystack = (
+                f"BINARY {haystack}"
+                if dialect == "mysql"
+                else f"{haystack} COLLATE Latin1_General_BIN2"
+            )
         start = _emit_expression(node.args[2], dialect) if len(node.args) > 2 else None
         # MySQL LOCATE/INSTR and PostgreSQL POSITION/STRPOS with an empty needle
         # return 1; Oracle INSTR returns NULL (empty string -> NULL) and T-SQL

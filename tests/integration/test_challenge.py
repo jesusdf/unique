@@ -1930,6 +1930,18 @@ class TestMysqlInsertBounds:
         assert re.search(r"(?i)CASE\s+WHEN\b.*<\s*1\s+OR\b.*>\s+LEN\(", out), out
 
 
+class TestInstrCaseSensitive:
+    """Oracle/PostgreSQL INSTR searches case-sensitively, but MySQL's and T-SQL's
+    default collations are case-insensitive (INSTR('aAaA','A') = 1 not 2). Force a
+    binary / BIN2 collation on the haystack so the match position matches the
+    source. Live-verified 2 on MySQL and T-SQL."""
+
+    def test_forces_case_sensitive_haystack(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-instr-case ")
+        assert "BINARY 'aAaA'" in _tx(case, "oracle", "mysql")
+        assert "'aAaA' COLLATE Latin1_General_BIN2" in _tx(case, "oracle", "tsql")
+
+
 class TestTopWithTies:
     """T-SQL TOP n WITH TIES also returns rows tying the last one. PG (13+) and
     Oracle carry it as FETCH FIRST n ROWS WITH TIES (a plain LIMIT would silently
