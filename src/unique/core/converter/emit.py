@@ -6968,12 +6968,35 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # T-SQL NCHAR(n) is the Unicode code point → character function (not the
         # NCHAR type here — that arrives as a DataType). Oracle spells it NCHR;
         # PG's CHR takes a code point; MySQL builds the char in a Unicode set.
-        n = _emit_expression(node.args[0], dialect)
+        # A ``0x…`` literal argument is an INTEGER code point, not a byte string —
+        # resolve it so the emitted call receives the number, not hex bytes.
+        nchar_arg = node.args[0]
+        cp: int | None = None
+        if isinstance(nchar_arg, Literal):
+            if nchar_arg.dtype == "hex" and isinstance(nchar_arg.value, str):
+                cp = int(nchar_arg.value, 16)
+            elif isinstance(nchar_arg.value, int):
+                cp = nchar_arg.value
+        if cp is not None:
+            if dialect == "postgresql":
+                return f"CHR({cp})"
+            if dialect == "mysql":
+                # utf32 reads the number as a code point (BMP and supplementary).
+                return f"CHAR({cp} USING utf32)"
+            if cp > 0xFFFF:
+                # Oracle NCHR only covers the BMP (it truncates a supplementary
+                # code point to 16 bits); build the UTF-16 surrogate pair and let
+                # UNISTR assemble the character.
+                hi = 0xD800 + ((cp - 0x10000) >> 10)
+                lo = 0xDC00 + ((cp - 0x10000) & 0x3FF)
+                return f"UNISTR('\\{hi:04X}\\{lo:04X}')"
+            return f"NCHR({cp})"
+        n = _emit_expression(nchar_arg, dialect)
         if dialect == "oracle":
             return f"NCHR({n})"
         if dialect == "postgresql":
             return f"CHR({n})"
-        return f"CHAR({n} USING utf16)"  # mysql
+        return f"CHAR({n} USING utf32)"  # mysql
     if up == "SPACE" and len(node.args) == 1 and dialect in ("oracle", "postgresql"):
         # Neither engine has SPACE(n); n spaces is RPAD(' ', n) / REPEAT(' ', n).
         n = _emit_expression(node.args[0], dialect)

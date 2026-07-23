@@ -1105,6 +1105,20 @@ class TestExtractMicroseconds:
         assert result.warnings and "UNIQUE:" in result.sql
 
 
+class TestNcharHexCodePoint:
+    """T-SQL NCHAR(0x1F600) is a Unicode code point (integer), not hex bytes. It
+    maps to PG CHR / MySQL CHAR(n USING utf32) / Oracle NCHR — and a supplementary
+    code point (> U+FFFF), which Oracle NCHR can't hold, becomes a UNISTR surrogate
+    pair (ts-nchar-hex)."""
+
+    def test_codepoint_resolved_per_dialect(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-nchar-hex ")
+        assert "CHR(128512)" in _tx(case, "tsql", "postgresql")
+        assert "CHAR(128512 USING utf32)" in _tx(case, "tsql", "mysql")
+        # 0x1F600 -> surrogate pair D83D DE00
+        assert "UNISTR('\\D83D\\DE00')" in _tx(case, "tsql", "oracle")
+
+
 class TestCastOnConversionError:
     """Oracle CAST(x AS T DEFAULT d ON CONVERSION ERROR): the fallback must survive.
     T-SQL COALESCE(TRY_CAST,d); PG/MySQL a numeric-validation CASE; a literal folds
@@ -1938,7 +1952,7 @@ class TestNcharCharCodePoint:
         src = _case("challenge_sqlserver.sql", "ts-ascii-char")
         assert "NCHR(65)" in _tx(src, "tsql", "oracle"), _tx(src, "tsql", "oracle")
         my = _tx(src, "tsql", "mysql")
-        assert "CHAR(65 USING latin1)" in my and "CHAR(65 USING utf16)" in my, my
+        assert "CHAR(65 USING latin1)" in my and "CHAR(65 USING utf32)" in my, my
         assert "NCHAR(" not in _exec_lines(my), my  # no leaked NCHAR
 
 

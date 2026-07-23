@@ -335,6 +335,15 @@ rejects). Both are validated live. Only date parts outside the common
 year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
 still need review.
 
+### 3.16 `NCHAR(n)` Unicode Code Point (handled)
+
+T-SQL `NCHAR(n)` returns the character for Unicode code point `n` (an integer — a
+`0x…` argument is a number, not a byte string). It maps to PostgreSQL `CHR(n)`,
+MySQL `CHAR(n USING utf32)`, and Oracle `NCHR(n)`. Oracle's `NCHR` only covers the
+Basic Multilingual Plane and truncates a supplementary code point (`> U+FFFF`) to
+16 bits, so those are emitted as `UNISTR('\HHHH\LLLL')` with the UTF-16 surrogate
+pair (e.g. `NCHAR(0x1F600)` 😀 → `UNISTR('\D83D\DE00')`). Verified live on all three.
+
 ### 3.15 Error-Tolerant Cast (`DEFAULT … ON CONVERSION ERROR`)
 
 Oracle's `CAST(x AS T DEFAULT d ON CONVERSION ERROR)` returns `d` when the

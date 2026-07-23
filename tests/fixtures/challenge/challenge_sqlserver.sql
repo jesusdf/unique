@@ -257,7 +257,7 @@ SELECT CAST(10.5 AS MONEY) + CAST(2.3 AS MONEY) AS r
 -- CASE[fixed]: ts-month-overflow — DATEADD(MONTH,1,'2020-01-31')=2020-02-29 on both; T-SQL returns a datetime (00:00:00), MySQL a date — same value, precision-only (maintainer policy 2026-07-19).
 SELECT DATEADD(MONTH, 1, '2020-01-31') AS r
 
--- CASE[open]: ts-nchar-hex — fails on mysql, oracle, postgresql. ORA-00904: "NCHAR": invalid identifier
+-- CASE[fixed]: ts-nchar-hex — NCHAR(0x1F600) takes a Unicode code point (integer), not hex bytes: PG CHR(n), MySQL CHAR(n USING utf32), Oracle NCHR(n) for BMP / UNISTR('\D83D\DE00') surrogate pair for supplementary (Oracle NCHR truncates > U+FFFF). Live U+1F600 on all three.
 SELECT NCHAR(0x1F600) AS r
 
 -- CASE[fixed]: ts-nolock-hint — the WITH (NOLOCK) table hint (a read-uncommitted advisory) is dropped for MySQL; it does not change the committed result set. The RED failure was a harness locked-table artifact. live-verified.
