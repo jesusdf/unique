@@ -5479,6 +5479,26 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             rs_pat = "'" + pv.replace("'", "''") + "'"
         return f"REGEXP_SUBSTR({rs_x}, {rs_pat})"
 
+    # PG SUBSTRING(x FROM sql_regex FOR escape) — the SQL-standard SIMILAR TO form
+    # (string pattern + string escape char) — has no cross-engine equivalent: its
+    # metacharacters (%/_ wildcards) and #"…"# capture markers differ from POSIX,
+    # so a REGEXP_SUBSTR mapping would be unfaithful. Degrade off PG.
+    if (
+        fn_name in ("SUBSTRING", "SUBSTR")
+        and SOURCE_DIALECT.get() == "postgresql"
+        and dialect != "postgresql"
+        and len(node.args) == 3
+        and isinstance(node.args[1], Literal)
+        and node.args[1].dtype == "string"
+        and isinstance(node.args[2], Literal)
+        and node.args[2].dtype == "string"
+    ):
+        return (
+            "NULL /* UNIQUE: SUBSTRING(x FROM SIMILAR-TO pattern FOR escape) has "
+            "no cross-engine equivalent (SQL-regex metachars differ from POSIX) — "
+            "see docs/03-unsupported.md */"
+        )
+
     # MySQL SUBSTRING rounds a fractional position/length (2.9 -> 3), but
     # Oracle/PG/T-SQL truncate it (2). Pre-round a fractional numeric-literal
     # argument on a MySQL source so the result matches.

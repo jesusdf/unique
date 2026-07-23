@@ -651,7 +651,7 @@ SELECT substring('hello',-3), substr('hello',2,2), left('hello',-1), right('hell
 -- CASE[fixed]: pg-substr-zero — PostgreSQL SUBSTRING with start<=0 counts out-of-range positions toward the length ('ab'); rebase to start 1 with length start+len-1 on Oracle/MySQL.
 SELECT SUBSTRING('abcdef', 0, 3) AS r
 
--- CASE[open]: pg-substring-escape — fails on oracle, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib
+-- CASE[limit]: pg-substring-escape — SUBSTRING(x FROM SIMILAR-TO pattern FOR escape) is the SQL-standard regex form; its %/_ metachars and #"…"# capture markers differ from POSIX, so no faithful cross-engine rewrite exists — degrades to NULL + annotation (docs/03-unsupported.md). fails on oracle, tsql
 SELECT substring('a1b2' from '([a-z])([0-9])' for '#') AS r
 
 -- CASE[limit]: pg-substring-regex — SUBSTRING(x FROM POSIX pattern) → Oracle/MySQL REGEXP_SUBSTR ('1' verified live); T-SQL has no POSIX regex engine (2012+ target) so it degrades to NULL + annotation (docs/03-unsupported.md). fails on tsql

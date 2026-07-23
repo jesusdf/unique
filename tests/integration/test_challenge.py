@@ -565,6 +565,23 @@ class TestSubstringRegex:
         assert "REGEXP_SUBSTR" not in body and "NULL" in body, body
 
 
+class TestSubstringSimilarToEscape:
+    """PG SUBSTRING(x FROM pattern FOR escape) is the SQL-standard SIMILAR TO
+    regex form (string pattern + string escape); its metacharacters differ from
+    POSIX, so it degrades to NULL + carrier + warning off PG (a documented
+    limit)."""
+
+    def test_degrades_off_pg(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-substring-escape ")
+        for target in ("oracle", "tsql"):
+            result = Transpiler().transpile(case, source="postgresql", target=target)
+            assert result.warnings and "UNIQUE:" in result.sql
+            body = "\n".join(
+                ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "NULL" in body and "REGEXP" not in body, body
+
+
 class TestRegexpReplaceFlags:
     """PG regexp_replace's 4th arg is a FLAGS string (g/i); Oracle/MySQL take
     numeric position/occurrence and are global by default. Drop 'g', and for
