@@ -2528,7 +2528,8 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         if not re.fullmatch(r"\d+", limit_sql.strip()):
             # T-SQL requires parentheses around a non-literal TOP argument.
             limit_sql = f"({limit_sql.strip()})"
-        top = f"TOP {limit_sql}{pct} "
+        ties = " WITH TIES" if node.limit.with_ties else ""
+        top = f"TOP {limit_sql}{pct}{ties} "
     distinct = "DISTINCT " if node.distinct else ""
     if (
         dialect in ("oracle", "mysql")
@@ -7018,11 +7019,12 @@ def _emit_limit(limit: LimitClause, dialect: str) -> str:
         if limit.offset:
             parts.append(f"OFFSET {_emit_expression(limit.offset, dialect)} ROWS")
         if limit.limit:
-            # Oracle natively supports FETCH FIRST n PERCENT ROWS ONLY.
+            # Oracle natively supports FETCH FIRST n PERCENT ROWS ONLY / WITH TIES.
             pct = " PERCENT" if limit.percent else ""
+            tail = "WITH TIES" if limit.with_ties else "ONLY"
             parts.append(
                 f"FETCH FIRST {_emit_expression(limit.limit, dialect)}"
-                f"{pct} ROWS ONLY"
+                f"{pct} ROWS {tail}"
             )
         return "\n".join(parts)
 
@@ -7038,6 +7040,30 @@ def _emit_limit(limit: LimitClause, dialect: str) -> str:
         # A plain limit was already emitted as TOP in the SELECT clause.
         if limit.limit:
             return ""
+
+    # WITH TIES needs the SQL:2008 FETCH FIRST form. PostgreSQL (13+) supports it
+    # natively; a plain LIMIT would silently drop the tied rows.
+    if limit.with_ties and limit.limit is not None:
+        if dialect == "postgresql":
+            parts = []
+            if limit.offset:
+                parts.append(f"OFFSET {_emit_expression(limit.offset, dialect)} ROWS")
+            parts.append(
+                f"FETCH FIRST {_emit_expression(limit.limit, dialect)} ROWS WITH TIES"
+            )
+            return "\n".join(parts)
+        if dialect == "mysql":
+            # MySQL has no WITH TIES; keep the row limit but flag the dropped ties
+            # rather than silently returning fewer rows.
+            limit_sql = f"LIMIT {_emit_expression(limit.limit, dialect)}"
+            limit_sql += (
+                " /* UNIQUE: source had WITH TIES; MySQL has no equivalent — rows "
+                "tying the last one are not returned (see docs/03-unsupported.md) */"
+            )
+            out = [limit_sql]
+            if limit.offset:
+                out.append(f"OFFSET {_emit_expression(limit.offset, dialect)}")
+            return "\n".join(out)
 
     # PostgreSQL, MySQL: LIMIT ... OFFSET ...
     parts = []

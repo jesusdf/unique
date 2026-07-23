@@ -343,12 +343,14 @@ class LimitClause(ASTNode):
     """LIMIT/OFFSET or TOP or FETCH FIRST.
 
     ``percent`` marks a T-SQL ``TOP n PERCENT`` (limit by a fraction of rows
-    rather than a row count).
+    rather than a row count). ``with_ties`` marks ``TOP n WITH TIES`` / ``FETCH
+    FIRST n ROWS WITH TIES`` (also return rows that tie the last one).
     """
 
     limit: ASTNode | None = None
     offset: ASTNode | None = None
     percent: bool = False
+    with_ties: bool = False
 
 
 # ---------------------------------------------------------------------------

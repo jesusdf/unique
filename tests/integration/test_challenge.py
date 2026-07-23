@@ -1930,6 +1930,24 @@ class TestMysqlInsertBounds:
         assert re.search(r"(?i)CASE\s+WHEN\b.*<\s*1\s+OR\b.*>\s+LEN\(", out), out
 
 
+class TestTopWithTies:
+    """T-SQL TOP n WITH TIES also returns rows tying the last one. PG (13+) and
+    Oracle carry it as FETCH FIRST n ROWS WITH TIES (a plain LIMIT would silently
+    drop the ties); MySQL has no equivalent, so it keeps LIMIT + a documented
+    carrier warning. Live-verified [(1,), (1,)] on PG/Oracle."""
+
+    def test_pg_and_oracle_fetch_with_ties(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-top-with-ties ")
+        assert "FETCH FIRST 1 ROWS WITH TIES" in _tx(case, "tsql", "postgresql")
+        assert "FETCH FIRST 1 ROWS WITH TIES" in _tx(case, "tsql", "oracle")
+
+    def test_mysql_documents_dropped_ties(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-top-with-ties ")
+        result = Transpiler().transpile(case, source="tsql", target="mysql")
+        assert result.warnings, "MySQL WITH TIES loss must warn"
+        assert "WITH TIES" in result.sql and "LIMIT 1" in result.sql, result.sql
+
+
 class TestDateAddQualifiesDateLiteral:
     """MySQL's DATE_ADD reads a bare '2020-01-01' string as a date, but PG reads
     it as an interval and Oracle rejects the implicit cast. A date-only literal

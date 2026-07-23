@@ -393,7 +393,7 @@ CREATE TABLE t (id INT);
 GO
 SELECT * FROM t TABLESAMPLE (10 PERCENT)
 
--- CASE[open]: ts-top-with-ties — fails on postgresql. SILENT LOSS: TOP n WITH TIES -> plain LIMIT n on PG/MySQL (ties dropped); on Oracle the ro
+-- CASE[fixed]: ts-top-with-ties — carry WITH TIES to PG/Oracle FETCH FIRST n ROWS WITH TIES (both tied rows returned); MySQL keeps LIMIT + a documented carrier.
 SELECT TOP 1 WITH TIES x FROM (VALUES (1),(1),(2)) v(x) ORDER BY x
 
 -- CASE[limit]: ts-trailing-eq — fails on mysql, oracle, postgresql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('1',),) target=(('0',),)

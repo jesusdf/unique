@@ -1012,16 +1012,19 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
         # ``OFFSET … FETCH NEXT n ROWS`` parses to an exp.Fetch whose count is in
         # args["count"], not .expression — so read either (else LIMIT leaks None).
         percent = False
+        with_ties = False
         limit_count = None
         if limit_expr is not None:
             opts = limit_expr.args.get("limit_options")
             percent = bool(opts and opts.args.get("percent"))
+            with_ties = bool(opts and opts.args.get("with_ties"))
             count_node = limit_expr.args.get("count") or limit_expr.expression
             limit_count = convert_expression(count_node) if count_node else None
         limit = LimitClause(
             limit=limit_count,
             offset=convert_expression(offset_expr.expression) if offset_expr else None,
             percent=percent,
+            with_ties=with_ties,
         )
 
     # DISTINCT
