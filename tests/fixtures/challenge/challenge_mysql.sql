@@ -128,7 +128,7 @@ SELECT CAST(1 AS JSON), CAST('[1,2]' AS JSON), CAST(NULL AS JSON)
 -- CASE[open]: my-cast-matrix — fails on oracle, postgresql. ORA-00902: invalid datatype
 SELECT CAST(3.14 AS DECIMAL(10,2)), CAST(3.14 AS SIGNED), CAST(3.14 AS CHAR), CAST(3.14 AS DOUBLE)
 
--- CASE[open]: my-cast-num-char — fails on oracle. ORA-25137: Data value out of range
+-- CASE[fixed]: my-cast-num-char — MySQL CAST(x AS CHAR) (no length) is a to-string conversion; a bare CHAR is length-required elsewhere (Oracle ORA-25137). Map to VARCHAR2(4000)/TEXT/VARCHAR(MAX). live-verified 1234.5.
 SELECT CAST(1234.5 AS CHAR) AS r
 
 -- CASE[open]: my-cast-suite — fails on oracle. ORA-00902: invalid datatype

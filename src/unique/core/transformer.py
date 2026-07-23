@@ -290,6 +290,22 @@ class TypeMapper(TransformPass):
                     expression=stripped,
                     target_type=self._map_type(node.target_type, ctx.target),
                 )
+            # MySQL ``CAST(x AS CHAR)`` with no length is a to-string conversion
+            # (variable length); a bare CHAR is fixed-width or length-required
+            # elsewhere (Oracle ORA-25137). Map it to each engine's unbounded
+            # string type.
+            if (
+                node.target_type.name.upper() in ("CHAR", "NCHAR")
+                and not node.target_type.params
+                and ctx.source == "mysql"
+                and ctx.target != "mysql"
+            ):
+                str_type = {
+                    "oracle": DataType(name="VARCHAR2", params=(4000,)),
+                    "postgresql": DataType(name="TEXT"),
+                    "tsql": DataType(name="VARCHAR", params=(8000,)),
+                }[ctx.target]
+                return CastExpression(expression=node.expression, target_type=str_type)
             mapped_type = self._map_type(node.target_type, ctx.target)
             if mapped_type != node.target_type:
                 return CastExpression(

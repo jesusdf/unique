@@ -536,6 +536,13 @@ class TestTsqlIntToDatetime:
         assert "CAST(12.99 AS NUMBER(19,4))" in o4, o4
         assert "REPLACE(REPLACE('$12.99', '$', ''), ',', '')" in o4, o4
 
+    def test_mysql_cast_char_to_string_type(self) -> None:
+        # MySQL CAST(x AS CHAR) (no length) -> a target string type, not a bare
+        # length-less CHAR (which Oracle rejects).
+        case = _case("challenge_mysql.sql", "my-cast-num-char ")
+        assert "VARCHAR2(4000)" in _tx(case, "mysql", "oracle")
+        assert "AS TEXT)" in _tx(case, "mysql", "postgresql")
+
 
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL
