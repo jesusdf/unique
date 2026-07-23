@@ -265,7 +265,7 @@ CREATE TABLE t (id INT);
 GO
 SELECT * FROM t WITH (NOLOCK)
 
--- CASE[open]: ts-now-fns — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier
+-- CASE[limit]: ts-now-fns — fails on mysql, oracle, postgresql. current-time functions are non-deterministic (no cross-engine value parity) and SYSDATETIMEOFFSET has no equivalent (docs/03-unsupported.md §2).
 SELECT GETDATE(), SYSDATETIME(), CURRENT_TIMESTAMP, GETUTCDATE(), SYSDATETIMEOFFSET()
 
 -- CASE[fixed]: ts-now-variants — fails on mysql, oracle, postgresql. ORA-00904: "SYSUTCDATETIME": invalid identifier
@@ -438,7 +438,7 @@ SELECT SWITCHOFFSET(SYSDATETIMEOFFSET(),'+00:00'), TODATETIMEOFFSET(GETDATE(),'+
 -- CASE[fixed]: ts-tz-offset — fails on mysql, oracle, postgresql. ORA-00904: "TODATETIMEOFFSET": invalid identifier
 SELECT CONVERT(VARCHAR,SYSDATETIMEOFFSET(),121), SWITCHOFFSET(SYSDATETIMEOFFSET(),'+05:30'), TODATETIMEOFFSET(GETDATE(),'-08:00')
 
--- CASE[open]: ts-tzoffset — fails on mysql, oracle, postgresql. ORA-00904: "CURRENT_TIMESTAMP_L_T_Z": invalid identifier
+-- CASE[limit]: ts-tzoffset — fails on mysql, oracle, postgresql. DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) is non-deterministic and tz-offset extraction is engine-specific (docs/03-unsupported.md §2).
 SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r
 
 -- CASE[open]: ts-unpivot — fails on mysql, oracle, postgresql. ORA-00904: "VAL": invalid identifier

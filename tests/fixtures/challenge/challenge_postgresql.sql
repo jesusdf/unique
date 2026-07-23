@@ -196,7 +196,7 @@ SELECT DATE '2020-01-01' + 30 AS r
 -- CASE[fixed]: pg-date-trunc — DATE_TRUNC(unit, ts). PG date_trunc parses to TimestampTrunc (fake sql_name); canonicalized to DATE_TRUNC -> Oracle TRUNC(ts,'MM'), T-SQL DATETRUNC(month,ts), MySQL DATE_FORMAT. (Also fixed: Oracle TIMESTAMP literal needs padded seconds.) live-verified 2020-05-01 on all four.
 SELECT DATE_TRUNC('month', TIMESTAMP '2020-05-17 10:00') AS d
 
--- CASE[open]: pg-datetrunc-units — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
+-- CASE[limit]: pg-datetrunc-units — fails on mysql, oracle, tsql. date_trunc('decade', …) has no cross-engine equivalent and now() is non-deterministic (docs/03-unsupported.md §2).
 SELECT date_trunc('quarter', now()), date_trunc('decade', now())
 
 -- CASE[fixed]: pg-decimal-scale — same value at each engine's default decimal scale (10/3 = 3.3333...). (value equal, precision-only diff; maintainer policy 2026-07-19)
@@ -460,7 +460,7 @@ SELECT MOD(10, 3.5::numeric) AS r
 -- CASE[open]: pg-multi-out — fails on oracle. FUNCTION F compiled INVALID (line 7): PLS-00201: identifier 'VOID' must be declared
 CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; END; $$ LANGUAGE plpgsql
 
--- CASE[open]: pg-name-locale — fails on mysql, tsql. FUNC-DIFF: source=(('Monday', 'June', 'Monday'),) target=(('ua20', '6onA12', '6ua20'),)
+-- CASE[limit]: pg-name-locale — fails on mysql, tsql. to_char with locale month/day NAMES (Day/Month/FMDay) is locale-dependent, no cross-engine equivalent (docs/03-unsupported.md §3.1).
 SELECT to_char(DATE '2020-06-15','Day'), to_char(DATE '2020-06-15','Month'), trim(to_char(DATE '2020-06-15','FMDay'))
 
 -- CASE[open]: pg-named-exception — fails on oracle, tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
@@ -678,7 +678,7 @@ SELECT to_date('06/15/2020','MM/DD/YYYY'),to_timestamp('2020-06-15 10:30','YYYY-
 -- CASE[open]: pg-tohex2 — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT to_hex(255), to_char(255, 'XX')
 
--- CASE[open]: pg-totimestamp-long — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+-- CASE[limit]: pg-totimestamp-long — fails on mysql, oracle, tsql. parsing a locale month NAME ('Month DD YYYY') is NLS-dependent, no reproducible cross-engine parse (docs/03-unsupported.md §3.1).
 SELECT to_timestamp('June 15 2020', 'Month DD YYYY') AS r
 
 -- CASE[limit]: pg-trailing-eq — fails on oracle, tsql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0',),) target=(('1',),)

@@ -298,7 +298,7 @@ SELECT MEDIAN(x), STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 FR
 -- CASE[fixed]: ora-misc-num — fails on mysql, postgresql, tsql. (189, b'The rand function requires 0 to 1 arguments.DB-Lib error message 20018, severity 1
 SELECT DBMS_RANDOM.VALUE(1,100),BITAND(12,10),WIDTH_BUCKET(5,0,10,5),ORA_HASH('x') FROM DUAL
 
--- CASE[open]: ora-month-name — fails on mysql. FUNC-DIFF: source=(('June',),) target=(('Month',),)
+-- CASE[limit]: ora-month-name — fails on mysql. TO_CHAR with a locale month/day NAME (Month/Day) is NLS-dependent, no reproducible cross-engine equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(DATE '2020-06-01', 'Month') AS r FROM DUAL
 
 -- CASE[fixed]: ora-months-between — fails on mysql, postgresql. operator does not exist: timestamp with time zone - integer
@@ -310,7 +310,7 @@ SELECT MONTHS_BETWEEN(DATE '2020-03-10', DATE '2020-01-15') AS r FROM DUAL
 -- CASE[open]: ora-multiset-table — fails on postgresql, tsql. (156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:
 SELECT COLUMN_VALUE FROM TABLE(CAST(MULTISET(SELECT LEVEL FROM DUAL CONNECT BY LEVEL<=3) AS SYS.ODCINUMBERLIST))
 
--- CASE[open]: ora-name-locale — fails on mysql. FUNC-DIFF: source=(('Monday', 'June', 'MONDAY'),) target=(('25ay', 'Month', 'Monday'),)
+-- CASE[limit]: ora-name-locale — fails on mysql. TO_CHAR with locale month/day NAMES (Day/Month) is NLS/collation-dependent, no cross-engine equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(DATE '2020-06-15','Day'), TO_CHAR(DATE '2020-06-15','Month'), TRIM(TO_CHAR(DATE '2020-06-15','DAY')) FROM DUAL
 
 -- CASE[fixed]: ora-nanvl — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA
@@ -443,7 +443,7 @@ SELECT t.COLUMN_VALUE FROM TABLE(SYS.ODCINUMBERLIST(1,2,3)) t
 -- CASE[open]: ora-table-varchar-list — fails on postgresql, tsql. (156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:
 SELECT COLUMN_VALUE FROM TABLE(SYS.ODCIVARCHAR2LIST('a','b','c'))
 
--- CASE[open]: ora-to-char-day — fails on mysql. FUNC-DIFF: source=(('SUNDAY',),) target=(('Sunday',),)
+-- CASE[limit]: ora-to-char-day — fails on mysql. TO_CHAR(d,'DAY') is a locale day NAME, NLS-dependent, no reproducible cross-engine equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(DATE '2020-06-14', 'DAY') AS r FROM DUAL
 
 -- CASE[open]: ora-to-number-sci — fails on tsql. (8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit
