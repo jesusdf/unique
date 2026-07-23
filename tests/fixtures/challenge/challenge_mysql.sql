@@ -206,7 +206,7 @@ SELECT CONV('7F', 16, 2), CONV(255, 10, 16)
 -- CASE[fixed]: my-convert-signed — MySQL CONVERT(x, SIGNED) maps to CAST(x AS INTEGER) on Oracle. live-verified 123.
 SELECT CONVERT('123', SIGNED) AS r
 
--- CASE[open]: my-convert-tz — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
+-- CASE[limit]: my-convert-tz — CONVERT_TZ has no uniform cross-engine form (Oracle needs format-aware parsing + FROM_TZ, T-SQL AT TIME ZONE takes named Windows zones not offsets, and the result type/format differ); it gates + annotates on every target (docs/03-unsupported.md). fails on oracle, postgresql, tsql
 SELECT CONVERT_TZ('2020-01-01 10:00', '+00:00', '+02:00') AS r
 
 -- CASE[fixed]: my-convert-using2 — MySQL CONVERT(x USING charset) is a charset conversion that leaves the value unchanged; mapped to an unbounded string cast (VARCHAR2(4000)/TEXT/VARCHAR(8000)), since a bare CAST AS CHAR wrongly truncated to CHAR(1) -> '2'. live-verified 2020-06-15 14:30.
