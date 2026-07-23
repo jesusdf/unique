@@ -6119,6 +6119,14 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             "see docs/03-unsupported.md */"
         )
 
+    # GROUPING(x) flags a super-aggregate (CUBE/ROLLUP subtotal) row. MySQL has
+    # no CUBE/GROUPING SETS, so a non-MySQL-source CUBE degrades to the base
+    # grouping (subtotal rows omitted) — every surviving row is a base row where
+    # GROUPING is 0. Fold it to 0 (the statement already carries the CUBE
+    # degrade's warning); MySQL-native WITH ROLLUP keeps its GROUPING.
+    if fn_name == "GROUPING" and dialect == "mysql" and SOURCE_DIALECT.get() != "mysql":
+        return "0"
+
     # XMLELEMENT(name, value...): SQL/XML built-in on Oracle and PostgreSQL.
     # Oracle spells the element name as a (usually quoted) identifier;
     # PostgreSQL requires the ``NAME`` keyword before it. MySQL and T-SQL have

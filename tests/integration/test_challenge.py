@@ -853,6 +853,27 @@ class TestGenerateSeriesFrom:
         assert result.warnings and "UNIQUE:" in result.sql
 
 
+class TestGroupingCube:
+    """GROUPING(x) over GROUP BY CUBE renders natively on Oracle/T-SQL. MySQL has
+    no CUBE — it degrades to the base grouping (subtotal rows omitted) where
+    GROUPING is always 0, kept valid with the CUBE degrade's warning."""
+
+    def test_grouping_native_oracle_tsql(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-grouping-fn ")
+        for target in ("oracle", "tsql"):
+            out = _tx(case, "postgresql", target)
+            assert "GROUPING(x)" in out and "CUBE(x)" in out, out
+
+    def test_grouping_folds_to_zero_on_mysql(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-grouping-fn ")
+        result = Transpiler().transpile(case, source="postgresql", target="mysql")
+        assert result.warnings and "UNIQUE:" in result.sql
+        body = "\n".join(
+            ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "GROUPING" not in body.upper(), body
+
+
 class TestDateAddQuarter:
     """MySQL DATE_ADD(ts, INTERVAL n QUARTER) — QUARTER was not a recognized date
     unit, so it dropped to an invalid DATEADD. It is now 3 months on Oracle

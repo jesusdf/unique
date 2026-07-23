@@ -334,7 +334,7 @@ SELECT GREATEST('a', 'B') AS r
 -- CASE[open]: pg-grouping — fails on mysql, oracle, tsql. (8120, b"Column 't.a' is invalid in the select list because it is not contained in either 
 SELECT a,sum(c),grouping(a) FROM (SELECT 1 a,3 c) t GROUP BY GROUPING SETS ((a),())
 
--- CASE[open]: pg-grouping-fn — fails on mysql, oracle, tsql. (8161, b'Argument 1 of the GROUPING function does not match any of the expressions in the 
+-- CASE[limit]: pg-grouping-fn — GROUPING(x) over GROUP BY CUBE works on Oracle/T-SQL ((1,0)/(NULL,1) verified); MySQL has no CUBE so it degrades to the base grouping (subtotal rows omitted) where GROUPING is always 0 — the (1,0) row matches (docs/03-unsupported.md). fails on mysql
 SELECT x, GROUPING(x) FROM (VALUES (1)) v(x) GROUP BY CUBE (x)
 
 -- CASE[fixed]: pg-grouping-sets — fails on mysql, oracle, tsql. (8120, b"Column 'v.x' is invalid in the select list because it is not contained in either 
