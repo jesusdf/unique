@@ -335,6 +335,18 @@ rejects). Both are validated live. Only date parts outside the common
 year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
 still need review.
 
+### 3.15 Error-Tolerant Cast (`DEFAULT … ON CONVERSION ERROR`)
+
+Oracle's `CAST(x AS T DEFAULT d ON CONVERSION ERROR)` returns `d` when the
+conversion fails instead of raising. It is translated so the fallback is never
+silently dropped: T-SQL uses `COALESCE(TRY_CAST(x AS T), d)`; PostgreSQL and MySQL
+have no error-safe cast, so a **numeric** target is guarded with a validation
+`CASE` (`x ~`/`REGEXP` a number pattern, else `d`). A **literal** operand is folded
+at transpile time — a valid number casts, a non-numeric one becomes `d` — because
+PostgreSQL constant-folds the `THEN` branch during planning and would raise on a
+bad constant before the guard runs. A non-numeric target with a fallback keeps the
+plain cast and flags the dropped default with a carrier.
+
 ### 3.14 Case-Insensitive Collation Under DISTINCT / ORDER BY
 
 MySQL's default collation is case-insensitive, so `SELECT DISTINCT x … ORDER BY x`

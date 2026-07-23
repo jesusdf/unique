@@ -4751,6 +4751,58 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                     "1",
                 ):
                     return "NULL"  # non-boolean literal -> safe cast is NULL
+        if node.on_error_default is not None:
+            # Oracle ``CAST(x AS T DEFAULT d ON CONVERSION ERROR)`` returns d when
+            # the conversion fails. Dropping the clause silently ships a cast that
+            # raises on bad input, so translate the fallback (never lose it).
+            default_sql = _emit_expression(node.on_error_default, dialect)
+            _oerr_num = dtype.split("(")[0].strip().upper() in _NUMERIC_CAST_TYPES
+            # A literal inner is resolvable now — and must be: PG constant-folds
+            # the THEN branch of a runtime CASE and raises on a bad constant cast,
+            # so no runtime guard can protect a literal. Fold it (as the safe-cast
+            # path does): a numeric literal casts cleanly everywhere; a
+            # non-numeric one yields the fallback.
+            if _oerr_num and isinstance(node.expression, Literal):
+                try:
+                    float(str(node.expression.value).strip())
+                except (TypeError, ValueError):
+                    return default_sql
+                if dialect == "oracle":
+                    return (
+                        f"CAST({inner} AS {dtype} DEFAULT {default_sql} "
+                        "ON CONVERSION ERROR)"
+                    )
+                return f"CAST({inner} AS {dtype})"
+            if dialect == "oracle":
+                return (
+                    f"CAST({inner} AS {dtype} DEFAULT {default_sql} "
+                    "ON CONVERSION ERROR)"
+                )
+            if dialect == "tsql":
+                # TRY_CAST yields NULL on a failed conversion; COALESCE supplies
+                # the Oracle fallback.
+                return f"COALESCE(TRY_CAST({inner} AS {dtype}), {default_sql})"
+            if _oerr_num:
+                # PG/MySQL have no error-safe cast; guard a numeric target with a
+                # validation test so a non-numeric value yields the fallback
+                # instead of raising. The pattern uses only POSIX classes (no
+                # backslashes) so it survives MySQL's string-literal unescaping.
+                num_re = "^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$"
+                if dialect == "postgresql":
+                    guard = f"{inner}::text ~ '{num_re}'"
+                else:  # mysql
+                    guard = f"CAST({inner} AS CHAR) REGEXP '{num_re}'"
+                return (
+                    f"CASE WHEN {guard} THEN CAST({inner} AS {dtype}) "
+                    f"ELSE {default_sql} END"
+                )
+            # Non-numeric target with no error-safe cast: keep the valid cast but
+            # flag that the fallback was dropped (documented divergence).
+            return (
+                f"CAST({inner} AS {dtype}) /* UNIQUE: Oracle DEFAULT ... ON "
+                f"CONVERSION ERROR has no {dialect} error-safe cast for this "
+                "type; fallback dropped -- see docs/03-unsupported.md */"
+            )
         return f"CAST({inner} AS {dtype})"
 
     if isinstance(node, SubqueryExpression):

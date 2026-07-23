@@ -2362,10 +2362,15 @@ def _convert_cast(expr: exp.Cast) -> CastExpression:
     """Convert a CAST expression."""
     inner = convert_expression(expr.this)
     target_type = _convert_data_type(expr.to)
+    # Oracle ``CAST(x AS T DEFAULT d ON CONVERSION ERROR)`` — sqlglot keeps the
+    # fallback on the ``default`` arg (a non-NULL default; ``DEFAULT NULL`` maps
+    # to ``safe``). Capture it so the fallback isn't silently dropped.
+    default = expr.args.get("default")
     return CastExpression(
         expression=inner,
         target_type=target_type,
         safe=bool(expr.args.get("safe")),
+        on_error_default=convert_expression(default) if default is not None else None,
     )
 
 

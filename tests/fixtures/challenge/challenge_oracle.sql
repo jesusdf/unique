@@ -72,7 +72,7 @@ SELECT CAST('123' AS NUMBER), CAST(SYSDATE AS TIMESTAMP) FROM DUAL
 -- CASE[fixed]: ora-cast-int-edge — fails on mysql. FUNC-DIFF: source=(('4', '3', '4', '4'),) target=(('3', '3', '4', '4'),)
 SELECT CAST('3.9' AS INT), TRUNC(3.9), ROUND(3.9), CAST(3.9 AS NUMBER(1)) FROM DUAL
 
--- CASE[open]: ora-cast-onerror — fails on postgresql, tsql. (8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit
+-- CASE[fixed]: ora-cast-onerror — CAST(x AS T DEFAULT d ON CONVERSION ERROR): T-SQL COALESCE(TRY_CAST,d); PG/MySQL guard a numeric target with a validation CASE (a literal is folded at transpile time to dodge PG's constant-fold-on-plan error). Live -1 (bad) / 123.5 (good) on all four.
 SELECT CAST('abc' AS NUMBER DEFAULT -1 ON CONVERSION ERROR) AS r FROM DUAL
 
 -- CASE[fixed]: ora-char-encoding — fails on mysql, postgresql, tsql. (195, b"'RAWTOHEX' is not a recognized built-in function name.DB-Lib error message 20018, 

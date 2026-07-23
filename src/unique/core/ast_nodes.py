@@ -254,11 +254,14 @@ class CaseExpression(ASTNode):
 @dataclass(frozen=True)
 class CastExpression(ASTNode):
     """CAST(expression AS type). ``safe`` marks a T-SQL TRY_CAST/TRY_CONVERT (a
-    cast that yields NULL on a conversion error instead of raising)."""
+    cast that yields NULL on a conversion error instead of raising).
+    ``on_error_default`` holds Oracle's ``DEFAULT <x> ON CONVERSION ERROR`` fallback
+    (the value returned when the conversion fails)."""
 
     expression: ASTNode
     target_type: DataType
     safe: bool = False
+    on_error_default: ASTNode | None = None
 
 
 @dataclass(frozen=True)

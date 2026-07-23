@@ -1105,6 +1105,33 @@ class TestExtractMicroseconds:
         assert result.warnings and "UNIQUE:" in result.sql
 
 
+class TestCastOnConversionError:
+    """Oracle CAST(x AS T DEFAULT d ON CONVERSION ERROR): the fallback must survive.
+    T-SQL COALESCE(TRY_CAST,d); PG/MySQL a numeric-validation CASE; a literal folds
+    at transpile time so PG's constant-folding cannot raise on the bad cast
+    (ora-cast-onerror)."""
+
+    def test_literal_folds_to_fallback(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-cast-onerror ")
+        # 'abc' is not numeric -> the transpiled value is the fallback -1, with no
+        # residual cast of the bad literal (which would raise on PG at plan time).
+        for target in ("postgresql", "tsql", "mysql"):
+            out = _tx(case, "oracle", target)
+            assert "TRY_CAST" in out or "-1" in out, out
+            assert "CAST('abc'" not in out.replace(" ", ""), out
+
+    def test_tsql_uses_try_cast_coalesce(self) -> None:
+        # A column operand (not a foldable literal) becomes a runtime-safe form:
+        # T-SQL COALESCE(TRY_CAST,d), PG/MySQL a validation CASE.
+        col = "SELECT CAST(v AS NUMBER DEFAULT -1 ON CONVERSION ERROR) AS n " "FROM t;"
+        assert (
+            "COALESCE(TRY_CAST("
+            in Transpiler().transpile(col, source="oracle", target="tsql").sql
+        )
+        pg = Transpiler().transpile(col, source="oracle", target="postgresql").sql
+        assert "CASE WHEN" in pg and "~ '" in pg
+
+
 class TestGroupConcatDistinctOrder:
     """PG STRING_AGG(DISTINCT v, sep ORDER BY key) requires the ORDER BY key to be
     the aggregated argument; when the value is cast to text the key must carry the
