@@ -388,7 +388,7 @@ SELECT STUFF('abcdef', 2, 3, 'XY') AS r
 -- CASE[fixed]: ts-sysdatetime — fails on mysql, oracle, postgresql. ORA-00904: "GETUTCDATE": invalid identifier
 SELECT SYSDATETIME(), SYSUTCDATETIME(), GETUTCDATE()
 
--- CASE[open]: ts-tablesample — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+-- CASE[limit]: ts-tablesample — MySQL has no TABLESAMPLE (row sampling is also non-deterministic); degraded to a documented carrier + warning (docs/03-unsupported.md). fails on mysql
 CREATE TABLE t (id INT);
 GO
 SELECT * FROM t TABLESAMPLE (10 PERCENT)

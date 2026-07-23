@@ -6871,7 +6871,43 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
     if node.alias:
         result += f" {node.alias}"
 
+    if node.sample_method or node.sample_percent or node.sample_rows:
+        result += _emit_tablesample(node, dialect)
+
     return result
+
+
+def _emit_tablesample(node: TableRef, dialect: str | None) -> str:
+    """Emit a TABLESAMPLE clause in the target's idiom.
+
+    PostgreSQL/T-SQL keep a native TABLESAMPLE, Oracle uses SAMPLE(pct). MySQL
+    has no row sampling, so it degrades to a documented carrier (a silent drop
+    would return every row). Row-count sampling has no PG/Oracle spelling and is
+    likewise carried.
+    """
+    pct, rows = node.sample_percent, node.sample_rows
+    if dialect == "mysql":
+        what = f"{pct} PERCENT" if pct else f"{rows} ROWS"
+        return (
+            f" /* UNIQUE: TABLESAMPLE ({what}) has no MySQL equivalent — all rows "
+            "returned (docs/03-unsupported.md) */"
+        )
+    if dialect == "tsql":
+        return f" TABLESAMPLE ({pct} PERCENT)" if pct else f" TABLESAMPLE ({rows} ROWS)"
+    if dialect == "oracle":
+        if pct:
+            return f" SAMPLE ({pct})"
+        return (
+            " /* UNIQUE: TABLESAMPLE by row count has no Oracle SAMPLE form "
+            "(docs/03-unsupported.md) */"
+        )
+    # postgresql
+    if pct:
+        return f" TABLESAMPLE {node.sample_method or 'SYSTEM'} ({pct})"
+    return (
+        " /* UNIQUE: TABLESAMPLE by row count has no PostgreSQL equivalent "
+        "(docs/03-unsupported.md) */"
+    )
 
 
 def _emit_join(

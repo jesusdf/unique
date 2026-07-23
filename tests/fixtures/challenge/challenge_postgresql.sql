@@ -660,7 +660,7 @@ SELECT SUBSTRING('a1b2' FROM '[0-9]+') AS r
 -- CASE[open]: pg-synonym-as-view — fails on oracle. ORA-00955: name is already used by an existing object
 CREATE TABLE t (a INT); CREATE VIEW syn AS SELECT * FROM t
 
--- CASE[open]: pg-tablesample — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+-- CASE[limit]: pg-tablesample — MySQL has no TABLESAMPLE (row sampling is also non-deterministic); degraded to a documented carrier + warning (docs/03-unsupported.md). PG->T-SQL/Oracle sample natively. fails on mysql
 CREATE TABLE t (id INT); SELECT * FROM t TABLESAMPLE BERNOULLI(50)
 
 -- CASE[limit]: pg-tochar-fmts — fails on oracle. date format mask uses a bare-letter literal / locale name / exotic token that cannot round-trip to a quoted cross-engine mask (docs/03-unsupported.md §3.1).

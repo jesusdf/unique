@@ -171,6 +171,12 @@ class TableRef(ASTNode):
     function: ASTNode | None = None
     #: PG ``fn(…) WITH ORDINALITY [AS a(c…)]``.
     ordinality: bool = False
+    #: TABLESAMPLE — ``method`` (BERNOULLI/SYSTEM or None), and a size that is
+    #: either a percentage or a row count. MySQL has no sampling, so it degrades
+    #: to a documented carrier; the others re-spell it natively.
+    sample_method: str | None = None
+    sample_percent: str | None = None
+    sample_rows: str | None = None
 
 
 @dataclass(frozen=True)

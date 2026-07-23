@@ -1960,6 +1960,23 @@ class TestTopWithTies:
         assert "WITH TIES" in result.sql and "LIMIT 1" in result.sql, result.sql
 
 
+class TestTablesample:
+    """TABLESAMPLE re-spells natively on PG/T-SQL (TABLESAMPLE) and Oracle
+    (SAMPLE); MySQL has no row sampling, so it degrades to a documented carrier +
+    warning instead of silently returning every row."""
+
+    def test_pg_sample_to_tsql_and_oracle(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-tablesample ")
+        assert "TABLESAMPLE (50 PERCENT)" in _tx(case, "postgresql", "tsql")
+        assert "SAMPLE (50)" in _tx(case, "postgresql", "oracle")
+
+    def test_mysql_degrades_with_warning(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-tablesample ")
+        result = Transpiler().transpile(case, source="postgresql", target="mysql")
+        assert result.warnings, "dropped TABLESAMPLE must warn"
+        assert "UNIQUE:" in result.sql and "TABLESAMPLE" in result.sql, result.sql
+
+
 class TestPgBooleanCastFolds:
     """PostgreSQL word-spelled boolean casts ('true'/'t'/'1'/'yes'/'off') fold to
     1/0 on Oracle/T-SQL (which have no boolean text). Live-verified (1,1,1,1) and

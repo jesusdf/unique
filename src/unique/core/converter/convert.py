@@ -1764,6 +1764,19 @@ def _convert_table_ref(expr: exp.Expression) -> TableRef:
             column_aliases = tuple(
                 c.name for c in (alias_expr.args.get("columns") or [])
             )
+        s_method: str | None = None
+        s_percent: str | None = None
+        s_rows: str | None = None
+        sample = expr.args.get("sample")
+        if isinstance(sample, exp.TableSample):
+            method = sample.args.get("method")
+            s_method = method.name.upper() if method is not None else None
+            pct = sample.args.get("percent")
+            rows = sample.args.get("rows") or sample.args.get("size")
+            if pct is not None:
+                s_percent = pct.name
+            elif rows is not None:
+                s_rows = rows.name
         return TableRef(
             name=expr.name,
             schema=expr.db if expr.db else None,
@@ -1774,6 +1787,9 @@ def _convert_table_ref(expr: exp.Expression) -> TableRef:
             quoted=_identifier_quoted(expr.this),
             schema_quoted=_identifier_quoted(expr.args.get("db")),
             column_aliases=column_aliases,
+            sample_method=s_method,
+            sample_percent=s_percent,
+            sample_rows=s_rows,
         )
     if isinstance(expr, exp.Schema):
         return _convert_table_ref(expr.this)
