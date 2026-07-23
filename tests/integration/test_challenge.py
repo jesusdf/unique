@@ -545,6 +545,19 @@ class TestUnpivot:
             assert "'A' AS col" in out and "'B' AS col" in out, out
 
 
+class TestOverlay:
+    """OVERLAY(s PLACING r FROM start FOR len) — replace len chars of s at start
+    with r — is PG-native only. Rewritten to T-SQL STUFF, MySQL INSERT() (both
+    the same 1-based shape) and an Oracle SUBSTR concat. Live-verified 'aXYdef'."""
+
+    def test_overlay_rewrite(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-overlay ")
+        assert "STUFF('abcdef', 2, 2, 'XY')" in _tx(case, "postgresql", "tsql")
+        assert "INSERT('abcdef', 2, 2, 'XY')" in _tx(case, "postgresql", "mysql")
+        ora = _tx(case, "postgresql", "oracle")
+        assert "SUBSTR('abcdef', 1, (2) - 1)" in ora and "|| 'XY' ||" in ora, ora
+
+
 class TestExtractEpoch:
     """PG EXTRACT(EPOCH FROM timestamp) — Unix seconds — has no native EPOCH field
     on the other engines. Rewritten to a literal date-diff (no session-tz shift):

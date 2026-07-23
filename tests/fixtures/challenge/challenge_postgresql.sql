@@ -520,7 +520,7 @@ SELECT x FROM (SELECT 'Apple' x UNION SELECT 'banana' UNION SELECT 'Cherry') t O
 -- CASE[fixed]: pg-order-nulls-default — PostgreSQL sorts NULLs high by default; MySQL/T-SQL sort them low. Emulate with a null-priority key.
 SELECT x FROM (VALUES (3),(1),(NULL)) v(x) ORDER BY x
 
--- CASE[open]: pg-overlay — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.OV
+-- CASE[fixed]: pg-overlay — OVERLAY(s PLACING r FROM start FOR len) rewritten per engine (T-SQL STUFF, MySQL INSERT(), Oracle SUBSTR concat, PG native); 'aXYdef' verified equal on all three
 SELECT OVERLAY('abcdef' PLACING 'XY' FROM 2 FOR 2) AS o
 
 -- CASE[fixed]: pg-pad-repeat — PG lpad/rpad/repeat/reverse now translate (Oracle RPAD/REVERSE); stale tag, live-verified equal.

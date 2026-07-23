@@ -5781,6 +5781,32 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"DATEPART({part}, {value})"
         return f"EXTRACT({part} FROM {value})"
 
+    # OVERLAY(string PLACING sub FROM start [FOR len]): replace ``len`` chars of
+    # ``string`` at 1-based ``start`` with ``sub`` (len defaults to sub's length).
+    # sqlglot flattened it to a bare OVERLAY(...) call that only PG resolves (the
+    # others errored — dbo.OVERLAY on T-SQL — with no warning). T-SQL STUFF and
+    # MySQL INSERT() share the exact 1-based shape; Oracle rebuilds it with SUBSTR.
+    if fn_name == "OVERLAY" and len(node.args) >= 3:
+        ov_s = _emit_expression(node.args[0], dialect)
+        ov_r = _emit_expression(node.args[1], dialect)
+        ov_pos = _emit_expression(node.args[2], dialect)
+        # ``FOR len`` is optional; when absent the replaced length defaults to the
+        # length of ``r``. ``ov_len`` is "" (falsy) when absent, so ``ov_len or
+        # <default>`` picks the engine's length-of-r expression.
+        ov_len = _emit_expression(node.args[3], dialect) if len(node.args) >= 4 else ""
+        if dialect == "postgresql":
+            _for = f" FOR {ov_len}" if ov_len else ""
+            return f"OVERLAY({ov_s} PLACING {ov_r} FROM {ov_pos}{_for})"
+        if dialect == "tsql":
+            return f"STUFF({ov_s}, {ov_pos}, {ov_len or f'LEN({ov_r})'}, {ov_r})"
+        if dialect == "mysql":
+            _l = ov_len or f"CHAR_LENGTH({ov_r})"
+            return f"INSERT({ov_s}, {ov_pos}, {_l}, {ov_r})"
+        return (
+            f"SUBSTR({ov_s}, 1, ({ov_pos}) - 1) || {ov_r} || "
+            f"SUBSTR({ov_s}, ({ov_pos}) + ({ov_len or f'LENGTH({ov_r})'}))"
+        )
+
     # XMLELEMENT(name, value...): SQL/XML built-in on Oracle and PostgreSQL.
     # Oracle spells the element name as a (usually quoted) identifier;
     # PostgreSQL requires the ``NAME`` keyword before it. MySQL and T-SQL have
