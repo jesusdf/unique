@@ -48,7 +48,7 @@ SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r
 -- CASE[fixed]: ts-binary-length — DATALENGTH(x) is the byte length -> Oracle LENGTHB, PG/MySQL OCTET_LENGTH; the VARBINARY(MAX) cast is unwrapped (byte length of a string is the same). live-verified 5.
 SELECT DATALENGTH(CAST('hello' AS VARBINARY(MAX))) AS r
 
--- CASE[open]: ts-bit-cast — fails on oracle. ORA-01722: unable to convert string value containing 't' to a number: 
+-- CASE[fixed]: ts-bit-cast — T-SQL CAST('true' AS BIT) parses the boolean word; fold to 1/0 (other engines can't convert 'true' to a number). Live-verified (1,1,0). 
 SELECT CAST(1 AS BIT), CAST('true' AS BIT), CAST(0 AS BIT)
 
 -- CASE[limit]: ts-bit-fns — GET_BIT/SET_BIT have no cross-engine builtin; gated + annotated (docs/03-unsupported.md). fails on mysql, oracle, postgresql

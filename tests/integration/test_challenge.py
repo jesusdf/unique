@@ -497,6 +497,16 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestBitStringCast:
+    """T-SQL CAST('true' AS BIT) parses the boolean word (a numeric string by its
+    value); other engines can't convert 'true' to a number (ORA-01722). Fold a
+    string BIT cast to 1/0. Live-verified (1,1,0)."""
+
+    def test_bit_string_folds(self) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-bit-cast "), "tsql", "oracle")
+        assert "SIGN(ABS(1)), 1, SIGN(ABS(0))" in out, out
+
+
 class TestBitwiseArithmeticPrecedence:
     """Bitwise-vs-arithmetic precedence is not portable (MySQL/Oracle bind
     bitwise looser than +/*; PostgreSQL/T-SQL tighter). A mixed source

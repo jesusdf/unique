@@ -239,12 +239,30 @@ class TypeMapper(TransformPass):
                     return Literal(value=1, dtype="integer")
                 if _bv in ("f", "false", "no", "n", "off", "0"):
                     return Literal(value=0, dtype="integer")
+            # T-SQL ``CAST('true'/'false' AS BIT)`` parses the boolean word (and a
+            # numeric string by its value); no other engine converts 'true' to a
+            # number (``CAST('true' AS NUMBER(1))`` is ORA-01722). Fold to 1/0.
+            if (
+                node.target_type.name.upper() == "BIT"
+                and ctx.source == "tsql"
+                and ctx.target != "tsql"
+                and isinstance(node.expression, Literal)
+                and isinstance(node.expression.value, str)
+            ):
+                _sv = node.expression.value.strip().lower()
+                if _sv == "true":
+                    return Literal(value=1, dtype="integer")
+                if _sv == "false":
+                    return Literal(value=0, dtype="integer")
+                try:
+                    return Literal(value=1 if float(_sv) != 0 else 0, dtype="integer")
+                except ValueError:
+                    pass  # non-numeric non-boolean string — leave to the type map
             # T-SQL ``CAST(x AS BIT)`` normalizes any non-zero numeric to 1 (0 ->
             # 0, NULL -> NULL); every other engine keeps the value (a plain
             # ``CAST(2 AS NUMBER(1))`` stays 2). ``SIGN(ABS(x))`` reproduces the
             # bit value (and preserves NULL) referencing x once. A string operand
-            # ('true'/'false') is T-SQL's own boolean-word parse, left to the
-            # plain type map.
+            # ('true'/'false') is T-SQL's own boolean-word parse, handled above.
             if (
                 node.target_type.name.upper() == "BIT"
                 and ctx.source == "tsql"
