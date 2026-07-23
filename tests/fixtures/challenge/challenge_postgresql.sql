@@ -675,7 +675,7 @@ SELECT to_char(-1234.5, '9999.99') AS r
 -- CASE[open]: pg-todate2 — fails on mysql. (1305, 'FUNCTION unique_val_2ac6422f99c6.STR_TO_TIME does not exist')
 SELECT to_date('06/15/2020','MM/DD/YYYY'),to_timestamp('2020-06-15 10:30','YYYY-MM-DD HH24:MI')
 
--- CASE[open]: pg-tohex2 — fails on oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
+-- CASE[limit]: pg-tohex2 — PostgreSQL to_char(n,'XX') emits the literal template 'XX' (it has no hex number format), whereas Oracle's TO_CHAR reads X as hex (' FF'); the mask is not portable so the statement is gated + annotated (docs/03-unsupported.md). fails on oracle, tsql
 SELECT to_hex(255), to_char(255, 'XX')
 
 -- CASE[limit]: pg-totimestamp-long — fails on mysql, oracle, tsql. parsing a locale month NAME ('Month DD YYYY') is NLS-dependent, no reproducible cross-engine parse (docs/03-unsupported.md §3.1).
