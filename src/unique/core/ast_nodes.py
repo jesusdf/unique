@@ -275,6 +275,17 @@ class SubqueryExpression(ASTNode):
 
 
 @dataclass(frozen=True)
+class UnsupportedInline(ASTNode):
+    """A source expression with no cross-engine equivalent (e.g. a T-SQL spatial
+    CLR call ``geometry::Point(…).STDistance(…)``). It re-emits verbatim on its
+    own dialect and degrades to ``NULL`` plus a ``UNIQUE:`` carrier (and warning)
+    on every other target, so the loss is surfaced instead of silently mangled."""
+
+    source_sql: str
+    detail: str
+
+
+@dataclass(frozen=True)
 class UnpivotRelation(ASTNode):
     """``FROM <source> UNPIVOT (value_col FOR name_col IN (col1, col2, …))``.
 

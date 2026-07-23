@@ -55,6 +55,7 @@ from unique.core.ast_nodes import (
     UnaryOp,
     UnaryOperator,
     UnpivotRelation,
+    UnsupportedInline,
     UpdateStatement,
     WindowFunction,
     WindowSpec,
@@ -459,6 +460,23 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
             source_dialect=source_dialect,
             kind="MERGE",
+        )
+    # A T-SQL CLR static call — ``geometry::Point(…).STDistance(…)``, a
+    # hierarchyid or a UDT method — parses as a ScopeResolution (the ``::``
+    # static-method operator). No other engine has it, and sqlglot silently
+    # flattens it (dropping the ``::type`` half), so surface it as a documented
+    # degrade rather than a mangled, invalid column. Matched only at the column
+    # expression's own shape so it never swallows a surrounding statement.
+    if isinstance(expr, exp.ScopeResolution) or (
+        isinstance(expr, exp.Dot) and isinstance(expr.this, exp.ScopeResolution)
+    ):
+        return UnsupportedInline(
+            source_sql=" ".join(
+                expr.sql(dialect=sqlglot_dialect_name(source_dialect)).split()
+            ),
+            detail=(
+                "T-SQL spatial/CLR type method (::) has no cross-engine equivalent"
+            ),
         )
     # INSERT/UPDATE/DELETE with a RETURNING clause: our DML IR drops it, so
     # pass through to sqlglot (which maps RETURNING <-> OUTPUT) to preserve

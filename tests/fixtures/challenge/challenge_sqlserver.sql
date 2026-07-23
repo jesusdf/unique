@@ -200,7 +200,7 @@ SELECT value, ordinal FROM GENERATE_SERIES(1, 5) g CROSS APPLY (SELECT g.value A
 -- CASE[fixed]: ts-generate-series — GENERATE_SERIES(start,stop) maps to PG generate_series (column aliased 'value') / Oracle CONNECT BY LEVEL. Live-verified 1..5.
 SELECT value FROM GENERATE_SERIES(1,5)
 
--- CASE[open]: ts-geography — fails on mysql, oracle, postgresql. ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier
+-- CASE[limit]: ts-geography — T-SQL geography/geometry CLR type methods (the ``type::method()`` ScopeResolution) have no cross-engine equivalent; sqlglot silently flattened them, so the construct now degrades to NULL + annotation instead of shipping mangled invalid SQL (docs/03-unsupported.md). fails on mysql, oracle, postgresql
 SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r
 
 -- CASE[open]: ts-grouping-id — fails on mysql, oracle, postgresql. ORA-30481: GROUPING, GROUPING_ID, and GROUP_ID cannot be used without GROUP BY
@@ -335,7 +335,7 @@ SELECT SOUNDEX('Smith'),DIFFERENCE('Smith','Smyth')
 -- CASE[open]: ts-sp-executesql — fails on oracle. PROCEDURE P compiled INVALID (line 5): PLS-00103: Encountered the symbol ">" when expectin
 CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(200)=N'SELECT * FROM t WHERE id=@i'; EXEC sp_executesql @sql,N'@i INT',@i=5; END
 
--- CASE[open]: ts-spatial — fails on oracle, postgresql. DPY-4010: a bind variable replacement value for placeholder ":POINT" was not provided
+-- CASE[limit]: ts-spatial — T-SQL geometry/geography CLR type methods (``type::Point(…).STDistance(…)`` ScopeResolution) have no cross-engine equivalent; degraded to NULL + annotation instead of the mangled invalid flatten (docs/03-unsupported.md). fails on oracle, postgresql
 SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)), geography::Point(47,-122,4326).ToString()
 
 -- CASE[fixed]: ts-spectypes — fails on oracle, postgresql. ORA-00902: invalid datatype
@@ -347,7 +347,7 @@ SELECT @@SPID, @@VERSION
 -- CASE[fixed]: ts-split-agg — fails on oracle, postgresql. ORA-00904: "STRING_SPLIT": invalid identifier
 SELECT STRING_AGG(value,',') FROM STRING_SPLIT('a,b,c',',')
 
--- CASE[open]: ts-st-distance — fails on oracle, postgresql. DPY-4010: a bind variable replacement value for placeholder ":POINT" was not provided
+-- CASE[limit]: ts-st-distance — T-SQL geometry ``::Point(…).STDistance(…)`` (a CLR ScopeResolution method) has no cross-engine equivalent; degraded to NULL + annotation (docs/03-unsupported.md). fails on oracle, postgresql
 SELECT geometry::Point(0,0,0).STDistance(geometry::Point(3,4,0)) AS r
 
 -- CASE[fixed]: ts-str-func — fails on mysql, oracle, postgresql. ORA-00904: "STR": invalid identifier

@@ -545,6 +545,31 @@ class TestUnpivot:
             assert "'A' AS col" in out and "'B' AS col" in out, out
 
 
+class TestSpatialClrScopeResolution:
+    """T-SQL spatial/CLR type methods (``geometry::Point(…).STDistance(…)`` — a
+    ScopeResolution) have no cross-engine equivalent and sqlglot silently flattens
+    them; they now degrade to a NULL placeholder + UNIQUE carrier + warning on
+    every other engine, and re-emit verbatim on T-SQL."""
+
+    def test_degrades_with_carrier_off_tsql(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-st-distance ")
+        for target in ("oracle", "postgresql", "mysql"):
+            result = Transpiler().transpile(case, source="tsql", target=target)
+            assert result.warnings, target
+            assert "UNIQUE:" in result.sql and "NULL" in result.sql, result.sql
+            # No live spatial call escapes as executable text (only inside the
+            # carrier comment); ignore the source ``--`` header prose.
+            body = "\n".join(
+                ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "STDistance" not in body.split("/*")[0], body
+
+    def test_verbatim_on_tsql(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-st-distance ")
+        out = _tx(case, "tsql", "tsql")
+        assert "STDistance" in out and "UNIQUE:" not in out, out
+
+
 class TestBitStringCast:
     """T-SQL CAST('true' AS BIT) parses the boolean word (a numeric string by its
     value); other engines can't convert 'true' to a number (ORA-01722). Fold a

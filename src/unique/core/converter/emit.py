@@ -54,6 +54,7 @@ from unique.core.ast_nodes import (
     UnaryOp,
     UnaryOperator,
     UnpivotRelation,
+    UnsupportedInline,
     UpdateStatement,
     WindowFunction,
 )
@@ -4271,6 +4272,15 @@ def _map_system_global(sql: str, dialect: str) -> str | None:
 
 def _emit_expression(node: ASTNode, dialect: str) -> str:
     """Emit an expression node as SQL text."""
+    if isinstance(node, UnsupportedInline):
+        # Valid on its own engine; a NULL placeholder + carrier + warning
+        # elsewhere (the loss is documented, never silently mangled).
+        if SOURCE_DIALECT.get() == dialect:
+            return node.source_sql
+        return (
+            f"NULL /* UNIQUE: {node.detail} ({node.source_sql}) — "
+            "see docs/03-unsupported.md */"
+        )
     if isinstance(node, ColumnRef):
         # plpgsql's bare FOUND flag (statement state, not a column).
         if (
