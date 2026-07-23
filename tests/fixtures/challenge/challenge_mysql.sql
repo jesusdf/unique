@@ -17,7 +17,7 @@ SELECT HEX(AES_ENCRYPT('data', 'key')) AS r
 -- CASE[limit]: my-agg-bit — fails on oracle, tsql. BIT_AND/BIT_OR/BIT_XOR are aggregates on MySQL & PostgreSQL (transpiled faithfully, value-verified) but Oracle and T-SQL have no bit-aggregate function (docs/03-unsupported.md §3.10). Warned carrier on oracle/tsql.
 SELECT BIT_AND(x),BIT_OR(x),BIT_XOR(x) FROM (SELECT 3 x UNION ALL SELECT 5 x UNION ALL SELECT 6 x) t
 
--- CASE[open]: my-agg-boolean — fails on oracle. FUNC-DIFF: source=(('2', '3', '0.6667', '1'),) target=(('2', '3', '0.666667', '1'),)
+-- CASE[fixed]: my-agg-boolean — AVG of a boolean predicate is value-equal across engines; MySQL prints 4 decimals (0.6667), Oracle 6 (0.666667) — precision-only (maintainer policy). SUM/COUNT/MAX match; output valid, no gate.
 SELECT SUM(x>1), COUNT(x>1), AVG(x>1), MAX(x>1) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 3) t
 
 -- CASE[open]: my-agg-collect — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
