@@ -139,7 +139,7 @@ SELECT '(1,2)'::point AS r
 -- CASE[fixed]: pg-cast-round-half — PG 7.5::int rounds half-away-from-zero (8); T-SQL CAST truncates (7). ROUND(x, 0) on T-SQL matches (also half-away-from-zero).
 SELECT 7.5 :: int AS r
 
--- CASE[open]: pg-cast-tstz — fails on mysql, oracle, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity
+-- CASE[fixed]: pg-cast-tstz — TIMESTAMPTZ maps per engine (T-SQL DATETIMEOFFSET, MySQL DATETIME, Oracle date literal); live-verified 2020-01-01 midnight (tz-representation precision).
 SELECT '2020-01-01'::timestamptz AS r
 
 -- CASE[fixed]: pg-char-encoding — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se

@@ -99,6 +99,8 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "DATETIME2": "DATETIME",
         "SMALLDATETIME": "DATETIME",
         "TIMESTAMP": "DATETIME",
+        # MySQL has no timezone-aware type; DATETIME holds the same instant.
+        "TIMESTAMPTZ": "DATETIME",
         # T-SQL money types are fixed-scale decimals (DECIMAL(19,4)/(10,4)).
         "MONEY": "DECIMAL(19,4)",
         "SMALLMONEY": "DECIMAL(10,4)",
@@ -119,6 +121,8 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "DOUBLE": "FLOAT",
         "YEAR": "SMALLINT",
         "TIMESTAMP": "DATETIME2",
+        # PG's timezone-aware timestamp -> T-SQL's DATETIMEOFFSET.
+        "TIMESTAMPTZ": "DATETIMEOFFSET",
     },
     # DATETIME/DATETIME2/SMALLDATETIME are T-SQL types; Oracle/PostgreSQL use
     # TIMESTAMP. Passing DATETIME through fails (ORA-00902 / invalid pg type).
@@ -4134,7 +4138,14 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         if (
             dialect == "oracle"
             and node.target_type.name.upper()
-            in ("DATE", "TIMESTAMP", "DATETIME", "DATETIME2", "SMALLDATETIME")
+            in (
+                "DATE",
+                "TIMESTAMP",
+                "DATETIME",
+                "DATETIME2",
+                "SMALLDATETIME",
+                "TIMESTAMPTZ",
+            )
             and isinstance(node.expression, Literal)
             and isinstance(node.expression.value, str)
         ):

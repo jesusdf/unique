@@ -2246,6 +2246,23 @@ class TestToNumberScientific:
         assert "CAST('1.234E2' AS FLOAT)" in out, out
 
 
+class TestTimestamptzCast:
+    """PG TIMESTAMPTZ maps to each engine's timezone-aware type: T-SQL
+    DATETIMEOFFSET, MySQL DATETIME (no tz), Oracle a date literal. Live-verified
+    2020-01-01 midnight on all three."""
+
+    def test_timestamptz_per_engine(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-cast-tstz ")
+        assert "DATETIMEOFFSET" in _tx(case, "postgresql", "tsql")
+        assert "AS DATETIME)" in _tx(case, "postgresql", "mysql")
+        ora = "\n".join(
+            ln
+            for ln in _tx(case, "postgresql", "oracle").splitlines()
+            if not ln.lstrip().startswith("--")
+        )
+        assert "TIMESTAMPTZ" not in ora, ora
+
+
 class TestPgBooleanToText:
     """PostgreSQL renders a boolean cast to text as 'true'/'false'; MySQL has no
     boolean text and would give '1'/'0'. Emit CASE WHEN <bool> THEN 'true' ELSE
