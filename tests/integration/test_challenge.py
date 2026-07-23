@@ -2050,6 +2050,30 @@ class TestMysqlStringPlusIsArithmetic:
         assert "CAST('5' AS FLOAT) + CAST('5' AS FLOAT)" in out, out
 
 
+class TestStringPlusNumberStaysArithmetic:
+    """A T-SQL/Oracle '+' with one string and one *numeric-literal* operand is
+    arithmetic on every engine (the string is coerced to a number: '10' + 5 = 15,
+    '1' + 1 = 2). It must not be rewritten to concatenation. Live-verified."""
+
+    def test_tsql_string_plus_number(self) -> None:
+        for target in ("mysql", "oracle", "postgresql"):
+            out = _tx(
+                _case("challenge_sqlserver.sql", "ts-str-plus-num "), "tsql", target
+            )
+            body = "\n".join(
+                ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "'10' + 5" in body, body
+            assert "||" not in body and "CONCAT" not in body.upper(), body
+
+    def test_oracle_string_plus_number(self) -> None:
+        for target in ("mysql", "postgresql", "tsql"):
+            out = _tx(
+                _case("challenge_oracle.sql", "ora-implicit-arith "), "oracle", target
+            )
+            assert "'1' + 1" in out, out
+
+
 class TestMysqlConcatNullPropagates:
     """MySQL CONCAT returns NULL if any argument is NULL; PG/Oracle/T-SQL ignore
     NULL. A MySQL CONCAT with a literal NULL is always NULL — fold it. Only fires

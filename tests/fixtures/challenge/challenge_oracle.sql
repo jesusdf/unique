@@ -223,7 +223,7 @@ SELECT /*+ FULL(t) */ 1 AS r FROM DUAL t
 -- CASE[open]: ora-identity-opts — fails on mysql. (1075, 'Incorrect table definition; there can be only one auto column and it must be defin
 CREATE TABLE t (a NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100 INCREMENT BY 10 MAXVALUE 9999 CYCLE))
 
--- CASE[open]: ora-implicit-arith — fails on mysql, postgresql. FUNC-DIFF: source=(('2', '20', '2'),) target=(('11', '20', '2'),)
+-- CASE[fixed]: ora-implicit-arith — '1' + 1 is arithmetic (number operand), not concat: kept as + so it evaluates to 2.
 SELECT '1'+1, '10'*2, TO_NUMBER('1')+1 FROM DUAL
 
 -- CASE[limit]: ora-initcap — INITCAP (title-case each word) has no MySQL/T-SQL builtin and cannot be emulated for arbitrary multi-word text; PostgreSQL has INITCAP natively so it transpiles cleanly there. Gated + annotated on the other two (docs/03-unsupported.md). fails on mysql, tsql

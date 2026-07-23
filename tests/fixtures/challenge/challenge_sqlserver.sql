@@ -356,7 +356,7 @@ SELECT STR(3.14, 6, 2) AS r
 -- CASE[fixed]: ts-str-misc — fails on mysql, oracle, postgresql. ORA-00904: "QUOTENAME": invalid identifier
 SELECT SOUNDEX('Robert'),DIFFERENCE('Robert','Rupert'),FORMAT(1234567.891,'N2'),QUOTENAME('a]b')
 
--- CASE[open]: ts-str-plus-num — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('15',),) target=(('105',),)
+-- CASE[fixed]: ts-str-plus-num — '10' + 5 is arithmetic (number operand), not concat: kept as + so it evaluates to 15.
 SELECT '10' + 5 AS r
 
 -- CASE[fixed]: ts-stragg-order — fails on postgresql. function string_agg(integer, unknown) does not exist

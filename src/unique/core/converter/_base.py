@@ -423,6 +423,16 @@ def _looks_like_string(node: exp.Expression) -> bool:
     return False
 
 
+def _is_numeric_literal(node: exp.Expression) -> bool:
+    """A numeric (non-string) literal, optionally negated. Such an operand forces
+    arithmetic on every engine even when the other side is a string, because the
+    string is implicitly converted to a number (``'10' + 5`` = 15, ``'1' + 1`` =
+    2) — so a ``+`` involving one is addition, never concatenation."""
+    if isinstance(node, exp.Neg):
+        node = node.this
+    return isinstance(node, exp.Literal) and not node.args.get("is_string")
+
+
 def _rewrite_tsql_string_concat(expr: exp.Expression) -> exp.Expression:
     """Rewrite a T-SQL ``+`` that is string concatenation into ``||`` (DPipe).
 
@@ -440,6 +450,13 @@ def _rewrite_tsql_string_concat(expr: exp.Expression) -> exp.Expression:
         if isinstance(node, exp.Add):
             left, right = node.left, node.right
             if left is None or right is None:
+                return node
+            # A numeric-literal operand makes this arithmetic on every engine
+            # (the string side is coerced to a number), so it is not concat even
+            # though a string operand is present.
+            if _is_numeric_literal(left) or _is_numeric_literal(  # type: ignore[arg-type]
+                right  # type: ignore[arg-type]
+            ):
                 return node
             if (
                 _looks_like_string(left)  # type: ignore[arg-type]
