@@ -390,7 +390,7 @@ SELECT MD5('abc'), SHA1('abc'), SHA2('abc', 256)
 -- CASE[fixed]: my-hash-all — fails on oracle, postgresql, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT CRC32('abc'), MD5('abc'), SHA('abc'), SHA2('abc', 512)
 
--- CASE[open]: my-having-noagg — fails on oracle, postgresql, tsql. (8121, b"Column 't.x' is invalid in the HAVING clause because it is not contained in eithe
+-- CASE[fixed]: my-having-noagg — MySQL allows HAVING without GROUP BY on a non-aggregate; wrap the query so HAVING becomes an outer WHERE (window-then-filter). Live-verified (1,1),(2,2).
 SELECT x, RANK() OVER (ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2) t HAVING x>0
 
 -- CASE[fixed]: my-hex-bin — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE

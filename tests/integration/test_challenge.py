@@ -1930,6 +1930,21 @@ class TestMysqlInsertBounds:
         assert re.search(r"(?i)CASE\s+WHEN\b.*<\s*1\s+OR\b.*>\s+LEN\(", out), out
 
 
+class TestHavingNoGroupBy:
+    """MySQL allows HAVING without GROUP BY on a non-aggregate (a post-window row
+    filter); Oracle/PG/T-SQL require GROUP BY there. Wrap the query so HAVING
+    becomes an outer WHERE, preserving window-then-filter. Live-verified."""
+
+    def test_having_becomes_outer_where(self) -> None:
+        for target in ("oracle", "postgresql", "tsql"):
+            out = _tx(_case("challenge_mysql.sql", "my-having-noagg "), "mysql", target)
+            body = "\n".join(
+                ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "uq_h" in body and "WHERE x > 0" in body, body
+            assert "HAVING" not in body, body
+
+
 class TestMysqlDecimalDivision:
     """MySQL's / is always decimal division (SUM(x)/COUNT(x) = 1.5), but PG/T-SQL
     truncate two integers to an integer (1). Force decimal (* 1.0) on a MySQL

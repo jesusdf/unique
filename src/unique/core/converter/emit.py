@@ -2533,6 +2533,54 @@ def _qualify_using_join_columns(node: SelectStatement, dialect: str) -> SelectSt
     )
 
 
+_AGG_NAMES = frozenset(
+    {
+        "COUNT",
+        "SUM",
+        "AVG",
+        "MIN",
+        "MAX",
+        "GROUP_CONCAT",
+        "STRING_AGG",
+        "LISTAGG",
+        "STDDEV",
+        "STDDEV_POP",
+        "STDDEV_SAMP",
+        "VARIANCE",
+        "VAR_POP",
+        "VAR_SAMP",
+        "VAR",
+        "STDEV",
+        "STDEVP",
+        "VARP",
+        "ARRAY_AGG",
+        "JSON_ARRAYAGG",
+        "JSON_OBJECTAGG",
+        "BIT_AND",
+        "BIT_OR",
+        "BIT_XOR",
+        "BOOL_AND",
+        "BOOL_OR",
+    }
+)
+
+
+def _has_aggregate(node: object) -> bool:
+    """True if an aggregate function call appears in *node* (not descending into a
+    nested subquery/select, which has its own aggregation scope)."""
+    if isinstance(node, FunctionCall) and node.name.upper() in _AGG_NAMES:
+        return True
+    if isinstance(node, (SelectStatement, SubqueryExpression)):
+        return False
+    if isinstance(node, tuple):
+        return any(_has_aggregate(v) for v in node)
+    if dataclasses.is_dataclass(node) and not isinstance(node, type):
+        return any(
+            _has_aggregate(getattr(node, f.name)) for f in dataclasses.fields(node)
+        )
+    return False
+
+
 def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -> str:
     """Emit a SELECT statement.
 
@@ -2540,6 +2588,19 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     faithful CTAS form there); placed right before the FROM clause.
     """
     node = _qualify_using_join_columns(node, dialect)
+    # MySQL allows HAVING without GROUP BY on a non-aggregate (a post-window row
+    # filter); Oracle/PG/T-SQL require GROUP BY there. Wrap the query so the HAVING
+    # becomes an outer WHERE, preserving the window-then-filter order.
+    if (
+        dialect != "mysql"
+        and node.having is not None
+        and not node.group_by
+        and not _has_aggregate(node.having)
+        and into is None
+    ):
+        _inner = dataclasses.replace(node, having=None)
+        _hcond = _emit_condition(node.having, dialect)
+        return f"SELECT * FROM ({_emit_select(_inner, dialect)}) uq_h\nWHERE {_hcond}"
     parts: list[str] = []
 
     # CTEs
