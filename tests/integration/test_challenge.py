@@ -2093,6 +2093,18 @@ class TestHexLiteralToInt:
         assert "TO_NUMBER('FF', 'XX')" in out, out
 
 
+class TestCollationFn:
+    """COLLATION(x) returns the argument's collation name, which is engine-specific
+    (MySQL 'utf8mb4_0900_ai_ci' vs Oracle 'USING_NLS_COMP') and can never match.
+    Emit the call with a documented carrier + warning."""
+
+    def test_oracle_collation_carries(self) -> None:
+        case = _case("challenge_mysql.sql", "my-collation-fn ")
+        result = Transpiler().transpile(case, source="mysql", target="oracle")
+        assert result.warnings, "engine-specific collation must warn"
+        assert "UNIQUE:" in result.sql and "COLLATION(" in result.sql, result.sql
+
+
 class TestNanCast:
     """PostgreSQL numeric represents NaN (NaN > 1 = true); MySQL DECIMAL does not
     (CAST('NaN' AS DECIMAL) is 0), so the comparison diverges. Emit the cast plus

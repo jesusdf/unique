@@ -170,7 +170,7 @@ SELECT COALESCE(NULL, 0) = '' AS r
 -- CASE[fixed]: my-coalesce-single — a single-argument COALESCE(x) is its argument; Oracle (ORA-00938) and T-SQL reject a 1-arg COALESCE, so reduce it to the argument.
 SELECT COALESCE(x) FROM (SELECT NULL x) t
 
--- CASE[open]: my-collation-fn — fails on oracle. FUNC-DIFF: source=(('utf8mb4_0900_ai_ci',),) target=(('USING_NLS_COMP',),)
+-- CASE[limit]: my-collation-fn — COLLATION(x) returns engine-specific collation names (MySQL utf8mb4_0900_ai_ci vs Oracle USING_NLS_COMP); the function exists on both but can't match — carrier + warning (docs/03-unsupported.md). fails on oracle
 SELECT COLLATION('abc') AS r
 
 -- CASE[fixed]: my-compress — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN

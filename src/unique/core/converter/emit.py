@@ -4711,6 +4711,21 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"CAST({_emit_expression(inner, dialect)} AS DATE)"
         return _emit_expression(inner, dialect)
 
+    # COLLATION(x) returns the argument's collation NAME, which is engine-specific
+    # (MySQL 'utf8mb4_0900_ai_ci' vs Oracle 'USING_NLS_COMP') — the function
+    # exists on both but can never return the same value. Flag it.
+    if (
+        fn_name == "COLLATION"
+        and SOURCE_DIALECT.get() == "mysql"
+        and dialect != "mysql"
+        and len(node.args) == 1
+    ):
+        _c = _emit_expression(node.args[0], dialect)
+        return (
+            f"COLLATION({_c}) /* UNIQUE: collation names are engine-specific and "
+            "cannot match across engines (docs/03-unsupported.md) */"
+        )
+
     # Oracle REGEXP_SUBSTR(str, pat, pos, occ, match, GROUP) extracts a capture
     # group; MySQL's REGEXP_SUBSTR has no group argument (and takes at most 5
     # args), so the 6-arg form shipped an invalid call. Emit the portable
