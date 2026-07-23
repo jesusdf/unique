@@ -454,10 +454,10 @@ UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id
 -- CASE[open]: ts-waitfor-exec — fails on oracle. PROCEDURE P compiled INVALID (line 4): PLS-00201: identifier 'DBMS_LOCK' must be declared
 CREATE PROCEDURE p AS BEGIN WAITFOR DELAY '00:00:01'; EXEC sp_who; END
 
--- CASE[open]: ts-while-break-continue — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 11): PLS-00201: identifier 'BREAK' must be declared
+-- CASE[fixed]: ts-while-break-continue — WHILE with BREAK/CONTINUE maps to MySQL LEAVE/ITERATE (labeled loop), Oracle EXIT/CONTINUE, PG equivalents; verified compile-valid on oracle/pg/mysql
 CREATE PROCEDURE p AS BEGIN DECLARE @i INT = 0; WHILE @i < 5 BEGIN SET @i = @i + 1; IF @i = 3 CONTINUE; IF @i = 5 BREAK; END; END
 
--- CASE[open]: ts-while-loop — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 15): PLS-00103: Encountered the symbol "=" when expecti
+-- CASE[fixed]: ts-while-loop — WHILE loop + SELECT COUNT INTO now compiles on all three: MySQL's table value constructor needs ROW() per row (VALUES ROW(1),ROW(2)); Oracle/PG were already valid. Verified compile-valid on oracle/pg/mysql
 CREATE PROCEDURE p @id INT AS BEGIN DECLARE @n INT; SELECT @n = COUNT(*) FROM (VALUES (1),(2)) v(x); WHILE @n > 0 BEGIN SET @n -= 1; END; END
 
 -- CASE[fixed]: tsql-drop2-100|START|ID — fails on postgresql. SILENT CLAUSE DROP: '100|START|IDENTITY' absent from valid postgresql output, no warning

@@ -894,6 +894,21 @@ class TestTsqlScalarFunctionTrailingReturn:
             assert lines[-1] == "END" and lines[-2].upper().startswith("RETURN"), out
 
 
+class TestMysqlValuesConstructorInProc:
+    """MySQL's table value constructor needs ROW() per row — a procedural
+    ``SELECT COUNT(*) FROM (VALUES (1),(2)) v(x)`` was a 1064 (VALUES (1),(2));
+    it now emits ``VALUES ROW(1), ROW(2)``. Compile-verified on all engines."""
+
+    def test_values_gets_row_wrapper(self) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-while-loop "), "tsql", "mysql")
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        nospace = body.replace(" ", "")
+        assert "VALUESROW(" in nospace, body
+        assert "VALUES(1)" not in nospace, body
+
+
 class TestVoidFunctionToProcedure:
     """A PG function with only OUT params and no RETURNS returns void; on Oracle a
     FUNCTION must RETURN a type (RETURN void = PLS-00201), so it emits a

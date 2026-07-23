@@ -84,10 +84,28 @@ class MySqlTransformer(ProceduralTransformer):
             catch_body=self._transform_body(tuple(body)),
         )
 
+    #: MySQL's table value constructor needs a ROW() per row: ``(VALUES (1),(2))``
+    #: is a syntax error (1064); ``(VALUES ROW(1), ROW(2))`` is the valid form.
+    #: The SELECT INTO tail is a FROM context, so any VALUES here is a table
+    #: constructor (never an INSERT's value list).
+    _VALUES_CTOR_RE = re.compile(r"(?i)(\bVALUES\s+)(\([^)]*\)(?:\s*,\s*\([^)]*\))*)")
+
+    @classmethod
+    def _mysql_values_row(cls, sql: str) -> str:
+        def _wrap(m: re.Match[str]) -> str:
+            rows = re.findall(r"\([^)]*\)", m.group(2))
+            return m.group(1) + ", ".join("ROW" + r for r in rows)
+
+        return cls._VALUES_CTOR_RE.sub(_wrap, sql)
+
     def _transform_select_into(self, node: SelectIntoStatement) -> ASTNode:
         result = super()._transform_select_into(node)
         if not isinstance(result, SelectIntoStatement):
             return result
+        if "VALUES" in result.rest_sql.upper():
+            result = dataclasses.replace(
+                result, rest_sql=self._mysql_values_row(result.rest_sql)
+            )
         if not any(re.match(r"(?i)^(?:NEW|OLD)\s*\.", v) for v in result.into_vars):
             return result
         # MySQL's SELECT ... INTO cannot target the trigger pseudo-row:
