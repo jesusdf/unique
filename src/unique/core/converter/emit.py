@@ -4415,12 +4415,21 @@ def _emit_date_add(node: FunctionCall, dialect: str) -> str | None:
         op = "-" if sub else "+"
         return f"{ts} {op} {n}"
 
-    # MySQL's DATE_ADD reads a bare ``'2020-01-01'`` string as a date, but on
-    # PG interval arithmetic reads it as an *interval* ("invalid input syntax")
-    # and Oracle rejects the implicit string->date cast. Qualify a date-only
-    # literal as an ANSI DATE literal so the day arithmetic actually runs.
-    if dialect in ("postgresql", "oracle") and _is_date_only_literal(base):
-        ts = f"DATE {ts}"
+    # MySQL's DATE_ADD/TIMESTAMPADD reads a bare ``'2020-01-01[ 10:00]'`` string as
+    # a date/timestamp, but on PG interval arithmetic reads it as an *interval*
+    # ("invalid input syntax") and Oracle rejects the implicit string->date cast.
+    # Qualify a date/datetime literal as its ANSI literal so the arithmetic runs.
+    if isinstance(base, Literal) and isinstance(base.value, str):
+        if dialect == "oracle":
+            # Oracle's TIMESTAMP literal needs seconds (…10:00 -> ORA-01861);
+            # _oracle_date_literal pads them (and picks DATE for a date-only).
+            _ol = _oracle_date_literal(base.value.strip())
+            if _ol is not None:
+                ts = _ol
+        elif dialect == "postgresql":
+            _pl = _as_datetime_literal(base, dialect)
+            if _pl is not None:
+                ts = _pl
 
     if dialect == "mysql":
         fn = "DATE_SUB" if sub else "DATE_ADD"

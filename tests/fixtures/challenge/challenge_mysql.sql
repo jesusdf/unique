@@ -745,7 +745,7 @@ SELECT CONNECTION_ID(), DATABASE(), USER(), VERSION()
 -- CASE[fixed]: my-time-build — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT CAST('2020-01-01' AS DATETIME) + INTERVAL 90 MINUTE, MAKETIME(10,20,30), SEC_TO_TIME(3661)
 
--- CASE[open]: my-timestampadd — fails on oracle, postgresql. ORA-30081: invalid data type for datetime/interval arithmetic
+-- CASE[fixed]: my-timestampadd — qualify the bare datetime string as a TIMESTAMP literal (seconds padded for Oracle) so PG/Oracle interval arithmetic runs. Live-verified 2020-01-01 10:30.
 SELECT TIMESTAMPADD(MINUTE, 30, '2020-01-01 10:00') AS r
 
 -- CASE[fixed]: my-timestampdiff — MySQL TIMESTAMPDIFF(DAY, ...) now translates (day count); stale tag, live-verified 9.

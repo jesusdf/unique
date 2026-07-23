@@ -2351,6 +2351,21 @@ class TestTsqlDateAddEomonth:
         assert "LAST_DAY('2020-02-15')" in out, out
 
 
+class TestTimestampAddQualifiesLiteral:
+    """TIMESTAMPADD over a bare datetime string can't take interval arithmetic on
+    PG/Oracle; qualify it as a TIMESTAMP literal (seconds padded for Oracle).
+    Live-verified 2020-01-01 10:30."""
+
+    def test_pg_and_oracle_qualify_datetime(self) -> None:
+        case = _case("challenge_mysql.sql", "my-timestampadd ")
+        assert "TIMESTAMP '2020-01-01 10:00' + INTERVAL '30 MINUTE'" in _tx(
+            case, "mysql", "postgresql"
+        )
+        assert "TIMESTAMP '2020-01-01 10:00:00' + NUMTODSINTERVAL(30, 'MINUTE')" in _tx(
+            case, "mysql", "oracle"
+        )
+
+
 class TestDateAddQualifiesDateLiteral:
     """MySQL's DATE_ADD reads a bare '2020-01-01' string as a date, but PG reads
     it as an interval and Oracle rejects the implicit cast. A date-only literal
