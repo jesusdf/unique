@@ -1980,6 +1980,20 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
                 args=(convert_expression(key), convert_expression(val)),
             )
 
+    # JSON_OBJECT(k, v, ...) — a built-in on all four engines but spelled
+    # differently (MySQL comma, PG json_build_object, Oracle KEY..VALUE, T-SQL
+    # colon). sqlglot parses it to JSONObject with a fake sql_name; flatten the
+    # JSONKeyValue pairs to (k, v, k, v, …) and let the emitter render per engine.
+    if isinstance(expr, exp.JSONObject):
+        jo_args: list[ASTNode] = []
+        for kv in expr.expressions:
+            if isinstance(kv, exp.JSONKeyValue):
+                jo_args.append(convert_expression(kv.this))
+                jo_args.append(convert_expression(kv.expression))
+            else:
+                jo_args.append(convert_expression(kv))
+        return FunctionCall(name="JSON_OBJECT", args=tuple(jo_args))
+
     # PostgreSQL date_trunc('unit', ts) parses to TimestampTrunc/DateTrunc whose
     # sql_name() is the internal "TIMESTAMP_TRUNC" (no engine has it).
     # Canonicalize to the DATE_TRUNC FunctionCall the emitter already maps per

@@ -425,6 +425,10 @@ def gate_reason(sql: str, target: str, source: str | None = None) -> str | None:
             # sqlglot's tsql reader cannot parse a (valid) OUTPUT clause
             # followed by WHERE; drop it for the parse check only.
             stmt = _TSQL_OUTPUT_CLAUSE_RE.sub(" ", stmt)
+            # sqlglot's tsql reader also rejects the (valid, 2022+) JSON
+            # constructor null-clause ``JSON_ARRAY(… NULL ON NULL)`` — drop it
+            # for the parse check only (it runs live).
+            stmt = re.sub(r"(?i)\s+(?:NULL|ABSENT)\s+ON\s+NULL", " ", stmt)
             # Nor (valid) SAVE TRANSACTION name (wave 123).
             if re.fullmatch(r"(?is)\s*SAVE\s+TRAN(?:SACTION)?\s+\w+\s*;?\s*", stmt):
                 continue

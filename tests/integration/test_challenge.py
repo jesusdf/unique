@@ -412,6 +412,27 @@ class TestJsonAggregates:
         assert r.warnings and "UNIQUE:" in r.sql, r.sql
 
 
+class TestJsonConstructors:
+    """JSON_OBJECT / JSON_ARRAY exist on all four engines with different syntax
+    (PG json_build_object/array, Oracle KEY..VALUE, T-SQL colon). A boolean stays
+    a JSON boolean (PG/Oracle TRUE; T-SQL renders a BIT as true/false) and NULL is
+    preserved (Oracle/T-SQL need NULL ON NULL, which sqlglot's T-SQL reader can't
+    parse — the gate skips it). Live-verified [1,"a",null,true] on all four."""
+
+    def test_json_object_per_engine(self) -> None:
+        case = _case("challenge_mysql.sql", "my-json-object ")
+        assert "JSON_BUILD_OBJECT('a', 1" in _tx(case, "mysql", "postgresql")
+        assert "'a' VALUE 1" in _tx(case, "mysql", "oracle")
+        assert "'a':1" in _tx(case, "mysql", "tsql")
+
+    def test_json_array_boolean_and_null(self) -> None:
+        case = _case("challenge_mysql.sql", "my-json-build ")
+        pg = _tx(case, "mysql", "postgresql")
+        assert "JSON_BUILD_ARRAY(1, 'a', NULL, TRUE)" in pg, pg
+        ts = _tx(case, "mysql", "tsql")
+        assert "CAST(1 AS BIT)" in ts and "NULL ON NULL" in ts, ts
+
+
 class TestDateTruncMonth:
     """PG date_trunc parses to TimestampTrunc (fake sql_name); it is canonicalized
     to DATE_TRUNC and mapped per engine — Oracle TRUNC(ts,'MM'), T-SQL

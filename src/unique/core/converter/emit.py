@@ -5369,6 +5369,39 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             k = f"CAST({_emit_expression(inner, dialect)} AS VARCHAR2(4000))"
             return f"JSON_OBJECTAGG({k} VALUE {v})"
         return f"JSON_OBJECTAGG({_emit_expression(key_node, dialect)}, {v})"
+
+    # JSON_OBJECT / JSON_ARRAY constructors — a built-in on all four engines but
+    # spelled differently. A boolean stays a JSON boolean (PG/Oracle/MySQL keep
+    # TRUE; T-SQL renders a BIT as JSON true/false), and NULL is preserved
+    # (Oracle/T-SQL default to ABSENT ON NULL — force NULL ON NULL).
+    def _json_arg(a: ASTNode) -> str:
+        if isinstance(a, Literal) and a.dtype == "boolean":
+            if dialect == "tsql":
+                return f"CAST({1 if a.value else 0} AS BIT)"
+            return "TRUE" if a.value else "FALSE"
+        return _emit_expression(a, dialect)
+
+    if up == "JSON_OBJECT" and len(node.args) >= 2 and len(node.args) % 2 == 0:
+        vals = [_json_arg(a) for a in node.args]
+        pairs = list(zip(vals[0::2], vals[1::2], strict=True))
+        if dialect == "postgresql":
+            return f"JSON_BUILD_OBJECT({', '.join(vals)})"
+        if dialect == "oracle":
+            body = ", ".join(f"{k} VALUE {v}" for k, v in pairs)
+            return f"JSON_OBJECT({body} NULL ON NULL)"
+        if dialect == "tsql":
+            body = ", ".join(f"{k}:{v}" for k, v in pairs)
+            return f"JSON_OBJECT({body} NULL ON NULL)"
+        return f"JSON_OBJECT({', '.join(vals)})"  # MySQL native comma pairs
+
+    if up == "JSON_ARRAY" and node.args:
+        arr = ", ".join(_json_arg(a) for a in node.args)
+        if dialect == "postgresql":
+            return f"JSON_BUILD_ARRAY({arr})"
+        if dialect in ("oracle", "tsql"):
+            return f"JSON_ARRAY({arr} NULL ON NULL)"
+        return f"JSON_ARRAY({arr})"  # MySQL native (keeps NULLs by default)
+
     # MySQL ELT(n, a, b, …)/FIELD(v, a, b, …) → portable CASE chains (RC-1a).
     if up == "ELT" and len(node.args) >= 2 and dialect != "mysql":
         n = _emit_expression(node.args[0], dialect)

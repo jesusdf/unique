@@ -450,7 +450,7 @@ SELECT JSON_ARRAY_APPEND('[1,2]', '$', 3), JSON_ARRAY_INSERT('[1,2]', '$[0]', 0)
 -- CASE[fixed]: my-json-arrayagg — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION SELECT 2) t
 
--- CASE[open]: my-json-build — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[fixed]: my-json-build — JSON_ARRAY/JSON_OBJECT constructors. A boolean stays a JSON boolean (PG/Oracle TRUE, T-SQL CAST(x AS BIT)); NULL kept via NULL ON NULL (Oracle/T-SQL). PG spells json_build_array/object. live-verified [1,"a",null,true] on all four.
 SELECT JSON_ARRAY(1,'a',NULL,TRUE),JSON_OBJECT('k','v','n',1)
 
 -- CASE[fixed]: my-json-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
@@ -474,7 +474,7 @@ SELECT JSON_SET('{}','$.a',1),JSON_INSERT('{}','$.a',1),JSON_REPLACE('{"a":1}','
 -- CASE[fixed]: my-json-modify — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_SET('{}', '$.a', 1), JSON_REMOVE('{"a":1}', '$.a'), JSON_REPLACE('{"a":1}', '$.a', 2)
 
--- CASE[open]: my-json-object — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.J_
+-- CASE[fixed]: my-json-object — JSON_OBJECT maps per engine: PG json_build_object, Oracle KEY..VALUE, T-SQL colon, MySQL comma (NULL ON NULL keeps null values). live-verified {"a":1,"b":2} on all four.
 SELECT JSON_OBJECT('a', 1, 'b', 2)
 
 -- CASE[fixed]: my-json-search — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
