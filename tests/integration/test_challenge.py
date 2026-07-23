@@ -814,6 +814,18 @@ class TestAtTimeZone:
         assert "AT TIME ZONE 'UTC'" in out and "UNIQUE:" not in out, out
 
 
+class TestChrAsciiUnicode:
+    """PG chr(n) and ascii() are Unicode code-point operations. Oracle CHR(n>127)
+    returns a raw byte and ASCII of a multibyte char returns its raw encoding, so
+    they map to NCHR(n) and ASCII(TO_NCHAR(x)). Live-verified ('é', 233)."""
+
+    def test_oracle_unicode_codepoint(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-chr-ascii-unicode ")
+        out = _tx(case, "postgresql", "oracle")
+        assert "NCHR(233)" in out, out
+        assert "ASCII(TO_NCHAR(" in out, out
+
+
 class TestExtractEpochInterval:
     """EXTRACT(EPOCH FROM timestamp) is a literal date-diff, but EXTRACT(EPOCH
     FROM interval) has no portable form (T-SQL/MySQL have no interval value type)

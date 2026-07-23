@@ -157,7 +157,7 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) NOT V
 -- CASE[open]: pg-check-xor — fails on tsql. (102, b"Incorrect syntax near '<'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 CREATE TABLE t (a INT, b INT, c INT, CONSTRAINT ck CHECK ((a IS NULL) != (b IS NULL)))
 
--- CASE[open]: pg-chr-ascii-unicode — fails on oracle. 'utf-8' codec can't decode byte 0xe9 in position 0: unexpected end of data
+-- CASE[fixed]: pg-chr-ascii-unicode — PG chr(n) is a Unicode code point (Oracle CHR(n>127) returns a raw byte) → NCHR(n); PG ascii() is the code point (Oracle ASCII of a multibyte char returns the raw encoding) → ASCII(TO_NCHAR(x)); ('é', 233) verified on Oracle
 SELECT chr(233), ascii('é')
 
 -- CASE[fixed]: pg-chr-concat — fails on mysql. FUNC-DIFF: source=(('AB',),) target=(('4142',),)

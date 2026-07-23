@@ -5361,6 +5361,11 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _asc_x = _emit_expression(node.args[0], dialect)
         if dialect == "tsql":
             return f"CASE WHEN {_asc_x} = '' THEN 0 ELSE ASCII({_asc_x}) END"
+        # PG's ascii() returns the Unicode code point; Oracle ASCII of a multibyte
+        # character returns its raw encoding (ASCII('é') = 50089, not 233), so read
+        # the code point through the national charset (ASCII(TO_NCHAR(x)) = 233).
+        if SOURCE_DIALECT.get() == "postgresql":
+            return f"COALESCE(ASCII(TO_NCHAR({_asc_x})), 0)"
         return f"COALESCE(ASCII({_asc_x}), 0)"
 
     # MySQL CONCAT returns NULL if ANY argument is NULL (it propagates NULL);
@@ -6778,6 +6783,18 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             f"CHR({_n}) /* UNIQUE: MySQL CHAR({_n}) is a multi-byte byte string, "
             "not a single code point (docs/03-unsupported.md) */"
         )
+    if (
+        up == "CHR"
+        and len(node.args) == 1
+        and dialect == "oracle"
+        and SOURCE_DIALECT.get() == "postgresql"
+        and isinstance(node.args[0], Literal)
+        and isinstance(node.args[0].value, int)
+        and node.args[0].value > 127
+    ):
+        # PG CHR(n) is a Unicode code point; Oracle CHR(n) for n > 127 returns a
+        # raw byte (invalid in an AL32UTF8 DB), so use NCHR (national code point).
+        return f"NCHR({node.args[0].value})"
     if up == "CHR" and len(node.args) == 1 and dialect in ("mysql", "tsql"):
         # PG/Oracle CHR(n) is a Unicode code point; above ASCII (n > 127) MySQL's
         # byte CHAR(n USING latin1) gives the wrong bytes and T-SQL's CHAR(n)
