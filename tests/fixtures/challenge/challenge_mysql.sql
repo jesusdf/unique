@@ -462,7 +462,7 @@ CREATE TABLE t (a INT, b JSON, c INT AS (JSON_EXTRACT(b,'$.x')) STORED, INDEX((C
 -- CASE[fixed]: my-json-keys — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_KEYS('{"a":1,"b":2}') AS r
 
--- CASE[open]: my-json-merge — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[limit]: my-json-merge — MySQL JSON_MERGE_PATCH (RFC 7396 deep merge) has no portable form (Oracle spells it JSON_MERGEPATCH, PG has only shallow ||); catalog-gated + annotated (docs/03-unsupported.md). fails on oracle, postgresql, tsql
 SELECT JSON_MERGE_PATCH('{"a":1}', '{"b":2}') AS r
 
 -- CASE[fixed]: my-json-meta — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS

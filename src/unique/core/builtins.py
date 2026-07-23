@@ -94,6 +94,10 @@ _ENGINE_STANDARD: dict[str, frozenset[str]] = {
     # the last inserted IDENTITY value in a given scope. Flag them so the gate
     # degrades rather than shipping an undefined function.
     "tsql": frozenset({"IDENT_CURRENT"}),
+    # MySQL JSON document-merge functions (RFC 7396 patch / recursive preserve)
+    # with no portable equivalent — Oracle spells the patch differently
+    # (JSON_MERGEPATCH, no underscore) and PostgreSQL has only shallow ``||``.
+    "mysql": frozenset({"JSON_MERGE_PATCH", "JSON_MERGE_PRESERVE"}),
 }
 
 
