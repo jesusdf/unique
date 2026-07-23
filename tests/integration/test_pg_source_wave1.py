@@ -6075,7 +6075,9 @@ class TestWave163CharsetCastSubqueryOrder:
             "mysql",
             "tsql",
         )
-        assert re.search(r"(?i)CAST\('bar' AS CHAR\)", out), out
+        # A charset conversion leaves the value unchanged; a bare CHAR cast would
+        # truncate to CHAR(1) ('bar' -> 'b'), so it maps to an unbounded string.
+        assert re.search(r"(?i)CAST\('bar' AS VARCHAR\(8000\)\)", out), out
         assert "CHARACTER_SET" not in out.upper(), out
 
     def test_charset_cast_kept_mysql(self) -> None:

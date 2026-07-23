@@ -131,7 +131,7 @@ SELECT CAST(3.14 AS DECIMAL(10,2)), CAST(3.14 AS SIGNED), CAST(3.14 AS CHAR), CA
 -- CASE[fixed]: my-cast-num-char — MySQL CAST(x AS CHAR) (no length) is a to-string conversion; a bare CHAR is length-required elsewhere (Oracle ORA-25137). Map to VARCHAR2(4000)/TEXT/VARCHAR(MAX). live-verified 1234.5.
 SELECT CAST(1234.5 AS CHAR) AS r
 
--- CASE[open]: my-cast-suite — fails on oracle. ORA-00902: invalid datatype
+-- CASE[fixed]: my-cast-suite — MySQL SIGNED/CONVERT(,SIGNED) map to CAST(AS INTEGER); DECIMAL/DATE/CHAR map to NUMBER/DATE/VARCHAR2 on Oracle (DECIMAL prints 1.5 vs 1.50, precision-only). live-verified 123, 1.5, 123, 2020-01-01, 65.
 SELECT CAST('123' AS SIGNED),CAST('1.5' AS DECIMAL(4,2)),CONVERT('123',SIGNED),CAST('2020-01-01' AS DATE),CAST(65 AS CHAR)
 
 -- CASE[open]: my-cast-time — fails on oracle. DPY-3006: Oracle data type 178 is not supported
@@ -203,13 +203,13 @@ SELECT CONCAT_WS('-', a, b) FROM (SELECT 'x' a, 'y' b) t
 -- CASE[fixed]: my-conv2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT CONV('7F', 16, 2), CONV(255, 10, 16)
 
--- CASE[open]: my-convert-signed — fails on oracle. ORA-00902: invalid datatype
+-- CASE[fixed]: my-convert-signed — MySQL CONVERT(x, SIGNED) maps to CAST(x AS INTEGER) on Oracle. live-verified 123.
 SELECT CONVERT('123', SIGNED) AS r
 
 -- CASE[open]: my-convert-tz — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CO
 SELECT CONVERT_TZ('2020-01-01 10:00', '+00:00', '+02:00') AS r
 
--- CASE[open]: my-convert-using2 — fails on oracle, postgresql. FUNC-DIFF: source=(('2020-06-15 14:30',),) target=(('2',),)
+-- CASE[fixed]: my-convert-using2 — MySQL CONVERT(x USING charset) is a charset conversion that leaves the value unchanged; mapped to an unbounded string cast (VARCHAR2(4000)/TEXT/VARCHAR(8000)), since a bare CAST AS CHAR wrongly truncated to CHAR(1) -> '2'. live-verified 2020-06-15 14:30.
 SELECT CONVERT('2020-06-15 14:30' USING utf8mb4) AS r
 
 -- CASE[fixed]: my-crc32 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CR

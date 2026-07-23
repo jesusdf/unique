@@ -412,6 +412,25 @@ class TestJsonAggregates:
         assert r.warnings and "UNIQUE:" in r.sql, r.sql
 
 
+class TestConvertUsingCharset:
+    """MySQL CONVERT(x USING charset) is a per-value charset conversion that
+    leaves the string value unchanged; no other engine has per-value charsets,
+    so it maps to identity (a bare CAST AS CHAR would truncate to CHAR(1))."""
+
+    def test_convert_using_is_identity(self) -> None:
+        for target in ("oracle", "postgresql", "tsql"):
+            out = _tx(
+                _case("challenge_mysql.sql", "my-convert-using2 "), "mysql", target
+            )
+            body = "\n".join(
+                ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+            )
+            # Unbounded string cast (VARCHAR2(4000)/TEXT/VARCHAR(8000)) preserves
+            # the value; it must never be a bare CHAR (truncates to CHAR(1)).
+            assert "'2020-06-15 14:30'" in body, body
+            assert not re.search(r"(?i)AS CHAR\b", body), body
+
+
 class TestConcatDateIso:
     """Oracle renders a DATE concatenated to a string via NLS_DATE_FORMAT
     ('01-JAN-20'); MySQL uses ISO 'yyyy-mm-dd'. A DATE-valued CONCAT argument is

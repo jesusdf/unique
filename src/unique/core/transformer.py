@@ -290,6 +290,22 @@ class TypeMapper(TransformPass):
                     expression=stripped,
                     target_type=self._map_type(node.target_type, ctx.target),
                 )
+            # MySQL ``CONVERT(x USING charset)`` / ``CAST(x AS CHAR CHARACTER
+            # SET …)`` is a charset conversion that leaves the string VALUE
+            # unchanged. No other engine has per-value charsets; treat it like a
+            # no-length CHAR (an unbounded string cast) so the value is preserved
+            # — a bare CHAR cast would wrongly truncate to CHAR(1) ('bar' -> 'b').
+            if (
+                "CHARACTER SET" in node.target_type.name.upper()
+                and ctx.source == "mysql"
+                and ctx.target != "mysql"
+            ):
+                str_type = {
+                    "oracle": DataType(name="VARCHAR2", params=(4000,)),
+                    "postgresql": DataType(name="TEXT"),
+                    "tsql": DataType(name="VARCHAR", params=(8000,)),
+                }[ctx.target]
+                return CastExpression(expression=node.expression, target_type=str_type)
             # MySQL ``CAST(x AS CHAR)`` with no length is a to-string conversion
             # (variable length); a bare CHAR is fixed-width or length-required
             # elsewhere (Oracle ORA-25137). Map it to each engine's unbounded
