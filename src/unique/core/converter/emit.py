@@ -5176,6 +5176,21 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
                     f"'({_xp.value}/text())[1]', 'NVARCHAR(MAX)')"
                 )
 
+    # MySQL UpdateXML(xml, xpath, new_fragment) replaces the matched node. PG has
+    # no such function; T-SQL uses .modify() XML-DML and Oracle's UPDATEXML has a
+    # different XMLTYPE signature/semantics — no faithful cross-engine form, so
+    # degrade to a carrier (ExtractValue in the same statement still translates).
+    if (
+        fn_name == "UPDATEXML"
+        and SOURCE_DIALECT.get() == "mysql"
+        and dialect != "mysql"
+    ):
+        return (
+            "NULL /* UNIQUE: MySQL UpdateXML has no cross-engine equivalent "
+            "(PG lacks it; T-SQL .modify() and Oracle UPDATEXML differ) — "
+            "see docs/03-unsupported.md */"
+        )
+
     # COLLATION(x) returns the argument's collation NAME, which is engine-specific
     # (MySQL 'utf8mb4_0900_ai_ci' vs Oracle 'USING_NLS_COMP') — the function
     # exists on both but can never return the same value. Flag it.

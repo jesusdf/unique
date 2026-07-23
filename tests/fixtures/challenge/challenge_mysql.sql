@@ -838,7 +838,7 @@ SELECT WEEK('2020-06-15'), QUARTER('2020-06-15'), DAYOFWEEK('2020-06-15')
 -- CASE[fixed]: my-weight-string — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.WE
 SELECT WEIGHT_STRING('abc') AS r
 
--- CASE[open]: my-xml-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.Ex
+-- CASE[limit]: my-xml-fns — ExtractValue translates per engine (Oracle EXTRACTVALUE(XMLTYPE)/PG XPATH/T-SQL .value()), but MySQL UpdateXML has no cross-engine equivalent (PG lacks it; T-SQL .modify() XML-DML and Oracle UPDATEXML differ) so it degrades to NULL + annotation (docs/03-unsupported.md). fails on oracle, postgresql, tsql
 SELECT ExtractValue('<r><a>1</a></r>','/r/a'), UpdateXML('<r><a>1</a></r>','/r/a','<a>2</a>')
 
 -- CASE[fixed]: my8-lag-nth — fails on oracle. ORA-43853: JSON type cannot be used in non-automatic segment space management tablespace "

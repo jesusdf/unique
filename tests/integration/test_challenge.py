@@ -524,6 +524,24 @@ class TestWindowedStringAgg:
         assert "SUM(x) OVER" in out and "UNIQUE:" not in out, out
 
 
+class TestMysqlUpdateXml:
+    """MySQL UpdateXML (node-replacement XML DML) has no cross-engine equivalent
+    and degrades to NULL + carrier + warning; ExtractValue in the same statement
+    still translates per engine, and the whole statement stays valid."""
+
+    def test_updatexml_degrades_extractvalue_kept(self) -> None:
+        case = _case("challenge_mysql.sql", "my-xml-fns ")
+        for target in ("oracle", "postgresql", "tsql"):
+            result = Transpiler().transpile(case, source="mysql", target=target)
+            assert result.warnings and "UNIQUE:" in result.sql, target
+            body = "\n".join(
+                ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "UPDATEXML(" not in body.upper(), body
+            # ExtractValue still translated (no raw MySQL ExtractValue leaks).
+            assert "XMLTYPE" in body or "XPATH" in body or ".value(" in body, body
+
+
 class TestMysqlLenientDecimalCast:
     """MySQL casts a string to a number leniently — a non-numeric string yields 0
     (CAST('abc' AS DECIMAL) = 0), where the other engines error. The literal is
