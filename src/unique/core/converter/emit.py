@@ -1620,6 +1620,26 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 f"ALTER TABLE {_tdc} DROP COLUMN {_cdc}"
             )
 
+    # Oracle FOR UPDATE WAIT <n> (block up to n seconds for the row lock) has no
+    # PostgreSQL/MySQL form — they offer only FOR UPDATE (block) and NOWAIT. Drop
+    # the WAIT <n> and document the lost bounded-wait timeout.
+    if (
+        node.source_dialect == "oracle"
+        and dialect in ("postgresql", "mysql")
+        and re.search(r"(?i)\bFOR\s+UPDATE\b[\s\S]*\bWAIT\s+\d+", node.sql)
+    ):
+        _stripped = re.sub(r"(?i)\s*\bWAIT\s+\d+\b", "", node.sql)
+        try:
+            _rendered = sqlglot.transpile(_stripped, read=read, write=write)
+            _base = _rendered[0] if _rendered and _rendered[0].strip() else _stripped
+        except Exception:  # noqa: BLE001 - keep the stripped spelling on failure
+            _base = _stripped
+        return (
+            f"-- UNIQUE: Oracle FOR UPDATE WAIT <n> (bounded lock wait) has no "
+            f"{dialect} equivalent; it blocks with the default behavior "
+            f"(docs/03-unsupported.md)\n{_base}"
+        )
+
     # Oracle CREATE SEQUENCE spells its negatives as one word (NOCYCLE, NOCACHE,
     # NOMAXVALUE, NOMINVALUE) and has an ORDER/NOORDER RAC option no other engine
     # shares. PostgreSQL/T-SQL use two words (NO CYCLE, …) and have no ORDER

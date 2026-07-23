@@ -192,7 +192,7 @@ CREATE TABLE t (id NUMBER); SELECT * FROM t FOR UPDATE NOWAIT
 -- CASE[open]: ora-format-currency — fails on mysql, postgresql. FUNC-DIFF: source=(('1,234,567.89', '$1,234,567.89'),) target=(('1,234,567.89', '1,234,567
 SELECT TO_CHAR(1234567.891,'FM999,999,990.00'), TO_CHAR(1234567.891,'FML999G999G990D00') FROM DUAL
 
--- CASE[open]: ora-forupdate-wait — fails on mysql, postgresql. syntax error at or near "WAIT"
+-- CASE[limit]: ora-forupdate-wait — Oracle FOR UPDATE WAIT <n> (bounded lock wait) has no PostgreSQL/MySQL equivalent (they offer only FOR UPDATE / NOWAIT); the WAIT <n> is dropped and the lost timeout annotated (docs/03-unsupported.md). fails on mysql, postgresql
 CREATE TABLE t (id NUMBER); CREATE INDEX ix ON t (id);
 SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5
 
