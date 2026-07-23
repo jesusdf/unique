@@ -227,7 +227,7 @@ SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r
 -- CASE[limit]: my-date-diff-minus — MySQL DATE - DATE is a numeric YYYYMMDD subtraction (200), not a day count; the meaningful day count (60) is emitted with a documented carrier (docs/03-unsupported.md). fails on oracle, postgresql
 SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r
 
--- CASE[open]: my-date-eq-dt — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[fixed]: my-date-eq-dt — DATE('2020-01-01') = '...' is a DATE comparison (true; the date equals the midnight timestamp), but the DATE() of a literal was dropped to a bare string (a false TEXT compare). It now emits a real date cast; Oracle lifts the ISO datetime string to a TIMESTAMP literal (a bare string vs a DATE is ORA-01861). Live 1 on all four.
 SELECT DATE('2020-01-01') = '2020-01-01 00:00:00' AS r
 
 -- CASE[fixed]: my-date-format — DATE_FORMAT(str, mask) with a reproducible mask. The bare ISO string value is wrapped as a DATE (Oracle/PG TO_CHAR / T-SQL FORMAT reject a string); mask translated python->engine model. live-verified 2020/05/17 on all four. (bare-letter/locale masks like %W degrade honestly.)

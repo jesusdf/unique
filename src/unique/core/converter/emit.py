@@ -7599,6 +7599,70 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         _sr = _emit_expression(node.right, dialect)
         return f"CAST({_sl} AS FLOAT) + CAST({_sr} AS FLOAT)"
 
+    # ``DATE('2020-01-01') = '2020-01-01 00:00:00'`` is a DATE comparison, true on
+    # every engine (the date equals the midnight timestamp) — but the DATE() of a
+    # literal was dropped to a bare string, making it a false TEXT comparison.
+    # Only the narrow literal-vs-literal shape is handled (a general DATE(col) is
+    # unchanged, to avoid disturbing the common ``DATE(col) = '…'`` pattern).
+    if node.operator in (
+        BinaryOperator.EQ,
+        BinaryOperator.NEQ,
+        BinaryOperator.LT,
+        BinaryOperator.GT,
+        BinaryOperator.LTE,
+        BinaryOperator.GTE,
+    ):
+
+        def _date_of_literal(n: ASTNode) -> Literal | None:
+            if (
+                isinstance(n, FunctionCall)
+                and n.name.upper() == "TS_OR_DS_TO_DATE"
+                and len(n.args) == 1
+                and isinstance(n.args[0], Literal)
+            ):
+                return n.args[0]
+            return None
+
+        _ld, _rd = _date_of_literal(node.left), _date_of_literal(node.right)
+        if (_ld is not None and isinstance(node.right, Literal)) or (
+            _rd is not None and isinstance(node.left, Literal)
+        ):
+
+            def _cmp_side(n: ASTNode, dlit: Literal | None, other_is_date: bool) -> str:
+                if dlit is not None:
+                    return _emit_expression(
+                        CastExpression(
+                            expression=dlit, target_type=DataType(name="DATE")
+                        ),
+                        dialect,
+                    )
+                # A date/datetime string opposite a DATE: Oracle can't implicitly
+                # convert an ISO string (ORA-01861) — lift it to an ANSI literal.
+                if (
+                    other_is_date
+                    and dialect == "oracle"
+                    and isinstance(n, Literal)
+                    and isinstance(n.value, str)
+                ):
+                    _s = n.value.strip().replace("T", " ")
+                    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", _s):
+                        return f"DATE '{_s}'"
+                    if re.fullmatch(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", _s):
+                        return f"TIMESTAMP '{_s}'"
+                return _emit_operand(n, node.operator, dialect)
+
+            _op_sym = {
+                BinaryOperator.EQ: "=",
+                BinaryOperator.NEQ: "<>",
+                BinaryOperator.LT: "<",
+                BinaryOperator.GT: ">",
+                BinaryOperator.LTE: "<=",
+                BinaryOperator.GTE: ">=",
+            }[node.operator]
+            _cl = _cmp_side(node.left, _ld, _rd is not None)
+            _cr = _cmp_side(node.right, _rd, _ld is not None)
+            return f"{_cl} {_op_sym} {_cr}"
+
     left = _emit_operand(node.left, node.operator, dialect)
     right = _emit_operand(node.right, node.operator, dialect, right=True)
 

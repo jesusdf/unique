@@ -1135,6 +1135,22 @@ class TestCaseStatementEmptyBlock:
         assert out.count("SET NOCOUNT ON;") >= 3, out  # proc prelude + 2 fillers
 
 
+class TestDateLiteralComparison:
+    """DATE('2020-01-01') = '2020-01-01 00:00:00' is a DATE comparison (true), but
+    the DATE() of a literal was dropped to a bare string (a false text compare).
+    It now emits a real date cast; Oracle lifts the ISO string to a TIMESTAMP
+    literal (my-date-eq-dt)."""
+
+    def test_date_typing_preserved(self) -> None:
+        case = _case("challenge_mysql.sql", "my-date-eq-dt ")
+        for target in ("postgresql", "tsql"):
+            assert "CAST('2020-01-01' AS DATE)" in _exec_lines(
+                _tx(case, "mysql", target)
+            )
+        ora = _exec_lines(_tx(case, "mysql", "oracle"))
+        assert "DATE '2020-01-01'" in ora and "TIMESTAMP '2020-01-01 00:00:00'" in ora
+
+
 class TestHighPrecisionDecimalLiteral:
     """A decimal literal a Python float cannot hold (2.9999999999999999 -> 3.0) is
     emitted from its exact source text, so FLOOR stays 2 rather than folding to 3
