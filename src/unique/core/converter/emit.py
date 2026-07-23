@@ -148,6 +148,8 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "SMALLDATETIME": "TIMESTAMP",
         "MONEY": "NUMERIC(19,4)",
         "SMALLMONEY": "NUMERIC(10,4)",
+        # PG has no bare DOUBLE (a bare-name cast errors) — it is DOUBLE PRECISION.
+        "DOUBLE": "DOUBLE PRECISION",
     },
 }
 

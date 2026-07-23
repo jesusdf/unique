@@ -125,7 +125,7 @@ SELECT CAST(2.7 AS SIGNED) AS r
 -- CASE[open]: my-cast-json — fails on oracle, postgresql, tsql. (243, b'Type json is not a defined system type.DB-Lib error message 20018, severity 16:\nG
 SELECT CAST(1 AS JSON), CAST('[1,2]' AS JSON), CAST(NULL AS JSON)
 
--- CASE[open]: my-cast-matrix — fails on oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[fixed]: my-cast-matrix — CAST AS DOUBLE maps to PG DOUBLE PRECISION / Oracle BINARY_DOUBLE (bare DOUBLE is an invalid type name). Live-verified (3.14, 3, '3.14', 3.14).
 SELECT CAST(3.14 AS DECIMAL(10,2)), CAST(3.14 AS SIGNED), CAST(3.14 AS CHAR), CAST(3.14 AS DOUBLE)
 
 -- CASE[fixed]: my-cast-num-char — MySQL CAST(x AS CHAR) (no length) is a to-string conversion; a bare CHAR is length-required elsewhere (Oracle ORA-25137). Map to VARCHAR2(4000)/TEXT/VARCHAR(MAX). live-verified 1234.5.

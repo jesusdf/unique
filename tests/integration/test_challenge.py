@@ -2249,6 +2249,16 @@ class TestRoundDateMonth:
         assert "DATE_ADD(" in out and "INTERVAL 1 MONTH" in out, out
 
 
+class TestCastDouble:
+    """A bare CAST(... AS DOUBLE) is an invalid type name on PG (needs DOUBLE
+    PRECISION) and Oracle (BINARY_DOUBLE). Map it. Live-verified 3.14."""
+
+    def test_cast_double_maps(self) -> None:
+        case = _case("challenge_mysql.sql", "my-cast-matrix ")
+        assert "DOUBLE PRECISION" in _tx(case, "mysql", "postgresql")
+        assert "BINARY_DOUBLE" in _tx(case, "mysql", "oracle")
+
+
 class TestToNumberScientific:
     """Oracle TO_NUMBER of a scientific-notation string ('1.234E2') can't CAST to
     a T-SQL DECIMAL (error 8114); FLOAT parses the exponent. Live-verified 123.4."""
