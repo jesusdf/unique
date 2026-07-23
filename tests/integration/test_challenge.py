@@ -472,6 +472,22 @@ class TestDateFormatMasks:
         )
         assert r.warnings and "UNIQUE:" in r.sql, r.sql
 
+    def test_number_format_mask(self) -> None:
+        # T-SQL FORMAT(num, 'N2') -> Oracle/PG TO_CHAR FM mask, MySQL FORMAT(n, 2).
+        case = _case("challenge_sqlserver.sql", "ts-format-number ")
+        o4 = _tx(case, "tsql", "oracle")
+        assert "TO_CHAR(1234.5, 'FM" in o4 and "D00')" in o4, o4
+        my = _tx(case, "tsql", "mysql")
+        assert "FORMAT(1234.5, 2)" in my, my
+
+    def test_currency_number_mask_degrades(self) -> None:
+        # A currency mask (L) has no cross-engine equivalent — degrade, not
+        # ship a wrong DATE_FORMAT.
+        r = Transpiler().transpile(
+            "SELECT TO_CHAR(1234.5, 'L9G999D99') AS r", source="oracle", target="mysql"
+        )
+        assert r.warnings and "UNIQUE:" in r.sql, r.sql
+
 
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL

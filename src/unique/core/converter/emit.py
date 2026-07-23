@@ -231,7 +231,10 @@ _PY_FMT_TOKEN_RE = re.compile(r"%.")
 def _date_fmt_reproducible(pyfmt: str) -> bool:
     """Whether a python-model date format is composed only of tokens every
     engine can reproduce (no FF fractional, no un-canonicalized locale name)."""
-    if any(t not in _KNOWN_PY_FMT_TOKENS for t in _PY_FMT_TOKEN_RE.findall(pyfmt)):
+    tokens = _PY_FMT_TOKEN_RE.findall(pyfmt)
+    # No ``%`` field at all → not a date format (a number mask like ``9,999.99``
+    # or a bare literal); it must not be routed through the date-format path.
+    if not tokens or any(t not in _KNOWN_PY_FMT_TOKENS for t in tokens):
         return False
     # Remove the % tokens and any ``"…"`` quoted literal run (which round-trips:
     # kept quoted on Oracle/PG/.NET, stripped bare on MySQL). Any letter left is
@@ -245,6 +248,34 @@ def _date_fmt_reproducible(pyfmt: str) -> bool:
 _ISO_DT_LITERAL_RE = re.compile(
     r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?)?"
 )
+
+
+def _number_mask_spec(mask: object) -> tuple[int, bool] | None:
+    """``(decimal_count, has_grouping)`` for a *reproducible* numeric format —
+    plain digit grouping and a fixed number of decimals, which every engine can
+    render. ``None`` for a mask with no cross-engine equivalent: currency (``L``
+    / ``$``), hex (``X``), Roman (``RN``), angle-bracket negatives (``PR``),
+    scientific (``EEEE``), or a locale culture name."""
+    m = str(mask).strip().upper()
+    dotnet = re.fullmatch(r"([NF])(\d+)", m)  # .NET N2 (grouped) / F2 (plain)
+    if dotnet:
+        return (int(dotnet.group(2)), dotnet.group(1) == "N")
+    if re.fullmatch(r"\d+", m):  # MySQL FORMAT(x, n) — always grouped
+        return (int(m), True)
+    if re.search(r"[LXCU$%]|RN|PR|EEEE|\bV\b|FM.*FM", m):
+        return None
+    if not re.fullmatch(r"[90GD,.SMI ]+", m):  # only grouping/decimal/sign tokens
+        return None
+    grouping = "G" in m or "," in m
+    dec = re.search(r"[D.]([90]*)", m)  # digits after the decimal point
+    return (len(dec.group(1)) if dec else 0, grouping)
+
+
+def _oracle_number_mask(decimals: int, grouping: bool) -> str:
+    """Build an Oracle/PG ``TO_CHAR`` numeric mask for the given spec (``FM``
+    trims the sign/pad space; ``990`` forces a leading zero for values < 1)."""
+    intpart = "999G999G999G990" if grouping else "9999999990"
+    return f"FM{intpart}" + (f"D{'0' * decimals}" if decimals else "")
 
 
 def _as_datetime_literal(node: ASTNode, dialect: str) -> str | None:
@@ -4910,6 +4941,28 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"CAST({value} AS CHAR)"
         return f"CAST({value} AS TEXT)"
 
+    # NUMBER_TO_STR: sqlglot's canonical for T-SQL/MySQL FORMAT(num, mask) of a
+    # number. A reproducible grouping/decimal mask maps to each engine's numeric
+    # formatter (Oracle/PG TO_CHAR with an FM mask — no leading pad space, so it
+    # matches T-SQL/MySQL FORMAT). A non-reproducible mask (currency, hex, locale)
+    # falls through and degrades.
+    if (
+        fn_name == "NUMBER_TO_STR"
+        and len(node.args) == 2
+        and isinstance(node.args[1], Literal)
+    ):
+        spec = _number_mask_spec(node.args[1].value)
+        if spec is not None:
+            decimals, grouping = spec
+            value = _emit_expression(node.args[0], dialect)
+            if dialect in ("oracle", "postgresql"):
+                return f"TO_CHAR({value}, '{_oracle_number_mask(decimals, grouping)}')"
+            if dialect == "tsql":
+                return f"FORMAT({value}, '{'N' if grouping else 'F'}{decimals}')"
+            if dialect == "mysql" and grouping:
+                # MySQL FORMAT always groups; a non-grouping mask has no builtin.
+                return f"FORMAT({value}, {decimals})"
+
     # Date <-> string formatting. sqlglot keeps TO_CHAR's Oracle format model but
     # normalizes the DATE_FORMAT/STR_TO_DATE ones to strftime; translate per
     # target (PostgreSQL shares Oracle's model; T-SQL uses FORMAT/.NET).
@@ -4920,20 +4973,24 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     ):
         value = _emit_expression(node.args[0], dialect)
         fmt = str(node.args[1].value)
+        is_date_mask = bool(
+            re.search(r"(?i)YY|MM|DD|HH|MI|SS|MON|DAY|DY|RM|IW|WW|\bQ\b", fmt)
+        )
         if dialect in ("oracle", "postgresql"):
+            # Oracle and PostgreSQL share the TO_CHAR number/date model — identity.
             return f"TO_CHAR({value}, '{fmt}')"
-        if dialect == "mysql":
-            my = _convert_date_format(fmt, "oracle", "mysql")
-            return f"DATE_FORMAT({value}, '{my}')"
-        if re.fullmatch(r"\d+", fmt):
-            # A NUMERIC format is client code ported FROM T-SQL:
-            # TO_CHAR(x, 112) means CONVERT style 112.
+        if is_date_mask:
+            if dialect == "mysql":
+                mf = _convert_date_format(fmt, "oracle", "mysql")
+                return f"DATE_FORMAT({value}, '{mf}')"
+            return f"FORMAT({value}, '{_convert_date_format(fmt, 'oracle', 'tsql')}')"
+        if dialect == "tsql" and re.fullmatch(r"\d+", fmt):
+            # A bare number is T-SQL client code: TO_CHAR(x, 112) = CONVERT style.
             return f"CONVERT(VARCHAR(4000), {value}, {fmt})"
-        if not re.search(r"(?i)YY|MM|DD|HH|MI|SS", fmt):
-            # A numeric mask ('999.99') has no FORMAT equivalent — keep the
-            # call visible for review, like the text path.
-            return f"TO_CHAR({value}, '{fmt}')"
-        return f"FORMAT({value}, '{_convert_date_format(fmt, 'oracle', 'tsql')}')"
+        # A numeric mask (grouping, currency, hex, sign): MySQL/T-SQL cannot
+        # reproduce Oracle's number formatting (leading pad space, ``L``/``X``/
+        # ``PR``) — fall through and degrade honestly rather than ship a wrong
+        # value.
 
     # (TIME_TO_STR — sqlglot's date->string canonical — is handled above with a
     # value-wrap + reproducible-mask guard; a non-reproducible mask degrades.)

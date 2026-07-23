@@ -185,7 +185,7 @@ SELECT (SELECT 1 a,2 b FOR XML PATH('row'),ROOT('rows')) AS xmlcol
 -- CASE[open]: ts-format-iso — fails on oracle. ORA-01821: date format not recognized
 SELECT FORMAT(CAST('2020-06-15 14:30:45' AS DATETIME2), 'yyyy-MM-ddTHH:mm:ss') AS r
 
--- CASE[open]: ts-format-number — fails on mysql, oracle, postgresql. ORA-00904: "NUMBER_TO_STR": invalid identifier
+-- CASE[fixed]: ts-format-number — FORMAT(num, .NET-mask) numeric. A reproducible grouping/decimal mask (N2) maps to each engine: Oracle/PG TO_CHAR with an FM mask (no leading pad, matches FORMAT), MySQL FORMAT(n,decimals). Currency/hex/locale masks degrade. live-verified 1,234.50 on all four.
 SELECT FORMAT(1234.5, 'N2') AS r
 
 -- CASE[fixed]: ts-formatmessage — fails on mysql, oracle, postgresql. ORA-00904: "FORMATMESSAGE": invalid identifier

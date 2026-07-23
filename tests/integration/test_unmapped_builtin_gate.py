@@ -79,10 +79,11 @@ def test_sqlglot_internal_name_leak_degrades() -> None:
     engine has (FORMAT -> NUMBER_TO_STR, GET_BIT -> GETBIT). Those bypass the
     source-built-in check (they are not a source built-in), so the gate degrades
     them as unmapped rather than ship them live. (A function that DOES get a
-    faithful mapping — e.g. DATETIMEFROMPARTS — emits a real name and bypasses
-    this net.)"""
+    faithful mapping — e.g. a reproducible ``FORMAT(x, 'N2')`` number mask, or
+    DATETIMEFROMPARTS — emits a real name and bypasses this net; the ``'C2'``
+    currency mask below has no cross-engine equivalent, so it still degrades.)"""
     for sql, leak in (
-        ("SELECT FORMAT(1234.5, 'N2') AS r", "NUMBER_TO_STR"),
+        ("SELECT FORMAT(1234.5, 'C2') AS r", "NUMBER_TO_STR"),
         ("SELECT GET_BIT(0x0A, 1) AS r", "GETBIT"),
     ):
         r = _t(sql, "tsql", "oracle")
