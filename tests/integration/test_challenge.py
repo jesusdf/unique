@@ -497,6 +497,33 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestWindowedStringAgg:
+    """Oracle windowed LISTAGG (string aggregation OVER a partition) has no
+    portable equivalent — T-SQL/MySQL can't window a string-agg at all and PG
+    can't window an ORDER-BY'd one; it degrades to NULL + carrier + warning. A
+    plain windowed numeric aggregate and a non-ordered STRING_AGG OVER on PG are
+    left untouched."""
+
+    def test_listagg_over_degrades(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-listagg-over ")
+        for target in ("postgresql", "tsql", "mysql"):
+            result = Transpiler().transpile(case, source="oracle", target=target)
+            assert result.warnings and "UNIQUE:" in result.sql, target
+            # No executable window clause survives. The carrier comment mentions
+            # "OVER …" as prose; the source ``--`` header also names OVER(...) — so
+            # strip ``--`` lines and check for the "OVER (" call form only.
+            body = "\n".join(
+                ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "OVER (" not in body, body
+
+    def test_plain_window_untouched(self) -> None:
+        out = _tx(
+            "SELECT SUM(x) OVER (PARTITION BY d) AS r FROM t;", "postgresql", "tsql"
+        )
+        assert "SUM(x) OVER" in out and "UNIQUE:" not in out, out
+
+
 class TestCastPointGeometric:
     """PG's geometric ``point`` type has no cross-engine equivalent; a cast to it
     degrades to the source's text value plus a carrier + warning. The kept text

@@ -7630,6 +7630,21 @@ def _emit_case(node: CaseExpression, dialect: str) -> str:
 def _emit_window(node: WindowFunction, dialect: str) -> str:
     """Emit a window function."""
     func = _emit_function(node.function, dialect)
+    # Windowed string aggregation (Oracle ``LISTAGG(…) WITHIN GROUP (…) OVER (…)``)
+    # has no portable equivalent: T-SQL STRING_AGG (error 4113) and MySQL
+    # GROUP_CONCAT (error 1235) are never window functions, and PostgreSQL rejects
+    # an ORDER-BY'd aggregate used as a window function. Degrade with a carrier.
+    if isinstance(node.function, FunctionCall) and node.function.name in (
+        "GROUP_CONCAT",
+        "STRING_AGG",
+        "LISTAGG",
+    ):
+        ordered = bool(re.search(r"(?i)\bORDER\s+BY\b|\bWITHIN\s+GROUP\b", func))
+        if dialect in ("tsql", "mysql") or (dialect == "postgresql" and ordered):
+            return (
+                "NULL /* UNIQUE: windowed string aggregation (string-agg OVER …) "
+                f"has no {dialect} equivalent — see docs/03-unsupported.md */"
+            )
     spec_parts: list[str] = []
 
     if node.window.partition_by:

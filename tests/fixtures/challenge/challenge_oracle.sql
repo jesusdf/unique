@@ -268,7 +268,7 @@ SELECT LENGTH('abc   ') AS r FROM DUAL
 -- CASE[fixed]: ora-listagg — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT LISTAGG(x,',') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 FROM DUAL)
 
--- CASE[open]: ora-listagg-over — fails on mysql, postgresql, tsql. (4113, b"The function 'STRING_AGG' is not a valid windowing function, and cannot be used w
+-- CASE[limit]: ora-listagg-over — Oracle LISTAGG(...) WITHIN GROUP (...) OVER (...) is windowed string aggregation; T-SQL STRING_AGG (4113) and MySQL GROUP_CONCAT (1235) are never window functions and PG rejects an ORDER-BY'd aggregate as a window fn — no equivalent, degrades to NULL + annotation (docs/03-unsupported.md). fails on mysql, postgresql, tsql
 SELECT deptno, LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) OVER (PARTITION BY deptno) FROM (SELECT 1 deptno, 2 x FROM DUAL)
 
 -- CASE[fixed]: ora-listagg-overflow — LISTAGG(x, sep ON OVERFLOW TRUNCATE) -> PG STRING_AGG. PG string_agg has no length cap, so the ON OVERFLOW TRUNCATE clause is a no-op for non-overflowing data (the common case) and is dropped; value matches. live-verified on postgresql.
