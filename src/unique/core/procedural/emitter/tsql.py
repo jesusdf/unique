@@ -399,7 +399,14 @@ class TSqlEmitter(ProceduralEmitter):
 
     def _emit_guard_if(self, cond: str, body_lines: list[str]) -> str | None:
         # T-SQL's IF takes a SQL condition (incl. EXISTS), so the guard is a
-        # plain IF … BEGIN … END — no cursor, no FROM DUAL.
+        # plain IF … BEGIN … END — no cursor, no FROM DUAL. A T-SQL BEGIN…END may
+        # not be empty (error 156), so when the loop body is a no-op (Oracle
+        # ``NULL;`` -> a comment) inject a side-effect-free DECLARE.
+        if not any(
+            ln.strip() and not ln.lstrip().startswith("--") for ln in body_lines
+        ):
+            indent = re.match(r"\s*", body_lines[0]).group() if body_lines else "    "
+            body_lines = [*body_lines, f"{indent}DECLARE @uq_noop BIT;"]
         return "\n".join([f"IF ({cond})", "BEGIN", *body_lines, "END"])
 
     def _emit_numeric_for_loop(

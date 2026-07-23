@@ -963,6 +963,22 @@ class TestVoidFunctionExecuteUsing:
         assert "$1" not in body and "VALUES (?)" in body, body
 
 
+class TestEmptyGuardIfBody:
+    """A FROM DUAL cursor FOR-loop maps to a T-SQL guard IF; a no-op (NULL-only)
+    body would leave an empty BEGIN..END (error 156), so it gets a side-effect-
+    free DECLARE no-op."""
+
+    def test_empty_loop_body_gets_noop(self) -> None:
+        out = _tx(
+            _case("challenge_oracle.sql", "ora-cursor-for-loop "), "oracle", "tsql"
+        )
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "IF (1 = 1)" in body and "DECLARE @uq_noop" in body, body
+        assert "FROM DUAL" not in body.upper(), body
+
+
 class TestMysqlCursorDeclOrder:
     """MySQL requires DECLARE <variable> before DECLARE <cursor> (error 1337);
     the leading declaration block is reordered (variables first, then cursors)."""

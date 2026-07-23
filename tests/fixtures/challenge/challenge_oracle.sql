@@ -103,7 +103,7 @@ CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN 
 CREATE PROCEDURE p AS CURSOR c IS SELECT 1 FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; IF c%FOUND THEN DBMS_OUTPUT.PUT_LINE(c%ROWCOUNT); END IF; CLOSE c; END;
 /
 
--- CASE[open]: ora-cursor-for-loop — fails on tsql. (156, b"Incorrect syntax near the keyword 'END'.DB-Lib error message 20018, severity 15:\n
+-- CASE[fixed]: ora-cursor-for-loop — a FROM DUAL cursor FOR-loop maps to a T-SQL guard IF (0/1 rows, no cursor); an empty (NULL-only) body left an empty BEGIN..END (error 156), now given a side-effect-free DECLARE no-op. Compiles + EXEC ok on T-SQL
 CREATE PROCEDURE p AS BEGIN FOR r IN (SELECT 1 AS x FROM DUAL) LOOP NULL; END LOOP; END;
 /
 
