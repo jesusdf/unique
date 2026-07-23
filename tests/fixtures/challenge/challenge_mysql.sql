@@ -218,7 +218,7 @@ SELECT CRC32('abc') AS r
 -- CASE[fixed]: my-crypto2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FR
 SELECT FROM_BASE64(TO_BASE64('hello')),HEX(AES_DECRYPT(AES_ENCRYPT('d','k'),'k'))
 
--- CASE[open]: my-date-add-interval — fails on oracle, postgresql. ORA-30081: invalid data type for datetime/interval arithmetic
+-- CASE[fixed]: my-date-add-interval — qualify the bare date string as DATE so PG/Oracle interval arithmetic runs (2020-01-08; midnight on the datetime-typed targets).
 SELECT DATE_ADD('2020-01-01', INTERVAL 7 DAY) AS r
 
 -- CASE[fixed]: my-date-add-month — fails on tsql. FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)

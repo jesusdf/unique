@@ -1930,6 +1930,21 @@ class TestMysqlInsertBounds:
         assert re.search(r"(?i)CASE\s+WHEN\b.*<\s*1\s+OR\b.*>\s+LEN\(", out), out
 
 
+class TestDateAddQualifiesDateLiteral:
+    """MySQL's DATE_ADD reads a bare '2020-01-01' string as a date, but PG reads
+    it as an interval and Oracle rejects the implicit cast. A date-only literal
+    base is qualified as an ANSI DATE literal so the interval add runs (verified
+    2020-01-08 on both; midnight on the datetime-typed targets)."""
+
+    def test_pg_and_oracle_qualify_the_literal(self) -> None:
+        case = _case("challenge_mysql.sql", "my-date-add-interval ")
+        assert "DATE '2020-01-01' + INTERVAL '7 DAY'" in _tx(
+            case, "mysql", "postgresql"
+        )
+        ora = _tx(case, "mysql", "oracle")
+        assert "DATE '2020-01-01' + NUMTODSINTERVAL(7, 'DAY')" in ora, ora
+
+
 class TestMysqlDateArithReturnsDate:
     """MySQL date arithmetic on a DATE returns a DATE ('2020-01-31'); T-SQL
     DATEADD returns a DATETIME ('… 00:00:00'). For a MySQL source with a
