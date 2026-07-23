@@ -86,6 +86,10 @@ _ENGINE_STANDARD: dict[str, frozenset[str]] = {
         }
     ),
     "postgresql": frozenset({"XMLELEMENT"}),  # XMLAGG is already introspected
+    # T-SQL identity-scope functions with no cross-engine equivalent — they read
+    # the last inserted IDENTITY value in a given scope. Flag them so the gate
+    # degrades rather than shipping an undefined function.
+    "tsql": frozenset({"IDENT_CURRENT"}),
 }
 
 

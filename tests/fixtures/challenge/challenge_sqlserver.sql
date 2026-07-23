@@ -215,7 +215,7 @@ SELECT CONVERT(VARCHAR,0x48656C6C6F),CONVERT(VARBINARY,'Hello',0)
 -- CASE[fixed]: ts-host-db — fails on mysql, oracle, postgresql. ORA-00904: "DB_NAME": invalid identifier
 SELECT HOST_NAME(), DB_NAME(), SUSER_SNAME()
 
--- CASE[open]: ts-identity-funcs — fails on mysql, oracle, postgresql. ORA-00936: missing expression
+-- CASE[limit]: ts-identity-funcs — T-SQL identity-scope reads (SCOPE_IDENTITY/@@IDENTITY/IDENT_CURRENT) have no cross-engine equivalent (each engine exposes the last identity differently: Oracle sequence.CURRVAL, PG lastval(), MySQL LAST_INSERT_ID()); the statement degrades to a carrier + warning (docs/03-unsupported.md). fails on mysql, oracle, postgresql
 SELECT SCOPE_IDENTITY(), @@IDENTITY, IDENT_CURRENT('t')
 
 -- CASE[open]: ts-inline-index2 — fails on oracle, postgresql. ORA-00902: invalid datatype
