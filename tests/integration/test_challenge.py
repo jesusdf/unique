@@ -508,6 +508,12 @@ class TestBitwiseArithmeticPrecedence:
             assert "10 & (6 + 1)" in out and "10 | (2 * 3)" in out, out
             assert "1 << (2 + 1)" in out, out
 
+    def test_pg_grouping_preserved_on_tsql(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-bit-prec2 "), "postgresql", "tsql"
+        )
+        assert "10 & (6 + 1)" in out and "1 << (2 + 1)" in out, out
+
 
 class TestDateExtractCast:
     """MySQL/T-SQL DATE(x) extracts the date part (drops any time). Unwrapping

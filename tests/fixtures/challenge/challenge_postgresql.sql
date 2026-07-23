@@ -79,7 +79,7 @@ SELECT get_bit(B'1011', 0), set_bit(B'0000', 1, 1)
 -- CASE[fixed]: pg-bit-negative — Signed source ~x yields a negative (two's-complement) result; MySQL's ~ is UNSIGNED (~5=18446744073709551610), so the bitwise NOT is wrapped in CAST(~x AS SIGNED) to match. &|^ and shifts already agree. live-verified. (-1,-6,3,5)
 SELECT ~0, ~5, (-5) & 3, 5 & (-1)
 
--- CASE[open]: pg-bit-prec2 — fails on tsql. FUNC-DIFF: source=(('2', '8'),) target=(('3', '5'),)
+-- CASE[fixed]: pg-bit-prec2 — bitwise/arithmetic parens keep PG grouping on T-SQL (10 & (6+1), 1 << (2+1)).
 SELECT 10 & 6 + 1, 1 << 2 + 1
 
 -- CASE[fixed]: pg-bitnot — Signed source ~x yields a negative (two's-complement) result; MySQL's ~ is UNSIGNED (~5=18446744073709551610), so the bitwise NOT is wrapped in CAST(~x AS SIGNED) to match. &|^ and shifts already agree. live-verified. -1
