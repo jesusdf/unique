@@ -221,7 +221,7 @@ SELECT SCOPE_IDENTITY(), @@IDENTITY, IDENT_CURRENT('t')
 -- CASE[open]: ts-inline-index2 — fails on oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (id INT, name VARCHAR(50), INDEX ix_name NONCLUSTERED (name))
 
--- CASE[open]: ts-insert-output — fails on oracle. ORA-63809: returning clause is not allowed with INSERT and Table Value Constructor
+-- CASE[limit]: ts-insert-output — the T-SQL OUTPUT clause returns a result set; PostgreSQL maps it to RETURNING, but Oracle's RETURNING needs INTO variables (PL/SQL only, ORA-63809), so the INSERT runs and the OUTPUT is documented in a carrier (docs/03-unsupported.md). fails on oracle
 CREATE TABLE t (id INT IDENTITY, n INT);
 GO
 INSERT INTO t (n) OUTPUT INSERTED.id,INSERTED.n VALUES (10),(20)
@@ -444,7 +444,7 @@ SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r
 -- CASE[open]: ts-unpivot — fails on mysql, oracle, postgresql. ORA-00904: "VAL": invalid identifier
 SELECT id,col,val FROM (SELECT 1 id,10 a,20 b) s UNPIVOT (val FOR col IN (a,b)) u
 
--- CASE[open]: ts-update-output — fails on oracle. ORA-00925: missing INTO keyword
+-- CASE[limit]: ts-update-output — same as ts-insert-output: OUTPUT has no standalone Oracle equivalent (RETURNING needs INTO variables); the UPDATE runs and the OUTPUT is documented in a carrier (docs/03-unsupported.md). fails on oracle
 CREATE TABLE t (id INT);
 GO
 CREATE INDEX ix ON t (id);

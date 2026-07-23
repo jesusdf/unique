@@ -1014,12 +1014,17 @@ class Transpiler:
                 # Map the OUTPUT columns (strip INSERTED./DELETED. prefixes).
                 cols = re.sub(r"(?i)\b(INSERTED|DELETED)\.", "", output_cols).strip()
                 body = base_result.sql.rstrip().rstrip(";")
-                if target in ("postgresql", "oracle"):
+                if target == "postgresql":
+                    # Only PostgreSQL has a standalone RETURNING result set.
                     new_sql = f"{body} RETURNING {cols}"
-                else:  # mysql: no RETURNING/OUTPUT
+                else:
+                    # MySQL has no OUTPUT/RETURNING; Oracle's RETURNING needs INTO
+                    # variables (PL/SQL only) — a bare RETURNING is ORA-63809. Both
+                    # degrade with a documented carrier.
                     new_sql = (
-                        f"{body}\n-- UNIQUE: MySQL has no OUTPUT/RETURNING; "
-                        f"the statement returned: {cols}"
+                        f"{body}\n-- UNIQUE: {target} has no standalone "
+                        f"OUTPUT/RETURNING result set; the statement returned: "
+                        f"{cols} (docs/03-unsupported.md)"
                     )
                 return TranspileResult(
                     sql=new_sql,

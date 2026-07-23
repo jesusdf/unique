@@ -942,7 +942,7 @@ class TestOutputReturning:
         # WHERE preserved, OUTPUT documented (MySQL has no OUTPUT/RETURNING).
         assert "WHERE" in result.sql.upper()
         assert "a = 1" in result.sql
-        assert "no OUTPUT/RETURNING" in result.sql
+        assert "OUTPUT/RETURNING" in result.sql
 
     def test_returning_to_tsql_output(self, transpiler: Transpiler) -> None:
         sql = "INSERT INTO t (a) VALUES (1) RETURNING id"
