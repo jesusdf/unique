@@ -303,7 +303,7 @@ SELECT REPLICATE('ab', 3), SPACE(5), REVERSE('abc')
 -- CASE[fixed]: ts-rowversion — fails on oracle, postgresql. ORA-00902: invalid datatype
 CREATE TABLE t (row_ver ROWVERSION, flags BINARY(8))
 
--- CASE[open]: ts-scroll-cursor — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 9): PLS-00103: Encountered the symbol ";" when expectin
+-- CASE[limit]: ts-scroll-cursor — a scroll cursor FETCH (PRIOR/FIRST/LAST/ABSOLUTE/RELATIVE) has no cross-engine equivalent (Oracle/PG/MySQL cursors are forward-only, only FETCH NEXT); the scroll fetch degrades to a carrier comment and the surrounding OPEN/CLOSE compile (docs/03-unsupported.md). fails on mysql, oracle, postgresql
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR LOCAL SCROLL FOR SELECT 1; OPEN c; FETCH LAST FROM c; CLOSE c; DEALLOCATE c; END
 
 -- CASE[fixed]: ts-select-into — T-SQL SELECT … INTO newtable creates a table; Oracle has no such form, so it is rewritten to CREATE TABLE newtable AS SELECT …. live-verified DDL runs.

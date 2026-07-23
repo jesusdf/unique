@@ -963,6 +963,22 @@ class TestVoidFunctionExecuteUsing:
         assert "$1" not in body and "VALUES (?)" in body, body
 
 
+class TestScrollCursorFetch:
+    """A scroll cursor FETCH (PRIOR/FIRST/LAST/ABSOLUTE/RELATIVE) has no
+    cross-engine equivalent — Oracle/PG/MySQL cursors are forward-only — so it
+    degrades to a carrier while the OPEN/CLOSE still compile."""
+
+    def test_scroll_fetch_degrades(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-scroll-cursor ")
+        for target in ("oracle", "postgresql", "mysql"):
+            result = Transpiler().transpile(case, source="tsql", target=target)
+            assert result.warnings and "UNIQUE:" in result.sql, target
+            body = "\n".join(
+                ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "FETCH" not in body.upper(), body
+
+
 class TestDynamicSqlHoist:
     """T-SQL sp_executesql needs its statement as a variable/literal, not a
     concat expression ('...' + @t is a syntax error near '+'); a compound dynamic

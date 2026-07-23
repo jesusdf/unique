@@ -381,14 +381,31 @@ class TsqlStatementsMixin(ParserBase):
     def _parse_tsql_fetch(self) -> ASTNode:
         """Parse T-SQL ``FETCH [NEXT|PRIOR|FIRST|LAST] FROM c [INTO @v, ...]``.
 
-        The direction keyword is dropped (NEXT is both the T-SQL default and
-        the only portable behaviour); ABSOLUTE/RELATIVE fetches have no
-        counterpart in the targets and fall through as embedded DML.
+        Only ``NEXT`` (the T-SQL default) is portable — Oracle/PG/MySQL cursors
+        are forward-only. A scroll direction (PRIOR/FIRST/LAST/ABSOLUTE/RELATIVE)
+        has no counterpart, so it falls through as embedded DML and degrades to a
+        documented carrier on the targets.
         """
-        if self._peek(1).upper_value in ("ABSOLUTE", "RELATIVE"):
-            return self._parse_embedded_dml()
+        if self._peek(1).upper_value in (
+            "ABSOLUTE",
+            "RELATIVE",
+            "PRIOR",
+            "FIRST",
+            "LAST",
+        ):
+            from unique.core.ast_nodes import RawSQL as _RawSQL
+
+            dml = self._parse_embedded_dml()
+            return _RawSQL(
+                sql=getattr(dml, "sql", "").strip(),
+                reason=(
+                    "scroll cursor FETCH (PRIOR/FIRST/LAST/ABSOLUTE/RELATIVE) has "
+                    "no cross-engine equivalent — Oracle/PG/MySQL cursors are "
+                    "forward-only; preserved as a comment"
+                ),
+            )
         self._expect_keyword("FETCH")
-        self._match_keyword("NEXT", "PRIOR", "FIRST", "LAST")
+        self._match_keyword("NEXT")
         self._match_keyword("FROM")
         cursor_name = self._parse_identifier()
         into_vars: list[str] = []
