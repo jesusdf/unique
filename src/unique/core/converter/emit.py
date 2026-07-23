@@ -125,6 +125,9 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "TIMESTAMP": "DATETIME2",
         # PG's timezone-aware timestamp -> T-SQL's DATETIMEOFFSET.
         "TIMESTAMPTZ": "DATETIMEOFFSET",
+        # TEXT is a deprecated LOB — invalid as a CAST target (error 529); the
+        # modern large-string type VARCHAR(MAX) holds the same value.
+        "TEXT": "VARCHAR(MAX)",
     },
     # DATETIME/DATETIME2/SMALLDATETIME are T-SQL types; Oracle/PostgreSQL use
     # TIMESTAMP. Passing DATETIME through fails (ORA-00902 / invalid pg type).
@@ -136,6 +139,10 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "SMALLMONEY": "NUMBER(10,4)",
         "VARCHAR": "VARCHAR2",
         "NVARCHAR": "NVARCHAR2",
+        # CLOB is not a valid CAST target (ORA-22849); VARCHAR2(4000) is the
+        # portable large-string stand-in (matches the STRING_AGG/GROUP_CONCAT
+        # CLOB->VARCHAR2 rewrite). DDL CLOB columns go through a separate map.
+        "CLOB": "VARCHAR2(4000)",
         "DOUBLE": "BINARY_DOUBLE",
         # Oracle has INTEGER/SMALLINT (NUMBER aliases) but not BIGINT/TINYINT/
         # MEDIUMINT (ORA-00902); INTEGER rounds a fractional value like the

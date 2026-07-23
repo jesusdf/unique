@@ -545,6 +545,24 @@ class TestUnpivot:
             assert "'A' AS col" in out and "'B' AS col" in out, out
 
 
+class TestTextCastTarget:
+    """A CAST to text (PG's ``::text``) lands on CLOB (Oracle) / TEXT (T-SQL),
+    neither a legal CAST target; both remap to a castable large-string type so a
+    chained ``123::text::int`` round-trips to 123."""
+
+    def test_intermediate_text_cast(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-double-cast ")
+        assert "VARCHAR2(4000)" in _tx(case, "postgresql", "oracle")
+        assert "VARCHAR(MAX)" in _tx(case, "postgresql", "tsql")
+        for target in ("oracle", "tsql"):
+            body = "\n".join(
+                ln
+                for ln in _tx(case, "postgresql", target).splitlines()
+                if not ln.lstrip().startswith("--")
+            )
+            assert "CLOB" not in body and "AS TEXT" not in body.upper(), body
+
+
 class TestOverlay:
     """OVERLAY(s PLACING r FROM start FOR len) — replace len chars of s at start
     with r — is PG-native only. Rewritten to T-SQL STUFF, MySQL INSERT() (both

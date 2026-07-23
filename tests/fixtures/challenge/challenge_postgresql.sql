@@ -205,7 +205,7 @@ SELECT 10.00/3, 10/3.0, 10::numeric(10,4)/3, 1.5*1.5
 -- CASE[fixed]: pg-div-precision — 1/3 = 0.3333...; same value at each engine's default division scale. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 1.0 / 3 AS r
 
--- CASE[open]: pg-double-cast — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
+-- CASE[fixed]: pg-double-cast — an intermediate ::text CAST target maps to CLOB (Oracle, ORA-22849) / TEXT (T-SQL, error 529), neither castable; remapped to VARCHAR2(4000) / VARCHAR(MAX) in the CAST map (DDL LOB columns unaffected); value 123 verified on both
 SELECT 123::text::int AS r
 
 -- CASE[fixed]: pg-drop-default — ALTER COLUMN a DROP DEFAULT maps to Oracle MODIFY a DEFAULT NULL and T-SQL dynamic drop of the named default constraint (a no-op when none). live-verified DDL runs.
