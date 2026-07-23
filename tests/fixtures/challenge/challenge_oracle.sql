@@ -367,7 +367,7 @@ SELECT x FROM (SELECT 3 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SEL
 -- CASE[fixed]: ora-percentile — fails on postgresql. function median(integer) does not exist
 SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY x),PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY x),MEDIAN(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 3 FROM DUAL)
 
--- CASE[open]: ora-pk-using-index — fails on mysql, postgresql, tsql. (1018, b"Incorrect syntax near 'INDEX'. If this is intended as a part of a table hint, A W
+-- CASE[fixed]: ora-pk-using-index — Oracle's PRIMARY KEY … USING INDEX names/tunes the backing index (a storage detail); every engine backs a PK with an index by default, so the clause is stripped and the constraint is identical. live-verified CREATE runs.
 CREATE TABLE t (id NUMBER, CONSTRAINT pk PRIMARY KEY (id) USING INDEX)
 
 -- CASE[limit]: ora-rand — fails on mysql, postgresql, tsql. DBMS_RANDOM.VALUE/STRING is non-deterministic (values cannot match cross-engine) and DBMS_RANDOM.STRING has no equivalent random-string builtin elsewhere (docs/03-unsupported.md §2). Warned carrier on all three.

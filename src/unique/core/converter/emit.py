@@ -3650,6 +3650,11 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
     read = sqlglot_dialect_name(node.source_dialect)
     write = sqlglot_dialect_name(dialect)
     fragment_sql = node.sql
+    # Oracle ``… USING INDEX [<storage>]`` on a PK/UNIQUE names/tunes the backing
+    # index — an Oracle storage detail. Every engine backs a PK/UNIQUE with an
+    # index by default, so strip the clause (the constraint is identical).
+    if node.source_dialect == "oracle" and dialect != "oracle":
+        fragment_sql = re.sub(r"(?is)\s+USING\s+INDEX\b.*$", "", fragment_sql)
     # PostgreSQL EXCLUDE has no equivalent on any other engine; keep it on PG,
     # degrade it to a documented carrier elsewhere (never silently drop it).
     if node.kind == "EXCLUDE" and dialect != "postgresql":

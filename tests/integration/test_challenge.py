@@ -497,6 +497,21 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestPkUsingIndex:
+    """Oracle's PRIMARY KEY … USING INDEX (backing-index storage detail) is
+    stripped for the other engines, which back a PK with an index by default."""
+
+    def test_using_index_stripped(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-pk-using-index ")
+        for target in ("mysql", "postgresql", "tsql"):
+            body = "\n".join(
+                ln
+                for ln in _tx(case, "oracle", target).splitlines()
+                if not ln.lstrip().startswith("--")
+            )
+            assert "PRIMARY KEY (id)" in body and "USING INDEX" not in body, body
+
+
 class TestFunctionalIndex:
     """An Oracle expression (function-based) index maps to the MySQL/PostgreSQL
     double-paren form ((expr)); T-SQL has no expression index and degrades."""
