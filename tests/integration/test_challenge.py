@@ -412,6 +412,30 @@ class TestJsonAggregates:
         assert r.warnings and "UNIQUE:" in r.sql, r.sql
 
 
+class TestAlterModifyColumn:
+    """MySQL ALTER TABLE … MODIFY COLUMN c <type> (a column type change) spells
+    differently per engine: Oracle MODIFY c, PostgreSQL ALTER COLUMN c TYPE,
+    T-SQL ALTER COLUMN c — with the type ported (BIGINT -> Oracle NUMBER).
+    sqlglot passes MODIFY COLUMN through unchanged, so it is rewritten here."""
+
+    def _out(self, target: str) -> str:
+        return _tx(_case("challenge_mysql.sql", "my-alter-modify "), "mysql", target)
+
+    def test_oracle_modify(self) -> None:
+        assert "MODIFY b NUMBER" in self._out("oracle"), self._out("oracle")
+
+    def test_pg_alter_column_type(self) -> None:
+        assert "ALTER COLUMN b TYPE BIGINT" in self._out("postgresql")
+
+    def test_tsql_alter_column(self) -> None:
+        body = "\n".join(
+            ln
+            for ln in self._out("tsql").splitlines()
+            if not ln.lstrip().startswith("--")
+        )
+        assert "ALTER COLUMN b BIGINT" in body and "MODIFY" not in body, body
+
+
 class TestPgBooleanWordCast:
     """PostgreSQL casts many word spellings to boolean ('t'/'true'/'yes'/'on' ->
     true), which other engines cannot cast to a number or bit. A string-literal

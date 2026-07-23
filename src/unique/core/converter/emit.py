@@ -1394,6 +1394,32 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             ),
         )
 
+    # ``ALTER TABLE t MODIFY [COLUMN] c <type>`` changes a column's type; sqlglot
+    # passes MODIFY COLUMN through unchanged (unsupported on every write dialect).
+    # Each engine spells the type change differently:
+    #   Oracle      ALTER TABLE t MODIFY c <type>
+    #   PostgreSQL  ALTER TABLE t ALTER COLUMN c TYPE <type>
+    #   T-SQL       ALTER TABLE t ALTER COLUMN c <type>
+    # Only the simple type-only form is rewritten; a modify carrying an inline
+    # constraint (NOT NULL / DEFAULT / …) leaves the tail unmatched and falls
+    # through to the generic path.
+    if node.kind == "ALTER" and dialect != node.source_dialect:
+        m_mod = re.match(
+            r"(?is)^\s*ALTER\s+TABLE\s+(\S+)\s+MODIFY\s+(?:COLUMN\s+)?"
+            r"(\S+)\s+([A-Za-z0-9_]+(?:\s*\([\d,\s]*\))?)\s*;?\s*$",
+            node.sql,
+        )
+        if m_mod:
+            _mt, _mc, _mtype = m_mod.groups()
+            _mtype = _portable_types_in_sql(_mtype, dialect)
+            if dialect == "oracle":
+                return f"ALTER TABLE {_mt} MODIFY {_mc} {_mtype}"
+            if dialect == "postgresql":
+                return f"ALTER TABLE {_mt} ALTER COLUMN {_mc} TYPE {_mtype}"
+            if dialect == "tsql":
+                return f"ALTER TABLE {_mt} ALTER COLUMN {_mc} {_mtype}"
+            return f"ALTER TABLE {_mt} MODIFY COLUMN {_mc} {_mtype}"
+
     # PG's NOT VALID (add the constraint but skip validating existing rows) has
     # no equivalent on the other engines, which validate immediately. Strip it —
     # the constraint definition is identical — and document the difference so the
