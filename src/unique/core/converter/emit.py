@@ -4651,6 +4651,21 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"XMLELEMENT({', '.join([f'NAME {name}', *vals])})"
         return f"XMLELEMENT({', '.join([name, *vals])})"
 
+    # JSON_VALUE(doc, path) / JSON_QUERY(doc, path): SQL/JSON scalar and
+    # object extraction. Oracle and T-SQL have both natively; MySQL has
+    # JSON_VALUE (8.0.21+) but no JSON_QUERY (JSON_EXTRACT is the object form);
+    # PostgreSQL <17 has neither, so route through the SQL/JSON path engine
+    # (JSONB_PATH_QUERY_FIRST), extracting the scalar as text for JSON_VALUE.
+    if fn_name in ("JSON_VALUE", "JSON_QUERY") and len(node.args) == 2:
+        doc = _emit_expression(node.args[0], dialect)
+        path = _emit_expression(node.args[1], dialect)
+        if dialect == "postgresql":
+            found = f"JSONB_PATH_QUERY_FIRST(CAST({doc} AS JSONB), {path})"
+            return f"({found} #>> '{{}}')" if fn_name == "JSON_VALUE" else found
+        if dialect == "mysql" and fn_name == "JSON_QUERY":
+            return f"JSON_EXTRACT({doc}, {path})"
+        return f"{fn_name}({doc}, {path})"
+
     # Oracle NVL2(a, b, c): b when a is not null, else c. Only Oracle has it.
     if fn_name == "NVL2" and len(node.args) == 3:
         a, b, c = (_emit_expression(x, dialect) for x in node.args)

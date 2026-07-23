@@ -247,10 +247,10 @@ SELECT NUMTOYMINTERVAL(14,'MONTH'), NUMTODSINTERVAL(90000,'SECOND') FROM DUAL
 -- CASE[open]: ora-interval-tochar — fails on postgresql. FUNC-DIFF: source=(('+02 03:04:05.000000',),) target=(('2 days 03:04:05',),)
 SELECT TO_CHAR(INTERVAL '2 3:04:05.000' DAY TO SECOND) AS r FROM DUAL
 
--- CASE[open]: ora-json-value — fails on postgresql. SILENT-ROUNDTRIP: literal(s) ['\'{"a":1}\'', "'$.a'"] lost after oracle->tsql->oracle
+-- CASE[fixed]: ora-json-value — JSON_VALUE(doc,path) maps to native JSON_VALUE on Oracle/T-SQL/MySQL and to JSONB_PATH_QUERY_FIRST(...) #>> '{}' on PostgreSQL <17. live-verified '1'.
 SELECT JSON_VALUE('{"a":1}', '$.a') AS r FROM DUAL
 
--- CASE[open]: ora-json-x — fails on mysql, postgresql. SILENT-ROUNDTRIP: literal(s) ['\'{"a":1}\'', "'$.a'", '\'{"a":[1]}\'', "'$.a'"] lost after
+-- CASE[fixed]: ora-json-x — JSON_VALUE + JSON_QUERY map to native forms (MySQL has no JSON_QUERY -> JSON_EXTRACT; PostgreSQL -> JSONB_PATH_QUERY_FIRST). live-verified '1', '[1]'.
 SELECT JSON_VALUE('{"a":1}','$.a'),JSON_QUERY('{"a":[1]}','$.a') FROM DUAL
 
 -- CASE[open]: ora-json-xml-agg — fails on mysql, postgresql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018

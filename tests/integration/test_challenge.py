@@ -433,6 +433,30 @@ class TestJsonConstructors:
         assert "CAST(1 AS BIT)" in ts and "NULL ON NULL" in ts, ts
 
 
+class TestJsonPathExtraction:
+    """JSON_VALUE(doc, path) and JSON_QUERY(doc, path) (Oracle/T-SQL scalar and
+    object extraction). MySQL has JSON_VALUE natively but routes JSON_QUERY
+    through JSON_EXTRACT; PostgreSQL <17 has neither and uses the SQL/JSON path
+    engine (JSONB_PATH_QUERY_FIRST). Live-verified '1' and '[1]' on all four."""
+
+    def test_json_value_per_engine(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-json-value ")
+        pg = _tx(case, "oracle", "postgresql")
+        assert (
+            "JSONB_PATH_QUERY_FIRST(CAST('{\"a\":1}' AS JSONB), '$.a') #>> '{}'" in pg
+        ), pg
+        assert "JSON_VALUE('{\"a\":1}', '$.a')" in _tx(case, "oracle", "mysql")
+        assert "JSON_VALUE('{\"a\":1}', '$.a')" in _tx(case, "oracle", "tsql")
+
+    def test_json_query_object_form(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-json-x ")
+        # MySQL has no JSON_QUERY -> JSON_EXTRACT; PG -> path engine (no #>>).
+        my = _tx(case, "oracle", "mysql")
+        assert "JSON_EXTRACT('{\"a\":[1]}', '$.a')" in my, my
+        pg = _tx(case, "oracle", "postgresql")
+        assert "JSONB_PATH_QUERY_FIRST(CAST('{\"a\":[1]}' AS JSONB), '$.a')" in pg, pg
+
+
 class TestDateTruncMonth:
     """PG date_trunc parses to TimestampTrunc (fake sql_name); it is canonicalized
     to DATE_TRUNC and mapped per engine — Oracle TRUNC(ts,'MM'), T-SQL
