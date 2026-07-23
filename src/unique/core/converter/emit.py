@@ -4711,6 +4711,23 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"CAST({_emit_expression(inner, dialect)} AS DATE)"
         return _emit_expression(inner, dialect)
 
+    # GREATEST/LEAST compare strings by collation: PostgreSQL/Oracle are
+    # case-sensitive (GREATEST('a','B') = 'a', since 'a' > 'B' by code point),
+    # but MySQL's and T-SQL's default collations are case-insensitive ('B'). Force
+    # a binary collation on the first string-literal argument so the whole
+    # comparison is case-sensitive.
+    if (
+        fn_name in ("GREATEST", "LEAST")
+        and dialect in ("mysql", "tsql")
+        and SOURCE_DIALECT.get() in ("postgresql", "oracle")
+        and node.args
+        and all(isinstance(a, Literal) and isinstance(a.value, str) for a in node.args)
+    ):
+        _coll = "utf8mb4_bin" if dialect == "mysql" else "Latin1_General_BIN2"
+        _parts = [_emit_expression(a, dialect) for a in node.args]
+        _parts[0] = f"{_parts[0]} COLLATE {_coll}"
+        return f"{fn_name}({', '.join(_parts)})"
+
     # COLLATION(x) returns the argument's collation NAME, which is engine-specific
     # (MySQL 'utf8mb4_0900_ai_ci' vs Oracle 'USING_NLS_COMP') — the function
     # exists on both but can never return the same value. Flag it.

@@ -328,7 +328,7 @@ CREATE TABLE t (a INT, b JSONB); CREATE INDEX ix ON t USING gin (b jsonb_path_op
 -- CASE[fixed]: pg-greatest-null — PG/T-SQL GREATEST/LEAST ignore NULL args (GREATEST(1, NULL, 3) = 3); MySQL/Oracle propagate NULL. Drop a literal NULL arg on those targets.
 SELECT GREATEST(1, NULL, 3) AS r
 
--- CASE[open]: pg-greatest-string — fails on mysql, tsql. FUNC-DIFF: source=(('a',),) target=(('B',),)
+-- CASE[fixed]: pg-greatest-string — GREATEST compares by collation; force a binary collation on the first string literal so MySQL/T-SQL are case-sensitive like PG ('a', not 'B'). Live-verified.
 SELECT GREATEST('a', 'B') AS r
 
 -- CASE[open]: pg-grouping — fails on mysql, oracle, tsql. (8120, b"Column 't.a' is invalid in the select list because it is not contained in either 
@@ -529,7 +529,7 @@ SELECT lpad('7',3,'0'),rpad('7',3,'x'),repeat('ab',3),reverse('abc'),repeat(' ',
 -- CASE[fixed]: pg-pi-fns — PG pi()/trunc/round now translate (Oracle ACOS(-1) for PI); stale tag, live-verified equal.
 SELECT trunc(pi()::numeric, 4), round(pi()::numeric, 4)
 
--- CASE[open]: pg-position-case — fails on mysql, tsql. FUNC-DIFF: source=(('0',),) target=(('1',),)
+-- CASE[fixed]: pg-position-case — POSITION goes through the CHARINDEX path, so the case-sensitivity fix (BINARY/BIN2 on the literal haystack) applies: 0 on MySQL/T-SQL (live-verified).
 SELECT POSITION('a' IN 'ABC') AS r
 
 -- CASE[fixed]: pg-position-empty — PG POSITION('' IN x) is 1; Oracle INSTR -> NULL, T-SQL CHARINDEX -> 0. Recover 1 (Oracle COALESCE, T-SQL CASE) — shared empty-needle handler.

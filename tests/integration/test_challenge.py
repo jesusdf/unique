@@ -1940,6 +1940,31 @@ class TestReplaceCaseSensitive:
         assert "REPLACE('AbCaBc' COLLATE Latin1_General_BIN2, 'a', 'X')" in out, out
 
 
+class TestPositionCaseSensitive:
+    """POSITION goes through the CHARINDEX path, so the INSTR case-sensitivity fix
+    (BINARY/BIN2 on the literal haystack) applies — POSITION('a' IN 'ABC') = 0 on
+    MySQL/T-SQL like PG."""
+
+    def test_position_case_sensitive(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-position-case ")
+        assert "BINARY 'ABC'" in _tx(case, "postgresql", "mysql")
+        assert "'ABC' COLLATE Latin1_General_BIN2" in _tx(case, "postgresql", "tsql")
+
+
+class TestGreatestCaseSensitive:
+    """GREATEST/LEAST compare strings by collation: PG/Oracle are case-sensitive
+    (GREATEST('a','B') = 'a'), MySQL/T-SQL default case-insensitive ('B'). Force a
+    binary collation on the first string literal. Live-verified 'a'."""
+
+    def test_greatest_case_sensitive(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-greatest-string ")
+        assert "GREATEST('a' COLLATE utf8mb4_bin, 'B')" in _tx(
+            case, "postgresql", "mysql"
+        )
+        tsql = _tx(case, "postgresql", "tsql")
+        assert "GREATEST('a' COLLATE Latin1_General_BIN2, 'B')" in tsql, tsql
+
+
 class TestInstrCaseSensitive:
     """Oracle/PostgreSQL INSTR searches case-sensitively, but MySQL's and T-SQL's
     default collations are case-insensitive (INSTR('aAaA','A') = 1 not 2). Force a
