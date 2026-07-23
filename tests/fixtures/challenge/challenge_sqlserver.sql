@@ -237,7 +237,7 @@ SELECT ISNUMERIC('12.3'), ISDATE('2020-01-01'), ISJSON('{}')
 -- CASE[fixed]: ts-len-trailing — T-SQL LEN excludes trailing spaces (LEN('abc   ')=3); other engines count them. Trim the argument (RTRIM) on non-T-SQL targets.
 SELECT LEN('abc   ') AS r
 
--- CASE[open]: ts-maxrecursion — fails on mysql, oracle, postgresql. ORA-32039: missing column alias list in recursive WITH clause element S
+-- CASE[fixed]: ts-maxrecursion — recursive CTE: PG/MySQL get WITH RECURSIVE, Oracle gets the required column list (derived from the anchor SELECT). OPTION (MAXRECURSION n) is a T-SQL-only hint with no equivalent (recursion completes within the target defaults), dropped. Live 1..5 on all three.
 WITH s AS (SELECT 1 n UNION ALL SELECT n+1 FROM s WHERE n<5) SELECT n FROM s OPTION (MAXRECURSION 10)
 
 -- CASE[open]: ts-merge-full — fails on oracle, postgresql. ORA-02000: missing THEN keyword
@@ -291,7 +291,7 @@ CREATE TABLE dbo.audit (id INT IDENTITY, msg NVARCHAR(MAX), ts DATETIME2);
 GO
 CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BEGIN BEGIN TRY INSERT INTO dbo.audit (msg, ts) VALUES (@msg, SYSDATETIME()); END TRY BEGIN CATCH THROW; END CATCH END
 
--- CASE[open]: ts-recursion-limit — fails on mysql, oracle, postgresql. ORA-32039: missing column alias list in recursive WITH clause element N
+-- CASE[fixed]: ts-recursion-limit — recursive CTE: PG/MySQL WITH RECURSIVE, Oracle derived column list; the OPTION (MAXRECURSION 1000) hint is dropped (no equivalent; 100 iterations completes within target defaults). Live COUNT=100 on all three.
 WITH n AS (SELECT 1 v UNION ALL SELECT v+1 FROM n WHERE v<100) SELECT COUNT(*) FROM n OPTION (MAXRECURSION 1000)
 
 -- CASE[fixed]: ts-recursive-cte — a T-SQL CTE that references its own name is recursive, but T-SQL omits the RECURSIVE keyword; PG/MySQL REQUIRE it. Detect the self-reference and emit WITH RECURSIVE (Oracle infers it, no keyword). Live 1..5 on PG and MySQL.

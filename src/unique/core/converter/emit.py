@@ -2719,6 +2719,19 @@ def _emit_unpivot_relation(node: UnpivotRelation, dialect: str) -> str:
     return f"({' UNION ALL '.join(arms)}) {alias}"
 
 
+def _cte_anchor_column_names(query: SelectStatement) -> list[str]:
+    """Output column names of a CTE's anchor SELECT — for Oracle's required
+    recursive-CTE column alias list. Returns [] if any projection has no clean
+    name (an unnameable list must not be guessed)."""
+    names: list[str] = []
+    for item in query.columns:
+        if isinstance(item, Alias) or (isinstance(item, ColumnRef) and not item.table):
+            names.append(item.name)
+        else:
+            return []
+    return names
+
+
 def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -> str:
     """Emit a SELECT statement.
 
@@ -2755,6 +2768,13 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         )
         for cte in node.ctes:
             cols = f"({', '.join(cte.columns)})" if cte.columns else ""
+            # Oracle REQUIRES an explicit column alias list on a recursive CTE
+            # (ORA-32039); derive it from the anchor SELECT's output names when
+            # the source omitted it (T-SQL/PG/MySQL infer them).
+            if not cols and cte.recursive and dialect == "oracle":
+                derived = _cte_anchor_column_names(cte.query)
+                if derived:
+                    cols = f"({', '.join(derived)})"
             cte_query = cte.query
             if dialect == "tsql" and cte_query.order_by and not cte_query.limit:
                 # Illegal in a T-SQL CTE without TOP/OFFSET (error 1033),

@@ -667,7 +667,7 @@ CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; EN
 -- CASE[open]: my-self-fk — fails on tsql. (1785, b"Introducing FOREIGN KEY constraint 'FK__emp__mgr__790A8C33' on table 'emp' may ca
 CREATE TABLE emp (id INT PRIMARY KEY, mgr INT, FOREIGN KEY (mgr) REFERENCES emp(id) ON DELETE SET NULL)
 
--- CASE[open]: my-seq-concat — fails on oracle, postgresql. ORA-32039: missing column alias list in recursive WITH clause element SEQ
+-- CASE[fixed]: my-seq-concat — recursive CTE: Oracle gets the required column list (derived from the anchor SELECT); PG gets WITH RECURSIVE + STRING_AGG. Live '1,2,...,10' on Oracle and PG.
 WITH RECURSIVE seq AS (SELECT 1 n UNION ALL SELECT n+1 FROM seq WHERE n<10) SELECT GROUP_CONCAT(n) FROM seq
 
 -- CASE[fixed]: my-session-fns — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'USER'.DB-Lib error message 20018, severity 15:\

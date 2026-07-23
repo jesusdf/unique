@@ -1118,6 +1118,24 @@ class TestRecursiveCteKeyword:
         assert "RECURSIVE" not in _exec_lines(_tx(case, "tsql", "oracle"))
 
 
+class TestRecursiveCteOracleColumnList:
+    """Oracle REQUIRES an explicit column alias list on a recursive CTE (ORA-32039);
+    it is derived from the anchor SELECT's output names when the source omits it.
+    The T-SQL-only OPTION (MAXRECURSION n) hint is dropped (ts-maxrecursion,
+    ts-recursion-limit, my-seq-concat)."""
+
+    def test_oracle_column_list_derived(self) -> None:
+        for fname, cid, src in (
+            ("challenge_sqlserver.sql", "ts-maxrecursion ", "tsql"),
+            ("challenge_sqlserver.sql", "ts-recursion-limit ", "tsql"),
+            ("challenge_mysql.sql", "my-seq-concat ", "mysql"),
+        ):
+            ora = _exec_lines(_tx(_case(fname, cid), src, "oracle"))
+            # a parenthesised alias list right after the CTE name, and no leaked hint
+            assert re.search(r"WITH\s+\w+\s*\(\s*\w+\s*\)", ora), ora
+            assert "MAXRECURSION" not in ora.upper(), ora
+
+
 class TestNestedProcedureCall:
     """A CALL to another procedure maps to each target's call form; the RED
     PLS-00201 was only the absent callee (the snippet never defines it), not a
