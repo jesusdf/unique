@@ -1930,6 +1930,17 @@ class TestMysqlInsertBounds:
         assert re.search(r"(?i)CASE\s+WHEN\b.*<\s*1\s+OR\b.*>\s+LEN\(", out), out
 
 
+class TestSubstringFloatArgs:
+    """MySQL rounds a fractional SUBSTRING position/length (2.9 -> 3); Oracle/PG/
+    T-SQL truncate (2). Pre-round the literal args on a MySQL source. Verified
+    'llo'."""
+
+    def test_float_args_rounded(self) -> None:
+        case = _case("challenge_mysql.sql", "my-substr-float ")
+        assert "SUBSTR('hello', 3, 3)" in _tx(case, "mysql", "oracle")
+        assert "SUBSTRING('hello', 3, 3)" in _tx(case, "mysql", "tsql")
+
+
 class TestReplaceCaseSensitive:
     """MySQL/Oracle/PG REPLACE matches case-sensitively; T-SQL uses the subject's
     (case-insensitive) collation, so REPLACE('AbCaBc','a','X') would also replace

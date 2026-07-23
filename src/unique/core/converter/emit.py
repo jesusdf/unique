@@ -5068,6 +5068,33 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # at least two arguments) — it IS its argument (wave 161).
     if fn_name == "COALESCE" and len(node.args) == 1 and dialect in ("tsql", "oracle"):
         return _emit_expression(node.args[0], dialect)
+    # MySQL SUBSTRING rounds a fractional position/length (2.9 -> 3), but
+    # Oracle/PG/T-SQL truncate it (2). Pre-round a fractional numeric-literal
+    # argument on a MySQL source so the result matches.
+    if (
+        fn_name == "SUBSTRING"
+        and dialect in ("oracle", "postgresql", "tsql")
+        and SOURCE_DIALECT.get() == "mysql"
+        and len(node.args) in (2, 3)
+        and any(
+            isinstance(a, Literal)
+            and isinstance(a.value, float)
+            and a.value != int(a.value)
+            for a in node.args[1:]
+        )
+    ):
+        _rounded: list[ASTNode] = [node.args[0]]
+        for _arg in node.args[1:]:
+            if (
+                isinstance(_arg, Literal)
+                and isinstance(_arg.value, float)
+                and _arg.value != int(_arg.value)
+            ):
+                _rounded.append(Literal(value=int(_arg.value + 0.5), dtype="integer"))
+            else:
+                _rounded.append(_arg)
+        return _emit_function(dataclasses.replace(node, args=tuple(_rounded)), dialect)
+
     # Oracle/MySQL SUBSTR(s, -n[, len]) counts the start position from the END;
     # PG/T-SQL SUBSTRING is 1-indexed from the start and reads -n literally (an
     # empty/left-of-string result). Convert a negative literal start:

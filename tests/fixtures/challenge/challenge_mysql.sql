@@ -718,7 +718,7 @@ SELECT '5'+'5' AS r
 -- CASE[fixed]: my-subdate — fails on tsql. FUNC-DIFF: source=(('2019-12-31',),) target=(('2019-12-31 00:00:00',),)
 SELECT SUBDATE('2020-01-31', INTERVAL 1 MONTH) AS r
 
--- CASE[open]: my-substr-float — fails on oracle, tsql. FUNC-DIFF: source=(('llo',),) target=(('el',),)
+-- CASE[fixed]: my-substr-float — MySQL rounds a fractional SUBSTRING position/length (2.9->3); Oracle/T-SQL truncate, so pre-round the literal args. Live-verified 'llo'.
 SELECT SUBSTRING('hello', 2.9, 2.9) AS r
 
 -- CASE[fixed]: my-substr-neg — fails on postgresql, tsql. FUNC-DIFF: source=(('def',),) target=(('ab',),)
