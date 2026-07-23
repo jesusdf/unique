@@ -510,6 +510,19 @@ class TestDateFormatMasks:
         assert r.warnings and "UNIQUE:" in r.sql, r.sql
 
 
+class TestTsqlIntToDatetime:
+    """T-SQL ``CAST(n AS DATETIME)`` reads n as days since the 1900-01-01 epoch;
+    no other engine has that implicit conversion, so it becomes date arithmetic
+    ``DATE '1900-01-01' + n`` (live-verified 1900-01-02 on Oracle and PG)."""
+
+    def test_int_to_datetime_epoch(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-cast-int-datetime ")
+        o4 = _tx(case, "tsql", "oracle")
+        assert "DATE '1900-01-01' + 1" in o4, o4
+        pg = _tx(case, "tsql", "postgresql")
+        assert "AS DATE) + 1" in pg, pg
+
+
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL
     STRING_AGG / Oracle LISTAGG); an integer value is cast to text so PG doesn't

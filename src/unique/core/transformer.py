@@ -240,6 +240,26 @@ class TypeMapper(TransformPass):
                     name="SIGN",
                     args=(FunctionCall(name="ABS", args=(node.expression,)),),
                 )
+            # T-SQL ``CAST(n AS DATETIME)`` reads a *number* as days since the
+            # 1900-01-01 epoch (CAST(1 AS DATETIME) = 1900-01-02). No other engine
+            # has that implicit conversion — reproduce it as date arithmetic
+            # (Oracle/PostgreSQL add an integer number of days to a DATE).
+            if (
+                node.target_type.name.upper()
+                in ("DATETIME", "DATETIME2", "SMALLDATETIME")
+                and ctx.source == "tsql"
+                and ctx.target != "tsql"
+                and isinstance(node.expression, Literal)
+                and node.expression.dtype
+                in ("integer", "bigint", "smallint", "tinyint", "decimal", "float")
+            ):
+                epoch = CastExpression(
+                    expression=Literal(value="1900-01-01", dtype="string"),
+                    target_type=DataType(name="DATE"),
+                )
+                return BinaryOp(
+                    operator=BinaryOperator.ADD, left=epoch, right=node.expression
+                )
             mapped_type = self._map_type(node.target_type, ctx.target)
             if mapped_type != node.target_type:
                 return CastExpression(

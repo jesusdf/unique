@@ -66,7 +66,7 @@ SELECT CAST(1 AS BIT), CAST('true' AS BIT), CAST(0.5 AS BIT), TRY_CAST('x' AS BI
 -- CASE[open]: ts-cast-date-int — fails on oracle, postgresql. ORA-00932: expression is of data type DATE, which is incompatible with expected data type 
 SELECT CAST(GETDATE() AS INT) AS r
 
--- CASE[open]: ts-cast-int-datetime — fails on oracle, postgresql. ORA-00932: expression is of data type NUMBER, which is incompatible with expected data typ
+-- CASE[fixed]: ts-cast-int-datetime — T-SQL CAST(n AS DATETIME) reads n as days since the 1900-01-01 epoch (no other engine has that implicit conversion); reproduce as DATE 1900-01-01 + n (Oracle/PG add days to a DATE). live-verified 1900-01-02.
 SELECT CAST(1 AS DATETIME) AS r
 
 -- CASE[open]: ts-cast-money — fails on oracle, postgresql. ORA-00902: invalid datatype
