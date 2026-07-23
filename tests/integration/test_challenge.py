@@ -497,6 +497,26 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestTryCast:
+    """TRY_CAST/TRY_CONVERT (a cast that yields NULL on a conversion error) is
+    carried via the CastExpression ``safe`` flag: Oracle DEFAULT NULL ON
+    CONVERSION ERROR, T-SQL native TRY_CAST, and PG/MySQL resolve a
+    non-convertible literal to NULL at transpile time (they constant-fold a CASE
+    guard). Live-verified NULL."""
+
+    def test_try_convert_int(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-try-convert ")
+        assert "CAST('abc' AS INT DEFAULT NULL ON CONVERSION ERROR)" in _tx(
+            case, "tsql", "oracle"
+        )
+        body = "\n".join(
+            ln
+            for ln in _tx(case, "tsql", "postgresql").splitlines()
+            if not ln.lstrip().startswith("--")
+        )
+        assert "SELECT NULL" in body, body
+
+
 class TestBitStringCast:
     """T-SQL CAST('true' AS BIT) parses the boolean word (a numeric string by its
     value); other engines can't convert 'true' to a number (ORA-01722). Fold a

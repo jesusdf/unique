@@ -766,6 +766,7 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
             return CastExpression(
                 expression=convert_expression(value_expr),
                 target_type=_convert_data_type(type_expr),
+                safe=bool(expr.args.get("safe")),
             )
     # A schema-qualified function call (e.g. dbo.fn_tax(net)) parses as a Dot
     # (schema . func(...)). Fold it into a FunctionCall whose name keeps the
@@ -2275,7 +2276,11 @@ def _convert_cast(expr: exp.Cast) -> CastExpression:
     """Convert a CAST expression."""
     inner = convert_expression(expr.this)
     target_type = _convert_data_type(expr.to)
-    return CastExpression(expression=inner, target_type=target_type)
+    return CastExpression(
+        expression=inner,
+        target_type=target_type,
+        safe=bool(expr.args.get("safe")),
+    )
 
 
 def _convert_data_type(expr: exp.Expression) -> DataType:

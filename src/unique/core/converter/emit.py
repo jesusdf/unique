@@ -4504,6 +4504,51 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                 f"{dialect} equivalent; unsigned wraparound not preserved "
                 "(docs/03-unsupported.md) */"
             )
+        # A TRY_CAST/TRY_CONVERT yields NULL on a conversion error. T-SQL has
+        # TRY_CAST natively; Oracle has DEFAULT NULL ON CONVERSION ERROR. PG/MySQL
+        # have neither and constant-fold a CASE guard, so a literal is resolved at
+        # transpile time (a non-numeric string cast to a number becomes NULL).
+        if node.safe:
+            if dialect == "tsql":
+                return f"TRY_CAST({inner} AS {dtype})"
+            if dialect == "oracle":
+                return f"CAST({inner} AS {dtype} DEFAULT NULL ON CONVERSION ERROR)"
+            _sup = dtype.split("(")[0].strip().upper()
+            if isinstance(node.expression, Literal):
+                _lv = str(node.expression.value).strip()
+                if _sup in (
+                    "INT",
+                    "INTEGER",
+                    "BIGINT",
+                    "SMALLINT",
+                    "TINYINT",
+                    "DECIMAL",
+                    "NUMERIC",
+                    "NUMBER",
+                    "DEC",
+                    "FLOAT",
+                    "DOUBLE",
+                    "REAL",
+                ):
+                    try:
+                        float(_lv)
+                    except (TypeError, ValueError):
+                        return "NULL"  # non-numeric literal -> safe cast is NULL
+                elif _sup in ("BOOLEAN", "BOOL", "BIT") and _lv.lower() not in (
+                    "true",
+                    "false",
+                    "t",
+                    "f",
+                    "yes",
+                    "no",
+                    "y",
+                    "n",
+                    "on",
+                    "off",
+                    "0",
+                    "1",
+                ):
+                    return "NULL"  # non-boolean literal -> safe cast is NULL
         return f"CAST({inner} AS {dtype})"
 
     if isinstance(node, SubqueryExpression):

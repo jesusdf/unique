@@ -60,7 +60,7 @@ SELECT 5 & 3, 5 | 2, 5 ^ 3, ~5
 -- CASE[fixed]: ts-cast-bit — T-SQL CAST(x AS BIT) normalizes non-zero to 1; other engines keep the value. Emit SIGN(ABS(x)) (0->0, non-zero->1, NULL->NULL) in the TypeMapper pass.
 SELECT CAST(2 AS BIT) AS r
 
--- CASE[open]: ts-cast-bit2 — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 't' to a number: 
+-- CASE[fixed]: ts-cast-bit2 — TRY_CAST is carried (safe flag): Oracle DEFAULT NULL ON CONVERSION ERROR, PG resolves the non-boolean literal to NULL at transpile time. Live-verified (1,1,1,NULL).
 SELECT CAST(1 AS BIT), CAST('true' AS BIT), CAST(0.5 AS BIT), TRY_CAST('x' AS BIT)
 
 -- CASE[open]: ts-cast-date-int — fails on oracle, postgresql. ORA-00932: expression is of data type DATE, which is incompatible with expected data type 
@@ -426,7 +426,7 @@ SELECT TRIM('x' FROM 'xxabcxx') AS r
 -- CASE[fixed]: ts-try-catch-raiserror — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 8): PLS-00103: Encountered the symbol "RAISERROR" when 
 CREATE PROCEDURE p AS BEGIN BEGIN TRY INSERT INTO t VALUES(1); END TRY BEGIN CATCH IF ERROR_NUMBER()=2627 RAISERROR('dup',16,1); END CATCH END
 
--- CASE[open]: ts-try-convert — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'a' to a number: 
+-- CASE[fixed]: ts-try-convert — TRY_CONVERT carried via the CastExpression safe flag: Oracle DEFAULT NULL ON CONVERSION ERROR, PG resolves the non-numeric literal to NULL. Live-verified NULL.
 SELECT TRY_CONVERT(INT, 'abc') AS r
 
 -- CASE[fixed]: ts-try-parse — fails on mysql, oracle, postgresql. ORA-00907: missing right parenthesis

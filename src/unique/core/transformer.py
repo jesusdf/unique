@@ -325,6 +325,7 @@ class TypeMapper(TransformPass):
                 return CastExpression(
                     expression=stripped,
                     target_type=self._map_type(node.target_type, ctx.target),
+                    safe=node.safe,
                 )
             # MySQL ``CONVERT(x USING charset)`` / ``CAST(x AS CHAR CHARACTER
             # SET …)`` is a charset conversion that leaves the string VALUE
@@ -341,7 +342,9 @@ class TypeMapper(TransformPass):
                     "postgresql": DataType(name="TEXT"),
                     "tsql": DataType(name="VARCHAR", params=(8000,)),
                 }[ctx.target]
-                return CastExpression(expression=node.expression, target_type=str_type)
+                return CastExpression(
+                    expression=node.expression, target_type=str_type, safe=node.safe
+                )
             # MySQL ``CAST(x AS CHAR)`` with no length is a to-string conversion
             # (variable length); a bare CHAR is fixed-width or length-required
             # elsewhere (Oracle ORA-25137). Map it to each engine's unbounded
@@ -357,7 +360,9 @@ class TypeMapper(TransformPass):
                     "postgresql": DataType(name="TEXT"),
                     "tsql": DataType(name="VARCHAR", params=(8000,)),
                 }[ctx.target]
-                return CastExpression(expression=node.expression, target_type=str_type)
+                return CastExpression(
+                    expression=node.expression, target_type=str_type, safe=node.safe
+                )
             # MySQL YEAR type: a constant with MySQL's 2-digit century rule
             # (00-69 -> 2000-2069, 70-99 -> 1970-1999). No engine has a YEAR type,
             # so fold a literal to its integer year (the value MySQL stores).
@@ -383,6 +388,7 @@ class TypeMapper(TransformPass):
                 return CastExpression(
                     expression=node.expression,
                     target_type=mapped_type,
+                    safe=node.safe,
                     location=node.location,
                 )
             return node

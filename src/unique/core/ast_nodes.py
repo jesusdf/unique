@@ -253,10 +253,12 @@ class CaseExpression(ASTNode):
 
 @dataclass(frozen=True)
 class CastExpression(ASTNode):
-    """CAST(expression AS type)."""
+    """CAST(expression AS type). ``safe`` marks a T-SQL TRY_CAST/TRY_CONVERT (a
+    cast that yields NULL on a conversion error instead of raising)."""
 
     expression: ASTNode
     target_type: DataType
+    safe: bool = False
 
 
 @dataclass(frozen=True)
