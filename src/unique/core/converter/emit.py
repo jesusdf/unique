@@ -4929,6 +4929,14 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         )
         pyfmt = node.args[1].value
         if dialect in ("oracle", "postgresql"):
+            # A lone full month/day NAME pads to 9 chars and uppercases on the
+            # Oracle model ('JUNE     '); FM + init-capped name trims and
+            # matches the source (MySQL MONTHNAME/DAYNAME give 'June'/'Monday').
+            # Safe only for a single token — Oracle's FM *toggles* fill mode, so
+            # a multi-field mask cannot use a per-field FM.
+            lone_name = {"%B": "FMMonth", "%A": "FMDay"}.get(pyfmt.strip())
+            if lone_name is not None:
+                return f"TO_CHAR({value}, '{lone_name}')"
             return (
                 f"TO_CHAR({value}, '{_convert_date_format(pyfmt, 'python', 'oracle')}')"
             )
@@ -5324,7 +5332,10 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         d = _emit_expression(node.args[0], dialect)
         if dialect == "tsql":
             return f"DATENAME(WEEKDAY, {d})"
+        # A bare ISO-string arg needs an ANSI ``DATE '…'`` literal or Oracle/PG
+        # reject it (ORA-01722 / PG unknown type), exactly like LAST_DAY above.
         # Oracle/PG pad the day name to 9 chars; fm/FM trims it to match MySQL.
+        d = wrap_oracle_date_arg(d)
         return (
             f"TO_CHAR({d}, 'fmDay')"
             if dialect == "oracle"

@@ -486,7 +486,7 @@ SELECT JSON_SEARCH('{"a":"x","b":"x"}','all','x'),JSON_OVERLAPS('[1,2]','[2,3]')
 -- CASE[open]: my-json-type — fails on oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (data JSON)
 
--- CASE[open]: my-last-day-name — fails on oracle, postgresql, tsql. (195, b"'LAST_DAY' is not a recognized built-in function name.DB-Lib error message 20018, 
+-- CASE[fixed]: my-last-day-name — LAST_DAY -> EOMONTH (tsql) / native (oracle) / DATE_TRUNC month-end (pg); DAYNAME/MONTHNAME wrap the ISO arg as an ANSI DATE and use FM-trimmed, init-capped names (Oracle 'MONTH' otherwise pads/uppercases to 'JUNE     '). live-verified 2020-02-29, Monday, June.
 SELECT LAST_DAY('2020-02-15'), DAYNAME('2020-06-15'), MONTHNAME('2020-06-15')
 
 -- CASE[fixed]: my-lastday-extract — LAST_DAY + EXTRACT(DAY). Oracle LAST_DAY / PG month-end via DATE_TRUNC / T-SQL EOMONTH; the extracted day = 29 on all. Oracle's DATE renders a 00:00:00 time (same value, precision-only; policy 2026-07-19). live-verified.

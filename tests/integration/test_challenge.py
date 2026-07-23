@@ -433,6 +433,30 @@ class TestJsonConstructors:
         assert "CAST(1 AS BIT)" in ts and "NULL ON NULL" in ts, ts
 
 
+class TestLastDayAndNames:
+    """LAST_DAY / DAYNAME / MONTHNAME (MySQL) across engines. The date-name
+    functions wrap a bare ISO string as an ANSI ``DATE`` literal (else Oracle/PG
+    reject it) and use the FM-trimmed, init-capped name model so a lone month/day
+    name matches MySQL's 'June'/'Monday' instead of Oracle's padded 'JUNE     '.
+    Live-verified 2020-02-29, Monday, June on all four engines."""
+
+    def _out(self, target: str) -> str:
+        return _tx(_case("challenge_mysql.sql", "my-last-day-name "), "mysql", target)
+
+    def test_last_day_forms(self) -> None:
+        assert "EOMONTH('2020-02-15')" in self._out("tsql")
+        assert "LAST_DAY(DATE '2020-02-15')" in self._out("oracle")
+        assert "DATE_TRUNC('month', DATE '2020-02-15')" in self._out("postgresql")
+
+    def test_month_and_day_names_trimmed(self) -> None:
+        ora = self._out("oracle")
+        assert "TO_CHAR(DATE '2020-06-15', 'fmDay')" in ora, ora
+        assert "TO_CHAR(DATE '2020-06-15', 'FMMonth')" in ora, ora
+        pg = self._out("postgresql")
+        assert "TO_CHAR(DATE '2020-06-15', 'FMDay')" in pg, pg
+        assert "TO_CHAR(DATE '2020-06-15', 'FMMonth')" in pg, pg
+
+
 class TestJsonPathExtraction:
     """JSON_VALUE(doc, path) and JSON_QUERY(doc, path) (Oracle/T-SQL scalar and
     object extraction). MySQL has JSON_VALUE natively but routes JSON_QUERY
