@@ -329,7 +329,7 @@ SELECT DATE_FORMAT('2020-06-15','%D %W %M'),DATE_FORMAT('2020-06-15','%X %V')
 -- CASE[limit]: my-fmt3 — fails on oracle, postgresql, tsql. FORMAT with a locale (de_DE) has no cross-engine equivalent (docs/03-unsupported.md §3.1).
 SELECT FORMAT(1234.5678,2),FORMAT(1234.5678,4,'de_DE'),TRUNCATE(1234.5678,2)
 
--- CASE[open]: my-for-share — fails on oracle. ORA-02000: missing COMPRESS or UPDATE keyword
+-- CASE[limit]: my-for-share — FOR SHARE (a shared row lock) has no Oracle equivalent (Oracle SELECT locking is FOR UPDATE, exclusive); the shared lock is dropped and the divergence annotated (docs/03-unsupported.md). fails on oracle
 CREATE TABLE t (id INT, INDEX ix (id)); SELECT id FROM t WHERE id = 1 FOR SHARE
 
 -- CASE[fixed]: my-format-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI

@@ -229,7 +229,7 @@ SELECT '1'+1, '10'*2, TO_NUMBER('1')+1 FROM DUAL
 -- CASE[limit]: ora-initcap — INITCAP (title-case each word) has no MySQL/T-SQL builtin and cannot be emulated for arbitrary multi-word text; PostgreSQL has INITCAP natively so it transpiles cleanly there. Gated + annotated on the other two (docs/03-unsupported.md). fails on mysql, tsql
 SELECT INITCAP('hello world') AS r FROM DUAL
 
--- CASE[open]: ora-insert-append — fails on postgresql. validator-crash: sending query failed: another command is already in progress
+-- CASE[fixed]: ora-insert-append — the Oracle /*+ APPEND */ direct-path hint is advisory (result-identical) and is dropped for PostgreSQL; the INSERT … SELECT runs unchanged. The RED "crash" was a harness connection-state artifact. live-verified 1 row inserted.
 CREATE TABLE t (a NUMBER); INSERT /*+ APPEND */ INTO t SELECT 1 FROM DUAL
 
 -- CASE[open]: ora-instr-case — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('1',),)

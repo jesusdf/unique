@@ -1620,6 +1620,26 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 f"ALTER TABLE {_tdc} DROP COLUMN {_cdc}"
             )
 
+    # MySQL/PostgreSQL FOR SHARE (a shared row lock) has no Oracle form — Oracle
+    # SELECT locking is FOR UPDATE (exclusive) only. Drop it and document the
+    # absent shared lock.
+    if (
+        dialect == "oracle"
+        and node.source_dialect in ("mysql", "postgresql")
+        and re.search(r"(?i)\bFOR\s+SHARE\b", node.sql)
+    ):
+        _fs = re.sub(r"(?i)\s*\bFOR\s+SHARE\b", "", node.sql)
+        try:
+            _fsr = sqlglot.transpile(_fs, read=read, write=write)
+            _fsb = _fsr[0] if _fsr and _fsr[0].strip() else _fs
+        except Exception:  # noqa: BLE001 - keep the stripped spelling on failure
+            _fsb = _fs
+        return (
+            "-- UNIQUE: FOR SHARE (shared row lock) has no Oracle equivalent "
+            "(Oracle SELECT locking is FOR UPDATE, exclusive); the shared lock "
+            f"is dropped (docs/03-unsupported.md)\n{_fsb}"
+        )
+
     # Oracle FOR UPDATE WAIT <n> (block up to n seconds for the row lock) has no
     # PostgreSQL/MySQL form — they offer only FOR UPDATE (block) and NOWAIT. Drop
     # the WAIT <n> and document the lost bounded-wait timeout.
