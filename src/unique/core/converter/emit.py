@@ -4698,6 +4698,22 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     ):
         return "NULL"
 
+    # MySQL/Oracle/PostgreSQL REPLACE matches case-sensitively; T-SQL uses the
+    # subject's collation (case-insensitive by default), so REPLACE('AbC','a','X')
+    # would also replace the 'A'. Force a binary collation on a literal subject so
+    # only the exact-case matches are replaced (a column keeps its own collation).
+    if (
+        fn_name == "REPLACE"
+        and dialect == "tsql"
+        and SOURCE_DIALECT.get() in ("mysql", "oracle", "postgresql")
+        and len(node.args) >= 3
+        and isinstance(node.args[0], Literal)
+        and isinstance(node.args[0].value, str)
+    ):
+        subj = _emit_expression(node.args[0], dialect)
+        rest = ", ".join(_emit_expression(a, dialect) for a in node.args[1:])
+        return f"REPLACE({subj} COLLATE Latin1_General_BIN2, {rest})"
+
     # The reverse: T-SQL/PG/Oracle CONCAT() *ignore* a NULL argument, so a
     # literal NULL contributes nothing. Drop it (otherwise MySQL's NULL-
     # propagating CONCAT would turn the whole result NULL). The ``||`` operator

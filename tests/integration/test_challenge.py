@@ -1930,6 +1930,16 @@ class TestMysqlInsertBounds:
         assert re.search(r"(?i)CASE\s+WHEN\b.*<\s*1\s+OR\b.*>\s+LEN\(", out), out
 
 
+class TestReplaceCaseSensitive:
+    """MySQL/Oracle/PG REPLACE matches case-sensitively; T-SQL uses the subject's
+    (case-insensitive) collation, so REPLACE('AbCaBc','a','X') would also replace
+    the 'A'. Force a BIN2 collation on a literal subject. Live-verified 'AbCXBc'."""
+
+    def test_tsql_literal_subject_is_binary(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-replace-case "), "mysql", "tsql")
+        assert "REPLACE('AbCaBc' COLLATE Latin1_General_BIN2, 'a', 'X')" in out, out
+
+
 class TestInstrCaseSensitive:
     """Oracle/PostgreSQL INSTR searches case-sensitively, but MySQL's and T-SQL's
     default collations are case-insensitive (INSTR('aAaA','A') = 1 not 2). Force a

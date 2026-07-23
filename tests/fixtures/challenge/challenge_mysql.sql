@@ -646,7 +646,7 @@ SELECT REPEAT('ab', 2.9) AS r
 -- CASE[fixed]: my-repeat-neg — fails on tsql. FUNC-DIFF: source=(('',),) target=(('NULL',),)
 SELECT REPEAT('ab', -1) AS r
 
--- CASE[open]: my-replace-case — fails on tsql. FUNC-DIFF: source=(('AbCXBc',),) target=(('XbCXBc',),)
+-- CASE[fixed]: my-replace-case — MySQL REPLACE is case-sensitive; force a BIN2 collation on the T-SQL subject so only lowercase 'a' is replaced (AbCXBc, not XbCXBc).
 SELECT REPLACE('AbCaBc', 'a', 'X') AS r
 
 -- CASE[fixed]: my-replace-null2 — MySQL REPLACE propagates NULL (literal-NULL arg -> NULL); Oracle ignores it. Fold to NULL.
