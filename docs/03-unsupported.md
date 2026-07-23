@@ -121,6 +121,8 @@ transpilation target:
 | Oracle CONNECT BY | Oracle | ⚠️ Partially supported → Recursive CTE |
 | T-SQL PIVOT/UNPIVOT | T-SQL | ⚠️ Partially supported → CASE/UNION |
 | REGEXP_LIKE/REGEXP_REPLACE/… → T-SQL | Oracle/PG/MySQL | SQL Server gained REGEXP_* only in 2025; targeting 2012+, a statement using them degrades to a documented carrier + warning (rewrite with LIKE/PATINDEX manually) |
+| `TRANSLATE(s, from, to)` → MySQL | Oracle/PG | MySQL has no TRANSLATE, and a nested `REPLACE` emulation is order-dependent (not equivalent), so it degrades to a carrier + warning (Oracle/PG/T-SQL 2017+ have it natively) |
+| Windowed string aggregation (`LISTAGG(…) OVER (…)`) → PG/MySQL/T-SQL | Oracle | A string aggregate used as a window function: T-SQL/MySQL never allow it and PG rejects an ORDER-BY'd one — degrades to a carrier + warning |
 | FK `ON UPDATE` action → Oracle | Oracle | Oracle has **no** `ON UPDATE` referential action (only `ON DELETE CASCADE`/`SET NULL`); the clause is stripped, the FK + `ON DELETE` kept |
 | FK `MATCH FULL/PARTIAL/SIMPLE` → Oracle | Oracle | Oracle FKs are always simple-match; the `MATCH` clause (PostgreSQL) is stripped, the FK kept (ORA-03075 otherwise) |
 | `INT UNSIGNED` → PG/Oracle/T-SQL | MySQL | No unsigned integer type; widened to the next signed size (BIGINT) so the full range fits — the ≥0 constraint is not re-added |

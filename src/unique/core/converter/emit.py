@@ -5293,6 +5293,30 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     ):
         return "NULL"
 
+    # Oracle REPLACE(str, search) [2-arg] omits the replacement, removing every
+    # occurrence of search; an all-removed empty result becomes NULL (Oracle's
+    # empty string = NULL). PG/T-SQL/MySQL REPLACE require 3 args, so supply the
+    # '' and reproduce Oracle's empty->NULL with NULLIF.
+    if (
+        fn_name == "REPLACE"
+        and len(node.args) == 2
+        and SOURCE_DIALECT.get() == "oracle"
+        and dialect != "oracle"
+    ):
+        _r0 = _emit_expression(node.args[0], dialect)
+        _r1 = _emit_expression(node.args[1], dialect)
+        return f"NULLIF(REPLACE({_r0}, {_r1}, ''), '')"
+
+    # TRANSLATE(str, from, to) is a per-character map. Oracle/PG have it natively
+    # and T-SQL 2017+ does too, but MySQL has none — and a nested REPLACE is
+    # order-dependent (not equivalent), so degrade to a documented carrier.
+    if fn_name == "TRANSLATE" and dialect == "mysql" and len(node.args) == 3:
+        return (
+            "NULL /* UNIQUE: MySQL has no TRANSLATE and a nested-REPLACE "
+            "emulation is order-dependent (not equivalent) — "
+            "see docs/03-unsupported.md */"
+        )
+
     # MySQL REPLACE propagates NULL — REPLACE(str, NULL, x) is NULL — while
     # Oracle's REPLACE ignores a NULL search/replace and returns the subject
     # unchanged. With a literal NULL argument the MySQL result is NULL; fold it

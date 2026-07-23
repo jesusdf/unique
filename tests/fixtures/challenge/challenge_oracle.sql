@@ -476,7 +476,7 @@ SELECT CASE WHEN 'a'='a ' THEN 1 ELSE 0 END, CASE WHEN 'a'=RPAD('a',2) THEN 1 EL
 -- CASE[fixed]: ora-translate — fails on mysql. (1305, 'FUNCTION unique_val_6c47c43e12f3.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r FROM DUAL
 
--- CASE[open]: ora-translate3 — fails on mysql, postgresql, tsql. (174, b'The replace function requires 3 argument(s).DB-Lib error message 20018, severity 1
+-- CASE[limit]: ora-translate3 — Oracle 2-arg REPLACE(s, search) rewritten to NULLIF(REPLACE(s, search, ''), '') on all targets (reproduces Oracle's empty->NULL; NULL/'abc45' verified on PG/T-SQL); TRANSLATE is native on PG/T-SQL but MySQL has none (nested REPLACE is order-dependent) so it degrades there (docs/03-unsupported.md). fails on mysql
 SELECT TRANSLATE('12345', '123', 'abc'), REPLACE('aaa','a') FROM DUAL
 
 -- CASE[fixed]: ora-trig — fails on mysql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AT

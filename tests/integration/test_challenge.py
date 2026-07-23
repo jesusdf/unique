@@ -524,6 +524,29 @@ class TestWindowedStringAgg:
         assert "SUM(x) OVER" in out and "UNIQUE:" not in out, out
 
 
+class TestOracleTwoArgReplaceTranslate:
+    """Oracle 2-arg REPLACE(s, search) removes all matches and returns NULL when
+    the result is empty; it becomes NULLIF(REPLACE(s, search, ''), '') so PG/
+    T-SQL/MySQL match. TRANSLATE is native on PG/T-SQL but MySQL has none, so it
+    degrades there (a documented limit). Live-verified NULL / 'abc45'."""
+
+    def test_two_arg_replace_rewrite(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-translate3 ")
+        for target in ("postgresql", "tsql"):
+            out = _tx(case, "oracle", target)
+            assert "NULLIF(REPLACE('aaa', 'a', ''), '')" in out, out
+            assert "TRANSLATE('12345', '123', 'abc')" in out, out
+
+    def test_mysql_translate_degrades(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-translate3 ")
+        result = Transpiler().transpile(case, source="oracle", target="mysql")
+        assert result.warnings and "UNIQUE:" in result.sql
+        body = "\n".join(
+            ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "TRANSLATE(" not in body.upper(), body
+
+
 class TestCastPointGeometric:
     """PG's geometric ``point`` type has no cross-engine equivalent; a cast to it
     degrades to the source's text value plus a carrier + warning. The kept text
