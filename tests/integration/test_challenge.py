@@ -945,6 +945,24 @@ class TestBareThrowReraise:
         assert "RAISE_APPLICATION_ERROR(-20001, )" not in body, body
 
 
+class TestVoidFunctionExecuteUsing:
+    """A PG RETURNS VOID function is semantically a PROCEDURE; MySQL forbids
+    dynamic SQL in a function (1336) but allows it in a procedure, so the void
+    function is emitted as a PROCEDURE (and PG's $N placeholder becomes ?)."""
+
+    def test_void_dynamic_sql_becomes_procedure(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-execute-using "),
+            "postgresql",
+            "mysql",
+        )
+        assert "CREATE PROCEDURE f" in out, out
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "$1" not in body and "VALUES (?)" in body, body
+
+
 class TestMysqlCursorDeclOrder:
     """MySQL requires DECLARE <variable> before DECLARE <cursor> (error 1337);
     the leading declaration block is reordered (variables first, then cursors)."""

@@ -244,7 +244,7 @@ CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1; EXCEPTION WHEN OTHERS THEN
 -- CASE[limit]: pg-exception-when — unique_violation/OTHERS handler compiles on Oracle/MySQL (with the referenced table present); T-SQL scalar functions forbid TRY/CATCH (error 443) so it degrades to a carrier (docs/03-unsupported.md). fails on tsql
 CREATE FUNCTION f() RETURNS void AS $$ BEGIN INSERT INTO t VALUES(1); EXCEPTION WHEN unique_violation THEN RAISE EXCEPTION 'dup'; WHEN others THEN RAISE; END; $$ LANGUAGE plpgsql
 
--- CASE[open]: pg-execute-using — fails on mysql. (1336, 'Dynamic SQL is not allowed in stored function or trigger')
+-- CASE[fixed]: pg-execute-using — a PG RETURNS VOID function is semantically a PROCEDURE; MySQL forbids dynamic SQL in a function (1336) but allows it in a procedure, so the void function is emitted as a PROCEDURE (and PG's $1 placeholder -> MySQL ?); CALL inserts 5, verified
 CREATE FUNCTION f() RETURNS VOID AS $$ BEGIN EXECUTE 'INSERT INTO t VALUES ($1)' USING 5; END; $$ LANGUAGE plpgsql
 
 -- CASE[open]: pg-expr-index — fails on mysql, oracle. ORA-02327: cannot create index on expression with data type LOB

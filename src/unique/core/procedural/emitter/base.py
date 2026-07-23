@@ -1546,6 +1546,11 @@ class ProceduralEmitter:
     def _emit_mysql_execute(
         self, expr: str, params: list[str], immediate: bool = False
     ) -> str:
+        # PostgreSQL's ``EXECUTE 'sql' USING a, b`` spells the placeholders
+        # ``$1, $2, …``; MySQL's PREPARE uses positional ``?``. (No other source's
+        # dynamic SQL carries ``$N``, so the rewrite is a no-op for them.)
+        if params:
+            expr = re.sub(r"\$\d+", "?", expr)
         stripped = expr.strip()
 
         # Oracle EXECUTE IMMEDIATE: dynamic SQL run via the PREPARE workflow (a

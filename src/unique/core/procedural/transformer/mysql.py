@@ -21,6 +21,7 @@ from unique.core.ast_nodes import (
     DataType,
     DeclareStatement,
     ExceptionBlock,
+    ExecuteStatement,
     RawSQL,
     SelectIntoStatement,
     SetVariableStatement,
@@ -207,7 +208,34 @@ class MySqlTransformer(ProceduralTransformer):
             self._reorder_declarations(super()._transform_procedure(node))
         )
 
+    @classmethod
+    def _has_dynamic_sql(cls, node: ASTNode) -> bool:
+        """Whether a routine body runs dynamic SQL (EXECUTE / EXECUTE IMMEDIATE),
+        anywhere including nested control flow."""
+        if isinstance(node, ExecuteStatement):
+            return True
+        for value in vars(node).values():
+            items = value if isinstance(value, tuple) else (value,)
+            for item in items:
+                if isinstance(item, ASTNode) and cls._has_dynamic_sql(item):
+                    return True
+        return False
+
     def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
+        # A void PG function that runs dynamic SQL must become a MySQL PROCEDURE:
+        # a MySQL function forbids dynamic SQL (error 1336), a procedure allows it.
+        # (A plain void function without dynamic SQL keeps the neutral scalar form
+        # — see TestReturnsVoid.)
+        is_void = node.return_type is None or node.return_type.name.upper() == "VOID"
+        if is_void and any(self._has_dynamic_sql(s) for s in node.body):
+            proc = CreateProcedureStatement(
+                name=node.name,
+                schema=node.schema,
+                parameters=node.parameters,
+                body=node.body,
+                or_replace=node.or_replace,
+            )
+            return self._transform_procedure(proc)
         return self._inject_fetch_done(
             self._reorder_declarations(super()._transform_function(node))
         )

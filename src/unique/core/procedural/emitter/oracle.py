@@ -322,7 +322,8 @@ class OracleEmitter(ProceduralEmitter):
     def _emit_function_impl(self, node: CreateFunctionStatement) -> str:
         # A routine with no return type — a PostgreSQL function with only OUT
         # params — is a PROCEDURE on Oracle: a FUNCTION must RETURN a type, and
-        # ``RETURN void`` raises PLS-00201 ('VOID' must be declared).
+        # ``RETURN void`` raises PLS-00201. (A plain RETURNS void body maps to the
+        # neutral scalar form instead — see TestReturnsVoid.)
         if node.return_type is None:
             name = self._qualified_name(node.schema, node.name)
             header = self._procedure_header(name, node.or_replace)
