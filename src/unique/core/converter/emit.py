@@ -5764,6 +5764,19 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
                 return f"DATEPART(ISO_WEEK, {value})"
         if part == "QUARTER" and dialect == "oracle":
             return f"TO_NUMBER(TO_CHAR({value}, 'Q'))"
+        if part == "EPOCH":
+            # Unix epoch seconds. PG's EPOCH for a timestamp WITHOUT time zone is
+            # the literal difference from 1970-01-01 00:00:00 — no session-tz
+            # conversion — so use a literal date-diff (not UNIX_TIMESTAMP, which
+            # would shift by the session offset). EPOCH FROM an INTERVAL is a
+            # different computation this does not model (it stays unhandled).
+            if dialect == "oracle":
+                return f"((CAST({value} AS DATE) - DATE '1970-01-01') * 86400)"
+            if dialect == "tsql":
+                return f"DATEDIFF_BIG(SECOND, '1970-01-01', {value})"
+            if dialect == "mysql":
+                return f"TIMESTAMPDIFF(SECOND, '1970-01-01 00:00:00', {value})"
+            return f"EXTRACT(EPOCH FROM {value})"
         if dialect == "tsql":
             return f"DATEPART({part}, {value})"
         return f"EXTRACT({part} FROM {value})"

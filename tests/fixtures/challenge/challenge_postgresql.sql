@@ -253,7 +253,7 @@ CREATE TABLE t (a INT, b TEXT); CREATE INDEX ix ON t (lower(b))
 -- CASE[fixed]: pg-extract-dow — EXTRACT(DOW), PG Sunday=0..Saturday=6. No target's native EXTRACT/DATEPART matches: MySQL DAYOFWEEK(d)-1, Oracle MOD over a known Sunday (1970-01-04), T-SQL DATEDIFF over a known Sunday (1900-01-07) — all NLS-/DATEFIRST-independent. live-verified value on all four.
 SELECT EXTRACT(DOW FROM DATE '2020-01-01') AS d
 
--- CASE[open]: pg-extract-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1
+-- CASE[fixed]: pg-extract-epoch — EXTRACT(EPOCH FROM ts) rewritten to a literal date-diff (Oracle date arithmetic, T-SQL DATEDIFF_BIG SECOND, MySQL TIMESTAMPDIFF SECOND) with no session-tz shift; value 1577836800 verified equal on all three (PG returns it as numeric .000000, targets as integer — same value)
 SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01') AS r
 
 -- CASE[limit]: pg-fcollate — fails on mysql, tsql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('c', 'B', '0'),) target=(('c', 'a', '1'),)

@@ -545,6 +545,28 @@ class TestUnpivot:
             assert "'A' AS col" in out and "'B' AS col" in out, out
 
 
+class TestExtractEpoch:
+    """PG EXTRACT(EPOCH FROM timestamp) — Unix seconds — has no native EPOCH field
+    on the other engines. Rewritten to a literal date-diff (no session-tz shift):
+    Oracle date arithmetic *86400, T-SQL DATEDIFF_BIG(SECOND, …), MySQL
+    TIMESTAMPDIFF(SECOND, …). Live-verified 1577836800 on all three."""
+
+    def test_epoch_rewrite(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-extract-epoch ")
+        assert "DATE '1970-01-01'" in _tx(case, "postgresql", "oracle")
+        assert "DATEDIFF_BIG(SECOND, '1970-01-01'" in _tx(case, "postgresql", "tsql")
+        assert "TIMESTAMPDIFF(SECOND, '1970-01-01 00:00:00'" in _tx(
+            case, "postgresql", "mysql"
+        )
+        for target in ("oracle", "tsql", "mysql"):
+            body = "\n".join(
+                ln
+                for ln in _tx(case, "postgresql", target).splitlines()
+                if not ln.lstrip().startswith("--")
+            )
+            assert "EPOCH" not in body, body
+
+
 class TestSpatialClrScopeResolution:
     """T-SQL spatial/CLR type methods (``geometry::Point(…).STDistance(…)`` — a
     ScopeResolution) have no cross-engine equivalent and sqlglot silently flattens
