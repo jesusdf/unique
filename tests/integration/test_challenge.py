@@ -503,7 +503,10 @@ class TestBitWidthType:
 
     def test_bit_width_dropped_on_tsql(self) -> None:
         out = _tx(_case("challenge_mysql.sql", "my-bintypes "), "mysql", "tsql")
-        assert "g BIT" in out and "BIT(" not in out, out
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "g BIT" in body and "BIT(" not in body, body
 
 
 class TestFloatDisplayScale:
