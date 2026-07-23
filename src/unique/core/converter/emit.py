@@ -7914,6 +7914,53 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
     if (
         isinstance(node.function, FunctionCall)
         and node.function.name.upper() == "GENERATE_SERIES"
+        and len(node.function.args) == 3
+        and dialect in ("oracle", "tsql")
+        and SOURCE_DIALECT.get() == "postgresql"
+        and isinstance(node.function.args[0], CastExpression)
+        and node.function.args[0].target_type.name.upper() == "DATE"
+        and isinstance(node.function.args[2], RawSQL)
+    ):
+        # PG date-range generate_series(date, date, INTERVAL 'n' DAY). Only a day
+        # step is modelled (month/year intervals fall through to the degrade):
+        # Oracle adds days to a DATE directly, T-SQL via DATEADD over a numbers
+        # source. count = floor((stop - start) / step) + 1.
+        # Accept both interval spellings sqlglot may emit: ``INTERVAL '1' DAY``
+        # and ``INTERVAL '1 day'``; only a plain day step (no month/year) matches.
+        _istep = node.function.args[2].sql
+        _dm = re.search(r"(?i)INTERVAL\s+'?(\d+)", _istep)
+        if (
+            _dm
+            and re.search(r"(?i)\bDAYS?\b", _istep)
+            and not re.search(r"(?i)\b(MONTH|YEAR|HOUR|MINUTE|SECOND|WEEK)", _istep)
+        ):
+            _step = _dm.group(1)
+            _dstart = _emit_expression(node.function.args[0], dialect)
+            _dstop = _emit_expression(node.function.args[1], dialect)
+            _dtal = node.alias or "uq_gs"
+            _dvcol = node.column_aliases[0] if node.column_aliases else _dtal
+            if dialect == "oracle":
+                _dmul = "" if _step == "1" else f" * {_step}"
+                _dcnt = (
+                    f"({_dstop}) - ({_dstart}) + 1"
+                    if _step == "1"
+                    else f"FLOOR((({_dstop}) - ({_dstart})) / {_step}) + 1"
+                )
+                _dinner = (
+                    f"SELECT ({_dstart}) + (LEVEL - 1){_dmul} AS {_dvcol} "
+                    f"FROM DUAL CONNECT BY LEVEL <= {_dcnt}"
+                )
+                return f"({_dinner}) {_dtal}"
+            _drn = "ROW_NUMBER() OVER (ORDER BY (SELECT NULL))"
+            _dcnt = f"DATEDIFF(DAY, {_dstart}, {_dstop}) / {_step} + 1"
+            _dinner = (
+                f"SELECT TOP ({_dcnt}) DATEADD(DAY, ({_drn} - 1) * {_step}, "
+                f"{_dstart}) AS {_dvcol} FROM sys.all_objects"
+            )
+            return f"({_dinner}) {_dtal}"
+    if (
+        isinstance(node.function, FunctionCall)
+        and node.function.name.upper() == "GENERATE_SERIES"
         and len(node.function.args) == 2
         and dialect in ("oracle", "postgresql")
         and SOURCE_DIALECT.get() == "tsql"

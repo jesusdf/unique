@@ -310,7 +310,7 @@ CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE sql SECURITY DEFINER 
 -- CASE[fixed]: pg-gen-months — fails on oracle. ORA-30089: missing or invalid <datetime field>
 SELECT day::date FROM generate_series('2020-01-01', '2020-12-01', '1 month'::interval) day
 
--- CASE[open]: pg-gen-series-date — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
+-- CASE[limit]: pg-gen-series-date — date-range generate_series(date, date, INTERVAL 'n' DAY) rewritten for Oracle (DATE + (LEVEL-1)*n) and T-SQL (DATEADD over a numbers source); the 5 dates match (PG returns timestamptz, Oracle/T-SQL date/timestamp — precision only). MySQL has no inline table function so it degrades (docs/03-unsupported.md). fails on mysql
 SELECT generate_series('2020-01-01'::date, '2020-01-05'::date, '1 day') AS d
 
 -- CASE[fixed]: pg-gen-series-ord — FROM generate_series(1,10,2) WITH ORDINALITY rewritten for T-SQL to a numbers source (TOP over sys.all_objects; value = start+(rn-1)*step, ordinality = ROW_NUMBER); rows (1,1)..(9,5) verified

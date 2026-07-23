@@ -836,6 +836,13 @@ class TestGenerateSeriesFrom:
         )
         assert "ORDINALITY" not in body.upper(), body
 
+    def test_date_range_series(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-gen-series-date ")
+        ora = _tx(case, "postgresql", "oracle")
+        assert "CONNECT BY LEVEL <=" in ora and "DATE '2020-01-01'" in ora, ora
+        tsql = _tx(case, "postgresql", "tsql")
+        assert "DATEADD(DAY," in tsql and "sys.all_objects" in tsql, tsql
+
     def test_srf_in_select_list_moved_to_from(self) -> None:
         case = _case("challenge_postgresql.sql", "pg-generate-series ")
         # SELECT-list generate_series is moved to FROM and rewritten.
