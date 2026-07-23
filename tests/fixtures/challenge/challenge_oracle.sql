@@ -253,7 +253,7 @@ SELECT JSON_VALUE('{"a":1}', '$.a') AS r FROM DUAL
 -- CASE[fixed]: ora-json-x — JSON_VALUE + JSON_QUERY map to native forms (MySQL has no JSON_QUERY -> JSON_EXTRACT; PostgreSQL -> JSONB_PATH_QUERY_FIRST). live-verified '1', '[1]'.
 SELECT JSON_VALUE('{"a":1}','$.a'),JSON_QUERY('{"a":[1]}','$.a') FROM DUAL
 
--- CASE[open]: ora-json-xml-agg — fails on mysql, postgresql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
+-- CASE[limit]: ora-json-xml-agg — combines JSON_ARRAYAGG + XMLAGG; PostgreSQL has both natively (works, live-verified [1,2] / <i>1</i><i>2</i>), but MySQL/T-SQL have no XML aggregate, so their output degrades to a carrier + warning (docs/03-unsupported.md). fails on mysql, tsql
 SELECT JSON_ARRAYAGG(x), XMLAGG(XMLELEMENT("i",x)) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 FROM DUAL) t
 
 -- CASE[fixed]: ora-last-day — LAST_DAY now translates (PG DATE_TRUNC month-end formula, T-SQL EOMONTH); stale tag, live-verified 2020-02-29 (date-vs-datetime display is precision-only).
