@@ -435,7 +435,7 @@ SELECT INSTR('aAaA', 'A') AS r
 -- CASE[limit]: my-int-or-empty — fails on oracle. Oracle stores '' as NULL (docs/03-unsupported.md). FUNC-DIFF: source=(('0',),) target=(('NULL',),)
 SELECT 0 OR '' AS r
 
--- CASE[open]: my-is-true — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'IS'.DB-Lib error message 20018, severity 15:\nG
+-- CASE[fixed]: my-is-true — <predicate> IS TRUE in value position normalizes to the predicate before the CASE wrap (was an invalid IS 1). Live-verified 1.
 SELECT 1 IN (SELECT 1) IS TRUE AS r
 
 -- CASE[limit]: my-json-agg — fails on tsql. JSON_ARRAYAGG/JSON_OBJECTAGG map faithfully across MySQL, PostgreSQL (json_agg/json_object_agg) and Oracle (value-verified); T-SQL has no JSON aggregate (docs/03-unsupported.md §3.9). Warned carrier on tsql.

@@ -2486,6 +2486,21 @@ class TestMysqlStringPlusIsArithmetic:
         assert "CAST('5' AS FLOAT) + CAST('5' AS FLOAT)" in out, out
 
 
+class TestIsTrueInValuePosition:
+    """`<predicate> IS TRUE` in a SELECT list has no boolean value on T-SQL/Oracle;
+    it normalizes to the predicate inside the CASE wrap (was an invalid `IS 1`).
+    Live-verified 1."""
+
+    def test_is_true_normalized(self) -> None:
+        for target in ("oracle", "tsql"):
+            out = _tx(_case("challenge_mysql.sql", "my-is-true "), "mysql", target)
+            body = "\n".join(
+                ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "IS 1" not in body and "IS TRUE" not in body, body
+            assert "CASE WHEN 1 IN" in body, body
+
+
 class TestStringPlusNumberStaysArithmetic:
     """A T-SQL/Oracle '+' with one string and one *numeric-literal* operand is
     arithmetic on every engine (the string is coerced to a number: '10' + 5 = 15,

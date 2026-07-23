@@ -894,6 +894,13 @@ def _emit_value_expression(node: ASTNode, dialect: str) -> str:
     predicate in value position. ``CASE WHEN p THEN 1 WHEN not-p THEN 0
     END`` reproduces the tri-state exactly (ELSE NULL implicit)."""
     inner = node.expression if isinstance(node, Alias) else node
+    # ``<predicate> IS TRUE/FALSE`` / ``= 1/0`` in value position: normalize to the
+    # predicate (or its negation) first, so the CASE wrap below emits a valid
+    # condition instead of ``<pred> IS 1`` (T-SQL/Oracle have no boolean value).
+    if dialect in ("tsql", "oracle"):
+        _norm_pred = _predicate_int_comparison(inner)
+        if _norm_pred is not None:
+            inner = _norm_pred
     if (
         dialect in ("tsql", "oracle")
         and isinstance(inner, BinaryOp)
