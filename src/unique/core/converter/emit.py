@@ -1660,6 +1660,34 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             f"(docs/03-unsupported.md)\n{_base}"
         )
 
+    # CREATE INDEX on an EXPRESSION (function-based index): Oracle keeps the
+    # native single-parens form; MySQL 8.0.13+/PostgreSQL require the expression
+    # in DOUBLE parens; T-SQL has no expression index (it needs a computed
+    # column), so it degrades with a carrier. A plain column-list index is
+    # unaffected (it has no operator/function, or a top-level comma).
+    if node.kind == "CREATE INDEX" and dialect != node.source_dialect:
+        m_idx = re.match(
+            r"(?is)^\s*CREATE\s+(UNIQUE\s+)?INDEX\s+(\S+)\s+ON\s+(\S+)\s*"
+            r"\((.*)\)\s*;?\s*$",
+            node.sql,
+        )
+        if m_idx:
+            _uni, _iname, _itbl, _itgt = m_idx.groups()
+            _itgt = _itgt.strip()
+            is_expr = bool(re.search(r"[*/%+]|\|\||\b\w+\s*\(", _itgt)) and (
+                "," not in _itgt
+            )
+            if is_expr:
+                _uni = _uni or ""
+                if dialect in ("mysql", "postgresql"):
+                    return f"CREATE {_uni}INDEX {_iname} ON {_itbl} (({_itgt}))"
+                if dialect == "tsql":
+                    return (
+                        "-- UNIQUE: T-SQL has no expression/function index; add a "
+                        "computed column and index it (docs/03-unsupported.md)\n"
+                        f"{_comment_block(node.sql)}"
+                    )
+
     # Oracle CREATE SEQUENCE spells its negatives as one word (NOCYCLE, NOCACHE,
     # NOMAXVALUE, NOMINVALUE) and has an ORDER/NOORDER RAC option no other engine
     # shares. PostgreSQL/T-SQL use two words (NO CYCLE, …) and have no ORDER

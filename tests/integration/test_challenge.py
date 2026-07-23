@@ -497,6 +497,16 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestFunctionalIndex:
+    """An Oracle expression (function-based) index maps to the MySQL/PostgreSQL
+    double-paren form ((expr)); T-SQL has no expression index and degrades."""
+
+    def test_double_parens_on_mysql_pg(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-functional-index ")
+        assert "ON t ((a * 2))" in _tx(case, "oracle", "mysql")
+        assert "ON t ((a * 2))" in _tx(case, "oracle", "postgresql")
+
+
 class TestSelectIntoCtas:
     """T-SQL / PostgreSQL SELECT … INTO newtable creates a table; Oracle (and
     MySQL) have no such form, so it is rewritten to CREATE TABLE … AS SELECT
