@@ -307,7 +307,7 @@ SELECT MONTHS_BETWEEN(SYSDATE, SYSDATE - 40) AS r FROM DUAL
 -- CASE[fixed]: ora-months-between-val — Oracle MONTHS_BETWEEN is fractional (whole months + (day1-day2)/31, whole when both are month-ends or same day); T-SQL DATEDIFF(MONTH) was an integer boundary count. Emit the exact CASE on T-SQL. live-verified 1.83871.
 SELECT MONTHS_BETWEEN(DATE '2020-03-10', DATE '2020-01-15') AS r FROM DUAL
 
--- CASE[open]: ora-multiset-table — fails on postgresql, tsql. (156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:
+-- CASE[limit]: ora-multiset-table — fails on postgresql, tsql. Oracle collection unnesting TABLE(CAST(MULTISET(...) AS <collection>)) has no PG/T-SQL equivalent; degrades to a carrier (docs/03-unsupported.md §3.1).
 SELECT COLUMN_VALUE FROM TABLE(CAST(MULTISET(SELECT LEVEL FROM DUAL CONNECT BY LEVEL<=3) AS SYS.ODCINUMBERLIST))
 
 -- CASE[limit]: ora-name-locale — fails on mysql. TO_CHAR with locale month/day NAMES (Day/Month) is NLS/collation-dependent, no cross-engine equivalent (docs/03-unsupported.md §3.1).

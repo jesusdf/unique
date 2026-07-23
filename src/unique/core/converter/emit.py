@@ -2966,6 +2966,7 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         ):
             _ci_str_cols = _from_string_columns(node)
         _bin_coll = "utf8mb4_bin" if dialect == "mysql" else "Latin1_General_BIN2"
+        _ci_distinct_limit = False
         rendered = []
         for o in node.order_by:
             key = _order_null_priority_key(o, dialect) if emulate_nulls else None
@@ -2976,9 +2977,25 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
             )
             _oc = _bin_coll if (_str_key in _cs_str_cols) else None
             _lower = _str_key is not None and _str_key in _ci_str_cols
+            if _lower and node.distinct and dialect in ("postgresql", "oracle"):
+                # PG/Oracle reject an ORDER BY expression (LOWER(x)) absent from a
+                # DISTINCT select list — and LOWER-ordering cannot emulate MySQL's
+                # case-insensitive DISTINCT dedup anyway (it collapses 'a'='A',
+                # they don't). Keep the plain key (valid) and flag the collation
+                # divergence as a documented carrier.
+                _lower = False
+                _ci_distinct_limit = True
             item_sql = _emit_order_item(o, dialect, collate=_oc, lower=_lower)
             rendered.append(f"{key}, {item_sql}" if key else item_sql)
-        parts.append(f"ORDER BY {', '.join(rendered)}")
+        order_line = f"ORDER BY {', '.join(rendered)}"
+        if _ci_distinct_limit:
+            order_line += (
+                " /* UNIQUE: MySQL's default collation is case-insensitive, so "
+                "DISTINCT/ordering on a string column merges 'a'='A'; PG/Oracle "
+                "are case-sensitive and keep them distinct — no portable "
+                "equivalent (see docs/03-unsupported.md) */"
+            )
+        parts.append(order_line)
     elif dialect == "tsql" and node.limit is not None and node.limit.offset is not None:
         # OFFSET…FETCH requires an ORDER BY on T-SQL; the source had
         # none, so the arbitrary-order marker is faithful.
@@ -4314,6 +4331,12 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             f"NULL /* UNIQUE: {node.detail} ({node.source_sql}) — "
             "see docs/03-unsupported.md */"
         )
+    if isinstance(node, PassthroughSQL):
+        # A passthrough that reached expression position (e.g. a subquery
+        # argument to an unknown function). Re-transpile its inner SQL rather
+        # than leak the node's Python repr — the invariant is that unhandled
+        # fragments degrade to text, never to a mangled object dump.
+        return _emit_passthrough(node, dialect)
     if isinstance(node, ColumnRef):
         # plpgsql's bare FOUND flag (statement state, not a column).
         if (
@@ -5147,8 +5170,16 @@ def _emit_group_concat(node: FunctionCall, dialect: str) -> str | None:
         value = expr_sql
         if not _is_text_valued(first):
             value = f"CAST({expr_sql} AS TEXT)"
-            if node.distinct and order_sql == expr_sql:
-                order_sql = value
+            if node.distinct and order_sql:
+                # PG: with DISTINCT the ORDER BY key must be the aggregated
+                # argument itself. When the value is cast, the sort key (minus
+                # its trailing ASC/DESC direction) must carry the same cast to
+                # still match — else "ORDER BY expressions must appear in the
+                # argument list" (my-groupconcat-distinct).
+                mdir = re.search(r"(?i)\s+(ASC|DESC)\s*$", order_sql)
+                key = order_sql[: mdir.start()] if mdir else order_sql
+                if key.strip() == expr_sql:
+                    order_sql = value + (mdir.group(0) if mdir else "")
         order = f" ORDER BY {order_sql}" if order_sql else ""
         return f"STRING_AGG({distinct}{value}, {sep_sql(',')}{order})"
     if dialect == "tsql":

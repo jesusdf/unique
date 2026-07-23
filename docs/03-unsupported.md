@@ -335,6 +335,26 @@ rejects). Both are validated live. Only date parts outside the common
 year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
 still need review.
 
+### 3.14 Case-Insensitive Collation Under DISTINCT / ORDER BY
+
+MySQL's default collation is case-insensitive, so `SELECT DISTINCT x … ORDER BY x`
+merges `'a'` and `'A'` into one group. PostgreSQL and Oracle are case-sensitive by
+default and keep them distinct — a different row count that no rewrite can bridge
+(a case-insensitive `ORDER BY LOWER(x)` is both invalid under `DISTINCT`, since the
+sort key is not in the select list, and cannot change how `DISTINCT` itself
+deduplicates). The transpiler keeps the plain, valid ordering and flags the
+divergence with a carrier. T-SQL is also case-insensitive, so it dedups the same
+way MySQL does (it may echo a different but collation-equal representative byte).
+
+### 3.13 Oracle Collection Unnesting (`TABLE(CAST(MULTISET(...)))`)
+
+Oracle can materialize a subquery into a nested-table collection and unnest it in
+the `FROM` clause — `SELECT COLUMN_VALUE FROM TABLE(CAST(MULTISET(SELECT ...) AS
+SYS.ODCINUMBERLIST))`. The `MULTISET` constructor, the collection cast, and the
+`TABLE()` unnest operator have no PostgreSQL or T-SQL equivalent (PG uses `unnest`
+on real array types; T-SQL has no collection type at all). The whole batch is
+preserved as a documented carrier comment rather than emitted as invalid SQL.
+
 ---
 
 ## 4. Behavioral Differences (Not Bugs)

@@ -1295,7 +1295,11 @@ class Transformer:
                 order_txt = re.sub(
                     r"(?i)\s+NULLS\s+(FIRST|LAST)\s*$", "", order_txt
                 ).strip()
-                if order_txt.strip().upper() != expr_txt.strip().upper():
+                # A trailing ASC/DESC direction still orders by the argument —
+                # ``ORDER BY x DESC`` is valid MySQL under DISTINCT; only a
+                # different ordering *expression* has no spelling.
+                order_key = re.sub(r"(?i)\s+(ASC|DESC)\s*$", "", order_txt)
+                if order_key.strip().upper() != expr_txt.strip().upper():
                     return (
                         "MySQL requires a DISTINCT string-aggregate to ORDER "
                         "BY its own argument; a different ordering "

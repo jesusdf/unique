@@ -254,7 +254,7 @@ SELECT DAYOFWEEK(NOW()), WEEKDAY(NOW()), DAYOFYEAR(NOW()), QUARTER(NOW())
 -- CASE[fixed]: my-decimal-scale — same value at each engine's default decimal scale (10/3 = 3.3333...; 1.5*1.5 = 2.25; 0.1*0.1 = 0.01). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 10.00/3, 10/3.0, CAST(10 AS DECIMAL(10,4))/3, 1.5*1.5, 0.1*0.1
 
--- CASE[open]: my-distinct-case — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('a',), ('B',)) target=(('A',), ('B',))
+-- CASE[limit]: my-distinct-case — fails on postgresql, oracle. MySQL's default collation is case-insensitive so DISTINCT collapses 'a'='A' (2 rows); PG/Oracle are case-sensitive (3 rows), no portable equivalent (docs/03-unsupported.md §3.14). T-SQL is also CI (2 rows, collation-equal representative).
 SELECT DISTINCT x FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'a' x UNION ALL SELECT 'B' x) t ORDER BY x
 
 -- CASE[fixed]: my-div — MySQL / is decimal (2.5); PG/T-SQL truncate two ints. Force decimal via (a * 1.0 / b). Value 2.5 (repr differs by decimal scale).
@@ -378,7 +378,7 @@ SELECT x, COUNT(*) FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'b
 -- CASE[fixed]: my-group-concat — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR '|') AS r FROM (SELECT 1 x UNION SELECT 2) t
 
--- CASE[open]: my-groupconcat-distinct — fails on postgresql. SILENT-ROUNDTRIP: literal(s) ["'|'"] lost after mysql->oracle->mysql
+-- CASE[fixed]: my-groupconcat-distinct — PG STRING_AGG(DISTINCT v, sep ORDER BY key) needs the ORDER BY key cast identically to the arg; a trailing ASC/DESC must not defeat the match (both here and the MySQL roundtrip guard). Live 2|1 on PG/Oracle; roundtrip keeps the separator.
 SELECT GROUP_CONCAT(DISTINCT x ORDER BY x DESC SEPARATOR '|') FROM (SELECT 1 x UNION ALL SELECT 1 UNION ALL SELECT 2) t
 
 -- CASE[fixed]: my-groupconcat-order — fails on postgresql. function string_agg(integer, unknown) does not exist

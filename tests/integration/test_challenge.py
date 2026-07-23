@@ -1105,6 +1105,55 @@ class TestExtractMicroseconds:
         assert result.warnings and "UNIQUE:" in result.sql
 
 
+class TestGroupConcatDistinctOrder:
+    """PG STRING_AGG(DISTINCT v, sep ORDER BY key) requires the ORDER BY key to be
+    the aggregated argument; when the value is cast to text the key must carry the
+    same cast, and a trailing ASC/DESC must not defeat the match. The MySQL
+    roundtrip guard uses the same direction-stripped comparison so the separator
+    survives (my-groupconcat-distinct)."""
+
+    def test_pg_distinct_order_key_cast_matches_arg(self) -> None:
+        case = _case("challenge_mysql.sql", "my-groupconcat-distinct ")
+        pg = _tx(case, "mysql", "postgresql")
+        assert "STRING_AGG(DISTINCT CAST(x AS TEXT), '|' ORDER BY CAST(x AS TEXT)" in pg
+        # roundtrip mysql->oracle->mysql keeps the '|' separator (not silently lost)
+        ora = Transpiler().transpile(case, source="mysql", target="oracle").sql
+        back = Transpiler().transpile(ora, source="oracle", target="mysql").sql
+        assert "SEPARATOR '|'" in back
+
+
+class TestDistinctCaseInsensitiveCollation:
+    """MySQL's case-insensitive DISTINCT collapses 'a'='A'; PG/Oracle are
+    case-sensitive. A LOWER() ordering emulation is invalid under DISTINCT (the key
+    is not in the select list) and cannot fix the dedup — so the plain key is kept
+    and the divergence flagged as a carrier (my-distinct-case)."""
+
+    def test_lower_suppressed_and_flagged_under_distinct(self) -> None:
+        case = _case("challenge_mysql.sql", "my-distinct-case ")
+        for target in ("postgresql", "oracle"):
+            result = Transpiler().transpile(case, source="mysql", target=target)
+            assert result.warnings and "UNIQUE:" in result.sql, target
+            body = "\n".join(
+                ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+            ).split("/*")[0]
+            assert "LOWER(" not in body.upper(), body
+
+
+class TestMultisetCollectionUnnest:
+    """Oracle TABLE(CAST(MULTISET(...) AS <collection>)) collection unnesting has
+    no PG/T-SQL equivalent. It degrades to a carrier — and must never leak a node
+    repr (a passthrough subquery reaching expression position used to dump its
+    Python repr; the invariant is text-degrade, never an object dump)."""
+
+    def test_multiset_degrades_no_repr_leak(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-multiset-table ")
+        for target in ("postgresql", "tsql"):
+            result = Transpiler().transpile(case, source="oracle", target=target)
+            assert result.warnings and "UNIQUE:" in result.sql, target
+            assert "PassthroughSQL(" not in result.sql, target
+            assert "SourceLocation(" not in result.sql, target
+
+
 class TestExtractEpochInterval:
     """EXTRACT(EPOCH FROM timestamp) is a literal date-diff, but EXTRACT(EPOCH
     FROM interval) has no portable form (T-SQL/MySQL have no interval value type)
