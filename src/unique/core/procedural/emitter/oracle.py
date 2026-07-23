@@ -305,6 +305,23 @@ class OracleEmitter(ProceduralEmitter):
         payload = text or number or msg
         return f"RAISE_APPLICATION_ERROR({code}, {payload});"
 
+    def _emit_function_impl(self, node: CreateFunctionStatement) -> str:
+        # A routine with no return type — a PostgreSQL function with only OUT
+        # params — is a PROCEDURE on Oracle: a FUNCTION must RETURN a type, and
+        # ``RETURN void`` raises PLS-00201 ('VOID' must be declared).
+        if node.return_type is None:
+            name = self._qualified_name(node.schema, node.name)
+            header = self._procedure_header(name, node.or_replace)
+            self._indent_level += 1
+            params_str = self._emit_params(node.parameters)
+            self._indent_level -= 1
+            if params_str:
+                header += f"\n(\n{params_str}\n)"
+            declarations, body_stmts = self._split_declarations(node.body)
+            self._in_oracle_procedure = True
+            return self._emit_oracle_procedure_body(header, declarations, body_stmts)
+        return super()._emit_function_impl(node)
+
     def _emit_function_body(
         self,
         header: str,

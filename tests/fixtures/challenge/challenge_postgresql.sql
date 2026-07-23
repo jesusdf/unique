@@ -457,7 +457,7 @@ SELECT MD5('abc') AS r
 -- CASE[fixed]: pg-mod-decimal — PG MOD(10, 3.5) now translates faithfully; the remaining diff is decimal-precision only. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT MOD(10, 3.5::numeric) AS r
 
--- CASE[open]: pg-multi-out — fails on oracle. FUNCTION F compiled INVALID (line 7): PLS-00201: identifier 'VOID' must be declared
+-- CASE[fixed]: pg-multi-out — a PG function with only OUT params (no RETURNS) returns void; on Oracle a FUNCTION must RETURN a type (RETURN void = PLS-00201), so it now emits a PROCEDURE (a IN, b/c OUT); compiles VALID and f(5) yields b=5, c=10
 CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; END; $$ LANGUAGE plpgsql
 
 -- CASE[limit]: pg-name-locale — fails on mysql, tsql. to_char with locale month/day NAMES (Day/Month/FMDay) is locale-dependent, no cross-engine equivalent (docs/03-unsupported.md §3.1).

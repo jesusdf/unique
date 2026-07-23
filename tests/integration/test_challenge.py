@@ -874,6 +874,21 @@ class TestGroupingCube:
         assert "GROUPING" not in body.upper(), body
 
 
+class TestVoidFunctionToProcedure:
+    """A PG function with only OUT params and no RETURNS returns void; on Oracle a
+    FUNCTION must RETURN a type (RETURN void = PLS-00201), so it emits a
+    PROCEDURE. Live-verified valid + f(5) -> (5, 10)."""
+
+    def test_void_out_function_becomes_oracle_procedure(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-multi-out ")
+        out = _tx(case, "postgresql", "oracle")
+        assert "CREATE OR REPLACE PROCEDURE f" in out, out
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "VOID" not in body.upper(), body
+
+
 class TestDateAddQuarter:
     """MySQL DATE_ADD(ts, INTERVAL n QUARTER) — QUARTER was not a recognized date
     unit, so it dropped to an invalid DATEADD. It is now 3 months on Oracle
