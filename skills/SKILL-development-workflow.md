@@ -577,6 +577,15 @@ python -m unique.cli.main transpile \
 - **Push to `main`** after the gate passes (`git push origin main`). The remote
   and its credentials are configured in the local environment, outside the repo.
   Never print, commit, or document a token or its location in a versioned file.
+- **Batch pushes in long sessions to spare CI (~1 push per 30-min window).**
+  Every push triggers a CI run (on the tip commit only), so pushing after *every*
+  small commit hammers CI with dozens of redundant runs. Keep commits granular —
+  one logical change each, that part is good — but **accumulate several commits
+  locally and push them together** roughly once per 30 minutes (gauge by the last
+  commit/push timestamp). Because the batched push CI-validates only the tip,
+  **run the full local suite once right before pushing** so no intermediate commit
+  ships a regression. (Push immediately, without batching, when the change is
+  urgent, a release, or the branch is about to be handed off.)
 - After pushing, it's good practice to **check CI** (see the CI section below)
   and fix any failure before moving on.
 
