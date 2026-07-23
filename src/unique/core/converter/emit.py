@@ -2710,14 +2710,34 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
                 for c in node.columns
             ),
         )
+    # SELECT DISTINCT over a case-sensitive source's string column dedups in the
+    # target's case-insensitive collation on MySQL/T-SQL (merging 'a'/'A'); a
+    # binary collation on a provably-string bare column keeps them distinct.
+    _dstr: frozenset[str] = frozenset()
+    _dcoll = "utf8mb4_bin" if dialect == "mysql" else "Latin1_General_BIN2"
+    if (
+        node.distinct
+        and SOURCE_DIALECT.get() in ("postgresql", "oracle")
+        and dialect in ("mysql", "tsql")
+    ):
+        _dstr = _from_string_columns(node)
     if node.empty_select_list and not node.columns and dialect == "postgresql":
         # PG's zero-column select list (``SELECT;``) — a ``*`` here is
         # invalid without FROM and changes the shape with one (wave 124).
         parts.append(f"SELECT {distinct}".rstrip())
     else:
-        cols = (
-            ", ".join(_emit_value_expression(c, dialect) for c in node.columns) or "*"
-        )
+        _col_parts = []
+        for c in node.columns:
+            _cstr = _emit_value_expression(c, dialect)
+            if (
+                _dstr
+                and isinstance(c, ColumnRef)
+                and c.table is None
+                and c.name.lower() in _dstr
+            ):
+                _cstr = f"{_cstr} COLLATE {_dcoll}"
+            _col_parts.append(_cstr)
+        cols = ", ".join(_col_parts) or "*"
         parts.append(f"SELECT {distinct}{top}{cols}")
 
     if into:
@@ -2794,10 +2814,13 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     # ORDER BY
     if node.order_by:
         # Preserve the source's implicit NULL ordering on MySQL/T-SQL with a
-        # leading null-priority key. T-SQL forbids an ORDER BY expression that is
-        # not in the select list under DISTINCT, so skip the emulation there
-        # (the divergence stays, but the SQL stays valid).
-        emulate_nulls = not (dialect == "tsql" and node.distinct)
+        # leading null-priority key. T-SQL forbids a non-selected ORDER BY
+        # expression under DISTINCT; MySQL forbids one only when it references a
+        # column that isn't in the (here collated) select list (error 3065). Skip
+        # the emulation in those cases so the SQL stays valid.
+        emulate_nulls = not (dialect == "tsql" and node.distinct) and not (
+            dialect == "mysql" and node.distinct and _dstr
+        )
         # A case-sensitive source (PG/Oracle) ordering a string column comes back
         # in the target's default (case-insensitive) collation on MySQL/T-SQL; a
         # binary collation on a provably-string key preserves the source order.

@@ -2033,6 +2033,11 @@ class TestOrderByCaseSensitive:
         assert "COLLATE utf8mb4_bin" in _tx(case, "postgresql", "mysql")
         assert "COLLATE Latin1_General_BIN2" in _tx(case, "postgresql", "tsql")
 
+    def test_pg_distinct_case_sensitive(self) -> None:
+        case = _case("challenge_postgresql.sql", "po-distinct-case ")
+        out = _tx(case, "postgresql", "mysql")
+        assert "DISTINCT x COLLATE utf8mb4_bin" in out, out
+
 
 class TestGreatestCaseSensitive:
     """GREATEST/LEAST compare strings by collation: PG/Oracle are case-sensitive

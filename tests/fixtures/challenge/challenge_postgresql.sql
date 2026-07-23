@@ -753,7 +753,7 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); MERGE
 -- CASE[limit]: po-agg-bit — fails on oracle, tsql. BIT_AND/BIT_OR/BIT_XOR aggregates map faithfully PostgreSQL<->MySQL (value-verified); Oracle/T-SQL have no bit aggregate (docs/03-unsupported.md §3.10). Warned carrier on oracle/tsql.
 SELECT BIT_AND(x),BIT_OR(x),BIT_XOR(x) FROM (VALUES (3),(5),(6)) v(x)
 
--- CASE[open]: po-distinct-case — fails on mysql, tsql. FUNC-DIFF: source=(('A',), ('B',), ('a',)) target=(('A',), ('B',))
+-- CASE[fixed]: po-distinct-case — force a binary collation on the DISTINCT string column so MySQL/T-SQL keep 'a'/'A' distinct like PG (A, B, a); null-priority ORDER key skipped under DISTINCT.
 SELECT DISTINCT x FROM (VALUES ('a'),('A'),('a'),('B')) v(x) ORDER BY x
 
 -- CASE[open]: po-distinct-null — fails on mysql, tsql. FUNC-DIFF: source=((1,),(2,),(NULL,)) target=((NULL,),(1,),(2,)). MySQL-fixable, but T-SQL forbids the null-priority key under DISTINCT.
