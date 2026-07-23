@@ -205,7 +205,7 @@ SELECT FROM_TZ(CAST(SYSDATE AS TIMESTAMP), '00:00') AS r FROM DUAL
 -- CASE[open]: ora-functional-index — fails on mysql, postgresql, tsql. (102, b"Incorrect syntax near '*'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)
 
--- CASE[open]: ora-gen-expr — fails on mysql. (1075, 'Incorrect table definition; there can be only one auto column and it must be defin
+-- CASE[fixed]: ora-gen-expr — Oracle virtual column GENERATED ALWAYS AS (SQRT(a*a+b*b)) maps to the MySQL generated-column form with the ported type; live-verified hyp(3,4)=5 on both.
 CREATE TABLE t (a NUMBER, b NUMBER, hyp NUMBER GENERATED ALWAYS AS (SQRT(a*a+b*b)))
 
 -- CASE[open]: ora-grouping-id — fails on mysql, postgresql, tsql. (8120, b"Column 'uq_dt.deptno' is invalid in the select list because it is not contained i
