@@ -483,7 +483,7 @@ SELECT JSON_KEYS('{"a":1,"b":2}'),JSON_CONTAINS('[1,2]','1'),JSON_CONTAINS_PATH(
 -- CASE[fixed]: my-json-search2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_SEARCH('{"a":"x","b":"x"}','all','x'),JSON_OVERLAPS('[1,2]','[2,3]')
 
--- CASE[open]: my-json-type — fails on oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type json.DB-Lib error messag
+-- CASE[fixed]: my-json-type — a MySQL JSON column maps to Oracle CLOB (the native JSON type has usage limits, ORA-43853) and T-SQL NVARCHAR(MAX) (no JSON type pre-2025); PostgreSQL keeps native JSON. live-verified CREATE runs.
 CREATE TABLE t (data JSON)
 
 -- CASE[fixed]: my-last-day-name — LAST_DAY -> EOMONTH (tsql) / native (oracle) / DATE_TRUNC month-end (pg); DAYNAME/MONTHNAME wrap the ISO arg as an ANSI DATE and use FM-trimmed, init-capped names (Oracle 'MONTH' otherwise pads/uppercases to 'JUNE     '). live-verified 2020-02-29, Monday, June.

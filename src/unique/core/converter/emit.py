@@ -3095,6 +3095,15 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 # a MySQL DATETIME(n) needs DATETIME2(n) to keep the precision.
                 if dialect == "tsql" and _tn == "DATETIME" and col.data_type.params:
                     dtype = "DATETIME2"
+                # A MySQL JSON column: PostgreSQL has native JSON, but Oracle's
+                # JSON type has usage restrictions (ORA-43853) so JSON text lives
+                # in a CLOB, and T-SQL has no JSON type (pre-2025) so it uses
+                # NVARCHAR(MAX) — the canonical JSON storage on each.
+                if _tn == "JSON":
+                    if dialect == "oracle":
+                        dtype = "CLOB"
+                    elif dialect == "tsql":
+                        dtype = "NVARCHAR(MAX)"
                 # If the mapped name already carries a length (e.g. CHAR(36)),
                 # don't append the caller's params on top of it. PostgreSQL and
                 # T-SQL integer types take no parameters at all — a MySQL display

@@ -497,6 +497,16 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestJsonColumnType:
+    """A MySQL JSON column maps to Oracle CLOB (its JSON type has usage limits)
+    and T-SQL NVARCHAR(MAX) (no JSON type pre-2025); PostgreSQL keeps JSON."""
+
+    def test_json_column_maps_per_engine(self) -> None:
+        case = _case("challenge_mysql.sql", "my-json-type ")
+        assert "data CLOB" in _tx(case, "mysql", "oracle")
+        assert "data NVARCHAR(MAX)" in _tx(case, "mysql", "tsql")
+
+
 class TestBitWidthType:
     """MySQL BIT(M) maps to T-SQL BIT with no width (error 2716 on a width),
     consistent with Oracle NUMBER(1) / PG BOOLEAN treating BIT as a boolean."""
