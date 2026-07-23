@@ -591,7 +591,7 @@ SELECT NOW(), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(3), CURDATE(), CURTIME(), SYS
 -- CASE[open]: my-num-to-str — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('n=5', 'x=5.50', 'd=0.33333', 'b=1', '5.5'),) target=(('n=5', 'x=5.5',
 SELECT CONCAT('n=',5), CONCAT('x=',5.50), CONCAT('d=',1.0/3), CONCAT('b=',TRUE), 5.50+0
 
--- CASE[open]: my-numeric — fails on tsql. (2724, b"Parameter or variable 'b' has an invalid data type.DB-Lib error message 20018, se
+-- CASE[fixed]: my-numeric — MySQL FLOAT(M,D) is a 4-byte float with a display scale; T-SQL FLOAT takes at most a bit-precision, so FLOAT(10,2) maps to REAL (no width), matching PostgreSQL. live-verified CREATE runs.
 CREATE TABLE t (a DECIMAL(20,4), b FLOAT(10,2), c DOUBLE)
 
 -- CASE[fixed]: my-numeric-conv — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.BI

@@ -497,6 +497,15 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestFloatDisplayScale:
+    """MySQL FLOAT(M,D) is a 4-byte float with a display scale; PostgreSQL and
+    T-SQL FLOAT take at most a bit-precision, so it maps to REAL with no width."""
+
+    def test_float_md_maps_to_real_on_tsql(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-numeric "), "mysql", "tsql")
+        assert "b REAL" in out and "REAL(" not in out, out
+
+
 class TestCheckEnforced:
     """MySQL's ENFORCED on a CHECK constraint is the default (the constraint is
     validated); it has no keyword on Oracle/PG/T-SQL, so it is stripped."""

@@ -3081,10 +3081,11 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     )
                 ):
                     dtype = "NUMBER"
-                # PostgreSQL FLOAT takes ONE precision argument; MySQL's
-                # FLOAT(M,D) display form maps to the same 4-byte REAL.
+                # PostgreSQL/T-SQL FLOAT takes at most ONE argument (a precision
+                # in bits, not a scale); MySQL's FLOAT(M,D) display form maps to
+                # the same 4-byte REAL on both.
                 if (
-                    dialect == "postgresql"
+                    dialect in ("postgresql", "tsql")
                     and _tn in ("FLOAT", "UFLOAT")
                     and len(col.data_type.params) == 2
                 ):
@@ -3117,6 +3118,12 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                         # Oracle LOB types take no length (BLOB/CLOB, not BLOB(255)).
                         dialect == "oracle"
                         and dtype.upper() in ("BLOB", "CLOB", "NCLOB")
+                    )
+                    or (
+                        # T-SQL REAL takes no width (a MySQL FLOAT(M,D) mapped to
+                        # REAL must not keep its display scale — error 2724).
+                        dialect == "tsql"
+                        and dtype.upper() == "REAL"
                     )
                 )
                 params = col.data_type.params
