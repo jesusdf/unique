@@ -868,7 +868,7 @@ CREATE TABLE t (a VARCHAR(10) CHARACTER SET latin1)
 -- CASE[fixed]: mysql-drop2-my table|COM — MySQL table COMMENT='…' now materializes as COMMENT ON TABLE on PG/Oracle (a note on T-SQL); live-verified the COMMENT executes.
 CREATE TABLE t (a INT) COMMENT='my table'
 
--- CASE[open]: mysql-drop4-50|IDENTITY| — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: '50|IDENTITY|START' absent from valid tsql output, no warning
+-- CASE[fixed]: mysql-drop4-50|IDENTITY| — the table option AUTO_INCREMENT = 50 sets the next auto value, but the column `a` is not AUTO_INCREMENT, so the option is inert; dropping it on other engines is faithful. live-verified CREATE runs.
 CREATE TABLE t (a INT PRIMARY KEY) AUTO_INCREMENT = 50
 
 -- CASE[fixed]: mysql-drop4-COLLATE|utf8 — fails on oracle, postgresql. SILENT CLAUSE DROP: 'COLLATE|utf8mb4' absent from valid postgresql output, no warning

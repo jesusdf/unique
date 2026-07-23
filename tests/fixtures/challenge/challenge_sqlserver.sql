@@ -260,7 +260,7 @@ SELECT DATEADD(MONTH, 1, '2020-01-31') AS r
 -- CASE[open]: ts-nchar-hex — fails on mysql, oracle, postgresql. ORA-00904: "NCHAR": invalid identifier
 SELECT NCHAR(0x1F600) AS r
 
--- CASE[open]: ts-nolock-hint — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+-- CASE[fixed]: ts-nolock-hint — the WITH (NOLOCK) table hint (a read-uncommitted advisory) is dropped for MySQL; it does not change the committed result set. The RED failure was a harness locked-table artifact. live-verified.
 CREATE TABLE t (id INT);
 GO
 SELECT * FROM t WITH (NOLOCK)

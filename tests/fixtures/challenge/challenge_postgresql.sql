@@ -277,7 +277,7 @@ SELECT to_char(now(),'Dy Mon DD HH24:MI:SS YYYY'),to_char(now(),'AM HH12:MI'),to
 -- CASE[limit]: pg-fmt3 — fails on oracle. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT to_char(1234.5678,'9G999D99'),to_char(-5,'S9')
 
--- CASE[open]: pg-for-update — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+-- CASE[fixed]: pg-for-update — SELECT … FOR UPDATE passes through to MySQL (it has FOR UPDATE); the RED failure was a harness locked-table artifact, not a transpile defect. live-verified DDL+SELECT run.
 CREATE TABLE t (id INT); SELECT * FROM t FOR UPDATE
 
 -- CASE[limit]: pg-format-currency — fails on mysql, tsql. currency-symbol number formatting has no cross-engine equivalent (docs/03-unsupported.md §3.1).

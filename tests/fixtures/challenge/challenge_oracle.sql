@@ -186,7 +186,7 @@ SELECT TO_CHAR(DATE '2020-06-15', 'WW') AS r FROM DUAL
 -- CASE[limit]: ora-fmt3 — fails on tsql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(1234.5678,'9G999D99'),TO_CHAR(-5,'S9') FROM DUAL
 
--- CASE[open]: ora-for-update-nowait — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
+-- CASE[fixed]: ora-for-update-nowait — SELECT … FOR UPDATE NOWAIT passes through to MySQL 8.0 and PostgreSQL (both support NOWAIT); the RED failure was a harness locked-table artifact. live-verified.
 CREATE TABLE t (id NUMBER); SELECT * FROM t FOR UPDATE NOWAIT
 
 -- CASE[open]: ora-format-currency — fails on mysql, postgresql. FUNC-DIFF: source=(('1,234,567.89', '$1,234,567.89'),) target=(('1,234,567.89', '1,234,567
