@@ -436,6 +436,23 @@ class TestAlterModifyColumn:
         assert "ALTER COLUMN b BIGINT" in body and "MODIFY" not in body, body
 
 
+class TestAlterSetDefault:
+    """MySQL ALTER COLUMN c SET DEFAULT v maps to Oracle MODIFY c DEFAULT v and
+    T-SQL ADD CONSTRAINT DF_<t>_<c> DEFAULT v FOR c (a named default
+    constraint); PostgreSQL keeps the SET DEFAULT spelling."""
+
+    def _out(self, target: str) -> str:
+        return _tx(
+            _case("challenge_mysql.sql", "my-alter-set-default "), "mysql", target
+        )
+
+    def test_oracle_modify_default(self) -> None:
+        assert "MODIFY a DEFAULT 5" in self._out("oracle"), self._out("oracle")
+
+    def test_tsql_named_default_constraint(self) -> None:
+        assert "ADD CONSTRAINT DF_t_a DEFAULT 5 FOR a" in self._out("tsql")
+
+
 class TestPgBooleanWordCast:
     """PostgreSQL casts many word spellings to boolean ('t'/'true'/'yes'/'on' ->
     true), which other engines cannot cast to a number or bit. A string-literal

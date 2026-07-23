@@ -1420,6 +1420,30 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 return f"ALTER TABLE {_mt} ALTER COLUMN {_mc} {_mtype}"
             return f"ALTER TABLE {_mt} MODIFY COLUMN {_mc} {_mtype}"
 
+    # ``ALTER TABLE t ALTER COLUMN c SET DEFAULT v``: the MySQL/PostgreSQL-native
+    # spelling (T-SQL uses ADD DEFAULT … FOR, handled by the guard/default paths,
+    # so this stays gated to those sources). Oracle uses MODIFY c DEFAULT v;
+    # T-SQL has no ALTER COLUMN … DEFAULT — a default is a named constraint, so
+    # ADD CONSTRAINT … DEFAULT v FOR c (name derived from table+column).
+    if (
+        node.kind == "ALTER"
+        and node.source_dialect in ("mysql", "postgresql")
+        and dialect != node.source_dialect
+    ):
+        m_sd = re.match(
+            r"(?is)^\s*ALTER\s+TABLE\s+(\S+)\s+ALTER\s+COLUMN\s+(\S+)\s+"
+            r"SET\s+DEFAULT\s+(.+?)\s*;?\s*$",
+            node.sql,
+        )
+        if m_sd:
+            _t, _c, _v = m_sd.groups()
+            if dialect == "oracle":
+                return f"ALTER TABLE {_t} MODIFY {_c} DEFAULT {_v}"
+            if dialect == "tsql":
+                _cn = re.sub(r"[^A-Za-z0-9_]", "", _t.split(".")[-1] + "_" + _c)
+                return f"ALTER TABLE {_t} ADD CONSTRAINT DF_{_cn} DEFAULT {_v} FOR {_c}"
+            return f"ALTER TABLE {_t} ALTER COLUMN {_c} SET DEFAULT {_v}"
+
     # PG's NOT VALID (add the constraint but skip validating existing rows) has
     # no equivalent on the other engines, which validate immediately. Strip it —
     # the constraint definition is identical — and document the difference so the

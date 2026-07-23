@@ -29,7 +29,7 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP DEFAULT
 -- CASE[fixed]: my-alter-modify — MySQL ALTER TABLE … MODIFY COLUMN c <type> maps to Oracle MODIFY c, PostgreSQL ALTER COLUMN c TYPE, T-SQL ALTER COLUMN c (with the type ported). live-verified DDL runs on all three.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t MODIFY COLUMN b BIGINT
 
--- CASE[open]: my-alter-set-default — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'SET'.DB-Lib error message 20018, severity 15:\n
+-- CASE[fixed]: my-alter-set-default — MySQL ALTER COLUMN a SET DEFAULT v maps to Oracle MODIFY a DEFAULT v and T-SQL ADD CONSTRAINT DF_t_a DEFAULT v FOR a (named default constraint). live-verified DDL runs.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DEFAULT 5
 
 -- CASE[open]: my-any-value — fails on postgresql, tsql. (102, b"Incorrect syntax near '>'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
