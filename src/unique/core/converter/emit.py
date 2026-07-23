@@ -3448,6 +3448,29 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 trailing_comments.append(emitted.strip())
             else:
                 col_defs.append(f"  {emitted}")
+        if dialect == "mysql":
+            # MySQL requires an AUTO_INCREMENT column to be indexed (error 1075).
+            # A PostgreSQL SERIAL carries no key, so add one when nothing already
+            # covers the column (its own PRIMARY KEY/UNIQUE, or a table key).
+            _auto_col = _auto_line_keyed = None
+            for _cd in col_defs:
+                if re.search(r"(?i)\bAUTO_INCREMENT\b", _cd):
+                    _m = re.match(r'\s*[`"]?(\w+)', _cd)
+                    _auto_col = _m.group(1) if _m else None
+                    _auto_line_keyed = bool(
+                        re.search(r"(?i)\b(?:PRIMARY\s+KEY|UNIQUE)\b", _cd)
+                    )
+                    break
+            if _auto_col is not None and not _auto_line_keyed:
+                _joined = "\n".join(col_defs)
+                _keyed = re.search(
+                    r'(?i)\b(?:PRIMARY\s+KEY|UNIQUE|KEY)\b[^,\n]*[`"(]\s*'
+                    + re.escape(_auto_col)
+                    + r"\b",
+                    _joined,
+                )
+                if not _keyed:
+                    col_defs.append(f"  KEY (`{_auto_col}`)")
         cols = ",\n".join(col_defs)
         result = f"{tsql_guard}CREATE {temp}TABLE {exists}{table} (\n{cols}\n)"
         # Emitted unconditionally: the transformer degrades the whole

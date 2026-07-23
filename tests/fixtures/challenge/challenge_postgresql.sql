@@ -511,7 +511,7 @@ SELECT to_char(1234567.891, '9,999,999.99') AS r
 -- CASE[fixed]: pg-numnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.nu
 SELECT num_nonnulls(1,NULL,2),num_nulls(1,NULL,2)
 
--- CASE[open]: pg-numtypes — fails on mysql. (1075, 'Incorrect table definition; there can be only one auto column and it must be defin
+-- CASE[fixed]: pg-numtypes — PostgreSQL SERIAL maps to a MySQL AUTO_INCREMENT column, which MySQL requires to be indexed (error 1075); a KEY is added when nothing already covers it. live-verified CREATE runs.
 CREATE TABLE t (a SMALLINT, b INT, c BIGINT, d NUMERIC(10,2), e REAL, f DOUBLE PRECISION, g SERIAL, h MONEY)
 
 -- CASE[open]: pg-order-case-sens — fails on mysql, tsql. FUNC-DIFF: source=(('Apple',), ('Cherry',), ('banana',)) target=(('Apple',), ('banana',), 

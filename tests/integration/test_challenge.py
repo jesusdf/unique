@@ -544,6 +544,24 @@ class TestJsonColumnType:
         assert "data NVARCHAR(MAX)" in _tx(case, "mysql", "tsql")
 
 
+class TestAutoIncrementKey:
+    """A PostgreSQL SERIAL maps to a MySQL AUTO_INCREMENT column, which MySQL
+    requires to be indexed (error 1075); a KEY is added when nothing covers it,
+    but not when the column is already a PRIMARY KEY."""
+
+    def test_serial_gets_key_on_mysql(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-numtypes "), "postgresql", "mysql"
+        )
+        assert "AUTO_INCREMENT" in out and "KEY (`g`)" in out, out
+
+    def test_serial_pk_not_double_keyed(self) -> None:
+        out = _tx(
+            "CREATE TABLE t (id SERIAL PRIMARY KEY, x INT)", "postgresql", "mysql"
+        )
+        assert out.upper().count("KEY") == 1, out
+
+
 class TestBitWidthType:
     """MySQL BIT(M) maps to T-SQL BIT with no width (error 2716 on a width),
     consistent with Oracle NUMBER(1) / PG BOOLEAN treating BIT as a boolean."""
