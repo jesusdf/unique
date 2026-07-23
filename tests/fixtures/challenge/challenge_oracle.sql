@@ -208,7 +208,7 @@ CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)
 -- CASE[fixed]: ora-gen-expr — Oracle virtual column GENERATED ALWAYS AS (SQRT(a*a+b*b)) maps to the MySQL generated-column form with the ported type; live-verified hyp(3,4)=5 on both.
 CREATE TABLE t (a NUMBER, b NUMBER, hyp NUMBER GENERATED ALWAYS AS (SQRT(a*a+b*b)))
 
--- CASE[open]: ora-grouping-id — fails on mysql, postgresql, tsql. (8120, b"Column 'uq_dt.deptno' is invalid in the select list because it is not contained i
+-- CASE[limit]: ora-grouping-id — GROUPING_ID has no MySQL (no ROLLUP GROUPING_ID) or PostgreSQL equivalent (PG has GROUPING but not GROUPING_ID); T-SQL supports it natively (works). The MySQL/PG output degrades to a carrier + warning (docs/03-unsupported.md). fails on mysql, postgresql
 SELECT deptno,job,SUM(sal),GROUPING(deptno),GROUPING_ID(deptno,job) FROM (SELECT 10 deptno,'X' job,100 sal FROM DUAL) GROUP BY ROLLUP(deptno,job)
 
 -- CASE[fixed]: ora-grouping-sets — fails on mysql, postgresql, tsql. (8120, b"Column 'uq_dt.deptno' is invalid in the select list because it is not contained i
@@ -518,7 +518,7 @@ SELECT WIDTH_BUCKET(5, 0, 10, 5) AS r FROM DUAL
 -- CASE[fixed]: ora-window-analytic — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.RA
 SELECT x,RATIO_TO_REPORT(x) OVER (),NTILE(2) OVER (ORDER BY x),CUME_DIST() OVER (ORDER BY x),PERCENT_RANK() OVER (ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 2 FROM DUAL)
 
--- CASE[open]: ora-xmlagg — fails on mysql, postgresql, tsql. (195, b"'XMLELEMENT' is not a recognized built-in function name.DB-Lib error message 20018
+-- CASE[limit]: ora-xmlagg — XMLAGG (XML fragment aggregation) has no MySQL or T-SQL equivalent; PostgreSQL has xmlagg/xmlelement natively (works, live-verified <e>x</e>). The MySQL/T-SQL output degrades to a carrier + warning (docs/03-unsupported.md). fails on mysql, tsql
 SELECT XMLAGG(XMLELEMENT("e", dummy)) FROM DUAL
 
 -- CASE[limit]: ora-xmlelement — fails on mysql, tsql. XMLELEMENT is an SQL/XML built-in on Oracle & PostgreSQL (transpiled faithfully, element-name case preserved); MySQL has no XML type and T-SQL has no XMLELEMENT (only FOR XML) — no cross-engine mapping (docs/03-unsupported.md §5, §2). Warned carrier on mysql/tsql.
