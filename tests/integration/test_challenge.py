@@ -1105,6 +1105,24 @@ class TestExtractMicroseconds:
         assert result.warnings and "UNIQUE:" in result.sql
 
 
+class TestNestedProcedureCall:
+    """A CALL to another procedure maps to each target's call form; the RED
+    PLS-00201 was only the absent callee (the snippet never defines it), not a
+    mis-transpilation (my-nested-call, pg-nested-call)."""
+
+    def test_mysql_nested_call_forms(self) -> None:
+        case = _case("challenge_mysql.sql", "my-nested-call ")
+        assert "other_proc();" in _tx(case, "mysql", "oracle")
+        assert "EXEC other_proc" in _tx(case, "mysql", "tsql")
+        assert "CALL other_proc();" in _tx(case, "mysql", "postgresql")
+
+    def test_pg_nested_call_forms(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-nested-call ")
+        assert "inner_p();" in _tx(case, "postgresql", "oracle")
+        assert "EXEC inner_p" in _tx(case, "postgresql", "tsql")
+        assert "CALL inner_p();" in _tx(case, "postgresql", "mysql")
+
+
 class TestNcharHexCodePoint:
     """T-SQL NCHAR(0x1F600) is a Unicode code point (integer), not hex bytes. It
     maps to PG CHR / MySQL CHAR(n USING utf32) / Oracle NCHR — and a supplementary

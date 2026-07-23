@@ -475,7 +475,7 @@ CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id, LAG(n) OVER w, LEAD(n)
 -- CASE[limit]: pg-nan-cmp — PostgreSQL numeric NaN (NaN > 1 = true) has no MySQL equivalent (CAST('NaN' AS DECIMAL) collapses to 0); emit the cast + a documented carrier (docs/03-unsupported.md). fails on mysql
 SELECT 'NaN'::numeric > 1 AS r
 
--- CASE[open]: pg-nested-call — fails on oracle. PROCEDURE OUTER_P compiled INVALID (line 4): PLS-00201: identifier 'INNER_P' must be decla
+-- CASE[fixed]: pg-nested-call — CALL inner_p() maps to the target's call form (Oracle inner_p();, T-SQL EXEC inner_p;, MySQL CALL inner_p();). The RED PLS-00201 was a missing-dependency artifact — the snippet never defines inner_p; the transpiled proc compiles valid once it exists (verified against a stub).
 CREATE PROCEDURE outer_p() AS $$ BEGIN CALL inner_p(); END; $$ LANGUAGE plpgsql
 
 -- CASE[fixed]: pg-network-types — fails on oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag

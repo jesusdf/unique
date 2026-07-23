@@ -579,7 +579,7 @@ SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r
 -- CASE[fixed]: my-name-const — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NA
 SELECT NAME_CONST('col', 5) AS r
 
--- CASE[open]: my-nested-call — fails on oracle. PROCEDURE P compiled INVALID (line 4): PLS-00201: identifier 'OTHER_PROC' must be declared
+-- CASE[fixed]: my-nested-call — CALL other_proc() maps to the target's call form (Oracle other_proc();, T-SQL EXEC other_proc;, PG CALL other_proc();). The RED PLS-00201 was a missing-dependency artifact — the snippet never defines other_proc; the transpiled proc compiles valid once it exists (verified against a stub).
 CREATE PROCEDURE p() BEGIN CALL other_proc(); END
 
 -- CASE[fixed]: my-now-fns — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever
