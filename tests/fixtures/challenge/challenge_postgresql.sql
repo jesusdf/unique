@@ -232,7 +232,7 @@ SELECT ENCODE('abc'::bytea, 'base64') AS r
 -- CASE[fixed]: pg-encode-decode — fails on mysql, oracle, tsql. (195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se
 SELECT ENCODE(DECODE('SGVsbG8=', 'base64'), 'hex')
 
--- CASE[open]: pg-epoch — fails on mysql, oracle, tsql. (155, b"'EPOCH' is not a recognized datepart option.DB-Lib error message 20018, severity 1
+-- CASE[limit]: pg-epoch — EXTRACT(EPOCH FROM timestamp) is translated to a literal date-diff (1577836800 verified), but EXTRACT(EPOCH FROM interval) has no portable equivalent (T-SQL/MySQL have no interval value type) so it degrades to NULL + annotation (docs/03-unsupported.md). fails on mysql, oracle, tsql
 SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01 00:00:00'), EXTRACT(EPOCH FROM INTERVAL '1 day')
 
 -- CASE[fixed]: pg-except-all — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active

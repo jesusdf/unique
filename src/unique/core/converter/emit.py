@@ -5943,11 +5943,19 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if part == "QUARTER" and dialect == "oracle":
             return f"TO_NUMBER(TO_CHAR({value}, 'Q'))"
         if part == "EPOCH":
+            # EXTRACT(EPOCH FROM interval) is the interval's total seconds — a
+            # different computation, and T-SQL/MySQL have no interval value type
+            # to carry it — so degrade an interval argument to a carrier.
+            if value.strip().upper().startswith("INTERVAL"):
+                return (
+                    "NULL /* UNIQUE: EXTRACT(EPOCH FROM interval) has no portable "
+                    "equivalent (T-SQL/MySQL have no interval value type) — "
+                    "see docs/03-unsupported.md */"
+                )
             # Unix epoch seconds. PG's EPOCH for a timestamp WITHOUT time zone is
             # the literal difference from 1970-01-01 00:00:00 — no session-tz
             # conversion — so use a literal date-diff (not UNIX_TIMESTAMP, which
-            # would shift by the session offset). EPOCH FROM an INTERVAL is a
-            # different computation this does not model (it stays unhandled).
+            # would shift by the session offset).
             if dialect == "oracle":
                 return f"((CAST({value} AS DATE) - DATE '1970-01-01') * 86400)"
             if dialect == "tsql":

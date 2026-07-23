@@ -791,6 +791,23 @@ class TestOverlay:
         assert "SUBSTR('abcdef', 1, (2) - 1)" in ora and "|| 'XY' ||" in ora, ora
 
 
+class TestExtractEpochInterval:
+    """EXTRACT(EPOCH FROM timestamp) is a literal date-diff, but EXTRACT(EPOCH
+    FROM interval) has no portable form (T-SQL/MySQL have no interval value type)
+    and degrades to a carrier — the timestamp column still translates."""
+
+    def test_interval_epoch_degrades_timestamp_kept(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-epoch ")
+        for target in ("oracle", "tsql", "mysql"):
+            result = Transpiler().transpile(case, source="postgresql", target=target)
+            assert result.warnings and "UNIQUE:" in result.sql, target
+            body = "\n".join(
+                ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+            )
+            # The interval half degrades; no live INTERVAL keyword survives.
+            assert "INTERVAL" not in body.upper().split("/*")[0], body
+
+
 class TestExtractEpoch:
     """PG EXTRACT(EPOCH FROM timestamp) — Unix seconds — has no native EPOCH field
     on the other engines. Rewritten to a literal date-diff (no session-tz shift):
