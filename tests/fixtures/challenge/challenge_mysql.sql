@@ -122,7 +122,7 @@ SELECT CAST(0xFF AS CHAR) AS r
 -- CASE[fixed]: my-cast-int — MySQL CAST(2.7 AS SIGNED) rounds (3); T-SQL CAST truncates (2). Wrap ROUND(x, 0) on a T-SQL target (both round half-away-from-zero).
 SELECT CAST(2.7 AS SIGNED) AS r
 
--- CASE[open]: my-cast-json — fails on oracle, postgresql, tsql. (243, b'Type json is not a defined system type.DB-Lib error message 20018, severity 16:\nG
+-- CASE[limit]: my-cast-json — MySQL's JSON type has no faithful cross-engine cast (T-SQL has no JSON type at all; MySQL's canonical JSON spacing '[1, 2]' differs from PG/Oracle), so a CAST to JSON keeps the value as text + annotation (docs/03-unsupported.md). fails on oracle, postgresql, tsql
 SELECT CAST(1 AS JSON), CAST('[1,2]' AS JSON), CAST(NULL AS JSON)
 
 -- CASE[fixed]: my-cast-matrix — CAST AS DOUBLE maps to PG DOUBLE PRECISION / Oracle BINARY_DOUBLE (bare DOUBLE is an invalid type name). Live-verified (3.14, 3, '3.14', 3.14).

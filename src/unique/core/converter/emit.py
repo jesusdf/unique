@@ -4608,6 +4608,20 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                 f"{inner} /* UNIQUE: Oracle has no {_what} type — value kept as "
                 "text (docs/03-unsupported.md) */"
             )
+        # MySQL's JSON type has no faithful cross-engine cast: T-SQL has no JSON
+        # type at all (error 243), and MySQL's canonical JSON spacing ('[1, 2]')
+        # differs from PG/Oracle, so the value can't be guaranteed equal. Keep the
+        # source value as text with a documented carrier.
+        if (
+            dialect != "mysql"
+            and SOURCE_DIALECT.get() == "mysql"
+            and _cast_to == "JSON"
+        ):
+            return (
+                f"{inner} /* UNIQUE: MySQL JSON type has no faithful cross-engine "
+                "equivalent (T-SQL has no JSON type; canonical JSON spacing differs "
+                "on PG/Oracle) — value kept as text — see docs/03-unsupported.md */"
+            )
         # PostgreSQL geometric types (point/line/box/…) have no cross-engine
         # equivalent; keep the source's text value with a documented carrier.
         if (

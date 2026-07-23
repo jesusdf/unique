@@ -546,6 +546,22 @@ class TestForXml:
             ), result.sql
 
 
+class TestMysqlCastJson:
+    """MySQL's JSON type has no faithful cross-engine cast (T-SQL has none;
+    canonical JSON spacing differs on PG/Oracle), so a CAST to JSON keeps the
+    source value as text + carrier + warning."""
+
+    def test_cast_json_degrades(self) -> None:
+        case = _case("challenge_mysql.sql", "my-cast-json ")
+        for target in ("oracle", "tsql", "postgresql"):
+            result = Transpiler().transpile(case, source="mysql", target=target)
+            assert result.warnings and "UNIQUE:" in result.sql, target
+            body = "\n".join(
+                ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "AS JSON" not in body.upper().split("/*")[0], body
+
+
 class TestMysqlUpdateXml:
     """MySQL UpdateXML (node-replacement XML DML) has no cross-engine equivalent
     and degrades to NULL + carrier + warning; ExtractValue in the same statement
