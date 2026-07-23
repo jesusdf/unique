@@ -180,7 +180,7 @@ SELECT TO_CHAR(DATE '2020-06-15', 'DAY') AS r FROM DUAL
 -- CASE[limit]: ora-fmt-quarter — fails on mysql. locale month/day names and Oracle Q quarter token have no reproducible cross-engine format token (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(DATE '2020-06-15', 'Q') AS r FROM DUAL
 
--- CASE[open]: ora-fmt-week — fails on mysql. FUNC-DIFF: source=(('24',),) target=(('Monday',),)
+-- CASE[limit]: ora-fmt-week — TO_CHAR(d,'WW') week-of-year has no portable format token (engines disagree on week 1, and MySQL's '%W' means the weekday NAME); it now degrades + annotates instead of emitting a silently wrong 'Monday' (docs/03-unsupported.md). fails on mysql
 SELECT TO_CHAR(DATE '2020-06-15', 'WW') AS r FROM DUAL
 
 -- CASE[limit]: ora-fmt3 — fails on tsql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).

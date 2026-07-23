@@ -228,8 +228,12 @@ def _convert_date_format(fmt: str, src_model: str, dst_model: str) -> str:
 #: _DATE_FMT_TOKENS). A format built only of these + literal characters is
 #: reproducible; anything else (Oracle ``FF`` fractional, a locale ``Month``/
 #: ``Day`` name sqlglot left un-canonicalized) is not, and must degrade.
+# NB: ``%W`` (python week-of-year, e.g. Oracle ``WW``) is deliberately absent —
+# week numbering is not portable (engines disagree on the first week/day and
+# MySQL's ``%W`` means the weekday NAME), so it must degrade rather than emit a
+# silently wrong weekday. The weekday name travels as ``%A``.
 _KNOWN_PY_FMT_TOKENS = frozenset(
-    {"%Y", "%y", "%B", "%b", "%H", "%I", "%m", "%d", "%M", "%S", "%W", "%a", "%p"}
+    {"%Y", "%y", "%B", "%b", "%H", "%I", "%m", "%d", "%M", "%S", "%a", "%p"}
 )
 _PY_FMT_TOKEN_RE = re.compile(r"%.")
 
