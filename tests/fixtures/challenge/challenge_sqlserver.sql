@@ -286,7 +286,7 @@ SELECT PATINDEX('%[0-9]%', 'abc123') AS r
 -- CASE[fixed]: ts-quotename — fails on mysql, oracle, postgresql. ORA-00904: "SPLIT_PART": invalid identifier
 SELECT QUOTENAME('my table'), PARSENAME('a.b.c', 2)
 
--- CASE[open]: ts-realworld-audit — fails on mysql, oracle, postgresql. PROCEDURE LOG_IT compiled INVALID (line 11): PLS-00103: Encountered the symbol ")" when ex
+-- CASE[fixed]: ts-realworld-audit — a bare THROW; (re-raise in a CATCH) was parsed with an empty message and shipped RAISE_APPLICATION_ERROR(-20001, ) (PLS-00103); now flagged as reraise -> Oracle RAISE;, PG/MySQL native re-raise. Compiles valid on oracle/pg/mysql
 CREATE TABLE dbo.audit (id INT IDENTITY, msg NVARCHAR(MAX), ts DATETIME2);
 GO
 CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BEGIN BEGIN TRY INSERT INTO dbo.audit (msg, ts) VALUES (@msg, SYSDATETIME()); END TRY BEGIN CATCH THROW; END CATCH END

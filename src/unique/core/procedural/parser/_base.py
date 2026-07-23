@@ -1602,6 +1602,12 @@ class ParserBase:
     def _parse_raiserror(self) -> ASTNode:
         """Parse RAISERROR or THROW."""
         self._advance()
+        # A bare ``THROW;`` inside a CATCH re-raises the active exception; without
+        # this it captured an empty message and shipped RAISE_APPLICATION_ERROR
+        # (-20001, ) — a syntax error. Every target has a native re-raise.
+        if self._current().type == TokenType.SEMICOLON:
+            self._advance()
+            return RaiseErrorStatement(reraise=True)
         expr = self._parse_expression_until_semicolon()
         self._match_type(TokenType.SEMICOLON)
         return RaiseErrorStatement(message=expr)

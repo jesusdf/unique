@@ -894,6 +894,22 @@ class TestTsqlScalarFunctionTrailingReturn:
             assert lines[-1] == "END" and lines[-2].upper().startswith("RETURN"), out
 
 
+class TestBareThrowReraise:
+    """A bare ``THROW;`` (re-raise inside a CATCH) was parsed with an empty
+    message and shipped RAISE_APPLICATION_ERROR(-20001, ) on Oracle (PLS-00103);
+    it now maps to the native re-raise (Oracle RAISE;, PG/MySQL equivalents)."""
+
+    def test_bare_throw_becomes_raise(self) -> None:
+        out = _tx(
+            _case("challenge_sqlserver.sql", "ts-realworld-audit "), "tsql", "oracle"
+        )
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "RAISE;" in body, body
+        assert "RAISE_APPLICATION_ERROR(-20001, )" not in body, body
+
+
 class TestMysqlValuesConstructorInProc:
     """MySQL's table value constructor needs ROW() per row — a procedural
     ``SELECT COUNT(*) FROM (VALUES (1),(2)) v(x)`` was a 1064 (VALUES (1),(2));
