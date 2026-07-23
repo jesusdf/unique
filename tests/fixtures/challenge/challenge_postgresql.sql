@@ -723,7 +723,7 @@ CREATE TABLE t (a TIMESTAMPTZ, b TIME WITH TIME ZONE, c INTERVAL)
 -- CASE[open]: pg-unicode-escape — fails on mysql, oracle, tsql. (207, b"Invalid column name 'U'.DB-Lib error message 20018, severity 16:\nGeneral SQL Serv
 SELECT U&'\0041' AS r
 
--- CASE[open]: pg-unique-nulls-notdistinct — fails on mysql, oracle. ORA-03050: invalid identifier: "UNIQUE" is a reserved word
+-- CASE[limit]: pg-unique-nulls-notdistinct — PostgreSQL UNIQUE … NULLS NOT DISTINCT (NULLs compare equal, so only one NULL row is allowed) has no equivalent; the modifier is stripped to a plain UNIQUE (NULLs distinct) and the divergence is annotated (docs/03-unsupported.md). fails on mysql, oracle
 CREATE TABLE t (a INT, b INT, UNIQUE NULLS NOT DISTINCT (a, b))
 
 -- CASE[fixed]: pg-week — EXTRACT(WEEK) ISO 8601. T-SQL DATEPART(WEEK) gave 2; DATEPART(ISO_WEEK,d) gives PG's 1. live-verified.

@@ -3443,6 +3443,26 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
         trailing_comments.extend(on_update_notes)
         trailing_comments.extend(collate_notes)
         for constraint in node.table_constraints:
+            # PostgreSQL ``UNIQUE … NULLS NOT DISTINCT`` (NULLs compare equal, so
+            # only one NULL row is allowed) has no equivalent elsewhere, where a
+            # UNIQUE key treats NULLs as distinct. Strip the modifier to a plain
+            # UNIQUE and document the divergence (never silently change it).
+            if (
+                dialect != "postgresql"
+                and constraint.source_dialect == "postgresql"
+                and re.search(r"(?i)\bNULLS\s+NOT\s+DISTINCT\b", constraint.sql)
+            ):
+                constraint = dataclasses.replace(
+                    constraint,
+                    sql=re.sub(
+                        r"(?i)\s*\bNULLS\s+NOT\s+DISTINCT\b", "", constraint.sql
+                    ),
+                )
+                trailing_comments.append(
+                    "-- UNIQUE: PostgreSQL UNIQUE … NULLS NOT DISTINCT (NULLs "
+                    f"compare equal) has no {dialect} equivalent; a plain UNIQUE "
+                    "treats NULLs as distinct (docs/03-unsupported.md)"
+                )
             emitted = _emit_passthrough_inline(constraint, dialect)
             if emitted.lstrip().startswith("--"):
                 trailing_comments.append(emitted.strip())
