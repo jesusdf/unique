@@ -2153,6 +2153,20 @@ class TestCollationFn:
         assert "UNIQUE:" in result.sql and "COLLATION(" in result.sql, result.sql
 
 
+class TestOracleTimeCast:
+    """Oracle has no TIME type, so CAST(... AS TIME) shipped an invalid datatype.
+    Keep the value as text with a documented carrier + warning."""
+
+    def test_oracle_time_cast_carries(self) -> None:
+        case = _case("challenge_mysql.sql", "my-cast-time ")
+        result = Transpiler().transpile(case, source="mysql", target="oracle")
+        assert result.warnings, "no-TIME-type must warn"
+        body = "\n".join(
+            ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "UNIQUE:" in body and "AS TIME)" not in body, body
+
+
 class TestNanCast:
     """PostgreSQL numeric represents NaN (NaN > 1 = true); MySQL DECIMAL does not
     (CAST('NaN' AS DECIMAL) is 0), so the comparison diverges. Emit the cast plus

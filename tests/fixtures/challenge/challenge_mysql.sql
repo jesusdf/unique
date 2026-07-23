@@ -134,7 +134,7 @@ SELECT CAST(1234.5 AS CHAR) AS r
 -- CASE[fixed]: my-cast-suite — MySQL SIGNED/CONVERT(,SIGNED) map to CAST(AS INTEGER); DECIMAL/DATE/CHAR map to NUMBER/DATE/VARCHAR2 on Oracle (DECIMAL prints 1.5 vs 1.50, precision-only). live-verified 123, 1.5, 123, 2020-01-01, 65.
 SELECT CAST('123' AS SIGNED),CAST('1.5' AS DECIMAL(4,2)),CONVERT('123',SIGNED),CAST('2020-01-01' AS DATE),CAST(65 AS CHAR)
 
--- CASE[open]: my-cast-time — fails on oracle. DPY-3006: Oracle data type 178 is not supported
+-- CASE[limit]: my-cast-time — Oracle has no TIME type; CAST(... AS TIME) keeps the value as text with a documented carrier (docs/03-unsupported.md). fails on oracle
 SELECT CAST('10:00:00' AS TIME) AS r
 
 -- CASE[open]: my-cast-truncate — fails on oracle, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity
