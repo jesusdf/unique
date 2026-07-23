@@ -150,7 +150,7 @@ SELECT DUMP('A', 1016) AS r FROM DUAL
 CREATE PROCEDURE p (tbl VARCHAR2) AS n NUMBER; BEGIN EXECUTE IMMEDIATE 'SELECT COUNT(*) FROM ' || tbl INTO n; END;
 /
 
--- CASE[open]: ora-edit-distance — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "UTL_MATCH" or the user-defined function or aggregate "
+-- CASE[limit]: ora-edit-distance — Oracle's UTL_MATCH.EDIT_DISTANCE (Levenshtein) has no core cross-engine equivalent (PG's is a fuzzystrmatch extension); the gate now recognizes it and degrades + annotates instead of shipping an undefined function (docs/03-unsupported.md). fails on mysql, postgresql, tsql
 SELECT UTL_MATCH.EDIT_DISTANCE('hello', 'hallo') AS r FROM DUAL
 
 -- CASE[limit]: ora-empty-is-null — fails on mysql, postgresql, tsql. Oracle stores '' as NULL so '' IS NULL is true (1) only on Oracle; other engines see a real empty string (0). No faithful workaround (docs/03-unsupported.md).
@@ -506,7 +506,7 @@ CREATE TABLE t (id NUMBER, n NUMBER);UPDATE t SET n=(SELECT MAX(n) FROM t x WHER
 -- CASE[fixed]: ora-user-context — fails on mysql, postgresql, tsql. (195, b"'SYS_CONTEXT' is not a recognized built-in function name.DB-Lib error message 2001
 SELECT USER, SYS_CONTEXT('USERENV','SESSION_USER') FROM DUAL
 
--- CASE[open]: ora-utl-raw — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "UTL_RAW" or the user-defined function or aggregate "UT
+-- CASE[limit]: ora-utl-raw — Oracle's UTL_RAW.CAST_TO_RAW (RAW/byte packing) has no cross-engine equivalent; the gate now recognizes the UTL_RAW package functions and degrades + annotates instead of shipping an undefined function (docs/03-unsupported.md). fails on mysql, postgresql, tsql
 SELECT UTL_RAW.CAST_TO_RAW('abc') AS r FROM DUAL
 
 -- CASE[fixed]: ora-vsize — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.VS

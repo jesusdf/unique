@@ -68,7 +68,23 @@ _SQL_STANDARD = frozenset(
 #: absent. Only names whose emitter renders a valid call on the listed engine
 #: belong here (adding one the emitter mis-spells would ship silently invalid).
 _ENGINE_STANDARD: dict[str, frozenset[str]] = {
-    "oracle": frozenset({"XMLELEMENT", "XMLAGG"}),
+    # Oracle built-in package functions with no cross-engine equivalent — listing
+    # them lets the output gate flag (and degrade) an unmapped leak rather than
+    # ship an undefined function silently. Distinctive names only (no LENGTH,
+    # SUBSTR, … that collide with standard scalars).
+    "oracle": frozenset(
+        {
+            "XMLELEMENT",
+            "XMLAGG",
+            "EDIT_DISTANCE",  # UTL_MATCH
+            "EDIT_DISTANCE_SIMILARITY",
+            "JARO_WINKLER",
+            "JARO_WINKLER_SIMILARITY",
+            "CAST_TO_RAW",  # UTL_RAW
+            "CAST_TO_VARCHAR2",
+            "CAST_TO_NVARCHAR2",
+        }
+    ),
     "postgresql": frozenset({"XMLELEMENT"}),  # XMLAGG is already introspected
 }
 
