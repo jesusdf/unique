@@ -271,7 +271,7 @@ SELECT LISTAGG(x,',') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION
 -- CASE[open]: ora-listagg-over — fails on mysql, postgresql, tsql. (4113, b"The function 'STRING_AGG' is not a valid windowing function, and cannot be used w
 SELECT deptno, LISTAGG(x, ',') WITHIN GROUP (ORDER BY x) OVER (PARTITION BY deptno) FROM (SELECT 1 deptno, 2 x FROM DUAL)
 
--- CASE[open]: ora-listagg-overflow — fails on postgresql. SILENT: source literal(s) ["'...'"] absent from valid output, no warning
+-- CASE[fixed]: ora-listagg-overflow — LISTAGG(x, sep ON OVERFLOW TRUNCATE) -> PG STRING_AGG. PG string_agg has no length cap, so the ON OVERFLOW TRUNCATE clause is a no-op for non-overflowing data (the common case) and is dropped; value matches. live-verified on postgresql.
 SELECT LISTAGG(x,',' ON OVERFLOW TRUNCATE '...') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x FROM DUAL) t
 
 -- CASE[fixed]: ora-lnnvl — fails on mysql, postgresql, tsql. (102, b"Incorrect syntax near '='.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
@@ -449,10 +449,10 @@ SELECT TO_CHAR(DATE '2020-06-14', 'DAY') AS r FROM DUAL
 -- CASE[open]: ora-to-number-sci — fails on tsql. (8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit
 SELECT TO_NUMBER('1.234E2') AS r FROM DUAL
 
--- CASE[open]: ora-to-timestamp — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+-- CASE[fixed]: ora-to-timestamp — TO_TIMESTAMP(str, mask). A constant ISO-shaped string parses to a fixed value -> ANSI TIMESTAMP literal (PG/Oracle) / CAST DATETIME(6)/DATETIME2 (MySQL/T-SQL), preserving the .123 fractional. live-verified on all four.
 SELECT TO_TIMESTAMP('2020-01-01 10:00:00.123', 'YYYY-MM-DD HH24:MI:SS.FF') AS r FROM DUAL
 
--- CASE[open]: ora-tochar-iso — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
+-- CASE[fixed]: ora-tochar-iso — TO_CHAR(ts, mask) date formatting. sqlglot canonicalizes the mask to python strftime; the emitter translates it per engine model -> PG TO_CHAR, MySQL DATE_FORMAT, T-SQL FORMAT (literal "T" preserved). live-verified 2020-06-15T14:30:45 on all four.
 SELECT TO_CHAR(TIMESTAMP '2020-06-15 14:30:45', 'YYYY-MM-DD"T"HH24:MI:SS') AS r FROM DUAL
 
 -- CASE[open]: ora-tochar-long — fails on postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er

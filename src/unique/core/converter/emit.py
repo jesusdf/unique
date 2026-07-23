@@ -217,6 +217,28 @@ def _convert_date_format(fmt: str, src_model: str, dst_model: str) -> str:
     return "".join(out)
 
 
+#: The python-strftime tokens sqlglot canonicalizes date formats to that
+#: _convert_date_format can round-trip to every engine model (the %-column of
+#: _DATE_FMT_TOKENS). A format built only of these + literal characters is
+#: reproducible; anything else (Oracle ``FF`` fractional, a locale ``Month``/
+#: ``Day`` name sqlglot left un-canonicalized) is not, and must degrade.
+_KNOWN_PY_FMT_TOKENS = frozenset(
+    {"%Y", "%y", "%B", "%b", "%H", "%I", "%m", "%d", "%M", "%S", "%W", "%a", "%p"}
+)
+_PY_FMT_TOKEN_RE = re.compile(r"%.")
+
+
+def _date_fmt_reproducible(pyfmt: str) -> bool:
+    """Whether a python-model date format is composed only of tokens every
+    engine can reproduce (no FF fractional, no un-canonicalized locale name)."""
+    if any(t not in _KNOWN_PY_FMT_TOKENS for t in _PY_FMT_TOKEN_RE.findall(pyfmt)):
+        return False
+    # A bare ``Month``/``Day``/``FF`` word is a token sqlglot could not map to a
+    # ``%`` code — it would ship as a literal and lose the field.
+    stripped = _PY_FMT_TOKEN_RE.sub("", pyfmt)
+    return not re.search(r"(?i)\b(MONTH|DAY|DY|FF\d?|RR|AM|PM)\b", stripped)
+
+
 def _portable_type_name(name: str, dialect: str) -> str:
     """Map a data-type name to the target dialect's equivalent.
 
@@ -4783,6 +4805,76 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
                     return f"DATE_FORMAT({value}, '%Y-%m-01')"
                 if trunc_part == "year":
                     return f"DATE_FORMAT({value}, '%Y-01-01')"
+
+    # Date formatting/parsing. sqlglot canonicalizes TO_CHAR(date,fmt) to
+    # TIME_TO_STR and TO_TIMESTAMP/TO_DATE(str,fmt) to STR_TO_TIME, with the
+    # mask already in the python-strftime model. Translate the mask to each
+    # engine's model and spell its date-format/parse function; a non-reproducible
+    # mask (Oracle FF fractional, locale month/day names) falls through and
+    # degrades via the gate. MySQL uses bare literal characters (strip the
+    # ``"…"`` quotes the Oracle/.NET models use).
+    if (
+        fn_name == "TIME_TO_STR"
+        and len(node.args) == 2
+        and isinstance(node.args[1], Literal)
+        and isinstance(node.args[1].value, str)
+        and _date_fmt_reproducible(node.args[1].value)
+    ):
+        value = _emit_expression(node.args[0], dialect)
+        pyfmt = node.args[1].value
+        if dialect in ("oracle", "postgresql"):
+            return (
+                f"TO_CHAR({value}, '{_convert_date_format(pyfmt, 'python', 'oracle')}')"
+            )
+        if dialect == "mysql":
+            mf = _convert_date_format(pyfmt, "python", "mysql").replace('"', "")
+            return f"DATE_FORMAT({value}, '{mf}')"
+        if dialect == "tsql":
+            return f"FORMAT({value}, '{_convert_date_format(pyfmt, 'python', 'tsql')}')"
+
+    if fn_name == "STR_TO_TIME" and len(node.args) == 2:
+        # A constant ISO-shaped string (also how sqlglot models a TIMESTAMP/DATE
+        # literal argument) parses to a fixed value — emit the ANSI literal / cast
+        # directly; the parse format is implied and its FF fractional is moot.
+        if (
+            isinstance(node.args[0], Literal)
+            and isinstance(node.args[0].value, str)
+            and re.fullmatch(
+                r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?)?",
+                node.args[0].value.strip(),
+            )
+        ):
+            sval = node.args[0].value.strip()
+            if dialect in ("oracle", "postgresql"):
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", sval):
+                    return f"DATE '{sval}'"
+                return f"TIMESTAMP '{sval}'"
+            if dialect == "tsql":
+                cast_t = (
+                    "DATE" if re.fullmatch(r"\d{4}-\d{2}-\d{2}", sval) else "DATETIME2"
+                )
+            elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", sval):
+                cast_t = "DATE"
+            else:
+                # MySQL DATETIME has no sub-second precision — DATETIME(6) keeps
+                # a fractional-second literal (…10:00:00.123).
+                cast_t = "DATETIME(6)" if "." in sval else "DATETIME"
+            return f"CAST('{sval}' AS {cast_t})"
+        # Otherwise a real format-driven parse of a (possibly non-constant)
+        # string — reproducible masks only; non-ISO/locale masks degrade.
+        if (
+            isinstance(node.args[1], Literal)
+            and isinstance(node.args[1].value, str)
+            and _date_fmt_reproducible(node.args[1].value)
+        ):
+            s = _emit_expression(node.args[0], dialect)
+            pyfmt = node.args[1].value
+            if dialect in ("oracle", "postgresql"):
+                ofmt = _convert_date_format(pyfmt, "python", "oracle")
+                return f"TO_TIMESTAMP({s}, '{ofmt}')"
+            if dialect == "mysql":
+                mf = _convert_date_format(pyfmt, "python", "mysql").replace('"', "")
+                return f"STR_TO_DATE({s}, '{mf}')"
 
     # Oracle's one-argument TO_CHAR(x) — a plain to-string conversion — exists
     # nowhere else (PostgreSQL's TO_CHAR needs a format); spell it as a cast.

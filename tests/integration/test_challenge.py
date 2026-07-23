@@ -429,6 +429,31 @@ class TestDateTruncMonth:
         assert "DATE_FORMAT(" in my and "%Y-%m-01" in my, my
 
 
+class TestDateFormatMasks:
+    """TO_CHAR(date, mask) / TO_TIMESTAMP(str, mask): sqlglot canonicalizes the
+    mask to python strftime; the emitter translates it to each engine's model
+    (Oracle/PG ``YYYY-MM-DD``, MySQL ``%Y-%m-%d`` with bare literals, T-SQL .NET
+    ``yyyy-MM-dd``) and spells TO_CHAR / DATE_FORMAT / FORMAT. A constant
+    ISO-shaped string parses to a fixed value (ANSI literal / CAST).
+    (Live-verified 2020-06-15T14:30:45 and the .123 fractional on all four.)"""
+
+    def test_tochar_iso_formatting(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-tochar-iso ")
+        my = _tx(case, "oracle", "mysql")
+        assert "DATE_FORMAT(" in my and "%Y-%m-%dT%H:%i:%s" in my, my
+        ts = _tx(case, "oracle", "tsql")
+        assert "FORMAT(" in ts and "yyyy-MM-dd" in ts, ts
+        pg = _tx(case, "oracle", "postgresql")
+        assert "TO_CHAR(" in pg and 'YYYY-MM-DD"T"HH24:MI:SS' in pg, pg
+
+    def test_to_timestamp_fractional(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-to-timestamp ")
+        my = _tx(case, "oracle", "mysql")
+        assert "DATETIME(6)" in my, my  # keeps the .123 fractional
+        pg = _tx(case, "oracle", "postgresql")
+        assert "TIMESTAMP '2020-01-01 10:00:00.123'" in pg, pg
+
+
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL
     STRING_AGG / Oracle LISTAGG); an integer value is cast to text so PG doesn't

@@ -666,7 +666,7 @@ CREATE TABLE t (id INT); SELECT * FROM t TABLESAMPLE BERNOULLI(50)
 -- CASE[open]: pg-tochar-fmts — fails on oracle. SILENT: source literal(s) ["'Day'", "'FMDay'", "'TZ'"] absent from valid output, no warnin
 SELECT to_char(now(),'Day'), to_char(now(),'FMDay'), to_char(now(),'IW'), to_char(now(),'TZ')
 
--- CASE[open]: pg-tochar-iso — fails on mysql, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of format function.DB-Lib 
+-- CASE[fixed]: pg-tochar-iso — to_char(ts, mask) date formatting -> MySQL DATE_FORMAT, T-SQL FORMAT (via the strftime-model mask translation). live-verified 2020-06-15T14:30:45 on all four.
 SELECT to_char(TIMESTAMP '2020-06-15 14:30:45', 'YYYY-MM-DD"T"HH24:MI:SS') AS r
 
 -- CASE[open]: pg-tochar-neg — fails on mysql, tsql. FUNC-DIFF: source=(('-1234.5',),) target=(('-9999123599',),)
