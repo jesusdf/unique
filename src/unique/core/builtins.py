@@ -83,6 +83,9 @@ _ENGINE_STANDARD: dict[str, frozenset[str]] = {
             "CAST_TO_RAW",  # UTL_RAW
             "CAST_TO_VARCHAR2",
             "CAST_TO_NVARCHAR2",
+            "ODCINUMBERLIST",  # SYS collection types (no cross-engine array/table type)
+            "ODCIVARCHAR2LIST",
+            "ODCIDATELIST",
         }
     ),
     "postgresql": frozenset({"XMLELEMENT"}),  # XMLAGG is already introspected

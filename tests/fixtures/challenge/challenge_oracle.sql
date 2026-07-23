@@ -44,7 +44,7 @@ ALTER TABLE t MODIFY (id NUMBER(19));
 ALTER TABLE t RENAME COLUMN name TO nm;
 ALTER TABLE t DROP COLUMN nm;
 
--- CASE[open]: ora-arr-collect — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "SYS" or the user-defined function or aggregate "SYS.OD
+-- CASE[limit]: ora-arr-collect — Oracle's SYS.ODCINUMBERLIST/ODCIVARCHAR2LIST (built-in collection types used as table/array constructors) have no cross-engine equivalent; the gate now recognizes them and degrades + annotates instead of shipping an undefined function (docs/03-unsupported.md). fails on mysql, postgresql, tsql
 SELECT SYS.ODCINUMBERLIST(1,2,3) FROM DUAL
 
 -- CASE[fixed]: ora-asciistr — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.AS
