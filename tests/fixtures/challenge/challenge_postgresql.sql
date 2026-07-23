@@ -316,7 +316,7 @@ SELECT generate_series('2020-01-01'::date, '2020-01-05'::date, '1 day') AS d
 -- CASE[open]: pg-gen-series-ord — fails on tsql. (102, b"Incorrect syntax near 'ORDINALITY'.DB-Lib error message 20018, severity 15:\nGener
 SELECT * FROM generate_series(1, 10, 2) WITH ORDINALITY AS t(v, n)
 
--- CASE[open]: pg-gencol2 — fails on mysql. (1075, 'Incorrect table definition; there can be only one auto column and it must be defin
+-- CASE[fixed]: pg-gencol2 — a STORED generated column plus a GENERATED AS IDENTITY column now transpiles to MySQL (the AUTO_INCREMENT column gets a KEY, error 1075 otherwise). live-verified a=5 -> b=10 (a*2), c=1 (identity).
 CREATE TABLE t (a INT, b INT GENERATED ALWAYS AS (a*2) STORED, c INT GENERATED ALWAYS AS IDENTITY)
 
 -- CASE[open]: pg-generate-series — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
