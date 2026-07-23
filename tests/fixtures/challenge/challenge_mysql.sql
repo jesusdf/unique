@@ -146,7 +146,7 @@ SELECT CAST(0xFFFF AS UNSIGNED), CAST(b'1111' AS UNSIGNED), CAST(TRUE AS UNSIGNE
 -- CASE[fixed]: my-cast-year — MySQL YEAR type has no cross-engine equivalent; fold a literal to its integer year with MySQL's 2-digit century rule (00-69->2000s, 70-99->1900s). live-verified 2020,2020,1999.
 SELECT CAST('2020' AS YEAR), CAST(2020 AS YEAR), CAST('99' AS YEAR)
 
--- CASE[open]: my-change-column — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'CHANGE'.DB-Lib error message 20018, severity 15:\nGeneral S
+-- CASE[fixed]: my-change-column — MySQL ALTER TABLE t CHANGE a x <type> (rename + retype) splits into a RENAME COLUMN + a type change per engine (T-SQL uses EXEC sp_rename). live-verified DDL runs on all three.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t CHANGE a x INT
 
 -- CASE[open]: my-char-256 — fails on oracle, postgresql. FUNC-DIFF: source=(('0100',),) target=(('\x01\x00',),)

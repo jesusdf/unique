@@ -1444,6 +1444,38 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 return f"ALTER TABLE {_t} ADD CONSTRAINT DF_{_cn} DEFAULT {_v} FOR {_c}"
             return f"ALTER TABLE {_t} ALTER COLUMN {_c} SET DEFAULT {_v}"
 
+    # ``ALTER TABLE t CHANGE [COLUMN] old new <type>`` renames a column AND
+    # changes its type in one MySQL-only statement. Split into a rename + a type
+    # change (the column is ``new`` after the rename); only the simple type-only
+    # form is handled, a trailing constraint falls through.
+    if node.kind == "ALTER" and node.source_dialect == "mysql" and dialect != "mysql":
+        m_ch = re.match(
+            r"(?is)^\s*ALTER\s+TABLE\s+(\S+)\s+CHANGE\s+(?:COLUMN\s+)?"
+            r"(\S+)\s+(\S+)\s+([A-Za-z0-9_]+(?:\s*\([\d,\s]*\))?)\s*;?\s*$",
+            node.sql,
+        )
+        if m_ch:
+            _t, _old, _new, _ty = m_ch.groups()
+            _ty = _portable_types_in_sql(_ty, dialect)
+            if dialect == "oracle":
+                return (
+                    f"ALTER TABLE {_t} RENAME COLUMN {_old} TO {_new};\n"
+                    f"ALTER TABLE {_t} MODIFY {_new} {_ty}"
+                )
+            if dialect == "postgresql":
+                return (
+                    f"ALTER TABLE {_t} RENAME COLUMN {_old} TO {_new};\n"
+                    f"ALTER TABLE {_t} ALTER COLUMN {_new} TYPE {_ty}"
+                )
+            if dialect == "tsql":
+                _tn = _t.strip('[]"`')
+                _on = _old.strip('[]"`')
+                _nn = _new.strip('[]"`')
+                return (
+                    f"EXEC sp_rename '{_tn}.{_on}', '{_nn}', 'COLUMN';\n"
+                    f"ALTER TABLE {_t} ALTER COLUMN {_new} {_ty}"
+                )
+
     # PG's NOT VALID (add the constraint but skip validating existing rows) has
     # no equivalent on the other engines, which validate immediately. Strip it —
     # the constraint definition is identical — and document the difference so the

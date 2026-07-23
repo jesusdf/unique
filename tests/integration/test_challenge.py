@@ -436,6 +436,24 @@ class TestAlterModifyColumn:
         assert "ALTER COLUMN b BIGINT" in body and "MODIFY" not in body, body
 
 
+class TestAlterChangeColumn:
+    """MySQL ALTER TABLE t CHANGE a x <type> renames AND retypes in one
+    statement; it splits into a rename + a type change per engine (Oracle/PG
+    RENAME COLUMN, T-SQL EXEC sp_rename), the column being `x` afterward."""
+
+    def _out(self, target: str) -> str:
+        return _tx(_case("challenge_mysql.sql", "my-change-column "), "mysql", target)
+
+    def test_oracle_rename_then_modify(self) -> None:
+        out = self._out("oracle")
+        assert "RENAME COLUMN a TO x" in out and "MODIFY x NUMBER" in out, out
+
+    def test_tsql_sp_rename_then_alter(self) -> None:
+        out = self._out("tsql")
+        assert "sp_rename 't.a', 'x', 'COLUMN'" in out, out
+        assert "ALTER COLUMN x INT" in out, out
+
+
 class TestAlterSetDefault:
     """MySQL ALTER COLUMN c SET DEFAULT v maps to Oracle MODIFY c DEFAULT v and
     T-SQL ADD CONSTRAINT DF_<t>_<c> DEFAULT v FOR c (a named default
