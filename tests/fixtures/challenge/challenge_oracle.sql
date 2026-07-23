@@ -220,7 +220,7 @@ SELECT STANDARD_HASH('abc', 'SHA256'), ORA_HASH('abc', 100) FROM DUAL
 -- CASE[open]: ora-hint-comment — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
 SELECT /*+ FULL(t) */ 1 AS r FROM DUAL t
 
--- CASE[open]: ora-identity-opts — fails on mysql. (1075, 'Incorrect table definition; there can be only one auto column and it must be defin
+-- CASE[limit]: ora-identity-opts — MySQL AUTO_INCREMENT has no per-column START/INCREMENT/MAXVALUE/CYCLE; emits AUTO_INCREMENT (keyed) + a documented carrier + warning (docs/03-unsupported.md). fails on mysql
 CREATE TABLE t (a NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100 INCREMENT BY 10 MAXVALUE 9999 CYCLE))
 
 -- CASE[fixed]: ora-implicit-arith — '1' + 1 is arithmetic (number operand), not concat: kept as + so it evaluates to 2.

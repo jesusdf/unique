@@ -3410,6 +3410,15 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     # MySQL has no per-column step, and the seed is a table option
                     # (AUTO_INCREMENT=n), not a column clause — left as the default.
                     identity = " AUTO_INCREMENT"
+                    if custom:
+                        # A non-default START WITH/INCREMENT BY (and any MAXVALUE/
+                        # CYCLE) can't be a MySQL column clause; flag rather than
+                        # silently reset the sequence to start 1 / step 1.
+                        identity += (
+                            f" /* UNIQUE: source IDENTITY (START {seed} INCREMENT "
+                            f"{step}) has no MySQL column form — AUTO_INCREMENT "
+                            "starts at 1, steps by 1 (docs/03-unsupported.md) */"
+                        )
                 elif dialect == "postgresql":
                     if custom or col.identity_always:
                         identity = f" GENERATED {kind} AS IDENTITY{span}"
@@ -3546,12 +3555,14 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 if re.search(r"(?i)\bAUTO_INCREMENT\b", _cd):
                     _m = re.match(r'\s*[`"]?(\w+)', _cd)
                     _auto_col = _m.group(1) if _m else None
+                    # Ignore a carrier comment — its "UNIQUE:" is not a key.
+                    _cd_nc = re.sub(r"/\*.*?\*/", "", _cd)
                     _auto_line_keyed = bool(
-                        re.search(r"(?i)\b(?:PRIMARY\s+KEY|UNIQUE)\b", _cd)
+                        re.search(r"(?i)\b(?:PRIMARY\s+KEY|UNIQUE)\b", _cd_nc)
                     )
                     break
             if _auto_col is not None and not _auto_line_keyed:
-                _joined = "\n".join(col_defs)
+                _joined = re.sub(r"/\*.*?\*/", "", "\n".join(col_defs))
                 _keyed = re.search(
                     r'(?i)\b(?:PRIMARY\s+KEY|UNIQUE|KEY)\b[^,\n]*[`"(]\s*'
                     + re.escape(_auto_col)

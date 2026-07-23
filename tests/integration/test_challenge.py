@@ -1960,6 +1960,22 @@ class TestTopWithTies:
         assert "WITH TIES" in result.sql and "LIMIT 1" in result.sql, result.sql
 
 
+class TestOracleIdentityOptions:
+    """Oracle IDENTITY (START WITH/INCREMENT BY/MAXVALUE/CYCLE) has no MySQL
+    per-column form — AUTO_INCREMENT always starts at 1 / steps by 1. Emit the
+    keyed AUTO_INCREMENT plus a documented carrier + warning rather than silently
+    resetting the sequence."""
+
+    def test_mysql_carries_dropped_options(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-identity-opts ")
+        result = Transpiler().transpile(case, source="oracle", target="mysql")
+        assert result.warnings, "dropped IDENTITY options must warn"
+        assert "UNIQUE:" in result.sql, result.sql
+        # AUTO_INCREMENT column must still be keyed (the carrier's "UNIQUE:" is
+        # not a key).
+        assert "KEY (`a`)" in result.sql, result.sql
+
+
 class TestTablesample:
     """TABLESAMPLE re-spells natively on PG/T-SQL (TABLESAMPLE) and Oracle
     (SAMPLE); MySQL has no row sampling, so it degrades to a documented carrier +
