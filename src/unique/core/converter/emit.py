@@ -5402,6 +5402,23 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"JSON_ARRAY({arr} NULL ON NULL)"
         return f"JSON_ARRAY({arr})"  # MySQL native (keeps NULLs by default)
 
+    # T-SQL DATALENGTH(x): the byte length. Oracle spells it LENGTHB, PG/MySQL
+    # OCTET_LENGTH. A VARBINARY cast argument is a no-op for the byte count of a
+    # string (its byte length is the same), so unwrap it — the other engines have
+    # no direct VARBINARY(MAX) equivalent.
+    if up == "DATALENGTH" and len(node.args) == 1 and dialect != "tsql":
+        dl_arg = node.args[0]
+        if isinstance(dl_arg, CastExpression) and dl_arg.target_type.name.upper() in (
+            "VARBINARY",
+            "BINARY",
+            "BLOB",
+            "BYTEA",
+            "RAW",
+        ):
+            dl_arg = dl_arg.expression
+        x = _emit_expression(dl_arg, dialect)
+        return f"LENGTHB({x})" if dialect == "oracle" else f"OCTET_LENGTH({x})"
+
     # MySQL ELT(n, a, b, …)/FIELD(v, a, b, …) → portable CASE chains (RC-1a).
     if up == "ELT" and len(node.args) >= 2 and dialect != "mysql":
         n = _emit_expression(node.args[0], dialect)

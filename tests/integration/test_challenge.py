@@ -522,6 +522,13 @@ class TestTsqlIntToDatetime:
         pg = _tx(case, "tsql", "postgresql")
         assert "AS DATE) + 1" in pg, pg
 
+    def test_datalength_byte_length(self) -> None:
+        # DATALENGTH(x) is the byte length -> LENGTHB / OCTET_LENGTH; the
+        # VARBINARY cast is unwrapped.
+        case = _case("challenge_sqlserver.sql", "ts-binary-length ")
+        assert "LENGTHB('hello')" in _tx(case, "tsql", "oracle")
+        assert "OCTET_LENGTH('hello')" in _tx(case, "tsql", "postgresql")
+
 
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL

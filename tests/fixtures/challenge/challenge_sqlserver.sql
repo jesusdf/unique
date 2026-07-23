@@ -45,7 +45,7 @@ SELECT ASCII('A'), CHAR(65), NCHAR(65)
 -- CASE[open]: ts-at-time-zone — fails on oracle, postgresql. ORA-00902: invalid datatype
 SELECT CAST('2020-01-01 10:00' AS DATETIME2) AT TIME ZONE 'UTC' AS r
 
--- CASE[open]: ts-binary-length — fails on mysql, oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[fixed]: ts-binary-length — DATALENGTH(x) is the byte length -> Oracle LENGTHB, PG/MySQL OCTET_LENGTH; the VARBINARY(MAX) cast is unwrapped (byte length of a string is the same). live-verified 5.
 SELECT DATALENGTH(CAST('hello' AS VARBINARY(MAX))) AS r
 
 -- CASE[open]: ts-bit-cast — fails on oracle. ORA-01722: unable to convert string value containing 't' to a number: 
