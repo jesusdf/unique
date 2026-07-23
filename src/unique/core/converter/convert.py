@@ -1306,6 +1306,20 @@ def _convert_update(expr: exp.Update) -> ASTNode:
                 reason="Unhandled expression type: UPDATE FROM derived table",
             )
 
+    # MySQL's ``UPDATE t JOIN s ON … SET …`` hangs the join off the target table
+    # (``expr.this``), not a FROM clause, so the join was silently dropped —
+    # leaving an ``UPDATE t SET n = s.n`` with a dangling ``s``. Lift it into the
+    # same from_clause/joins shape the FROM-JOIN form uses so the per-engine
+    # cross-table emitter renders it.
+    if (
+        from_clause is None
+        and isinstance(expr.this, exp.Table)
+        and expr.this.args.get("joins")
+    ):
+        from_clause = _convert_table_ref(expr.this)
+        for join_expr in expr.this.args["joins"]:
+            joins.append(_convert_join(join_expr))
+
     where = None
     # Direct arg, not find(): find() would descend into a subquery in SET/FROM
     # and lift ITS where onto this UPDATE (same class as the SELECT bug).

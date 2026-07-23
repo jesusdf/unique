@@ -802,10 +802,10 @@ SELECT UNIX_TIMESTAMP('2020-01-01'), FROM_UNIXTIME(1577836800)
 -- CASE[fixed]: my-unixtime2 — fails on oracle, postgresql, tsql. (195, b"'UNIX_TIMESTAMP' is not a recognized built-in function name.DB-Lib error message 2
 SELECT FROM_UNIXTIME(1600000000,'%Y-%m-%d'), UNIX_TIMESTAMP('2020-09-13')
 
--- CASE[open]: my-upd-selfjoin — fails on oracle, postgresql, tsql. (4104, b'The multi-part identifier "t2.n" could not be bound.DB-Lib error message 20018, s
+-- CASE[fixed]: my-upd-selfjoin — the target's JOIN is lifted into the cross-table UPDATE emitter (PG FROM/WHERE, T-SQL FROM JOIN, Oracle correlated subquery); live-verified (1,10),(2,10).
 CREATE TABLE t (id INT, n INT);UPDATE t t1 JOIN t t2 ON t1.id=t2.id+1 SET t1.n=t2.n
 
--- CASE[open]: my-update-join — fails on oracle, postgresql, tsql. (4104, b'The multi-part identifier "s.n" could not be bound.DB-Lib error message 20018, se
+-- CASE[fixed]: my-update-join — UPDATE t JOIN s ON … SET … lifts the join into the per-engine cross-table UPDATE (join no longer dropped); live-verified (1,99),(2,88).
 CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); UPDATE t JOIN s ON t.id = s.id SET t.n = s.n
 
 -- CASE[limit]: my-upper-sharps — fails on postgresql. APPROVED LIMIT (2026-07-18): non-ASCII case-folding (ß, accents) is locale/collation-dependent, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('ß',),) target=(('ẞ',),)

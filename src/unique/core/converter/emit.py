@@ -2975,7 +2975,16 @@ def _emit_update_tsql_from(
         result = f"UPDATE {node.table.alias}\nSET {sets}"
         from_sql = _emit_table_ref(node.from_clause, dialect)
         joins_sql = "".join(f"\n{_emit_join(j, dialect)}" for j in node.joins)
-        result += f"\nFROM {table}, {from_sql}{joins_sql}"
+        # When the FROM's first source IS the target (MySQL ``UPDATE t t1 JOIN …``
+        # lifts the target's own join), it already binds the alias — re-listing
+        # the target table would duplicate it (``FROM t t1, t t1 JOIN …``).
+        if (
+            node.from_clause.name == node.table.name
+            and node.from_clause.alias == node.table.alias
+        ):
+            result += f"\nFROM {from_sql}{joins_sql}"
+        else:
+            result += f"\nFROM {table}, {from_sql}{joins_sql}"
         if node.where is not None:
             result += f"\nWHERE {_emit_condition(node.where, dialect)}"
         return result

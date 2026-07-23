@@ -2003,6 +2003,27 @@ class TestTablesample:
         assert "UNIQUE:" in result.sql and "TABLESAMPLE" in result.sql, result.sql
 
 
+class TestMysqlUpdateJoin:
+    """MySQL's UPDATE t JOIN s ON … SET … hangs the join off the target table, so
+    it was silently dropped (dangling ``s``). Lift it into the per-engine
+    cross-table UPDATE: PG FROM/WHERE, T-SQL FROM JOIN, Oracle correlated
+    subquery. Live-verified (1,99),(2,88) on all three."""
+
+    def test_update_join_carried(self) -> None:
+        case = _case("challenge_mysql.sql", "my-update-join ")
+        pg = _tx(case, "mysql", "postgresql")
+        assert "FROM s" in pg and "WHERE t.id = s.id" in pg, pg
+        tsql = _tx(case, "mysql", "tsql")
+        assert "FROM t\nINNER JOIN s ON t.id = s.id" in tsql, tsql
+        assert "(SELECT s.n FROM s WHERE t.id = s.id)" in _tx(case, "mysql", "oracle")
+
+    def test_self_join_no_duplicate_target(self) -> None:
+        # The T-SQL self-join must bind the aliased target once (not ``t t1, t t1``).
+        out = _tx(_case("challenge_mysql.sql", "my-upd-selfjoin "), "mysql", "tsql")
+        assert "t t1, t t1" not in out, out
+        assert "FROM t t1\nINNER JOIN t t2" in out, out
+
+
 class TestNamedWindowInlined:
     """A named WINDOW clause (OVER w ... WINDOW w AS (ORDER BY x)) is inlined into
     each OVER reference, since the IR has no named-window concept — an un-inlined
