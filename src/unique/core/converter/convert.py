@@ -1110,6 +1110,9 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
             isinstance(m, exp.Var) and m.name.upper() == "SQL_CALC_FOUND_ROWS"
             for m in (expr.args.get("operation_modifiers") or [])
         ),
+        # T-SQL FOR XML/FOR JSON (sqlglot only partially models the clause, so
+        # capture its presence — the emitter degrades it on non-T-SQL targets).
+        has_for_xml=expr.args.get("for_") is not None,
     )
 
 

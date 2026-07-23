@@ -524,6 +524,28 @@ class TestWindowedStringAgg:
         assert "SUM(x) OVER" in out and "UNIQUE:" not in out, out
 
 
+class TestForXml:
+    """T-SQL FOR XML/JSON serializes a row set to a single scalar; no other engine
+    has an equivalent, so a (SELECT … FOR XML) scalar subquery degrades to NULL +
+    carrier + warning (rather than shipping the multi-column rows raw)."""
+
+    def test_for_xml_scalar_degrades(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-for-xml ")
+        for target in ("mysql", "oracle", "postgresql"):
+            result = Transpiler().transpile(case, source="tsql", target=target)
+            assert result.warnings and "UNIQUE:" in result.sql, target
+            # Both the source ``--`` header and the ``/* … */`` carrier name
+            # "FOR XML" as prose; strip comment lines then the carrier, and check
+            # the remaining executable text has no live FOR XML clause.
+            body = "\n".join(
+                ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+            )
+            executable = body.split("/*")[0]
+            assert (
+                "NULL" in executable and "FOR XML" not in executable.upper()
+            ), result.sql
+
+
 class TestMysqlUpdateXml:
     """MySQL UpdateXML (node-replacement XML DML) has no cross-engine equivalent
     and degrades to NULL + carrier + warning; ExtractValue in the same statement

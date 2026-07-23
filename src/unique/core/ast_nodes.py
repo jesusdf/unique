@@ -500,6 +500,11 @@ class SelectStatement(ASTNode):
     #: other engine has it; dropping it silently breaks that pattern, so a
     #: non-MySQL target surfaces the loss as a carrier + warning.
     calc_found_rows: bool = False
+    #: T-SQL ``FOR XML``/``FOR JSON`` serialization clause (sqlglot's ``for_``).
+    #: It turns the row set into a single XML/JSON scalar; no other engine has an
+    #: equivalent, so a non-T-SQL target degrades the whole scalar subquery to a
+    #: carrier + warning rather than shipping the (multi-column) rows raw.
+    has_for_xml: bool = False
 
 
 @dataclass(frozen=True)

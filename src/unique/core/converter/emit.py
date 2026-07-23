@@ -4706,6 +4706,15 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
 
     if isinstance(node, SubqueryExpression):
         query = node.query
+        # A ``(SELECT … FOR XML/JSON)`` scalar subquery serializes its rows to a
+        # single XML/JSON value — T-SQL-only. Elsewhere the clause is dropped and
+        # the multi-column rows ship raw (ORA-00913 "too many values"), so degrade
+        # the whole scalar to a carrier + warning.
+        if getattr(query, "has_for_xml", False) and dialect != "tsql":
+            return (
+                "NULL /* UNIQUE: T-SQL FOR XML/JSON row serialization has no "
+                "cross-engine equivalent — see docs/03-unsupported.md */"
+            )
         if dialect in ("tsql", "oracle") and not node.quantifier:
             # Illegal in a T-SQL/Oracle scalar subquery without TOP/FETCH,
             # and with no LIMIT it cannot change the single-row result.

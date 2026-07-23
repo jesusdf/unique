@@ -179,7 +179,7 @@ SELECT 0.1+0.2, CAST(0.1 AS FLOAT)+CAST(0.2 AS FLOAT), 1.0/3, CAST(1 AS FLOAT)/3
 -- CASE[limit]: ts-fmt-spec — fails on oracle. date format mask uses a bare-letter literal / locale name / exotic token that cannot round-trip to a quoted cross-engine mask (docs/03-unsupported.md §3.1).
 SELECT FORMAT(GETDATE(),'ddd MMM dd HH:mm:ss yyyy'),FORMAT(GETDATE(),'tt hh:mm'),FORMAT(GETDATE(),'D')
 
--- CASE[open]: ts-for-xml — fails on mysql, oracle, postgresql. ORA-00913: too many values
+-- CASE[limit]: ts-for-xml — T-SQL FOR XML/JSON serializes a row set into a single XML/JSON scalar; no other engine has an equivalent (dropping it ships the multi-column rows raw → ORA-00913), so the scalar subquery degrades to NULL + annotation (docs/03-unsupported.md). fails on mysql, oracle, postgresql
 SELECT (SELECT 1 a,2 b FOR XML PATH('row'),ROOT('rows')) AS xmlcol
 
 -- CASE[limit]: ts-format-iso — fails on oracle. T-SQL FORMAT numeric/date .NET mask with no reproducible cross-engine equivalent (docs/03-unsupported.md §3.1).
