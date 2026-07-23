@@ -4583,6 +4583,17 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             # no inline-cast spelling elsewhere (wave 163).
             dtype = re.sub(r"(?i)\s+CHARACTER\s+SET\s+\S+$", "", dtype)
         mapped = _CAST_TYPE_MAP.get(dialect, {}).get(dtype.upper())
+        if (
+            mapped
+            and dialect == "oracle"
+            and dtype.upper() == "CLOB"
+            and IR_EMBEDDED.get()
+        ):
+            # Inside a PL/SQL body ``CAST(x AS CLOB)`` is valid but
+            # ``CAST(x AS VARCHAR2(4000))`` is not (PLS-00103) — the exact reverse
+            # of a top-level SQL statement (ORA-22849 on CLOB). The CLOB->VARCHAR2
+            # remap is for the SQL engine; keep CLOB in a procedural body.
+            mapped = None
         if mapped:
             dtype = mapped
             # A mapped character type keeps its length (Oracle rejects a
