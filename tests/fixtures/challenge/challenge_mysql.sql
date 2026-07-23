@@ -113,7 +113,7 @@ SELECT CAST('2020-01-01' AS DATETIME) AS r
 -- CASE[limit]: my-cast-datetime2 — the CAST(... AS TIME) part has no Oracle type; kept as text with a documented carrier (docs/03-unsupported.md). fails on oracle
 SELECT CAST('2020-01-01 10:00' AS DATE), CAST('2020-01-01 10:00' AS TIME), CAST('2020-01-01 10:00' AS DATETIME)
 
--- CASE[open]: my-cast-decimal2 — fails on oracle, postgresql, tsql. (8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit
+-- CASE[fixed]: my-cast-decimal2 — MySQL's lenient string->number cast (CAST('abc' AS DECIMAL)=0, leading-numeric-prefix parse) reproduced by folding the literal to its MySQL-parsed value; bare DECIMAL kept as DECIMAL(10,0) (MySQL's default scale 0); values 13/13/0 verified equal (Oracle drops a trailing .0 — precision only)
 SELECT CAST('12.99' AS DECIMAL(4,1)), CAST('12.99' AS DECIMAL(3,0)), CAST('abc' AS DECIMAL)
 
 -- CASE[open]: my-cast-hex-char — fails on oracle. ORA-25137: Data value out of range

@@ -524,6 +524,24 @@ class TestWindowedStringAgg:
         assert "SUM(x) OVER" in out and "UNIQUE:" not in out, out
 
 
+class TestMysqlLenientDecimalCast:
+    """MySQL casts a string to a number leniently — a non-numeric string yields 0
+    (CAST('abc' AS DECIMAL) = 0), where the other engines error. The literal is
+    folded to its MySQL-parsed value, and a bare DECIMAL keeps MySQL's scale-0
+    default. Live-verified 13/13/0."""
+
+    def test_nonnumeric_string_folds_to_zero(self) -> None:
+        case = _case("challenge_mysql.sql", "my-cast-decimal2 ")
+        for target in ("oracle", "tsql"):
+            assert "CAST(0 AS DECIMAL(10, 0))" in _tx(case, "mysql", target)
+        # PG's bare DECIMAL is arbitrary-precision — no scale forced.
+        assert "CAST(0 AS DECIMAL)" in _tx(case, "mysql", "postgresql")
+
+    def test_valid_numeric_string_preserved(self) -> None:
+        case = _case("challenge_mysql.sql", "my-cast-decimal2 ")
+        assert "CAST(12.99 AS DECIMAL(4, 1))" in _tx(case, "mysql", "tsql")
+
+
 class TestFormatFunc:
     """PG printf-style format() has no cross-engine equivalent (T-SQL/MySQL FORMAT
     is a value formatter). A %s-only template rewrites to concatenation (Oracle

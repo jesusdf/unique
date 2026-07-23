@@ -93,6 +93,25 @@ _PG_GEOMETRIC_TYPES = frozenset(
     {"POINT", "LINE", "LSEG", "BOX", "PATH", "POLYGON", "CIRCLE"}
 )
 
+# Numeric CAST targets, for MySQL's lenient string->number cast compensation.
+_NUMERIC_CAST_TYPES = frozenset(
+    {
+        "DECIMAL",
+        "NUMERIC",
+        "NUMBER",
+        "DEC",
+        "INT",
+        "INTEGER",
+        "BIGINT",
+        "SMALLINT",
+        "TINYINT",
+        "MEDIUMINT",
+        "FLOAT",
+        "DOUBLE",
+        "REAL",
+    }
+)
+
 _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
     "mysql": {
         "INT": "SIGNED",
@@ -4433,6 +4452,29 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         ):
             _hx = str(node.expression.value)
             return f"TO_NUMBER('{_hx}', '{'X' * len(_hx)}')"
+        # MySQL casts a string to a number leniently — it parses the leading
+        # numeric prefix and yields 0 for a non-numeric string (CAST('abc' AS
+        # DECIMAL) = 0), where Oracle/PG/T-SQL raise a conversion error. Replace
+        # the literal with its MySQL-parsed value so the target computes the same
+        # result (a plain numeric literal — no CASE guard for PG to constant-fold).
+        if (
+            SOURCE_DIALECT.get() == "mysql"
+            and dialect != "mysql"
+            and isinstance(node.expression, Literal)
+            and isinstance(node.expression.value, str)
+            and node.target_type.name.split("(")[0].strip().upper()
+            in _NUMERIC_CAST_TYPES
+        ):
+            _m = re.match(
+                r"\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)", node.expression.value
+            )
+            _lax = _m.group(1) if _m else "0"
+            _num: ASTNode = (
+                Literal(value=float(_lax), dtype="number")
+                if any(c in _lax for c in ".eE")
+                else Literal(value=int(_lax), dtype="integer")
+            )
+            return _emit_expression(dataclasses.replace(node, expression=_num), dialect)
         if (
             dialect == "tsql"
             and isinstance(node.expression, UnaryOp)
@@ -4530,13 +4572,15 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         # PostgreSQL's unbounded ``numeric``/``decimal`` (no precision/scale) is
         # arbitrary-precision, but a bare DECIMAL defaults to scale 0 on
         # MySQL/Oracle/T-SQL — it silently truncates the fraction (2.675::numeric
-        # would become 3 before a later ROUND). Give the cast a scale there.
+        # would become 3 before a later ROUND). Give a PG-source cast a generous
+        # scale so the fraction survives; a MySQL-source bare DECIMAL is really
+        # DECIMAL(10,0) (scale 0), so keep that to match MySQL's own rounding.
         if (
             not node.target_type.params
             and dialect in ("mysql", "oracle", "tsql")
             and re.fullmatch(r"(?i)(DECIMAL|NUMERIC|NUMBER|DEC)", dtype.strip())
         ):
-            dtype = f"{dtype}(38, 10)"
+            dtype += "(10, 0)" if SOURCE_DIALECT.get() == "mysql" else "(38, 10)"
         if dialect == "tsql":
             # A size beyond T-SQL's 8000-byte page types only exists as
             # MAX (MySQL BINARY takes sizes up to 2^32-1 — wave 187).
