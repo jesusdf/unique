@@ -36,7 +36,7 @@ CREATE TABLE t (id INT PRIMARY KEY, n INT);
 GO
 CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) FROM deleted); END
 
--- CASE[open]: ts-alter-add — fails on oracle. ORA-30649: missing DIRECTORY keyword
+-- CASE[fixed]: ts-alter-add — Oracle requires DEFAULT before NOT NULL in a column def (ORA-30649 otherwise); the ADD column's 'NOT NULL DEFAULT v' is reordered to 'DEFAULT v NOT NULL'. live-verified DDL runs.
 CREATE TABLE t (a INT); ALTER TABLE t ADD b NVARCHAR(10) NOT NULL DEFAULT 'x'
 
 -- CASE[fixed]: ts-ascii-char — fails on mysql, oracle, postgresql. ORA-00904: "NCHAR": invalid identifier

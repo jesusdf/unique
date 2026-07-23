@@ -1519,6 +1519,50 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                     f"ALTER TABLE {_t} ALTER COLUMN {_new} {_ty}"
                 )
 
+    # Oracle requires DEFAULT before NOT NULL in a column definition (ORA-30649
+    # otherwise); sqlglot keeps the source's ``NOT NULL DEFAULT`` order. Reorder
+    # it for an ADD/MODIFY column on Oracle.
+    if (
+        node.kind == "ALTER"
+        and dialect == "oracle"
+        and re.search(r"(?is)\bNOT\s+NULL\s+DEFAULT\b", node.sql)
+    ):
+        try:
+            rendered = sqlglot.transpile(node.sql, read=read, write=write)
+            base = rendered[0] if rendered and rendered[0].strip() else node.sql
+        except Exception:  # noqa: BLE001 - keep the source spelling on failure
+            base = node.sql
+        return re.sub(
+            r"(?is)\bNOT\s+NULL\s+DEFAULT\s+('(?:[^']|'')*'|\S+)",
+            r"DEFAULT \1 NOT NULL",
+            base,
+        )
+
+    # MySQL rejects a literal DEFAULT on a TEXT/BLOB/JSON/spatial column (error
+    # 1101) — it must be an expression default ``DEFAULT (v)``. Wrap the literal
+    # when such a type appears in an ADD/MODIFY column (parenthesizing a literal
+    # default is valid for every type on MySQL 8.0.13+, so it is always safe).
+    if (
+        node.kind == "ALTER"
+        and dialect == "mysql"
+        and re.search(r"(?i)\bDEFAULT\s+(?!\()", node.sql)
+        and re.search(
+            r"(?i)\b(?:TINY|MEDIUM|LONG)?TEXT\b|\b(?:TINY|MEDIUM|LONG)?BLOB\b"
+            r"|\bJSON\b|\bGEOMETRY\b",
+            node.sql,
+        )
+    ):
+        try:
+            rendered = sqlglot.transpile(node.sql, read=read, write=write)
+            base = rendered[0] if rendered and rendered[0].strip() else node.sql
+        except Exception:  # noqa: BLE001 - keep the source spelling on failure
+            base = node.sql
+        return re.sub(
+            r"(?i)\bDEFAULT\s+('(?:[^']|'')*'|-?\d+(?:\.\d+)?|TRUE|FALSE)(?!\s*\()",
+            r"DEFAULT (\1)",
+            base,
+        )
+
     # PG's NOT VALID (add the constraint but skip validating existing rows) has
     # no equivalent on the other engines, which validate immediately. Strip it —
     # the constraint definition is identical — and document the difference so the

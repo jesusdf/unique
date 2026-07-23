@@ -24,7 +24,7 @@ SELECT age(now(), '2020-01-01'), date_part('epoch', now())
 -- CASE[open]: pg-all-values — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t WHERE n > ALL (VALUES (1),(2),(3))
 
--- CASE[open]: pg-alter-add — fails on mysql, oracle. ORA-30649: missing DIRECTORY keyword
+-- CASE[fixed]: pg-alter-add — ADD COLUMN b TEXT NOT NULL DEFAULT 'x': Oracle reorders to DEFAULT 'x' NOT NULL (ORA-30649), and MySQL wraps the TEXT-column literal default as DEFAULT ('x') (error 1101 otherwise). live-verified DDL runs on both.
 CREATE TABLE t (a INT); ALTER TABLE t ADD COLUMN b TEXT NOT NULL DEFAULT 'x'
 
 -- CASE[fixed]: pg-alter-notvalid — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n

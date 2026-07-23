@@ -477,6 +477,22 @@ class TestAlterSetDefault:
         assert "MODIFY a DEFAULT 5" in out, out
 
 
+class TestAlterAddColumnDefault:
+    """ADD COLUMN … NOT NULL DEFAULT v: Oracle needs DEFAULT before NOT NULL
+    (ORA-30649), and MySQL needs a parenthesized default on TEXT/BLOB columns
+    (error 1101). Both are rewritten in the passthrough emitter."""
+
+    def test_tsql_add_reordered_on_oracle(self) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-alter-add "), "tsql", "oracle")
+        assert "DEFAULT 'x' NOT NULL" in out, out
+
+    def test_pg_text_default_parenthesized_on_mysql(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-alter-add "), "postgresql", "mysql"
+        )
+        assert "DEFAULT ('x')" in out, out
+
+
 class TestAlterDropDefault:
     """ALTER COLUMN a DROP DEFAULT maps to Oracle MODIFY a DEFAULT NULL and to a
     T-SQL dynamic drop of the (auto-named) default constraint via
