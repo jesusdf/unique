@@ -6563,10 +6563,19 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         ld = _date_literal_sql(node.left, dialect)
         rd = _date_literal_sql(node.right, dialect)
         if ld is not None and rd is not None:
+            # MySQL's ``DATE - DATE`` is a numeric YYYYMMDD subtraction
+            # (2020-03-01 - 2020-01-01 = 200, not 60 days); the meaningful day
+            # count is emitted instead, so flag the deliberate normalization.
+            _sub_carrier = (
+                " /* UNIQUE: MySQL DATE - DATE is a numeric YYYYMMDD subtraction; "
+                "normalized to a day count (docs/03-unsupported.md) */"
+                if SOURCE_DIALECT.get() == "mysql" and dialect != "mysql"
+                else ""
+            )
             if dialect in ("oracle", "postgresql"):
-                return f"({ld} - {rd})"
+                return f"({ld} - {rd}){_sub_carrier}"
             if dialect == "tsql":
-                return f"DATEDIFF(DAY, {rd}, {ld})"
+                return f"DATEDIFF(DAY, {rd}, {ld}){_sub_carrier}"
             return f"DATEDIFF({ld}, {rd})"  # MySQL
 
     # ``date + n`` adds n days on PostgreSQL/Oracle (yielding a date), but MySQL

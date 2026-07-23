@@ -1930,6 +1930,18 @@ class TestMysqlInsertBounds:
         assert re.search(r"(?i)CASE\s+WHEN\b.*<\s*1\s+OR\b.*>\s+LEN\(", out), out
 
 
+class TestMysqlDateSubtraction:
+    """MySQL's DATE - DATE is a numeric YYYYMMDD subtraction (2020-03-01 -
+    2020-01-01 = 200), not a day count; the meaningful day count (60) is emitted
+    with a documented carrier flagging the normalization."""
+
+    def test_mysql_date_sub_carries(self) -> None:
+        case = _case("challenge_mysql.sql", "my-date-diff-minus ")
+        result = Transpiler().transpile(case, source="mysql", target="postgresql")
+        assert result.warnings, "normalized date subtraction must warn"
+        assert "UNIQUE:" in result.sql, result.sql
+
+
 class TestSubstringFloatArgs:
     """MySQL rounds a fractional SUBSTRING position/length (2.9 -> 3); Oracle/PG/
     T-SQL truncate (2). Pre-round the literal args on a MySQL source. Verified

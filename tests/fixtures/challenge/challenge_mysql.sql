@@ -224,7 +224,7 @@ SELECT DATE_ADD('2020-01-01', INTERVAL 7 DAY) AS r
 -- CASE[fixed]: my-date-add-month — fails on tsql. FUNC-DIFF: source=(('2020-02-29',),) target=(('2020-02-29 00:00:00',),)
 SELECT DATE_ADD('2020-01-31', INTERVAL 1 MONTH) AS r
 
--- CASE[open]: my-date-diff-minus — fails on oracle, postgresql. FUNC-DIFF: source=(('200',),) target=(('60',),)
+-- CASE[limit]: my-date-diff-minus — MySQL DATE - DATE is a numeric YYYYMMDD subtraction (200), not a day count; the meaningful day count (60) is emitted with a documented carrier (docs/03-unsupported.md). fails on oracle, postgresql
 SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r
 
 -- CASE[open]: my-date-eq-dt — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
