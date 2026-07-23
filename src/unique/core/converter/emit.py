@@ -2772,6 +2772,35 @@ def _emit_insert(node: InsertStatement, dialect: str) -> str:
     return f"INSERT INTO {table}{cols}\nDEFAULT VALUES"
 
 
+def _wrap_mysql_update_self_ref(val: ASTNode, target: str) -> ASTNode:
+    """MySQL error 1093: a subquery in SET can't select FROM the UPDATE target.
+    Wrap an aliased target-table FROM reference in a derived table
+    (``FROM t x`` -> ``FROM (SELECT * FROM t) x``) to force materialization so
+    the correlated subquery is allowed; the outer correlation is unaffected."""
+    if not isinstance(val, SubqueryExpression):
+        return val
+    sel = val.query
+    fc = sel.from_clause
+    if (
+        isinstance(fc, TableRef)
+        and fc.function is None
+        and fc.name == target
+        and fc.alias
+        and fc.alias != target
+    ):
+        derived = SubqueryExpression(
+            query=SelectStatement(
+                columns=(Star(),),
+                from_clause=dataclasses.replace(fc, alias=None),
+            ),
+            alias=fc.alias,
+        )
+        return dataclasses.replace(
+            val, query=dataclasses.replace(sel, from_clause=derived)
+        )
+    return val
+
+
 def _emit_update(node: UpdateStatement, dialect: str) -> str:
     """Emit an UPDATE statement.
 
@@ -2788,6 +2817,8 @@ def _emit_update(node: UpdateStatement, dialect: str) -> str:
     table = _emit_table_ref(node.table, dialect)
     set_parts = []
     for col, val in node.assignments:
+        if dialect == "mysql":
+            val = _wrap_mysql_update_self_ref(val, node.table.name)
         val = _coerce_bit_literal(node.table, col, val, dialect)
         val = _coerce_date_literal(node.table, col, val, dialect)
         set_parts.append(

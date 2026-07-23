@@ -2003,6 +2003,19 @@ class TestTablesample:
         assert "UNIQUE:" in result.sql and "TABLESAMPLE" in result.sql, result.sql
 
 
+class TestMysqlUpdateSelfRef:
+    """MySQL error 1093: a subquery in SET can't select FROM the UPDATE target.
+    Wrap the aliased self-reference in a derived table so the correlated subquery
+    is allowed. Live-verified (1,NULL),(2,10),(3,20)."""
+
+    def test_self_ref_wrapped_for_mysql(self) -> None:
+        out = _tx(
+            _case("challenge_oracle.sql", "ora-upd-correlated "), "oracle", "mysql"
+        )
+        assert "FROM (SELECT *\nFROM t) x" in out, out
+        assert "x.id < t.id" in out, out
+
+
 class TestMysqlUpdateJoin:
     """MySQL's UPDATE t JOIN s ON … SET … hangs the join off the target table, so
     it was silently dropped (dangling ``s``). Lift it into the per-engine

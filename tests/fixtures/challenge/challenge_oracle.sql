@@ -500,7 +500,7 @@ CREATE TABLE t (a TIMESTAMP WITH TIME ZONE, b INTERVAL DAY TO SECOND, c INTERVAL
 -- CASE[open]: ora-unpivot — fails on mysql, postgresql, tsql. (207, b"Invalid column name 'col'.DB-Lib error message 20018, severity 16:\nGeneral SQL Se
 SELECT id,col,val FROM (SELECT 1 id,10 a,20 b FROM DUAL) UNPIVOT (val FOR col IN (a,b))
 
--- CASE[open]: ora-upd-correlated — fails on mysql. (1093, "You can't specify target table 't' for update in FROM clause")
+-- CASE[fixed]: ora-upd-correlated — wrap the target's self-reference in a derived table (FROM (SELECT * FROM t) x) so MySQL allows the correlated subquery; live-verified (1,NULL),(2,10),(3,20).
 CREATE TABLE t (id NUMBER, n NUMBER);UPDATE t SET n=(SELECT MAX(n) FROM t x WHERE x.id<t.id)
 
 -- CASE[fixed]: ora-user-context — fails on mysql, postgresql, tsql. (195, b"'SYS_CONTEXT' is not a recognized built-in function name.DB-Lib error message 2001
