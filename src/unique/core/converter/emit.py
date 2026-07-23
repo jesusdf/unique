@@ -1620,6 +1620,24 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 f"ALTER TABLE {_tdc} DROP COLUMN {_cdc}"
             )
 
+    # Oracle CREATE SEQUENCE spells its negatives as one word (NOCYCLE, NOCACHE,
+    # NOMAXVALUE, NOMINVALUE) and has an ORDER/NOORDER RAC option no other engine
+    # shares. PostgreSQL/T-SQL use two words (NO CYCLE, …) and have no ORDER
+    # clause — normalize sqlglot's (verbatim) output for them.
+    if (
+        node.kind == "CREATE SEQUENCE"
+        and dialect in ("postgresql", "tsql")
+        and node.source_dialect == "oracle"
+    ):
+        try:
+            rendered = sqlglot.transpile(node.sql, read=read, write=write)
+            base = rendered[0] if rendered and rendered[0].strip() else node.sql
+        except Exception:  # noqa: BLE001 - keep the source spelling on failure
+            base = node.sql
+        base = re.sub(r"(?i)\bNO(CYCLE|CACHE|MAXVALUE|MINVALUE)\b", r"NO \1", base)
+        base = re.sub(r"(?i)\s*\b(?:NOORDER|ORDER)\b", "", base)
+        return base.rstrip().rstrip(";") if dialect == "tsql" else base
+
     # PG's NOT VALID (add the constraint but skip validating existing rows) has
     # no equivalent on the other engines, which validate immediately. Strip it —
     # the constraint definition is identical — and document the difference so the

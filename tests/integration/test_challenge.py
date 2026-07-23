@@ -497,6 +497,22 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestSequenceOptions:
+    """Oracle CREATE SEQUENCE one-word negatives (NOCYCLE) map to PostgreSQL /
+    T-SQL two-word NO CYCLE, and the ORDER/NOORDER RAC option is dropped."""
+
+    def test_nocycle_and_order_normalized(self) -> None:
+        for target in ("postgresql", "tsql"):
+            out = _tx(
+                _case("challenge_oracle.sql", "ora-sequence-options "), "oracle", target
+            )
+            body = "\n".join(
+                ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "NO CYCLE" in body and "NOCYCLE" not in body, body
+            assert "ORDER" not in body, body
+
+
 class TestJsonColumnType:
     """A MySQL JSON column maps to Oracle CLOB (its JSON type has usage limits)
     and T-SQL NVARCHAR(MAX) (no JSON type pre-2025); PostgreSQL keeps JSON."""

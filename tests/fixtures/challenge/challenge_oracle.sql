@@ -410,7 +410,7 @@ SELECT RTRIM('axxx', 'x') AS r FROM DUAL
 -- CASE[open]: ora-seq-use — fails on tsql. (4104, b'The multi-part identifier "s.CURRVAL" could not be bound.DB-Lib error message 200
 CREATE SEQUENCE s START WITH 1; SELECT s.NEXTVAL,s.CURRVAL FROM DUAL
 
--- CASE[open]: ora-sequence-options — fails on postgresql, tsql. (102, b"Incorrect syntax near 'NOCYCLE'.DB-Lib error message 20018, severity 15:\nGeneral 
+-- CASE[fixed]: ora-sequence-options — Oracle's one-word sequence negatives (NOCYCLE/NOCACHE/...) map to PostgreSQL/T-SQL two-word NO CYCLE etc., and the ORDER/NOORDER RAC option (no other engine) is dropped. live-verified CREATE SEQUENCE runs. 
 CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1 CACHE 20 NOCYCLE ORDER
 
 -- CASE[fixed]: ora-soundex — fails on postgresql. function soundex(unknown) does not exist
