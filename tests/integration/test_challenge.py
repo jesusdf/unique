@@ -853,6 +853,20 @@ class TestGenerateSeriesFrom:
         assert result.warnings and "UNIQUE:" in result.sql
 
 
+class TestHashFns:
+    """md5() is a hex digest on every engine and translates (Oracle STANDARD_HASH,
+    T-SQL HASHBYTES); PG sha256(bytea) returns a bytea digest where the others
+    return hex, so it degrades to a carrier. lpad/md5 verified, sha256 NULL."""
+
+    def test_md5_translated_sha256_degraded(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-hash-fns ")
+        assert "STANDARD_HASH('x', 'MD5')" in _tx(case, "postgresql", "oracle")
+        assert "HASHBYTES('MD5', 'x')" in _tx(case, "postgresql", "tsql")
+        for target in ("oracle", "tsql", "mysql"):
+            result = Transpiler().transpile(case, source="postgresql", target=target)
+            assert result.warnings and "UNIQUE:" in result.sql, target
+
+
 class TestChrAsciiUnicode:
     """PG chr(n) and ascii() are Unicode code-point operations. Oracle CHR(n>127)
     returns a raw byte and ASCII of a multibyte char returns its raw encoding, so

@@ -6086,6 +6086,30 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return " || ".join(pieces)
         return f"CONCAT({', '.join(pieces)})"
 
+    # md5(x) -> a 32-char lowercase hex digest. PG and MySQL have it natively;
+    # Oracle spells it STANDARD_HASH(x, 'MD5') and T-SQL HASHBYTES('MD5', x), both
+    # returning binary that a hex CONVERT/UPPER renders to the same digest.
+    if fn_name == "MD5" and len(node.args) == 1 and dialect in ("oracle", "tsql"):
+        _md = _emit_expression(node.args[0], dialect)
+        if dialect == "oracle":
+            return f"LOWER(STANDARD_HASH({_md}, 'MD5'))"
+        return f"LOWER(CONVERT(VARCHAR(32), HASHBYTES('MD5', {_md}), 2))"
+
+    # PG sha224/256/384/512(bytea) — sqlglot canonicalises to SHA2(x, n) — return
+    # a bytea digest; the other engines yield a hex string (Oracle STANDARD_HASH,
+    # T-SQL HASHBYTES, MySQL SHA2), so the value is the same digest in a different
+    # representation (binary vs hex). Degrade rather than claim equality.
+    if (
+        fn_name == "SHA2"
+        and SOURCE_DIALECT.get() == "postgresql"
+        and dialect != "postgresql"
+    ):
+        return (
+            "NULL /* UNIQUE: PG sha256/sha512 returns a bytea digest; other engines "
+            "return a hex string (same digest, different representation) — "
+            "see docs/03-unsupported.md */"
+        )
+
     # XMLELEMENT(name, value...): SQL/XML built-in on Oracle and PostgreSQL.
     # Oracle spells the element name as a (usually quoted) identifier;
     # PostgreSQL requires the ``NAME`` keyword before it. MySQL and T-SQL have

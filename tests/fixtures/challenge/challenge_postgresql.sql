@@ -349,7 +349,7 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 -- CASE[fixed]: pg-hash-all — fails on mysql, oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT md5('abc'), encode(sha256('abc'::bytea), 'hex')
 
--- CASE[open]: pg-hash-fns — fails on mysql, oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
+-- CASE[limit]: pg-hash-fns — lpad + md5 translate faithfully (Oracle LOWER(STANDARD_HASH(x,'MD5')), T-SQL LOWER(CONVERT(...,HASHBYTES('MD5',x),2)); '  x'/'9dd4e4...' verified), but PG sha256(bytea) returns a bytea digest where the other engines return a hex string (same digest, different representation) so it degrades to NULL + annotation (docs/03-unsupported.md). fails on mysql, oracle, tsql
 SELECT lpad('x', 3), md5('x'), sha256('x'::bytea)
 
 -- CASE[fixed]: pg-hex-literal — a hex literal cast to int uses Oracle TO_NUMBER('FF','XX') (HEXTORAW can't cast to a number); live-verified (255, 1500).
