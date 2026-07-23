@@ -497,7 +497,7 @@ SELECT SYSTIMESTAMP, LOCALTIMESTAMP, SESSIONTIMEZONE FROM DUAL
 -- CASE[open]: ora-tz-interval — fails on tsql. (102, b"Incorrect syntax near 'DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQL 
 CREATE TABLE t (a TIMESTAMP WITH TIME ZONE, b INTERVAL DAY TO SECOND, c INTERVAL YEAR TO MONTH)
 
--- CASE[open]: ora-unpivot — fails on mysql, postgresql, tsql. (207, b"Invalid column name 'col'.DB-Lib error message 20018, severity 16:\nGeneral SQL Se
+-- CASE[fixed]: ora-unpivot — UNPIVOT rewritten to UNION ALL; Oracle upper-cases the unquoted name-column value ('A','B'), matched by literal on tsql/pg/mysql
 SELECT id,col,val FROM (SELECT 1 id,10 a,20 b FROM DUAL) UNPIVOT (val FOR col IN (a,b))
 
 -- CASE[fixed]: ora-upd-correlated — wrap the target's self-reference in a derived table (FROM (SELECT * FROM t) x) so MySQL allows the correlated subquery; live-verified (1,NULL),(2,10),(3,20).

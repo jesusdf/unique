@@ -275,6 +275,25 @@ class SubqueryExpression(ASTNode):
 
 
 @dataclass(frozen=True)
+class UnpivotRelation(ASTNode):
+    """``FROM <source> UNPIVOT (value_col FOR name_col IN (col1, col2, …))``.
+
+    T-SQL and Oracle re-spell it natively; MySQL and PostgreSQL have no UNPIVOT
+    operator, so it degrades to an explicit ``UNION ALL`` rewrite (one arm per
+    unpivoted column, carrying the source's other columns and excluding NULL
+    values to match UNPIVOT's default). The rewrite needs the source's column
+    names, so a bare-table source (no visible projection) degrades to a carrier.
+    """
+
+    source: ASTNode  # TableRef | SubqueryExpression
+    value_col: str
+    name_col: str
+    columns: tuple[str, ...] = ()
+    alias: str | None = None
+    include_nulls: bool = False
+
+
+@dataclass(frozen=True)
 class ExpressionList(ASTNode):
     """A parenthesized expression list, e.g. the right side of ``x IN (a, b)``."""
 
@@ -440,7 +459,7 @@ class SelectStatement(ASTNode):
     """A SELECT query."""
 
     columns: tuple[ASTNode, ...] = ()
-    from_clause: TableRef | SubqueryExpression | None = None
+    from_clause: TableRef | SubqueryExpression | UnpivotRelation | None = None
     joins: tuple[JoinClause, ...] = ()
     where: ASTNode | None = None
     group_by: tuple[ASTNode, ...] = ()

@@ -53,6 +53,7 @@ from unique.core.ast_nodes import (
     TableRef,
     UnaryOp,
     UnaryOperator,
+    UnpivotRelation,
     UpdateStatement,
     WindowFunction,
 )
@@ -2616,6 +2617,74 @@ def _from_string_columns(node: SelectStatement) -> frozenset[str]:
     return frozenset(out)
 
 
+def _unpivot_carried_columns(
+    src: ASTNode, unpivoted: tuple[str, ...]
+) -> list[str] | None:
+    """The source's output columns that survive the UNPIVOT (everything not in
+    the IN-list), needed to build the UNION ALL rewrite. ``None`` when the source
+    has no visible projection to name (a bare table, a ``*``, or an unaliased
+    expression) — the caller then degrades to a carrier rather than emit dangling
+    references."""
+    if not isinstance(src, SubqueryExpression):
+        return None
+    names: list[str] = []
+    for col in src.query.columns:
+        if isinstance(col, (Alias, ColumnRef)):
+            names.append(col.name)
+        else:
+            return None
+    lowered = {u.lower() for u in unpivoted}
+    return [n for n in names if n.lower() not in lowered]
+
+
+def _emit_unpivot_relation(node: UnpivotRelation, dialect: str) -> str:
+    """Emit the FROM-item SQL for ``<source> UNPIVOT (val FOR col IN (…))``.
+
+    Rendered as a ``UNION ALL`` (one arm per unpivoted column, excluding NULLs to
+    match UNPIVOT's default) on every target — not the native UNPIVOT operator.
+    The reason is the name-column *value*: native UNPIVOT re-derives it from the
+    IN-list identifier, and Oracle folds an unquoted identifier to upper case
+    (its UNPIVOT yields ``'A'`` where T-SQL yields ``'a'``). The rewrite instead
+    emits an explicit string literal cased exactly as the *source* engine would
+    produce it, so the values match across engines."""
+    src = node.source
+    if isinstance(src, SubqueryExpression):
+        inner = _emit_select(src.query, dialect)
+        src_alias = src.alias or (None if dialect == "oracle" else "uq_src")
+        src_sql = f"({inner})" + (
+            f" {_ident(src_alias, False, dialect)}" if src_alias else ""
+        )
+    elif isinstance(src, TableRef):
+        src_sql = _emit_table_ref(src, dialect)
+    else:
+        src_sql = emit_node(src, dialect)
+
+    carried = _unpivot_carried_columns(src, node.columns)
+    if carried is None:
+        return (
+            f"{src_sql} /* UNIQUE: UNPIVOT has no {dialect} equivalent and the "
+            "source columns are not visible to rewrite it as UNION ALL — see "
+            "docs/03-unsupported.md */"
+        )
+    val = _ident(node.value_col, False, dialect)
+    name = _ident(node.name_col, False, dialect)
+    # Oracle upper-cases unquoted identifiers, so its UNPIVOT name-column holds
+    # the upper-cased column name; every other engine preserves it as written.
+    upper = SOURCE_DIALECT.get() == "oracle"
+    arms: list[str] = []
+    for c in node.columns:
+        proj = [_ident(cc, False, dialect) for cc in carried]
+        display = c.upper() if upper else c
+        proj.append(f"'{display.replace(chr(39), chr(39) * 2)}' AS {name}")
+        proj.append(f"{_ident(c, False, dialect)} AS {val}")
+        arm = f"SELECT {', '.join(proj)} FROM {src_sql}"
+        if not node.include_nulls:
+            arm += f" WHERE {_ident(c, False, dialect)} IS NOT NULL"
+        arms.append(arm)
+    alias = _ident(node.alias or "uq_unpivot", False, dialect)
+    return f"({' UNION ALL '.join(arms)}) {alias}"
+
+
 def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -> str:
     """Emit a SELECT statement.
 
@@ -2747,7 +2816,9 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
 
     # FROM
     if node.from_clause:
-        if isinstance(node.from_clause, SubqueryExpression):
+        if isinstance(node.from_clause, UnpivotRelation):
+            parts.append(f"FROM {_emit_unpivot_relation(node.from_clause, dialect)}")
+        elif isinstance(node.from_clause, SubqueryExpression):
             # A derived table needs its alias, or references to it (and, on
             # MySQL, the derived table itself) are invalid. Oracle is the
             # only engine where the alias is optional — synthesize one for
@@ -2780,6 +2851,8 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     from_name = None
     if isinstance(node.from_clause, TableRef):
         from_name = node.from_clause.alias or node.from_clause.name
+    elif isinstance(node.from_clause, UnpivotRelation):
+        from_name = node.from_clause.alias or "uq_unpivot"
     elif isinstance(node.from_clause, SubqueryExpression):
         from_name = node.from_clause.alias or ("uq_dt" if dialect != "oracle" else None)
     merged_cols: dict[str, str] = {}

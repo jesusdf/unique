@@ -517,6 +517,34 @@ class TestTryCast:
         assert "SELECT NULL" in body, body
 
 
+class TestUnpivot:
+    """UNPIVOT (T-SQL/Oracle only) is rewritten to a UNION ALL — one arm per
+    unpivoted column, carrying the source's other columns and excluding NULLs to
+    match UNPIVOT's default. The name-column *value* is an explicit literal cased
+    as the source engine produces it (Oracle upper-cases an unquoted identifier,
+    so its UNPIVOT yields 'A' where T-SQL yields 'a'). Live-verified equal on all
+    targets."""
+
+    def test_tsql_source_lowercase_names(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-unpivot ")
+        for target in ("oracle", "postgresql", "mysql"):
+            out = _tx(case, "tsql", target)
+            body = "\n".join(
+                ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "UNION ALL" in body and "UNPIVOT" not in body.upper(), body
+            assert "'a' AS col" in body and "'b' AS col" in body, body
+            assert "a IS NOT NULL" in body, body
+
+    def test_oracle_source_uppercases_name_value(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-unpivot ")
+        for target in ("tsql", "postgresql", "mysql"):
+            out = _tx(case, "oracle", target)
+            assert "UNION ALL" in out, out
+            # Oracle folds the unquoted identifier, so the value is upper-cased.
+            assert "'A' AS col" in out and "'B' AS col" in out, out
+
+
 class TestBitStringCast:
     """T-SQL CAST('true' AS BIT) parses the boolean word (a numeric string by its
     value); other engines can't convert 'true' to a number (ORA-01722). Fold a

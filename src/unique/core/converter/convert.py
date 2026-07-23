@@ -54,6 +54,7 @@ from unique.core.ast_nodes import (
     TableRef,
     UnaryOp,
     UnaryOperator,
+    UnpivotRelation,
     UpdateStatement,
     WindowFunction,
     WindowSpec,
@@ -958,7 +959,7 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
     # FROM — use the direct arg, not find(), which recurses into a subquery in
     # the WHERE (e.g. NOT EXISTS (SELECT … FROM t)) and would pull that table
     # into this SELECT's FROM. sqlglot keys it "from_" (older versions "from").
-    from_clause: TableRef | SubqueryExpression | None = None
+    from_clause: TableRef | SubqueryExpression | UnpivotRelation | None = None
     hoisted_joins: tuple[JoinClause, ...] = ()
     from_expr = expr.args.get("from_") or expr.args.get("from")
     if from_expr and from_expr.this:
@@ -977,6 +978,7 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
             from_clause = _convert_table_ref(inner_table)
         else:
             from_clause = _convert_table_or_subquery(from_item)
+        from_clause = _maybe_wrap_unpivot(from_item, from_clause)
 
     # JOINs
     joins = hoisted_joins + tuple(
@@ -1858,6 +1860,43 @@ def _convert_table_ref(expr: exp.Expression) -> TableRef:
     if hasattr(expr, "name"):
         return TableRef(name=expr.name)
     return TableRef(name=str(expr))
+
+
+def _maybe_wrap_unpivot(
+    src_expr: exp.Expression,
+    converted: TableRef | SubqueryExpression,
+) -> TableRef | SubqueryExpression | UnpivotRelation:
+    """Wrap the converted FROM source in an ``UnpivotRelation`` when the source
+    carries an ``UNPIVOT`` clause, so the emitter can re-spell it natively
+    (T-SQL/Oracle) or as a ``UNION ALL`` rewrite (MySQL/PG). PIVOT (not UNPIVOT)
+    is left for the gate — it is a distinct feature with no rewrite yet."""
+    pivots = src_expr.args.get("pivots")
+    if not pivots:
+        return converted
+    piv = pivots[0]
+    if not piv.args.get("unpivot"):
+        return converted
+    value_exprs = piv.args.get("expressions") or []
+    value_col = value_exprs[0].name if value_exprs else ""
+    name_col = ""
+    columns: list[str] = []
+    fields = piv.args.get("fields") or []
+    if fields and isinstance(fields[0], exp.In):
+        in_expr = fields[0]
+        name_col = in_expr.this.name if in_expr.this else ""
+        columns = [c.name for c in in_expr.expressions if c.name]
+    alias_arg = piv.args.get("alias")
+    alias = alias_arg.name if alias_arg is not None else None
+    if not value_col or not name_col or not columns:
+        return converted
+    return UnpivotRelation(
+        source=converted,
+        value_col=value_col,
+        name_col=name_col,
+        columns=tuple(columns),
+        alias=alias or None,
+        include_nulls=bool(piv.args.get("include_nulls")),
+    )
 
 
 def _convert_table_or_subquery(expr: exp.Expression) -> TableRef | SubqueryExpression:

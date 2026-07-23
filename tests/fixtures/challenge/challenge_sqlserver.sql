@@ -441,7 +441,7 @@ SELECT CONVERT(VARCHAR,SYSDATETIMEOFFSET(),121), SWITCHOFFSET(SYSDATETIMEOFFSET(
 -- CASE[limit]: ts-tzoffset — fails on mysql, oracle, postgresql. DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) is non-deterministic and tz-offset extraction is engine-specific (docs/03-unsupported.md §2).
 SELECT DATENAME(TZOFFSET, SYSDATETIMEOFFSET()) AS r
 
--- CASE[open]: ts-unpivot — fails on mysql, oracle, postgresql. ORA-00904: "VAL": invalid identifier
+-- CASE[fixed]: ts-unpivot — UNPIVOT rewritten to a UNION ALL (one arm per column, NULLs excluded); values verified equal on oracle/pg/mysql
 SELECT id,col,val FROM (SELECT 1 id,10 a,20 b) s UNPIVOT (val FOR col IN (a,b)) u
 
 -- CASE[limit]: ts-update-output — same as ts-insert-output: OUTPUT has no standalone Oracle equivalent (RETURNING needs INTO variables); the UPDATE runs and the OUTPUT is documented in a carrier (docs/03-unsupported.md). fails on oracle
