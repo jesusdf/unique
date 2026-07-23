@@ -149,7 +149,7 @@ SELECT CAST('2020' AS YEAR), CAST(2020 AS YEAR), CAST('99' AS YEAR)
 -- CASE[fixed]: my-change-column — MySQL ALTER TABLE t CHANGE a x <type> (rename + retype) splits into a RENAME COLUMN + a type change per engine (T-SQL uses EXEC sp_rename). live-verified DDL runs on all three.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t CHANGE a x INT
 
--- CASE[open]: my-char-256 — fails on oracle, postgresql. FUNC-DIFF: source=(('0100',),) target=(('\x01\x00',),)
+-- CASE[limit]: my-char-256 — MySQL CHAR(n) is byte-based (CHAR(256) = the 2-byte string 0x0100), not a single code point like CHR; carrier + warning (docs/03-unsupported.md). fails on oracle, postgresql
 SELECT CHAR(256) AS r
 
 -- CASE[fixed]: my-char-encoding — fails on oracle, postgresql, tsql. (195, b"'CHR' is not a recognized built-in function name.DB-Lib error message 20018, sever

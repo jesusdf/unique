@@ -1974,6 +1974,18 @@ class TestReplaceCaseSensitive:
         assert "REPLACE('AbCaBc' COLLATE Latin1_General_BIN2, 'a', 'X')" in out, out
 
 
+class TestMysqlCharByteString:
+    """MySQL CHAR(n) is byte-based: n > 255 yields a multi-byte byte string
+    (CHAR(256) = 0x0100), not the single code point CHR gives on Oracle/PG.
+    Emit CHR with a documented carrier + warning for the divergence."""
+
+    def test_mysql_char_256_carries(self) -> None:
+        case = _case("challenge_mysql.sql", "my-char-256 ")
+        result = Transpiler().transpile(case, source="mysql", target="oracle")
+        assert result.warnings, "byte-CHAR quirk must warn"
+        assert "UNIQUE:" in result.sql, result.sql
+
+
 class TestChrUnicode:
     """PG/Oracle CHR(n) is a Unicode code point; above ASCII (n > 127) MySQL's
     byte CHAR gives the wrong bytes and T-SQL's CHAR returns NULL. Build the

@@ -6094,6 +6094,22 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"{seq}.NEXTVAL"
         bare = node.args[0].name if isinstance(node.args[0], ColumnRef) else seq
         return f"nextval('{bare}')"
+    if (
+        up == "CHR"
+        and len(node.args) == 1
+        and SOURCE_DIALECT.get() == "mysql"
+        and dialect in ("oracle", "postgresql")
+        and isinstance(node.args[0], Literal)
+        and isinstance(node.args[0].value, int)
+        and node.args[0].value > 255
+    ):
+        # MySQL CHAR(n) is byte-based: n > 255 yields a multi-byte byte string
+        # (CHAR(256) = 0x0100), not the single code point CHR gives elsewhere.
+        _n = node.args[0].value
+        return (
+            f"CHR({_n}) /* UNIQUE: MySQL CHAR({_n}) is a multi-byte byte string, "
+            "not a single code point (docs/03-unsupported.md) */"
+        )
     if up == "CHR" and len(node.args) == 1 and dialect in ("mysql", "tsql"):
         # PG/Oracle CHR(n) is a Unicode code point; above ASCII (n > 127) MySQL's
         # byte CHAR(n USING latin1) gives the wrong bytes and T-SQL's CHAR(n)
