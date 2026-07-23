@@ -328,10 +328,10 @@ SELECT NLS_INITCAP('word'), NLS_UPPER('word'), NLS_LOWER('WORD') FROM DUAL
 -- CASE[fixed]: ora-nlssort — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NL
 SELECT NLSSORT('abc', 'NLS_SORT=BINARY_CI') AS r FROM DUAL
 
--- CASE[open]: ora-now-fns — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
+-- CASE[fixed]: ora-now-fns — LOCALTIMESTAMP is now mapped per engine (PostgreSQL niladic keyword, T-SQL SYSDATETIME(), MySQL CURRENT_TIMESTAMP) alongside SYSDATE/CURRENT_DATE/SYSTIMESTAMP. live-verified the SELECT runs on all targets (values are the current timestamp).
 SELECT SYSDATE, CURRENT_DATE, SYSTIMESTAMP, LOCALTIMESTAMP FROM DUAL
 
--- CASE[open]: ora-now-variants — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
+-- CASE[fixed]: ora-now-variants — same as ora-now-fns: the full set of Oracle "now" spellings (SYSDATE/SYSTIMESTAMP/CURRENT_TIMESTAMP/CURRENT_DATE/LOCALTIMESTAMP) maps per engine. live-verified the SELECT runs on all targets.
 SELECT SYSDATE, SYSTIMESTAMP, CURRENT_TIMESTAMP, CURRENT_DATE, LOCALTIMESTAMP FROM DUAL
 
 -- CASE[fixed]: ora-num-concat — fails on tsql. FUNC-DIFF: source=(('23',),) target=(('5',),)

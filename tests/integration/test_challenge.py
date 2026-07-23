@@ -497,6 +497,18 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestLocalTimestamp:
+    """Oracle LOCALTIMESTAMP maps to PostgreSQL's niladic keyword (no parens),
+    T-SQL SYSDATETIME(), and MySQL CURRENT_TIMESTAMP (a parenthesized
+    LOCALTIMESTAMP() is invalid on PG / undefined on T-SQL)."""
+
+    def test_localtimestamp_per_engine(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-now-fns ")
+        pg = _tx(case, "oracle", "postgresql")
+        assert "LOCALTIMESTAMP" in pg and "LOCALTIMESTAMP()" not in pg, pg
+        assert "SYSDATETIME()" in _tx(case, "oracle", "tsql")
+
+
 class TestPkUsingIndex:
     """Oracle's PRIMARY KEY … USING INDEX (backing-index storage detail) is
     stripped for the other engines, which back a PK with an index by default."""

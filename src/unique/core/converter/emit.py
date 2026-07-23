@@ -5567,6 +5567,18 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if node.name.upper() in ("SYSTIMESTAMP", "SYSDATE", "NOW") and not node.args:
         return CURRENT_TIMESTAMP_EXPR.get(dialect, "CURRENT_TIMESTAMP")
 
+    # LOCALTIMESTAMP (current local timestamp, no time zone): Oracle/PostgreSQL
+    # spell it as a niladic KEYWORD — a parenthesized LOCALTIMESTAMP() is invalid
+    # on PG; T-SQL has no such keyword and uses SYSDATETIME(); MySQL's is a NOW()
+    # synonym.
+    if node.name.upper() == "LOCALTIMESTAMP" and not node.args:
+        return {
+            "oracle": "LOCALTIMESTAMP",
+            "postgresql": "LOCALTIMESTAMP",
+            "tsql": "SYSDATETIME()",
+            "mysql": "CURRENT_TIMESTAMP",
+        }.get(dialect, "CURRENT_TIMESTAMP")
+
     # CURRENT_USER/SESSION_USER are niladic KEYWORDS on PG/T-SQL (the
     # parenthesized call is invalid there); Oracle spells it USER.
     if node.name.upper() in ("CURRENT_USER", "SESSION_USER") and not node.args:
