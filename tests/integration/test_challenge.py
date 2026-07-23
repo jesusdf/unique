@@ -2062,6 +2062,11 @@ class TestGenerateSeries:
         ora = _tx(case, "tsql", "oracle")
         assert "CONNECT BY LEVEL <= (5) - (1) + 1" in ora, ora
 
+    def test_generate_series_with_apply(self) -> None:
+        # GENERATE_SERIES with an explicit alias + CROSS APPLY still resolves value.
+        case = _case("challenge_sqlserver.sql", "ts-gen-series-apply ")
+        assert "generate_series(1, 5) AS g(value)" in _tx(case, "tsql", "postgresql")
+
 
 class TestTopWithTies:
     """T-SQL TOP n WITH TIES also returns rows tying the last one. PG (13+) and

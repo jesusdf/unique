@@ -194,7 +194,7 @@ SELECT FORMATMESSAGE('hi %s', 'x') AS r
 -- CASE[fixed]: ts-frac-seconds — CAST AS DATETIME2/DATETIME maps to an Oracle TIMESTAMP literal; live-verified 10:20:30.123456 / .123000.
 SELECT CAST('2020-01-01 10:20:30.1234567' AS DATETIME2), CAST('2020-01-01 10:20:30.123' AS DATETIME)
 
--- CASE[open]: ts-gen-series-apply — fails on oracle, postgresql. ORA-00904: "GENERATE_SERIES": invalid identifier
+-- CASE[fixed]: ts-gen-series-apply — GENERATE_SERIES maps to PG/Oracle (CROSS APPLY→LATERAL/APPLY already handled); live-verified (1,1)..(5,5).
 SELECT value, ordinal FROM GENERATE_SERIES(1, 5) g CROSS APPLY (SELECT g.value AS ordinal) x
 
 -- CASE[fixed]: ts-generate-series — GENERATE_SERIES(start,stop) maps to PG generate_series (column aliased 'value') / Oracle CONNECT BY LEVEL. Live-verified 1..5.
