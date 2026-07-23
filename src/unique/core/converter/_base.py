@@ -921,7 +921,7 @@ _DATE_UNIT_ALIASES = {
 }
 
 
-_DATE_UNITS = {"DAY", "WEEK", "MONTH", "YEAR", "HOUR", "MINUTE", "SECOND"}
+_DATE_UNITS = {"DAY", "WEEK", "MONTH", "QUARTER", "YEAR", "HOUR", "MINUTE", "SECOND"}
 
 
 # sqlglot canonicalization wrappers that must never reach emitted SQL.

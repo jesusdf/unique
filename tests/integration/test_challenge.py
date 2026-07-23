@@ -853,6 +853,18 @@ class TestGenerateSeriesFrom:
         assert result.warnings and "UNIQUE:" in result.sql
 
 
+class TestDateAddQuarter:
+    """MySQL DATE_ADD(ts, INTERVAL n QUARTER) — QUARTER was not a recognized date
+    unit, so it dropped to an invalid DATEADD. It is now 3 months on Oracle
+    (ADD_MONTHS *3) and PG (INTERVAL '3 months'), native on T-SQL/MySQL."""
+
+    def test_quarter_units(self) -> None:
+        case = _case("challenge_mysql.sql", "my-dateadd-units ")
+        assert "ADD_MONTHS(SYSDATE, 3)" in _tx(case, "mysql", "oracle")
+        assert "DATEADD(QUARTER, 1," in _tx(case, "mysql", "tsql")
+        assert "INTERVAL '3 months'" in _tx(case, "mysql", "postgresql")
+
+
 class TestHashFns:
     """md5() is a hex digest on every engine and translates (Oracle STANDARD_HASH,
     T-SQL HASHBYTES); PG sha256(bytea) returns a bytea digest where the others

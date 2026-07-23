@@ -236,7 +236,7 @@ SELECT DATE_FORMAT('2020-05-17', '%Y/%m/%d') AS r
 -- CASE[fixed]: my-dateadd — fails on tsql. FUNC-DIFF: source=(('2020-02-29', '2020-01-02', '2020-02-29', '2020-01-01 01:00:00'),) tar
 SELECT DATE_ADD('2020-01-31',INTERVAL 1 MONTH), DATE_ADD('2020-01-01',INTERVAL 1 DAY), DATE_SUB('2020-03-01',INTERVAL 1 DAY), '2020-01-01'+INTERVAL 1 HOUR
 
--- CASE[open]: my-dateadd-units — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 2 of dateadd function.DB-Lib e
+-- CASE[fixed]: my-dateadd-units — QUARTER was unrecognized (dropped to an invalid DATEADD with a quoted count); added to the date-unit set and handled as 3 months on Oracle (ADD_MONTHS *3) and PG (INTERVAL '3 months'), native on T-SQL/MySQL; +1 quarter = 2020-04-15 and -2 weeks = 2020-01-01 verified on all
 SELECT DATE_ADD(NOW(),INTERVAL 1 QUARTER), DATE_SUB(NOW(),INTERVAL 2 WEEK)
 
 -- CASE[limit]: my-dateformat-iso — fails on oracle, postgresql, tsql. date format mask uses a bare-letter literal / locale name / exotic token that cannot round-trip to a quoted cross-engine mask (docs/03-unsupported.md §3.1).

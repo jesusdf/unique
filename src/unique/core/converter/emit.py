@@ -4856,13 +4856,22 @@ def _emit_date_add(node: FunctionCall, dialect: str) -> str | None:
         return result
     if dialect == "postgresql":
         op = "-" if sub else "+"
+        # PG has no ``quarter`` interval unit — a quarter is three months.
+        if unit == "QUARTER":
+            if literal_n is not None:
+                return f"{ts} {op} INTERVAL '{int(literal_n) * 3} months'"
+            return f"{ts} {op} ({n}) * INTERVAL '3 months'"
         if literal_n is not None:
             return f"{ts} {op} INTERVAL '{n} {unit}'"
         return f"{ts} {op} ({n}) * INTERVAL '1 {unit}'"
     if dialect == "oracle":
-        if unit in ("MONTH", "YEAR"):
+        if unit in ("MONTH", "YEAR", "QUARTER"):
             if unit == "MONTH":
                 months = n
+            elif unit == "QUARTER":
+                months = (
+                    str(int(literal_n) * 3) if literal_n is not None else f"({n}) * 3"
+                )
             elif literal_n is not None:
                 months = str(int(literal_n) * 12)
             else:
