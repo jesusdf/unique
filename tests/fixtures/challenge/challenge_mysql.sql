@@ -736,7 +736,7 @@ SELECT SUBSTRING_INDEX(SUBSTRING_INDEX('a,b,c,d', ',', 3), ',', -1) AS r
 -- CASE[fixed]: my-substring-index — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.SU
 SELECT SUBSTRING_INDEX('a,b,c', ',', 2) AS r
 
--- CASE[open]: my-sum-div-count — fails on postgresql, tsql. FUNC-DIFF: source=(('1.5',),) target=(('1',),)
+-- CASE[fixed]: my-sum-div-count — MySQL / is always decimal division; PG/T-SQL truncate two integers, so force decimal (* 1.0) on a MySQL source. Live-verified 1.5.
 SELECT SUM(x)/COUNT(x) FROM (SELECT 1 x UNION ALL SELECT 2) t
 
 -- CASE[fixed]: my-system-funcs — fails on oracle, postgresql, tsql. (156, b"Incorrect syntax near the keyword 'USER'.DB-Lib error message 20018, severity 15:\

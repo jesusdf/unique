@@ -6643,6 +6643,16 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
                     else f"TRUNC({left} / {right})"
                 )
             return f"({left} * 1.0 / {right})"  # source decimal — force it
+    # MySQL's / is *always* decimal division (SUM(x)/COUNT(x) = 1.5), but PG/T-SQL
+    # truncate two integers to an integer (1). The literal case is handled above;
+    # this covers non-literal integer results (aggregates like COUNT) that can't be
+    # proven integer statically — mysql never truncates, so forcing decimal is safe.
+    if (
+        node.operator == BinaryOperator.DIV
+        and dialect in ("postgresql", "tsql")
+        and SOURCE_DIALECT.get() == "mysql"
+    ):
+        return f"({left} * 1.0 / {right})"
 
     # Interval arithmetic: T-SQL has no INTERVAL literal — lower
     # ``expr ± INTERVAL 'n' UNIT`` to DATEADD(UNIT, ±n, expr).

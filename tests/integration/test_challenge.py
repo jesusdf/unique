@@ -1930,6 +1930,17 @@ class TestMysqlInsertBounds:
         assert re.search(r"(?i)CASE\s+WHEN\b.*<\s*1\s+OR\b.*>\s+LEN\(", out), out
 
 
+class TestMysqlDecimalDivision:
+    """MySQL's / is always decimal division (SUM(x)/COUNT(x) = 1.5), but PG/T-SQL
+    truncate two integers to an integer (1). Force decimal (* 1.0) on a MySQL
+    source, including non-literal integer results like COUNT. Live-verified 1.5."""
+
+    def test_sum_div_count_forces_decimal(self) -> None:
+        case = _case("challenge_mysql.sql", "my-sum-div-count ")
+        assert "SUM(x) * 1.0 / COUNT(x)" in _tx(case, "mysql", "postgresql")
+        assert "SUM(x) * 1.0 / COUNT(x)" in _tx(case, "mysql", "tsql")
+
+
 class TestMysqlDateSubtraction:
     """MySQL's DATE - DATE is a numeric YYYYMMDD subtraction (2020-03-01 -
     2020-01-01 = 200), not a day count; the meaningful day count (60) is emitted
