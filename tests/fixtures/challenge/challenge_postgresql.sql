@@ -121,7 +121,7 @@ SELECT '2020-01-01 10:00'::date, '2020-01-01 10:00'::time, '10:00'::interval
 -- CASE[fixed]: pg-cast-int — PG CAST(2.7 AS INT) rounds (3); T-SQL CAST truncates (2). Wrap ROUND(x, 0) on a T-SQL target (both round half-away-from-zero).
 SELECT CAST(2.7 AS INT) AS r
 
--- CASE[open]: pg-cast-interval — fails on oracle. ORA-30089: missing or invalid <datetime field>
+-- CASE[limit]: pg-cast-interval — Oracle has no bare INTERVAL type (it needs a DAY TO SECOND/YEAR TO MONTH qualifier); '1 day'::interval keeps the value as text with a documented carrier (docs/03-unsupported.md). fails on oracle
 SELECT '1 day'::interval AS r
 
 -- CASE[open]: pg-cast-interval3 — fails on oracle. ORA-30089: missing or invalid <datetime field>

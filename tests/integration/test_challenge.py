@@ -2154,8 +2154,9 @@ class TestCollationFn:
 
 
 class TestOracleTimeCast:
-    """Oracle has no TIME type, so CAST(... AS TIME) shipped an invalid datatype.
-    Keep the value as text with a documented carrier + warning."""
+    """Oracle has no TIME or bare INTERVAL type, so CAST(... AS TIME)/::interval
+    shipped an invalid datatype. Keep the value as text with a documented carrier
+    + warning."""
 
     def test_oracle_time_cast_carries(self) -> None:
         case = _case("challenge_mysql.sql", "my-cast-time ")
@@ -2165,6 +2166,15 @@ class TestOracleTimeCast:
             ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
         )
         assert "UNIQUE:" in body and "AS TIME)" not in body, body
+
+    def test_oracle_interval_cast_carries(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-cast-interval ")
+        result = Transpiler().transpile(case, source="postgresql", target="oracle")
+        assert result.warnings, "no-bare-INTERVAL must warn"
+        body = "\n".join(
+            ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "UNIQUE:" in body and "AS INTERVAL)" not in body, body
 
 
 class TestNanCast:

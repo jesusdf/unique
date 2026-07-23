@@ -4272,15 +4272,16 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                         else f"{'N' if base == 'NVARCHAR' else ''}VARCHAR(MAX)"
                     )
         # Oracle has no TIME type (CAST(... AS TIME) shipped an invalid ORA-00902
-        # datatype). No exact equivalent exists — keep the value as text with a
-        # documented carrier.
-        if (
-            dialect == "oracle"
-            and node.target_type.name.split("(")[0].strip().upper() == "TIME"
-        ):
+        # datatype), and no *bare* INTERVAL type — it requires a qualifier
+        # (INTERVAL DAY TO SECOND / YEAR TO MONTH) and can't cast a free-form
+        # '1 day' string. No exact equivalent exists — keep the value as text with
+        # a documented carrier.
+        _cast_to = node.target_type.name.split("(")[0].strip().upper()
+        if dialect == "oracle" and _cast_to in ("TIME", "INTERVAL"):
+            _what = "TIME" if _cast_to == "TIME" else "bare INTERVAL"
             return (
-                f"{inner} /* UNIQUE: Oracle has no TIME type — value kept as text "
-                "(docs/03-unsupported.md) */"
+                f"{inner} /* UNIQUE: Oracle has no {_what} type — value kept as "
+                "text (docs/03-unsupported.md) */"
             )
         # PostgreSQL numeric represents NaN / ±Infinity; MySQL/T-SQL/Oracle
         # DECIMAL do not (CAST('NaN' AS DECIMAL) collapses to 0), so a comparison
