@@ -4521,7 +4521,16 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         return "COUNT(*)"
     # sqlglot-internal cast wrappers must never reach the output.
     if fn_name in _SQLGLOT_WRAPPERS and len(node.args) == 1:
-        return _emit_expression(node.args[0], dialect)
+        inner = node.args[0]
+        # MySQL/T-SQL ``DATE(x)`` genuinely extracts the date part (drops any
+        # time); sqlglot models it as this wrapper. Unwrapping to the bare
+        # expression silently keeps the time on the target, so a timestamp
+        # argument comes back with its clock component. Preserve the truncation
+        # with an explicit CAST for anything that is not a plain literal (those
+        # are handled as ANSI date literals elsewhere).
+        if fn_name == "TS_OR_DS_TO_DATE" and not isinstance(inner, Literal):
+            return f"CAST({_emit_expression(inner, dialect)} AS DATE)"
+        return _emit_expression(inner, dialect)
 
     # T-SQL AVG returns the *input* type, so AVG over an integer column truncates
     # (AVG of 1, 2 = 1), whereas MySQL/Oracle/PostgreSQL always average as a

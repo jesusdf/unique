@@ -509,6 +509,16 @@ class TestBitwiseArithmeticPrecedence:
             assert "1 << (2 + 1)" in out, out
 
 
+class TestDateExtractCast:
+    """MySQL/T-SQL DATE(x) extracts the date part (drops any time). Unwrapping
+    the sqlglot cast wrapper to the bare expression kept the clock on the
+    target; an explicit CAST AS DATE preserves the truncation."""
+
+    def test_date_of_timestamp_drops_time(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-ts-to-date "), "mysql", "postgresql")
+        assert "CAST(CAST('2020-01-01 14:30' AS TIMESTAMPTZ) AS DATE)" in out, out
+
+
 class TestLocalTimestamp:
     """Oracle LOCALTIMESTAMP maps to PostgreSQL's niladic keyword (no parens),
     T-SQL SYSDATETIME(), and MySQL CURRENT_TIMESTAMP (a parenthesized

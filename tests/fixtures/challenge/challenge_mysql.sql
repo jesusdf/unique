@@ -787,7 +787,7 @@ SELECT LENGTH(TRIM(BOTH ' ' FROM '  hi  ')),CHAR_LENGTH(RTRIM(' hi '))
 -- CASE[fixed]: my-trim-trailing — fails on postgresql, tsql. FUNC-DIFF: source=(('abc',),) target=(('',),)
 SELECT TRIM(TRAILING '.' FROM 'abc...') AS r
 
--- CASE[open]: my-ts-to-date — fails on postgresql. FUNC-DIFF: source=(('2020-01-01',),) target=(('2020-01-01 14:30:00+00:00',),)
+-- CASE[fixed]: my-ts-to-date — DATE(x) extracts the date part; CAST AS DATE preserves the time-drop.
 SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r
 
 -- CASE[fixed]: my-tsadd-quarter — fails on oracle, postgresql. ORA-00904: "QUARTER": invalid identifier
