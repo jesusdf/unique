@@ -556,6 +556,12 @@ class TestTsqlIntToDatetime:
         case = _case("challenge_mysql.sql", "my-cast-datetime ")
         assert "DATE '2020-01-01'" in _tx(case, "mysql", "oracle")
 
+    def test_mysql_year_type_folds_to_integer(self) -> None:
+        # MySQL YEAR (no cross-engine type) folds a literal to its integer year
+        # with the 2-digit century rule ('99' -> 1999).
+        o4 = _tx(_case("challenge_mysql.sql", "my-cast-year "), "mysql", "oracle")
+        assert "2020, 2020, 1999" in o4, o4
+
 
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL

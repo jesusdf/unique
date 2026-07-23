@@ -8015,7 +8015,8 @@ class TestWave231TempQualifierRename:
 class TestWave232TimestampaddYearCast:
     """wave 232 (mysql-corpus): MySQL's TIMESTAMPADD(unit, n, ts)
     reorders to the canonical DATE_ADD form (T-SQL DATEADD, Oracle
-    interval); and CAST(... AS YEAR) is SMALLINT off MySQL."""
+    interval); and a CAST(literal AS YEAR) folds to its integer year off
+    MySQL (applying MySQL's 2-digit century rule)."""
 
     def test_timestampadd_tsql(self) -> None:
         out = _t2(
@@ -8023,9 +8024,7 @@ class TestWave232TimestampaddYearCast:
             "mysql",
             "tsql",
         )
-        assert re.search(
-            r"(?i)DATEADD\(MINUTE, 1, CAST\(1988 AS SMALLINT\)\)", out
-        ), out
+        assert re.search(r"(?i)DATEADD\(MINUTE, 1, 1988\)", out), out
 
     def test_timestampadd_kept_mysql(self) -> None:
         out = _t2("select timestampadd(minute, 1, x);", "mysql", "mysql")

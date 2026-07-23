@@ -306,6 +306,26 @@ class TypeMapper(TransformPass):
                     "tsql": DataType(name="VARCHAR", params=(8000,)),
                 }[ctx.target]
                 return CastExpression(expression=node.expression, target_type=str_type)
+            # MySQL YEAR type: a constant with MySQL's 2-digit century rule
+            # (00-69 -> 2000-2069, 70-99 -> 1970-1999). No engine has a YEAR type,
+            # so fold a literal to its integer year (the value MySQL stores).
+            if (
+                node.target_type.name.upper() == "YEAR"
+                and ctx.source == "mysql"
+                and ctx.target != "mysql"
+                and isinstance(node.expression, Literal)
+            ):
+                try:
+                    year_v: int | None = int(str(node.expression.value))
+                except (ValueError, TypeError):
+                    year_v = None
+                if year_v is not None and 0 <= year_v <= 9999:
+                    yr = (
+                        2000 + year_v
+                        if year_v < 70
+                        else 1900 + year_v if year_v < 100 else year_v
+                    )
+                    return Literal(value=yr, dtype="integer")
             mapped_type = self._map_type(node.target_type, ctx.target)
             if mapped_type != node.target_type:
                 return CastExpression(

@@ -143,7 +143,7 @@ SELECT CAST(TIMESTAMP '2020-01-01 10:30' AS DATE), CAST(TIME '10:30:45' AS CHAR)
 -- CASE[open]: my-cast-uns2 — fails on postgresql. type "ubigint" does not exist
 SELECT CAST(0xFFFF AS UNSIGNED), CAST(b'1111' AS UNSIGNED), CAST(TRUE AS UNSIGNED)
 
--- CASE[open]: my-cast-year — fails on oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[fixed]: my-cast-year — MySQL YEAR type has no cross-engine equivalent; fold a literal to its integer year with MySQL's 2-digit century rule (00-69->2000s, 70-99->1900s). live-verified 2020,2020,1999.
 SELECT CAST('2020' AS YEAR), CAST(2020 AS YEAR), CAST('99' AS YEAR)
 
 -- CASE[open]: my-change-column — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'CHANGE'.DB-Lib error message 20018, severity 15:\nGeneral S
