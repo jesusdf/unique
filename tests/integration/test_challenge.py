@@ -497,6 +497,18 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestBitwiseArithmeticPrecedence:
+    """Bitwise-vs-arithmetic precedence is not portable (MySQL/Oracle bind
+    bitwise looser than +/*; PostgreSQL/T-SQL tighter). A mixed source
+    expression is parenthesized explicitly so it can't re-associate."""
+
+    def test_mysql_grouping_preserved_on_tsql(self) -> None:
+        for target in ("postgresql", "tsql"):
+            out = _tx(_case("challenge_mysql.sql", "my-bit-prec2 "), "mysql", target)
+            assert "10 & (6 + 1)" in out and "10 | (2 * 3)" in out, out
+            assert "1 << (2 + 1)" in out, out
+
+
 class TestLocalTimestamp:
     """Oracle LOCALTIMESTAMP maps to PostgreSQL's niladic keyword (no parens),
     T-SQL SYSDATETIME(), and MySQL CURRENT_TIMESTAMP (a parenthesized

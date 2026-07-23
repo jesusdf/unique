@@ -6077,6 +6077,28 @@ _BIN_PRECEDENCE = {
     BinaryOperator.MOD: 6,
 }
 
+#: Bitwise vs arithmetic operators — their relative precedence differs by engine
+#: (MySQL/Oracle: bitwise looser than +/*; PostgreSQL/T-SQL: tighter), so a mixed
+#: expression must be explicitly parenthesized to keep the source's grouping.
+_BITWISE_BIN_OPS = frozenset(
+    {
+        BinaryOperator.BIT_OR,
+        BinaryOperator.BIT_XOR,
+        BinaryOperator.BIT_AND,
+        BinaryOperator.BIT_LSHIFT,
+        BinaryOperator.BIT_RSHIFT,
+    }
+)
+_ARITH_BIN_OPS = frozenset(
+    {
+        BinaryOperator.ADD,
+        BinaryOperator.SUB,
+        BinaryOperator.MUL,
+        BinaryOperator.DIV,
+        BinaryOperator.MOD,
+    }
+)
+
 #: Operators where ``a op (b op c)`` differs from ``(a op b) op c`` — the
 #: right operand keeps its parens even at equal precedence.
 _NON_ASSOCIATIVE = frozenset(
@@ -6098,6 +6120,14 @@ def _emit_operand(
     if isinstance(child, BinaryOp):
         child_prec = _BIN_PRECEDENCE[child.operator]
         parent_prec = _BIN_PRECEDENCE[parent]
+        # Bitwise-vs-arithmetic precedence is NOT portable: MySQL/Oracle bind a
+        # bitwise operator LOOSER than +/*, but PostgreSQL/T-SQL bind it tighter.
+        # A source tree like ``10 & (6 + 1)`` would silently re-associate to
+        # ``(10 & 6) + 1`` on the other family, so always parenthesize across the
+        # boundary (explicit parens are semantics-preserving everywhere).
+        _pair = {parent, child.operator}
+        if _pair & _BITWISE_BIN_OPS and _pair & _ARITH_BIN_OPS:
+            return f"({text})"
         if child_prec < parent_prec or (
             right and child_prec == parent_prec and parent in _NON_ASSOCIATIVE
         ):

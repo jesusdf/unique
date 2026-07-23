@@ -77,10 +77,10 @@ SELECT BIT_COUNT(b'1011'), BIT_LENGTH('a'), OCTET_LENGTH('ab')
 -- CASE[limit]: my-bit-negative — fails on oracle, postgresql, tsql. MySQL treats bitwise operands as unsigned 64-bit, so ~ and negative-operand bit ops diverge from signed engines. No faithful mapping (docs/03-unsupported.md).
 SELECT ~0, ~5, -5 & 3, -1 >> 1, 5 & -1
 
--- CASE[open]: my-bit-prec2 — fails on tsql. FUNC-DIFF: source=(('2', '14', '8'),) target=(('3', '14', '5'),)
+-- CASE[fixed]: my-bit-prec2 — MySQL/Oracle bind a bitwise operator LOOSER than +/*, but PostgreSQL/T-SQL bind it tighter, so the source grouping (10 & (6+1)) is now parenthesized explicitly on emit. live-verified (2,14,8).
 SELECT 10 & 6 + 1, 10 | 2 * 3, 1 << 2 + 1
 
--- CASE[open]: my-bitand-prec — fails on tsql. FUNC-DIFF: source=(('2',),) target=(('3',),)
+-- CASE[fixed]: my-bitand-prec — MySQL/Oracle bind a bitwise operator LOOSER than +/*, but PostgreSQL/T-SQL bind it tighter, so the source grouping (10 & (6+1)) is now parenthesized explicitly on emit. live-verified 2.
 SELECT 10 & 6 + 1 AS r
 
 -- CASE[limit]: my-bitnot — fails on oracle, postgresql, tsql. MySQL bitwise NOT is unsigned 64-bit (~0=18446744073709551615); other engines are signed (-1). No faithful unsigned-64 type (docs/03-unsupported.md).
