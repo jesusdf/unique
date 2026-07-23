@@ -1090,6 +1090,21 @@ class TestChrAsciiUnicode:
         assert "ASCII(TO_NCHAR(" in out, out
 
 
+class TestExtractMicroseconds:
+    """PG EXTRACT(MICROSECONDS) = the whole seconds field * 1e6; MySQL/T-SQL only
+    expose sub-second MICROSECOND, so add SECOND*1e6 (and keep the literal's
+    fraction via a (6) datetime cast on MySQL). Oracle has no TIME type → carrier.
+    Live-verified 30123456."""
+
+    def test_microseconds_composite(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-frac-seconds ")
+        assert "DATEPART(SECOND," in _tx(case, "postgresql", "tsql")
+        my = _tx(case, "postgresql", "mysql")
+        assert "SECOND(" in my and "* 1000000" in my and "(6)" in my, my
+        result = Transpiler().transpile(case, source="postgresql", target="oracle")
+        assert result.warnings and "UNIQUE:" in result.sql
+
+
 class TestExtractEpochInterval:
     """EXTRACT(EPOCH FROM timestamp) is a literal date-diff, but EXTRACT(EPOCH
     FROM interval) has no portable form (T-SQL/MySQL have no interval value type)

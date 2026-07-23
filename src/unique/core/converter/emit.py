@@ -4581,6 +4581,18 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             and re.fullmatch(r"(?i)(DECIMAL|NUMERIC|NUMBER|DEC)", dtype.strip())
         ):
             dtype += "(10, 0)" if SOURCE_DIALECT.get() == "mysql" else "(38, 10)"
+        # MySQL DATETIME/TIME default to 0 fractional digits, silently truncating
+        # a literal's sub-second part ('…:30.123456' -> '…:30'); keep it with (6)
+        # when the value carries a fraction.
+        if (
+            dialect == "mysql"
+            and not node.target_type.params
+            and dtype.upper() in ("DATETIME", "TIME")
+            and isinstance(node.expression, Literal)
+            and isinstance(node.expression.value, str)
+            and re.search(r":\d{2}\.\d+", node.expression.value)
+        ):
+            dtype += "(6)"
         if dialect == "tsql":
             # A size beyond T-SQL's 8000-byte page types only exists as
             # MAX (MySQL BINARY takes sizes up to 2^32-1 — wave 187).
@@ -5977,6 +5989,22 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             if dialect == "mysql":
                 return f"TIMESTAMPDIFF(SECOND, '1970-01-01 00:00:00', {value})"
             return f"EXTRACT(EPOCH FROM {value})"
+        if part == "MICROSECONDS":
+            # PG's MICROSECONDS is the whole seconds field including its fraction,
+            # times 1e6 (so 30.123456s -> 30123456). MySQL/T-SQL only expose the
+            # sub-second MICROSECOND, so add SECOND*1e6. Oracle has no TIME type
+            # (nor a MICROSECONDS extract), so it degrades to a carrier.
+            if dialect == "tsql":
+                return (
+                    f"(DATEPART(SECOND, {value}) * 1000000 + "
+                    f"DATEPART(MICROSECOND, {value}))"
+                )
+            if dialect == "mysql":
+                return f"(SECOND({value}) * 1000000 + MICROSECOND({value}))"
+            return (
+                "NULL /* UNIQUE: EXTRACT(MICROSECONDS FROM TIME) has no Oracle "
+                "equivalent (no TIME type) — see docs/03-unsupported.md */"
+            )
         if dialect == "tsql":
             return f"DATEPART({part}, {value})"
         return f"EXTRACT({part} FROM {value})"

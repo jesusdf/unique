@@ -289,7 +289,7 @@ SELECT format('%s=%s', 'a', 1) AS r
 -- CASE[fixed]: pg-format2 — fails on oracle. ORA-00904: "CONCAT_WS": invalid identifier
 SELECT format('%s-%I-%L', 'a', 'col name', 'val'), concat_ws('|', 'a', NULL, 'b')
 
--- CASE[open]: pg-frac-seconds — fails on mysql, oracle, tsql. (155, b"'MICROSECONDS' is not a recognized datepart option.DB-Lib error message 20018, sev
+-- CASE[limit]: pg-frac-seconds — EXTRACT(MICROSECONDS FROM t) = SECOND*1e6 + MICROSECOND on MySQL/T-SQL (30123456 verified; MySQL DATETIME/TIME casts of a fractional literal now use (6) to keep the sub-second part); Oracle has no TIME type so the TIME-based extract degrades to a carrier (docs/03-unsupported.md). fails on oracle
 SELECT TIMESTAMP '2020-01-01 10:20:30.123456', EXTRACT(MICROSECONDS FROM TIME '10:20:30.123456')
 
 -- CASE[fixed]: pg-fround — PG numeric ROUND half-up (0.5->1,1.5->2,2.5->3); unbounded ::numeric cast now scaled (was truncating to integer).
