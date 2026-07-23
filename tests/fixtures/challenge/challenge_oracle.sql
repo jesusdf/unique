@@ -189,7 +189,7 @@ SELECT TO_CHAR(1234.5678,'9G999D99'),TO_CHAR(-5,'S9') FROM DUAL
 -- CASE[fixed]: ora-for-update-nowait — SELECT … FOR UPDATE NOWAIT passes through to MySQL 8.0 and PostgreSQL (both support NOWAIT); the RED failure was a harness locked-table artifact. live-verified.
 CREATE TABLE t (id NUMBER); SELECT * FROM t FOR UPDATE NOWAIT
 
--- CASE[open]: ora-format-currency — fails on mysql, postgresql. FUNC-DIFF: source=(('1,234,567.89', '$1,234,567.89'),) target=(('1,234,567.89', '1,234,567
+-- CASE[limit]: ora-format-currency — TO_CHAR with a currency mask ($999,999.00) maps to PostgreSQL's TO_CHAR (works, live-verified $1,234.50); MySQL's FORMAT() has no currency-symbol mask, so its output degrades to a carrier + warning (docs/03-unsupported.md). fails on mysql
 SELECT TO_CHAR(1234567.891,'FM999,999,990.00'), TO_CHAR(1234567.891,'FML999G999G990D00') FROM DUAL
 
 -- CASE[limit]: ora-forupdate-wait — Oracle FOR UPDATE WAIT <n> (bounded lock wait) has no PostgreSQL/MySQL equivalent (they offer only FOR UPDATE / NOWAIT); the WAIT <n> is dropped and the lost timeout annotated (docs/03-unsupported.md). fails on mysql, postgresql

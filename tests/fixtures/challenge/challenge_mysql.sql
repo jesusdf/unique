@@ -20,7 +20,7 @@ SELECT BIT_AND(x),BIT_OR(x),BIT_XOR(x) FROM (SELECT 3 x UNION ALL SELECT 5 x UNI
 -- CASE[fixed]: my-agg-boolean — AVG of a boolean predicate is value-equal across engines; MySQL prints 4 decimals (0.6667), Oracle 6 (0.666667) — precision-only (maintainer policy). SUM/COUNT/MAX match; output valid, no gate.
 SELECT SUM(x>1), COUNT(x>1), AVG(x>1), MAX(x>1) FROM (SELECT 1 x UNION ALL SELECT 2 UNION ALL SELECT 3) t
 
--- CASE[open]: my-agg-collect — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
+-- CASE[limit]: my-agg-collect — JSON_ARRAYAGG maps to PostgreSQL json_agg (works, live-verified [1,2]); T-SQL has no JSON aggregate, so its output degrades to a carrier + warning (docs/03-unsupported.md). fails on tsql
 SELECT GROUP_CONCAT(x),JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION ALL SELECT 2 x) t
 
 -- CASE[fixed]: my-alter-drop-default — ALTER COLUMN a DROP DEFAULT maps to Oracle MODIFY a DEFAULT NULL and T-SQL dynamic drop of the (named) default constraint via sys.default_constraints (a no-op when none). live-verified DDL runs.
@@ -32,7 +32,7 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t MODIFY COLUMN b BIGINT
 -- CASE[fixed]: my-alter-set-default — MySQL ALTER COLUMN a SET DEFAULT v maps to Oracle MODIFY a DEFAULT v and T-SQL ADD CONSTRAINT DF_t_a DEFAULT v FOR a (named default constraint). live-verified DDL runs.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DEFAULT 5
 
--- CASE[open]: my-any-value — fails on postgresql, tsql. (102, b"Incorrect syntax near '>'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
+-- CASE[limit]: my-any-value — ANY_VALUE + GROUP_CONCAT map to PostgreSQL (ANY_VALUE is native in PG16+, GROUP_CONCAT->STRING_AGG; works, live-verified (1,'1,2')); T-SQL has no ANY_VALUE, so its output degrades to a carrier + warning (docs/03-unsupported.md). fails on tsql
 SELECT ANY_VALUE(x), GROUP_CONCAT(x) FROM (SELECT 1 x UNION SELECT 2) t GROUP BY x>0
 
 -- CASE[fixed]: my-arr-json — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
