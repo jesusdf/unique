@@ -497,6 +497,27 @@ class TestAlterSuiteBatches:
         assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
 
 
+class TestSelectIntoCtas:
+    """T-SQL / PostgreSQL SELECT … INTO newtable creates a table; Oracle (and
+    MySQL) have no such form, so it is rewritten to CREATE TABLE … AS SELECT
+    (GLOBAL TEMPORARY for a TEMP / #name target)."""
+
+    def test_tsql_select_into_becomes_ctas(self) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-select-into "), "tsql", "oracle")
+        up = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        ).upper()
+        assert "CREATE TABLE DST AS SELECT" in up and " INTO " not in up, up
+
+    def test_pg_temp_select_into_becomes_gtt(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-select-into-ctas "),
+            "postgresql",
+            "oracle",
+        )
+        assert "CREATE GLOBAL TEMPORARY TABLE t2 AS SELECT" in out, out
+
+
 class TestSequenceOptions:
     """Oracle CREATE SEQUENCE one-word negatives (NOCYCLE) map to PostgreSQL /
     T-SQL two-word NO CYCLE, and the ORDER/NOORDER RAC option is dropped."""

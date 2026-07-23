@@ -306,12 +306,12 @@ CREATE TABLE t (row_ver ROWVERSION, flags BINARY(8))
 -- CASE[open]: ts-scroll-cursor — fails on mysql, oracle, postgresql. PROCEDURE P compiled INVALID (line 9): PLS-00103: Encountered the symbol ";" when expectin
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR LOCAL SCROLL FOR SELECT 1; OPEN c; FETCH LAST FROM c; CLOSE c; DEALLOCATE c; END
 
--- CASE[open]: ts-select-into — fails on oracle. ORA-00905: missing keyword
+-- CASE[fixed]: ts-select-into — T-SQL SELECT … INTO newtable creates a table; Oracle has no such form, so it is rewritten to CREATE TABLE newtable AS SELECT …. live-verified DDL runs.
 CREATE TABLE src (id INT);
 GO
 SELECT id INTO dst FROM src
 
--- CASE[open]: ts-select-into-temp — fails on oracle. ORA-00905: missing keyword
+-- CASE[fixed]: ts-select-into-temp — SELECT … INTO #t2 (a T-SQL session temp table) becomes Oracle CREATE GLOBAL TEMPORARY TABLE t2 AS SELECT …. live-verified DDL runs.
 SELECT id INTO #t2 FROM (SELECT 1 id) s;
 SELECT * FROM #t2;
 

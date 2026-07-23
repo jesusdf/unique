@@ -884,7 +884,12 @@ class TestDDLPassthrough:
         sql = "SELECT a, b INTO new_table FROM src"
         result = transpiler.transpile(sql, "tsql", target)
         assert "new_table" in result.sql
-        assert "INTO" in result.sql.upper()
+        if target == "oracle":
+            # Oracle has no SELECT-INTO-table form (ORA-00905); it becomes CTAS.
+            up = result.sql.upper()
+            assert "CREATE TABLE" in up and "AS SELECT" in up, result.sql
+        else:
+            assert "INTO" in result.sql.upper()
 
     @pytest.mark.parametrize("target", ["postgresql", "mysql"])
     def test_for_update_lock_preserved(

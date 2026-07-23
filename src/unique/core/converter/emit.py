@@ -1638,6 +1638,30 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         base = re.sub(r"(?i)\s*\b(?:NOORDER|ORDER)\b", "", base)
         return base.rstrip().rstrip(";") if dialect == "tsql" else base
 
+    # T-SQL / PostgreSQL ``SELECT … INTO [TEMP] newtable FROM …`` CREATES a table;
+    # Oracle and MySQL have no SELECT-INTO-table form (INTO there targets
+    # variables), so rewrite it to CREATE TABLE … AS SELECT (CTAS).
+    if node.kind == "SELECT INTO" and dialect in ("oracle", "mysql"):
+        m_si = re.match(
+            r"(?is)^\s*SELECT\s+(.*?)\s+INTO\s+(TEMP(?:ORARY)?\s+)?"
+            r"([\w.\"\[\]#]+)\s+FROM\s+(.*?)\s*;?\s*$",
+            node.sql,
+        )
+        if m_si:
+            _sel, _temp, _tbl, _rest = m_si.groups()
+            # A T-SQL ``#name`` target is a (session) temp table too.
+            _is_temp = bool(_temp) or _tbl.startswith("#")
+            _tbl = _tbl.strip('#[]"')
+            # Build the CTAS in the SOURCE dialect (TEMPORARY, its own spelling)
+            # and let sqlglot map it to the target (Oracle GLOBAL TEMPORARY, …).
+            _temp_kw = "TEMPORARY " if _is_temp else ""
+            _ctas = f"CREATE {_temp_kw}TABLE {_tbl} AS SELECT {_sel} FROM {_rest}"
+            try:
+                rendered = sqlglot.transpile(_ctas, read=read, write=write)
+                return rendered[0] if rendered and rendered[0].strip() else _ctas
+            except Exception:  # noqa: BLE001 - keep the rewritten spelling
+                return _ctas
+
     # PG's NOT VALID (add the constraint but skip validating existing rows) has
     # no equivalent on the other engines, which validate immediately. Strip it —
     # the constraint definition is identical — and document the difference so the

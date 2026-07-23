@@ -589,7 +589,7 @@ SELECT scale(1.230), trim_scale(1.230)
 -- CASE[open]: pg-scientific — fails on mysql. FUNC-DIFF: source=(('100000000000000000000', '1e-20', '123456789012345677877719597056'),) 
 SELECT 1e20::float, 1e-20::float, 123456789012345678901234567890::numeric
 
--- CASE[open]: pg-select-into-ctas — fails on oracle. ORA-00905: missing keyword
+-- CASE[fixed]: pg-select-into-ctas — PostgreSQL SELECT … INTO TEMP t2 becomes Oracle CREATE GLOBAL TEMPORARY TABLE t2 AS SELECT …; the plain SELECT INTO becomes CREATE TABLE AS SELECT. live-verified batch runs.
 CREATE TABLE t (id INT);
 SELECT id INTO TEMP t2 FROM t;
 CREATE TABLE t3 AS SELECT * FROM t;
