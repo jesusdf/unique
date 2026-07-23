@@ -319,7 +319,7 @@ SELECT * FROM generate_series(1, 10, 2) WITH ORDINALITY AS t(v, n)
 -- CASE[fixed]: pg-gencol2 — a STORED generated column plus a GENERATED AS IDENTITY column now transpiles to MySQL (the AUTO_INCREMENT column gets a KEY, error 1075 otherwise). live-verified a=5 -> b=10 (a*2), c=1 (identity).
 CREATE TABLE t (a INT, b INT GENERATED ALWAYS AS (a*2) STORED, c INT GENERATED ALWAYS AS IDENTITY)
 
--- CASE[open]: pg-generate-series — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
+-- CASE[limit]: pg-generate-series — a SELECT-list generate_series (SRF) is moved to FROM and rewritten for Oracle (CONNECT BY) and T-SQL (numbers source) — 1..5 verified; MySQL has no inline table function (a recursive CTE can't be inlined in FROM) so it degrades (docs/03-unsupported.md). fails on mysql
 SELECT generate_series(1, 5) AS r
 
 -- CASE[open]: pg-gin-jsonb — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #2: Cannot find data type JSONB.DB-Lib error messa

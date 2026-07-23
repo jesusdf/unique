@@ -1103,6 +1103,18 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
         rec = bool(with_clause.args.get("recursive"))
         ctes = tuple(_convert_cte(c, recursive=rec) for c in with_clause.expressions)
 
+    # A set-returning function in the SELECT list with no FROM — PG's
+    # ``SELECT generate_series(1, 5)`` returns one row per element. Move the SRF
+    # into the FROM clause (a function relation) and project its value column, so
+    # the FROM-position rewrite (CONNECT BY / numbers source) can render it.
+    if from_clause is None and not joins and len(columns) == 1:
+        _only = columns[0]
+        _srf = _only.expression if isinstance(_only, Alias) else _only
+        if isinstance(_srf, FunctionCall) and _srf.name.upper() == "GENERATE_SERIES":
+            _srf_alias = _only.name if isinstance(_only, Alias) else "generate_series"
+            from_clause = TableRef(name=_srf_alias, function=_srf, alias=_srf_alias)
+            columns = (ColumnRef(name=_srf_alias),)
+
     return SelectStatement(
         columns=columns,
         from_clause=from_clause,

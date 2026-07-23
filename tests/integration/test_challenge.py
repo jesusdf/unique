@@ -836,6 +836,15 @@ class TestGenerateSeriesFrom:
         )
         assert "ORDINALITY" not in body.upper(), body
 
+    def test_srf_in_select_list_moved_to_from(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-generate-series ")
+        # SELECT-list generate_series is moved to FROM and rewritten.
+        assert "CONNECT BY LEVEL <=" in _tx(case, "postgresql", "oracle")
+        assert "sys.all_objects" in _tx(case, "postgresql", "tsql")
+        # MySQL has no inline table function → documented degrade.
+        result = Transpiler().transpile(case, source="postgresql", target="mysql")
+        assert result.warnings and "UNIQUE:" in result.sql
+
 
 class TestChrAsciiUnicode:
     """PG chr(n) and ascii() are Unicode code-point operations. Oracle CHR(n>127)
