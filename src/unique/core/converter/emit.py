@@ -131,6 +131,12 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "VARCHAR": "VARCHAR2",
         "NVARCHAR": "NVARCHAR2",
         "DOUBLE": "BINARY_DOUBLE",
+        # Oracle has INTEGER/SMALLINT (NUMBER aliases) but not BIGINT/TINYINT/
+        # MEDIUMINT (ORA-00902); INTEGER rounds a fractional value like the
+        # others (CAST(3.99 AS INTEGER) = 4).
+        "BIGINT": "INTEGER",
+        "TINYINT": "INTEGER",
+        "MEDIUMINT": "INTEGER",
     },
     "postgresql": {
         "DATETIME": "TIMESTAMP",
@@ -3640,11 +3646,19 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         # CAST truncates (2, 7). Round first so the value matches — T-SQL ROUND is
         # half-away-from-zero too. Gated to a fractional numeric literal: PG rounds
         # a float *column* half-to-even, which would not match, so leave those.
+        # A fractional numeric literal, or its negation (``-3.99`` parses to a
+        # UnaryOp over a Literal, so a plain isinstance(Literal) check missed it).
+        _ci_lit_node = node.expression
+        if (
+            isinstance(_ci_lit_node, UnaryOp)
+            and _ci_lit_node.operator == UnaryOperator.NEGATIVE
+        ):
+            _ci_lit_node = _ci_lit_node.operand
         _ci_frac_lit = (
-            isinstance(node.expression, Literal)
-            and isinstance(node.expression.value, (int, float))
-            and not isinstance(node.expression.value, bool)
-            and float(node.expression.value) != int(node.expression.value)
+            isinstance(_ci_lit_node, Literal)
+            and isinstance(_ci_lit_node.value, (int, float))
+            and not isinstance(_ci_lit_node.value, bool)
+            and float(_ci_lit_node.value) != int(_ci_lit_node.value)
         )
         if (
             dialect == "tsql"

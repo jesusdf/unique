@@ -543,6 +543,13 @@ class TestTsqlIntToDatetime:
         assert "VARCHAR2(4000)" in _tx(case, "mysql", "oracle")
         assert "AS TEXT)" in _tx(case, "mysql", "postgresql")
 
+    def test_mysql_cast_to_int_rounds(self) -> None:
+        # MySQL CAST(x AS SIGNED) rounds; Oracle INTEGER rounds, T-SQL truncates
+        # so ROUND is wrapped -- including for a negated literal (-3.99).
+        case = _case("challenge_mysql.sql", "my-round-cast ")
+        assert "CAST(-3.99 AS INTEGER)" in _tx(case, "mysql", "oracle")
+        assert "CAST(ROUND(-3.99, 0) AS BIGINT)" in _tx(case, "mysql", "tsql")
+
 
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL

@@ -652,7 +652,7 @@ SELECT REPLACE('AbCaBc', 'a', 'X') AS r
 -- CASE[fixed]: my-replace-null2 — MySQL REPLACE propagates NULL (literal-NULL arg -> NULL); Oracle ignores it. Fold to NULL.
 SELECT REPLACE('abc', NULL, 'x') IS NULL AS r
 
--- CASE[open]: my-round-cast — fails on oracle. ORA-00902: invalid datatype
+-- CASE[fixed]: my-round-cast — MySQL CAST(x AS SIGNED) rounds to int. Oracle CAST AS INTEGER rounds (BIGINT/TINYINT→INTEGER, no BIGINT type); PG BIGINT rounds; T-SQL truncates so wrap ROUND(x,0) — now also for a negated literal (-3.99 is a UnaryOp). live-verified 4,-4,4.
 SELECT CAST(3.99 AS SIGNED),CAST(-3.99 AS SIGNED),CONVERT(3.99,SIGNED)
 
 -- CASE[fixed]: my-round-fns — fails on tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.CE
