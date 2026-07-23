@@ -2561,4 +2561,13 @@ def _convert_cte(expr: exp.CTE, recursive: bool = False) -> CTEDefinition:
     else:
         query = SelectStatement()
 
+    # A CTE whose body references its own name is recursive even when the source
+    # omits the RECURSIVE keyword (T-SQL and Oracle infer it); PostgreSQL and
+    # MySQL REQUIRE it, so detect the self-reference rather than lose it.
+    if not recursive and query_expr is not None:
+        recursive = any(
+            (t.name or "").lower() == name.lower()
+            for t in query_expr.find_all(exp.Table)
+        )
+
     return CTEDefinition(name=name, query=query, columns=columns, recursive=recursive)

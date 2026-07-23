@@ -2744,14 +2744,16 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     # CTEs
     if node.ctes:
         cte_parts = []
+        # PG and MySQL REQUIRE the RECURSIVE keyword (once, after WITH, for the
+        # whole clause) when ANY CTE is recursive; T-SQL and Oracle have no such
+        # keyword (recursion is implicit).
+        recursive = (
+            "RECURSIVE "
+            if dialect in ("postgresql", "mysql")
+            and any(c.recursive for c in node.ctes)
+            else ""
+        )
         for cte in node.ctes:
-            # PG and MySQL REQUIRE the RECURSIVE keyword; T-SQL and
-            # Oracle have no such keyword (recursion is implicit).
-            recursive = (
-                "RECURSIVE "
-                if cte.recursive and dialect in ("postgresql", "mysql")
-                else ""
-            )
             cols = f"({', '.join(cte.columns)})" if cte.columns else ""
             cte_query = cte.query
             if dialect == "tsql" and cte_query.order_by and not cte_query.limit:

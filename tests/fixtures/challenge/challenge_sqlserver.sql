@@ -294,7 +294,7 @@ CREATE PROCEDURE dbo.log_it @msg NVARCHAR(MAX) AS BEGIN BEGIN TRY INSERT INTO db
 -- CASE[open]: ts-recursion-limit — fails on mysql, oracle, postgresql. ORA-32039: missing column alias list in recursive WITH clause element N
 WITH n AS (SELECT 1 v UNION ALL SELECT v+1 FROM n WHERE v<100) SELECT COUNT(*) FROM n OPTION (MAXRECURSION 1000)
 
--- CASE[open]: ts-recursive-cte — fails on mysql, postgresql. relation "r" does not exist
+-- CASE[fixed]: ts-recursive-cte — a T-SQL CTE that references its own name is recursive, but T-SQL omits the RECURSIVE keyword; PG/MySQL REQUIRE it. Detect the self-reference and emit WITH RECURSIVE (Oracle infers it, no keyword). Live 1..5 on PG and MySQL.
 WITH r(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM r WHERE n < 5) SELECT * FROM r
 
 -- CASE[fixed]: ts-replicate-space — REPLICATE/SPACE/REVERSE now translate faithfully (Oracle RPAD, PG REPEAT, native REVERSE); stale tag, live-verified equal on all targets.

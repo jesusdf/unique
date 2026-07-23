@@ -1105,6 +1105,19 @@ class TestExtractMicroseconds:
         assert result.warnings and "UNIQUE:" in result.sql
 
 
+class TestRecursiveCteKeyword:
+    """A T-SQL CTE that references its own name is recursive, but T-SQL omits the
+    RECURSIVE keyword that PG/MySQL require. The self-reference is detected and
+    WITH RECURSIVE emitted (Oracle infers recursion, no keyword) — ts-recursive-cte."""
+
+    def test_recursive_keyword_added_for_pg_mysql(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-recursive-cte ")
+        assert "WITH RECURSIVE r" in _exec_lines(_tx(case, "tsql", "postgresql"))
+        assert "WITH RECURSIVE r" in _exec_lines(_tx(case, "tsql", "mysql"))
+        # Oracle infers recursion; the keyword would be a syntax error there.
+        assert "RECURSIVE" not in _exec_lines(_tx(case, "tsql", "oracle"))
+
+
 class TestNestedProcedureCall:
     """A CALL to another procedure maps to each target's call form; the RED
     PLS-00201 was only the absent callee (the snippet never defines it), not a
