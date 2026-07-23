@@ -3160,7 +3160,9 @@ class TestPgCastsInRawTextAndNotInCast:
         out = _t(src, "tsql")
         assert "::" not in out, out
         assert ": :" not in out, out
-        assert re.search(r"(?i)CAST\(\s*@p1 AS text\s*\)", out), out
+        # ``text`` maps to a castable large-string type — CAST(x AS text) is
+        # itself invalid on T-SQL (error 529); VARCHAR(MAX) is the stand-in.
+        assert re.search(r"(?i)CAST\(\s*@p1 AS VARCHAR\(MAX\)\s*\)", out), out
 
     def test_not_inside_cast_tsql(self) -> None:
         out = _t("select min(cast(not b2 as int)) from bt;", "tsql")
