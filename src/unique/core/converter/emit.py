@@ -1444,6 +1444,22 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 return f"ALTER TABLE {_t} ADD CONSTRAINT DF_{_cn} DEFAULT {_v} FOR {_c}"
             return f"ALTER TABLE {_t} ALTER COLUMN {_c} SET DEFAULT {_v}"
 
+        # PostgreSQL ``ALTER COLUMN c [SET DATA] TYPE t [USING …]`` -> Oracle
+        # ``MODIFY c t`` (Oracle has neither the TYPE keyword nor a USING clause;
+        # a redundant USING cast IS the target's implicit conversion). The other
+        # targets keep the ALTER COLUMN … TYPE spelling (sqlglot handles them).
+        if dialect == "oracle":
+            m_ty = re.match(
+                r"(?is)^\s*ALTER\s+TABLE\s+(\S+)\s+ALTER\s+COLUMN\s+(\S+)\s+"
+                r"(?:SET\s+DATA\s+)?TYPE\s+([A-Za-z0-9_]+(?:\s*\([\d,\s]*\))?)"
+                r"(?:\s+USING\b.*)?\s*;?\s*$",
+                node.sql,
+            )
+            if m_ty:
+                _t2, _c2, _ty2 = m_ty.groups()
+                _ty2 = _portable_types_in_sql(_ty2, "oracle")
+                return f"ALTER TABLE {_t2} MODIFY {_c2} {_ty2}"
+
     # ``ALTER TABLE t CHANGE [COLUMN] old new <type>`` renames a column AND
     # changes its type in one MySQL-only statement. Split into a rename + a type
     # change (the column is ``new`` after the rename); only the simple type-only

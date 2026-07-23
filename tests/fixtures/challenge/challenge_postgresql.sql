@@ -40,10 +40,10 @@ ALTER TABLE t ALTER COLUMN name SET DEFAULT 'x';
 ALTER TABLE t RENAME COLUMN name TO nm;
 ALTER TABLE t DROP COLUMN nm;
 
--- CASE[open]: pg-alter-type — fails on oracle. ORA-01735: invalid ALTER TABLE option
+-- CASE[fixed]: pg-alter-type — PostgreSQL ALTER COLUMN a TYPE t maps to Oracle MODIFY a t (Oracle has no TYPE keyword / SET DATA TYPE); T-SQL/MySQL keep their spelling. live-verified DDL runs.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a TYPE BIGINT
 
--- CASE[open]: pg-alter-using — fails on oracle. ORA-01735: invalid ALTER TABLE option
+-- CASE[fixed]: pg-alter-using — PostgreSQL ALTER COLUMN a SET DATA TYPE t USING a::t maps to Oracle MODIFY a t; the redundant USING cast IS Oracle's implicit conversion, so it is dropped. live-verified DDL runs.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DATA TYPE BIGINT USING a::bigint
 
 -- CASE[open]: pg-any-array-subquery — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
@@ -603,7 +603,7 @@ CREATE SEQUENCE seq; SELECT nextval('seq'), currval('seq')
 -- CASE[fixed]: pg-serial-bit — fails on oracle, tsql. (2716, b'Column, parameter, or variable #2: Cannot specify a column width on data type bit
 CREATE TABLE t (a BIGSERIAL, flags BIT(8), vb VARBIT(16))
 
--- CASE[open]: pg-set-default — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'SET'.DB-Lib error message 20018, severity 15:\n
+-- CASE[fixed]: pg-set-default — PostgreSQL ALTER COLUMN a SET DEFAULT v maps to Oracle MODIFY a DEFAULT v and T-SQL ADD CONSTRAINT DF_t_a DEFAULT v FOR a (same handler as the MySQL form). live-verified DDL runs.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DEFAULT 5
 
 -- CASE[fixed]: pg-setweight — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.se

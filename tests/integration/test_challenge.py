@@ -470,6 +470,33 @@ class TestAlterSetDefault:
     def test_tsql_named_default_constraint(self) -> None:
         assert "ADD CONSTRAINT DF_t_a DEFAULT 5 FOR a" in self._out("tsql")
 
+    def test_pg_source_set_default(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-set-default "), "postgresql", "oracle"
+        )
+        assert "MODIFY a DEFAULT 5" in out, out
+
+
+class TestPgAlterColumnType:
+    """PostgreSQL ALTER COLUMN a [SET DATA] TYPE t maps to Oracle MODIFY a t
+    (Oracle has no TYPE keyword); a redundant USING cast IS Oracle's implicit
+    conversion and is dropped."""
+
+    def test_alter_type_oracle_modify(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-alter-type "), "postgresql", "oracle"
+        )
+        assert "MODIFY a NUMBER" in out and "TYPE" not in out.split(";")[-1], out
+
+    def test_alter_using_dropped_on_oracle(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-alter-using "), "postgresql", "oracle"
+        )
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "MODIFY a NUMBER" in body and "USING" not in body, body
+
 
 class TestPgBooleanWordCast:
     """PostgreSQL casts many word spellings to boolean ('t'/'true'/'yes'/'on' ->
