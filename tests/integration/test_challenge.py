@@ -477,6 +477,24 @@ class TestAlterSetDefault:
         assert "MODIFY a DEFAULT 5" in out, out
 
 
+class TestAlterDropDefault:
+    """ALTER COLUMN a DROP DEFAULT maps to Oracle MODIFY a DEFAULT NULL and to a
+    T-SQL dynamic drop of the (auto-named) default constraint via
+    sys.default_constraints — a no-op when the column has no default."""
+
+    def test_oracle_modify_default_null(self) -> None:
+        out = _tx(
+            _case("challenge_mysql.sql", "my-alter-drop-default "), "mysql", "oracle"
+        )
+        assert "MODIFY a DEFAULT NULL" in out, out
+
+    def test_tsql_dynamic_constraint_drop(self) -> None:
+        out = _tx(
+            _case("challenge_mysql.sql", "my-alter-drop-default "), "mysql", "tsql"
+        )
+        assert "sys.default_constraints" in out and "DROP CONSTRAINT" in out, out
+
+
 class TestPgAlterColumnType:
     """PostgreSQL ALTER COLUMN a [SET DATA] TYPE t maps to Oracle MODIFY a t
     (Oracle has no TYPE keyword); a redundant USING cast IS Oracle's implicit

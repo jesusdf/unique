@@ -23,7 +23,7 @@ SELECT SUM(x>1), COUNT(x>1), AVG(x>1), MAX(x>1) FROM (SELECT 1 x UNION ALL SELEC
 -- CASE[open]: my-agg-collect — fails on postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT GROUP_CONCAT(x),JSON_ARRAYAGG(x) FROM (SELECT 1 x UNION ALL SELECT 2 x) t
 
--- CASE[open]: my-alter-drop-default — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'DEFAULT'.DB-Lib error message 20018, severity 1
+-- CASE[fixed]: my-alter-drop-default — ALTER COLUMN a DROP DEFAULT maps to Oracle MODIFY a DEFAULT NULL and T-SQL dynamic drop of the (named) default constraint via sys.default_constraints (a no-op when none). live-verified DDL runs.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP DEFAULT
 
 -- CASE[fixed]: my-alter-modify — MySQL ALTER TABLE … MODIFY COLUMN c <type> maps to Oracle MODIFY c, PostgreSQL ALTER COLUMN c TYPE, T-SQL ALTER COLUMN c (with the type ported). live-verified DDL runs on all three.

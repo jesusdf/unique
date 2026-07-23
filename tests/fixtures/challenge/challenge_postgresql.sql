@@ -208,7 +208,7 @@ SELECT 1.0 / 3 AS r
 -- CASE[open]: pg-double-cast — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
 SELECT 123::text::int AS r
 
--- CASE[open]: pg-drop-default — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'DEFAULT'.DB-Lib error message 20018, severity 1
+-- CASE[fixed]: pg-drop-default — ALTER COLUMN a DROP DEFAULT maps to Oracle MODIFY a DEFAULT NULL and T-SQL dynamic drop of the named default constraint (a no-op when none). live-verified DDL runs.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP DEFAULT
 
 -- CASE[open]: pg-drop-not-null — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n

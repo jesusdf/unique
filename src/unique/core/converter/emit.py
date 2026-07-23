@@ -1460,6 +1460,33 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 _ty2 = _portable_types_in_sql(_ty2, "oracle")
                 return f"ALTER TABLE {_t2} MODIFY {_c2} {_ty2}"
 
+        # ``ALTER COLUMN c DROP DEFAULT``: Oracle spells it MODIFY c DEFAULT NULL.
+        # T-SQL has no column-level drop — a default is a named constraint whose
+        # (auto-generated) name is unknown here, so look it up and drop it via
+        # dynamic SQL (a no-op when the column has no default, matching MySQL/PG).
+        m_dd = re.match(
+            r"(?is)^\s*ALTER\s+TABLE\s+(\S+)\s+ALTER\s+COLUMN\s+(\S+)\s+"
+            r"DROP\s+DEFAULT\s*;?\s*$",
+            node.sql,
+        )
+        if m_dd:
+            _td, _cd = m_dd.groups()
+            if dialect == "oracle":
+                return f"ALTER TABLE {_td} MODIFY {_cd} DEFAULT NULL"
+            if dialect == "tsql":
+                _tn = _td.strip('[]"`')
+                _cn = _cd.strip('[]"`')
+                return (
+                    "DECLARE @n SYSNAME; "
+                    "SELECT @n = dc.name FROM sys.default_constraints dc "
+                    "JOIN sys.columns c ON c.object_id = dc.parent_object_id "
+                    "AND c.column_id = dc.parent_column_id "
+                    f"WHERE dc.parent_object_id = OBJECT_ID('{_tn}') "
+                    f"AND c.name = '{_cn}'; "
+                    f"IF @n IS NOT NULL EXEC('ALTER TABLE {_td} DROP CONSTRAINT ' + @n)"
+                )
+            return f"ALTER TABLE {_td} ALTER COLUMN {_cd} DROP DEFAULT"
+
     # ``ALTER TABLE t CHANGE [COLUMN] old new <type>`` renames a column AND
     # changes its type in one MySQL-only statement. Split into a rename + a type
     # change (the column is ``new`` after the rename); only the simple type-only
