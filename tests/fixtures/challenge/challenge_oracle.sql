@@ -395,7 +395,7 @@ SELECT REGEXP_COUNT('a1b2c3','[0-9]'),REGEXP_INSTR('a1b2','[0-9]',1,2) FROM DUAL
 -- CASE[fixed]: ora-regexp-count — fails on mysql. (1305, 'FUNCTION unique_val_41751da4688e.REGEXP_COUNT does not exist')
 SELECT REGEXP_COUNT('a1b2c3', '[0-9]') AS r FROM DUAL
 
--- CASE[open]: ora-regexp-group — fails on mysql. (1582, "Incorrect parameter count in the call to native function 'REGEXP_SUBSTR'")
+-- CASE[limit]: ora-regexp-group — MySQL REGEXP_SUBSTR has no capture-group argument; emit the portable (str,pat,pos,occ) subset + a documented carrier (docs/03-unsupported.md). fails on mysql
 SELECT REGEXP_SUBSTR('a1b2c3', '(\d)', 1, 1, NULL, 1) AS r FROM DUAL
 
 -- CASE[fixed]: ora-round-date-month — MySQL has no ROUND(date,'MONTH'); emulate the month rounding (day>=16 -> 1st of next month) with a CASE. Live-verified 2020-07-01.

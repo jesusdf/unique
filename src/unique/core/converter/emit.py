@@ -4693,6 +4693,18 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"CAST({_emit_expression(inner, dialect)} AS DATE)"
         return _emit_expression(inner, dialect)
 
+    # Oracle REGEXP_SUBSTR(str, pat, pos, occ, match, GROUP) extracts a capture
+    # group; MySQL's REGEXP_SUBSTR has no group argument (and takes at most 5
+    # args), so the 6-arg form shipped an invalid call. Emit the portable
+    # ``(str, pat, pos, occ)`` subset plus a carrier — group extraction has no
+    # MySQL equivalent (and the match value diverges without it).
+    if fn_name == "REGEXP_SUBSTR" and dialect == "mysql" and len(node.args) >= 6:
+        _base = ", ".join(_emit_expression(a, dialect) for a in node.args[:4])
+        return (
+            f"REGEXP_SUBSTR({_base}) /* UNIQUE: Oracle REGEXP_SUBSTR capture-group "
+            "extraction (6th arg) has no MySQL equivalent (docs/03-unsupported.md) */"
+        )
+
     # Oracle ROUND(date, 'MONTH') rounds to the nearest month start (day >= 16
     # rounds up to the 1st of next month) — MySQL's ROUND is numeric and would
     # ship an invalid ``ROUND('2020-06-16', 'MONTH')``. Emulate with month

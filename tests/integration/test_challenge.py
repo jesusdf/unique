@@ -2093,6 +2093,19 @@ class TestHexLiteralToInt:
         assert "TO_NUMBER('FF', 'XX')" in out, out
 
 
+class TestRegexpSubstrGroup:
+    """Oracle REGEXP_SUBSTR's 6th arg (capture group) has no MySQL equivalent
+    (and would ship an invalid 6-arg call). Emit the portable 4-arg subset plus a
+    documented carrier + warning."""
+
+    def test_mysql_drops_group_with_carrier(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-regexp-group ")
+        result = Transpiler().transpile(case, source="oracle", target="mysql")
+        assert result.warnings, "dropped capture group must warn"
+        assert "UNIQUE:" in result.sql, result.sql
+        assert "REGEXP_SUBSTR('a1b2c3', '(\\d)', 1, 1)" in result.sql, result.sql
+
+
 class TestRoundDateMonth:
     """Oracle ROUND(date,'MONTH') rounds to the nearest month start (day>=16 ->
     1st of next month); MySQL's ROUND is numeric, so emulate with month
