@@ -2003,6 +2003,22 @@ class TestTablesample:
         assert "UNIQUE:" in result.sql and "TABLESAMPLE" in result.sql, result.sql
 
 
+class TestToDateToMysql:
+    """Oracle/PG TO_DATE / TO_TIMESTAMP map to MySQL STR_TO_DATE with a translated
+    format mask (a DATETIME literal when the input is already ISO). Live-verified
+    2020-06-15 on both."""
+
+    def test_oracle_to_date_uses_str_to_date(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "ora-todate2 "), "oracle", "mysql")
+        assert "STR_TO_DATE('15-JUN-20', '%d-%b-%y')" in out, out
+
+    def test_pg_to_date_uses_str_to_date(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-todate2 "), "postgresql", "mysql"
+        )
+        assert "STR_TO_DATE('06/15/2020', '%m/%d/%Y')" in out, out
+
+
 class TestHexLiteralToInt:
     """A hex literal cast to an integer can't go through Oracle HEXTORAW (ORA-00932
     casting BINARY to a number); TO_NUMBER with an 'X' mask parses the digits.

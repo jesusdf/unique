@@ -672,7 +672,7 @@ SELECT to_char(TIMESTAMP '2020-06-15 14:30:45', 'YYYY-MM-DD"T"HH24:MI:SS') AS r
 -- CASE[limit]: pg-tochar-neg — fails on mysql, tsql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT to_char(-1234.5, '9999.99') AS r
 
--- CASE[open]: pg-todate2 — fails on mysql. (1305, 'FUNCTION unique_val_2ac6422f99c6.STR_TO_TIME does not exist')
+-- CASE[fixed]: pg-todate2 — to_date/to_timestamp map to MySQL STR_TO_DATE / a DATETIME literal; live-verified 2020-06-15 and 2020-06-15 10:30 (same instant, tz-precision on col2).
 SELECT to_date('06/15/2020','MM/DD/YYYY'),to_timestamp('2020-06-15 10:30','YYYY-MM-DD HH24:MI')
 
 -- CASE[limit]: pg-tohex2 — PostgreSQL to_char(n,'XX') emits the literal template 'XX' (it has no hex number format), whereas Oracle's TO_CHAR reads X as hex (' FF'); the mask is not portable so the statement is gated + annotated (docs/03-unsupported.md). fails on oracle, tsql

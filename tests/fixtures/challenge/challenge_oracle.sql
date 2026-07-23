@@ -461,7 +461,7 @@ SELECT TO_CHAR(DATE '2020-06-15', 'Day, Month DD, YYYY') AS r FROM DUAL
 -- CASE[limit]: ora-tochar-neg — fails on mysql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(-1234.5, '9999.99') AS r FROM DUAL
 
--- CASE[open]: ora-todate2 — fails on mysql. (1305, 'FUNCTION unique_val_9fa2bcf8c36d.STR_TO_TIME does not exist')
+-- CASE[fixed]: ora-todate2 — TO_DATE/TO_TIMESTAMP map to MySQL STR_TO_DATE / a DATETIME literal; live-verified 2020-06-15 and 2020-06-15 10:30:45.123 (date-precision on col1).
 SELECT TO_DATE('15-JUN-20','DD-MON-YY'),TO_TIMESTAMP('2020-06-15 10:30:45.123','YYYY-MM-DD HH24:MI:SS.FF3') FROM DUAL
 
 -- CASE[fixed]: ora-tonumber2 — fails on mysql, tsql. (195, b"'TO_NUMBER' is not a recognized built-in function name.DB-Lib error message 20018,
