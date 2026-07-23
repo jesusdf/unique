@@ -150,6 +150,9 @@ _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
         "SMALLMONEY": "NUMERIC(10,4)",
         # PG has no bare DOUBLE (a bare-name cast errors) — it is DOUBLE PRECISION.
         "DOUBLE": "DOUBLE PRECISION",
+        # PG's binary type is BYTEA (there is no BINARY/VARBINARY).
+        "BINARY": "BYTEA",
+        "VARBINARY": "BYTEA",
     },
 }
 

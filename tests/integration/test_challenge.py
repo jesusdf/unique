@@ -2295,6 +2295,17 @@ class TestRoundDateMonth:
         assert "DATE_ADD(" in out and "INTERVAL 1 MONTH" in out, out
 
 
+class TestCastBinary:
+    """PG has no BINARY/VARBINARY type; CAST AS BINARY maps to BYTEA.
+    Live-verified b'abc'."""
+
+    def test_cast_binary_maps_to_bytea(self) -> None:
+        out = _tx(
+            _case("challenge_mysql.sql", "my-cast-binary2 "), "mysql", "postgresql"
+        )
+        assert "CAST('abc' AS BYTEA)" in out, out
+
+
 class TestCastDouble:
     """A bare CAST(... AS DOUBLE) is an invalid type name on PG (needs DOUBLE
     PRECISION) and Oracle (BINARY_DOUBLE). Map it. Live-verified 3.14."""

@@ -98,7 +98,7 @@ CREATE TABLE t (data BLOB); INSERT INTO t VALUES (LOAD_FILE('/x')); SELECT LENGT
 -- CASE[fixed]: my-bool-char — fails on postgresql. FUNC-DIFF: source=(('1',),) target=(('t',),)
 SELECT CAST((1=1) AS CHAR) AS r
 
--- CASE[open]: my-cast-binary2 — fails on postgresql. type "binary" does not exist
+-- CASE[fixed]: my-cast-binary2 — CAST AS BINARY/VARBINARY maps to PG BYTEA (PG has no BINARY type). Live-verified (b'abc', 'abc', b'abc').
 SELECT CONVERT('abc',BINARY), CONVERT('abc' USING latin1), CAST('abc' AS BINARY)
 
 -- CASE[open]: my-cast-charset — fails on oracle. ORA-25137: Data value out of range
