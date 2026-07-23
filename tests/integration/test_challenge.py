@@ -945,6 +945,22 @@ class TestBareThrowReraise:
         assert "RAISE_APPLICATION_ERROR(-20001, )" not in body, body
 
 
+class TestMysqlCursorDeclOrder:
+    """MySQL requires DECLARE <variable> before DECLARE <cursor> (error 1337);
+    the leading declaration block is reordered (variables first, then cursors)."""
+
+    def test_variable_before_cursor(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "ora-cursor "), "oracle", "mysql")
+        decls = [
+            ln.strip()
+            for ln in out.splitlines()
+            if "DECLARE" in ln and not ln.lstrip().startswith("--")
+        ]
+        var_i = next(i for i, d in enumerate(decls) if "CURSOR" not in d.upper())
+        cur_i = next(i for i, d in enumerate(decls) if "CURSOR" in d.upper())
+        assert var_i < cur_i, decls
+
+
 class TestMysqlValuesConstructorInProc:
     """MySQL's table value constructor needs ROW() per row — a procedural
     ``SELECT COUNT(*) FROM (VALUES (1),(2)) v(x)`` was a 1064 (VALUES (1),(2));

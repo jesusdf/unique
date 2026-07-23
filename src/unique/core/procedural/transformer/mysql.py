@@ -165,14 +165,57 @@ class MySqlTransformer(ProceduralTransformer):
         new_body = body[:first] + (flag,) + body[first:last] + (handler,) + body[last:]
         return replace(result, body=new_body)  # type: ignore[call-arg]
 
+    @staticmethod
+    def _reorder_declarations(result: ASTNode) -> ASTNode:
+        """MySQL requires DECLARE <variable> before DECLARE <cursor> (error 1337,
+        "variable declaration after cursor"). Oracle/T-SQL allow either order, so
+        reorder the routine's leading declaration block — variables first, then
+        cursors — preserving relative order within each group."""
+        body = getattr(result, "body", None)
+        if not isinstance(body, tuple):
+            return result
+        lead: list[ASTNode] = []
+        rest_start = 0
+        for i, s in enumerate(body):
+            if isinstance(s, (DeclareStatement, CursorDeclaration)):
+                lead.append(s)
+                rest_start = i + 1
+            elif (
+                isinstance(s, StatementList)
+                and s.statements
+                and all(
+                    isinstance(x, (DeclareStatement, CursorDeclaration))
+                    for x in s.statements
+                )
+            ):
+                lead.extend(s.statements)
+                rest_start = i + 1
+            else:
+                break
+        variables = [d for d in lead if isinstance(d, DeclareStatement)]
+        cursors = [d for d in lead if isinstance(d, CursorDeclaration)]
+        if not variables or not cursors:
+            return result
+        # Already in the right order? (all variables precede all cursors)
+        if lead == variables + cursors:
+            return result
+        new_body = (*variables, *cursors, *body[rest_start:])
+        return replace(result, body=new_body)  # type: ignore[call-arg]
+
     def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
-        return self._inject_fetch_done(super()._transform_procedure(node))
+        return self._inject_fetch_done(
+            self._reorder_declarations(super()._transform_procedure(node))
+        )
 
     def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
-        return self._inject_fetch_done(super()._transform_function(node))
+        return self._inject_fetch_done(
+            self._reorder_declarations(super()._transform_function(node))
+        )
 
     def _transform_trigger(self, node: CreateTriggerStatement) -> ASTNode:
-        return self._inject_fetch_done(super()._transform_trigger(node))
+        return self._inject_fetch_done(
+            self._reorder_declarations(super()._transform_trigger(node))
+        )
 
     def _system_var_map(self) -> dict[str, str]:
         return {

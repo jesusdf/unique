@@ -96,7 +96,7 @@ SELECT 'a' || NULL || 'b' AS r FROM DUAL
 -- CASE[fixed]: ora-concat-num — fails on tsql. (245, b"Conversion failed when converting the varchar value 'a' to data type int.DB-Lib er
 SELECT 'a' || 5 AS r FROM DUAL
 
--- CASE[open]: ora-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
+-- CASE[fixed]: ora-cursor — MySQL requires DECLARE <variable> before DECLARE <cursor> (error 1337); the leading declaration block is reordered (variables first, then cursors). Compiles + CALL ok on MySQL
 CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; CLOSE c; END;
 
 -- CASE[open]: ora-cursor-attr — fails on mysql, tsql. (128, b'The name "c" is not permitted in this context. Valid expressions are constants, co
