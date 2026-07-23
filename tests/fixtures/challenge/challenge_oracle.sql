@@ -434,13 +434,13 @@ SELECT SYS_EXTRACT_UTC(SYSTIMESTAMP) AS r FROM DUAL
 -- CASE[fixed]: ora-sys-fns — fails on mysql, postgresql, tsql. (195, b"'SYS_CONTEXT' is not a recognized built-in function name.DB-Lib error message 2001
 SELECT SYS_GUID(), SYS_CONTEXT('USERENV','SID'), USERENV('LANGUAGE') FROM DUAL
 
--- CASE[open]: ora-table-collection — fails on postgresql, tsql. (156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:
+-- CASE[limit]: ora-table-collection — Oracle TABLE(SYS.ODCINUMBERLIST(...)) unnests a built-in collection into rows; no cross-engine equivalent (the ODCI collection type + TABLE() have no PG/T-SQL form), so it degrades to a carrier + warning (docs/03-unsupported.md). fails on postgresql, tsql
 SELECT * FROM TABLE(SYS.ODCINUMBERLIST(1,2,3))
 
--- CASE[open]: ora-table-fn2 — fails on postgresql, tsql. (156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:
+-- CASE[limit]: ora-table-fn2 — TABLE(SYS.ODCINUMBERLIST(...)) collection unnesting with COLUMN_VALUE has no PG/T-SQL equivalent; degrades to a carrier + warning (docs/03-unsupported.md). fails on postgresql, tsql
 SELECT t.COLUMN_VALUE FROM TABLE(SYS.ODCINUMBERLIST(1,2,3)) t
 
--- CASE[open]: ora-table-varchar-list — fails on postgresql, tsql. (156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:
+-- CASE[limit]: ora-table-varchar-list — TABLE(SYS.ODCIVARCHAR2LIST(...)) collection unnesting has no PG/T-SQL equivalent; degrades to a carrier + warning (docs/03-unsupported.md). fails on postgresql, tsql
 SELECT COLUMN_VALUE FROM TABLE(SYS.ODCIVARCHAR2LIST('a','b','c'))
 
 -- CASE[limit]: ora-to-char-day — fails on mysql. TO_CHAR(d,'DAY') is a locale day NAME, NLS-dependent, no reproducible cross-engine equivalent (docs/03-unsupported.md §3.1).
