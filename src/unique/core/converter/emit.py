@@ -6650,6 +6650,10 @@ def _emit_unary(node: UnaryOp, dialect: str) -> str:
         # ``-(x) - 1`` is exact for integers (wave 189).
         if dialect == "oracle":
             return f"-({operand}) - 1"
+        # MySQL's ~ yields an UNSIGNED BIGINT (~5 = 18446744073709551610); a
+        # signed-source ~ is a signed result (-6), so cast back to SIGNED.
+        if dialect == "mysql" and SOURCE_DIALECT.get() not in (None, "mysql"):
+            return f"CAST(~{operand} AS SIGNED)"
         return f"~{operand}"
     if node.operator == UnaryOperator.IS_NULL:
         return f"{operand} IS NULL"

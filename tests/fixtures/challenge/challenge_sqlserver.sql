@@ -54,7 +54,7 @@ SELECT CAST(1 AS BIT), CAST('true' AS BIT), CAST(0 AS BIT)
 -- CASE[limit]: ts-bit-fns — GET_BIT/SET_BIT have no cross-engine builtin; gated + annotated (docs/03-unsupported.md). fails on mysql, oracle, postgresql
 SELECT GET_BIT(0x0A, 1), SET_BIT(0x0A, 0, 1)
 
--- CASE[open]: ts-bitops — fails on mysql. FUNC-DIFF: source=(('1', '7', '6', '-6'),) target=(('1', '7', '6', '18446744073709551616')
+-- CASE[fixed]: ts-bitops — Signed source ~x yields a negative (two's-complement) result; MySQL's ~ is UNSIGNED (~5=18446744073709551610), so the bitwise NOT is wrapped in CAST(~x AS SIGNED) to match. &|^ and shifts already agree. live-verified. (1,7,6,-6)
 SELECT 5 & 3, 5 | 2, 5 ^ 3, ~5
 
 -- CASE[fixed]: ts-cast-bit — T-SQL CAST(x AS BIT) normalizes non-zero to 1; other engines keep the value. Emit SIGN(ABS(x)) (0->0, non-zero->1, NULL->NULL) in the TypeMapper pass.
