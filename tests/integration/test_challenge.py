@@ -1960,6 +1960,23 @@ class TestTopWithTies:
         assert "WITH TIES" in result.sql and "LIMIT 1" in result.sql, result.sql
 
 
+class TestTsqlDateAddEomonth:
+    """T-SQL DATEADD / EOMONTH over date-string literals map to each engine's
+    idiom (ADD_MONTHS/LAST_DAY on Oracle, DATE_ADD/LAST_DAY on MySQL, interval
+    arithmetic on PG) with the literal qualified as a DATE. Live-verified
+    2020-02-29 / 2020-01-02 / 2020-02-29 on every target."""
+
+    def test_oracle_uses_add_months_and_last_day(self) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-dateadd "), "tsql", "oracle")
+        assert "ADD_MONTHS(DATE '2020-01-31', 1)" in out, out
+        assert "LAST_DAY(DATE '2020-02-15')" in out, out
+
+    def test_mysql_uses_date_add(self) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-dateadd "), "tsql", "mysql")
+        assert "DATE_ADD('2020-01-31', INTERVAL 1 MONTH)" in out, out
+        assert "LAST_DAY('2020-02-15')" in out, out
+
+
 class TestDateAddQualifiesDateLiteral:
     """MySQL's DATE_ADD reads a bare '2020-01-01' string as a date, but PG reads
     it as an interval and Oracle rejects the implicit cast. A date-only literal

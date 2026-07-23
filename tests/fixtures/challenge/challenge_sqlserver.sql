@@ -129,7 +129,7 @@ CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT 1; OPEN c; FETCH NEXT FR
 -- CASE[fixed]: ts-date-bucket2 — fails on mysql, oracle, postgresql. ORA-01861: literal does not match format string
 SELECT DATE_BUCKET(MINUTE, 15, CAST('2020-01-01 00:07' AS DATETIME2))
 
--- CASE[open]: ts-dateadd — fails on mysql, oracle, postgresql. FUNC-DIFF: source=(('2020-02-29 00:00:00', '2020-01-02 00:00:00', '2020-02-29'),) target=(
+-- CASE[fixed]: ts-dateadd — DATEADD/EOMONTH map to ADD_MONTHS/LAST_DAY/DATE_ADD with the date literal qualified; live-verified 2020-02-29, 2020-01-02, 2020-02-29 on all targets.
 SELECT DATEADD(MONTH,1,'2020-01-31'), DATEADD(DAY,1,'2020-01-01'), EOMONTH('2020-02-15')
 
 -- CASE[fixed]: ts-datediff — fails on oracle. ORA-01861: literal does not match format string
