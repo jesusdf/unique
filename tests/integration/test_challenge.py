@@ -2260,6 +2260,18 @@ class TestHexLiteralToInt:
         assert "TO_NUMBER('FF', 'XX')" in out, out
 
 
+class TestStringAggOrderCast:
+    """STRING_AGG(x::text ORDER BY x) folds the value cast into a RawSQL; its
+    source type name is portabilized and a string cast mapped to the target's
+    VARCHAR — LISTAGG rejects CLOB (ORA-00932), T-SQL STRING_AGG rejects TEXT
+    (529). Live-verified '1,2'."""
+
+    def test_string_agg_order_cast_portabilized(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-string-agg-order ")
+        assert "CAST(x AS VARCHAR2(4000))" in _tx(case, "postgresql", "oracle")
+        assert "CAST(x AS VARCHAR(MAX))" in _tx(case, "postgresql", "tsql")
+
+
 class TestExtractValue:
     """MySQL EXTRACTVALUE(xml, xpath) maps per engine: Oracle EXTRACTVALUE over an
     XMLTYPE, PG XPATH(...'/text()')[1], T-SQL an XML .value(). Live-verified '1'."""

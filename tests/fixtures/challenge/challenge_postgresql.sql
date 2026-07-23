@@ -624,10 +624,10 @@ SELECT g, g*g FROM generate_series(1,3) g
 -- CASE[limit]: pg-str-lt — fails on mysql, tsql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'apple' < 'Banana' AS r
 
--- CASE[open]: pg-stragg-order — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
+-- CASE[fixed]: pg-stragg-order — STRING_AGG(x::text ORDER BY x)'s folded value cast is portabilized to VARCHAR (LISTAGG rejects CLOB, T-SQL STRING_AGG rejects TEXT). Live-verified '1,2'.
 SELECT string_agg(x::text,',' ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2) t
 
--- CASE[open]: pg-string-agg-order — fails on oracle, tsql. (529, b'Explicit conversion from data type int to text is not allowed.DB-Lib error message
+-- CASE[fixed]: pg-string-agg-order — STRING_AGG(x::text ORDER BY x)'s folded value cast is portabilized to VARCHAR (LISTAGG/STRING_AGG reject CLOB/TEXT). Live-verified '1,2'.
 SELECT STRING_AGG(x::text, ',' ORDER BY x) FROM (VALUES (1),(2)) v(x)
 
 -- CASE[fixed]: pg-string-fns2 — fails on mysql, oracle, tsql. (195, b"'SPLIT_PART' is not a recognized built-in function name.DB-Lib error message 20018

@@ -4840,8 +4840,16 @@ def _emit_group_concat(node: FunctionCall, dialect: str) -> str | None:
     order_sql: str | None = None
     if isinstance(first, RawSQL) and " ORDER BY " in first.sql:
         expr_sql, order_sql = first.sql.split(" ORDER BY ", 1)
-        expr_sql = expr_sql.strip()
+        # The folded value/ORDER-BY text keeps the SOURCE's type names; portabilize
+        # them, and map a string cast to the target's VARCHAR — LISTAGG rejects a
+        # CLOB (ORA-00932) and T-SQL STRING_AGG a TEXT (error 529).
+        expr_sql = _portable_types_in_sql(expr_sql.strip(), dialect)
         order_sql = re.sub(r"\s+NULLS\s+(FIRST|LAST)\s*$", "", order_sql.strip())
+        order_sql = _portable_types_in_sql(order_sql, dialect)
+        if dialect == "oracle":
+            expr_sql = re.sub(r"(?i)\bCLOB\b", "VARCHAR2(4000)", expr_sql)
+        elif dialect == "tsql":
+            expr_sql = re.sub(r"(?i)\bTEXT\b", "VARCHAR(MAX)", expr_sql)
     else:
         expr_sql = _emit_expression(first, dialect)
 
