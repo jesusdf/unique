@@ -580,7 +580,7 @@ SELECT ROUND(1.005::numeric, 2) AS r
 -- CASE[fixed]: pg-round-2675 — PG numeric ROUND is half-up (2.675->2.68), same on all; the divergence was a bare DECIMAL cast truncating to scale 0 (fixed: scale the unbounded numeric cast).
 SELECT ROUND(2.675::numeric, 2) AS r
 
--- CASE[open]: pg-savepoint — fails on mysql, tsql. (156, b"Incorrect syntax near the keyword 'AS'.DB-Lib error message 20018, severity 15:\nG
+-- CASE[fixed]: pg-savepoint — SAVEPOINT in a batch was sqlglot-misparsed as an Alias (SAVEPOINT AS sp, rejected everywhere) and a re-transpile re-introduced it; modeled as a passthrough (T-SQL SAVE TRANSACTION). ROLLBACK TO SAVEPOINT keeps its name (T-SQL ROLLBACK TRANSACTION sp; MySQL ROLLBACK TO sp). Batch executes on MySQL and T-SQL.
 BEGIN; SAVEPOINT sp; ROLLBACK TO SAVEPOINT sp; COMMIT
 
 -- CASE[fixed]: pg-scale — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.sc

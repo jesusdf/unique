@@ -629,6 +629,32 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="BEGIN TRANSACTION",
         )
+    # ``SAVEPOINT name`` inside a batch is parsed by sqlglot as an Alias
+    # (``SAVEPOINT AS name``), which every engine rejects, and a re-transpile
+    # re-introduces it — model it as a SAVEPOINT passthrough (the emit spells
+    # T-SQL's SAVE TRANSACTION). The standalone-parse path handles this too.
+    if (
+        isinstance(expr, exp.Alias)
+        and isinstance(expr.this, exp.Column)
+        and expr.this.name.upper() == "SAVEPOINT"
+        and expr.this.table == ""
+    ):
+        return PassthroughSQL(
+            sql=f"SAVEPOINT {expr.alias}",
+            source_dialect=source_dialect,
+            kind="SAVEPOINT",
+        )
+    # ``ROLLBACK TO SAVEPOINT name``: sqlglot drops the savepoint name when it
+    # re-transpiles to T-SQL (a bare ROLLBACK TRANSACTION undoes the whole
+    # transaction, not just to the savepoint). Model it so the name survives.
+    if isinstance(expr, exp.Rollback) and expr.args.get("savepoint") is not None:
+        _sp = expr.args["savepoint"]
+        _sp_name = _sp.name if hasattr(_sp, "name") else str(_sp)
+        return PassthroughSQL(
+            sql=f"ROLLBACK TO SAVEPOINT {_sp_name}",
+            source_dialect=source_dialect,
+            kind="ROLLBACK_SAVEPOINT",
+        )
     # Transaction/DDL control (COMMIT / ROLLBACK / TRUNCATE) is valid on every
     # target — a data-migration dump is full of these — so re-transpile it via
     # the passthrough path instead of degrading each to an "Unhandled" carrier.

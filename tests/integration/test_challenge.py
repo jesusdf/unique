@@ -1943,6 +1943,20 @@ class TestStringAggTextCastIntoPg:
         assert "STRING_AGG(CAST(x AS TEXT), ',' ORDER BY x)" in out, out
 
 
+class TestSavepointBatch:
+    """SAVEPOINT in a batch is sqlglot-misparsed as an Alias (SAVEPOINT AS sp);
+    modeled as a passthrough so T-SQL gets SAVE TRANSACTION and ROLLBACK TO
+    SAVEPOINT keeps its name (pg-savepoint)."""
+
+    def test_savepoint_and_rollback_forms(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-savepoint ")
+        ts = _exec_lines(_tx(case, "postgresql", "tsql"))
+        assert "SAVE TRANSACTION sp" in ts and "ROLLBACK TRANSACTION sp" in ts
+        assert "AS sp" not in ts
+        my = _exec_lines(_tx(case, "postgresql", "mysql"))
+        assert "SAVEPOINT sp" in my and "ROLLBACK TO sp" in my and "AS sp" not in my
+
+
 class TestDdlConstraintClausesSurvive:
     """Inline CHECK and FK REFERENCES/ON DELETE constraints survive to every
     target (they were once silently dropped; the RC-3 constraint path keeps

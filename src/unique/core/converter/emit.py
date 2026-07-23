@@ -2067,6 +2067,17 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             return f"SAVE TRANSACTION {name}"
         return f"SAVEPOINT {name}"
 
+    # ROLLBACK TO SAVEPOINT: T-SQL spells it ROLLBACK TRANSACTION <name> (a bare
+    # ROLLBACK would undo the whole transaction); MySQL drops the SAVEPOINT
+    # keyword; PG/Oracle keep the full form.
+    if node.kind == "ROLLBACK_SAVEPOINT":
+        name = node.sql.split()[-1]
+        if dialect == "tsql":
+            return f"ROLLBACK TRANSACTION {name}"
+        if dialect == "mysql":
+            return f"ROLLBACK TO {name}"
+        return f"ROLLBACK TO SAVEPOINT {name}"
+
     # MySQL has no MERGE. The canonical one-UPDATE/one-INSERT pattern is
     # rewritten as INSERT ... SELECT ... ON DUPLICATE KEY UPDATE (which relies
     # on a UNIQUE/PRIMARY KEY covering the ON columns — noted in a carrier).
