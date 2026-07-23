@@ -32,7 +32,7 @@ CREATE TABLE t (id INT);
 ALTER TABLE t RENAME TO tbl;
 ALTER TABLE tbl ADD CONSTRAINT ck CHECK (id>0) NOT VALID;
 
--- CASE[open]: pg-alter-suite — fails on oracle, tsql. (156, b"Incorrect syntax near the keyword 'SET'.DB-Lib error message 20018, severity 15:\n
+-- CASE[fixed]: pg-alter-suite — a full ALTER batch (ADD COLUMN NOT NULL DEFAULT, ALTER COLUMN TYPE, SET DEFAULT, RENAME, DROP COLUMN) now translates: SET DEFAULT replaces (drops the existing default first on T-SQL) and DROP COLUMN pre-drops the dependent default constraint. live-verified whole batch on oracle + tsql.
 CREATE TABLE t (id INT);
 ALTER TABLE t ADD COLUMN name VARCHAR(50) NOT NULL DEFAULT '';
 ALTER TABLE t ALTER COLUMN id TYPE BIGINT;

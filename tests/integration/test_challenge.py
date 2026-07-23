@@ -477,6 +477,26 @@ class TestAlterSetDefault:
         assert "MODIFY a DEFAULT 5" in out, out
 
 
+class TestAlterSuiteBatches:
+    """Full ALTER batches: T-SQL SET DEFAULT replaces (drops the current default
+    constraint first, error 1781 otherwise) and DROP COLUMN pre-drops the
+    dependent default constraint (error 5074 otherwise). Whole batches
+    live-verified on Oracle + T-SQL."""
+
+    def test_pg_suite_tsql_set_default_replaces(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-alter-suite "), "postgresql", "tsql"
+        )
+        assert (
+            out.count("sys.default_constraints") >= 2
+        ), out  # SET DEFAULT + DROP COLUMN
+        assert "ADD CONSTRAINT DF_t_name DEFAULT 'x' FOR name" in out, out
+
+    def test_ora_suite_tsql_drop_column_predrops(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "ora-alter-suite "), "oracle", "tsql")
+        assert "sys.default_constraints" in out and "DROP COLUMN nm" in out, out
+
+
 class TestCheckEnforced:
     """MySQL's ENFORCED on a CHECK constraint is the default (the constraint is
     validated); it has no keyword on Oracle/PG/T-SQL, so it is stripped."""

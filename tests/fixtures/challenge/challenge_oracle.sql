@@ -37,7 +37,7 @@ SELECT LISTAGG(x,',') WITHIN GROUP(ORDER BY x) FROM (SELECT 1 x FROM DUAL UNION 
 -- CASE[fixed]: ora-agg-median — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ME
 SELECT MEDIAN(x),STATS_MODE(x) FROM (SELECT 1 x FROM DUAL UNION ALL SELECT 1 x FROM DUAL UNION ALL SELECT 2 x FROM DUAL)
 
--- CASE[open]: ora-alter-suite — fails on tsql. (5074, b"The object 'DF__t__name__6D63CF5D' is dependent on column 'nm'.DB-Lib error messa
+-- CASE[fixed]: ora-alter-suite — an Oracle ALTER batch ending in DROP COLUMN nm now translates to T-SQL: the DROP COLUMN pre-drops the (auto-named) default constraint that depended on nm (error 5074 otherwise). live-verified whole batch on tsql.
 CREATE TABLE t (id NUMBER);
 ALTER TABLE t ADD (name VARCHAR2(50) DEFAULT '' NOT NULL);
 ALTER TABLE t MODIFY (id NUMBER(19));

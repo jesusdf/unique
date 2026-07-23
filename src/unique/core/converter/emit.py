@@ -1336,6 +1336,24 @@ def _flatten_paren_joins(sql: str, source_dialect: str) -> str | None:
     return new_select.sql(dialect=sqlglot_dialect_name(source_dialect))
 
 
+def _tsql_drop_col_default(table: str, column: str) -> str:
+    """Dynamic T-SQL that drops the (auto-named) default constraint on a column
+    — a no-op when the column has none. The constraint's generated name is not
+    known at translation time, so it is looked up in sys.default_constraints.
+    Used to give SET DEFAULT its replace semantics and to unblock DROP COLUMN /
+    DROP DEFAULT (a column can carry only one default; error 1781 / 5074)."""
+    tn = table.strip('[]"`')
+    cn = column.strip('[]"`')
+    return (
+        "DECLARE @n SYSNAME; "
+        "SELECT @n = dc.name FROM sys.default_constraints dc "
+        "JOIN sys.columns c ON c.object_id = dc.parent_object_id "
+        "AND c.column_id = dc.parent_column_id "
+        f"WHERE dc.parent_object_id = OBJECT_ID('{tn}') AND c.name = '{cn}'; "
+        f"IF @n IS NOT NULL EXEC('ALTER TABLE {table} DROP CONSTRAINT ' + @n)"
+    )
+
+
 def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     """Re-transpile a passthrough statement to the target dialect.
 
@@ -1440,8 +1458,14 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             if dialect == "oracle":
                 return f"ALTER TABLE {_t} MODIFY {_c} DEFAULT {_v}"
             if dialect == "tsql":
+                # SET DEFAULT replaces any existing default (MySQL/PG semantics);
+                # T-SQL ADD CONSTRAINT would collide (error 1781), so drop the
+                # current default constraint (dynamic — name unknown) first.
                 _cn = re.sub(r"[^A-Za-z0-9_]", "", _t.split(".")[-1] + "_" + _c)
-                return f"ALTER TABLE {_t} ADD CONSTRAINT DF_{_cn} DEFAULT {_v} FOR {_c}"
+                return (
+                    f"{_tsql_drop_col_default(_t, _c)}; "
+                    f"ALTER TABLE {_t} ADD CONSTRAINT DF_{_cn} DEFAULT {_v} FOR {_c}"
+                )
             return f"ALTER TABLE {_t} ALTER COLUMN {_c} SET DEFAULT {_v}"
 
         # PostgreSQL ``ALTER COLUMN c [SET DATA] TYPE t [USING …]`` -> Oracle
@@ -1474,17 +1498,7 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             if dialect == "oracle":
                 return f"ALTER TABLE {_td} MODIFY {_cd} DEFAULT NULL"
             if dialect == "tsql":
-                _tn = _td.strip('[]"`')
-                _cn = _cd.strip('[]"`')
-                return (
-                    "DECLARE @n SYSNAME; "
-                    "SELECT @n = dc.name FROM sys.default_constraints dc "
-                    "JOIN sys.columns c ON c.object_id = dc.parent_object_id "
-                    "AND c.column_id = dc.parent_column_id "
-                    f"WHERE dc.parent_object_id = OBJECT_ID('{_tn}') "
-                    f"AND c.name = '{_cn}'; "
-                    f"IF @n IS NOT NULL EXEC('ALTER TABLE {_td} DROP CONSTRAINT ' + @n)"
-                )
+                return _tsql_drop_col_default(_td, _cd)
             return f"ALTER TABLE {_td} ALTER COLUMN {_cd} DROP DEFAULT"
 
     # ``ALTER TABLE t CHANGE [COLUMN] old new <type>`` renames a column AND
@@ -1589,6 +1603,22 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 f"{base}"
             )
         return base
+
+    # T-SQL cannot DROP a COLUMN that still has a default constraint (error
+    # 5074); other engines drop the default with the column. Drop any default
+    # constraint on the column first (dynamic — the name is auto-generated),
+    # then drop the column. Only the single-column form is rewritten.
+    if node.kind == "ALTER" and dialect == "tsql" and node.source_dialect != "tsql":
+        m_drop = re.match(
+            r"(?is)^\s*ALTER\s+TABLE\s+(\S+)\s+DROP\s+COLUMN\s+(\S+)\s*;?\s*$",
+            node.sql,
+        )
+        if m_drop:
+            _tdc, _cdc = m_drop.groups()
+            return (
+                f"{_tsql_drop_col_default(_tdc, _cdc)}; "
+                f"ALTER TABLE {_tdc} DROP COLUMN {_cdc}"
+            )
 
     # PG's NOT VALID (add the constraint but skip validating existing rows) has
     # no equivalent on the other engines, which validate immediately. Strip it —
