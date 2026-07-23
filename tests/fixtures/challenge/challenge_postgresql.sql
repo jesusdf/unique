@@ -481,7 +481,7 @@ CREATE PROCEDURE outer_p() AS $$ BEGIN CALL inner_p(); END; $$ LANGUAGE plpgsql
 -- CASE[fixed]: pg-network-types — fails on oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INET.DB-Lib error messag
 CREATE TABLE t (ip INET, mac MACADDR, cidr CIDR)
 
--- CASE[open]: pg-not-null-is-null — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
+-- CASE[limit]: pg-not-null-is-null — fails on tsql. (NOT NULL) IS NULL is 1 (3VL: NOT NULL is NULL, which IS null); the IR dropped the source parens so NOT re-associated. Parens restored -> live 1 on PG/MySQL/Oracle; T-SQL has no boolean value type (NOT of a non-predicate is error 4145) so it degrades to a carrier (docs/03-unsupported.md §3.18).
 SELECT (NOT NULL) IS NULL AS r
 
 -- CASE[fixed]: pg-now-fns — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'CURRENT_TIME'.DB-Lib error message 20018, sever

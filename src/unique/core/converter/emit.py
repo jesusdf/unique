@@ -1000,6 +1000,28 @@ def _emit_value_expression(node: ASTNode, dialect: str) -> str:
             return f"{wrapped} AS {_ident(node.name, node.quoted, dialect)}"
         return wrapped
     if (
+        dialect == "tsql"
+        and isinstance(inner, BinaryOp)
+        and inner.operator in _COMPARISON_OPS
+        and any(
+            isinstance(side, UnaryOp)
+            and side.operator == UnaryOperator.NOT
+            and not isinstance(side.operand, (BinaryOp, UnaryOp, SubqueryExpression))
+            for side in (inner.left, inner.right)
+        )
+    ):
+        # T-SQL has no boolean value type, so NOT applied to a non-predicate
+        # (``NOT NULL``, ``NOT col``) — as an operand of a comparison/IS — has no
+        # T-SQL form (error 4145). Degrade the value to a documented carrier.
+        carrier = (
+            "NULL /* UNIQUE: T-SQL has no boolean value type; NOT of a "
+            "non-predicate (e.g. NOT NULL) has no equivalent -- see "
+            "docs/03-unsupported.md */"
+        )
+        if isinstance(node, Alias):
+            return f"{carrier} AS {_ident(node.name, node.quoted, dialect)}"
+        return carrier
+    if (
         dialect in ("tsql", "oracle")
         and isinstance(inner, BinaryOp)
         and inner.operator in _COMPARISON_OPS
@@ -7394,6 +7416,16 @@ def _emit_operand(
 ) -> str:
     """Emit a binary operand, parenthesized when it binds weaker than *parent*."""
     text = _emit_expression(child, dialect)
+    # NOT binds LOOSER than any comparison/IS operator, so ``(NOT x) IS NULL`` /
+    # ``(NOT x) = y`` re-associate to ``NOT (x IS NULL)`` without parens (the
+    # source Paren the IR unwrapped). Only AND/OR bind looser than NOT, so a NOT
+    # operand of anything else needs its parens back.
+    if (
+        isinstance(child, UnaryOp)
+        and child.operator == UnaryOperator.NOT
+        and parent not in (BinaryOperator.AND, BinaryOperator.OR)
+    ):
+        return f"({text})"
     if isinstance(child, BinaryOp):
         child_prec = _BIN_PRECEDENCE[child.operator]
         parent_prec = _BIN_PRECEDENCE[parent]

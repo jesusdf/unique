@@ -1135,6 +1135,22 @@ class TestCaseStatementEmptyBlock:
         assert out.count("SET NOCOUNT ON;") >= 3, out  # proc prelude + 2 fillers
 
 
+class TestNotOperandParens:
+    """``(NOT x) IS NULL`` — NOT binds looser than IS, so the source parens are
+    load-bearing; the IR unwrapped them, re-associating to ``NOT (x IS NULL)`` (the
+    opposite truth value). Parens are restored on the engines with a boolean value
+    type; T-SQL (which has none) degrades the NOT-of-a-non-predicate to a carrier
+    (pg-not-null-is-null)."""
+
+    def test_paren_restored_and_tsql_degrades(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-not-null-is-null ")
+        for target in ("mysql", "oracle"):
+            assert "(NOT NULL) IS NULL" in _exec_lines(_tx(case, "postgresql", target))
+        result = Transpiler().transpile(case, source="postgresql", target="tsql")
+        assert result.warnings and "UNIQUE:" in result.sql
+        assert "NOT NULL" not in _exec_lines(result.sql).split("/*")[0]
+
+
 class TestRecursiveCteKeyword:
     """A T-SQL CTE that references its own name is recursive, but T-SQL omits the
     RECURSIVE keyword that PG/MySQL require. The self-reference is detected and

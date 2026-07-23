@@ -335,6 +335,16 @@ rejects). Both are validated live. Only date parts outside the common
 year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
 still need review.
 
+### 3.18 `NOT` of a Non-Predicate on T-SQL (no boolean value type)
+
+PostgreSQL, MySQL and Oracle evaluate `NOT` on a value with three-valued logic —
+`(NOT NULL) IS NULL` is `TRUE` (the negation of `NULL` is `NULL`, which *is* null).
+T-SQL has no boolean *value* type: `NOT` requires a predicate, so `NOT NULL` (or
+`NOT <column>`) as an operand of a comparison is error 4145. The correct value is
+kept on the engines that can express it; on T-SQL the operand degrades to a
+documented carrier. (Correct parenthesization of the `NOT` operand — `(NOT x) IS
+NULL`, which binds tighter than `NOT` — is now preserved on every engine.)
+
 ### 3.17 Sequence `CURRVAL` → T-SQL
 
 Oracle/PostgreSQL expose a sequence's last-issued value (`seq.CURRVAL` /
