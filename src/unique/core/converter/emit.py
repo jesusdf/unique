@@ -4278,6 +4278,31 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         ]
         return f"CONCAT({', '.join(_cb_parts)})"
 
+    # Oracle renders a DATE concatenated to a string through NLS_DATE_FORMAT
+    # ('01-JAN-20'), unlike MySQL's ISO 'yyyy-mm-dd'. Wrap a DATE-valued CONCAT
+    # argument in TO_CHAR(…, 'YYYY-MM-DD') to preserve the ISO text.
+    if (
+        fn_name == "CONCAT"
+        and dialect == "oracle"
+        and any(
+            isinstance(a, CastExpression) and a.target_type.name.upper() == "DATE"
+            for a in node.args
+        )
+    ):
+        _dc_args = tuple(
+            (
+                FunctionCall(
+                    name="TO_CHAR",
+                    args=(a, Literal(value="YYYY-MM-DD", dtype="string")),
+                )
+                if isinstance(a, CastExpression)
+                and a.target_type.name.upper() == "DATE"
+                else a
+            )
+            for a in node.args
+        )
+        return _emit_function(dataclasses.replace(node, args=_dc_args), dialect)
+
     # PG's binary DECODE(text, 'hex') — not Oracle's conditional DECODE
     # (that one has 3+ args and became a CASE upstream). Faithful hex
     # mappings exist everywhere (wave 139); other formats stay put.

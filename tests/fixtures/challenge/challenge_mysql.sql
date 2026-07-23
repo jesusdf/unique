@@ -185,7 +185,7 @@ CREATE TABLE t (data JSON, name VARCHAR(50) AS (JSON_UNQUOTE(JSON_EXTRACT(data, 
 -- CASE[fixed]: my-concat-bool — fails on postgresql. FUNC-DIFF: source=(('10',),) target=(('tf',),)
 SELECT CONCAT(TRUE, FALSE) AS r
 
--- CASE[open]: my-concat-date — fails on oracle. FUNC-DIFF: source=(('2020-01-01',),) target=(('01-JAN-20',),)
+-- CASE[fixed]: my-concat-date — Oracle renders a DATE in CONCAT via NLS_DATE_FORMAT ('01-JAN-20'); a DATE-valued CONCAT arg is now wrapped in TO_CHAR(d,'YYYY-MM-DD') to match MySQL's ISO. live-verified 2020-01-01.
 SELECT CONCAT(DATE '2020-01-01', '') AS r
 
 -- CASE[fixed]: my-concat-null — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('ab',),)

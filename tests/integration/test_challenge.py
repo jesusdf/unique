@@ -412,6 +412,19 @@ class TestJsonAggregates:
         assert r.warnings and "UNIQUE:" in r.sql, r.sql
 
 
+class TestConcatDateIso:
+    """Oracle renders a DATE concatenated to a string via NLS_DATE_FORMAT
+    ('01-JAN-20'); MySQL uses ISO 'yyyy-mm-dd'. A DATE-valued CONCAT argument is
+    wrapped in TO_CHAR(d, 'YYYY-MM-DD') on Oracle. Live-verified '2020-01-01'."""
+
+    def test_oracle_wraps_date_concat_arg(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-concat-date "), "mysql", "oracle")
+        assert "TO_CHAR(DATE '2020-01-01', 'YYYY-MM-DD')" in out, out
+
+    def test_plain_string_concat_untouched(self) -> None:
+        assert "TO_CHAR" not in _tx("SELECT CONCAT('a','b') AS r", "mysql", "oracle")
+
+
 class TestJsonConstructors:
     """JSON_OBJECT / JSON_ARRAY exist on all four engines with different syntax
     (PG json_build_object/array, Oracle KEY..VALUE, T-SQL colon). A boolean stays
