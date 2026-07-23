@@ -817,7 +817,7 @@ SELECT LENGTH(UPPER('ß')) AS r
 -- CASE[limit]: my-upper-strasse — fails on postgresql. APPROVED LIMIT (2026-07-18): non-ASCII case-folding (ß, accents) is locale/collation-dependent, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('STRAßE',),) target=(('STRAẞE',),)
 SELECT UPPER('straße') AS r
 
--- CASE[open]: my-using-join — fails on tsql. (209, b"Ambiguous column name 'x'.DB-Lib error message 20018, severity 16:\nGeneral SQL Se
+-- CASE[fixed]: my-using-join — USING(x)->ON a.x=b.x on T-SQL leaves a bare x ambiguous; qualify the projection's USING column with the left table (a.x). Live-verified 1.
 SELECT x FROM (SELECT 1 x) a JOIN (SELECT 1 x) b USING (x)
 
 -- CASE[fixed]: my-uuid-bin — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UU

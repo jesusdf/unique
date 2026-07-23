@@ -2003,6 +2003,16 @@ class TestTablesample:
         assert "UNIQUE:" in result.sql and "TABLESAMPLE" in result.sql, result.sql
 
 
+class TestUsingJoinQualified:
+    """T-SQL has no USING; USING(x) becomes ON a.x = b.x, so a bare ``x`` in the
+    projection is ambiguous. Qualify it with the left table (a.x). Verified 1."""
+
+    def test_tsql_projection_qualified(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-using-join "), "mysql", "tsql")
+        assert "SELECT a.x" in out, out
+        assert "ON a.x = b.x" in out, out
+
+
 class TestMysqlUpdateSelfRef:
     """MySQL error 1093: a subquery in SET can't select FROM the UPDATE target.
     Wrap the aliased self-reference in a derived table so the correlated subquery

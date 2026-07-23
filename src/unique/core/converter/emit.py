@@ -2468,12 +2468,65 @@ def _portable_index(sql: str, dialect: str) -> str:
     return sql
 
 
+def _walk_qualify_using(value: object, using_lc: set[str], left: str) -> object:
+    """Qualify a bare ColumnRef whose name is a USING join column with the left
+    table. Does not descend into a nested subquery/select (its own scope)."""
+    if isinstance(value, ColumnRef):
+        if value.table is None and value.name.lower() in using_lc:
+            return dataclasses.replace(value, table=left)
+        return value
+    if isinstance(value, (SubqueryExpression, SelectStatement)):
+        return value
+    if isinstance(value, tuple):
+        new = tuple(_walk_qualify_using(v, using_lc, left) for v in value)
+        changed = any(a is not b for a, b in zip(new, value, strict=True))
+        return new if changed else value
+    if dataclasses.is_dataclass(value) and not isinstance(value, type):
+        changes = {
+            f.name: nv
+            for f in dataclasses.fields(value)
+            if (nv := _walk_qualify_using(getattr(value, f.name), using_lc, left))
+            is not getattr(value, f.name)
+        }
+        return dataclasses.replace(value, **changes) if changes else value
+    return value
+
+
+def _qualify_using_join_columns(node: SelectStatement, dialect: str) -> SelectStatement:
+    """T-SQL has no USING; a ``USING (x)`` join becomes ``ON a.x = b.x``, so a
+    bare ``x`` in the projection is then ambiguous. Qualify bare USING-column
+    refs in the SELECT's own clauses with the left table (INNER/LEFT joins, whose
+    merged column takes the left value)."""
+    if dialect != "tsql" or not isinstance(
+        node.from_clause, (TableRef, SubqueryExpression)
+    ):
+        return node
+    left = node.from_clause.alias or getattr(node.from_clause, "name", None)
+    using_lc = {
+        c.lower()
+        for j in node.joins
+        if j.using and j.join_type in (JoinType.INNER, JoinType.LEFT)
+        for c in j.using
+    }
+    if not left or not using_lc:
+        return node
+    return dataclasses.replace(
+        node,
+        columns=_walk_qualify_using(node.columns, using_lc, left),  # type: ignore[arg-type]
+        where=_walk_qualify_using(node.where, using_lc, left),  # type: ignore[arg-type]
+        group_by=_walk_qualify_using(node.group_by, using_lc, left),  # type: ignore[arg-type]
+        having=_walk_qualify_using(node.having, using_lc, left),  # type: ignore[arg-type]
+        order_by=_walk_qualify_using(node.order_by, using_lc, left),  # type: ignore[arg-type]
+    )
+
+
 def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -> str:
     """Emit a SELECT statement.
 
     ``into`` renders T-SQL's ``SELECT … INTO <table> FROM …`` (the
     faithful CTAS form there); placed right before the FROM clause.
     """
+    node = _qualify_using_join_columns(node, dialect)
     parts: list[str] = []
 
     # CTEs
