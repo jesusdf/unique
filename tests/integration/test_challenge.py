@@ -2003,6 +2003,15 @@ class TestTablesample:
         assert "UNIQUE:" in result.sql and "TABLESAMPLE" in result.sql, result.sql
 
 
+class TestToNumberScientific:
+    """Oracle TO_NUMBER of a scientific-notation string ('1.234E2') can't CAST to
+    a T-SQL DECIMAL (error 8114); FLOAT parses the exponent. Live-verified 123.4."""
+
+    def test_tsql_uses_float_for_exponent(self) -> None:
+        out = _tx(_case("challenge_oracle.sql", "ora-to-number-sci "), "oracle", "tsql")
+        assert "CAST('1.234E2' AS FLOAT)" in out, out
+
+
 class TestPgBooleanToText:
     """PostgreSQL renders a boolean cast to text as 'true'/'false'; MySQL has no
     boolean text and would give '1'/'0'. Emit CASE WHEN <bool> THEN 'true' ELSE

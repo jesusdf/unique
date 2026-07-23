@@ -5772,6 +5772,17 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         and dialect in ("tsql", "mysql", "postgresql")
     ):
         arg = _emit_expression(node.args[0], dialect)
+        # T-SQL can't CAST a scientific-notation string ('1.234E2') to DECIMAL
+        # (error 8114); FLOAT parses the exponent. Oracle TO_NUMBER accepts it,
+        # so keep the value via FLOAT for such a literal.
+        _a0 = node.args[0]
+        if (
+            dialect == "tsql"
+            and isinstance(_a0, Literal)
+            and isinstance(_a0.value, str)
+            and re.fullmatch(r"\s*[-+]?\d*\.?\d+[eE][-+]?\d+\s*", _a0.value) is not None
+        ):
+            return f"CAST({arg} AS FLOAT)"
         target_num = "DECIMAL(38, 10)" if dialect != "postgresql" else "NUMERIC"
         return f"CAST({arg} AS {target_num})"
 

@@ -446,7 +446,7 @@ SELECT COLUMN_VALUE FROM TABLE(SYS.ODCIVARCHAR2LIST('a','b','c'))
 -- CASE[limit]: ora-to-char-day — fails on mysql. TO_CHAR(d,'DAY') is a locale day NAME, NLS-dependent, no reproducible cross-engine equivalent (docs/03-unsupported.md §3.1).
 SELECT TO_CHAR(DATE '2020-06-14', 'DAY') AS r FROM DUAL
 
--- CASE[open]: ora-to-number-sci — fails on tsql. (8114, b'Error converting data type varchar to numeric.DB-Lib error message 20018, severit
+-- CASE[fixed]: ora-to-number-sci — T-SQL can't CAST a scientific-notation string to DECIMAL; use FLOAT so TO_NUMBER('1.234E2') = 123.4 (live-verified).
 SELECT TO_NUMBER('1.234E2') AS r FROM DUAL
 
 -- CASE[fixed]: ora-to-timestamp — TO_TIMESTAMP(str, mask). A constant ISO-shaped string parses to a fixed value -> ANSI TIMESTAMP literal (PG/Oracle) / CAST DATETIME(6)/DATETIME2 (MySQL/T-SQL), preserving the .123 fractional. live-verified on all four.
