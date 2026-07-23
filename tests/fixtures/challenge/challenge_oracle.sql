@@ -304,7 +304,7 @@ SELECT TO_CHAR(DATE '2020-06-01', 'Month') AS r FROM DUAL
 -- CASE[fixed]: ora-months-between — fails on mysql, postgresql. operator does not exist: timestamp with time zone - integer
 SELECT MONTHS_BETWEEN(SYSDATE, SYSDATE - 40) AS r FROM DUAL
 
--- CASE[open]: ora-months-between-val — fails on tsql. FUNC-DIFF: source=(('1.83871',),) target=(('2',),)
+-- CASE[fixed]: ora-months-between-val — Oracle MONTHS_BETWEEN is fractional (whole months + (day1-day2)/31, whole when both are month-ends or same day); T-SQL DATEDIFF(MONTH) was an integer boundary count. Emit the exact CASE on T-SQL. live-verified 1.83871.
 SELECT MONTHS_BETWEEN(DATE '2020-03-10', DATE '2020-01-15') AS r FROM DUAL
 
 -- CASE[open]: ora-multiset-table — fails on postgresql, tsql. (156, b"Incorrect syntax near the keyword 'TABLE'.DB-Lib error message 20018, severity 15:

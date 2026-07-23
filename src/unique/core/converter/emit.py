@@ -4527,6 +4527,20 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return "SYS_CONTEXT('USERENV', 'SID')"
         return "CONNECTION_ID()"
 
+    # Oracle MONTHS_BETWEEN(d1, d2): fractional months = whole months +
+    # (day1 - day2)/31, except when both are their month's last day (or the same
+    # day-of-month), which yields a whole number. Only T-SQL lacks it (its
+    # DATEDIFF(MONTH,…) is an integer boundary count); PG/MySQL are handled
+    # elsewhere. Emit the exact CASE (live-verified against Oracle).
+    if fn_name == "MONTHS_BETWEEN" and len(node.args) == 2 and dialect == "tsql":
+        d1 = _emit_expression(node.args[0], dialect)
+        d2 = _emit_expression(node.args[1], dialect)
+        return (
+            f"CASE WHEN DAY({d1}) = DAY({d2}) OR (DAY({d1}) = DAY(EOMONTH({d1})) "
+            f"AND DAY({d2}) = DAY(EOMONTH({d2}))) THEN DATEDIFF(MONTH, {d2}, {d1}) "
+            f"ELSE DATEDIFF(MONTH, {d2}, {d1}) + (DAY({d1}) - DAY({d2})) / 31.0 END"
+        )
+
     # MySQL's INTERVAL(x, v1, v2, …) index function: position of the
     # last threshold ≤ x, −1 for NULL x. Only MySQL has it; the CASE
     # chain is the mechanical form everywhere else (wave 165).

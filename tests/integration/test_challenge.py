@@ -483,6 +483,20 @@ class TestJsonConstructors:
         assert "CAST(1 AS BIT)" in ts and "NULL ON NULL" in ts, ts
 
 
+class TestMonthsBetweenFractional:
+    """Oracle MONTHS_BETWEEN is fractional (whole months + (day1-day2)/31, and a
+    whole number when both dates are month-ends or the same day-of-month). T-SQL
+    has no such function; the exact CASE is emitted (not an integer DATEDIFF
+    boundary count). Live-verified 1.83871 and 1.0."""
+
+    def test_tsql_emits_fractional_case(self) -> None:
+        out = _tx(
+            _case("challenge_oracle.sql", "ora-months-between-val "), "oracle", "tsql"
+        )
+        assert "EOMONTH" in out and "/ 31.0" in out, out
+        assert "DATEDIFF(MONTH" in out, out
+
+
 class TestTimestampDiffCompletePeriods:
     """MySQL TIMESTAMPDIFF counts COMPLETE periods; T-SQL DATEDIFF counts
     unit-boundary crossings. For month/quarter/year the transpiler drops the
