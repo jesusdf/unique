@@ -12,6 +12,7 @@ from collections.abc import Callable
 from unique.core.ast_nodes import (
     AssignmentStatement,
     ASTNode,
+    CreateFunctionStatement,
     CreateTriggerStatement,
     EmbeddedDML,
     ExceptionBlock,
@@ -19,6 +20,7 @@ from unique.core.ast_nodes import (
     Literal,
     LoopStatement,
     NullStatement,
+    PrintStatement,
     RawSQL,
     ReturnStatement,
     SetVariableStatement,
@@ -547,6 +549,39 @@ class TSqlTransformer(ProceduralTransformer):
         if node.for_each != "ROW" or self._source == "tsql" or node.execute_function:
             return None
         return self._tsql_statement_trigger(node, node.body)
+
+    @classmethod
+    def _has_function_side_effect(cls, node: ASTNode) -> bool:
+        """A T-SQL scalar function forbids TRY/CATCH, PRINT and RAISERROR (error
+        443, "side-effecting operator within a function"). Walk the body for any
+        such construct — a PG/Oracle EXCEPTION handler (lowered to TRY/CATCH) or a
+        RAISE NOTICE/PRINT — anywhere, including nested loops."""
+        if isinstance(node, (TryCatchBlock, PrintStatement)):
+            return True
+        for value in vars(node).values():
+            items = value if isinstance(value, tuple) else (value,)
+            for item in items:
+                if isinstance(item, ASTNode) and cls._has_function_side_effect(item):
+                    return True
+        return False
+
+    def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
+        result = super()._transform_function(node)
+        if isinstance(result, CreateFunctionStatement) and any(
+            self._has_function_side_effect(s) for s in result.body
+        ):
+            reason = (
+                "T-SQL scalar functions forbid TRY/CATCH, PRINT and RAISERROR "
+                "(side-effecting, error 443), so a PG/Oracle EXCEPTION handler or "
+                "RAISE NOTICE has no function-level equivalent — function "
+                "preserved as a comment"
+            )
+            self._warnings.append(reason)
+            from unique.core.procedural.emitter import ProceduralEmitter
+
+            original = ProceduralEmitter(self._source).emit(node)
+            return RawSQL(sql=original, reason=reason)
+        return result
 
     def _lower_compound_for_statement_target(
         self, node: CreateTriggerStatement

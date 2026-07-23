@@ -908,7 +908,10 @@ class TestZeroPushZ4bBatch:
             "postgresql",
             "tsql",
         )
-        assert "THROW;" in r.sql, r.sql
+        # A T-SQL scalar function forbids TRY/CATCH (error 443), so this function
+        # (with an EXCEPTION handler) degrades to a carrier rather than emitting
+        # an invalid THROW; inside a function.
+        assert "-- UNIQUE:" in r.sql and "preserved as a comment" in r.sql, r.sql
 
 
 class TestZeroPushW1Batch:

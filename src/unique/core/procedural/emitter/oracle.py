@@ -102,6 +102,20 @@ class OracleEmitter(ProceduralEmitter):
         lines.append("END;")
         return "\n".join(lines)
 
+    #: PostgreSQL / standard predefined-condition names that Oracle spells
+    #: differently (the inverse of the PostgreSQL emitter's map); unknowns —
+    #: OTHERS, NO_DATA_FOUND, user-defined names — pass through unchanged.
+    _PG_EXCEPTION_CONDITIONS = {
+        "DIVISION_BY_ZERO": "ZERO_DIVIDE",
+        "UNIQUE_VIOLATION": "DUP_VAL_ON_INDEX",
+        "TOO_MANY_ROWS": "TOO_MANY_ROWS",
+        "NO_DATA_FOUND": "NO_DATA_FOUND",
+        "CASE_NOT_FOUND": "CASE_NOT_FOUND",
+    }
+
+    def _map_exception_name(self, name: str) -> str:
+        return self._PG_EXCEPTION_CONDITIONS.get(name.upper(), name)
+
     def _procedure_header(self, name: str, or_replace: bool) -> str:
         prefix = "CREATE OR REPLACE " if or_replace else "CREATE "
         return f"{prefix}PROCEDURE {name}"

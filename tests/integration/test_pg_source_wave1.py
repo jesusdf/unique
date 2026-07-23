@@ -1348,8 +1348,15 @@ class TestTsqlRaiserrorExpressionHoist:
             "  end;\n  return 1;\nend$$ language plpgsql;",
             "tsql",
         )
-        assert re.search(r"(?i)ERROR_MESSAGE\(\)", out), out
-        assert not re.search(r"(?i)\bsqlerrm\b", out), out
+        # A T-SQL scalar function forbids TRY/CATCH (error 443), so a PG function
+        # with an EXCEPTION handler degrades to a carrier rather than emitting
+        # invalid SQL (the SQLERRM->ERROR_MESSAGE map is covered in a procedure
+        # context). No raw sqlerrm leaks as executable text.
+        assert "-- UNIQUE:" in out and "preserved as a comment" in out, out
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert not re.search(r"(?i)\bsqlerrm\b", body), body
 
 
 class TestPerformDiscard:
@@ -4543,7 +4550,10 @@ class TestBareRaiseAndUsing:
     def test_bare_reraise_tsql(self) -> None:
         out = _t(self._SRC_RERAISE, "tsql")
         assert "'%', ;" not in out, out
-        assert re.search(r"(?im)^\s*THROW;", out), out
+        # A T-SQL scalar function forbids TRY/CATCH (error 443), so the function
+        # (with its EXCEPTION handler) degrades to a carrier; the bare-reraise ->
+        # THROW; map is covered where a procedure/trigger can hold a CATCH.
+        assert "-- UNIQUE:" in out and "preserved as a comment" in out, out
 
     def test_bare_reraise_mysql(self) -> None:
         out = _t(self._SRC_RERAISE, "mysql")

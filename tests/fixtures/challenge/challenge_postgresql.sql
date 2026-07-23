@@ -238,10 +238,10 @@ SELECT EXTRACT(EPOCH FROM TIMESTAMP '2020-01-01 00:00:00'), EXTRACT(EPOCH FROM I
 -- CASE[fixed]: pg-except-all — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 SELECT 1 EXCEPT ALL SELECT 2
 
--- CASE[open]: pg-exception-handler — fails on tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
+-- CASE[limit]: pg-exception-handler — WHEN OTHERS handler compiles on Oracle/MySQL; T-SQL scalar functions forbid TRY/CATCH (error 443) so it degrades to a carrier (docs/03-unsupported.md). fails on tsql
 CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1; EXCEPTION WHEN OTHERS THEN RETURN -1; END; $$ LANGUAGE plpgsql
 
--- CASE[open]: pg-exception-when — fails on oracle, tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
+-- CASE[limit]: pg-exception-when — unique_violation/OTHERS handler compiles on Oracle/MySQL (with the referenced table present); T-SQL scalar functions forbid TRY/CATCH (error 443) so it degrades to a carrier (docs/03-unsupported.md). fails on tsql
 CREATE FUNCTION f() RETURNS void AS $$ BEGIN INSERT INTO t VALUES(1); EXCEPTION WHEN unique_violation THEN RAISE EXCEPTION 'dup'; WHEN others THEN RAISE; END; $$ LANGUAGE plpgsql
 
 -- CASE[open]: pg-execute-using — fails on mysql. (1336, 'Dynamic SQL is not allowed in stored function or trigger')
@@ -439,7 +439,7 @@ SELECT LOG(2, 8) AS r
 -- CASE[fixed]: pg-log-base — fails on mysql, tsql. FUNC-DIFF: source=(('2',),) target=(('4.60517',),)
 SELECT LOG(100) AS r
 
--- CASE[open]: pg-loop-notice — fails on tsql. (443, b"Invalid use of a side-effecting operator 'PRINT' within a function.DB-Lib error me
+-- CASE[limit]: pg-loop-notice — LOOP + RAISE NOTICE compiles on Oracle/MySQL; T-SQL scalar functions forbid PRINT/side-effects (error 443) so it degrades to a carrier (docs/03-unsupported.md). fails on tsql
 CREATE FUNCTION f() RETURNS void AS $$ DECLARE i INT:=0; BEGIN LOOP i:=i+1; EXIT WHEN i>=3; END LOOP; RAISE NOTICE 'done'; END; $$ LANGUAGE plpgsql
 
 -- CASE[fixed]: pg-lpad-shrink — fails on tsql. FUNC-DIFF: source=(('hel',),) target=(('llo',),)
@@ -463,7 +463,7 @@ CREATE FUNCTION f(a INT, OUT b INT, OUT c INT) AS $$ BEGIN b := a; c := a * 2; E
 -- CASE[limit]: pg-name-locale — fails on mysql, tsql. to_char with locale month/day NAMES (Day/Month/FMDay) is locale-dependent, no cross-engine equivalent (docs/03-unsupported.md §3.1).
 SELECT to_char(DATE '2020-06-15','Day'), to_char(DATE '2020-06-15','Month'), trim(to_char(DATE '2020-06-15','FMDay'))
 
--- CASE[open]: pg-named-exception — fails on oracle, tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
+-- CASE[limit]: pg-named-exception — the named exception maps per engine (PG division_by_zero -> Oracle ZERO_DIVIDE), valid + f()=-1 on Oracle/MySQL; T-SQL scalar functions forbid TRY/CATCH (error 443) so the exception handler has no function-level equivalent and degrades to a carrier (docs/03-unsupported.md). fails on tsql
 CREATE FUNCTION f() RETURNS INT AS $$ BEGIN RETURN 1/0; EXCEPTION WHEN division_by_zero THEN RETURN -1; WHEN OTHERS THEN RAISE; END; $$ LANGUAGE plpgsql
 
 -- CASE[fixed]: pg-named-window — the WINDOW clause is inlined into each OVER (ORDER BY x) so no OVER () is emitted; live-verified (1,1,1),(2,3,2) on Oracle.

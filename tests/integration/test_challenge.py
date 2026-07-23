@@ -894,6 +894,41 @@ class TestTsqlScalarFunctionTrailingReturn:
             assert lines[-1] == "END" and lines[-2].upper().startswith("RETURN"), out
 
 
+class TestFunctionSideEffectDegrade:
+    """A T-SQL scalar function forbids TRY/CATCH, PRINT and RAISERROR (error 443),
+    so a PG EXCEPTION handler or RAISE NOTICE has no function-level equivalent and
+    the whole function degrades to a carrier. Named exceptions map on Oracle
+    (division_by_zero -> ZERO_DIVIDE)."""
+
+    def test_exception_function_degrades_on_tsql(self) -> None:
+        for cid in (
+            "pg-named-exception ",
+            "pg-loop-notice ",
+            "pg-exception-handler ",
+        ):
+            result = Transpiler().transpile(
+                _case("challenge_postgresql.sql", cid),
+                source="postgresql",
+                target="tsql",
+            )
+            assert result.warnings and "UNIQUE:" in result.sql, cid
+            body = "\n".join(
+                ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "BEGIN TRY" not in body.upper(), body
+
+    def test_named_exception_maps_on_oracle(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-named-exception "),
+            "postgresql",
+            "oracle",
+        )
+        body = "\n".join(
+            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "ZERO_DIVIDE" in body and "division_by_zero" not in body.lower(), body
+
+
 class TestBareThrowReraise:
     """A bare ``THROW;`` (re-raise inside a CATCH) was parsed with an empty
     message and shipped RAISE_APPLICATION_ERROR(-20001, ) on Oracle (PLS-00103);
