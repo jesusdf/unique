@@ -226,7 +226,7 @@ CREATE TABLE t (a NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100 INCREMENT 
 -- CASE[open]: ora-implicit-arith — fails on mysql, postgresql. FUNC-DIFF: source=(('2', '20', '2'),) target=(('11', '20', '2'),)
 SELECT '1'+1, '10'*2, TO_NUMBER('1')+1 FROM DUAL
 
--- CASE[open]: ora-initcap — fails on mysql, postgresql, tsql. (195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s
+-- CASE[limit]: ora-initcap — INITCAP (title-case each word) has no MySQL/T-SQL builtin and cannot be emulated for arbitrary multi-word text; PostgreSQL has INITCAP natively so it transpiles cleanly there. Gated + annotated on the other two (docs/03-unsupported.md). fails on mysql, tsql
 SELECT INITCAP('hello world') AS r FROM DUAL
 
 -- CASE[open]: ora-insert-append — fails on postgresql. validator-crash: sending query failed: another command is already in progress
