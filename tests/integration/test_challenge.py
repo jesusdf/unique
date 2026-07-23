@@ -433,6 +433,22 @@ class TestJsonConstructors:
         assert "CAST(1 AS BIT)" in ts and "NULL ON NULL" in ts, ts
 
 
+class TestPiMathFunctions:
+    """PI() math across engines. T-SQL RADIANS/DEGREES echo the argument's type,
+    so an integer arg truncates (RADIANS(180)=3) — the integer is cast to FLOAT.
+    PostgreSQL TRUNC/ROUND have no (double precision, int) overload, so a double
+    value like PI() is cast to NUMERIC. Live-verified on all four engines."""
+
+    def test_radians_integer_arg_cast_to_float(self) -> None:
+        ts = _tx(_case("challenge_mysql.sql", "my-pi-vals "), "mysql", "tsql")
+        assert "RADIANS(CAST(180 AS FLOAT))" in ts, ts
+
+    def test_pg_trunc_round_double_cast_to_numeric(self) -> None:
+        pg = _tx(_case("challenge_mysql.sql", "my-pi-fns "), "mysql", "postgresql")
+        assert "TRUNC(CAST(PI() AS NUMERIC), 4)" in pg, pg
+        assert "ROUND(CAST(PI() AS NUMERIC), 4)" in pg, pg
+
+
 class TestLastDayAndNames:
     """LAST_DAY / DAYNAME / MONTHNAME (MySQL) across engines. The date-name
     functions wrap a bare ISO string as an ANSI ``DATE`` literal (else Oracle/PG

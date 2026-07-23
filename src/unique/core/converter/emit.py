@@ -4743,7 +4743,31 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"ROUND({x}, {d}, 1)"
         if dialect == "mysql":
             return f"TRUNCATE({x}, {d})"
+        # PostgreSQL TRUNC(numeric, int) has no double-precision overload, so a
+        # double expression (PI(), a float column) errors; cast it to NUMERIC.
+        # A numeric literal already resolves, so leave that clean.
+        if dialect == "postgresql" and not (
+            isinstance(node.args[0], Literal)
+            and str(node.args[0].dtype) in ("integer", "number")
+        ):
+            return f"TRUNC(CAST({x} AS NUMERIC), {d})"
         return f"TRUNC({x}, {d})"
+
+    # PostgreSQL ROUND(numeric, int) likewise has no double-precision overload:
+    # ROUND(PI(), 4) / ROUND(<float column>, n) errors. Cast the value to NUMERIC
+    # (a numeric literal already resolves, so leave that clean).
+    if (
+        fn_name == "ROUND"
+        and len(node.args) == 2
+        and dialect == "postgresql"
+        and not (
+            isinstance(node.args[0], Literal)
+            and str(node.args[0].dtype) in ("integer", "number")
+        )
+    ):
+        x = _emit_expression(node.args[0], dialect)
+        d = _emit_expression(node.args[1], dialect)
+        return f"ROUND(CAST({x} AS NUMERIC), {d})"
 
     # Oracle LOB initializers. T-SQL/PG/MySQL spell "empty" as an empty
     # binary/character literal.
@@ -5341,6 +5365,16 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             if dialect == "oracle"
             else f"TO_CHAR({d}, 'FMDay')"
         )
+    # T-SQL RADIANS/DEGREES return the argument's type: an integer argument
+    # truncates the result (RADIANS(180) = 3, not 3.14159). Cast to FLOAT so the
+    # value is preserved, matching MySQL/PostgreSQL/Oracle.
+    if (
+        dialect == "tsql"
+        and up in ("RADIANS", "DEGREES")
+        and len(node.args) == 1
+        and _is_integer_operand(node.args[0])
+    ):
+        return f"{up}(CAST({_emit_expression(node.args[0], dialect)} AS FLOAT))"
     # Math built-ins Oracle lacks (RC-1a).
     if dialect == "oracle" and up == "DEGREES" and len(node.args) == 1:
         return f"({_emit_expression(node.args[0], dialect)} * 180 / ACOS(-1))"

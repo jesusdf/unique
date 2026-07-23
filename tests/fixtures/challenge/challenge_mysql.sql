@@ -615,10 +615,10 @@ SELECT PERIOD_DIFF(202006, 202001) AS r
 -- CASE[fixed]: my-period2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.PE
 SELECT PERIOD_ADD(202001,14), PERIOD_DIFF(202101,202001)
 
--- CASE[open]: my-pi-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+-- CASE[fixed]: my-pi-fns — TRUNCATE/ROUND/FORMAT of PI() across engines. PostgreSQL TRUNC/ROUND have no (double, int) overload, so PI() is cast to NUMERIC; Oracle PI()=ACOS(-1); FORMAT -> TO_CHAR/FORMAT number mask. live-verified 3.1415, 3.1416, 3.1416.
 SELECT TRUNCATE(PI(), 4), ROUND(PI(), 4), FORMAT(PI(), 4)
 
--- CASE[open]: my-pi-vals — fails on tsql. FUNC-DIFF: source=(('180', '3.14159', '3.14159'),) target=(('180', '3', '3.14159'),)
+-- CASE[fixed]: my-pi-vals — T-SQL RADIANS/DEGREES return the argument's type, so RADIANS(180) truncates an integer arg to 3; casting the integer arg to FLOAT preserves 3.14159. live-verified 180, 3.14159, 3.14159.
 SELECT DEGREES(PI()), RADIANS(180), PI()
 
 -- CASE[fixed]: my-quote2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.QU
