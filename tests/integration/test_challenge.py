@@ -453,6 +453,25 @@ class TestDateFormatMasks:
         pg = _tx(case, "oracle", "postgresql")
         assert "TIMESTAMP '2020-01-01 10:00:00.123'" in pg, pg
 
+    def test_mysql_date_format_wraps_string_value(self) -> None:
+        # DATE_FORMAT('2020-05-17', …): the bare ISO string is wrapped as a DATE
+        # so Oracle/PG TO_CHAR (which reject a string) work.
+        case = _case("challenge_mysql.sql", "my-date-format ")
+        o4 = _tx(case, "mysql", "oracle")
+        assert "TO_CHAR(DATE '2020-05-17', 'YYYY/MM/DD')" in o4, o4
+        ts = _tx(case, "mysql", "tsql")
+        assert "FORMAT(CAST('2020-05-17' AS DATE), 'yyyy/MM/dd')" in ts, ts
+
+    def test_bare_letter_mask_degrades(self) -> None:
+        # A MySQL mask with a bare-letter literal (%Y-%m-%dT…) or a locale name
+        # (%W) cannot round-trip unquoted — it must degrade, not ship wrong.
+        r = Transpiler().transpile(
+            _case("challenge_mysql.sql", "my-dateformat-iso "),
+            source="mysql",
+            target="oracle",
+        )
+        assert r.warnings and "UNIQUE:" in r.sql, r.sql
+
 
 class TestStringAggTextCastIntoPg:
     """PG ``string_agg`` will not implicitly stringify its value (unlike T-SQL

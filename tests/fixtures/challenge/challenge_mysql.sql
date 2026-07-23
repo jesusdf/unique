@@ -230,7 +230,7 @@ SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r
 -- CASE[open]: my-date-eq-dt — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('1',),) target=(('0',),)
 SELECT DATE('2020-01-01') = '2020-01-01 00:00:00' AS r
 
--- CASE[open]: my-date-format — fails on oracle, postgresql, tsql. (8116, b'Argument data type varchar is invalid for argument 1 of format function.DB-Lib er
+-- CASE[fixed]: my-date-format — DATE_FORMAT(str, mask) with a reproducible mask. The bare ISO string value is wrapped as a DATE (Oracle/PG TO_CHAR / T-SQL FORMAT reject a string); mask translated python->engine model. live-verified 2020/05/17 on all four. (bare-letter/locale masks like %W degrade honestly.)
 SELECT DATE_FORMAT('2020-05-17', '%Y/%m/%d') AS r
 
 -- CASE[fixed]: my-dateadd — fails on tsql. FUNC-DIFF: source=(('2020-02-29', '2020-01-02', '2020-02-29', '2020-01-01 01:00:00'),) tar
