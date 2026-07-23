@@ -352,7 +352,7 @@ SELECT md5('abc'), encode(sha256('abc'::bytea), 'hex')
 -- CASE[open]: pg-hash-fns — fails on mysql, oracle, tsql. (195, b"'MD5' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT lpad('x', 3), md5('x'), sha256('x'::bytea)
 
--- CASE[open]: pg-hex-literal — fails on oracle. ORA-00932: expression is of data type BINARY, which is incompatible with expected data typ
+-- CASE[fixed]: pg-hex-literal — a hex literal cast to int uses Oracle TO_NUMBER('FF','XX') (HEXTORAW can't cast to a number); live-verified (255, 1500).
 SELECT x'FF'::int AS h, 1.5e3 AS s
 
 -- CASE[fixed]: pg-hexcast — fails on mysql, oracle, tsql. (195, b"'ENCODE' is not a recognized built-in function name.DB-Lib error message 20018, se

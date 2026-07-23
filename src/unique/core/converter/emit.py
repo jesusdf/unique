@@ -4048,6 +4048,17 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             lit = _oracle_date_literal(node.expression.value.strip())
             if lit is not None:
                 return lit
+        # Oracle can't CAST a HEXTORAW to a number (ORA-00932). TO_NUMBER with an
+        # 'X' hex mask parses the hex digits directly (x'FF'::int -> 255).
+        if (
+            dialect == "oracle"
+            and isinstance(node.expression, Literal)
+            and node.expression.dtype == "hex"
+            and node.target_type.name.split("(")[0].strip().upper()
+            in ("INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT", "NUMBER", "NUMERIC")
+        ):
+            _hx = str(node.expression.value)
+            return f"TO_NUMBER('{_hx}', '{'X' * len(_hx)}')"
         if (
             dialect == "tsql"
             and isinstance(node.expression, UnaryOp)

@@ -2003,6 +2003,18 @@ class TestTablesample:
         assert "UNIQUE:" in result.sql and "TABLESAMPLE" in result.sql, result.sql
 
 
+class TestHexLiteralToInt:
+    """A hex literal cast to an integer can't go through Oracle HEXTORAW (ORA-00932
+    casting BINARY to a number); TO_NUMBER with an 'X' mask parses the digits.
+    Live-verified 255."""
+
+    def test_oracle_uses_to_number_hex_mask(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-hex-literal "), "postgresql", "oracle"
+        )
+        assert "TO_NUMBER('FF', 'XX')" in out, out
+
+
 class TestToNumberScientific:
     """Oracle TO_NUMBER of a scientific-notation string ('1.234E2') can't CAST to
     a T-SQL DECIMAL (error 8114); FLOAT parses the exponent. Live-verified 123.4."""
