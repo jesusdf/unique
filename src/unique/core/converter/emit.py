@@ -1563,6 +1563,33 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             base,
         )
 
+    # MySQL's ENFORCED / NOT ENFORCED on a CHECK constraint: ENFORCED is the
+    # default (the constraint IS validated) — strip the keyword for every other
+    # engine (identical semantics). NOT ENFORCED (defined but skipped) has no
+    # equivalent — strip with a carrier so the semantic loss is documented.
+    if (
+        node.kind == "ALTER"
+        and node.source_dialect == "mysql"
+        and dialect != "mysql"
+        and re.search(r"(?i)\bENFORCED\b", node.sql)
+    ):
+        not_enforced = re.search(r"(?i)\bNOT\s+ENFORCED\b", node.sql)
+        stripped = re.sub(r"(?i)\s*\b(?:NOT\s+)?ENFORCED\b", "", node.sql).rstrip()
+        try:
+            rendered = sqlglot.transpile(stripped, read=read, write=write)
+            base = rendered[0] if rendered and rendered[0].strip() else stripped
+        except Exception:  # noqa: BLE001 - keep the stripped spelling on failure
+            base = stripped
+        if dialect == "tsql":
+            base = base.rstrip().rstrip(";")
+        if not_enforced:
+            return (
+                f"-- UNIQUE: MySQL NOT ENFORCED (a CHECK that is defined but not "
+                f"validated) has no {dialect} equivalent; it is enforced here\n"
+                f"{base}"
+            )
+        return base
+
     # PG's NOT VALID (add the constraint but skip validating existing rows) has
     # no equivalent on the other engines, which validate immediately. Strip it —
     # the constraint definition is identical — and document the difference so the

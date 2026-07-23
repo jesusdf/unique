@@ -161,7 +161,7 @@ SELECT CHAR(956 USING utf8mb4) AS r
 -- CASE[fixed]: my-char-unicode2 — fails on oracle, postgresql, tsql. (195, b"'CHR' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT CHAR(0x41,0x42 USING utf8mb4),ORD('中')
 
--- CASE[open]: my-check-enforced — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near 'ENFORCED'.DB-Lib error message 20018, severity 15:\nGeneral
+-- CASE[fixed]: my-check-enforced — MySQL's ENFORCED is the default (the CHECK is validated), so the keyword is stripped for every other engine (identical semantics); NOT ENFORCED would keep a carrier. live-verified DDL runs.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) ENFORCED
 
 -- CASE[limit]: my-coalesce-empty — fails on oracle. Oracle stores '' as NULL (docs/03-unsupported.md). FUNC-DIFF: source=(('1',),) target=(('NULL',),)

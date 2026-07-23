@@ -477,6 +477,21 @@ class TestAlterSetDefault:
         assert "MODIFY a DEFAULT 5" in out, out
 
 
+class TestCheckEnforced:
+    """MySQL's ENFORCED on a CHECK constraint is the default (the constraint is
+    validated); it has no keyword on Oracle/PG/T-SQL, so it is stripped."""
+
+    def test_enforced_stripped(self) -> None:
+        for target in ("oracle", "postgresql", "tsql"):
+            out = _tx(
+                _case("challenge_mysql.sql", "my-check-enforced "), "mysql", target
+            )
+            body = "\n".join(
+                ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
+            )
+            assert "CHECK (a > 0)" in body and "ENFORCED" not in body, body
+
+
 class TestAlterAddColumnDefault:
     """ADD COLUMN … NOT NULL DEFAULT v: Oracle needs DEFAULT before NOT NULL
     (ORA-30649), and MySQL needs a parenthesized default on TEXT/BLOB columns
