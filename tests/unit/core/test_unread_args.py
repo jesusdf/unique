@@ -82,43 +82,56 @@ class TestTrackingMechanism:
 class TestConverterIntegration:
     """The tripwire fires through the real conversion dispatch."""
 
-    def test_n1_on_conflict_warns_pre_b1(self, transpiler: Transpiler) -> None:
-        # N1: sqlglot models ON CONFLICT as Insert.args["conflict"];
-        # _convert_insert never reads it (until B1 lands). The tripwire flags
-        # the silent drop.
-        sql = (
-            "INSERT INTO kv (k, v) VALUES ('a', 1) "
-            "ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v + 1;"
-        )
-        result = transpiler.transpile(sql, source="postgresql", target="mysql")
+    _N1_SQL = (
+        "INSERT INTO kv (k, v) VALUES ('a', 1) "
+        "ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v + 1;"
+    )
+
+    def test_n1_on_conflict_converts_post_b1(self, transpiler: Transpiler) -> None:
+        # N1 closed by B1: Insert.args["conflict"] is now consumed — the
+        # tripwire stays silent and the upsert converts (this asserted the
+        # warning until B1 landed).
+        result = transpiler.transpile(self._N1_SQL, "postgresql", "mysql")
+        assert not [w for w in result.warnings if w.feature == "unread_args"]
+        assert "ON DUPLICATE KEY UPDATE" in result.sql
+        assert "ON CONFLICT" not in result.sql.upper()
+
+    # Integration coverage of the warn/off/gate modes needs a genuinely
+    # unread semantic arg; post-B1 none survives in real conversions, so we
+    # un-allowlist Concat.safe (a real sqlglot arg the converter ignores) as
+    # the guinea pig.
+    _CONCAT_SQL = "SELECT CONCAT('a', 'b') AS c"
+
+    def _un_allowlist_concat(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from unique.core.converter import _unread_args as ua
+
+        monkeypatch.delitem(ua.ALLOWED_UNREAD, "Concat")
+
+    def test_warn_mode_flags_unread_arg(
+        self, transpiler: Transpiler, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._un_allowlist_concat(monkeypatch)
+        result = transpiler.transpile(self._CONCAT_SQL, "postgresql", "mysql")
         unread = [w.message for w in result.warnings if w.feature == "unread_args"]
-        assert any(
-            "unread sqlglot arg 'conflict' on Insert" in m for m in unread
-        ), unread
+        assert any("'safe' on Concat" in m for m in unread), unread
 
     def test_off_mode_suppresses(
         self, transpiler: Transpiler, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        self._un_allowlist_concat(monkeypatch)
         monkeypatch.setenv("UNIQUE_UNREAD_ARGS", "off")
-        sql = (
-            "INSERT INTO kv (k, v) VALUES ('a', 1) "
-            "ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v + 1;"
-        )
-        result = transpiler.transpile(sql, source="postgresql", target="mysql")
+        result = transpiler.transpile(self._CONCAT_SQL, "postgresql", "mysql")
         assert not [w for w in result.warnings if w.feature == "unread_args"]
 
     def test_gate_mode_degrades_to_carrier(
         self, transpiler: Transpiler, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        self._un_allowlist_concat(monkeypatch)
         monkeypatch.setenv("UNIQUE_UNREAD_ARGS", "gate")
-        sql = (
-            "INSERT INTO kv (k, v) VALUES ('a', 1) "
-            "ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v + 1;"
-        )
-        result = transpiler.transpile(sql, source="postgresql", target="mysql")
+        result = transpiler.transpile(self._CONCAT_SQL, "postgresql", "mysql")
         # The whole statement degrades to a carrier that preserves the source,
         # and the unread-args warning is surfaced.
-        assert "ON CONFLICT" in result.sql
+        assert "CONCAT('a', 'b')" in result.sql
         assert any(w.feature == "unread_args" for w in result.warnings)
 
     def test_clean_statement_has_no_unread_warning(

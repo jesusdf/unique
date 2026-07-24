@@ -5039,6 +5039,7 @@ class TestMergeOutputToPostgres:
         )
         assert "RETURNING" in r.sql.upper(), r.sql
 
+
 class TestInsertSelectConflict:
     """``pg-insert-select-conflict`` — INSERT … SELECT with ON CONFLICT (id) DO
     NOTHING models the upsert per target instead of dropping the clause (audit
