@@ -1265,7 +1265,10 @@ class TestWaitFor:
     def test_delay_to_oracle(self) -> None:
         src = "CREATE PROCEDURE dbo.p AS BEGIN WAITFOR DELAY '00:00:02' END"
         out = _transpile(src, "tsql", "oracle")
-        assert "DBMS_LOCK.SLEEP(2);" in out
+        # DBMS_SESSION.SLEEP (18c+) is granted to PUBLIC; DBMS_LOCK.SLEEP
+        # needs an explicit EXECUTE grant and fails PLS-00201 without it.
+        assert "DBMS_SESSION.SLEEP(2);" in out
+        assert "DBMS_LOCK" not in out
 
     def test_time_documented(self) -> None:
         src = "CREATE PROCEDURE dbo.p AS BEGIN WAITFOR TIME '23:00:00' END"

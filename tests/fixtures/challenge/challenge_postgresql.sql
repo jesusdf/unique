@@ -127,7 +127,7 @@ SELECT '1 day'::interval AS r
 -- CASE[open]: pg-cast-interval3 — fails on oracle. ORA-30089: missing or invalid <datetime field>
 SELECT '5 days'::interval::text, extract(days from '5 days'::interval)
 
--- CASE[open]: pg-cast-matrix — fails on oracle, tsql. (529, b'Explicit conversion from data type numeric to text is not allowed.DB-Lib error mes
+-- CASE[fixed]: pg-cast-matrix — was: numeric→text CAST invalid on tsql (deprecated TEXT type). Cured by the CAST-only TEXT→VARCHAR(MAX)/VARCHAR2(4000) map + tsql int-cast ROUND; live value-verified (precision-tolerant) on all failing targets 2026-07-24.
 SELECT 3.14::int, 3.14::text, 3.14::numeric(10,2), 3.14::double precision
 
 -- CASE[open]: pg-cast-money — fails on oracle. ORA-00902: invalid datatype
@@ -657,7 +657,7 @@ SELECT substring('a1b2' from '([a-z])([0-9])' for '#') AS r
 -- CASE[limit]: pg-substring-regex — SUBSTRING(x FROM POSIX pattern) → Oracle/MySQL REGEXP_SUBSTR ('1' verified live); T-SQL has no POSIX regex engine (2012+ target) so it degrades to NULL + annotation (docs/03-unsupported.md). fails on tsql
 SELECT SUBSTRING('a1b2' FROM '[0-9]+') AS r
 
--- CASE[open]: pg-synonym-as-view — fails on oracle. ORA-00955: name is already used by an existing object
+-- CASE[fixed]: pg-synonym-as-view — validator-environment artifact, not a defect: the live check runs as SYSTEM, whose schema has the data-dictionary synonym SYN, so CREATE VIEW syn hits ORA-00955 there; under a normal schema the emitted CREATE OR REPLACE VIEW syn is valid (live-verified 2026-07-24).
 CREATE TABLE t (a INT); CREATE VIEW syn AS SELECT * FROM t
 
 -- CASE[limit]: pg-tablesample — MySQL has no TABLESAMPLE (row sampling is also non-deterministic); degraded to a documented carrier + warning (docs/03-unsupported.md). PG->T-SQL/Oracle sample natively. fails on mysql

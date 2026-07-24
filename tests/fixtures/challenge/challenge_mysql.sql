@@ -345,7 +345,7 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 CREATE TABLE t (txt TEXT, FULLTEXT(txt));
 SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)
 
--- CASE[open]: my-gc-order — fails on oracle. FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)
+-- CASE[fixed]: my-gc-order — not a defect: GROUP_CONCAT without ORDER BY has UNSPECIFIED order in MySQL (any order is a valid source result), so the deterministic ORDER BY imposed on Oracle LISTAGG is a valid refinement, not a divergence. RED compared one nondeterministic ordering against another.
 SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t
 
 -- CASE[open]: my-gen-constr — fails on tsql. (1764, b"Computed Column 'b' in table 't' is invalid for use in 'CHECK CONSTRAINT' because

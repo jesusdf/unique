@@ -67,6 +67,7 @@ from unique.core.ast_nodes import (
     WhileStatement,
     needs_procedural_wrapper,
 )
+from unique.core.batch_splitter import _TSQL_SYSTEM_PROCS
 from unique.core.mappings import (
     LAST_IDENTITY_EXPR,
     PROCEDURAL_FUNC_MAPS,
@@ -2523,6 +2524,31 @@ class ProceduralTransformer:
                     return self._transform_node(
                         EmbeddedDML(sql=inner, dialect=self._source)
                     )
+        # A Microsoft-shipped T-SQL system procedure (EXEC sp_who, sp_rename…)
+        # has no equivalent off T-SQL; shipped raw it is a guaranteed error.
+        # Same carrier shape as the Oracle package-call branch in
+        # _transform_call. sp_executesql is excluded (real dynamic-SQL path).
+        if (
+            self._source == "tsql"
+            and self._target != "tsql"
+            and not node.immediate
+            and isinstance(expr, RawSQL)
+        ):
+            m = re.match(r"\s*(?:[\w\[\]]+\s*\.\s*)*\[?(sp_\w+)\]?", expr.sql)
+            callee = m.group(1).lower() if m else ""
+            if callee in _TSQL_SYSTEM_PROCS and callee != "sp_executesql":
+                self._warnings.append(
+                    f"T-SQL system procedure {callee} has no "
+                    f"{self._target} equivalent; preserved as a comment"
+                )
+                return RawSQL(
+                    sql=(
+                        "-- UNIQUE: T-SQL system procedure has no "
+                        f"{self._target} equivalent; original: "
+                        f"EXEC {expr.sql.strip()}\n{self._noop_sql()}"
+                    ),
+                    reason="tsql system procedure",
+                )
         op = self._named_arg_op()
         if op and isinstance(expr, RawSQL):
             # A T-SQL ``EXEC proc @param = value`` uses named-parameter syntax;
@@ -2593,6 +2619,31 @@ class ProceduralTransformer:
 
             original = ProceduralEmitter(self._source).emit(node)
             return RawSQL(sql=original, reason=reason)
+        # A Microsoft-shipped T-SQL system procedure (sp_who, sp_rename, …)
+        # shipped raw is a guaranteed error off T-SQL — same shape as the
+        # Oracle package-call carrier below. sp_executesql is excluded: it has
+        # a real dynamic-SQL mapping.
+        if (
+            self._source == "tsql"
+            and self._target != "tsql"
+            and callee in _TSQL_SYSTEM_PROCS
+            and callee != "sp_executesql"
+        ):
+            original = (
+                f"{node.schema}.{node.name}" if node.schema else node.name
+            ) + f"({node.args})"
+            self._warnings.append(
+                f"T-SQL system procedure {node.name} has no "
+                f"{self._target} equivalent; preserved as a comment"
+            )
+            return RawSQL(
+                sql=(
+                    "-- UNIQUE: T-SQL system procedure has no "
+                    f"{self._target} equivalent; original: {original}\n"
+                    f"{self._noop_sql()}"
+                ),
+                reason="tsql system procedure",
+            )
         # An Oracle built-in package call shipped raw is a guaranteed runtime
         # error off Oracle (audit D10: DBMS_SCHEDULER.CREATE_JOB became a raw
         # CALL on PostgreSQL, unwarned). Preserve it as a documented carrier.

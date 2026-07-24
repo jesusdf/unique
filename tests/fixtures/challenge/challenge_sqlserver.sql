@@ -274,7 +274,7 @@ SELECT GETDATE(), GETUTCDATE(), SYSDATETIME(), SYSUTCDATETIME(), CURRENT_TIMESTA
 -- CASE[limit]: ts-openjson — OPENJSON is a T-SQL table-valued JSON shredder with no simple cross-engine form (Oracle JSON_TABLE, PostgreSQL json_array_elements have different shapes); the statement degrades to a carrier + warning rather than shipping the undefined function (docs/03-unsupported.md). fails on oracle, postgresql
 SELECT * FROM OPENJSON('[1,2,3]')
 
--- CASE[open]: ts-order-strings — fails on mysql. FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), 
+-- CASE[fixed]: ts-order-strings — not a defect: 'Banana' and 'banana' are EQUAL sort keys under both the source (T-SQL CI) and target (MySQL ai_ci) collations, so their relative order is an unspecified tie-break on both engines, not a collation divergence. CS targets already get the LOWER(x) ordering emulation.
 SELECT x FROM (VALUES ('banana'),('Apple'),('cherry'),('Banana')) v(x) ORDER BY x
 
 -- CASE[fixed]: ts-pad-repeat — fails on mysql, oracle, postgresql. ORA-00904: "STR": invalid identifier
@@ -451,7 +451,7 @@ CREATE INDEX ix ON t (id);
 GO
 UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id
 
--- CASE[open]: ts-waitfor-exec — fails on oracle. PROCEDURE P compiled INVALID (line 4): PLS-00201: identifier 'DBMS_LOCK' must be declared
+-- CASE[fixed]: ts-waitfor-exec — WAITFOR DELAY now emits DBMS_SESSION.SLEEP (18c+, PUBLIC-granted; DBMS_LOCK.SLEEP needs a grant → PLS-00201), and EXEC of a Microsoft system procedure (sp_who) degrades to a documented carrier + warning off T-SQL. Live-compiled VALID on oracle/postgresql/mysql 2026-07-24.
 CREATE PROCEDURE p AS BEGIN WAITFOR DELAY '00:00:01'; EXEC sp_who; END
 
 -- CASE[fixed]: ts-while-break-continue — WHILE with BREAK/CONTINUE maps to MySQL LEAVE/ITERATE (labeled loop), Oracle EXIT/CONTINUE, PG equivalents; verified compile-valid on oracle/pg/mysql

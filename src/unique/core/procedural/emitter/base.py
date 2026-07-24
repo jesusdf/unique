@@ -1881,8 +1881,9 @@ class ProceduralEmitter:
 
     def _sleep_call(self, secs: str) -> str:
         """The engine's "sleep for N seconds" statement. Default is Oracle's
-        DBMS_LOCK.SLEEP; MySQL and PostgreSQL override."""
-        return f"DBMS_LOCK.SLEEP({secs});"
+        DBMS_SESSION.SLEEP (18c+, granted to PUBLIC — DBMS_LOCK.SLEEP needs an
+        explicit EXECUTE grant); MySQL and PostgreSQL override."""
+        return f"DBMS_SESSION.SLEEP({secs});"
 
     def _emit_cursor_op(self, node: CursorOperation) -> str:
         op = node.operation.upper()

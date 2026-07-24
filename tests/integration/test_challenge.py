@@ -3946,3 +3946,106 @@ class TestMysqlConcatNumBool:
     def test_concat_num_bool_null(self, target: str) -> None:
         out = _tx(_case("challenge_mysql.sql", "my-fconcatnum"), "mysql", target)
         assert "CONCAT('x', 1)" in out and "NULL" in out, out
+
+
+class TestPgCastMatrix:
+    """PG cast matrix: the failing legs were the deprecated TEXT cast target
+    (tsql error 529 / no VARCHAR length on oracle); cured by the CAST-only
+    TEXT type remap. Live value-verified (precision-tolerant) 2026-07-24."""
+
+    def test_tsql_text_cast_modernized(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-cast-matrix"), "postgresql", "tsql"
+        )
+        assert "VARCHAR(MAX)" in out, out
+        assert "AS TEXT" not in out.upper(), out
+        assert "::" not in out, out
+
+    def test_oracle_text_cast_modernized(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-cast-matrix"), "postgresql", "oracle"
+        )
+        assert "VARCHAR2(4000)" in out, out
+        assert "BINARY_DOUBLE" in out, out
+        assert "::" not in out, out
+
+
+class TestPgSynonymAsView:
+    """The emitted view DDL is plain and valid; the corpus live check failed
+    only because it ran as SYSTEM (whose schema has the SYN dictionary
+    synonym). Identity-proof: OR REPLACE/ALTER added, source text absent."""
+
+    def test_oracle_view_form(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-synonym-as-view"),
+            "postgresql",
+            "oracle",
+        )
+        assert re.search(r"(?i)CREATE OR REPLACE VIEW syn", out), out
+
+    def test_tsql_view_form(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-synonym-as-view"),
+            "postgresql",
+            "tsql",
+        )
+        assert re.search(r"(?i)CREATE OR ALTER VIEW syn", out), out
+
+
+class TestGroupConcatUnorderedRefinement:
+    """GROUP_CONCAT with no ORDER BY is unordered in MySQL, so Oracle's LISTAGG
+    (which requires WITHIN GROUP) legitimately imposes a deterministic order."""
+
+    def test_oracle_listagg_ordered(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-gc-order"), "mysql", "oracle")
+        )
+        assert re.search(r"(?i)LISTAGG\(.*WITHIN GROUP \(ORDER BY", out), out
+        assert "GROUP_CONCAT" not in out.upper(), out
+
+
+class TestTsqlOrderStringsCollation:
+    """T-SQL CI ordering to a CS target gets the LOWER() key emulation; the
+    MySQL target is CI natively so the plain column order is kept."""
+
+    @pytest.mark.parametrize("target", ("oracle", "postgresql"))
+    def test_cs_target_gets_lower_key(self, target: str) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-order-strings"), "tsql", target)
+        assert re.search(r"(?i)ORDER BY LOWER\(x\)", out), out
+
+    def test_mysql_ci_target_plain(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_sqlserver.sql", "ts-order-strings"), "tsql", "mysql")
+        )
+        assert re.search(r"(?i)ORDER BY x", out), out
+        assert "LOWER" not in out.upper(), out
+
+
+class TestWaitforExecSystemProc:
+    """WAITFOR DELAY maps to a PUBLIC-granted sleep on Oracle and EXEC of a
+    Microsoft system procedure degrades to a warned carrier off T-SQL."""
+
+    def test_oracle_sleep_and_carrier(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_sqlserver.sql", "ts-waitfor-exec"),
+            source="tsql",
+            target="oracle",
+        )
+        assert "DBMS_SESSION.SLEEP(1);" in result.sql, result.sql
+        code = _exec_lines(result.sql)
+        assert "DBMS_LOCK" not in code, result.sql
+        assert "sp_who" not in code, result.sql
+        assert any("sp_who" in str(w) for w in result.warnings), result.warnings
+
+    @pytest.mark.parametrize("target", ("postgresql", "mysql"))
+    def test_other_targets_carrier(self, target: str) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_sqlserver.sql", "ts-waitfor-exec"),
+            source="tsql",
+            target=target,
+        )
+        code = "\n".join(
+            ln for ln in result.sql.splitlines() if not ln.lstrip().startswith("--")
+        )
+        assert "sp_who" not in code, result.sql
+        assert any("sp_who" in str(w) for w in result.warnings), result.warnings

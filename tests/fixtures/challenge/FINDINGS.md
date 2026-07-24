@@ -464,11 +464,6 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - src: `CREATE TABLE t (txt TEXT, FULLTEXT(txt));
 SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 
-## my-gc-order  (mysql)
-- targets: oracle(func)
-- live error: `FUNC-DIFF: source=(('3,1,2',),) target=(('1,2,3',),)`
-- src: `SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t`
-
 ## my-gen-constr  (mysql)
 - targets: tsql(invalid)
 - live error: `(1764, b"Computed Column 'b' in table 't' is invalid for use in 'CHECK CONSTRAINT' because`
@@ -1584,11 +1579,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `ORA-30089: missing or invalid <datetime field>`
 - src: `SELECT '5 days'::interval::text, extract(days from '5 days'::interval)`
 
-## pg-cast-matrix  (postgresql)
-- targets: oracle(invalid), tsql(invalid)
-- live error: `(529, b'Explicit conversion from data type numeric to text is not allowed.DB-Lib error mes`
-- src: `SELECT 3.14::int, 3.14::text, 3.14::numeric(10,2), 3.14::double precision`
-
 ## pg-cast-money  (postgresql)
 - targets: oracle(invalid)
 - live error: `ORA-00902: invalid datatype`
@@ -2112,11 +2102,6 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - live error: `(8116, b'Argument data type varchar is invalid for argument 2 of substring function.DB-Lib`
 - src: `SELECT SUBSTRING('a1b2' FROM '[0-9]+') AS r`
 
-## pg-synonym-as-view  (postgresql)
-- targets: oracle(invalid)
-- live error: `ORA-00955: name is already used by an existing object`
-- src: `CREATE TABLE t (a INT); CREATE VIEW syn AS SELECT * FROM t`
-
 ## pg-tablesample  (postgresql)
 - targets: mysql(invalid)
 - live error: `(1192, "Can't execute the given command because you have active locked tables or an active`
@@ -2542,11 +2527,6 @@ SELECT * FROM t WITH (NOLOCK)`
 - live error: `ORA-00904: "OPEN_J_S_O_N": invalid identifier`
 - src: `SELECT * FROM OPENJSON('[1,2,3]')`
 
-## ts-order-strings  (tsql)
-- targets: mysql(func)
-- live error: `FUNC-DIFF: source=(('Apple',), ('Banana',), ('banana',), ('cherry',)) target=(('Apple',), `
-- src: `SELECT x FROM (VALUES ('banana'),('Apple'),('cherry'),('Banana')) v(x) ORDER BY x`
-
 ## ts-realworld-audit  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `PROCEDURE LOG_IT compiled INVALID (line 11): PLS-00103: Encountered the symbol ")" when ex`
@@ -2680,11 +2660,6 @@ GO
 CREATE INDEX ix ON t (id);
 GO
 UPDATE t SET id = id + 1 OUTPUT DELETED.id, INSERTED.id`
-
-## ts-waitfor-exec  (tsql)
-- targets: mysql(silent), oracle(invalid), postgresql(silent)
-- live error: `PROCEDURE P compiled INVALID (line 4): PLS-00201: identifier 'DBMS_LOCK' must be declared`
-- src: `CREATE PROCEDURE p AS BEGIN WAITFOR DELAY '00:00:01'; EXEC sp_who; END`
 
 ## ts-while-break-continue  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
