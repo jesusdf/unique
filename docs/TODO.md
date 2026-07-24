@@ -94,12 +94,33 @@ workflow.
       documented limit).** Landed so far (recorded in [`docs/DONE.md`](DONE.md)
       §41): RC-1b gate (DML+procedural), 21 built-in mappings, RC-3
       FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG.
-      **2026-07-24 (architect session) — 38 `[open]` / 165 `[limit]` / 659
-      `[fixed]`** (of 862). The user DELEGATED the fix-vs-limit decision to the
+      **2026-07-24 (architect session) — 17 `[open]` / 167 `[limit]` / 678
+      `[fixed]`** (of 862; 73 cleared in 8 waves, 10 local commits `6987d38`…
+      `982ceb8`). The user DELEGATED the fix-vs-limit decision to the
       architect session ("decide por mí lo que es límite y lo que no"); each
       approved limit is recorded in its case header + docs/03-unsupported.md
-      §3.19–3.22. The session cleared 52 in five waves (commits `6987d38`,
-      `c374928`, `0b609d8`, `1c24c72`): DBMS_SESSION.SLEEP + system-proc
+      §3.19–3.22. Waves 5–8 additionally landed: GROUPING_ID→multi-arg
+      GROUPING on PG/MySQL (ora-grouping-id upgraded [limit]→[fixed]), the
+      degraded-CUBE GROUPING→0 fold scoped to non-ROLLUP, quantified
+      VALUES→UNION ALL, binary-literal numeric folds, FORMAT masks, JSONB
+      per-target map + GIN/inline-INDEX carriers (inline INDEX was dropped
+      SILENTLY; the misparsed T-SQL form is reconstructed incl. separate
+      CREATE INDEX on PG/Oracle), ALTER…ADD IDENTITY→MySQL AUTO_INCREMENT+KEY,
+      %I dynamic-SQL quoting + SQLCODE exception handlers (check_violation
+      -2290 …) + PL/SQL BIGINT map, information_schema/sys.tables→Oracle
+      catalog maps, SESSIONTIMEZONE mapping ([limit]), T-SQL DISTINCT
+      null-order derived-table wrap, sp_executesql positional binds, PG
+      star-call gate (JSON_OBJECT(*)), interval-literal EXTRACT folds.
+      **Remaining 17 = the structural tail:** front-1 embedded-text-vs-IR
+      (my-gencol2/my-gen-constr shorthand path, my-json-index pg leg,
+      my-select-into-out, ts-cursor-attr, pg-check-xor), triggers row-vs-
+      statement (ts-instead-of-insert, ts-trg-instead-delete,
+      ts-trigger-on-view, ts-after-delete-count), ts-merge-full (BY SOURCE;
+      local PG is 16), cross-statement metadata (pg-drop-not-null,
+      pg-expr-index), pg-func-attrs (parser), my-set-transaction (batch
+      SET fallback), ora-cursor-attr (MySQL cursor attrs),
+      ts-dyn-concat-loop (aggregation-assignment→LISTAGG + column map).
+      Waves 1–4 (commits `6987d38`, `c374928`, `0b609d8`, `1c24c72`): DBMS_SESSION.SLEEP + system-proc
       carrier; type-gap closest-type map (TIME/INTERVAL/BIT(n)/precision
       clamps, §3.19) + Oracle DATE-cast TRUNC + money annotation (§3.20);
       compile-time literal folds by source semantics (§3.21 — LENGTH family,
