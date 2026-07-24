@@ -42,9 +42,17 @@ Findings detail: audit docs 02/04/05/07.
   Create.properties, Introducer.this), `scripts/unread_args_sweep.py --sweep`,
   and `tests/unit/core/test_unread_args.py` (the fixture-corpus-clean test is
   the CI ratchet). N1's `Insert.conflict` now warns pre-B1.
-- [ ] **B1** Model the upsert clause (`ON CONFLICT`/`ON DUPLICATE KEY UPDATE`)
+- [x] **B1** Model the upsert clause (`ON CONFLICT`/`ON DUPLICATE KEY UPDATE`)
   — audit N1, the headline S1: upserts silently become plain INSERTs in every
-  direction.
+  direction. **Done:** `OnConflictClause`/`ExcludedColumn` IR on
+  `InsertStatement`; converted from `exp.OnConflict`/`Insert.ignore`; emitted
+  native PG⟷MySQL and lowered to a MERGE for T-SQL/Oracle; MySQL-source keys
+  taken from a new PK/UNIQUE harvest, else the whole statement degrades warned;
+  any-key + `INSERT IGNORE` divergences annotated. Also extended: `INSERT
+  IGNORE` (DO NOTHING class). Covered by `tests/unit/core/test_upsert.py` +
+  `TestInsertSelectConflict` in `test_challenge.py`; live FE value test on all
+  four engines (DO UPDATE and DO NOTHING). Corpus case `pg-insert-select-conflict`
+  made scenario-adequate (PK + pre-seeded conflict).
 - [x] **B4/B5/B6** MERGE semantic series (one series, `converter/emit.py`
   `_merge_extended_clauses` + `_merge_carve_do_nothing`, and the OUTPUT path in
   `transpiler/_core.py`) — done 2026-07-24: **B4** Oracle conditional-DELETE

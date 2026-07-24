@@ -364,8 +364,8 @@ SELECT '192.168.1.0/24'::cidr >> '192.168.1.5'::inet, abbrev('10.0.0.0/8'::cidr)
 -- CASE[fixed]: pg-initcap — fails on mysql, oracle, tsql. (195, b"'INITCAP' is not a recognized built-in function name.DB-Lib error message 20018, s
 SELECT INITCAP('hello world') AS r
 
--- CASE[fixed]: pg-insert-select-conflict — fails on oracle, tsql. (208, b"Invalid object name 'dbo.GENERATE_SERIES'.DB-Lib error message 20018, severity 16:
-CREATE TABLE t (id INT, n INT, s VARCHAR(50)); INSERT INTO t (id, n) SELECT g, g*2 FROM generate_series(1,5) g ON CONFLICT DO NOTHING
+-- CASE[fixed]: pg-insert-select-conflict — INSERT … SELECT with ON CONFLICT (id) DO NOTHING now models the upsert per target (PG native, MySQL INSERT IGNORE, T-SQL/Oracle insert-only MERGE) instead of dropping the clause; the table has a PRIMARY KEY and a pre-seeded conflicting row (id=1) so DO NOTHING is a real no-op. Live-validated on all four engines 2026-07-24 (audit B1/N1).
+CREATE TABLE t (id INT PRIMARY KEY, n INT); INSERT INTO t (id, n) VALUES (1, 10); INSERT INTO t (id, n) SELECT 1, 99 ON CONFLICT (id) DO NOTHING
 
 -- CASE[fixed]: pg-intdiv — PostgreSQL / truncates two ints (2); MySQL/Oracle divide as decimal. Match with DIV (MySQL) / TRUNC (Oracle).
 SELECT 5 / 2 AS r

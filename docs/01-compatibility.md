@@ -190,7 +190,7 @@ engines and indicates the transpilation support status for each.
 | INSERT INTO | ✓ | ✓ | ✓ | ✓ | ✅ |
 | INSERT multi-row VALUES | ✓ | ✓ (12c+) | ✓ | ✓ | ✅ |
 | INSERT ALL (multi-table) | N/A | ✓ | N/A | N/A | ⚠️ → multiple INSERTs |
-| INSERT … ON CONFLICT / MERGE | ✓ (MERGE) | ✓ (MERGE) | ✓ (ON CONFLICT) | ✓ (ON DUPLICATE KEY) | ⚠️ T-SQL MERGE mapped; PG `ON CONFLICT` is currently **dropped without warning** on foreign targets — fix planned (audit/2026-07-24/02-new-findings.md N1) |
+| INSERT … ON CONFLICT / ON DUPLICATE KEY / IGNORE | ✓ (MERGE) | ✓ (MERGE) | ✓ (ON CONFLICT) | ✓ (ON DUPLICATE KEY / IGNORE) | ✅ Modeled per target (audit B1/N1): PG `ON CONFLICT` and MySQL `ON DUPLICATE KEY UPDATE`/`INSERT IGNORE` map natively PG⟷MySQL and lower to a MERGE for T-SQL/Oracle. `EXCLUDED.col`/`VALUES(col)` unify as the incoming-row value. MySQL's any-unique-key semantics and `INSERT IGNORE`'s error-swallowing are annotated + warned (docs/03-unsupported.md). A MySQL-source upsert needs the target's key: taken from the in-script PK/UNIQUE, else the whole statement degrades to a carrier + warning (never a bare INSERT). |
 | UPDATE | ✓ | ✓ | ✓ | ✓ | ✅ |
 | UPDATE with JOIN | ✓ | ✓ | ✓ | ✓ | ✅ (syntax adaptation) |
 | DELETE | ✓ | ✓ | ✓ | ✓ | ✅ |

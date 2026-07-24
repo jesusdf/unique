@@ -384,6 +384,20 @@ silently:
   a plain literal or `CHR()`).
 - **PostgreSQL array column types** (`TEXT[]`): no cross-engine model (§7) —
   the output gate degrades the statement off PG.
+- **Upsert semantics across engines** (audit B1/N1): the upsert clause is
+  modeled and lowered per target (native PG⟷MySQL, MERGE for T-SQL/Oracle), but
+  two divergences are annotated + warned rather than shipped silently:
+  - **MySQL `ON DUPLICATE KEY UPDATE` fires on *any* unique/primary key**, not a
+    single named conflict target — so a PG `ON CONFLICT (k)` mapped to MySQL, or
+    a MySQL-source upsert whose target key had to be assumed from the in-script
+    PK, carries a `UNIQUE:` note naming the assumption.
+  - **MySQL `INSERT IGNORE` also swallows non-duplicate errors** (bad values, FK
+    violations), which PG `ON CONFLICT DO NOTHING` and the MERGE forms do not; a
+    PG `DO NOTHING` → MySQL `INSERT IGNORE` mapping is annotated to that effect.
+  A MySQL-source upsert (no explicit conflict target) whose table's PK/UNIQUE key
+  is **not** declared in-script cannot be lowered faithfully (PG needs a target;
+  the MERGE needs an `ON` condition) and degrades the WHOLE statement to a
+  carrier + warning — never a bare INSERT that would raise a duplicate-key error.
 
 ### 3.21 Oracle Extended `INSTR` (occurrence / backward search)
 

@@ -5038,3 +5038,35 @@ class TestMergeOutputToPostgres:
             "INSERT INTO t (a) OUTPUT INSERTED.id VALUES (1)", "tsql", "postgresql"
         )
         assert "RETURNING" in r.sql.upper(), r.sql
+
+class TestInsertSelectConflict:
+    """``pg-insert-select-conflict`` — INSERT … SELECT with ON CONFLICT (id) DO
+    NOTHING models the upsert per target instead of dropping the clause (audit
+    2026-07-24 B1/N1). The case seeds a PK conflict so DO NOTHING is a real
+    no-op (scenario adequacy)."""
+
+    def _out(self, target: str) -> str:
+        return _tx(
+            _case("challenge_postgresql.sql", "pg-insert-select-conflict"),
+            "postgresql",
+            target,
+        )
+
+    def test_tsql_lowers_conflict_to_insert_only_merge(self) -> None:
+        out = self._out("tsql")
+        assert "MERGE INTO" in out, out
+        assert "WHEN NOT MATCHED THEN INSERT" in out, out
+        assert "ON CONFLICT" not in _exec_lines(out).upper(), out
+
+    def test_oracle_lowers_conflict_to_insert_only_merge(self) -> None:
+        out = self._out("oracle")
+        assert "MERGE INTO" in out, out
+        assert "ON CONFLICT" not in _exec_lines(out).upper(), out
+
+    def test_mysql_uses_insert_ignore(self) -> None:
+        out = self._out("mysql")
+        assert "INSERT IGNORE INTO" in out, out
+        # Strip the honesty annotation (which names ON CONFLICT) before the
+        # source-idiom-absent check.
+        code = re.sub(r"/\*.*?\*/", "", _exec_lines(out), flags=re.DOTALL)
+        assert "ON CONFLICT" not in code.upper(), out
