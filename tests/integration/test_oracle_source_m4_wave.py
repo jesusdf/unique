@@ -838,8 +838,9 @@ class TestCaseInsensitiveVarRename:
 
 class TestCursorAttributesOnTsql:
     """Oracle cursor attributes leaking raw into T-SQL (4145 live:
-    ``WHILE C_X % FOUND``). Named-cursor %FOUND/%NOTFOUND read
-    @@FETCH_STATUS; the implicit SQL%FOUND/%NOTFOUND read @@ROWCOUNT."""
+    ``WHILE C_X % FOUND``). Named-cursor %FOUND/%NOTFOUND read a per-cursor
+    status var captured after each FETCH (adjacency-safe — finding N5c); the
+    implicit SQL%FOUND/%NOTFOUND read @@ROWCOUNT."""
 
     def test_named_cursor_found(self) -> None:
         src = (
@@ -857,7 +858,9 @@ class TestCursorAttributesOnTsql:
         )
         out = _t(src, "tsql")
         assert "%" not in out.replace("%TYPE", ""), out
-        assert re.search(r"(?i)@@FETCH_STATUS\s*=\s*0", out), out
+        # %FOUND reads the per-cursor status var, captured after each FETCH.
+        assert "SET @uq_c_t_fs = @@FETCH_STATUS;" in out, out
+        assert re.search(r"(?i)@uq_c_t_fs\s*=\s*0", out), out
 
     def test_implicit_sql_found(self) -> None:
         src = (

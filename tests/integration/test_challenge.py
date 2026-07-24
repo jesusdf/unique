@@ -3726,21 +3726,35 @@ class TestTsqlLoopControl:
         [
             ("oracle", "EXIT;", "CONTINUE;"),
             ("postgresql", "EXIT;", "CONTINUE;"),
-            ("mysql", "LEAVE loop_lbl;", "ITERATE loop_lbl;"),
+            # MySQL LEAVE/ITERATE target the loop's unique generated label
+            # (loop_lbl_<n>, per finding N5a) — assert the exact form below.
+            ("mysql", None, None),
         ],
     )
-    def test_break_continue_map(self, target: str, brk: str, cont: str) -> None:
+    def test_break_continue_map(
+        self, target: str, brk: str | None, cont: str | None
+    ) -> None:
         out = _tx(_case("challenge_sqlserver.sql", "ts-continue-break"), "tsql", target)
         body = _exec_lines(out)
-        assert brk in body, out
-        assert cont in body, out
+        if target == "mysql":
+            assert re.search(r"LEAVE loop_lbl_\d+;", body), out
+            assert re.search(r"ITERATE loop_lbl_\d+;", body), out
+        else:
+            assert brk in body, out
+            assert cont in body, out
         assert "BREAK" not in body.upper(), out  # no leftover T-SQL BREAK
 
     def test_mysql_loop_is_labeled(self) -> None:
+        # Each emitted loop carries a UNIQUE label so nested loops never
+        # collide (finding N5a: two ``loop_lbl`` is MySQL error 1309); the
+        # LEAVE/ITERATE inside reference the same label.
         out = _tx(
             _case("challenge_sqlserver.sql", "ts-continue-break"), "tsql", "mysql"
         )
-        assert "loop_lbl: WHILE" in out, out
+        m = re.search(r"(loop_lbl_\d+): WHILE", out)
+        assert m, out
+        label = m.group(1)
+        assert f"LEAVE {label};" in out and f"ITERATE {label};" in out, out
 
 
 class TestTsqlBitCast:
@@ -4807,7 +4821,11 @@ class TestCursorAttributes:
             _tx(_case("challenge_oracle.sql", "ora-cursor-attr"), "oracle", "mysql")
         )
         assert "DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_fetch_done" in out, out
-        assert "IF NOT v_fetch_done THEN" in out, out
+        # %NOTFOUND reads a PER-cursor done flag transferred from the shared
+        # handler flag after each FETCH (so a nested cursor cannot leak its
+        # exhaustion into an outer loop — finding N5b).
+        assert "IF NOT v_uq_c_done THEN" in out, out
+        assert "SET v_uq_c_done = v_fetch_done; SET v_fetch_done = FALSE;" in out, out
         assert re.search(r"(?i)SET uq_c_rc = uq_c_rc \+ 1", out), out
 
 

@@ -566,10 +566,13 @@ class TestCursorsAndLoops:
 
     def test_exit_when_notfound_tsql(self) -> None:
         out = _transpile(self.SRC, "oracle", "tsql")
-        # EXIT WHEN cur%NOTFOUND must keep its condition, not become a bare
-        # BREAK.
-        assert "@@FETCH_STATUS <> 0" in out
-        assert "BREAK" in out
+        # EXIT WHEN cur%NOTFOUND keeps its condition (not a bare BREAK) and
+        # reads a per-cursor status var captured right after that cursor's
+        # FETCH — adjacency-safe, unlike the single global @@FETCH_STATUS
+        # (finding N5c).
+        assert "SET @uq_c_fs = @@FETCH_STATUS;" in out
+        assert "IF @uq_c_fs <> 0 BREAK;" in out
+        assert "%NOTFOUND" not in out.upper()
 
     def test_exit_when_notfound_postgresql(self) -> None:
         out = _transpile(self.SRC, "oracle", "postgresql")
