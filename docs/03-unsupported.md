@@ -174,6 +174,10 @@ degrading) is always preferable — the carrier is the honest floor, not the goa
 
 ## 3. Partially Supported (⚠️) — Known Limitations
 
+> Subsections §3.13+ are ordered **newest first** (a new limitation is added
+> right after §3.12), so numbering runs §3.12, §3.22 … §3.13. All numbers
+> exist; cross-references resolve by number, not position.
+
 ### 3.1 Date Format Strings
 
 Format models differ between engines. The transpiler bridges four conventions —

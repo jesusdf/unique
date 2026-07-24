@@ -190,7 +190,7 @@ engines and indicates the transpilation support status for each.
 | INSERT INTO | ✓ | ✓ | ✓ | ✓ | ✅ |
 | INSERT multi-row VALUES | ✓ | ✓ (12c+) | ✓ | ✓ | ✅ |
 | INSERT ALL (multi-table) | N/A | ✓ | N/A | N/A | ⚠️ → multiple INSERTs |
-| INSERT … ON CONFLICT / MERGE | ✓ (MERGE) | ✓ (MERGE) | ✓ (ON CONFLICT) | ✓ (ON DUPLICATE KEY) | ✅ |
+| INSERT … ON CONFLICT / MERGE | ✓ (MERGE) | ✓ (MERGE) | ✓ (ON CONFLICT) | ✓ (ON DUPLICATE KEY) | ⚠️ T-SQL MERGE mapped; PG `ON CONFLICT` is currently **dropped without warning** on foreign targets — fix planned (audit/2026-07-24/02-new-findings.md N1) |
 | UPDATE | ✓ | ✓ | ✓ | ✓ | ✅ |
 | UPDATE with JOIN | ✓ | ✓ | ✓ | ✓ | ✅ (syntax adaptation) |
 | DELETE | ✓ | ✓ | ✓ | ✓ | ✅ |
@@ -210,7 +210,7 @@ engines and indicates the transpilation support status for each.
 | CREATE TABLE | ✓ | ✓ | ✓ | ✓ | ✅ |
 | ALTER TABLE ADD/DROP/MODIFY | ✓ | ✓ | ✓ | ✓ | ✅ (syntax normalization) |
 | DROP TABLE | ✓ | ✓ | ✓ | ✓ | ✅ |
-| IF EXISTS / IF NOT EXISTS | ✓ | N/A | ✓ | ✓ | ✅ (Oracle → exception block) |
+| IF EXISTS / IF NOT EXISTS | ✓ | N/A | ✓ | ✓ | ⚠️ Oracle: kept verbatim (valid on 23c+ only); no exception block is emitted — pre-23c guard planned (2026-07-24 audit, `audit/2026-07-24/06-docs-drift.md` D3) |
 | Temporary tables | ✓ (#table) | ✓ (GTT) | ✓ (TEMP) | ✓ (TEMPORARY) | ✅ |
 | IDENTITY / SERIAL / AUTO_INCREMENT | ✓ | ✓ (12c+) | ✓ | ✓ | ✅ |
 | Computed/generated columns | ✓ | ✓ | ✓ | ✓ | ✅ |
@@ -447,12 +447,16 @@ engines and indicates the transpilation support status for each.
 
 | Category | Total Features | ✅ Full | ⚠️ Partial | ❌ Out of Scope |
 |----------|---------------|---------|------------|-----------------|
-| DQL (SELECT, JOINs, etc.) | 53 | 39 | 13 | 1 |
-| DML (INSERT, UPDATE, etc.) | 11 | 8 | 3 | 0 |
-| DDL (Tables, Indexes, etc.) | 20 | 14 | 5 | 1 |
-| Data Types | 17 | 11 | 6 | 0 |
-| Built-in Functions | 33 | 25 | 8 | 0 |
-| Procedural SQL | 27 | 14 | 11 | 2 |
-| Transaction & DCL | 6 | 4 | 2 | 0 |
-| Triggers | 5 | 1 | 4 | 0 |
-| **Total** | **172** | **116 (67%)** | **52 (30%)** | **4 (2%)** |
+| DQL (SELECT, JOINs, etc.) | 56 | 46 | 10 | 0 |
+| DML (INSERT, UPDATE, etc.) | 11 | 7 | 4 | 0 |
+| DDL (Tables, Indexes, etc.) | 20 | 12 | 7 | 1 |
+| Data Types | 17 | 10 | 6 | 1 |
+| Built-in Functions | 37 | 34 | 3 | 0 |
+| Procedural SQL | 35 | 18 | 15 | 2 |
+| Transaction & DCL | 6 | 3 | 3 | 0 |
+| Triggers | 8 | 1 | 6 | 1 |
+| **Total** | **190** | **131 (69%)** | **54 (28%)** | **5 (3%)** |
+
+<!-- Recounted 2026-07-24 (audit D4) with the row-count script in
+     audit/2026-07-24/06-docs-drift.md; keep this table in sync when adding
+     matrix rows. -->

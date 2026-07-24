@@ -97,18 +97,17 @@ See `docs/02-architecture.md` for the full layout.
 
 ## Adding a New Dialect
 
-1. Create the dialect directory:
+1. Create the dialect directory — a single module:
    ```
    src/unique/dialects/<name>/
-   ├── __init__.py
-   ├── parser.py
-   ├── emitter.py
-   ├── functions.py
-   ├── types.py
-   └── keywords.py
+   └── __init__.py      # the Dialect subclass
    ```
 
-2. Implement the `Dialect` interface in `__init__.py`.
+2. Implement the `Dialect` interface in `__init__.py`. Dialect knowledge goes
+   in the shared layers, not the plugin: function/type/literal mappings in
+   `core/mappings.py` (both pipelines read it), procedural behavior as one new
+   emitter module + one new transformer module under
+   `core/procedural/{emitter,transformer}/` (self-registering, factory-selected).
 
 3. Register via entry point in `pyproject.toml`:
    ```toml

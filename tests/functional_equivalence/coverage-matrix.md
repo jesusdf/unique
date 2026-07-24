@@ -6,9 +6,11 @@ complete**: every construct below is touched by at least one operation *and*
 asserted on in `expected_state.yaml`, and nothing is included that isn't
 asserted.
 
-Status: **LOCKED for Phase 1** (T-SQL canonical source → MySQL / PostgreSQL /
-Oracle). Only the faithfully-transpilable subset lives here; lossy constructs
-stay covered by the syntactic / `-- UNIQUE:` tests, not this matrix.
+Status: **full 4×4 matrix** — native scenario fixtures for all four sources,
+16 source×target pairs (extended from the original T-SQL-canonical Phase 1;
+see the Step-6 addendum; status line refreshed 2026-07-24, audit D13). Only
+the faithfully-transpilable subset lives here; lossy constructs stay covered
+by the syntactic / `-- UNIQUE:` tests, not this matrix.
 
 Step numbers below refer to the ordered scenario (also recapped in
 `expected_state.yaml` and authored in full in `scenario/tsql.sql`):

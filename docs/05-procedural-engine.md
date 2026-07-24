@@ -115,7 +115,7 @@ Tokenizes procedural SQL into a stream of typed tokens:
 - Comments: preserved as tokens
 - Embedded DML: captured as a single token for delegation to sqlglot
 
-### 3. ProceduralParser (`core/procedural/parser.py`)
+### 3. ProceduralParser (`core/procedural/parser/` — `_base.py` + `_tsql.py`/`_plsql.py`)
 
 Recursive descent parser producing IR AST nodes. The parser depends on the
 *source* dialect, of which there are only two syntactic families — T-SQL and

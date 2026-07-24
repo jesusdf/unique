@@ -4842,7 +4842,7 @@ CHARINDEX not-found offset drift, N'…' invalid on PG, silent GROUPS-frame
 material, the '+'-as-concat mysql-source semantics, COUNT boundary
 semantics of DATEDIFF(HOUR).
 
-## 40. Zero-reduction campaign — six-direction residue 127 → 22 (batches W1–W6)
+## 40. Zero-reduction campaign — six-direction residue 127 → 16 (batches W1–W10)
 
 Archived from `docs/TODO.md` on 2026-07-17 (landed across `80c9545`..`34d7338`).
 **The direction-residue campaign was CLOSED at a user-declared floor of 133

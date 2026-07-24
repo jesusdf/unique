@@ -94,14 +94,22 @@ all dialects translate to and from.
 core/
 ├── __init__.py
 ├── ast_nodes.py           # IR node type hierarchy
-├── transpiler.py          # Orchestrator
+├── transpiler/            # Orchestrator (package: _core.py + _text_rules.py)
 ├── converter/             # sqlglot-backed DML/DDL path (package:
 │                          #   _base/harvest/convert/emit submodules)
+├── batch_splitter.py      # Dialect-aware batch splitting + classification
+├── mappings.py            # Shared dialect knowledge (both pipelines)
+├── transformer.py         # DML/DDL transform passes
+├── output_gate.py         # M1 honesty gate (never ship known-invalid output)
+├── sql_split.py           # Shared string/comment-aware statement splitter
+├── validation.py          # Source-syntax validation
+├── detection.py           # Source-dialect auto-detection
+├── builtins.py / dialect.py / live_validate.py / metadata.py
 ├── registry.py            # Plugin discovery & registration
 ├── errors.py              # Exception hierarchy
 └── procedural/            # The procedural engine (the value-add over sqlglot)
     ├── lexer.py           # Engine-agnostic tokenizer
-    ├── parser.py          # Source-family parser (T-SQL vs PL/SQL)
+    ├── parser/            # Source-family parser (package: _base.py + _tsql.py/_plsql.py)
     ├── emitter/           # Per-target emitter plugins
     │   ├── __init__.py    #   factory + registry, re-exports ProceduralEmitter
     │   ├── base.py        #   ProceduralEmitter: shared logic + overridable hooks
@@ -207,7 +215,7 @@ Key design decisions:
 - **Metadata** — Each node carries optional source location info for
   error reporting.
 
-#### transpiler.py — Orchestrator
+#### transpiler/ (package) — Orchestrator
 
 ```python
 class Transpiler:
@@ -330,17 +338,17 @@ class DialectRegistry:
 
 ### 3.2 Dialect Plugins (`src/unique/dialects/`)
 
-Each dialect follows the same internal structure:
+Each dialect plugin is a **single module**:
 
 ```
 dialects/<name>/
-├── __init__.py      # Exports the Dialect subclass
-├── parser.py        # SQL text → IR nodes
-├── emitter.py       # IR nodes → SQL text
-├── functions.py     # Function mapping table
-├── types.py         # Type mapping table
-└── keywords.py      # Reserved words & syntax specifics
+└── __init__.py      # The Dialect subclass (parse/emit delegate to the core)
 ```
+
+Dialect *knowledge* is deliberately not per-plugin: function/type/literal
+mapping tables live centralized in `core/mappings.py` (consumed by both the
+DML and the procedural pipelines), and per-target procedural behavior lives in
+the plugin modules under `core/procedural/{emitter,transformer}/`.
 
 A dialect may be **source-only** (its `source_only` property returns `True`):
 it provides a parser but its `emit()` raises, and the orchestrator rejects it as
@@ -419,9 +427,8 @@ Optional FastAPI-based REST API:
 ```
 api/
 ├── __init__.py
-├── app.py           # FastAPI application
-├── routes.py        # API endpoints
-└── models.py        # Pydantic request/response models
+├── app.py           # FastAPI application: endpoints + Pydantic models
+└── static/          # Built web UI served by the app
 ```
 
 Endpoints:

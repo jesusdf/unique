@@ -5,7 +5,7 @@
 **Direction-residue campaign closed 2026-07-17** (waves 103–239, user-declared
 architectural floor at `469917a`): the six corpus directions (pg-source and
 mysql-source × the three foreign targets) went from ~770 live-invalid
-statements to **133**, validity **98.9–99.8%**, and the pg→pg silent-gap
+statements to **133**, validity **98.8–99.8%**, and the pg→pg silent-gap
 discovery channel (`scripts/discover_silent_gaps.py`) from **287 to 0** — every
 statement now transpiles validly or carries an explicit warning/carrier. Full
 log: `docs/DONE.md` §36.
@@ -76,8 +76,9 @@ documented known limitations.
     unwrapping constant EXECUTE IMMEDIATE strings surfaced failures that
     previously hid as runtime noise inside opaque EXEC() calls.
     Tier-1 promotion still wants a second corpus.
-- **Test-assertion quality** is gated (identity-mutation floor 33%, currently
-  38%) and tracked nightly (mutation job with per-module floors).
+- **Test-assertion quality** is gated (identity-mutation floor 45%, last
+  measured 66% on 2026-07-24) and tracked nightly (mutation job with
+  per-module floors).
 
 ### Direction tiers (doc-04 P6)
 
@@ -118,7 +119,7 @@ in [`docs/MILESTONES.md`](MILESTONES.md); the highlights:
 
 - **Direction-residue campaign (waves 103–239)** (2026-07-15 → 2026-07-17):
   the no-silent-loss push over both validated corpora — silent-gap discovery
-  pg→pg 287 → 0, six-direction live-invalid residue ~770 → 133 (98.9–99.8%
+  pg→pg 287 → 0, six-direction live-invalid residue ~770 → 133 (98.8–99.8%
   validity), with an IR array model, function relations in FROM, a live
   output-validation option (`TranspileOptions.validate_live_url`,
   development-only by scope decision), and dozens of mechanism-level fixes in
