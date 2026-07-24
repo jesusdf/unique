@@ -4787,3 +4787,39 @@ class TestTypedComputedColumnShorthand:
             "mysql",
         )
         assert "->> '$.name'" in out, out
+
+
+class TestCursorAttributes:
+    """Oracle cursor attributes map before the IR (which read c%FOUND as
+    modulo): FETCH-status forms + a per-cursor rowcount counter. Live-compiled
+    VALID on tsql + mysql 2026-07-24."""
+
+    def test_tsql_counter_and_status(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_oracle.sql", "ora-cursor-attr"), "oracle", "tsql")
+        )
+        assert "DECLARE @uq_c_rc INT = 0;" in out, out
+        assert "IF @@FETCH_STATUS = 0 SET @uq_c_rc = @uq_c_rc + 1;" in out, out
+        assert "% FOUND" not in out and "% ROWCOUNT" not in out, out
+
+    def test_mysql_handler_flag_and_counter(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_oracle.sql", "ora-cursor-attr"), "oracle", "mysql")
+        )
+        assert "DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_fetch_done" in out, out
+        assert "IF NOT v_fetch_done THEN" in out, out
+        assert re.search(r"(?i)SET uq_c_rc = uq_c_rc \+ 1", out), out
+
+
+class TestCheckXorPredicateWrap:
+    """A CHECK comparing predicate operands wraps them in CASE 1/0 on T-SQL
+    (no boolean value type). Live: XOR enforced 2026-07-24."""
+
+    def test_case_wrap(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_postgresql.sql", "pg-check-xor"), "postgresql", "tsql")
+        )
+        assert (
+            "CHECK (CASE WHEN a IS NULL THEN 1 ELSE 0 END <> "
+            "CASE WHEN b IS NULL THEN 1 ELSE 0 END)" in out
+        ), out

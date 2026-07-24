@@ -99,7 +99,7 @@ SELECT 'a' || 5 AS r FROM DUAL
 -- CASE[fixed]: ora-cursor — MySQL requires DECLARE <variable> before DECLARE <cursor> (error 1337); the leading declaration block is reordered (variables first, then cursors). Compiles + CALL ok on MySQL
 CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; CLOSE c; END;
 
--- CASE[open]: ora-cursor-attr — fails on mysql, tsql. (128, b'The name "c" is not permitted in this context. Valid expressions are constants, co
+-- CASE[fixed]: ora-cursor-attr — cursor attributes now map BEFORE the IR attempt (which parsed c%FOUND as modulo): T-SQL @@FETCH_STATUS + a per-cursor @uq_<c>_rc counter incremented after each successful FETCH; MySQL the NOT FOUND handler flag + a guarded counter. Live-compiled VALID on tsql + mysql 2026-07-24.
 CREATE PROCEDURE p AS CURSOR c IS SELECT 1 FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; IF c%FOUND THEN DBMS_OUTPUT.PUT_LINE(c%ROWCOUNT); END IF; CLOSE c; END;
 /
 

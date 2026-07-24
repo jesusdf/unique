@@ -4604,6 +4604,45 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
     # index by default, so strip the clause (the constraint is identical).
     if node.source_dialect == "oracle" and dialect != "oracle":
         fragment_sql = re.sub(r"(?is)\s+USING\s+INDEX\b.*$", "", fragment_sql)
+    # T-SQL has no boolean VALUE type: a comparison whose operand is itself a
+    # predicate (``(a IS NULL) != (b IS NULL)`` — the null-XOR CHECK idiom) is
+    # a syntax error there. Wrap each predicate operand in CASE WHEN … THEN 1
+    # ELSE 0 END via the sqlglot AST (an exact 0/1 encoding of the boolean).
+    _ckm = re.match(
+        r"(?is)^\s*((?:CONSTRAINT\s+\w+\s+)?CHECK)\s*\((.*)\)\s*$", fragment_sql
+    )
+    if (
+        dialect == "tsql"
+        and _ckm
+        and re.search(r"(?i)\bIS\s+(?:NOT\s+)?NULL\s*\)?\s*(?:=|!=|<>)", _ckm.group(2))
+    ):
+        try:
+            _ck = sqlglot.parse_one(f"SELECT 1 WHERE {_ckm.group(2)}", read=read)
+        except Exception:
+            _ck = None
+        if _ck is not None:
+            _changed = False
+            for _cmp in _ck.find_all(exp.EQ, exp.NEQ):
+                for _side in ("this", "expression"):
+                    _sv = _cmp.args.get(_side)
+                    _inner = _sv.this if isinstance(_sv, exp.Paren) else _sv
+                    if isinstance(_inner, (exp.Is, exp.Not, exp.Exists)):
+                        _cmp.set(
+                            _side,
+                            exp.Case(
+                                ifs=[
+                                    exp.If(
+                                        this=_inner.copy(),
+                                        true=exp.Literal.number(1),
+                                    )
+                                ],
+                                default=exp.Literal.number(0),
+                            ),
+                        )
+                        _changed = True
+            _where = _ck.args.get("where")
+            if _changed and _where is not None:
+                return f"{_ckm.group(1)} ({_where.this.sql(dialect=write)})"
     # An inline INDEX table element (MySQL functional/plain index): native on
     # MySQL; elsewhere an index is physical-only — carry the loss (a separate
     # CREATE INDEX can be written by hand where the target supports the form).

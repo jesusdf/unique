@@ -203,9 +203,46 @@ class MySqlTransformer(ProceduralTransformer):
         new_body = (*variables, *cursors, *body[rest_start:])
         return replace(result, body=new_body)  # type: ignore[call-arg]
 
+    def _map_cursor_attributes(self, sql: str) -> str:
+        if self._source != "oracle":
+            return sql
+        sql = re.sub(r"(?i)\bSQL\s*%\s*ROWCOUNT\b", "ROW_COUNT()", sql)
+        sql = re.sub(r"(?i)\bSQL\s*%\s*NOTFOUND\b", "(ROW_COUNT() = 0)", sql)
+        sql = re.sub(r"(?i)\bSQL\s*%\s*FOUND\b", "(ROW_COUNT() > 0)", sql)
+        if re.search(r"(?i)\b\w+\s*%\s*(?:NOT)?FOUND\b", sql):
+            _forms = self._fetch_status_forms()
+            if _forms is not None:
+                found, notfound = _forms
+                sql = re.sub(r"(?i)\b\w+\s*%\s*NOTFOUND\b", notfound, sql)
+                sql = re.sub(r"(?i)\b\w+\s*%\s*FOUND\b", found, sql)
+        if re.search(r"(?i)\b\w+\s*%\s*ROWCOUNT\b", sql):
+            self._used_fetch_done = True  # the increment guards on it
+            sql = re.sub(
+                r"(?i)\b(\w+)\s*%\s*ROWCOUNT\b",
+                lambda m: f"uq_{m.group(1).lower()}_rc",
+                sql,
+            )
+        return sql
+
+    def _rc_declare(self, name: str) -> ASTNode | None:
+        return DeclareStatement(
+            name=f"uq_{name}_rc",
+            data_type=DataType(name="INT"),
+            default=RawSQL(sql="0", reason="cursor rowcount counter"),
+        )
+
+    def _rc_increment_sql(self, name: str) -> str:
+        # Guarded on the NOT FOUND flag: a FETCH past the end must not count.
+        return (
+            f"IF v_fetch_done = FALSE THEN SET uq_{name}_rc = uq_{name}_rc + 1; "
+            "END IF;"
+        )
+
     def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
         return self._inject_fetch_done(
-            self._reorder_declarations(super()._transform_procedure(node))
+            self._reorder_declarations(
+                self._emulate_cursor_rowcounts(super()._transform_procedure(node))
+            )
         )
 
     @classmethod

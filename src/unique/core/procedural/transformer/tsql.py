@@ -282,6 +282,14 @@ class TSqlTransformer(ProceduralTransformer):
         sql = re.sub(r"(?i)\bSQL\s*%\s*FOUND\b", "@@ROWCOUNT > 0", sql)
         sql = re.sub(r"(?i)\b\w+\s*%\s*NOTFOUND\b", "@@FETCH_STATUS <> 0", sql)
         sql = re.sub(r"(?i)\b\w+\s*%\s*FOUND\b", "@@FETCH_STATUS = 0", sql)
+        # A named cursor's %ROWCOUNT (rows fetched so far) has no T-SQL
+        # global; it reads a per-cursor counter the routine post-pass
+        # declares and increments after each successful FETCH.
+        sql = re.sub(
+            r"(?i)\b(\w+)\s*%\s*ROWCOUNT\b",
+            lambda m: f"@uq_{m.group(1).lower()}_rc",
+            sql,
+        )
         # MONTHS_BETWEEN(a, b) -> DATEDIFF(MONTH, b, a). Whole months only
         # (T-SQL has no fractional form); the boundary-counting difference
         # is the standard accepted approximation.
@@ -600,6 +608,32 @@ class TSqlTransformer(ProceduralTransformer):
                 if isinstance(item, ASTNode) and cls._has_function_side_effect(item):
                     return True
         return False
+
+    def _map_cursor_attributes(self, sql: str) -> str:
+        if self._source not in ("oracle", "postgresql"):
+            return sql
+        sql = re.sub(r"(?i)\bSQL\s*%\s*ROWCOUNT\b", "@@ROWCOUNT", sql)
+        sql = re.sub(r"(?i)\bSQL\s*%\s*NOTFOUND\b", "@@ROWCOUNT = 0", sql)
+        sql = re.sub(r"(?i)\bSQL\s*%\s*FOUND\b", "@@ROWCOUNT > 0", sql)
+        sql = re.sub(r"(?i)\b\w+\s*%\s*NOTFOUND\b", "@@FETCH_STATUS <> 0", sql)
+        sql = re.sub(r"(?i)\b\w+\s*%\s*FOUND\b", "@@FETCH_STATUS = 0", sql)
+        return re.sub(
+            r"(?i)\b(\w+)\s*%\s*ROWCOUNT\b",
+            lambda m: f"@uq_{m.group(1).lower()}_rc",
+            sql,
+        )
+
+    def _rc_declare(self, name: str) -> ASTNode | None:
+        return RawSQL(
+            sql=f"DECLARE @uq_{name}_rc INT = 0;",
+            reason="cursor rowcount counter",
+        )
+
+    def _rc_increment_sql(self, name: str) -> str:
+        return f"IF @@FETCH_STATUS = 0 SET @uq_{name}_rc = @uq_{name}_rc + 1;"
+
+    def _transform_procedure(self, node) -> ASTNode:  # type: ignore[no-untyped-def]
+        return self._emulate_cursor_rowcounts(super()._transform_procedure(node))
 
     def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
         result = super()._transform_function(node)

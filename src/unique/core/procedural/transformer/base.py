@@ -2583,6 +2583,84 @@ class ProceduralTransformer:
     #: on other engines (DBMS_SCHEDULER.CREATE_JOB, UTL_FILE, …).
     _ORACLE_PACKAGE_RE = re.compile(r"(?i)^(?:DBMS_|UTL_|CTX_|APEX_|OWA_)")
 
+    #: Marker the per-target %ROWCOUNT rewrite leaves in fragments
+    #: (``@uq_<cursor>_rc`` on T-SQL, ``uq_<cursor>_rc`` on MySQL).
+    _CURSOR_RC_RE = re.compile(r"(?i)@?uq_(\w+)_rc\b")
+
+    def _rc_declare(self, name: str) -> ASTNode | None:
+        """Per-cursor %ROWCOUNT counter declaration; None disables the pass."""
+        return None
+
+    def _rc_increment_sql(self, name: str) -> str:
+        raise NotImplementedError
+
+    def _emulate_cursor_rowcounts(self, result: ASTNode) -> ASTNode:
+        """Oracle's ``c%ROWCOUNT`` (rows fetched so far) has no T-SQL/MySQL
+        global: the fragment rewrite leaves ``uq_<c>_rc`` references; this
+        pass declares the counters and increments them after each successful
+        FETCH on that cursor (nested blocks included)."""
+        body = getattr(result, "body", None)
+        if not isinstance(body, tuple):
+            return result
+        names: set[str] = set()
+
+        def scan(v: object) -> None:
+            if isinstance(v, RawSQL):
+                names.update(
+                    m.group(1).lower() for m in self._CURSOR_RC_RE.finditer(v.sql)
+                )
+            elif isinstance(v, ASTNode):
+                for f in dataclasses.fields(v):
+                    scan(getattr(v, f.name))
+            elif isinstance(v, tuple):
+                for x in v:
+                    scan(x)
+
+        scan(result)
+        if not names:
+            return result
+
+        def inject(stmts: tuple[ASTNode, ...]) -> tuple[ASTNode, ...]:
+            out: list[ASTNode] = []
+            for s in stmts:
+                changes: dict[str, object] = {}
+                for f in dataclasses.fields(s):
+                    v = getattr(s, f.name)
+                    if (
+                        isinstance(v, tuple)
+                        and v
+                        and all(isinstance(x, ASTNode) for x in v)
+                    ):
+                        nv = inject(v)
+                        if nv != v:
+                            changes[f.name] = nv
+                if changes:
+                    s = dataclasses.replace(s, **changes)  # type: ignore[arg-type]
+                out.append(s)
+                if (
+                    isinstance(s, CursorOperation)
+                    and s.operation.upper() == "FETCH"
+                    and s.cursor_name.lstrip("@").lower() in names
+                ):
+                    out.append(
+                        RawSQL(
+                            sql=self._rc_increment_sql(
+                                s.cursor_name.lstrip("@").lower()
+                            ),
+                            reason="cursor rowcount counter",
+                        )
+                    )
+            return tuple(out)
+
+        decls = tuple(
+            d for n in sorted(names) if (d := self._rc_declare(n)) is not None
+        )
+        if not decls:
+            return result
+        return dataclasses.replace(  # type: ignore[call-arg]
+            result, body=decls + inject(body)
+        )
+
     def _transform_call(self, node: CallStatement) -> ASTNode:
         """Transform a stored-procedure call. The ``dbo`` default schema is
         meaningful only on T-SQL, so drop it for the other targets; the argument
@@ -4114,6 +4192,10 @@ class ProceduralTransformer:
 
                 sql = self._map_outside_strings(sql, _sub_domain)
         sql = self._transform_var_in_sql(sql)
+        # Cursor attributes (%FOUND/%NOTFOUND/%ROWCOUNT) are SHELL context —
+        # they must map before the IR attempt (which would happily parse
+        # ``c % FOUND`` as a modulo expression and return early).
+        sql = self._map_cursor_attributes(sql)
         # An Oracle trigger body's assignment value carries ``:NEW.``/``:OLD.``
         # row references; map them to the target's row qualifier (a no-op for the
         # Oracle target). Mirrors _transform_embedded_dml so a value captured as a
@@ -4194,6 +4276,11 @@ class ProceduralTransformer:
             # bails; they have no cross-engine form.
             sql = self._strip_tsql_table_hints(sql)
         return RawSQL(sql=sql, reason=node.reason)
+
+    def _map_cursor_attributes(self, sql: str) -> str:
+        """Map Oracle-style cursor attributes (``c%FOUND``…) to the target's
+        form. The base is a no-op; T-SQL/MySQL override."""
+        return sql
 
     def _fix_raw_sql_target(self, sql: str) -> str:
         """Apply target-specific cleanups to a transformed raw-SQL expression.

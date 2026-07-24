@@ -863,11 +863,6 @@ ALTER`
 - live error: `(1337, 'Variable or condition declaration after cursor or handler declaration')`
 - src: `CREATE PROCEDURE p AS CURSOR c IS SELECT 1 AS x FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; CLOSE c; END;`
 
-## ora-cursor-attr  (oracle)
-- targets: mysql(invalid), tsql(invalid)
-- live error: `(128, b'The name "c" is not permitted in this context. Valid expressions are constants, co`
-- src: `CREATE PROCEDURE p AS CURSOR c IS SELECT 1 FROM DUAL; v NUMBER; BEGIN OPEN c; FETCH c INTO v; IF c%FOUND THEN DBMS_OUTPUT.PUT_LINE`
-
 ## ora-cursor-for-loop  (oracle)
 - targets: tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'END'.DB-Lib error message 20018, severity 15:\n`
@@ -1391,11 +1386,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) NOT VALID`
-
-## pg-check-xor  (postgresql)
-- targets: tsql(invalid)
-- live error: `(102, b"Incorrect syntax near '<'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se`
-- src: `CREATE TABLE t (a INT, b INT, c INT, CONSTRAINT ck CHECK ((a IS NULL) != (b IS NULL)))`
 
 ## pg-chr-ascii-unicode  (postgresql)
 - targets: oracle(invalid)

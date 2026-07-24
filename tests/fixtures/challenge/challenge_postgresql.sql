@@ -154,7 +154,7 @@ CREATE TABLE t (id INT PRIMARY KEY, data JSONB, CONSTRAINT ck CHECK (jsonb_typeo
 -- CASE[fixed]: pg-check-notvalid — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ADD CONSTRAINT ck CHECK (a>0) NOT VALID
 
--- CASE[open]: pg-check-xor — fails on tsql. (102, b"Incorrect syntax near '<'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
+-- CASE[fixed]: pg-check-xor — a CHECK comparing predicate operands ((a IS NULL) != (b IS NULL)) wraps each predicate in CASE WHEN ... THEN 1 ELSE 0 END for T-SQL (no boolean value type) via a sqlglot-AST pass on the constraint fragment. Live: XOR enforced (both-set insert rejected, 547) on tsql 2026-07-24.
 CREATE TABLE t (a INT, b INT, c INT, CONSTRAINT ck CHECK ((a IS NULL) != (b IS NULL)))
 
 -- CASE[fixed]: pg-chr-ascii-unicode — PG chr(n) is a Unicode code point (Oracle CHR(n>127) returns a raw byte) → NCHR(n); PG ascii() is the code point (Oracle ASCII of a multibyte char returns the raw encoding) → ASCII(TO_NCHAR(x)); ('é', 233) verified on Oracle
