@@ -365,7 +365,7 @@ rejects). Both are validated live. Only date parts outside the common
 year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
 still need review.
 
-### 3.23 T-SQL Money Literal Shorthand (`$12.50`) — Handled (2026-07-25)
+### 3.24 T-SQL Money Literal Shorthand (`$12.50`) — Handled (2026-07-25)
 
 T-SQL's bare currency literal (`$12.50`, `$100`) is mis-parsed by sqlglot as a
 `table.column` reference (`Column(this=Literal(50), table=Identifier($12))`
