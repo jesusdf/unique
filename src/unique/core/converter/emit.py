@@ -774,6 +774,73 @@ def _merge_extended_clauses(
     return followups, delete_where, None
 
 
+def _merge_carve_do_nothing(tree: exp.Merge) -> str | None:
+    """Lower PG's ``THEN DO NOTHING`` merge action for targets that lack it
+    (T-SQL / Oracle) by clause carve-out. First-match-wins makes
+    ``WHEN <kind> AND c THEN DO NOTHING`` equivalent to adding ``AND NOT (c)``
+    to every *later* clause of the same match kind; an unconditional
+    ``DO NOTHING`` makes all later same-kind clauses unreachable (drop them).
+
+    Modifies ``tree.args["whens"]`` in place. Returns a degrade reason for a
+    ``Var`` action that is neither DELETE nor DO NOTHING (a future sqlglot
+    merge action we do not model), or when the carve-out empties the clause
+    list; otherwise ``None``.
+    """
+    whens = tree.args.get("whens")
+    if whens is None:
+        return None
+    exprs = list(whens.expressions)
+
+    def _then_var(w: exp.When) -> str | None:
+        then = w.args.get("then")
+        if isinstance(then, exp.Var):
+            return str(then.this).strip().upper()
+        return None
+
+    for w in exprs:
+        name = _then_var(w)
+        if name is not None and name not in ("DELETE", "DO NOTHING"):
+            return (
+                f"MERGE action '{w.args['then'].this}' has no equivalent on "
+                "this target; rewrite the MERGE manually"
+            )
+
+    def _kind(w: exp.When) -> tuple[bool, bool]:
+        return bool(w.args.get("matched")), bool(w.args.get("source"))
+
+    to_remove: set[int] = set()
+    for idx, w in enumerate(exprs):
+        if id(w) in to_remove or _then_var(w) != "DO NOTHING":
+            continue
+        to_remove.add(id(w))
+        cond = w.args.get("condition")
+        kind = _kind(w)
+        for later in exprs[idx + 1 :]:
+            if _kind(later) != kind:
+                continue
+            if cond is None:
+                to_remove.add(id(later))
+            else:
+                neg = exp.Not(this=exp.Paren(this=cond.copy()))
+                existing = later.args.get("condition")
+                later.set(
+                    "condition",
+                    (
+                        neg
+                        if existing is None
+                        else exp.And(this=exp.Paren(this=existing), expression=neg)
+                    ),
+                )
+    kept = [w for w in exprs if id(w) not in to_remove]
+    if not kept:
+        return (
+            "MERGE reduces to no action after DO NOTHING carve-out; "
+            "rewrite the MERGE manually"
+        )
+    whens.set("expressions", kept)
+    return None
+
+
 def _collect_defined_aliases(value: object) -> set[str]:
     """Aliases the statement itself defines (table/derived-table aliases):
     the temp-table QUALIFIER rename must not fire on them — ``(SELECT …) y``
@@ -2527,15 +2594,22 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         parsed = [e for e in sqlglot.parse(node.sql, read=read) if e is not None]
         merge_followups: list[str] = []
         merge_delete_where: str | None = None
-        if node.kind == "MERGE" and dialect in ("oracle", "postgresql"):
+        if node.kind == "MERGE" and dialect in ("oracle", "postgresql", "tsql"):
             for e in parsed:
                 if not isinstance(e, exp.Merge):
                     continue
-                merge_followups, merge_delete_where, reason = _merge_extended_clauses(
-                    e, dialect
-                )
-                if reason is not None:
-                    return f"-- UNIQUE: {reason}\n{_comment_block(node.sql)}"
+                # PG keeps DO NOTHING natively; T-SQL/Oracle carve it out
+                # (before the Oracle CASE fold, which composes with it).
+                if dialect in ("oracle", "tsql"):
+                    reason = _merge_carve_do_nothing(e)
+                    if reason is not None:
+                        return f"-- UNIQUE: {reason}\n{_comment_block(node.sql)}"
+                if dialect in ("oracle", "postgresql"):
+                    merge_followups, merge_delete_where, reason = (
+                        _merge_extended_clauses(e, dialect)
+                    )
+                    if reason is not None:
+                        return f"-- UNIQUE: {reason}\n{_comment_block(node.sql)}"
         if (
             node.kind == "RETURNING"
             and dialect != "postgresql"

@@ -297,6 +297,11 @@ than ship silently-wrong output:
   therefore performed **only** when the DELETE condition references no target
   column the UPDATE assigns (source-column conditions are safe); an unsafe
   shape degrades warned (`… would delete rows the source keeps`).
+- **`THEN DO NOTHING` → T-SQL / Oracle.** PostgreSQL's `DO NOTHING` merge
+  action has no T-SQL/Oracle spelling; first-match-wins lets it be lowered as a
+  clause carve-out (its negated condition is ANDed onto every later same-kind
+  clause; an unconditional `DO NOTHING` drops all later same-kind clauses). A
+  MERGE `Var` action that is neither `DELETE` nor `DO NOTHING` degrades warned.
 
 ### 3.7 OUTPUT / RETURNING Clause → MySQL
 

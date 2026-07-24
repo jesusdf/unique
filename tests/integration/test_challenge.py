@@ -4932,3 +4932,73 @@ class TestMergeConditionalDeleteFoldSafety:
         assert "DELETE WHERE NOT (src.n > 0)" in out, out
 
 
+
+
+# --- Audit 2026-07-24 finding N4: PG MERGE THEN DO NOTHING carve-out ---
+
+import sqlglot  # noqa: E402
+
+from unique.core.converter._base import sqlglot_dialect_name  # noqa: E402
+
+
+def _target_parses(sql: str, target: str) -> bool:
+    """Every executable (non-comment) statement in *sql* parses in *target*."""
+    read = sqlglot_dialect_name(target)
+    # Drop trivia first so a ``;`` inside a block/line comment can't split a
+    # statement mid-token.
+    stripped = re.sub(r"/\*.*?\*/", "", sql, flags=re.S)
+    stripped = "\n".join(
+        ln for ln in stripped.splitlines() if not ln.lstrip().startswith("--")
+    )
+    for stmt in stripped.split(";"):
+        body = stmt.strip()
+        if not body:
+            continue
+        sqlglot.parse(body, read=read, error_level=sqlglot.ErrorLevel.RAISE)
+    return True
+
+
+class TestMergeDoNothingCarveOut:
+    """N4: PG MERGE ``THEN DO NOTHING`` has no T-SQL/Oracle spelling. First-
+    match-wins makes it a condition carve-out on later same-kind clauses."""
+
+    _SQL = (
+        "MERGE INTO dst AS d USING src AS s ON d.id = s.id "
+        "WHEN MATCHED AND s.qty IS NULL THEN DO NOTHING "
+        "WHEN MATCHED THEN UPDATE SET qty = s.qty "
+        "WHEN NOT MATCHED THEN INSERT (id, qty) VALUES (s.id, s.qty);"
+    )
+
+    @pytest.mark.parametrize("target", ["tsql", "oracle"])
+    def test_do_nothing_carved_out(self, target: str) -> None:
+        r = Transpiler().transpile(self._SQL, "postgresql", target)
+        assert "DO NOTHING" not in r.sql.upper(), r.sql
+        # The carve-out negates the DO NOTHING condition onto the UPDATE.
+        assert "NOT (s.qty IS NULL)" in r.sql, r.sql
+        assert _target_parses(r.sql, target), r.sql
+
+    def test_unconditional_do_nothing_drops_later_matched(self) -> None:
+        sql = (
+            "MERGE INTO dst AS d USING src AS s ON d.id = s.id "
+            "WHEN MATCHED THEN DO NOTHING "
+            "WHEN NOT MATCHED THEN INSERT (id, qty) VALUES (s.id, s.qty);"
+        )
+        r = Transpiler().transpile(sql, "postgresql", "tsql")
+        assert "DO NOTHING" not in r.sql.upper(), r.sql
+        assert "WHEN MATCHED" not in _exec_lines(r.sql).upper(), r.sql
+        assert "WHEN NOT MATCHED" in _exec_lines(r.sql).upper(), r.sql
+        assert _target_parses(r.sql, "tsql"), r.sql
+
+    def test_unknown_var_action_degrades(self) -> None:
+        # Construct a MERGE whose action is an unknown Var directly via sqlglot.
+        tree = sqlglot.parse_one(
+            "MERGE INTO dst AS d USING src AS s ON d.id = s.id "
+            "WHEN MATCHED THEN DELETE",
+            read="tsql",
+        )
+        when = tree.args["whens"].expressions[0]
+        when.set("then", sqlglot.exp.Var(this="FROBNICATE"))
+        from unique.core.converter.emit import _merge_carve_do_nothing
+
+        reason = _merge_carve_do_nothing(tree)
+        assert reason is not None and "FROBNICATE" in reason
