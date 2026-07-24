@@ -94,9 +94,37 @@ workflow.
       documented limit).** Landed so far (recorded in [`docs/DONE.md`](DONE.md)
       §41): RC-1b gate (DML+procedural), 21 built-in mappings, RC-3
       FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG.
-      **2026-07-24 — 90 `[open]` / 156 `[limit]` / 616 `[fixed]`** (of 862; HEAD
-      `e6eafc4`, CI green). Down from 372 `[open]` on 2026-07-21 — the 07-23/24
-      campaign cleared ~282 more (invalid-output tail via the `triage3.py`
+      **2026-07-24 (architect session) — 38 `[open]` / 165 `[limit]` / 659
+      `[fixed]`** (of 862). The user DELEGATED the fix-vs-limit decision to the
+      architect session ("decide por mí lo que es límite y lo que no"); each
+      approved limit is recorded in its case header + docs/03-unsupported.md
+      §3.19–3.22. The session cleared 52 in five waves (commits `6987d38`,
+      `c374928`, `0b609d8`, `1c24c72`): DBMS_SESSION.SLEEP + system-proc
+      carrier; type-gap closest-type map (TIME/INTERVAL/BIT(n)/precision
+      clamps, §3.19) + Oracle DATE-cast TRUNC + money annotation (§3.20);
+      compile-time literal folds by source semantics (§3.21 — LENGTH family,
+      substring edges, extended INSTR incl. a silently-DROPPED occurrence
+      argument, MySQL byte decodes and string arithmetic, T-SQL binary
+      CONVERTs, PG16 hex ints, Literal.raw trailing zeros); interval/date
+      arithmetic per target + ANY(ARRAY(sub)) unwrap + TEXT→NVARCHAR(MAX)
+      modernization + lengthless-CAST sizing; and 7 annotated inherent limits
+      (§3.22: case-variant ORDER/GROUP, ZEROFILL, TO_CHAR(INTERVAL), self-FK
+      cascade, U&'…' parse-block, array column types). Every fix was live
+      value-verified on the 4 engines; suites + live-syntax green each commit.
+      **Remaining 38 = the feature tail:** JSON cluster (~6, type-map +
+      operator translation), procedural cluster (~10: sp_executesql typed
+      params, cursor attrs on MySQL, format %I, catalogs, fn-attrs parser,
+      realworld-transfer fn→proc, recursive-func 455), triggers row-vs-
+      statement (4), front-1 embedded-text-vs-IR infra (my-select-into-out,
+      ts-cursor-attr, pg-check-xor, my-gen-constr/my-gencol2 shorthand path),
+      full MERGE BY SOURCE, batch SET TRANSACTION, cross-statement metadata
+      (pg-drop-not-null, pg-expr-index, pg-add-identity), tz-function mapping
+      (ora-tz-funcs, pg-tz-convert), GROUPING family, my8-window/pg-all-values/
+      pg-grouping-sets2 (JSON type + misc), ts-inline-index2 (sqlglot
+      misparse), my-infoschema, ts-dyn-concat-loop, ts-after-delete-count.
+      **Previous state 2026-07-24 pre-session: 90 open / 156 limit / 616 fixed
+      (HEAD `e6eafc4`).** Down from 372 `[open]` on 2026-07-21 — the 07-23/24
+      campaign cleared ~282 (invalid-output tail via the `triage3.py`
       live-DB scan, the recursive-CTE cluster, several disguised "FUNC-DIFF"
       real bugs — paren precedence, float-literal folding, DATE-literal typing —
       plus feature emulation: compound EXTRACT, batch SAVEPOINT, T-SQL derived-
