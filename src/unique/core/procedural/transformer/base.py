@@ -2583,9 +2583,13 @@ class ProceduralTransformer:
     #: on other engines (DBMS_SCHEDULER.CREATE_JOB, UTL_FILE, …).
     _ORACLE_PACKAGE_RE = re.compile(r"(?i)^(?:DBMS_|UTL_|CTX_|APEX_|OWA_)")
 
-    #: Marker the per-target %ROWCOUNT rewrite leaves in fragments
-    #: (``@uq_<cursor>_rc`` on T-SQL, ``uq_<cursor>_rc`` on MySQL).
+    #: Markers the per-target cursor-attribute rewrites leave in fragments.
+    #: %ROWCOUNT: ``@uq_<cursor>_rc`` (T-SQL) / ``uq_<cursor>_rc`` (MySQL).
     _CURSOR_RC_RE = re.compile(r"(?i)@?uq_(\w+)_rc\b")
+    #: %FOUND/%NOTFOUND fetch-status flag (per target); None disables it.
+    _CURSOR_FS_RE: re.Pattern[str] | None = None
+    #: %ISOPEN open flag (per target); None disables it.
+    _CURSOR_OPEN_RE: re.Pattern[str] | None = None
 
     def _rc_declare(self, name: str) -> ASTNode | None:
         """Per-cursor %ROWCOUNT counter declaration; None disables the pass."""
@@ -2594,21 +2598,36 @@ class ProceduralTransformer:
     def _rc_increment_sql(self, name: str) -> str:
         raise NotImplementedError
 
-    def _emulate_cursor_rowcounts(self, result: ASTNode) -> ASTNode:
-        """Oracle's ``c%ROWCOUNT`` (rows fetched so far) has no T-SQL/MySQL
-        global: the fragment rewrite leaves ``uq_<c>_rc`` references; this
-        pass declares the counters and increments them after each successful
-        FETCH on that cursor (nested blocks included)."""
-        body = getattr(result, "body", None)
-        if not isinstance(body, tuple):
-            return result
+    def _fetchstatus_declare(self, name: str) -> ASTNode | None:
+        """Per-cursor %FOUND/%NOTFOUND flag declaration; None disables it."""
+        return None
+
+    def _fetchstatus_after_fetch_sql(self, name: str) -> str | None:
+        """Maintenance run right after ``FETCH <name>`` to capture this
+        cursor's fetch status into its per-cursor flag; None disables it."""
+        return None
+
+    def _isopen_declare(self, name: str) -> ASTNode | None:
+        """Per-cursor %ISOPEN flag declaration; None disables it."""
+        return None
+
+    def _isopen_set_sql(self, name: str, opened: bool) -> str | None:
+        """Maintenance run right after ``OPEN``/``CLOSE <name>`` to set this
+        cursor's open flag; None disables it."""
+        return None
+
+    def _scan_cursor_markers(
+        self, result: ASTNode, regex: re.Pattern[str] | None
+    ) -> set[str]:
+        """Collect the cursor names referenced by *regex* in every RawSQL
+        fragment reachable from *result* (matching the %ROWCOUNT scan)."""
         names: set[str] = set()
+        if regex is None:
+            return names
 
         def scan(v: object) -> None:
             if isinstance(v, RawSQL):
-                names.update(
-                    m.group(1).lower() for m in self._CURSOR_RC_RE.finditer(v.sql)
-                )
+                names.update(m.group(1).lower() for m in regex.finditer(v.sql))
             elif isinstance(v, ASTNode):
                 for f in dataclasses.fields(v):
                     scan(getattr(v, f.name))
@@ -2617,8 +2636,44 @@ class ProceduralTransformer:
                     scan(x)
 
         scan(result)
-        if not names:
+        return names
+
+    def _emulate_cursor_state(self, result: ASTNode) -> ASTNode:
+        """Declare and maintain the per-cursor state variables that
+        ``_map_cursor_attributes`` emits as markers: the ``%ROWCOUNT`` counter,
+        the ``%FOUND``/``%NOTFOUND`` fetch-status flag and the ``%ISOPEN`` open
+        flag. Each is declared once and maintained right after the relevant
+        cursor operation (FETCH for the counter/fetch-status, OPEN/CLOSE for the
+        open flag), so a FETCH on another cursor cannot clobber it and a
+        non-adjacent status check still reads the right cursor (finding N5)."""
+        body = getattr(result, "body", None)
+        if not isinstance(body, tuple):
             return result
+        rc = self._scan_cursor_markers(result, self._CURSOR_RC_RE)
+        fs = self._scan_cursor_markers(result, self._CURSOR_FS_RE)
+        op = self._scan_cursor_markers(result, self._CURSOR_OPEN_RE)
+        if not (rc or fs or op):
+            return result
+
+        def maintenance(name: str, operation: str) -> list[ASTNode]:
+            out: list[ASTNode] = []
+            oper = operation.upper()
+            if oper == "FETCH":
+                # %ROWCOUNT increment first: on MySQL it reads the shared
+                # NOT-FOUND flag that the fetch-status transfer then resets.
+                if name in rc:
+                    out.append(
+                        RawSQL(
+                            sql=self._rc_increment_sql(name),
+                            reason="cursor rowcount counter",
+                        )
+                    )
+                if name in fs and (s := self._fetchstatus_after_fetch_sql(name)):
+                    out.append(RawSQL(sql=s, reason="cursor fetch-status flag"))
+            elif oper in ("OPEN", "CLOSE") and name in op:
+                if s := self._isopen_set_sql(name, oper == "OPEN"):
+                    out.append(RawSQL(sql=s, reason="cursor open flag"))
+            return out
 
         def inject(stmts: tuple[ASTNode, ...]) -> tuple[ASTNode, ...]:
             out: list[ASTNode] = []
@@ -2637,28 +2692,26 @@ class ProceduralTransformer:
                 if changes:
                     s = dataclasses.replace(s, **changes)  # type: ignore[arg-type]
                 out.append(s)
-                if (
-                    isinstance(s, CursorOperation)
-                    and s.operation.upper() == "FETCH"
-                    and s.cursor_name.lstrip("@").lower() in names
-                ):
-                    out.append(
-                        RawSQL(
-                            sql=self._rc_increment_sql(
-                                s.cursor_name.lstrip("@").lower()
-                            ),
-                            reason="cursor rowcount counter",
-                        )
+                if isinstance(s, CursorOperation):
+                    out.extend(
+                        maintenance(s.cursor_name.lstrip("@").lower(), s.operation)
                     )
             return tuple(out)
 
-        decls = tuple(
-            d for n in sorted(names) if (d := self._rc_declare(n)) is not None
-        )
+        decls: list[ASTNode] = []
+        for n in sorted(rc):
+            if (d := self._rc_declare(n)) is not None:
+                decls.append(d)
+        for n in sorted(fs):
+            if (d := self._fetchstatus_declare(n)) is not None:
+                decls.append(d)
+        for n in sorted(op):
+            if (d := self._isopen_declare(n)) is not None:
+                decls.append(d)
         if not decls:
             return result
         return dataclasses.replace(  # type: ignore[call-arg]
-            result, body=decls + inject(body)
+            result, body=tuple(decls) + inject(body)
         )
 
     def _transform_call(self, node: CallStatement) -> ASTNode:
@@ -4293,6 +4346,36 @@ class ProceduralTransformer:
         """Map Oracle-style cursor attributes (``c%FOUND``…) to the target's
         form. The base is a no-op; T-SQL/MySQL override."""
         return sql
+
+    #: A residual cursor attribute ``<cursor>%<attr>`` after the known ones
+    #: (FOUND/NOTFOUND/ROWCOUNT/ISOPEN) have been mapped. In Oracle PL/SQL
+    #: ``%`` is never a modulo operator (that is ``MOD``), so any survivor
+    #: is an unmapped cursor attribute — never arithmetic. ``%TYPE``/
+    #: ``%ROWTYPE`` are type attributes handled elsewhere and excluded.
+    _CURSOR_ATTR_RESIDUE_RE = re.compile(
+        r"(?i)\b(\w+)\s*%\s*(?!TYPE\b|ROWTYPE\b)([A-Za-z_]\w*)\b"
+    )
+
+    def _backstop_cursor_attribute(self, sql: str) -> str:
+        """Never let an unrecognized Oracle cursor attribute lex through as
+        ``%`` modulo arithmetic (finding N6 class-closure): degrade it to a
+        carrier + warning instead of shipping invalid output silently."""
+        if self._source != "oracle":
+            return sql
+        m = self._CURSOR_ATTR_RESIDUE_RE.search(sql)
+        if not m:
+            return sql
+        self._warnings.append(
+            f"unrecognized cursor attribute {m.group(1)}%{m.group(2)} has no "
+            f"{self._target} equivalent; preserved as a comment"
+        )
+        return self._CURSOR_ATTR_RESIDUE_RE.sub(
+            lambda mm: (
+                f"/* UNIQUE: unmapped cursor attribute "
+                f"{mm.group(1)}%{mm.group(2)} */ (0 = 1)"
+            ),
+            sql,
+        )
 
     def _fix_raw_sql_target(self, sql: str) -> str:
         """Apply target-specific cleanups to a transformed raw-SQL expression.

@@ -609,19 +609,49 @@ class TSqlTransformer(ProceduralTransformer):
                     return True
         return False
 
+    #: The per-cursor fetch-status and open-flag markers this target emits;
+    #: the shared _emulate_cursor_state pass declares and maintains them.
+    _CURSOR_FS_RE = re.compile(r"(?i)@uq_(\w+)_fs\b")
+    _CURSOR_OPEN_RE = re.compile(r"(?i)@uq_(\w+)_open\b")
+
     def _map_cursor_attributes(self, sql: str) -> str:
         if self._source not in ("oracle", "postgresql"):
             return sql
+        # Implicit-cursor (SQL%…) attributes read the affected-row count; the
+        # implicit cursor is never "open" in the %ISOPEN sense.
         sql = re.sub(r"(?i)\bSQL\s*%\s*ROWCOUNT\b", "@@ROWCOUNT", sql)
         sql = re.sub(r"(?i)\bSQL\s*%\s*NOTFOUND\b", "@@ROWCOUNT = 0", sql)
         sql = re.sub(r"(?i)\bSQL\s*%\s*FOUND\b", "@@ROWCOUNT > 0", sql)
-        sql = re.sub(r"(?i)\b\w+\s*%\s*NOTFOUND\b", "@@FETCH_STATUS <> 0", sql)
-        sql = re.sub(r"(?i)\b\w+\s*%\s*FOUND\b", "@@FETCH_STATUS = 0", sql)
-        return re.sub(
+        sql = re.sub(r"(?i)\bSQL\s*%\s*ISOPEN\b", "(0 = 1)", sql)
+        # Named-cursor %FOUND/%NOTFOUND read a per-cursor status variable
+        # captured right after that cursor's FETCH — T-SQL has ONE global
+        # @@FETCH_STATUS, so an intervening FETCH on another cursor would
+        # otherwise corrupt the check (finding N5c). The capture and DECLARE
+        # are injected by _emulate_cursor_state, keyed on this marker.
+        sql = re.sub(
+            r"(?i)\b(\w+)\s*%\s*NOTFOUND\b",
+            lambda m: f"@uq_{m.group(1).lower()}_fs <> 0",
+            sql,
+        )
+        sql = re.sub(
+            r"(?i)\b(\w+)\s*%\s*FOUND\b",
+            lambda m: f"@uq_{m.group(1).lower()}_fs = 0",
+            sql,
+        )
+        sql = re.sub(
             r"(?i)\b(\w+)\s*%\s*ROWCOUNT\b",
             lambda m: f"@uq_{m.group(1).lower()}_rc",
             sql,
         )
+        # %ISOPEN reads a per-cursor open flag set 1/0 on OPEN/CLOSE
+        # (finding N6): T-SQL has no faithful global for a named cursor's
+        # open state and CURSOR_STATUS()'s three-state/scope guessing is worse.
+        sql = re.sub(
+            r"(?i)\b(\w+)\s*%\s*ISOPEN\b",
+            lambda m: f"@uq_{m.group(1).lower()}_open = 1",
+            sql,
+        )
+        return self._backstop_cursor_attribute(sql)
 
     def _rc_declare(self, name: str) -> ASTNode | None:
         return RawSQL(
@@ -632,8 +662,26 @@ class TSqlTransformer(ProceduralTransformer):
     def _rc_increment_sql(self, name: str) -> str:
         return f"IF @@FETCH_STATUS = 0 SET @uq_{name}_rc = @uq_{name}_rc + 1;"
 
+    def _fetchstatus_declare(self, name: str) -> ASTNode | None:
+        return RawSQL(
+            sql=f"DECLARE @uq_{name}_fs INT = 0;",
+            reason="cursor fetch-status flag",
+        )
+
+    def _fetchstatus_after_fetch_sql(self, name: str) -> str | None:
+        return f"SET @uq_{name}_fs = @@FETCH_STATUS;"
+
+    def _isopen_declare(self, name: str) -> ASTNode | None:
+        return RawSQL(
+            sql=f"DECLARE @uq_{name}_open BIT = 0;",
+            reason="cursor open flag",
+        )
+
+    def _isopen_set_sql(self, name: str, opened: bool) -> str | None:
+        return f"SET @uq_{name}_open = {1 if opened else 0};"
+
     def _transform_procedure(self, node) -> ASTNode:  # type: ignore[no-untyped-def]
-        return self._emulate_cursor_rowcounts(super()._transform_procedure(node))
+        return self._emulate_cursor_state(super()._transform_procedure(node))
 
     def _transform_function(self, node: CreateFunctionStatement) -> ASTNode:
         result = super()._transform_function(node)

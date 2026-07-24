@@ -203,18 +203,35 @@ class MySqlTransformer(ProceduralTransformer):
         new_body = (*variables, *cursors, *body[rest_start:])
         return replace(result, body=new_body)  # type: ignore[call-arg]
 
+    #: The per-cursor done-flag and open-flag markers this target emits; the
+    #: shared _emulate_cursor_state pass declares and maintains them.
+    _CURSOR_FS_RE = re.compile(r"(?i)\bv_uq_(\w+)_done\b")
+    _CURSOR_OPEN_RE = re.compile(r"(?i)\bv_uq_(\w+)_open\b")
+
     def _map_cursor_attributes(self, sql: str) -> str:
         if self._source != "oracle":
             return sql
         sql = re.sub(r"(?i)\bSQL\s*%\s*ROWCOUNT\b", "ROW_COUNT()", sql)
         sql = re.sub(r"(?i)\bSQL\s*%\s*NOTFOUND\b", "(ROW_COUNT() = 0)", sql)
         sql = re.sub(r"(?i)\bSQL\s*%\s*FOUND\b", "(ROW_COUNT() > 0)", sql)
+        sql = re.sub(r"(?i)\bSQL\s*%\s*ISOPEN\b", "(0 = 1)", sql)
         if re.search(r"(?i)\b\w+\s*%\s*(?:NOT)?FOUND\b", sql):
-            _forms = self._fetch_status_forms()
-            if _forms is not None:
-                found, notfound = _forms
-                sql = re.sub(r"(?i)\b\w+\s*%\s*NOTFOUND\b", notfound, sql)
-                sql = re.sub(r"(?i)\b\w+\s*%\s*FOUND\b", found, sql)
+            # Per-cursor done flag: the single shared NOT FOUND handler still
+            # sets v_fetch_done, but _emulate_cursor_state transfers it into
+            # this cursor's flag right after each FETCH and resets the shared
+            # one, so a nested inner cursor's exhaustion cannot leak into the
+            # outer loop's check (finding N5b).
+            self._used_fetch_done = True
+            sql = re.sub(
+                r"(?i)\b(\w+)\s*%\s*NOTFOUND\b",
+                lambda m: f"v_uq_{m.group(1).lower()}_done",
+                sql,
+            )
+            sql = re.sub(
+                r"(?i)\b(\w+)\s*%\s*FOUND\b",
+                lambda m: f"(NOT v_uq_{m.group(1).lower()}_done)",
+                sql,
+            )
         if re.search(r"(?i)\b\w+\s*%\s*ROWCOUNT\b", sql):
             self._used_fetch_done = True  # the increment guards on it
             sql = re.sub(
@@ -222,7 +239,13 @@ class MySqlTransformer(ProceduralTransformer):
                 lambda m: f"uq_{m.group(1).lower()}_rc",
                 sql,
             )
-        return sql
+        # %ISOPEN reads a per-cursor open flag set 1/0 on OPEN/CLOSE (N6).
+        sql = re.sub(
+            r"(?i)\b(\w+)\s*%\s*ISOPEN\b",
+            lambda m: f"v_uq_{m.group(1).lower()}_open = 1",
+            sql,
+        )
+        return self._backstop_cursor_attribute(sql)
 
     def _rc_declare(self, name: str) -> ASTNode | None:
         return DeclareStatement(
@@ -238,10 +261,33 @@ class MySqlTransformer(ProceduralTransformer):
             "END IF;"
         )
 
+    def _fetchstatus_declare(self, name: str) -> ASTNode | None:
+        return DeclareStatement(
+            name=f"v_uq_{name}_done",
+            data_type=DataType(name="INT"),
+            default=RawSQL(sql="FALSE", reason="cursor end-of-data flag"),
+        )
+
+    def _fetchstatus_after_fetch_sql(self, name: str) -> str | None:
+        # Transfer the shared NOT-FOUND flag into this cursor's flag, then
+        # reset it so the next cursor's FETCH starts clean (the standard MySQL
+        # per-cursor end-of-data idiom — one NOT FOUND handler per scope).
+        return f"SET v_uq_{name}_done = v_fetch_done; SET v_fetch_done = FALSE;"
+
+    def _isopen_declare(self, name: str) -> ASTNode | None:
+        return DeclareStatement(
+            name=f"v_uq_{name}_open",
+            data_type=DataType(name="INT"),
+            default=RawSQL(sql="0", reason="cursor open flag"),
+        )
+
+    def _isopen_set_sql(self, name: str, opened: bool) -> str | None:
+        return f"SET v_uq_{name}_open = {1 if opened else 0};"
+
     def _transform_procedure(self, node: CreateProcedureStatement) -> ASTNode:
         return self._inject_fetch_done(
             self._reorder_declarations(
-                self._emulate_cursor_rowcounts(super()._transform_procedure(node))
+                self._emulate_cursor_state(super()._transform_procedure(node))
             )
         )
 

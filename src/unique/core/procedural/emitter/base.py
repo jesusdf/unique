@@ -279,6 +279,43 @@ class ProceduralEmitter:
         # Whether a PostgreSQL *procedure* body is being emitted. A PG procedure
         # cannot RETURN a value (only RETURN; to exit early), unlike a function.
         self._in_pg_procedure = False
+        # Per-emission monotonic counter for synthesized loop labels, and the
+        # stack of currently-open loops as (source label, generated label). A
+        # target whose loops need labels (MySQL LEAVE/ITERATE) allocates a
+        # unique label per loop so nested loops never collide (finding N5a).
+        self._loop_label_counter = 0
+        self._loop_label_stack: list[tuple[str | None, str]] = []
+
+    def _push_loop_label(self, source_label: str | None = None) -> str:
+        """Allocate the next unique loop label, push it (paired with any source
+        label so a labeled EXIT/CONTINUE can resolve to it), and return it."""
+        self._loop_label_counter += 1
+        generated = f"loop_lbl_{self._loop_label_counter}"
+        self._loop_label_stack.append(
+            (source_label.lower() if source_label else None, generated)
+        )
+        return generated
+
+    def _pop_loop_label(self) -> None:
+        if self._loop_label_stack:
+            self._loop_label_stack.pop()
+
+    def _current_loop_label(self) -> str:
+        """The nearest enclosing loop's generated label (an unlabeled
+        LEAVE/ITERATE targets it). ``loop_lbl`` when outside any loop."""
+        return self._loop_label_stack[-1][1] if self._loop_label_stack else "loop_lbl"
+
+    def _resolve_loop_label(self, source_label: str | None) -> str:
+        """Resolve an EXIT/CONTINUE target to a generated label: an explicit
+        source label maps to the matching open loop; a bare one targets the
+        nearest enclosing loop."""
+        if not source_label:
+            return self._current_loop_label()
+        want = source_label.lower()
+        for src, generated in reversed(self._loop_label_stack):
+            if src == want:
+                return generated
+        return self._current_loop_label()
 
     def emit(self, node: ASTNode) -> str:
         """Emit a procedural AST node as target-dialect SQL.

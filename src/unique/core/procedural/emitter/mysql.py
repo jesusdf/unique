@@ -19,6 +19,7 @@ from unique.core.ast_nodes import (
     DataType,
     ExitStatement,
     IfStatement,
+    LoopStatement,
     NullStatement,
     ParameterDefinition,
     ReturnStatement,
@@ -138,8 +139,17 @@ class MySqlEmitter(ProceduralEmitter):
             "with a result set"
         )
 
-    def _emit_loop_body(self, body_lines: list[str]) -> str:
-        return "\n".join(["loop_lbl: LOOP", *body_lines, "END LOOP loop_lbl;"])
+    def _emit_loop(self, node: LoopStatement) -> str:
+        # Each emitted loop gets a unique label (finding N5a: two nested loops
+        # both named ``loop_lbl`` is MySQL error 1309). The label is pushed
+        # before the body emits so an unlabeled LEAVE/ITERATE inside resolves
+        # to this loop.
+        label = self._push_loop_label(node.label)
+        self._indent_level += 1
+        body_lines = self._emit_indented_stmts(node.body)
+        self._indent_level -= 1
+        self._pop_loop_label()
+        return "\n".join([f"{label}: LOOP", *body_lines, f"END LOOP {label};"])
 
     def _assignment_form(self, target: str, val: str) -> str:
         # A hoisted DECLARE default of ERROR_MESSAGE() (T-SQL CATCH): MySQL
@@ -439,12 +449,15 @@ class MySqlEmitter(ProceduralEmitter):
         # when the body contains one.
         cond = self._emit_node(node.condition)
         labeled = self._has_loop_control(node.body)
-        prefix = "loop_lbl: " if labeled else ""
+        label = self._push_loop_label() if labeled else None
+        prefix = f"{label}: " if label else ""
         lines = [f"{prefix}WHILE {cond} DO"]
         self._indent_level += 1
         lines.extend(self._emit_indented_stmts(node.body))
         self._indent_level -= 1
-        lines.append(f"END WHILE{' loop_lbl' if labeled else ''};")
+        if label:
+            self._pop_loop_label()
+        lines.append(f"END WHILE{f' {label}' if label else ''};")
         return "\n".join(lines)
 
     def _emit_call(self, node: CallStatement) -> str:
@@ -485,15 +498,16 @@ class MySqlEmitter(ProceduralEmitter):
     def _emit_exit(self, node: ExitStatement) -> str:
         cond = self._emit_node(node.condition) if node.condition else ""
         cond = self._translate_cursor_attrs(cond)
-        # MySQL uses LEAVE with a loop label; emit a guarded LEAVE.
-        label = node.label or "loop_lbl"
+        # MySQL uses LEAVE with a loop label; a bare EXIT targets the nearest
+        # enclosing loop's unique label (finding N5a).
+        label = self._resolve_loop_label(node.label)
         if cond:
             return f"IF {cond} THEN LEAVE {label}; END IF;"
         return f"LEAVE {label};"
 
     def _emit_continue(self, node: ContinueStatement) -> str:
         # MySQL spells CONTINUE as ITERATE <label>.
-        return f"ITERATE {node.label or 'loop_lbl'};"
+        return f"ITERATE {self._resolve_loop_label(node.label)};"
 
     def _translate_cursor_attrs(self, expr: str) -> str:
         if not expr:
