@@ -94,6 +94,16 @@ workflow.
       documented limit).** Landed so far (recorded in [`docs/DONE.md`](DONE.md)
       §41): RC-1b gate (DML+procedural), 21 built-in mappings, RC-3
       FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG.
+      **2026-07-24 — 90 `[open]` / 156 `[limit]` / 616 `[fixed]`** (of 862; HEAD
+      `e6eafc4`, CI green). Down from 372 `[open]` on 2026-07-21 — the 07-23/24
+      campaign cleared ~282 more (invalid-output tail via the `triage3.py`
+      live-DB scan, the recursive-CTE cluster, several disguised "FUNC-DIFF"
+      real bugs — paren precedence, float-literal folding, DATE-literal typing —
+      plus feature emulation: compound EXTRACT, batch SAVEPOINT, T-SQL derived-
+      column naming). **It also fixed a critical Live-Syntax CI regression** (the
+      CLOB→VARCHAR2 CAST-in-PL/SQL remap `4f57b2c` had turned the job red for
+      hours; gated on `IR_EMBEDDED`, commit `bdbb216`). Full per-commit log in the
+      `blue-rc1b-builtin-gate` memory file.
       **2026-07-21 — 372 `[open]` / 37 `[limit]` / 453 `[fixed]` (down from ~600
       open); released `v0.29.0`. The clean single-fn/stale/precision/simple-
       type-map corrections are now EXHAUSTED — the remaining `[open]` are
@@ -127,36 +137,88 @@ workflow.
       decimal/date PRECISION/scale is `[fixed]` (trailing zeros AND
       scale-rounding AND datetime-vs-date zero-time); (b) per-family directives
       below.
-      **Remaining hard tail by family** (each is a mini-project, not a quick
-      flip): (1) **format** (~41 — TO_CHAR/FORMAT date & number masks): implement
-      the reproducible mask translations, `[limit]` the no-equivalent ones
-      (currency symbol, locale month/day names, week numbering). A
-      *format-mask translation layer* generalizing `_map_oracle_datefmt_to_mysql`
-      (currently oracle→mysql + procedural-path only) to all pairs + wiring into
-      the DML/IR emit path. Largest piece — **PAUSED by the maintainer**, do as a
-      dedicated fresh session. (2) **type-cast bucket** (ts-cast-money/
-      datetimeoffset/binary-length/cast-date-int/cast-int-datetime, string
-      bit-casts): all route through **`transformer.py` `TypeMapper.visit`** (the
-      interception point, found via a `DataType.__init__` stack-trace breakpoint;
-      `ctx.source`/`ctx.target` available). Date↔int is T-SQL's 1900-01-01 epoch
-      (needs operand type inference); money needs currency-string parsing. The
-      **Oracle char-CAST-in-PL/SQL** issue (`CAST(x AS VARCHAR2(n))` is PLS-00103
-      in an expression but ORA-00906 without the length in SQL) needs an explicit
-      SQL-vs-PL/SQL context flag threaded to each CAST — a fragment-text heuristic
-      is UNSOUND (reverted `88e5bf5`; select-list sub-exprs lose the SELECT
-      keyword). (3) **collation** remainder (DISTINCT/GROUP/ORDER/GREATEST case):
-      DISTINCT/GROUP/GREATEST change returned values → `[limit]`; ORDER-BY tie-break
-      is fragile; CS-source→CI-target ignored per policy. (4) **date/string edges**:
-      INSTR 4-arg occurrence/reverse, TIMESTAMPDIFF complete-months, emoji UTF-16
-      len. (5) remaining **unsigned/bit** carriers (BIT_AND/OR/XOR agg, BIT_COUNT)
-      need function-mapping to valid first. Method: check src-vs-tgt live, write a
-      `SOURCE_DIALECT`-gated compensation OR a narrow `_DIVERGENCE_RULES` entry
-      (measure churn — broad regexes over-fire), verify on the real engines, run
-      the full **8-shard** suite AND (for procedural/CAST changes) the **live-syntax
-      suite locally** with the `UNIQUE_TEST_*_URL` env vars (the 8-shard does NOT
-      run it — it caught a char-CAST regression `c8e5f5f`), `mypy src/`
-      whole-project, flip + add an assertion. **`--db-url` live collation resolver:
-      SKIPPED per user.**
+      **Composición exacta de los 90 `[open]` (2026-07-24, por tema):**
+      14 tipos-sin-equivalente (INTERVAL/TIMESTAMPTZ/TIME/money/datetime) · 14
+      formato/semántica nº-fecha + substring-negativo + INSTR-extendido (FUNC-DIFF)
+      · 13 DDL/constraints (gen-cols, self-FK, índices expr/inline, identity,
+      SOUNDEX, drops silenciosos) · 13 procedural (parser, SQL-embebido-como-texto,
+      catálogos, cursor-attrs, sp_executesql) · 10 codificación (bytes↔code-point,
+      hex/binario, emoji UTF-16, base64, `U&'…'`) · 7 JSON/arrays · 6 colación/
+      orden/mayúsculas · 5 MERGE/transacciones-batch/sesión-tz · 5 GROUPING/
+      GROUPING-SETS/ventanas · 3 triggers-INSTEAD-OF/vistas. Cortes: 40 fallan en
+      1 motor, 27 en 2, 22 en 3; por motor oracle 54 / tsql 44 / mysql 32 / pg 30;
+      64 son error-de-motor y 23 FUNC-DIFF de valor.
+
+      **Los 90 se reparten en CINCO FRENTES — ninguno es "triage-and-flip";
+      cada uno es desarrollo deliberado con su propia validación:**
+
+      1. **Frontera arquitectónica: SQL-embebido-como-texto vs modelado-en-IR
+         (el ítem de MAYOR palanca — desbloquea un clúster).** La misma causa raíz
+         se arregla limpia en el camino IR pero queda bloqueada cuando el DML
+         embebido renderiza por *fragmento de texto* procedural. Confirmado hoy:
+         `my-reads-sql`/`my-scalar-subquery-assign` (RETURN/asignación por IR) se
+         cerraron con `_name_tsql_derived_columns@emit.py`, pero `my-select-into-out`
+         (cola de SELECT…INTO por `_fix_select_into_rest`) NO — parche-regex ahí =
+         "script-layer shape-patch" prohibido por el guardrail. Igual patrón:
+         `pg-check-xor` (CHECK como PassthroughSQL, no en IR), `ts-cursor-attr`
+         (CAST char-en-PL/SQL: `CAST(x AS VARCHAR2(n))` es PLS-00103 en expresión
+         pero ORA-00906 sin longitud en SQL — la heurística de texto es UNSOUND,
+         revertida; un fragmento mezcla sub-contextos SQL y PL/SQL). **Fix limpio:
+         enrutar el DML embebido / las condiciones de constraint por el IR** (donde
+         el contexto se conoce), en vez de por texto. Desbloquea la trío
+         derived-table restante + varios CAST/CHECK procedurales.
+
+      2. **Divergencias inherentes — necesitan DECISIÓN DEL MANTENEDOR sobre si
+         avisar.** Colación/mayúsculas (`my-group-case`, `my-order-strings`,
+         `my-greatest-string`, `ts-order-strings`), orden no-determinista de
+         GROUP_CONCAT (`my-gc-order`), null-ordering bajo DISTINCT
+         (`po-distinct-null`), longitud de emoji UTF-16-vs-code-point
+         (`my/pg/ts-emoji-len`), byte-vs-code-point de `CHAR` (`my-char-unicode`).
+         Un carrier POR CONSULTA sobre-avisa y **rompe tests existentes** (probado:
+         el carrier de LISTAGG-orden rompió `test_string_agg_to_oracle`/
+         `test_group_concat_to_oracle`, que asertan la conversión limpia sin aviso).
+         La convención actual es imponer un orden determinista EN SILENCIO. Sin
+         carrier no pueden ser `[limit]` (el test genérico lo exige). → decisión.
+
+      3. **Features multi-parte (mini-proyectos).** MERGE completo con
+         `WHEN NOT MATCHED BY SOURCE/TARGET` (`ts-merge-full`), GROUPING/GROUPING_ID
+         + ROLLUP (`ts-grouping-id`, `pg-grouping*`), INSTR 4-arg
+         ocurrencia/negativo (`ora-instr-edge`), `sp_executesql` con params
+         tipados (`ts-sp-executesql`), triggers statement-vs-row + pseudo-tablas
+         `inserted`/`deleted`/`FOR EACH ROW` (`ts-instead-of-*`, `ts-trigger-on-view`,
+         `ts-after-delete-count`), atributos de función PG que el parser procedural
+         mezcla en el cuerpo (`pg-func-attrs`), máscaras de formato num/fecha
+         (`*-num-to-str`, `ora-interval-tochar`) — **capa de traducción de máscaras
+         PAUSADA por el mantenedor**, sesión dedicada. Método por caso: comprobar
+         src-vs-tgt en vivo, compensación con puerta `SOURCE_DIALECT` o entrada
+         estrecha en `_DIVERGENCE_RULES` (medir churn; regex amplia sobre-dispara).
+
+      4. **Metadatos entre sentencias.** `pg-drop-not-null` necesita el tipo de
+         columna del `CREATE TABLE` del mismo batch para el `MODIFY`/`ALTER COLUMN`
+         de MySQL/T-SQL (Oracle sí puede `MODIFY a NULL` sin tipo). Requiere
+         rastreo de metadatos cross-statement en el batch. También el bucket de
+         casts que pasa por **`transformer.py TypeMapper.visit`** (`ctx.source`/
+         `ctx.target` disponibles): date↔int es la época 1900-01-01 de T-SQL
+         (necesita inferencia de tipo del operando), money necesita parseo de
+         símbolo de moneda, TIMESTAMPTZ/TIME/INTERVAL no tienen tipo destino.
+
+      5. **Bloqueados por parseo / codificación de bajo nivel.**
+         `pg-unicode-escape` (`U&'…'` que sqlglot mal-parsea como `U & '…'` —
+         guardrail: no pre-parsear texto), `ts-hexcast`/`pg-blob-length`/
+         `my-cast-uns2` (binario↔varchar, base64, hex/bit/bool→unsigned — reinterp.
+         de bytes por engine con `UTL_RAW`/`CONVERT_FROM`; multi-parte, `ts-hexcast`
+         intentado y revertido).
+
+      **Método OBLIGATORIO para cualquier fix (aprendido a golpes esta campaña):**
+      probar valor en vivo en los 4 motores → cambio con puerta `SOURCE_DIALECT`/
+      `IR_EMBEDDED` (evitar text-patches) → `pytest test_challenge.py` + `ruff`
+      (no solo black) + **suite paralela completa** (`sg docker -c
+      "bash scripts/test-parallel.sh"`, `REAL_EXIT=0`) → **Y para CUALQUIER cambio
+      de emit/procedural/CAST, la suite live-syntax LOCAL** con los 4
+      `UNIQUE_TEST_*_URL` (la paralela la SALTA — así se coló la regresión de CI de
+      horas) → `mypy src/` → flip a `[fixed]`/`[limit]` + assertion (recordar el
+      "comment-prose trap": quitar líneas `--`/`/* */` antes de aserciones
+      negativas). **`--db-url` live collation resolver: SKIPPED per user.**
 
 ---
 
