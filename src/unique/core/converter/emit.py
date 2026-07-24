@@ -2817,6 +2817,31 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     faithful CTAS form there); placed right before the FROM clause.
     """
     node = _qualify_using_join_columns(node, dialect)
+    # T-SQL forbids a non-selected ORDER BY expression under DISTINCT, which
+    # used to force dropping the null-priority key (silent NULL reordering).
+    # Wrap the DISTINCT in a derived table and order OUTSIDE it instead —
+    # sound when every ORDER BY expression is a bare selected column.
+    if (
+        dialect == "tsql"
+        and node.distinct
+        and node.order_by
+        and into is None
+        and not node.limit
+        and all(
+            isinstance(o.expression, ColumnRef) and o.expression.table is None
+            for o in node.order_by
+        )
+        and any(_order_null_priority_key(o, dialect) for o in node.order_by)
+    ):
+        inner = _emit_select(dataclasses.replace(node, order_by=()), dialect)
+        rendered_items = []
+        for o in node.order_by:
+            key = _order_null_priority_key(o, dialect)
+            item = _emit_order_item(o, dialect)
+            rendered_items.append(f"{key}, {item}" if key else item)
+        return (
+            f"SELECT *\nFROM ({inner}) uq_d\n" f"ORDER BY {', '.join(rendered_items)}"
+        )
     # MySQL allows HAVING without GROUP BY on a non-aggregate (a post-window row
     # filter); Oracle/PG/T-SQL require GROUP BY there. Wrap the query so the HAVING
     # becomes an outer WHERE, preserving the window-then-filter order.
@@ -4666,6 +4691,26 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             and SOURCE_DIALECT.get() == "postgresql"
         ):
             return DML_FOUND_EXPR.get(dialect, node.name)
+        # Oracle's bare SESSIONTIMEZONE global (the session's UTC offset, e.g.
+        # '+02:00') — session-dependent, so values cannot match across servers
+        # (annotated; the ts-spid-version precedent).
+        if (
+            not node.table
+            and node.name.upper() == "SESSIONTIMEZONE"
+            and SOURCE_DIALECT.get() == "oracle"
+            and dialect != "oracle"
+        ):
+            _stz = {
+                "postgresql": "current_setting('TimeZone')",
+                "mysql": "@@session.time_zone",
+                "tsql": "DATENAME(TZOFFSET, SYSDATETIMEOFFSET())",
+            }[dialect]
+            return (
+                f"{_stz} /* UNIQUE: Oracle SESSIONTIMEZONE is session-"
+                "dependent; the mapped expression reports this session's "
+                "zone/offset in the target's own format "
+                "(docs/03-unsupported.md) */"
+            )
         # Bare SQLERRM (PL/SQL and plpgsql spell it without parens) is the
         # current-error-message global, not a column (exception context).
         if (
@@ -6781,6 +6826,38 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # T-SQL has no EXTRACT at all (error 195) — its spelling is DATEPART.
     if fn_name == "EXTRACT" and len(node.args) == 2:
         part = _emit_expression(node.args[0], dialect).strip("'\"").upper()
+        # EXTRACT(field FROM <interval literal>) folds at compile time: the
+        # interval-literal cast degrades to a text carrier off PG, which no
+        # engine can EXTRACT from — but the value is statically known.
+        _iv_arg = node.args[1]
+        if (
+            isinstance(_iv_arg, CastExpression)
+            and _iv_arg.target_type.name.split("(")[0].strip().upper() == "INTERVAL"
+            and isinstance(_iv_arg.expression, Literal)
+            and isinstance(_iv_arg.expression.value, str)
+        ):
+            _iv_fields = {
+                m.group(2).rstrip("s").upper(): int(m.group(1))
+                for m in re.finditer(
+                    r"(-?\d+)\s*(year|mon|month|week|day|hour|min|minute|sec|second)s?",
+                    _iv_arg.expression.value,
+                    re.I,
+                )
+            }
+            _iv_want = (
+                {"DAYS": "DAY", "HOURS": "HOUR", "YEARS": "YEAR"}
+                .get(part, part)
+                .rstrip("S")
+            )
+            if _iv_fields and _iv_want in (
+                "YEAR",
+                "MONTH",
+                "DAY",
+                "HOUR",
+                "MINUTE",
+                "SECOND",
+            ):
+                return str(_iv_fields.get(_iv_want, 0))
         value = _emit_expression(node.args[1], dialect)
         # MySQL's compound EXTRACT units (YEAR_MONTH -> YYYYMM, DAY_SECOND ->
         # DDHHMMSS, …) concatenate the component fields into one number; no other
@@ -6971,22 +7048,36 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         tmpl = node.args[0].value
         specs = re.findall(r"%(.)", tmpl)
         if (
-            not all(c in ("s", "%") for c in specs)
-            or specs.count("s") != len(node.args) - 1
+            not all(c in ("s", "I", "%") for c in specs)
+            or sum(1 for c in specs if c in ("s", "I")) != len(node.args) - 1
         ):
             return (
-                "NULL /* UNIQUE: PG format() with %I/%L/width/positional "
+                "NULL /* UNIQUE: PG format() with %L/width/positional "
                 "specifiers has no cross-engine equivalent — "
                 "see docs/03-unsupported.md */"
             )
+
+        def _quoted_ident(arg_sql: str) -> str:
+            # %I: the argument as a QUOTED IDENTIFIER in the target's dialect.
+            if dialect == "tsql":
+                return f"QUOTENAME({arg_sql})"
+            if dialect == "mysql":
+                return f"CONCAT('`', REPLACE({arg_sql}, '`', '``'), '`')"
+            return f"'\"' || REPLACE({arg_sql}, '\"', '\"\"') || '\"'"
+
         fmt_args = [_emit_expression(a, dialect) for a in node.args[1:]]
+        fmt_parts = re.split(r"%([sI])", tmpl)
         pieces: list[str] = []
-        for i, part in enumerate(re.split(r"%s", tmpl)):
+        _ai = 0
+        for i, part in enumerate(fmt_parts):
+            if i % 2 == 1:  # a captured spec letter
+                arg_sql = fmt_args[_ai]
+                pieces.append(_quoted_ident(arg_sql) if part == "I" else arg_sql)
+                _ai += 1
+                continue
             lit = part.replace("%%", "%")
             if lit:
                 pieces.append("'" + lit.replace("'", "''") + "'")
-            if i < len(fmt_args):
-                pieces.append(fmt_args[i])
         if not pieces:
             return "''"
         if len(pieces) == 1:

@@ -417,7 +417,7 @@ SELECT INET_ATON('10.0.0.1'),INET_NTOA(167772161),INET6_ATON('::1')
 -- CASE[fixed]: my-inet6 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.IN
 SELECT INET6_ATON('::1'), INET6_NTOA(INET6_ATON('::1'))
 
--- CASE[open]: my-infoschema — fails on oracle. PROCEDURE P compiled INVALID (line 8): PL/SQL: ORA-00942: table or view does not exist
+-- CASE[fixed]: my-infoschema — information_schema.tables maps to Oracle's accessible-tables view (all_tables; sys.tables likewise -> user_tables). Catalog row counts are environment-dependent on every engine. Live-compiled VALID on oracle 2026-07-24.
 CREATE PROCEDURE p() BEGIN DECLARE c INT; SELECT COUNT(*) INTO c FROM information_schema.tables; SELECT c; END
 
 -- CASE[fixed]: my-insert-oob — fails on tsql. FUNC-DIFF: source=(('abc',),) target=(('NULL',),)

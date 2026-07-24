@@ -16,6 +16,7 @@ from unique.core.ast_nodes import (
     CreateTriggerStatement,
     EmbeddedDML,
     ExceptionBlock,
+    ExecuteStatement,
     IfStatement,
     Literal,
     LoopStatement,
@@ -554,9 +555,11 @@ class TSqlTransformer(ProceduralTransformer):
     def _has_function_side_effect(cls, node: ASTNode) -> bool:
         """A T-SQL scalar function forbids TRY/CATCH, PRINT and RAISERROR (error
         443, "side-effecting operator within a function"). Walk the body for any
-        such construct — a PG/Oracle EXCEPTION handler (lowered to TRY/CATCH) or a
-        RAISE NOTICE/PRINT — anywhere, including nested loops."""
-        if isinstance(node, (TryCatchBlock, PrintStatement)):
+        such construct — a PG/Oracle EXCEPTION handler (lowered to TRY/CATCH), a
+        RAISE NOTICE/PRINT, or dynamic SQL (the EXECUTE … INTO lowering needs
+        INSERT EXEC, equally side-effecting) — anywhere, including nested
+        loops."""
+        if isinstance(node, (TryCatchBlock, PrintStatement, ExecuteStatement)):
             return True
         for value in vars(node).values():
             items = value if isinstance(value, tuple) else (value,)

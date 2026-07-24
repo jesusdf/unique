@@ -124,7 +124,7 @@ SELECT CAST(2.7 AS INT) AS r
 -- CASE[limit]: pg-cast-interval — Oracle has no bare INTERVAL type (it needs a DAY TO SECOND/YEAR TO MONTH qualifier); '1 day'::interval keeps the value as text with a documented carrier (docs/03-unsupported.md). fails on oracle
 SELECT '1 day'::interval AS r
 
--- CASE[open]: pg-cast-interval3 — fails on oracle. ORA-30089: missing or invalid <datetime field>
+-- CASE[fixed]: pg-cast-interval3 — EXTRACT(field FROM <interval literal>) folds to its statically-known value (5) and the ::text leg matches PG's own rendering. Live ('5 days', 5) exact on oracle 2026-07-24.
 SELECT '5 days'::interval::text, extract(days from '5 days'::interval)
 
 -- CASE[fixed]: pg-cast-matrix — was: numeric→text CAST invalid on tsql (deprecated TEXT type). Cured by the CAST-only TEXT→VARCHAR(MAX)/VARCHAR2(4000) map + tsql int-cast ROUND; live value-verified (precision-tolerant) on all failing targets 2026-07-24.
@@ -217,7 +217,7 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL
 -- CASE[fixed]: pg-dttypes — TIME/TIMETZ/INTERVAL now map to Oracle INTERVAL DAY TO SECOND with warned notes (docs/03-unsupported.md §3.19); TIMESTAMPTZ -> TIMESTAMP WITH TIME ZONE. Live-executed on oracle 2026-07-24.
 CREATE TABLE t (a DATE, b TIME, c TIMESTAMP, d TIMESTAMPTZ, e TIMETZ, f INTERVAL, g TIMESTAMP(3))
 
--- CASE[open]: pg-dyn-count — fails on oracle, tsql. (102, b"Incorrect syntax near 'SELECT COUNT(*) FROM %I'.DB-Lib error message 20018, severi
+-- CASE[fixed]: pg-dyn-count — format('%I') renders the argument as a QUOTED IDENTIFIER per target (Oracle '"'||REPLACE||'"' — live-compiled VALID; T-SQL QUOTENAME) and PL/SQL BIGINT maps to NUMBER(19); the T-SQL function leg degrades documented (INSERT EXEC is side-effecting, error 443), as does MySQL's dynamic SELECT INTO.
 CREATE FUNCTION f(tbl TEXT) RETURNS BIGINT AS $$ DECLARE n BIGINT; BEGIN EXECUTE format('SELECT COUNT(*) FROM %I', tbl) INTO n; RETURN n; END; $$ LANGUAGE plpgsql
 
 -- CASE[fixed]: pg-emoji-len — LENGTH of a literal folds to the code-point count (1), which is also T-SQL-correct. Live-verified on tsql.
@@ -541,7 +541,7 @@ SELECT QUOTE_LITERAL('O''Brien'), QUOTE_IDENT('my col')
 -- CASE[fixed]: pg-range-types — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type INT4RANGE.DB-Lib error m
 CREATE TABLE t (rng INT4RANGE, tsr TSRANGE)
 
--- CASE[open]: pg-realworld-transfer — fails on oracle, tsql. (443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro
+-- CASE[fixed]: pg-realworld-transfer — PG check_violation (no predefined Oracle exception) now lands as WHEN OTHERS + SQLCODE = -2290 + RAISE (live-compiled VALID on oracle); the T-SQL leg degrades documented (TRY/CATCH in a scalar function, error 443).
 CREATE TABLE accounts (id SERIAL PRIMARY KEY, balance NUMERIC(12,2) DEFAULT 0 CHECK (balance >= 0));
 CREATE TABLE ledger (id SERIAL PRIMARY KEY, account_id INT REFERENCES accounts(id) ON DELETE CASCADE, amount NUMERIC(12,2), ts TIMESTAMPTZ DEFAULT now());
 CREATE FUNCTION transfer(from_id INT, to_id INT, amt NUMERIC) RETURNS VOID AS $$
@@ -550,7 +550,7 @@ UPDATE accounts SET balance = balance + amt WHERE id = to_id;
 INSERT INTO ledger (account_id, amount) VALUES (from_id, -amt), (to_id, amt);
 EXCEPTION WHEN check_violation THEN RAISE EXCEPTION 'insufficient funds'; END; $$ LANGUAGE plpgsql;
 
--- CASE[open]: pg-recursive-func — fails on tsql. (455, b'The last statement included within a function must be a return statement.DB-Lib er
+-- CASE[fixed]: pg-recursive-func — stale finding: the all-branches-return trailing RETURN NULL fix and the dbo.f() recursive-call qualification already cure it; live-compiled and dbo.f(4)=24 on tsql 2026-07-24.
 CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END; $$ LANGUAGE plpgsql
 
 -- CASE[fixed]: pg-regexp-backref — PG regexp_replace flags normalized: drop the 'g' (Oracle/MySQL are global by default, so 'g' was mis-read as Oracle's numeric position), map no-flags to occurrence 1, carry 'i', and for MySQL double the pattern's backslashes + rewrite \N backrefs to $N; 'a[1]b[2]' verified on both
@@ -714,7 +714,7 @@ SELECT ts_rank(to_tsvector('the cat'), to_tsquery('cat')) AS r
 -- CASE[fixed]: pg-tstzrange — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
 SELECT tstzrange(now(), now() + INTERVAL '1 day') AS r
 
--- CASE[open]: pg-tz-convert — fails on mysql, oracle, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D
+-- CASE[limit]: pg-tz-convert — AT TIME ZONE is not portable (Oracle/MySQL have no such operator; the session-tz-dependent display differs on PG/T-SQL) and degrades to NULL + annotation + warning off PG — the same approved limit as ts-at-time-zone (docs/03-unsupported.md). fails on mysql, oracle, tsql
 SELECT TIMESTAMP '2020-06-15 10:00:00' AT TIME ZONE 'America/New_York', now() AT TIME ZONE 'UTC'
 
 -- CASE[fixed]: pg-tz-interval — same type-gap mapping as pg-dttypes (TIMETZ/INTERVAL -> INTERVAL DAY TO SECOND, warned notes, docs/03-unsupported.md §3.19). Live-executed on oracle 2026-07-24.
@@ -756,7 +756,7 @@ SELECT BIT_AND(x),BIT_OR(x),BIT_XOR(x) FROM (VALUES (3),(5),(6)) v(x)
 -- CASE[fixed]: po-distinct-case — force a binary collation on the DISTINCT string column so MySQL/T-SQL keep 'a'/'A' distinct like PG (A, B, a); null-priority ORDER key skipped under DISTINCT.
 SELECT DISTINCT x FROM (VALUES ('a'),('A'),('a'),('B')) v(x) ORDER BY x
 
--- CASE[open]: po-distinct-null — fails on mysql, tsql. FUNC-DIFF: source=((1,),(2,),(NULL,)) target=((NULL,),(1,),(2,)). MySQL-fixable, but T-SQL forbids the null-priority key under DISTINCT.
+-- CASE[fixed]: po-distinct-null — MySQL keeps the null-priority key (live 1,2,NULL exact); T-SQL now wraps the DISTINCT in a derived table and orders OUTSIDE it, so the null-priority key is legal there too (live 1,2,NULL exact, 2026-07-24).
 SELECT DISTINCT x FROM (VALUES (1),(NULL),(1),(NULL),(2)) v(x) ORDER BY x
 
 -- CASE[fixed]: po-group-case — force a binary collation consistently on the SELECT/GROUP BY/ORDER BY string key so MySQL/T-SQL group case-sensitively like PG (A,a,b each once).

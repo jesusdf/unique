@@ -491,7 +491,7 @@ SELECT TRIM(LEADING '0' FROM '007'), LTRIM('007','0'), RTRIM('hi!!','!'), TRANSL
 -- CASE[fixed]: ora-tz-fns — fails on mysql, postgresql, tsql. (155, b"'TIMEZONE_HOUR' is not a recognized datepart option.DB-Lib error message 20018, se
 SELECT EXTRACT(TIMEZONE_HOUR FROM SYSTIMESTAMP), TZ_OFFSET('US/Eastern') FROM DUAL
 
--- CASE[open]: ora-tz-funcs — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
+-- CASE[limit]: ora-tz-funcs — SYSTIMESTAMP/LOCALTIMESTAMP map to each target's now-functions and SESSIONTIMEZONE to its session-zone expression (current_setting('TimeZone') / @@session.time_zone / DATENAME(TZOFFSET, SYSDATETIMEOFFSET())), annotated + warned: the values are session/server-dependent and cannot match across engines (docs/03-unsupported.md; ts-spid-version precedent). fails on mysql, postgresql, tsql
 SELECT SYSTIMESTAMP, LOCALTIMESTAMP, SESSIONTIMEZONE FROM DUAL
 
 -- CASE[fixed]: ora-tz-interval — T-SQL/MySQL have no INTERVAL column type: mapped to VARCHAR(30) with a warned -- UNIQUE: note (docs/03-unsupported.md §3.19); TIMESTAMP WITH TIME ZONE -> DATETIMEOFFSET. Live-executed on tsql + mysql 2026-07-24.

@@ -444,6 +444,12 @@ class OracleTransformer(ProceduralTransformer):
         {"VARCHAR", "VARCHAR2", "NVARCHAR", "NVARCHAR2", "CHAR", "NCHAR"}
     )
 
+    def _fix_select_into_rest(self, sql: str) -> str:
+        # Cross-engine catalog views in a SELECT INTO's FROM tail: Oracle has
+        # no information_schema and no sys.tables.
+        sql = re.sub(r"(?i)\binformation_schema\s*\.\s*tables\b", "all_tables", sql)
+        return re.sub(r"(?i)\bsys\s*\.\s*tables\b", "user_tables", sql)
+
     def _fix_raw_sql_target(self, sql: str) -> str:
         if self._source == "postgresql":
             # plpgsql's FOUND flag (set by the last DML): this
@@ -462,6 +468,12 @@ class OracleTransformer(ProceduralTransformer):
         # T-SQL ERROR_MESSAGE() inside a CATCH -> SQLERRM in the EXCEPTION
         # handler (parameterless; the empty parens would not parse).
         sql = re.sub(r"(?i)\bERROR_MESSAGE\s*\(\s*\)", "SQLERRM", sql)
+
+        # Cross-engine catalog views: Oracle has no information_schema and no
+        # sys.tables — ALL_TABLES/USER_TABLES are the accessible-tables views
+        # (a name map; row counts are environment-dependent on every engine).
+        sql = re.sub(r"(?i)\binformation_schema\s*\.\s*tables\b", "all_tables", sql)
+        sql = re.sub(r"(?i)\bsys\s*\.\s*tables\b", "user_tables", sql)
 
         # dbo doesn't exist in Oracle; drop a dbo. qualifier on calls within
         # expressions (e.g. dbo.func1() in an assignment, RETURN or COALESCE).

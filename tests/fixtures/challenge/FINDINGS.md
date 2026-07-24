@@ -464,11 +464,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI`
 - src: `SELECT INTERVAL(3, 1, 2, 4, 6), FIELD('b','a','b'), ELT(1,'x','y')`
 
-## my-infoschema  (mysql)
-- targets: oracle(invalid)
-- live error: `PROCEDURE P compiled INVALID (line 8): PL/SQL: ORA-00942: table or view does not exist`
-- src: `CREATE PROCEDURE p() BEGIN DECLARE c INT; SELECT COUNT(*) INTO c FROM information_schema.tables; SELECT c; END`
-
 ## my-insert-oob  (mysql)
 - targets: tsql(func)
 - live error: `FUNC-DIFF: source=(('abc',),) target=(('NULL',),)`
@@ -1242,11 +1237,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - live error: `(174, b'The replace function requires 3 argument(s).DB-Lib error message 20018, severity 1`
 - src: `SELECT TRANSLATE('12345', '123', 'abc'), REPLACE('aaa','a') FROM DUAL`
 
-## ora-tz-funcs  (oracle)
-- targets: mysql(invalid), postgresql(invalid), tsql(invalid)
-- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO`
-- src: `SELECT SYSTIMESTAMP, LOCALTIMESTAMP, SESSIONTIMEZONE FROM DUAL`
-
 ## ora-unpivot  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(207, b"Invalid column name 'col'.DB-Lib error message 20018, severity 16:\nGeneral SQL Se`
@@ -1419,11 +1409,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `ORA-30089: missing or invalid <datetime field>`
 - src: `SELECT '1 day'::interval AS r`
 
-## pg-cast-interval3  (postgresql)
-- targets: oracle(invalid)
-- live error: `ORA-30089: missing or invalid <datetime field>`
-- src: `SELECT '5 days'::interval::text, extract(days from '5 days'::interval)`
-
 ## pg-cast-point  (postgresql)
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(243, b'Type POINT is not a defined system type.DB-Lib error message 20018, severity 16:\n`
@@ -1518,11 +1503,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL`
-
-## pg-dyn-count  (postgresql)
-- targets: tsql(invalid)
-- live error: `(102, b"Incorrect syntax near 'SELECT COUNT(*) FROM %I'.DB-Lib error message 20018, severi`
-- src: `CREATE FUNCTION f(tbl TEXT) RETURNS BIGINT AS $$ DECLARE n BIGINT; BEGIN EXECUTE format('SELECT COUNT(*) FROM %I', tbl) INTO n; RE`
 
 ## pg-empty-is-null  (postgresql)
 - targets: oracle(func)
@@ -1789,17 +1769,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `FUNC-DIFF: source=(('1',),) target=(('0',),)`
 - src: `SELECT POSITION('' IN 'abc') AS r`
 
-## pg-realworld-transfer  (postgresql)
-- targets: mysql(silent-rt), oracle(invalid), tsql(invalid)
-- live error: `(443, b"Invalid use of a side-effecting operator 'BEGIN TRY' within a function.DB-Lib erro`
-- src: `CREATE TABLE accounts (id SERIAL PRIMARY KEY, balance NUMERIC(12,2) DEFAULT 0 CHECK (balance >= 0));
-CREATE TABLE ledger (id SERIA`
-
-## pg-recursive-func  (postgresql)
-- targets: tsql(invalid)
-- live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
-- src: `CREATE FUNCTION f(n INT) RETURNS INT AS $$ BEGIN IF n <= 1 THEN RETURN 1; ELSE RETURN n * f(n-1); END IF; END; $$ LANGUAGE plpgsql`
-
 ## pg-regexp-backref  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
 - live error: `ORA-01722: unable to convert string value containing 'g' to a number: `
@@ -1917,11 +1886,6 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - live error: `(102, b"Incorrect syntax near 'RESTART'.DB-Lib error message 20018, severity 15:\nGeneral `
 - src: `CREATE TABLE t (id INT); TRUNCATE TABLE t RESTART IDENTITY CASCADE`
 
-## pg-tz-convert  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D`
-- src: `SELECT TIMESTAMP '2020-06-15 10:00:00' AT TIME ZONE 'America/New_York', now() AT TIME ZONE 'UTC'`
-
 ## pg-unique-nulls-notdistinct  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
 - live error: `ORA-03050: invalid identifier: "UNIQUE" is a reserved word`
@@ -1961,11 +1925,6 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('A',), ('B',), ('a',)) target=(('A',), ('B',))`
 - src: `SELECT DISTINCT x FROM (VALUES ('a'),('A'),('a'),('B')) v(x) ORDER BY x`
-
-## po-distinct-null  (postgresql)
-- targets: mysql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('1',), ('2',), ('NULL',)) target=(('NULL',), ('1',), ('2',))`
-- src: `SELECT DISTINCT x FROM (VALUES (1),(NULL),(1),(NULL),(2)) v(x) ORDER BY x`
 
 ## po-group-case  (postgresql)
 - targets: mysql(func), tsql(func)

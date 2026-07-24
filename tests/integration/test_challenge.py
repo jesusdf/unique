@@ -609,9 +609,14 @@ class TestFormatFunc:
         assert "CONCAT('a', '=', 1)" in _tx(case, "postgresql", "tsql")
         assert "CONCAT('a', '=', 1)" in _tx(case, "postgresql", "mysql")
 
+    def test_identifier_spec_quotes(self) -> None:
+        # %I now renders the argument as a quoted identifier per target.
+        out = _tx("SELECT format('%I', 'tbl') AS r;", "postgresql", "tsql")
+        assert "QUOTENAME('tbl')" in out, out
+
     def test_complex_spec_degrades(self) -> None:
         result = Transpiler().transpile(
-            "SELECT format('%I', 'tbl') AS r;", source="postgresql", target="tsql"
+            "SELECT format('%L', 'v') AS r;", source="postgresql", target="tsql"
         )
         assert result.warnings and "UNIQUE:" in result.sql
 
@@ -3918,13 +3923,20 @@ class TestNullOrderingEmulation:
         )
         assert re.search(r"(?i)CASE WHEN .*IS NULL THEN 1 ELSE 0 END", out), out
 
-    def test_tsql_distinct_omits_key_to_stay_valid(self) -> None:
+    def test_tsql_distinct_wraps_to_keep_key(self) -> None:
         # T-SQL forbids an ORDER BY expression outside the select list under
-        # DISTINCT, so the null-priority key is skipped there (valid, divergent).
-        out = _tx(
-            _case("challenge_postgresql.sql", "po-distinct-null"), "postgresql", "tsql"
+        # DISTINCT — the DISTINCT now wraps in a derived table and the
+        # null-priority key orders OUTSIDE it (live-verified 1, 2, NULL).
+        out = " ".join(
+            _exec_lines(
+                _tx(
+                    _case("challenge_postgresql.sql", "po-distinct-null"),
+                    "postgresql",
+                    "tsql",
+                )
+            ).split()
         )
-        assert "IS NULL THEN" not in out.upper(), out
+        assert re.search(r"(?i)\) uq_d ORDER BY CASE WHEN x IS NULL", out), out
 
     def test_mysql_distinct_keeps_key(self) -> None:
         # MySQL allows a non-selected ORDER BY expression under DISTINCT, so the
@@ -4454,3 +4466,50 @@ class TestWave5GroupingAndFolds:
         )
         assert out.upper().count("OVER (ORDER BY ID") == 2, out
         assert re.search(r"(?i)WINDOW\s+w\s+AS", out) is None, out
+
+
+class TestWave6Procedural:
+    """Wave-6 procedural/misc fixes, live-verified 2026-07-24."""
+
+    def test_format_identifier_spec(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-dyn-count"), "postgresql", "oracle"
+        )
+        assert "REPLACE(tbl, '\"', '\"\"')" in out, out
+        assert "NUMBER(19)" in out, out
+
+    def test_check_violation_sqlcode_handler(self) -> None:
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-realworld-transfer"),
+            "postgresql",
+            "oracle",
+        )
+        assert "SQLCODE = -2290" in out, out
+        assert re.search(r"(?i)ELSE\s+RAISE;", out), out
+
+    def test_infoschema_catalog_map(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-infoschema"), "mysql", "oracle")
+        )
+        assert re.search(r"(?i)FROM all_tables", out), out
+        assert "information_schema" not in out.lower(), out
+
+    def test_sessiontimezone_mapped_and_annotated(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_oracle.sql", "ora-tz-funcs"),
+            source="oracle",
+            target="postgresql",
+        )
+        assert "current_setting('TimeZone')" in result.sql, result.sql
+        assert result.warnings, result.warnings
+
+    def test_interval_literal_extract_folds(self) -> None:
+        out = _exec_lines(
+            _tx(
+                _case("challenge_postgresql.sql", "pg-cast-interval3"),
+                "postgresql",
+                "oracle",
+            )
+        )
+        assert re.search(r",\s*5\b", " ".join(out.split())), out
+        assert "EXTRACT" not in out.upper(), out

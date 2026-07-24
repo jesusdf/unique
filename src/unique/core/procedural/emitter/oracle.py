@@ -16,6 +16,7 @@ from unique.core.ast_nodes import (
     CreateTriggerStatement,
     DeclareStatement,
     EmbeddedDML,
+    ExceptionBlock,
     ForLoopStatement,
     ParameterDefinition,
     PerformStatement,
@@ -115,6 +116,56 @@ class OracleEmitter(ProceduralEmitter):
 
     def _map_exception_name(self, name: str) -> str:
         return self._PG_EXCEPTION_CONDITIONS.get(name.upper(), name)
+
+    #: PG conditions with a definite ORA error code but NO predefined named
+    #: Oracle exception — handled via WHEN OTHERS + SQLCODE (a PRAGMA
+    #: EXCEPTION_INIT declaration would need DECLARE-section surgery).
+    _PG_CONDITION_SQLCODES = {
+        "CHECK_VIOLATION": -2290,
+        "FOREIGN_KEY_VIOLATION": -2291,
+        "NOT_NULL_VIOLATION": -1400,
+    }
+
+    def _emit_exception_block(self, node: ExceptionBlock) -> str:
+        coded = [
+            h
+            for h in node.handlers
+            if h.exception_name.upper() in self._PG_CONDITION_SQLCODES
+        ]
+        if not coded:
+            return super()._emit_exception_block(node)
+        lines = ["EXCEPTION"]
+        for handler in node.handlers:
+            if handler in coded:
+                continue
+            lines.append(
+                f"WHEN {self._map_exception_name(handler.exception_name)} THEN"
+            )
+            self._indent_level += 1
+            for stmt in handler.body:
+                for line in self._emit_node(stmt).split("\n"):
+                    lines.append(f"{self._indent()}{line}" if line.strip() else "")
+            self._indent_level -= 1
+        # One WHEN OTHERS discriminating by SQLCODE; unmatched errors re-raise.
+        lines.append("WHEN OTHERS THEN")
+        self._indent_level += 1
+        kw = "IF"
+        for handler in coded:
+            code = self._PG_CONDITION_SQLCODES[handler.exception_name.upper()]
+            lines.append(f"{self._indent()}{kw} SQLCODE = {code} THEN")
+            self._indent_level += 1
+            for stmt in handler.body:
+                for line in self._emit_node(stmt).split("\n"):
+                    lines.append(f"{self._indent()}{line}" if line.strip() else "")
+            self._indent_level -= 1
+            kw = "ELSIF"
+        lines.append(f"{self._indent()}ELSE")
+        self._indent_level += 1
+        lines.append(f"{self._indent()}RAISE;")
+        self._indent_level -= 1
+        lines.append(f"{self._indent()}END IF;")
+        self._indent_level -= 1
+        return "\n".join(lines)
 
     def _procedure_header(self, name: str, or_replace: bool) -> str:
         prefix = "CREATE OR REPLACE " if or_replace else "CREATE "

@@ -520,6 +520,7 @@ PROCEDURAL_TYPE_MAPS: dict[tuple[str, str], dict[str, str]] = {
         "BPCHAR": "VARCHAR2",
         "NAME": "VARCHAR2",
         "REFCURSOR": "SYS_REFCURSOR",
+        "BIGINT": "NUMBER(19)",
         "INT2": "SMALLINT",
         "INT4": "INTEGER",
         "INT8": "NUMBER(19)",
