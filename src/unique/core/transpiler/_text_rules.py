@@ -732,12 +732,6 @@ def _extract_tsql_output(sql: str) -> tuple[str, str | None]:
 
 def _statement_is_merge(sql: str) -> bool:
     """True when *sql*'s first keyword (past any leading comments) is MERGE."""
-    s = sql.lstrip()
-    while s.startswith("--") or s.startswith("/*"):
-        if s.startswith("--"):
-            nl = s.find("\n")
-            s = ("" if nl == -1 else s[nl + 1 :]).lstrip()
-        else:
-            end = s.find("*/")
-            s = ("" if end == -1 else s[end + 2 :]).lstrip()
-    return re.match(r"(?i)MERGE\b", s) is not None
+    # Guardrail 3: comment stripping lives in ONE shared place.
+    _trivia, code = split_leading_trivia(sql)
+    return re.match(r"(?i)\s*MERGE\b", code) is not None
