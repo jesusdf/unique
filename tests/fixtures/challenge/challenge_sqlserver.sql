@@ -63,7 +63,7 @@ SELECT CAST(2 AS BIT) AS r
 -- CASE[fixed]: ts-cast-bit2 — TRY_CAST is carried (safe flag): Oracle DEFAULT NULL ON CONVERSION ERROR, PG resolves the non-boolean literal to NULL at transpile time. Live-verified (1,1,1,NULL).
 SELECT CAST(1 AS BIT), CAST('true' AS BIT), CAST(0.5 AS BIT), TRY_CAST('x' AS BIT)
 
--- CASE[open]: ts-cast-date-int — fails on oracle, postgresql. ORA-00932: expression is of data type DATE, which is incompatible with expected data type 
+-- CASE[fixed]: ts-cast-date-int — CAST(<now> AS INT) is T-SQL's ROUNDED day count since 1900-01-01; emitted as ROUND(SYSDATE - DATE '1900-01-01') / epoch-seconds forms. Live value-verified equal (46225) on oracle/postgresql 2026-07-24.
 SELECT CAST(GETDATE() AS INT) AS r
 
 -- CASE[fixed]: ts-cast-int-datetime — T-SQL CAST(n AS DATETIME) reads n as days since the 1900-01-01 epoch (no other engine has that implicit conversion); reproduce as DATE 1900-01-01 + n (Oracle/PG add days to a DATE). live-verified 1900-01-02.
@@ -114,7 +114,7 @@ SELECT IIF(1>0,'y','n'), CHOOSE(2,'a','b','c'), ISNULL(NULL,'x'), NULLIF(1,1)
 -- CASE[fixed]: ts-continue-break — compound assignment (@i+=1) expanded to @i=@i+1; BREAK->EXIT/LEAVE, CONTINUE->CONTINUE/ITERATE; MySQL loop labeled. Compiles on oracle/pg/mysql.
 CREATE PROCEDURE p AS BEGIN DECLARE @i INT=1; WHILE @i<=3 BEGIN SET @i+=1; IF @i=2 CONTINUE; IF @i=5 BREAK; END; END
 
--- CASE[open]: ts-convert-style — fails on oracle. ORA-01821: date format not recognized
+-- CASE[fixed]: ts-convert-style — CONVERT date styles map to TO_CHAR masks; style 126 now quotes the ISO 'T' separator, maps %f -> FF3 and casts the value to TIMESTAMP (FF on DATE is ORA-01821). Live-executed on oracle 2026-07-24.
 SELECT CONVERT(VARCHAR,GETDATE(),101),CONVERT(VARCHAR,GETDATE(),112),CONVERT(VARCHAR,GETDATE(),120),CONVERT(VARCHAR,GETDATE(),126)
 
 -- CASE[fixed]: ts-cube — fails on mysql, oracle, postgresql. ORA-00937: not a single-group group function
@@ -365,7 +365,7 @@ SELECT STRING_AGG(x,',') WITHIN GROUP (ORDER BY x DESC) FROM (SELECT 1 x UNION A
 -- CASE[fixed]: ts-stragg-within — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT STRING_AGG(x,',') WITHIN GROUP (ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2 x) t
 
--- CASE[open]: ts-stragg-within2 — fails on mysql, oracle. ORA-00906: missing left parenthesis
+-- CASE[fixed]: ts-stragg-within2 — a lengthless character CAST inside STRING_AGG's canonical fragment is sized (VARCHAR2(4000)) for Oracle SQL context and mapped to CHAR for MySQL's CAST target set. Live-executed on mysql/oracle 2026-07-24.
 CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); CREATE TABLE data (data NVARCHAR(MAX));
 GO
 SELECT STRING_AGG(CAST(n AS VARCHAR), ',') WITHIN GROUP (ORDER BY id) FROM t

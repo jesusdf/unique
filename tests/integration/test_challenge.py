@@ -3206,7 +3206,8 @@ class TestStringAggOrderCast:
     def test_string_agg_order_cast_portabilized(self) -> None:
         case = _case("challenge_postgresql.sql", "pg-string-agg-order ")
         assert "CAST(x AS VARCHAR2(4000))" in _tx(case, "postgresql", "oracle")
-        assert "CAST(x AS VARCHAR(MAX))" in _tx(case, "postgresql", "tsql")
+        # PG TEXT now maps to the Unicode NVARCHAR(MAX) (procedural-map parity).
+        assert "CAST(x AS NVARCHAR(MAX))" in _tx(case, "postgresql", "tsql")
 
 
 class TestExtractValue:
@@ -4326,3 +4327,66 @@ class TestLiteralFolds:
             )
         )
         assert "DECIMAL(30, 0)" in out, out
+
+
+class TestWave4Rewrites:
+    """Wave-4 expression/DDL rewrites, live-executed 2026-07-24."""
+
+    def test_any_array_subquery_unwrapped(self) -> None:
+        out = " ".join(
+            _exec_lines(
+                _tx(
+                    _case("challenge_postgresql.sql", "pg-any-array-subquery"),
+                    "postgresql",
+                    "tsql",
+                )
+            ).split()
+        )
+        assert re.search(r"(?i)= ANY \(SELECT id FROM b\)", out), out
+        assert "ARRAY" not in out.upper(), out
+
+    def test_interval_arith_per_target(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-interval-arith")
+        assert "DATEADD(DAY, -1, GETDATE())" in _tx(case, "postgresql", "tsql")
+        assert "INTERVAL 1 DAY" in _tx(case, "postgresql", "mysql")
+        assert "INTERVAL '1' DAY" in _tx(case, "postgresql", "oracle")
+
+    def test_now_plus_int_is_day_arith(self) -> None:
+        case = _case("challenge_oracle.sql", "ora-date-plus-int")
+        assert "DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 1 DAY)" in _tx(
+            case, "oracle", "mysql"
+        )
+        assert "+ INTERVAL '1' DAY" in _tx(case, "oracle", "postgresql")
+
+    def test_cast_now_to_int_rounds_epoch_days(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-cast-date-int")
+        assert "ROUND(SYSDATE - DATE '1900-01-01')" in _tx(case, "tsql", "oracle")
+        assert re.search(
+            r"(?i)ROUND\(EXTRACT\(EPOCH FROM \(CURRENT_TIMESTAMP - "
+            r"TIMESTAMP '1900-01-01'\)\) / 86400\)",
+            _tx(case, "tsql", "postgresql"),
+        )
+
+    def test_convert_style_126_mask(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_sqlserver.sql", "ts-convert-style"), "tsql", "oracle")
+        )
+        assert "HH24:MI:SS.FF3" in out, out
+        assert '"T"' in out, out
+        assert "%f" not in out, out
+
+    def test_stragg_cast_sized(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-stragg-within2")
+        assert "CAST(n AS VARCHAR2(4000))" in _tx(case, "tsql", "oracle")
+        assert "CAST(n AS CHAR)" in _tx(case, "tsql", "mysql")
+
+    def test_pg_text_column_modernized(self) -> None:
+        out = _exec_lines(
+            _tx(
+                _case("challenge_postgresql.sql", "pg-computed-func"),
+                "postgresql",
+                "tsql",
+            )
+        )
+        assert "NVARCHAR(MAX)" in out, out
+        assert re.search(r"(?i)\bTEXT\b", out) is None, out

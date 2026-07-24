@@ -6437,12 +6437,13 @@ class TestWave172MysqlTsqlDeclareTypes:
         assert "double" not in out.lower(), out
 
     def test_declare_text_becomes_varchar_max(self) -> None:
+        # MySQL 8 TEXT is utf8mb4 (Unicode) -> NVARCHAR(MAX) (emit-map parity).
         out = _t2(
             "create procedure p() begin declare s text; set s = 'x'; end",
             "mysql",
             "tsql",
         )
-        assert re.search(r"(?i)DECLARE @s VARCHAR\(MAX\)", out), out
+        assert re.search(r"(?i)DECLARE @s NVARCHAR\(MAX\)", out), out
 
     def test_declare_double_kept_mysql(self) -> None:
         out = _t2(

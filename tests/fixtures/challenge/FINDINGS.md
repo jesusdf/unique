@@ -944,11 +944,6 @@ ALTER`
 - live error: `FUNC-DIFF: source=(('60',),) target=(('0',),)`
 - src: `SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r FROM DUAL`
 
-## ora-date-plus-int  (oracle)
-- targets: mysql(semantic), postgresql(invalid)
-- live error: `SEMANTIC: Oracle 'date + 1' adds ONE DAY; MySQL 'CURRENT_TIMESTAMP + 1' does numeric arith`
-- src: `SELECT SYSDATE + 1 AS r FROM DUAL`
-
 ## ora-date-plus-int2  (oracle)
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('2020-01-31 00:00:00',),) target=(('2050',),)`
@@ -1389,11 +1384,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `ORA-01735: invalid ALTER TABLE option`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DATA TYPE BIGINT USING a::bigint`
 
-## pg-any-array-subquery  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ`
-- src: `CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a WHERE id = ANY(ARRAY(SELECT id FROM b))`
-
 ## pg-array-jsonb  (postgresql)
 - targets: oracle(invalid)
 - live error: `ORA-03099: unexpected item [ in a column definition`
@@ -1459,11 +1449,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `(245, b"Conversion failed when converting the varchar value 't' to data type bit.DB-Lib er`
 - src: `SELECT 'true'::boolean, 't'::boolean, 1::boolean, EXTRACT(WEEK FROM DATE '2020-01-01')`
 
-## pg-bulk-insert  (postgresql)
-- targets: tsql(invalid)
-- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
-- src: `CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)`
-
 ## pg-case-statement  (postgresql)
 - targets: tsql(invalid)
 - live error: `(455, b'The last statement included within a function must be a return statement.DB-Lib er`
@@ -1528,11 +1513,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('μ',),) target=(('NULL',),)`
 - src: `SELECT CHR(956) AS r`
-
-## pg-computed-func  (postgresql)
-- targets: tsql(invalid)
-- live error: `(8116, b'Argument data type text is invalid for argument 1 of lower function.DB-Lib error `
-- src: `CREATE TABLE t (a TEXT, b TEXT GENERATED ALWAYS AS (lower(a)) STORED)`
 
 ## pg-computed-jsonb  (postgresql)
 - targets: mysql(invalid), tsql(invalid)
@@ -1753,11 +1733,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(func), oracle(func)
 - live error: `FUNC-DIFF: source=(('2',),) target=(('2.5',),)`
 - src: `SELECT 5 / 2 AS r`
-
-## pg-interval-arith  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S`
-- src: `SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7`
 
 ## pg-json-aggs  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
@@ -2179,11 +2154,6 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `ORA-01722: unable to convert string value containing 't' to a number: `
 - src: `SELECT CAST(1 AS BIT), CAST('true' AS BIT), CAST(0.5 AS BIT), TRY_CAST('x' AS BIT)`
 
-## ts-cast-date-int  (tsql)
-- targets: oracle(invalid), postgresql(invalid)
-- live error: `ORA-00932: expression is of data type DATE, which is incompatible with expected data type `
-- src: `SELECT CAST(GETDATE() AS INT) AS r`
-
 ## ts-cast-int-datetime  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00932: expression is of data type NUMBER, which is incompatible with expected data typ`
@@ -2203,11 +2173,6 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol "=" when expectin`
 - src: `CREATE PROCEDURE p AS BEGIN DECLARE @i INT=1; WHILE @i<=3 BEGIN SET @i+=1; IF @i=2 CONTINUE; IF @i=5 BREAK; END; END`
-
-## ts-convert-style  (tsql)
-- targets: oracle(invalid)
-- live error: `ORA-01821: date format not recognized`
-- src: `SELECT CONVERT(VARCHAR,GETDATE(),101),CONVERT(VARCHAR,GETDATE(),112),CONVERT(VARCHAR,GETDATE(),120),CONVERT(VARCHAR,GETDATE(),126)`
 
 ## ts-cube  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
@@ -2431,13 +2396,6 @@ SELECT * FROM #t2;`
 - targets: mysql(func), oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('15',),) target=(('105',),)`
 - src: `SELECT '10' + 5 AS r`
-
-## ts-stragg-within2  (tsql)
-- targets: mysql(invalid), oracle(invalid)
-- live error: `ORA-00906: missing left parenthesis`
-- src: `CREATE TABLE t (id INT, n INT); CREATE TABLE s (id INT, n INT); CREATE TABLE data (data NVARCHAR(MAX));
-GO
-SELECT STRING_AGG(CAST(`
 
 ## ts-stuff  (tsql)
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)

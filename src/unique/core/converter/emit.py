@@ -14,7 +14,7 @@ import base64
 import binascii
 import dataclasses
 import re
-from typing import cast
+from typing import Any, cast
 
 import sqlglot
 import sqlglot.expressions as exp
@@ -401,7 +401,9 @@ def _portable_types_in_sql(sql: str, dialect: str) -> str:
     for src, dst in mapping.items():
         # Replace the bare type name not already followed by '2' (avoid
         # turning VARCHAR into VARCHAR2 twice) — handled by word boundary.
-        dst_name = dst.split("(")[0]
+        # A (MAX) marker is part of the type itself (VARCHAR alone means
+        # VARCHAR(1) in DDL), unlike a numeric length the source may carry.
+        dst_name = dst if dst.upper().endswith("(MAX)") else dst.split("(")[0]
         sql = re.sub(rf"(?i)\b{re.escape(src)}\b", dst_name, sql)
     return sql
 
@@ -3669,6 +3671,30 @@ def _emit_enum_type(col: ColumnDefinition, dialect: str) -> tuple[str, str, str]
     return f"{varchar}({total_len})", "", note
 
 
+def _substitute_column_refs(expr: ASTNode, mapping: dict[str, ASTNode]) -> ASTNode:
+    """Replace ColumnRef nodes named in *mapping* with their expressions
+    (used to inline chained generated-column references)."""
+    if isinstance(expr, ColumnRef) and expr.name.lower() in mapping:
+        return mapping[expr.name.lower()]
+    if not dataclasses.is_dataclass(expr):
+        return expr
+    changes: dict[str, Any] = {}
+    for f in dataclasses.fields(expr):
+        v = getattr(expr, f.name)
+        if isinstance(v, ASTNode):
+            nv = _substitute_column_refs(v, mapping)
+            if nv is not v:
+                changes[f.name] = nv
+        elif isinstance(v, tuple) and any(isinstance(x, ASTNode) for x in v):
+            nt = tuple(
+                _substitute_column_refs(x, mapping) if isinstance(x, ASTNode) else x
+                for x in v
+            )
+            if nt != v:
+                changes[f.name] = nt
+    return dataclasses.replace(expr, **changes) if changes else expr
+
+
 def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     """Emit a CREATE TABLE statement."""
     # The T-SQL default schema "dbo" has no meaning in Oracle, MySQL or
@@ -3731,6 +3757,29 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
         return f"{tsql_guard}CREATE {temp}TABLE {exists}{table} AS\n{select}"
 
     if node.columns or node.table_constraints:
+        # A generated column referencing ANOTHER generated column is rejected
+        # by PG and T-SQL (error 1759): inline the referenced expression
+        # (transitively, in declaration order).
+        if dialect in ("postgresql", "tsql"):
+            _gen_map: dict[str, ASTNode] = {}
+            _new_cols = []
+            for _gc in node.columns:
+                if _gc.generated_expr is not None:
+                    _inlined = _substitute_column_refs(_gc.generated_expr, _gen_map)
+                    _gen_map[_gc.name.lower()] = _inlined
+                    _gc = dataclasses.replace(_gc, generated_expr=_inlined)
+                _new_cols.append(_gc)
+            node = dataclasses.replace(node, columns=tuple(_new_cols))
+        # T-SQL: a computed column used by a CHECK constraint (error 1764) or
+        # carrying UNIQUE/PK must be PERSISTED — collect the referenced names.
+        _persist_names: set[str] = set()
+        if dialect == "tsql":
+            for _tc in node.table_constraints:
+                for _gc in node.columns:
+                    if _gc.generated_expr is not None and re.search(
+                        rf"(?i)\b{re.escape(_gc.name)}\b", _tc.sql
+                    ):
+                        _persist_names.add(_gc.name.lower())
         col_defs = []
         set_type_notes: list[str] = []
         column_comments: list[tuple[str, str]] = []
@@ -4022,7 +4071,14 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             if col.generated_expr is not None:
                 expr = _emit_expression(col.generated_expr, dialect)
                 if dialect == "tsql":
-                    persisted = " PERSISTED" if col.generated_stored else ""
+                    persisted = (
+                        " PERSISTED"
+                        if col.generated_stored
+                        or col.unique
+                        or col.primary_key
+                        or col.name.lower() in _persist_names
+                        else ""
+                    )
                     generated = f" AS ({expr}){persisted}"
                 elif dialect == "postgresql":
                     generated = f" GENERATED ALWAYS AS ({expr}) STORED"
@@ -4861,6 +4917,15 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                 dtype += f"({', '.join(str(p) for p in node.target_type.params)})"
         elif node.target_type.params:
             dtype += f"({', '.join(str(p) for p in node.target_type.params)})"
+        # A LENGTHLESS VARCHAR2 CAST is ORA-00906 in a SQL statement (but the
+        # only valid form inside a PL/SQL expression — the CLOB lesson): give
+        # the SQL-context cast the maximum length.
+        if (
+            dialect == "oracle"
+            and not IR_EMBEDDED.get()
+            and dtype.upper() in ("VARCHAR2", "NVARCHAR2", "VARCHAR", "NVARCHAR")
+        ):
+            dtype += "(4000)"
         # PostgreSQL's unbounded ``numeric``/``decimal`` (no precision/scale) is
         # arbitrary-precision, but a bare DECIMAL defaults to scale 0 on
         # MySQL/Oracle/T-SQL — it silently truncates the fraction (2.675::numeric
@@ -4918,6 +4983,26 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         # '1 day' string. No exact equivalent exists — keep the value as text with
         # a documented carrier.
         _cast_to = node.target_type.name.split("(")[0].strip().upper()
+        # T-SQL CAST(datetime AS INT) is the ROUNDED day count since the
+        # 1900-01-01 epoch (no other engine has that implicit conversion).
+        if (
+            SOURCE_DIALECT.get() == "tsql"
+            and dialect != "tsql"
+            and _cast_to in ("INT", "INTEGER", "BIGINT", "SMALLINT")
+            and isinstance(node.expression, FunctionCall)
+            and node.expression.name.upper()
+            in ("CURRENT_TIMESTAMP", "GETDATE", "SYSDATETIME", "GETUTCDATE", "NOW")
+        ):
+            if dialect == "oracle":
+                return f"ROUND({inner} - DATE '1900-01-01')"
+            if dialect == "postgresql":
+                return (
+                    f"ROUND(EXTRACT(EPOCH FROM ({inner} - "
+                    "TIMESTAMP '1900-01-01')) / 86400)"
+                )
+            return (
+                f"ROUND((TO_SECONDS({inner}) - TO_SECONDS('1900-01-01')) " "/ 86400, 0)"
+            )
         # Off-Oracle semantics: CAST(ts AS DATE) strips the time of day
         # (a date-only value); Oracle DATE keeps it (10:30 survives the cast).
         # TRUNC the cast so the value matches — a no-op at midnight.
@@ -5455,6 +5540,11 @@ def _emit_group_concat(node: FunctionCall, dialect: str) -> str | None:
         order_sql = _portable_types_in_sql(order_sql, dialect)
         if dialect == "oracle":
             expr_sql = re.sub(r"(?i)\bCLOB\b", "VARCHAR2(4000)", expr_sql)
+            # A lengthless character CAST inside the canonical fragment is
+            # ORA-00906 in SQL context.
+            expr_sql = re.sub(
+                r"(?i)\bN?VARCHAR2?\b(?!\s*\()", "VARCHAR2(4000)", expr_sql
+            )
         elif dialect == "tsql":
             expr_sql = re.sub(r"(?i)\bTEXT\b", "VARCHAR(MAX)", expr_sql)
     else:
@@ -5491,6 +5581,7 @@ def _emit_group_concat(node: FunctionCall, dialect: str) -> str | None:
         # ("expr ORDER BY …"); MySQL's CAST target set differs (no TEXT).
         def _mysql_cast_targets(s: str) -> str:
             s = re.sub(r"(?i)\bAS\s+TEXT\s*\)", "AS CHAR)", s)
+            s = re.sub(r"(?i)\bAS\s+N?VARCHAR\s*\)", "AS CHAR)", s)
             return re.sub(r"(?i)\bAS\s+(?:INT|INTEGER|BIGINT)\s*\)", "AS SIGNED)", s)
 
         expr_sql = _mysql_cast_targets(expr_sql)
@@ -7022,7 +7113,15 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
                 fn = "DATE_FORMAT" if to_string else "STR_TO_DATE"
                 return f"{fn}({value}, '{my}')"
             ora = _convert_date_format(fmt, "python", "oracle")
+            # Style 126 (ISO8601): the literal 'T' separator must be quoted in
+            # an Oracle mask, and the python %f fraction is FF3 — which needs a
+            # TIMESTAMP value (FF on a DATE is ORA-01821).
+            ora = re.sub(r"(?<=D)T(?=H)", '"T"', ora)
+            if "%f" in ora:
+                ora = ora.replace(".%f", ".FF3").replace("%f", "FF3")
             if to_string:
+                if "FF" in ora:
+                    value = f"CAST({value} AS TIMESTAMP)"
                 return f"TO_CHAR({value}, '{ora}')"
             fn = (
                 "TO_DATE"
@@ -8118,6 +8217,56 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             ),
             dialect,
         )
+    # An INTERVAL literal in +/- arithmetic renders per target: T-SQL has no
+    # interval at all (DATEADD), MySQL takes an unquoted count, Oracle quotes
+    # the count alone (INTERVAL '1' DAY — '1 DAY' is ORA-30089), PG accepts
+    # the combined form natively.
+    if (
+        node.operator in (BinaryOperator.ADD, BinaryOperator.SUB)
+        and isinstance(node.right, RawSQL)
+        and (
+            _iv := re.fullmatch(
+                r"(?is)\s*INTERVAL\s+'?(\d+)'?\s+'?([A-Z]+)'?\s*",
+                node.right.sql,
+            )
+        )
+        and dialect in ("tsql", "mysql", "oracle")
+        # A MySQL-source string-literal date keeps its specialized handling
+        # below (CAST-back-to-DATE wrap / non-datetime NULL fold).
+        and not (SOURCE_DIALECT.get() == "mysql" and isinstance(node.left, Literal))
+    ):
+        _iv_n, _iv_unit = _iv.group(1), _iv.group(2).upper().rstrip("S")
+        _iv_left = _emit_operand(node.left, node.operator, dialect)
+        if dialect == "tsql":
+            _sign = "-" if node.operator == BinaryOperator.SUB else ""
+            return f"DATEADD({_iv_unit}, {_sign}{_iv_n}, {_iv_left})"
+        _op = "-" if node.operator == BinaryOperator.SUB else "+"
+        if dialect == "mysql":
+            return f"{_iv_left} {_op} INTERVAL {_iv_n} {_iv_unit}"
+        return f"{_iv_left} {_op} INTERVAL '{_iv_n}' {_iv_unit}"
+    # Oracle/PG ``<now-function> + n`` adds n DAYS (a date value); MySQL would
+    # do a numeric addition on the timestamp and PG rejects timestamp + int.
+    if (
+        SOURCE_DIALECT.get() in ("oracle", "postgresql")
+        and dialect in ("mysql", "postgresql", "tsql")
+        and node.operator in (BinaryOperator.ADD, BinaryOperator.SUB)
+        and isinstance(node.left, FunctionCall)
+        and node.left.name.upper()
+        in ("CURRENT_TIMESTAMP", "CURRENT_DATE", "SYSDATE", "NOW", "GETDATE")
+        and isinstance(node.right, Literal)
+        and isinstance(node.right.value, int)
+        and not isinstance(node.right.value, bool)
+    ):
+        _dl = _emit_expression(node.left, dialect)
+        _dn = node.right.value
+        _dsign = "-" if node.operator == BinaryOperator.SUB else ""
+        if dialect == "mysql":
+            _fn = "DATE_SUB" if node.operator == BinaryOperator.SUB else "DATE_ADD"
+            return f"{_fn}({_dl}, INTERVAL {_dn} DAY)"
+        if dialect == "tsql":
+            return f"DATEADD(DAY, {_dsign}{_dn}, {_dl})"
+        _dop = "-" if node.operator == BinaryOperator.SUB else "+"
+        return f"{_dl} {_dop} INTERVAL '{_dn}' DAY"
     # MySQL date arithmetic on a NON-datetime string literal ('12:00:00' +
     # INTERVAL 90 MINUTE) yields NULL (the string is not a valid datetime);
     # PG/T-SQL would either error or invent a 1900-01-01 date. Fold to NULL

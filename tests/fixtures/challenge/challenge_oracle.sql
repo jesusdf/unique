@@ -113,7 +113,7 @@ SELECT ADD_MONTHS(SYSDATE,3), NEXT_DAY(SYSDATE,'MONDAY'), LAST_DAY(SYSDATE) FROM
 -- CASE[fixed]: ora-date-diff-days — fails on mysql. FUNC-DIFF: source=(('60',),) target=(('0',),)
 SELECT DATE '2020-03-01' - DATE '2020-01-01' AS r FROM DUAL
 
--- CASE[open]: ora-date-plus-int — fails on mysql, postgresql. SEMANTIC: Oracle 'date + 1' adds ONE DAY; MySQL 'CURRENT_TIMESTAMP + 1' does numeric arith
+-- CASE[fixed]: ora-date-plus-int — <now-function> ± n from an Oracle/PG source is DAY arithmetic: MySQL DATE_ADD(x, INTERVAL n DAY), PG x + INTERVAL 'n' DAY, T-SQL DATEADD (numeric addition / timestamp+int rejected before). Live-executed on mysql/postgresql 2026-07-24.
 SELECT SYSDATE + 1 AS r FROM DUAL
 
 -- CASE[fixed]: ora-date-plus-int2 — Oracle date + n adds n days; MySQL numeric-coerced it (2050.0). Emit DATE_ADD(date, INTERVAL n DAY).

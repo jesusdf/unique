@@ -897,6 +897,17 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         # gate to degrade whole (wave 153).
         while isinstance(inner, (exp.Subquery, exp.Paren)):
             inner = inner.this
+        # PG ``ANY(ARRAY(SELECT …))`` is equivalent to ``ANY(SELECT …)`` —
+        # unwrap the ARRAY() constructor around a single subquery (no other
+        # engine has the array spelling).
+        if (
+            isinstance(inner, exp.Array)
+            and len(inner.expressions) == 1
+            and isinstance(inner.expressions[0], (exp.Select, exp.Subquery))
+        ):
+            inner = inner.expressions[0]
+            while isinstance(inner, (exp.Subquery, exp.Paren)):
+                inner = inner.this
         scalar = not (isinstance(inner, exp.Select) and len(inner.expressions) > 1)
         if isinstance(inner, (exp.Select, exp.SetOperation)) and scalar:
             kw = "ALL" if isinstance(expr, exp.All) else "ANY"

@@ -46,7 +46,7 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a TYPE BIGINT
 -- CASE[fixed]: pg-alter-using — PostgreSQL ALTER COLUMN a SET DATA TYPE t USING a::t maps to Oracle MODIFY a t; the redundant USING cast IS Oracle's implicit conversion, so it is dropped. live-verified DDL runs.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DATA TYPE BIGINT USING a::bigint
 
--- CASE[open]: pg-any-array-subquery — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'ARRAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ
+-- CASE[fixed]: pg-any-array-subquery — ANY(ARRAY(SELECT ...)) unwraps the ARRAY() constructor to the standard quantified subquery = ANY (SELECT ...), valid on all four engines. Live-executed on mysql/oracle/tsql 2026-07-24.
 CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a WHERE id = ANY(ARRAY(SELECT id FROM b))
 
 -- CASE[fixed]: pg-arr-str-roundtrip — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
@@ -103,7 +103,7 @@ SELECT true::text AS r
 -- CASE[fixed]: pg-bool-week — word/'t'/1 boolean casts fold to 1/0 and EXTRACT(WEEK) maps per engine; live-verified (1,1,1,1) (True==1).
 SELECT 'true'::boolean, 't'::boolean, 1::boolean, EXTRACT(WEEK FROM DATE '2020-01-01')
 
--- CASE[open]: pg-bulk-insert — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
+-- CASE[fixed]: pg-bulk-insert — generate_series in INSERT..SELECT lands via the numbers-source rewrites (Oracle CONNECT BY LEVEL, T-SQL ROW_NUMBER over sys.all_objects), live-executed; MySQL has no table functions and degrades to a documented carrier + warning.
 CREATE TABLE t (a INT); INSERT INTO t SELECT generate_series(1, 1000)
 
 -- CASE[fixed]: pg-case-statement — T-SQL scalar functions require the LAST statement to be a RETURN (error 455); a body ending in an all-branches-return IF/ELSE now gets an unreachable trailing RETURN NULL; f(1)='one' verified
@@ -166,7 +166,7 @@ SELECT chr(65) || chr(66)
 -- CASE[fixed]: pg-chr-unicode — CHR(n>127) is a Unicode code point; MySQL CHAR(n USING utf16) / T-SQL NCHAR(n) build the char (byte CHAR gave wrong bytes / NULL). Live-verified μ.
 SELECT CHR(956) AS r
 
--- CASE[open]: pg-computed-func — fails on tsql. (8116, b'Argument data type text is invalid for argument 1 of lower function.DB-Lib error 
+-- CASE[fixed]: pg-computed-func — PG TEXT now maps to T-SQL NVARCHAR(MAX) (TEXT is deprecated and string functions reject it, error 8116; procedural-map parity). Live-executed on tsql 2026-07-24.
 CREATE TABLE t (a TEXT, b TEXT GENERATED ALWAYS AS (lower(a)) STORED)
 
 -- CASE[open]: pg-computed-jsonb — fails on mysql, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type JSONB.DB-Lib error messa
@@ -373,7 +373,7 @@ SELECT 5 / 2 AS r
 -- CASE[fixed]: pg-intersect-all — fails on mysql. (1192, "Can't execute the given command because you have active locked tables or an active
 SELECT 1 INTERSECT ALL SELECT 1
 
--- CASE[open]: pg-interval-arith — fails on mysql, oracle, tsql. (207, b"Invalid column name 'INTERVAL'.DB-Lib error message 20018, severity 16:\nGeneral S
+-- CASE[fixed]: pg-interval-arith — INTERVAL-literal arithmetic renders per target (T-SQL DATEADD, MySQL unquoted count, Oracle INTERVAL 'n' UNIT) and date-literal + integer keeps the day-add rewrites. Live-executed on all three 2026-07-24.
 SELECT NOW() - INTERVAL '1 day', DATE '2020-01-01' + 7
 
 -- CASE[fixed]: pg-interval-out — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '400 DAYS'.DB-Lib error message 20018, severity 15:\nGeneral
