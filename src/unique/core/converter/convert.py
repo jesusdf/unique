@@ -14,7 +14,7 @@ import contextlib
 import dataclasses
 import decimal
 import re
-from typing import cast
+from typing import Any, cast
 
 import sqlglot
 import sqlglot.expressions as exp
@@ -37,6 +37,7 @@ from unique.core.ast_nodes import (
     DataType,
     DeleteStatement,
     DropStatement,
+    ExcludedColumn,
     ExpressionList,
     FunctionCall,
     InsertStatement,
@@ -44,6 +45,7 @@ from unique.core.ast_nodes import (
     JoinType,
     LimitClause,
     Literal,
+    OnConflictClause,
     OrderByItem,
     OrderDirection,
     PassthroughSQL,
@@ -1402,11 +1404,118 @@ def _convert_insert(expr: exp.Insert) -> InsertStatement | RawSQL:
             reason=f"Unmodeled INSERT body: {type(val_expr).__name__}",
         )
 
+    # Upsert clause (guardrail 7 — do not let ``conflict``/``ignore`` fall on
+    # the floor). sqlglot normalizes PG ``ON CONFLICT`` and MySQL ``ON
+    # DUPLICATE KEY UPDATE`` into ``exp.OnConflict``; ``INSERT IGNORE`` sets the
+    # ``ignore`` flag. A shape we cannot model degrades the WHOLE statement to a
+    # carrier (never a plain INSERT that would raise/duplicate at runtime).
+    conflict = expr.args.get("conflict")
+    on_conflict: ASTNode | None = None
+    if isinstance(conflict, exp.OnConflict):
+        on_conflict = _convert_on_conflict(conflict)
+        if on_conflict is None:
+            return RawSQL(
+                sql=_source_sql(expr),
+                reason=(
+                    "INSERT upsert clause has no portable model; "
+                    "statement preserved as a comment"
+                ),
+            )
+    elif expr.args.get("ignore"):
+        on_conflict = OnConflictClause(action="nothing", from_ignore=True)
+
     return InsertStatement(
         table=table,
         columns=columns,
         values=values,
         select=select,
+        on_conflict=on_conflict,
+    )
+
+
+def _map_excluded_refs(node: ASTNode) -> ASTNode:
+    """Replace incoming-row references anywhere in a converted conflict-action
+    value — PG ``EXCLUDED.col`` (a table-qualified ColumnRef) and MySQL
+    ``VALUES(col)`` (a one-arg function) — with the :class:`ExcludedColumn`
+    marker, recursing through the whole expression tree."""
+    if isinstance(node, ColumnRef) and node.table and node.table.upper() == "EXCLUDED":
+        return ExcludedColumn(column=node.name)
+    if (
+        isinstance(node, FunctionCall)
+        and node.name.upper() == "VALUES"
+        and len(node.args) == 1
+    ):
+        arg = node.args[0]
+        if isinstance(arg, ColumnRef) and not arg.table:
+            return ExcludedColumn(column=arg.name)
+        # A bare column identifier converts to a RawSQL passthrough, not a
+        # ColumnRef; accept the simple-name form (``VALUES(v)``).
+        if isinstance(arg, RawSQL) and re.fullmatch(r"\w+", arg.sql.strip()):
+            return ExcludedColumn(column=arg.sql.strip())
+    if not dataclasses.is_dataclass(node):
+        return node
+    changes: dict[str, Any] = {}
+    for f in dataclasses.fields(node):
+        value = getattr(node, f.name)
+        if isinstance(value, ASTNode):
+            mapped = _map_excluded_refs(value)
+            if mapped is not value:
+                changes[f.name] = mapped
+        elif isinstance(value, tuple):
+            new_items = tuple(_map_tuple_item(item) for item in value)
+            if new_items != value:
+                changes[f.name] = new_items
+    return dataclasses.replace(node, **changes) if changes else node
+
+
+def _map_tuple_item(item: object) -> object:
+    """Recurse ``_map_excluded_refs`` through a tuple field's items (an ASTNode,
+    or a nested tuple such as a CASE branch pair)."""
+    if isinstance(item, ASTNode):
+        return _map_excluded_refs(item)
+    if isinstance(item, tuple):
+        return tuple(_map_tuple_item(sub) for sub in item)
+    return item
+
+
+def _convert_on_conflict(oc: exp.OnConflict) -> OnConflictClause | None:
+    """Convert ``exp.OnConflict`` (PG/MySQL) to the IR clause, or ``None`` when
+    the shape has no portable model (named constraint, partial-index predicate,
+    non-EQ assignment)."""
+    # ON CONSTRAINT <name> / partial-index WHERE on the target: PG-only shapes
+    # with no key list to lower a MERGE with — degrade whole.
+    if (
+        oc.args.get("constraint") is not None
+        or oc.args.get("index_predicate") is not None
+    ):
+        return None
+    keys = tuple(k.name for k in oc.args.get("conflict_keys") or [])
+    where_expr = oc.args.get("where")
+    where = None
+    if isinstance(where_expr, exp.Where):
+        where = convert_expression(where_expr.this)
+    elif where_expr is not None:
+        where = convert_expression(where_expr)
+
+    action_var = oc.args.get("action")
+    action_text = (action_var.name if action_var is not None else "").upper()
+    if action_text == "DO NOTHING":
+        return OnConflictClause(action="nothing", key_columns=keys, where=where)
+
+    # DO UPDATE (PG) / ON DUPLICATE KEY UPDATE (MySQL, ``duplicate=True``).
+    assignments: list[tuple[str, ASTNode]] = []
+    for eq in oc.args.get("expressions") or []:
+        if not isinstance(eq, exp.EQ):
+            return None
+        col = eq.this.name if hasattr(eq.this, "name") else str(eq.this)
+        assignments.append((col, _map_excluded_refs(convert_expression(eq.expression))))
+    if not assignments:
+        return None
+    return OnConflictClause(
+        action="update",
+        key_columns=keys,
+        assignments=tuple(assignments),
+        where=where,
     )
 
 
