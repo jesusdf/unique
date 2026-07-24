@@ -462,16 +462,27 @@ class OracleEmitter(ProceduralEmitter):
         header_lines = [ln for ln in header_lines if ln != "BEGIN"]
         declarations, body_stmts = self._split_declarations(node.body)
         self._in_oracle_procedure = True  # a trigger RETURN cannot carry a value
-        return self._degrade_pseudo_table_trigger(
-            note
-            + self._emit_oracle_procedure_body(
-                "\n".join(header_lines),
-                declarations,
-                body_stmts,
-                decl_keyword="DECLARE",
-                no_decl_keyword="",
-            )
+        out = note + self._emit_oracle_procedure_body(
+            "\n".join(header_lines),
+            declarations,
+            body_stmts,
+            decl_keyword="DECLARE",
+            no_decl_keyword="",
         )
+        # Safety net: a set-based inserted/deleted read that slipped past the
+        # pseudo-table rewrite (e.g. a hoisted declaration initializer) has no
+        # Oracle form — no transition tables; ORA-00942 at compile otherwise.
+        if re.search(r"(?i)\b(?:FROM|JOIN)\s+(?:inserted|deleted)\b", out):
+            commented = "\n".join(
+                f"-- {line}" if line.strip() else "--" for line in out.splitlines()
+            )
+            return (
+                "-- UNIQUE: trigger reads the T-SQL inserted/deleted "
+                "pseudo-tables in a set-based way Oracle cannot express (no "
+                "transition tables — use a compound trigger); the translation "
+                "is preserved commented out for a manual rewrite:\n" + commented
+            )
+        return self._degrade_pseudo_table_trigger(out)
 
     def _body_reads_table(self, body_text: str, table: str) -> bool:
         """Whether the trigger body reads/writes its own triggering *table* (in a

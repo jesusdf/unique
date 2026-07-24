@@ -31,7 +31,7 @@ GO
 
 -- ===== RED-found open findings (validated live; see FINDINGS.md) =====
 
--- CASE[open]: ts-after-delete-count — fails on oracle. TRIGGER TRG compiled INVALID (line 4): PL/SQL: ORA-00942: table or view does not exist
+-- CASE[fixed]: ts-after-delete-count — a set-based inserted/deleted read that slips past the pseudo-table rewrite (hoisted declaration initializer) now degrades the WHOLE trigger to a documented carrier + warning on Oracle (no transition tables; compound-trigger rewrite by hand). Live-compiled VALID 2026-07-24.
 CREATE TABLE t (id INT PRIMARY KEY, n INT);
 GO
 CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) FROM deleted); END
@@ -226,7 +226,7 @@ CREATE TABLE t (id INT IDENTITY, n INT);
 GO
 INSERT INTO t (n) OUTPUT INSERTED.id,INSERTED.n VALUES (10),(20)
 
--- CASE[open]: ts-instead-of-insert — fails on postgresql. "t" is a table
+-- CASE[fixed]: ts-instead-of-insert — PG allows INSTEAD OF only on views: on a table the equivalent is a BEFORE row trigger returning NULL (suppresses the original operation) with a pg_trigger_depth guard that lets the body's own DML through. Live: INSERT lands exactly once (2026-07-24).
 CREATE TABLE t (id INT PRIMARY KEY, n INT);
 GO
 CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT id, n FROM inserted; END
@@ -405,7 +405,7 @@ SELECT CASE WHEN 'a'='a ' THEN 'eq' ELSE 'ne' END, CASE WHEN 'a '='a' THEN 'eq' 
 -- CASE[fixed]: ts-translate — fails on mysql. (1305, 'FUNCTION unique_val_d6bc06ffba67.TRANSLATE does not exist')
 SELECT TRANSLATE('abc', 'ab', 'xy') AS r
 
--- CASE[open]: ts-trg-instead-delete — fails on postgresql. "t" is a table
+-- CASE[fixed]: ts-trg-instead-delete — same BEFORE-row emulation; the depth guard returns OLD on DELETE (NEW is NULL there and would suppress the nested delete). Live: only id>0 rows deleted, exact T-SQL semantics (2026-07-24).
 CREATE TABLE t (id INT);
 GO
 CREATE TRIGGER g ON t INSTEAD OF DELETE AS BEGIN DELETE FROM t WHERE id IN (SELECT id FROM deleted WHERE id>0); END
@@ -413,7 +413,7 @@ CREATE TRIGGER g ON t INSTEAD OF DELETE AS BEGIN DELETE FROM t WHERE id IN (SELE
 -- CASE[fixed]: ts-trig — ATN2/DEGREES/RADIANS/COT translate (Oracle ATAN2/ACOS-formula/(1/TAN)); the Oracle diff is decimal-precision only (180.0 vs 180; COT last digit). (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT ATN2(1,1), DEGREES(PI()), RADIANS(180.0), COT(1)
 
--- CASE[open]: ts-trigger-on-view — fails on postgresql. INSTEAD OF triggers must be FOR EACH ROW
+-- CASE[fixed]: ts-trigger-on-view — PG INSTEAD OF triggers are row-level only: emitted FOR EACH ROW without REFERENCING, with the transition-table reads rowified to NEW/OLD references. Live: INSERT INTO v landed in t (2026-07-24).
 CREATE TABLE t (id INT);
 GO
 CREATE VIEW v AS SELECT id FROM t;

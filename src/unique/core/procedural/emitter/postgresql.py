@@ -273,6 +273,38 @@ class PostgresEmitter(ProceduralEmitter):
             self._trigger_return_value = None
         self._indent_level = 0
         body_text = "\n".join(body_lines)
+        # T-SQL INSTEAD OF triggers are statement-level; PostgreSQL's must be
+        # FOR EACH ROW (and take no REFERENCING clause) — and PG only allows
+        # INSTEAD OF on VIEWS: on a plain table the equivalent is a BEFORE
+        # row trigger returning NULL (suppresses the default action). Rewrite
+        # the transition-table reads to NEW/OLD row references.
+        _instead_of = "INSTEAD" in node.timing.upper()
+        _timing = node.timing
+        _instead_note = ""
+        if _instead_of:
+            rowified = self._rowify_transition_refs(body_text)
+            if rowified is None:
+                # An aggregate over the transition table has no row form.
+                return self._degrade_pseudo_table_trigger(
+                    "-- UNIQUE: INSTEAD OF trigger aggregates over the "
+                    "inserted/deleted transition table; PostgreSQL INSTEAD OF "
+                    "triggers are row-level only — port by hand "
+                    "(docs/03-unsupported.md)\n"
+                    + "\n".join(f"-- {ln}" for ln in body_text.splitlines())
+                )
+            body_text = rowified
+            from unique.core.converter import COLUMN_TYPES
+
+            _on_table = str(node.table).split(".")[-1].strip('"').lower() in (
+                COLUMN_TYPES.get() or {}
+            )
+            if _on_table:
+                _timing = "BEFORE"
+                _instead_note = (
+                    "-- UNIQUE: PostgreSQL allows INSTEAD OF only on views; "
+                    "on a table the equivalent is a BEFORE row trigger "
+                    "returning NULL (the original operation is suppressed)\n"
+                )
         # A cursor over the transition table lives in the DECLARE section
         # (``v_cur CURSOR FOR SELECT ... FROM inserted``) — scan it too, or
         # the REFERENCING clause is omitted and the reference is unbound.
@@ -289,7 +321,17 @@ class PostgresEmitter(ProceduralEmitter):
         refs_deleted = re.search(r"\bdeleted\b", scan_text) is not None
         referencing: list[str] = []
         preamble: list[str] = []
-        if node.set_based_transition:
+        if _instead_of:
+            if _timing == "BEFORE":
+                # The body's own DML on the same table re-fires this trigger:
+                # let the NESTED firing through (return the operation's row —
+                # OLD on DELETE, where NEW is NULL and would suppress it) so
+                # the body's operation lands while the outer one is suppressed.
+                _pass_row = "OLD" if events[0] == "DELETE" else "NEW"
+                preamble.append("    IF pg_trigger_depth() > 1 THEN")
+                preamble.append(f"        RETURN {_pass_row};")
+                preamble.append("    END IF;")
+        elif node.set_based_transition:
             # T-SQL does not re-fire a trigger from its own statements
             # (RECURSIVE_TRIGGERS is OFF by default); PostgreSQL always
             # does, so a set-based body that updates its own table would
@@ -317,14 +359,27 @@ class PostgresEmitter(ProceduralEmitter):
                         f"(LIKE {node.table}) ON COMMIT DROP;"
                     )
         fn_lines.extend(preamble)
-        fn_lines.extend(body_lines)
+        if _instead_of:
+            fn_lines.extend(body_text.splitlines())
+        else:
+            fn_lines.extend(body_lines)
         # A statement-level (set-based) trigger function has no NEW row, so it
         # returns NULL; a row-level AFTER returns NULL too and BEFORE returns
         # NEW. Default to NEW (safe for BEFORE, ignored for AFTER row-level);
-        # for the set-based form return NULL.
-        fn_lines.append(
-            "    RETURN NULL;" if node.set_based_transition else "    RETURN NEW;"
-        )
+        # for the set-based form return NULL. An INSTEAD OF row trigger must
+        # return the processed row (NEW; OLD on DELETE) — or NULL from the
+        # BEFORE-on-table form to suppress the original operation.
+        if _instead_of:
+            if _timing == "BEFORE":
+                fn_lines.append("    RETURN NULL;")
+            else:
+                fn_lines.append(
+                    "    RETURN OLD;" if events[0] == "DELETE" else "    RETURN NEW;"
+                )
+        else:
+            fn_lines.append(
+                "    RETURN NULL;" if node.set_based_transition else "    RETURN NEW;"
+            )
         fn_lines.append("END;")
         fn_lines.append("$$;")
         joined_events = " OR ".join(events)
@@ -332,9 +387,11 @@ class PostgresEmitter(ProceduralEmitter):
             joined_events = self._events_with_update_of(joined_events, node.update_of)
         trg_lines = [
             f"CREATE OR REPLACE TRIGGER {name}",
-            f"{node.timing} {joined_events} ON {node.table}",
+            f"{_timing} {joined_events} ON {node.table}",
         ]
-        if node.set_based_transition:
+        if _instead_of:
+            trg_lines.append("FOR EACH ROW")
+        elif node.set_based_transition:
             if referencing:
                 trg_lines.append("REFERENCING " + " ".join(referencing))
             trg_lines.append("FOR EACH STATEMENT")
@@ -342,8 +399,68 @@ class PostgresEmitter(ProceduralEmitter):
             trg_lines.append("FOR EACH ROW")
         trg_lines.append(f"EXECUTE FUNCTION {qfunc}();")
         return self._degrade_pseudo_table_trigger(
-            "\n".join(fn_lines) + "\n\n" + "\n".join(trg_lines)
+            _instead_note + "\n".join(fn_lines) + "\n\n" + "\n".join(trg_lines)
         )
+
+    _ROWIFY_KEYWORDS = frozenset(
+        {
+            "and",
+            "or",
+            "not",
+            "null",
+            "in",
+            "is",
+            "like",
+            "between",
+            "exists",
+            "true",
+            "false",
+            "new",
+            "old",
+            "select",
+            "where",
+            "case",
+            "when",
+            "then",
+            "else",
+            "end",
+        }
+    )
+
+    @classmethod
+    def _rowify_transition_refs(cls, text: str) -> str | None:
+        """Rewrite ``SELECT <cols> FROM inserted/deleted [WHERE …]`` to the
+        row form (``SELECT NEW.c1, NEW.c2 [WHERE NEW.…]``) for a FOR EACH ROW
+        trigger. Returns None when a reference cannot be rowified (aggregates
+        over the transition table have no row form)."""
+
+        def prefix_idents(fragment: str, q: str) -> str:
+            def sub(m: re.Match[str]) -> str:
+                word = m.group(1)
+                if word.lower() in cls._ROWIFY_KEYWORDS:
+                    return word
+                return f"{q}.{word}"
+
+            return re.sub(r"(?<![\w.$'])([A-Za-z_]\w*)\b(?!\s*\()", sub, fragment)
+
+        def repl(m: re.Match[str]) -> str:
+            cols, tbl, where = m.group(1), m.group(2), m.group(3) or ""
+            q = "NEW" if tbl.lower() == "inserted" else "OLD"
+            col_list = ", ".join(
+                f"{q}.*" if c.strip() == "*" else f"{q}.{c.strip()}"
+                for c in cols.split(",")
+            )
+            return f"SELECT {col_list}{prefix_idents(where, q)}"
+
+        out = re.sub(
+            r"(?is)SELECT\s+([^()]+?)\s+FROM\s+(inserted|deleted)\b"
+            r"((?:\s+WHERE\s+[^();]+)?)",
+            repl,
+            text,
+        )
+        if re.search(r"(?i)\b(?:inserted|deleted)\b", out):
+            return None
+        return out
 
     def _emit_return(self, node: ReturnStatement) -> str:
         # A PostgreSQL procedure cannot RETURN a value; emit a bare RETURN and

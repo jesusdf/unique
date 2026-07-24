@@ -1939,13 +1939,6 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - live error: `SILENT CLAUSE DROP: 'ROWS\s+BETWEEN' absent from valid tsql output, no warning`
 - src: `SELECT x, SUM(x) OVER (ORDER BY x ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM (VALUES (1),(2)) v(x)`
 
-## ts-after-delete-count  (tsql)
-- targets: oracle(invalid)
-- live error: `TRIGGER TRG compiled INVALID (line 4): PL/SQL: ORA-00942: table or view does not exist`
-- src: `CREATE TABLE t (id INT PRIMARY KEY, n INT);
-GO
-CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) FRO`
-
 ## ts-alter-add  (tsql)
 - targets: oracle(invalid)
 - live error: `ORA-30649: missing DIRECTORY keyword`
@@ -2098,13 +2091,6 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 GO
 INSERT INTO t (n) OUTPUT INSERTED.id,INSERTED.n VALUES (10),(20)`
 
-## ts-instead-of-insert  (tsql)
-- targets: postgresql(invalid)
-- live error: `"t" is a table`
-- src: `CREATE TABLE t (id INT PRIMARY KEY, n INT);
-GO
-CREATE TRIGGER trg ON t INSTEAD OF INSERT AS BEGIN INSERT INTO t (id, n) SELECT id,`
-
 ## ts-len-trailing  (tsql)
 - targets: mysql(func), oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('3',),) target=(('6',),)`
@@ -2226,26 +2212,10 @@ SELECT * FROM t TABLESAMPLE (10 PERCENT)`
 - live error: `SILENT LOSS: TOP n WITH TIES -> plain LIMIT n on PG/MySQL (ties dropped); on Oracle the ro`
 - src: `SELECT TOP 1 WITH TIES x FROM (VALUES (1),(1),(2)) v(x) ORDER BY x`
 
-## ts-trg-instead-delete  (tsql)
-- targets: postgresql(invalid)
-- live error: `"t" is a table`
-- src: `CREATE TABLE t (id INT);
-GO
-CREATE TRIGGER g ON t INSTEAD OF DELETE AS BEGIN DELETE FROM t WHERE id IN (SELECT id FROM deleted WHE`
-
 ## ts-trig  (tsql)
 - targets: oracle(invalid)
 - live error: `ORA-00904: "COT": invalid identifier`
 - src: `SELECT ATN2(1,1), DEGREES(PI()), RADIANS(180.0), COT(1)`
-
-## ts-trigger-on-view  (tsql)
-- targets: postgresql(invalid)
-- live error: `INSTEAD OF triggers must be FOR EACH ROW`
-- src: `CREATE TABLE t (id INT);
-GO
-CREATE VIEW v AS SELECT id FROM t;
-GO
-CREATE TRIGGER trg ON v INSTEAD OF INSERT AS BEGIN INSERT INTO t`
 
 ## ts-try-convert  (tsql)
 - targets: oracle(invalid), postgresql(invalid)

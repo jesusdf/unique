@@ -4698,3 +4698,55 @@ class TestPgFnAttrsAndAggregationAssignment:
         assert "WITHIN GROUP (ORDER BY ROWNUM)" in out, out
         assert "EXECUTE IMMEDIATE V_SQL;" in out, out
         assert re.search(r"(?i)\bFROM user_tables\b", out), out
+
+
+class TestInsteadOfTriggers:
+    """T-SQL INSTEAD OF triggers into PG: row-level rewrite (views) and the
+    BEFORE-row suppression emulation (tables). Live semantics verified
+    2026-07-24 (insert-through-view, exactly-once insert, filtered delete)."""
+
+    def test_view_trigger_row_level(self) -> None:
+        out = _exec_lines(
+            _tx(
+                _case("challenge_sqlserver.sql", "ts-trigger-on-view"),
+                "tsql",
+                "postgresql",
+            )
+        )
+        assert "INSTEAD OF INSERT ON v" in out, out
+        assert "FOR EACH ROW" in out, out
+        assert "REFERENCING" not in out.upper(), out
+        assert "SELECT NEW.id" in out, out
+
+    def test_table_trigger_before_suppression(self) -> None:
+        out = _exec_lines(
+            _tx(
+                _case("challenge_sqlserver.sql", "ts-instead-of-insert"),
+                "tsql",
+                "postgresql",
+            )
+        )
+        assert re.search(r"(?i)BEFORE INSERT ON t", out), out
+        assert "RETURN NULL;" in out, out
+        assert "pg_trigger_depth() > 1" in out, out
+
+    def test_delete_guard_returns_old(self) -> None:
+        out = _exec_lines(
+            _tx(
+                _case("challenge_sqlserver.sql", "ts-trg-instead-delete"),
+                "tsql",
+                "postgresql",
+            )
+        )
+        assert re.search(r"(?is)pg_trigger_depth\(\) > 1 THEN\s+RETURN OLD;", out), out
+        assert "SELECT OLD.id WHERE OLD.id > 0" in out, out
+
+    def test_statement_level_aggregate_degrades_on_oracle(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_sqlserver.sql", "ts-after-delete-count"),
+            source="tsql",
+            target="oracle",
+        )
+        assert result.warnings, result.warnings
+        code = _exec_lines(result.sql)
+        assert "deleted" not in code.lower(), result.sql
