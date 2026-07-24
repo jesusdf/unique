@@ -448,8 +448,8 @@ class MySqlEmitter(ProceduralEmitter):
         # label, so label the loop ``loop_lbl`` (matching _emit_exit/_emit_continue)
         # when the body contains one.
         cond = self._emit_node(node.condition)
-        labeled = self._has_loop_control(node.body)
-        label = self._push_loop_label() if labeled else None
+        labeled = node.label is not None or self._has_loop_control(node.body)
+        label = self._push_loop_label(node.label) if labeled else None
         prefix = f"{label}: " if label else ""
         lines = [f"{prefix}WHILE {cond} DO"]
         self._indent_level += 1

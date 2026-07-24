@@ -287,14 +287,20 @@ class ProceduralEmitter:
         self._loop_label_stack: list[tuple[str | None, str]] = []
 
     def _push_loop_label(self, source_label: str | None = None) -> str:
-        """Allocate the next unique loop label, push it (paired with any source
-        label so a labeled EXIT/CONTINUE can resolve to it), and return it."""
-        self._loop_label_counter += 1
-        generated = f"loop_lbl_{self._loop_label_counter}"
+        """Push and return the loop's label: the SOURCE label verbatim when the
+        user wrote one (valid source already guarantees scope-uniqueness, and
+        rewriting user identifiers gratuitously hurts fidelity), else the next
+        unique generated ``loop_lbl_<n>`` (finding N5a: synthesized labels must
+        not collide across nested loops)."""
+        if source_label:
+            label = source_label
+        else:
+            self._loop_label_counter += 1
+            label = f"loop_lbl_{self._loop_label_counter}"
         self._loop_label_stack.append(
-            (source_label.lower() if source_label else None, generated)
+            (source_label.lower() if source_label else None, label)
         )
-        return generated
+        return label
 
     def _pop_loop_label(self) -> None:
         if self._loop_label_stack:
