@@ -1551,6 +1551,40 @@ def _convert_create_table(
     if isinstance(schema_expr, exp.Schema):
         table = _convert_table_ref(schema_expr.this)
         for col_def in schema_expr.expressions:
+            if (
+                isinstance(col_def, exp.ColumnDef)
+                and str(getattr(col_def.this, "name", "")).upper() == "INDEX"
+                and isinstance(col_def.kind, exp.DataType)
+                and col_def.kind.this == exp.DataType.Type.USERDEFINED
+            ):
+                # T-SQL inline ``INDEX ix (cols)``: sqlglot MISPARSES it as a
+                # column named INDEX whose "type" is the index name, with the
+                # column list inside a (NON)CLUSTERED constraint. Reconstruct.
+                _ix_name = str(col_def.kind.args.get("kind") or "").strip()
+                _ix_cols = [
+                    c.name
+                    for c in col_def.find_all(exp.Column)
+                    if isinstance(c.this, exp.Identifier)
+                ]
+                if _ix_name and _ix_cols:
+                    constraints.append(
+                        PassthroughSQL(
+                            sql=f"{_ix_name}|{', '.join(_ix_cols)}",
+                            source_dialect=source_dialect,
+                            kind="INLINE_INDEX_COLS",
+                        )
+                    )
+                else:  # unreconstructible — keep the raw fragment as a carrier
+                    constraints.append(
+                        PassthroughSQL(
+                            sql=col_def.sql(
+                                dialect=sqlglot_dialect_name(source_dialect)
+                            ),
+                            source_dialect=source_dialect,
+                            kind="INLINE_INDEX",
+                        )
+                    )
+                continue
             if isinstance(col_def, exp.ColumnDef):
                 # Computed/generated columns (AS (expr) [PERSISTED]) have no
                 # plain type; sqlglot translates them to GENERATED ALWAYS AS

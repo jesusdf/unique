@@ -218,7 +218,7 @@ SELECT HOST_NAME(), DB_NAME(), SUSER_SNAME()
 -- CASE[limit]: ts-identity-funcs — T-SQL identity-scope reads (SCOPE_IDENTITY/@@IDENTITY/IDENT_CURRENT) have no cross-engine equivalent (each engine exposes the last identity differently: Oracle sequence.CURRVAL, PG lastval(), MySQL LAST_INSERT_ID()); the statement degrades to a carrier + warning (docs/03-unsupported.md). fails on mysql, oracle, postgresql
 SELECT SCOPE_IDENTITY(), @@IDENTITY, IDENT_CURRENT('t')
 
--- CASE[open]: ts-inline-index2 — fails on oracle, postgresql. ORA-00902: invalid datatype
+-- CASE[fixed]: ts-inline-index2 — the inline INDEX table element (which sqlglot misparses as a column named INDEX) is reconstructed: kept inline on T-SQL/MySQL and emitted as a separate CREATE INDEX after the table on PG/Oracle. Live-executed on postgresql/oracle/mysql 2026-07-24.
 CREATE TABLE t (id INT, name VARCHAR(50), INDEX ix_name NONCLUSTERED (name))
 
 -- CASE[limit]: ts-insert-output — the T-SQL OUTPUT clause returns a result set; PostgreSQL maps it to RETURNING, but Oracle's RETURNING needs INTO variables (PL/SQL only, ORA-63809), so the INSERT runs and the OUTPUT is documented in a carrier (docs/03-unsupported.md). fails on oracle

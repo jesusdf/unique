@@ -4291,6 +4291,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
         trailing_comments: list[str] = list(set_type_notes)
         trailing_comments.extend(on_update_notes)
         trailing_comments.extend(collate_notes)
+        post_statements: list[str] = []
         for constraint in node.table_constraints:
             # PostgreSQL ``UNIQUE … NULLS NOT DISTINCT`` (NULLs compare equal, so
             # only one NULL row is allowed) has no equivalent elsewhere, where a
@@ -4343,6 +4344,16 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     "— emulate with an AFTER trigger if the automatic action "
                     "is required (docs/03-unsupported.md)"
                 )
+            # A reconstructed T-SQL inline INDEX ("name|cols"): T-SQL and MySQL
+            # keep the inline element; PG/Oracle get a separate CREATE INDEX
+            # appended after the table (their CREATE TABLE has no inline form).
+            if constraint.kind == "INLINE_INDEX_COLS":
+                _ixn, _ixc = constraint.sql.split("|", 1)
+                if dialect in ("tsql", "mysql"):
+                    col_defs.append(f"  INDEX {_ixn} ({_ixc})")
+                else:
+                    post_statements.append(f"CREATE INDEX {_ixn} ON {table} ({_ixc})")
+                continue
             emitted = _emit_passthrough_inline(constraint, dialect)
             if emitted.lstrip().startswith("--"):
                 trailing_comments.append(emitted.strip())
@@ -4437,6 +4448,8 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     "-- table comment (T-SQL: sp_addextendedproperty): "
                     f"{node.table_comment}"
                 )
+        for _ps in post_statements:
+            result += f";\n{_ps}"
         if trailing_comments:
             result += "\n" + "\n".join(trailing_comments)
         return result

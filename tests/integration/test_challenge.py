@@ -4577,3 +4577,29 @@ class TestWave7JsonAndDdl:
             _tx(_case("challenge_mysql.sql", "my-json-index"), "mysql", "mysql")
         )
         assert re.search(r"(?i)INDEX \(\(CAST", out), out
+
+
+class TestInlineIndexReconstructed:
+    """The T-SQL inline INDEX element (sqlglot misparses it as a column named
+    INDEX) is reconstructed: inline on T-SQL/MySQL, a separate CREATE INDEX
+    on PG/Oracle. Live-executed on all three 2026-07-24."""
+
+    def test_separate_create_index_on_pg_oracle(self) -> None:
+        for target in ("postgresql", "oracle"):
+            out = " ".join(
+                _exec_lines(
+                    _tx(
+                        _case("challenge_sqlserver.sql", "ts-inline-index2"),
+                        "tsql",
+                        target,
+                    )
+                ).split()
+            )
+            assert "CREATE INDEX ix_name ON t (name)" in out, out
+            assert '"INDEX"' not in out, out
+
+    def test_inline_on_mysql(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_sqlserver.sql", "ts-inline-index2"), "tsql", "mysql")
+        )
+        assert "INDEX ix_name (name)" in out, out

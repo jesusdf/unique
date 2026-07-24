@@ -2121,11 +2121,6 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - live error: `ORA-00936: missing expression`
 - src: `SELECT SCOPE_IDENTITY(), @@IDENTITY, IDENT_CURRENT('t')`
 
-## ts-inline-index2  (tsql)
-- targets: oracle(invalid), postgresql(invalid)
-- live error: `ORA-00902: invalid datatype`
-- src: `CREATE TABLE t (id INT, name VARCHAR(50), INDEX ix_name NONCLUSTERED (name))`
-
 ## ts-insert-output  (tsql)
 - targets: oracle(invalid)
 - live error: `ORA-63809: returning clause is not allowed with INSERT and Table Value Constructor`
