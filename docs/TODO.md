@@ -94,9 +94,9 @@ workflow.
       documented limit).** Landed so far (recorded in [`docs/DONE.md`](DONE.md)
       §41): RC-1b gate (DML+procedural), 21 built-in mappings, RC-3
       FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG.
-      **2026-07-24 (architect session) — 17 `[open]` / 167 `[limit]` / 678
-      `[fixed]`** (of 862; 73 cleared in 8 waves, 10 local commits `6987d38`…
-      `982ceb8`). The user DELEGATED the fix-vs-limit decision to the
+      **2026-07-24 (architect session) — 16 `[open]` / 167 `[limit]` / 679
+      `[fixed]`** (of 862; 74 cleared in 9 waves, 13 local commits `6987d38`…
+      `aa00b4a`). The user DELEGATED the fix-vs-limit decision to the
       architect session ("decide por mí lo que es límite y lo que no"); each
       approved limit is recorded in its case header + docs/03-unsupported.md
       §3.19–3.22. Waves 5–8 additionally landed: GROUPING_ID→multi-arg
@@ -113,7 +113,7 @@ workflow.
       star-call gate (JSON_OBJECT(*)), interval-literal EXTRACT folds.
       **Remaining 17 = the structural tail:** front-1 embedded-text-vs-IR
       (my-gencol2/my-gen-constr shorthand path, my-json-index pg leg,
-      my-select-into-out, ts-cursor-attr, pg-check-xor), triggers row-vs-
+      ts-cursor-attr, pg-check-xor), triggers row-vs-
       statement (ts-instead-of-insert, ts-trg-instead-delete,
       ts-trigger-on-view, ts-after-delete-count), ts-merge-full (BY SOURCE;
       local PG is 16), cross-statement metadata (pg-drop-not-null,
