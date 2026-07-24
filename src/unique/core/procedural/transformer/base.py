@@ -2847,8 +2847,20 @@ class ProceduralTransformer:
             return AnonymousBlock(statements=new_stmts, degraded=True)
         return AnonymousBlock(statements=new_stmts, degraded=node.degraded)
 
+    #: True while transforming a node in a pure procedural *expression*
+    #: position (a PRINT argument) — a raw fragment cannot tell this from its
+    #: own text, and Oracle's CAST rules invert between the two contexts
+    #: (PLS-00103 with a constrained type in a PL/SQL expression, ORA-00906
+    #: without one in a SQL statement).
+    _expr_position = False
+
     def _transform_print(self, node: PrintStatement) -> PrintStatement:
-        return PrintStatement(expression=self._transform_node(node.expression))
+        prev = self._expr_position
+        self._expr_position = True
+        try:
+            return PrintStatement(expression=self._transform_node(node.expression))
+        finally:
+            self._expr_position = prev
 
     def _transform_raise_error(self, node: RaiseErrorStatement) -> ASTNode:
         if getattr(node, "reraise", False) and not getattr(

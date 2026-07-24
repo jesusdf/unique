@@ -123,7 +123,7 @@ SELECT a,b,SUM(c) FROM (SELECT 1 a,2 b,3 c) t GROUP BY CUBE(a,b)
 -- CASE[fixed]: ts-cursor — fails on mysql. (1337, 'Variable or condition declaration after cursor or handler declaration')
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT x FROM (VALUES (1),(2)) v(x); DECLARE @x INT; OPEN c; FETCH NEXT FROM c INTO @x; WHILE @@FETCH_STATUS = 0 BEGIN FETCH NEXT FROM c INTO @x; END; CLOSE c; DEALLOCATE c; END
 
--- CASE[open]: ts-cursor-attr — @@CURSOR_ROWS + FETCH-without-INTO now valid carriers (pg/mysql compile). Oracle still fails: a bare char CAST gets a length that PL/SQL rejects (PLS-00103) — needs context-aware handling (fragment-level heuristic is unsound; select-list sub-exprs lose their SQL context).
+-- CASE[limit]: ts-cursor-attr — fails on mysql, oracle, postgresql. @@CURSOR_ROWS has no equivalent (neutral-0 carrier; docs/03-unsupported.md §7) and FETCH without INTO is preserved as a comment. The Oracle PLS-00103/ORA-00906 CAST-context inversion is handled: the PRINT argument is a marked expression position, so its char CAST stays lengthless. All three targets compile (live 2026-07-24).
 CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT 1; OPEN c; FETCH NEXT FROM c; IF @@FETCH_STATUS=0 PRINT CAST(@@CURSOR_ROWS AS VARCHAR); CLOSE c; DEALLOCATE c; END
 
 -- CASE[fixed]: ts-date-bucket2 — fails on mysql, oracle, postgresql. ORA-01861: literal does not match format string
@@ -240,7 +240,7 @@ SELECT LEN('abc   ') AS r
 -- CASE[fixed]: ts-maxrecursion — recursive CTE: PG/MySQL get WITH RECURSIVE, Oracle gets the required column list (derived from the anchor SELECT). OPTION (MAXRECURSION n) is a T-SQL-only hint with no equivalent (recursion completes within the target defaults), dropped. Live 1..5 on all three.
 WITH s AS (SELECT 1 n UNION ALL SELECT n+1 FROM s WHERE n<5) SELECT n FROM s OPTION (MAXRECURSION 10)
 
--- CASE[open]: ts-merge-full — fails on oracle, postgresql. ORA-02000: missing THEN keyword
+-- CASE[fixed]: ts-merge-full — WHEN NOT MATCHED BY SOURCE splits into a follow-up anti-join DELETE/UPDATE (PG17-only / no Oracle form); Oracle folds the conditional MATCHED pair into one UPDATE with CASE-kept values plus DELETE WHERE. Live: identical final rows on tsql/oracle/pg 2026-07-24.
 CREATE TABLE tgt (id INT PRIMARY KEY, n INT); CREATE TABLE src (id INT, n INT);
 GO
 MERGE tgt USING src ON tgt.id = src.id WHEN MATCHED AND src.n > 0 THEN UPDATE SET n = src.n WHEN MATCHED THEN DELETE WHEN NOT MATCHED BY TARGET THEN INSERT (id, n) VALUES (src.id, src.n) WHEN NOT MATCHED BY SOURCE THEN DELETE;

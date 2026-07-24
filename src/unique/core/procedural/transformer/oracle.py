@@ -545,7 +545,26 @@ class OracleTransformer(ProceduralTransformer):
         sql = self._CAST_CONSTRAINED_RE.sub(_unconstrained_cast_type, sql)
         # Last: after the concat re-pass (which can drop a CAST's length) and the
         # constraint strip — TRY_CAST, a bare character CAST needing a length, etc.
-        return self._expr._oracle_function_fixes(sql)
+        sql = self._expr._oracle_function_fixes(sql)
+        if self._expr_position:
+            # A pure PL/SQL *expression* position (PRINT argument): ANY
+            # constrained CAST type is PLS-00103 — char included, the exact
+            # reverse of a SQL statement (ORA-00906 without a length). The
+            # caller marks the position; the fragment text cannot tell.
+            def _bare(m: re.Match[str]) -> str:
+                typ = m.group(1).upper()
+                return f"AS {self._CAST_TYPE_MAP.get(typ, typ)})"
+
+            sql = self._map_outside_strings(
+                sql,
+                lambda seg: re.sub(
+                    r"(?i)\bAS\s+(N?VARCHAR2?|N?CHAR|NUMBER|DECIMAL|NUMERIC|DEC"
+                    r"|FLOAT)\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\)\s*\)",
+                    _bare,
+                    seg,
+                ),
+            )
+        return sql
 
     @staticmethod
     def _top_to_oracle(sql: str) -> str:

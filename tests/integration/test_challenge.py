@@ -4823,3 +4823,59 @@ class TestCheckXorPredicateWrap:
             "CHECK (CASE WHEN a IS NULL THEN 1 ELSE 0 END <> "
             "CASE WHEN b IS NULL THEN 1 ELSE 0 END)" in out
         ), out
+
+
+class TestPlsqlExpressionCastContext:
+    """Oracle inverts CAST typing rules between contexts: a PL/SQL expression
+    rejects any constrained type (PLS-00103) while a SQL statement requires the
+    char length (ORA-00906). The PRINT argument is a marked expression
+    position, so its char CAST is emitted lengthless. Live-compiled VALID on
+    oracle 2026-07-24."""
+
+    def test_print_cast_is_lengthless(self) -> None:
+        out = _tx(_case("challenge_sqlserver.sql", "ts-cursor-attr"), "tsql", "oracle")
+        line = next(x for x in out.splitlines() if "PUT_LINE" in x)
+        assert re.search(r"AS\s+VARCHAR2\s*\)", line), out
+        assert not re.search(r"AS\s+VARCHAR2?\s*\(", line), out
+
+    def test_sql_statement_cast_keeps_length(self) -> None:
+        out = _tx(
+            "CREATE PROCEDURE p AS BEGIN DECLARE @v VARCHAR(10); "
+            "SELECT @v = CAST(n AS VARCHAR(10)) FROM t; END",
+            "tsql",
+            "oracle",
+        )
+        assert re.search(r"(?i)AS\s+VARCHAR2\s*\(\s*10\s*\)", out), out
+
+
+class TestMergeExtendedClauses:
+    """T-SQL's extended MERGE clauses: NOT MATCHED BY SOURCE splits into a
+    follow-up anti-join statement (PG only gained the clause in 17; Oracle
+    never had it), and Oracle folds a conditional MATCHED UPDATE/DELETE pair
+    into its single-clause UPDATE + DELETE WHERE spelling. Live: identical
+    final rows on tsql/oracle/pg 2026-07-24."""
+
+    def _out(self, target: str) -> str:
+        return _tx(_case("challenge_sqlserver.sql", "ts-merge-full"), "tsql", target)
+
+    def test_oracle_folds_matched_pair_and_splits_by_source(self) -> None:
+        out = self._out("oracle")
+        assert (
+            "WHEN MATCHED THEN UPDATE SET n = CASE WHEN src.n > 0 "
+            "THEN src.n ELSE tgt.n END DELETE WHERE NOT (src.n > 0)" in out
+        ), out
+        assert (
+            "DELETE FROM tgt WHERE NOT EXISTS "
+            "(SELECT 1 FROM src WHERE tgt.id = src.id)" in out
+        ), out
+        assert "BY SOURCE" not in _exec_lines(out), out
+
+    def test_postgresql_keeps_matched_pair_and_splits_by_source(self) -> None:
+        out = self._out("postgresql")
+        assert "WHEN MATCHED AND src.n > 0 THEN UPDATE SET n = src.n" in out, out
+        assert "WHEN MATCHED THEN DELETE" in out, out
+        assert (
+            "DELETE FROM tgt WHERE NOT EXISTS "
+            "(SELECT 1 FROM src WHERE tgt.id = src.id)" in out
+        ), out
+        assert "BY SOURCE" not in _exec_lines(out), out

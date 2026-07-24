@@ -631,6 +631,105 @@ def _oracle_merge_paren_on(sql: str) -> str:
     return f"{sql[:on_at]} ON ({cond}){sql[when_at:]}"
 
 
+def _merge_extended_clauses(
+    tree: exp.Merge, dialect: str
+) -> tuple[list[str], str | None]:
+    """T-SQL's extended MERGE clause set on targets that lack it (in place).
+
+    ``WHEN NOT MATCHED BY SOURCE`` exists nowhere else (PostgreSQL only from
+    17): each such clause becomes a follow-up UPDATE/DELETE over the same join
+    predicate as an anti-join — the rows it addresses cannot be touched by the
+    remaining MERGE, so the two-statement split is value-equivalent.
+
+    Oracle additionally allows a single unconditional WHEN MATCHED clause; its
+    conditional forms are spelled ``UPDATE … WHERE`` / ``DELETE WHERE`` (no
+    sqlglot grammar). A conditional UPDATE/DELETE pair folds into one
+    unconditional UPDATE whose SET keeps the old value via CASE — Oracle's
+    DELETE WHERE only examines *updated* rows, so the update must cover every
+    matched row — plus a ``DELETE WHERE`` tail spliced after emission (second
+    return value). First-match-wins order decides each action's condition.
+    """
+    whens = tree.args.get("whens")
+    using = tree.args.get("using")
+    on = tree.args.get("on")
+    if whens is None or using is None or on is None:
+        return [], None
+    wd = sqlglot_dialect_name(dialect)
+    exprs = list(whens.expressions)
+    followups: list[str] = []
+    tgt_sql = tree.this.sql(dialect=wd)
+    for w in [x for x in exprs if x.args.get("source")]:
+        anti = (
+            f"NOT EXISTS (SELECT 1 FROM {using.sql(dialect=wd)} "
+            f"WHERE {on.sql(dialect=wd)})"
+        )
+        cond = w.args.get("condition")
+        if cond is not None:
+            anti += f" AND ({cond.sql(dialect=wd)})"
+        then = w.args.get("then")
+        if isinstance(then, exp.Update):
+            sets = ", ".join(e.sql(dialect=wd) for e in then.expressions)
+            followups.append(f"UPDATE {tgt_sql} SET {sets} WHERE {anti}")
+        elif isinstance(then, exp.Var) and str(then.this).upper() == "DELETE":
+            followups.append(f"DELETE FROM {tgt_sql} WHERE {anti}")
+        else:
+            return [], None
+        exprs.remove(w)
+    delete_where: str | None = None
+    matched = [w for w in exprs if w.args.get("matched")]
+    if dialect == "oracle" and (
+        len(matched) > 1 or any(w.args.get("condition") for w in matched)
+    ):
+        updates = [w for w in matched if isinstance(w.args.get("then"), exp.Update)]
+        deletes = [
+            w
+            for w in matched
+            if isinstance(w.args.get("then"), exp.Var)
+            and str(w.args["then"].this).upper() == "DELETE"
+        ]
+        if len(updates) == 1 and len(deletes) <= 1 and len(matched) <= 2:
+            upd, dlt = updates[0], deletes[0] if deletes else None
+            uc = upd.args.get("condition")
+            dc = dlt.args.get("condition") if dlt is not None else None
+
+            def _not_and(
+                base: exp.Expression, extra: exp.Expression | None
+            ) -> exp.Expression:
+                inv = exp.Not(this=exp.Paren(this=base.copy()))
+                if extra is None:
+                    return inv
+                return exp.And(this=inv, expression=exp.Paren(this=extra.copy()))
+
+            if dlt is None:
+                u_active, d_active = uc, None
+            elif matched[0] is dlt:
+                # DELETE(dc) wins first; UPDATE applies to the rest.
+                u_active, d_active = _not_and(dc, uc) if dc is not None else None, dc
+            else:
+                u_active, d_active = uc, _not_and(uc, dc) if uc is not None else dc
+            if u_active is not None:
+                alias = tree.this.alias or tree.this.name
+                then_upd = upd.args["then"]
+                for eq in then_upd.expressions:
+                    keep = exp.column(eq.this.name, table=alias)
+                    eq.set(
+                        "expression",
+                        exp.Case(
+                            ifs=[
+                                exp.If(this=u_active.copy(), true=eq.expression.copy())
+                            ],
+                            default=keep,
+                        ),
+                    )
+            upd.set("condition", None)
+            if d_active is not None:
+                delete_where = d_active.sql(dialect=wd)
+            if dlt is not None:
+                exprs.remove(dlt)
+    whens.set("expressions", exprs)
+    return followups, delete_where
+
+
 def _collect_defined_aliases(value: object) -> set[str]:
     """Aliases the statement itself defines (table/derived-table aliases):
     the temp-table QUALIFIER rename must not fire on them — ``(SELECT …) y``
@@ -2382,6 +2481,14 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         # Parse → quote reserved-word identifiers → generate, so a passthrough
         # CREATE INDEX / ALTER on a reserved name (e.g. ``collation``) is valid.
         parsed = [e for e in sqlglot.parse(node.sql, read=read) if e is not None]
+        merge_followups: list[str] = []
+        merge_delete_where: str | None = None
+        if node.kind == "MERGE" and dialect in ("oracle", "postgresql"):
+            for e in parsed:
+                if isinstance(e, exp.Merge):
+                    merge_followups, merge_delete_where = _merge_extended_clauses(
+                        e, dialect
+                    )
         if (
             node.kind == "RETURNING"
             and dialect != "postgresql"
@@ -2457,6 +2564,21 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                     # Oracle requires MERGE ... ON (<condition>) — the parens
                     # are mandatory (ORA-00969 without them).
                     result = _oracle_merge_paren_on(result)
+                if merge_delete_where:
+                    # Oracle's conditional-DELETE spelling (no sqlglot
+                    # grammar): splice the tail after the folded SET list.
+                    result = re.sub(
+                        r"(?is)(WHEN\s+MATCHED\s+THEN\s+UPDATE\s+SET\s+.*?)"
+                        r"(\s+WHEN\s+NOT\s+MATCHED\b|$)",
+                        lambda m: (
+                            f"{m.group(1)} DELETE WHERE {merge_delete_where}"
+                            f"{m.group(2)}"
+                        ),
+                        result,
+                        count=1,
+                    )
+                for _ms in merge_followups:
+                    result = result.rstrip().rstrip(";") + f";\n{_ms}"
                 if dialect == "tsql" and not result.rstrip().endswith(";"):
                     result = result.rstrip() + ";"
                 if dialect == "tsql":

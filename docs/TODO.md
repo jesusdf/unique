@@ -89,15 +89,26 @@ are found; guarded by `tests/integration/test_challenge.py`. Cases are tagged
 [challenge-corpus skill](../skills/SKILL-challenge-corpus.md) for the red/blue
 workflow.
 
-- [ ] **BLUE batch IN PROGRESS — NOT over (per `SKILL-challenge-corpus.md`, the
-      batch ends only when every `[open]` case is `[fixed]` or user-approved as a
-      documented limit).** Landed so far (recorded in [`docs/DONE.md`](DONE.md)
+- [x] **BLUE batch COMPLETE 2026-07-24 — 0 `[open]` / 694 `[fixed]` /
+      168 `[limit]` of 862.** Every RED finding is either strictly guarded
+      (`[fixed]`) or an approved, warned + annotated, documented limit
+      (`[limit]`, docs/03-unsupported.md). The final wave landed: Oracle
+      cursor-attribute emulation (@@FETCH_STATUS forms + per-cursor
+      rowcount counters on T-SQL/MySQL), the PG CHECK-xor CASE-wrap, the
+      PL/SQL-vs-SQL CAST-context inversion (`_expr_position` marks PRINT
+      arguments; constrained CAST types are PLS-00103 in a PL/SQL
+      expression but required in SQL, so the caller — not the fragment —
+      decides), and full T-SQL MERGE (`WHEN NOT MATCHED BY SOURCE` →
+      follow-up anti-join statement on PG/Oracle; Oracle's conditional
+      MATCHED pair folds to UPDATE-with-CASE + DELETE WHERE, live
+      value-verified identical on tsql/oracle/pg).
+      Landed earlier (recorded in [`docs/DONE.md`](DONE.md)
       §41): RC-1b gate (DML+procedural), 21 built-in mappings, RC-3
       FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG.
-      **2026-07-24 (architect session) — 16 `[open]` / 167 `[limit]` / 679
-      `[fixed]`** (of 862; 74 cleared in 9 waves, 13 local commits `6987d38`…
-      `aa00b4a`). The user DELEGATED the fix-vs-limit decision to the
-      architect session ("decide por mí lo que es límite y lo que no"); each
+      **2026-07-24 (architect session) — 74+16 cleared in 12 waves,
+      commits `6987d38`….** The user DELEGATED the fix-vs-limit
+      decision to the architect session ("decide por mí lo que es límite
+      y lo que no"); each
       approved limit is recorded in its case header + docs/03-unsupported.md
       §3.19–3.22. Waves 5–8 additionally landed: GROUPING_ID→multi-arg
       GROUPING on PG/MySQL (ora-grouping-id upgraded [limit]→[fixed]), the
@@ -111,7 +122,7 @@ workflow.
       catalog maps, SESSIONTIMEZONE mapping ([limit]), T-SQL DISTINCT
       null-order derived-table wrap, sp_executesql positional binds, PG
       star-call gate (JSON_OBJECT(*)), interval-literal EXTRACT folds.
-      **Remaining 17 = the structural tail:** front-1 embedded-text-vs-IR
+      **The final structural tail (all closed by the last waves):** front-1 embedded-text-vs-IR
       (my-gencol2/my-gen-constr shorthand path, my-json-index pg leg,
       ts-cursor-attr, pg-check-xor), triggers row-vs-
       statement (ts-instead-of-insert, ts-trg-instead-delete,

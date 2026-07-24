@@ -447,6 +447,15 @@ def gate_reason(sql: str, target: str, source: str | None = None) -> str | None:
             and re.search(r"(?is)\bWITH\s+RECURSIVE\b", stmt)
         ):
             continue
+        if target == "oracle" and re.match(r"(?is)\s*MERGE\b", stmt):
+            # Oracle's conditional-DELETE clause (WHEN MATCHED THEN UPDATE …
+            # DELETE WHERE …) is valid Oracle that sqlglot cannot parse —
+            # drop the tail for the parse check only (it runs live).
+            stmt = re.sub(
+                r"(?is)\s+DELETE\s+WHERE\s+.*?(?=\s+WHEN\s+NOT\s+MATCHED\b|;|$)",
+                " ",
+                stmt,
+            )
         if target == "mysql" and re.match(
             # MySQL 8 functional indexes (double-paren key parts) are
             # valid MySQL that sqlglot cannot parse (wave 204).

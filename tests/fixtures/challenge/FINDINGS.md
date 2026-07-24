@@ -1979,11 +1979,6 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - live error: `ORA-00937: not a single-group group function`
 - src: `SELECT a,b,SUM(c) FROM (SELECT 1 a,2 b,3 c) t GROUP BY CUBE(a,b)`
 
-## ts-cursor-attr  (tsql)
-- targets: mysql(invalid), oracle(invalid), postgresql(invalid)
-- live error: `PROCEDURE P compiled INVALID (line 6): PLS-00103: Encountered the symbol ";" when expectin`
-- src: `CREATE PROCEDURE p AS BEGIN DECLARE c CURSOR FOR SELECT 1; OPEN c; FETCH NEXT FROM c; IF @@FETCH_STATUS=0 PRINT CAST(@@CURSOR_ROWS`
-
 ## ts-dateadd  (tsql)
 - targets: mysql(func), oracle(invalid), postgresql(invalid)
 - live error: `FUNC-DIFF: source=(('2020-02-29 00:00:00', '2020-01-02 00:00:00', '2020-02-29'),) target=(`
@@ -2075,13 +2070,6 @@ INSERT INTO t (n) OUTPUT INSERTED.id,INSERTED.n VALUES (10),(20)`
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-32039: missing column alias list in recursive WITH clause element S`
 - src: `WITH s AS (SELECT 1 n UNION ALL SELECT n+1 FROM s WHERE n<5) SELECT n FROM s OPTION (MAXRECURSION 10)`
-
-## ts-merge-full  (tsql)
-- targets: oracle(invalid), postgresql(invalid)
-- live error: `ORA-02000: missing THEN keyword`
-- src: `CREATE TABLE tgt (id INT PRIMARY KEY, n INT); CREATE TABLE src (id INT, n INT);
-GO
-MERGE tgt USING src ON tgt.id = src.id WHEN MAT`
 
 ## ts-month-overflow  (tsql)
 - targets: mysql(func)
