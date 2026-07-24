@@ -50,6 +50,9 @@ from unique.core.converter import (
     map_sequence_refs,
     rewrite_oracle_modify,
 )
+from unique.core.converter._unread_args import WARNING_FEATURE as _UNREAD_FEATURE
+from unique.core.converter._unread_args import drain_sink as _drain_unread_arg_sink
+from unique.core.converter._unread_args import reset_sink as _reset_unread_arg_sink
 from unique.core.dialect import Dialect
 from unique.core.errors import UnsupportedFeatureError
 from unique.core.output_gate import annotate_divergence, degrade_to_carrier, gate_reason
@@ -1060,7 +1063,13 @@ class Transpiler:
                 )
 
         try:
+            # Unread-args tripwire (guardrail 7 / brief B2): the converter
+            # records any semantic sqlglot arg a ``_convert_*`` never read
+            # (an ON CONFLICT / OUTPUT / DO NOTHING clause silently dropped).
+            _reset_unread_arg_sink()
             ir_nodes = source_dialect.parse(sql)
+            for msg in _drain_unread_arg_sink():
+                warnings.append(_warn(msg, _UNREAD_FEATURE, source, target))
 
             if source != target:
                 transformer = Transformer(source, target)
@@ -1101,6 +1110,10 @@ class Transpiler:
                 unsupported=unsupported,
             )
         except Exception as e:
+            # gate mode aborts the conversion with an UnreadArgError before the
+            # post-parse drain runs — surface the recorded residue too.
+            for msg in _drain_unread_arg_sink():
+                warnings.append(_warn(msg, _UNREAD_FEATURE, source, target))
             # exc_info: a rare escaping error (e.g. the one-off KeyError
             # 'into', audit 2026-07-24 N16) is undiagnosable from str(e) alone.
             logger.warning("DML transpilation failed: %s", e, exc_info=True)

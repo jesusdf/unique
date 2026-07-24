@@ -64,6 +64,7 @@ from unique.core.ast_nodes import (
 
 # Split out of the former single-file converter; see the package __init__.
 from unique.core.converter._base import *  # noqa: F401,F403
+from unique.core.converter._unread_args import dispatch_tracked
 from unique.core.converter.harvest import _resolve_tsql_alias_type  # noqa: F401
 from unique.core.sql_split import split_leading_trivia
 
@@ -687,7 +688,11 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             source_dialect=source_dialect,
             kind="statement",
         )
-    return _convert_expression_impl(expr)
+    # Structural conversion — the only path where a construct can be silently
+    # dropped by an unread sqlglot arg. Track args reads and report residue
+    # (guardrail 7 / brief B2); the passthrough branches above re-render the
+    # whole node, so nothing can fall on the floor there.
+    return dispatch_tracked(expr, _convert_expression_impl)
 
 
 def _is_passthrough_create(expr: exp.Expression) -> bool:
