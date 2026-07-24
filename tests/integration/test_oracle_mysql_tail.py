@@ -397,7 +397,7 @@ class TestCommentInsideIfCondition:
     _SRC = (
         "create or replace PROCEDURE p_c(m_tipo IN VARCHAR2) AS\n"
         "BEGIN\n"
-        "  IF m_tipo --Si el episodio es de urgencias\n"
+        "  IF m_tipo --Si el registro es prioritario\n"
         "     = 'U' THEN\n"
         "    INSERT INTO t_log (a) VALUES (1);\n"
         "  END IF;\n"
@@ -412,7 +412,7 @@ class TestCommentInsideIfCondition:
 
     def test_comment_text_is_preserved_inline(self) -> None:
         out = _t(self._SRC, "mysql")
-        assert "/* Si el episodio es de urgencias */" in out, out
+        assert "/* Si el registro es prioritario */" in out, out
 
 
 class TestRoutineNamedAsMySqlBuiltin:

@@ -27,10 +27,14 @@ Findings detail: audit docs 02/04/05/07.
 
 ### P1
 
-- [ ] **B3** Confidentiality remediation at HEAD — rename private vocabulary in
-  7 files + reword 2 `docs/DONE.md` lines (audit doc 07; hit list in the
-  maintainer's local scratchpad). Maintainer decided 2026-07-24: **no history
-  rewrite** — the 2 commit-message hits are accepted residual risk.
+- [x] **B3** Confidentiality remediation at HEAD — done 2026-07-24: renamed all
+  private vocabulary to verified-synthetic names in the 7 flagged files (plus 2
+  residues the fix sweep itself caught), reworded the 2 `docs/DONE.md`
+  passages, and moved the fixture anonymization guard's fragment list to an
+  untracked `fixtures-private/leak_fragments.txt` (guard skips when absent).
+  Diff swept against the full 24,923-token private inventory: 0 hits.
+  Maintainer decided: **no history rewrite** — the 2 commit-message hits are
+  accepted residual risk.
 - [ ] **B2** Unread-args tripwire (T1), warn-mode first — the mechanical guard
   for the N1/N3/N4 class.
 - [ ] **B1** Model the upsert clause (`ON CONFLICT`/`ON DUPLICATE KEY UPDATE`)

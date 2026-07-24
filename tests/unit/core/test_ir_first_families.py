@@ -244,7 +244,7 @@ class TestCommentsInIrFragments:
         "    @m_tipo NVARCHAR(10)\n"
         "AS\n"
         "BEGIN\n"
-        "    IF -- Si el episodio es de urgencias\n"
+        "    IF -- Si el registro es prioritario\n"
         "    @m_tipo = 'U'\n"
         "    BEGIN\n"
         "        INSERT INTO t_log (a) VALUES (1);\n"
@@ -259,7 +259,7 @@ class TestCommentsInIrFragments:
 
         out = Transpiler().transpile(self.SRC, "tsql", "mysql").sql
         flat = " ".join(out.splitlines())
-        assert "/* Si el episodio es de urgencias */" in out, out
+        assert "/* Si el registro es prioritario */" in out, out
         assert not __import__("re").search(r"--[^\n]*= 'U'", flat), out
 
     def test_condition_survives_on_oracle(self, monkeypatch) -> None:

@@ -473,21 +473,21 @@ class TestExecNamedArgs:
     PostgreSQL spell it ``proc(name => value)`` — the ``@`` sigil dropped and the
     name kept as the formal parameter (not renamed to a V_ local variable)."""
 
-    SRC = "EXEC SVP_WEBMENU @idmenu=23904, @cmd='NEXT-MED', @orden=20\n" "go"
+    SRC = "EXEC PRC_PANELCFG @idpanel=11111, @cmd='STEP-ONE', @orden=20\n" "go"
 
     def test_oracle_named_args_use_arrow(self) -> None:
         out = _transpile(self.SRC, "tsql", "oracle")
-        assert "idmenu => 23904" in out
-        assert "cmd => 'NEXT-MED'" in out
+        assert "idpanel => 11111" in out
+        assert "cmd => 'STEP-ONE'" in out
         assert "orden => 20" in out
         assert "@" not in out  # sigil dropped
-        assert "V_IDMENU" not in out  # not renamed as a local variable
+        assert "V_IDPANEL" not in out  # not renamed as a local variable
         assert "20 go" not in out.lower()  # the GO batch terminator is not leaked
 
     def test_postgresql_named_args_use_arrow(self) -> None:
         out = _transpile(self.SRC, "tsql", "postgresql")
-        assert "CALL SVP_WEBMENU(" in out
-        assert "idmenu => 23904" in out
+        assert "CALL PRC_PANELCFG(" in out
+        assert "idpanel => 11111" in out
         assert "20 go" not in out.lower()
 
     def test_named_arg_rhs_variable_still_transformed(self) -> None:

@@ -30,11 +30,27 @@ _FIXTURES = [
     ("procedures_postgresql.sql", "postgresql"),
 ]
 
-# Domain terms that must never appear (anonymization guard).
-_FORBIDDEN = re.compile(
-    r"(?i)\b(svp_|svf_|svk_|salastel|citas|telemed|paciente|encuesta|"
-    r"idsalastel|usuariomod|fechamod)",
+# Domain terms that must never appear (anonymization guard). The term list is
+# itself confidential, so it lives OUTSIDE the repo in the untracked
+# fixtures-private/ directory (one regex fragment per line, "#" comments
+# allowed); when the private corpus is absent there is nothing to guard, so
+# the check skips (audit 2026-07-24 B3/F8).
+_FRAGMENTS_FILE = (
+    Path(__file__).parent.parent.parent / "fixtures-private" / "leak_fragments.txt"
 )
+
+
+def _forbidden_pattern() -> re.Pattern[str] | None:
+    if not _FRAGMENTS_FILE.is_file():
+        return None
+    fragments = [
+        line.strip()
+        for line in _FRAGMENTS_FILE.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    if not fragments:
+        return None
+    return re.compile(r"(?i)\b(" + "|".join(fragments) + ")")
 
 
 @pytest.fixture
@@ -51,8 +67,11 @@ def test_fixture_exists_and_nonempty(filename: str, dialect: str) -> None:
 
 @pytest.mark.parametrize("filename,dialect", _FIXTURES)
 def test_fixture_is_anonymized(filename: str, dialect: str) -> None:
+    pattern = _forbidden_pattern()
+    if pattern is None:
+        pytest.skip("private fragment list not available (fixtures-private/)")
     text = (FIXTURE_DIR / filename).read_text(encoding="utf-8")
-    leak = _FORBIDDEN.search(text)
+    leak = pattern.search(text)
     assert leak is None, f"domain term leaked in {filename}: {leak!r}"
 
 
@@ -85,7 +104,9 @@ def test_fixture_transpiles_without_crashing(
     result = transpiler.transpile(text, source, target)
     # Must produce substantial output and never leak domain terms.
     assert len(result.sql) > 500
-    assert _FORBIDDEN.search(result.sql) is None
+    pattern = _forbidden_pattern()
+    if pattern is not None:
+        assert pattern.search(result.sql) is None
 
 
 # Constructs that must never appear as *executable* MySQL in the committed

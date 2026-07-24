@@ -1611,8 +1611,8 @@ family-migration survey) remain recorded in the open §2 M3 item of
         privileges, GUC tests) should simply not be selected. Start set:
         the portable core — insert/update/delete/join/select*/aggregates/
         window/case/union/subselect/with/triggers/plpgsql.
-      - *MySQL* (`mysql-test/`): **rejected** — GPLv2 (incompatible with
-        committing into this MIT repo) and written in the mysqltest DSL
+      - *MySQL*: **rejected** — GPLv2 (incompatible with
+        committing into this MIT repo) and written in a bespoke test DSL
         (`--source`, `if` blocks, per-connection commands) interleaved with
         the SQL, so it would need a real parser, not a curation pass.
       - *Fetcher shipped 2026-07-11:* `scripts/fetch_pg_corpus.py` downloads
@@ -3117,8 +3117,8 @@ family-migration survey) remain recorded in the open §2 M3 item of
       honest* — unwrapping constant dynamic SQL surfaced ~30 failures that
       previously hid as runtime missing-object noise inside EXEC() strings.
       *Remaining (tsql 54):* dominated by ~12 client-DB-resident UDFs
-      (SVF_* — genuinely unresolvable without --db-url metadata; on the
-      real target DB they resolve), PL/SQL collections (ARRAYTIPOALTA),
+      (client-DB-resident UDF prefixes — genuinely unresolvable without --db-url metadata; on the
+      real target DB they resolve), PL/SQL collections (ARRAYTYPELIST),
       and 2x edges (4145 non-boolean IF, 128, @dosis1, date literal,
       TO_NUMBER-in-raw). PG 10 — RETURN edges, ADD COLUMNS(...),
       2x bytea/uuid defaults. **MySQL 18 classified 2026-07-10** (dump hook +

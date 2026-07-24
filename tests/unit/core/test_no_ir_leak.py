@@ -44,9 +44,9 @@ class TestNoIrReprLeak:
     def test_insert_select_where_not_exists(self) -> None:
         # The reported case: INSERT ... SELECT <literals> WHERE NOT EXISTS (…).
         _assert_clean(
-            "INSERT INTO dbo.h_config (idconfig, nombre) "
+            "INSERT INTO dbo.t_params (idsetting, etiqueta) "
             "SELECT 'x', dbo.Now() "
-            "WHERE NOT EXISTS (SELECT NULL FROM dbo.h_config WHERE idconfig = 'x')",
+            "WHERE NOT EXISTS (SELECT NULL FROM dbo.t_params WHERE idsetting = 'x')",
             "tsql",
         )
 
@@ -61,7 +61,7 @@ class TestNoIrReprLeak:
 
     def test_from_not_pulled_from_subquery(self) -> None:
         # The outer table-less SELECT must not steal the NOT EXISTS subquery's
-        # FROM (regression: it produced `SELECT 'x' FROM h_config WHERE …`).
+        # FROM (regression: it produced `SELECT 'x' FROM t_params WHERE …`).
         out = t.transpile(
             "INSERT INTO h (a) SELECT 'x' "
             "WHERE NOT EXISTS (SELECT NULL FROM other WHERE a = 'x')",

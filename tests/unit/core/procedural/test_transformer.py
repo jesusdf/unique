@@ -803,22 +803,22 @@ class TestUniqueTypePreservationComment:
 
         src = (
             "CREATE PROCEDURE p (\n"
-            "    V_SALA IN H_SALASTELDET.SALA%TYPE DEFAULT NULL\n"
+            "    V_ROOM IN H_ROOMBOOKDET.ROOM%TYPE DEFAULT NULL\n"
             ") AS\nBEGIN\n    NULL;\nEND;"
         )
         out = Transpiler().transpile(src, source="oracle", target="tsql").sql
-        assert "SQL_VARIANT /* UNIQUE: H_SALASTELDET.SALA%TYPE */" in out
+        assert "SQL_VARIANT /* UNIQUE: H_ROOMBOOKDET.ROOM%TYPE */" in out
 
     def test_unresolved_pct_type_oracle_to_mysql(self) -> None:
         from unique.core.transpiler import Transpiler
 
         src = (
             "CREATE PROCEDURE p (\n"
-            "    V_SALA IN H_SALASTELDET.SALA%TYPE DEFAULT NULL\n"
+            "    V_ROOM IN H_ROOMBOOKDET.ROOM%TYPE DEFAULT NULL\n"
             ") AS\nBEGIN\n    NULL;\nEND;"
         )
         out = Transpiler().transpile(src, source="oracle", target="mysql").sql
-        assert "LONGTEXT /* UNIQUE: H_SALASTELDET.SALA%TYPE */" in out
+        assert "LONGTEXT /* UNIQUE: H_ROOMBOOKDET.ROOM%TYPE */" in out
 
     def test_sql_variant_preserves_original(self) -> None:
         t = ProceduralTransformer("tsql", "mysql")

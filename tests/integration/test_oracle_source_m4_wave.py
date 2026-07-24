@@ -31,7 +31,7 @@ class TestExceptionScope:
     _SRC = (
         "create or replace PROCEDURE p_pi(p_no IN NUMBER, p_ing OUT NUMBER)\n"
         "AS\nBEGIN\n"
-        "    SELECT ningreso INTO p_ing FROM a_ing WHERE numorden = p_no;\n"
+        "    SELECT nregistro INTO p_ing FROM a_reg WHERE numlinea = p_no;\n"
         "EXCEPTION\n    WHEN NO_DATA_FOUND THEN\n        p_ing := NULL;\n"
         "END;\n/"
     )
@@ -40,14 +40,14 @@ class TestExceptionScope:
         out = _flat(_t(self._SRC, "tsql"))
         # The old flattener emitted an empty BEGIN TRY (syntax error) with
         # the protected SELECT outside it.
-        assert re.search(r"(?i)BEGIN TRY\s+SELECT @p_ing = ningreso", out), out
+        assert re.search(r"(?i)BEGIN TRY\s+SELECT @p_ing = nregistro", out), out
         assert not re.search(r"(?i)BEGIN TRY\s+END TRY", out), out
 
     def test_mysql_handler_wraps_block_with_not_found(self) -> None:
         out = _flat(_t(self._SRC, "mysql"))
         assert "DECLARE EXIT HANDLER FOR NOT FOUND" in out, out
         # Handler first, then the protected statement, inside one block.
-        assert out.index("EXIT HANDLER") < out.index("SELECT ningreso"), out
+        assert out.index("EXIT HANDLER") < out.index("SELECT nregistro"), out
 
     def test_mysql_generic_handler_for_others(self) -> None:
         src = self._SRC.replace("NO_DATA_FOUND", "OTHERS")
@@ -127,7 +127,7 @@ class TestPseudoRowIntoTargets:
         "create or replace TRIGGER trg_pa BEFORE UPDATE ON u_pam FOR EACH ROW\n"
         "BEGIN\n"
         "    SELECT familia, grupo INTO :NEW.familia, :NEW.grupo\n"
-        "    FROM s_art WHERE idarticulo = :NEW.idarticulo;\nEND;\n/"
+        "    FROM s_elem WHERE idelemento = :NEW.idelemento;\nEND;\n/"
     )
 
     def test_postgresql_assigns_record_fields(self) -> None:
@@ -144,11 +144,11 @@ class TestPseudoRowIntoTargets:
     def test_call_arguments_map_pseudo_rows(self) -> None:
         src = (
             "create or replace TRIGGER trg_r AFTER INSERT ON t_r FOR EACH ROW\n"
-            "BEGIN\n    svp_reg_pro(:NEW.rcn_id, :NEW.usuariomod);\nEND;\n/"
+            "BEGIN\n    prc_reg_pro(:NEW.rcn_id, :NEW.moduser);\nEND;\n/"
         )
         for target in ("mysql", "postgresql"):
             out = _flat(_t(src, target))
-            assert "CALL svp_reg_pro(NEW.rcn_id, NEW.usuariomod);" in out, (
+            assert "CALL prc_reg_pro(NEW.rcn_id, NEW.moduser);" in out, (
                 target,
                 out,
             )
@@ -205,11 +205,11 @@ class TestOracleBuiltinsOnTsql:
         src = (
             "DECLARE\n    v_codigo VARCHAR2(10);\nBEGIN\n"
             "    v_codigo := 'X';\n"
-            "    svp_tipo_ins(v_codigo);\n"
+            "    prc_tipo_ins(v_codigo);\n"
             "    dbms_output.put_line('v_codigo = ' || v_codigo);\nEND;\n/"
         )
         out = _flat(_t(src, "tsql"))
-        assert "EXEC svp_tipo_ins @codigo;" in out, out
+        assert "EXEC prc_tipo_ins @codigo;" in out, out
         assert "'v_codigo = ' + @codigo" in out, out
 
 
@@ -323,13 +323,13 @@ class TestWave10Classes:
         assert "CASE" not in out2.upper(), out2
 
     def test_multicolumn_drop(self) -> None:
-        src = "ALTER TABLE d_idi DROP (descripcion, textoplano);"
+        src = "ALTER TABLE d_lang DROP (descripcion, textolargo);"
         pg = _flat(_t(src, "postgresql"))
-        assert "DROP COLUMN descripcion, DROP COLUMN textoplano" in pg, pg
+        assert "DROP COLUMN descripcion, DROP COLUMN textolargo" in pg, pg
         my = _flat(_t(src, "mysql"))
-        assert "DROP COLUMN descripcion, DROP COLUMN textoplano" in my, my
+        assert "DROP COLUMN descripcion, DROP COLUMN textolargo" in my, my
         ts = _flat(_t(src, "tsql"))
-        assert "DROP COLUMN descripcion, textoplano" in ts, ts
+        assert "DROP COLUMN descripcion, textolargo" in ts, ts
 
     def test_mysql_errno_magnitude(self) -> None:
         src = (
@@ -452,10 +452,10 @@ class TestWave12And13Classes:
     def test_exec_expression_argument_hoisted(self) -> None:
         # T-SQL EXEC arguments accept only literals/variables; a GETDATE()
         # value (Oracle SYSDATE) made whole seeding batches invalid.
-        src = "BEGIN\n    SVP_MED_INS(V_ID=>1, V_fechamod=>SYSDATE);\nEND;\n/"
+        src = "BEGIN\n    PRC_MED_INS(V_ID=>1, V_modstamp=>SYSDATE);\nEND;\n/"
         out = _flat(_t(src, "tsql"))
         assert re.search(r"DECLARE @uq_now\d+ DATETIME = GETDATE\(\);", out), out
-        assert re.search(r"@V_fechamod = @uq_now\d+", out), out
+        assert re.search(r"@V_modstamp = @uq_now\d+", out), out
         assert "= GETDATE()" not in out.split("EXEC", 1)[1], out
 
     def test_named_association_lhs_not_renamed(self) -> None:
@@ -463,7 +463,7 @@ class TestWave12And13Classes:
         # into '@id => @id' and the T-SQL spelling into '@@id'.
         src = (
             "DECLARE\n   V_ID NUMBER(9,0);\nBEGIN\n    V_ID := -1;\n"
-            "    SVP_MED_INS(V_ID=>V_ID, V_tipo=>'LEU');\nEND;\n/"
+            "    PRC_MED_INS(V_ID=>V_ID, V_tipo=>'LEU');\nEND;\n/"
         )
         out = _flat(_t(src, "tsql"))
         assert "@V_ID = @id" in out, out
@@ -508,7 +508,7 @@ class TestDynamicSqlAndRowcount:
         # statement is just that statement on every target.
         src = (
             "BEGIN\n    EXECUTE IMMEDIATE 'DELETE FROM E_CONF WHERE D LIKE "
-            "''tipo%'' OR D LIKE ''ordenf''';\nEND;\n/"
+            "''tipo%'' OR D LIKE ''lineaf''';\nEND;\n/"
         )
         for target in ("postgresql", "tsql", "mysql"):
             out = _flat(_t(src, target))
