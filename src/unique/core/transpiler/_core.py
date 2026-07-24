@@ -29,6 +29,7 @@ from unique.core.converter import (
     PG_COMPOSITE_TYPES,
     PG_DOMAIN_TYPES,
     PG_TRIGGER_FN_BODIES,
+    PK_UNIQUE_COLUMNS,
     PROC_DATE_PARAMS,
     REFCURSOR_PROCS,
     SOURCE_DIALECT,
@@ -42,6 +43,7 @@ from unique.core.converter import (
     harvest_pg_composite_types,
     harvest_pg_domains,
     harvest_pg_trigger_functions,
+    harvest_pk_unique_columns,
     harvest_proc_date_params,
     harvest_temp_tables,
     harvest_tsql_alias_types,
@@ -248,10 +250,17 @@ class Transpiler:
         # TABLEs (MySQL/T-SQL ALTERs re-state the type; LOB expression
         # indexes degrade).
         column_types_token = None
+        pk_unique_token = None
         if source != target:
             column_types = harvest_column_types(sql)
             if column_types:
                 column_types_token = COLUMN_TYPES.set(column_types)
+            # PK/UNIQUE keys let an upsert with no explicit conflict target
+            # (MySQL ON DUPLICATE KEY / INSERT IGNORE) lower to a PG conflict
+            # target or a T-SQL/Oracle MERGE ON condition.
+            pk_unique = harvest_pk_unique_columns(sql)
+            if pk_unique:
+                pk_unique_token = PK_UNIQUE_COLUMNS.set(pk_unique)
         source_dialect_token = SOURCE_DIALECT.set(source)
         degraded_routines_token = DEGRADED_ROUTINES.set(set())
         refcursor_procs_token = REFCURSOR_PROCS.set({})
@@ -514,6 +523,8 @@ class Transpiler:
                 TEMP_TABLES.reset(temp_tables_token)
             if column_types_token is not None:
                 COLUMN_TYPES.reset(column_types_token)
+            if pk_unique_token is not None:
+                PK_UNIQUE_COLUMNS.reset(pk_unique_token)
             if proc_date_token is not None:
                 PROC_DATE_PARAMS.reset(proc_date_token)
             if func_token is not None:

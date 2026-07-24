@@ -174,6 +174,16 @@ COLUMN_TYPES: contextvars.ContextVar[dict[str, dict[str, str]] | None] = (
 )
 
 
+# PRIMARY KEY / UNIQUE column tuples per table harvested from the script's own
+# CREATE TABLEs (table -> list of key column-tuples, PK first, lowercase keys).
+# An upsert with no explicit conflict target (MySQL ``ON DUPLICATE KEY UPDATE``
+# / ``INSERT IGNORE``) needs a key to lower to a PG ``ON CONFLICT`` target or a
+# T-SQL/Oracle MERGE ``ON`` condition; without one it degrades whole.
+PK_UNIQUE_COLUMNS: contextvars.ContextVar[dict[str, list[tuple[str, ...]]] | None] = (
+    contextvars.ContextVar("pk_unique_columns", default=None)
+)
+
+
 # Temp tables declared in the script (PG/MySQL ``CREATE TEMPORARY TABLE`` /
 # ``SELECT … INTO TEMPORARY``): T-SQL spells a temp table ``#name``, and the
 # rename must apply to EVERY later reference, not only the creating statement
@@ -1028,6 +1038,7 @@ def _object_id_name(node: TableRef) -> str:
 
 __all__ = [
     "COLUMN_TYPES",
+    "PK_UNIQUE_COLUMNS",
     "DATE_COLUMNS",
     "IDENTITY_COLUMNS",
     "TEMP_TABLES",

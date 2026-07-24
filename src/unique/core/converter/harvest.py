@@ -233,6 +233,87 @@ def harvest_column_types(sql: str) -> dict[str, dict[str, str]]:
     return result
 
 
+def _key_column_list(text: str) -> tuple[str, ...]:
+    """Split a parenthesized key column list into bare lowercase names."""
+    from unique.core.converter._base import _split_top_level_commas
+
+    cols: list[str] = []
+    for part in _split_top_level_commas(text):
+        name = part.strip().strip('[]"`').split()[0] if part.strip() else ""
+        name = name.strip('[]"`').lower()
+        if name:
+            cols.append(name)
+    return tuple(cols)
+
+
+def harvest_pk_unique_columns(sql: str) -> dict[str, list[tuple[str, ...]]]:
+    """PRIMARY KEY / UNIQUE column tuples per table from the script's own
+    CREATE TABLEs (table -> list of key column-tuples, PK first, lowercase
+    keys). Balanced-paren body scan, so inline single-line CREATEs work too.
+
+    Recognizes both table-level constraints (``PRIMARY KEY (a, b)``,
+    ``CONSTRAINT x UNIQUE (a)``, MySQL ``UNIQUE KEY name (a)``) and column-level
+    ``col type PRIMARY KEY`` / ``col type UNIQUE``.
+    """
+    from unique.core.converter._base import _split_top_level_commas
+
+    result: dict[str, list[tuple[str, ...]]] = {}
+    for m in _CT_HEAD_RE.finditer(sql):
+        depth, i = 1, m.end()
+        while i < len(sql) and depth:
+            ch = sql[i]
+            if ch == "'":
+                i += 1
+                while i < len(sql):
+                    if sql[i : i + 2] == "''":
+                        i += 2
+                        continue
+                    if sql[i] == "'":
+                        break
+                    i += 1
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            i += 1
+        body = sql[m.end() : i - 1]
+        table = m.group(1).replace("[", "").replace("]", "").replace('"', "")
+        table = table.split(".")[-1].lstrip("#").lower()
+        pk: tuple[str, ...] | None = None
+        uniques: list[tuple[str, ...]] = []
+        for item in _split_top_level_commas(body):
+            s = item.strip()
+            mk = re.match(r"(?is)^(?:CONSTRAINT\s+\S+\s+)?PRIMARY\s+KEY\s*\((.*?)\)", s)
+            if mk:
+                pk = _key_column_list(mk.group(1))
+                continue
+            mu = re.match(
+                r"(?is)^(?:CONSTRAINT\s+\S+\s+)?UNIQUE(?:\s+KEY|\s+INDEX)?"
+                r"(?:\s+[\w`\"\[\]]+)?\s*\((.*?)\)",
+                s,
+            )
+            if mu:
+                uniques.append(_key_column_list(mu.group(1)))
+                continue
+            cm = re.match(r'\s*(\[[^\]]+\]|`[^`]+`|"[^"]+"|\w+)\s+', s)
+            if not cm:
+                continue
+            name = cm.group(1).strip('[]"`')
+            if name.upper() in _CT_ELEMENT_HEADS:
+                continue
+            if re.search(r"(?i)\bPRIMARY\s+KEY\b", s):
+                pk = (name.lower(),)
+            elif re.search(r"(?i)\bUNIQUE\b", s):
+                uniques.append((name.lower(),))
+        keys: list[tuple[str, ...]] = []
+        if pk:
+            keys.append(pk)
+        keys.extend(u for u in uniques if u)
+        if keys:
+            result[table] = keys
+    return result
+
+
 def harvest_date_columns(sql: str) -> dict[str, frozenset[str]]:
     """Collect date/time column names per table from a whole script.
 
