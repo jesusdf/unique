@@ -488,9 +488,12 @@ and treat it as part of the deliverable, not an afterthought.
   follow-up while doing something else, add an item immediately (with a short
   rationale and a priority like P1/P2/P3) rather than relying on memory. Bugs
   found via the live-validation layer are especially worth capturing.
-- **Mark items done, don't delete the context.** When you finish an item, flip
+- **Mark items done, then move them out.** When you finish an item, flip
   `- [ ]` to `- [x]` and append a one-line note on how it was solved (and the
-  test that covers it). This keeps the history useful for the next session.
+  test that covers it). When a whole section is closed, **move it to
+  `docs/MILESTONES.md`** (closing summary, newest first) with the detail
+  archived in `docs/DONE.md` — `docs/TODO.md` holds pending work only; it is
+  not a history file.
 - **Don't duplicate entries.** If an item already exists, update it in place
   instead of adding a near-identical one. Re-check after edits that a heading
   or sibling bullet wasn't accidentally consumed by a replace.

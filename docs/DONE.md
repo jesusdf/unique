@@ -5171,3 +5171,201 @@ Archived from `docs/TODO.md §5`. The RC-1..4 root-cause plan for the 862 RED fi
       `COMMIT`/`ROLLBACK`/`SAVE` already mapped. Covered by
       `tests/integration/test_challenge.py`. (A multi-statement `BEGIN TRAN … `
       `COMMIT` in ONE semicolon-less batch is a separate splitter limitation.)
+
+## 43. Challenge corpus COMPLETE — 0 open of 862 (2026-07-24 architect session)
+
+Archived from `docs/TODO.md §5`. The 2026-07-24 architect session (fix-vs-limit
+decision delegated by the user) drove the corpus from 90 `[open]` to **0** —
+final standing **0 `[open]` / 694 `[fixed]` / 168 `[limit]` of 862**, released
+as v0.30.0. Detail below (kept verbatim for provenance).
+
+- [x] **BLUE batch COMPLETE 2026-07-24 — 0 `[open]` / 694 `[fixed]` /
+      168 `[limit]` of 862.** Every RED finding is either strictly guarded
+      (`[fixed]`) or an approved, warned + annotated, documented limit
+      (`[limit]`, docs/03-unsupported.md). The final wave landed: Oracle
+      cursor-attribute emulation (@@FETCH_STATUS forms + per-cursor
+      rowcount counters on T-SQL/MySQL), the PG CHECK-xor CASE-wrap, the
+      PL/SQL-vs-SQL CAST-context inversion (`_expr_position` marks PRINT
+      arguments; constrained CAST types are PLS-00103 in a PL/SQL
+      expression but required in SQL, so the caller — not the fragment —
+      decides), and full T-SQL MERGE (`WHEN NOT MATCHED BY SOURCE` →
+      follow-up anti-join statement on PG/Oracle; Oracle's conditional
+      MATCHED pair folds to UPDATE-with-CASE + DELETE WHERE, live
+      value-verified identical on tsql/oracle/pg).
+      Landed earlier (recorded in [`docs/DONE.md`](DONE.md)
+      §41): RC-1b gate (DML+procedural), 21 built-in mappings, RC-3
+      FK/CHECK/IDENTITY/COMMENT + Oracle ON UPDATE, RC-2 LOG.
+      **2026-07-24 (architect session) — 74+16 cleared in 12 waves,
+      commits `6987d38`….** The user DELEGATED the fix-vs-limit
+      decision to the architect session ("decide por mí lo que es límite
+      y lo que no"); each
+      approved limit is recorded in its case header + docs/03-unsupported.md
+      §3.19–3.22. Waves 5–8 additionally landed: GROUPING_ID→multi-arg
+      GROUPING on PG/MySQL (ora-grouping-id upgraded [limit]→[fixed]), the
+      degraded-CUBE GROUPING→0 fold scoped to non-ROLLUP, quantified
+      VALUES→UNION ALL, binary-literal numeric folds, FORMAT masks, JSONB
+      per-target map + GIN/inline-INDEX carriers (inline INDEX was dropped
+      SILENTLY; the misparsed T-SQL form is reconstructed incl. separate
+      CREATE INDEX on PG/Oracle), ALTER…ADD IDENTITY→MySQL AUTO_INCREMENT+KEY,
+      %I dynamic-SQL quoting + SQLCODE exception handlers (check_violation
+      -2290 …) + PL/SQL BIGINT map, information_schema/sys.tables→Oracle
+      catalog maps, SESSIONTIMEZONE mapping ([limit]), T-SQL DISTINCT
+      null-order derived-table wrap, sp_executesql positional binds, PG
+      star-call gate (JSON_OBJECT(*)), interval-literal EXTRACT folds.
+      **The final structural tail (all closed by the last waves):** front-1 embedded-text-vs-IR
+      (my-gencol2/my-gen-constr shorthand path, my-json-index pg leg,
+      ts-cursor-attr, pg-check-xor), triggers row-vs-
+      statement (ts-instead-of-insert, ts-trg-instead-delete,
+      ts-trigger-on-view, ts-after-delete-count), ts-merge-full (BY SOURCE;
+      local PG is 16), cross-statement metadata (pg-drop-not-null,
+      pg-expr-index), pg-func-attrs (parser), my-set-transaction (batch
+      SET fallback), ora-cursor-attr (MySQL cursor attrs),
+      ts-dyn-concat-loop (aggregation-assignment→LISTAGG + column map).
+      Waves 1–4 (commits `6987d38`, `c374928`, `0b609d8`, `1c24c72`): DBMS_SESSION.SLEEP + system-proc
+      carrier; type-gap closest-type map (TIME/INTERVAL/BIT(n)/precision
+      clamps, §3.19) + Oracle DATE-cast TRUNC + money annotation (§3.20);
+      compile-time literal folds by source semantics (§3.21 — LENGTH family,
+      substring edges, extended INSTR incl. a silently-DROPPED occurrence
+      argument, MySQL byte decodes and string arithmetic, T-SQL binary
+      CONVERTs, PG16 hex ints, Literal.raw trailing zeros); interval/date
+      arithmetic per target + ANY(ARRAY(sub)) unwrap + TEXT→NVARCHAR(MAX)
+      modernization + lengthless-CAST sizing; and 7 annotated inherent limits
+      (§3.22: case-variant ORDER/GROUP, ZEROFILL, TO_CHAR(INTERVAL), self-FK
+      cascade, U&'…' parse-block, array column types). Every fix was live
+      value-verified on the 4 engines; suites + live-syntax green each commit.
+      **Remaining 38 = the feature tail:** JSON cluster (~6, type-map +
+      operator translation), procedural cluster (~10: sp_executesql typed
+      params, cursor attrs on MySQL, format %I, catalogs, fn-attrs parser,
+      realworld-transfer fn→proc, recursive-func 455), triggers row-vs-
+      statement (4), front-1 embedded-text-vs-IR infra (my-select-into-out,
+      ts-cursor-attr, pg-check-xor, my-gen-constr/my-gencol2 shorthand path),
+      full MERGE BY SOURCE, batch SET TRANSACTION, cross-statement metadata
+      (pg-drop-not-null, pg-expr-index, pg-add-identity), tz-function mapping
+      (ora-tz-funcs, pg-tz-convert), GROUPING family, my8-window/pg-all-values/
+      pg-grouping-sets2 (JSON type + misc), ts-inline-index2 (sqlglot
+      misparse), my-infoschema, ts-dyn-concat-loop, ts-after-delete-count.
+      **Previous state 2026-07-24 pre-session: 90 open / 156 limit / 616 fixed
+      (HEAD `e6eafc4`).** Down from 372 `[open]` on 2026-07-21 — the 07-23/24
+      campaign cleared ~282 (invalid-output tail via the `triage3.py`
+      live-DB scan, the recursive-CTE cluster, several disguised "FUNC-DIFF"
+      real bugs — paren precedence, float-literal folding, DATE-literal typing —
+      plus feature emulation: compound EXTRACT, batch SAVEPOINT, T-SQL derived-
+      column naming). **It also fixed a critical Live-Syntax CI regression** (the
+      CLOB→VARCHAR2 CAST-in-PL/SQL remap `4f57b2c` had turned the job red for
+      hours; gated on `IR_EMBEDDED`, commit `bdbb216`). Full per-commit log in the
+      `blue-rc1b-builtin-gate` memory file.
+      **2026-07-21 — 372 `[open]` / 37 `[limit]` / 453 `[fixed]` (down from ~600
+      open); released `v0.29.0`. The clean single-fn/stale/precision/simple-
+      type-map corrections are now EXHAUSTED — the remaining `[open]` are
+      features (UPDATE/USING-JOIN, procedural→PG, IS-TRUE-in-value, format masks,
+      JSON/XML) or judgment calls (BIT(64) precision, MySQL TIME→Oracle type
+      gap, collation DISTINCT/GROUP → [limit]). 2026-07-20/21 waves: faithful string-fn edges
+      (LENGTH-trailing, ASCII/POSITION/STRPOS empty-needle, PG LEFT-neg), T-SQL
+      CAST-to-int fractional-literal ROUND, Oracle DECODE NULL-safe equality,
+      Oracle exception-name → PL/pgSQL condition map, PG GREATEST/LEAST literal-
+      NULL drop, Oracle single-arg COALESCE, and a vc7 stale/precision harvest
+      (ELT/FIELD/INSERT/pad/REPEAT/PI/trig, TIMESTAMPDIFF-day).** Structural IR-drop fixes (window frame, GROUP BY
+      ROLLUP/CUBE/GROUPING SETS, computed columns), base-10 LOG, silent-clause
+      carriers (FOR UPDATE/NOT VALID/CONCURRENTLY/EXCLUDE/ON UPDATE/
+      MEMORY_OPTIMIZED), collation/charset drops (carrier + warning — the
+      **`--db-url` %TYPE-style fallback the user approved**: resolve live when a
+      DB connection is given, else warn), UNSIGNED→widen+`CHECK(≥0)`, and a
+      source-gated FUNC-DIFF wave (MOD-by-zero, Oracle CAST-to-int rounding,
+      GREATEST/LEAST NULL-propagation, negative/float LEFT·REPEAT, INSERT bounds,
+      MySQL date-arith→DATE). Later waves (all live-verified, full log in the
+      `blue-rc1b-builtin-gate` memory): division/AVG-int/LOG/precision, NULL
+      ordering emulation (MySQL/T-SQL null-priority key), T-SQL `LEN`
+      trailing-space (`RTRIM`), PG `SUBSTRING` start≤0, PG unbounded numeric cast
+      scale (`(38,10)` — cured the pg-round-* "banker's" mirage), MySQL
+      case-insensitive `INSTR`/`LOCATE`→`LOWER` on CS targets, PG `DATE-DATE`
+      & PG/Oracle `date+int`→DATE_ADD, date-precision flips, and two `[limit]`
+      batches (Oracle `''`=NULL, MySQL unsigned-64 bitwise). Procedural:
+      `ts-continue-break` (compound assignment + `BREAK`/`CONTINUE`→EXIT/LEAVE +
+      labeled MySQL loop), `@@`-global neutral carrier + FETCH-without-INTO
+      carrier, `ts-cast-bit`→`SIGN(ABS(x))` (via the `TypeMapper` IR pass).
+      **Maintainer policies 2026-07-19:** (a) a correct value differing only in
+      decimal/date PRECISION/scale is `[fixed]` (trailing zeros AND
+      scale-rounding AND datetime-vs-date zero-time); (b) per-family directives
+      below.
+      **Composición exacta de los 90 `[open]` (2026-07-24, por tema):**
+      14 tipos-sin-equivalente (INTERVAL/TIMESTAMPTZ/TIME/money/datetime) · 14
+      formato/semántica nº-fecha + substring-negativo + INSTR-extendido (FUNC-DIFF)
+      · 13 DDL/constraints (gen-cols, self-FK, índices expr/inline, identity,
+      SOUNDEX, drops silenciosos) · 13 procedural (parser, SQL-embebido-como-texto,
+      catálogos, cursor-attrs, sp_executesql) · 10 codificación (bytes↔code-point,
+      hex/binario, emoji UTF-16, base64, `U&'…'`) · 7 JSON/arrays · 6 colación/
+      orden/mayúsculas · 5 MERGE/transacciones-batch/sesión-tz · 5 GROUPING/
+      GROUPING-SETS/ventanas · 3 triggers-INSTEAD-OF/vistas. Cortes: 40 fallan en
+      1 motor, 27 en 2, 22 en 3; por motor oracle 54 / tsql 44 / mysql 32 / pg 30;
+      64 son error-de-motor y 23 FUNC-DIFF de valor.
+
+      **Los 90 se reparten en CINCO FRENTES — ninguno es "triage-and-flip";
+      cada uno es desarrollo deliberado con su propia validación:**
+
+      1. **Frontera arquitectónica: SQL-embebido-como-texto vs modelado-en-IR
+         (el ítem de MAYOR palanca — desbloquea un clúster).** La misma causa raíz
+         se arregla limpia en el camino IR pero queda bloqueada cuando el DML
+         embebido renderiza por *fragmento de texto* procedural. Confirmado hoy:
+         `my-reads-sql`/`my-scalar-subquery-assign` (RETURN/asignación por IR) se
+         cerraron con `_name_tsql_derived_columns@emit.py`, pero `my-select-into-out`
+         (cola de SELECT…INTO por `_fix_select_into_rest`) NO — parche-regex ahí =
+         "script-layer shape-patch" prohibido por el guardrail. Igual patrón:
+         `pg-check-xor` (CHECK como PassthroughSQL, no en IR), `ts-cursor-attr`
+         (CAST char-en-PL/SQL: `CAST(x AS VARCHAR2(n))` es PLS-00103 en expresión
+         pero ORA-00906 sin longitud en SQL — la heurística de texto es UNSOUND,
+         revertida; un fragmento mezcla sub-contextos SQL y PL/SQL). **Fix limpio:
+         enrutar el DML embebido / las condiciones de constraint por el IR** (donde
+         el contexto se conoce), en vez de por texto. Desbloquea la trío
+         derived-table restante + varios CAST/CHECK procedurales.
+
+      2. **Divergencias inherentes — necesitan DECISIÓN DEL MANTENEDOR sobre si
+         avisar.** Colación/mayúsculas (`my-group-case`, `my-order-strings`,
+         `my-greatest-string`, `ts-order-strings`), orden no-determinista de
+         GROUP_CONCAT (`my-gc-order`), null-ordering bajo DISTINCT
+         (`po-distinct-null`), longitud de emoji UTF-16-vs-code-point
+         (`my/pg/ts-emoji-len`), byte-vs-code-point de `CHAR` (`my-char-unicode`).
+         Un carrier POR CONSULTA sobre-avisa y **rompe tests existentes** (probado:
+         el carrier de LISTAGG-orden rompió `test_string_agg_to_oracle`/
+         `test_group_concat_to_oracle`, que asertan la conversión limpia sin aviso).
+         La convención actual es imponer un orden determinista EN SILENCIO. Sin
+         carrier no pueden ser `[limit]` (el test genérico lo exige). → decisión.
+
+      3. **Features multi-parte (mini-proyectos).** MERGE completo con
+         `WHEN NOT MATCHED BY SOURCE/TARGET` (`ts-merge-full`), GROUPING/GROUPING_ID
+         + ROLLUP (`ts-grouping-id`, `pg-grouping*`), INSTR 4-arg
+         ocurrencia/negativo (`ora-instr-edge`), `sp_executesql` con params
+         tipados (`ts-sp-executesql`), triggers statement-vs-row + pseudo-tablas
+         `inserted`/`deleted`/`FOR EACH ROW` (`ts-instead-of-*`, `ts-trigger-on-view`,
+         `ts-after-delete-count`), atributos de función PG que el parser procedural
+         mezcla en el cuerpo (`pg-func-attrs`), máscaras de formato num/fecha
+         (`*-num-to-str`, `ora-interval-tochar`) — **capa de traducción de máscaras
+         PAUSADA por el mantenedor**, sesión dedicada. Método por caso: comprobar
+         src-vs-tgt en vivo, compensación con puerta `SOURCE_DIALECT` o entrada
+         estrecha en `_DIVERGENCE_RULES` (medir churn; regex amplia sobre-dispara).
+
+      4. **Metadatos entre sentencias.** `pg-drop-not-null` necesita el tipo de
+         columna del `CREATE TABLE` del mismo batch para el `MODIFY`/`ALTER COLUMN`
+         de MySQL/T-SQL (Oracle sí puede `MODIFY a NULL` sin tipo). Requiere
+         rastreo de metadatos cross-statement en el batch. También el bucket de
+         casts que pasa por **`transformer.py TypeMapper.visit`** (`ctx.source`/
+         `ctx.target` disponibles): date↔int es la época 1900-01-01 de T-SQL
+         (necesita inferencia de tipo del operando), money necesita parseo de
+         símbolo de moneda, TIMESTAMPTZ/TIME/INTERVAL no tienen tipo destino.
+
+      5. **Bloqueados por parseo / codificación de bajo nivel.**
+         `pg-unicode-escape` (`U&'…'` que sqlglot mal-parsea como `U & '…'` —
+         guardrail: no pre-parsear texto), `ts-hexcast`/`pg-blob-length`/
+         `my-cast-uns2` (binario↔varchar, base64, hex/bit/bool→unsigned — reinterp.
+         de bytes por engine con `UTL_RAW`/`CONVERT_FROM`; multi-parte, `ts-hexcast`
+         intentado y revertido).
+
+      **Método OBLIGATORIO para cualquier fix (aprendido a golpes esta campaña):**
+      probar valor en vivo en los 4 motores → cambio con puerta `SOURCE_DIALECT`/
+      `IR_EMBEDDED` (evitar text-patches) → `pytest test_challenge.py` + `ruff`
+      (no solo black) + **suite paralela completa** (`sg docker -c
+      "bash scripts/test-parallel.sh"`, `REAL_EXIT=0`) → **Y para CUALQUIER cambio
+      de emit/procedural/CAST, la suite live-syntax LOCAL** con los 4
+      `UNIQUE_TEST_*_URL` (la paralela la SALTA — así se coló la regresión de CI de
+      horas) → `mypy src/` → flip a `[fixed]`/`[limit]` + assertion (recordar el
+      "comment-prose trap": quitar líneas `--`/`/* */` antes de aserciones
+      negativas). **`--db-url` live collation resolver: SKIPPED per user.**

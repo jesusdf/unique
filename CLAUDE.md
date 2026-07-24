@@ -100,8 +100,10 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## Quick reference
 
-- **Backlog:** [`docs/TODO.md`](docs/TODO.md) is the single source of truth;
-  completed work is archived in [`docs/DONE.md`](docs/DONE.md). Keep both current.
+- **Backlog:** [`docs/TODO.md`](docs/TODO.md) is the single source of truth and
+  holds **pending work only**; when a backlog section closes, its summary moves
+  to [`docs/MILESTONES.md`](docs/MILESTONES.md) and the detailed why/how is
+  archived in [`docs/DONE.md`](docs/DONE.md). Keep all three current.
 - **Tests:** `pytest` (serial) or `scripts/test-parallel.sh` (across cores, needs
   GNU parallel). The gate is black + isort + ruff + mypy + the full suite green.
 - **Never** commit or push unless asked; branch off `main` first when you do.

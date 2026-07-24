@@ -1,6 +1,6 @@
 # Unique — Project Status
 
-## Current state: v0.27.0 (**ALL architecture milestones M0–M4 complete**; zero-reduction campaign closed at residue 16 — both Oracle directions at 100.0% validity)
+## Current state: v0.30.0 (**ALL architecture milestones M0–M4 complete**; challenge corpus of 862 RED findings fully resolved — 0 open, 694 fixed, 168 approved limits)
 
 **Direction-residue campaign closed 2026-07-17** (waves 103–239, user-declared
 architectural floor at `469917a`): the six corpus directions (pg-source and
@@ -38,8 +38,9 @@ honest, measure validity per direction as the definition of done — is
 *and* scalar expressions through the shared IR pipeline — IR-first with
 the text rewriters as the warned fallback; `UNIQUE_NO_IR_FIRST` is the
 emergency kill-switch) and **M4** (Oracle-source bring-up) are all done.
-Remaining backlog: the fallback-rewriter pruning follow-up and PyPI
-packaging — see `docs/TODO.md`.
+The discrete backlog is currently empty (all TODO items closed and
+archived) — see `docs/TODO.md` for the continuously-tracked items and the
+documented known limitations.
 
 ### What holds today (measured, not asserted)
 
@@ -90,6 +91,22 @@ packaging — see `docs/TODO.md`.
 
 ### Recent milestones
 
+The full milestone history (every closed backlog section, newest first) lives
+in [`docs/MILESTONES.md`](MILESTONES.md); the highlights:
+
+- **Challenge-corpus campaign COMPLETE** (2026-07-18 → 2026-07-24, v0.30.0):
+  a RED batch live-validated 862 mis-transpilations (only *silent* problems
+  count — a warned degrade is an accepted outcome); the BLUE/architect
+  sessions then resolved every one: **694 `[fixed]`** (strictly guarded in
+  `tests/integration/test_challenge.py`, live value-verified on the four
+  engines) and **168 `[limit]`** (approved divergences — each warns, annotates
+  the output with a `UNIQUE:` note and is documented in
+  `docs/03-unsupported.md`). Highlights: full T-SQL MERGE (NOT MATCHED BY
+  SOURCE → anti-join follow-up; Oracle single-clause fold + DELETE WHERE),
+  Oracle cursor-attribute emulation, PL/SQL-vs-SQL CAST-context handling,
+  cross-statement column-type metadata, JSONB/index carriers, constant folds
+  by source semantics, INSTEAD OF trigger lowering. Full log: `docs/DONE.md`
+  §41/§43.
 - **M3 final — IR-first expressions** (2026-07-17, `86f7c11`): scalar
   fragments in routine bodies route through the shared IR pipeline by
   default; the text rewriters serve only IR-declined fragments (the
@@ -131,7 +148,7 @@ packaging — see `docs/TODO.md`.
 
 ### Bug-detection infrastructure (what replaced ad-hoc manual testing)
 
-Five complementary layers:
+Six complementary layers:
 
 - **Validity sweep** (`scripts/validity_sweep.py`): per-direction validity %
   on real scripts against live engines — the definition of done.
@@ -143,7 +160,17 @@ Five complementary layers:
   transpiled result sets — catches wrong-answer bugs.
 - **Mutation testing** (nightly + identity-mutation CI gate): assertion
   quality as a ratcheted number.
+- **Challenge corpus, RED/BLUE roles** (`tests/fixtures/challenge/`, workflow
+  in `skills/SKILL-challenge-corpus.md`): an adversarial RED role hunts
+  *silent* mis-transpilations (valid, anonymized source; live-validated on
+  the four engines; a warned degrade is not a finding) and records them as
+  `[open]` cases; a BLUE role fixes each one and locks it in as `[fixed]`
+  (strict assertion) or an approved `[limit]` (warning + `UNIQUE:` annotation
+  + `docs/03-unsupported.md` entry, contract-enforced by
+  `test_challenge.py`). The 2026-07 campaign resolved all 862 RED findings
+  (`docs/MILESTONES.md`); the corpus stays as the live intake for new ones.
 
 The version is single-sourced from `unique.__version__` and released via
-`scripts/release.py`. History: `docs/DONE.md`. Backlog: `docs/TODO.md`
-(M3 final step + module-growth hardening + packaging).
+`scripts/release.py`. History: `docs/MILESTONES.md` (closed backlog sections)
+and `docs/DONE.md` (detailed archive). Backlog: `docs/TODO.md` (currently
+empty — all discrete items closed and archived).
