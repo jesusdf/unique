@@ -211,7 +211,16 @@ class MySqlTransformer(ProceduralTransformer):
     def _map_cursor_attributes(self, sql: str) -> str:
         if self._source != "oracle":
             return sql
-        sql = re.sub(r"(?i)\bSQL\s*%\s*ROWCOUNT\b", "ROW_COUNT()", sql)
+        # N11/B12: the implicit cursor's SQL%ROWCOUNT (matched rows) has no
+        # exact MySQL equivalent — ROW_COUNT() counts changed rows. Keep the
+        # mapping (still the closest fit) but annotate the divergence.
+        if re.search(r"(?i)\bSQL\s*%\s*ROWCOUNT\b", sql):
+            self._warn_mysql_rowcount_divergence()
+        sql = re.sub(
+            r"(?i)\bSQL\s*%\s*ROWCOUNT\b",
+            f"ROW_COUNT() {self._MYSQL_ROWCOUNT_NOTE}",
+            sql,
+        )
         sql = re.sub(r"(?i)\bSQL\s*%\s*NOTFOUND\b", "(ROW_COUNT() = 0)", sql)
         sql = re.sub(r"(?i)\bSQL\s*%\s*FOUND\b", "(ROW_COUNT() > 0)", sql)
         sql = re.sub(r"(?i)\bSQL\s*%\s*ISOPEN\b", "(0 = 1)", sql)

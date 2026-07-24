@@ -107,7 +107,17 @@ Findings detail: audit docs 02/04/05/07.
   `test_validation.py::TestBareAndTypoStatements::test_dollar_money_*`.
 - [ ] **B11** Dynamic-SQL constant strings routed through the transpiler, warn
   otherwise (N10).
-- [ ] **B12** `SQL%ROWCOUNT`→MySQL annotated divergence (N11, §3.22 class).
+- [x] **B12** `SQL%ROWCOUNT`→MySQL annotated divergence (N11, §3.22 class) —
+  done 2026-07-25; kept the mapping (no faithful emulation exists) and added
+  a `UNIQUE:` note + deduplicated warning at both emission sites
+  (`procedural/transformer/mysql.py::_map_cursor_attributes` for Oracle's
+  implicit-cursor `SQL%ROWCOUNT`, `transformer/base.py::_transform_get_
+  diagnostics`'s `_DIAG_ITEMS["mysql"]["ROW_COUNT"]` entry for PostgreSQL's
+  `GET DIAGNOSTICS x = ROW_COUNT`); T-SQL `@@ROWCOUNT` stays unannotated
+  (matched-rows, verified equivalent). Live-verified on MySQL: an UPDATE
+  re-asserting an unchanged value returns `ROW_COUNT()=0` where the source's
+  matched-rows semantics return 1. Tests:
+  `test_challenge.py::TestRowcountDivergenceAnnotation`.
 - [ ] **B13** Carriers preserve the ORIGINAL statement text, never a hybrid
   re-render (N12) + carrier-body-parses-as-source assertion.
 - [x] **B14** API filename sanitizer `re.ASCII` one-liner (05 A1) — done

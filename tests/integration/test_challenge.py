@@ -5141,3 +5141,82 @@ class TestMoneyLiteralMangle:
 
         issues = validate_source("SELECT $12.50 AS price;", "oracle")
         assert issues and "not a valid column reference" in issues[0].message
+
+
+class TestRowcountDivergenceAnnotation:
+    """N11/B12: Oracle's implicit-cursor ``SQL%ROWCOUNT`` (rows MATCHED)
+    maps to MySQL's ``ROW_COUNT()`` (rows CHANGED) — the mapping is kept
+    (still the closest fit) but annotated with a UNIQUE: note + warning
+    instead of shipped silently. T-SQL's ``@@ROWCOUNT`` is matched-rows too
+    (verified equivalent) and stays unannotated."""
+
+    _ORACLE_SRC = (
+        "CREATE PROCEDURE p AS BEGIN "
+        "UPDATE dst SET qty = 7 WHERE id = 1; "
+        "IF SQL%ROWCOUNT = 0 THEN INSERT INTO dst (id, qty) VALUES (1, 7); "
+        "END IF; END;"
+    )
+
+    def test_mysql_target_annotates_and_warns(self) -> None:
+        r = Transpiler().transpile(self._ORACLE_SRC, "oracle", "mysql")
+        assert "ROW_COUNT()" in r.sql, r.sql
+        assert "UNIQUE:" in r.sql, r.sql
+        assert "changed rows" in r.sql, r.sql
+        assert any(
+            "ROW_COUNT() counts rows CHANGED" in w.message for w in r.warnings
+        ), r.warnings
+
+    def test_tsql_target_stays_unannotated(self) -> None:
+        r = Transpiler().transpile(self._ORACLE_SRC, "oracle", "tsql")
+        assert "@@ROWCOUNT" in r.sql, r.sql
+        assert "UNIQUE:" not in r.sql, r.sql
+        assert not r.warnings, r.warnings
+
+    def test_warning_deduplicated_across_multiple_occurrences(self) -> None:
+        # Two independent SQL%ROWCOUNT checks in one routine must not spam
+        # the same warning twice (guardrail 5: aggregated, not repeated).
+        src = (
+            "CREATE PROCEDURE p AS BEGIN "
+            "UPDATE dst SET qty = 7 WHERE id = 1; "
+            "IF SQL%ROWCOUNT = 0 THEN INSERT INTO dst (id, qty) VALUES (1, 7); "
+            "END IF; "
+            "UPDATE dst SET qty = 8 WHERE id = 2; "
+            "IF SQL%ROWCOUNT = 0 THEN INSERT INTO dst (id, qty) VALUES (2, 8); "
+            "END IF; END;"
+        )
+        r = Transpiler().transpile(src, "oracle", "mysql")
+        matches = [
+            w for w in r.warnings if "ROW_COUNT() counts rows CHANGED" in w.message
+        ]
+        assert len(matches) == 1, r.warnings
+
+    def test_get_diagnostics_row_count_to_mysql_annotates(self) -> None:
+        # The same divergence via PostgreSQL's GET DIAGNOSTICS ROW_COUNT
+        # (matched rows) -> MySQL's ROW_COUNT() (base.py:2904's table).
+        src = (
+            "CREATE OR REPLACE FUNCTION p() RETURNS void AS $$\n"
+            "DECLARE cnt INT;\n"
+            "BEGIN\n"
+            "  UPDATE dst SET qty = 7 WHERE id = 1;\n"
+            "  GET DIAGNOSTICS cnt = ROW_COUNT;\n"
+            "END;\n"
+            "$$ LANGUAGE plpgsql;"
+        )
+        r = Transpiler().transpile(src, "postgresql", "mysql")
+        assert "ROW_COUNT()" in r.sql, r.sql
+        assert "UNIQUE:" in r.sql, r.sql
+        assert any(
+            "ROW_COUNT() counts rows CHANGED" in w.message for w in r.warnings
+        ), r.warnings
+
+    def test_mysql_to_mysql_get_diagnostics_not_annotated(self) -> None:
+        # Same engine both ends: no divergence, no annotation.
+        src = (
+            "CREATE PROCEDURE p()\n"
+            "BEGIN\n"
+            "  UPDATE dst SET qty = 7 WHERE id = 1;\n"
+            "  GET DIAGNOSTICS @cnt = ROW_COUNT;\n"
+            "END"
+        )
+        r = Transpiler().transpile(src, "mysql", "mysql")
+        assert "UNIQUE:" not in r.sql, r.sql

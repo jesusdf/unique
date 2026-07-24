@@ -396,6 +396,17 @@ silently:
   and there is no portable mask — annotated.
 - **Self-referencing FK cascade on T-SQL** (error 1785): the action downgrades
   to `NO ACTION` with a warned note (emulate with an AFTER trigger).
+- **`SQL%ROWCOUNT`/`GET DIAGNOSTICS … = ROW_COUNT` → MySQL `ROW_COUNT()`**
+  (audit N11/B12): Oracle's implicit-cursor `SQL%ROWCOUNT` and PostgreSQL's
+  `GET DIAGNOSTICS x = ROW_COUNT` both count rows the last statement
+  **matched**; MySQL's `ROW_COUNT()` counts rows it **changed** — an
+  `UPDATE` that re-asserts a row's existing value returns a different count
+  on MySQL (live-verified: Oracle `SQL%ROWCOUNT` = 1, MySQL `ROW_COUNT()` =
+  0 for the same no-op update). No connection-wide fix exists without the
+  caller opting into `CLIENT_FOUND_ROWS`, so the mapping is kept (still the
+  closest equivalent) and every emission carries a `UNIQUE:` note + warning.
+  T-SQL's `@@ROWCOUNT` is matched-rows too (verified equivalent) and stays
+  unannotated.
 - **PostgreSQL `SET TRANSACTION [ISOLATION LEVEL <lvl>] READ ONLY|READ
   WRITE`** (audit N7/B8): MySQL comma-joins the isolation level and access
   mode into one statement; Oracle prefers the access mode (its `READ ONLY`

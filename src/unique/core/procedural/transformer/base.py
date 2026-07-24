@@ -216,6 +216,31 @@ class ProceduralTransformer:
         # The composed text-level expression engine (see _expr.py).
         self._expr = ExpressionRewriter(self)
 
+    #: MySQL's ``ROW_COUNT()`` counts rows actually CHANGED by the last
+    #: statement (an ``UPDATE`` that assigns a row its existing value does
+    #: not count it); Oracle's ``SQL%ROWCOUNT`` and PostgreSQL's
+    #: ``GET DIAGNOSTICS x = ROW_COUNT`` both count rows MATCHED by the
+    #: WHERE clause, regardless of whether the assignment changed anything
+    #: (audit N11/B12 — live-verified: an UPDATE re-asserting an unchanged
+    #: value returns 1 on Oracle, 0 on MySQL). No connection-wide fix exists
+    #: that doesn't require the caller to opt in (``CLIENT_FOUND_ROWS``), so
+    #: the mapping is kept (it is still the closest equivalent) and annotated
+    #: instead of silently shipped.
+    _MYSQL_ROWCOUNT_DIVERGENCE = (
+        "MySQL ROW_COUNT() counts rows CHANGED by the last statement; the "
+        "source's row-count attribute counts rows MATCHED — a value-wise "
+        "no-op UPDATE returns a different count on MySQL (docs/03-unsupported.md)"
+    )
+    _MYSQL_ROWCOUNT_NOTE = (
+        "/* UNIQUE: ROW_COUNT() counts changed rows, not matched rows like "
+        "the source (docs/03-unsupported.md) */"
+    )
+
+    def _warn_mysql_rowcount_divergence(self) -> None:
+        """Register the ROW_COUNT() divergence warning once per transpile."""
+        if self._MYSQL_ROWCOUNT_DIVERGENCE not in self._warnings:
+            self._warnings.append(self._MYSQL_ROWCOUNT_DIVERGENCE)
+
     @staticmethod
     def _is_string_type(dt: DataType) -> bool:
         base = dt.name.split("(")[0].strip().upper()
@@ -2976,6 +3001,17 @@ class ProceduralTransformer:
                         "RETURNED_SQLSTATE mapped to the target's error "
                         "code/state — different value domain"
                     )
+                # N11/B12: MySQL's ROW_COUNT() is changed-rows, the source's
+                # ROW_COUNT diagnostic item is matched-rows — annotate the
+                # divergence rather than ship it silently. Not a divergence
+                # for a MySQL source (same engine, same semantics).
+                if (
+                    item == "ROW_COUNT"
+                    and self._target == "mysql"
+                    and self._source != "mysql"
+                ):
+                    self._warn_mysql_rowcount_divergence()
+                    expr = f"{expr} {self._MYSQL_ROWCOUNT_NOTE}"
                 out.append(
                     AssignmentStatement(
                         target=new_var,
