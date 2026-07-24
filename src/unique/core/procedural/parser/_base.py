@@ -1938,6 +1938,9 @@ class ParserBase:
                 body_sql = re.sub(
                     r"(?is)(?:\s+(?:language\s+\w+|immutable|stable|volatile"
                     r"|strict|parallel\s+\w+|cost\s+\d+(?:\.\d+)?"
+                    r"|security\s+(?:definer|invoker)|(?:not\s+)?leakproof"
+                    r"|window|called\s+on\s+null\s+input"
+                    r"|returns\s+null\s+on\s+null\s+input"
                     r"|rows\s+\d+))+\s*$",
                     "",
                     last.sql.strip(),

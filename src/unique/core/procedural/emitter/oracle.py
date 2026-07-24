@@ -653,7 +653,10 @@ class OracleEmitter(ProceduralEmitter):
         # An Oracle EXECUTE IMMEDIATE (or a dynamic-SQL string/bind/expression)
         # keeps ``EXECUTE IMMEDIATE`` — the ``immediate`` flag settles the case a
         # record field (r.cmd) would otherwise misread as a named-proc call.
-        if immediate or stripped.startswith(("'", "@", "v_", "(", "N'", ":")):
+        # The v_ variable-prefix check must be case-insensitive: the renamer
+        # upper-cases locals (V_SQL), which fell through to a bogus
+        # named-procedure call ``V_SQL();`` (PLS-00221).
+        if immediate or stripped.lower().startswith(("'", "@", "v_", "(", "n'", ":")):
             if params:
                 return f"EXECUTE IMMEDIATE {expr} USING {', '.join(params)};"
             return f"EXECUTE IMMEDIATE {expr};"

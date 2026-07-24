@@ -29,6 +29,7 @@ from unique.core.ast_nodes import (
     NullStatement,
     ParameterDefinition,
     RawSQL,
+    SelectIntoStatement,
     StatementList,
     TryCatchBlock,
     WhileStatement,
@@ -443,6 +444,50 @@ class OracleTransformer(ProceduralTransformer):
     _CAST_KEEP_LENGTH = frozenset(
         {"VARCHAR", "VARCHAR2", "NVARCHAR", "NVARCHAR2", "CHAR", "NCHAR"}
     )
+
+    def _transform_select_into(self, node: SelectIntoStatement) -> ASTNode:
+        result = super()._transform_select_into(node)
+        # T-SQL's aggregation assignment ``SELECT @v = @v + <expr> FROM …``
+        # concatenates <expr> across ALL rows; a plain SELECT INTO reads ONE
+        # row (and raises on more). Rewrite to LISTAGG over the rows — the
+        # variable prefix and its NULL propagation are preserved.
+        if (
+            isinstance(result, SelectIntoStatement)
+            and result.tsql_assignment
+            and self._source == "tsql"
+            and len(result.into_vars) == 1
+            and len(result.columns) == 1
+            and isinstance(result.columns[0], RawSQL)
+            and result.rest_sql.upper().startswith("FROM")
+        ):
+            var = result.into_vars[0]
+            m = re.match(
+                rf"(?is)^\s*CASE\s+WHEN\s+{re.escape(var)}\s+IS\s+NULL\s+THEN\s+"
+                rf"NULL\s+ELSE\s+{re.escape(var)}\s*\|\|\s*(.+?)\s+END\s*$",
+                result.columns[0].sql,
+            ) or re.match(
+                rf"(?is)^\s*{re.escape(var)}\s*\|\|\s*(.+)$",
+                result.columns[0].sql,
+            )
+            if m:
+                agg_expr = m.group(1).strip()
+                # The T-SQL catalog's ``name`` column is TABLE_NAME on the
+                # mapped user_tables/all_tables view.
+                if re.search(r"(?i)\b(?:user|all)_tables\b", result.rest_sql):
+                    agg_expr = self._map_outside_strings(
+                        agg_expr,
+                        lambda seg: re.sub(r"(?i)\bname\b", "table_name", seg),
+                    )
+                agg = (
+                    f"CASE WHEN {var} IS NULL THEN NULL ELSE {var} || "
+                    f"LISTAGG({agg_expr}, '') "
+                    "WITHIN GROUP (ORDER BY ROWNUM) END"
+                )
+                result = dataclasses.replace(
+                    result,
+                    columns=(RawSQL(sql=agg, reason="aggregation assignment"),),
+                )
+        return result
 
     def _fix_select_into_rest(self, sql: str) -> str:
         # Cross-engine catalog views in a SELECT INTO's FROM tail: Oracle has

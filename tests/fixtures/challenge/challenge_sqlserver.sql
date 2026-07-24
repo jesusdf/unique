@@ -155,7 +155,7 @@ CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)
 -- CASE[fixed]: ts-dttypes — oracle: TIME -> INTERVAL DAY TO SECOND (warned note, docs/03-unsupported.md §3.19), SMALLDATETIME -> DATE (superset). Live-executed on oracle 2026-07-24.
 CREATE TABLE t (a DATE, b TIME, c DATETIME, d DATETIME2, e SMALLDATETIME, f DATETIMEOFFSET, g TIME(3))
 
--- CASE[open]: ts-dyn-concat-loop — fails on oracle. PROCEDURE P compiled INVALID (line 6): PL/SQL: ORA-00942: table or view does not exist
+-- CASE[fixed]: ts-dyn-concat-loop — the T-SQL aggregation assignment (SELECT @v = @v + expr FROM ...) rewrites to LISTAGG(expr, '') WITHIN GROUP (ORDER BY ROWNUM) preserving the variable prefix and NULL propagation; sys.tables maps to user_tables (name -> table_name) and EXEC(@sql) of an upper-cased local now reaches EXECUTE IMMEDIATE (the v_ prefix check was case-sensitive, PLS-00221). Live-compiled VALID on oracle 2026-07-24.
 CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(MAX) = N''; SELECT @sql = @sql + 'DROP TABLE ' + name + ';' FROM sys.tables; EXEC(@sql); END
 
 -- CASE[fixed]: ts-dyn-count — fails on oracle. PROCEDURE P compiled INVALID (line 6): PLS-00201: identifier 'QUOTENAME' must be declared

@@ -4675,3 +4675,26 @@ class TestSetTransactionModes:
         )
         assert "no READ ONLY access mode" in result.sql, result.sql
         assert result.warnings, result.warnings
+
+
+class TestPgFnAttrsAndAggregationAssignment:
+    """pg-func-attrs + ts-dyn-concat-loop fixes, live-compiled 2026-07-24."""
+
+    @pytest.mark.parametrize("target", ("tsql", "oracle", "mysql"))
+    def test_fn_attribute_tail_stripped(self, target: str) -> None:
+        out = _exec_lines(
+            _tx(
+                _case("challenge_postgresql.sql", "pg-func-attrs"), "postgresql", target
+            )
+        )
+        assert "SECURITY" not in out.upper(), out
+        assert "PARALLEL" not in out.upper(), out
+
+    def test_aggregation_assignment_listagg(self) -> None:
+        out = _tx(
+            _case("challenge_sqlserver.sql", "ts-dyn-concat-loop"), "tsql", "oracle"
+        )
+        assert re.search(r"(?i)LISTAGG\('DROP TABLE ' \|\| table_name", out), out
+        assert "WITHIN GROUP (ORDER BY ROWNUM)" in out, out
+        assert "EXECUTE IMMEDIATE V_SQL;" in out, out
+        assert re.search(r"(?i)\bFROM user_tables\b", out), out

@@ -304,7 +304,7 @@ SELECT to_tsvector('a cat') @@ to_tsquery('cat') AS r
 -- CASE[fixed]: pg-fulltext2 — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
 CREATE TABLE t (id INT, n INT, s VARCHAR(50)); SELECT id FROM t WHERE to_tsvector('english', s) @@ plainto_tsquery('english', 'term')
 
--- CASE[open]: pg-func-attrs — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near 'sql'.DB-Lib error message 20018, severity 15:\nGeneral SQL 
+-- CASE[fixed]: pg-func-attrs — the LANGUAGE sql body's trailing-attribute strip now covers SECURITY DEFINER/INVOKER, LEAKPROOF, WINDOW and CALLED/RETURNS NULL ON NULL INPUT (they leaked into the RETURN expression); STABLE/PARALLEL SAFE were already handled. Live-compiled VALID on tsql/oracle/mysql 2026-07-24.
 CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE sql SECURITY DEFINER STABLE PARALLEL SAFE
 
 -- CASE[fixed]: pg-gen-months — fails on oracle. ORA-30089: missing or invalid <datetime field>

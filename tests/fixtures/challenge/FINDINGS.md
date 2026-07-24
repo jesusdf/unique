@@ -1547,11 +1547,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `FUNC-DIFF: source=(('1', '2', '3', '2.57'),) target=(('1', '2', '3', '3'),)`
 - src: `SELECT round(0.5::numeric),round(1.5::numeric),round(2.5::numeric),round(2.567::numeric,2)`
 
-## pg-func-attrs  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(102, b"Incorrect syntax near 'sql'.DB-Lib error message 20018, severity 15:\nGeneral SQL `
-- src: `CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE sql SECURITY DEFINER STABLE PARALLEL SAFE`
-
 ## pg-gen-series-date  (postgresql)
 - targets: tsql(invalid)
 - live error: `(102, b"Incorrect syntax near '1 DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQ`
@@ -2030,11 +2025,6 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - targets: mysql(func)
 - live error: `FUNC-DIFF: source=(('3.33333', '3.33333', '3.33333', '2.25'),) target=(('3.33333', '3.3333`
 - src: `SELECT 10.00/3, 10/3.0, CAST(10 AS DECIMAL(10,4))/3, 1.5*1.5`
-
-## ts-dyn-concat-loop  (tsql)
-- targets: mysql(silent-rt), oracle(invalid)
-- live error: `PROCEDURE P compiled INVALID (line 6): PL/SQL: ORA-00942: table or view does not exist`
-- src: `CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(MAX) = N''; SELECT @sql = @sql + 'DROP TABLE ' + name + ';' FROM sys.tables; EXE`
 
 ## ts-eomonth  (tsql)
 - targets: oracle(invalid), postgresql(invalid)
