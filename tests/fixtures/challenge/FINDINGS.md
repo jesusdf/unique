@@ -424,16 +424,6 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - src: `CREATE TABLE t (txt TEXT, FULLTEXT(txt));
 SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 
-## my-gen-constr  (mysql)
-- targets: tsql(invalid)
-- live error: `(1764, b"Computed Column 'b' in table 't' is invalid for use in 'CHECK CONSTRAINT' because`
-- src: `CREATE TABLE t (a INT, b INT GENERATED ALWAYS AS (a+1) VIRTUAL, UNIQUE (b), CHECK (b>a))`
-
-## my-gencol2  (mysql)
-- targets: postgresql(invalid), tsql(invalid)
-- live error: `(1759, b"Computed column 'b' in table 't' is not allowed to be used in another computed-co`
-- src: `CREATE TABLE t (a INT, b INT AS (a*2) STORED, c INT AS (a+b) VIRTUAL, KEY(b))`
-
 ## my-greatest-null  (mysql)
 - targets: postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('3',),)`
@@ -508,11 +498,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - targets: oracle(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS`
 - src: `SELECT JSON_ARRAY(1,'a',NULL,TRUE),JSON_OBJECT('k','v','n',1)`
-
-## my-json-index  (mysql)
-- targets: postgresql(invalid), tsql(invalid)
-- live error: `(2715, b'Column, parameter, or variable #2: Cannot find data type json.DB-Lib error messag`
-- src: `CREATE TABLE t (a INT, b JSON, c INT AS (JSON_EXTRACT(b,'$.x')) STORED, INDEX((CAST(b->'$.x' AS UNSIGNED))))`
 
 ## my-json-merge  (mysql)
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)

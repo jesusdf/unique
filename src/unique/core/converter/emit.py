@@ -4306,6 +4306,14 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                         or col.name.lower() in _persist_names
                         else ""
                     )
+                    # A T-SQL computed column DERIVES its type from the
+                    # expression; a JSON accessor yields nvarchar, so a
+                    # declared numeric/date type needs an explicit CAST to
+                    # keep the source column's typing.
+                    if "JSON_" in expr.upper() and not re.match(
+                        r"(?i)N?VARCHAR|N?CHAR|TEXT", dtype
+                    ):
+                        expr = f"CAST({expr} AS {dtype})"
                     generated = f" AS ({expr}){persisted}"
                 elif dialect == "postgresql":
                     # A JSON extraction returns json; a non-text generated
@@ -7884,6 +7892,27 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             pos = f"POSITION({needle} IN SUBSTRING({haystack} FROM {start}))"
             return f"CASE WHEN {pos} = 0 THEN 0 ELSE {pos} + {start} - 1 END"
         return f"POSITION({needle} IN {haystack})"
+
+    # MySQL JSON_EXTRACT / ``->``: each target's accessor. T-SQL: JSON_QUERY
+    # returns objects/arrays and JSON_VALUE scalars — ISNULL of both covers
+    # either. PG: JSON_EXTRACT_PATH (the generated-column branch further
+    # rewrites it to the ->> text accessor + CAST for non-text columns).
+    if (
+        fn_name == "JSON_EXTRACT"
+        and len(node.args) == 2
+        and dialect != "mysql"
+        and SOURCE_DIALECT.get() == "mysql"
+    ):
+        _jx = _emit_expression(node.args[0], dialect)
+        _jp = _emit_expression(node.args[1], dialect)
+        if dialect == "tsql":
+            return f"ISNULL(JSON_QUERY({_jx}, {_jp}), JSON_VALUE({_jx}, {_jp}))"
+        if dialect == "oracle":
+            return f"JSON_VALUE({_jx}, {_jp})"
+        _jm = re.fullmatch(r"'\$\.(\w+)'", _jp.strip())
+        if _jm:
+            return f"JSON_EXTRACT_PATH({_jx}, '{_jm.group(1)}')"
+        return f"JSON_EXTRACT_PATH({_jx}, {_jp})"
 
     # GROUPING_ID(a, b) is Oracle/T-SQL spelling; PG and MySQL expose the SAME
     # bitmask as multi-argument GROUPING(a, b) (live-verified 0/1/3 on both).

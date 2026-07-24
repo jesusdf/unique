@@ -1586,14 +1586,63 @@ def _convert_create_table(
                     )
                 continue
             if isinstance(col_def, exp.ColumnDef):
-                # Computed/generated columns (AS (expr) [PERSISTED]) have no
-                # plain type; sqlglot translates them to GENERATED ALWAYS AS
-                # (...) STORED. Keep the column as a passthrough fragment so
-                # the expression and type are preserved.
-                if any(
-                    isinstance(getattr(c, "kind", None), exp.ComputedColumnConstraint)
-                    for c in col_def.args.get("constraints", [])
-                ):
+                # Computed/generated columns (AS (expr) [PERSISTED/STORED]).
+                # A TYPED shorthand (MySQL ``c INT AS (…) STORED``) models as a
+                # generated ColumnDefinition, gaining the whole modeled-path
+                # machinery (chained-reference inlining, PERSISTED-when-
+                # referenced, PG JSON casts). The typeless T-SQL form keeps the
+                # passthrough fragment (the target derives the type).
+                _comp = next(
+                    (
+                        c.kind
+                        for c in col_def.args.get("constraints", [])
+                        if isinstance(
+                            getattr(c, "kind", None), exp.ComputedColumnConstraint
+                        )
+                    ),
+                    None,
+                )
+                if _comp is not None:
+                    if col_def.args.get("kind") is not None:
+                        _cexpr = _comp.this
+                        while isinstance(_cexpr, exp.Paren):
+                            _cexpr = _cexpr.this
+                        _gen = convert_expression(_cexpr)
+
+                        def _has_unmapped(v: object) -> bool:
+                            if isinstance(v, RawSQL):
+                                return v.reason.startswith("unmapped operator")
+                            if isinstance(v, ASTNode):
+                                return any(
+                                    _has_unmapped(getattr(v, f.name))
+                                    for f in dataclasses.fields(v)
+                                )
+                            if isinstance(v, tuple):
+                                return any(_has_unmapped(x) for x in v)
+                            return False
+
+                        if not _has_unmapped(_gen):
+                            columns.append(
+                                ColumnDefinition(
+                                    name=(
+                                        col_def.this.name
+                                        if hasattr(col_def.this, "name")
+                                        else str(col_def.this)
+                                    ),
+                                    data_type=_resolve_tsql_alias_type(
+                                        _convert_data_type(col_def.args["kind"])
+                                    ),
+                                    nullable=True,
+                                    generated_expr=_gen,
+                                    generated_stored=bool(_comp.args.get("persisted")),
+                                    quoted=_identifier_quoted(col_def.this),
+                                )
+                            )
+                            continue
+                        # An unmapped operator in the expression (e.g. ->>)
+                        # keeps the passthrough fragment (sqlglot re-renders
+                        # it per target) instead of tripping the whole-degrade
+                        # gate.
                     constraints.append(
                         PassthroughSQL(
                             sql=col_def.sql(
@@ -2429,6 +2478,20 @@ def _convert_binary(expr: exp.Binary) -> ASTNode:
         # even though POWER exists there — and emits portably (RC-1a).
         return FunctionCall(
             name="POWER",
+            args=(
+                convert_expression(expr.this),
+                convert_expression(expr.expression),
+            ),
+        )
+    if isinstance(expr, exp.JSONExtract) and not isinstance(
+        expr, exp.JSONExtractScalar
+    ):
+        # MySQL ``col -> '$.x'`` / JSON_EXTRACT(col, '$.x'): model as a call
+        # (the emitter renders each target's accessor) instead of an unmapped
+        # operator that degrades the whole statement. The SCALAR ``->>`` form
+        # keeps its RawSQL path (sqlglot re-renders it per target).
+        return FunctionCall(
+            name="JSON_EXTRACT",
             args=(
                 convert_expression(expr.this),
                 convert_expression(expr.expression),

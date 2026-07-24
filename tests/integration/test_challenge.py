@@ -4750,3 +4750,40 @@ class TestInsteadOfTriggers:
         assert result.warnings, result.warnings
         code = _exec_lines(result.sql)
         assert "deleted" not in code.lower(), result.sql
+
+
+class TestTypedComputedColumnShorthand:
+    """The typed MySQL computed-column shorthand models as a generated
+    ColumnDefinition — chained refs inline, PERSISTED when constrained, JSON
+    accessors per target. Live values exact 2026-07-24."""
+
+    def test_chained_reference_inlined(self) -> None:
+        case = _case("challenge_mysql.sql", "my-gencol2")
+        pg = _exec_lines(_tx(case, "mysql", "postgresql"))
+        assert "GENERATED ALWAYS AS (a + a * 2) STORED" in pg, pg
+        ts = _exec_lines(_tx(case, "mysql", "tsql"))
+        assert "b AS (a * 2) PERSISTED" in ts, ts
+
+    def test_constrained_computed_persisted(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-gen-constr"), "mysql", "tsql")
+        )
+        assert "b AS (a + 1) PERSISTED" in out, out
+
+    def test_json_extract_typed_accessors(self) -> None:
+        case = _case("challenge_mysql.sql", "my-json-index")
+        pg = _exec_lines(_tx(case, "mysql", "postgresql"))
+        assert "CAST(JSON_EXTRACT_PATH_TEXT(b, 'x') AS INT)" in pg, pg
+        ts = _exec_lines(_tx(case, "mysql", "tsql"))
+        assert (
+            "CAST(ISNULL(JSON_QUERY(b, '$.x'), JSON_VALUE(b, '$.x')) AS INT)" in ts
+        ), ts
+
+    def test_pg_fullsyntax_scalar_accessor_unaffected(self) -> None:
+        # PG's ->> (JSONExtractScalar) keeps its passthrough rendering.
+        out = _tx(
+            _case("challenge_postgresql.sql", "pg-computed-jsonb"),
+            "postgresql",
+            "mysql",
+        )
+        assert "->> '$.name'" in out, out

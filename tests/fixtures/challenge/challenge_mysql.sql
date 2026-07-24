@@ -348,10 +348,10 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)
 -- CASE[fixed]: my-gc-order — not a defect: GROUP_CONCAT without ORDER BY has UNSPECIFIED order in MySQL (any order is a valid source result), so the deterministic ORDER BY imposed on Oracle LISTAGG is a valid refinement, not a divergence. RED compared one nondeterministic ordering against another.
 SELECT GROUP_CONCAT(x) FROM (SELECT 3 x UNION ALL SELECT 1 x UNION ALL SELECT 2 x) t
 
--- CASE[open]: my-gen-constr — fails on tsql. (1764, b"Computed Column 'b' in table 't' is invalid for use in 'CHECK CONSTRAINT' because
+-- CASE[fixed]: my-gen-constr — a computed column referenced by a CHECK/UNIQUE constraint gains PERSISTED on T-SQL (errors 1764/2733 otherwise) via the modeled generated-column path. Live values (3,4) exact on tsql 2026-07-24.
 CREATE TABLE t (a INT, b INT GENERATED ALWAYS AS (a+1) VIRTUAL, UNIQUE (b), CHECK (b>a))
 
--- CASE[open]: my-gencol2 — fails on postgresql, tsql. (1759, b"Computed column 'b' in table 't' is not allowed to be used in another computed-co
+-- CASE[fixed]: my-gencol2 — the TYPED computed-column shorthand (c INT AS (…) STORED/VIRTUAL) now models as a generated ColumnDefinition, gaining the chained-reference inliner (c = a + b -> a + a*2 on PG/T-SQL, which forbid generated-over-generated) and PERSISTED-when-indexed; the KEY(b) inline index carries documented. Live values (5,10,15) exact on postgresql + tsql 2026-07-24.
 CREATE TABLE t (a INT, b INT AS (a*2) STORED, c INT AS (a+b) VIRTUAL, KEY(b))
 
 -- CASE[fixed]: my-get-format — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE
@@ -456,7 +456,7 @@ SELECT JSON_ARRAY(1,'a',NULL,TRUE),JSON_OBJECT('k','v','n',1)
 -- CASE[fixed]: my-json-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS
 SELECT JSON_SEARCH('{"a":"x"}', 'one', 'x'), JSON_DEPTH('[1,[2]]'), JSON_LENGTH('[1,2,3]')
 
--- CASE[open]: my-json-index — fails on postgresql, tsql. (2715, b'Column, parameter, or variable #2: Cannot find data type json.DB-Lib error messag
+-- CASE[fixed]: my-json-index — JSON_EXTRACT models as a call (each target's accessor: T-SQL ISNULL(JSON_QUERY, JSON_VALUE) with a CAST to the declared type, PG JSON_EXTRACT_PATH_TEXT + CAST); the inline functional INDEX stays native on MySQL and carries documented elsewhere. Live value 7 (INT) exact on postgresql + tsql 2026-07-24.
 CREATE TABLE t (a INT, b JSON, c INT AS (JSON_EXTRACT(b,'$.x')) STORED, INDEX((CAST(b->'$.x' AS UNSIGNED))))
 
 -- CASE[fixed]: my-json-keys — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.JS

@@ -2100,18 +2100,23 @@ class Transformer:
         on T-SQL (wave 175): the engine requires at least one
         non-computed column (error 102 at the closing paren, verified
         live)."""
-        if not (
-            isinstance(node, CreateTableStatement)
-            and not node.columns
-            and node.table_constraints
+        if not isinstance(node, CreateTableStatement) or not (
+            node.columns or node.table_constraints
         ):
+            return node
+        # Typed computed columns model as generated ColumnDefinitions; the
+        # typeless T-SQL shorthand stays a COLUMN passthrough fragment. The
+        # table is all-computed when every element is one of the two.
+        if any(c.generated_expr is None for c in node.columns):
             return node
         col_frags = [
             c
             for c in node.table_constraints
             if isinstance(c, PassthroughSQL) and c.kind == "COLUMN"
         ]
-        if not col_frags or len(col_frags) != len(node.table_constraints):
+        if len(col_frags) != len(node.table_constraints):
+            return node
+        if not node.columns and not col_frags:
             return node
         if not all(self._GENERATED_COLUMN_RE.search(c.sql) for c in col_frags):
             return node
