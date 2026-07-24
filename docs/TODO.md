@@ -35,8 +35,13 @@ Findings detail: audit docs 02/04/05/07.
   Diff swept against the full 24,923-token private inventory: 0 hits.
   Maintainer decided: **no history rewrite** — the 2 commit-message hits are
   accepted residual risk.
-- [ ] **B2** Unread-args tripwire (T1), warn-mode first — the mechanical guard
-  for the N1/N3/N4 class.
+- [x] **B2** Unread-args tripwire (T1), warn-mode first — the mechanical guard
+  for the N1/N3/N4 class. Done: read-tracking wrapper at the converter dispatch
+  (`converter/_unread_args.py` + `convert.py`), env `UNIQUE_UNREAD_ARGS=
+  off|warn|gate` (default warn), empirical 3-entry allowlist (Concat.safe,
+  Create.properties, Introducer.this), `scripts/unread_args_sweep.py --sweep`,
+  and `tests/unit/core/test_unread_args.py` (the fixture-corpus-clean test is
+  the CI ratchet). N1's `Insert.conflict` now warns pre-B1.
 - [ ] **B1** Model the upsert clause (`ON CONFLICT`/`ON DUPLICATE KEY UPDATE`)
   — audit N1, the headline S1: upserts silently become plain INSERTs in every
   direction.
