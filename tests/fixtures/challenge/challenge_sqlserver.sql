@@ -203,7 +203,7 @@ SELECT value FROM GENERATE_SERIES(1,5)
 -- CASE[limit]: ts-geography — T-SQL geography/geometry CLR type methods (the ``type::method()`` ScopeResolution) have no cross-engine equivalent; sqlglot silently flattened them, so the construct now degrades to NULL + annotation instead of shipping mangled invalid SQL (docs/03-unsupported.md). fails on mysql, oracle, postgresql
 SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r
 
--- CASE[open]: ts-grouping-id — fails on mysql, oracle, postgresql. ORA-30481: GROUPING, GROUPING_ID, and GROUP_ID cannot be used without GROUP BY
+-- CASE[fixed]: ts-grouping-id — GROUPING_ID(a,b) maps to multi-argument GROUPING(a,b) on PG and MySQL (the SAME bitmask, live-verified 0/1/3 on both); ROLLUP is native everywhere. All three targets live value-equal 2026-07-24.
 SELECT a,b,SUM(c),GROUPING(a),GROUPING_ID(a,b) FROM (SELECT 1 a,2 b,3 c) t GROUP BY ROLLUP(a,b)
 
 -- CASE[limit]: ts-hash-all — CHECKSUM is a proprietary T-SQL row hash with no cross-engine equivalent; gated + annotated (docs/03-unsupported.md). fails on mysql, postgresql

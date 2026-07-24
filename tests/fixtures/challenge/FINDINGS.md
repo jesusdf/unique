@@ -218,11 +218,6 @@ Kinds: **invalid** = live target rejected the output; **func** = runs clean but 
 - live error: `DPY-3006: Oracle data type 178 is not supported`
 - src: `SELECT CAST('10:00:00' AS TIME) AS r`
 
-## my-cast-uns2  (mysql)
-- targets: postgresql(invalid)
-- live error: `type "ubigint" does not exist`
-- src: `SELECT CAST(0xFFFF AS UNSIGNED), CAST(b'1111' AS UNSIGNED), CAST(TRUE AS UNSIGNED)`
-
 ## my-cast-year  (mysql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00902: invalid datatype`
@@ -699,11 +694,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `ORA-00900: invalid SQL statement`
 - src: `SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION READ ONLY; COMMIT;`
 
-## my-soundex-format  (mysql)
-- targets: oracle(invalid), tsql(invalid)
-- live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU`
-- src: `SELECT SOUNDEX('Smith'), FORMAT(1234.5, 2)`
-
 ## my-str-null  (mysql)
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('NULL', 'NULL', 'NULL', 'NULL', 'NULL', 'NULL'),) target=(('NULL', 'a'`
@@ -793,11 +783,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - targets: oracle(invalid), postgresql(invalid), tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.Ex`
 - src: `SELECT ExtractValue('<r><a>1</a></r>','/r/a'), UpdateXML('<r><a>1</a></r>','/r/a','<a>2</a>')`
-
-## my8-window  (mysql)
-- targets: oracle(invalid), tsql(invalid)
-- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
-- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, ROW_NUMBER() OVER w, SUM(n) OVER w FROM t WI`
 
 ## mysql-drop-'note'|note  (mysql)
 - targets: oracle(silent-drop), postgresql(silent-drop)
@@ -1030,11 +1015,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(invalid)
 - live error: `(1075, 'Incorrect table definition; there can be only one auto column and it must be defin`
 - src: `CREATE TABLE t (a NUMBER, b NUMBER, hyp NUMBER GENERATED ALWAYS AS (SQRT(a*a+b*b)))`
-
-## ora-grouping-id  (oracle)
-- targets: tsql(invalid)
-- live error: `(8120, b"Column 'uq_dt.deptno' is invalid in the select list because it is not contained i`
-- src: `SELECT deptno,job,SUM(sal),GROUPING(deptno),GROUPING_ID(deptno,job) FROM (SELECT 10 deptno,'X' job,100 sal FROM DUAL) GROUP BY ROL`
 
 ## ora-grouping-sets  (oracle)
 - targets: mysql(invalid), postgresql(invalid), tsql(invalid)
@@ -1324,11 +1304,6 @@ SELECT JSON_OBJECT(*) FROM t`
 - live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
 - src: `CREATE TABLE t (id INT PRIMARY KEY, n INT);
 ALTER TABLE t ADD COLUMN big BIGINT GENERATED ALWAYS AS IDENTITY`
-
-## pg-all-values  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
-- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t WHERE n > ALL (VALUES (1),(2),(3))`
 
 ## pg-alter-add  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
@@ -1668,26 +1643,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('a',),) target=(('B',),)`
 - src: `SELECT GREATEST('a', 'B') AS r`
-
-## pg-grouping  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(8120, b"Column 't.a' is invalid in the select list because it is not contained in either `
-- src: `SELECT a,sum(c),grouping(a) FROM (SELECT 1 a,3 c) t GROUP BY GROUPING SETS ((a),())`
-
-## pg-grouping-fn  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(8161, b'Argument 1 of the GROUPING function does not match any of the expressions in the `
-- src: `SELECT x, GROUPING(x) FROM (VALUES (1)) v(x) GROUP BY CUBE (x)`
-
-## pg-grouping-sets  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(8120, b"Column 'v.x' is invalid in the select list because it is not contained in either `
-- src: `SELECT x, SUM(y) FROM (VALUES (1,10)) v(x,y) GROUP BY GROUPING SETS ((x),())`
-
-## pg-grouping-sets2  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag`
-- src: `CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, n, GROUPING(id), GROUPING(n) FROM t GROUP BY`
 
 ## pg-hash-fns  (postgresql)
 - targets: mysql(invalid)
@@ -2218,11 +2173,6 @@ CREATE TRIGGER trg ON t AFTER DELETE AS BEGIN DECLARE @c INT = (SELECT COUNT(*) 
 - targets: mysql(invalid), oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "GEOGRAPHY"."TOSTRING": invalid identifier`
 - src: `SELECT GEOGRAPHY::Point(47.6, -122.3, 4326).ToString() AS r`
-
-## ts-grouping-id  (tsql)
-- targets: oracle(invalid)
-- live error: `ORA-30481: GROUPING, GROUPING_ID, and GROUP_ID cannot be used without GROUP BY`
-- src: `SELECT a,b,SUM(c),GROUPING(a),GROUPING_ID(a,b) FROM (SELECT 1 a,2 b,3 c) t GROUP BY ROLLUP(a,b)`
 
 ## ts-hash-all  (tsql)
 - targets: oracle(silent)

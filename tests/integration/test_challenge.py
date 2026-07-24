@@ -4390,3 +4390,67 @@ class TestWave4Rewrites:
         )
         assert "NVARCHAR(MAX)" in out, out
         assert re.search(r"(?i)\bTEXT\b", out) is None, out
+
+
+class TestWave5GroupingAndFolds:
+    """Wave-5: GROUPING_ID mapping, VALUES-subquery rewrite, binary-literal
+    numeric folds — live value-verified 2026-07-24."""
+
+    def test_grouping_id_maps_to_multiarg_grouping(self) -> None:
+        case = _case("challenge_sqlserver.sql", "ts-grouping-id")
+        for target in ("postgresql", "mysql"):
+            out = _exec_lines(_tx(case, "tsql", target))
+            assert "GROUPING(a, b)" in out, out
+            assert "GROUPING_ID" not in out.upper(), out
+        # Oracle keeps the native spelling.
+        assert "GROUPING_ID(a, b)" in _tx(case, "tsql", "oracle")
+
+    def test_rollup_keeps_real_grouping_on_mysql(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_oracle.sql", "ora-grouping-id"), "oracle", "mysql")
+        )
+        assert "WITH ROLLUP" in out, out
+        assert "GROUPING(deptno)" in out, out  # not folded to 0
+        assert "COLLATE" not in out.upper(), out  # would break GROUPING refs
+
+    def test_degraded_grouping_sets_folds_grouping_to_zero(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_postgresql.sql", "pg-grouping"),
+            source="postgresql",
+            target="mysql",
+        )
+        code = _exec_lines(result.sql)
+        assert "GROUPING" not in code.upper(), result.sql
+        assert result.warnings, result.warnings
+
+    def test_quantified_values_rewritten(self) -> None:
+        out = " ".join(
+            _exec_lines(
+                _tx(
+                    _case("challenge_postgresql.sql", "pg-all-values"),
+                    "postgresql",
+                    "oracle",
+                )
+            ).split()
+        )
+        assert "ALL (SELECT 1 FROM DUAL UNION ALL SELECT 2" in out, out
+        assert "VALUES" not in out.upper(), out
+
+    def test_mysql_binary_literals_fold_numeric(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-cast-uns2"), "mysql", "postgresql")
+        )
+        assert "65535" in out and "15" in out, out
+        assert "bytea" not in out.lower(), out
+
+    def test_soundex_format_masks(self) -> None:
+        case = _case("challenge_mysql.sql", "my-soundex-format")
+        assert "TO_CHAR(1234.5, 'FM999G999G999G990D00')" in _tx(case, "mysql", "oracle")
+        assert "FORMAT(1234.5, 'N2')" in _tx(case, "mysql", "tsql")
+
+    def test_window_clause_inlined(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my8-window"), "mysql", "tsql")
+        )
+        assert out.upper().count("OVER (ORDER BY ID") == 2, out
+        assert re.search(r"(?i)WINDOW\s+w\s+AS", out) is None, out

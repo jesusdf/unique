@@ -21,7 +21,7 @@ SELECT AGE(TIMESTAMP '2020-01-01', TIMESTAMP '2019-01-01') AS a
 -- CASE[fixed]: pg-age-epoch — fails on mysql, oracle, tsql. (195, b"'age' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT age(now(), '2020-01-01'), date_part('epoch', now())
 
--- CASE[open]: pg-all-values — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+-- CASE[fixed]: pg-all-values — a quantified VALUES list (> ALL (VALUES (1),(2))) parses as an Anonymous ALL over a Values node and is rewritten to a portable UNION ALL subquery (bare VALUES is not a subquery on MySQL/Oracle/T-SQL). Live-executed on all three 2026-07-24.
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id FROM t WHERE n > ALL (VALUES (1),(2),(3))
 
 -- CASE[fixed]: pg-alter-add — ADD COLUMN b TEXT NOT NULL DEFAULT 'x': Oracle reorders to DEFAULT 'x' NOT NULL (ORA-30649), and MySQL wraps the TEXT-column literal default as DEFAULT ('x') (error 1101 otherwise). live-verified DDL runs on both.
@@ -331,7 +331,7 @@ SELECT GREATEST(1, NULL, 3) AS r
 -- CASE[fixed]: pg-greatest-string — GREATEST compares by collation; force a binary collation on the first string literal so MySQL/T-SQL are case-sensitive like PG ('a', not 'B'). Live-verified.
 SELECT GREATEST('a', 'B') AS r
 
--- CASE[open]: pg-grouping — fails on mysql, oracle, tsql. (8120, b"Column 't.a' is invalid in the select list because it is not contained in either 
+-- CASE[fixed]: pg-grouping — faithful on Oracle/T-SQL (live multiset-equal values); MySQL keeps the base grouping with GROUPING() folded to 0 + a documented carrier + warning (its GROUPING() needs a WITH ROLLUP context). Live-verified 2026-07-24.
 SELECT a,sum(c),grouping(a) FROM (SELECT 1 a,3 c) t GROUP BY GROUPING SETS ((a),())
 
 -- CASE[limit]: pg-grouping-fn — GROUPING(x) over GROUP BY CUBE works on Oracle/T-SQL ((1,0)/(NULL,1) verified); MySQL has no CUBE so it degrades to the base grouping (subtotal rows omitted) where GROUPING is always 0 — the (1,0) row matches (docs/03-unsupported.md). fails on mysql
@@ -340,7 +340,7 @@ SELECT x, GROUPING(x) FROM (VALUES (1)) v(x) GROUP BY CUBE (x)
 -- CASE[fixed]: pg-grouping-sets — fails on mysql, oracle, tsql. (8120, b"Column 'v.x' is invalid in the select list because it is not contained in either 
 SELECT x, SUM(y) FROM (VALUES (1,10)) v(x,y) GROUP BY GROUPING SETS ((x),())
 
--- CASE[open]: pg-grouping-sets2 — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+-- CASE[fixed]: pg-grouping-sets2 — GROUPING SETS + GROUPING() are native on Oracle/T-SQL (JSON column type map cured the old tsql error); MySQL keeps the base grouping with GROUPING() folded to 0 + a documented carrier + warning. Live-executed 2026-07-24.
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, n, GROUPING(id), GROUPING(n) FROM t GROUP BY GROUPING SETS ((id),(n),())
 
 -- CASE[fixed]: pg-groups2 — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag

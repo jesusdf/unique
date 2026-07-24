@@ -89,7 +89,8 @@ _ENGINE_STANDARD: dict[str, frozenset[str]] = {
             "COLLECT",  # aggregates rows into a nested-table collection (no equivalent)
         }
     ),
-    "postgresql": frozenset({"XMLELEMENT"}),  # XMLAGG is already introspected
+    # GROUPING is grammar, not a pg_proc entry, so introspection misses it.
+    "postgresql": frozenset({"XMLELEMENT", "GROUPING"}),
     # T-SQL identity-scope functions with no cross-engine equivalent — they read
     # the last inserted IDENTITY value in a given scope. Flag them so the gate
     # degrades rather than shipping an undefined function.

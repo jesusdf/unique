@@ -208,7 +208,7 @@ CREATE TABLE t (a NUMBER); CREATE INDEX ix ON t (a * 2)
 -- CASE[fixed]: ora-gen-expr — Oracle virtual column GENERATED ALWAYS AS (SQRT(a*a+b*b)) maps to the MySQL generated-column form with the ported type; live-verified hyp(3,4)=5 on both.
 CREATE TABLE t (a NUMBER, b NUMBER, hyp NUMBER GENERATED ALWAYS AS (SQRT(a*a+b*b)))
 
--- CASE[limit]: ora-grouping-id — GROUPING_ID has no MySQL (no ROLLUP GROUPING_ID) or PostgreSQL equivalent (PG has GROUPING but not GROUPING_ID); T-SQL supports it natively (works). The MySQL/PG output degrades to a carrier + warning (docs/03-unsupported.md). fails on mysql, postgresql
+-- CASE[fixed]: ora-grouping-id — upgraded from [limit]: GROUPING_ID(a,b) now maps to multi-argument GROUPING(a,b) on PG and MySQL (same bitmask), the degraded-CUBE GROUPING()->0 fold no longer fires under native WITH ROLLUP, and the binary-collation GROUP BY emulation is skipped when GROUPING() references the keys (MySQL 3602). Live value-equal on postgresql + mysql 2026-07-24.
 SELECT deptno,job,SUM(sal),GROUPING(deptno),GROUPING_ID(deptno,job) FROM (SELECT 10 deptno,'X' job,100 sal FROM DUAL) GROUP BY ROLLUP(deptno,job)
 
 -- CASE[fixed]: ora-grouping-sets — fails on mysql, postgresql, tsql. (8120, b"Column 'uq_dt.deptno' is invalid in the select list because it is not contained i

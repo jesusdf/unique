@@ -14,6 +14,7 @@ import base64
 import binascii
 import dataclasses
 import re
+from collections.abc import Iterator
 from typing import Any, cast
 
 import sqlglot
@@ -2912,6 +2913,25 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
                 for c in node.columns
             ),
         )
+    # MySQL CUBE/GROUPING SETS degrade to the base grouping (subtotal rows
+    # omitted, warned carrier below): every surviving row is a base row, so a
+    # GROUPING()/GROUPING_ID() there is the constant 0. Native WITH ROLLUP
+    # keeps the real calls.
+    if dialect == "mysql" and node.group_modifier in ("CUBE", "GROUPING SETS"):
+
+        def _zero_grouping(e: ASTNode) -> ASTNode:
+            if isinstance(e, FunctionCall) and e.name.upper() in (
+                "GROUPING",
+                "GROUPING_ID",
+            ):
+                return Literal(value=0, dtype="integer")
+            if isinstance(e, Alias):
+                return dataclasses.replace(e, expression=_zero_grouping(e.expression))
+            return e
+
+        node = dataclasses.replace(
+            node, columns=tuple(_zero_grouping(c) for c in node.columns)
+        )
     # SELECT DISTINCT / GROUP BY over a case-sensitive source's string column
     # dedups/groups in the target's case-insensitive collation on MySQL/T-SQL
     # (merging 'a'/'A'); a binary collation on the provably-string key — applied
@@ -2923,6 +2943,15 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         (node.distinct or node.group_by)
         and SOURCE_DIALECT.get() in ("postgresql", "oracle")
         and dialect in ("mysql", "tsql")
+        # GROUPING()/GROUPING_ID() must reference the GROUP BY key VERBATIM
+        # (MySQL error 3602 on a collated key) — skip the binary-collation
+        # emulation when the select list uses them.
+        and not any(
+            isinstance(f, FunctionCall)
+            and f.name.upper() in ("GROUPING", "GROUPING_ID")
+            for c in node.columns
+            for f in _walk_nodes(c)
+        )
     ):
         _dstr = _from_string_columns(node)
     if node.empty_select_list and not node.columns and dialect == "postgresql":
@@ -3669,6 +3698,21 @@ def _emit_enum_type(col: ColumnDefinition, dialect: str) -> tuple[str, str, str]
         f"Allowed members: {quoted_values}"
     )
     return f"{varchar}({total_len})", "", note
+
+
+def _walk_nodes(node: ASTNode) -> Iterator[ASTNode]:
+    """Yield *node* and every ASTNode reachable through its dataclass fields."""
+    yield node
+    if not dataclasses.is_dataclass(node):
+        return
+    for f in dataclasses.fields(node):
+        v = getattr(node, f.name)
+        if isinstance(v, ASTNode):
+            yield from _walk_nodes(v)
+        elif isinstance(v, tuple):
+            for x in v:
+                if isinstance(x, ASTNode):
+                    yield from _walk_nodes(x)
 
 
 def _substitute_column_refs(expr: ASTNode, mapping: dict[str, ASTNode]) -> ASTNode:
@@ -4819,6 +4863,40 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             if _bts is not None:
                 return _emit_expression(
                     Literal(value=_bts.hex().upper(), dtype="hex"), dialect
+                )
+        # MySQL binary-ish literals cast to a number fold to their numeric
+        # value: a hex literal is a big-endian integer (0xFFFF = 65535), a bit
+        # literal b'1111' is base 2 (15), a boolean is 1/0 — the emitted forms
+        # (bytea/bit-string/boolean) cannot be cast to a number elsewhere.
+        if (
+            SOURCE_DIALECT.get() == "mysql"
+            and dialect != "mysql"
+            and (
+                node.target_type.name.split("(")[0].strip().upper()
+                in _NUMERIC_CAST_TYPES
+                or node.target_type.name.split("(")[0].strip().upper().startswith("U")
+            )
+        ):
+            _mnum: int | None = None
+            _mexp = node.expression
+            if isinstance(_mexp, Literal) and _mexp.dtype == "hex":
+                try:
+                    _mnum = int(str(_mexp.value), 16)
+                except ValueError:
+                    _mnum = None
+            elif isinstance(_mexp, Literal) and _mexp.dtype == "boolean":
+                _mnum = 1 if _mexp.value else 0
+            elif isinstance(_mexp, RawSQL):
+                _mbit = re.fullmatch(r"(?i)\s*b'([01]+)'\s*", _mexp.sql)
+                if _mbit:
+                    _mnum = int(_mbit.group(1), 2)
+            if _mnum is not None:
+                return _emit_expression(
+                    dataclasses.replace(
+                        node,
+                        expression=Literal(value=_mnum, dtype="integer"),
+                    ),
+                    dialect,
                 )
         # MySQL casts a string to a number leniently — it parses the leading
         # numeric prefix and yields 0 for a non-numeric string (CAST('abc' AS
@@ -6941,13 +7019,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             "see docs/03-unsupported.md */"
         )
 
-    # GROUPING(x) flags a super-aggregate (CUBE/ROLLUP subtotal) row. MySQL has
-    # no CUBE/GROUPING SETS, so a non-MySQL-source CUBE degrades to the base
-    # grouping (subtotal rows omitted) — every surviving row is a base row where
-    # GROUPING is 0. Fold it to 0 (the statement already carries the CUBE
-    # degrade's warning); MySQL-native WITH ROLLUP keeps its GROUPING.
-    if fn_name == "GROUPING" and dialect == "mysql" and SOURCE_DIALECT.get() != "mysql":
-        return "0"
+    # GROUPING(x) under a degraded MySQL CUBE/GROUPING SETS folds to 0 at the
+    # SELECT level (_emit_select), where the grouping modifier is known —
+    # native WITH ROLLUP keeps the real call here.
 
     # XMLELEMENT(name, value...): SQL/XML built-in on Oracle and PostgreSQL.
     # Oracle spells the element name as a (usually quoted) identifier;
@@ -7519,6 +7593,12 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             pos = f"POSITION({needle} IN SUBSTRING({haystack} FROM {start}))"
             return f"CASE WHEN {pos} = 0 THEN 0 ELSE {pos} + {start} - 1 END"
         return f"POSITION({needle} IN {haystack})"
+
+    # GROUPING_ID(a, b) is Oracle/T-SQL spelling; PG and MySQL expose the SAME
+    # bitmask as multi-argument GROUPING(a, b) (live-verified 0/1/3 on both).
+    if fn_name == "GROUPING_ID" and dialect in ("postgresql", "mysql") and node.args:
+        _gid = ", ".join(_emit_expression(a, dialect) for a in node.args)
+        return f"GROUPING({_gid})"
 
     # The source's last-identity function is a GLOBAL, not a UDF — it maps
     # to the target's whole expression (LAST_IDENTITY_EXPR); guarded on the

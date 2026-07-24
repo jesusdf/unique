@@ -762,6 +762,31 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         return Star()
     if isinstance(expr, exp.Alias):
         return _convert_alias(expr)
+    # ``> ALL (VALUES (1),(2))`` parses as an Anonymous ALL/ANY call over a
+    # Values node (not exp.All): rewrite the single-column VALUES to a
+    # portable UNION ALL subquery (bare VALUES is not a subquery on
+    # MySQL/Oracle/T-SQL).
+    if (
+        isinstance(expr, exp.Anonymous)
+        and str(expr.this).upper() in ("ALL", "ANY", "SOME")
+        and len(expr.expressions) == 1
+        and isinstance(expr.expressions[0], exp.Values)
+    ):
+        _tuples = expr.expressions[0].expressions
+        if _tuples and all(
+            isinstance(tp, exp.Tuple) and len(tp.expressions) == 1 for tp in _tuples
+        ):
+            _sel: exp.Select | exp.Union = exp.Select(
+                expressions=[_tuples[0].expressions[0].copy()]
+            )
+            for _tp in _tuples[1:]:
+                _sel = exp.Union(
+                    this=_sel,
+                    expression=exp.Select(expressions=[_tp.expressions[0].copy()]),
+                    distinct=False,
+                )
+            _kw = "ALL" if str(expr.this).upper() == "ALL" else "ANY"
+            return SubqueryExpression(query=_convert_select(_sel), quantifier=_kw)
     if isinstance(expr, exp.Anonymous):
         return _convert_function(expr)
     if isinstance(expr, exp.Filter) and isinstance(expr.this, exp.WithinGroup):

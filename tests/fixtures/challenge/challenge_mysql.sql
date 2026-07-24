@@ -140,7 +140,7 @@ SELECT CAST('10:00:00' AS TIME) AS r
 -- CASE[fixed]: my-cast-truncate — oracle: CAST(ts AS DATE) now wrapped in TRUNC() (Oracle DATE keeps the time of day; every other engine strips it) — live 2020-01-01 00:00. tsql leg: '10:30:45.0000000' vs '10:30:45' is a trailing-zero fraction (maintainer precision policy => fixed).
 SELECT CAST(TIMESTAMP '2020-01-01 10:30' AS DATE), CAST(TIME '10:30:45' AS CHAR)
 
--- CASE[open]: my-cast-uns2 — fails on postgresql. type "ubigint" does not exist
+-- CASE[fixed]: my-cast-uns2 — MySQL binary-ish literals cast to a number now fold to their numeric value (0xFFFF=65535 big-endian, b'1111'=15 base-2, TRUE=1) — the emitted bytea/bit/boolean forms cannot be cast to a number elsewhere. Live-verified (65535, 15, 1) on postgresql 2026-07-24.
 SELECT CAST(0xFFFF AS UNSIGNED), CAST(b'1111' AS UNSIGNED), CAST(TRUE AS UNSIGNED)
 
 -- CASE[fixed]: my-cast-year — MySQL YEAR type has no cross-engine equivalent; fold a literal to its integer year with MySQL's 2-digit century rule (00-69->2000s, 70-99->1900s). live-verified 2020,2020,1999.
@@ -682,7 +682,7 @@ SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION READ ONLY; COM
 -- CASE[fixed]: my-soundex-eq — fails on postgresql. function soundex(unknown) does not exist
 SELECT SOUNDEX('hello') = SOUNDEX('hallo') AS r
 
--- CASE[open]: my-soundex-format — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
+-- CASE[fixed]: my-soundex-format — FORMAT(x, d) maps to TO_CHAR masks / T-SQL FORMAT('N2') (live-verified '1,234.50' equal on oracle + tsql); SOUNDEX is native on Oracle/T-SQL and genuinely absent on PG (fuzzystrmatch extension), where the statement degrades to a documented carrier + warning.
 SELECT SOUNDEX('Smith'), FORMAT(1234.5, 2)
 
 -- CASE[fixed]: my-spatial — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.ST
@@ -847,7 +847,7 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 -- CASE[fixed]: my8-recursive — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); WITH RECURSIVE cte AS (SELECT 1 n UNION ALL SELECT n+1 FROM cte WHERE n<5) SELECT * FROM cte
 
--- CASE[open]: my8-window — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
+-- CASE[fixed]: my8-window — the named WINDOW clause is inlined into each OVER() and the JSON column maps per target (CLOB / NVARCHAR(MAX)); live-executed on oracle + tsql 2026-07-24.
 CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELECT id, ROW_NUMBER() OVER w, SUM(n) OVER w FROM t WINDOW w AS (ORDER BY id)
 
 -- CASE[fixed]: mysql-drop-'note'|note — MySQL column COMMENT now materializes as COMMENT ON COLUMN on PG/Oracle (RC-3); stale tag, live-verified the COMMENT executes.
