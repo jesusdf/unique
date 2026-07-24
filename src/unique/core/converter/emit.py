@@ -37,6 +37,7 @@ from unique.core.ast_nodes import (
     DataType,
     DeleteStatement,
     DropStatement,
+    ExcludedColumn,
     ExpressionList,
     FunctionCall,
     InsertStatement,
@@ -44,6 +45,7 @@ from unique.core.ast_nodes import (
     JoinType,
     LimitClause,
     Literal,
+    OnConflictClause,
     OrderByItem,
     OrderDirection,
     PassthroughSQL,
@@ -3625,7 +3627,17 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
 
 
 def _emit_insert(node: InsertStatement, dialect: str) -> str:
-    """Emit an INSERT statement."""
+    """Emit an INSERT statement, lowering any upsert clause per target."""
+    if isinstance(node.on_conflict, OnConflictClause):
+        return _emit_upsert(node, node.on_conflict, dialect)
+    return _emit_insert_core(node, dialect)
+
+
+def _emit_insert_core(
+    node: InsertStatement, dialect: str, insert_kw: str = "INSERT INTO"
+) -> str:
+    """Emit the bare INSERT (no upsert clause). ``insert_kw`` lets MySQL's
+    ``INSERT IGNORE INTO`` reuse the same body."""
     table = _emit_table_ref(node.table, dialect)
     col_names = [_ident_if_plain(c, dialect) for c in node.columns]
     cols = f" ({', '.join(col_names)})" if node.columns else ""
@@ -3645,7 +3657,7 @@ def _emit_insert(node: InsertStatement, dialect: str) -> str:
                 cells.append(_emit_value_expression(v, dialect))
             rows.append(f"({', '.join(cells)})")
         values = ", ".join(rows)
-        return f"INSERT INTO {table}{cols}\nVALUES {values}"
+        return f"{insert_kw} {table}{cols}\nVALUES {values}"
 
     if node.select:
         sel_node = node.select
@@ -3664,21 +3676,249 @@ def _emit_insert(node: InsertStatement, dialect: str) -> str:
             with_prefix = f"WITH {', '.join(cte_parts)}\n"
             sel_node = dataclasses.replace(sel_node, ctes=())
         select = _emit_select(sel_node, dialect)
-        return f"{with_prefix}INSERT INTO {table}{cols}\n{select}"
+        return f"{with_prefix}{insert_kw} {table}{cols}\n{select}"
 
     if dialect == "mysql":
         # MySQL has no DEFAULT VALUES clause; the all-defaults row is
         # spelled with empty lists.
-        return f"INSERT INTO {table} () VALUES ()"
+        return f"{insert_kw} {table} () VALUES ()"
     if dialect == "oracle" and (all_empty or not node.columns):
         # Oracle has no DEFAULT VALUES and the all-defaults row cannot
         # be spelled without the column list.
         return (
             "-- UNIQUE: all-defaults INSERT has no Oracle spelling "
             "without the column list; original preserved:\n"
-            f"-- INSERT INTO {table} VALUES ()"
+            f"-- {insert_kw} {table} VALUES ()"
         )
-    return f"INSERT INTO {table}{cols}\nDEFAULT VALUES"
+    return f"{insert_kw} {table}{cols}\nDEFAULT VALUES"
+
+
+#: The synthetic aliases used when an upsert is lowered to a MERGE statement.
+#: The ``uq_`` prefix (the project's synthesized-name convention) keeps them from
+#: colliding with a real target table named ``t``/``src`` (``MERGE INTO t AS t``
+#: is ambiguous).
+_UPSERT_TGT_ALIAS = "uq_t"
+_UPSERT_SRC_ALIAS = "uq_s"
+
+
+def _emit_excluded_column(node: ExcludedColumn, dialect: str) -> str:
+    """Render an incoming-row reference in an upsert action per target:
+    PG ``EXCLUDED.col``, MySQL ``VALUES(col)``, T-SQL/Oracle MERGE-source
+    ``src.col``."""
+    col = _ident_if_plain(node.column, dialect)
+    if dialect == "postgresql":
+        return f"EXCLUDED.{col}"
+    if dialect == "mysql":
+        return f"VALUES({col})"
+    return f"{_UPSERT_SRC_ALIAS}.{col}"
+
+
+def _resolve_conflict_key(
+    node: InsertStatement, oc: OnConflictClause
+) -> tuple[str, ...] | None:
+    """The conflict-target columns to lower with: the explicit list when the
+    source stated one (PG), else a single harvested PK/UNIQUE key (MySQL's
+    any-key upsert), else ``None`` (the caller degrades whole)."""
+    if oc.key_columns:
+        return oc.key_columns
+    registry = PK_UNIQUE_COLUMNS.get() or {}
+    keys = registry.get(node.table.name.lower())
+    if keys:
+        # PK is stored first; it is the canonical, unambiguous target.
+        return keys[0]
+    return None
+
+
+def _degrade_upsert(node: InsertStatement, dialect: str, reason: str) -> str:
+    """Whole-statement carrier for an upsert the target cannot render (no key,
+    or an unsupported action shape) — never a plain INSERT that would raise or
+    duplicate at runtime."""
+    original = _emit_insert_core(node, SOURCE_DIALECT.get() or dialect)
+    return f"-- UNIQUE: {reason}; statement preserved as a comment\n" + _comment_block(
+        original
+    )
+
+
+def _emit_upsert(node: InsertStatement, oc: OnConflictClause, dialect: str) -> str:
+    """Lower an INSERT ... upsert clause to the target's idiom."""
+    if dialect == "postgresql":
+        return _emit_upsert_pg(node, oc)
+    if dialect == "mysql":
+        return _emit_upsert_mysql(node, oc)
+    return _emit_upsert_merge(node, oc, dialect)
+
+
+def _emit_upsert_pg(node: InsertStatement, oc: OnConflictClause) -> str:
+    core = _emit_insert_core(node, "postgresql")
+    if oc.action == "nothing":
+        # DO NOTHING needs no target (fires on any constraint); keep an
+        # explicit one when the source named it.
+        target = f" ({', '.join(oc.key_columns)})" if oc.key_columns else ""
+        return f"{core}\nON CONFLICT{target} DO NOTHING"
+    key = _resolve_conflict_key(node, oc)
+    if not key:
+        return _degrade_upsert(
+            node,
+            "postgresql",
+            "PG ON CONFLICT DO UPDATE needs a conflict target and none was "
+            "declared in-script",
+        )
+    set_items = [
+        f"{_ident_if_plain(col, 'postgresql')} = {_emit_expression(val, 'postgresql')}"
+        for col, val in oc.assignments
+    ]
+    where = f" WHERE {_emit_condition(oc.where, 'postgresql')}" if oc.where else ""
+    clause = (
+        f"ON CONFLICT ({', '.join(key)}) DO UPDATE SET {', '.join(set_items)}{where}"
+    )
+    note = ""
+    if not oc.key_columns:
+        # A faithful mapping with a caveat — inline /* … */ so it survives the
+        # embedded-DML faithfulness check yet still reconciles to a warning.
+        note = (
+            " /* UNIQUE: conflict target assumed to be "
+            f"({', '.join(key)}) from the table's key; the MySQL source names "
+            "no explicit target (fires on any unique key) */"
+        )
+    return f"{core}\n{clause}{note}"
+
+
+def _emit_upsert_mysql(node: InsertStatement, oc: OnConflictClause) -> str:
+    if oc.action == "nothing":
+        core = _emit_insert_core(node, "mysql", insert_kw="INSERT IGNORE INTO")
+        return (
+            f"{core}\n/* UNIQUE: INSERT IGNORE also swallows other errors "
+            "(bad values, FK violations), not only duplicate keys — unlike PG "
+            "ON CONFLICT DO NOTHING */"
+        )
+    if oc.where is not None:
+        return _degrade_upsert(
+            node,
+            "mysql",
+            "MySQL ON DUPLICATE KEY UPDATE has no conditional (WHERE) form",
+        )
+    core = _emit_insert_core(node, "mysql")
+    set_items = [
+        f"{_ident_if_plain(col, 'mysql')} = {_emit_expression(val, 'mysql')}"
+        for col, val in oc.assignments
+    ]
+    clause = f"ON DUPLICATE KEY UPDATE {', '.join(set_items)}"
+    note = (
+        " /* UNIQUE: MySQL ON DUPLICATE KEY UPDATE fires on ANY unique/primary "
+        "key, not a single named conflict target */"
+    )
+    return f"{core}\n{clause}{note}"
+
+
+def _upsert_merge_source(node: InsertStatement, dialect: str) -> str | None:
+    """The ``USING <relation> <alias>`` fragment feeding the lowered MERGE, with
+    the source columns exposed under the target column names. ``None`` when the
+    source cannot be aliased (unknown column count)."""
+    cols = list(node.columns)
+    if not cols:
+        return None
+    alias = _UPSERT_SRC_ALIAS
+    col_list = ", ".join(_ident_if_plain(c, dialect) for c in cols)
+    all_empty = bool(node.values) and all(len(row) == 0 for row in node.values)
+    if node.values and not all_empty:
+        rendered_rows = []
+        for row in node.values:
+            if len(row) != len(cols):
+                return None
+            cells = []
+            for i, v in enumerate(row):
+                v = _coerce_bit_literal(node.table, cols[i], v, dialect)
+                v = _coerce_date_literal(node.table, cols[i], v, dialect)
+                cells.append(_emit_value_expression(v, dialect))
+            rendered_rows.append(cells)
+        if dialect == "oracle":
+            # Oracle has no VALUES table constructor in USING; SELECT … FROM DUAL.
+            selects = [
+                "SELECT "
+                + ", ".join(
+                    f"{c} AS {_ident_if_plain(cols[i], dialect)}"
+                    for i, c in enumerate(cell)
+                )
+                + " FROM DUAL"
+                for cell in rendered_rows
+            ]
+            return f"USING ({' UNION ALL '.join(selects)}) {alias}"
+        rows_sql = ", ".join(f"({', '.join(cell)})" for cell in rendered_rows)
+        return f"USING (VALUES {rows_sql}) AS {alias} ({col_list})"
+    if node.select is not None:
+        if dialect == "oracle":
+            # Oracle rejects a derived-table column-alias list; alias inside.
+            aliased = _alias_select_columns(node.select, cols)
+            if aliased is None:
+                return None
+            return f"USING ({_emit_select(aliased, dialect)}) {alias}"
+        return f"USING ({_emit_select(node.select, dialect)}) AS {alias} ({col_list})"
+    return None
+
+
+def _alias_select_columns(
+    select: SelectStatement, cols: list[str]
+) -> SelectStatement | None:
+    """Re-alias a SELECT's projection to *cols* (Oracle MERGE source, which
+    can't take a derived-table column list). ``None`` when the arity differs or
+    a star makes the columns unknown."""
+    if len(select.columns) != len(cols):
+        return None
+    new_cols: list[ASTNode] = []
+    for item, name in zip(select.columns, cols, strict=True):
+        inner = item.expression if isinstance(item, Alias) else item
+        if isinstance(inner, Star):
+            return None
+        new_cols.append(Alias(expression=inner, name=name))
+    return dataclasses.replace(select, columns=tuple(new_cols))
+
+
+def _emit_upsert_merge(
+    node: InsertStatement, oc: OnConflictClause, dialect: str
+) -> str:
+    key = _resolve_conflict_key(node, oc)
+    if not key:
+        return _degrade_upsert(
+            node,
+            dialect,
+            "upsert has no conflict key to build a MERGE ON condition and none "
+            "was declared in-script",
+        )
+    using = _upsert_merge_source(node, dialect)
+    if using is None:
+        return _degrade_upsert(
+            node, dialect, "upsert source cannot be modeled as a MERGE source"
+        )
+    tgt = _emit_table_ref(node.table, dialect)
+    ta, sa = _UPSERT_TGT_ALIAS, _UPSERT_SRC_ALIAS
+    on_terms = " AND ".join(
+        f"{ta}.{_ident_if_plain(k, dialect)} = {sa}.{_ident_if_plain(k, dialect)}"
+        for k in key
+    )
+    on_clause = f"({on_terms})" if dialect == "oracle" else on_terms
+    tgt_ref = f"{tgt} {ta}" if dialect == "oracle" else f"{tgt} AS {ta}"
+    whens: list[str] = []
+    if oc.action == "update":
+        set_items = [
+            f"{ta}.{_ident_if_plain(col, dialect)} = {_emit_expression(val, dialect)}"
+            for col, val in oc.assignments
+        ]
+        cond = f" AND ({_emit_condition(oc.where, dialect)})" if oc.where else ""
+        whens.append(f"WHEN MATCHED{cond} THEN UPDATE SET {', '.join(set_items)}")
+    insert_cols = ", ".join(_ident_if_plain(c, dialect) for c in node.columns)
+    insert_vals = ", ".join(f"{sa}.{_ident_if_plain(c, dialect)}" for c in node.columns)
+    whens.append(f"WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals})")
+    merge = f"MERGE INTO {tgt_ref}\n{using}\nON {on_clause}\n" + "\n".join(whens)
+    if dialect == "tsql":
+        merge += ";"  # T-SQL requires the MERGE statement to be ;-terminated.
+    note = ""
+    if not oc.key_columns:
+        note = (
+            " /* UNIQUE: MERGE ON key assumed to be "
+            f"({', '.join(key)}) from the table's key; the source names no "
+            "explicit conflict target */"
+        )
+    return merge + note
 
 
 def _wrap_mysql_update_self_ref(val: ASTNode, target: str) -> ASTNode:
@@ -5158,6 +5398,8 @@ def _map_system_global(sql: str, dialect: str) -> str | None:
 
 def _emit_expression(node: ASTNode, dialect: str) -> str:
     """Emit an expression node as SQL text."""
+    if isinstance(node, ExcludedColumn):
+        return _emit_excluded_column(node, dialect)
     if isinstance(node, UnsupportedInline):
         # Valid on its own engine; a NULL placeholder + carrier + warning
         # elsewhere (the loss is documented, never silently mangled).

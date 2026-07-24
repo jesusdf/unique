@@ -349,6 +349,13 @@ _FUNC_CALL_RE = re.compile(r"(?<!\w)([A-Za-z_][A-Za-z0-9_$]*)\s*\(")
 #: function relation ``FROM generate_series(…)`` is never in this position.
 _TABLE_POSITION_RE = re.compile(r"(?i)\b(?:INTO|TABLE|UPDATE)\s+[\w.]*$")
 
+#: A MERGE ``WHEN [NOT] MATCHED … THEN INSERT`` action head — the following
+#: ``(`` is a column list, not a call to MySQL's ``INSERT()`` string function.
+#: Requires ``MATCHED`` before the ``THEN`` so a CASE ``… THEN INSERT(…)`` is
+#: not masked (strings are scrubbed before this scan, so ``MATCHED`` is only the
+#: MERGE keyword).
+_MERGE_INSERT_ACTION_RE = re.compile(r"(?i)\bMATCHED\b.*\bTHEN\s+$")
+
 
 def _untranslated_source_builtin(scrubbed: str, source: str, target: str) -> str | None:
     """First source built-in that leaked into the output untranslated.
@@ -367,7 +374,13 @@ def _untranslated_source_builtin(scrubbed: str, source: str, target: str) -> str
         if name in _TYPE_CONSTRUCTOR_NAMES or name in _KEYWORD_HEADS:
             continue
         # A bounded look-back is enough for ``INTO <schema.>?name (``.
-        if _TABLE_POSITION_RE.search(scrubbed[max(0, m.start() - 64) : m.start()]):
+        look_back = scrubbed[max(0, m.start() - 64) : m.start()]
+        if _TABLE_POSITION_RE.search(look_back):
+            continue
+        # A MERGE ``WHEN NOT MATCHED THEN INSERT (cols)`` action heads a column
+        # list, not a call to MySQL's ``INSERT()`` string function (which is
+        # never preceded by ``THEN``).
+        if name == "INSERT" and _MERGE_INSERT_ACTION_RE.search(look_back):
             continue
         if is_builtin(name, source) and not is_builtin(name, target):
             return name
