@@ -399,6 +399,29 @@ silently:
   the MERGE needs an `ON` condition) and degrades the WHOLE statement to a
   carrier + warning — never a bare INSERT that would raise a duplicate-key error.
 
+### 3.23 Oracle cursor attributes (per-cursor emulation, audit B7/N5+N6)
+
+Oracle's cursor attributes have no cross-engine global, so each named cursor
+gets its **own** state variables (mirroring the `%ROWCOUNT` counter), maintained
+right beside the cursor operation they depend on — a FETCH or OPEN/CLOSE on
+another cursor can no longer corrupt them:
+
+- **`%FOUND` / `%NOTFOUND`** — T-SQL captures `@@FETCH_STATUS` into `@uq_<c>_fs`
+  immediately after each `FETCH <c>` (T-SQL has a single global
+  `@@FETCH_STATUS`, so a non-adjacent check would otherwise read another
+  cursor's status). MySQL transfers the shared `NOT FOUND` handler flag into a
+  per-cursor `v_uq_<c>_done` right after each FETCH, then resets the shared flag.
+- **`%ISOPEN`** — a per-cursor `@uq_<c>_open` / `v_uq_<c>_open` flag set to 1/0
+  on `OPEN`/`CLOSE` (T-SQL's `CURSOR_STATUS()` three-state/scope guessing is less
+  faithful than a deterministic flag).
+- **`%ROWCOUNT`** — the existing per-cursor counter (the MySQL `ROW_COUNT()`
+  divergence for the *implicit* `SQL%ROWCOUNT` is annotated separately, §3.22).
+- Each emitted MySQL loop carries a **unique label** (`loop_lbl_<n>`), so nested
+  loops never collide (MySQL error 1309 "Redefining label").
+- **Unrecognized cursor attributes** (e.g. `%BULK_ROWCOUNT`, or an invalid one):
+  degrade to a `-- UNIQUE:` carrier + warning — never emitted as `%` modulo
+  arithmetic.
+
 ### 3.21 Oracle Extended `INSTR` (occurrence / backward search)
 
 Oracle's 4-argument `INSTR(s, sub, start, occurrence)` and the negative-start

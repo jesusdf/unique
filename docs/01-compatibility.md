@@ -395,7 +395,7 @@ engines and indicates the transpilation support status for each.
 |---------|-------|--------|------------|-------|------------------|
 | DECLARE CURSOR | ✓ | ✓ | ✓ | ✓ | ✅ |
 | OPEN / FETCH / CLOSE | ✓ | ✓ | ✓ | ✓ | ✅ |
-| Cursor attributes | @@FETCH_STATUS | %FOUND, %NOTFOUND | FOUND | ✓ | ⚠️ |
+| Cursor attributes | @@FETCH_STATUS | %FOUND, %NOTFOUND, %ISOPEN, %ROWCOUNT | FOUND | ✓ | ⚠️ per-cursor emulation (adjacency-safe status/open flags, unique MySQL loop labels); unknown attributes degrade warned (docs 03 §3.23) |
 | Ref cursors | N/A | ✓ (SYS_REFCURSOR) | ✓ (REFCURSOR) | N/A | ⚠️ Oracle↔PG type-mapped; a routine declaring or returning a ref cursor degrades whole on T-SQL/MySQL with a documented carrier |
 | FETCH directions (NEXT/LAST/ABSOLUTE/RELATIVE) | ✓ | N/A | ✓ | N/A | ⚠️ native on PG/T-SQL (incl. SCROLL); Oracle/MySQL cursors are forward-only — documented carrier |
 

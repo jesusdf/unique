@@ -74,8 +74,15 @@ Findings detail: audit docs 02/04/05/07.
 
 - [ ] **B10** Running COLUMN_TYPES harvest + T-SQL `ALTER COLUMN` nullability
   (N9 — silent type revert / dropped NOT NULL); shares harvest work with B1.
-- [ ] **B7** Per-cursor status emulation class fix (N5+N6: duplicate MySQL
-  labels, stale NOT-FOUND flag, global `@@FETCH_STATUS`, `%ISOPEN` as modulo).
+- [x] **B7** Per-cursor status emulation class fix (N5+N6: duplicate MySQL
+  labels, stale NOT-FOUND flag, global `@@FETCH_STATUS`, `%ISOPEN` as modulo) —
+  done: per-cursor `@uq_<c>_fs`/`v_uq_<c>_done` fetch-status flags captured
+  beside each FETCH, per-cursor `%ISOPEN` open flags, unique `loop_lbl_<n>`
+  labels (emitter-base counter + label stack), unmapped `%<attr>` hits the
+  warned carrier gate. `_emulate_cursor_state` generalizes the `%ROWCOUNT`
+  pass; live-verified nested (MySQL, all parents processed) + interleaved
+  (T-SQL == Oracle row count) in `tests/integration/test_cursor_state_b7.py`;
+  docs 03 §3.23 + compat matrix updated.
 - [ ] **B8** PG `SET TRANSACTION … READ ONLY` access-mode mapping (N7).
 - [ ] **B9** T-SQL money literal `$12.50` mangle intercept + garbage-shape
   guard (N8).
