@@ -92,6 +92,7 @@ from ._text_rules import (  # noqa: F401
     _rewrite_tsql_constraint_state,
     _rewrite_tsql_default_constraint,
     _rewrite_tvf_callers,
+    _statement_is_merge,
     _warn,
     _warning_covers,
 )
@@ -1044,8 +1045,12 @@ class Transpiler:
                 # Map the OUTPUT columns (strip INSERTED./DELETED. prefixes).
                 cols = re.sub(r"(?i)\b(INSERTED|DELETED)\.", "", output_cols).strip()
                 body = base_result.sql.rstrip().rstrip(";")
-                if target == "postgresql":
-                    # Only PostgreSQL has a standalone RETURNING result set.
+                if target == "postgresql" and not _statement_is_merge(base_sql):
+                    # Only PostgreSQL has a standalone RETURNING result set —
+                    # but NOT on MERGE (PG16 has none; PG17 spells $action as
+                    # merge_action()). A MERGE OUTPUT degrades like the others
+                    # rather than emit invalid RETURNING or re-attach the tail
+                    # to a follow-up statement / comment (audit N3).
                     new_sql = f"{body} RETURNING {cols}"
                 else:
                     # MySQL has no OUTPUT/RETURNING; Oracle's RETURNING needs INTO

@@ -297,6 +297,13 @@ than ship silently-wrong output:
   therefore performed **only** when the DELETE condition references no target
   column the UPDATE assigns (source-column conditions are safe); an unsafe
   shape degrades warned (`… would delete rows the source keeps`).
+- **`OUTPUT` on a MERGE → PostgreSQL.** PostgreSQL has no `MERGE … RETURNING`
+  (PG16; PG17 spells `$action` as `merge_action()`), so the OUTPUT result set
+  degrades to the same "no standalone OUTPUT/RETURNING result set" carrier +
+  warning that Oracle/MySQL already use — the MERGE effect is preserved, the
+  returned rows are not; the tail is never re-attached to a follow-up
+  statement or a comment. (Plain INSERT/UPDATE/DELETE `OUTPUT` → PG still maps
+  to a valid `RETURNING`.)
 - **`THEN DO NOTHING` → T-SQL / Oracle.** PostgreSQL's `DO NOTHING` merge
   action has no T-SQL/Oracle spelling; first-match-wins lets it be lowered as a
   clause carve-out (its negated condition is ANDed onto every later same-kind

@@ -45,9 +45,22 @@ Findings detail: audit docs 02/04/05/07.
 - [ ] **B1** Model the upsert clause (`ON CONFLICT`/`ON DUPLICATE KEY UPDATE`)
   — audit N1, the headline S1: upserts silently become plain INSERTs in every
   direction.
-- [ ] **B4/B5/B6** MERGE semantic series (one PR series, same function):
-  Oracle `DELETE WHERE` post-update evaluation (N2), `OUTPUT`→PG invalid or
-  mis-attached RETURNING (N3), PG `THEN DO NOTHING` passthrough (N4).
+- [x] **B4/B5/B6** MERGE semantic series (one series, `converter/emit.py`
+  `_merge_extended_clauses` + `_merge_carve_do_nothing`, and the OUTPUT path in
+  `transpiler/_core.py`) — done 2026-07-24: **B4** Oracle conditional-DELETE
+  fold now carries a safety predicate (`_merge_delete_reads_updated`): folds
+  only when the DELETE condition reads no UPDATE-assigned target column, else
+  degrades warned (live: SQL Server `{(2,7)}` == Oracle for the safe shape; the
+  N2 unsafe shape now carries instead of returning `{}`). **B5** `OUTPUT` on a
+  MERGE → PostgreSQL degrades to the existing "no standalone OUTPUT/RETURNING"
+  carrier + warning (never re-attaches the tail to a follow-up statement or a
+  comment); plain INSERT/UPDATE/DELETE OUTPUT → PG still returns. **B6** PG
+  `THEN DO NOTHING` → T-SQL/Oracle lowered by clause carve-out (negated
+  condition ANDed onto later same-kind clauses; unknown `Var` action degrades
+  warned) — live three-engine equality `{(1,5),(2,7),(3,9)}`. Tests:
+  `test_challenge.py::TestMerge{ConditionalDeleteFoldSafety,OutputToPostgres,
+  DoNothingCarveOut}`; `ts-merge-full` corpus case stays green;
+  `docs/03-unsupported.md` §3.6 documents the three degrades.
 
 ### P2
 

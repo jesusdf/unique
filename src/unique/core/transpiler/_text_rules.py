@@ -728,3 +728,16 @@ def _extract_tsql_output(sql: str) -> tuple[str, str | None]:
         return sql, None
     base = (sql[: m.start()].rstrip() + " " + sql[m.end() :].lstrip()).strip()
     return base, output_cols
+
+
+def _statement_is_merge(sql: str) -> bool:
+    """True when *sql*'s first keyword (past any leading comments) is MERGE."""
+    s = sql.lstrip()
+    while s.startswith("--") or s.startswith("/*"):
+        if s.startswith("--"):
+            nl = s.find("\n")
+            s = ("" if nl == -1 else s[nl + 1 :]).lstrip()
+        else:
+            end = s.find("*/")
+            s = ("" if end == -1 else s[end + 2 :]).lstrip()
+    return re.match(r"(?i)MERGE\b", s) is not None

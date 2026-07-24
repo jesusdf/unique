@@ -4932,8 +4932,6 @@ class TestMergeConditionalDeleteFoldSafety:
         assert "DELETE WHERE NOT (src.n > 0)" in out, out
 
 
-
-
 # --- Audit 2026-07-24 finding N4: PG MERGE THEN DO NOTHING carve-out ---
 
 import sqlglot  # noqa: E402
@@ -5002,3 +5000,41 @@ class TestMergeDoNothingCarveOut:
 
         reason = _merge_carve_do_nothing(tree)
         assert reason is not None and "FROBNICATE" in reason
+
+
+class TestMergeOutputToPostgres:
+    """N3: T-SQL MERGE OUTPUT → PostgreSQL. PG has no MERGE RETURNING; the
+    OUTPUT must degrade to the documented carrier + warning, and the tail must
+    never land on a follow-up statement or inside a comment."""
+
+    _PLAIN = (
+        "MERGE INTO dst AS d USING src AS s ON d.id = s.id "
+        "WHEN MATCHED THEN UPDATE SET d.qty = s.qty "
+        "OUTPUT $action, inserted.id;"
+    )
+    _BY_SOURCE = (
+        "MERGE INTO dst AS d USING src AS s ON d.id = s.id "
+        "WHEN MATCHED THEN UPDATE SET d.qty = s.qty "
+        "WHEN NOT MATCHED BY SOURCE THEN DELETE "
+        "OUTPUT $action, inserted.id;"
+    )
+    _COMMENT = (
+        "MERGE INTO dst AS d USING src AS s ON d.id = s.id "
+        "WHEN MATCHED THEN UPDATE SET d.qty = s.qty -- qty sync\n"
+        "OUTPUT $action, inserted.id;"
+    )
+
+    @pytest.mark.parametrize("sql", [_PLAIN, _BY_SOURCE, _COMMENT])
+    def test_merge_output_to_pg_degrades_no_returning(self, sql: str) -> None:
+        r = Transpiler().transpile(sql, "tsql", "postgresql")
+        assert "RETURNING" not in _exec_lines(r.sql).upper(), r.sql
+        assert "OUTPUT/RETURNING result set" in r.sql, r.sql
+        assert r.warnings, r.warnings
+        assert _target_parses(r.sql, "postgresql"), r.sql
+
+    def test_plain_insert_output_to_pg_still_returns(self) -> None:
+        # Regression: non-MERGE OUTPUT → PG keeps its valid RETURNING.
+        r = Transpiler().transpile(
+            "INSERT INTO t (a) OUTPUT INSERTED.id VALUES (1)", "tsql", "postgresql"
+        )
+        assert "RETURNING" in r.sql.upper(), r.sql
