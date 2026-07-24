@@ -56,6 +56,7 @@ unique/
 │   ├── 07-interfaces.md          # CLI / Python / REST / web UI
 │   ├── STATUS.md                 # Current project state
 │   ├── TODO.md                   # Pending backlog (authoritative)
+│   ├── MILESTONES.md             # Closed backlog sections (newest first)
 │   └── DONE.md                   # Archived completed work (why/how)
 ├── skills/                       # Claude AI continuity skills
 ├── src/unique/
@@ -70,22 +71,29 @@ unique/
 │   │   │                         #   literals) consumed by BOTH pipelines
 │   │   ├── validation.py         # Source-syntax validation (locate errors)
 │   │   ├── transformer.py        # DML/DDL transform passes
-│   │   ├── transpiler.py         # Orchestrator: split → classify → route → join
+│   │   ├── transpiler/           # Orchestrator (package since 2026-07-17):
+│   │   │   ├── _core.py          #   split → classify → route → join
+│   │   │   └── _text_rules.py    #   sanctioned pre-parse strips / guard recognizer
 │   │   ├── batch_splitter.py     # Dialect-aware batch splitting + classification
+│   │   ├── output_gate.py        # M1 honesty gate (never ship known-invalid output)
+│   │   ├── sql_split.py          # Shared string/comment-aware statement splitter
+│   │   ├── builtins.py / dialect.py / live_validate.py
 │   │   ├── detection.py          # Source-dialect auto-detection
 │   │   ├── metadata.py           # Optional DB connection for %TYPE/%ROWTYPE
 │   │   ├── registry.py           # Plugin registry (entry-point discovery)
 │   │   ├── errors.py             # Custom exceptions
 │   │   └── procedural/           # Autonomous procedural engine
 │   │       ├── lexer.py          #   tokenizer for procedural SQL (engine-agnostic)
-│   │       ├── parser.py         #   recursive descent (T-SQL + PL/SQL families)
+│   │       ├── parser/           #   recursive descent (package: _base.py + _tsql.py/_plsql.py)
 │   │       ├── transformer/      #   per-target transform plugins
 │   │       │   ├── base.py       #     shared + source/pair logic, factory, maps
 │   │       │   └── {tsql,oracle,postgresql,mysql}.py
 │   │       └── emitter/          #   per-target emission plugins
 │   │           ├── base.py       #     shared structure + overridable hooks, factory
 │   │           └── {tsql,oracle,postgresql,mysql}.py
-│   ├── dialects/{tsql,oracle,postgresql,mysql}/   # Dialect plugins (DML/DDL via sqlglot)
+│   ├── dialects/{tsql,oracle,postgresql,mysql,sqlite}/  # Dialect plugins — each a
+│   │                             #   SINGLE __init__.py (knowledge lives in
+│   │                             #   core/mappings.py + procedural plugins)
 │   ├── cli/                      # CLI entry point
 │   └── api/                      # REST API (FastAPI) + web UI
 ├── web/                          # Web UI source + build (build.py)
@@ -127,8 +135,21 @@ When resuming work, check `docs/STATUS.md` for the latest progress tracker.
 Each completed feature should have corresponding tests in the test suite.
 
 **Also check `audit/` for the latest audit** (`audit/2026-07-02/`,
-`audit/2026-07-08/`). Audits are ground truth about real defects and must not
-be contradicted by STATUS/README claims.
+`audit/2026-07-08/`, **`audit/2026-07-24/` — current**). Audits are ground
+truth about real defects and must not be contradicted by STATUS/README claims.
+
+**The 2026-07-24 audit (v0.30.0) is the working agenda.** It verified the
+07-08 remediation (both S1s fixed, no old silent-loss reproduces) and found
+the *new* frontier one level up: **clause-level conversion and cross-feature
+composition** (10 live-verified S1s — upsert clauses silently dropped, MERGE
+semantic holes, nested-cursor emulation breaks), plus emitter-side debt
+(`converter/emit.py` ~10k lines with a relocated regex cascade — see the
+extended guardrail 2), stalled test-floor ratchets, and 10 private-vocabulary
+leaks. Before fixing ANY of its findings, read
+`audit/2026-07-24/08-prevention-plan.md` (why each class recurred, and the
+mechanical rules now in force) and the per-finding brief in
+`audit/2026-07-24/09-fix-briefs.md` — fixes start from the brief, not from
+scratch.
 
 **The corpus validity campaigns are CLOSED (2026-07-17).** The pg-source and
 mysql-source directions were swept wave-by-wave against the live engines

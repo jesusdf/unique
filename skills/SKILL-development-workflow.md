@@ -28,6 +28,21 @@ identifier. Keep the real names in the working conversation only. If a real name
 has already been committed, fix the files **and rewrite git history**
 (`git filter-repo --replace-text --replace-message`, then force-push) to purge it.
 
+Two rules the 2026-07-24 confidentiality sweep (audit doc 07: 7 leaking files,
+2 leaking **commit messages**) makes explicit:
+
+- **Commit messages are a leak surface.** Never quote an identifier from a
+  private repro in a commit message — reference the challenge case ID or the
+  anonymized name instead. A leaked message can only be purged by rewriting
+  history; a leaked file at least can be fixed at HEAD.
+- **Sweep before you push** anything derived from private material: run
+  `scripts/private_leak_check.py` once it lands
+  (`audit/2026-07-24/09-fix-briefs.md` T2 — derives tokens from
+  `fixtures-private/` at runtime, checks your diff and new commit messages,
+  no-op where the private corpus is absent); until then, grep your diff and
+  messages for every identifier you saw in the private file, not just the
+  ones you remember copying.
+
 The same contract covers **license-restricted local corpora** under the
 gitignored `fixtures-corpus/`: some tuning material there may not be
 redistributed, and its **provenance must never be named in committed
@@ -68,11 +83,14 @@ method over another `if/elif`, a correct transformation over a passthrough that
 solution is large, say so and propose it; don't quietly downgrade the goal to
 make the change easier.
 
-## Architecture guardrails (audit 2026-07-08 doc 04 — binding)
+## Architecture guardrails (audits 2026-07-08 doc 04 + 2026-07-24 docs 04/08 — binding)
 
 The 2026-07-08 audit traced ~40 real-script defects to five root causes; these
 rules keep them from growing back. When one of them blocks the quick version
 of your fix, that is the rule working — do the structural version or escalate.
+The 2026-07-24 audit added guardrail 7 and extended guardrail 2 after finding
+that the banned pattern had **relocated** to an unwatched layer (the emitter)
+rather than disappearing — the rules ban the *pattern*, in every layer.
 
 1. **Moratorium on regex shape-patches in the script layer.** Do not add new
    regex recognizers/extractors/special cases for SQL *constructs* to
@@ -83,14 +101,24 @@ of your fix, that is the rule working — do the structural version or escalate.
    ever grew one hole per fix (guard + `BEGIN`, guard + leading comment,
    `OBJECT_ID` with a type argument… each individually "fixed" while its
    neighbors stayed broken).
-2. **Never transform SQL as text.** Function/type/literal/operator mappings go
-   in the IR converter + `core/mappings.py`, applied on the AST — never as an
-   `re.sub` over SQL text. Text-level rewriting is how `MAX(NVL(n,0)) + 1`
-   lost tokens on one target and turned `+` into `||` on another (silent
-   corruption, the worst defect class we ship). Embedded DML inside routine
-   bodies must go through the same IR pipeline as standalone DML (the
-   table-variable DDL path shows the pattern); raw `sqlglot.transpile` is a
+2. **Never transform SQL as text — in ANY layer, including after emission.**
+   Function/type/literal/operator mappings go in the IR converter +
+   `core/mappings.py`, applied on the AST — never as an `re.sub` over SQL
+   text. Text-level rewriting is how `MAX(NVL(n,0)) + 1` lost tokens on one
+   target and turned `+` into `||` on another (silent corruption, the worst
+   defect class we ship). Embedded DML inside routine bodies must go through
+   the same IR pipeline as standalone DML; raw `sqlglot.transpile` is a
    *warned* fallback, never the primary path.
+   The 2026-07-24 audit found this rule held in the script layer while the
+   same cascade re-grew inside `converter/emit.py` (82 `re.sub`s, post-emit
+   function mapping) — **that is the same violation one layer down**. The
+   ONLY sanctioned regex-on-SQL-text uses are: lexing/tokenization, comment/
+   trivia handling, carrier detection & warning reconciliation, and the
+   warned pre-parse strips in `transpiler/_text_rules.py`. A regex that maps
+   a function/type/operator or reshapes a construct on **converted or emitted
+   text** is banned everywhere; the architecture-ratchet gate (see
+   `audit/2026-07-24/09-fix-briefs.md` T3) counts these so the cascade cannot
+   silently re-grow.
 3. **Comments are trivia.** No classification, matching, guard extraction, or
    terminator decision may ever operate on text that can still contain
    comments; comments attach to the following statement and are re-emitted.
@@ -114,6 +142,16 @@ of your fix, that is the rule working — do the structural version or escalate.
    corpus tests) does not regress for the affected direction **and** docs
    updated. Direction maturity is stated as a measured validity %, never as
    "complete".
+7. **Consume every semantic sqlglot arg (2026-07-24).** Converting a sqlglot
+   node means accounting for **every key in `node.args`**: convert it, or
+   degrade the statement with a warning — never let an unread arg fall on the
+   floor. Upserts (`ON CONFLICT` / `ON DUPLICATE KEY UPDATE`) shipped as
+   plain INSERTs with zero warnings because `_convert_insert` never read
+   `args["conflict"]` (audit 2026-07-24 N1; N3/N4 are the same class). When
+   you write or touch any `_convert_*`, enumerate the node's `arg_types` and
+   justify each ignored key (genuinely cosmetic → fine; semantic → convert or
+   warn). This is a manual checklist until the unread-args tripwire
+   (`audit/2026-07-24/09-fix-briefs.md` T1) makes it mechanical.
 
 ## The validity-wave cadence (proven 2026-07-15 → 2026-07-17, waves 4-239)
 
@@ -174,9 +212,14 @@ run these checks; when one fires, **stop patching and change altitude**.
 2. **Neighbor test.** A shape bug is never alone. Before declaring a fix done,
    enumerate its combinatorial neighbors — ± leading comment, ± `BEGIN…END`
    wrapper, ± an extra argument, sibling statement kinds (INSERT/UPDATE/
-   DELETE/CREATE/DROP), and **all targets** — and probe them. If the neighbors
-   fail and each would need its own patch, you are patching a class one
-   instance at a time: circuit-break to the structural fix.
+   DELETE/CREATE/DROP), and **all targets** — and probe them. Neighbors also
+   include **cross-feature composition** (2026-07-24): the construct inside a
+   routine body, a second interleaved instance (two nested cursors broke
+   labels, flags and `@@FETCH_STATUS` mapping while one cursor was perfect),
+   combined with OUTPUT/RETURNING, inside dynamic SQL, and appearing twice in
+   one script. If the neighbors fail and each would need its own patch, you
+   are patching a class one instance at a time: circuit-break to the
+   structural fix.
 3. **Green-but-unmoved metric.** If tests pass but the corpus/live/sweep
    number that motivated the work doesn't move, the fix missed the mechanism.
    Re-derive where the failing inputs actually flow (add a temporary trace if
@@ -384,13 +427,17 @@ When adding or fixing any function/type/literal/pseudo-table mapping:
 
 ## Adding a New Dialect
 
-1. Create `src/unique/dialects/<name>/`:
-   - `__init__.py` with `Dialect` subclass
-   - `parser.py` — Implements `parse(sql) -> list[ASTNode]`
-   - `emitter.py` — Implements `emit(nodes) -> str`
-2. Register in `src/unique/core/registry.py` (auto-discovery via entry points).
-3. Mirror test structure in `tests/unit/dialects/`.
-4. Add integration test files for all transpilation directions.
+1. Create `src/unique/dialects/<name>/` — a **single `__init__.py`** holding
+   the `Dialect` subclass (parse/emit delegate to the shared core; there are
+   no per-dialect `parser.py`/`emitter.py` files).
+2. Put the dialect *knowledge* in the shared layers: function/type/literal
+   mappings in `core/mappings.py` (read by both pipelines); procedural
+   behavior as one new self-registering emitter module + one transformer
+   module under `core/procedural/{emitter,transformer}/`.
+3. Register via the `unique.dialects` entry-point group in `pyproject.toml`
+   (auto-discovered by `core/registry.py`).
+4. Mirror test structure in `tests/unit/dialects/` and add integration tests
+   for all transpilation directions.
 
 ## Work in parallel where independent (save time)
 
@@ -413,6 +460,49 @@ same file, DB rows, or a fixed port), but by default:
   per case.
 - **Fan out only when it pays** — a genuinely large, independent sweep is worth
   parallelizing; two quick reads are not worth the ceremony.
+
+## Agentic team mode — architect directs, workers implement (2026-07-24)
+
+For brief-driven fix campaigns (e.g. the `audit/2026-07-24/09-fix-briefs.md`
+backlog), the proven division of labor is **one architect session + delegated
+worker agents**:
+
+- **The MAIN session is the ARCHITECT** — run it on the strongest model
+  available (Mythos/Fable class if available, otherwise Opus with high
+  reasoning). The architect does the thinking that briefs and reviews require:
+  reads/refines the brief, spawns workers, reviews every diff, runs the gate,
+  owns commits and pushes. It does NOT mass-implement.
+- **Workers implement, one brief per agent — pick the CHEAPEST tier the brief
+  supports.** The whole point of a good brief is that it moves the thinking
+  out of the worker, so delegate as far down the model ladder as the residual
+  judgment allows (this is what makes usage credits go furthest):
+  | tier | use for | examples |
+  |---|---|---|
+  | architect's own model (Fable/Mythos) | nothing routine — only reviews, brief surgery, and fixes where the approach is still being discovered | emit.py split design calls |
+  | Opus | semantic/multi-file briefs where implementation still needs real judgment | upsert modeling, MERGE series, cursor class fix, dynamic SQL |
+  | Sonnet | well-specified single-mechanism work: the brief names files, approach and tests; the worker "just" builds it | tooling scripts (leak check, challenge stats), access-mode mapping, carrier text fix |
+  | Haiku | bulk mechanical text transforms with a checkable result | anonymization renames, doc syncs, assertion-upgrade batches once the pattern is established |
+  If a cheaper tier bounces (wrong approach, weak tests), re-run one tier up —
+  one bounce is cheaper than defaulting everything to Opus. The worker's
+  prompt is always: the brief **verbatim**, pointers to this skill and the
+  project-overview skill, and the standing constraints (TDD red→green, full
+  gate before handing back, no edits to skills/docs-policy, no approach
+  changes). Use worktree isolation when workers touch code in parallel.
+- **Concurrency is budget-bound:** keep it to **2–3 workers at a time** and
+  batch the rest — the 2026-07-24 six-agent fan-out exhausted the session
+  limit mid-campaign. Long-running workers go in the background; the
+  architect keeps working.
+- **What the worker cannot self-certify (architect review, every diff):** the
+  circuit breakers (rule-of-three, fallback smell, green-but-unmoved), the
+  no-silent-loss invariant, guardrail 2/7 compliance, identity-mutation and
+  ratchet impact, and that docs moved with the behavior. A worker's "gate
+  green" is necessary, never sufficient.
+- **When a brief's approach proves wrong mid-implementation**, the worker
+  stops and reports; the ARCHITECT updates the brief (or escalates to the
+  human), then relaunches. Workers never improvise a new approach — that is
+  how instance-patches happen.
+- **Trivial items** (P3 one-liners) skip the ceremony: the architect does
+  them directly.
 
 ## Running Tests
 
@@ -616,6 +706,26 @@ It refuses to run off `main`, on a dirty tree, or if the tag already exists; run
 tags annotated as `vX.Y.Z` / `unique X.Y.Z` (the repo convention). After a
 milestone release, refresh the `Current state: vX.Y.Z` line in `docs/STATUS.md`
 (narrative, not auto-updated).
+
+**Release checklist — re-arm the ratchets (2026-07-24, mandatory).** Floors
+that nobody raises become head-room that absorbs regressions (the identity
+floor sat 21 points under measured; the nightly mutation floors went stale in
+under three weeks). At every release:
+
+1. Run `scripts/identity_mutation_check.py`; if the floor is **more than 10
+   points below the measured kill rate**, raise it to measured − 5 in the same
+   release commit. Same for the per-module floors in
+   `.github/workflows/mutation.yml` against the latest nightly numbers.
+2. Run the architecture-ratchet gate (`audit/2026-07-24/09-fix-briefs.md` T3
+   once it lands: emitter line counts, `re.sub` counts, dialect
+   string-compares, C901 offenders) and lower any floor the campaign improved
+   — the ratchet is monotonic downward.
+3. Re-read the point-in-time docs (`STATUS.md`, the compatibility matrix
+   summary table) against the numbers just measured — every figure in them
+   carries the command that produced it and a date.
+
+A stale floor discovered outside a release is a finding, not background noise:
+fix it then.
 
 ## Common Patterns
 

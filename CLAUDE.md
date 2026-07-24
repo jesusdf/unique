@@ -100,6 +100,11 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## Quick reference
 
+- **Latest audit:** [`audit/2026-07-24/`](audit/2026-07-24/) — ground truth on
+  current defects. Its `08-prevention-plan.md` (root causes + mechanical rules
+  now in force) and `09-fix-briefs.md` (per-finding pre-analysis) define how
+  audit findings get fixed: **read the brief before fixing — never start a fix
+  from scratch when a brief exists.**
 - **Backlog:** [`docs/TODO.md`](docs/TODO.md) is the single source of truth and
   holds **pending work only**; when a backlog section closes, its summary moves
   to [`docs/MILESTONES.md`](docs/MILESTONES.md) and the detailed why/how is
