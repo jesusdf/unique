@@ -165,6 +165,15 @@ IDENTITY_COLUMNS: contextvars.ContextVar[dict[str, str] | None] = (
 )
 
 
+# Column types per table harvested from the script's own CREATE TABLEs
+# (table -> {column -> declared type SQL}, lowercase keys). Cross-statement
+# metadata: MySQL/T-SQL ALTERs that re-state the column type (MODIFY / ALTER
+# COLUMN) and LOB-typed expression indexes need it.
+COLUMN_TYPES: contextvars.ContextVar[dict[str, dict[str, str]] | None] = (
+    contextvars.ContextVar("column_types", default=None)
+)
+
+
 # Temp tables declared in the script (PG/MySQL ``CREATE TEMPORARY TABLE`` /
 # ``SELECT … INTO TEMPORARY``): T-SQL spells a temp table ``#name``, and the
 # rename must apply to EVERY later reference, not only the creating statement
@@ -1018,6 +1027,7 @@ def _object_id_name(node: TableRef) -> str:
 
 
 __all__ = [
+    "COLUMN_TYPES",
     "DATE_COLUMNS",
     "IDENTITY_COLUMNS",
     "TEMP_TABLES",

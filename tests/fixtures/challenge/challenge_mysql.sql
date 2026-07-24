@@ -676,7 +676,7 @@ CREATE TABLE t (id INT); SELECT LAST_INSERT_ID(),ROW_COUNT(),CONNECTION_ID(),DAT
 -- CASE[fixed]: my-set-fns — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.FI
 SELECT FIND_IN_SET('b', 'a,b,c'), MAKE_SET(6, 'x','y','z')
 
--- CASE[open]: my-set-transaction — fails on oracle. ORA-00900: invalid SQL statement
+-- CASE[fixed]: my-set-transaction — the single-line multi-statement batch now splits (string-aware top-level ';' scan); START TRANSACTION READ ONLY maps to Oracle SET TRANSACTION READ ONLY / MySQL long spelling / T-SQL note (no access modes), and SET ... READ COMMITTED into Oracle becomes a documented no-op note (its default; ORA-01453 otherwise). Live-executed on all four 2026-07-24.
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION READ ONLY; COMMIT;
 
 -- CASE[fixed]: my-soundex-eq — fails on postgresql. function soundex(unknown) does not exist

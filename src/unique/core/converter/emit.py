@@ -1922,6 +1922,58 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         if rebuilt is not None:
             return rebuilt
 
+    # PG ``ALTER TABLE t ALTER COLUMN c DROP/SET NOT NULL``: Oracle spells it
+    # MODIFY (c [NOT] NULL) without the type; MySQL MODIFY and T-SQL ALTER
+    # COLUMN must RE-STATE the type — recovered from the script's own CREATE
+    # TABLE via the COLUMN_TYPES harvest (else a documented carrier).
+    if (
+        node.kind == "ALTER"
+        and dialect != "postgresql"
+        and (
+            _nn := re.search(
+                r"(?i)^\s*ALTER\s+TABLE\s+([\w.\"]+)\s+ALTER\s+(?:COLUMN\s+)?"
+                r"(\w+)\s+(DROP|SET)\s+NOT\s+NULL\s*;?\s*$",
+                node.sql,
+            )
+        )
+    ):
+        _nn_tbl_raw, _nn_col, _nn_op = _nn.group(1), _nn.group(2), _nn.group(3)
+        _nn_null = "NULL" if _nn_op.upper() == "DROP" else "NOT NULL"
+        if dialect == "oracle":
+            # PG's DROP/SET NOT NULL is IDEMPOTENT; Oracle's MODIFY raises
+            # ORA-01451/-01442 when the column is already in that state —
+            # swallow exactly those two codes.
+            return (
+                "BEGIN\n"
+                f"    EXECUTE IMMEDIATE 'ALTER TABLE {_nn_tbl_raw} "
+                f"MODIFY ({_nn_col} {_nn_null})';\n"
+                "EXCEPTION\n"
+                "    WHEN OTHERS THEN\n"
+                "        IF SQLCODE NOT IN (-1451, -1442) THEN\n"
+                "            RAISE;\n"
+                "        END IF;\n"
+                "END;"
+            )
+        _nn_types = (COLUMN_TYPES.get() or {}).get(
+            _nn_tbl_raw.split(".")[-1].strip('"').lower(), {}
+        )
+        _nn_type = _nn_types.get(_nn_col.lower())
+        if _nn_type is None:
+            return (
+                f"-- UNIQUE: {dialect} needs the column's declared type to "
+                f"alter its nullability and the script does not define "
+                f"{_nn_tbl_raw}.{_nn_col}; original postgresql statement "
+                f"preserved:\n{_comment_block(node.sql)}"
+            )
+        _nn_type = _portable_types_in_sql(_nn_type, dialect)
+        if dialect == "mysql":
+            return (
+                f"ALTER TABLE {_nn_tbl_raw} MODIFY {_nn_col} " f"{_nn_type} {_nn_null}"
+            )
+        return (
+            f"ALTER TABLE {_nn_tbl_raw} ALTER COLUMN {_nn_col} "
+            f"{_nn_type} {_nn_null}"
+        )
     # ALTER TABLE … ADD COLUMN … GENERATED … AS IDENTITY -> MySQL: the only
     # auto-number form is AUTO_INCREMENT, and MySQL requires the column to be
     # a key — add a UNIQUE index alongside.
@@ -1966,6 +2018,35 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             "equivalent (access-method specific); index omitted — queries "
             "run unindexed (docs/03-unsupported.md)\n" + _comment_block(node.sql)
         )
+    # An EXPRESSION index over a column that maps to a LOB on the target
+    # (PG TEXT -> CLOB / MySQL TEXT) is invalid there (ORA-02327; MySQL 3757):
+    # physical-only, so carry the loss. Column types come from the script's
+    # own CREATE TABLE (COLUMN_TYPES harvest).
+    if (
+        node.kind == "CREATE INDEX"
+        and node.source_dialect == "postgresql"
+        and dialect in ("oracle", "mysql")
+        and (
+            _xi := re.search(
+                r"(?i)\bON\s+([\w.\"]+)\s*\((.+)\)\s*;?\s*$", node.sql.strip()
+            )
+        )
+        and "(" in _xi.group(2)
+    ):
+        _xi_types = (COLUMN_TYPES.get() or {}).get(
+            _xi.group(1).split(".")[-1].strip('"').lower(), {}
+        )
+        _xi_lob = re.compile(r"(?i)^(TEXT|CLOB|NCLOB|JSON|JSONB|BLOB|BYTEA|IMAGE|XML)")
+        if any(
+            _xi_lob.match(_xi_types.get(_r.lower(), ""))
+            for _r in re.findall(r"\b\w+\b", _xi.group(2))
+        ):
+            return (
+                f"-- UNIQUE: expression index over a LOB-typed column is "
+                f"invalid on {dialect} (ORA-02327 / MySQL functional-index "
+                "restriction); index omitted — queries run unindexed "
+                "(docs/03-unsupported.md)\n" + _comment_block(node.sql)
+            )
     if (
         node.kind == "CREATE INDEX"
         and node.source_dialect == "postgresql"
@@ -2148,10 +2229,43 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     # BEGIN TRANSACTION: T-SQL/PG/MySQL have a statement form (rendered by the
     # sqlglot passthrough below); Oracle starts a transaction implicitly, so drop
     # it with a documented note instead of a bare — and invalid — ``BEGIN``.
-    if node.kind == "BEGIN TRANSACTION" and dialect == "oracle":
+    # An access MODE (READ ONLY / READ WRITE) DOES have an Oracle statement:
+    # SET TRANSACTION <mode> (must be the transaction's first statement).
+    if node.kind == "BEGIN TRANSACTION":
+        _tx_mode = re.search(r"(?i)\bREAD\s+(ONLY|WRITE)\b", node.sql)
+        if dialect == "oracle":
+            if _tx_mode:
+                return f"SET TRANSACTION READ {_tx_mode.group(1).upper()}"
+            return (
+                "-- UNIQUE: BEGIN TRANSACTION dropped -- Oracle starts a "
+                "transaction implicitly"
+            )
+        if _tx_mode and dialect == "mysql":
+            # MySQL's BEGIN takes no access mode — the long spelling does.
+            return f"START TRANSACTION READ {_tx_mode.group(1).upper()}"
+        if _tx_mode and dialect == "tsql":
+            return (
+                "BEGIN TRANSACTION /* UNIQUE: T-SQL transactions have no "
+                f"READ {_tx_mode.group(1).upper()} access mode; started as a "
+                "regular transaction (docs/03-unsupported.md) */"
+            )
+    # SET TRANSACTION ISOLATION LEVEL READ COMMITTED into Oracle: READ
+    # COMMITTED is Oracle's DEFAULT, and its SET TRANSACTION must be the
+    # transaction's FIRST statement (a following mapped SET TRANSACTION
+    # READ ONLY would be ORA-01453) — note the no-op instead.
+    if (
+        node.kind in ("SET", "SET_OPTION", "COMMAND")
+        and dialect == "oracle"
+        and node.source_dialect != "oracle"
+        and re.match(
+            r"(?i)^\s*SET\s+TRANSACTION\s+ISOLATION\s+LEVEL\s+READ\s+COMMITTED\s*;?\s*$",
+            node.sql,
+        )
+    ):
         return (
-            "-- UNIQUE: BEGIN TRANSACTION dropped -- Oracle starts a "
-            "transaction implicitly"
+            "-- UNIQUE: READ COMMITTED is Oracle's default isolation level "
+            "(no-op; kept as a note so a following SET TRANSACTION mode "
+            "statement can still open the transaction)"
         )
 
     # Oracle hierarchical query: keep as-is for Oracle; for others there is

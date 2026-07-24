@@ -4612,3 +4612,66 @@ class TestSelectIntoDerivedColumnsNamed:
     def test_tail_derived_column_aliased(self) -> None:
         out = _tx(_case("challenge_mysql.sql", "my-select-into-out"), "mysql", "tsql")
         assert "SELECT 1 AS uq_col1" in out, out
+
+
+class TestCrossStatementMetadata:
+    """COLUMN_TYPES harvest: the script's own CREATE TABLE supplies column
+    types to later statements. Live-verified 2026-07-24."""
+
+    def test_drop_not_null_restates_type(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-drop-not-null")
+        assert "MODIFY a INT NULL" in _tx(case, "postgresql", "mysql")
+        assert "ALTER COLUMN a INT NULL" in _tx(case, "postgresql", "tsql")
+        out = _tx(case, "postgresql", "oracle")
+        assert "MODIFY (a NULL)" in out and "SQLCODE NOT IN (-1451, -1442)" in out
+
+    def test_unknown_column_degrades_warned(self) -> None:
+        result = Transpiler().transpile(
+            "ALTER TABLE elsewhere ALTER COLUMN x DROP NOT NULL;",
+            source="postgresql",
+            target="mysql",
+        )
+        assert result.warnings, result.sql
+        assert "does not define" in result.sql, result.sql
+
+    def test_lob_expression_index_degrades(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-expr-index")
+        for target in ("mysql", "oracle"):
+            result = Transpiler().transpile(case, source="postgresql", target=target)
+            assert "LOB-typed column" in result.sql, result.sql
+            assert result.warnings, result.warnings
+
+    def test_varchar_expression_index_native(self) -> None:
+        out = _tx(
+            "CREATE TABLE v (a INT, b VARCHAR(50)); CREATE INDEX iv ON v (lower(b));",
+            "postgresql",
+            "oracle",
+        )
+        assert "CREATE INDEX iv ON v(LOWER(b))" in out.replace("  ", " "), out
+
+
+class TestSetTransactionModes:
+    """Transaction access modes per target; the single-line multi-statement
+    batch splits. Live-executed on all four 2026-07-24."""
+
+    def test_oracle_read_only(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-set-transaction"), "mysql", "oracle")
+        )
+        assert "SET TRANSACTION READ ONLY" in out, out
+        assert "START TRANSACTION" not in out.upper(), out
+
+    def test_mysql_identity_keeps_long_spelling(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-set-transaction"), "mysql", "mysql")
+        )
+        assert "START TRANSACTION READ ONLY" in out, out
+
+    def test_tsql_mode_noted(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_mysql.sql", "my-set-transaction"),
+            source="mysql",
+            target="tsql",
+        )
+        assert "no READ ONLY access mode" in result.sql, result.sql
+        assert result.warnings, result.warnings

@@ -679,11 +679,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `ORA-32039: missing column alias list in recursive WITH clause element SEQ`
 - src: `WITH RECURSIVE seq AS (SELECT 1 n UNION ALL SELECT n+1 FROM seq WHERE n<10) SELECT GROUP_CONCAT(n) FROM seq`
 
-## my-set-transaction  (mysql)
-- targets: oracle(invalid)
-- live error: `ORA-00900: invalid SQL statement`
-- src: `SET TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION READ ONLY; COMMIT;`
-
 ## my-str-null  (mysql)
 - targets: oracle(func), postgresql(func)
 - live error: `FUNC-DIFF: source=(('NULL', 'NULL', 'NULL', 'NULL', 'NULL', 'NULL'),) target=(('NULL', 'a'`
@@ -1477,11 +1472,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - live error: `(156, b"Incorrect syntax near the keyword 'DEFAULT'.DB-Lib error message 20018, severity 1`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP DEFAULT`
 
-## pg-drop-not-null  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n`
-- src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL`
-
 ## pg-empty-is-null  (postgresql)
 - targets: oracle(func)
 - live error: `FUNC-DIFF: source=(('0',),) target=(('1',),)`
@@ -1506,11 +1496,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(invalid)
 - live error: `(1336, 'Dynamic SQL is not allowed in stored function or trigger')`
 - src: `CREATE FUNCTION f() RETURNS VOID AS $$ BEGIN EXECUTE 'INSERT INTO t VALUES ($1)' USING 5; END; $$ LANGUAGE plpgsql`
-
-## pg-expr-index  (postgresql)
-- targets: mysql(invalid), oracle(invalid)
-- live error: `ORA-02327: cannot create index on expression with data type LOB`
-- src: `CREATE TABLE t (a INT, b TEXT); CREATE INDEX ix ON t (lower(b))`
 
 ## pg-extract-dow  (postgresql)
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)

@@ -177,6 +177,62 @@ def harvest_proc_date_params(sql: str) -> dict[str, frozenset[int]]:
     return result
 
 
+_CT_HEAD_RE = re.compile(
+    r"(?i)\bCREATE\s+(?:GLOBAL\s+|LOCAL\s+|TEMPORARY\s+|TEMP\s+|UNLOGGED\s+)*"
+    r"TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?([\w.\[\]\"`#]+)\s*\("
+)
+_CT_ELEMENT_HEADS = frozenset(
+    {"PRIMARY", "FOREIGN", "UNIQUE", "CHECK", "CONSTRAINT", "INDEX", "KEY", "EXCLUDE"}
+)
+
+
+def harvest_column_types(sql: str) -> dict[str, dict[str, str]]:
+    """Column types per table from the script's own CREATE TABLEs
+    (table -> {column -> declared type SQL}, lowercase keys). Balanced-paren
+    body scan, so inline single-line CREATEs work too."""
+    from unique.core.converter._base import _split_top_level_commas
+
+    result: dict[str, dict[str, str]] = {}
+    for m in _CT_HEAD_RE.finditer(sql):
+        depth, i = 1, m.end()
+        while i < len(sql) and depth:
+            ch = sql[i]
+            if ch == "'":
+                i += 1
+                while i < len(sql):
+                    if sql[i : i + 2] == "''":
+                        i += 2
+                        continue
+                    if sql[i] == "'":
+                        break
+                    i += 1
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            i += 1
+        body = sql[m.end() : i - 1]
+        table = m.group(1).replace("[", "").replace("]", "").replace('"', "")
+        table = table.split(".")[-1].lstrip("#").lower()
+        cols: dict[str, str] = {}
+        for item in _split_top_level_commas(body):
+            cm = re.match(
+                r'\s*(\[[^\]]+\]|`[^`]+`|"[^"]+"|\w+)\s+'
+                r"([A-Za-z]\w*(?:\s+PRECISION|\s+VARYING)?"
+                r"(?:\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\))?)",
+                item,
+            )
+            if not cm:
+                continue
+            name = cm.group(1).strip('[]"`')
+            if name.upper() in _CT_ELEMENT_HEADS:
+                continue
+            cols[name.lower()] = cm.group(2).strip()
+        if cols:
+            result[table] = cols
+    return result
+
+
 def harvest_date_columns(sql: str) -> dict[str, frozenset[str]]:
     """Collect date/time column names per table from a whole script.
 

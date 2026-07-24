@@ -22,6 +22,7 @@ from unique.core.ast_nodes import (
 )
 from unique.core.batch_splitter import _TSQL_SYSTEM_PROCS, BatchSplitter, BatchType
 from unique.core.converter import (
+    COLUMN_TYPES,
     DATE_COLUMNS,
     DEGRADED_ROUTINES,
     IDENTITY_COLUMNS,
@@ -35,6 +36,7 @@ from unique.core.converter import (
     TSQL_ALIAS_TYPES,
     TSQL_BIT_COLUMNS,
     USER_FUNCTIONS,
+    harvest_column_types,
     harvest_date_columns,
     harvest_identity_columns,
     harvest_pg_composite_types,
@@ -238,6 +240,14 @@ class Transpiler:
             temp_tables = harvest_temp_tables(sql)
             if temp_tables:
                 temp_tables_token = TEMP_TABLES.set(temp_tables)
+        # Cross-statement column-type metadata from the script's own CREATE
+        # TABLEs (MySQL/T-SQL ALTERs re-state the type; LOB expression
+        # indexes degrade).
+        column_types_token = None
+        if source != target:
+            column_types = harvest_column_types(sql)
+            if column_types:
+                column_types_token = COLUMN_TYPES.set(column_types)
         source_dialect_token = SOURCE_DIALECT.set(source)
         degraded_routines_token = DEGRADED_ROUTINES.set(set())
         refcursor_procs_token = REFCURSOR_PROCS.set({})
@@ -498,6 +508,8 @@ class Transpiler:
                 IDENTITY_COLUMNS.reset(identity_token)
             if temp_tables_token is not None:
                 TEMP_TABLES.reset(temp_tables_token)
+            if column_types_token is not None:
+                COLUMN_TYPES.reset(column_types_token)
             if proc_date_token is not None:
                 PROC_DATE_PARAMS.reset(proc_date_token)
             if func_token is not None:
@@ -1391,6 +1403,35 @@ class Transpiler:
         — an executable statement reduced to a comment with a misleading
         warning is a no-silent-loss violation (audit 2026-07-08, RC1/RC4).
         """
+        if target == "oracle" and source != "oracle":
+            _, _rc_code = split_leading_trivia(sql)
+            # READ COMMITTED is Oracle's DEFAULT isolation level, and its SET
+            # TRANSACTION must be the transaction's FIRST statement — keeping
+            # this one would block a following mapped SET TRANSACTION mode
+            # statement (ORA-01453). Note the no-op.
+            if re.match(
+                r"(?is)^\s*SET\s+TRANSACTION\s+ISOLATION\s+LEVEL\s+READ\s+"
+                r"COMMITTED\s*;?\s*$",
+                _rc_code,
+            ):
+                return TranspileResult(
+                    sql=(
+                        "-- UNIQUE: READ COMMITTED is Oracle's default "
+                        "isolation level (no-op; noted so a following SET "
+                        "TRANSACTION mode statement can still open the "
+                        "transaction)"
+                    ),
+                    warnings=[
+                        _warn(
+                            "SET TRANSACTION ISOLATION LEVEL READ COMMITTED "
+                            "is Oracle's default — noted as a comment",
+                            "set_option",
+                            source,
+                            target,
+                        )
+                    ],
+                    unsupported=[],
+                )
         if target == "tsql" and source != "tsql":
             # SET ROLE is real SQL on PG/MySQL/Oracle but T-SQL has no
             # such statement (role membership / EXECUTE AS) — wave 139.

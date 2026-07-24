@@ -388,6 +388,43 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
     return BatchType.UNKNOWN
 
 
+def _split_line_semis(line: str) -> list[str]:
+    """Split one line at top-level semicolons (string- and paren-aware),
+    keeping each terminator with its segment."""
+    segs: list[str] = []
+    buf: list[str] = []
+    depth = 0
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if ch == "'":
+            buf.append(ch)
+            i += 1
+            while i < len(line):
+                buf.append(line[i])
+                if line[i] == "'":
+                    if line[i : i + 2] == "''":
+                        buf.append("'")
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        buf.append(ch)
+        if ch == ";" and depth <= 0:
+            segs.append("".join(buf))
+            buf = []
+        i += 1
+    if "".join(buf).strip():
+        segs.append("".join(buf))
+    return segs
+
+
 class BatchSplitter:
     """Splits SQL scripts into batches based on dialect separators."""
 
@@ -775,6 +812,26 @@ class BatchSplitter:
                 in_routine = False
                 begin_depth = 0
                 continue
+
+            # A single LINE holding several ;-terminated statements (the
+            # line-based scan would keep them one batch and the leading
+            # statement's classification would swallow the rest): split it at
+            # top-level semicolons, string-aware. Routine bodies excluded.
+            if (
+                delimiter == ";"
+                and not in_routine
+                and not stripped.startswith("--")
+                and not routine_re.search(line)
+            ):
+                _segs = _split_line_semis(line)
+                if len(_segs) > 1:
+                    for _seg in _segs:
+                        if not _seg.strip():
+                            continue
+                        current.append(_seg)
+                        if _seg.rstrip().endswith(";"):
+                            flush(i)
+                    continue
 
             # Track routine bodies (BEGIN/END nesting) only when no custom
             # delimiter is in effect (a custom delimiter marks the boundaries).

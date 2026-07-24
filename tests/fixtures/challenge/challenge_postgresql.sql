@@ -211,7 +211,7 @@ SELECT 123::text::int AS r
 -- CASE[fixed]: pg-drop-default — ALTER COLUMN a DROP DEFAULT maps to Oracle MODIFY a DEFAULT NULL and T-SQL dynamic drop of the named default constraint (a no-op when none). live-verified DDL runs.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP DEFAULT
 
--- CASE[open]: pg-drop-not-null — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
+-- CASE[fixed]: pg-drop-not-null — cross-statement COLUMN_TYPES harvest (the script's own CREATE TABLE) lets MySQL MODIFY / T-SQL ALTER COLUMN re-state the type; Oracle uses type-less MODIFY wrapped in an idempotent guard (PG's DROP/SET NOT NULL is idempotent, Oracle's raises ORA-01451/-01442). Live-executed on mysql/oracle/tsql 2026-07-24.
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL
 
 -- CASE[fixed]: pg-dttypes — TIME/TIMETZ/INTERVAL now map to Oracle INTERVAL DAY TO SECOND with warned notes (docs/03-unsupported.md §3.19); TIMESTAMPTZ -> TIMESTAMP WITH TIME ZONE. Live-executed on oracle 2026-07-24.
@@ -247,7 +247,7 @@ CREATE FUNCTION f() RETURNS void AS $$ BEGIN INSERT INTO t VALUES(1); EXCEPTION 
 -- CASE[fixed]: pg-execute-using — a PG RETURNS VOID function is semantically a PROCEDURE; MySQL forbids dynamic SQL in a function (1336) but allows it in a procedure, so the void function is emitted as a PROCEDURE (and PG's $1 placeholder -> MySQL ?); CALL inserts 5, verified
 CREATE FUNCTION f() RETURNS VOID AS $$ BEGIN EXECUTE 'INSERT INTO t VALUES ($1)' USING 5; END; $$ LANGUAGE plpgsql
 
--- CASE[open]: pg-expr-index — fails on mysql, oracle. ORA-02327: cannot create index on expression with data type LOB
+-- CASE[fixed]: pg-expr-index — an expression index over a column that maps to a LOB on the target (TEXT→CLOB; MySQL functional-index restriction) degrades to a documented carrier + warning via the COLUMN_TYPES harvest; a VARCHAR-typed expression index keeps its native emission. Live-verified 2026-07-24.
 CREATE TABLE t (a INT, b TEXT); CREATE INDEX ix ON t (lower(b))
 
 -- CASE[fixed]: pg-extract-dow — EXTRACT(DOW), PG Sunday=0..Saturday=6. No target's native EXTRACT/DATEPART matches: MySQL DAYOFWEEK(d)-1, Oracle MOD over a known Sunday (1970-01-04), T-SQL DATEDIFF over a known Sunday (1900-01-07) — all NLS-/DATEFIRST-independent. live-verified value on all four.
