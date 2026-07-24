@@ -5089,3 +5089,55 @@ class TestInsertSelectConflict:
         # source-idiom-absent check.
         code = re.sub(r"/\*.*?\*/", "", _exec_lines(out), flags=re.DOTALL)
         assert "ON CONFLICT" not in code.upper(), out
+
+
+class TestMoneyLiteralMangle:
+    """N8/B9: T-SQL's bare money literal (``$12.50``) sqlglot mis-parses as
+    ``Column(this=Literal(50), table=Identifier($12))`` — a bogus column
+    ``50`` of a table ``$12``. Rebuilt as the numeric literal at conversion
+    time instead of shipping the garbage ``table.column`` shape."""
+
+    @pytest.mark.parametrize(
+        ("literal", "expected"),
+        [
+            ("$12.50", "12.50"),
+            ("$0.5", "0.5"),
+            ("$12.05", "12.05"),
+            ("$100", "100"),
+        ],
+    )
+    @pytest.mark.parametrize("target", ["postgresql", "oracle", "mysql"])
+    def test_money_literal_becomes_numeric(
+        self, literal: str, expected: str, target: str
+    ) -> None:
+        out = _tx(f"SELECT {literal} AS price;", "tsql", target)
+        assert expected in out, out
+        assert "$" not in out, out
+        assert _target_parses(out, target), out
+
+    def test_money_literal_survives_arithmetic(self) -> None:
+        out = _tx("SELECT $12.50 + 1;", "tsql", "postgresql")
+        assert "12.50" in out or "12.5" in out, out
+        assert "$" not in out, out
+
+    def test_negative_control_bracket_quoted_identifier_untouched(self) -> None:
+        # A genuine bracket-quoted identifier that merely starts with '$'
+        # (never a valid *unquoted* T-SQL identifier) must not be rewritten.
+        out = _tx("SELECT [$12abc] FROM t;", "tsql", "postgresql")
+        assert "12abc" in out.replace('"', ""), out
+
+    def test_negative_control_quoted_dotted_form_untouched(self) -> None:
+        # A quoted "$12".50 is invalid T-SQL (live-verified: Msg 102) and is
+        # NOT the money-literal shorthand, unlike the unquoted form — it must
+        # not be silently reinterpreted as 12.50.
+        out = _tx('SELECT "$12".50 FROM t;', "tsql", "postgresql")
+        assert "12.50" not in out, out
+
+    def test_non_tsql_source_flags_the_same_shape_as_garbage(self) -> None:
+        # Oracle/MySQL have no money-literal shorthand — the identical
+        # Column(table=$12, this=Literal(50)) shape there is genuine garbage
+        # (07-08 N3's detector, generalized one level down).
+        from unique.core.validation import validate_source
+
+        issues = validate_source("SELECT $12.50 AS price;", "oracle")
+        assert issues and "not a valid column reference" in issues[0].message

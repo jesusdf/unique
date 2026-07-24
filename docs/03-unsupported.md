@@ -365,6 +365,23 @@ rejects). Both are validated live. Only date parts outside the common
 year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
 still need review.
 
+### 3.23 T-SQL Money Literal Shorthand (`$12.50`) — Handled (2026-07-25)
+
+T-SQL's bare currency literal (`$12.50`, `$100`) is mis-parsed by sqlglot as a
+`table.column` reference (`Column(this=Literal(50), table=Identifier($12))`
+for the dotted form, `Column(this=Identifier($100))` for a whole-dollar
+amount) rather than a number — a nonsense shape that used to ship unmodified
+(a quoted `"$12"` identifier and a bare `$` on non-T-SQL targets, both
+invalid SQL there, with zero warnings). The converter now recognizes both
+shapes on T-SQL source and rebuilds the numeric literal (`12.50`, `100`),
+value-preserving on every target — no warning is needed since nothing is
+lost. A **quoted** `"$12".50` / `[$12].[50]` is left untouched (it is
+already-invalid T-SQL, not the money shorthand — live-verified Msg 102), and
+the same `table.column` shape on a dialect with no money-literal syntax
+(Oracle/MySQL source) is now flagged by `validate_source` as invalid input
+instead of validating clean (generalizing the §07-08 "garbage `table.column`"
+detector one level below the top-level bare-statement check).
+
 ### 3.22 Annotated Inherent Divergences (2026-07-24 batch)
 
 Approved-limit divergences that now warn + annotate instead of shipping

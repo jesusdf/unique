@@ -226,6 +226,28 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
                     f"VALUES ({', '.join(vals)})"
                 )
     if dialect == "postgresql":
+        # PG's ``SET TRANSACTION [ISOLATION LEVEL <lvl>] [READ ONLY|READ
+        # WRITE]``: sqlglot parses the bare access-mode form as ``exp.Set``
+        # and the combined form (with ISOLATION LEVEL) as an opaque
+        # ``exp.Command`` — neither shape carries a usable per-target
+        # spelling, and the batch classifier now routes this statement class
+        # here instead of the SET-option comment-out fallback (N7/B8). Model
+        # it as a passthrough carrying the ORIGINAL text so the emitter can
+        # apply the per-target access-mode mapping without re-parsing a
+        # mangled tree.
+        txn_mode = re.match(
+            r"(?is)^\s*SET\s+TRANSACTION\s+"
+            r"(?=.*\b(?:ISOLATION\s+LEVEL|READ\s+(?:ONLY|WRITE))\b)",
+            sql,
+        )
+        if txn_mode:
+            return [
+                PassthroughSQL(
+                    sql=sql.strip().rstrip(";"),
+                    source_dialect=dialect,
+                    kind="SET TRANSACTION MODE",
+                )
+            ]
         # PG 14's recursive-CTE ordering clauses (``) SEARCH DEPTH|BREADTH
         # FIRST BY … SET col`` / ``) CYCLE … SET col``): sqlglot cannot
         # parse them and the fallback SHREDDED the statement into
@@ -756,6 +778,9 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     if isinstance(expr, exp.SetOperation):
         return _convert_union(expr)
     if isinstance(expr, exp.Column):
+        money = _tsql_money_literal_from_column(expr)
+        if money is not None:
+            return money
         return _convert_column(expr)
     if isinstance(expr, exp.Table):
         return _convert_table(expr)
@@ -2091,6 +2116,49 @@ def _convert_drop(expr: exp.Drop) -> DropStatement:
         if_exists=if_exists,
         on_table=on_table,
     )
+
+
+_MONEY_MANGLE_RE = re.compile(r"^\$[\d.,]+$")
+
+
+def _tsql_money_literal_from_column(expr: exp.Column) -> Literal | None:
+    """Rebuild a T-SQL money literal (``$12.50``) sqlglot mis-parses as a
+    ``table.column`` reference (N8/B9).
+
+    ``$12.50`` parses as ``Column(this=Literal(50), table=Identifier($12))``
+    — a bogus column ``50`` of a table ``$12`` — and a bare whole-dollar
+    amount (``$100``) as ``Column(this=Identifier($100))`` with no table at
+    all. Neither is a real identifier: an unquoted T-SQL identifier cannot
+    start with ``$``, and a *quoted* ``"$12"."50"``/``[$12].[50]`` reference
+    to real columns parses with quoted ``Identifier`` nodes, never a
+    ``Literal``, on the ``this`` side — so gating on ``this`` being an
+    unquoted numeric ``Literal`` (dotted form) or an unquoted ``$``-prefixed
+    ``Identifier`` (whole-dollar form) never mistakes a genuine identifier
+    (e.g. Oracle's ``A$B``, or a bracket-quoted ``[$12abc]``) for a literal.
+    Scoped to T-SQL source only, where the money shorthand exists.
+    """
+    if SOURCE_DIALECT.get() != "tsql":
+        return None
+    table = expr.args.get("table")
+    if (
+        table is not None
+        and isinstance(expr.this, exp.Literal)
+        and not expr.this.is_string
+        and not (isinstance(table, exp.Identifier) and table.args.get("quoted"))
+        and _MONEY_MANGLE_RE.match(str(table.this))
+    ):
+        whole = str(table.this)[1:].replace(",", "")
+        frac = str(expr.this.this)
+        return _convert_literal(exp.Literal(this=f"{whole}.{frac}", is_string=False))
+    if (
+        table is None
+        and isinstance(expr.this, exp.Identifier)
+        and not expr.this.args.get("quoted")
+        and _MONEY_MANGLE_RE.fullmatch(str(expr.this.this))
+    ):
+        whole = str(expr.this.this)[1:].replace(",", "")
+        return _convert_literal(exp.Literal(this=whole, is_string=False))
+    return None
 
 
 def _convert_column(expr: exp.Column) -> ColumnRef:

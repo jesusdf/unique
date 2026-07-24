@@ -260,4 +260,42 @@ def validate_source(sql: str, dialect: str) -> list[SyntaxIssue]:
                             snippet=rest[:80],
                         )
                     )
+            # A ``table.column`` reference whose "table" is not a shape any
+            # real identifier can take (audit N8/B9): T-SQL's ``$12.50``
+            # money-literal shorthand mis-parses this way, is handled and
+            # rewritten by the converter, and is excluded here — but the
+            # same nonsense shape appearing on a dialect with no such
+            # shorthand is genuine garbage that sqlglot accepts silently
+            # (07-08 N3's "garbage detector", generalized one level down
+            # from the top-level bare-statement check above).
+            if dialect != "tsql":
+                for stmt in parsed:
+                    if stmt is None:
+                        continue
+                    for col in stmt.find_all(exp.Column):
+                        table = col.args.get("table")
+                        if (
+                            isinstance(table, exp.Identifier)
+                            and not table.args.get("quoted")
+                            and isinstance(col.this, exp.Literal)
+                            and re.match(r"^\$[\d.,]+$", str(table.this))
+                        ):
+                            issues.append(
+                                SyntaxIssue(
+                                    line=batch.line_offset + 1,
+                                    column=0,
+                                    message=(
+                                        f"'{table.this}.{col.this.this}' is not a "
+                                        "valid column reference"
+                                    ),
+                                    snippet=next(
+                                        (
+                                            ln.strip()
+                                            for ln in batch.sql.splitlines()
+                                            if ln.strip()
+                                        ),
+                                        "",
+                                    )[:80],
+                                )
+                            )
     return issues

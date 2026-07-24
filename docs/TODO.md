@@ -94,8 +94,17 @@ Findings detail: audit docs 02/04/05/07.
   keeps the existing READ-COMMITTED no-op note). Live-verified on
   SQL Server + MySQL (`pymssql`/`pymysql`); Oracle spot-checked via
   `DBMS_SQL.PARSE`. Tests: `test_pg_source_wave1.py::TestPgSetTransactionAccessMode`.
-- [ ] **B9** T-SQL money literal `$12.50` mangle intercept + garbage-shape
-  guard (N8).
+- [x] **B9** T-SQL money literal `$12.50` mangle intercept + garbage-shape
+  guard (N8) — done 2026-07-25; `convert.py` rebuilds sqlglot's
+  `Column(this=Literal, table=Identifier($…))` (and the whole-dollar
+  `Column(this=Identifier($…))` no-dot form) into the numeric literal on
+  T-SQL source, gated to unquoted `$`-shaped identifiers only (a quoted
+  `"$12".50` is already-invalid T-SQL, not the shorthand, and is left
+  untouched); `validation.py` flags the identical shape as invalid input on
+  Oracle/MySQL source, which have no money-literal syntax. Live-verified
+  12.50/0.5/100 on pg/oracle/mysql. Tests:
+  `test_challenge.py::TestMoneyLiteralMangle`,
+  `test_validation.py::TestBareAndTypoStatements::test_dollar_money_*`.
 - [ ] **B11** Dynamic-SQL constant strings routed through the transpiler, warn
   otherwise (N10).
 - [ ] **B12** `SQL%ROWCOUNT`→MySQL annotated divergence (N11, §3.22 class).

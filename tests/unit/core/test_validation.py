@@ -99,3 +99,16 @@ class TestBareAndTypoStatements:
             "SET NOCOUNT ON",
         ):
             assert not validate_source(sql, "tsql"), sql
+
+    def test_dollar_money_shaped_column_flagged_on_non_tsql(self) -> None:
+        # N8/B9: ``Column(table=$12, this=Literal(50))`` is T-SQL's real
+        # money-literal shorthand ($12.50) but the identical shape on a
+        # dialect with no such shorthand is garbage.
+        issues = validate_source("SELECT $12.50 AS price;", "oracle")
+        assert issues and "not a valid column reference" in issues[0].message
+        issues = validate_source("SELECT $12.50 AS price;", "mysql")
+        assert issues and "not a valid column reference" in issues[0].message
+
+    def test_dollar_money_literal_not_flagged_on_tsql(self) -> None:
+        # The same shape on T-SQL IS the real money literal — valid input.
+        assert validate_source("SELECT $12.50 AS price;", "tsql") == []
