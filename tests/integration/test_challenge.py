@@ -4879,3 +4879,56 @@ class TestMergeExtendedClauses:
             "(SELECT 1 FROM src WHERE tgt.id = src.id)" in out
         ), out
         assert "BY SOURCE" not in _exec_lines(out), out
+
+
+# --- Audit 2026-07-24 finding N2: MERGE conditional-DELETE fold safety ---
+
+
+class TestMergeConditionalDeleteFoldSafety:
+    """N2: Oracle folds a conditional MATCHED DELETE/UPDATE pair into
+    ``UPDATE … DELETE WHERE``, but Oracle evaluates ``DELETE WHERE`` against
+    *post-update* values. Folding is only value-equivalent when the DELETE
+    condition references no target column the UPDATE assigns."""
+
+    _UNSAFE = (
+        "MERGE INTO dst AS d USING src AS s ON d.id = s.id "
+        "WHEN MATCHED AND d.qty = 0 THEN DELETE "
+        "WHEN MATCHED THEN UPDATE SET d.qty = s.qty;"
+    )
+    # UPDATE-first neighbour: the folded DELETE cond NOT(uc) also reads d.qty.
+    _UNSAFE_UPDATE_FIRST = (
+        "MERGE INTO dst AS d USING src AS s ON d.id = s.id "
+        "WHEN MATCHED AND d.qty > 0 THEN UPDATE SET d.qty = s.qty "
+        "WHEN MATCHED THEN DELETE;"
+    )
+    _SAFE = (
+        "MERGE INTO dst AS d USING src AS s ON d.id = s.id "
+        "WHEN MATCHED AND s.qty = 0 THEN DELETE "
+        "WHEN MATCHED THEN UPDATE SET d.qty = s.qty;"
+    )
+
+    def test_unsafe_delete_on_updated_column_degrades(self) -> None:
+        r = Transpiler().transpile(self._UNSAFE, "tsql", "oracle")
+        # No silent post-update DELETE WHERE fold.
+        assert "DELETE WHERE" not in _exec_lines(r.sql), r.sql
+        # The whole MERGE is degraded to a carrier + warning.
+        assert "-- UNIQUE:" in r.sql
+        assert r.warnings, "unsafe fold must warn"
+        assert any("post-update" in w.message.lower() for w in r.warnings), r.warnings
+
+    def test_unsafe_update_first_order_degrades(self) -> None:
+        r = Transpiler().transpile(self._UNSAFE_UPDATE_FIRST, "tsql", "oracle")
+        assert "DELETE WHERE" not in _exec_lines(r.sql), r.sql
+        assert r.warnings, r.warnings
+
+    def test_safe_source_column_condition_still_folds(self) -> None:
+        out = _tx(self._SAFE, "tsql", "oracle")
+        assert "DELETE WHERE s.qty = 0" in out, out
+        assert "CASE WHEN NOT (s.qty = 0)" in out, out
+
+    def test_ts_merge_full_corpus_case_still_folds(self) -> None:
+        # The corpus case uses a source-column condition — must keep folding.
+        out = _tx(_case("challenge_sqlserver.sql", "ts-merge-full"), "tsql", "oracle")
+        assert "DELETE WHERE NOT (src.n > 0)" in out, out
+
+

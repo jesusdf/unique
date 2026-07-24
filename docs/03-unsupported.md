@@ -284,6 +284,20 @@ More complex MERGEs (conditional WHEN clauses, WHEN MATCHED DELETE, multiple
 branches) are preserved as a documented comment and registered in
 `result.warnings` / `result.unsupported` — never dropped silently.
 
+#### MERGE clause composition across engines (audit 2026-07-24)
+
+Some cross-engine MERGE lowerings are only value-equivalent in restricted
+shapes; outside them the whole MERGE degrades to a carrier + warning rather
+than ship silently-wrong output:
+
+- **Conditional DELETE that reads an UPDATE-assigned column → Oracle.** Oracle
+  folds a conditional `WHEN MATCHED … DELETE` / `WHEN MATCHED … UPDATE` pair
+  into one `UPDATE … DELETE WHERE`, but Oracle evaluates `DELETE WHERE` against
+  the *post-update* row while T-SQL evaluates the original row. The fold is
+  therefore performed **only** when the DELETE condition references no target
+  column the UPDATE assigns (source-column conditions are safe); an unsafe
+  shape degrades warned (`… would delete rows the source keeps`).
+
 ### 3.7 OUTPUT / RETURNING Clause → MySQL
 
 MySQL has no equivalent to the OUTPUT (T-SQL) or RETURNING (Oracle/PostgreSQL)

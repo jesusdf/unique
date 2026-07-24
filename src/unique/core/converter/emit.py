@@ -631,9 +631,27 @@ def _oracle_merge_paren_on(sql: str) -> str:
     return f"{sql[:on_at]} ON ({cond}){sql[when_at:]}"
 
 
+def _merge_delete_reads_updated(
+    cond: exp.Expression, target_alias: str, assigned: set[str]
+) -> bool:
+    """True when the DELETE-relevant condition references a target column the
+    UPDATE assigns. Oracle evaluates ``DELETE WHERE`` against *post-update*
+    values, so such a fold would delete rows T-SQL keeps (audit N2)."""
+    for col in cond.find_all(exp.Column):
+        if col.name.lower() not in assigned:
+            continue
+        tbl = col.args.get("table")
+        tbl_name = tbl.name.lower() if tbl is not None else None
+        # A column qualified with the target alias, or an unqualified column
+        # (which binds to the target in the DELETE), reads the updated row.
+        if tbl_name in (target_alias, None):
+            return True
+    return False
+
+
 def _merge_extended_clauses(
     tree: exp.Merge, dialect: str
-) -> tuple[list[str], str | None]:
+) -> tuple[list[str], str | None, str | None]:
     """T-SQL's extended MERGE clause set on targets that lack it (in place).
 
     ``WHEN NOT MATCHED BY SOURCE`` exists nowhere else (PostgreSQL only from
@@ -648,12 +666,17 @@ def _merge_extended_clauses(
     DELETE WHERE only examines *updated* rows, so the update must cover every
     matched row — plus a ``DELETE WHERE`` tail spliced after emission (second
     return value). First-match-wins order decides each action's condition.
+
+    The third return value is a degrade reason (or ``None``): when the fold
+    would be value-unsafe (the DELETE condition reads a column the UPDATE
+    assigns — Oracle would evaluate it against post-update values), the whole
+    MERGE degrades to a carrier + warning rather than ship silently wrong rows.
     """
     whens = tree.args.get("whens")
     using = tree.args.get("using")
     on = tree.args.get("on")
     if whens is None or using is None or on is None:
-        return [], None
+        return [], None, None
     wd = sqlglot_dialect_name(dialect)
     exprs = list(whens.expressions)
     followups: list[str] = []
@@ -673,7 +696,7 @@ def _merge_extended_clauses(
         elif isinstance(then, exp.Var) and str(then.this).upper() == "DELETE":
             followups.append(f"DELETE FROM {tgt_sql} WHERE {anti}")
         else:
-            return [], None
+            return [], None, None
         exprs.remove(w)
     delete_where: str | None = None
     matched = [w for w in exprs if w.args.get("matched")]
@@ -707,6 +730,27 @@ def _merge_extended_clauses(
                 u_active, d_active = _not_and(dc, uc) if dc is not None else None, dc
             else:
                 u_active, d_active = uc, _not_and(uc, dc) if uc is not None else dc
+            target_alias = (tree.this.alias or tree.this.name).lower()
+            assigned = {
+                eq.this.name.lower()
+                for eq in upd.args["then"].expressions
+                if isinstance(eq, exp.EQ) and isinstance(eq.this, exp.Column)
+            }
+            if d_active is not None and _merge_delete_reads_updated(
+                d_active, target_alias, assigned
+            ):
+                # Unsafe fold: Oracle's DELETE WHERE would read post-update
+                # values. Degrade the whole MERGE (carrier + warning).
+                return (
+                    [],
+                    None,
+                    (
+                        "conditional DELETE in MERGE reads a column the UPDATE "
+                        "assigns; Oracle evaluates DELETE WHERE against "
+                        "post-update values, which would delete rows the source "
+                        "keeps — rewrite the MERGE manually"
+                    ),
+                )
             if u_active is not None:
                 alias = tree.this.alias or tree.this.name
                 then_upd = upd.args["then"]
@@ -727,7 +771,7 @@ def _merge_extended_clauses(
             if dlt is not None:
                 exprs.remove(dlt)
     whens.set("expressions", exprs)
-    return followups, delete_where
+    return followups, delete_where, None
 
 
 def _collect_defined_aliases(value: object) -> set[str]:
@@ -2485,10 +2529,13 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         merge_delete_where: str | None = None
         if node.kind == "MERGE" and dialect in ("oracle", "postgresql"):
             for e in parsed:
-                if isinstance(e, exp.Merge):
-                    merge_followups, merge_delete_where = _merge_extended_clauses(
-                        e, dialect
-                    )
+                if not isinstance(e, exp.Merge):
+                    continue
+                merge_followups, merge_delete_where, reason = _merge_extended_clauses(
+                    e, dialect
+                )
+                if reason is not None:
+                    return f"-- UNIQUE: {reason}\n{_comment_block(node.sql)}"
         if (
             node.kind == "RETURNING"
             and dialect != "postgresql"
