@@ -86,6 +86,11 @@ Findings detail: audit docs 02/04/05/07.
   B22 traceback logging via `exc_info`, B26 `.dockerignore`.)*
 - [ ] **B28** feature briefs when scheduled: `#temp`-in-procedure wiring,
   top-level `BEGIN TRY/CATCH` routing (currently honest warned degrades).
+- [ ] **RED seeds from the B2 sweep** (2026-07-24): (a) `Create.properties`
+  is allowlisted as cosmetic but bundles view modifiers (`WITH CHECK OPTION`,
+  `SCHEMABINDING`) the VIEW converter currently drops — probe, and split the
+  allowlist if semantic; (b) `INSERT IGNORE` (`Insert.ignore`) — folded into
+  B1's scope as the DO NOTHING-class upsert.
 
 ---
 
