@@ -83,7 +83,17 @@ Findings detail: audit docs 02/04/05/07.
   pass; live-verified nested (MySQL, all parents processed) + interleaved
   (T-SQL == Oracle row count) in `tests/integration/test_cursor_state_b7.py`;
   docs 03 §3.23 + compat matrix updated.
-- [ ] **B8** PG `SET TRANSACTION … READ ONLY` access-mode mapping (N7).
+- [x] **B8** PG `SET TRANSACTION … READ ONLY` access-mode mapping (N7) — done
+  2026-07-25; `batch_splitter.classify_batch` routes the statement to the DML
+  pipeline (like Oracle's equivalent already did) instead of the SET-option
+  comment-out fallback, `convert.py` models it as a `PassthroughSQL` carrying
+  the original text (`kind="SET TRANSACTION MODE"`), and `emit.py` extends
+  the BEGIN-TRANSACTION access-mode table: MySQL comma-joins the
+  characteristics, T-SQL keeps the isolation-level statement and drops the
+  access mode with a `UNIQUE:` warning, Oracle prefers the access mode (or
+  keeps the existing READ-COMMITTED no-op note). Live-verified on
+  SQL Server + MySQL (`pymssql`/`pymysql`); Oracle spot-checked via
+  `DBMS_SQL.PARSE`. Tests: `test_pg_source_wave1.py::TestPgSetTransactionAccessMode`.
 - [ ] **B9** T-SQL money literal `$12.50` mangle intercept + garbage-shape
   guard (N8).
 - [ ] **B11** Dynamic-SQL constant strings routed through the transpiler, warn

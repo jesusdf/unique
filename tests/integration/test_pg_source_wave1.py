@@ -58,6 +58,82 @@ class TestPgGucSettings:
         assert re.search(r"(?i)TRANSACTION", out), out
 
 
+class TestPgSetTransactionAccessMode:
+    """PG ``SET TRANSACTION [ISOLATION LEVEL <lvl>] [READ ONLY|READ WRITE]``
+    (N7/B8): previously passed through byte-identical to every target with
+    zero warnings — invalid on T-SQL (Msg 102/156) and MySQL (1064, needs a
+    comma before the access mode). Extends the BEGIN TRANSACTION access-mode
+    mapping (``emit.py``) to this PG statement class."""
+
+    def test_combined_tsql_keeps_isolation_drops_access_mode_with_warning(
+        self,
+    ) -> None:
+        r = Transpiler().transpile(
+            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY;",
+            source="postgresql",
+            target="tsql",
+        )
+        executable = r.sql.split("/*")[0].strip()
+        assert executable == "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE", r.sql
+        assert not re.search(r"(?i)\bREAD\s+ONLY\b", executable), r.sql
+        assert any("READ ONLY access mode" in w.message for w in r.warnings), r.warnings
+        import sqlglot
+
+        sqlglot.parse(executable, read="tsql", error_level=sqlglot.ErrorLevel.RAISE)
+
+    def test_bare_access_mode_tsql_degrades_with_warning(self) -> None:
+        r = Transpiler().transpile(
+            "SET TRANSACTION READ ONLY;", source="postgresql", target="tsql"
+        )
+        assert not re.search(r"(?i)^\s*SET\s+TRANSACTION\s+READ\s+ONLY", r.sql), r.sql
+        assert any("READ ONLY access mode" in w.message for w in r.warnings), r.warnings
+        assert r.unsupported, r.unsupported
+
+    def test_mysql_comma_joins_characteristics(self) -> None:
+        import sqlglot
+
+        r = Transpiler().transpile(
+            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY;",
+            source="postgresql",
+            target="mysql",
+        )
+        assert "ISOLATION LEVEL SERIALIZABLE, READ ONLY" in r.sql, r.sql
+        assert not r.warnings, r.warnings
+        sqlglot.parse(r.sql, read="mysql", error_level=sqlglot.ErrorLevel.RAISE)
+
+    def test_mysql_bare_access_mode_unchanged(self) -> None:
+        r = Transpiler().transpile(
+            "SET TRANSACTION READ WRITE;", source="postgresql", target="mysql"
+        )
+        assert re.search(r"(?i)SET\s+TRANSACTION\s+READ\s+WRITE", r.sql), r.sql
+
+    def test_oracle_access_mode_native(self) -> None:
+        r = Transpiler().transpile(
+            "SET TRANSACTION READ ONLY;", source="postgresql", target="oracle"
+        )
+        assert re.search(r"(?i)^\s*SET\s+TRANSACTION\s+READ\s+ONLY", r.sql), r.sql
+        assert not r.warnings, r.warnings
+
+    def test_oracle_combined_prefers_access_mode(self) -> None:
+        # Oracle cannot combine ISOLATION LEVEL and an access mode in one
+        # statement; READ ONLY is already implicitly serializable there.
+        r = Transpiler().transpile(
+            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE READ ONLY;",
+            source="postgresql",
+            target="oracle",
+        )
+        assert re.search(r"(?i)^\s*SET\s+TRANSACTION\s+READ\s+ONLY", r.sql), r.sql
+        assert "ISOLATION LEVEL" not in r.sql.upper(), r.sql
+
+    def test_negative_control_real_dollar_table_untouched(self) -> None:
+        # A real table/column literally named to look like access-mode SQL
+        # must not trip this mapping — sanity guard, not a live PG shape but
+        # exercises that only a genuine SET TRANSACTION statement matches.
+        out = _t("SELECT * FROM transaction_log WHERE mode = 'READ ONLY';", "tsql")
+        assert "transaction_log" in out
+        assert "UNIQUE:" not in out, out
+
+
 class TestValuesRelation:
     """``FROM (VALUES (1,'x'),(2,'y')) v(a,b)`` converted to NOTHING — the
     FROM emitted empty (silent loss caught by the gate; the whole

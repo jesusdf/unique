@@ -379,6 +379,15 @@ silently:
   and there is no portable mask — annotated.
 - **Self-referencing FK cascade on T-SQL** (error 1785): the action downgrades
   to `NO ACTION` with a warned note (emulate with an AFTER trigger).
+- **PostgreSQL `SET TRANSACTION [ISOLATION LEVEL <lvl>] READ ONLY|READ
+  WRITE`** (audit N7/B8): MySQL comma-joins the isolation level and access
+  mode into one statement; Oracle prefers the access mode (its `READ ONLY`
+  is already implicitly serializable) when both are given, and keeps its
+  existing `READ COMMITTED`-is-the-default no-op note otherwise. T-SQL has no
+  access-mode clause on `SET TRANSACTION` — the isolation level statement is
+  kept and the access mode is dropped with a `UNIQUE:` note + warning; a
+  bare access-mode-only statement (no isolation level) has nothing to keep
+  and degrades to a documented carrier + `unsupported` entry.
 - **PostgreSQL `U&'…'` Unicode-escape literals**: mis-parsed by the parser —
   the statement degrades to a documented carrier + warning off PG (rewrite as
   a plain literal or `CHR()`).

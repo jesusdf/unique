@@ -417,6 +417,7 @@ engines and indicates the transpilation support status for each.
 | COMMIT / ROLLBACK | ✓ | ✓ | ✓ | ✓ | ✅ |
 | SAVEPOINT | ✓ | ✓ | ✓ | ✓ | ✅ |
 | SET TRANSACTION ISOLATION | ✓ | ✓ | ✓ | ✓ | ⚠️ Levels differ |
+| SET TRANSACTION [ISOLATION LEVEL] READ ONLY\|READ WRITE (PG source) | ⚠️ isolation level kept, access mode dropped (warned) | ✓ (access-mode-first; READ ONLY implies serializable) | ✅ | ✅ comma-joined characteristics | ⚠️ N7/B8 |
 
 ---
 

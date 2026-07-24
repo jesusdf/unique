@@ -80,6 +80,16 @@ _PROCEDURAL_PATTERNS = {
 # options has a cross-engine equivalent, so they are documented, not executed.
 _SET_PATTERN = re.compile(r"(?i)^\s*SET\s+(?!@)[A-Za-z_]\w*")
 
+# PostgreSQL ``SET TRANSACTION [ISOLATION LEVEL <lvl>] [READ ONLY|READ
+# WRITE]`` — real SQL with a per-target access-mode mapping (N7/B8), not a
+# session GUC. Oracle's equivalent is already excluded from SET_OPTION below
+# (it never matches ``_SQLPLUS_SET_RE``); PG needs the same exemption so the
+# statement reaches the DML pipeline instead of the SET-option comment-out
+# fallback.
+_PG_TXN_MODE_RE = re.compile(
+    r"(?is)^\s*SET\s+TRANSACTION\s+(?=.*\b(?:ISOLATION\s+LEVEL|READ\s+(?:ONLY|WRITE))\b)"
+)
+
 # SQL*Plus session directives: ``SET <option> [value]`` lines a real Oracle
 # dump opens its blocks with. They are *client* commands (line-oriented, often
 # no ``;``) with no cross-engine meaning. ``SET TRANSACTION`` / ``SET
@@ -322,8 +332,10 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
     ):
         return BatchType.SET_OPTION
 
-    if _SET_PATTERN.match(first_meaningful) and (
-        dialect != "oracle" or _SQLPLUS_SET_RE.match(first_meaningful)
+    if (
+        _SET_PATTERN.match(first_meaningful)
+        and not (dialect == "postgresql" and _PG_TXN_MODE_RE.match(first_meaningful))
+        and (dialect != "oracle" or _SQLPLUS_SET_RE.match(first_meaningful))
     ):
         return BatchType.SET_OPTION
 

@@ -2480,6 +2480,68 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             "statement can still open the transaction)"
         )
 
+    # PostgreSQL ``SET TRANSACTION [ISOLATION LEVEL <lvl>] [READ ONLY|READ
+    # WRITE]`` (N7/B8): MySQL comma-joins the characteristics in one
+    # statement; T-SQL keeps the isolation-level statement and strips the
+    # access mode with the same documented-note pattern as the BEGIN
+    # TRANSACTION branch above; Oracle reuses that branch's access-mode-first
+    # rule (it cannot combine ISOLATION LEVEL and an access mode in one
+    # statement — READ ONLY is already implicitly serializable there) plus
+    # the READ COMMITTED no-op note from the block below.
+    if node.kind == "SET TRANSACTION MODE":
+        _level = re.search(
+            r"(?i)ISOLATION\s+LEVEL\s+"
+            r"(READ\s+COMMITTED|READ\s+UNCOMMITTED|REPEATABLE\s+READ|SERIALIZABLE)",
+            node.sql,
+        )
+        level = re.sub(r"\s+", " ", _level.group(1)).upper() if _level else None
+        _mode = re.search(r"(?i)\bREAD\s+(ONLY|WRITE)\b", node.sql)
+        mode = _mode.group(1).upper() if _mode else None
+        if dialect == "postgresql":
+            return node.sql
+        if dialect == "mysql":
+            parts = [
+                p
+                for p in (
+                    f"ISOLATION LEVEL {level}" if level else None,
+                    f"READ {mode}" if mode else None,
+                )
+                if p
+            ]
+            return "SET TRANSACTION " + ", ".join(parts)
+        if dialect == "oracle":
+            if mode:
+                return f"SET TRANSACTION READ {mode}"
+            if level == "READ COMMITTED":
+                return (
+                    "-- UNIQUE: READ COMMITTED is Oracle's default isolation "
+                    "level (no-op; kept as a note so a following SET "
+                    "TRANSACTION mode statement can still open the "
+                    "transaction)"
+                )
+            if level == "SERIALIZABLE":
+                return "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE"
+            return (
+                f"-- UNIQUE: Oracle has no {level} isolation level (supports "
+                "READ COMMITTED/SERIALIZABLE only); statement dropped. "
+                f"Original:\n{_comment_block(node.sql)}"
+            )
+        # dialect == "tsql"
+        if level:
+            base = f"SET TRANSACTION ISOLATION LEVEL {level}"
+            if mode:
+                return (
+                    base + " /* UNIQUE: T-SQL SET TRANSACTION has no "
+                    f"READ {mode} access mode; access mode dropped "
+                    "(docs/03-unsupported.md) */"
+                )
+            return base
+        return (
+            f"-- UNIQUE: T-SQL SET TRANSACTION has no READ {mode} access "
+            "mode (docs/03-unsupported.md); statement dropped. "
+            f"Original:\n{_comment_block(node.sql)}"
+        )
+
     # Oracle hierarchical query: keep as-is for Oracle; for others there is
     # no faithful automatic rewrite, so emit a documented comment.
     if node.kind == "CONNECT BY" and dialect != "oracle":
