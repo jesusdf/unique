@@ -1273,12 +1273,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - src: `CREATE PROCEDURE p AS v NUMBER; BEGIN v := 1/0; EXCEPTION WHEN ZERO_DIVIDE THEN v := 0; END;
 /`
 
-## ora23-json-object-star  (oracle)
-- targets: postgresql(invalid)
-- live error: `function j_s_o_n_object() does not exist`
-- src: `CREATE TABLE t (id NUMBER, n NUMBER); CREATE TABLE s (id NUMBER, n NUMBER);
-SELECT JSON_OBJECT(*) FROM t`
-
 ## oracle-drop2-100|START  (oracle)
 - targets: postgresql(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: '100|START' absent from valid tsql output, no warning`
@@ -1288,12 +1282,6 @@ SELECT JSON_OBJECT(*) FROM t`
 - targets: mysql(silent-drop), postgresql(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'COLLATE' absent from valid tsql output, no warning`
 - src: `CREATE TABLE t (a VARCHAR2(10) COLLATE BINARY_CI)`
-
-## pg-add-identity  (postgresql)
-- targets: mysql(invalid)
-- live error: `(1064, "You have an error in your SQL syntax; check the manual that corresponds to your My`
-- src: `CREATE TABLE t (id INT PRIMARY KEY, n INT);
-ALTER TABLE t ADD COLUMN big BIGINT GENERATED ALWAYS AS IDENTITY`
 
 ## pg-alter-add  (postgresql)
 - targets: mysql(invalid), oracle(invalid)
@@ -1443,11 +1431,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: mysql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('μ',),) target=(('NULL',),)`
 - src: `SELECT CHR(956) AS r`
-
-## pg-computed-jsonb  (postgresql)
-- targets: mysql(invalid), tsql(invalid)
-- live error: `(2715, b'Column, parameter, or variable #1: Cannot find data type JSONB.DB-Lib error messa`
-- src: `CREATE TABLE t (data JSONB, name TEXT GENERATED ALWAYS AS (data->>'name') STORED)`
 
 ## pg-concat-null  (postgresql)
 - targets: mysql(func)
@@ -1608,11 +1591,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: tsql(invalid)
 - live error: `(4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.GE`
 - src: `SELECT generate_series(1, 5) AS r`
-
-## pg-gin-jsonb  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(2715, b'Column, parameter, or variable #2: Cannot find data type JSONB.DB-Lib error messa`
-- src: `CREATE TABLE t (a INT, b JSONB); CREATE INDEX ix ON t USING gin (b jsonb_path_ops)`
 
 ## pg-greatest-null  (postgresql)
 - targets: mysql(func), oracle(func)
@@ -2245,11 +2223,6 @@ SELECT id INTO dst FROM src`
 - live error: `ORA-00905: missing keyword`
 - src: `SELECT id INTO #t2 FROM (SELECT 1 id) s;
 SELECT * FROM #t2;`
-
-## ts-sp-executesql  (tsql)
-- targets: oracle(invalid)
-- live error: `PROCEDURE P compiled INVALID (line 5): PLS-00103: Encountered the symbol ">" when expectin`
-- src: `CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(200)=N'SELECT * FROM t WHERE id=@i'; EXEC sp_executesql @sql,N'@i INT',@i=5; END`
 
 ## ts-spatial  (tsql)
 - targets: oracle(invalid), postgresql(invalid)

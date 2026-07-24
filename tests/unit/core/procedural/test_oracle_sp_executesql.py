@@ -5,6 +5,8 @@ bound positionally. Oracle's equivalent is ``EXECUTE IMMEDIATE @stmt USING @a,
 @b`` — the parameter-definition string is dropped (Oracle infers bind types).
 """
 
+import re
+
 from unique.core.transpiler import Transpiler
 
 t = Transpiler()
@@ -20,8 +22,12 @@ class TestSpExecuteSql:
             "oracle",
         ).sql
         up = out.upper()
-        assert "EXECUTE IMMEDIATE V_S USING V_A, V_B" in up, out
-        assert "SP_EXECUTESQL" not in up, out
+        # Binds are positional; the trailing UNIQUE note documents that the
+        # dynamic string's placeholders must be :1, :2, … .
+        assert "EXECUTE IMMEDIATE V_S USING V_A, V_B;" in up, out
+        code = re.sub(r"/\*.*?\*/", "", up, flags=re.S)
+        assert "SP_EXECUTESQL" not in code, out
+        assert "POSITIONALLY" in up, out
 
     def test_no_binds(self) -> None:
         out = t.transpile(

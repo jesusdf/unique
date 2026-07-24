@@ -766,6 +766,10 @@ class Transformer:
             result = [self._gate_empty_select_list(node) for node in result]
             result = [self._gate_zero_column_table(node) for node in result]
             result = [self._gate_composite_row_value(node) for node in result]
+        if self.context.target == "postgresql" and self.context.source != "postgresql":
+            # PG has no fn(*) call form outside COUNT(*) either (Oracle's
+            # JSON_OBJECT(*) star-expansion needs the schema) — same degrade.
+            result = [self._gate_star_call(node) for node in result]
         if self.context.target in ("mysql", "tsql"):
             result = [self._gate_interval_cast(node) for node in result]
         if self.context.target == "oracle" and self.context.source == "mysql":
@@ -2316,6 +2320,40 @@ class Transformer:
         from unique.core.converter.emit import emit_node
 
         return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _gate_star_call(self, node: ASTNode) -> ASTNode:
+        """Degrade a statement with a non-COUNT ``fn(*)`` call — PG has no
+        aggregate-star form either (Oracle's JSON_OBJECT(*) star-expansion
+        would need the table schema)."""
+        found = self._find_star_call(node)
+        if found is None:
+            return node
+        reason = (
+            f"{self.context.source} construct {found} has no "
+            f"{self.context.target} equivalent; statement preserved as a comment"
+        )
+        self.context.warn(reason, "array_construct")
+        self.context.mark_unsupported(found)
+        from unique.core.converter.emit import emit_node
+
+        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+
+    def _find_star_call(self, value: object) -> str | None:
+        if (
+            isinstance(value, FunctionCall)
+            and value.name.upper() not in ("COUNT", "COUNT_BIG")
+            and any(isinstance(a, Star) for a in value.args)
+        ):
+            return f"aggregate star call {value.name}(*)"
+        if isinstance(value, ASTNode):
+            for f in fields(value):
+                if (r := self._find_star_call(getattr(value, f.name))) is not None:
+                    return r
+        if isinstance(value, tuple):
+            for item in value:
+                if (r := self._find_star_call(item)) is not None:
+                    return r
+        return None
 
     def _find_array_construct(self, value: object) -> str | None:
         """First array-construct function name reachable from *value*."""

@@ -8,7 +8,7 @@
 -- CASE[limit]: pg-accent-eq — fails on mysql. APPROVED LIMIT (2026-07-18): string-comparison collation (case/accent/trailing-space) is a per-column/default-collation property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0',),) target=(('1',),)
 SELECT 'Ä' = 'A' AS r
 
--- CASE[open]: pg-add-identity — fails on mysql. (1064, "You have an error in your SQL syntax; check the manual that corresponds to your My
+-- CASE[fixed]: pg-add-identity — ALTER ... ADD COLUMN ... GENERATED AS IDENTITY maps to MySQL's AUTO_INCREMENT with an accompanying ADD UNIQUE (the column must be a key), carried + warned. Live-executed and auto-assigns on mysql 2026-07-24.
 CREATE TABLE t (id INT PRIMARY KEY, n INT);
 ALTER TABLE t ADD COLUMN big BIGINT GENERATED ALWAYS AS IDENTITY
 
@@ -169,7 +169,7 @@ SELECT CHR(956) AS r
 -- CASE[fixed]: pg-computed-func — PG TEXT now maps to T-SQL NVARCHAR(MAX) (TEXT is deprecated and string functions reject it, error 8116; procedural-map parity). Live-executed on tsql 2026-07-24.
 CREATE TABLE t (a TEXT, b TEXT GENERATED ALWAYS AS (lower(a)) STORED)
 
--- CASE[open]: pg-computed-jsonb — fails on mysql, tsql. (2715, b'Column, parameter, or variable #1: Cannot find data type JSONB.DB-Lib error messa
+-- CASE[fixed]: pg-computed-jsonb — JSONB maps per target and the ->> generated column lands as MySQL ->>/VIRTUAL and T-SQL JSON_VALUE/JSON_QUERY computed column. Live value 'bob' exact on mysql + tsql 2026-07-24.
 CREATE TABLE t (data JSONB, name TEXT GENERATED ALWAYS AS (data->>'name') STORED)
 
 -- CASE[fixed]: pg-concat-null — fails on mysql. FUNC-DIFF: source=(('NULL', 'ab', 'a-b'),) target=(('NULL', 'NULL', 'a-b'),)
@@ -322,7 +322,7 @@ CREATE TABLE t (a INT, b INT GENERATED ALWAYS AS (a*2) STORED, c INT GENERATED A
 -- CASE[limit]: pg-generate-series — a SELECT-list generate_series (SRF) is moved to FROM and rewritten for Oracle (CONNECT BY) and T-SQL (numbers source) — 1..5 verified; MySQL has no inline table function (a recursive CTE can't be inlined in FROM) so it degrades (docs/03-unsupported.md). fails on mysql
 SELECT generate_series(1, 5) AS r
 
--- CASE[open]: pg-gin-jsonb — fails on mysql, oracle, tsql. (2715, b'Column, parameter, or variable #2: Cannot find data type JSONB.DB-Lib error messa
+-- CASE[fixed]: pg-gin-jsonb — JSONB columns now map per target (JSON / CLOB / NVARCHAR(MAX)) and a GIN/GiST/BRIN index degrades to a documented carrier + warning (access-method specific, physical-only). Live-verified emissions on mysql/oracle/tsql 2026-07-24.
 CREATE TABLE t (a INT, b JSONB); CREATE INDEX ix ON t USING gin (b jsonb_path_ops)
 
 -- CASE[fixed]: pg-greatest-null — PG/T-SQL GREATEST/LEAST ignore NULL args (GREATEST(1, NULL, 3) = 3); MySQL/Oracle propagate NULL. Drop a literal NULL arg on those targets.

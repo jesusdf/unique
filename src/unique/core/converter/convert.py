@@ -1733,6 +1733,17 @@ def _convert_create_table(
                         quoted=_identifier_quoted(col_def.this),
                     )
                 )
+            elif isinstance(col_def, exp.IndexColumnConstraint):
+                # An inline INDEX table element (MySQL functional/plain index):
+                # keep the fragment so the emitter re-emits it on MySQL and
+                # degrades it to a carrier elsewhere (it was dropped SILENTLY).
+                constraints.append(
+                    PassthroughSQL(
+                        sql=col_def.sql(dialect=sqlglot_dialect_name(source_dialect)),
+                        source_dialect=source_dialect,
+                        kind="INLINE_INDEX",
+                    )
+                )
             elif isinstance(col_def, exp.ExcludeColumnConstraint):
                 # PostgreSQL EXCLUDE is a pg-only exclusion constraint with no
                 # equivalent elsewhere; keep it as a fragment (kind tags it so the

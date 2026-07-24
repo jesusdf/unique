@@ -1922,10 +1922,50 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
         if rebuilt is not None:
             return rebuilt
 
+    # ALTER TABLE … ADD COLUMN … GENERATED … AS IDENTITY -> MySQL: the only
+    # auto-number form is AUTO_INCREMENT, and MySQL requires the column to be
+    # a key — add a UNIQUE index alongside.
+    if (
+        node.kind == "ALTER"
+        and dialect == "mysql"
+        and (
+            _mid := re.search(
+                r"(?i)\bADD\s+(?:COLUMN\s+)?(\w+)\s+(\w+(?:\(\d+\))?)\s+"
+                r"GENERATED\s+(?:ALWAYS|BY\s+DEFAULT)\s+AS\s+IDENTITY\b[^,;]*",
+                node.sql,
+            )
+        )
+    ):
+        _mcol, _mtype = _mid.group(1), _mid.group(2)
+        _mrew = (
+            node.sql[: _mid.start()]
+            + f"ADD COLUMN {_mcol} {_mtype} AUTO_INCREMENT, ADD UNIQUE ({_mcol})"
+            + node.sql[_mid.end() :]
+        ).rstrip(";\n ")
+        return (
+            f"-- UNIQUE: MySQL's only identity form is AUTO_INCREMENT (must be "
+            f"a key; a UNIQUE index on {_mcol} is added)\n{_mrew}"
+        )
+
     # PostgreSQL CREATE INDEX -> T-SQL: sqlglot's write-side NULLs-distinct
     # emulation wraps unique-index columns in CASE WHEN expressions
     # (invalid in a T-SQL index column list) and keeps PG's nameless form
     # (T-SQL requires a name). Rebuild from the parsed tree.
+    # A PG access-method index (GIN/GiST/BRIN — JSONB path ops, full-text,
+    # ranges) has no equivalent structure elsewhere, and its base column
+    # (JSONB/array) is typically unindexable there anyway. Physical-only:
+    # queries still run without it — carry the loss, never ship USING gin.
+    if (
+        node.kind == "CREATE INDEX"
+        and node.source_dialect == "postgresql"
+        and dialect != "postgresql"
+        and re.search(r"(?i)\bUSING\s+(?:gin|gist|brin|spgist)\b", node.sql)
+    ):
+        return (
+            f"-- UNIQUE: PostgreSQL GIN/GiST/BRIN index has no {dialect} "
+            "equivalent (access-method specific); index omitted — queries "
+            "run unindexed (docs/03-unsupported.md)\n" + _comment_block(node.sql)
+        )
     if (
         node.kind == "CREATE INDEX"
         and node.source_dialect == "postgresql"
@@ -3899,11 +3939,15 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 # JSON type has usage restrictions (ORA-43853) so JSON text lives
                 # in a CLOB, and T-SQL has no JSON type (pre-2025) so it uses
                 # NVARCHAR(MAX) — the canonical JSON storage on each.
-                if _tn == "JSON":
+                if _tn in ("JSON", "JSONB"):
                     if dialect == "oracle":
                         dtype = "CLOB"
                     elif dialect == "tsql":
                         dtype = "NVARCHAR(MAX)"
+                    elif dialect == "mysql":
+                        dtype = "JSON"
+                    elif _tn == "JSONB":
+                        dtype = "JSONB"
                 # Types the target genuinely lacks (TIME/INTERVAL on Oracle,
                 # INTERVAL on T-SQL/MySQL, multi-bit BIT(n), >6-digit
                 # fractional seconds on MySQL): closest type + warned note.
@@ -4150,6 +4194,24 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     )
                     generated = f" AS ({expr}){persisted}"
                 elif dialect == "postgresql":
+                    # A JSON extraction returns json; a non-text generated
+                    # column needs the ->>-style TEXT accessor plus a cast
+                    # ("column is of type integer but expression is of type
+                    # json" otherwise).
+                    if re.search(
+                        r"(?i)\bJSON_EXTRACT(?:_PATH)?\s*\(", expr
+                    ) and not re.match(r"(?i)TEXT|JSON", dtype):
+                        expr = re.sub(
+                            r"(?i)\bJSON_EXTRACT_PATH\s*\(",
+                            "JSON_EXTRACT_PATH_TEXT(",
+                            expr,
+                        )
+                        expr = re.sub(
+                            r"(?i)\bJSON_EXTRACT\s*\(\s*(\w+)\s*,\s*'\$\.(\w+)'\s*\)",
+                            r"(\1 ->> '\2')",
+                            expr,
+                        )
+                        expr = f"CAST({expr} AS {dtype})"
                     generated = f" GENERATED ALWAYS AS ({expr}) STORED"
                 else:
                     store = " STORED" if col.generated_stored else ""
@@ -4407,6 +4469,17 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
     # index by default, so strip the clause (the constraint is identical).
     if node.source_dialect == "oracle" and dialect != "oracle":
         fragment_sql = re.sub(r"(?is)\s+USING\s+INDEX\b.*$", "", fragment_sql)
+    # An inline INDEX table element (MySQL functional/plain index): native on
+    # MySQL; elsewhere an index is physical-only — carry the loss (a separate
+    # CREATE INDEX can be written by hand where the target supports the form).
+    if node.kind == "INLINE_INDEX":
+        if dialect == "mysql":
+            return node.sql
+        return (
+            f"-- UNIQUE: inline INDEX table element has no {dialect} "
+            f"equivalent form; index omitted — queries run unindexed. "
+            f"Original: {node.sql}"
+        )
     # PostgreSQL EXCLUDE has no equivalent on any other engine; keep it on PG,
     # degrade it to a documented carrier elsewhere (never silently drop it).
     if node.kind == "EXCLUDE" and dialect != "postgresql":

@@ -531,7 +531,7 @@ SELECT x.a,x.b FROM XMLTABLE('/r' PASSING XMLTYPE('<r><a>1</a><b>2</b></r>') COL
 CREATE PROCEDURE p AS v NUMBER; BEGIN v := 1/0; EXCEPTION WHEN ZERO_DIVIDE THEN v := 0; END;
 /
 
--- CASE[open]: ora23-json-object-star — fails on postgresql. function j_s_o_n_object() does not exist
+-- CASE[limit]: ora23-json-object-star — JSON_OBJECT(*) star-expansion needs the table's schema (no target can expand it statically); the statement degrades to a documented carrier + warning off Oracle (docs/03-unsupported.md). fails on postgresql
 CREATE TABLE t (id NUMBER, n NUMBER); CREATE TABLE s (id NUMBER, n NUMBER);
 SELECT JSON_OBJECT(*) FROM t
 

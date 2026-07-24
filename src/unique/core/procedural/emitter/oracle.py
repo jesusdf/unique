@@ -635,7 +635,20 @@ class OracleEmitter(ProceduralEmitter):
                 stmt = args[0]
                 binds = args[2:]  # args[1] is the N'<paramdefs>' string — dropped
                 if binds:
-                    return f"EXECUTE IMMEDIATE {stmt} USING {', '.join(binds)};"
+                    # ``@p = value`` named args arrive as ``p => value``;
+                    # EXECUTE IMMEDIATE binds are POSITIONAL-only (the named
+                    # form is PLS-00103). The @name placeholders inside the
+                    # dynamic string must be :binds — flag it, don't ship
+                    # silently.
+                    values = [re.sub(r"^\s*\w+\s*=>\s*", "", b).strip() for b in binds]
+                    return (
+                        f"EXECUTE IMMEDIATE {stmt} USING "
+                        f"{', '.join(values)}; "
+                        "/* UNIQUE: sp_executesql named parameters bind "
+                        "POSITIONALLY here — spell the placeholders inside "
+                        "the dynamic string as :1, :2, … "
+                        "(docs/03-unsupported.md) */"
+                    )
                 return f"EXECUTE IMMEDIATE {stmt};"
         # An Oracle EXECUTE IMMEDIATE (or a dynamic-SQL string/bind/expression)
         # keeps ``EXECUTE IMMEDIATE`` — the ``immediate`` flag settles the case a

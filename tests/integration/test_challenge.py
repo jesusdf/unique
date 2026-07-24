@@ -4513,3 +4513,67 @@ class TestWave6Procedural:
         )
         assert re.search(r",\s*5\b", " ".join(out.split())), out
         assert "EXTRACT" not in out.upper(), out
+
+
+class TestWave7JsonAndDdl:
+    """Wave-7: JSONB type map, GIN degrade, ALTER identity, sp_executesql
+    positional binds — live-verified 2026-07-24."""
+
+    def test_jsonb_type_maps(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-gin-jsonb")
+        assert "b JSON" in _exec_lines(_tx(case, "postgresql", "mysql"))
+        assert "b CLOB" in _exec_lines(_tx(case, "postgresql", "oracle"))
+        assert "b NVARCHAR(MAX)" in _exec_lines(_tx(case, "postgresql", "tsql"))
+
+    def test_gin_index_degrades_warned(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_postgresql.sql", "pg-gin-jsonb"),
+            source="postgresql",
+            target="oracle",
+        )
+        assert "GIN/GiST/BRIN" in result.sql, result.sql
+        assert "USING gin" not in _exec_lines(result.sql), result.sql
+        assert result.warnings, result.warnings
+
+    def test_computed_jsonb_columns(self) -> None:
+        case = _case("challenge_postgresql.sql", "pg-computed-jsonb")
+        assert "->> '$.name'" in _tx(case, "postgresql", "mysql")
+        assert "JSON_VALUE(data, '$.name')" in _tx(case, "postgresql", "tsql")
+
+    def test_add_identity_to_mysql(self) -> None:
+        out = _exec_lines(
+            _tx(
+                _case("challenge_postgresql.sql", "pg-add-identity"),
+                "postgresql",
+                "mysql",
+            )
+        )
+        assert "AUTO_INCREMENT, ADD UNIQUE (big)" in out, out
+        assert "GENERATED" not in out.upper(), out
+
+    def test_sp_executesql_positional_binds(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_sqlserver.sql", "ts-sp-executesql"),
+            source="tsql",
+            target="oracle",
+        )
+        assert re.search(
+            r"(?i)EXECUTE IMMEDIATE V_SQL USING 5;", result.sql
+        ), result.sql
+        assert "=>" not in result.sql, result.sql
+        assert result.warnings, result.warnings
+
+    def test_json_object_star_gated_on_pg(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_oracle.sql", "ora23-json-object-star"),
+            source="oracle",
+            target="postgresql",
+        )
+        assert result.warnings, result.warnings
+        assert "JSON_OBJECT(*)" not in _exec_lines(result.sql), result.sql
+
+    def test_inline_index_kept_on_mysql(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-json-index"), "mysql", "mysql")
+        )
+        assert re.search(r"(?i)INDEX \(\(CAST", out), out

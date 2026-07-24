@@ -332,7 +332,7 @@ SELECT SOUNDEX('Smith'), DIFFERENCE('Smith', 'Smyth')
 -- CASE[fixed]: ts-soundex3 — fails on mysql, oracle, postgresql. ORA-00904: "DIFFERENCE": invalid identifier
 SELECT SOUNDEX('Smith'),DIFFERENCE('Smith','Smyth')
 
--- CASE[open]: ts-sp-executesql — fails on oracle. PROCEDURE P compiled INVALID (line 5): PLS-00103: Encountered the symbol ">" when expectin
+-- CASE[fixed]: ts-sp-executesql — named sp_executesql parameters now bind POSITIONALLY in EXECUTE IMMEDIATE ... USING (the named form was PLS-00103), with a warned UNIQUE note that the dynamic string's placeholders must be spelled :1, :2, ... Live-compiled VALID on oracle 2026-07-24.
 CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(200)=N'SELECT * FROM t WHERE id=@i'; EXEC sp_executesql @sql,N'@i INT',@i=5; END
 
 -- CASE[limit]: ts-spatial — T-SQL geometry/geography CLR type methods (``type::Point(…).STDistance(…)`` ScopeResolution) have no cross-engine equivalent; degraded to NULL + annotation instead of the mangled invalid flatten (docs/03-unsupported.md). fails on oracle, postgresql
