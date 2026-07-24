@@ -1,0 +1,15 @@
+# Guard against any future context-wide COPY baking local-only content into a
+# published image (audit 2026-07-24 B26). Today's Dockerfiles COPY explicit
+# paths only; this file makes the exclusion structural.
+fixtures-private/
+fixtures-corpus/
+.venv/
+.git/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage.xml
+htmlcov/
+audit/

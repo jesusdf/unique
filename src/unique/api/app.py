@@ -471,7 +471,9 @@ def transpile_file(
     # header syntax (quotes, CR/LF) or path separators into the
     # Content-Disposition header.
     stem = (file.filename or "script").rsplit(".", 1)[0]
-    stem = re.sub(r"[^\w.\- ]", "_", stem).strip() or "script"
+    # re.ASCII: with Unicode \w, a non-latin-1 filename (CJK, Cyrillic…)
+    # survives into the header and crashes Starlette's latin-1 encode (500).
+    stem = re.sub(r"[^\w.\- ]", "_", stem, flags=re.ASCII).strip() or "script"
     out_name = f"{stem}.{target}.sql"
     buffer = io.BytesIO(result.sql.encode("utf-8"))
     headers = {

@@ -58,7 +58,9 @@ Findings detail: audit docs 02/04/05/07.
 - [ ] **B12** `SQL%ROWCOUNT`→MySQL annotated divergence (N11, §3.22 class).
 - [ ] **B13** Carriers preserve the ORIGINAL statement text, never a hybrid
   re-render (N12) + carrier-body-parses-as-source assertion.
-- [ ] **B14** API filename sanitizer `re.ASCII` one-liner (05 A1).
+- [x] **B14** API filename sanitizer `re.ASCII` one-liner (05 A1) — done
+  2026-07-24; non-latin-1 filenames return 200 with an ASCII header
+  (`test_file_non_ascii_filename_does_not_break_header`).
 - [ ] **B15** Re-arm ratchets: identity floor 0.45→0.60, nightly mutation
   floors, stale-floor detector (T7).
 - [ ] **B16** Challenge corpus: target-parse gate (T4) + upgrade the ~362
@@ -74,9 +76,9 @@ Findings detail: audit docs 02/04/05/07.
 - [ ] **B19** `scripts/challenge_stats.py` (T5) — class distribution + batch
   scoring for the challenge corpus.
 - [ ] **B20–B27** small items: PG `TABLE t` validation false positive, MERGE
-  comment trivia, `KeyError('into')` traceback logging, dead IR nodes,
-  mutation-script isolation, perf-budget flake (process_time), `.dockerignore`,
-  CI installs with `-c constraints.txt`.
+  comment trivia, dead IR nodes, mutation-script isolation, perf-budget flake
+  (process_time), CI installs with `-c constraints.txt`. *(Done 2026-07-24:
+  B22 traceback logging via `exc_info`, B26 `.dockerignore`.)*
 - [ ] **B28** feature briefs when scheduled: `#temp`-in-procedure wiring,
   top-level `BEGIN TRY/CATCH` routing (currently honest warned degrades).
 

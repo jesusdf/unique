@@ -360,6 +360,25 @@ class TestTranspileFile:
             r'attachment; filename="[\w.\- ]+\.postgresql\.sql"', disposition
         ), disposition
 
+    def test_file_non_ascii_filename_does_not_break_header(
+        self, client: TestClient
+    ) -> None:
+        # A non-latin-1 filename (CJK/Cyrillic) used to crash Starlette's
+        # latin-1 header encode into a 500 (audit 2026-07-24 05 A1); the
+        # sanitizer must reduce the stem to ASCII (re.ASCII) instead.
+        for name in ("中文档.sql", "файл.sql", "ñandú.sql"):
+            resp = client.post(
+                "/api/v1/transpile/file",
+                data={"source": "tsql", "target": "postgresql"},
+                files={"file": (name, b"SELECT 1", "text/plain")},
+            )
+            assert resp.status_code == 200, name
+            disposition = resp.headers["content-disposition"]
+            assert disposition.isascii(), disposition
+            assert re.fullmatch(
+                r'attachment; filename="[\w.\- ]+\.postgresql\.sql"', disposition
+            ), disposition
+
     def test_file_unknown_dialect(self, client: TestClient) -> None:
         resp = client.post(
             "/api/v1/transpile/file",

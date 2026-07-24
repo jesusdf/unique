@@ -503,6 +503,17 @@ worker agents**:
   how instance-patches happen.
 - **Trivial items** (P3 one-liners) skip the ceremony: the architect does
   them directly.
+- **The architect defines the session goal.** At campaign/session start the
+  architect formulates the `/goal` condition and hands it to the human to set
+  (the command is user-side). Rules for the condition: **one tanda per goal**
+  (not the whole backlog — the session must be able to finish in a stable
+  state), and **verifiable by artifacts**, naming the briefs and the checkable
+  end state. Pattern:
+  `tanda <N> completada: <briefs> implementados cumpliendo los criterios de
+  aceptación de sus briefs, gate completo verde y push hecho a main`.
+  Never phrase a goal as an intention ("sigue trabajando") — a goal means
+  *complete it correctly*, and an uncheckable condition can neither be met
+  nor honestly ended.
 
 ## Running Tests
 

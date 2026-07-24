@@ -1101,7 +1101,9 @@ class Transpiler:
                 unsupported=unsupported,
             )
         except Exception as e:
-            logger.warning("DML transpilation failed: %s", e)
+            # exc_info: a rare escaping error (e.g. the one-off KeyError
+            # 'into', audit 2026-07-24 N16) is undiagnosable from str(e) alone.
+            logger.warning("DML transpilation failed: %s", e, exc_info=True)
             warnings.append(
                 _warn(f"DML transpilation failed: {e}", "dml", source, target)
             )
