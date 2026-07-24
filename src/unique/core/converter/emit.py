@@ -4181,6 +4181,37 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     f"compare equal) has no {dialect} equivalent; a plain UNIQUE "
                     "treats NULLs as distinct (docs/03-unsupported.md)"
                 )
+            # A SELF-referencing FK with a cascading referential action is
+            # T-SQL error 1785 ("may cause cycles or multiple cascade paths"):
+            # downgrade the action to NO ACTION and document the loss.
+            _tbl_name = getattr(node.table, "name", "")
+            if (
+                dialect == "tsql"
+                and _tbl_name
+                and re.search(
+                    rf"(?i)\bREFERENCES\s+\[?{re.escape(_tbl_name)}\]?\s*\(",
+                    constraint.sql,
+                )
+                and re.search(
+                    r"(?i)\bON\s+(?:DELETE|UPDATE)\s+(?:SET\s+NULL|SET\s+DEFAULT|CASCADE)\b",
+                    constraint.sql,
+                )
+            ):
+                constraint = dataclasses.replace(
+                    constraint,
+                    sql=re.sub(
+                        r"(?i)\b(ON\s+(?:DELETE|UPDATE))\s+"
+                        r"(?:SET\s+NULL|SET\s+DEFAULT|CASCADE)\b",
+                        r"\1 NO ACTION",
+                        constraint.sql,
+                    ),
+                )
+                trailing_comments.append(
+                    "-- UNIQUE: T-SQL forbids a cascading action on a "
+                    "self-referencing FK (error 1785); downgraded to NO ACTION "
+                    "— emulate with an AFTER trigger if the automatic action "
+                    "is required (docs/03-unsupported.md)"
+                )
             emitted = _emit_passthrough_inline(constraint, dialect)
             if emitted.lstrip().startswith("--"):
                 trailing_comments.append(emitted.strip())

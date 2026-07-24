@@ -372,7 +372,7 @@ SELECT GREATEST(NULL, 1) AS r
 -- CASE[fixed]: my-greatest-string — GREATEST/LEAST over ASCII string literals folds to MySQL's case-insensitive pick ('B'); ci-ties are left alone (unspecified in MySQL). Live-verified on oracle/postgresql.
 SELECT GREATEST('a', 'B') AS r
 
--- CASE[open]: my-group-case — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('a', '2'), ('b', '1')) target=(('A', '2'), ('b', '1'))
+-- CASE[limit]: my-group-case — GROUP BY over case-variant values: MySQL's CI default collation groups 'a'/'A' as one key; CS targets keep two (and even CI T-SQL picks an arbitrary representative). No statement-level fix — annotated + warned via the case-variant-literal rule (docs/03-unsupported.md §3.14). fails on oracle, postgresql, tsql
 SELECT x, COUNT(*) FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'b' x) t GROUP BY x ORDER BY x
 
 -- CASE[fixed]: my-group-concat — fails on postgresql. function string_agg(integer, unknown) does not exist
@@ -603,7 +603,7 @@ CREATE TABLE t (id INT, n INT, data JSON); CREATE TABLE s (id INT, n INT); SELEC
 -- CASE[fixed]: my-order-case-sens — MySQL orders case-insensitively; LOWER() on the (provably-string) ORDER BY key reproduces that order on Oracle/PG (Apple, banana, Cherry). 
 SELECT x FROM (SELECT 'Apple' x UNION SELECT 'banana' UNION SELECT 'Cherry') t ORDER BY x
 
--- CASE[open]: my-order-strings — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('Apple',), ('banana',), ('Banana',), ('cherry',)) target=(('Apple',), 
+-- CASE[limit]: my-order-strings — ORDER BY over case-variant values under MySQL's CI collation: CS targets sort 'banana'/'Banana' apart and equal-key tie order is unspecified. Annotated + warned via the case-variant-literal rule (docs/03-unsupported.md §3.14). fails on oracle, postgresql, tsql
 SELECT x FROM (SELECT 'banana' x UNION ALL SELECT 'Apple' x UNION ALL SELECT 'cherry' x UNION ALL SELECT 'Banana' x) t ORDER BY x
 
 -- CASE[fixed]: my-pad-repeat — MySQL LPAD/RPAD/REPEAT/REVERSE/SPACE now translate (Oracle RPAD, PG REPEAT); stale tag, live-verified equal.
@@ -664,7 +664,7 @@ CREATE PROCEDURE p() BEGIN DECLARE v INT; SET v = (SELECT COUNT(*) FROM (SELECT 
 -- CASE[open]: my-select-into-out — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
 CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END
 
--- CASE[open]: my-self-fk — fails on tsql. (1785, b"Introducing FOREIGN KEY constraint 'FK__emp__mgr__790A8C33' on table 'emp' may ca
+-- CASE[limit]: my-self-fk — T-SQL forbids a cascading action on a self-referencing FK (error 1785): downgraded to ON DELETE NO ACTION + warned note (emulate with an AFTER trigger if needed) (docs/03-unsupported.md §3.22). fails on tsql
 CREATE TABLE emp (id INT PRIMARY KEY, mgr INT, FOREIGN KEY (mgr) REFERENCES emp(id) ON DELETE SET NULL)
 
 -- CASE[fixed]: my-seq-concat — recursive CTE: Oracle gets the required column list (derived from the anchor SELECT); PG gets WITH RECURSIVE + STRING_AGG. Live '1,2,...,10' on Oracle and PG.
@@ -877,7 +877,7 @@ CREATE TABLE t (a INT) COLLATE=utf8mb4_unicode_ci
 -- CASE[fixed]: mysql-drop4-UNSIGNED|CHE — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'UNSIGNED|CHECK' absent from valid postgresql output, no warning
 CREATE TABLE t (a INT UNSIGNED)
 
--- CASE[open]: mysql-drop4-ZEROFILL|LPA — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ZEROFILL|LPAD' absent from valid postgresql output, no warning
+-- CASE[limit]: mysql-drop4-ZEROFILL — ZEROFILL is a display-only zero pad sqlglot drops at parse; the stored value is identical, so the loss is annotated + warned from the source text (docs/03-unsupported.md §3.22). fails on oracle, postgresql, tsql
 CREATE TABLE t (a INT ZEROFILL)
 
 -- CASE[fixed]: mysql-drop5-utf8mb4|CHAR — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'utf8mb4|CHARSET' absent from valid tsql output, no warning

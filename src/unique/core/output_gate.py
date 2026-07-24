@@ -400,6 +400,10 @@ def gate_reason(sql: str, target: str, source: str | None = None) -> str | None:
     if leftovers:
         return f"source-dialect leftovers: {', '.join(leftovers)}"
     scrubbed = scrub(sql)
+    # A PostgreSQL array column type (TEXT[], INT[][]) leaked into non-PG
+    # output — arrays have no cross-engine model (docs/03-unsupported.md §7).
+    if target != "postgresql" and re.search(r"\w(?:\s*\[\s*\])+", scrubbed):
+        return "PostgreSQL array type ([]) has no " f"{target} equivalent"
     if source is not None and source != target:
         # Runs on all output, procedural bodies included: an unmapped built-in
         # is equally invalid inside a routine, and sqlglot cannot parse those to
@@ -559,6 +563,17 @@ _DIVERGENCE_RULES: list[tuple[str, str, re.Pattern[str], str]] = [
         "unsigned-64 mapping",
     ),
     (
+        # Oracle's default text rendering of an INTERVAL ('+02 03:04:05.000000')
+        # differs from PG's ('2 days 03:04:05'); TO_CHAR of an interval has no
+        # portable format mask.
+        "oracle",
+        "*",
+        re.compile(r"(?i)TO_CHAR\s*\(\s*INTERVAL"),
+        "each engine renders an INTERVAL as text in its own default format "
+        "(Oracle '+DD HH:MM:SS.FFFFFF' vs {target}'s) — TO_CHAR of an interval "
+        "has no portable mask, so the text differs",
+    ),
+    (
         # PostgreSQL renders ``money`` with a locale currency symbol
         # ('$12.99'); the numeric mappings elsewhere (MONEY / NUMBER(19,4) /
         # DECIMAL(19,4)) hold the same value but render it plain. Narrow: only
@@ -602,6 +617,38 @@ def annotate_divergence(source_sql: str, source: str, target: str) -> str | None
             "MySQL case-folding of non-ASCII text (e.g. ß→ß, accents) is "
             f"locale/collation-dependent and differs from {target}'s (ß→SS, …) "
             "— the result may differ (docs/03-unsupported.md)"
+        )
+    # Case-variant string literals ('a' and 'A') feeding an ORDER BY/GROUP BY:
+    # the source's case-insensitive default collation groups/sorts them as
+    # equal keys, a case-sensitive target does not (and even a CI target picks
+    # an arbitrary group representative). Checked on the ORIGINAL text (scrub
+    # blanks literal contents); narrow — needs an actual case-variant pair.
+    code_only = "\n".join(
+        ln for ln in source_sql.splitlines() if not ln.lstrip().startswith("--")
+    )
+    if source in ("mysql", "tsql") and re.search(
+        r"(?i)\b(?:ORDER|GROUP)\s+BY\b", code_only
+    ):
+        seen: dict[str, str] = {}
+        for lit in re.findall(r"'([^']*)'", code_only):
+            low = lit.lower()
+            if low in seen and seen[low] != lit:
+                return (
+                    f"string literals differing only in case ({seen[low]!r} / "
+                    f"{lit!r}) feed an ORDER BY/GROUP BY: {source}'s default "
+                    "collation is case-insensitive (equal keys), so grouping/"
+                    f"ordering may differ on {target} "
+                    "(docs/03-unsupported.md)"
+                )
+            seen.setdefault(low, lit)
+    # MySQL ZEROFILL is a display-only zero pad (5 -> '0000000005' in the
+    # client) sqlglot drops at parse — the stored value is identical.
+    if source == "mysql" and re.search(r"(?i)\bZEROFILL\b", code_only):
+        return (
+            "MySQL ZEROFILL is a display-only zero pad with no column-type "
+            f"equivalent on {target}; the stored numeric value is identical "
+            "but a client-side fetch renders it unpadded "
+            "(docs/03-unsupported.md)"
         )
     return None
 

@@ -335,6 +335,26 @@ rejects). Both are validated live. Only date parts outside the common
 year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
 still need review.
 
+### 3.22 Annotated Inherent Divergences (2026-07-24 batch)
+
+Approved-limit divergences that now warn + annotate instead of shipping
+silently:
+
+- **Case-variant literals under ORDER BY/GROUP BY** (MySQL/T-SQL CI source →
+  any other target): equal keys under a case-insensitive collation group/sort
+  differently elsewhere; annotated when a case-variant literal pair is present.
+- **MySQL `ZEROFILL`**: display-only zero pad (dropped by the parser); the
+  stored value is identical — annotated from the source text.
+- **`TO_CHAR(INTERVAL …)`**: each engine's default interval rendering differs
+  and there is no portable mask — annotated.
+- **Self-referencing FK cascade on T-SQL** (error 1785): the action downgrades
+  to `NO ACTION` with a warned note (emulate with an AFTER trigger).
+- **PostgreSQL `U&'…'` Unicode-escape literals**: mis-parsed by the parser —
+  the statement degrades to a documented carrier + warning off PG (rewrite as
+  a plain literal or `CHR()`).
+- **PostgreSQL array column types** (`TEXT[]`): no cross-engine model (§7) —
+  the output gate degrades the statement off PG.
+
 ### 3.21 Oracle Extended `INSTR` (occurrence / backward search)
 
 Oracle's 4-argument `INSTR(s, sub, start, occurrence)` and the negative-start

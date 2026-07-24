@@ -377,6 +377,21 @@ class Transpiler:
                     result.sql
                 ):
                     gate = gate_reason(result.sql, target, source)
+                    # PG U&'…' Unicode-escape literals are mis-parsed by the
+                    # parser (``U & '…'`` — a column named U), silently
+                    # producing a wrong expression; a source-text detection is
+                    # the only possible catch (docs/03-unsupported.md §3.22).
+                    if (
+                        gate is None
+                        and source == "postgresql"
+                        and target != "postgresql"
+                        and re.search(r"(?i)\bU&'", batch.sql)
+                    ):
+                        gate = (
+                            "PostgreSQL U&'…' Unicode-escape literal is not "
+                            "supported by the parser (mis-parsed as a column "
+                            "reference); rewrite it as a plain literal or CHR()"
+                        )
                     if gate is not None:
                         message = (
                             f"output failed the {target} validity check "

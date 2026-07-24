@@ -52,7 +52,7 @@ CREATE TABLE a (id INT, n INT); CREATE TABLE b (id INT, n INT); SELECT * FROM a 
 -- CASE[fixed]: pg-arr-str-roundtrip — fails on mysql, oracle, tsql. (195, b"'STRING_TO_ARRAY' is not a recognized built-in function name.DB-Lib error message 
 SELECT array_to_string(string_to_array('a,b,c',','),'|')
 
--- CASE[open]: pg-array-jsonb — fails on oracle. ORA-03099: unexpected item [ in a column definition
+-- CASE[limit]: pg-array-jsonb — PostgreSQL array column types (TEXT[], INT[][]) have no cross-engine model (docs/03-unsupported.md §7); the output gate now degrades the statement to a documented carrier + warning off PG (was shipped invalid, ORA-03099). fails on oracle
 CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)
 
 -- CASE[fixed]: pg-ascii-empty — PG ASCII('') is 0; Oracle/T-SQL return NULL. Recover 0 (T-SQL CASE, Oracle COALESCE) — shared with the MySQL-source handler.
@@ -720,7 +720,7 @@ SELECT TIMESTAMP '2020-06-15 10:00:00' AT TIME ZONE 'America/New_York', now() AT
 -- CASE[fixed]: pg-tz-interval — same type-gap mapping as pg-dttypes (TIMETZ/INTERVAL -> INTERVAL DAY TO SECOND, warned notes, docs/03-unsupported.md §3.19). Live-executed on oracle 2026-07-24.
 CREATE TABLE t (a TIMESTAMPTZ, b TIME WITH TIME ZONE, c INTERVAL)
 
--- CASE[open]: pg-unicode-escape — fails on mysql, oracle, tsql. (207, b"Invalid column name 'U'.DB-Lib error message 20018, severity 16:\nGeneral SQL Serv
+-- CASE[limit]: pg-unicode-escape — U&'…' Unicode-escape literals are mis-parsed by the parser (U & '…'), so the statement degrades to a documented carrier + warning off PG instead of shipping a silently wrong expression (docs/03-unsupported.md §3.22). fails on mysql, oracle, tsql
 SELECT U&'\0041' AS r
 
 -- CASE[limit]: pg-unique-nulls-notdistinct — PostgreSQL UNIQUE … NULLS NOT DISTINCT (NULLs compare equal, so only one NULL row is allowed) has no equivalent; the modifier is stripped to a plain UNIQUE (NULLs distinct) and the divergence is annotated (docs/03-unsupported.md). fails on mysql, oracle

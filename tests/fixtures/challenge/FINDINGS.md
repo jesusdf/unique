@@ -449,11 +449,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('1',),)`
 - src: `SELECT GREATEST(NULL, 1) AS r`
 
-## my-group-case  (mysql)
-- targets: oracle(func), postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('a', '2'), ('b', '1')) target=(('A', '2'), ('b', '1'))`
-- src: `SELECT x, COUNT(*) FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'b' x) t GROUP BY x ORDER BY x`
-
 ## my-groupconcat-distinct  (mysql)
 - targets: oracle(silent-rt), postgresql(invalid)
 - live error: `SILENT-ROUNDTRIP: literal(s) ["'|'"] lost after mysql->oracle->mysql`
@@ -634,11 +629,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `FUNC-DIFF: source=(('Apple',), ('banana',), ('Cherry',)) target=(('Apple',), ('Cherry',), `
 - src: `SELECT x FROM (SELECT 'Apple' x UNION SELECT 'banana' UNION SELECT 'Cherry') t ORDER BY x`
 
-## my-order-strings  (mysql)
-- targets: oracle(func), postgresql(func), tsql(func)
-- live error: `FUNC-DIFF: source=(('Apple',), ('banana',), ('Banana',), ('cherry',)) target=(('Apple',), `
-- src: `SELECT x FROM (SELECT 'banana' x UNION ALL SELECT 'Apple' x UNION ALL SELECT 'cherry' x UNION ALL SELECT 'Banana' x) t ORDER BY x`
-
 ## my-pad-repeat  (mysql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-00904: "SPACE": invalid identifier`
@@ -698,11 +688,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - targets: tsql(invalid)
 - live error: `(8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve`
 - src: `CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END`
-
-## my-self-fk  (mysql)
-- targets: tsql(invalid)
-- live error: `(1785, b"Introducing FOREIGN KEY constraint 'FK__emp__mgr__790A8C33' on table 'emp' may ca`
-- src: `CREATE TABLE emp (id INT PRIMARY KEY, mgr INT, FOREIGN KEY (mgr) REFERENCES emp(id) ON DELETE SET NULL)`
 
 ## my-seq-concat  (mysql)
 - targets: oracle(invalid), postgresql(invalid)
@@ -853,11 +838,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
 - live error: `SILENT CLAUSE DROP: 'UNSIGNED|CHECK' absent from valid postgresql output, no warning`
 - src: `CREATE TABLE t (a INT UNSIGNED)`
-
-## mysql-drop4-ZEROFILL|LPA  (mysql)
-- targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
-- live error: `SILENT CLAUSE DROP: 'ZEROFILL|LPAD' absent from valid postgresql output, no warning`
-- src: `CREATE TABLE t (a INT ZEROFILL)`
 
 ## mysql-drop5-utf8mb4|CHAR  (mysql)
 - targets: oracle(silent-drop), postgresql(silent-drop), tsql(silent-drop)
@@ -1095,11 +1075,6 @@ SELECT id FROM t WHERE id = 1 FOR UPDATE OF id WAIT 5`
 - targets: mysql(func), postgresql(func), tsql(func)
 - live error: `FUNC-DIFF: source=(('NULL',),) target=(('0',),)`
 - src: `SELECT INSTR('abc', '') AS r FROM DUAL`
-
-## ora-interval-tochar  (oracle)
-- targets: postgresql(func)
-- live error: `FUNC-DIFF: source=(('+02 03:04:05.000000',),) target=(('2 days 03:04:05',),)`
-- src: `SELECT TO_CHAR(INTERVAL '2 3:04:05.000' DAY TO SECOND) AS r FROM DUAL`
 
 ## ora-json-value  (oracle)
 - targets: tsql(silent-rt)
@@ -1383,11 +1358,6 @@ ALTER TABLE t ALTER COLUMN id TYPE BIGINT;`
 - targets: oracle(invalid)
 - live error: `ORA-01735: invalid ALTER TABLE option`
 - src: `CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a SET DATA TYPE BIGINT USING a::bigint`
-
-## pg-array-jsonb  (postgresql)
-- targets: oracle(invalid)
-- live error: `ORA-03099: unexpected item [ in a column definition`
-- src: `CREATE TABLE t (tags TEXT[], matrix INT[][], data JSONB)`
 
 ## pg-ascii-empty  (postgresql)
 - targets: oracle(func), tsql(func)
@@ -1996,11 +1966,6 @@ CREATE TABLE t3 AS SELECT * FROM t;`
 - targets: mysql(invalid), oracle(invalid), tsql(invalid)
 - live error: `(8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D`
 - src: `SELECT TIMESTAMP '2020-06-15 10:00:00' AT TIME ZONE 'America/New_York', now() AT TIME ZONE 'UTC'`
-
-## pg-unicode-escape  (postgresql)
-- targets: mysql(invalid), oracle(invalid), tsql(invalid)
-- live error: `(207, b"Invalid column name 'U'.DB-Lib error message 20018, severity 16:\nGeneral SQL Serv`
-- src: `SELECT U&'\0041' AS r`
 
 ## pg-unique-nulls-notdistinct  (postgresql)
 - targets: mysql(invalid), oracle(invalid)

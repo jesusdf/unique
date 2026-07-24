@@ -244,7 +244,7 @@ SELECT INSTR('abc', '') AS r FROM DUAL
 -- CASE[fixed]: ora-interval-out — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT NUMTOYMINTERVAL(14,'MONTH'), NUMTODSINTERVAL(90000,'SECOND') FROM DUAL
 
--- CASE[open]: ora-interval-tochar — fails on postgresql. FUNC-DIFF: source=(('+02 03:04:05.000000',),) target=(('2 days 03:04:05',),)
+-- CASE[limit]: ora-interval-tochar — each engine renders an INTERVAL as text in its own default format (Oracle '+02 03:04:05.000000' vs PG '2 days 03:04:05'); TO_CHAR of an interval has no portable mask — annotated + warned (docs/03-unsupported.md §3.22). fails on postgresql
 SELECT TO_CHAR(INTERVAL '2 3:04:05.000' DAY TO SECOND) AS r FROM DUAL
 
 -- CASE[fixed]: ora-json-value — JSON_VALUE(doc,path) maps to native JSON_VALUE on Oracle/T-SQL/MySQL and to JSONB_PATH_QUERY_FIRST(...) #>> '{}' on PostgreSQL <17. live-verified '1'.
