@@ -661,7 +661,7 @@ SELECT FLOOR(3.7), CEILING(3.2), ROUND(3.567, 2), TRUNCATE(3.567, 1)
 -- CASE[fixed]: my-scalar-subquery-assign — a derived table (SELECT 1) t has an unnamed literal column; T-SQL requires derived-table columns named (error 8155). The IR-path derived table now aliases the unnamed projection -> (SELECT 1 AS uq_col1) t. Compiles on T-SQL.
 CREATE PROCEDURE p() BEGIN DECLARE v INT; SET v = (SELECT COUNT(*) FROM (SELECT 1) t); END
 
--- CASE[open]: my-select-into-out — fails on tsql. (8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve
+-- CASE[fixed]: my-select-into-out — the SELECT-INTO tail's derived table now gets its unnamed projections aliased via a sqlglot-AST pass in the T-SQL fragment fixer (_name_derived_columns — the text-path twin of the IR _name_tsql_derived_columns). Live-compiled VALID on tsql 2026-07-24.
 CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END
 
 -- CASE[limit]: my-self-fk — T-SQL forbids a cascading action on a self-referencing FK (error 1785): downgraded to ON DELETE NO ACTION + warned note (emulate with an AFTER trigger if needed) (docs/03-unsupported.md §3.22). fails on tsql

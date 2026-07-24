@@ -4603,3 +4603,12 @@ class TestInlineIndexReconstructed:
             _tx(_case("challenge_sqlserver.sql", "ts-inline-index2"), "tsql", "mysql")
         )
         assert "INDEX ix_name (name)" in out, out
+
+
+class TestSelectIntoDerivedColumnsNamed:
+    """The SELECT-INTO tail's derived table aliases unnamed projections on
+    T-SQL (error 8155) — the text-path twin of _name_tsql_derived_columns."""
+
+    def test_tail_derived_column_aliased(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-select-into-out"), "mysql", "tsql")
+        assert "SELECT 1 AS uq_col1" in out, out

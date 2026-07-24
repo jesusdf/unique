@@ -9,6 +9,9 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
+import sqlglot
+from sqlglot import expressions as exp
+
 from unique.core.ast_nodes import (
     AssignmentStatement,
     ASTNode,
@@ -505,7 +508,37 @@ class TSqlTransformer(ProceduralTransformer):
         return self._map_oracle_builtins(sql)
 
     def _fix_select_into_rest(self, sql: str) -> str:
-        return self._map_oracle_builtins(sql)
+        return self._name_derived_columns(self._map_oracle_builtins(sql))
+
+    @staticmethod
+    def _name_derived_columns(sql: str) -> str:
+        """T-SQL requires every derived-table column to be NAMED (error 8155):
+        alias unnamed projections inside ``FROM (SELECT …) t`` via the sqlglot
+        AST (the IR path already does this in ``_name_tsql_derived_columns``;
+        this covers the SELECT-INTO tail fragment)."""
+        if not re.search(r"(?i)\(\s*SELECT\b", sql):
+            return sql
+        probe = f"SELECT uq_probe {sql}" if re.match(r"(?i)\s*FROM\b", sql) else sql
+        try:
+            tree = sqlglot.parse_one(probe, read="tsql")
+        except Exception:  # noqa: BLE001 - keep the fragment untouched
+            return sql
+        changed = False
+        for sub in tree.find_all(exp.Subquery):
+            inner = sub.this
+            if not isinstance(inner, exp.Select):
+                continue
+            for i, proj in enumerate(list(inner.expressions)):
+                if isinstance(proj, (exp.Alias, exp.Column, exp.Star)):
+                    continue
+                inner.expressions[i] = exp.alias_(proj, f"uq_col{i + 1}")
+                changed = True
+        if not changed:
+            return sql
+        out = tree.sql(dialect="tsql")
+        if probe is not sql:
+            out = re.sub(r"(?i)^SELECT uq_probe\s*", "", out)
+        return out
 
     def _fix_raw_sql_target(self, sql: str) -> str:
         sql = self._map_oracle_builtins(sql)

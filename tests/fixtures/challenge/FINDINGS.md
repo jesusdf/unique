@@ -674,11 +674,6 @@ SELECT * FROM t WHERE MATCH(txt) AGAINST('hello' IN NATURAL LANGUAGE MODE)`
 - live error: `(8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve`
 - src: `CREATE PROCEDURE p() BEGIN DECLARE v INT; SET v = (SELECT COUNT(*) FROM (SELECT 1) t); END`
 
-## my-select-into-out  (mysql)
-- targets: tsql(invalid)
-- live error: `(8155, b"No column name was specified for column 1 of 't'.DB-Lib error message 20018, seve`
-- src: `CREATE PROCEDURE p(OUT c INT) BEGIN SELECT COUNT(*) INTO c FROM (SELECT 1) t; END`
-
 ## my-seq-concat  (mysql)
 - targets: oracle(invalid), postgresql(invalid)
 - live error: `ORA-32039: missing column alias list in recursive WITH clause element SEQ`
