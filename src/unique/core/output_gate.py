@@ -558,6 +558,19 @@ _DIVERGENCE_RULES: list[tuple[str, str, re.Pattern[str], str]] = [
         "is -1) — results using the high bit differ, with no faithful "
         "unsigned-64 mapping",
     ),
+    (
+        # PostgreSQL renders ``money`` with a locale currency symbol
+        # ('$12.99'); the numeric mappings elsewhere (MONEY / NUMBER(19,4) /
+        # DECIMAL(19,4)) hold the same value but render it plain. Narrow: only
+        # a ::money / AS MONEY cast spelling fires (docs/03-unsupported.md
+        # §3.20).
+        "postgresql",
+        "*",
+        re.compile(r"(?i)::\s*money\b|\bAS\s+MONEY\b"),
+        "PostgreSQL formats a money value with a currency symbol ('$12.99'); "
+        "{target} stores the same numeric value but renders it plain — the "
+        "formatted text differs",
+    ),
 ]
 
 

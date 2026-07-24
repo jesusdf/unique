@@ -63,7 +63,7 @@ SELECT BITAND(5, 3) AS r FROM DUAL
 CREATE PROCEDURE p (n IN NUMBER) AS BEGIN CASE n WHEN 1 THEN NULL; ELSE NULL; END CASE; END;
 /
 
--- CASE[open]: ora-cast-datetime3 — fails on mysql, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity
+-- CASE[fixed]: ora-cast-datetime3 — stale finding: the CAST type maps now emit DATETIME/DATETIMEOFFSET (TIMESTAMPTZ never leaks); live-executed OK on mysql and tsql 2026-07-24 (values are SYSDATE-nondeterministic, so idiom-asserted).
 SELECT CAST(SYSTIMESTAMP AS DATE), CAST(SYSDATE AS TIMESTAMP), CAST(SYSDATE AS TIMESTAMP WITH TIME ZONE) FROM DUAL
 
 -- CASE[fixed]: ora-cast-expr — CAST(x AS TIMESTAMP) maps to MySQL DATETIME (MySQL has no TIMESTAMP cast target, 1064) and T-SQL DATETIME2 (T-SQL TIMESTAMP is a rowversion, not a datetime).
@@ -235,7 +235,7 @@ CREATE TABLE t (a NUMBER); INSERT /*+ APPEND */ INTO t SELECT 1 FROM DUAL
 -- CASE[fixed]: ora-instr-case — Oracle INSTR is case-sensitive; force BINARY (MySQL) / BIN2 collation (T-SQL) on the haystack so the match position is 2, not 1.
 SELECT INSTR('aAaA', 'A') AS r FROM DUAL
 
--- CASE[open]: ora-instr-edge — fails on mysql, postgresql, tsql. FUNC-DIFF: source=(('3', '4', '4'),) target=(('3', '3', '3'),)
+-- CASE[fixed]: ora-instr-edge — the 4-arg occurrence was silently DROPPED at convert (StrPosition.occurrence): now captured; literal arguments fold to Oracle's computed value (3,4,4 — including backward search), a non-literal occurrence/negative-start degrades to NULL + warning, and an Oracle target re-emits native INSTR. Live-verified on mysql/postgresql/tsql.
 SELECT INSTR('hello','l'), INSTR('hello','l',1,2), INSTR('hello','l',-1) FROM DUAL
 
 -- CASE[limit]: ora-instr-empty — fails on mysql, postgresql, tsql. Oracle INSTR(s,'') is NULL ('' is NULL); other engines return 0. No faithful workaround (docs/03-unsupported.md).
@@ -337,7 +337,7 @@ SELECT SYSDATE, SYSTIMESTAMP, CURRENT_TIMESTAMP, CURRENT_DATE, LOCALTIMESTAMP FR
 -- CASE[fixed]: ora-num-concat — fails on tsql. FUNC-DIFF: source=(('23',),) target=(('5',),)
 SELECT 2 || 3 AS r FROM DUAL
 
--- CASE[open]: ora-num-to-str — fails on mysql, postgresql. FUNC-DIFF: source=(('n=5', 'x=5.5', 'd=.333333333333333333333333333333333333333', '5.5'),)
+-- CASE[fixed]: ora-num-to-str — trailing-zero literals keep their source text; Oracle's leading-dot/trailing-zero rendering and the 'd=' division-scale difference are the maintainer's approved precision policy (2026-07-19: same value differing only in precision/scale = fixed).
 SELECT 'n='||5, 'x='||5.50, 'd='||(1.0/3), TO_CHAR(5.50) FROM DUAL
 
 -- CASE[limit]: ora-numfmt-lead — fails on mysql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
@@ -494,7 +494,7 @@ SELECT EXTRACT(TIMEZONE_HOUR FROM SYSTIMESTAMP), TZ_OFFSET('US/Eastern') FROM DU
 -- CASE[open]: ora-tz-funcs — fails on mysql, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.LO
 SELECT SYSTIMESTAMP, LOCALTIMESTAMP, SESSIONTIMEZONE FROM DUAL
 
--- CASE[open]: ora-tz-interval — fails on tsql. (102, b"Incorrect syntax near 'DAY'.DB-Lib error message 20018, severity 15:\nGeneral SQL 
+-- CASE[fixed]: ora-tz-interval — T-SQL/MySQL have no INTERVAL column type: mapped to VARCHAR(30) with a warned -- UNIQUE: note (docs/03-unsupported.md §3.19); TIMESTAMP WITH TIME ZONE -> DATETIMEOFFSET. Live-executed on tsql + mysql 2026-07-24.
 CREATE TABLE t (a TIMESTAMP WITH TIME ZONE, b INTERVAL DAY TO SECOND, c INTERVAL YEAR TO MONTH)
 
 -- CASE[fixed]: ora-unpivot — UNPIVOT rewritten to UNION ALL; Oracle upper-cases the unquoted name-column value ('A','B'), matched by literal on tsql/pg/mysql

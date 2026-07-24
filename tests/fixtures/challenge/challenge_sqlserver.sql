@@ -75,7 +75,7 @@ SELECT CAST(12.99 AS MONEY), CAST(12.99 AS SMALLMONEY), CONVERT(MONEY, '$12.99')
 -- CASE[fixed]: ts-cast-suite — fails on mysql, oracle, postgresql. ORA-00906: missing left parenthesis
 SELECT CAST('123' AS INT),CONVERT(INT,'123'),CONVERT(VARCHAR,123),TRY_CAST('x' AS INT),TRY_CONVERT(INT,'x'),PARSE('123' AS INT)
 
--- CASE[open]: ts-cast-trycast — fails on oracle, postgresql. ORA-01722: unable to convert string value containing 'x' to a number: 
+-- CASE[fixed]: ts-cast-trycast — stale finding: TRY_CAST now carries its safe flag (Oracle DEFAULT NULL ON CONVERSION ERROR; PG folds the bad literal to NULL) and CONVERT(DATE, GETDATE()) gains the Oracle TRUNC date-cast. Live-verified (123, NULL, today) on oracle/postgresql 2026-07-24.
 SELECT CAST(123 AS VARCHAR(10)), TRY_CAST('x' AS INT), CONVERT(DATE, GETDATE())
 
 -- CASE[fixed]: ts-char-encoding — fails on mysql, oracle, postgresql. ORA-00906: missing left parenthesis
@@ -141,7 +141,7 @@ SELECT DATEDIFF_BIG(SECOND, '2020-01-01', '2020-01-02') AS r
 -- CASE[fixed]: ts-datetimefromparts — fails on mysql, oracle, postgresql. ORA-00904: "TIMESTAMP_FROM_PARTS": invalid identifier
 SELECT DATETIMEFROMPARTS(2020, 6, 15, 10, 30, 0, 0) AS r
 
--- CASE[open]: ts-datetimeoffset — fails on mysql, oracle. ORA-03060: Data type TIME is invalid.
+-- CASE[fixed]: ts-datetimeoffset — mysql: DATETIME2(7) precision clamps to DATETIME(6) with a warned note; oracle: TIME(3) -> INTERVAL DAY TO SECOND with a warned note (docs/03-unsupported.md §3.19); DATETIMEOFFSET -> TIMESTAMP WITH TIME ZONE natively. Live-executed on mysql + oracle 2026-07-24.
 CREATE TABLE t (a DATETIMEOFFSET, b DATETIME2(7), c TIME(3))
 
 -- CASE[fixed]: ts-decimal-scale — same value at each engine's default decimal scale (10/3 = 3.3333...). (value equal, precision-only diff; maintainer policy 2026-07-19)
@@ -152,7 +152,7 @@ CREATE SEQUENCE s AS INT START WITH 1;
 GO
 CREATE TABLE t (id INT DEFAULT (NEXT VALUE FOR s), a INT)
 
--- CASE[open]: ts-dttypes — fails on oracle. ORA-03060: Data type TIME is invalid.
+-- CASE[fixed]: ts-dttypes — oracle: TIME -> INTERVAL DAY TO SECOND (warned note, docs/03-unsupported.md §3.19), SMALLDATETIME -> DATE (superset). Live-executed on oracle 2026-07-24.
 CREATE TABLE t (a DATE, b TIME, c DATETIME, d DATETIME2, e SMALLDATETIME, f DATETIMEOFFSET, g TIME(3))
 
 -- CASE[open]: ts-dyn-concat-loop — fails on oracle. PROCEDURE P compiled INVALID (line 6): PL/SQL: ORA-00942: table or view does not exist
@@ -161,7 +161,7 @@ CREATE PROCEDURE p AS BEGIN DECLARE @sql NVARCHAR(MAX) = N''; SELECT @sql = @sql
 -- CASE[fixed]: ts-dyn-count — fails on oracle. PROCEDURE P compiled INVALID (line 6): PLS-00201: identifier 'QUOTENAME' must be declared
 CREATE PROCEDURE p @tbl NVARCHAR(128) AS BEGIN DECLARE @sql NVARCHAR(MAX) = N'SELECT COUNT(*) FROM ' + QUOTENAME(@tbl); EXEC(@sql); END
 
--- CASE[open]: ts-emoji-len — fails on mysql, postgresql. FUNC-DIFF: source=(('2',),) target=(('1',),)
+-- CASE[fixed]: ts-emoji-len — LEN of a literal folds to T-SQL's UTF-16 code-unit count of the right-trimmed text (2 for an emoji). Live-verified on mysql/postgresql.
 SELECT LEN(N'😀') AS r
 
 -- CASE[fixed]: ts-eomonth — EOMONTH -> Oracle LAST_DAY(DATE '..'), PG month-end via DATE_TRUNC, MySQL LAST_DAY. All = 2020-02-29; Oracle's DATE renders a 00:00:00 time (same value, precision-only; maintainer policy 2026-07-19). live-verified.
@@ -209,7 +209,7 @@ SELECT a,b,SUM(c),GROUPING(a),GROUPING_ID(a,b) FROM (SELECT 1 a,2 b,3 c) t GROUP
 -- CASE[limit]: ts-hash-all — CHECKSUM is a proprietary T-SQL row hash with no cross-engine equivalent; gated + annotated (docs/03-unsupported.md). fails on mysql, postgresql
 SELECT HASHBYTES('SHA2_512', 'abc'), CHECKSUM('abc')
 
--- CASE[open]: ts-hexcast — fails on oracle, postgresql. ORA-00906: missing left parenthesis
+-- CASE[fixed]: ts-hexcast — CONVERT(VARCHAR, 0xhex) folds to the cp1252-decoded literal ('Hello'); CONVERT(VARBINARY, str[, 0]) folds to the encoded bytes as each target's binary literal (HEXTORAW / bytea / x''), with binary style 0 no longer misparsed as a date style. Live-verified on oracle/postgresql.
 SELECT CONVERT(VARCHAR,0x48656C6C6F),CONVERT(VARBINARY,'Hello',0)
 
 -- CASE[fixed]: ts-host-db — fails on mysql, oracle, postgresql. ORA-00904: "DB_NAME": invalid identifier

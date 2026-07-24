@@ -10,6 +10,8 @@ converting sqlglot's expression tree into our engine-agnostic IR.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import dataclasses
 import re
 from typing import cast
@@ -3560,6 +3562,81 @@ def _emit_delete(node: DeleteStatement, dialect: str) -> str:
     return result
 
 
+def _type_gap_map(
+    col: ColumnDefinition, dtype: str, dialect: str
+) -> tuple[str, tuple[int, ...] | None, str]:
+    """Closest-type mapping for column types the target genuinely lacks.
+
+    Returns ``(dtype, params_override, trailing_note)``. ``params_override``
+    replaces the column's type parameters when the mapped spelling consumed or
+    clamped them (``None`` = leave them alone). A non-empty note is a
+    ``-- UNIQUE:`` trailing carrier — auto-warned by the no-silent-loss scan —
+    so the loss is documented, never silent (docs/03-unsupported.md §3.19).
+    """
+    tn = col.data_type.name.upper()
+    params = col.data_type.params
+    if dialect == "oracle":
+        # Bare INTERVAL DAY TO SECOND on purpose: the validity gate's sqlglot
+        # parse rejects the (perfectly valid) precision forms DAY(0)/SECOND(3);
+        # Oracle's defaults (DAY(2), SECOND(6)) cover both uses.
+        if tn in ("TIME", "TIMETZ"):
+            tz = "; the time-zone offset is dropped" if tn == "TIMETZ" else ""
+            return (
+                "INTERVAL DAY TO SECOND",
+                (),
+                f"-- UNIQUE: Oracle has no TIME type — column {col.name} "
+                f"stores the time of day as INTERVAL DAY TO SECOND{tz} "
+                "(docs/03-unsupported.md)",
+            )
+        if tn == "INTERVAL" and not params:
+            return (
+                "INTERVAL DAY TO SECOND",
+                (),
+                f"-- UNIQUE: PostgreSQL INTERVAL mixes year-month and "
+                f"day-second fields; column {col.name} is mapped to INTERVAL "
+                "DAY TO SECOND — year-month values need a separate "
+                "INTERVAL YEAR TO MONTH column (docs/03-unsupported.md)",
+            )
+    if dialect in ("tsql", "mysql") and tn.startswith("INTERVAL"):
+        # T-SQL has no interval type at all; MySQL's INTERVAL is only an
+        # arithmetic qualifier, not a column type. Keep the value as text.
+        return (
+            "VARCHAR",
+            (30,),
+            f"-- UNIQUE: {dialect} has no INTERVAL column type — column "
+            f"{col.name} keeps the interval as text (docs/03-unsupported.md)",
+        )
+    if (
+        dialect == "mysql"
+        and tn in ("DATETIME", "DATETIME2", "TIMESTAMP", "TIME")
+        and params
+        and int(params[0]) > 6
+    ):
+        return (
+            dtype,
+            (6,),
+            f"-- UNIQUE: MySQL fractional-seconds precision caps at 6 — "
+            f"column {col.name} precision {params[0]} clamped to 6 "
+            "(docs/03-unsupported.md)",
+        )
+    # A multi-bit MySQL BIT(n) is a 64-bit value, not a boolean. The IR may
+    # carry the name pre-mapped (BOOLEAN on PG, NUMBER(1) on Oracle), so match
+    # those spellings too — only a BIT(n) source produces them with a width.
+    if tn in ("BIT", "BOOLEAN", "NUMBER(1)") and params and int(params[0]) > 1:
+        if dialect == "postgresql":
+            return ("BIT", None, "")  # native bit string, width kept
+        if dialect in ("oracle", "tsql"):
+            mapped = "NUMBER(20)" if dialect == "oracle" else "NUMERIC(20)"
+            return (
+                mapped,
+                (),
+                f"-- UNIQUE: {dialect} has no bit-string type — column "
+                f"{col.name} BIT({params[0]}) stores its numeric value as "
+                f"{mapped} (docs/03-unsupported.md)",
+            )
+    return dtype, None, ""
+
+
 def _emit_enum_type(col: ColumnDefinition, dialect: str) -> tuple[str, str, str]:
     """Render a MySQL ENUM/SET column type for *dialect*.
 
@@ -3709,6 +3786,19 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                         dtype = "CLOB"
                     elif dialect == "tsql":
                         dtype = "NVARCHAR(MAX)"
+                # Types the target genuinely lacks (TIME/INTERVAL on Oracle,
+                # INTERVAL on T-SQL/MySQL, multi-bit BIT(n), >6-digit
+                # fractional seconds on MySQL): closest type + warned note.
+                dtype, _gap_params, _gap_note = _type_gap_map(col, dtype, dialect)
+                if _gap_note:
+                    set_type_notes.append(_gap_note)
+                if _gap_params is not None:
+                    col = dataclasses.replace(
+                        col,
+                        data_type=dataclasses.replace(
+                            col.data_type, params=_gap_params
+                        ),
+                    )
                 # If the mapped name already carries a length (e.g. CHAR(36)),
                 # don't append the caller's params on top of it. PostgreSQL and
                 # T-SQL integer types take no parameters at all — a MySQL display
@@ -4500,6 +4590,14 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                 return f"N'{quoted_n}'"
             return f"'{quoted_n}'"
         if node.dtype == "hex":
+            # PostgreSQL (16+) reads 0x1F as an INTEGER literal (31), not a
+            # byte string — every other engine's hex literal is bytes, so a
+            # PG-source hex literal must emit its decimal value.
+            if SOURCE_DIALECT.get() == "postgresql":
+                try:
+                    return str(int(str(node.value), 16))
+                except ValueError:
+                    pass
             # Binary/hex literal: MySQL x'8f', T-SQL 0x8f, PG bytea,
             # Oracle HEXTORAW (wave 174 — it shipped as a DECIMAL
             # rendering that overflowed past BIGINT digits).
@@ -4566,6 +4664,14 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         ):
             lit = _oracle_date_literal(node.expression.value.strip())
             if lit is not None:
+                # Off-Oracle, CAST(x AS DATE) STRIPS the time of day; Oracle
+                # DATE keeps it. TRUNC a time-carrying literal cast to DATE.
+                if (
+                    node.target_type.name.upper() == "DATE"
+                    and SOURCE_DIALECT.get() != "oracle"
+                    and lit.upper().startswith("TIMESTAMP")
+                ):
+                    return f"TRUNC({lit})"
                 return lit
         # Oracle can't CAST a HEXTORAW to a number (ORA-00932). TO_NUMBER with an
         # 'X' hex mask parses the hex digits directly (x'FF'::int -> 255).
@@ -4578,6 +4684,55 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         ):
             _hx = str(node.expression.value)
             return f"TO_NUMBER('{_hx}', '{'X' * len(_hx)}')"
+        # A hex literal cast to a CHARACTER type is a compile-time byte decode:
+        # MySQL decodes per the cast's CHARACTER SET (utf8mb4 default; an
+        # invalid sequence is NULL), T-SQL CONVERT(VARCHAR, 0x…) decodes the
+        # default collation's cp1252. No engine-side reinterpret needed.
+        if (
+            isinstance(node.expression, Literal)
+            and node.expression.dtype == "hex"
+            and SOURCE_DIALECT.get() in ("mysql", "tsql")
+            and node.target_type.name.split("(")[0].strip().upper() in _CHAR_CAST_BASES
+        ):
+            if SOURCE_DIALECT.get() == "tsql":
+                _codec: str | None = "cp1252"
+            else:
+                _cs_m = re.search(r"(?i)CHARACTER\s+SET\s+(\w+)", node.target_type.name)
+                _codec = _MYSQL_CHARSET_CODECS.get(
+                    _cs_m.group(1).lower() if _cs_m else "utf8mb4"
+                )
+            if _codec is not None:
+                try:
+                    _decoded = bytes.fromhex(str(node.expression.value)).decode(_codec)
+                except (ValueError, UnicodeDecodeError):
+                    return "NULL"
+                return "'" + _decoded.replace("'", "''") + "'"
+        # The reverse: a string literal cast to VARBINARY is the literal's
+        # encoded bytes — emit them as the target's hex literal. VARBINARY
+        # only: a fixed BINARY(n) zero-PADS to n bytes, and a sized
+        # VARBINARY(n) shorter than the value truncates, so those keep the
+        # runtime CAST.
+        if (
+            isinstance(node.expression, Literal)
+            and isinstance(node.expression.value, str)
+            and node.expression.dtype in ("string", "national", "unknown")
+            and node.target_type.name.split("(")[0].strip().upper() == "VARBINARY"
+            and (
+                not node.target_type.params
+                or not str(node.target_type.params[0]).isdigit()
+                or int(node.target_type.params[0])
+                >= len(node.expression.value.encode("utf-8", errors="ignore"))
+            )
+        ):
+            _enc = "cp1252" if SOURCE_DIALECT.get() == "tsql" else "utf-8"
+            try:
+                _bts = node.expression.value.encode(_enc)
+            except UnicodeEncodeError:
+                _bts = None
+            if _bts is not None:
+                return _emit_expression(
+                    Literal(value=_bts.hex().upper(), dtype="hex"), dialect
+                )
         # MySQL casts a string to a number leniently — it parses the leading
         # numeric prefix and yields 0 for a non-numeric string (CAST('abc' AS
         # DECIMAL) = 0), where Oracle/PG/T-SQL raise a conversion error. Replace
@@ -4717,7 +4872,19 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             and dialect in ("mysql", "oracle", "tsql")
             and re.fullmatch(r"(?i)(DECIMAL|NUMERIC|NUMBER|DEC)", dtype.strip())
         ):
-            dtype += "(10, 0)" if SOURCE_DIALECT.get() == "mysql" else "(38, 10)"
+            # An INTEGER literal wider than the (38,10) default's 28 integer
+            # digits would overflow it — size the type to the literal.
+            _int_lit = node.expression
+            if (
+                isinstance(_int_lit, Literal)
+                and isinstance(_int_lit.value, int)
+                and not isinstance(_int_lit.value, bool)
+                and len(str(abs(_int_lit.value))) > 28
+            ):
+                _digits = len(str(abs(int(_int_lit.value))))
+                dtype += f"({min(_digits, 65 if dialect == 'mysql' else 38)}, 0)"
+            else:
+                dtype += "(10, 0)" if SOURCE_DIALECT.get() == "mysql" else "(38, 10)"
         # MySQL DATETIME/TIME default to 0 fractional digits, silently truncating
         # a literal's sub-second part ('…:30.123456' -> '…:30'); keep it with (6)
         # when the value carries a fraction.
@@ -4751,6 +4918,15 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         # '1 day' string. No exact equivalent exists — keep the value as text with
         # a documented carrier.
         _cast_to = node.target_type.name.split("(")[0].strip().upper()
+        # Off-Oracle semantics: CAST(ts AS DATE) strips the time of day
+        # (a date-only value); Oracle DATE keeps it (10:30 survives the cast).
+        # TRUNC the cast so the value matches — a no-op at midnight.
+        if (
+            dialect == "oracle"
+            and _cast_to == "DATE"
+            and SOURCE_DIALECT.get() not in (None, "oracle")
+        ):
+            return f"TRUNC(CAST({inner} AS DATE))"
         if dialect == "oracle" and _cast_to in ("TIME", "INTERVAL"):
             _what = "TIME" if _cast_to == "TIME" else "bare INTERVAL"
             return (
@@ -5362,9 +5538,188 @@ def _emit_group_concat(node: FunctionCall, dialect: str) -> str | None:
     return None
 
 
+def _literal_str_resolve(node: ASTNode) -> str | bytes | None:
+    """Resolve *node* to its compile-time string/bytes value, unwrapping only
+    the wrappers the pipeline itself materializes around a literal: a CAST to a
+    character type, a plain-space TRIM family call, and a base64 DECODE /
+    FROM_BASE64. Returns None for anything not statically known."""
+    if isinstance(node, Literal) and isinstance(node.value, str):
+        if node.dtype in ("string", "national", "unknown"):
+            return node.value
+        return None
+    if isinstance(node, CastExpression):
+        base = node.target_type.name.split("(")[0].strip().upper()
+        if base in _CHAR_CAST_BASES:
+            return _literal_str_resolve(node.expression)
+        return None
+    if isinstance(node, FunctionCall):
+        fn = node.name.upper()
+        if fn in ("TRIM", "LTRIM", "RTRIM") and len(node.args) == 1:
+            inner = _literal_str_resolve(node.args[0])
+            if not isinstance(inner, str):
+                return None
+            strip = {"TRIM": inner.strip, "LTRIM": inner.lstrip, "RTRIM": inner.rstrip}
+            return strip[fn](" ")
+        if (
+            fn in ("DECODE", "FROM_BASE64")
+            and len(node.args) in (1, 2)
+            and isinstance(node.args[0], Literal)
+            and isinstance(node.args[0].value, str)
+            and (
+                len(node.args) == 1
+                or (
+                    isinstance(node.args[1], Literal)
+                    and str(node.args[1].value).lower() == "base64"
+                )
+            )
+        ):
+            try:
+                return base64.b64decode(node.args[0].value)
+            except (ValueError, binascii.Error):
+                return None
+    return None
+
+
+_CHAR_CAST_BASES = frozenset(
+    {
+        "CHAR",
+        "NCHAR",
+        "VARCHAR",
+        "NVARCHAR",
+        "VARCHAR2",
+        "NVARCHAR2",
+        "TEXT",
+        "CLOB",
+        "NCLOB",
+    }
+)
+
+#: MySQL character-set names -> Python codecs (for compile-time byte decodes).
+_MYSQL_CHARSET_CODECS: dict[str, str] = {
+    "utf8mb4": "utf-8",
+    "utf8mb3": "utf-8",
+    "utf8": "utf-8",
+    "latin1": "cp1252",
+    "ascii": "ascii",
+    "binary": "latin-1",
+    "ucs2": "utf-16-be",
+    "utf16": "utf-16-be",
+    "utf16le": "utf-16-le",
+    "utf32": "utf-32-be",
+}
+
+
+def _fold_length_literal(node: FunctionCall) -> str | None:
+    """Fold LENGTH(<literal>) to the SOURCE dialect's value.
+
+    Per-source semantics: T-SQL LEN counts UTF-16 code units of the
+    right-trimmed text; MySQL's LENGTH counts utf8mb4 BYTES but shares this IR
+    name with CHAR_LENGTH, so only an ASCII literal (where both agree) folds;
+    PG/Oracle count code points. A bytes value (base64 DECODE) is a byte count
+    everywhere."""
+    if len(node.args) != 1 or node.distinct:
+        return None
+    value = _literal_str_resolve(node.args[0])
+    if isinstance(value, bytes):
+        return str(len(value))
+    if not isinstance(value, str):
+        return None
+    source = SOURCE_DIALECT.get()
+    if source == "tsql":
+        trimmed = value.rstrip(" ")
+        return str(sum(2 if ord(c) > 0xFFFF else 1 for c in trimmed))
+    if source == "mysql":
+        return str(len(value)) if value.isascii() else None
+    return str(len(value))
+
+
+def _fold_oracle_instr(node: FunctionCall) -> str | None:
+    """Fold Oracle's extended INSTR (negative start / 4-arg occurrence) over
+    literal arguments. IR argument order is CHARINDEX-style (needle, haystack,
+    start, occurrence). Oracle semantics: a positive start finds the occ-th
+    occurrence at-or-after it; a negative start searches BACKWARD from
+    position LENGTH(s)+start+1. Returns 0 when absent."""
+    if not (2 <= len(node.args) <= 4):
+        return None
+    vals = []
+    for arg in node.args:
+        if isinstance(arg, Literal):
+            vals.append(arg.value)
+        elif (
+            isinstance(arg, UnaryOp)
+            and arg.operator == UnaryOperator.NEGATIVE
+            and isinstance(arg.operand, Literal)
+        ):
+            vals.append(-arg.operand.value)
+        else:
+            return None
+    sub, s = vals[0], vals[1]
+    if not isinstance(s, str) or not isinstance(sub, str) or not sub:
+        return None
+    try:
+        start = int(vals[2]) if len(vals) > 2 else 1
+        occ = int(vals[3]) if len(vals) > 3 else 1
+    except (TypeError, ValueError):
+        return None
+    if start == 0 or occ < 1:
+        return "0"
+    starts = [i for i in range(len(s) - len(sub) + 1) if s.startswith(sub, i)]
+    if start > 0:
+        hits = [i for i in starts if i >= start - 1]
+    else:
+        limit = len(s) + start
+        hits = [i for i in reversed(starts) if i <= limit]
+    return str(hits[occ - 1] + 1) if occ <= len(hits) else "0"
+
+
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
+    # Compile-time folds over literal arguments: the value each SOURCE engine
+    # computes is emitted directly, sidestepping per-target semantic gaps
+    # (LEN/LENGTH counting units, Oracle INSTR occurrence/backward search).
+    if fn_name == "LENGTH":
+        folded = _fold_length_literal(node)
+        if folded is not None:
+            return folded
+        # MySQL LENGTH/CHAR_LENGTH share this IR name, so a non-ASCII MySQL
+        # literal cannot fold (bytes vs chars is ambiguous). T-SQL LEN counts a
+        # surrogate pair as TWO; a supplementary-character (_SC) collation makes
+        # it count code points — the CHAR_LENGTH semantics every other engine
+        # has. (A genuine byte-count LENGTH is already [limit]-annotated.)
+        if (
+            dialect == "tsql"
+            and len(node.args) == 1
+            and isinstance(node.args[0], Literal)
+            and isinstance(node.args[0].value, str)
+            and any(ord(c) > 0xFFFF for c in node.args[0].value)
+        ):
+            _sc = node.args[0].value.replace("'", "''")
+            return f"LEN(N'{_sc}' COLLATE Latin1_General_100_CI_AS_SC)"
+    if (
+        fn_name == "CHARINDEX"
+        and SOURCE_DIALECT.get() == "oracle"
+        and (
+            len(node.args) == 4
+            or (
+                len(node.args) == 3
+                and isinstance(node.args[2], UnaryOp)
+                and node.args[2].operator == UnaryOperator.NEGATIVE
+            )
+        )
+    ):
+        folded = _fold_oracle_instr(node)
+        if folded is not None:
+            return folded
+        if dialect == "oracle":
+            # Native re-spell: INSTR(haystack, needle, start[, occurrence]).
+            _in = [_emit_expression(a, dialect) for a in node.args]
+            return f"INSTR({_in[1]}, {_in[0]}, {', '.join(_in[2:])})"
+        return (
+            "NULL /* UNIQUE: Oracle INSTR with an occurrence count or "
+            "backward (negative-start) search has no portable equivalent "
+            "for non-literal arguments — see docs/03-unsupported.md */"
+        )
     # A parameterless aggregate call is invalid on every engine — PG's own
     # error says "count(*) must be used"; that IS the faithful spelling.
     if fn_name == "COUNT" and not node.args and not node.distinct:
@@ -5398,6 +5753,27 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _parts = [_emit_expression(a, dialect) for a in node.args]
         _parts[0] = f"{_parts[0]} COLLATE {_coll}"
         return f"{fn_name}({', '.join(_parts)})"
+    # The reverse: a MySQL-source GREATEST/LEAST over ASCII string literals
+    # compares case-insensitively (GREATEST('a','B') = 'B'); PG/Oracle compare
+    # by code point ('a'). All-literal arguments fold to MySQL's answer —
+    # skipped on a case-insensitive tie, where MySQL's pick is unspecified.
+    if (
+        fn_name in ("GREATEST", "LEAST")
+        and SOURCE_DIALECT.get() == "mysql"
+        and dialect in ("postgresql", "oracle")
+        and len(node.args) > 1
+        and all(
+            isinstance(a, Literal) and isinstance(a.value, str) and a.value.isascii()
+            for a in node.args
+        )
+    ):
+        _vals = [cast(Literal, a).value for a in node.args]
+        _keys = [str(v).lower() for v in _vals]
+        if len(set(_keys)) == len(_keys):
+            _pick = (max if fn_name == "GREATEST" else min)(
+                _vals, key=lambda v: str(v).lower()
+            )
+            return "'" + str(_pick).replace("'", "''") + "'"
 
     # MySQL EXTRACTVALUE(xml_string, xpath) returns the text of the first matching
     # node. Oracle's own EXTRACTVALUE needs an XMLTYPE (a bare string is ORA-00932);
@@ -5766,19 +6142,43 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _lf_n = _emit_expression(node.args[1], dialect)
         return f"LEFT({_lf_s}, CASE WHEN {_lf_n} < 0 THEN 0 ELSE {_lf_n} END)"
     # The reverse: PostgreSQL LEFT with a negative length returns "all but the
-    # last |n|" (LEFT('abc', -1) = 'ab'); MySQL returns '' for a negative length.
-    # Reproduce PostgreSQL's semantics: LEFT(s, GREATEST(CHAR_LENGTH(s) + n, 0)).
+    # last |n|" (LEFT('abc', -1) = 'ab'); MySQL returns '' for a negative
+    # length, and T-SQL/Oracle error/NULL on it. Reproduce PostgreSQL's
+    # semantics with a clamped length: LEFT(s, max(len(s) + n, 0)).
     if (
         fn_name == "LEFT"
         and SOURCE_DIALECT.get() == "postgresql"
-        and dialect == "mysql"
+        and dialect != "postgresql"
         and len(node.args) == 2
         and isinstance(node.args[1], UnaryOp)
         and node.args[1].operator == UnaryOperator.NEGATIVE
     ):
         _lf_s = _emit_expression(node.args[0], dialect)
         _lf_n = _emit_expression(node.args[1], dialect)
+        if dialect == "tsql":
+            _lf_len = f"LEN({_lf_s}) + {_lf_n}"
+            return f"LEFT({_lf_s}, CASE WHEN {_lf_len} > 0 THEN {_lf_len} ELSE 0 END)"
+        if dialect == "oracle":
+            return f"SUBSTR({_lf_s}, 1, GREATEST(LENGTH({_lf_s}) + {_lf_n}, 0))"
         return f"LEFT({_lf_s}, GREATEST(CHAR_LENGTH({_lf_s}) + {_lf_n}, 0))"
+    # PostgreSQL RIGHT with a negative length is "all but the FIRST |n|"
+    # (RIGHT('hello', -1) = 'ello'); MySQL returns '' and T-SQL errors on a
+    # negative length. That is a substring from position |n|+1 (naturally ''
+    # when |n| >= length).
+    if (
+        fn_name == "RIGHT"
+        and SOURCE_DIALECT.get() == "postgresql"
+        and dialect != "postgresql"
+        and len(node.args) == 2
+        and isinstance(node.args[1], UnaryOp)
+        and node.args[1].operator == UnaryOperator.NEGATIVE
+        and isinstance(node.args[1].operand, Literal)
+    ):
+        _rt_s = _emit_expression(node.args[0], dialect)
+        _rt_from = int(node.args[1].operand.value) + 1
+        if dialect == "tsql":
+            return f"SUBSTRING({_rt_s}, {_rt_from}, LEN({_rt_s}))"
+        return f"SUBSTR({_rt_s}, {_rt_from})"
     if fn_name == "CONCAT" and len(node.args) == 1 and dialect in ("tsql", "oracle"):
         return _emit_expression(node.args[0], dialect)
     # A CONCAT chain emits ONE flat call on MySQL (nested CONCATs are valid
@@ -5898,6 +6298,51 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         else:
             length = f"{lenfn}({s})"  # T-SQL needs a length; to the end
         return f"SUBSTRING({s}, {startpos}, {length})"
+    # MySQL SUBSTRING with a start of 0 is '' by design; PG would return the
+    # whole string and Oracle would clamp 0 to 1. Preserve the empty string.
+    if (
+        fn_name == "SUBSTRING"
+        and dialect != "mysql"
+        and SOURCE_DIALECT.get() == "mysql"
+        and len(node.args) in (2, 3)
+        and isinstance(node.args[1], Literal)
+        and node.args[1].value == 0
+        and not isinstance(node.args[1].value, bool)
+    ):
+        if dialect == "oracle":
+            # Oracle cannot represent '' apart from NULL — the approved limit.
+            return (
+                "'' /* UNIQUE: Oracle stores an empty string as NULL "
+                "(docs/03-unsupported.md) */"
+            )
+        return "''"
+    # PostgreSQL 2-arg SUBSTRING with a start <= 0 runs from the beginning
+    # (virtual positions only shorten a 3-arg length, handled below); MySQL
+    # would return ''/count from the end and Oracle counts a negative start
+    # from the end. Rewrite to an explicit start of 1.
+    if (
+        fn_name == "SUBSTRING"
+        and dialect != "postgresql"
+        and SOURCE_DIALECT.get() == "postgresql"
+        and len(node.args) == 2
+        and (
+            (
+                isinstance(node.args[1], Literal)
+                and isinstance(node.args[1].value, int)
+                and not isinstance(node.args[1].value, bool)
+                and node.args[1].value <= 0
+            )
+            or (
+                isinstance(node.args[1], UnaryOp)
+                and node.args[1].operator == UnaryOperator.NEGATIVE
+                and isinstance(node.args[1].operand, Literal)
+            )
+        )
+    ):
+        _z_s = _emit_expression(node.args[0], dialect)
+        if dialect == "tsql":
+            return f"SUBSTRING({_z_s}, 1, LEN({_z_s}))"
+        return f"SUBSTR({_z_s}, 1)"
     # Oracle SUBSTR treats a start position of 0 as 1; the other engines read 0
     # literally (PG/T-SQL a char short, MySQL an empty string). Oracle-source
     # only — MySQL's own SUBSTR(s, 0) is '' by design, so don't touch that.
@@ -7067,14 +7512,27 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         up == "CHR"
         and len(node.args) == 1
         and SOURCE_DIALECT.get() == "mysql"
-        and dialect in ("oracle", "postgresql")
+        and dialect != "mysql"
         and isinstance(node.args[0], Literal)
         and isinstance(node.args[0].value, int)
         and node.args[0].value > 255
     ):
-        # MySQL CHAR(n) is byte-based: n > 255 yields a multi-byte byte string
-        # (CHAR(256) = 0x0100), not the single code point CHR gives elsewhere.
+        # MySQL CHAR(n) is byte-based: n > 255 yields a multi-byte BYTE STRING
+        # (CHAR(256) = bytes 0x01 0x00), not the single code point CHR gives
+        # elsewhere. The value is computable now: decode the bytes as utf8mb4 —
+        # an invalid sequence is NULL (what MySQL itself returns).
         _n = node.args[0].value
+        _bts = _n.to_bytes(max((_n.bit_length() + 7) // 8, 1), "big")
+        try:
+            _chr_val: str | None = _bts.decode("utf-8")
+        except UnicodeDecodeError:
+            _chr_val = None
+        if _chr_val is None:
+            return "NULL"  # what MySQL itself returns for an invalid sequence
+        if not any(ord(c) < 0x20 for c in _chr_val):
+            return "'" + _chr_val.replace("'", "''") + "'"
+        # Control/NUL bytes (CHAR(256) = 0x01 0x00) cannot live in a string
+        # literal on PG/Oracle — keep the documented carrier.
         return (
             f"CHR({_n}) /* UNIQUE: MySQL CHAR({_n}) is a multi-byte byte string, "
             "not a single code point (docs/03-unsupported.md) */"
@@ -7618,6 +8076,67 @@ def _date_literal_sql(node: ASTNode, dialect: str) -> str | None:
 
 def _emit_binary(node: BinaryOp, dialect: str) -> str:
     """Emit a binary operation."""
+    # MySQL arithmetic coerces a string operand by parsing its LEADING numeric
+    # prefix ('0x10' + 0 = 0 — the parse stops at 'x'); PG would read '0x10' as
+    # hex (16) and Oracle/T-SQL error. Fold a literal string operand of a
+    # literal-only MySQL arithmetic expression to its MySQL numeric value.
+    if (
+        SOURCE_DIALECT.get() == "mysql"
+        and dialect != "mysql"
+        and node.operator
+        in (BinaryOperator.ADD, BinaryOperator.SUB, BinaryOperator.MUL)
+        and all(isinstance(side, Literal) for side in (node.left, node.right))
+        and any(
+            isinstance(side, Literal)
+            and isinstance(side.value, str)
+            and side.dtype in ("string", "national", "unknown")
+            for side in (node.left, node.right)
+        )
+        # An ISO date/timestamp string keeps the documented DATE-arithmetic
+        # normalization (the DATE - DATE branch below), not the numeric fold.
+        and not any(
+            isinstance(side, Literal)
+            and isinstance(side.value, str)
+            and _ISO_DT_LITERAL_RE.fullmatch(side.value.strip())
+            for side in (node.left, node.right)
+        )
+    ):
+
+        def _mysql_num(side: Literal) -> ASTNode:
+            if not isinstance(side.value, str):
+                return side
+            m = re.match(r"\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)", side.value)
+            text = m.group(1) if m else "0"
+            # MySQL string-operand arithmetic always yields a DOUBLE.
+            return Literal(value=float(text), dtype="number")
+
+        return _emit_binary(
+            dataclasses.replace(
+                node,
+                left=_mysql_num(cast(Literal, node.left)),
+                right=_mysql_num(cast(Literal, node.right)),
+            ),
+            dialect,
+        )
+    # MySQL date arithmetic on a NON-datetime string literal ('12:00:00' +
+    # INTERVAL 90 MINUTE) yields NULL (the string is not a valid datetime);
+    # PG/T-SQL would either error or invent a 1900-01-01 date. Fold to NULL
+    # with the divergence documented inline (auto-warned).
+    if (
+        SOURCE_DIALECT.get() == "mysql"
+        and dialect != "mysql"
+        and node.operator in (BinaryOperator.ADD, BinaryOperator.SUB)
+        and isinstance(node.left, Literal)
+        and isinstance(node.left.value, str)
+        and node.left.dtype in ("string", "national", "unknown")
+        and not _ISO_DT_LITERAL_RE.fullmatch(node.left.value.strip())
+        and isinstance(node.right, RawSQL)
+        and node.right.sql.upper().lstrip().startswith("INTERVAL")
+    ):
+        return (
+            "NULL /* UNIQUE: MySQL date arithmetic on a non-datetime string "
+            "literal yields NULL (docs/03-unsupported.md) */"
+        )
     # ``DATE 'a' - DATE 'b'`` is a day count on every engine, but spelled
     # differently: Oracle/PostgreSQL subtract dates natively (yielding days),
     # T-SQL/MySQL need DATEDIFF. sqlglot models each DATE literal as a

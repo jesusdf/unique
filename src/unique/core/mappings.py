@@ -380,6 +380,9 @@ EMIT_TYPE_MAP: dict[str, dict[str, str]] = {
         "TEXT": "CLOB",
         "DATETIME": "TIMESTAMP",
         "DATETIME2": "TIMESTAMP",
+        # T-SQL SMALLDATETIME (minute precision) fits inside Oracle DATE
+        # (second precision) — a superset, no note needed.
+        "SMALLDATETIME": "DATE",
         "TINYINT": "NUMBER(3)",
         "INT": "NUMBER(10)",
         "BIGINT": "NUMBER(19)",

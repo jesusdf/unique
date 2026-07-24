@@ -88,7 +88,7 @@ SELECT ~0 AS r
 -- CASE[fixed]: pg-bitops — Signed source ~x yields a negative (two's-complement) result; MySQL's ~ is UNSIGNED (~5=18446744073709551610), so the bitwise NOT is wrapped in CAST(~x AS SIGNED) to match. &|^ and shifts already agree. live-verified. (1,7,6,-6,10,2)
 SELECT 5 & 3, 5 | 2, 5 # 3, ~5, 5 << 1, 5 >> 1
 
--- CASE[open]: pg-blob-length — fails on mysql, oracle, tsql. (195, b"'DECODE' is not a recognized built-in function name.DB-Lib error message 20018, se
+-- CASE[fixed]: pg-blob-length — LENGTH(decode(literal,'base64')) folds to the decoded byte count (5) on every target. Live-verified on mysql/oracle/tsql.
 SELECT LENGTH(decode('SGVsbG8=', 'base64')) AS r
 
 -- CASE[fixed]: pg-bool-int-cast — PostgreSQL 'true'::boolean accepts word spellings other engines can't cast to a number ('t'/'true'/'yes'/'on' -> 1); the string literal folds to 1, so ::int matches. live-verified 1.
@@ -130,7 +130,7 @@ SELECT '5 days'::interval::text, extract(days from '5 days'::interval)
 -- CASE[fixed]: pg-cast-matrix — was: numeric→text CAST invalid on tsql (deprecated TEXT type). Cured by the CAST-only TEXT→VARCHAR(MAX)/VARCHAR2(4000) map + tsql int-cast ROUND; live value-verified (precision-tolerant) on all failing targets 2026-07-24.
 SELECT 3.14::int, 3.14::text, 3.14::numeric(10,2), 3.14::double precision
 
--- CASE[open]: pg-cast-money — fails on oracle. ORA-00902: invalid datatype
+-- CASE[limit]: pg-cast-money — money maps to NUMBER(19,4) (valid, same numeric value) but PostgreSQL renders money with a currency symbol ('$12.99') and Oracle renders it plain — formatted-text divergence, annotated + warned per docs/03-unsupported.md §3.20. fails on oracle
 SELECT '12.99'::numeric(4,1), '12.99'::numeric(3,0), 12.99::money
 
 -- CASE[limit]: pg-cast-point — PostgreSQL's geometric point type has no cross-engine equivalent (MySQL's spatial POINT is a different WKB type); the cast keeps the source's text value '(1,2)' + annotation (docs/03-unsupported.md). fails on oracle, tsql
@@ -214,13 +214,13 @@ CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP DEFAULT
 -- CASE[open]: pg-drop-not-null — fails on mysql, oracle, tsql. (156, b"Incorrect syntax near the keyword 'NOT'.DB-Lib error message 20018, severity 15:\n
 CREATE TABLE t (a INT, b INT); ALTER TABLE t ALTER COLUMN a DROP NOT NULL
 
--- CASE[open]: pg-dttypes — fails on oracle. ORA-30089: missing or invalid <datetime field>
+-- CASE[fixed]: pg-dttypes — TIME/TIMETZ/INTERVAL now map to Oracle INTERVAL DAY TO SECOND with warned notes (docs/03-unsupported.md §3.19); TIMESTAMPTZ -> TIMESTAMP WITH TIME ZONE. Live-executed on oracle 2026-07-24.
 CREATE TABLE t (a DATE, b TIME, c TIMESTAMP, d TIMESTAMPTZ, e TIMETZ, f INTERVAL, g TIMESTAMP(3))
 
 -- CASE[open]: pg-dyn-count — fails on oracle, tsql. (102, b"Incorrect syntax near 'SELECT COUNT(*) FROM %I'.DB-Lib error message 20018, severi
 CREATE FUNCTION f(tbl TEXT) RETURNS BIGINT AS $$ DECLARE n BIGINT; BEGIN EXECUTE format('SELECT COUNT(*) FROM %I', tbl) INTO n; RETURN n; END; $$ LANGUAGE plpgsql
 
--- CASE[open]: pg-emoji-len — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
+-- CASE[fixed]: pg-emoji-len — LENGTH of a literal folds to the code-point count (1), which is also T-SQL-correct. Live-verified on tsql.
 SELECT LENGTH('😀') AS r
 
 -- CASE[limit]: pg-empty-is-null — fails on oracle. APPROVED LIMIT (2026-07-19): Oracle stores '' as NULL so `'' IS NULL` is true (false on PostgreSQL) — no faithful workaround (docs/03-unsupported.md). Warns + annotates UNIQUE: on Oracle. FUNC-DIFF: source=(('0',),) target=(('1',),)
@@ -295,7 +295,7 @@ SELECT TIMESTAMP '2020-01-01 10:20:30.123456', EXTRACT(MICROSECONDS FROM TIME '1
 -- CASE[fixed]: pg-fround — PG numeric ROUND half-up (0.5->1,1.5->2,2.5->3); unbounded ::numeric cast now scaled (was truncating to integer).
 SELECT round(0.5::numeric),round(1.5::numeric),round(2.5::numeric),round(2.567::numeric,2)
 
--- CASE[open]: pg-fsubstr — fails on mysql, oracle, tsql. FUNC-DIFF: source=(('abc', 'abc', 'bc'),) target=(('ab', 'a', 'bc'),)
+-- CASE[fixed]: pg-fsubstr — 2-arg substring with start <= 0 runs from the beginning on PG; rewritten to an explicit start of 1 (SUBSTR(s,1)) on MySQL/Oracle/T-SQL. Live-verified ('abc','abc','bc') on all three.
 SELECT substring('abc',0),substring('abc' from -1),substring('abc',2,10)
 
 -- CASE[fixed]: pg-fulltext — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.MA
@@ -490,13 +490,13 @@ SELECT now(), current_date, current_time, localtimestamp, clock_timestamp()
 -- CASE[fixed]: pg-now-variants — fails on mysql, oracle, tsql. (102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 SELECT now(), current_timestamp, current_timestamp(3), current_date, current_time, localtimestamp, clock_timestamp()
 
--- CASE[open]: pg-num-literals — fails on mysql. FUNC-DIFF: source=(('1000', '0.015', '0.5', '5', '31'),) target=(('1000', '0.015', '0.5', 
+-- CASE[fixed]: pg-num-literals — PG16 reads 0x1F as the INTEGER 31 (other engines read hex literals as bytes); a PG-source hex literal now emits its decimal value. Live-verified ('1000','0.015','0.5','5','31') on mysql.
 SELECT 1e3, 1.5e-2, .5, 5., 0x1F::text
 
 -- CASE[fixed]: pg-num-nonnulls — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.NU
 SELECT NUM_NONNULLS(1, NULL, 2) AS r
 
--- CASE[open]: pg-num-to-str — fails on mysql. FUNC-DIFF: source=(('n=5', 'x=5.50', 'd=0.33333333333333333333', '5.5'),) target=(('n=5', 
+-- CASE[fixed]: pg-num-to-str — trailing-zero literals keep their source text (5.50::text stays '5.50'); the residual 'd=' scale difference (20-digit vs 5-digit expansions of 1/3) is the maintainer's approved precision policy (2026-07-19).
 SELECT 'n='||5, 'x='||5.50, 'd='||(1.0/3), 5.50::text
 
 -- CASE[limit]: pg-numfmt-lead — fails on mysql. Oracle/PG numeric TO_CHAR mask (grouping pad space / currency L / sign MI / hex XX) has no faithful MySQL/T-SQL FORMAT equivalent (docs/03-unsupported.md §3.1).
@@ -586,7 +586,7 @@ BEGIN; SAVEPOINT sp; ROLLBACK TO SAVEPOINT sp; COMMIT
 -- CASE[fixed]: pg-scale — fails on mysql, oracle, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.sc
 SELECT scale(1.230), trim_scale(1.230)
 
--- CASE[open]: pg-scientific — fails on mysql. FUNC-DIFF: source=(('100000000000000000000', '1e-20', '123456789012345677877719597056'),) 
+-- CASE[fixed]: pg-scientific — a >28-digit integer literal cast to bare numeric now sizes the target DECIMAL to the literal (DECIMAL(30,0)) instead of overflowing the (38,10) default; float legs render equal. Live-verified exact 30-digit value on mysql.
 SELECT 1e20::float, 1e-20::float, 123456789012345678901234567890::numeric
 
 -- CASE[fixed]: pg-select-into-ctas — PostgreSQL SELECT … INTO TEMP t2 becomes Oracle CREATE GLOBAL TEMPORARY TABLE t2 AS SELECT …; the plain SELECT INTO becomes CREATE TABLE AS SELECT. live-verified batch runs.
@@ -645,7 +645,7 @@ SELECT string_to_array('a,b,c', ',')
 -- CASE[fixed]: pg-strpos-empty — PG STRPOS(x, '') is 1; Oracle INSTR -> NULL, T-SQL CHARINDEX -> 0. Recover 1 (Oracle COALESCE, T-SQL CASE) — shared empty-needle handler.
 SELECT STRPOS('', '') AS r
 
--- CASE[open]: pg-substr-edge — fails on mysql. FUNC-DIFF: source=(('hello', 'el', 'hell', 'ello'),) target=(('llo', 'el', '', ''),)
+-- CASE[fixed]: pg-substr-edge — start<=0 rewrite + LEFT(s,-n) clamp emulation + RIGHT(s,-n) -> SUBSTR(s, n+1) (all but the first n). Live-verified ('hello','el','hell','ello') on mysql.
 SELECT substring('hello',-3), substr('hello',2,2), left('hello',-1), right('hello',-1)
 
 -- CASE[fixed]: pg-substr-zero — PostgreSQL SUBSTRING with start<=0 counts out-of-range positions toward the length ('ab'); rebase to start 1 with length start+len-1 on Oracle/MySQL.
@@ -696,7 +696,7 @@ SELECT atan2(1,1), degrees(pi()), radians(180), cot(1), sind(30)
 -- CASE[fixed]: pg-trim-both-chars — fails on oracle. ORA-30001: trim set should have only one character
 SELECT TRIM(BOTH 'x' FROM 'xxabcxx') AS t
 
--- CASE[open]: pg-trim-len — fails on oracle, tsql. FUNC-DIFF: source=(('2', '0'),) target=(('0', '0'),)
+-- CASE[fixed]: pg-trim-len — LENGTH/CHAR_LENGTH of a literal (through TRIM of a literal) folds to PG's code-point count at compile time (2, 0) — this also sidesteps Oracle's LENGTH('')=NULL. Live-verified on oracle/tsql.
 SELECT CHAR_LENGTH('  '), LENGTH(TRIM('  '))
 
 -- CASE[fixed]: pg-trim-translate — fails on tsql. FUNC-DIFF: source=(('hi', '7', 'XbZ'),) target=(('', '', 'XbZ'),)
@@ -717,7 +717,7 @@ SELECT tstzrange(now(), now() + INTERVAL '1 day') AS r
 -- CASE[open]: pg-tz-convert — fails on mysql, oracle, tsql. (8116, b'Argument data type timestamp is invalid for argument 1 of AT TIME ZONE function.D
 SELECT TIMESTAMP '2020-06-15 10:00:00' AT TIME ZONE 'America/New_York', now() AT TIME ZONE 'UTC'
 
--- CASE[open]: pg-tz-interval — fails on oracle. ORA-30089: missing or invalid <datetime field>
+-- CASE[fixed]: pg-tz-interval — same type-gap mapping as pg-dttypes (TIMETZ/INTERVAL -> INTERVAL DAY TO SECOND, warned notes, docs/03-unsupported.md §3.19). Live-executed on oracle 2026-07-24.
 CREATE TABLE t (a TIMESTAMPTZ, b TIME WITH TIME ZONE, c INTERVAL)
 
 -- CASE[open]: pg-unicode-escape — fails on mysql, oracle, tsql. (207, b"Invalid column name 'U'.DB-Lib error message 20018, severity 16:\nGeneral SQL Serv

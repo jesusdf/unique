@@ -65,7 +65,9 @@ class TestTSQLToOracle:
         # a SQL context, where the constrained DECIMAL cast is valid
         # Oracle (the constraint strip only applies to PL/SQL expression
         # CASTs).
-        assert "CAST(0.1 AS DECIMAL(12, 2)) INTO" in out
+        # The 0.10 literal keeps its source text (trailing-zero scale is
+        # display-significant — Literal.raw).
+        assert "CAST(0.10 AS DECIMAL(12, 2)) INTO" in out
 
     IDENTITY_PROC = (
         "CREATE TABLE dbo.invoice (\n"

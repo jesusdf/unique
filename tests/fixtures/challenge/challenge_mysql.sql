@@ -59,7 +59,7 @@ SELECT BENCHMARK(1, 1+1) AS r
 -- CASE[fixed]: my-binary-substr — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.UN
 SELECT SUBSTRING(UNHEX('48656C6C6F'), 1, 2) AS r
 
--- CASE[fixed]: my-bintypes — MySQL BIT(M) maps to T-SQL BIT with no width (error 2716 otherwise), consistent with Oracle NUMBER(1) / PG BOOLEAN treating BIT as a boolean; the BLOB family maps to VARBINARY(MAX). live-verified CREATE runs.
+-- CASE[fixed]: my-bintypes — a multi-bit BIT(M>1) is a 64-bit VALUE, not a boolean: it maps to NUMERIC(20)/NUMBER(20) (T-SQL/Oracle, warned note) and native BIT(M) on PG (the old width-dropping BIT map silently truncated it — see mysql-prec-64); a 1-bit BIT/BOOL stays the boolean map. BLOB family maps to VARBINARY(MAX). live-verified CREATE runs.
 CREATE TABLE t (a BINARY(16), b VARBINARY(255), c TINYBLOB, d BLOB, e MEDIUMBLOB, f LONGBLOB, g BIT(8), h BOOL)
 
 -- CASE[limit]: my-bit-agg — fails on oracle, tsql. BIT_XOR/BIT_OR aggregates map faithfully MySQL<->PostgreSQL; Oracle/T-SQL have no bit aggregate (docs/03-unsupported.md §3.10). Warned carrier on oracle/tsql.
@@ -101,7 +101,7 @@ SELECT CAST((1=1) AS CHAR) AS r
 -- CASE[fixed]: my-cast-binary2 — CAST AS BINARY/VARBINARY maps to PG BYTEA (PG has no BINARY type). Live-verified (b'abc', 'abc', b'abc').
 SELECT CONVERT('abc',BINARY), CONVERT('abc' USING latin1), CAST('abc' AS BINARY)
 
--- CASE[open]: my-cast-charset — fails on oracle. ORA-25137: Data value out of range
+-- CASE[fixed]: my-cast-charset — CAST(0xC3A9 AS CHAR CHARACTER SET utf8mb4) folds to the decoded literal 'é'. Live-verified on oracle.
 SELECT CAST(0xC3A9 AS CHAR CHARACTER SET utf8mb4) AS r
 
 -- CASE[limit]: my-cast-convert — CAST AS UNSIGNED has no signed-engine type; mapped to NUMERIC/NUMBER (value 1 exact) with a carrier flagging the lost unsigned wraparound (docs/03-unsupported.md). fails on oracle, postgresql, tsql
@@ -116,7 +116,7 @@ SELECT CAST('2020-01-01 10:00' AS DATE), CAST('2020-01-01 10:00' AS TIME), CAST(
 -- CASE[fixed]: my-cast-decimal2 — MySQL's lenient string->number cast (CAST('abc' AS DECIMAL)=0, leading-numeric-prefix parse) reproduced by folding the literal to its MySQL-parsed value; bare DECIMAL kept as DECIMAL(10,0) (MySQL's default scale 0); values 13/13/0 verified equal (Oracle drops a trailing .0 — precision only)
 SELECT CAST('12.99' AS DECIMAL(4,1)), CAST('12.99' AS DECIMAL(3,0)), CAST('abc' AS DECIMAL)
 
--- CASE[open]: my-cast-hex-char — fails on oracle. ORA-25137: Data value out of range
+-- CASE[fixed]: my-cast-hex-char — CAST(0xFF AS CHAR) folds to the utf8mb4 byte decode (invalid -> NULL, MySQL's own result). Live-verified NULL on oracle.
 SELECT CAST(0xFF AS CHAR) AS r
 
 -- CASE[fixed]: my-cast-int — MySQL CAST(2.7 AS SIGNED) rounds (3); T-SQL CAST truncates (2). Wrap ROUND(x, 0) on a T-SQL target (both round half-away-from-zero).
@@ -137,7 +137,7 @@ SELECT CAST('123' AS SIGNED),CAST('1.5' AS DECIMAL(4,2)),CONVERT('123',SIGNED),C
 -- CASE[limit]: my-cast-time — Oracle has no TIME type; CAST(... AS TIME) keeps the value as text with a documented carrier (docs/03-unsupported.md). fails on oracle
 SELECT CAST('10:00:00' AS TIME) AS r
 
--- CASE[open]: my-cast-truncate — fails on oracle, tsql. (243, b'Type TIMESTAMPTZ is not a defined system type.DB-Lib error message 20018, severity
+-- CASE[fixed]: my-cast-truncate — oracle: CAST(ts AS DATE) now wrapped in TRUNC() (Oracle DATE keeps the time of day; every other engine strips it) — live 2020-01-01 00:00. tsql leg: '10:30:45.0000000' vs '10:30:45' is a trailing-zero fraction (maintainer precision policy => fixed).
 SELECT CAST(TIMESTAMP '2020-01-01 10:30' AS DATE), CAST(TIME '10:30:45' AS CHAR)
 
 -- CASE[open]: my-cast-uns2 — fails on postgresql. type "ubigint" does not exist
@@ -155,7 +155,7 @@ SELECT CHAR(256) AS r
 -- CASE[fixed]: my-char-encoding — fails on oracle, postgresql, tsql. (195, b"'CHR' is not a recognized built-in function name.DB-Lib error message 20018, sever
 SELECT ASCII('A'),CHAR(65),ORD('é'),HEX('AB'),UNHEX('4142'),TO_BASE64('AB'),FROM_BASE64('QUI='),BIT_LENGTH('AB')
 
--- CASE[open]: my-char-unicode — fails on postgresql. FUNC-DIFF: source=(('NULL',),) target=(('μ',),)
+-- CASE[fixed]: my-char-unicode — CHAR(n USING cs) is a byte string: the literal decodes at compile time (invalid utf8mb4 sequence -> NULL, exactly MySQL's result; control/NUL bytes keep the documented carrier). Live-verified NULL on postgresql.
 SELECT CHAR(956 USING utf8mb4) AS r
 
 -- CASE[fixed]: my-char-unicode2 — fails on oracle, postgresql, tsql. (195, b"'CHR' is not a recognized built-in function name.DB-Lib error message 20018, sever
@@ -266,13 +266,13 @@ SELECT 1/3*3 AS r
 -- CASE[fixed]: my-div-precision — 1.0/3 = 0.3333...; same value at each engine's default division scale. (value equal, precision-only diff; maintainer policy 2026-07-19)
 SELECT 1.0 / 3 AS r
 
--- CASE[open]: my-dttypes — fails on oracle, tsql. (2716, b'Column, parameter, or variable #6: Cannot specify a column width on data type dat
+-- CASE[fixed]: my-dttypes — tsql leg was stale (DATETIME(6)->DATETIME2(6) already lands); oracle TIME/TIME(3) now map to INTERVAL DAY TO SECOND with a warned note (docs/03-unsupported.md §3.19). Live-executed on oracle + tsql 2026-07-24.
 CREATE TABLE t (a DATE, b TIME, c DATETIME, d TIMESTAMP, e YEAR, f DATETIME(6), g TIME(3))
 
 -- CASE[fixed]: my-elt — MySQL ELT(n, ...) now translates (element by 1-based index); stale tag, live-verified equal.
 SELECT ELT(2, 'a', 'b', 'c') AS r
 
--- CASE[open]: my-emoji-len — fails on tsql. FUNC-DIFF: source=(('1',),) target=(('2',),)
+-- CASE[fixed]: my-emoji-len — CHAR_LENGTH of a supplementary-plane literal: T-SQL LEN counts a surrogate pair as 2, so the emitted LEN uses a _SC (supplementary characters) collation, which counts code points. Live-verified 1 on tsql.
 SELECT CHAR_LENGTH('😀') AS r
 
 -- CASE[limit]: my-empty-eq-zero — fails on oracle. Oracle stores '' as NULL (docs/03-unsupported.md). FUNC-DIFF: source=(('1',),) target=(('NULL',),)
@@ -335,7 +335,7 @@ CREATE TABLE t (id INT, INDEX ix (id)); SELECT id FROM t WHERE id = 1 FOR SHARE
 -- CASE[fixed]: my-format-fns2 — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.TI
 SELECT DATE_FORMAT(NOW(),'%W %M %Y'), TIME_FORMAT(NOW(),'%r')
 
--- CASE[open]: my-fsubstr — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('', 'c', 'bc'),) target=(('ab', 'a', 'bc'),)
+-- CASE[limit]: my-fsubstr — SUBSTRING edge folds now emit MySQL's exact values ('', from-end, clamp; live-verified on pg/tsql); the residual divergence is Oracle's ''≡NULL (no faithful workaround), annotated + warned per docs/03-unsupported.md. fails on oracle
 SELECT SUBSTRING('abc',0),SUBSTRING('abc',-1),SUBSTRING('abc',2,10)
 
 -- CASE[fixed]: my-full-select — fails on oracle, tsql. (2715, b'Column, parameter, or variable #3: Cannot find data type json.DB-Lib error messag
@@ -369,7 +369,7 @@ SELECT GREATEST(1, NULL, 3) AS r
 -- CASE[fixed]: my-greatest-null2 — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1',),)
 SELECT GREATEST(NULL, 1) AS r
 
--- CASE[open]: my-greatest-string — fails on oracle, postgresql. FUNC-DIFF: source=(('B',),) target=(('a',),)
+-- CASE[fixed]: my-greatest-string — GREATEST/LEAST over ASCII string literals folds to MySQL's case-insensitive pick ('B'); ci-ties are left alone (unspecified in MySQL). Live-verified on oracle/postgresql.
 SELECT GREATEST('a', 'B') AS r
 
 -- CASE[open]: my-group-case — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('a', '2'), ('b', '1')) target=(('A', '2'), ('b', '1'))
@@ -396,7 +396,7 @@ SELECT x, RANK() OVER (ORDER BY x) FROM (SELECT 1 x UNION ALL SELECT 2) t HAVING
 -- CASE[fixed]: my-hex-bin — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
 SELECT HEX(255) AS r, BIN(5) AS b
 
--- CASE[open]: my-hex-str-add — fails on postgresql. FUNC-DIFF: source=(('0',),) target=(('16',),)
+-- CASE[fixed]: my-hex-str-add — a string literal in MySQL arithmetic folds to its leading-numeric-prefix DOUBLE value ('0x10'+0 -> 0.0+0); ISO-date strings keep the DATE-arithmetic normalization. Live-verified 0 on postgresql.
 SELECT '0x10' + 0 AS r
 
 -- CASE[fixed]: my-hexcast — fails on oracle, postgresql, tsql. (4121, b'Cannot find either column "dbo" or the user-defined function or aggregate "dbo.HE
@@ -588,7 +588,7 @@ SELECT NOW(), CURDATE(), CURTIME(), UTC_DATE(), UTC_TIME(), SYSDATE()
 -- CASE[fixed]: my-now-variants — fails on oracle, postgresql, tsql. (102, b"Incorrect syntax near '3'.DB-Lib error message 20018, severity 15:\nGeneral SQL Se
 SELECT NOW(), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP(3), CURDATE(), CURTIME(), SYSDATE(), UNIX_TIMESTAMP()
 
--- CASE[open]: my-num-to-str — fails on oracle, postgresql, tsql. FUNC-DIFF: source=(('n=5', 'x=5.50', 'd=0.33333', 'b=1', '5.5'),) target=(('n=5', 'x=5.5',
+-- CASE[fixed]: my-num-to-str — trailing-zero literals keep their source text (Literal.raw: 5.50 stays 5.50) and CONCAT(TRUE) folds to 1; the residual 'd=' scale difference (0.33333 vs longer expansions of 1/3) and Oracle's trailing-zero/leading-dot rendering are the maintainer's approved precision policy (2026-07-19: same value differing only in precision/scale = fixed).
 SELECT CONCAT('n=',5), CONCAT('x=',5.50), CONCAT('d=',1.0/3), CONCAT('b=',TRUE), 5.50+0
 
 -- CASE[fixed]: my-numeric — MySQL FLOAT(M,D) is a 4-byte float with a display scale; T-SQL FLOAT takes at most a bit-precision, so FLOAT(10,2) maps to REAL (no width), matching PostgreSQL. live-verified CREATE runs.
@@ -757,7 +757,7 @@ SELECT TIMESTAMPDIFF(MONTH, '2020-01-15', '2020-03-10') AS r
 -- CASE[fixed]: my-timestampdiff-year — same complete-vs-boundary divergence for YEAR (2019-12-31..2020-01-01 = 0 complete years, not 1). live-verified 0.
 SELECT TIMESTAMPDIFF(YEAR, '2019-12-31', '2020-01-01') AS r
 
--- CASE[open]: my-timestr-plus — fails on postgresql, tsql. FUNC-DIFF: source=(('NULL',),) target=(('1900-01-01 13:30:00',),)
+-- CASE[fixed]: my-timestr-plus — MySQL date arithmetic on a non-datetime string literal yields NULL; folded to NULL with an inline UNIQUE note + warning. Live-verified NULL on postgresql/tsql.
 SELECT '12:00:00' + INTERVAL 90 MINUTE AS r
 
 -- CASE[limit]: my-trailing-eq — fails on oracle, tsql. APPROVED LIMIT (2026-07-18): collation case/accent/trailing-space sensitivity is a per-column property, not statement-compensable (docs/03-unsupported.md §2). FUNC-DIFF: source=(('0',),) target=(('1',),)
@@ -883,7 +883,7 @@ CREATE TABLE t (a INT ZEROFILL)
 -- CASE[fixed]: mysql-drop5-utf8mb4|CHAR — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'utf8mb4|CHARSET' absent from valid tsql output, no warning
 CREATE TABLE t (a INT AUTO_INCREMENT PRIMARY KEY, b VARCHAR(20)) DEFAULT CHARSET=utf8mb4
 
--- CASE[open]: mysql-prec-64|BIGINT| — fails on oracle, postgresql. SILENT PRECISION CHANGE: '64|BIGINT|BINARY' not preserved in valid oracle output, no warni
+-- CASE[fixed]: mysql-prec-64 — BIT(64) is a 64-bit value: now native BIT(64) on PG and NUMBER(20)/NUMERIC(20) with a warned note on Oracle/T-SQL (was silently truncated to NUMBER(1)/BOOLEAN — docs/03-unsupported.md §3.19). Live-executed on oracle, postgresql, tsql 2026-07-24.
 CREATE TABLE t (a BIT(64))
 
 -- CASE[fixed]: mysql-qdrop-ROLLUP — fails on oracle, postgresql, tsql. SILENT CLAUSE DROP: 'ROLLUP' absent from valid tsql output, no warning

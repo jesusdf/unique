@@ -1539,15 +1539,22 @@ class TestAutoIncrementKey:
 
 
 class TestBitWidthType:
-    """MySQL BIT(M) maps to T-SQL BIT with no width (error 2716 on a width),
-    consistent with Oracle NUMBER(1) / PG BOOLEAN treating BIT as a boolean."""
+    """A multi-bit MySQL BIT(M>1) is a 64-bit value: NUMERIC(20)/NUMBER(20) on
+    T-SQL/Oracle (with a warned note) and native BIT(M) on PG. Only a 1-bit
+    BIT/BOOL keeps the boolean map (the old width-dropping BIT map silently
+    truncated BIT(8) to one bit — the mysql-prec-64 finding)."""
 
-    def test_bit_width_dropped_on_tsql(self) -> None:
+    def test_bit8_maps_to_numeric_on_tsql(self) -> None:
         out = _tx(_case("challenge_mysql.sql", "my-bintypes "), "mysql", "tsql")
-        body = "\n".join(
-            ln for ln in out.splitlines() if not ln.lstrip().startswith("--")
-        )
-        assert "g BIT" in body and "BIT(" not in body, body
+        body = _exec_lines(out)
+        assert "g NUMERIC(20)" in body, body
+        assert "h BIT" in body and "BIT(" not in body, body
+
+    def test_bit8_native_on_postgresql(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-bintypes "), "mysql", "postgresql")
+        body = _exec_lines(out)
+        assert "g BIT(8)" in body, body
+        assert "h BOOLEAN" in body, body
 
 
 class TestFloatDisplayScale:
@@ -3305,6 +3312,9 @@ class TestCastBinary:
     Live-verified b'abc'."""
 
     def test_cast_binary_maps_to_bytea(self) -> None:
+        # A bare BINARY cast keeps the runtime BYTEA cast (only an unsized /
+        # wide-enough VARBINARY literal folds to its encoded bytes — a fixed
+        # BINARY(n) would zero-pad).
         out = _tx(
             _case("challenge_mysql.sql", "my-cast-binary2 "), "mysql", "postgresql"
         )
@@ -3544,8 +3554,13 @@ class TestMysqlStringPlusIsArithmetic:
     them so T-SQL does the arithmetic. Live-verified 10.0 (not '55')."""
 
     def test_numeric_string_add_casts(self) -> None:
-        out = _tx(_case("challenge_mysql.sql", "my-strnum-add"), "mysql", "tsql")
-        assert "CAST('5' AS FLOAT) + CAST('5' AS FLOAT)" in out, out
+        # Literal operands fold to MySQL's DOUBLE arithmetic values; a
+        # non-literal string operand keeps the runtime FLOAT cast.
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-strnum-add"), "mysql", "tsql")
+        )
+        assert "5.0 + 5.0" in out, out
+        assert "'5'" not in out, out
 
 
 class TestIsTrueInValuePosition:
@@ -3797,8 +3812,15 @@ class TestTsqlLenTrailingSpaces:
 
     @pytest.mark.parametrize("target", ("mysql", "oracle", "postgresql"))
     def test_len_trims_trailing_on_other_engines(self, target: str) -> None:
-        out = _tx(_case("challenge_sqlserver.sql", "ts-len-trailing"), "tsql", target)
+        # A column argument keeps the runtime RTRIM emulation.
+        out = _tx("SELECT LEN(c) AS r FROM t", "tsql", target)
         assert "RTRIM(" in out.upper(), out
+
+    @pytest.mark.parametrize("target", ("oracle", "postgresql"))
+    def test_len_literal_folds_to_count(self, target: str) -> None:
+        # The corpus case's literal argument folds to T-SQL LEN's value (3).
+        out = _tx(_case("challenge_sqlserver.sql", "ts-len-trailing"), "tsql", target)
+        assert re.search(r"(?i)SELECT 3 AS r", out), out
 
     def test_len_unchanged_on_tsql(self) -> None:
         out = _tx("SELECT LEN('abc   ') AS r", "tsql", "tsql")
@@ -4049,3 +4071,258 @@ class TestWaitforExecSystemProc:
         )
         assert "sp_who" not in code, result.sql
         assert any("sp_who" in str(w) for w in result.warnings), result.warnings
+
+
+class TestTypeGapClosestType:
+    """Column types the target lacks map to the closest type with a warned
+    -- UNIQUE: note (docs/03-unsupported.md §3.19), never silently."""
+
+    def test_time_to_oracle_interval(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_sqlserver.sql", "ts-dttypes"),
+            source="tsql",
+            target="oracle",
+        )
+        body = _exec_lines(result.sql)
+        assert "INTERVAL DAY TO SECOND" in body, result.sql
+        assert re.search(r"(?i)\bb TIME\b", body) is None, result.sql
+        assert re.search(r"(?i)\be DATE\b", body), result.sql  # SMALLDATETIME
+        assert result.warnings, "type-gap note must warn"
+
+    def test_interval_to_tsql_text(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_oracle.sql", "ora-tz-interval"),
+            source="oracle",
+            target="tsql",
+        )
+        body = _exec_lines(result.sql)
+        assert body.count("VARCHAR(30)") == 2, result.sql
+        assert "INTERVAL" not in body.upper(), result.sql
+        assert "DATETIMEOFFSET" in body, result.sql
+        assert result.warnings, result.warnings
+
+    def test_datetime7_clamped_on_mysql(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_sqlserver.sql", "ts-datetimeoffset"),
+            source="tsql",
+            target="mysql",
+        )
+        body = _exec_lines(result.sql)
+        assert "DATETIME(6)" in body, result.sql
+        assert "(7)" not in body, result.sql
+        assert result.warnings, result.warnings
+
+    def test_pg_interval_to_oracle(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_postgresql.sql", "pg-tz-interval"),
+            source="postgresql",
+            target="oracle",
+        )
+        body = _exec_lines(result.sql)
+        assert body.upper().count("INTERVAL DAY TO SECOND") == 2, result.sql
+        assert "TIMETZ" not in body.upper(), result.sql
+        assert result.warnings, result.warnings
+
+
+class TestOracleDateCastTruncates:
+    """Off-Oracle, CAST(x AS DATE) strips the time of day; Oracle DATE keeps
+    it, so an Oracle-target DATE cast from another source gains TRUNC()."""
+
+    def test_mysql_timestamp_cast(self) -> None:
+        out = _tx(_case("challenge_mysql.sql", "my-cast-truncate"), "mysql", "oracle")
+        assert re.search(
+            r"(?i)TRUNC\(CAST\(TIMESTAMP '2020-01-01 10:30:00' AS DATE\)\)", out
+        ), out
+
+    def test_oracle_source_keeps_its_semantics(self) -> None:
+        out = _tx("SELECT CAST(SYSTIMESTAMP AS DATE) FROM DUAL", "oracle", "oracle")
+        assert "TRUNC" not in out.upper(), out
+
+
+class TestPgMoneyAnnotated:
+    """PG money renders '$12.99'; the numeric map keeps the value but not the
+    symbol — annotated + warned (docs/03-unsupported.md §3.20)."""
+
+    def test_money_cast_warns(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_postgresql.sql", "pg-cast-money"),
+            source="postgresql",
+            target="oracle",
+        )
+        assert "NUMBER(19,4)" in result.sql, result.sql
+        assert any("currency" in str(w) for w in result.warnings), result.warnings
+
+
+class TestOraCastDatetime3:
+    """Oracle datetime casts land as native mysql/tsql types (no TIMESTAMPTZ
+    leak); values are SYSDATE-nondeterministic so the idiom is asserted."""
+
+    def test_tsql_types(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_oracle.sql", "ora-cast-datetime3"), "oracle", "tsql")
+        )
+        assert "DATETIMEOFFSET" in out and "TIMESTAMPTZ" not in out.upper(), out
+
+    def test_mysql_types(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_oracle.sql", "ora-cast-datetime3"), "oracle", "mysql")
+        )
+        assert "AS DATETIME" in out and "TIMESTAMPTZ" not in out.upper(), out
+
+
+class TestLiteralFolds:
+    """Compile-time folds over literal arguments emit the SOURCE engine's
+    value directly (substring edges, extended INSTR, LENGTH family, byte
+    decodes, MySQL string arithmetic) — live value-verified 2026-07-24."""
+
+    def test_mysql_substr_zero_folds_empty(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-fsubstr"), "mysql", "postgresql")
+        )
+        assert "''" in out, out
+        assert "SUBSTRING('abc', 0" not in out, out
+
+    def test_mysql_substr_zero_oracle_annotated(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_mysql.sql", "my-fsubstr"), source="mysql", target="oracle"
+        )
+        assert "UNIQUE: Oracle stores an empty string as NULL" in result.sql
+        assert result.warnings, result.warnings
+
+    def test_pg_substr_edges_rewritten(self) -> None:
+        out = _exec_lines(
+            _tx(
+                _case("challenge_postgresql.sql", "pg-substr-edge"),
+                "postgresql",
+                "mysql",
+            )
+        )
+        assert "SUBSTR('hello', 1)" in out, out  # start <= 0 -> from 1
+        assert "SUBSTR('hello', 2)" in out, out  # RIGHT(s,-1) -> all but first
+        assert "RIGHT(" not in out.upper(), out
+
+    def test_oracle_instr_occurrence_folds(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_oracle.sql", "ora-instr-edge"), "oracle", "postgresql")
+        )
+        assert re.search(r"\b4\b", out), out
+        assert "INSTR" not in out.upper(), out
+
+    def test_oracle_instr_nonliteral_degrades(self) -> None:
+        result = Transpiler().transpile(
+            "SELECT INSTR(c, 'l', 1, 2) FROM t;", source="oracle", target="tsql"
+        )
+        assert "NULL /* UNIQUE: Oracle INSTR" in result.sql, result.sql
+        assert result.warnings, result.warnings
+
+    def test_length_folds(self) -> None:
+        # pg-trim-len: CHAR_LENGTH('  ') / LENGTH(TRIM('  ')) fold to 2, 0.
+        out = _exec_lines(
+            _tx(
+                _case("challenge_postgresql.sql", "pg-trim-len"), "postgresql", "oracle"
+            )
+        )
+        assert re.search(r"(?i)SELECT 2, 0\b", out), out
+
+    def test_emoji_len_folds(self) -> None:
+        assert "SELECT 2" in _exec_lines(
+            _tx(_case("challenge_sqlserver.sql", "ts-emoji-len"), "tsql", "postgresql")
+        )
+        assert "SELECT 1" in _exec_lines(
+            _tx(_case("challenge_postgresql.sql", "pg-emoji-len"), "postgresql", "tsql")
+        )
+        # MySQL CHAR_LENGTH shares its IR name with byte-LENGTH, so the emoji
+        # literal doesn't fold — the T-SQL emit uses an _SC collation instead.
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-emoji-len"), "mysql", "tsql")
+        )
+        assert "COLLATE Latin1_General_100_CI_AS_SC" in out, out
+
+    def test_b64_length_folds(self) -> None:
+        out = _exec_lines(
+            _tx(
+                _case("challenge_postgresql.sql", "pg-blob-length"),
+                "postgresql",
+                "tsql",
+            )
+        )
+        assert "SELECT 5" in out, out
+
+    def test_hexcast_folds(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_sqlserver.sql", "ts-hexcast"), "tsql", "oracle")
+        )
+        assert "'Hello'" in out, out
+        assert "HEXTORAW('48656C6C6F')" in out, out
+        assert "TO_TIMESTAMP" not in out.upper(), out
+
+    def test_mysql_hex_char_decodes(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-cast-charset"), "mysql", "oracle")
+        )
+        assert "'é'" in out, out
+        assert (
+            _exec_lines(
+                _tx(_case("challenge_mysql.sql", "my-cast-hex-char"), "mysql", "oracle")
+            )
+            .strip()
+            .startswith("SELECT NULL")
+        ), "invalid utf8 byte must fold to NULL"
+
+    def test_mysql_char_unicode_null(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-char-unicode"), "mysql", "postgresql")
+        )
+        assert "SELECT NULL" in out, out
+
+    def test_mysql_string_arith_folds(self) -> None:
+        out = _exec_lines(
+            _tx(_case("challenge_mysql.sql", "my-hex-str-add"), "mysql", "postgresql")
+        )
+        assert "0.0 + 0" in out, out
+        assert "'0x10'" not in out, out
+
+    def test_mysql_timestr_interval_null(self) -> None:
+        result = Transpiler().transpile(
+            _case("challenge_mysql.sql", "my-timestr-plus"),
+            source="mysql",
+            target="tsql",
+        )
+        assert "NULL /* UNIQUE: MySQL date arithmetic" in result.sql, result.sql
+        assert result.warnings, result.warnings
+
+    def test_mysql_greatest_ci_folds(self) -> None:
+        out = _exec_lines(
+            _tx(
+                _case("challenge_mysql.sql", "my-greatest-string"),
+                "mysql",
+                "postgresql",
+            )
+        )
+        assert "'B'" in out, out
+        assert "GREATEST" not in out.upper(), out
+
+    def test_trailing_zero_literal_kept(self) -> None:
+        out = _tx("SELECT 'x=' || 5.50 AS r", "postgresql", "mysql")
+        assert "5.50" in out, out
+
+    def test_pg_hex_literal_is_integer(self) -> None:
+        out = _exec_lines(
+            _tx(
+                _case("challenge_postgresql.sql", "pg-num-literals"),
+                "postgresql",
+                "mysql",
+            )
+        )
+        assert "31" in out, out
+        assert "x'1F'" not in out, out
+
+    def test_pg_wide_numeric_cast_sized(self) -> None:
+        out = _exec_lines(
+            _tx(
+                _case("challenge_postgresql.sql", "pg-scientific"),
+                "postgresql",
+                "mysql",
+            )
+        )
+        assert "DECIMAL(30, 0)" in out, out

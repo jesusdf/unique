@@ -389,6 +389,15 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
 def _styled_convert_is_modeled(c: exp.Convert) -> bool:
     """Whether a styled CONVERT converts structurally (known date style, or
     the hash-stringify wrapper whose target functions already return hex)."""
+    # A BINARY/VARBINARY target is a byte reinterpretation, never a date
+    # conversion — style 0 there is the default binary style, not the date
+    # format mapping (it used to misparse to TO_TIMESTAMP).
+    _type = c.this if isinstance(c.this, exp.DataType) else c.expression
+    if isinstance(_type, exp.DataType) and _type.this in (
+        exp.DataType.Type.VARBINARY,
+        exp.DataType.Type.BINARY,
+    ):
+        return False
     style = str(c.args["style"].name).strip("'")
     if style in ("1", "2"):
         inner = c.args.get("expression")
@@ -601,6 +610,20 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
     # hash-stringify wrapper are modeled (FunctionCall CONVERT with the style
     # argument — see _convert_styled_convert); a style outside the known
     # table still passes the whole statement through.
+    # A BINARY/VARBINARY conversion with style 0 IS the default byte
+    # reinterpretation — drop the redundant style so it models as a plain
+    # cast instead of dragging the whole statement into the passthrough.
+    if isinstance(expr, exp.Select):
+        for _c in expr.find_all(exp.Convert):
+            if _c.args.get("style") is None:
+                continue
+            _ct = _c.this if isinstance(_c.this, exp.DataType) else _c.expression
+            if (
+                isinstance(_ct, exp.DataType)
+                and _ct.this in (exp.DataType.Type.VARBINARY, exp.DataType.Type.BINARY)
+                and str(_c.args["style"].name).strip("'") == "0"
+            ):
+                _c.set("style", None)
     if isinstance(expr, exp.Select) and any(
         not _styled_convert_is_modeled(c)
         for c in expr.find_all(exp.Convert)
@@ -2025,6 +2048,11 @@ def _convert_literal(expr: exp.Literal) -> Literal:
         with contextlib.suppress(decimal.InvalidOperation):
             if decimal.Decimal(str(fval)) != decimal.Decimal(text):
                 raw = text
+        # A trailing-zero scale ('5.50') is numerically equal but display- and
+        # (on PG/MySQL) type-significant: 5.50 keeps scale 2 in DECIMAL
+        # arithmetic and in ||/CONCAT stringification. Keep the source text.
+        if raw is None and re.fullmatch(r"-?\d+\.\d*0", text):
+            raw = text
         return Literal(value=fval, dtype="number", raw=raw)
     if expr.is_string:
         return Literal(value=str(expr.this), dtype="string")
@@ -2109,6 +2137,7 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
         needle = expr.args.get("substr")
         haystack = expr.this
         start = expr.args.get("position")
+        occurrence = expr.args.get("occurrence")
         sp_args: list[ASTNode] = []
         if needle is not None:
             sp_args.append(convert_expression(needle))
@@ -2116,6 +2145,12 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
             sp_args.append(convert_expression(haystack))
         if start is not None:
             sp_args.append(convert_expression(start))
+        if occurrence is not None:
+            # Oracle INSTR's 4th argument (the n-th occurrence) — dropping it
+            # silently returned the FIRST match. The emitter folds/degrades it.
+            if start is None:
+                sp_args.append(Literal(value=1, dtype="integer"))
+            sp_args.append(convert_expression(occurrence))
         return FunctionCall(name="CHARINDEX", args=tuple(sp_args))
 
     # sqlglot canonicalizes LPAD/RPAD to one Pad node whose direction lives in

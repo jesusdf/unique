@@ -335,6 +335,47 @@ rejects). Both are validated live. Only date parts outside the common
 year/month/day/hour/minute/second set (e.g. `WEEKDAY`, `QUARTER` on Oracle) may
 still need review.
 
+### 3.21 Oracle Extended `INSTR` (occurrence / backward search)
+
+Oracle's 4-argument `INSTR(s, sub, start, occurrence)` and the negative-start
+backward search have no equivalent on MySQL/PostgreSQL/T-SQL. Literal
+arguments are folded to Oracle's computed value at transpile time; a
+non-literal occurrence or negative start degrades to `NULL` with a `UNIQUE:`
+note and a warning. Compile-time literal folds of the same kind cover the
+LENGTH family (per-source code-unit semantics, including T-SQL LEN's UTF-16
+count and right-trim), substring edge positions, MySQL byte-string decodes
+(`CAST(0x… AS CHAR)`, `CHAR(n USING cs)`), string-operand arithmetic, and
+T-SQL binary `CONVERT`s.
+
+### 3.20 PostgreSQL `money` Formatting
+
+`::money` values render with a locale currency symbol on PostgreSQL
+(`'$12.99'`). No other engine has that display form — T-SQL `MONEY` and the
+`NUMBER(19,4)`/`DECIMAL(19,4)` mappings store the same numeric value but render
+it plain (`12.99`). The numeric value is preserved; the formatted text differs.
+A `money` cast is annotated with a `UNIQUE:` note + warning.
+
+### 3.19 Column Types With No Target Equivalent (closest-type + note)
+
+A column type the target genuinely lacks maps to the closest type, with a
+trailing `-- UNIQUE:` note and a warning (never silently):
+
+- `TIME`/`TIMETZ` → Oracle `INTERVAL DAY TO SECOND` (time of day as an
+  interval; `TIMETZ` additionally drops the zone offset).
+- PostgreSQL bare `INTERVAL` → Oracle `INTERVAL DAY TO SECOND` (Oracle splits
+  intervals into two families; year-month values need `INTERVAL YEAR TO MONTH`).
+- Oracle/PG `INTERVAL …` → T-SQL/MySQL `VARCHAR(30)` (no interval column type).
+- Multi-bit `BIT(n)` (n > 1) → PostgreSQL native `BIT(n)`; Oracle
+  `NUMBER(20)` / T-SQL `NUMERIC(20)` hold the 64-bit numeric value (the
+  boolean-style `BIT` map used to truncate it to 1 bit silently). Bit-string
+  literals/functions on those targets remain in the unsigned-64 limit family.
+- Fractional-seconds precision above 6 → clamped to `(6)` on MySQL.
+- T-SQL `SMALLDATETIME` → Oracle `DATE` (superset, no note needed).
+
+Additionally, `CAST(x AS DATE)` on an Oracle *target* from a non-Oracle source
+is wrapped in `TRUNC(…)`: every other engine's DATE cast strips the time of
+day, while Oracle DATE keeps it.
+
 ### 3.18 `NOT` of a Non-Predicate on T-SQL (no boolean value type)
 
 PostgreSQL, MySQL and Oracle evaluate `NOT` on a value with three-valued logic —
