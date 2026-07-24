@@ -515,6 +515,41 @@ class SelectStatement(ASTNode):
 
 
 @dataclass(frozen=True)
+class ExcludedColumn(ASTNode):
+    """A reference to the *incoming* row's value for one column inside an
+    upsert's conflict action.
+
+    Both PG's ``EXCLUDED.col`` and MySQL's ``VALUES(col)`` mean "the value this
+    INSERT tried to write"; this single marker models both and each emitter
+    renders its own spelling (T-SQL/Oracle use the lowered MERGE's source
+    alias).
+    """
+
+    column: str
+
+
+@dataclass(frozen=True)
+class OnConflictClause(ASTNode):
+    """The upsert conflict action of an ``INSERT`` (PG ``ON CONFLICT`` / MySQL
+    ``ON DUPLICATE KEY UPDATE`` / ``INSERT IGNORE``).
+
+    ``action`` is ``"update"`` (DO UPDATE / ON DUPLICATE KEY UPDATE) or
+    ``"nothing"`` (DO NOTHING / INSERT IGNORE). ``key_columns`` are the explicit
+    conflict-target columns (PG); empty when the source states none (MySQL's
+    any-key semantics, or ``INSERT IGNORE``). ``assignments`` are the
+    ``(column, value)`` SET pairs whose value may contain an
+    :class:`ExcludedColumn`. ``from_ignore`` marks a clause synthesized from
+    MySQL ``INSERT IGNORE`` (which also swallows non-duplicate errors).
+    """
+
+    action: str = "nothing"
+    key_columns: tuple[str, ...] = ()
+    assignments: tuple[tuple[str, ASTNode], ...] = ()
+    where: ASTNode | None = None
+    from_ignore: bool = False
+
+
+@dataclass(frozen=True)
 class InsertStatement(ASTNode):
     """INSERT INTO ... VALUES / SELECT."""
 
