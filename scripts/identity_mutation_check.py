@@ -25,7 +25,37 @@ import sys
 # quoting, per-fixture idiom checks); measured kill rate after: 36%.
 # Raised 0.40 -> 0.45 on 2026-07-11 (measured 0.49 after the M4-closing
 # and M3-prereq waves' shape-asserting tests).
-KILL_RATE_FLOOR = 0.45
+# Raised 0.45 -> 0.60 on 2026-07-24 (audit/2026-07-24/09-fix-briefs.md B15;
+# measured 0.66, margin 6 points). The release checklist in
+# skills/SKILL-development-workflow.md governs future raises; STALE_MARGIN
+# below is the automated backstop for a floor that goes un-raised too long.
+KILL_RATE_FLOOR = 0.60
+
+# T7 (audit B15): if measured kill rate outruns the floor by more than this,
+# the floor has gone stale (head-room that would silently absorb a
+# regression) — fail loudly instead of waiting for someone to notice.
+STALE_MARGIN = 0.15
+
+
+def evaluate(kill_rate: float, floor: float = KILL_RATE_FLOOR) -> tuple[int, str]:
+    """Decide the gate's exit code + message for a measured kill rate.
+
+    Pure function (no subprocess) so it is unit-testable independently of
+    running the integration suite.
+    """
+    if kill_rate < floor:
+        return 1, (
+            "FAIL: too many tests pass with the transpiler disabled — "
+            "assertions must check the target idiom is present AND the "
+            "source idiom is absent (see skills/SKILL-development-workflow.md)."
+        )
+    if round(kill_rate - floor, 9) > STALE_MARGIN:
+        return 3, (
+            f"FAIL: floor is stale — raise it (measured {kill_rate:.0%} is "
+            f">{STALE_MARGIN:.0%} above floor {floor:.0%}; see the release "
+            "checklist in skills/SKILL-development-workflow.md)."
+        )
+    return 0, ""
 
 
 def main() -> int:
@@ -58,14 +88,10 @@ def main() -> int:
         f"identity-mutation: {failed}/{total} tests detect a no-op transpiler "
         f"(kill rate {kill_rate:.0%}, floor {KILL_RATE_FLOOR:.0%})"
     )
-    if kill_rate < KILL_RATE_FLOOR:
-        print(
-            "FAIL: too many tests pass with the transpiler disabled — "
-            "assertions must check the target idiom is present AND the "
-            "source idiom is absent (see skills/SKILL-development-workflow.md)."
-        )
-        return 1
-    return 0
+    code, message = evaluate(kill_rate)
+    if message:
+        print(message)
+    return code
 
 
 if __name__ == "__main__":

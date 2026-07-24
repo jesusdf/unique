@@ -87,8 +87,12 @@ Findings detail: audit docs 02/04/05/07.
 - [x] **B14** API filename sanitizer `re.ASCII` one-liner (05 A1) — done
   2026-07-24; non-latin-1 filenames return 200 with an ASCII header
   (`test_file_non_ascii_filename_does_not_break_header`).
-- [ ] **B15** Re-arm ratchets: identity floor 0.45→0.60, nightly mutation
-  floors, stale-floor detector (T7).
+- [ ] **B15** Re-arm ratchets: identity floor 0.45→0.60 (done — measured
+  0.66, margin 6) and stale-floor detector (T7, done —
+  `scripts/identity_mutation_check.py` fails with a distinct exit code and
+  "floor is stale — raise it" when measured − floor > 0.15). Remaining:
+  nightly floors: bump to measured−10 after the first clean nightly at this
+  HEAD (owner: next session).
 - [ ] **B16** Challenge corpus: target-parse gate (T4) + upgrade the ~362
   loop-only `[fixed]` cases to dedicated assertions (batched campaign).
 - [ ] **B17** Emitter debt: arm ratchet gates (T3) + complexity lint (T6),
