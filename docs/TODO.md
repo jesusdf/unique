@@ -196,6 +196,14 @@ Findings detail: audit docs 02/04/05/07.
   T-SQL→Oracle converts to `JSON_EXTRACT(...)` as *executable* output —
   Oracle has no `JSON_EXTRACT`; probe and route through the per-target JSON
   accessor mapping or degrade warned.
+- [ ] **B17 follow-ups** (2026-07-25): (a) the emit seam modules resolve
+  siblings via runtime namespace injection with a scoped mypy override —
+  convert to explicit imports as the mutual recursion is untangled (the
+  ratchet gate watches the sizes meanwhile); (b) B16's 4-entry
+  `XFAIL_TARGET_PARSE` triage (sqlglot MERGE-fold/savepoint parser gaps,
+  JSON `NULL ON NULL` → tsql, `BEGIN READ ONLY` → pg); (c) the ~362
+  loop-only challenge `[fixed]` cases upgrade campaign (B16 step 2) and the
+  nightly live-execution job for func-class cases.
 
 ---
 

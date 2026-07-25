@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -89,9 +90,13 @@ def _c901_offenders() -> int:
     independent of the pyproject ceiling T6 sets (which only bars *new* code
     above the current worst offender).
     """
+    # Resolve ruff beside the running interpreter first (venv), falling back
+    # to PATH — a bare "ruff" breaks when the script runs outside an
+    # activated venv (e.g. invoked as .venv/bin/python scripts/...).
+    ruff = Path(sys.executable).parent / "ruff"
     proc = subprocess.run(
         [
-            "ruff",
+            str(ruff) if ruff.exists() else "ruff",
             "check",
             "--select",
             "C901",
