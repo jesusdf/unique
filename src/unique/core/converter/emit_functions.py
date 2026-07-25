@@ -48,9 +48,10 @@ from unique.core.mappings import (
     tsql_call_needs_schema,
 )
 
-# NOTE: moved verbatim from emit.py (audit doc 04 F4 split). Cross-seam
-# and emit.py helpers are referenced by bare name and resolved at call time
-# via the namespace injection emit.py performs after importing every seam.
+# NOTE: moved verbatim from emit.py (audit doc 04 F4 split). The emit.py
+# helpers and sibling emitters this module calls are imported explicitly at
+# the module tail (after the defs) — see emit.py's module docstring for why the
+# cross-family imports live at the tail rather than the top.
 
 __all__ = [
     "_emit_date_add",
@@ -2868,3 +2869,28 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # on the RawSQL branch instead; FunctionCall-modeled foreigners are
     # handled by their dedicated downstream handlers.
     return f"{name}({distinct}{args})"
+
+
+# Cross-family imports at the tail (after the defs above) so the mutually
+# recursive emit-family modules resolve without namespace injection — see
+# emit.py's module docstring.
+from unique.core.converter.emit import (  # noqa: E402
+    _COMPARISON_OPS,
+    _PG_FUNCTION_CASTS,
+    _STAT_AGGREGATE_MAP,
+    _as_datetime_literal,
+    _convert_date_format,
+    _date_fmt_reproducible,
+    _emit_condition,
+    _number_mask_spec,
+    _oracle_number_mask,
+    _plain_int_value,
+    _portable_types_in_sql,
+)
+from unique.core.converter.emit_expr import (  # noqa: E402
+    _emit_expression,
+    _is_date_only_literal,
+    _is_integer_operand,
+    _is_nonneg_int_literal,
+    _is_nonneg_literal,
+)

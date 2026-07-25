@@ -30,9 +30,10 @@ from unique.core.converter.harvest import (  # noqa: F401
 from unique.core.mappings import TSQL_OBJECT_CONTEXT_WORDS, tsql_call_needs_schema
 from unique.core.sql_split import qualify_function_calls
 
-# NOTE: moved verbatim from emit.py (audit doc 04 F4 split). Cross-seam
-# and emit.py helpers are referenced by bare name and resolved at call time
-# via the namespace injection emit.py performs after importing every seam.
+# NOTE: moved verbatim from emit.py (audit doc 04 F4 split). The emit.py
+# helpers this module calls are imported explicitly at the module tail (after
+# the defs) — see emit.py's module docstring for why the cross-family imports
+# live at the tail rather than the top.
 
 __all__ = [
     "_emit_passthrough",
@@ -1420,3 +1421,30 @@ def _emit_passthrough_inline(node: PassthroughSQL, dialect: str) -> str:
     except Exception as e:  # noqa: BLE001
         logger.warning("constraint transpile error: %s", e)
     return node.sql
+
+
+# Cross-family imports at the tail (after the defs above) so the mutually
+# recursive emit-family modules resolve without namespace injection — see
+# emit.py's module docstring.
+from unique.core.converter.emit import (  # noqa: E402
+    _alias_bare_derived_tables,
+    _carry_index_nulls_order,
+    _comment_block,
+    _cte_dml_unsupported,
+    _drop_named_default,
+    _flatten_paren_joins,
+    _merge_carve_do_nothing,
+    _merge_extended_clauses,
+    _oracle_merge_paren_on,
+    _pg_index_rebuild,
+    _portable_alter_add,
+    _portable_index,
+    _portable_rename_column,
+    _portable_types_in_sql,
+    _prefix_tsql_output_items,
+    _quote_reserved_identifiers,
+    _remodel_update_from,
+    _tsql_add_key_constraint,
+    _tsql_alter_type_restating_nullability,
+    _tsql_drop_col_default,
+)

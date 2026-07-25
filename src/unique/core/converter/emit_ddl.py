@@ -33,9 +33,10 @@ from unique.core.converter.harvest import (  # noqa: F401
     wrap_oracle_date_arg,
 )
 
-# NOTE: moved verbatim from emit.py (audit doc 04 F4 split). Cross-seam
-# and emit.py helpers are referenced by bare name and resolved at call time
-# via the namespace injection emit.py performs after importing every seam.
+# NOTE: moved verbatim from emit.py (audit doc 04 F4 split). The emit.py
+# helpers and sibling emitters this module calls are imported explicitly at
+# the module tail (after the defs) — see emit.py's module docstring for why the
+# cross-family imports live at the tail rather than the top.
 
 __all__ = [
     "_type_gap_map",
@@ -942,3 +943,18 @@ def _emit_drop(node: DropStatement, dialect: str) -> str:
             return f"DROP TRIGGER {exists}{name} ON {node.on_table}{cascade}"
         return f"DROP TRIGGER {exists}{name}{cascade}"
     return f"DROP {node.object_type} {exists}{name}{cascade}"
+
+
+# Cross-family imports at the tail (after the defs above) so the mutually
+# recursive emit-family modules resolve without namespace injection — see
+# emit.py's module docstring.
+from unique.core.converter.emit import (  # noqa: E402
+    _UNSIGNED_INT_TYPES,
+    _emit_select,
+    _emit_table_ref,
+    _portable_type_name,
+)
+from unique.core.converter.emit_expr import _emit_expression  # noqa: E402
+from unique.core.converter.emit_passthrough import (  # noqa: E402
+    _emit_passthrough_inline,
+)

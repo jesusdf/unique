@@ -56,9 +56,10 @@ from unique.core.mappings import (
     ERROR_MESSAGE_SOURCES,
 )
 
-# NOTE: moved verbatim from emit.py (audit doc 04 F4 split). Cross-seam
-# and emit.py helpers are referenced by bare name and resolved at call time
-# via the namespace injection emit.py performs after importing every seam.
+# NOTE: moved verbatim from emit.py (audit doc 04 F4 split). The emit.py
+# helpers and sibling emitters this module calls are imported explicitly at
+# the module tail (after the defs) — see emit.py's module docstring for why the
+# cross-family imports live at the tail rather than the top.
 
 __all__ = [
     "_emit_expression",
@@ -1761,3 +1762,30 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
 
     spec = " ".join(spec_parts)
     return f"{func} OVER ({spec})"
+
+
+# Cross-family imports at the tail (after the defs above) so the mutually
+# recursive emit-family modules resolve without namespace injection — see
+# emit.py's module docstring.
+from unique.core.converter.emit import (  # noqa: E402
+    _CAST_TYPE_MAP,
+    _ISO_DT_LITERAL_RE,
+    _NUMERIC_CAST_TYPES,
+    _PG_GEOMETRIC_TYPES,
+    _emit_condition,
+    _emit_excluded_column,
+    _emit_order_item,
+    _emit_select,
+    _emit_table_ref,
+    _is_predicate_node,
+    _map_system_global,
+    _plain_int_value,
+    _strip_unlimited_order_by,
+    _tuple_items,
+)
+from unique.core.converter.emit_functions import (  # noqa: E402
+    _CHAR_CAST_BASES,
+    _MYSQL_CHARSET_CODECS,
+    _emit_function,
+)
+from unique.core.converter.emit_passthrough import _emit_passthrough  # noqa: E402
