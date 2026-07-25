@@ -1,6 +1,6 @@
 # Unique — Project Status
 
-## Current state: v0.30.0 (**ALL architecture milestones M0–M4 complete**; challenge corpus of 862 RED findings fully resolved — 0 open, 694 fixed, 168 approved limits)
+## Current state: v0.30.0+ (**M0–M4 complete; the 2026-07-24 audit backlog fully executed 2026-07-25** — upserts/MERGE/cursors/dynamic-SQL S1s fixed live-verified, emitter debt paid under CI ratchet gates, challenge corpus armed with 1,073 dedicated assertions)
 
 **Direction-residue campaign closed 2026-07-17** (waves 103–239, user-declared
 architectural floor at `469917a`): the six corpus directions (pg-source and
@@ -38,9 +38,12 @@ honest, measure validity per direction as the definition of done — is
 *and* scalar expressions through the shared IR pipeline — IR-first with
 the text rewriters as the warned fallback; `UNIQUE_NO_IR_FIRST` is the
 emergency kill-switch) and **M4** (Oracle-source bring-up) are all done.
-The discrete backlog is currently empty (all TODO items closed and
-archived) — see `docs/TODO.md` for the continuously-tracked items and the
-documented known limitations.
+The **2026-07-24 audit** (`audit/2026-07-24/` — remediation verification,
+10 new live-verified S1s, prevention plan, pre-analyzed fix briefs) and its
+**entire B1–B28 backlog were executed 2026-07-24→25** in agentic team mode
+(`docs/MILESTONES.md`, `docs/DONE.md` §44). The pending backlog in
+`docs/TODO.md` now holds only the new findings that campaign surfaced, two
+maintainer decisions, and the two authored feature briefs (B28a/B28b).
 
 ### What holds today (measured, not asserted)
 
@@ -76,9 +79,14 @@ documented known limitations.
     unwrapping constant EXECUTE IMMEDIATE strings surfaced failures that
     previously hid as runtime noise inside opaque EXEC() calls.
     Tier-1 promotion still wants a second corpus.
-- **Test-assertion quality** is gated (identity-mutation floor 45%, last
-  measured 66% on 2026-07-24) and tracked nightly (mutation job with
-  per-module floors).
+- **Test-assertion quality** is gated (identity-mutation floor **70%**, last
+  measured **76%** on 2026-07-25 after the challenge assertion campaign —
+  the stale-floor backstop itself demanded the raise) and tracked nightly
+  (mutation job with per-module floors, now self-ratcheting: it fails when a
+  floor sits >15 points under the measurement). Architecture debt is gated
+  too (`scripts/architecture_ratchets.py` in CI: emitter module size,
+  post-emit regex surface, dialect string-dispatch, complexity offenders —
+  monotonic downward).
 
 ### Direction tiers (doc-04 P6)
 

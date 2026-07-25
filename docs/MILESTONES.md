@@ -10,6 +10,28 @@ Newest first.
 
 ---
 
+## Audit 2026-07-24 backlog — fully executed in agentic team mode (2026-07-24 → 2026-07-25)
+
+The third full audit ([`audit/2026-07-24/`](../audit/2026-07-24/)) verified
+the 07-08 remediation, found 10 new live-verified S1s one level up
+(clause-level + cross-feature composition), and produced a prevention plan
+(doc 08) + pre-analyzed fix briefs (doc 09). The ENTIRE backlog (B1–B28,
+tools T1–T7) was then executed across three /goal tandas by worker agents
+under architect review — the "agentic team mode" now documented in the
+dev-workflow skill. Highlights: upserts modeled end-to-end (live FE on 4
+engines), MERGE semantic series, per-cursor attribute emulation, running
+column-type harvest, constant dynamic-SQL translation, original-text
+carriers, emitter debt paid (`emit.py` 10,485→3,718 max lines, F1/F2
+de-regexed, ratchet gates + complexity ceilings in CI), the challenge corpus
+armed (target-parse gate, nightly live result-diff job, 1,073 new
+identity-killing dedicated assertions → kill rate 66%→**76%**, floor 0.70 —
+the T7 stale backstop demanded the raise itself), confidentiality tooling
+(leak checker that caught a real leak on day one), and a self-ratcheting
+nightly mutation workflow. New findings surfaced by the campaign form the
+next (small) pending backlog. Detail: [`docs/DONE.md`](DONE.md) §44.
+
+---
+
 ## Challenge corpus — 862 RED findings fully resolved (2026-07-18 → 2026-07-24, v0.30.0)
 
 Regression corpus at [`tests/fixtures/challenge/`](../tests/fixtures/challenge/)

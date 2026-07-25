@@ -5369,3 +5369,83 @@ as v0.30.0. Detail below (kept verbatim for provenance).
       horas) → `mypy src/` → flip a `[fixed]`/`[limit]` + assertion (recordar el
       "comment-prose trap": quitar líneas `--`/`/* */` antes de aserciones
       negativas). **`--db-url` live collation resolver: SKIPPED per user.**
+
+## 44. Audit 2026-07-24 backlog — fully executed (2026-07-24 → 2026-07-25, agentic team mode)
+
+The complete P1/P2/P3 backlog of `audit/2026-07-24/` (fix briefs B1–B28 +
+tools T1–T7, `09-fix-briefs.md`), implemented across three /goal tandas by
+worker agents under architect review (the mode documented in
+`skills/SKILL-development-workflow.md` §"Agentic team mode" during the same
+campaign). Every fix started from its pre-analyzed brief; every semantic fix
+was live-verified on the four Docker engines. Detail per brief (condensed from
+the TODO close notes; tests named per item):
+
+**P1.** B3 confidentiality: private vocabulary renamed to verified-synthetic
+names (collision-checked against the 24,923-token inventory), guard fragment
+list moved to untracked `fixtures-private/leak_fragments.txt`; no history
+rewrite (maintainer decision — 2 commit-message hits accepted). B2 unread-args
+tripwire: read-tracking at the converter dispatch, `UNIQUE_UNREAD_ARGS=
+off|warn|gate`, sweep script, fixture-corpus-clean CI ratchet
+(`test_unread_args.py`). B1 upserts: `OnConflictClause`/`ExcludedColumn` IR,
+PK/UNIQUE harvest, native PG⟷MySQL + MERGE lowering for T-SQL/Oracle,
+`INSERT IGNORE` folded in, live FE value tests both-runs on all four engines
+(`test_upsert.py`); vacuous corpus case made scenario-adequate. B4/B5/B6
+MERGE series: Oracle DELETE-fold safety predicate, OUTPUT-on-MERGE→PG honest
+degrade (tail never mis-attached), PG `DO NOTHING` carve-out — live value
+equality per shape (`TestMerge*` in `test_challenge.py`).
+
+**P2.** B7 per-cursor state: `@uq_<c>_fs`/`v_uq_<c>_done`/open flags beside
+each FETCH/OPEN/CLOSE, unique `loop_lbl_<n>` (user labels preserved —
+architect fix), unmapped `%attr` gated; live nested + interleaved scenarios
+(`test_cursor_state_b7.py`). B8 PG `SET TRANSACTION` access modes per target.
+B9 money-literal mangle rebuilt to numeric (+ validation garbage-shape).
+B10 running COLUMN_TYPES/COLUMN_NOT_NULL harvest folded in statement order +
+T-SQL `ALTER COLUMN` re-states nullability (`test_harvest_running_columns`).
+B11 constant dynamic-SQL translated at the EXEC sinks via the embedded-DML
+pipeline, warned otherwise, depth-capped (`test_dynamic_sql_constant.py`).
+B12 `SQL%ROWCOUNT`→MySQL annotated divergence. B13 carriers quote the
+ORIGINAL text (`ASTNode.source_text` + `_preserved_sql`, both pipelines) +
+carrier-body-parses-as-source invariant over 12 directions. B14 `re.ASCII`
+filename sanitizer. B15 identity floor 0.45→0.60→**0.70** (measured 0.76;
+the T7 stale backstop demanded the second raise itself) + self-ratcheting
+nightly (see below). B16: T4 target-parse gate over every `[fixed]` output +
+the four-engine assertion campaign — `test_challenge_assertions_{sqlserver,
+oracle,postgresql,mysql}.py`, 387 cases / 1,073 parametrized nodes, ALL
+identity-killing; per-batch SUSPECT protocol surfaced 2 real findings
+instead of blessing them. B17: architecture-ratchet gate in CI
+(`scripts/architecture_ratchets.py`, monotonic-down floors), C901/PLR
+ceilings, F1 deleted (dead post-emit regex carrying 2 defects), F2 sequences
+modeled on the AST, `emit.py` 10,485→3,718 max lines across 4 seams, then
+seam namespace-injection replaced by explicit tail imports (mypy strict, no
+overrides).
+
+**P3.** B18 `private_leak_check.py` (runtime token inventory + EN/ES system
+dictionaries; caught a REAL leak in its own first dogfood run — the test
+example used the actual private fragment). B19 `challenge_stats.py`
+(class/points batch scoring per the skill's A9 rules). B20 PG `TABLE t`
+validation whitelist. B21 MERGE comment trivia (leading kept once, inline
+de-duplicated). B22 `exc_info` on DML-failure logs. B23 dead IR nodes +
+`builtins_for` removed, duplicated `_transform_exception_block` hoisted.
+B24 mutation script mutates a temp copy (live-verified src/ untouched
+mid-run). B25 perf budgets on CPU time (+12s northwind margin). B26
+`.dockerignore`. B27 CI installs pin to `constraints.txt` (+ release-checklist
+regeneration line in the skill). B28a/B28b feature briefs authored
+(`09-fix-briefs.md`). RED seeds closed: CREATE VIEW modifiers (portable
+CHECK OPTION modeled pre-parse, live-enforced on MySQL/Oracle; non-portable
+modifiers warned; allowlist entry removed), `JSON_QUERY` per-target accessor
+(live Oracle value), `INSERT IGNORE` (in B1).
+
+**Nightly mutation (B15 close-out).** `mutation.yml` now mutates the four
+emit seams (previously invisible), runs the four assertion modules +
+`test_cursor_state_b7`/`test_dynamic_sql_constant` in its kill selections,
+warns on measured-but-unfloored modules, and FAILS when a floor sits >15
+points under the measurement — the first nightly at this HEAD forces the
+floor bump with real full-run numbers (a local full-prefix measurement of
+convert.py, n=300 pre-expanded-selections, scored 66%: floors kept
+meanwhile).
+
+**New findings surfaced by the campaign itself** (left as the new pending
+backlog with the finding→brief→fix discipline): `TIMESTAMPLTZ`→PG silent
+invalid type (C4; also exposes the T4 gate's sqlglot-leniency hole),
+Oracle numeric `||`→PG invalid (B17b), the `or_replace` always-on maintainer
+decision, and the sqlglot CASCADED-CHECK-OPTION hang note.

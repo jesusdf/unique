@@ -744,6 +744,11 @@ under three weeks). At every release:
 3. Re-read the point-in-time docs (`STATUS.md`, the compatibility matrix
    summary table) against the numbers just measured — every figure in them
    carries the command that produced it and a date.
+4. Regenerate (or verify still-resolving) `constraints.txt` — CI and the
+   Docker image both pin to it, and it is hand-maintained:
+   `pip install . && pip freeze --exclude-editable > constraints.txt` in a
+   fresh venv, then run the suite against the refreshed pins before
+   committing them.
 
 A stale floor discovered outside a release is a finding, not background noise:
 fix it then.
