@@ -26,7 +26,7 @@ feature work.*
 
 ### P2 — new findings from the 2026-07-25 campaign
 
-- [ ] **PL/SQL multi-word datetime types in DECLARE → silent garbage** (found
+- [x] **PL/SQL multi-word datetime types in DECLARE → silent garbage** (found
   by the TIMESTAMPLTZ worker, pre-existing, distinct subsystem): a PL/SQL
   `DECLARE v TIMESTAMP WITH LOCAL TIME ZONE` produces `v TIMESTAMP; WITH
   LOCAL; TIME ZONE;` with no warning — the procedural declaration parser's
@@ -34,7 +34,13 @@ feature work.*
   already degrades honestly via parse error). Brief-first: teach the
   declaration parser the `TIMESTAMP WITH [LOCAL] TIME ZONE` compound (map per
   target like the DDL fix in `emit_ddl._local_tz_gap`), or gate the compound
-  into a warned degrade.
+  into a warned degrade. *(Done 2026-07-25: `_fold_compound_type` parses the
+  whole family — `TIMESTAMP [WITH [LOCAL]|WITHOUT] TIME ZONE` incl. precision
+  forms, `INTERVAL <f>[(n)] TO <f>[(n)]` — as ONE type; per-target mapping
+  reuses the `_local_tz_gap` decisions via table dispatch; also fixed the
+  precision-position bug (`TIMESTAMPTZ(6)` → `TIMESTAMP(6) WITH TIME ZONE`).
+  Live: Oracle source VALID, all four targets validate, PG executes,
+  round-trips exact. `test_datetime_tz_interval_declares.py`, docs §3.19.)*
 - [x] **`TIMESTAMPLTZ` → PostgreSQL silent invalid type** (found by the C4
   assertion sweep): Oracle `TIMESTAMP WITH LOCAL TIME ZONE` → PG emits
   `TIMESTAMPLTZ` (not a PG type) with zero warnings — a no-silent-loss
@@ -74,10 +80,21 @@ feature work.*
 
 ### Scheduled feature work (briefs authored — `audit/2026-07-24/09-fix-briefs.md` §B28)
 
-- [ ] **B28a** `#temp` tables inside converted procedures (PG statement-form
-  temp DDL + script-wide rename; Oracle GTT hoisting; MySQL native).
-- [ ] **B28b** top-level `BEGIN TRY/CATCH` routed to the procedural engine
-  (classify as PROCEDURAL, reuse the in-routine lowering per target).
+- [x] **B28a** `#temp` tables inside converted procedures — done 2026-07-25:
+  `_rewrite_temp_select_into` lowers `SELECT … INTO #t` per target (PG/MySQL
+  `DROP IF EXISTS` + `CREATE TEMPORARY TABLE … AS`; Oracle hoisted GTT reusing
+  the `@table`-variable machinery + script-wide rename); functions keep the
+  warned degrade. Live two-call isolation verified on all three targets
+  ([30,30], no leakage). Also fixed the pre-existing MySQL cursor-handler
+  placement bug the composition exposed (handler hoisted into the declaration
+  section). `test_temp_table_in_procedure.py`.
+- [x] **B28b** top-level `BEGIN TRY/CATCH` routed to the procedural engine —
+  done 2026-07-25: sanctioned recognizer in `batch_splitter.classify_batch` +
+  parser routing to an anonymous block; ALL lowering reused (PG `DO $$ …
+  EXCEPTION`, Oracle `BEGIN … EXCEPTION`, MySQL documented warned carrier).
+  Live raise-and-recover matches the SQL Server reference exactly on PG and
+  Oracle (log ['after','caught'], 0 rows persisted). Subtransaction caveat
+  documented (03-unsupported §3.5). `TestTopLevelTryCatch`.
 
 ---
 
