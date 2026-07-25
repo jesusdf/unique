@@ -12,6 +12,12 @@ mutant. The mutation score and the list of *survivors* (mutations no test
 caught) are a precise, objective map of where the tests assert nothing — what
 line coverage cannot see (a covered line may still be un-asserted).
 
+Isolation (B24): mutants are written to a **temporary copy** of ``src/``, never
+to the real source tree, so a concurrent local test run (or IDE) never reads
+mutated code. Each subprocess test run points ``PYTHONPATH`` at that temp copy
+(ahead of the editable install) so it imports the mutated package; ``tests/``
+itself is read from the real checkout (only ``src/`` is mutated).
+
 Usage:
     python scripts/mutation_test.py src/unique/core/converter/emit.py [more.py ...]
     python scripts/mutation_test.py <module> --tests "tests/unit/core" --limit 50
@@ -23,10 +29,17 @@ from __future__ import annotations
 
 import argparse
 import ast
+import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
+
+#: Repo root, assuming this script lives at ``<repo>/scripts/mutation_test.py``.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_SRC_ROOT = _REPO_ROOT / "src"
 
 _CMP = {
     ast.Eq: ast.NotEq,
@@ -131,7 +144,36 @@ def _limit_resources() -> None:  # pragma: no cover - runs in the child process
     resource.setrlimit(resource.RLIMIT_AS, (_MUTANT_MEM_BYTES, _MUTANT_MEM_BYTES))
 
 
-def _run(tests: list[str]) -> subprocess.CompletedProcess[str]:
+def _copy_src_tree(dest_parent: Path) -> Path:
+    """Copy the real ``src/`` tree into a fresh directory under *dest_parent* and
+    return the copy's root, so mutants are written there instead of the real
+    source tree (B24 — a concurrent local test run must never read a mutant)."""
+    temp_src = dest_parent / "src"
+    shutil.copytree(
+        _SRC_ROOT, temp_src, ignore=shutil.ignore_patterns("__pycache__", "*.pyc")
+    )
+    return temp_src
+
+
+def _mutated_path(module: str, temp_src: Path) -> Path:
+    """Map a *module* CLI argument (a path to a file under the real ``src/``) to
+    its counterpart inside the temporary copy rooted at *temp_src*."""
+    real_path = Path(module).resolve()
+    rel = real_path.relative_to(_SRC_ROOT)
+    return temp_src / rel
+
+
+def _mutation_env(temp_src: Path) -> dict[str, str]:
+    """Environment for the test subprocess: ``PYTHONPATH`` points at the
+    temporary ``src/`` copy ahead of anything already set, so ``import unique``
+    resolves the mutated copy instead of the real, editable-installed package."""
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = str(temp_src) + (os.pathsep + existing if existing else "")
+    return env
+
+
+def _run(tests: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     cmd = [
         sys.executable,
         "-m",
@@ -151,6 +193,8 @@ def _run(tests: list[str]) -> subprocess.CompletedProcess[str]:
             text=True,
             timeout=_MUTANT_TIMEOUT_S,
             preexec_fn=_limit_resources if sys.platform != "win32" else None,
+            env=env,
+            cwd=_REPO_ROOT,
         )
     except subprocess.TimeoutExpired:
         # A hang is a detected (killed) mutant: the behavior change is fatal.
@@ -159,14 +203,22 @@ def _run(tests: list[str]) -> subprocess.CompletedProcess[str]:
         )
 
 
-def mutate_module(path: Path, tests: list[str], limit: int | None) -> list[str]:
-    """Mutate *path* one node at a time; return the surviving-mutation list."""
+def mutate_module(
+    path: Path,
+    tests: list[str],
+    limit: int | None,
+    env: dict[str, str],
+    display: str | None = None,
+) -> list[str]:
+    """Mutate *path* (a file inside the temporary ``src/`` copy) one node at a
+    time; return the surviving-mutation list. *display* names the module in
+    output (the real, repo-relative path, for a readable summary)."""
     original = path.read_text()
     tree = ast.parse(original)
     sites = _sites(tree)
     if limit:
         sites = sites[:limit]
-    print(f"\n=== {path}  ({len(sites)} mutants) ===", flush=True)
+    print(f"\n=== {display or path}  ({len(sites)} mutants) ===", flush=True)
     killed = survived = 0
     survivors: list[str] = []
     t0 = time.time()
@@ -176,7 +228,7 @@ def mutate_module(path: Path, tests: list[str], limit: int | None) -> list[str]:
             mutated = ast.unparse(tree)
             restore()
             path.write_text(mutated)
-            result = _run(tests)
+            result = _run(tests, env)
             if result.returncode != 0:
                 killed += 1
             else:
@@ -214,15 +266,21 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    baseline = _run(args.tests)
-    if baseline.returncode != 0:
-        print("FAIL: baseline test selection is not green; aborting.")
-        print(baseline.stdout[-800:])
-        return 2
+    with tempfile.TemporaryDirectory(prefix="unique-mutation-") as tmp:
+        temp_src = _copy_src_tree(Path(tmp))
+        env = _mutation_env(temp_src)
 
-    all_survivors: dict[str, list[str]] = {}
-    for mod in args.modules:
-        all_survivors[mod] = mutate_module(Path(mod), args.tests, args.limit)
+        baseline = _run(args.tests, env)
+        if baseline.returncode != 0:
+            print("FAIL: baseline test selection is not green; aborting.")
+            print(baseline.stdout[-800:])
+            return 2
+
+        all_survivors: dict[str, list[str]] = {}
+        for mod in args.modules:
+            all_survivors[mod] = mutate_module(
+                _mutated_path(mod, temp_src), args.tests, args.limit, env, display=mod
+            )
 
     print("\n=== SURVIVORS (mutations no test caught) ===")
     total = 0
