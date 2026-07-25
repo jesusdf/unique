@@ -179,7 +179,13 @@ Findings detail: audit docs 02/04/05/07.
   new parametrized rows, all failing under the identity transpiler; identity
   kill rate 66% -> 70%. One `SUSPECT_CASES` entry (`postgresql-drop4-match`
   oracle silently drops MATCH FULL — no-op for a single-column FK, left
-  unasserted). Remaining: the sqlserver/oracle-source loop-only tails.
+  unasserted).   - MySQL-source batch done 2026-07-25: new module
+    `tests/integration/test_challenge_assertions_mysql.py` gives every
+    uncovered `[fixed]` MySQL case a dedicated per-target present+absent (or
+    warned-degrade) assertion — 141 cases / 390 parametrized items, all fail
+    under the identity transpiler. Overall identity kill rate 66% -> 71%.
+    `SUSPECT_CASES` empty (no silent-loss/invalid found). Remaining: the
+    sqlserver/oracle source batches (in progress).
 - [ ] **B17** Emitter debt: arm ratchet gates (T3) + complexity lint (T6),
   de-regex the two guardrail violations (F1/F2), split `emit.py` along the
   doc-04 seams.
