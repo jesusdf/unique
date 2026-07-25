@@ -187,8 +187,15 @@ Findings detail: audit docs 02/04/05/07.
   absent. Contains no private data itself. Tests:
   `tests/unit/test_private_leak_check.py` (fake private dir + a real temp git
   repo, 24 cases).
-- [ ] **B19** `scripts/challenge_stats.py` (T5) — class distribution + batch
-  scoring for the challenge corpus.
+- [x] **B19** `scripts/challenge_stats.py` (T5) — done 2026-07-25; parses
+  `-- CASE[status][class=x]:` headers across
+  `tests/fixtures/challenge/challenge_*.sql`, reports per-status/per-class/
+  per-source counts, and `--batch-since <ref>` scores `[open]` cases added
+  since a ref against the challenge skill's A9 rules (points table,
+  concentration cap, >= 3 distinct classes; unclassified legacy cases
+  excluded from scoring). Pure stdlib. Tests:
+  `tests/unit/test_challenge_stats.py` (25 cases, incl. a real temp git repo
+  for `--batch-since`).
 - [ ] **B20–B27** small items: PG `TABLE t` validation false positive, MERGE
   comment trivia, dead IR nodes, mutation-script isolation, perf-budget flake
   (process_time), CI installs with `-c constraints.txt`. *(Done 2026-07-24:
