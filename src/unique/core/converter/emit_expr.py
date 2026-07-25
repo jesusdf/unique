@@ -948,6 +948,27 @@ def _is_integer_operand(node: object) -> bool:
     return False
 
 
+_CONCAT_ARITH_OPS = (
+    BinaryOperator.ADD,
+    BinaryOperator.SUB,
+    BinaryOperator.MUL,
+    BinaryOperator.DIV,
+    BinaryOperator.MOD,
+)
+
+
+def _is_pg_concat_numeric(node: object) -> bool:
+    """A concat operand PostgreSQL sees as numeric (so ``a || b`` finds no
+    ``integer || integer`` operator). A numeric literal, an integer-declared
+    procedural variable, or an arithmetic sub-expression. Mirrors the T-SQL
+    CONCAT() classification; a nested ``||`` (text-producing) is NOT numeric."""
+    if isinstance(node, Literal):
+        return node.dtype in ("integer", "number", "float")
+    if isinstance(node, ColumnRef):
+        return _is_integer_operand(node)
+    return isinstance(node, BinaryOp) and node.operator in _CONCAT_ARITH_OPS
+
+
 def _nullable_string_operand(node: object) -> bool:
     """An operand a concat could see as NULL: a NULL literal, or a procedural
     string variable (always nullable — unassigned locals start NULL)."""
@@ -1620,6 +1641,15 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
 
             _gather_concat(node)
             return f"CONCAT({', '.join(parts)})"
+        elif dialect == "postgresql":
+            # PostgreSQL has no ``integer || integer`` operator, so a source
+            # that implicitly stringifies both operands (Oracle ``2||3`` -> '23')
+            # emits an invalid ``2 || 3``. When BOTH operands are known-numeric
+            # (no text operand to resolve ``text || anynonarray``), cast them to
+            # TEXT. A string/unknown operand is left untouched — PG resolves it.
+            if _is_pg_concat_numeric(node.left) and _is_pg_concat_numeric(node.right):
+                left = f"CAST({left} AS TEXT)"
+                right = f"CAST({right} AS TEXT)"
 
     # MySQL's ``x MOD 0`` returns NULL; every other engine either errors (PG/
     # T-SQL divide-by-zero) or returns the dividend (Oracle). Preserve MySQL's

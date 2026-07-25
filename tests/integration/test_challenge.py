@@ -2158,6 +2158,36 @@ class TestConcatNumberIntoTsql:
         assert "CONCAT('a', 5)" in out, out
 
 
+class TestConcatNumberIntoPostgres:
+    """PostgreSQL has no ``integer || integer`` operator, so Oracle's ``2||3``
+    (which implicitly stringifies to '23') would emit an invalid ``2 || 3`` on
+    PG. When both operands of a ``||`` are known-numeric, cast them to TEXT so
+    the operator resolves. A ``||`` with a string/unknown operand (PG's
+    ``text || anynonarray``) already resolves and must stay untouched."""
+
+    def test_both_numeric_operands_cast_to_text(self) -> None:
+        out = _tx(
+            _case("challenge_oracle.sql", "ora-num-concat"), "oracle", "postgresql"
+        )
+        assert "CAST(2 AS TEXT) || CAST(3 AS TEXT)" in out, out
+
+    def test_string_operand_stays_bare(self) -> None:
+        # 'a' || 5 : the text operand lets PG resolve text || anynonarray — no cast.
+        out = _tx(
+            _case("challenge_oracle.sql", "ora-concat-num"), "oracle", "postgresql"
+        )
+        assert "'a' || 5" in out and "CAST(5 AS TEXT)" not in out, out
+
+    def test_unknown_column_operand_stays_bare(self) -> None:
+        # col type unknown: PG resolves if col is text; we do not guess/cast.
+        out = _tx("SELECT col || 'x' AS r FROM t", "oracle", "postgresql")
+        assert "col || 'x'" in out and "CAST(" not in out, out
+
+    def test_numeric_chain_casts_only_the_all_numeric_node(self) -> None:
+        out = _tx("SELECT 2 || 3 || 4 AS r FROM DUAL", "oracle", "postgresql")
+        assert "CAST(2 AS TEXT) || CAST(3 AS TEXT) || 4" in out, out
+
+
 class TestLikeBackslashEscape:
     """PG/MySQL LIKE use backslash as the default escape char; Oracle/T-SQL have
     none. A backslash pattern gets an explicit ``ESCAPE '\\'`` so the literal

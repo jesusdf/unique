@@ -332,7 +332,10 @@ CASES.update(
             "ora-fconcat ",
             {
                 "tsql": Expect(("'a' + 'b'", "CONCAT(2, 3)"), ("||",)),
-                "postgresql": Expect(("'a' || 'b'", "2 || 3")),
+                # PG has no integer||integer operator: both-numeric || -> TEXT casts.
+                "postgresql": Expect(
+                    ("'a' || 'b'", "CAST(2 AS TEXT) || CAST(3 AS TEXT)")
+                ),
                 "mysql": Expect(("CONCAT('a', 'b')", "CONCAT(2, 3)"), ("||",)),
             },
         ),
