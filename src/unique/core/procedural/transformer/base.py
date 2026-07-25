@@ -862,6 +862,14 @@ class ProceduralTransformer:
 
         type_name = dt.name.upper()
 
+        # Compound datetime/interval types (``TIMESTAMP WITH [LOCAL] TIME
+        # ZONE``, ``INTERVAL YEAR TO MONTH``, …) that the declaration parser
+        # folded into one name. Mapped per target reusing the DDL
+        # ``emit_ddl._local_tz_gap`` decisions.
+        compound = self._map_compound_datetime(dt, type_name)
+        if compound is not None:
+            return compound
+
         # Handle %TYPE / %ROWTYPE references
         if "%TYPE" in type_name or "%ROWTYPE" in type_name:
             is_rowtype = "%ROWTYPE" in type_name
@@ -993,6 +1001,67 @@ class ProceduralTransformer:
             return DataType(name=carrier, origin_comment=dt.name)
 
         return dt
+
+    _INTERVAL_FIELD_WORDS = ("YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND")
+
+    def _map_compound_datetime(self, dt: DataType, type_name: str) -> DataType | None:
+        """Map a folded datetime/interval compound type, or None if it is not
+        one. Reuses the DDL ``emit_ddl._local_tz_gap`` target decisions."""
+        if type_name.startswith("TIMESTAMP") and "TIME ZONE" in type_name:
+            if "WITHOUT" in type_name:
+                # Session-naive: identical to the plain base TIMESTAMP.
+                return self._transform_data_type(
+                    dataclasses.replace(dt, name="TIMESTAMP")
+                )
+            return self._tz_compound(dt, local="LOCAL" in type_name)
+        if type_name.startswith("INTERVAL ") and any(
+            f in type_name for f in self._INTERVAL_FIELD_WORDS
+        ):
+            return self._interval_compound(dt)
+        return None
+
+    #: Targets whose fixed-offset / UTC datetime type loses the source's
+    #: session-tz display, so a WITH-TIME-ZONE compound must carry the original.
+    _TZ_LOSSY_TARGETS: frozenset[str] = frozenset({"tsql", "mysql"})
+    #: Targets with no interval column/variable type — keep the value as text.
+    _INTERVAL_TEXT_TARGETS: frozenset[str] = frozenset({"tsql", "mysql"})
+    #: Targets that keep an interval qualifier's native per-field precision
+    #: spelling verbatim (Oracle). PostgreSQL accepts the qualifier but not a
+    #: leading-field precision, so it strips precisions to the bare qualifier.
+    _INTERVAL_NATIVE_TARGETS: frozenset[str] = frozenset({"oracle"})
+
+    def _tz_compound(self, dt: DataType, local: bool) -> DataType:
+        """Map ``TIMESTAMP WITH [LOCAL] TIME ZONE`` per target."""
+        from unique.core.converter.emit_ddl import _LOCAL_TZ_TYPE
+
+        mapped = _LOCAL_TZ_TYPE.get(self._target)
+        # A target whose mapping is itself a WITH-TIME-ZONE spelling (Oracle) —
+        # or an unknown target — keeps the original native spelling: faithful,
+        # no carrier.
+        if mapped is None or "TIME ZONE" in mapped.upper():
+            return DataType(name=dt.name, params=dt.params)
+        # PG timestamptz == "timestamp with time zone" exactly, so the plain
+        # (non-local) form is faithful and needs no carrier. The LOCAL form
+        # (session-tz display) and the fixed-offset / UTC targets lose the
+        # session semantics, so preserve the original + warn (the carrier also
+        # lets a reverse pass restore the exact spelling).
+        lossy = local or self._target in self._TZ_LOSSY_TARGETS
+        origin = dt.name if lossy else None
+        return DataType(name=mapped, params=dt.params, origin_comment=origin)
+
+    def _interval_compound(self, dt: DataType) -> DataType:
+        """Map an ``INTERVAL <field> [TO <field>]`` qualifier per target."""
+        if self._target in self._INTERVAL_TEXT_TARGETS:
+            # No interval type — keep as text (mirrors the DDL _type_gap_map).
+            return DataType(name="VARCHAR", params=(30,), origin_comment=dt.name)
+        if "(" not in dt.name or self._target in self._INTERVAL_NATIVE_TARGETS:
+            # A precision-less qualifier is accepted verbatim everywhere; Oracle
+            # additionally keeps its native per-field precision spelling.
+            return DataType(name=dt.name, params=dt.params)
+        # PostgreSQL accepts the qualifier but not a leading-field precision:
+        # strip precisions to the bare qualifier and carry the original.
+        bare = re.sub(r"\(\d+\)", "", dt.name)
+        return DataType(name=bare, params=(), origin_comment=dt.name)
 
     # Source types with no faithful equivalent in the other engines: the
     # mapping is a best-effort carrier, so the original is worth preserving.

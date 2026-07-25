@@ -423,7 +423,14 @@ class ProceduralEmitter:
         source type was preserved for documentation/round-tripping."""
         if dt.params and dt.name.upper() not in self._PARAMLESS_TYPES:
             params = ", ".join("MAX" if p == -1 else str(p) for p in dt.params)
-            base = f"{dt.name}({params})"
+            if " " in dt.name and "TIME ZONE" in dt.name.upper():
+                # A fractional-seconds precision sits on the base field, not
+                # after the qualifier: TIMESTAMP(6) WITH TIME ZONE, never
+                # TIMESTAMP WITH TIME ZONE(6) (invalid on Oracle).
+                first, rest = dt.name.split(" ", 1)
+                base = f"{first}({params}) {rest}"
+            else:
+                base = f"{dt.name}({params})"
         else:
             base = dt.name
         if dt.origin_comment:
