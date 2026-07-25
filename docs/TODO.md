@@ -231,11 +231,17 @@ Findings detail: audit docs 02/04/05/07.
   T-SQL→Oracle converts to `JSON_EXTRACT(...)` as *executable* output —
   Oracle has no `JSON_EXTRACT`; probe and route through the per-target JSON
   accessor mapping or degrade warned.
-- [ ] **B17 follow-ups** (2026-07-25): (a) the emit seam modules resolve
-  siblings via runtime namespace injection with a scoped mypy override —
-  convert to explicit imports as the mutual recursion is untangled (the
-  ratchet gate watches the sizes meanwhile); (c-remaining) the ~362
-  loop-only challenge `[fixed]` cases upgrade campaign (B16 step 2).
+- [ ] **RED seed from B17b** (2026-07-25): `SELECT 2||3` Oracle→PostgreSQL
+  emits bare `2 || 3` — PG rejects `integer || integer` (Oracle implicitly
+  casts to varchar and returns '23'). Needs an operand cast
+  (`2::text || 3::text`) or CONCAT() on PG when both operands are numeric.
+  Excluded from the nightly FUNC_CASES until fixed (`ora-num-concat`).
+- [ ] **B17 follow-ups** (2026-07-25): (c-remaining) the ~362 loop-only
+  challenge `[fixed]` cases upgrade campaign (B16 step 2) — mysql+postgresql
+  modules in progress 2026-07-25.
+  - [x] **(a)** seam namespace injection → explicit tail imports, mypy strict
+    restored on the 4 seam modules (no overrides), emit floor 3721→3718 —
+    done 2026-07-25.
   - [x] **(b)** B16's 4-entry `XFAIL_TARGET_PARSE` triage — resolved on
     principle 2026-07-25: each case transpiled and its output EXECUTED on the
     live target engine (Oracle 23ai / SQL Server 2022 / PostgreSQL 16). All
