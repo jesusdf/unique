@@ -14,6 +14,7 @@ import contextlib
 import dataclasses
 import decimal
 import re
+from collections.abc import Iterator
 from typing import Any, cast
 
 import sqlglot
@@ -113,6 +114,51 @@ def _strip_insert_column_qualifiers(sql: str) -> str:
         return f"{m.group(1)}{cols}{m.group(4)}"
 
     return _INSERT_COLS_RE.sub(_fix, sql)
+
+
+def _iter_sql_comments(text: str) -> Iterator[tuple[str, bool]]:
+    """Yield ``(comment_body, is_own_line)`` for each comment in *text*.
+
+    ``comment_body`` is the stripped comment content (no ``--`` or ``/* */``
+    markers); ``is_own_line`` is True when only whitespace precedes the comment
+    on its physical line. String literals are skipped so a ``--`` inside a
+    string is not read as a comment. Used to recover standalone comments that
+    sqlglot drops when it re-renders a passthrough statement (audit N14/B21):
+    the ones already carried in the re-rendered SQL are filtered by the caller.
+    """
+    i, n = 0, len(text)
+    line_has_code = False
+    while i < n:
+        ch = text[i]
+        if ch == "\n":
+            line_has_code = False
+            i += 1
+        elif ch in "'\"`":
+            i += 1
+            while i < n:
+                if text[i] == ch:
+                    if ch == "'" and i + 1 < n and text[i + 1] == "'":
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            line_has_code = True
+        elif ch == "-" and i + 1 < n and text[i + 1] == "-":
+            j = text.find("\n", i)
+            j = n if j == -1 else j
+            yield text[i + 2 : j].strip(), not line_has_code
+            i = j
+        elif ch == "/" and i + 1 < n and text[i + 1] == "*":
+            end = text.find("*/", i + 2)
+            body_end = n if end == -1 else end
+            yield text[i + 2 : body_end].strip(), not line_has_code
+            i = body_end if end == -1 else end + 2
+            line_has_code = True
+        else:
+            if not ch.isspace():
+                line_has_code = True
+            i += 1
 
 
 def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
@@ -361,10 +407,12 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
         # expression); our IR conversion would otherwise drop them. Re-emit them
         # as CommentStatements just before the statement, and clear them so a
         # PassthroughSQL ``.sql()`` doesn't also render them.
+        emitted_comments: set[str] = set()
         leading = getattr(expression, "comments", None)
         if leading:
             for raw in leading:
                 text = (raw or "").strip()
+                emitted_comments.add(text)
                 if "\n" in text:
                     nodes.append(CommentStatement(text=f"/* {text} */", style="block"))
                 else:
@@ -416,16 +464,35 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
         node = convert_expression(expression, dialect)  # type: ignore[arg-type]
         if original_stmt is not None:
             node = dataclasses.replace(node, source_text=original_stmt)
+        # A source-rendering node (PassthroughSQL/RawSQL/…) re-emits the
+        # original expression verbatim, comments included; an IR-modelled node
+        # renders no SQL string here (``rendered`` empty). sqlglot drops
+        # standalone mid-statement comments when it re-renders — recover those
+        # the render lost, placed above the statement, so nothing is dropped
+        # and nothing already carried inline is duplicated (audit N14/B21).
+        rendered = getattr(node, "sql", "") or getattr(node, "source_sql", "") or ""
+        if rendered and original_stmt:
+            for body, own_line in _iter_sql_comments(original_stmt):
+                if (
+                    own_line
+                    and body
+                    and body not in rendered
+                    and body not in emitted_comments
+                ):
+                    emitted_comments.add(body)
+                    nodes.append(CommentStatement(text=f"-- {body}", style="line"))
         nodes.append(node)
         # Trailing / inline comments attach to child nodes, not the statement;
         # collect them so they aren't lost (re-emitted after the statement —
-        # position may shift slightly, but nothing is dropped).
+        # position may shift slightly, but nothing is dropped). A comment the
+        # source-rendering ``rendered`` already carries is skipped so it is not
+        # emitted twice (audit N14/B21).
         for sub in expression.walk():
             if sub is expression or not sub.comments:
                 continue
             for raw in sub.comments:
                 text = (raw or "").strip()
-                if text:
+                if text and text not in rendered:
                     nodes.append(CommentStatement(text=f"-- {text}", style="line"))
 
     return nodes
