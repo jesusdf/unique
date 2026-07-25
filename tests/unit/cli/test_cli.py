@@ -136,6 +136,16 @@ class TestValidateCommand:
         assert result.exit_code == 1
         assert "Invalid" in result.output and "line 1" in result.output
 
+    def test_pg_table_shorthand_is_valid(
+        self, runner: CliRunner, tmp_path: Path
+    ) -> None:
+        # B20/N13: PostgreSQL's ``TABLE t`` shorthand must not be flagged.
+        f = tmp_path / "ok.sql"
+        f.write_text("TABLE t")
+        result = runner.invoke(cli, ["validate", str(f), "--dialect", "postgresql"])
+        assert result.exit_code == 0
+        assert "Valid" in result.output
+
 
 class TestHelp:
     def test_top_level_help(self, runner: CliRunner) -> None:

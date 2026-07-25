@@ -196,10 +196,12 @@ Findings detail: audit docs 02/04/05/07.
   excluded from scoring). Pure stdlib. Tests:
   `tests/unit/test_challenge_stats.py` (25 cases, incl. a real temp git repo
   for `--batch-since`).
-- [ ] **B20–B27** small items: PG `TABLE t` validation false positive, MERGE
-  comment trivia, dead IR nodes, mutation-script isolation, perf-budget flake
-  (process_time), CI installs with `-c constraints.txt`. *(Done 2026-07-24:
-  B22 traceback logging via `exc_info`, B26 `.dockerignore`.)*
+- [ ] **B20–B27** small items: MERGE comment trivia, dead IR nodes,
+  mutation-script isolation, perf-budget flake (process_time), CI installs
+  with `-c constraints.txt`. *(Done 2026-07-24: B22 traceback logging via
+  `exc_info`, B26 `.dockerignore`. Done 2026-07-25: B20 PG `TABLE t`
+  validation false positive — dialect-conditional whitelist in
+  `core/validation.py` (`_is_pg_table_shorthand`).)*
 - [ ] **B28** feature briefs when scheduled: `#temp`-in-procedure wiring,
   top-level `BEGIN TRY/CATCH` routing (currently honest warned degrades).
 - [ ] **RED seeds from the B2 sweep** (2026-07-24): (a) `Create.properties`

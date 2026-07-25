@@ -100,6 +100,25 @@ class TestBareAndTypoStatements:
         ):
             assert not validate_source(sql, "tsql"), sql
 
+    def test_pg_table_shorthand_is_not_flagged(self) -> None:
+        # B20/N13: PostgreSQL's ``TABLE t`` is valid shorthand for
+        # ``SELECT * FROM t`` — it parses to the exact bare-Alias shape as
+        # garbage ("banana banana"), so it needs a dialect-conditional
+        # whitelist rather than a blanket bare-statement rejection.
+        assert validate_source("TABLE t", "postgresql") == []
+
+    def test_pg_table_shorthand_still_flagged_on_other_dialects(self) -> None:
+        # No such shorthand exists outside PostgreSQL — "TABLE t" there is the
+        # same garbage as "banana banana".
+        for dialect in ("tsql", "oracle", "mysql"):
+            issues = validate_source("TABLE t", dialect)
+            assert issues and "not a valid SQL statement" in issues[0].message, dialect
+
+    def test_banana_still_rejected_on_postgresql(self) -> None:
+        # The whitelist must not open the door to arbitrary bare Alias shapes.
+        issues = validate_source("banana banana", "postgresql")
+        assert issues and "not a valid SQL statement" in issues[0].message
+
     def test_dollar_money_shaped_column_flagged_on_non_tsql(self) -> None:
         # N8/B9: ``Column(table=$12, this=Literal(50))`` is T-SQL's real
         # money-literal shorthand ($12.50) but the identical shape on a

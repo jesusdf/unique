@@ -101,6 +101,26 @@ def _missing_go_issue(batch: object) -> SyntaxIssue | None:
     )
 
 
+def _is_pg_table_shorthand(stmt: exp.Expression, dialect: str) -> bool:
+    """PostgreSQL's ``TABLE t`` statement (shorthand for ``SELECT * FROM t``) is
+    valid SQL on that dialect only, but sqlglot parses it with the exact same
+    shape as garbage like ``banana banana``: ``Alias(this=Column(Identifier
+    ("TABLE")), alias=Identifier(t))``. Recognize that specific shape so it is
+    not flagged (B20/N13) — never on other dialects, which have no such
+    shorthand."""
+    if dialect != "postgresql" or not isinstance(stmt, exp.Alias):
+        return False
+    column = stmt.this
+    if not isinstance(column, exp.Column):
+        return False
+    identifier = column.this
+    return (
+        isinstance(identifier, exp.Identifier)
+        and not identifier.quoted
+        and identifier.this.upper() == "TABLE"
+    )
+
+
 _CREATE_OBJECT_KINDS = frozenset(
     {
         "TABLE",
@@ -226,7 +246,11 @@ def validate_source(sql: str, dialect: str) -> list[SyntaxIssue]:
                 exp.Null,
                 exp.Alias,
             )
-            if any(isinstance(stmt, bare) for stmt in parsed if stmt is not None):
+            if any(
+                isinstance(stmt, bare) and not _is_pg_table_shorthand(stmt, dialect)
+                for stmt in parsed
+                if stmt is not None
+            ):
                 first = next((ln for ln in batch.sql.splitlines() if ln.strip()), "")
                 issues.append(
                     SyntaxIssue(

@@ -169,6 +169,15 @@ class TestValidate:
         assert body["valid"] is False
         assert body["issues"] and body["issues"][0]["line"] == 1
 
+    def test_pg_table_shorthand_is_valid(self, client: TestClient) -> None:
+        # B20/N13: PostgreSQL's ``TABLE t`` shorthand must not be flagged.
+        resp = client.post(
+            "/api/v1/validate",
+            json={"sql": "TABLE t", "dialect": "postgresql"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["valid"] is True
+
 
 class TestSourceValidationGate:
     _MALFORMED = "INSERT INTO t VALUES (1)\nCREATE PROCEDURE p AS BEGIN SELECT 1 END"
@@ -201,6 +210,15 @@ class TestSourceValidationGate:
         resp = client.post(
             "/api/v1/transpile",
             json={"sql": "SELECT 1", "source": "tsql", "target": "oracle"},
+        )
+        assert resp.status_code == 200
+
+    def test_pg_table_shorthand_source_transpiles(self, client: TestClient) -> None:
+        # B20/N13: the source-validation gate must not reject a PG script
+        # using ``TABLE t`` as a syntax error.
+        resp = client.post(
+            "/api/v1/transpile",
+            json={"sql": "TABLE t", "source": "postgresql", "target": "mysql"},
         )
         assert resp.status_code == 200
 
