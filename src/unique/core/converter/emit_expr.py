@@ -1595,7 +1595,7 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
                         f"{_emit_expression(p, dialect)} IS NULL" for p in nullable
                     )
                     return f"CASE WHEN {guard} THEN NULL ELSE {joined} END"
-        if dialect == "tsql":
+        elif dialect == "tsql":
             # T-SQL '+' does ARITHMETIC on numeric operands (2 + 3 = 5, not the
             # '23' that Oracle/PG || and MySQL CONCAT produce) and errors on
             # string + number. When any operand is numeric, use CONCAT(), which
@@ -1641,12 +1641,13 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
 
             _gather_concat(node)
             return f"CONCAT({', '.join(parts)})"
-        elif dialect == "postgresql":
-            # PostgreSQL has no ``integer || integer`` operator, so a source
-            # that implicitly stringifies both operands (Oracle ``2||3`` -> '23')
-            # emits an invalid ``2 || 3``. When BOTH operands are known-numeric
-            # (no text operand to resolve ``text || anynonarray``), cast them to
-            # TEXT. A string/unknown operand is left untouched — PG resolves it.
+        else:
+            # PostgreSQL target: PG has no ``integer || integer`` operator, so a
+            # source that implicitly stringifies both operands (Oracle ``2||3``
+            # -> '23') would emit an invalid ``2 || 3``. When BOTH operands are
+            # known-numeric (no text operand to resolve ``text || anynonarray``),
+            # cast them to TEXT. A string/unknown operand is left untouched — PG
+            # resolves it. (Oracle/T-SQL/MySQL are handled above.)
             if _is_pg_concat_numeric(node.left) and _is_pg_concat_numeric(node.right):
                 left = f"CAST({left} AS TEXT)"
                 right = f"CAST({right} AS TEXT)"
