@@ -49,11 +49,14 @@ feature work.*
   warned+annotated; `tests/helpers/validity.py` gained the
   `KNOWN_INVALID_TOKENS` denylist closing the sqlglot-leniency hole;
   ora-dttypes un-suspected into a real assertion.)*
-- [ ] **Oracle numeric `||` → PostgreSQL invalid** (found by the B17b live
-  sweep): `SELECT 2||3` emits bare `2 || 3` — PG rejects
-  `integer || integer` (Oracle implicitly casts and returns '23'). Needs
-  operand casts (`::text`) or CONCAT() on PG when both operands are numeric.
-  Excluded from the nightly FUNC_CASES until fixed (`ora-num-concat`).
+- [x] **Oracle numeric `||` → PostgreSQL invalid** (found by the B17b live
+  sweep) — done 2026-07-25: when BOTH `||` operands are known-numeric the PG
+  emission wraps each in `CAST(… AS TEXT)` (string/unknown operands
+  untouched), in BOTH pipelines (`emit_expr._emit_binary` CONCAT +
+  `procedural/transformer/_expr._pg_numeric_concat_cast`); tsql/mysql were
+  already correct (CONCAT() folds). Live: `SELECT 2||3` returns '23' on all
+  three targets; `ora-num-concat` re-included in the nightly FUNC_CASES and
+  passing. Ratchets kept flat by refactor, not floor raises.
 
 ### P3 — decisions and notes
 
