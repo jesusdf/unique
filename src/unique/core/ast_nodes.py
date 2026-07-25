@@ -653,6 +653,13 @@ class CreateViewStatement(ASTNode):
     query: SelectStatement
     or_replace: bool = False
     columns: tuple[str, ...] = ()
+    #: ``WITH [CASCADED|LOCAL] CHECK OPTION`` — portable across all four
+    #: engines (sqlglot cannot parse it, so a pre-parse hook models it).
+    check_option: str | None = None
+    #: Non-portable view modifiers (SCHEMABINDING, ALGORITHM=, DEFINER=, …)
+    #: that were dropped; the emitter surfaces each as a warned carrier so the
+    #: loss is never silent.
+    dropped_modifiers: tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------

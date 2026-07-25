@@ -148,11 +148,11 @@ ALLOWED_UNREAD: dict[str, frozenset[str]] = {
     # operator); the converter models concatenation structurally per target,
     # so the flag carries no droppable construct.
     "Concat": frozenset({"safe"}),
-    # CREATE VIEW/CTAS storage & modifier properties (ENGINE, CHARSET,
-    # DEFINER, WITH CHECK/SCHEMABINDING): non-portable physical/session
-    # options. The CREATE TABLE path reads ``properties`` structurally; only
-    # these non-portable view/engine modifiers reach the untracked path.
-    "Create": frozenset({"properties"}),
+    # ``Create.properties`` is deliberately NOT allowlisted (RED seed
+    # 2026-07-24): the CREATE TABLE path reads it structurally and the CREATE
+    # VIEW path collects the view modifiers (SCHEMABINDING, ALGORITHM=,
+    # DEFINER=, …) — re-attached natively where the target supports them,
+    # warned carriers elsewhere — so an unread ``properties`` warns again.
     # A MySQL charset introducer (``_utf8mb4'…'``): ``this`` is the charset
     # name, dropped when the literal is carried cross-engine (MySQL-specific,
     # no portable form). The literal itself (``expression``) is converted.

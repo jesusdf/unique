@@ -238,6 +238,29 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
                 kind="PG STORAGE",
             )
         ]
+    # ``CREATE VIEW … WITH [CASCADED|LOCAL] CHECK OPTION``: sqlglot cannot
+    # parse the trailing clause on any dialect (it degrades the whole CREATE to
+    # a Command carrier, or drops it silently on Oracle). It is portable — all
+    # four engines spell it ``WITH CHECK OPTION`` (MySQL/PG also accept the
+    # CASCADED/LOCAL scope) — so strip it, re-parse the view, and model the
+    # option on the IR for the emitter to re-attach per target.
+    if "CHECK" in sql.upper():
+        check_opt = re.match(
+            r"(?is)^\s*(CREATE\b.+?\bVIEW\b.+?)\s+WITH\s+"
+            r"(?:(CASCADED|LOCAL)\s+)?CHECK\s+OPTION\s*;?\s*$",
+            sql,
+        )
+        if check_opt:
+            scope = check_opt.group(2)
+            opt = f"{scope.upper()} CHECK OPTION" if scope else "CHECK OPTION"
+            return [
+                (
+                    dataclasses.replace(n, check_option=opt)
+                    if isinstance(n, CreateViewStatement)
+                    else n
+                )
+                for n in parse_sql(check_opt.group(1).strip() + ";", dialect)
+            ]
     if dialect == "mysql":
         # MySQL's ``INSERT INTO t SET a = 1, b = 2`` form: sqlglot cannot
         # parse it at all, and the embedded-routine fallback DROPPED the
@@ -2190,17 +2213,33 @@ def _convert_create_table(
 
 
 def _convert_create_view(expr: exp.Create) -> CreateViewStatement:
-    """Convert CREATE VIEW."""
+    """Convert CREATE VIEW.
+
+    Reads ``Create.properties`` (guardrail 7): a view carries only non-portable
+    single-engine modifiers there (SCHEMABINDING, ALGORITHM=, DEFINER=, SQL
+    SECURITY, …). They are collected as ``dropped_modifiers`` so the emitter
+    degrades each with a warning instead of dropping it silently. ``WITH CHECK
+    OPTION`` is portable and is modelled separately by the pre-parse hook.
+    """
     name_expr = expr.this
     table = _convert_table_ref(name_expr)
 
     query_expr = expr.args.get("expression")
     query = _convert_select(query_expr) if query_expr else SelectStatement()
 
+    props = expr.args.get("properties")
+    modifiers: list[str] = []
+    if props is not None:
+        for prop in props.expressions:
+            text = re.sub(r"(?is)^\s*WITH\s+", "", prop.sql()).strip()
+            if text:
+                modifiers.append(text)
+
     return CreateViewStatement(
         name=table,
         query=query,
         or_replace=expr.args.get("replace") is not None,
+        dropped_modifiers=tuple(modifiers),
     )
 
 

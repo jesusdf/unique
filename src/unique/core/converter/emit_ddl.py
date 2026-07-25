@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from typing import Any
 
 from unique.core.ast_nodes import (
@@ -867,6 +867,22 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
     return bare
 
 
+#: Single-engine view modifiers each target re-attaches natively: slot ``with``
+#: renders a ``WITH attr, …`` list after the view name (T-SQL); slot ``pre``
+#: renders the modifiers between CREATE and VIEW (MySQL). A modifier no entry
+#: claims is warn-dropped by ``_emit_create_view``.
+_NATIVE_VIEW_MODIFIERS: dict[str, tuple[str, Callable[[str], bool]]] = {
+    "tsql": (
+        "with",
+        lambda u: u in ("SCHEMABINDING", "ENCRYPTION", "VIEW_METADATA"),
+    ),
+    "mysql": (
+        "pre",
+        lambda u: u.startswith(("ALGORITHM", "DEFINER", "SQL SECURITY")),
+    ),
+}
+
+
 def _emit_create_view(node: CreateViewStatement, dialect: str) -> str:
     """Emit a CREATE VIEW statement."""
     name = _emit_table_ref(node.name, dialect)
@@ -882,7 +898,39 @@ def _emit_create_view(node: CreateViewStatement, dialect: str) -> str:
         # engines that accept it — a view has no guaranteed order anyway.
         view_query = dataclasses.replace(view_query, order_by=())
     query = _emit_select(view_query, dialect)
-    return f"CREATE {replace}VIEW {name} AS\n{query}"
+    # Non-portable view modifiers (SCHEMABINDING, ALGORITHM=, DEFINER=, …):
+    # re-attach natively where the target owns the modifier (per-engine table
+    # below); degrade the rest with a warned carrier (auto-warned by the
+    # no-silent-loss scan) — never a silent drop (audit 2026-07-24 B2 seed).
+    with_list: list[str] = []
+    pre_list: list[str] = []
+    dropped: list[str] = []
+    native = _NATIVE_VIEW_MODIFIERS.get(dialect)
+    for mod in node.dropped_modifiers:
+        upper = mod.upper()
+        if native and native[1](upper):
+            (with_list if native[0] == "with" else pre_list).append(
+                upper if native[0] == "with" else mod
+            )
+        else:
+            dropped.append(mod)
+    with_attrs = f"\nWITH {', '.join(with_list)}" if with_list else ""
+    pre_mods = f"{' '.join(pre_list)} " if pre_list else ""
+    result = f"CREATE {replace}{pre_mods}VIEW {name}{with_attrs} AS\n{query}"
+    if node.check_option:
+        # T-SQL and Oracle accept only the unscoped ``WITH CHECK OPTION``;
+        # MySQL and PostgreSQL also take the LOCAL/CASCADED scope.
+        opt = node.check_option
+        if dialect in ("tsql", "oracle"):
+            opt = "CHECK OPTION"
+        result = f"{result}\nWITH {opt}"
+    if dropped:
+        carriers = "\n".join(
+            f"-- UNIQUE: view modifier {mod} is not portable on {dialect}; dropped"
+            for mod in dropped
+        )
+        result = f"{carriers}\n{result}"
+    return result
 
 
 def _emit_drop(node: DropStatement, dialect: str) -> str:

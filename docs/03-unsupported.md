@@ -262,6 +262,17 @@ Only Oracle and PostgreSQL support materialized views natively. Transpilation
 to T-SQL or MySQL will emit the view definition as a regular view with a
 warning that materialization must be handled externally.
 
+### 3.4b Non-portable view modifiers
+
+`WITH CHECK OPTION` is portable and survives on all four engines (T-SQL and
+Oracle accept only the unscoped form, so a MySQL/PostgreSQL `LOCAL`/`CASCADED`
+scope is narrowed to the plain spelling there). The single-engine view
+modifiers — T-SQL `SCHEMABINDING`/`ENCRYPTION`/`VIEW_METADATA`, MySQL
+`ALGORITHM=`/`DEFINER=`/`SQL SECURITY` — are kept when the target is the
+engine that owns them and otherwise dropped with a `-- UNIQUE:` carrier plus a
+warning (they configure engine-local binding/security behavior with no
+cross-engine equivalent).
+
 ### 3.5 Error Handling
 
 Error handling constructs are structurally different:

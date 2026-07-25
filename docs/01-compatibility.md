@@ -234,6 +234,8 @@ engines and indicates the transpilation support status for each.
 |---------|-------|--------|------------|-------|------------------|
 | CREATE VIEW | ✓ | ✓ | ✓ | ✓ | ✅ |
 | CREATE OR REPLACE VIEW | ✓ | ✓ | ✓ | ✓ | ✅ |
+| WITH CHECK OPTION | ✓ | ✓ | ✓ | ✓ | ✅ (T-SQL/Oracle drop the MySQL/PG LOCAL/CASCADED scope — both accept only the unscoped form) |
+| View modifiers (SCHEMABINDING, ALGORITHM=, DEFINER=, SQL SECURITY, …) | ✓ | N/A | N/A | ✓ | ⚠️ Kept on the owning engine; dropped with a warned carrier elsewhere |
 | Materialized views | N/A | ✓ | ✓ | N/A | ⚠️ |
 
 ### 3.4 Sequences
