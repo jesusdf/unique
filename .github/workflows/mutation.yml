@@ -33,10 +33,18 @@ jobs:
           python scripts/mutation_test.py \
             src/unique/core/converter/convert.py \
             src/unique/core/converter/emit.py \
+            src/unique/core/converter/emit_functions.py \
+            src/unique/core/converter/emit_expr.py \
+            src/unique/core/converter/emit_ddl.py \
+            src/unique/core/converter/emit_passthrough.py \
             src/unique/core/converter/_base.py \
             src/unique/core/converter/harvest.py \
             --tests tests/unit/core tests/integration/test_cross_dialect.py \
                     tests/integration/test_pg_source_wave1.py \
+                    tests/integration/test_challenge_assertions_sqlserver.py \
+                    tests/integration/test_challenge_assertions_oracle.py \
+                    tests/integration/test_challenge_assertions_postgresql.py \
+                    tests/integration/test_challenge_assertions_mysql.py \
             | tee /tmp/mut_dml.txt || true
 
       - name: Mutate the procedural transformer
@@ -46,6 +54,8 @@ jobs:
             src/unique/core/procedural/transformer/oracle.py \
             --tests tests/unit/core/procedural tests/integration/test_procedural.py \
                     tests/integration/test_pg_source_wave1.py \
+                    tests/integration/test_cursor_state_b7.py \
+                    tests/unit/core/procedural/test_dynamic_sql_constant.py \
             | tee /tmp/mut_proc.txt || true
 
       - name: Publish scores + survivors to the summary
@@ -80,10 +90,17 @@ jobs:
         run: |
           python - <<'PY'
           import re, sys
+          # Floors last reviewed 2026-07-25 (audit B15): a local full-prefix
+          # measurement of convert.py (n=300, PRE-expanded selections) scored
+          # 66% -- floors kept, because the expanded --tests selections above
+          # (the four challenge assertion modules, +1,073 identity-killing
+          # tests) will raise every measured score. The STALE check below
+          # forces the bump after the first nightly at this HEAD.
           FLOORS = {
               "convert.py": 65, "emit.py": 60, "_base.py": 38,
               "harvest.py": 48, "base.py": 52,  # transformer/base.py
           }
+          STALE_MARGIN = 15  # measured - floor > this => floor must be raised
           scores, current = {}, None
           for path in ("/tmp/mut_dml.txt", "/tmp/mut_proc.txt"):
               try:
@@ -106,11 +123,27 @@ jobs:
               f"{n}: {p}% < floor {FLOORS[n]}%"
               for n, p in scores.items() if n in FLOORS and p < FLOORS[n]
           ]
+          # Self-ratcheting (audit B15/T7): a floor left >STALE_MARGIN under
+          # the measurement is head-room that absorbs regressions -- the
+          # nightly itself demands the raise instead of waiting for an audit.
+          stale = [
+              f"{n}: measured {p}% vs floor {FLOORS[n]}% -- raise to {p - 10}%"
+              for n, p in scores.items()
+              if n in FLOORS and p - FLOORS[n] > STALE_MARGIN
+          ]
+          unfloored = sorted(n for n in scores if n not in FLOORS)
           print("measured:", scores)
+          if unfloored:
+              print("::warning::modules measured but not floored -- set floors "
+                    "from this run: " + ", ".join(unfloored))
           if problems:
               print("::error::mutation-score regression: " + "; ".join(problems))
               sys.exit(1)
-          print("all measured modules at/above floor")
+          if stale:
+              print("::error::stale mutation floors -- raise them: "
+                    + "; ".join(stale))
+              sys.exit(1)
+          print("all measured modules at/above floor and within the stale margin")
           PY
 
       - name: Open an issue on regression
