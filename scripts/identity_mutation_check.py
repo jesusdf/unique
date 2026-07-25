@@ -29,7 +29,10 @@ import sys
 # measured 0.66, margin 6 points). The release checklist in
 # skills/SKILL-development-workflow.md governs future raises; STALE_MARGIN
 # below is the automated backstop for a floor that goes un-raised too long.
-KILL_RATE_FLOOR = 0.60
+# Raised 0.60 -> 0.70 on 2026-07-25: the B16-step-2 campaign added the four
+# challenge assertion modules (+1,073 identity-killing tests, measured 0.76)
+# and the stale backstop itself demanded the raise — the ratchet ratcheting.
+KILL_RATE_FLOOR = 0.70
 
 # T7 (audit B15): if measured kill rate outruns the floor by more than this,
 # the floor has gone stale (head-room that would silently absorb a

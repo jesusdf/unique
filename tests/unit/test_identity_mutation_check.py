@@ -43,8 +43,10 @@ class TestEvaluate:
         assert "floor is stale — raise it" in message
 
     def test_current_floor_not_stale_against_measured_baseline(self) -> None:
-        # 2026-07-24 measured kill rate (audit B15): 0.66 vs floor 0.60 —
-        # comfortably inside the margin, so the real floor must not trip T7.
-        code, message = identity_mutation_check.evaluate(0.66)
+        # 2026-07-25 measured kill rate (B16-step-2 campaign): 0.76 vs floor
+        # 0.70 — inside the margin, so the real floor must not trip T7.
+        # (Historic note: the 0.60 floor DID trip T7 at 0.76 — the backstop
+        # forced this raise, which is the mechanism working.)
+        code, message = identity_mutation_check.evaluate(0.76)
         assert code == 0
         assert message == ""
