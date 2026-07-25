@@ -177,8 +177,16 @@ Findings detail: audit docs 02/04/05/07.
 
 ### P3
 
-- [ ] **B18** `scripts/private_leak_check.py` (T2) — pre-push confidentiality
-  sweep, local-only.
+- [x] **B18** `scripts/private_leak_check.py` (T2) — done 2026-07-25;
+  pre-push confidentiality sweep, local-only. Derives its token inventory at
+  runtime from `fixtures-private/` (case-fold, length >= 6, drop SQL
+  keywords/this repo's own builtin catalogs/curated English+Spanish
+  dictionary words) plus the untracked `leak_fragments.txt` for short/compound
+  fragments; checks `origin/main..HEAD` + staged/working-tree diff lines and
+  `origin/main..HEAD` commit messages; no-ops when `fixtures-private/` is
+  absent. Contains no private data itself. Tests:
+  `tests/unit/test_private_leak_check.py` (fake private dir + a real temp git
+  repo, 24 cases).
 - [ ] **B19** `scripts/challenge_stats.py` (T5) — class distribution + batch
   scoring for the challenge corpus.
 - [ ] **B20–B27** small items: PG `TABLE t` validation false positive, MERGE
