@@ -68,6 +68,9 @@ class FuncCase:
 #     ora-concat-null ('a'||NULL||'b' = 'ab', Oracle treats NULL as ''),
 #     ts-concat-null (CONCAT skips NULL = 'ab'): each returned a different
 #     string ('NULL', dropped operand) before the fix.
+#   numeric concat              — ora-num-concat (2 || 3 = '23'): PG has no
+#     integer||integer operator, so the all-numeric || needs TEXT casts;
+#     T-SQL/MySQL fold to CONCAT(). Emitted bare (invalid) on PG before the fix.
 #   safe cast                    — ora-cast-onerror: CAST(... ON CONVERSION
 #     ERROR) folds to the default (-1) on the engines without a native form.
 #   upsert                       — pg-insert-select-conflict: ON CONFLICT DO
@@ -89,6 +92,7 @@ FUNC_CASES: tuple[FuncCase, ...] = (
     FuncCase("challenge_mysql.sql", "mysql", "my-sum-div-count "),
     FuncCase("challenge_oracle.sql", "oracle", "ora-implicit-arith "),
     FuncCase("challenge_sqlserver.sql", "tsql", "ts-str-plus-num "),
+    FuncCase("challenge_oracle.sql", "oracle", "ora-num-concat "),
     FuncCase("challenge_oracle.sql", "oracle", "ora-concat-num "),
     FuncCase("challenge_oracle.sql", "oracle", "ora-concat-null "),
     FuncCase("challenge_sqlserver.sql", "tsql", "ts-concat-null "),
