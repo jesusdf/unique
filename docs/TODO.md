@@ -116,8 +116,25 @@ Findings detail: audit docs 02/04/05/07.
   12.50/0.5/100 on pg/oracle/mysql. Tests:
   `test_challenge.py::TestMoneyLiteralMangle`,
   `test_validation.py::TestBareAndTypoStatements::test_dollar_money_*`.
-- [ ] **B11** Dynamic-SQL constant strings routed through the transpiler, warn
-  otherwise (N10).
+- [x] **B11** Dynamic-SQL constant strings routed through the transpiler, warn
+  otherwise (N10) — done 2026-07-25; a constant string reaching an
+  `EXEC`/`sp_executesql`/`EXEC(...)`/`EXECUTE [IMMEDIATE]` sink (literal
+  argument, or a variable whose single assignment is a constant literal that
+  parses as one source-dialect statement) is translated through the real
+  embedded-DML pipeline and spliced back (`procedural/transformer/base.py`:
+  `_collect_dynamic_sql_vars` pre-scan at every routine entry +
+  `_maybe_translate_dynamic_sink` at `_transform_execute` +
+  `_dyn_sql_value_replacement` at declare/SET/assignment sites); non-constant
+  variables, non-SQL strings, and multi-statement strings get the
+  "review the dynamic SQL" warning (never silent); recursion capped at depth 2
+  via the `_EMBEDDED_DYN_SQL_DEPTH` ContextVar. Parameterized sinks
+  (`USING`/sp_executesql binds) keep the established placeholder handling —
+  translating them statically would mangle the target's placeholder spelling
+  (`$1`→`?` etc.); statically translating the non-placeholder content of a
+  parameterized constant string is a possible follow-up. Live-verified: the
+  N10 pair (literal + variable) creates, compiles VALID, and executes on
+  PG and Oracle. Tests: `test_dynamic_sql_constant.py` (translation both
+  targets, warning paths, round-trip, depth cap, parameterized regression).
 - [x] **B12** `SQL%ROWCOUNT`→MySQL annotated divergence (N11, §3.22 class) —
   done 2026-07-25; kept the mapping (no faithful emulation exists) and added
   a `UNIQUE:` note + deduplicated warning at both emission sites
