@@ -113,8 +113,8 @@ class TestFindHits:
         assert hits == ["zzqfrobnicate"]
 
     def test_finds_fragment_substring_hit(self) -> None:
-        hits = plc.find_hits("col next-med_flag", frozenset(), ("next-med",))
-        assert hits == ["next-med"]
+        hits = plc.find_hits("col zzq-frag_flag", frozenset(), ("zzq-frag",))
+        assert hits == ["zzq-frag"]
 
     def test_clean_line_no_hits(self) -> None:
         assert plc.find_hits("SELECT 1", frozenset({"zzqfrobnicate"}), ()) == []

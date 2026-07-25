@@ -70,6 +70,13 @@ _NEW_FILE_RE = re.compile(r"^\+\+\+ b/(.+)$")
 # would trip the guard on every diff). Not exhaustive by design -- extend as
 # false positives appear; this is a local pre-push habit, not a certification.
 _CURATED_STOPWORDS: tuple[str, ...] = (
+    # generic programming/tech identifiers that occur in embedded code or
+    # comments of the private corpus but identify nothing (FP tail):
+    "filename",
+    "lineno",
+    "returncode",
+    "column_name",
+    "sqlserver",
     # -- SQL / DDL / DML keywords and clause words --------------------------
     "select",
     "insert",
@@ -428,9 +435,33 @@ def _load_builtin_names() -> frozenset[str]:
     return frozenset(names)
 
 
+#: System wordlists (the audit's sweep filtered English AND Spanish dictionary
+#: words — the client corpus carries Spanish comments). Best-effort: absent
+#: files are skipped, the curated list is the floor.
+_SYSTEM_WORDLISTS = (
+    Path("/usr/share/dict/american-english"),
+    Path("/usr/share/dict/spanish"),
+)
+
+
+def _load_system_wordlists() -> frozenset[str]:
+    words: set[str] = set()
+    for path in _SYSTEM_WORDLISTS:
+        if path.is_file():
+            for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+                w = line.strip().casefold()
+                if w.isalpha():
+                    words.add(w)
+    return frozenset(words)
+
+
 def stopwords() -> frozenset[str]:
     """The full drop-set: curated keywords/dictionary words + real builtins."""
-    return frozenset(w.casefold() for w in _CURATED_STOPWORDS) | _load_builtin_names()
+    return (
+        frozenset(w.casefold() for w in _CURATED_STOPWORDS)
+        | _load_builtin_names()
+        | _load_system_wordlists()
+    )
 
 
 def _private_files(private_dir: Path) -> Iterator[Path]:
