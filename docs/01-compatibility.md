@@ -385,7 +385,7 @@ engines and indicates the transpilation support status for each.
 
 | Feature | T-SQL | Oracle | PostgreSQL | MySQL | Transpile Status |
 |---------|-------|--------|------------|-------|------------------|
-| TRY…CATCH | ✓ | N/A | N/A | N/A | ⚠️ → BEGIN…EXCEPTION / HANDLER |
+| TRY…CATCH | ✓ | N/A | N/A | N/A | ⚠️ → BEGIN…EXCEPTION / HANDLER; also at **batch level** (`BEGIN TRY…END CATCH` outside a routine) → PG `DO $$…EXCEPTION $$`, Oracle `BEGIN…EXCEPTION…END;`, MySQL documented carrier |
 | EXCEPTION block | N/A | ✓ | ✓ | N/A | ⚠️ → TRY…CATCH / HANDLER |
 | DECLARE HANDLER | N/A | N/A | N/A | ✓ | ⚠️ |
 | RAISERROR / RAISE | ✓ | RAISE_APPLICATION_ERROR | RAISE | SIGNAL | ✅ |

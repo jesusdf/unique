@@ -191,6 +191,37 @@ class TestClassification:
         sql = "EXECUTE dbo.do_thing 1, 2"
         assert classify_batch(sql, "tsql") == BatchType.PROCEDURAL
 
+    def test_top_level_begin_try_is_procedural(self) -> None:
+        # A batch-level ``BEGIN TRY … END TRY BEGIN CATCH … END CATCH`` (common
+        # in migration scripts) is procedural control flow: route it to the
+        # procedural engine so the TRY/CATCH is lowered per target (PG DO $$
+        # EXCEPTION, Oracle BEGIN EXCEPTION), not mangled by the DML pipeline.
+        sql = (
+            "BEGIN TRY\n"
+            "    INSERT INTO t (id) VALUES (1)\n"
+            "END TRY\n"
+            "BEGIN CATCH\n"
+            "    INSERT INTO log_t (msg) VALUES (ERROR_MESSAGE())\n"
+            "END CATCH"
+        )
+        assert classify_batch(sql, "tsql") == BatchType.PROCEDURAL
+
+    def test_top_level_begin_try_with_leading_comment_is_procedural(self) -> None:
+        # A leading comment must not defeat the recognizer (comments are trivia,
+        # stripped before classification).
+        sql = (
+            "/* guard */\nBEGIN TRY\nSELECT 1\nEND TRY\n"
+            "BEGIN CATCH\nSELECT 2\nEND CATCH"
+        )
+        assert classify_batch(sql, "tsql") == BatchType.PROCEDURAL
+
+    def test_begin_try_only_recognized_for_tsql(self) -> None:
+        # ``BEGIN TRY`` is a T-SQL-only construct; the recognizer must not fire
+        # for other source dialects (they never emit it).
+        sql = "BEGIN TRY\nSELECT 1\nEND TRY\nBEGIN CATCH\nSELECT 2\nEND CATCH"
+        assert classify_batch(sql, "postgresql") != BatchType.PROCEDURAL
+        assert classify_batch(sql, "mysql") != BatchType.PROCEDURAL
+
     def test_batch_declare_is_procedural(self) -> None:
         # A batch-level DECLARE (a variable, then statements using it) is an
         # anonymous procedural block, not DML.

@@ -884,6 +884,84 @@ class TestTryCatchToMySQL:
         assert "WHEN OTHERS THEN" in out
 
 
+class TestTopLevelTryCatch:
+    """A batch-level (not inside a routine) T-SQL ``BEGIN TRY … END CATCH``
+    routes to the procedural engine and lowers per target, reusing the
+    in-routine TRY/CATCH machinery (B28b)."""
+
+    SRC = (
+        "BEGIN TRY\n"
+        "    INSERT INTO t (id) VALUES (1);\n"
+        "    INSERT INTO t (id) VALUES (1 / 0);\n"
+        "END TRY\n"
+        "BEGIN CATCH\n"
+        "    INSERT INTO log_t (msg) VALUES (ERROR_MESSAGE());\n"
+        "END CATCH"
+    )
+
+    def test_postgresql_wraps_in_do_block_with_exception(self) -> None:
+        out = _transpile(self.SRC, "tsql", "postgresql")
+        # PG anonymous block wrapper + PL/pgSQL exception handler.
+        assert "DO $$" in out
+        assert "EXCEPTION" in out and "WHEN OTHERS THEN" in out
+        # The source idiom must be gone (lowered, not passed through).
+        assert "BEGIN TRY" not in out
+        assert "END CATCH" not in out
+        # ERROR_MESSAGE() becomes the plpgsql diagnostic form.
+        assert "ERROR_MESSAGE" not in out.upper()
+        # No honesty-gate "Unhandled expression type" carrier.
+        assert "Unhandled expression type" not in out
+
+    def test_oracle_wraps_in_plsql_exception_block(self) -> None:
+        out = _transpile(self.SRC, "tsql", "oracle")
+        assert "EXCEPTION" in out and "WHEN OTHERS THEN" in out
+        assert "BEGIN TRY" not in out
+        assert "END CATCH" not in out
+        # ERROR_MESSAGE() becomes SQLERRM in the Oracle handler.
+        assert "SQLERRM" in out
+        assert "Unhandled expression type" not in out
+
+    def test_mysql_documents_the_degrade(self) -> None:
+        # MySQL has no procedural code outside a stored routine, so a top-level
+        # anonymous block with control flow degrades to a documented carrier +
+        # warning (never silent, never invalid executable SQL).
+        result = Transpiler().transpile(self.SRC, source="tsql", target="mysql")
+        assert "BEGIN TRY" not in result.sql
+        # A carrier comment preserves the intent.
+        assert "-- UNIQUE:" in result.sql
+        # And the loss is recorded in the result object (no silent loss).
+        joined = " ".join(w.message for w in result.warnings)
+        assert "top-level" in joined and "mysql" in joined.lower()
+
+    def test_no_begin_try_leaks_to_any_target(self) -> None:
+        for target in ("postgresql", "oracle", "mysql"):
+            out = _transpile(self.SRC, "tsql", target)
+            assert "BEGIN TRY" not in out, target
+            assert "END TRY" not in out, target
+            assert "END CATCH" not in out, target
+
+    def test_roundtrip_preserves_try_catch(self) -> None:
+        # T-SQL -> Oracle -> T-SQL keeps a runnable TRY/CATCH shell (the
+        # protected work and the handler both survive the round trip). Uses a
+        # body free of engine-specific built-ins so the round trip isolates the
+        # TRY/CATCH structure, not an unrelated function-mapping gap.
+        src = (
+            "BEGIN TRY\n"
+            "    UPDATE t SET x = 1;\n"
+            "END TRY\n"
+            "BEGIN CATCH\n"
+            "    UPDATE t SET x = 2;\n"
+            "END CATCH"
+        )
+        oracle = _transpile(src, "tsql", "oracle")
+        assert "BEGIN TRY" not in oracle  # actually lowered on the way out
+        back = _transpile(oracle, "oracle", "tsql")
+        assert "BEGIN TRY" in back
+        assert "END TRY" in back
+        assert "BEGIN CATCH" in back
+        assert "END CATCH" in back
+
+
 class TestPostgreSQLProcedureFixes:
     """Bugs fixed while generating the PostgreSQL procedures fixture."""
 

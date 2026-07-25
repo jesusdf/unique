@@ -283,6 +283,20 @@ Error handling constructs are structurally different:
 The transpiler handles common patterns (catch-all, specific error codes) but
 complex exception handling with multiple handlers may lose precision.
 
+**Batch-level `BEGIN TRY … END CATCH`** (a TRY/CATCH outside any routine, common
+in migration scripts) is routed to the procedural engine and lowered with the
+same machinery as an in-routine TRY/CATCH: PostgreSQL wraps it in
+`DO $$ BEGIN … EXCEPTION WHEN OTHERS THEN … END $$;`, Oracle in an anonymous
+`BEGIN … EXCEPTION WHEN OTHERS THEN … END;` block. **MySQL** has no procedural
+code outside a stored routine, so a top-level TRY/CATCH degrades to a documented
+`-- UNIQUE:` carrier comment plus a `result.warnings` entry (never invalid
+executable SQL). Note the standing PL/pgSQL caveat: an `EXCEPTION` block runs its
+body inside an implicit subtransaction, so work done *before* the error inside
+the same block is rolled back — T-SQL `TRY/CATCH` leaves already-committed
+statements in place. Behavior is equivalent for the swallow-and-continue case
+(the handler runs, the script proceeds); it diverges only when the protected
+block performs a partial mutation before failing.
+
 ### 3.6 MERGE Statement → MySQL
 
 MySQL lacks MERGE. The canonical pattern (one unconditional WHEN MATCHED
