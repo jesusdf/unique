@@ -49,6 +49,58 @@ __all__ = [
 ]
 
 
+#: Faithful/closest column type for Oracle TIMESTAMP WITH LOCAL TIME ZONE
+#: (sqlglot's TIMESTAMPLTZ) per target. No engine spells the type
+#: ``TIMESTAMPLTZ``; sqlglot's lenient readers accept the raw token but every
+#: real engine rejects it, so shipping it is a silent-invalid defect.
+_LOCAL_TZ_TYPE: dict[str, str] = {
+    "postgresql": "TIMESTAMPTZ",
+    "tsql": "DATETIMEOFFSET",
+    "mysql": "TIMESTAMP",
+    # Oracle keeps its own native spelling — faithful, no loss, no note.
+    "oracle": "TIMESTAMP WITH LOCAL TIME ZONE",
+}
+
+#: Trailing ``-- UNIQUE:`` carrier (auto-warned by the no-silent-loss scan) for
+#: the WITH LOCAL TIME ZONE mapping. PostgreSQL timestamptz has the identical
+#: session-tz display behaviour as Oracle LTZ (verified live: a value shows
+#: 12:00 in a UTC session and 07:00 in a New York session, same instant), so
+#: its note documents that dependence rather than a loss. T-SQL DATETIMEOFFSET
+#: keeps a fixed stored offset and MySQL TIMESTAMP normalizes to UTC — the
+#: instant is kept but the session-tz display is not reproduced. Oracle has no
+#: entry: its native spelling loses nothing. ``{name}`` = the column name.
+_LOCAL_TZ_NOTE: dict[str, str] = {
+    "postgresql": (
+        "-- UNIQUE: Oracle WITH LOCAL TIME ZONE and PostgreSQL timestamptz "
+        "both display column {name} in the session time zone (same instant, "
+        "session-dependent wall clock) (docs/03-unsupported.md)"
+    ),
+    "tsql": (
+        "-- UNIQUE: tsql has no session-local timestamp type — column {name} "
+        "WITH LOCAL TIME ZONE maps to DATETIMEOFFSET; the value's instant is "
+        "kept but the session-time-zone display is not reproduced "
+        "(docs/03-unsupported.md)"
+    ),
+    "mysql": (
+        "-- UNIQUE: mysql has no session-local timestamp type — column {name} "
+        "WITH LOCAL TIME ZONE maps to TIMESTAMP; the value's instant is kept "
+        "but the session-time-zone display is not reproduced "
+        "(docs/03-unsupported.md)"
+    ),
+}
+
+
+def _local_tz_gap(
+    col: ColumnDefinition, dtype: str, dialect: str
+) -> tuple[str, tuple[int, ...] | None, str]:
+    """Closest-type mapping for Oracle TIMESTAMP WITH LOCAL TIME ZONE."""
+    mapped = _LOCAL_TZ_TYPE.get(dialect)
+    if mapped is None:
+        return dtype, None, ""  # unknown target — leave the name alone
+    note = _LOCAL_TZ_NOTE.get(dialect)
+    return mapped, None, note.format(name=col.name) if note else ""
+
+
 def _type_gap_map(
     col: ColumnDefinition, dtype: str, dialect: str
 ) -> tuple[str, tuple[int, ...] | None, str]:
@@ -62,6 +114,8 @@ def _type_gap_map(
     """
     tn = col.data_type.name.upper()
     params = col.data_type.params
+    if tn == "TIMESTAMPLTZ":
+        return _local_tz_gap(col, dtype, dialect)
     if dialect == "oracle":
         # Bare INTERVAL DAY TO SECOND on purpose: the validity gate's sqlglot
         # parse rejects the (perfectly valid) precision forms DAY(0)/SECOND(3);
