@@ -16,11 +16,12 @@ registry the engine modules populate on import.
 
 from __future__ import annotations
 
+import contextvars
 import dataclasses
 import logging
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 
 import sqlglot
 
@@ -78,6 +79,15 @@ from unique.core.sql_split import split_leading_trivia
 from ._expr import ExpressionRewriter
 
 logger = logging.getLogger(__name__)
+
+#: Recursion depth of embedded dynamic-SQL translation (B11/N10). A constant
+#: dynamic-SQL string is transpiled by re-entering the pipeline; a dynamic-SQL
+#: string that itself runs more dynamic SQL is capped so the translation cannot
+#: recurse without bound (warn beyond depth 2).
+_EMBEDDED_DYN_SQL_DEPTH: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "unique_embedded_dyn_sql_depth", default=0
+)
+_MAX_EMBEDDED_DYN_SQL_DEPTH = 2
 
 
 def _one_line_sql(sql: str) -> str:
@@ -197,6 +207,14 @@ class ProceduralTransformer:
         # string type. Used to disambiguate T-SQL '+' as concatenation when no
         # string literal is present (e.g. SHA2(@a + @b) over two text vars).
         self._string_vars: set[str] = set()
+        # B11/N10: variables whose value flows into a dynamic-SQL sink
+        # (EXEC / sp_executesql / EXECUTE IMMEDIATE) as its SOLE content.
+        # Maps the bare, lower-cased SOURCE name -> the single constant SQL
+        # string (source-dialect, unquoted) when the variable is assigned exactly
+        # once with a constant literal that parses as SQL, else None (built at
+        # runtime / not SQL -> the sink warns instead of shipping it untranslated).
+        # Recomputed per routine by _collect_dynamic_sql_vars before the body walk.
+        self._dyn_sql_vars: dict[str, str | None] = {}
         # Names (transformed form) of DATE/DATETIME variables/parameters. Used to
         # rewrite ``d2 - d1`` (legal date subtraction on the source) to
         # ``DATEDIFF(DAY, d1, d2)`` for the T-SQL target, which rejects the ``-``.
@@ -1317,6 +1335,7 @@ class ProceduralTransformer:
         node = dataclasses.replace(node, body=folded_body)
         self._routine_name = self._bare_ident(node.name)
         new_params = self._transform_params(node.parameters)
+        self._dyn_sql_vars = self._collect_dynamic_sql_vars(node.body)
         new_body = self._transform_body(
             self._drop_param_shadowing_locals(node.body, node.parameters)
         )
@@ -1335,6 +1354,7 @@ class ProceduralTransformer:
         """Transform ALTER PROCEDURE (T-SQL) → CREATE OR REPLACE (others)."""
         self._routine_name = self._bare_ident(node.name)
         new_params = self._transform_params(node.parameters)
+        self._dyn_sql_vars = self._collect_dynamic_sql_vars(node.body)
         new_body = self._transform_body(node.body)
         if self._alter_becomes_create():
             return CreateProcedureStatement(
@@ -1777,6 +1797,7 @@ class ProceduralTransformer:
         new_params = self._transform_params(node.parameters)
         prev_void = getattr(self, "_in_void_function", False)
         self._in_void_function = is_void
+        self._dyn_sql_vars = self._collect_dynamic_sql_vars(node.body)
         try:
             new_body = self._transform_body(
                 self._drop_param_shadowing_locals(node.body, node.parameters)
@@ -1940,6 +1961,7 @@ class ProceduralTransformer:
         )
         prev_rewrite = self._preserve_set_based_dml
         self._preserve_set_based_dml = set_based
+        self._dyn_sql_vars = self._collect_dynamic_sql_vars(node.body)
         try:
             new_body = self._ensure_non_empty_body(self._transform_body(node.body))
         finally:
@@ -2169,10 +2191,17 @@ class ProceduralTransformer:
         new_type = self._transform_data_type(node.data_type)
         # Oracle rejects a self-referential initializer (``x NUMBER := x`` is
         # PLS-00320); in the source it only seeds NULL, so drop it.
+        # B11/N10: a constant dynamic-SQL variable's initializer is translated
+        # to the target dialect (the string is SQL fed to an EXEC sink).
+        dyn_default = self._dyn_sql_value_replacement(node.name, node.default)
         new_default = (
-            None
-            if self._is_self_init(node.default, node.name)
-            else self._transform_node(node.default) if node.default else None
+            dyn_default
+            if dyn_default is not None
+            else (
+                None
+                if self._is_self_init(node.default, node.name)
+                else self._transform_node(node.default) if node.default else None
+            )
         )
         # A SYS_REFCURSOR cannot carry an initializer on Oracle (PLS-00382 on
         # ``rc SYS_REFCURSOR := 'name'``); the cursor is bound by OPEN … FOR.
@@ -2323,7 +2352,13 @@ class ProceduralTransformer:
         if capture is not None:
             return capture
         new_name = self._transform_var_name(node.name)
-        new_value = self._wrap_mysql_not_value(self._transform_node(node.value))
+        # B11/N10: a constant dynamic-SQL variable's value is translated.
+        dyn_value = self._dyn_sql_value_replacement(node.name, node.value)
+        new_value = (
+            dyn_value
+            if dyn_value is not None
+            else self._wrap_mysql_not_value(self._transform_node(node.value))
+        )
         # SET keeps a SET statement on engines that have one (T-SQL, MySQL);
         # Oracle/PostgreSQL lower it to a ``:=`` assignment.
         if self._uses_set_statement():
@@ -2389,7 +2424,13 @@ class ProceduralTransformer:
         if capture is not None:
             return capture
         new_name = self._transform_var_name(node.target)
-        new_value = self._wrap_mysql_not_value(self._transform_node(node.value))
+        # B11/N10: a constant dynamic-SQL variable's value is translated.
+        dyn_value = self._dyn_sql_value_replacement(node.target, node.value)
+        new_value = (
+            dyn_value
+            if dyn_value is not None
+            else self._wrap_mysql_not_value(self._transform_node(node.value))
+        )
         # A T-SQL target re-expresses an assignment as SET; the others keep an
         # assignment node (MySQL's is rendered as SET by its emitter).
         if self._assignment_becomes_set():
@@ -2514,6 +2555,14 @@ class ProceduralTransformer:
 
     _CONSTANT_SQL_STRING_RE = re.compile(r"(?s)^\s*N?'((?:[^']|'')*)'\s*$")
 
+    #: Routine DDL inside a dynamic-SQL string: cannot be inlined or routed
+    #: through the DML pipeline (a routine needs the procedural engine and
+    #: cannot live inside another routine's block on PG/T-SQL).
+    _DYN_ROUTINE_DDL_RE = re.compile(
+        r"(?is)\s*CREATE\s+(?:OR\s+REPLACE\s+)?"
+        r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE)\b"
+    )
+
     def _transform_execute(self, node: ExecuteStatement) -> ASTNode:
         expr = node.sql_expression
         # EXECUTE IMMEDIATE of a *constant* string is just that statement:
@@ -2530,11 +2579,7 @@ class ProceduralTransformer:
             m = self._CONSTANT_SQL_STRING_RE.match(expr.sql)
             if m:
                 inner = m.group(1).replace("''", "'").strip()
-                if inner and re.match(
-                    r"(?is)\s*CREATE\s+(?:OR\s+REPLACE\s+)?"
-                    r"(?:PROCEDURE|FUNCTION|TRIGGER|PACKAGE)\b",
-                    inner,
-                ):
+                if inner and self._DYN_ROUTINE_DDL_RE.match(inner):
                     # Routine DDL cannot be inlined: neither PG nor T-SQL
                     # allows CREATE PROCEDURE/FUNCTION inside a block — it
                     # must STAY dynamic. The string still holds the source
@@ -2549,6 +2594,15 @@ class ProceduralTransformer:
                     return self._transform_node(
                         EmbeddedDML(sql=inner, dialect=self._source)
                     )
+        # B11/N10: a CONSTANT dynamic-SQL string (literal argument, or variable
+        # assigned exactly one constant literal) must be translated to the
+        # target dialect, never executed as untranslated source-dialect text;
+        # anything non-constant is flagged (no-silent-loss, one quote level
+        # down). Variable carriers are translated at their declaration or
+        # assignment site; this call handles literal carriers and the warning.
+        replaced = self._maybe_translate_dynamic_sink(node, expr)
+        if replaced is not None:
+            expr = replaced
         # A Microsoft-shipped T-SQL system procedure (EXEC sp_who, sp_rename…)
         # has no equivalent off T-SQL; shipped raw it is a guaranteed error.
         # Same carrier shape as the Oracle package-call branch in
@@ -2596,6 +2650,280 @@ class ProceduralTransformer:
         """The named-argument operator in a procedure call, or ``None`` when the
         target has no named-argument syntax. Oracle/PostgreSQL use ``=>``; T-SQL
         keeps ``@name = value`` and MySQL's CALL is positional-only."""
+        return None
+
+    # ------------------------------------------------------------------
+    # B11/N10 — constant dynamic-SQL strings are translated, never shipped
+    # verbatim. The sink (EXEC / sp_executesql / EXECUTE [IMMEDIATE]) either
+    # (a) translates a constant literal argument in place, (b) relies on the
+    # declaration/assignment site having translated a constant variable's
+    # content (via _dyn_sql_vars, built by _collect_dynamic_sql_vars), or
+    # (c) emits the review-dynamic-SQL warning — no silent untranslated text.
+    # ------------------------------------------------------------------
+
+    #: A bare variable reference (with or without the T-SQL ``@`` sigil).
+    _DYN_VARIABLE_RE = re.compile(r"^@?[A-Za-z_][\w$#]*$")
+
+    def _iter_ast_nodes(self, root: object) -> Iterator[ASTNode]:
+        """Yield every ASTNode reachable from *root* (node, tuple, or list)."""
+        stack: list[object] = [root]
+        while stack:
+            v = stack.pop()
+            if isinstance(v, ASTNode):
+                yield v
+                for f in dataclasses.fields(v):
+                    stack.append(getattr(v, f.name))
+            elif isinstance(v, (tuple, list)):
+                stack.extend(v)
+
+    def _collect_dynamic_sql_vars(
+        self, body: tuple[ASTNode, ...]
+    ) -> dict[str, str | None]:
+        """Map each variable feeding a dynamic-SQL sink to its constant SQL.
+
+        A variable qualifies as *constant* when it has exactly one
+        value-bearing site (DECLARE default, SET, or ``:=`` assignment) whose
+        value is a single constant string literal that parses as one
+        source-dialect SQL statement. Everything else maps to ``None`` — the
+        sink then warns instead of shipping untranslated text. Runs before the
+        body walk, on SOURCE names.
+        """
+        sinks: set[str] = set()
+        for n in self._iter_ast_nodes(body):
+            if isinstance(n, ExecuteStatement) and isinstance(n.sql_expression, RawSQL):
+                parts = self._dyn_sink_parts(n, n.sql_expression.sql)
+                if (
+                    parts is not None
+                    and not self._dyn_sink_has_binds(n, parts)
+                    and self._DYN_VARIABLE_RE.match(parts[1])
+                ):
+                    sinks.add(parts[1].lstrip("@").lower())
+        if not sinks:
+            return {}
+        assigns: dict[str, list[str | None]] = {s: [] for s in sinks}
+
+        def record(name: str, value: ASTNode | None) -> None:
+            bare = name.strip().lstrip("@").lower()
+            if bare in assigns:
+                assigns[bare].append(value.sql if isinstance(value, RawSQL) else None)
+
+        for n in self._iter_ast_nodes(body):
+            if isinstance(n, DeclareStatement):
+                if n.default is not None:
+                    record(n.name, n.default)
+            elif isinstance(n, SetVariableStatement):
+                record(n.name, n.value)
+            elif isinstance(n, AssignmentStatement):
+                record(n.target, n.value)
+            elif isinstance(n, (SelectIntoStatement, CursorOperation)):
+                for v in n.into_vars:
+                    record(v, None)  # runtime-assigned -> non-constant
+            elif isinstance(n, ExecuteStatement):
+                for v in n.into_vars:
+                    record(v, None)
+        result: dict[str, str | None] = {}
+        for bare, values in assigns.items():
+            content: str | None = None
+            if len(values) == 1 and values[0]:
+                m = self._CONSTANT_SQL_STRING_RE.match(values[0])
+                if m:
+                    text = m.group(1).replace("''", "'").strip()
+                    if text and self._dyn_sql_statement_count(text) == 1:
+                        content = text
+            result[bare] = content
+        return result
+
+    def _dyn_sink_parts(
+        self, node: ExecuteStatement, text: str
+    ) -> tuple[str, str, str] | None:
+        """Split a dynamic-SQL sink expression into (prefix, carrier, suffix).
+
+        The *carrier* is the fragment holding the executed SQL text: the first
+        ``sp_executesql`` argument, the inside of a T-SQL ``EXEC(...)``, a bare
+        ``@var``, or the whole expression of an ``EXECUTE [IMMEDIATE]``.
+        Returns ``None`` for a named-procedure call (not a string sink).
+        """
+        s = text.strip()
+        m = re.match(r"(?is)^sp_executesql\s+(.*)$", s)
+        if m:
+            first, tail = self._split_first_dyn_arg(m.group(1))
+            return "sp_executesql ", first.strip(), tail
+        if node.immediate:
+            return "", s, ""
+        m = re.match(r"(?s)^\(\s*(.*?)\s*\)$", s)
+        if m:
+            return "(", m.group(1), ")"
+        if s.startswith("@") and self._DYN_VARIABLE_RE.match(s):
+            return "", s, ""
+        return None
+
+    @staticmethod
+    def _dyn_sink_has_binds(
+        node: ExecuteStatement, parts: tuple[str, str, str]
+    ) -> bool:
+        """Whether the sink passes bind parameters (``USING`` values, or an
+        ``sp_executesql`` bind tail). The dynamic string then carries
+        placeholders whose spelling is execution-form-specific (``$1``/``?``/
+        ``:1``/``@p``); the established emit-time placeholder handling and its
+        documented binding limits own that shape — a static content
+        translation would mangle the placeholders, so it must not fire."""
+        return bool(node.params) or parts[2].lstrip().startswith(",")
+
+    @staticmethod
+    def _split_first_dyn_arg(text: str) -> tuple[str, str]:
+        """Split off the first top-level comma-separated argument; the tail
+        keeps its leading comma (mirrors the emitter's ``_first_arg``)."""
+        depth = 0
+        in_str = False
+        for i, ch in enumerate(text):
+            if ch == "'":
+                in_str = not in_str
+            elif not in_str:
+                if ch in "([":
+                    depth += 1
+                elif ch in ")]":
+                    depth -= 1
+                elif ch == "," and depth == 0:
+                    return text[:i], text[i:]
+        return text, ""
+
+    def _dyn_sql_statement_count(self, text: str) -> int:
+        """How many real SQL statements *text* parses into in the source
+        dialect; 0 when it does not parse or is a bare expression fragment
+        (``'hello'`` parses as a column reference, not a statement)."""
+        try:
+            trees = sqlglot.parse(text, read=self._get_sqlglot_dialect(self._source))
+        except Exception:
+            return 0
+        trees = [t for t in trees if t is not None]
+        if not trees:
+            return 0
+        from sqlglot import expressions as _exp
+
+        fragment_types = (
+            _exp.Column,
+            _exp.Identifier,
+            _exp.Alias,
+            _exp.Literal,
+            _exp.Paren,
+            _exp.Tuple,
+            _exp.Anonymous,
+        )
+        if any(isinstance(t, fragment_types) for t in trees):
+            return 0
+        return len(trees)
+
+    def _translate_dynamic_sql_text(self, content: str) -> str | None:
+        """Translate one constant dynamic-SQL statement through the real
+        embedded-DML pipeline (never a text rewrite — the string IS SQL).
+        Returns the target-dialect text, or ``None`` (warned) on failure or
+        past the recursion cap."""
+        depth = _EMBEDDED_DYN_SQL_DEPTH.get()
+        if depth >= _MAX_EMBEDDED_DYN_SQL_DEPTH:
+            self._warn_dynamic_sql_review(
+                f"nested more than {_MAX_EMBEDDED_DYN_SQL_DEPTH} levels deep"
+            )
+            return None
+        token = _EMBEDDED_DYN_SQL_DEPTH.set(depth + 1)
+        try:
+            translated = self._transform_embedded_dml(
+                EmbeddedDML(sql=content, dialect=self._source)
+            ).sql
+        except Exception as e:  # noqa: BLE001 - degrade to the warned path
+            logger.debug("dynamic-SQL translation failed: %s", e)
+            self._warn_dynamic_sql_review("its translation failed")
+            return None
+        finally:
+            _EMBEDDED_DYN_SQL_DEPTH.reset(token)
+        return translated.strip().rstrip(";").strip()
+
+    def _warn_dynamic_sql_review(self, reason: str) -> None:
+        self._warnings.append(
+            f"dynamic SQL {reason}; the executed string is not statically "
+            f"translated to {self._target} — review the dynamic SQL manually"
+        )
+
+    def _requote_dynamic_literal(self, original: str, translated: str) -> str:
+        """Re-quote *translated* as a string literal, keeping the national
+        (``N``) prefix where the target understands it (not PostgreSQL)."""
+        keep_n = (
+            original.lstrip().upper().startswith("N'") and self._target != "postgresql"
+        )
+        body = translated.replace("'", "''")
+        return ("N'" if keep_n else "'") + body + "'"
+
+    def _dyn_sql_value_replacement(
+        self, name: str, value: ASTNode | None
+    ) -> RawSQL | None:
+        """The translated literal for a constant dynamic-SQL variable's single
+        assignment site, or ``None`` when it does not apply (the sink then
+        warns via the ``None`` map entry)."""
+        if (
+            value is None
+            or not isinstance(value, RawSQL)
+            or self._source == self._target
+        ):
+            return None
+        bare = name.strip().lstrip("@").lower()
+        content = self._dyn_sql_vars.get(bare)
+        if not content or self._DYN_ROUTINE_DDL_RE.match(content):
+            return None
+        if not self._CONSTANT_SQL_STRING_RE.match(value.sql):
+            return None
+        translated = self._translate_dynamic_sql_text(content)
+        if translated is None:
+            self._dyn_sql_vars[bare] = None  # sink warns; value stays as-is
+            return None
+        return dataclasses.replace(
+            value, sql=self._requote_dynamic_literal(value.sql, translated)
+        )
+
+    def _maybe_translate_dynamic_sink(
+        self, node: ExecuteStatement, expr: ASTNode
+    ) -> RawSQL | None:
+        """Handle a dynamic-SQL sink: translate a constant literal carrier in
+        place (returns the replacement expression), trust a constant variable
+        carrier (translated at its assignment site), or warn. Returns ``None``
+        when the expression is left unchanged."""
+        if self._source == self._target or not isinstance(expr, RawSQL):
+            return None
+        parts = self._dyn_sink_parts(node, expr.sql)
+        if parts is None:
+            return None  # named-procedure call, not a dynamic string
+        if self._dyn_sink_has_binds(node, parts):
+            return None  # parameterized: the emit-time bind handling owns it
+        prefix, carrier, suffix = parts
+        m = self._CONSTANT_SQL_STRING_RE.match(carrier)
+        if m:
+            content = m.group(1).replace("''", "'").strip()
+            if not content:
+                return None
+            if self._DYN_ROUTINE_DDL_RE.match(content):
+                # The EXECUTE IMMEDIATE constant-unwrap branch above already
+                # warned for the immediate no-params form; don't double-warn.
+                if not (node.immediate and not node.into_vars and not node.params):
+                    self._warnings.append(
+                        "dynamic routine DDL (EXECUTE of a constant CREATE "
+                        "PROCEDURE/FUNCTION/TRIGGER string) kept verbatim; "
+                        "convert the routine text manually"
+                    )
+                return None
+            if self._dyn_sql_statement_count(content) != 1:
+                self._warn_dynamic_sql_review(
+                    "string does not parse as a single " f"{self._source} statement"
+                )
+                return None
+            translated = self._translate_dynamic_sql_text(content)
+            if translated is None:
+                return None
+            lit = self._requote_dynamic_literal(carrier, translated)
+            return dataclasses.replace(expr, sql=f"{prefix}{lit}{suffix}")
+        if self._DYN_VARIABLE_RE.match(carrier):
+            if self._dyn_sql_vars.get(carrier.lstrip("@").lower()):
+                return None  # constant: translated at its assignment site
+            self._warn_dynamic_sql_review("executes a string built at runtime")
+            return None
+        self._warn_dynamic_sql_review("executes a string built at runtime")
         return None
 
     def _supports_top_level_anonymous_block(self) -> bool:
@@ -2883,6 +3211,12 @@ class ProceduralTransformer:
         degraded_uv = self._degrade_mysql_uservar(node)
         if degraded_uv is not None:
             return degraded_uv
+        # Merge (don't replace): a nested block must keep the enclosing
+        # routine's dynamic-SQL constant map visible.
+        self._dyn_sql_vars = {
+            **self._dyn_sql_vars,
+            **self._collect_dynamic_sql_vars(node.statements),
+        }
         new_stmts = self._transform_body(node.statements)
         if new_stmts and all(
             isinstance(s, RawSQL) and "preserved as a comment" in s.reason
