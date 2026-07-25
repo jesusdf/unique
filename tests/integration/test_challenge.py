@@ -19,6 +19,7 @@ import re
 
 import pytest
 
+from tests.helpers.validity import assert_statements_parse
 from unique.core.transpiler import Transpiler
 
 _CHALLENGE_DIR = pathlib.Path(__file__).resolve().parents[1] / "fixtures" / "challenge"
@@ -154,6 +155,114 @@ def test_limit_cases_warn_and_annotate_on_every_failing_target() -> None:
                 if marker in result.sql:
                     failures.append(f"{fname}[{i}] -> {target}: {marker!r}")
     assert not failures, "\n".join(failures[:20])
+
+
+def _slug(block: str) -> str:
+    """Stable id for a case = its ``xx-yyy`` header slug, else the head prose."""
+    head = block.splitlines()[0]
+    body = re.sub(r"^-- CASE(?:\[[a-z]+\])?:\s*", "", head)
+    m = re.match(r"([a-z0-9]+(?:-[a-z0-9]+)+)", body)
+    return m.group(1) if m else re.sub(r"\s+", " ", body)[:60]
+
+
+# T4 target-parse gate triage list. Each ``(fixture, case-slug, target)`` here is
+# a ``[fixed]`` case whose transpiled output does not parse in the target dialect
+# under sqlglot ``RAISE``. Two kinds live here: (a) sqlglot parser gaps — the
+# output is valid target SQL that sqlglot itself cannot parse; (b) genuine
+# emission debt tracked by an audit brief. The gate is STRICT: an entry that
+# starts parsing (fix landed, or sqlglot upgraded) fails the gate so it gets
+# removed, and an entry whose case disappears fails as stale. Fixing any of
+# these means touching ``src/`` — out of scope for this test-only step; they are
+# parked as documented debt (audit 09-fix-briefs B16 step 1).
+XFAIL_TARGET_PARSE: dict[tuple[str, str, str], str] = {
+    ("challenge_sqlserver.sql", "ts-merge-full", "oracle"): (
+        "sqlglot's oracle parser rejects the MERGE 'WHEN MATCHED THEN UPDATE "
+        "SET ... DELETE WHERE' fold (valid Oracle; see brief B4)"
+    ),
+    ("challenge_postgresql.sql", "pg-savepoint", "tsql"): (
+        "sqlglot's tsql parser does not accept 'SAVE TRANSACTION <name>' "
+        "(valid T-SQL savepoint syntax)"
+    ),
+    ("challenge_mysql.sql", "my-json-build", "tsql"): (
+        "JSON_ARRAY/JSON_OBJECT '... NULL ON NULL' clause rejected by sqlglot's "
+        "tsql parser (JSON emission debt)"
+    ),
+    ("challenge_mysql.sql", "my-set-transaction", "postgresql"): (
+        "'BEGIN READ ONLY' access mode rejected by sqlglot's postgres parser "
+        "(SET TRANSACTION lowering; see brief B8/N7)"
+    ),
+}
+
+
+def _assert_target_parse_gate(fname: str, source: str) -> None:
+    """Every ``[fixed]`` case in *fname* must transpile to each foreign target
+    and have its output parse in that target dialect (sqlglot ``RAISE``).
+
+    Uses ``assert_statements_parse``: it splits the output with the FE harness
+    splitter and parses each statement in the target dialect, EXEMPTING batches
+    the FE classifier marks PROCEDURAL (CREATE PROCEDURE / PL/SQL / DELIMITER
+    bodies sqlglot cannot parse), COMMENT (whole-statement carrier degrades),
+    EMPTY, and SET_OPTION. Known target-parse gaps are parked in
+    ``XFAIL_TARGET_PARSE`` and enforced strictly (a resolved or stale entry
+    fails the gate). Kept as ONE loop per source engine (not per case) so the
+    gate does not swell the identity-mutation denominator (challenge skill's CI
+    gotcha)."""
+    seen_xfail: set[tuple[str, str, str]] = set()
+    unexpected_fail: list[str] = []
+    resolved: list[str] = []
+    for block in _cases(fname):
+        if _status(block) != "fixed":
+            continue
+        slug = _slug(block)
+        for target in _ALL_ENGINES:
+            if target == source:
+                continue
+            key = (fname, slug, target)
+            out = _tx(block, source, target)
+            try:
+                assert_statements_parse(out, target, context=f"{fname}:{slug}")
+            except AssertionError as exc:
+                if key in XFAIL_TARGET_PARSE:
+                    seen_xfail.add(key)
+                else:
+                    unexpected_fail.append(f"{slug} -> {target}: {str(exc)[:200]}")
+            else:
+                if key in XFAIL_TARGET_PARSE:
+                    resolved.append(f"{slug} -> {target}")
+    stale = {k for k in XFAIL_TARGET_PARSE if k[0] == fname} - seen_xfail
+    msgs: list[str] = []
+    if unexpected_fail:
+        msgs.append(
+            "target-parse failures (fix the emission or add an XFAIL entry):\n  "
+            + "\n  ".join(unexpected_fail)
+        )
+    if resolved:
+        msgs.append(
+            "XFAIL entries now parse — delete them from XFAIL_TARGET_PARSE:\n  "
+            + "\n  ".join(resolved)
+        )
+    if stale:
+        msgs.append(
+            "stale XFAIL entries (no matching case) — delete them:\n  "
+            + "\n  ".join(str(k) for k in sorted(stale))
+        )
+    assert not msgs, "\n".join(msgs)
+
+
+def test_fixed_outputs_parse_in_target_from_tsql() -> None:
+    _assert_target_parse_gate("challenge_sqlserver.sql", "tsql")
+
+
+def test_fixed_outputs_parse_in_target_from_oracle() -> None:
+    _assert_target_parse_gate("challenge_oracle.sql", "oracle")
+
+
+def test_fixed_outputs_parse_in_target_from_postgresql() -> None:
+    _assert_target_parse_gate("challenge_postgresql.sql", "postgresql")
+
+
+def test_fixed_outputs_parse_in_target_from_mysql() -> None:
+    _assert_target_parse_gate("challenge_mysql.sql", "mysql")
 
 
 class TestOracleSelfQualifiedParam:
