@@ -196,23 +196,17 @@ Findings detail: audit docs 02/04/05/07.
   excluded from scoring). Pure stdlib. Tests:
   `tests/unit/test_challenge_stats.py` (25 cases, incl. a real temp git repo
   for `--batch-since`).
-- [ ] **B20–B27** small items: MERGE comment trivia, perf-budget flake
-  (process_time). *(Done 2026-07-24: B22 traceback logging via `exc_info`,
-  B26 `.dockerignore`. Done 2026-07-25: B20 PG `TABLE t` validation false
-  positive — dialect-conditional whitelist in `core/validation.py`
-  (`_is_pg_table_shorthand`); B23 removed the 5 zero-reference IR node
-  classes (`ParameterRef`, `AlterTableStatement`, `CreateIndexStatement`,
-  `CreateSequenceStatement`, `TypeReference`) and `builtins_for`, and
-  hoisted the byte-identical `_transform_exception_block` (tsql/mysql) into
-  `ProceduralTransformer` base, branching on the existing
-  `_folds_exception_scope()` hook; B24 `scripts/mutation_test.py` now
-  mutates a temporary copy of `src/` (PYTHONPATH-redirected subprocess env)
-  instead of writing mutants into the real tree — live-verified a
-  concurrent pytest run against the real `src/` stays green and file
-  hashes are unchanged while a mutation round is in flight, `--tests`/CLI/
-  output format unchanged; B27 all 5 `pip install` steps in
-  `.github/workflows/ci.yaml` now pass `-c constraints.txt` so the tested
-  closure matches the shipped image's runtime pins.)*
+- [x] **B20–B27** small items — ALL DONE. *(2026-07-24: B22 traceback
+  logging via `exc_info`, B26 `.dockerignore`. 2026-07-25: B20 PG `TABLE t`
+  validation whitelist (`_is_pg_table_shorthand`); B21 MERGE comment trivia —
+  leading standalone comment preserved once, inline comment no longer
+  duplicated (`test_merge_comment_trivia.py`); B23 removed the 5
+  zero-reference IR node classes and `builtins_for`, hoisted the duplicated
+  `_transform_exception_block` to the transformer base; B24
+  `scripts/mutation_test.py` mutates a temp copy of `src/` (live-verified
+  the real tree stays untouched mid-run); B25 perf budgets measure CPU time
+  (+12s northwind margin) — load flake dead; B27 all 5 CI `pip install`
+  steps pin to `constraints.txt`.)*
 - [ ] **Architect follow-up from B27** (2026-07-25): `constraints.txt` is
   hand-regenerated (`pip install . && pip freeze --exclude-editable`) and
   nothing forces it to stay current now that CI enforces it as an install
@@ -222,15 +216,25 @@ Findings detail: audit docs 02/04/05/07.
   part of cutting a release, or wire a periodic CI job that does so.
 - [ ] **B28** feature briefs when scheduled: `#temp`-in-procedure wiring,
   top-level `BEGIN TRY/CATCH` routing (currently honest warned degrades).
-- [ ] **RED seeds from the B2 sweep** (2026-07-24): (a) `Create.properties`
+- [x] **RED seeds from the B2 sweep** (2026-07-24): (a) `Create.properties`
   is allowlisted as cosmetic but bundles view modifiers (`WITH CHECK OPTION`,
   `SCHEMABINDING`) the VIEW converter currently drops — probe, and split the
   allowlist if semantic; (b) `INSERT IGNORE` (`Insert.ignore`) — folded into
-  B1's scope as the DO NOTHING-class upsert (done).
-- [ ] **RED seed from B13** (2026-07-25): standalone `JSON_QUERY(x, path)`
+  B1's scope as the DO NOTHING-class upsert (done). *(Done 2026-07-25: (a)
+  `WITH [CASCADED|LOCAL] CHECK OPTION` is modelled pre-parse (sqlglot cannot
+  parse it) and re-emitted on every target (unscoped on T-SQL/Oracle);
+  non-portable modifiers (SCHEMABINDING, ALGORITHM=, …) are kept on the
+  owning engine and warned-dropped elsewhere; the `Create.properties`
+  allowlist entry is removed — an unread `properties` warns again.
+  `tests/integration/test_create_view_modifiers.py`, live CHECK OPTION
+  enforcement verified on MySQL.)*
+- [x] **RED seed from B13** (2026-07-25): standalone `JSON_QUERY(x, path)`
   T-SQL→Oracle converts to `JSON_EXTRACT(...)` as *executable* output —
   Oracle has no `JSON_EXTRACT`; probe and route through the per-target JSON
-  accessor mapping or degrade warned.
+  accessor mapping or degrade warned. *(Done 2026-07-25: tsql/oracle-source
+  object extraction emits native `JSON_QUERY` on tsql/oracle and
+  `JSONB_PATH_QUERY_FIRST` on PG; MySQL keeps `JSON_EXTRACT`. Live value
+  verified on Oracle. `tests/integration/test_json_query_accessor.py`.)*
 - [ ] **RED seed from B17b** (2026-07-25): `SELECT 2||3` Oracle→PostgreSQL
   emits bare `2 || 3` — PG rejects `integer || integer` (Oracle implicitly
   casts to varchar and returns '23'). Needs an operand cast
