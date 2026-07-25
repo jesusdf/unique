@@ -184,8 +184,14 @@ Findings detail: audit docs 02/04/05/07.
     uncovered `[fixed]` MySQL case a dedicated per-target present+absent (or
     warned-degrade) assertion — 141 cases / 390 parametrized items, all fail
     under the identity transpiler. Overall identity kill rate 66% -> 71%.
-    `SUSPECT_CASES` empty (no silent-loss/invalid found). Remaining: the
-    sqlserver/oracle source batches (in progress).
+    `SUSPECT_CASES` empty (no silent-loss/invalid found). 
+  - tsql-source batch done 2026-07-25:
+    `tests/integration/test_challenge_assertions_sqlserver.py` — dedicated
+    present/absent (or warned-degrade) assertions for the 57 `[fixed]`
+    `challenge_sqlserver.sql` cases that had no dedicated test (160 `(case,
+    target)` nodes; native-passthrough targets omitted so every node kills the
+    identity mutant). Identity kill rate 66% → 68% (1765/2660 → 1925/2821). No
+    SUSPECT cases found. Remaining: oracle/postgresql/mysql source batches.
 - [ ] **B17** Emitter debt: arm ratchet gates (T3) + complexity lint (T6),
   de-regex the two guardrail violations (F1/F2), split `emit.py` along the
   doc-04 seams.
