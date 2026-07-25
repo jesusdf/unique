@@ -80,6 +80,13 @@ where = ["src"]
     "static/*.png",
     "static/*.ico",
 ]
+# The output gate's built-in catalogs. Missing package data crashes the
+# installed wheel at runtime (FileNotFoundError in the gate) while the
+# repo checkout keeps working, so tests/unit/test_package_data.py fails
+# the suite whenever a non-.py file under src/unique is not covered here.
+"unique.core" = [
+    "data/builtins/*.txt",
+]
 
 [tool.black]
 # Pin the exact formatter version. black changes its formatting between releases,
