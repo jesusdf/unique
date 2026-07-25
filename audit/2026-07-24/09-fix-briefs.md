@@ -584,6 +584,49 @@ always; batch-gate only when RED batches run, via a manual flag).
   write when scheduled (the current warned degrades are honest, so they are
   P3 enhancements, not invariant violations).
 
+## B28 feature briefs (authored 2026-07-25 — enhancements, current degrades are honest)
+
+### B28a — `#temp` tables inside converted procedures (02 improvement #3)
+
+**Symptom:** the composition `CREATE PROCEDURE … SELECT INTO #w … cursor over
+#w` (T-SQL source) degrades piecemeal: plpgsql gets `SELECT … INTO TEMPORARY w`
+(invalid inside plpgsql — INTO means variable there), Oracle gets a
+`SELECT … INTO <table>` PLS error and a 23ai-only `DROP TABLE IF EXISTS`, all
+under one generic warning. Warned → honest, so a P3 feature, not a defect.
+**Approach:** wire `#temp` in routine bodies through the machinery that already
+exists for the pieces: the PG path rewrites `SELECT INTO #w` →
+`CREATE TEMPORARY TABLE w AS SELECT` (statement form valid in plpgsql via
+EXECUTE-free direct DDL) and renames later refs (the script-wide rename map
+from the N2-class fix); the Oracle path hoists `#w` to the GTT pattern the
+`@table`-variable path already uses (declare GTT before the routine, DELETE
+instead of DROP); MySQL native `CREATE TEMPORARY TABLE`. The transformer
+already tracks TEMP_TABLES ContextVar — extend it to routine scope.
+**Tests-first:** the composition fixture per target + live execution (proc
+created, called twice — temp isolation per call verified); round-trip.
+**Acceptance:** the N-probe from audit 02 improvement #3 compiles and runs
+live on pg/oracle/mysql with equal result sets; warnings only where a real
+limitation remains. **Blast radius:** procedural transformer base + per-target,
+TEMP_TABLES handling; medium. **Tier:** Opus.
+
+### B28b — top-level `BEGIN TRY/CATCH` routed to the procedural engine (02 improvement #4)
+
+**Symptom:** a batch-level TRY/CATCH (very common in migration scripts)
+degrades to `Unhandled expression type: Command` (warned). The procedural
+engine already converts TRY/CATCH *inside* routines.
+**Approach:** classify the top-level `BEGIN TRY … END CATCH` batch as
+PROCEDURAL in `batch_splitter.classify_batch` (exactly the shape of the
+IF-guard fix from 07-08 P1: route to the engine, don't regex-transform),
+wrapping it as an anonymous block for the transformer, which lowers it per
+target (PG DO $$ EXCEPTION, Oracle BEGIN EXCEPTION, MySQL handler-in-proc or
+documented degrade — reuse the in-routine lowering).
+**Tests-first:** classification unit test; per-target lowering probes (present
+AND absent: no `BEGIN TRY` outside tsql); live execution of a
+raise-and-recover scenario on pg/oracle; MySQL documented outcome.
+**Acceptance:** the audit probe converts on pg/oracle with equal observable
+behavior (error swallowed/logged per source semantics); no silent loss
+anywhere. **Blast radius:** batch_splitter + procedural transformer;
+medium-small. **Tier:** Opus.
+
 ## Suggested worker tier per brief (agentic team mode — see the workflow skill)
 
 Delegate each brief to the cheapest model tier its residual judgment allows;
