@@ -7285,13 +7285,17 @@ class TestWave199CteDeleteUsingAlterUsing:
         assert "USING" not in out.upper(), out
 
     def test_alter_using_redundant_cast_strips(self) -> None:
+        # B10: the stripped type change re-states nullability like the
+        # USING-less form — table t is not created in-script, so the
+        # unknown-nullability note accompanies the best-effort statement.
         out = _t2(
             "alter table t alter column name integer" " using cast(name as integer);",
             "postgresql",
             "tsql",
         )
         assert "USING" not in out.upper(), out
-        assert re.search(r"(?i)ALTER COLUMN name INTEGER", out), out
+        assert re.search(r"(?i)ALTER COLUMN name INT\b", out), out
+        assert "UNIQUE:" in out and "nullability" in out, out
 
     def test_alter_using_expression_carriers(self) -> None:
         out = _t2(
@@ -8296,3 +8300,96 @@ class TestWave239MultiObjectDrop:
     def test_multi_drop_view(self) -> None:
         out = _t2("drop view v1, v2;", "postgresql", "mysql")
         assert out.upper().count("DROP VIEW") == 2, out
+
+
+def _r2(sql: str, source: str, target: str):
+    return Transpiler().transpile(sql, source=source, target=target)
+
+
+class TestB10RunningColumnTypeAlterNullability:
+    """B10 / audit 2026-07-24 N9: the COLUMN_TYPES harvest is a *running*
+    statement-order scan (ALTER … TYPE / ADD COLUMN fold), and the T-SQL
+    ``ALTER COLUMN <c> <type>`` emission re-states the column's known
+    nullability instead of silently defaulting it to NULL and reverting the
+    type. The exact N9 three-statement script drove both halves."""
+
+    _N9 = (
+        "CREATE TABLE t (a INT NOT NULL, b TEXT);\n"
+        "ALTER TABLE t ALTER COLUMN a TYPE BIGINT;\n"
+        "ALTER TABLE t ALTER COLUMN a DROP NOT NULL;"
+    )
+
+    def test_n9_tsql_restates_notnull_and_keeps_new_type(self) -> None:
+        out = _t2(self._N9, "postgresql", "tsql")
+        # (i) the type change re-states the known NOT NULL constraint
+        assert re.search(r"(?i)ALTER COLUMN a BIGINT NOT NULL", out), out
+        # (ii) the later DROP NOT NULL sees the *new* type (BIGINT), not INT
+        assert re.search(r"(?i)ALTER COLUMN a BIGINT NULL", out), out
+        # the type never silently reverts to INT in an ALTER
+        assert not re.search(r"(?i)ALTER COLUMN a INT\b", out), out
+        assert not out.strip().endswith("UNIQUE:"), out
+
+    def test_n9_no_spurious_warning_when_known(self) -> None:
+        res = _r2(self._N9, "postgresql", "tsql")
+        assert res.warnings == [], res.warnings
+
+    def test_add_column_folds_into_running_map(self) -> None:
+        # improvement #8: ADD COLUMN's type/nullability feed a later ALTER TYPE.
+        sql = (
+            "CREATE TABLE t (a INT);\n"
+            "ALTER TABLE t ADD COLUMN c SMALLINT NOT NULL;\n"
+            "ALTER TABLE t ALTER COLUMN c TYPE BIGINT;"
+        )
+        out = _t2(sql, "postgresql", "tsql")
+        assert re.search(r"(?i)ALTER COLUMN c BIGINT NOT NULL", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_unknown_column_warns(self) -> None:
+        # A table ALTERed but never CREATEd in-script: nullability is unknown,
+        # so the emission warns instead of silently defaulting to NULL.
+        res = _r2(
+            "ALTER TABLE wtb10_ext ALTER COLUMN x TYPE BIGINT;",
+            "postgresql",
+            "tsql",
+        )
+        assert "UNIQUE:" in res.sql, res.sql
+        assert res.warnings, res.warnings
+        # best-effort executable statement still present
+        assert re.search(r"(?i)ALTER COLUMN x BIGINT", res.sql), res.sql
+
+    def test_add_nullable_column_then_type_change_restates_null(self) -> None:
+        sql = (
+            "CREATE TABLE t (a INT);\n"
+            "ALTER TABLE t ADD COLUMN c SMALLINT;\n"
+            "ALTER TABLE t ALTER COLUMN c TYPE BIGINT;"
+        )
+        out = _t2(sql, "postgresql", "tsql")
+        assert re.search(r"(?i)ALTER COLUMN c BIGINT NULL", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_type_change_kept_pg(self) -> None:
+        out = _t2(self._N9, "postgresql", "postgresql")
+        assert re.search(r"(?i)ALTER COLUMN a (?:SET DATA )?TYPE BIGINT", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_rename_column_folds_into_running_map(self) -> None:
+        sql = (
+            "CREATE TABLE t (a INT NOT NULL);\n"
+            "ALTER TABLE t RENAME COLUMN a TO a2;\n"
+            "ALTER TABLE t ALTER COLUMN a2 TYPE BIGINT;"
+        )
+        out = _t2(sql, "postgresql", "tsql")
+        assert re.search(r"(?i)ALTER COLUMN a2 BIGINT NOT NULL", out), out
+        assert "UNIQUE:" not in out, out
+
+    def test_redundant_using_cast_strip_restates_known_notnull(self) -> None:
+        # Neighbor: the USING-redundant-cast strip (wave 199) is a type
+        # change too — it must re-state nullability like the plain form.
+        sql = (
+            "CREATE TABLE t (a INT NOT NULL);\n"
+            "ALTER TABLE t ALTER COLUMN a TYPE BIGINT USING CAST(a AS BIGINT);"
+        )
+        out = _t2(sql, "postgresql", "tsql")
+        assert re.search(r"(?i)ALTER COLUMN a BIGINT NOT NULL", out), out
+        assert "USING" not in out.upper(), out
+        assert "UNIQUE:" not in out, out

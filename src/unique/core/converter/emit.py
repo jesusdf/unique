@@ -1655,6 +1655,31 @@ def _tsql_drop_col_default(table: str, column: str) -> str:
     )
 
 
+def _tsql_alter_type_restating_nullability(table: str, col: str, dtype: str) -> str:
+    """T-SQL ``ALTER COLUMN <col> <type>`` re-stating the column's known
+    nullability. T-SQL defaults an unspecified nullability to NULL, silently
+    dropping a NOT NULL constraint the source's type change preserves (audit
+    2026-07-24 N9); the running COLUMN_NOT_NULL map says which to re-state.
+    When the script never defined the column (a table it did not create
+    in-script), the emission is a warned best-effort statement instead."""
+    dtype = _portable_types_in_sql(dtype, "tsql")
+    known = (
+        (COLUMN_NOT_NULL.get() or {})
+        .get(table.split(".")[-1].strip('[]"`').lower(), {})
+        .get(col.split(".")[-1].strip('[]"`').lower())
+    )
+    if known is True:
+        return f"ALTER TABLE {table} ALTER COLUMN {col} {dtype} NOT NULL"
+    if known is False:
+        return f"ALTER TABLE {table} ALTER COLUMN {col} {dtype} NULL"
+    return (
+        f"-- UNIQUE: T-SQL ALTER COLUMN defaults the column to NULL; "
+        f"the script does not define {table}.{col}'s nullability, so it "
+        f"cannot be re-stated — verify the column keeps its "
+        f"constraint\nALTER TABLE {table} ALTER COLUMN {col} {dtype}"
+    )
+
+
 def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     """Re-transpile a passthrough statement to the target dialect.
 
@@ -1711,6 +1736,18 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 node.sql,
                 count=1,
             ),
+        )
+
+    # Running-scan fold: a type/ADD/RENAME/nullability ALTER updates the
+    # cross-statement COLUMN_TYPES / COLUMN_NOT_NULL maps in statement order,
+    # so a LATER statement (this same table's DROP NOT NULL, another ALTER
+    # TYPE) reads the current type/nullability rather than the stale CREATE
+    # TABLE snapshot (audit 2026-07-24 N9). Idempotent, so safe if re-emitted.
+    if node.kind == "ALTER":
+        from unique.core.converter.harvest import fold_alter_into_running_types
+
+        fold_alter_into_running_types(
+            node.sql, node.source_dialect, COLUMN_TYPES.get(), COLUMN_NOT_NULL.get()
         )
 
     # ``ALTER TABLE t MODIFY [COLUMN] c <type>`` changes a column's type; sqlglot
@@ -1784,6 +1821,24 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                 _t2, _c2, _ty2 = m_ty.groups()
                 _ty2 = _portable_types_in_sql(_ty2, "oracle")
                 return f"ALTER TABLE {_t2} MODIFY {_c2} {_ty2}"
+
+        # PostgreSQL ``ALTER COLUMN c [SET DATA] TYPE t`` -> T-SQL ``ALTER
+        # COLUMN c t`` — but T-SQL DEFAULTS an unspecified nullability to NULL,
+        # silently dropping a NOT NULL constraint PG's TYPE change preserves
+        # (audit 2026-07-24 N9). Re-state the column's known nullability from
+        # the running COLUMN_NOT_NULL map; warn when the script never defined
+        # the column (a table it did not create in-script). The USING-clause
+        # forms have their own handler below (redundant-cast strip / carrier),
+        # so match only the plain type-only form here.
+        if dialect == "tsql" and node.source_dialect == "postgresql":
+            m_tt = re.match(
+                r"(?is)^\s*ALTER\s+TABLE\s+(\S+)\s+ALTER\s+COLUMN\s+(\S+)\s+"
+                r"(?:SET\s+DATA\s+)?TYPE\s+([A-Za-z0-9_]+(?:\s*\([\d,\s]*\))?)"
+                r"\s*;?\s*$",
+                node.sql,
+            )
+            if m_tt:
+                return _tsql_alter_type_restating_nullability(*m_tt.groups())
 
         # ``ALTER COLUMN c DROP DEFAULT``: Oracle spells it MODIFY c DEFAULT NULL.
         # T-SQL has no column-level drop — a default is a named constraint whose
@@ -2120,6 +2175,19 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
                     r"(?is)\s+USING\s+CAST.*$", "", node.sql.rstrip().rstrip(";")
                 ),
             )
+            # The stripped statement is a plain type change: T-SQL must
+            # re-state the column's known nullability like the USING-less
+            # form (audit 2026-07-24 N9) — same helper, TYPE optional here
+            # (the strip accepts the keyword-less spelling).
+            if dialect == "tsql":
+                m_st = re.match(
+                    r"(?is)^\s*ALTER\s+TABLE\s+(\S+)\s+ALTER\s+COLUMN\s+(\S+)\s+"
+                    r"(?:SET\s+DATA\s+)?(?:TYPE\s+)?"
+                    r"([A-Za-z0-9_]+(?:\s*\([\d,\s]*\))?)\s*;?\s*$",
+                    node.sql,
+                )
+                if m_st:
+                    return _tsql_alter_type_restating_nullability(*m_st.groups())
         else:
             return (
                 f"-- UNIQUE: {dialect} has no ALTER COLUMN … USING conversion "
