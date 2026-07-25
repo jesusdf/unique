@@ -192,6 +192,21 @@ Findings detail: audit docs 02/04/05/07.
     target)` nodes; native-passthrough targets omitted so every node kills the
     identity mutant). Identity kill rate 66% → 68% (1765/2660 → 1925/2821). No
     SUSPECT cases found. Remaining: oracle/postgresql/mysql source batches.
+  - oracle-source batch done 2026-07-25:
+    `tests/integration/test_challenge_assertions_oracle.py` — dedicated
+    present-AND-absent (or warned-degrade) assertions for the 79
+    `[fixed]`/untagged `challenge_oracle.sql` cases that had no dedicated test
+    (cases already asserted in `test_challenge.py`, and all `[limit]` cases,
+    are skipped). Declarative `CASES` table + one parametrized runner per
+    foreign target (tsql/postgresql/mysql); 213 `(case, target)` nodes,
+    checked on comment-stripped output, native-passthrough directions omitted
+    so every node kills the identity mutant. Controlled A/B on this worktree:
+    identity kill rate 66% → 69% (1765/2660 → 1978/2875). One `SUSPECT_CASES`
+    entry — `ora-dttypes`→postgresql silently emits the invalid PG type
+    `TIMESTAMPLTZ` (from Oracle `TIMESTAMP WITH LOCAL TIME ZONE`) with no
+    warning/carrier (sqlglot's lenient parse hides it, so the T4 target-parse
+    gate misses it too); left unasserted — the fix is a src/ change. Remaining:
+    postgresql/mysql/tsql source batches.
 - [ ] **B17** Emitter debt: arm ratchet gates (T3) + complexity lint (T6),
   de-regex the two guardrail violations (F1/F2), split `emit.py` along the
   doc-04 seams.
