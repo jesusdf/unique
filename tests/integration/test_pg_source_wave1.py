@@ -5516,7 +5516,12 @@ class TestEStringsInBodies:
         )
         out = _t(src, "tsql")
         assert not re.search(r"(?i)\bE\s+'", out), out
-        assert "foo\\bar" in out, out
+        # Since B13 the whole-routine degrade carrier quotes the ORIGINAL
+        # routine text — so the E-string keeps its source spelling verbatim
+        # (stronger than the old decoded-re-render assertion: the exact
+        # user-written literal must survive, not a normalization of it).
+        assert "E'foo\\\\bar'" in out, out
+        assert "-- UNIQUE:" in out, out
 
 
 class TestWave144TupleColumnAndTempFn:
