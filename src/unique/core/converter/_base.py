@@ -174,6 +174,18 @@ COLUMN_TYPES: contextvars.ContextVar[dict[str, dict[str, str]] | None] = (
 )
 
 
+# Per-column NOT NULL knowledge harvested alongside COLUMN_TYPES (table ->
+# {column -> True if declared NOT NULL else False}, lowercase keys; an absent
+# column is unknown). Companion to COLUMN_TYPES for the running ALTER scan: a
+# T-SQL ``ALTER COLUMN c <type>`` must RE-STATE nullability (it defaults the
+# column to NULL otherwise, silently dropping a NOT NULL constraint — audit
+# 2026-07-24 N9). Both maps are folded in statement order as ALTER/ADD/RENAME
+# statements are emitted.
+COLUMN_NOT_NULL: contextvars.ContextVar[dict[str, dict[str, bool]] | None] = (
+    contextvars.ContextVar("column_not_null", default=None)
+)
+
+
 # PRIMARY KEY / UNIQUE column tuples per table harvested from the script's own
 # CREATE TABLEs (table -> list of key column-tuples, PK first, lowercase keys).
 # An upsert with no explicit conflict target (MySQL ``ON DUPLICATE KEY UPDATE``
@@ -1038,6 +1050,7 @@ def _object_id_name(node: TableRef) -> str:
 
 __all__ = [
     "COLUMN_TYPES",
+    "COLUMN_NOT_NULL",
     "PK_UNIQUE_COLUMNS",
     "DATE_COLUMNS",
     "IDENTITY_COLUMNS",

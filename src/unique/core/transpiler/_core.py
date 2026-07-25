@@ -22,6 +22,7 @@ from unique.core.ast_nodes import (
 )
 from unique.core.batch_splitter import _TSQL_SYSTEM_PROCS, BatchSplitter, BatchType
 from unique.core.converter import (
+    COLUMN_NOT_NULL,
     COLUMN_TYPES,
     DATE_COLUMNS,
     DEGRADED_ROUTINES,
@@ -37,6 +38,7 @@ from unique.core.converter import (
     TSQL_ALIAS_TYPES,
     TSQL_BIT_COLUMNS,
     USER_FUNCTIONS,
+    harvest_column_not_null,
     harvest_column_types,
     harvest_date_columns,
     harvest_identity_columns,
@@ -250,11 +252,17 @@ class Transpiler:
         # TABLEs (MySQL/T-SQL ALTERs re-state the type; LOB expression
         # indexes degrade).
         column_types_token = None
+        column_not_null_token = None
         pk_unique_token = None
         if source != target:
             column_types = harvest_column_types(sql)
             if column_types:
                 column_types_token = COLUMN_TYPES.set(column_types)
+            # NOT NULL knowledge feeds the T-SQL ALTER COLUMN re-statement and
+            # is folded (with the types) in statement order as ALTERs emit.
+            column_not_null = harvest_column_not_null(sql)
+            if column_not_null:
+                column_not_null_token = COLUMN_NOT_NULL.set(column_not_null)
             # PK/UNIQUE keys let an upsert with no explicit conflict target
             # (MySQL ON DUPLICATE KEY / INSERT IGNORE) lower to a PG conflict
             # target or a T-SQL/Oracle MERGE ON condition.
@@ -523,6 +531,8 @@ class Transpiler:
                 TEMP_TABLES.reset(temp_tables_token)
             if column_types_token is not None:
                 COLUMN_TYPES.reset(column_types_token)
+            if column_not_null_token is not None:
+                COLUMN_NOT_NULL.reset(column_not_null_token)
             if pk_unique_token is not None:
                 PK_UNIQUE_COLUMNS.reset(pk_unique_token)
             if proc_date_token is not None:

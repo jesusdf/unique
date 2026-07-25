@@ -233,6 +233,184 @@ def harvest_column_types(sql: str) -> dict[str, dict[str, str]]:
     return result
 
 
+def harvest_column_not_null(sql: str) -> dict[str, dict[str, bool]]:
+    """Per-column NOT NULL knowledge from the script's own CREATE TABLEs
+    (table -> {column -> True if declared NOT NULL else False}, lowercase
+    keys). Companion to :func:`harvest_column_types` for the running
+    ALTER-nullability scan; an absent column means the nullability is unknown.
+    Column-level and table-level ``PRIMARY KEY`` imply NOT NULL."""
+    from unique.core.converter._base import _split_top_level_commas
+
+    result: dict[str, dict[str, bool]] = {}
+    for m in _CT_HEAD_RE.finditer(sql):
+        depth, i = 1, m.end()
+        while i < len(sql) and depth:
+            ch = sql[i]
+            if ch == "'":
+                i += 1
+                while i < len(sql):
+                    if sql[i : i + 2] == "''":
+                        i += 2
+                        continue
+                    if sql[i] == "'":
+                        break
+                    i += 1
+            elif ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            i += 1
+        body = sql[m.end() : i - 1]
+        table = m.group(1).replace("[", "").replace("]", "").replace('"', "")
+        table = table.split(".")[-1].lstrip("#").lower()
+        cols: dict[str, bool] = {}
+        pk_cols: tuple[str, ...] = ()
+        for item in _split_top_level_commas(body):
+            s = item.strip()
+            mk = re.match(r"(?is)^(?:CONSTRAINT\s+\S+\s+)?PRIMARY\s+KEY\s*\((.*?)\)", s)
+            if mk:
+                pk_cols = _key_column_list(mk.group(1))
+                continue
+            cm = re.match(r'\s*(\[[^\]]+\]|`[^`]+`|"[^"]+"|\w+)\s+', s)
+            if not cm:
+                continue
+            name = cm.group(1).strip('[]"`')
+            if name.upper() in _CT_ELEMENT_HEADS:
+                continue
+            not_null = bool(re.search(r"(?i)\bNOT\s+NULL\b", s)) or bool(
+                re.search(r"(?i)\bPRIMARY\s+KEY\b", s)
+            )
+            cols[name.lower()] = not_null
+        for c in pk_cols:
+            if c in cols:
+                cols[c] = True
+        if cols:
+            result[table] = cols
+    return result
+
+
+# One ALTER TABLE statement, split into the target table and the trailing
+# action text (the running-scan fold parses the action per source dialect).
+_ALTER_TABLE_HEAD_RE = re.compile(r"(?is)^\s*ALTER\s+TABLE\s+([\w.\[\]\"`#]+)\s+(.*)$")
+_ALTER_TYPE_TAIL = r"([A-Za-z]\w*(?:\s*\([\d,\s]*\))?)"
+
+
+def _norm_ident(text: str) -> str:
+    """Bare lowercase identifier (last dotted segment, quotes/brackets/# off)."""
+    return text.split(".")[-1].lstrip("#").strip('[]"`').lower()
+
+
+def fold_alter_into_running_types(
+    sql: str,
+    source_dialect: str,
+    col_types: dict[str, dict[str, str]] | None,
+    col_not_null: dict[str, dict[str, bool]] | None,
+) -> None:
+    """Apply one ALTER TABLE statement's column-shape change to the running
+    COLUMN_TYPES / COLUMN_NOT_NULL maps **in place**, in statement order:
+    ``ALTER/MODIFY COLUMN … TYPE``, ``ADD COLUMN``, ``RENAME COLUMN`` and
+    ``DROP/SET NOT NULL``. A no-op when neither map tracks the table (a table
+    the script did not create in-script → the warned path).
+    """
+    if col_types is None and col_not_null is None:
+        return
+    m = _ALTER_TABLE_HEAD_RE.match(sql.strip())
+    if not m:
+        return
+    table = _norm_ident(m.group(1))
+    body = m.group(2).strip().rstrip(";").strip()
+    ct = col_types.get(table) if col_types is not None else None
+    nn = col_not_null.get(table) if col_not_null is not None else None
+    if ct is None and nn is None:
+        return  # table not created in-script
+
+    # RENAME COLUMN old TO new — move both maps' keys.
+    mr = re.match(
+        r'(?is)^RENAME\s+(?:COLUMN\s+)?([\w\[\]"`]+)\s+TO\s+([\w\[\]"`]+)', body
+    )
+    if mr:
+        old, new = _norm_ident(mr.group(1)), _norm_ident(mr.group(2))
+        if ct is not None and old in ct:
+            ct[new] = ct.pop(old)
+        if nn is not None and old in nn:
+            nn[new] = nn.pop(old)
+        return
+
+    # ADD [COLUMN] c <type> [NOT NULL …] — record the new column.
+    ma = re.match(
+        r'(?is)^ADD\s+(?:COLUMN\s+)?([\w\[\]"`]+)\s+' + _ALTER_TYPE_TAIL + r"(.*)$",
+        body,
+    )
+    if ma and _norm_ident(ma.group(1)).upper() not in _CT_ELEMENT_HEADS:
+        col = _norm_ident(ma.group(1))
+        if ct is not None:
+            ct[col] = ma.group(2).strip()
+        if nn is not None:
+            nn[col] = bool(re.search(r"(?i)\bNOT\s+NULL\b", ma.group(3)))
+        return
+
+    # DROP/SET NOT NULL — update nullability only.
+    md = re.match(
+        r'(?is)^ALTER\s+(?:COLUMN\s+)?([\w\[\]"`]+)\s+(DROP|SET)\s+NOT\s+NULL', body
+    )
+    if md:
+        if nn is not None:
+            nn[_norm_ident(md.group(1))] = md.group(2).upper() == "SET"
+        return
+
+    # Type change — spelling differs per source dialect.
+    col_type = _alter_type_change(source_dialect, body)
+    if col_type is not None:
+        col, new_type, restated_null = col_type
+        if ct is not None:
+            ct[col] = new_type
+        # MySQL MODIFY resets column attributes: a bare MODIFY drops NOT NULL
+        # unless restated. PG/Oracle/T-SQL type changes preserve nullability.
+        if nn is not None and source_dialect == "mysql":
+            nn[col] = restated_null
+
+
+def _alter_type_change(source_dialect: str, body: str) -> tuple[str, str, bool] | None:
+    """Parse a type-change ALTER body for *source_dialect*; return
+    (column, declared-type-SQL, restated-NOT-NULL) or None."""
+    if source_dialect == "postgresql":
+        mt = re.match(
+            r'(?is)^ALTER\s+(?:COLUMN\s+)?([\w\[\]"`]+)\s+'
+            r"(?:SET\s+DATA\s+)?TYPE\s+" + _ALTER_TYPE_TAIL,
+            body,
+        )
+    elif source_dialect == "oracle":
+        mt = re.match(
+            r'(?is)^MODIFY\s*\(?\s*(?:COLUMN\s+)?([\w\[\]"`]+)\s+' + _ALTER_TYPE_TAIL,
+            body,
+        )
+    elif source_dialect == "mysql":
+        # MODIFY only; MySQL CHANGE (rename+retype) is split upstream and out of
+        # this scan's scope. MODIFY resets attributes unless the tail restates.
+        mt = re.match(
+            r'(?is)^MODIFY\s+(?:COLUMN\s+)?([\w\[\]"`]+)\s+'
+            + _ALTER_TYPE_TAIL
+            + r"(.*)$",
+            body,
+        )
+        if mt:
+            return (
+                _norm_ident(mt.group(1)),
+                mt.group(2).strip(),
+                bool(re.search(r"(?i)\bNOT\s+NULL\b", mt.group(3))),
+            )
+        return None
+    elif source_dialect == "tsql":
+        mt = re.match(
+            r'(?is)^ALTER\s+COLUMN\s+([\w\[\]"`]+)\s+' + _ALTER_TYPE_TAIL, body
+        )
+    else:
+        return None
+    if not mt:
+        return None
+    return (_norm_ident(mt.group(1)), mt.group(2).strip(), False)
+
+
 def _key_column_list(text: str) -> tuple[str, ...]:
     """Split a parenthesized key column list into bare lowercase names."""
     from unique.core.converter._base import _split_top_level_commas
