@@ -33,30 +33,37 @@ def _parse_ok(sql: str, target: str) -> None:
 class TestCheckOption:
     SRC = "CREATE VIEW v AS SELECT id, val FROM t WHERE val > 0 WITH CHECK OPTION;"
 
-    def _assert_transpiled(self, out: str, target: str) -> str:
+    def _assert_transpiled(
+        self, out: str, target: str, present: str, absent: str | None = None
+    ) -> None:
         # The view must transpile as real code (not a Command carrier that
-        # merely comments the untranslated original).
+        # merely comments the untranslated original). All string assertions
+        # run BEFORE the target-parse gate: a no-op (identity) output must
+        # fail fast here — sqlglot's error path hangs on the raw
+        # ``WITH CASCADED CHECK OPTION`` spelling under the oracle reader.
         code = _code_lines(out).upper()
         assert "UNHANDLED" not in out.upper(), out
         assert "CREATE" in code and "VIEW" in code and "SELECT" in code, out
+        assert present in code, out
+        if absent is not None:
+            assert absent not in code, out
         _parse_ok(out, target)
-        return code
 
     def test_pg_to_mysql_keeps_check_option(self) -> None:
         out = Transpiler().transpile(self.SRC, "postgresql", "mysql").sql
-        assert "WITH CHECK OPTION" in self._assert_transpiled(out, "mysql"), out
+        self._assert_transpiled(out, "mysql", "WITH CHECK OPTION")
 
     def test_mysql_to_postgresql_keeps_check_option(self) -> None:
         out = Transpiler().transpile(self.SRC, "mysql", "postgresql").sql
-        assert "WITH CHECK OPTION" in self._assert_transpiled(out, "postgresql"), out
+        self._assert_transpiled(out, "postgresql", "WITH CHECK OPTION")
 
     def test_pg_to_oracle_keeps_check_option(self) -> None:
         out = Transpiler().transpile(self.SRC, "postgresql", "oracle").sql
-        assert "WITH CHECK OPTION" in self._assert_transpiled(out, "oracle"), out
+        self._assert_transpiled(out, "oracle", "WITH CHECK OPTION")
 
     def test_pg_to_tsql_keeps_check_option(self) -> None:
         out = Transpiler().transpile(self.SRC, "postgresql", "tsql").sql
-        assert "WITH CHECK OPTION" in self._assert_transpiled(out, "tsql"), out
+        self._assert_transpiled(out, "tsql", "WITH CHECK OPTION")
 
     def test_mysql_scoped_check_option_downgraded_for_oracle(self) -> None:
         src = (
@@ -64,10 +71,8 @@ class TestCheckOption:
             "WITH CASCADED CHECK OPTION;"
         )
         out = Transpiler().transpile(src, "mysql", "oracle").sql
-        code = self._assert_transpiled(out, "oracle")
         # Oracle has no LOCAL/CASCADED scope — the plain form remains.
-        assert "WITH CHECK OPTION" in code, out
-        assert "CASCADED" not in code, out
+        self._assert_transpiled(out, "oracle", "WITH CHECK OPTION", absent="CASCADED")
 
     def test_mysql_scoped_check_option_kept_for_postgresql(self) -> None:
         src = (
@@ -75,9 +80,8 @@ class TestCheckOption:
             "WITH CASCADED CHECK OPTION;"
         )
         out = Transpiler().transpile(src, "mysql", "postgresql").sql
-        code = self._assert_transpiled(out, "postgresql")
         # PostgreSQL supports the scoped form.
-        assert "CASCADED CHECK OPTION" in code, out
+        self._assert_transpiled(out, "postgresql", "CASCADED CHECK OPTION")
 
 
 class TestNonPortableModifiersWarn:
