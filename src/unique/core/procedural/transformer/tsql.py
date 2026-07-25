@@ -695,9 +695,7 @@ class TSqlTransformer(ProceduralTransformer):
                 "preserved as a comment"
             )
             self._warnings.append(reason)
-            from unique.core.procedural.emitter import ProceduralEmitter
-
-            original = ProceduralEmitter(self._source).emit(node)
+            original = self._preserved_sql(node)
             return RawSQL(sql=original, reason=reason)
         return result
 
@@ -738,10 +736,7 @@ class TSqlTransformer(ProceduralTransformer):
                 "as a comment"
             )
             self._warnings.append(reason)
-            from unique.core.procedural.emitter import ProceduralEmitter
-
-            original = ProceduralEmitter("postgresql").emit(node)
-            return RawSQL(sql=original, reason=reason)
+            return RawSQL(sql=self._preserved_sql(node, "postgresql"), reason=reason)
         kept = self._rename_transition_aliases(kept, node.referencing)
         kept = self._substitute_tg_constants(kept, node)
         if self._contains_raw_text(kept, "TG_ARGV"):
@@ -753,10 +748,7 @@ class TSqlTransformer(ProceduralTransformer):
                 "index; trigger preserved as a comment"
             )
             self._warnings.append(reason)
-            from unique.core.procedural.emitter import ProceduralEmitter
-
-            original = ProceduralEmitter("postgresql").emit(node)
-            return RawSQL(sql=original, reason=reason)
+            return RawSQL(sql=self._preserved_sql(node, "postgresql"), reason=reason)
         if self._contains_whole_row_ref(kept):
             # ``OLD.*`` / ``NEW.*`` (a whole-row value, usually cast to text
             # for a log message) has no T-SQL spelling — there is no whole-row
@@ -766,10 +758,7 @@ class TSqlTransformer(ProceduralTransformer):
                 "T-SQL has no whole-row variable — trigger preserved as a comment"
             )
             self._warnings.append(reason)
-            from unique.core.procedural.emitter import ProceduralEmitter
-
-            original = ProceduralEmitter("postgresql").emit(node)
-            return RawSQL(sql=original, reason=reason)
+            return RawSQL(sql=self._preserved_sql(node, "postgresql"), reason=reason)
         return self._tsql_statement_trigger(node, kept)
 
     _WHOLE_ROW_RE = re.compile(r"(?i)\b(?:OLD|NEW)\s*\.\s*\*")

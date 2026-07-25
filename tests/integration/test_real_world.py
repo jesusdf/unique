@@ -26,7 +26,11 @@ from functools import cache
 from pathlib import Path
 
 import pytest
-from helpers.invariants import assert_no_silent_loss, jaccard_similarity
+from helpers.invariants import (
+    assert_carrier_bodies_parse_as_source,
+    assert_no_silent_loss,
+    jaccard_similarity,
+)
 from helpers.validity import assert_statements_parse, executable_body
 
 from unique.core.batch_splitter import BatchSplitter, BatchType
@@ -283,6 +287,22 @@ class TestGenericInvariants:
         # the text and costs similarity. Honesty outranks the metric.
         "tsql": 0.23,
     }
+
+    @pytest.mark.parametrize(
+        "filename,source,target,_n",
+        PAIRS,
+        ids=[f"{src}->{tgt}" for (_, src, tgt, _) in PAIRS],
+    )
+    def test_carrier_bodies_parse_as_source(
+        self, filename: str, source: str, target: str, _n: int
+    ) -> None:
+        """Every "preserved as a comment" carrier quotes real SOURCE SQL.
+
+        A body that does not parse in the source dialect is a mid-transform
+        hybrid, not a preserved statement (audit 2026-07-24 N12).
+        """
+        out = _transpiled(filename, source, target).sql
+        assert_carrier_bodies_parse_as_source(out, source)
 
     @pytest.mark.parametrize(
         "filename,source,target,_n",

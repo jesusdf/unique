@@ -146,8 +146,20 @@ Findings detail: audit docs 02/04/05/07.
   re-asserting an unchanged value returns `ROW_COUNT()=0` where the source's
   matched-rows semantics return 1. Tests:
   `test_challenge.py::TestRowcountDivergenceAnnotation`.
-- [ ] **B13** Carriers preserve the ORIGINAL statement text, never a hybrid
-  re-render (N12) + carrier-body-parses-as-source assertion.
+- [x] **B13** Carriers preserve the ORIGINAL statement text, never a hybrid
+  re-render (N12) + carrier-body-parses-as-source assertion — done
+  2026-07-25. The parser attaches the original text to each statement node
+  (`ASTNode.source_text`; DML: `parse_sql` slices per-statement at tokenizer
+  `;` boundaries; procedural: `_transpile_procedural` attaches the batch
+  text) and the degrade gates quote it via `_preserved_sql` (both
+  pipelines), re-rendering only when no original is attached. The sweep
+  caught the procedural sibling (a degraded MySQL routine's carrier said
+  `DETERMINISTIC` where the source said `READS SQL DATA`) — same class,
+  fixed by the same mechanism. Shared assertion
+  `assert_carrier_bodies_parse_as_source` in `tests/helpers/invariants.py`
+  (sqlglot parse, procedural-parser fallback for routine bodies), wired
+  into `test_real_world.py::TestGenericInvariants` over all 12 directions.
+  Tests: `tests/unit/core/test_carrier_original_text.py`.
 - [x] **B14** API filename sanitizer `re.ASCII` one-liner (05 A1) — done
   2026-07-24; non-latin-1 filenames return 200 with an ASCII header
   (`test_file_non_ascii_filename_does_not_break_header`).

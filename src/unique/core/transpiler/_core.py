@@ -635,14 +635,22 @@ class Transpiler:
                     unsupported=unsupported,
                 )
 
+            # Attach the routine's ORIGINAL text (sans the captured leading
+            # comments) so a whole-routine degrade carrier quotes it verbatim
+            # instead of a re-render of the tree (audit 2026-07-24 N12).
+            parsed_node = replace(
+                parse_result.node,
+                source_text=sql[lead.end() if lead else 0 :].strip(),
+            )
+
             # Transform
             if source != target:
                 transformer = ProceduralTransformer(source, target, metadata_resolver)
-                node = transformer.transform(parse_result.node)
+                node = transformer.transform(parsed_node)
                 for w in transformer.warnings:
                     warnings.append(_warn(w, "procedural_transform", source, target))
             else:
-                node = parse_result.node
+                node = parsed_node
 
             # A routine's header comment lives where each engine stores it: SQL
             # Server keeps comments that precede CREATE as part of the module;

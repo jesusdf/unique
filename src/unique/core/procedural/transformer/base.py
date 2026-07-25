@@ -1136,10 +1136,22 @@ class ProceduralTransformer:
         )
         self._warnings.append(reason)
         self._register_degraded_routine(getattr(node, "name", None))
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
+
+    def _preserved_sql(self, node: ASTNode, dialect: str | None = None) -> str:
+        """The text a whole-routine degrade carrier quotes.
+
+        The routine's ORIGINAL source text when the transpiler attached it
+        (audit 2026-07-24 N12: a re-render of the tree substitutes emitter
+        normalizations — ``READS SQL DATA`` became ``DETERMINISTIC`` — so
+        the "preserved" text lies). The source-dialect re-render remains
+        only as the fallback for nodes without one (embedded/synthesized).
+        """
+        if node.source_text:
+            return node.source_text
         from unique.core.procedural.emitter import ProceduralEmitter
 
-        original = ProceduralEmitter(self._source).emit(node)
-        return RawSQL(sql=original, reason=reason)
+        return ProceduralEmitter(dialect or self._source).emit(node)
 
     def _find_uservar_text(self, value: object) -> str | None:
         import dataclasses as _dc
@@ -1235,10 +1247,7 @@ class ProceduralTransformer:
         )
         self._warnings.append(reason)
         self._register_degraded_routine(getattr(node, "name", None))
-        from unique.core.procedural.emitter import ProceduralEmitter
-
-        original = ProceduralEmitter(self._source).emit(node)
-        return RawSQL(sql=original, reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _degrade_untranslatable_body(self, node: ASTNode) -> RawSQL | None:
         """Degrade a routine whose body carries a construct with NO target
@@ -1308,10 +1317,9 @@ class ProceduralTransformer:
         if not checks:
             return None
         from unique.core.output_gate import scrub
-        from unique.core.procedural.emitter import ProceduralEmitter
 
         try:
-            original = ProceduralEmitter(self._source).emit(node)
+            original = self._preserved_sql(node)
         except Exception:  # noqa: BLE001 - a diagnostic scan must not break
             return None
         scrubbed = scrub(original)
@@ -1622,9 +1630,7 @@ class ProceduralTransformer:
             culprit = "cast of a parenthesized/composite expression"
         if culprit is None:
             return None
-        from unique.core.procedural.emitter import ProceduralEmitter
-
-        original = ProceduralEmitter("postgresql").emit(node)
+        original = self._preserved_sql(node, "postgresql")
         reason = (
             f"PostgreSQL {culprit} has no {self._target} equivalent; "
             "the routine is preserved as a comment"
@@ -1739,9 +1745,8 @@ class ProceduralTransformer:
         if self._target == "tsql":
             from unique.core.converter import TEMP_TABLES
             from unique.core.output_gate import scrub
-            from unique.core.procedural.emitter import ProceduralEmitter
 
-            original = ProceduralEmitter(self._source).emit(node)
+            original = self._preserved_sql(node)
             scrubbed_fn = scrub(original)
             temp_names = TEMP_TABLES.get() or frozenset()
             references_temp = any(
@@ -1874,9 +1879,8 @@ class ProceduralTransformer:
         # text so string contents can't false-positive (wave 138).
         if self._target != "postgresql" and self._source == "postgresql":
             from unique.core.output_gate import scrub
-            from unique.core.procedural.emitter import ProceduralEmitter
 
-            original = ProceduralEmitter(self._source).emit(node)
+            original = self._preserved_sql(node)
             # A PG trigger DELEGATES to a function; the bare row ref
             # lives in the harvested body, not the CREATE TRIGGER shell.
             from unique.core.converter import PG_TRIGGER_FN_BODIES
@@ -1908,10 +1912,7 @@ class ProceduralTransformer:
             )
             self._warnings.append(reason)
             self._register_degraded_routine(getattr(node, "name", None))
-            from unique.core.procedural.emitter import ProceduralEmitter
-
-            original = ProceduralEmitter(self._source).emit(node)
-            return RawSQL(sql=original, reason=reason)
+            return RawSQL(sql=self._preserved_sql(node), reason=reason)
         # An Oracle COMPOUND TRIGGER exists to dodge the mutating-table error
         # (ORA-04091) when re-aggregating a parent row after child rows change.
         # A target without that restriction (PostgreSQL) runs the same
