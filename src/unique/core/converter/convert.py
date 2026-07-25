@@ -824,6 +824,9 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     if isinstance(expr, exp.SetOperation):
         return _convert_union(expr)
     if isinstance(expr, exp.Column):
+        seq_ref = _convert_sequence_ref(expr)
+        if seq_ref is not None:
+            return seq_ref
         money = _tsql_money_literal_from_column(expr)
         if money is not None:
             return money
@@ -2205,6 +2208,37 @@ def _tsql_money_literal_from_column(expr: exp.Column) -> Literal | None:
         whole = str(expr.this.this)[1:].replace(",", "")
         return _convert_literal(exp.Literal(this=whole, is_string=False))
     return None
+
+
+def _convert_sequence_ref(expr: exp.Column) -> FunctionCall | None:
+    """Model Oracle ``seq.NEXTVAL`` / ``seq.CURRVAL`` as a sequence FunctionCall.
+
+    sqlglot parses these pseudo-columns as a table-qualified ``Column``
+    (``Column(this=NEXTVAL, table=seq)``) — they are not real columns. The
+    NEXTVAL form becomes the same ``NEXT_VALUE_FOR`` call the T-SQL ``NEXT VALUE
+    FOR seq`` source produces, so the emitter's per-target rendering is shared;
+    CURRVAL becomes ``CURRENT_VALUE_FOR``. Oracle-source only (elsewhere
+    ``x.nextval`` is an ordinary column), and only the bare ``seq.PSEUDO`` shape
+    (no schema/catalog qualifier), matching the former ``map_sequence_refs``
+    regex. Modeling this on the AST replaces that post-emit text rewrite, so a
+    ``NEXTVAL`` inside a string literal or a column genuinely named ``nextval``
+    is no longer mis-rewritten (audit doc 04 F2, guardrail 2).
+    """
+    if SOURCE_DIALECT.get() != "oracle":
+        return None
+    if (
+        expr.args.get("table") is None
+        or expr.args.get("db")
+        or expr.args.get("catalog")
+    ):
+        return None
+    fn = {"NEXTVAL": "NEXT_VALUE_FOR", "CURRVAL": "CURRENT_VALUE_FOR"}.get(
+        expr.name.upper()
+    )
+    if fn is None:
+        return None
+    seq = ColumnRef(name=expr.table, quoted=_identifier_quoted(expr.args.get("table")))
+    return FunctionCall(name=fn, args=(seq,))
 
 
 def _convert_column(expr: exp.Column) -> ColumnRef:

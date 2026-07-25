@@ -493,13 +493,64 @@ class TestWave12And13Classes:
         assert "ORDER BY" not in ts.upper(), ts
         pg = _flat(_t(src, "postgresql"))
         assert ") uq_dt" in pg, pg
-        my = _flat(_t(src, "mysql"))
-        assert ") uq_dt" in my, my
+        # MySQL has no sequences: modeling SEQ_d_conf.NEXTVAL on the AST means it
+        # has no faithful MySQL form, so the whole statement honestly degrades to
+        # a carrier instead of silently shipping a bogus SEQ_d_conf.NEXTVAL column
+        # (no-silent-loss). Alias synthesis is asserted on tsql/pg above; the
+        # per-target sequence behaviour is test_sequence_refs_per_target.
+        my = _t(src, "mysql")
+        assert my.lstrip().startswith("-- UNIQUE:"), my
 
     def test_sequence_refs_per_target(self) -> None:
         src = "INSERT INTO t_x (id) SELECT seq_x.NEXTVAL FROM t_y;"
         assert "NEXT VALUE FOR seq_x" in _t(src, "tsql")
         assert "nextval('seq_x')" in _t(src, "postgresql")
+
+
+class TestDeRegexOracleScalarsAndSequences:
+    """F1/F2 (audit doc 04): CHR/TO_NUMBER/MONTHS_BETWEEN and seq.NEXTVAL/CURRVAL
+    translate on the AST — the former post-emit regex rewrites are gone, so they
+    no longer mis-fire inside string literals or on lookalike identifiers."""
+
+    def test_currval_per_target(self) -> None:
+        src = "SELECT seq_x.CURRVAL FROM dual;"
+        assert "currval('seq_x')" in _t(src, "postgresql")
+        # T-SQL has no CURRVAL: honest documented carrier (auto-warned). No
+        # executable ``seq.CURRVAL`` accessor ships; the value degrades to NULL.
+        ts = Transpiler().transpile(src, "oracle", "tsql")
+        assert ".CURRVAL" not in ts.sql.upper()
+        assert "SELECT NULL" in ts.sql
+        assert "UNIQUE:" in ts.sql
+        assert any("CURRVAL" in w.message for w in ts.warnings)
+
+    def test_nextval_not_rewritten_inside_string_literal(self) -> None:
+        # The old F2 regex rewrote seq.NEXTVAL anywhere; on the AST a literal is
+        # inert.
+        src = "SELECT 'call seq_x.NEXTVAL here' AS note FROM dual;"
+        for target in ("tsql", "postgresql"):
+            out = _t(src, target)
+            assert "'call seq_x.NEXTVAL here'" in out, out
+            assert "NEXT VALUE FOR" not in out.upper(), out
+
+    def test_column_named_nextval_untouched(self) -> None:
+        # A real column named ``nextval`` (no sequence qualifier) is not a
+        # sequence reference.
+        out = _t("SELECT nextval FROM t;", "tsql")
+        assert "NEXT VALUE FOR" not in out.upper(), out
+
+    def test_chr_literal_not_rewritten(self) -> None:
+        # The old F1 regex turned the string ``'CHR('`` into ``'CHAR('``; on the
+        # AST the literal survives byte-for-byte while a real CHR() call maps.
+        out = _t("SELECT CHR(65), 'CHR(' AS lit FROM dual;", "tsql")
+        assert "'CHR('" in out, out
+        assert "CHAR(65)" in out, out
+
+    def test_to_number_nested_call_maps(self) -> None:
+        # The old F1 _SCALAR_ARG matched one paren level and mis-captured nested
+        # calls; the AST cast wraps the whole expression.
+        out = _t("SELECT TO_NUMBER(SUBSTR(x, INSTR(y, ','), 3)) FROM t;", "tsql")
+        assert "CAST(SUBSTRING(x, CHARINDEX(',', y), 3) AS DECIMAL(38, 10))" in out
+        assert "TO_NUMBER" not in out.upper()
 
 
 class TestDynamicSqlAndRowcount:

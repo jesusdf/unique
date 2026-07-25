@@ -565,36 +565,6 @@ def rewrite_oracle_modify(sql: str, dialect: str) -> str | None:
     return f"ALTER TABLE {table} " + ", ".join(actions) + ";"
 
 
-_SEQ_NEXTVAL_RE = re.compile(r"(?i)\b([A-Za-z_]\w*)\s*\.\s*NEXTVAL\b")
-_SEQ_CURRVAL_RE = re.compile(r"(?i)\b([A-Za-z_]\w*)\s*\.\s*CURRVAL\b")
-
-
-def map_sequence_refs(sql: str, dialect: str) -> str:
-    """Map Oracle ``seq.NEXTVAL``/``seq.CURRVAL`` to the target's spelling.
-
-    T-SQL: NEXT VALUE FOR seq (no CURRVAL equivalent — left for the
-    honesty gate); PostgreSQL: nextval('seq')/currval('seq'). MySQL has no
-    sequences at all — left untouched for the existing degradation paths.
-    """
-    if dialect == "tsql":
-        sql = _SEQ_NEXTVAL_RE.sub(r"NEXT VALUE FOR \1", sql)
-        # T-SQL has no CURRVAL (current value without advancing); capture NEXT
-        # VALUE FOR in a variable instead. No inline equivalent — degrade to a
-        # documented carrier rather than ship the unbindable ``seq.CURRVAL``.
-        sql = _SEQ_CURRVAL_RE.sub(
-            lambda m: (
-                "NULL /* UNIQUE: T-SQL has no sequence CURRVAL; capture "
-                f"NEXT VALUE FOR {m.group(1)} in a variable — see "
-                "docs/03-unsupported.md */"
-            ),
-            sql,
-        )
-    elif dialect == "postgresql":
-        sql = _SEQ_NEXTVAL_RE.sub(lambda m: f"nextval('{m.group(1).lower()}')", sql)
-        sql = _SEQ_CURRVAL_RE.sub(lambda m: f"currval('{m.group(1).lower()}')", sql)
-    return sql
-
-
 def _oracle_merge_paren_on(sql: str) -> str:
     """Wrap a MERGE's ON condition in the parentheses Oracle requires.
 
@@ -6779,6 +6749,38 @@ def _fold_oracle_instr(node: FunctionCall) -> str | None:
     return str(hits[occ - 1] + 1) if occ <= len(hits) else "0"
 
 
+def _emit_sequence_call(node: FunctionCall, dialect: str) -> str | None:
+    """Emit an Oracle-sequence pseudo-call per target, or ``None`` if *node* is
+    not one for this dialect.
+
+    Both the T-SQL ``NEXT VALUE FOR seq`` source and Oracle ``seq.NEXTVAL``
+    (see ``convert._convert_sequence_ref``) model as ``NEXT_VALUE_FOR``, and
+    Oracle ``seq.CURRVAL`` as ``CURRENT_VALUE_FOR``; this renders each per
+    target from the shared model. MySQL has no sequences, so it returns
+    ``None`` and the statement degrades honestly at the output gate. T-SQL has
+    no CURRVAL, so that one degrades to a documented carrier (auto-warned).
+    """
+    up = node.name.upper()
+    if up not in ("NEXT_VALUE_FOR", "CURRENT_VALUE_FOR") or len(node.args) != 1:
+        return None
+    if dialect == "mysql":
+        return None
+    seq = _emit_expression(node.args[0], dialect)
+    bare = node.args[0].name if isinstance(node.args[0], ColumnRef) else seq
+    if up == "NEXT_VALUE_FOR":
+        return {
+            "oracle": f"{seq}.NEXTVAL",
+            "tsql": f"NEXT VALUE FOR {seq}",
+        }.get(dialect, f"nextval('{bare}')")
+    return {
+        "oracle": f"{seq}.CURRVAL",
+        "tsql": (
+            "NULL /* UNIQUE: T-SQL has no sequence CURRVAL; capture "
+            f"NEXT VALUE FOR {seq} in a variable — see docs/03-unsupported.md */"
+        ),
+    }.get(dialect, f"currval('{bare}')")
+
+
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
@@ -8675,23 +8677,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             f"{p[3]}, ':', {p[4]}, ':', {p[5]})"
         )  # mysql
         return f"(TIMESTAMP({base}) + INTERVAL ({p[6]}) * 1000 MICROSECOND)"
-    if (
-        up == "NEXT_VALUE_FOR"
-        and len(node.args) == 1
-        and dialect
-        in (
-            "oracle",
-            "postgresql",
-        )
-    ):
-        # T-SQL ``NEXT VALUE FOR seq``: Oracle spells it ``seq.NEXTVAL``, PG
-        # ``nextval('seq')`` (regclass string). MySQL has no sequences, so it
-        # falls through to the gate's honest degrade.
-        seq = _emit_expression(node.args[0], dialect)
-        if dialect == "oracle":
-            return f"{seq}.NEXTVAL"
-        bare = node.args[0].name if isinstance(node.args[0], ColumnRef) else seq
-        return f"nextval('{bare}')"
+    seq_call = _emit_sequence_call(node, dialect)
+    if seq_call is not None:
+        return seq_call
     if (
         up == "CHR"
         and len(node.args) == 1

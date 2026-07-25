@@ -51,7 +51,6 @@ from unique.core.converter import (
     harvest_tsql_alias_types,
     harvest_tsql_bit_columns,
     harvest_user_functions,
-    map_sequence_refs,
     rewrite_oracle_modify,
 )
 from unique.core.converter._unread_args import WARNING_FEATURE as _UNREAD_FEATURE
@@ -85,7 +84,6 @@ from ._text_rules import (  # noqa: F401
     _harvest_split_tvf_names,
     _is_comment_only,
     _leading_comment_nodes,
-    _map_oracle_scalars_for_tsql,
     _mysql_safe_comments,
     _normalize_oracle_multicolumn_drop,
     _oracle_idempotent_create,
@@ -857,24 +855,10 @@ class Transpiler:
         result = self._transpile_dml_inner(
             sql, source, target, source_dialect, target_dialect
         )
-        if source == "oracle" and target in ("tsql", "postgresql"):
-            seq_mapped = map_sequence_refs(result.sql, target)
-            if seq_mapped != result.sql:
-                result = TranspileResult(
-                    sql=seq_mapped,
-                    warnings=result.warnings,
-                    unsupported=result.unsupported,
-                )
-        if target == "tsql" and source == "oracle":
-            # Oracle scalar builtins that sqlglot leaves untranslated in
-            # plain DML (the procedural paths map them via the transformer).
-            mapped = _map_oracle_scalars_for_tsql(result.sql)
-            if mapped != result.sql:
-                result = TranspileResult(
-                    sql=mapped,
-                    warnings=result.warnings,
-                    unsupported=result.unsupported,
-                )
+        # Oracle sequence references (seq.NEXTVAL/CURRVAL) and the CHR/TO_NUMBER/
+        # MONTHS_BETWEEN scalar builtins are now translated on the AST (converter
+        # _convert_sequence_ref + the function emitters) — the former post-emit
+        # regex rewrites (audit doc 04 F1/F2) are gone.
         if target == "tsql" and source != "tsql":
             # T-SQL rejects an unqualified scalar-UDF call as an unknown
             # built-in (error 195); the procedural paths already qualify —

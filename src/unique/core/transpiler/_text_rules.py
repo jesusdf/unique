@@ -153,27 +153,6 @@ def _normalize_oracle_multicolumn_drop(sql: str, target: str) -> str:
     return f"{m.group(1)}{dropped}"
 
 
-_SCALAR_ARG = r"((?:[^(),]|\([^()]*\))+?)"
-
-
-def _map_oracle_scalars_for_tsql(sql: str) -> str:
-    """Oracle scalar builtins with a direct T-SQL spelling that sqlglot
-    passes through untranslated in plain DML (found live in the 13 MB
-    corpus): CHR, TO_NUMBER, MONTHS_BETWEEN."""
-    sql = re.sub(r"(?i)\bCHR\s*\(", "CHAR(", sql)
-    sql = re.sub(
-        rf"(?is)\bTO_NUMBER\s*\(\s*{_SCALAR_ARG}\s*\)",
-        r"CAST(\1 AS DECIMAL(38, 10))",
-        sql,
-    )
-    sql = re.sub(
-        rf"(?is)\bMONTHS_BETWEEN\s*\(\s*{_SCALAR_ARG}\s*,\s*{_SCALAR_ARG}\s*\)",
-        r"DATEDIFF(MONTH, \2, \1)",
-        sql,
-    )
-    return sql
-
-
 def _qualify_tsql_udfs_in_sql(sql: str) -> str:
     """Qualify bare scalar-UDF calls as ``dbo.fn(`` using the harvested
     USER_FUNCTIONS registry (mirror of the procedural transformer's
