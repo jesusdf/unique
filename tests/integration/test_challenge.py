@@ -165,31 +165,44 @@ def _slug(block: str) -> str:
     return m.group(1) if m else re.sub(r"\s+", " ", body)[:60]
 
 
-# T4 target-parse gate triage list. Each ``(fixture, case-slug, target)`` here is
-# a ``[fixed]`` case whose transpiled output does not parse in the target dialect
-# under sqlglot ``RAISE``. Two kinds live here: (a) sqlglot parser gaps — the
-# output is valid target SQL that sqlglot itself cannot parse; (b) genuine
-# emission debt tracked by an audit brief. The gate is STRICT: an entry that
-# starts parsing (fix landed, or sqlglot upgraded) fails the gate so it gets
-# removed, and an entry whose case disappears fails as stale. Fixing any of
-# these means touching ``src/`` — out of scope for this test-only step; they are
-# parked as documented debt (audit 09-fix-briefs B16 step 1).
-XFAIL_TARGET_PARSE: dict[tuple[str, str, str], str] = {
+# T4 target-parse gate allowlist. Each ``(fixture, case-slug, target)`` here is a
+# ``[fixed]`` case whose transpiled output is **valid, executable target SQL that
+# sqlglot itself cannot parse** — a sqlglot parser gap, NOT a product defect. Each
+# entry was resolved on principle by transpiling the case and EXECUTING the output
+# on the live target engine (B17 follow-up (b), 2026-07-25): all four ran clean,
+# so they are exempt-with-evidence, not xfailed debt. The comment on each entry
+# carries that evidence (engine, date, what ran). The gate stays STRICT: an entry
+# that starts parsing (sqlglot upgraded) fails so it gets removed, and an entry
+# whose case disappears fails as stale. Because product ``src/`` is correct for
+# all four, there is no ``XFAIL_TARGET_PARSE`` debt dict — it emptied when the last
+# entry was verified valid and was deleted.
+VALID_BUT_SQLGLOT_UNPARSEABLE: dict[tuple[str, str, str], str] = {
     ("challenge_sqlserver.sql", "ts-merge-full", "oracle"): (
-        "sqlglot's oracle parser rejects the MERGE 'WHEN MATCHED THEN UPDATE "
-        "SET ... DELETE WHERE' fold (valid Oracle; see brief B4)"
+        "VALID Oracle: the MERGE 'WHEN MATCHED THEN UPDATE SET ... DELETE WHERE' "
+        "fold plus the follow-up anti-join DELETE. sqlglot's oracle parser "
+        "rejects the 'DELETE WHERE' fold (Unexpected token). Live-verified "
+        "2026-07-25 on Oracle 23ai Free (FREEPDB1): the CREATE TABLEs, the MERGE "
+        "and the DELETE all executed clean."
     ),
     ("challenge_postgresql.sql", "pg-savepoint", "tsql"): (
-        "sqlglot's tsql parser does not accept 'SAVE TRANSACTION <name>' "
-        "(valid T-SQL savepoint syntax)"
+        "VALID T-SQL: 'SAVE TRANSACTION sp' is the T-SQL savepoint spelling; "
+        "sqlglot's tsql parser does not accept it (Unexpected token). "
+        "Live-verified 2026-07-25 on SQL Server 2022 (master): BEGIN TRANSACTION "
+        "/ SAVE TRANSACTION sp / ROLLBACK TRANSACTION sp / COMMIT all executed "
+        "clean."
     ),
     ("challenge_mysql.sql", "my-json-build", "tsql"): (
-        "JSON_ARRAY/JSON_OBJECT '... NULL ON NULL' clause rejected by sqlglot's "
-        "tsql parser (JSON emission debt)"
+        "VALID T-SQL: JSON_ARRAY/JSON_OBJECT with the 'NULL ON NULL' clause; "
+        "sqlglot's tsql parser rejects 'NULL ON NULL' (Expecting )). "
+        "Live-verified 2026-07-25 on SQL Server 2022 (master): the SELECT "
+        "executed clean."
     ),
     ("challenge_mysql.sql", "my-set-transaction", "postgresql"): (
-        "'BEGIN READ ONLY' access mode rejected by sqlglot's postgres parser "
-        "(SET TRANSACTION lowering; see brief B8/N7)"
+        "VALID PostgreSQL: 'BEGIN READ ONLY' is the transaction access-mode "
+        "spelling; sqlglot's postgres parser rejects the access mode (Unexpected "
+        "token). Live-verified 2026-07-25 on PostgreSQL 16 (unique): SET "
+        "TRANSACTION ISOLATION LEVEL READ COMMITTED / BEGIN READ ONLY / COMMIT "
+        "all executed clean."
     ),
 }
 
@@ -202,12 +215,12 @@ def _assert_target_parse_gate(fname: str, source: str) -> None:
     splitter and parses each statement in the target dialect, EXEMPTING batches
     the FE classifier marks PROCEDURAL (CREATE PROCEDURE / PL/SQL / DELIMITER
     bodies sqlglot cannot parse), COMMENT (whole-statement carrier degrades),
-    EMPTY, and SET_OPTION. Known target-parse gaps are parked in
-    ``XFAIL_TARGET_PARSE`` and enforced strictly (a resolved or stale entry
-    fails the gate). Kept as ONE loop per source engine (not per case) so the
-    gate does not swell the identity-mutation denominator (challenge skill's CI
-    gotcha)."""
-    seen_xfail: set[tuple[str, str, str]] = set()
+    EMPTY, and SET_OPTION. Cases whose valid output sqlglot cannot parse are
+    parked in ``VALID_BUT_SQLGLOT_UNPARSEABLE`` (each live-verified on the target
+    engine) and enforced strictly (a now-parsing or stale entry fails the gate).
+    Kept as ONE loop per source engine (not per case) so the gate does not swell
+    the identity-mutation denominator (challenge skill's CI gotcha)."""
+    seen_allowed: set[tuple[str, str, str]] = set()
     unexpected_fail: list[str] = []
     resolved: list[str] = []
     for block in _cases(fname):
@@ -222,29 +235,31 @@ def _assert_target_parse_gate(fname: str, source: str) -> None:
             try:
                 assert_statements_parse(out, target, context=f"{fname}:{slug}")
             except AssertionError as exc:
-                if key in XFAIL_TARGET_PARSE:
-                    seen_xfail.add(key)
+                if key in VALID_BUT_SQLGLOT_UNPARSEABLE:
+                    seen_allowed.add(key)
                 else:
                     unexpected_fail.append(f"{slug} -> {target}: {str(exc)[:200]}")
             else:
-                if key in XFAIL_TARGET_PARSE:
+                if key in VALID_BUT_SQLGLOT_UNPARSEABLE:
                     resolved.append(f"{slug} -> {target}")
-    stale = {k for k in XFAIL_TARGET_PARSE if k[0] == fname} - seen_xfail
+    stale = {k for k in VALID_BUT_SQLGLOT_UNPARSEABLE if k[0] == fname} - seen_allowed
     msgs: list[str] = []
     if unexpected_fail:
         msgs.append(
-            "target-parse failures (fix the emission or add an XFAIL entry):\n  "
+            "target-parse failures (fix the emission, or — if the output is valid "
+            "target SQL sqlglot cannot parse — live-verify it and add a "
+            "VALID_BUT_SQLGLOT_UNPARSEABLE entry with the evidence):\n  "
             + "\n  ".join(unexpected_fail)
         )
     if resolved:
         msgs.append(
-            "XFAIL entries now parse — delete them from XFAIL_TARGET_PARSE:\n  "
-            + "\n  ".join(resolved)
+            "VALID_BUT_SQLGLOT_UNPARSEABLE entries now parse (sqlglot upgraded) — "
+            "delete them:\n  " + "\n  ".join(resolved)
         )
     if stale:
         msgs.append(
-            "stale XFAIL entries (no matching case) — delete them:\n  "
-            + "\n  ".join(str(k) for k in sorted(stale))
+            "stale VALID_BUT_SQLGLOT_UNPARSEABLE entries (no matching case) — "
+            "delete them:\n  " + "\n  ".join(str(k) for k in sorted(stale))
         )
     assert not msgs, "\n".join(msgs)
 

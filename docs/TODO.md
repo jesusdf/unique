@@ -234,11 +234,18 @@ Findings detail: audit docs 02/04/05/07.
 - [ ] **B17 follow-ups** (2026-07-25): (a) the emit seam modules resolve
   siblings via runtime namespace injection with a scoped mypy override —
   convert to explicit imports as the mutual recursion is untangled (the
-  ratchet gate watches the sizes meanwhile); (b) B16's 4-entry
-  `XFAIL_TARGET_PARSE` triage (sqlglot MERGE-fold/savepoint parser gaps,
-  JSON `NULL ON NULL` → tsql, `BEGIN READ ONLY` → pg); (c) the ~362
-  loop-only challenge `[fixed]` cases upgrade campaign (B16 step 2) and the
-  nightly live-execution job for func-class cases.
+  ratchet gate watches the sizes meanwhile); (c-remaining) the ~362
+  loop-only challenge `[fixed]` cases upgrade campaign (B16 step 2).
+  - [x] **(b)** B16's 4-entry `XFAIL_TARGET_PARSE` triage — resolved on
+    principle 2026-07-25: each case transpiled and its output EXECUTED on the
+    live target engine (Oracle 23ai / SQL Server 2022 / PostgreSQL 16). All
+    four ran clean, so all four are sqlglot-parser gaps on VALID SQL, not
+    product defects. Moved to a `VALID_BUT_SQLGLOT_UNPARSEABLE` allowlist in
+    `tests/integration/test_challenge.py`, each carrying its live-verification
+    evidence; the empty `XFAIL_TARGET_PARSE` dict was deleted.
+  - [ ] **(c-nightly)** nightly live-execution job for challenge func-class
+    cases — a `.github/workflows/challenge-live.yml` that executes
+    source-on-source vs output-on-target and diffs result sets.
 
 ---
 
