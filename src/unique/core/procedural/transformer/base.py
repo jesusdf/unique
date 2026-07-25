@@ -227,6 +227,16 @@ class ProceduralTransformer:
         # T-SQL inserted/deleted pseudo-tables to NEW/OLD (or documents a
         # set-based use that has no row-level equivalent).
         self._in_trigger = False
+        # True while transforming a PROCEDURE body (not a function/trigger).
+        # A T-SQL ``SELECT … INTO #tmp`` inside a procedure lowers to real
+        # temp-table DDL; on Oracle that DDL must be HOISTED before the routine
+        # (a CREATE cannot live in PL/SQL), which only the procedure hoist does
+        # — so the Oracle lowering is gated on this being a procedure (B28a).
+        self._in_procedure = False
+        # Bare, lower-cased names of ``#tmp`` tables the current routine
+        # creates via ``SELECT … INTO`` (TEMP_TABLES tracking extended to
+        # routine scope, B28a). Recomputed per routine.
+        self._routine_temp_tables: set[str] = set()
         # True while transforming a *purely* set-based trigger that the target
         # can express via transition tables; the set-based DML is then kept
         # as-is (inserted/deleted survive) instead of being documented.
@@ -1413,9 +1423,15 @@ class ProceduralTransformer:
         self._routine_name = self._bare_ident(node.name)
         new_params = self._transform_params(node.parameters)
         self._dyn_sql_vars = self._collect_dynamic_sql_vars(node.body)
-        new_body = self._transform_body(
-            self._drop_param_shadowing_locals(node.body, node.parameters)
-        )
+        self._routine_temp_tables = set()
+        prev_in_procedure = self._in_procedure
+        self._in_procedure = True
+        try:
+            new_body = self._transform_body(
+                self._drop_param_shadowing_locals(node.body, node.parameters)
+            )
+        finally:
+            self._in_procedure = prev_in_procedure
         or_replace = node.or_replace
         if self._source == "tsql" and self._target in ("oracle", "postgresql"):
             or_replace = True
@@ -1432,7 +1448,13 @@ class ProceduralTransformer:
         self._routine_name = self._bare_ident(node.name)
         new_params = self._transform_params(node.parameters)
         self._dyn_sql_vars = self._collect_dynamic_sql_vars(node.body)
-        new_body = self._transform_body(node.body)
+        self._routine_temp_tables = set()
+        prev_in_procedure = self._in_procedure
+        self._in_procedure = True
+        try:
+            new_body = self._transform_body(node.body)
+        finally:
+            self._in_procedure = prev_in_procedure
         if self._alter_becomes_create():
             return CreateProcedureStatement(
                 name=self._translate_ident_quoting(node.name) or node.name,
@@ -2908,15 +2930,22 @@ class ProceduralTransformer:
             return None
         token = _EMBEDDED_DYN_SQL_DEPTH.set(depth + 1)
         try:
-            translated = self._transform_embedded_dml(
+            result = self._transform_embedded_dml(
                 EmbeddedDML(sql=content, dialect=self._source)
-            ).sql
+            )
+            # A statement the embedded path lowers to more than one node (a
+            # ``SELECT … INTO #tmp`` temp-table rewrite, B28a) has no single
+            # dynamic-SQL string form — degrade it warned rather than guess.
+            translated = result.sql if isinstance(result, EmbeddedDML) else None
         except Exception as e:  # noqa: BLE001 - degrade to the warned path
             logger.debug("dynamic-SQL translation failed: %s", e)
             self._warn_dynamic_sql_review("its translation failed")
             return None
         finally:
             _EMBEDDED_DYN_SQL_DEPTH.reset(token)
+        if translated is None:
+            self._warn_dynamic_sql_review("its translation failed")
+            return None
         return translated.strip().rstrip(";").strip()
 
     def _warn_dynamic_sql_review(self, reason: str) -> None:
@@ -3769,7 +3798,100 @@ class ProceduralTransformer:
         sql = self._expr._oracle_function_fixes(sql)
         return sql
 
-    def _transform_embedded_dml(self, node: EmbeddedDML) -> EmbeddedDML:
+    #: A T-SQL ``SELECT <list> INTO #tmp <rest>`` statement (the temp-table
+    #: creating form — the ``@var`` assignment form is parsed to
+    #: SelectIntoStatement and never reaches embedded DML).
+    _SELECT_INTO_TEMP_RE = re.compile(r"(?is)\bINTO\s+(#\w+)\b")
+
+    def _target_select_text(self, query: str) -> str:
+        """Transpile the SELECT feeding a ``SELECT … INTO #tmp`` to the target,
+        preferring the shared IR pipeline and falling back to raw sqlglot."""
+        ir = self._ir_transpile_dml(query)
+        if ir is not None:
+            return self._fix_ir_dml(ir).strip().rstrip(";").strip()
+        try:
+            out = sqlglot.transpile(
+                query,
+                read=self._get_sqlglot_dialect(self._source),
+                write=self._get_sqlglot_dialect(self._target),
+                error_level=sqlglot.ErrorLevel.WARN,
+            )
+            if out and out[0].strip():
+                return out[0].strip().rstrip(";").strip()
+        except Exception as e:  # noqa: BLE001 - fall back to the source text
+            logger.debug("temp SELECT INTO transpile failed: %s", e)
+        return query.strip().rstrip(";").strip()
+
+    #: The ``DROP … IF EXISTS`` spelling that precedes a ``CREATE TEMPORARY
+    #: TABLE … AS SELECT`` so a second CALL in the same session recreates the
+    #: temp table (temp tables outlive a single statement on these engines).
+    _TEMP_CTAS_DROP = {
+        "postgresql": "DROP TABLE IF EXISTS",
+        "mysql": "DROP TEMPORARY TABLE IF EXISTS",
+    }
+    #: Targets whose temp table lowers to a hoisted session Global Temporary
+    #: Table instead (a CREATE cannot live in PL/SQL).
+    _TEMP_GTT_TARGETS = frozenset({"oracle"})
+
+    def _rewrite_temp_select_into(self, sql: str) -> ASTNode | None:
+        """Lower a T-SQL ``SELECT … INTO #tmp`` inside a procedure to the
+        target's temp-table idiom (B28a).
+
+        - PostgreSQL / MySQL: ``CREATE TEMPORARY TABLE t AS <select>`` (valid
+          direct DDL in plpgsql / a stored routine), preceded by a
+          ``DROP … IF EXISTS``.
+        - Oracle: a session Global Temporary Table hoisted before the routine
+          via the same machinery the T-SQL ``@table`` variable uses; the body
+          clears it (``DELETE``) and repopulates it (``INSERT``) so each CALL
+          is isolated.
+
+        Only fires in a procedure body: a function/trigger cannot host the DDL
+        (Oracle can't hoist there, MySQL functions forbid DDL), so those fall
+        back to the honest warned degrade.
+        """
+        if self._source == self._target or not self._in_procedure:
+            return None
+        if not re.match(r"(?is)^\s*(?:WITH\b|SELECT\b)", sql):
+            return None
+        m = self._SELECT_INTO_TEMP_RE.search(sql)
+        if not m:
+            return None
+        name = m.group(1).lstrip("#")
+        query = (sql[: m.start()].rstrip() + " " + sql[m.end() :].lstrip()).strip()
+        self._routine_temp_tables.add(name.lower())
+        select_text = self._target_select_text(query)
+        drop = self._TEMP_CTAS_DROP.get(self._target)
+        if drop is not None:
+            return StatementList(
+                statements=(
+                    EmbeddedDML(sql=f"{drop} {name}", dialect=self._target),
+                    EmbeddedDML(
+                        sql=f"CREATE TEMPORARY TABLE {name} AS\n{select_text}",
+                        dialect=self._target,
+                    ),
+                )
+            )
+        if self._target in self._TEMP_GTT_TARGETS:
+            # The CREATE is a hoist marker consumed by the Oracle procedure
+            # transform (``_hoist_table_variables``); the body keeps the
+            # clear+repopulate pair.
+            create = (
+                f"CREATE GLOBAL TEMPORARY TABLE {name} ON COMMIT PRESERVE ROWS "
+                f"AS SELECT * FROM (\n{select_text}\n) WHERE 1 = 0"
+            )
+            return StatementList(
+                statements=(
+                    RawSQL(sql=create, reason="select-into temp table"),
+                    EmbeddedDML(sql=f"DELETE FROM {name}", dialect=self._target),
+                    EmbeddedDML(
+                        sql=f"INSERT INTO {name}\n{select_text}",
+                        dialect=self._target,
+                    ),
+                )
+            )
+        return None
+
+    def _transform_embedded_dml(self, node: EmbeddedDML) -> ASTNode:
         """Transform embedded DML using sqlglot.
 
         A cross-table ``UPDATE ... FROM ... JOIN`` is routed through the IR
@@ -3783,6 +3905,13 @@ class ProceduralTransformer:
         # ``:NEW`` as a bind placeholder and emit ``%(NEW)s`` for PostgreSQL.
         if self._source == "oracle":
             sql = self._normalize_oracle_pseudorecords(sql)
+        # A T-SQL ``SELECT … INTO #tmp`` inside a procedure creates a temp
+        # table, not variables — lower it to real temp-table DDL per target
+        # (B28a) before the generic embedded-DML path emits the invalid
+        # variable-INTO spelling.
+        temp_rewrite = self._rewrite_temp_select_into(sql)
+        if temp_rewrite is not None:
+            return temp_rewrite
         # ``INSERT … RETURNING <col> INTO <var>`` captures a generated id. MySQL
         # has no RETURNING, and sqlglot drops the ``INTO <var>`` target, so peel
         # the capture off first and re-express it as ``SET <var> =

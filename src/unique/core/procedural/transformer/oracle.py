@@ -79,6 +79,29 @@ class OracleTransformer(ProceduralTransformer):
             return self._hoist_table_variables(self._result_selects_to_refcursors(proc))
         return proc
 
+    @staticmethod
+    def _table_var_gtt(node: ASTNode) -> tuple[str, str] | None:
+        """The ``(name, columns)`` of a T-SQL ``@table`` variable's CREATE
+        marker, or None if ``node`` is not one."""
+        if not (
+            isinstance(node, RawSQL)
+            and node.reason == "table variable -> temporary table"
+        ):
+            return None
+        m = re.match(
+            r"(?is)\s*CREATE\s+TEMPORARY\s+TABLE\s+(\w+)\s*(\(.*\))\s*;", node.sql
+        )
+        return (m.group(1), m.group(2).strip()) if m else None
+
+    @staticmethod
+    def _select_into_gtt_var(node: ASTNode) -> tuple[str, str] | None:
+        """The ``(name, CREATE sql)`` of a ``SELECT … INTO #tmp`` GTT hoist
+        marker (B28a), or None if ``node`` is not one."""
+        if not (isinstance(node, RawSQL) and node.reason == "select-into temp table"):
+            return None
+        m = re.match(r"(?is)\s*CREATE\s+GLOBAL\s+TEMPORARY\s+TABLE\s+(\w+)\b", node.sql)
+        return (m.group(1), node.sql) if m else None
+
     def _hoist_table_variables(self, proc: CreateProcedureStatement) -> ASTNode:
         """A T-SQL table variable has no in-block Oracle form (a CREATE cannot
         live in PL/SQL, and the body references it statically). Lift it to a
@@ -86,23 +109,27 @@ class OracleTransformer(ProceduralTransformer):
         a per-procedure-unique name (the same ``@t`` in two procedures would
         clash), and rename the body references."""
         gtts: list[tuple[str, str, str]] = []  # (var, gtt_name, columns)
+        # (var, gtt_name, full CREATE sql) for ``SELECT … INTO #tmp`` temp
+        # tables lowered to a GTT (B28a): the CREATE is a CTAS with a
+        # column-less structure, so it is hoisted verbatim (renamed) rather
+        # than rebuilt from a column list.
+        ctas_gtts: list[tuple[str, str, str]] = []
 
         def strip(node: ASTNode) -> ASTNode | None:
             # The declaration may sit inside an IF/WHILE/TRY block (T-SQL
-            # scopes DECLARE to the batch, not the block): recurse.
-            if (
-                isinstance(node, RawSQL)
-                and node.reason == "table variable -> temporary table"
-            ):
-                m = re.match(
-                    r"(?is)\s*CREATE\s+TEMPORARY\s+TABLE\s+(\w+)\s*(\(.*\))\s*;",
-                    node.sql,
-                )
-                if m:
-                    var, cols = m.group(1), m.group(2).strip()
-                    gtts.append((var, f"{proc.name}_{var}"[:120], cols))
-                    return None  # drop the in-body CREATE
-                return node
+            # scopes DECLARE to the batch, not the block): recurse. A hoist
+            # marker (a table-variable CREATE, or a SELECT-INTO temp-table
+            # GTT) is collected and dropped from the body.
+            tvar = self._table_var_gtt(node)
+            if tvar is not None:
+                var, cols = tvar
+                gtts.append((var, f"{proc.name}_{var}"[:120], cols))
+                return None  # drop the in-body CREATE
+            ctas = self._select_into_gtt_var(node)
+            if ctas is not None:
+                ctas_var, ctas_sql = ctas
+                ctas_gtts.append((ctas_var, f"{proc.name}_{ctas_var}"[:120], ctas_sql))
+                return None  # drop the in-body CREATE (hoisted below)
             changes: dict[str, object] = {}
             for f in dataclasses.fields(node):
                 val = getattr(node, f.name)
@@ -123,10 +150,11 @@ class OracleTransformer(ProceduralTransformer):
             return node
 
         kept = [y for stmt in proc.body if (y := strip(stmt)) is not None]
-        if not gtts:
+        if not gtts and not ctas_gtts:
             return proc
 
         renames = {var: gtt for var, gtt, _ in gtts}
+        renames.update({var: gtt for var, gtt, _ in ctas_gtts})
         new_proc = dataclasses.replace(
             proc, body=tuple(self._rename_idents(s, renames) for s in kept)
         )
@@ -141,6 +169,15 @@ class OracleTransformer(ProceduralTransformer):
                 )
             )
             for var, gtt, cols in gtts
+        ]
+        ddls += [
+            RawSQL(
+                sql=(
+                    f"/* UNIQUE: was T-SQL temp table #{var} */\n"
+                    f"{re.sub(rf'\b{re.escape(var)}\b', gtt, create_sql)};"
+                )
+            )
+            for var, gtt, create_sql in ctas_gtts
         ]
         return StatementList(statements=tuple([*ddls, new_proc]))
 
