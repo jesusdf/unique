@@ -514,12 +514,29 @@ trailing `-- UNIQUE:` note and a warning (never silently):
 - PostgreSQL bare `INTERVAL` → Oracle `INTERVAL DAY TO SECOND` (Oracle splits
   intervals into two families; year-month values need `INTERVAL YEAR TO MONTH`).
 - Oracle/PG `INTERVAL …` → T-SQL/MySQL `VARCHAR(30)` (no interval column type).
+- `TIMESTAMP WITH TIME ZONE` → PostgreSQL `TIMESTAMPTZ` (exactly equivalent,
+  faithful), T-SQL `DATETIMEOFFSET`, MySQL `TIMESTAMP` (UTC-normalized). A
+  fractional-seconds precision stays on the base field
+  (`TIMESTAMP(6) WITH TIME ZONE` → `TIMESTAMPTZ(6)` / `DATETIMEOFFSET(6)`).
+- `TIMESTAMP WITH LOCAL TIME ZONE` → PostgreSQL `TIMESTAMPTZ` (same session-tz
+  display, same instant), T-SQL `DATETIMEOFFSET` / MySQL `TIMESTAMP` (the
+  instant is kept but the session-time-zone display is not reproduced); Oracle
+  keeps its native spelling.
+- `INTERVAL YEAR TO MONTH` / `INTERVAL DAY TO SECOND` → PostgreSQL native
+  (faithful); a per-field precision PostgreSQL cannot express
+  (`INTERVAL DAY(2) TO SECOND(6)`) is stripped to the bare qualifier with the
+  original carried in the `UNIQUE:` note.
 - Multi-bit `BIT(n)` (n > 1) → PostgreSQL native `BIT(n)`; Oracle
   `NUMBER(20)` / T-SQL `NUMERIC(20)` hold the 64-bit numeric value (the
   boolean-style `BIT` map used to truncate it to 1 bit silently). Bit-string
   literals/functions on those targets remain in the unsigned-64 limit family.
 - Fractional-seconds precision above 6 → clamped to `(6)` on MySQL.
 - T-SQL `SMALLDATETIME` → Oracle `DATE` (superset, no note needed).
+
+The datetime/interval closest-type mappings above also apply to PL/SQL variable
+declarations (a `DECLARE v TIMESTAMP WITH LOCAL TIME ZONE` in a converted
+routine), not only to `CREATE TABLE` column definitions; the original spelling
+rides a `/* UNIQUE */` carrier so a reverse transpilation restores it exactly.
 
 Additionally, `CAST(x AS DATE)` on an Oracle *target* from a non-Oracle source
 is wrapped in `TRUNC(…)`: every other engine's DATE cast strips the time of
