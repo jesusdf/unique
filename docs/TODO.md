@@ -197,19 +197,29 @@ Findings detail: audit docs 02/04/05/07.
   `tests/unit/test_challenge_stats.py` (25 cases, incl. a real temp git repo
   for `--batch-since`).
 - [ ] **B20–B27** small items: MERGE comment trivia, perf-budget flake
-  (process_time), CI installs with `-c constraints.txt`. *(Done 2026-07-24:
-  B22 traceback logging via `exc_info`, B26 `.dockerignore`. Done 2026-07-25:
-  B20 PG `TABLE t` validation false positive — dialect-conditional whitelist
-  in `core/validation.py` (`_is_pg_table_shorthand`); B23 removed the 5
-  zero-reference IR node classes (`ParameterRef`, `AlterTableStatement`,
-  `CreateIndexStatement`, `CreateSequenceStatement`, `TypeReference`) and
-  `builtins_for`, and hoisted the byte-identical `_transform_exception_block`
-  (tsql/mysql) into `ProceduralTransformer` base, branching on the existing
-  `_folds_exception_scope()` hook; B24 `scripts/mutation_test.py` now mutates
-  a temporary copy of `src/` (PYTHONPATH-redirected subprocess env) instead of
-  writing mutants into the real tree — live-verified a concurrent pytest run
-  against the real `src/` stays green and file hashes are unchanged while a
-  mutation round is in flight, `--tests`/CLI/output format unchanged.)*
+  (process_time). *(Done 2026-07-24: B22 traceback logging via `exc_info`,
+  B26 `.dockerignore`. Done 2026-07-25: B20 PG `TABLE t` validation false
+  positive — dialect-conditional whitelist in `core/validation.py`
+  (`_is_pg_table_shorthand`); B23 removed the 5 zero-reference IR node
+  classes (`ParameterRef`, `AlterTableStatement`, `CreateIndexStatement`,
+  `CreateSequenceStatement`, `TypeReference`) and `builtins_for`, and
+  hoisted the byte-identical `_transform_exception_block` (tsql/mysql) into
+  `ProceduralTransformer` base, branching on the existing
+  `_folds_exception_scope()` hook; B24 `scripts/mutation_test.py` now
+  mutates a temporary copy of `src/` (PYTHONPATH-redirected subprocess env)
+  instead of writing mutants into the real tree — live-verified a
+  concurrent pytest run against the real `src/` stays green and file
+  hashes are unchanged while a mutation round is in flight, `--tests`/CLI/
+  output format unchanged; B27 all 5 `pip install` steps in
+  `.github/workflows/ci.yaml` now pass `-c constraints.txt` so the tested
+  closure matches the shipped image's runtime pins.)*
+- [ ] **Architect follow-up from B27** (2026-07-25): `constraints.txt` is
+  hand-regenerated (`pip install . && pip freeze --exclude-editable`) and
+  nothing forces it to stay current now that CI enforces it as an install
+  constraint — add a release-checklist line to
+  `skills/SKILL-development-workflow.md` ("Releasing" section) to
+  regenerate `constraints.txt` (or verify it still resolves cleanly) as
+  part of cutting a release, or wire a periodic CI job that does so.
 - [ ] **B28** feature briefs when scheduled: `#temp`-in-procedure wiring,
   top-level `BEGIN TRY/CATCH` routing (currently honest warned degrades).
 - [ ] **RED seeds from the B2 sweep** (2026-07-24): (a) `Create.properties`
