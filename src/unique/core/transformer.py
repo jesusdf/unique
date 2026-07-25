@@ -442,9 +442,11 @@ class SyntaxNormalizer(TransformPass):
         if not (node.inherits_clause or node.partition_of_clause):
             return node
         kind = "PARTITION OF" if node.partition_of_clause else "INHERITS"
-        from unique.core.converter.emit import emit_node
+        original = node.source_text
+        if not original:
+            from unique.core.converter.emit import emit_node
 
-        original = emit_node(node, "postgresql")
+            original = emit_node(node, "postgresql")
         reason = (
             f"PostgreSQL {kind} table binding has no {ctx.target} equivalent; "
             "the CREATE TABLE is preserved as a comment"
@@ -822,6 +824,22 @@ class Transformer:
             result = [self._apply_pass(pass_, node) for node in result]
         return result
 
+    def _preserved_sql(self, node: ASTNode) -> str:
+        """The text a degrade carrier quotes.
+
+        The ORIGINAL statement when the parser attached it (audit
+        2026-07-24 N12: a re-render of the mid-transform tree is a hybrid
+        no engine accepts — ``dbo.JSON_EXTRACT``, converted accessor
+        pairs). The source-dialect re-render remains only as the fallback
+        for nodes without one (multi-statement batches, synthesized
+        nodes).
+        """
+        if node.source_text:
+            return node.source_text
+        from unique.core.converter.emit import emit_node
+
+        return emit_node(node, self.context.source)
+
     def _gate_pg_internals(self, node: ASTNode) -> ASTNode:
         """Degrade a statement touching PG catalog internals — WHOLE.
 
@@ -837,9 +855,7 @@ class Transformer:
         )
         self.context.warn(reason, "pg_catalog_internal")
         self.context.mark_unsupported(f"{found} (PG catalog internal)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _find_pg_internal(self, value: object) -> str | None:
         """First PG catalog-internal construct reachable from *value*."""
@@ -899,9 +915,7 @@ class Transformer:
         )
         self.context.warn(reason, "full_outer_join")
         self.context.mark_unsupported("FULL OUTER JOIN (MySQL)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     _UNTRANSLATABLE_COLUMN_TYPES = frozenset({"INTERVAL"})
 
@@ -930,9 +944,7 @@ class Transformer:
         )
         self.context.warn(reason, "untranslatable_column_type")
         self.context.mark_unsupported(culprit)
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _gate_column_position(self, node: ASTNode) -> ASTNode:
         """MySQL's ALTER ... ADD col ... FIRST/AFTER x physical position has
@@ -993,9 +1005,7 @@ class Transformer:
         )
         self.context.warn(reason, "composite_row_value")
         self.context.mark_unsupported(f"{found} (composite row value)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _find_composite_row_value(self, value: object) -> str | None:
         # ONLY a Tuple in a CASE result or function-argument position:
@@ -1102,9 +1112,7 @@ class Transformer:
         )
         self.context.warn(reason, "zero_column_table")
         self.context.mark_unsupported("zero-column CREATE TABLE")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _gate_nested_cte_arm(self, node: ASTNode) -> ASTNode:
         """Degrade a statement whose set arm carries its own WITH — WHOLE.
@@ -1120,9 +1128,7 @@ class Transformer:
         )
         self.context.warn(reason, "nested_cte_arm")
         self.context.mark_unsupported("WITH inside a set-operation arm")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _has_nested_cte_arm(self, value: object, is_top: bool = True) -> bool:
         # ANY non-top CTE: a set arm's WITH, a derived table's WITH, a
@@ -1164,9 +1170,7 @@ class Transformer:
         )
         self.context.warn(reason, "conditioned_lateral")
         self.context.mark_unsupported("LATERAL JOIN … ON <condition>")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _has_conditioned_lateral(self, value: object) -> bool:
         from unique.core.ast_nodes import JoinClause
@@ -1200,9 +1204,7 @@ class Transformer:
         )
         self.context.warn(reason, "empty_select_list")
         self.context.mark_unsupported("empty select list")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _has_empty_select_list(self, value: object) -> bool:
         if (
@@ -1256,9 +1258,7 @@ class Transformer:
         reason = f"{found}; statement preserved as a comment"
         self.context.warn(reason, "mysql_agg_form")
         self.context.mark_unsupported(found)
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _find_mysql_agg_form(self, value: object) -> str | None:
         if isinstance(value, FunctionCall):
@@ -1335,9 +1335,7 @@ class Transformer:
         )
         self.context.warn(reason, "unmapped_operator")
         self.context.mark_unsupported(found)
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _find_unmapped_operator(self, value: object) -> str | None:
         if isinstance(value, RawSQL):
@@ -1367,9 +1365,7 @@ class Transformer:
         )
         self.context.warn(reason, "whole_row_cast")
         self.context.mark_unsupported("whole-row cast")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _contains_whole_row_cast(self, value: object) -> bool:
         if (
@@ -1398,9 +1394,7 @@ class Transformer:
         )
         self.context.warn(reason, "oracle_binary_cast")
         self.context.mark_unsupported("CAST(… AS BINARY) (Oracle)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _contains_binary_cast(self, value: object) -> bool:
         if isinstance(value, CastExpression) and re.match(
@@ -1427,9 +1421,7 @@ class Transformer:
         )
         self.context.warn(reason, "interval_cast")
         self.context.mark_unsupported("CAST(… AS INTERVAL)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _contains_interval_cast(self, value: object) -> bool:
         if isinstance(
@@ -1456,9 +1448,7 @@ class Transformer:
         )
         self.context.warn(reason, "srf_window")
         self.context.mark_unsupported("SRF window (GENERATE_SERIES OVER)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _contains_srf_window(self, value: object) -> bool:
         from unique.core.ast_nodes import WindowFunction
@@ -1488,9 +1478,7 @@ class Transformer:
         )
         self.context.warn(reason, "mysql_null_ntile")
         self.context.mark_unsupported("NTILE(NULL) (MySQL)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _contains_null_ntile(self, value: object) -> bool:
         if (
@@ -1559,9 +1547,7 @@ class Transformer:
         )
         self.context.warn(reason, "mysql_udf_window")
         self.context.mark_unsupported(f"{found}() OVER (MySQL)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _find_udf_window(self, value: object) -> str | None:
         from unique.core.ast_nodes import WindowFunction
@@ -1596,9 +1582,7 @@ class Transformer:
         )
         self.context.warn(reason, "nonconst_lag_offset")
         self.context.mark_unsupported("non-constant window argument (MySQL)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _find_nonconst_lag(self, value: object) -> bool:
         if (
@@ -1640,9 +1624,7 @@ class Transformer:
         )
         self.context.warn(reason, "function_relation")
         self.context.mark_unsupported(f"{found} as a relation (MySQL)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _find_function_relation(self, value: object) -> str | None:
         """First non-JSON_TABLE function-relation name reachable from *value*."""
@@ -1684,9 +1666,7 @@ class Transformer:
         )
         self.context.warn(reason, "invalid_date_literal")
         self.context.mark_unsupported("invalid calendar date CAST")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _find_invalid_date_cast(self, value: object) -> str | None:
         import datetime
@@ -1819,9 +1799,7 @@ class Transformer:
         )
         self.context.warn(reason, "mysql_user_var")
         self.context.mark_unsupported(f"@{found} (MySQL user variable)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _find_user_var(self, value: object) -> str | None:
         if isinstance(value, (RawSQL, PassthroughSQL)):
@@ -1857,9 +1835,7 @@ class Transformer:
         )
         self.context.warn(reason, "mysql_sysvar")
         self.context.mark_unsupported(f"{found} (MySQL system variable)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     _SYSVAR_RE = re.compile(r"@@\w+(?:\.\w+)?")
 
@@ -1897,9 +1873,7 @@ class Transformer:
         )
         self.context.warn(reason, "tuple_subquery")
         self.context.mark_unsupported("row tuple = (subquery) (T-SQL)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _contains_tuple_subquery_cmp(self, value: object) -> bool:
         from unique.core.ast_nodes import (
@@ -1966,9 +1940,7 @@ class Transformer:
         )
         self.context.warn(reason, "nth_value")
         self.context.mark_unsupported("NTH_VALUE (T-SQL)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _contains_nth_value(self, value: object) -> bool:
         from unique.core.ast_nodes import WindowFunction
@@ -2002,9 +1974,7 @@ class Transformer:
         )
         self.context.warn(reason, "column_alias_ref")
         self.context.mark_unsupported("column-renaming table alias")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _contains_column_alias_ref(self, value: object) -> bool:
         from unique.core.ast_nodes import TableRef
@@ -2126,9 +2096,7 @@ class Transformer:
         )
         self.context.warn(reason, "tsql_all_computed_table")
         self.context.mark_unsupported("all-computed table (T-SQL)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     _SETOP_ORDER_AGG_RE = re.compile(r"(?i)\b(MAX|MIN|SUM|COUNT|AVG)\s*\(")
 
@@ -2157,9 +2125,7 @@ class Transformer:
         )
         self.context.warn(reason, "pg_setop_order_aggregate")
         self.context.mark_unsupported("set-op ORDER BY aggregate (PG)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _order_expr_offends(self, value: object) -> bool:
         """An aggregate call or subquery anywhere in a set-op ORDER BY item —
@@ -2193,9 +2159,7 @@ class Transformer:
         )
         self.context.warn(reason, "tsql_agg_distinct")
         self.context.mark_unsupported("STRING_AGG(DISTINCT) (T-SQL)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _contains_agg_distinct(self, value: object) -> bool:
         if isinstance(value, FunctionCall):
@@ -2232,9 +2196,7 @@ class Transformer:
         )
         self.context.warn(reason, "natural_join")
         self.context.mark_unsupported("NATURAL join (T-SQL)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _contains_natural_join(self, value: object) -> bool:
         from unique.core.ast_nodes import JoinClause, JoinType
@@ -2284,9 +2246,7 @@ class Transformer:
         )
         self.context.warn(reason, "temp_view")
         self.context.mark_unsupported("VIEW over temporary table (T-SQL)")
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _references_table(self, value: object, names: frozenset[str]) -> bool:
         if isinstance(value, TableRef) and value.name.lower().lstrip("#") in names:
@@ -2322,9 +2282,7 @@ class Transformer:
         )
         self.context.warn(reason, "array_construct")
         self.context.mark_unsupported(found)
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _gate_star_call(self, node: ASTNode) -> ASTNode:
         """Degrade a statement with a non-COUNT ``fn(*)`` call — PG has no
@@ -2339,9 +2297,7 @@ class Transformer:
         )
         self.context.warn(reason, "array_construct")
         self.context.mark_unsupported(found)
-        from unique.core.converter.emit import emit_node
-
-        return RawSQL(sql=emit_node(node, self.context.source), reason=reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
 
     def _find_star_call(self, value: object) -> str | None:
         if (

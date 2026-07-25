@@ -18,7 +18,7 @@ from typing import Any, cast
 
 import sqlglot
 import sqlglot.expressions as exp
-from sqlglot import transforms
+from sqlglot import TokenType, transforms
 
 from unique.core.ast_nodes import (
     Alias,
@@ -68,7 +68,7 @@ from unique.core.ast_nodes import (
 from unique.core.converter._base import *  # noqa: F401,F403
 from unique.core.converter._unread_args import dispatch_tracked
 from unique.core.converter.harvest import _resolve_tsql_alias_type  # noqa: F401
-from unique.core.sql_split import split_leading_trivia
+from unique.core.sql_split import is_executable, split_leading_trivia
 
 _INSERT_COLS_RE = re.compile(
     r"(?is)\b(INSERT\s+(?:IGNORE\s+)?INTO\s+`?(\w+)`?\s*\()([^)]*)(\))"
@@ -333,12 +333,30 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
         return [RawSQL(sql=sql, reason=str(e))]
 
     nodes: list[ASTNode] = []
+    # Original batch text for degrade carriers: slice the batch into
+    # per-statement ORIGINAL texts (via the tokenizer — a ``;`` inside a
+    # string/comment must not cut) and attach each to its converted node,
+    # so a "statement preserved as a comment" carrier can quote the
+    # ORIGINAL, never a re-render of the mid-transform tree (audit
+    # 2026-07-24 N12). When the slices cannot be aligned one-to-one with
+    # the parsed statements, nodes keep the re-render fallback.
+    statement_count = sum(
+        1 for e in parsed if e is not None and not isinstance(e, exp.Semicolon)
+    )
+    source_texts = (
+        _statement_source_texts(sql, sg_dialect, statement_count)
+        if statement_count
+        else None
+    )
+    stmt_idx = 0
     for expression in parsed:
         # An empty statement — a stray/leading ``;`` (e.g. the mandatory one in
         # T-SQL's ``;WITH``). sqlglot yields None for it, or an exp.Semicolon when a
         # comment precedes it; both are no-ops, not an "unhandled" construct.
         if expression is None or isinstance(expression, exp.Semicolon):
             continue
+        original_stmt = source_texts[stmt_idx] if source_texts else None
+        stmt_idx += 1
         # Preserve the statement's leading comments (sqlglot attaches them to the
         # expression); our IR conversion would otherwise drop them. Re-emit them
         # as CommentStatements just before the statement, and clear them so a
@@ -396,6 +414,8 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
             )
             continue
         node = convert_expression(expression, dialect)  # type: ignore[arg-type]
+        if original_stmt is not None:
+            node = dataclasses.replace(node, source_text=original_stmt)
         nodes.append(node)
         # Trailing / inline comments attach to child nodes, not the statement;
         # collect them so they aren't lost (re-emitted after the statement —
@@ -740,6 +760,32 @@ def _passthrough_kind(expr: exp.Expression) -> str:
             return "CREATE INDEX"
         return "CREATE " + kind
     return type(expr).__name__.upper()
+
+
+def _statement_source_texts(sql: str, sg_dialect: str, count: int) -> list[str] | None:
+    """Per-statement slices of the ORIGINAL batch text.
+
+    Aligned one-to-one with the batch's *count* parsed statements. Boundaries
+    come from the tokenizer's top-level ``;`` tokens (never a text split — a
+    ``;`` inside a string or comment must not cut). Returns None when the
+    slices cannot be aligned unambiguously; callers then keep their re-render
+    fallback.
+    """
+    if count == 1 and ";" not in sql:
+        return [sql.strip()]
+    try:
+        tokens = sqlglot.tokenize(sql, read=sg_dialect)
+    except Exception:
+        return None
+    pieces: list[str] = []
+    start = 0
+    for tok in tokens:
+        if tok.token_type == TokenType.SEMICOLON:
+            pieces.append(sql[start : tok.start])
+            start = tok.end + 1
+    pieces.append(sql[start:])
+    statements = [p.strip() for p in pieces if is_executable(p)]
+    return statements if len(statements) == count else None
 
 
 def _source_sql(expr: exp.Expr) -> str:

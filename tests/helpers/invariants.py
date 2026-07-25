@@ -48,6 +48,64 @@ _WHITESPACE = re.compile(r"\s+")
 _IDENTIFIER_QUOTES = re.compile(r'[`"\[\]]')
 
 
+def carrier_bodies(sql: str) -> list[str]:
+    """The statement body of each "preserved as a comment" carrier in *sql*.
+
+    A carrier is a ``-- UNIQUE: <reason>`` line whose reason says the
+    statement is preserved, followed by consecutive ``--`` comment lines
+    holding it. The reason line is prose and is excluded (the comment-prose
+    trap); only the body lines are returned, ``--`` prefix stripped, ready to
+    parse in the source dialect.
+    """
+    lines = sql.splitlines()
+    bodies: list[str] = []
+    i = 0
+    while i < len(lines):
+        m = re.match(r"\s*-- UNIQUE:\s*(.*)", lines[i])
+        if m and "preserved as a comment" in m.group(1).lower():
+            body_lines: list[str] = []
+            i += 1
+            while i < len(lines) and lines[i].lstrip().startswith("--"):
+                if re.match(r"\s*-- UNIQUE:", lines[i]):
+                    break
+                body_lines.append(re.sub(r"^\s*--\s?", "", lines[i]))
+                i += 1
+            if any(ln.strip() for ln in body_lines):
+                bodies.append("\n".join(body_lines).strip())
+            continue
+        i += 1
+    return bodies
+
+
+def assert_carrier_bodies_parse_as_source(sql: str, source: str) -> None:
+    """Every preserved-statement carrier body must parse in *source*.
+
+    The carrier's contract is that a user can uncomment the body and rewrite
+    it by hand — a body that does not even parse in the SOURCE dialect is a
+    mid-transform hybrid, not a preserved statement (audit 2026-07-24 N12).
+    """
+    import sqlglot
+
+    from unique.core.converter._base import sqlglot_dialect_name
+
+    read = sqlglot_dialect_name(source)
+    for body in carrier_bodies(sql):
+        try:
+            sqlglot.parse(body, read=read, error_level=sqlglot.ErrorLevel.RAISE)
+        except Exception as e:
+            # sqlglot cannot parse procedural routines (multi-statement
+            # bodies); for those the parser of record is the procedural
+            # engine — accept the body iff IT parses it cleanly.
+            from unique.core.procedural.parser import ProceduralParser
+
+            result = ProceduralParser(source).parse(body)
+            if result.node is None or result.errors:
+                raise AssertionError(
+                    f"carrier body does not parse as {source}: {e}\n"
+                    f"--- body ---\n{body}"
+                ) from e
+
+
 def count_keyword(sql: str, keyword: str) -> int:
     """Count non-comment occurrences of a structural keyword (word-bounded)."""
     body = strip_comments(sql)

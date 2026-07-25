@@ -39,6 +39,14 @@ class ASTNode:
     location: SourceLocation = field(
         default_factory=SourceLocation, compare=False, kw_only=True
     )
+    #: The statement's ORIGINAL source text, attached by the parser when the
+    #: batch⇄statement mapping is unambiguous. Degrade carriers ("statement
+    #: preserved as a comment") must quote THIS, never a re-render of the
+    #: (already mid-transform) tree — a re-render yields a hybrid no engine
+    #: accepts (audit 2026-07-24 N12).
+    source_text: str | None = field(
+        default=None, compare=False, repr=False, kw_only=True
+    )
 
 
 # ---------------------------------------------------------------------------
