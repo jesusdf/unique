@@ -1020,6 +1020,11 @@ class TSqlTransformer(ProceduralTransformer):
         # Pattern (b): embedded DML keyed on NEW.<fk> -> set-based over inserted.
         if isinstance(node, EmbeddedDML):
             transformed = self._transform_embedded_dml(node)
+            if not isinstance(transformed, EmbeddedDML):
+                # B28a can lower a SELECT INTO #t to a non-DML node; triggers
+                # never set _in_procedure so this is a type-narrowing guard,
+                # not a reachable branch today.
+                return transformed
             sql = self._tsql_setbased_rewrite(transformed.sql, bare_table)
             return EmbeddedDML(sql=self._qualify_tsql_udfs(sql), dialect="tsql")
         # Anything else (IF, etc.): fall back to the normal transform.
