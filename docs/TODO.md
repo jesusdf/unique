@@ -191,7 +191,11 @@ Findings detail: audit docs 02/04/05/07.
   is allowlisted as cosmetic but bundles view modifiers (`WITH CHECK OPTION`,
   `SCHEMABINDING`) the VIEW converter currently drops — probe, and split the
   allowlist if semantic; (b) `INSERT IGNORE` (`Insert.ignore`) — folded into
-  B1's scope as the DO NOTHING-class upsert.
+  B1's scope as the DO NOTHING-class upsert (done).
+- [ ] **RED seed from B13** (2026-07-25): standalone `JSON_QUERY(x, path)`
+  T-SQL→Oracle converts to `JSON_EXTRACT(...)` as *executable* output —
+  Oracle has no `JSON_EXTRACT`; probe and route through the per-target JSON
+  accessor mapping or degrade warned.
 
 ---
 

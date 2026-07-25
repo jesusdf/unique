@@ -487,7 +487,17 @@ worker agents**:
   prompt is always: the brief **verbatim**, pointers to this skill and the
   project-overview skill, and the standing constraints (TDD red→green, full
   gate before handing back, no edits to skills/docs-policy, no approach
-  changes). Use worktree isolation when workers touch code in parallel.
+  changes, **and "do not invoke any skill from the session's skill listing —
+  your only inputs are this prompt and the files it names"** — a Sonnet
+  worker once spontaneously invoked an unrelated skill on its first turn and
+  misdiagnosed the result as a prompt injection; harmless, but one line
+  prevents it). Use worktree isolation when workers touch code in parallel.
+  **Worktree gotcha (B10 finding):** the venv's editable install points at the
+  MAIN checkout's src, and pyproject's `pythonpath` covers only `tests` — so
+  in a worktree, `pytest`/`scripts/test-parallel.sh` silently import and gate
+  the WRONG code unless the worker runs `export PYTHONPATH=$PWD/src` first
+  (and verifies `python -c "import unique; print(unique.__file__)"` resolves
+  to the worktree). Put that line in every worker prompt.
 - **Concurrency is budget-bound:** keep it to **2–3 workers at a time** and
   batch the rest — the 2026-07-24 six-agent fan-out exhausted the session
   limit mid-campaign. Long-running workers go in the background; the
