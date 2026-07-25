@@ -243,9 +243,17 @@ Findings detail: audit docs 02/04/05/07.
     product defects. Moved to a `VALID_BUT_SQLGLOT_UNPARSEABLE` allowlist in
     `tests/integration/test_challenge.py`, each carrying its live-verification
     evidence; the empty `XFAIL_TARGET_PARSE` dict was deleted.
-  - [ ] **(c-nightly)** nightly live-execution job for challenge func-class
-    cases — a `.github/workflows/challenge-live.yml` that executes
-    source-on-source vs output-on-target and diffs result sets.
+  - [x] **(c-nightly)** nightly live-execution job for challenge func-class
+    cases — done 2026-07-25: `.github/workflows/challenge-live.yml` (nightly
+    cron + workflow_dispatch, all four engines via ci.yaml's service-container
+    pattern) runs `tests/integration/test_challenge_live.py`, which executes
+    each curated FUNC_CASES entry (11 semantic cases: int/decimal division,
+    numeric-string arithmetic, concat-vs-NULL, safe CAST, ON CONFLICT upsert,
+    full MERGE fold) plus any `[class=func]`-tagged `[fixed]` case on its source
+    engine vs the transpiled output on each target and diffs result sets
+    (reusing `corpus_diff.normalize_rows`). Skips per case when the
+    `UNIQUE_TEST_*_URL` env vars are absent. Live-verified 33 pass / 33 skip
+    offline.
 
 ---
 

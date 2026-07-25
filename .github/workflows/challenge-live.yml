@@ -1,0 +1,270 @@
+name: Challenge live (nightly)
+
+# The challenge parse gate (test_challenge.py) proves transpiled output *parses*;
+# this nightly job proves the func-class cases return the *same result set*. It
+# executes the curated FUNC_CASES (and any [fixed] case tagged [class=func]) on
+# the real source and target engines and diffs the answers — a semantic gate that
+# a permissive parser cannot see. Runs nightly and on demand (not per push): it
+# needs the four live engines and is a regression sentinel, not a merge gate.
+
+on:
+  schedule:
+    - cron: "22 3 * * *"  # 03:22 UTC nightly (off the mutation job's 04:44)
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  challenge-live:
+    name: Challenge func-class result diff
+    # 22.04 ships the Microsoft ODBC Driver 18 (msodbcsql18) preinstalled,
+    # avoiding a flaky apt install of the Microsoft repo on newer runners.
+    runs-on: ubuntu-22.04
+    # SQL Server, MySQL and PostgreSQL run as service containers; Oracle Free is
+    # started as a plain container (long startup window) — the exact pattern the
+    # ci.yaml "Live Syntax Validation" job proved feasible.
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "Unique_Strong!Pass1"
+          MSSQL_PID: Developer
+        ports:
+          - 1433:1433
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: UniqueStrongPass1
+          MYSQL_DATABASE: unique
+          MYSQL_USER: unique
+          MYSQL_PASSWORD: unique
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -uunique -punique"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: unique
+          POSTGRES_PASSWORD: unique
+          POSTGRES_DB: unique
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U unique"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Start Oracle Free container
+        run: |
+          # Started as a plain container (not a service) so we can give it a
+          # long, observable startup window and read its logs on failure.
+          # APP_USER must not be an Oracle reserved word (unquoted CREATE USER
+          # folds 'unique' to reserved UNIQUE, ORA-01935) — use uniqueapp.
+          docker run -d --name oracle \
+            -p 1521:1521 \
+            -e ORACLE_PASSWORD=UniqueStrongPass1 \
+            -e APP_USER=uniqueapp \
+            -e APP_USER_PASSWORD=UniqueStrongPass1 \
+            gvenzl/oracle-free:23-slim-faststart
+          echo "Oracle container started; it will initialize while deps install."
+
+      - name: Install dependencies and DB drivers
+        run: |
+          # pymssql (bundled FreeTDS) lets the harness reach SQL Server without
+          # the MS ODBC driver; oracledb thin mode needs no Oracle client.
+          pip install -c constraints.txt -e ".[dev]" "psycopg[binary]>=3.1.0" \
+            "mysql-connector-python>=8.3.0" "pyodbc>=5.1.0" "oracledb>=2.0.0" \
+            "pymssql>=2.3.0"
+
+      - name: Ensure Microsoft ODBC Driver 18
+        run: |
+          set -uxo pipefail
+          # 22.04 runners usually ship the driver already.
+          if odbcinst -q -d 2>/dev/null | grep -qi "ODBC Driver 18 for SQL Server"; then
+            echo "ODBC Driver 18 already present."
+            exit 0
+          fi
+          . /etc/os-release
+          VER="${VERSION_ID}"
+          if ! curl -fsSL "https://packages.microsoft.com/config/ubuntu/${VER}/prod.list" -o /tmp/mssql.list; then
+            VER="22.04"
+            curl -fsSL "https://packages.microsoft.com/config/ubuntu/${VER}/prod.list" -o /tmp/mssql.list || true
+          fi
+          curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+            | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg || true
+          sudo sed -i 's#\[.*\]#[signed-by=/usr/share/keyrings/microsoft-prod.gpg]#' /tmp/mssql.list || true
+          sudo cp /tmp/mssql.list /etc/apt/sources.list.d/mssql-release.list || true
+          sudo apt-get update || true
+          sudo ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev || \
+            echo "WARNING: msodbcsql18 install failed; the SQL Server checks will skip."
+
+      - name: Wait for SQL Server
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          import time
+          try:
+              import pyodbc
+          except Exception as e:
+              print(f"pyodbc unavailable, skipping wait: {e}")
+              raise SystemExit(0)
+          dsn = (
+              "DRIVER={ODBC Driver 18 for SQL Server};"
+              "SERVER=localhost,1433;UID=sa;PWD=Unique_Strong!Pass1;"
+              "TrustServerCertificate=yes;"
+          )
+          for attempt in range(40):
+              try:
+                  pyodbc.connect(dsn, timeout=3).close()
+                  print("SQL Server ready")
+                  break
+              except Exception as e:
+                  print(f"waiting... ({attempt}) {e}")
+                  time.sleep(3)
+          else:
+              print("SQL Server not ready; its checks will skip.")
+          PY
+
+      - name: Wait for Oracle
+        id: oracle_wait
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          import os
+          import time
+          try:
+              import oracledb
+          except Exception as e:
+              print(f"oracledb unavailable, skipping wait: {e}")
+              raise SystemExit(0)
+          ok = False
+          for attempt in range(60):  # up to ~5 min
+              try:
+                  oracledb.connect(
+                      user="uniqueapp",
+                      password="UniqueStrongPass1",
+                      dsn="localhost:1521/FREEPDB1",
+                  ).close()
+                  print("Oracle ready")
+                  ok = True
+                  break
+              except Exception as e:
+                  print(f"waiting... ({attempt}) {e}")
+                  time.sleep(5)
+          if not ok:
+              print("Oracle not ready; its checks will skip.")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as fh:
+              fh.write(f"ready={'true' if ok else 'false'}\n")
+          PY
+
+      - name: Oracle container logs (on startup failure)
+        # Surface the container logs (as an ::error:: annotation, readable via
+        # the annotations API) only when Oracle did NOT come up.
+        if: always() && steps.oracle_wait.outputs.ready != 'true'
+        run: |
+          LOG="$(docker logs oracle 2>&1 | tail -25 || true)"
+          ENC="${LOG//'%'/'%25'}"
+          ENC="${ENC//$'\n'/'%0A'}"
+          echo "::error title=oracle-logs (startup failed)::${ENC}"
+
+      - name: Gate — all four engines must be reachable
+        # A missing engine must FAIL the job, not silently shrink the diff to
+        # whatever came up (mirrors ci.yaml's reachability gate).
+        run: |
+          python - <<'PY'
+          import sys
+
+          failures = []
+
+          def check(name, fn):
+              try:
+                  fn()
+                  print(f"{name} OK")
+              except Exception as e:  # noqa: BLE001
+                  failures.append(f"{name}: {e}")
+
+          def pg():
+              import psycopg
+
+              psycopg.connect(
+                  "postgresql://unique:unique@localhost:5433/unique",
+                  connect_timeout=10,
+              ).close()
+
+          def my():
+              import mysql.connector
+
+              mysql.connector.connect(
+                  host="127.0.0.1", port=3307, user="root",
+                  password="UniqueStrongPass1", database="unique",
+                  connection_timeout=10,
+              ).close()
+
+          def ora():
+              import oracledb
+
+              oracledb.connect(
+                  user="uniqueapp", password="UniqueStrongPass1",
+                  dsn="localhost:1521/FREEPDB1",
+              ).close()
+
+          def ms():
+              import pymssql
+
+              pymssql.connect(
+                  server="127.0.0.1", port=1433, user="sa",
+                  password="Unique_Strong!Pass1", database="master",
+                  login_timeout=10,
+              ).close()
+
+          check("postgresql", pg)
+          check("mysql", my)
+          check("oracle", ora)
+          check("mssql", ms)
+          if failures:
+              for f in failures:
+                  print(f"::error title=engine unreachable::{f}")
+              sys.exit(1)
+          PY
+
+      - name: Run challenge func-class result diff
+        env:
+          # oracle-free's default PDB is FREEPDB1; creds match the containers above.
+          UNIQUE_TEST_MSSQL_URL: mssql://sa:Unique_Strong!Pass1@localhost:1433/master
+          UNIQUE_TEST_ORACLE_URL: oracle://uniqueapp:UniqueStrongPass1@localhost:1521/FREEPDB1
+          UNIQUE_TEST_MYSQL_URL: mysql://root:UniqueStrongPass1@localhost:3307/unique
+          UNIQUE_TEST_PG_URL: postgresql://unique:unique@localhost:5433/unique
+        run: |
+          # Run, capture output, and surface failures as ::error:: annotations
+          # (readable via the annotations API; raw logs sit on a blocked blob).
+          set +e
+          pytest tests/integration/test_challenge_live.py -v -rA \
+            > /tmp/challenge_live.out 2>&1
+          rc=$?
+          set -e
+          cat /tmp/challenge_live.out
+          {
+            echo '### Challenge func-class result diff'
+            echo '```'
+            cat /tmp/challenge_live.out
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ $rc -ne 0 ]; then
+            DETAIL=$(grep -E "^(FAILED|E |assert|.*different result set|.*source:|.*target:)" /tmp/challenge_live.out \
+              | head -40 | sed 's/%/%25/g; s/\r//g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Challenge live result diff failed::${DETAIL}"
+          fi
+          exit $rc
