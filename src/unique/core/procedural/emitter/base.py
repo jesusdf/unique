@@ -547,6 +547,18 @@ class ProceduralEmitter:
             if isinstance(stmt, (DeclareStatement, CursorDeclaration)):
                 hoist_declare(stmt)
             elif (
+                isinstance(stmt, RawSQL) and stmt.reason == "cursor end-of-data handler"
+            ):
+                # MySQL's ``DECLARE … HANDLER FOR NOT FOUND`` is a declaration:
+                # it must precede every executable statement (error 1064
+                # otherwise). ``_inject_fetch_done`` places it after the last
+                # cursor declaration, but any executable ahead of the
+                # declarations (e.g. a ``SELECT … INTO #tmp`` lowered to a
+                # ``CREATE TEMPORARY TABLE``) would otherwise strand it in the
+                # body — hoist it into the declaration section, after the
+                # cursors it follows.
+                declarations.append(stmt)
+            elif (
                 isinstance(stmt, StatementList)
                 and stmt.statements
                 and all(
