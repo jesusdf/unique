@@ -100,7 +100,19 @@ line-length = 88
 target-version = "py313"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM", "C901", "PLR0912", "PLR0915"]
+
+# Complexity ceilings (audit 2026-07-24 doc 04 F5 / 09-fix-briefs.md B17 T6).
+# Set just at today's worst offender so the gate is green now but new code
+# cannot exceed the worst legacy function; the giants are burned down under the
+# architecture-ratchet gate (scripts/architecture_ratchets.py, C901 offenders),
+# and these ceilings ratchet down with them.
+[tool.ruff.lint.mccabe]
+max-complexity = 355  # _emit_function (converter/emit.py)
+
+[tool.ruff.lint.pylint]
+max-branches = 348    # _emit_function
+max-statements = 679  # _emit_function
 
 [tool.ruff.lint.per-file-ignores]
 # The converter package splits one module into _base/harvest/convert/emit and
