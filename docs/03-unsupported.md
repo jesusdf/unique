@@ -654,6 +654,16 @@ only partially supported:
   … INTO @t` is a documented carrier (Oracle `RETURNING` cannot target a table, so
   the GTT is populated manually). **PostgreSQL/MySQL** have no direct equivalent —
   the column list is captured verbatim (use a collection type or temporary table).
+- **`SELECT ... INTO #tmp`** inside a procedure (a T-SQL temp table, not a
+  variable): lowered to the target's temp-table idiom rather than the invalid
+  variable-`INTO` form. **PostgreSQL/MySQL** emit `CREATE TEMPORARY TABLE tmp AS
+  SELECT …` preceded by a `DROP … IF EXISTS` (so a second `CALL` in the same
+  session recreates it — temp tables outlive a statement there). **Oracle**
+  hoists a session **Global Temporary Table** before the routine (same machinery
+  as `@table` variables) and the body clears + repopulates it
+  (`DELETE`/`INSERT`) so each call is isolated. Outside a procedure (in a
+  function or trigger, where the Oracle CREATE cannot be hoisted) it falls back
+  to the documented warned degrade.
 - **`SELECT ... INTO @var`** combined with `OUTPUT ... INTO`: the `OUTPUT`
   clause is engine-specific and emitted as raw SQL.
 - **Variable-assignment `SELECT`** (`SELECT @x = col`): handled for the
