@@ -79,6 +79,12 @@ jobs:
         # audit/2026-07-02/02-test-quality.md and scripts/identity_mutation_check.py.
         run: python scripts/identity_mutation_check.py
 
+      - name: Architecture-ratchet gate (emitter debt non-growth)
+        # Fails if emitter size, post-emit regex surface, dialect
+        # string-dispatch or C901 offenders grow past their floors; see
+        # audit/2026-07-24/04-code-quality.md and scripts/architecture_ratchets.py.
+        run: python scripts/architecture_ratchets.py
+
       - name: Upload coverage
         uses: actions/upload-artifact@v5
         with:
