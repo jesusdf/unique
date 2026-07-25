@@ -235,6 +235,21 @@ Findings detail: audit docs 02/04/05/07.
   object extraction emits native `JSON_QUERY` on tsql/oracle and
   `JSONB_PATH_QUERY_FIRST` on PG; MySQL keeps `JSON_EXTRACT`. Live value
   verified on Oracle. `tests/integration/test_json_query_accessor.py`.)*
+- [ ] **Maintainer decision — `or_replace` on converted views** (found
+  2026-07-25, predates the view-modifier work): `_convert_create_view` sets
+  `or_replace = expr.args.get("replace") is not None`, but sqlglot stores
+  `replace=False` for a plain CREATE — so EVERY converted view emits
+  `CREATE OR REPLACE` (`OR ALTER` on tsql). Migration-friendly but a silent
+  semantic change (a plain CREATE errors on an existing view; OR REPLACE
+  overwrites it). Decide: keep as a documented idempotency feature (add the
+  03-unsupported note + annotation) or fix to `bool(...)` and re-bless the
+  affected corpus/tests.
+- [ ] **sqlglot hang note** (2026-07-25): sqlglot 30.x's parse-error
+  highlighter hangs (infinite) on `WITH CASCADED CHECK OPTION` under the
+  `oracle` reader at `ErrorLevel.RAISE`. Our pre-parse hook now strips the
+  clause first, but if raw user input can ever reach a RAISE-parse on the
+  oracle reader, guard it (timeout or pre-strip) — and consider reporting
+  upstream.
 - [ ] **RED seed from B17b** (2026-07-25): `SELECT 2||3` Oracle→PostgreSQL
   emits bare `2 || 3` — PG rejects `integer || integer` (Oracle implicitly
   casts to varchar and returns '23'). Needs an operand cast
