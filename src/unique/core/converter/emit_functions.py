@@ -613,6 +613,42 @@ def _emit_sequence_call(node: FunctionCall, dialect: str) -> str | None:
     }.get(dialect, f"currval('{bare}')")
 
 
+def _emit_json_object_extract(node: FunctionCall, dialect: str) -> str | None:
+    """Emit a JSON object-extract (``JSON_EXTRACT``/``JSON_QUERY``/``->``).
+
+    sqlglot models MySQL ``JSON_EXTRACT``/``->``, PG ``->`` and T-SQL/Oracle
+    ``JSON_QUERY`` all as ``exp.JSONExtract`` (IR name ``JSON_EXTRACT``). Each
+    non-MySQL target needs its own object accessor; the caller has already
+    checked ``dialect != "mysql"`` (MySQL keeps native ``JSON_EXTRACT``).
+    Returns ``None`` when the source dialect has no object-extract mapping so
+    the generic path handles it.
+    """
+    jx = _emit_expression(node.args[0], dialect)
+    jp = _emit_expression(node.args[1], dialect)
+    src = SOURCE_DIALECT.get()
+    if src == "mysql":
+        # MySQL JSON_EXTRACT returns objects/arrays or scalars — T-SQL:
+        # JSON_QUERY covers objects, JSON_VALUE scalars, ISNULL of both either.
+        if dialect == "tsql":
+            return f"ISNULL(JSON_QUERY({jx}, {jp}), JSON_VALUE({jx}, {jp}))"
+        if dialect == "oracle":
+            return f"JSON_VALUE({jx}, {jp})"
+        jm = re.fullmatch(r"'\$\.(\w+)'", jp.strip())
+        if jm:
+            return f"JSON_EXTRACT_PATH({jx}, '{jm.group(1)}')"
+        return f"JSON_EXTRACT_PATH({jx}, {jp})"
+    if src in ("tsql", "oracle"):
+        # T-SQL/Oracle JSON_QUERY is object extraction. Oracle and T-SQL have
+        # JSON_QUERY natively; PostgreSQL has no such function — route through
+        # the SQL/JSON path engine (the same lowering the JSON_QUERY builtin
+        # uses). Emitting a bare JSON_EXTRACT shipped an executable call to
+        # engines that lack it (N12/B13 follow-up).
+        if dialect in ("tsql", "oracle"):
+            return f"JSON_QUERY({jx}, {jp})"
+        return f"JSONB_PATH_QUERY_FIRST(CAST({jx} AS JSONB), {jp})"
+    return None
+
+
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
@@ -2381,26 +2417,10 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             return f"CASE WHEN {pos} = 0 THEN 0 ELSE {pos} + {start} - 1 END"
         return f"POSITION({needle} IN {haystack})"
 
-    # MySQL JSON_EXTRACT / ``->``: each target's accessor. T-SQL: JSON_QUERY
-    # returns objects/arrays and JSON_VALUE scalars — ISNULL of both covers
-    # either. PG: JSON_EXTRACT_PATH (the generated-column branch further
-    # rewrites it to the ->> text accessor + CAST for non-text columns).
-    if (
-        fn_name == "JSON_EXTRACT"
-        and len(node.args) == 2
-        and dialect != "mysql"
-        and SOURCE_DIALECT.get() == "mysql"
-    ):
-        _jx = _emit_expression(node.args[0], dialect)
-        _jp = _emit_expression(node.args[1], dialect)
-        if dialect == "tsql":
-            return f"ISNULL(JSON_QUERY({_jx}, {_jp}), JSON_VALUE({_jx}, {_jp}))"
-        if dialect == "oracle":
-            return f"JSON_VALUE({_jx}, {_jp})"
-        _jm = re.fullmatch(r"'\$\.(\w+)'", _jp.strip())
-        if _jm:
-            return f"JSON_EXTRACT_PATH({_jx}, '{_jm.group(1)}')"
-        return f"JSON_EXTRACT_PATH({_jx}, {_jp})"
+    if fn_name == "JSON_EXTRACT" and len(node.args) == 2 and dialect != "mysql":
+        _je = _emit_json_object_extract(node, dialect)
+        if _je is not None:
+            return _je
 
     # GROUPING_ID(a, b) is Oracle/T-SQL spelling; PG and MySQL expose the SAME
     # bitmask as multi-argument GROUPING(a, b) (live-verified 0/1/3 on both).
