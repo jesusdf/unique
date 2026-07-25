@@ -248,11 +248,15 @@ class TestPerformance:
 
         sql = _load(filename)
         target = "tsql" if source != "tsql" else "postgresql"
-        start = time.perf_counter()
+        # CPU time, not wall clock: the transpile is single-threaded pure
+        # CPU, so process_time keeps the regression signal while staying
+        # stable under parallel-suite/machine load — the wall-clock version
+        # flaked on every loaded run (audit 2026-07-24 B25).
+        start = time.process_time()
         transpile(sql, source, target)
-        elapsed = time.perf_counter() - start
+        elapsed = time.process_time() - start
         assert elapsed < budget_s, (
-            f"{filename} took {elapsed:.2f}s (budget {budget_s}s) — "
+            f"{filename} took {elapsed:.2f}s CPU (budget {budget_s}s) — "
             "possible performance regression"
         )
 
