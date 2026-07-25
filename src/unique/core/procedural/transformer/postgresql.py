@@ -139,6 +139,7 @@ class PostgresTransformer(ProceduralTransformer):
         sql = self._rewrite_alter_trigger(sql)
         sql = self._map_oracle_catalogs(sql)
         sql = self._expr._pg_string_concat(sql)
+        sql = self._expr._pg_numeric_concat_cast(sql)
         sql = self._pg_clean_dml(sql)
         return sql
 
@@ -190,6 +191,7 @@ class PostgresTransformer(ProceduralTransformer):
         sql = self._rewrite_alter_trigger(sql)
         sql = self._map_oracle_catalogs(sql)
         sql = self._expr._pg_string_concat(sql)
+        sql = self._expr._pg_numeric_concat_cast(sql)
         if self._in_trigger:
             # PL/SQL trigger event predicates: plpgsql reads TG_OP.
             sql = re.sub(

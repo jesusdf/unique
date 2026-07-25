@@ -520,6 +520,78 @@ class ExpressionRewriter:
     def _pg_string_concat(self, sql: str) -> str:
         return self._rewrite_string_concat(sql, "postgresql")
 
+    def _pg_numeric_concat_cast(self, sql: str) -> str:
+        """Cast both operands of an all-numeric ``||`` to TEXT for PostgreSQL.
+
+        PG has no ``integer || integer`` operator, so a source that implicitly
+        stringifies (Oracle ``2||3`` -> '23') emits an invalid ``2 || 3``. When
+        both operands of a ``||`` (DPipe) are numeric — with no text operand to
+        resolve ``text || anynonarray`` — cast them to TEXT. A ``||`` with a
+        string/unknown operand is left untouched (PG resolves it). Mirrors the
+        IR-pipeline rule in ``converter/emit_expr._is_pg_concat_numeric``.
+        """
+        if "||" not in sql:
+            return sql
+        import sqlglot
+        from sqlglot import exp
+
+        def is_numeric(n: exp.Expression) -> bool:
+            while isinstance(n, exp.Paren):
+                n = cast(exp.Expression, n.this)
+            if isinstance(n, exp.Neg):
+                return is_numeric(cast(exp.Expression, n.this))
+            if isinstance(n, exp.Literal):
+                return not n.args.get("is_string")
+            if isinstance(n, (exp.Add, exp.Sub, exp.Mul, exp.Div, exp.Mod)):
+                return is_numeric(cast(exp.Expression, n.left)) and is_numeric(
+                    cast(exp.Expression, n.right)
+                )
+            return False
+
+        def convert(node: exp.Expression) -> exp.Expression:
+            for key, value in list(node.args.items()):
+                if isinstance(value, exp.Expression):
+                    node.set(key, convert(value))
+                elif isinstance(value, list):
+                    node.set(
+                        key,
+                        [
+                            convert(c) if isinstance(c, exp.Expression) else c
+                            for c in value
+                        ],
+                    )
+            if isinstance(node, exp.DPipe):
+                left = cast(exp.Expression, node.left)
+                right = cast(exp.Expression, node.right)
+                if is_numeric(left) and is_numeric(right):
+                    text = exp.DataType.build("TEXT")
+                    node.set("this", exp.Cast(this=left.copy(), to=text.copy()))
+                    node.set("expression", exp.Cast(this=right.copy(), to=text.copy()))
+            return node
+
+        wrapped = False
+        tree = None
+        try:
+            parsed = sqlglot.parse_one(sql, read="postgres")
+            if not isinstance(parsed, exp.Command):
+                tree = parsed
+        except Exception:
+            tree = None
+        if tree is None:
+            try:
+                tree = sqlglot.parse_one(f"SELECT {sql}", read="postgres")
+                wrapped = True
+            except Exception:
+                return sql
+        try:
+            tree = convert(cast(exp.Expression, tree))
+            rendered = tree.sql(dialect="postgres")
+        except Exception:
+            return sql
+        if wrapped and rendered.upper().startswith("SELECT "):
+            return rendered[len("SELECT ") :].rstrip().rstrip(";")
+        return rendered
+
     def _rewrite_string_concat(self, sql: str, target: str) -> str:
         """Rewrite T-SQL string `+` concatenation for the target dialect.
 

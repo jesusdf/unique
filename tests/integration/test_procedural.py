@@ -231,6 +231,23 @@ class TestOracleToPostgreSQL:
         assert "TIMESTAMP" in out
         assert "END IF;" in out
 
+    def test_numeric_concat_casts_operands_to_text(self) -> None:
+        # PG has no integer||integer operator; both-numeric || needs TEXT casts.
+        # A string operand ('a' || 5) resolves as text || anynonarray -> untouched.
+        sql = (
+            "CREATE OR REPLACE PROCEDURE p IS\n"
+            "    v VARCHAR2(20);\n"
+            "BEGIN\n"
+            "    v := 2 || 3;\n"
+            "    v := 'a' || 5;\n"
+            "    v := col || 'x';\n"
+            "END;"
+        )
+        out = _transpile(sql, "oracle", "postgresql")
+        assert "v := CAST(2 AS TEXT) || CAST(3 AS TEXT);" in out, out
+        assert "v := 'a' || 5;" in out, out
+        assert "v := col || 'x';" in out, out
+
 
 class TestOracleToMySQL:
     def test_types_and_declare(self) -> None:
