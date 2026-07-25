@@ -135,26 +135,6 @@ warn_unused_configs = true
 module = ["unique.core.live_validate", "unique.core.metadata"]
 disable_error_code = ["unused-ignore"]
 
-# The converter emitter split (audit doc 04 F4) moved the mutually-recursive
-# emitter families into emit_functions/emit_expr/emit_ddl/emit_passthrough.
-# Their bodies reference sibling emitters and emit.py helpers by bare name;
-# those names are completed at import time by the namespace injection emit.py
-# performs after loading every seam (so they exist at runtime and the suite
-# proves it), but they are not statically importable without recreating the
-# cycle. Disable only ``name-defined`` for these seams — every other strict
-# check stays on, as it was when the code lived in emit.py. ``no-any-return``
-# is disabled for the same reason: an injected sibling emitter is statically
-# ``Any``, so returning its result trips warn_return_any even though the real
-# (runtime) return type is ``str``.
-[[tool.mypy.overrides]]
-module = [
-    "unique.core.converter.emit_functions",
-    "unique.core.converter.emit_expr",
-    "unique.core.converter.emit_ddl",
-    "unique.core.converter.emit_passthrough",
-]
-disable_error_code = ["name-defined", "no-any-return"]
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"

@@ -6,6 +6,20 @@
 
 All dialect parsers delegate to this module for the heavy lifting of
 converting sqlglot's expression tree into our engine-agnostic IR.
+
+Seam layout (audit doc 04 F4 split — B17). The emitter families were moved into
+four sibling modules — ``emit_functions``/``emit_expr``/``emit_ddl``/
+``emit_passthrough`` — mutually recursive with each other and this module. They
+resolve cross-references with *explicit* imports, not runtime namespace
+injection. This module is always the entry point (nothing imports a seam
+directly), so its helpers are all defined before its tail ``import *`` pulls the
+seams in and re-exports them (the façade surface). Each seam in turn imports the
+helpers and siblings it calls at *its own tail*, after its ``def``\\s — so every
+module finishes defining its own names before importing any other, and the
+cycle (notably ``emit_expr`` ⇄ ``emit_functions``) resolves: whichever is
+entered second finds the first already complete. Every cross-seam name is thus
+statically importable — mypy checks the seams at the project's normal strictness
+with no per-module override, and there is no per-call import cost.
 """
 
 from __future__ import annotations
@@ -3692,30 +3706,13 @@ def _emit_limit(limit: LimitClause, dialect: str) -> str:
 # ---------------------------------------------------------------------------
 # Emitter seam modules (audit doc 04 F4 split — 09-fix-briefs.md B17 step 4).
 # The heavy families were moved verbatim out of this module for size and are
-# re-imported here so the converter façade and this module's own dispatchers
-# keep working. The emitters are mutually recursive across the seams, so after
-# every seam is imported each seam's globals are completed with this module's
-# full namespace: seam bodies reference their siblings and this module's
-# helpers by bare name, resolved at call time. Nothing is called during import,
-# so the post-import injection is always in place before first use.
+# re-exported here (``import *``) so the converter façade and this module's own
+# dispatchers keep resolving them by bare name. Each seam imports the emit.py
+# helpers and sibling emitters it needs explicitly at its own tail; the mutual
+# recursion resolves because every module finishes defining its own names
+# before importing any other — see this module's docstring.
 # ---------------------------------------------------------------------------
-from unique.core.converter import emit_ddl as _emit_ddl_mod  # noqa: E402
-from unique.core.converter import emit_expr as _emit_expr_mod  # noqa: E402
-from unique.core.converter import emit_functions as _emit_functions_mod  # noqa: E402
-from unique.core.converter import (  # noqa: E402
-    emit_passthrough as _emit_passthrough_mod,
-)
 from unique.core.converter.emit_ddl import *  # noqa: E402,F401,F403
 from unique.core.converter.emit_expr import *  # noqa: E402,F401,F403
 from unique.core.converter.emit_functions import *  # noqa: E402,F401,F403
 from unique.core.converter.emit_passthrough import *  # noqa: E402,F401,F403
-
-_SEAM_MODULES = (
-    _emit_functions_mod,
-    _emit_expr_mod,
-    _emit_ddl_mod,
-    _emit_passthrough_mod,
-)
-_seam_shared = {_k: _v for _k, _v in globals().items() if not _k.startswith("__")}
-for _seam_mod in _SEAM_MODULES:
-    _seam_mod.__dict__.update(_seam_shared)
