@@ -238,7 +238,11 @@ class TestPerformance:
             ("hr_create_oracle.sql", "oracle", 2.0),
             ("sakila_schema_mysql.sql", "mysql", 2.0),
             ("adventureworks_lt_sqlserver.sql", "tsql", 4.0),
-            ("northwind_postgresql.sql", "postgresql", 10.0),
+            # 12.0: measured baseline ~5-8s CPU; under an 8-way parallel
+            # suite cache contention still inflated CPU past a 10.0 budget
+            # once (10.4s) — the margin keeps the regression signal without
+            # the flake.
+            ("northwind_postgresql.sql", "postgresql", 12.0),
         ],
     )
     def test_transpile_within_budget(
