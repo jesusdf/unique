@@ -72,8 +72,19 @@ Findings detail: audit docs 02/04/05/07.
 
 ### P2
 
-- [ ] **B10** Running COLUMN_TYPES harvest + T-SQL `ALTER COLUMN` nullability
-  (N9 — silent type revert / dropped NOT NULL); shares harvest work with B1.
+- [x] **B10** Running COLUMN_TYPES harvest + T-SQL `ALTER COLUMN` nullability
+  (N9 — silent type revert / dropped NOT NULL) — done 2026-07-25: the
+  COLUMN_TYPES map (plus a new COLUMN_NOT_NULL companion seeded by
+  `harvest_column_not_null`) is now a running scan folded in statement order
+  (`fold_alter_into_running_types` in `converter/harvest.py`: ALTER/MODIFY …
+  TYPE, ADD COLUMN, RENAME COLUMN, DROP/SET NOT NULL; MySQL MODIFY resets
+  nullability unless restated), and the T-SQL `ALTER COLUMN <c> <type>`
+  emission re-states the column's known nullability (NOT NULL/NULL), warning
+  when the script never defined the column — the USING-redundant-cast strip
+  routes through the same helper. Live-verified: SQL Server end state
+  (bigint, is_nullable) matches PG's for the N9 script and the ADD COLUMN
+  fold. Tests: `test_harvest_running_columns.py`,
+  `test_pg_source_wave1.py::TestB10RunningColumnTypeAlterNullability`.
 - [x] **B7** Per-cursor status emulation class fix (N5+N6: duplicate MySQL
   labels, stale NOT-FOUND flag, global `@@FETCH_STATUS`, `%ISOPEN` as modulo) —
   done: per-cursor `@uq_<c>_fs`/`v_uq_<c>_done` fetch-status flags captured

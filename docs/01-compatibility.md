@@ -208,7 +208,7 @@ engines and indicates the transpilation support status for each.
 | Feature | T-SQL | Oracle | PostgreSQL | MySQL | Transpile Status |
 |---------|-------|--------|------------|-------|------------------|
 | CREATE TABLE | ✓ | ✓ | ✓ | ✓ | ✅ |
-| ALTER TABLE ADD/DROP/MODIFY | ✓ | ✓ | ✓ | ✓ | ✅ (syntax normalization) |
+| ALTER TABLE ADD/DROP/MODIFY | ✓ | ✓ | ✓ | ✓ | ✅ (syntax normalization; column types/nullability are tracked in statement order across the script, so a later ALTER sees earlier type changes, and T-SQL `ALTER COLUMN` re-states the column's known NOT NULL/NULL — warned when the script never defines the column) |
 | DROP TABLE | ✓ | ✓ | ✓ | ✓ | ✅ |
 | IF EXISTS / IF NOT EXISTS | ✓ | N/A | ✓ | ✓ | ⚠️ Oracle: kept verbatim (valid on 23c+ only); no exception block is emitted — pre-23c guard planned (2026-07-24 audit, `audit/2026-07-24/06-docs-drift.md` D3) |
 | Temporary tables | ✓ (#table) | ✓ (GTT) | ✓ (TEMP) | ✓ (TEMPORARY) | ✅ |
