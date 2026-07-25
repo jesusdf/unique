@@ -916,19 +916,14 @@ class ParserBase:
         plus PG spellings — ``DOUBLE PRECISION``, ``TIMESTAMP/TIME
         [WITH|WITHOUT] TIME ZONE`` and ``int[]`` array suffixes (the
         lexer folds ``[]`` into one bracket token)."""
+        # The shared parse already folds ``TIMESTAMP/TIME [WITH [LOCAL]|WITHOUT]
+        # TIME ZONE`` and the INTERVAL qualifiers (_fold_compound_type); only
+        # PG's ``DOUBLE PRECISION`` and ``int[]`` array suffixes remain here.
         dtype = self._parse_data_type_or_reference()
         upper = dtype.name.upper()
         cur = self._current()
         if upper == "DOUBLE" and cur.value.upper() == "PRECISION":
             dtype = replace(dtype, name=f"{dtype.name} {self._advance().value}")
-        elif upper in ("TIMESTAMP", "TIME") and cur.value.upper() in (
-            "WITH",
-            "WITHOUT",
-        ):
-            words = [self._advance().value]
-            while words and self._current().value.upper() in ("TIME", "ZONE"):
-                words.append(self._advance().value)
-            dtype = replace(dtype, name=" ".join([dtype.name, *words]))
         while (
             self._current().type == TokenType.IDENTIFIER
             and self._ARRAY_SUFFIX_RE.fullmatch(self._current().value) is not None
@@ -1166,8 +1161,18 @@ class ParserBase:
         )
 
     _CARRIER_TYPE_RE = re.compile(r"(?is)^/\*\s*UNIQUE:\s*(?!.*--)(.+?)\s*\*/$")
+    #: A carrier's original text is only restored when it looks like a type: a
+    #: plain (optionally dotted / %TYPE / parameterised) identifier, or one of
+    #: the multi-word datetime/interval compounds (``TIMESTAMP WITH [LOCAL] TIME
+    #: ZONE``, ``INTERVAL YEAR TO MONTH``, …) so those round-trip faithfully.
     _CARRIER_TYPEISH_RE = re.compile(
-        r"(?i)^([\w.]+(?:%\w+)?)\s*(?:\(\s*([\w, ]+)\s*\))?$"
+        r"(?i)^(?:"
+        r"[\w.]+(?:%\w+)?\s*(?:\(\s*[\w, ]+\s*\))?"
+        r"|(?:TIMESTAMP|TIME)(?:\s*\(\s*\d+\s*\))?\s+WITH(?:\s+LOCAL)?"
+        r"\s+TIME\s+ZONE"
+        r"|(?:TIMESTAMP|TIME)(?:\s*\(\s*\d+\s*\))?\s+WITHOUT\s+TIME\s+ZONE"
+        r"|INTERVAL\s+\w+(?:\s*\(\s*\d+\s*\))?(?:\s+TO\s+\w+(?:\s*\(\s*\d+\s*\))?)?"
+        r")$"
     )
 
     def _take_carrier_origin(self) -> str | None:
@@ -1212,6 +1217,55 @@ class ParserBase:
                 unsigned = True
             self._advance()
         return unsigned
+
+    #: Interval field keywords that follow ``INTERVAL`` in an Oracle/ANSI
+    #: interval qualifier (``INTERVAL YEAR TO MONTH``, ``INTERVAL DAY TO
+    #: SECOND``). Used to fold the whole qualifier into one type name.
+    _INTERVAL_FIELDS = frozenset({"YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND"})
+
+    def _fold_compound_type(self, type_name: str) -> tuple[str, bool]:
+        """Fold a trailing datetime/interval qualifier into the type name.
+
+        A declaration/parameter type parser stops after the base keyword
+        (``TIMESTAMP``/``TIME``/``INTERVAL``); the leftover ``WITH LOCAL TIME
+        ZONE`` / ``YEAR TO MONTH`` tokens would otherwise splinter into garbage
+        statements (silent, no warning). Recognising the whole compound here
+        keeps the declaration intact so the transformer can map it per target.
+
+        Returns ``(name, folded)`` — ``folded`` is True when trailing tokens
+        were consumed, so the caller can re-scan for a carrier comment that now
+        follows the (longer) type.
+        """
+        upper = type_name.upper()
+        cur = self._current()
+        if upper in ("TIMESTAMP", "TIME") and cur.value.upper() in (
+            "WITH",
+            "WITHOUT",
+        ):
+            words = [self._advance().value]  # WITH / WITHOUT
+            if self._current().value.upper() == "LOCAL":  # Oracle LTZ
+                words.append(self._advance().value)
+            while self._current().value.upper() in ("TIME", "ZONE"):
+                words.append(self._advance().value)
+            return " ".join([type_name, *words]), True
+        if upper == "INTERVAL" and cur.value.upper() in self._INTERVAL_FIELDS:
+            parts = [type_name]
+            while (
+                self._current().value.upper() in self._INTERVAL_FIELDS
+                or self._current().is_keyword("TO")
+            ):
+                parts.append(self._advance().value)
+                if self._current().type == TokenType.LPAREN:  # per-field (n)
+                    paren = [self._advance().value]
+                    while (
+                        not self._at_end() and self._current().type != TokenType.RPAREN
+                    ):
+                        paren.append(self._advance().value)
+                    if self._current().type == TokenType.RPAREN:
+                        paren.append(self._advance().value)
+                    parts[-1] = parts[-1] + "".join(paren)
+            return " ".join(parts), True
+        return type_name, False
 
     def _parse_data_type(self) -> DataType:
         """Parse a SQL data type."""
@@ -1263,6 +1317,9 @@ class ParserBase:
             self._match_type(TokenType.RPAREN)
             origin = self._take_carrier_origin()
 
+        type_name, folded = self._fold_compound_type(type_name)
+        if folded:
+            origin = self._take_carrier_origin() or origin
         unsigned = self._consume_type_attributes()
         return DataType(
             name=type_name,
@@ -1316,6 +1373,9 @@ class ParserBase:
             self._match_type(TokenType.RPAREN)
             origin = self._take_carrier_origin()
 
+        type_name, folded = self._fold_compound_type(type_name)
+        if folded:
+            origin = self._take_carrier_origin() or origin
         unsigned = self._consume_type_attributes()
         return DataType(
             name=type_name,
