@@ -171,6 +171,15 @@ Findings detail: audit docs 02/04/05/07.
   HEAD (owner: next session).
 - [ ] **B16** Challenge corpus: target-parse gate (T4) + upgrade the ~362
   loop-only `[fixed]` cases to dedicated assertions (batched campaign).
+  Progress 2026-07-25: the 110 PostgreSQL-source `[fixed]` cases that lacked a
+  dedicated assertion are now covered in
+  `tests/integration/test_challenge_assertions_postgresql.py` (declarative
+  `CASES` table + one parametrized runner per foreign target; present-AND-absent
+  on comment-stripped output, warn+`UNIQUE:` for degrade-expected targets). 310
+  new parametrized rows, all failing under the identity transpiler; identity
+  kill rate 66% -> 70%. One `SUSPECT_CASES` entry (`postgresql-drop4-match`
+  oracle silently drops MATCH FULL — no-op for a single-column FK, left
+  unasserted). Remaining: the sqlserver/oracle-source loop-only tails.
 - [ ] **B17** Emitter debt: arm ratchet gates (T3) + complexity lint (T6),
   de-regex the two guardrail violations (F1/F2), split `emit.py` along the
   doc-04 seams.
