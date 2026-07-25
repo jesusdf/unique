@@ -25,6 +25,33 @@ SQLGLOT_DIALECT = {
     "mysql": "mysql",
 }
 
+#: Tokens that are syntactically invalid on the named target but which
+#: sqlglot's lenient reader accepts (or silently rewrites), so the parse gate
+#: alone would pass them. Checked (word-boundary, case-insensitive) against the
+#: comment-stripped statement AFTER a successful parse; a hit fails the gate
+#: even though sqlglot parsed. Seeded from real leniency holes the challenge
+#: sweep found — grow it whenever an engine rejects a token sqlglot waves
+#: through.
+KNOWN_INVALID_TOKENS: dict[str, tuple[str, ...]] = {
+    # Oracle TIMESTAMP WITH LOCAL TIME ZONE is sqlglot's TIMESTAMPLTZ; its
+    # postgres/tsql readers echo the raw token and its mysql reader rewrites it
+    # to TIMESTAMP, but no real engine spells the type (the emitter maps it to
+    # timestamptz / DATETIMEOFFSET / TIMESTAMP).
+    "postgresql": ("TIMESTAMPLTZ",),
+    "tsql": ("TIMESTAMPLTZ",),
+    "mysql": ("TIMESTAMPLTZ",),
+}
+
+
+def _known_invalid_token(body: str, target: str) -> str | None:
+    """Return the first :data:`KNOWN_INVALID_TOKENS` token present in *body*
+    (comment-stripped, word-boundary, case-insensitive), or ``None``."""
+    text = executable_body(body).upper()
+    for tok in KNOWN_INVALID_TOKENS.get(target, ()):
+        if re.search(rf"\b{re.escape(tok)}\b", text):
+            return tok
+    return None
+
 
 def executable_lines(sql: str) -> str:
     """Return only the executable (non-comment) lines of *sql*."""
@@ -71,6 +98,13 @@ def assert_statements_parse(sql_out: str, target: str, *, context: str = "") -> 
             )
         except Exception as exc:  # noqa: BLE001 - collect with the statement
             failures.append(f"{type(exc).__name__}: {exc}\n  stmt: {body[:300]}")
+            continue
+        bad = _known_invalid_token(stmt, target)
+        if bad is not None:
+            failures.append(
+                f"KnownInvalidToken: {bad!r} parses as {target} but no real "
+                f"engine accepts the token\n  stmt: {body[:300]}"
+            )
     assert not failures, (
         f"{context or 'output'}: {len(failures)} transpiled statement(s) do not "
         f"parse as {target}:\n" + "\n".join(failures[:5])
@@ -92,6 +126,12 @@ def assert_parses(sql: str, dialect: str) -> None:
         raise AssertionError(
             f"output does not parse as {dialect}: {exc}\n--- output ---\n{sql}"
         ) from exc
+    bad = _known_invalid_token(sql, dialect)
+    if bad is not None:
+        raise AssertionError(
+            f"output parses as {dialect} but contains {bad!r}, a token no real "
+            f"{dialect} engine accepts:\n--- output ---\n{sql}"
+        )
 
 
 def assert_translated(

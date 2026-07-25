@@ -287,9 +287,11 @@ CASES.update(
             },
         ),
         "ora-dttypes": Case(
-            # postgresql omitted -> SUSPECT_CASES (silent invalid TIMESTAMPLTZ).
             "ora-dttypes ",
             {
+                # WITH LOCAL TIME ZONE -> timestamptz (a real PG type), warned;
+                # the invalid TIMESTAMPLTZ token must be gone.
+                "postgresql": Expect(("d TIMESTAMPTZ",), ("TIMESTAMPLTZ",), warn=True),
                 "tsql": Expect(("DATETIMEOFFSET",), ("WITH TIME ZONE",), warn=True),
                 "mysql": Expect(("e VARCHAR(30)",), ("INTERVAL YEAR",), warn=True),
             },
@@ -548,21 +550,7 @@ CASES.update(
 # Cases whose current HEAD output is questionable — recorded with evidence, NOT
 # blessed by an assertion (per the challenge skill: a suspect gets documented, a
 # fix belongs to a src/ change, and blessing wrong output would lock in a defect).
-SUSPECT_CASES: dict[str, str] = {
-    "ora-dttypes/postgresql": (
-        "Oracle 'd TIMESTAMP WITH LOCAL TIME ZONE' is emitted to PostgreSQL as "
-        "'d TIMESTAMPLTZ' — not a valid PostgreSQL type (PG has timestamptz / "
-        "timestamp only) — with NO warning and NO UNIQUE: carrier (result."
-        "warnings == []). sqlglot's lenient PG parse accepts the token, so the "
-        "test_challenge target-parse gate does not catch it, but the DDL fails at "
-        "runtime. This is a silent-invalid-output defect (no-silent-loss "
-        "invariant). tsql/mysql emit the same TIMESTAMPLTZ token but there it is "
-        "warned + carried, so those directions are honest degrades and ARE "
-        "asserted. Left unasserted for PG rather than blessed; the fix is a "
-        "src/ change (map WITH LOCAL TIME ZONE to timestamptz + a divergence "
-        "annotation, or degrade the statement warned)."
-    ),
-}
+SUSPECT_CASES: dict[str, str] = {}
 
 
 _PARAMS = [
