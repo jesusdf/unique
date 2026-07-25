@@ -498,6 +498,16 @@ worker agents**:
   the WRONG code unless the worker runs `export PYTHONPATH=$PWD/src` first
   (and verifies `python -c "import unique; print(unique.__file__)"` resolves
   to the worktree). Put that line in every worker prompt.
+- **Workers do NOT edit `docs/TODO.md`** — every parallel worker ticking its
+  own entry produced a merge conflict on every single cherry-pick of the
+  2026-07-25 campaign. The ARCHITECT updates the backlog once, at
+  integration, with the worker's close note. Same for any other shared
+  ledger file.
+- **Live suites run SERIALLY in team mode** — the parallel runner's shards
+  collide on the four shared Docker engines (duplicate table names,
+  ORA-00955, pg_type races) when several workers gate at once. Workers run
+  the live-marked tests with a serial `pytest`; the parallel runner is for
+  the offline suite.
 - **Concurrency is budget-bound:** keep it to **2–3 workers at a time** and
   batch the rest — the 2026-07-24 six-agent fan-out exhausted the session
   limit mid-campaign. Long-running workers go in the background; the

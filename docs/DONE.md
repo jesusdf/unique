@@ -5449,3 +5449,41 @@ backlog with the finding→brief→fix discipline): `TIMESTAMPLTZ`→PG silent
 invalid type (C4; also exposes the T4 gate's sqlglot-leniency hole),
 Oracle numeric `||`→PG invalid (B17b), the `or_replace` always-on maintainer
 decision, and the sqlglot CASCADED-CHECK-OPTION hang note.
+
+## 45. Post-audit findings + B28 features closed (2026-07-25, v0.32.0)
+
+The findings the audit-backlog campaign itself surfaced, plus the two
+scheduled B28 features, all worker-implemented under architect review with
+live verification:
+
+- **`TIMESTAMPLTZ` class** — Oracle `TIMESTAMP WITH LOCAL TIME ZONE` leaked
+  the invalid token on ALL three targets: `emit_ddl._local_tz_gap` now maps
+  PG→`TIMESTAMPTZ` (live-verified same-instant, session-TZ display on both),
+  tsql→`DATETIMEOFFSET`, mysql→`TIMESTAMP`, annotated+warned; the T4 gate
+  gained `KNOWN_INVALID_TOKENS` (tests/helpers/validity.py) closing the
+  sqlglot-leniency class; `ora-dttypes` un-suspected into a real assertion.
+- **Numeric `||` → PG** — both pipelines cast known-numeric operands to TEXT
+  (string/unknown untouched); `SELECT 2||3` returns '23' live on all three
+  targets; `ora-num-concat` back in the nightly FUNC_CASES. Ratchets kept
+  flat by refactor.
+- **PL/SQL multi-word datetime/interval declares** — `_fold_compound_type`
+  parses the whole family as one type (was silent garbage:
+  `v TIMESTAMP; WITH LOCAL; TIME ZONE;`); per-target mapping reuses
+  `_local_tz_gap` via table dispatch; precision-position bug fixed
+  (`TIMESTAMP(6) WITH TIME ZONE`, never `…ZONE(6)`); round-trips exact,
+  live-verified on all four engines.
+- **B28a `#temp` in procedures** — `_rewrite_temp_select_into`: PG/MySQL
+  `DROP IF EXISTS` + `CREATE TEMPORARY TABLE … AS`, Oracle hoisted GTT
+  reusing the `@table`-variable machinery + script-wide rename; functions
+  keep the warned degrade; live two-call isolation [30,30] on all three
+  targets. Bonus fix: MySQL cursor NOT-FOUND handler hoisted into the
+  declaration section (pre-existing silent-invalid).
+- **B28b top-level `BEGIN TRY/CATCH`** — sanctioned recognizer in
+  `classify_batch` + parser routing to an anonymous block; ALL lowering
+  reused (PG `DO $$ … EXCEPTION`, Oracle `BEGIN … EXCEPTION`, MySQL warned
+  carrier); live raise-and-recover identical to the SQL Server reference on
+  PG and Oracle; plpgsql subtransaction caveat documented (§3.5).
+
+Remaining from the audit stream: only the two maintainer decisions
+(`or_replace` idempotency-vs-fix; sqlglot CASCADED-hang guard) — see
+`docs/TODO.md`.

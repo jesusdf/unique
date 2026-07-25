@@ -1,6 +1,6 @@
 # Unique — Project Status
 
-## Current state: v0.31.0 (**M0–M4 complete; the 2026-07-24 audit backlog fully executed 2026-07-25** — upserts/MERGE/cursors/dynamic-SQL S1s fixed live-verified, emitter debt paid under CI ratchet gates, challenge corpus armed with 1,073 dedicated assertions)
+## Current state: v0.32.0 (**M0–M4 complete; the 2026-07-24 audit backlog, its follow-on findings and the B28 features all executed 2026-07-25** — every audit S1 fixed live-verified, emitter debt paid under CI ratchet gates, challenge corpus armed with 1,073 dedicated assertions; pending: two maintainer decisions)
 
 **Direction-residue campaign closed 2026-07-17** (waves 103–239, user-declared
 architectural floor at `469917a`): the six corpus directions (pg-source and

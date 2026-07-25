@@ -138,18 +138,30 @@ Each completed feature should have corresponding tests in the test suite.
 `audit/2026-07-08/`, **`audit/2026-07-24/` — current**). Audits are ground
 truth about real defects and must not be contradicted by STATUS/README claims.
 
-**The 2026-07-24 audit (v0.30.0) is the working agenda.** It verified the
-07-08 remediation (both S1s fixed, no old silent-loss reproduces) and found
-the *new* frontier one level up: **clause-level conversion and cross-feature
-composition** (10 live-verified S1s — upsert clauses silently dropped, MERGE
-semantic holes, nested-cursor emulation breaks), plus emitter-side debt
-(`converter/emit.py` ~10k lines with a relocated regex cascade — see the
-extended guardrail 2), stalled test-floor ratchets, and 10 private-vocabulary
-leaks. Before fixing ANY of its findings, read
-`audit/2026-07-24/08-prevention-plan.md` (why each class recurred, and the
-mechanical rules now in force) and the per-finding brief in
-`audit/2026-07-24/09-fix-briefs.md` — fixes start from the brief, not from
-scratch.
+**The 2026-07-24 audit's ENTIRE backlog is executed (2026-07-25, v0.32.0)** —
+all fix briefs B1–B28, the tools T1–T7, the follow-on findings the campaign
+itself surfaced, and the B28 features, worked brief-first by worker agents
+under architect review (`docs/MILESTONES.md`, `docs/DONE.md` §44–§45; only
+two maintainer decisions remain in `docs/TODO.md`). What that campaign left
+as STANDING MACHINERY, which every future session works under:
+- **Guardrail 7 + the unread-args tripwire** (`UNIQUE_UNREAD_ARGS`, default
+  warn) — sqlglot args must be consumed or warned.
+- **Architecture ratchets in CI** (`scripts/architecture_ratchets.py`) —
+  emitter size, post-emit regex surface, dialect dispatch, C901 offenders
+  only go DOWN; when a fix trips one, refactor, never raise a floor.
+- **Identity-mutation floor 0.70** (measured 0.76) with the T7 stale
+  backstop, and a **self-ratcheting nightly** mutation job.
+- **Challenge corpus fully armed**: T4 target-parse gate (+
+  `KNOWN_INVALID_TOKENS` denylist for sqlglot leniency), dedicated
+  assertions for every `[fixed]` case
+  (`test_challenge_assertions_<engine>.py`), a nightly live result-diff job
+  (`challenge-live.yml`), and `scripts/challenge_stats.py` batch scoring.
+- **Confidentiality tooling**: `scripts/private_leak_check.py` pre-push
+  sweep (it caught a real leak on day one; extend its stopwords when
+  generic-tech false positives appear).
+The prevention plan (`audit/2026-07-24/08-prevention-plan.md`) documents why
+each defect class had recurred and the rules that now hold; new findings get
+a brief before a fix (`09-fix-briefs.md` is the template).
 
 **The corpus validity campaigns are CLOSED (2026-07-17).** The pg-source and
 mysql-source directions were swept wave-by-wave against the live engines

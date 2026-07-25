@@ -10,6 +10,20 @@ Newest first.
 
 ---
 
+## Post-audit findings + B28 features (2026-07-25, v0.31.0–v0.32.0)
+
+The flywheel's second turn: the findings the audit campaign itself surfaced
+(`TIMESTAMPLTZ` invalid-type class + the T4 gate's sqlglot-leniency denylist,
+numeric `||`→PG operand casts, PL/SQL multi-word datetime/interval declares)
+and the two authored feature briefs (B28a `#temp`-in-procedures with live
+two-call isolation on all targets; B28b top-level TRY/CATCH with a live
+raise-and-recover matching the SQL Server reference) — all closed
+brief-first by workers under architect review, ratchets kept flat by
+refactor. Remaining from the audit stream: two maintainer decisions only.
+Detail: [`docs/DONE.md`](DONE.md) §45.
+
+---
+
 ## Audit 2026-07-24 backlog — fully executed in agentic team mode (2026-07-24 → 2026-07-25)
 
 The third full audit ([`audit/2026-07-24/`](../audit/2026-07-24/)) verified
