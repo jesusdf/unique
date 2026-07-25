@@ -324,6 +324,17 @@ class ParserBase:
             # re-runnable DROP guard a schema opens with). T-SQL is excluded:
             # a bare BEGIN there is a transaction/BEGIN-TRY, handled elsewhere.
             return self._parse_anonymous_block()
+        elif (
+            tok.is_keyword("BEGIN")
+            and self._is_tsql_source()
+            and self._peek(1).is_keyword("TRY")
+        ):
+            # A top-level T-SQL ``BEGIN TRY … END TRY BEGIN CATCH … END CATCH``
+            # batch (common in migration scripts) the classifier routed here.
+            # Parse it as an anonymous block holding the TryCatchBlock so the
+            # emitter lowers it per target (PG ``DO $$ … EXCEPTION``, Oracle
+            # ``BEGIN … EXCEPTION … END;``) reusing the in-routine machinery.
+            return self._parse_anonymous_block()
         elif tok.is_keyword("IF") and self._is_tsql_source():
             # A top-level T-SQL control-flow guard (``IF [NOT] EXISTS(…) BEGIN …
             # END``) the batch classifier routed here — i.e. a *non-catalog*
@@ -372,7 +383,15 @@ class ParserBase:
                     statements.append(decl)
                 if self._pos == before:
                     self._advance()
-        wrapped = self._match_keyword("BEGIN")
+        # A T-SQL ``BEGIN TRY`` opens a TRY/CATCH statement, not a PL/SQL block
+        # shell: leave the ``BEGIN`` for the statement parser (which builds the
+        # TryCatchBlock) instead of unwrapping it as a block wrapper.
+        begin_try = (
+            self._is_tsql_source()
+            and self._current().is_keyword("BEGIN")
+            and self._peek(1).is_keyword("TRY")
+        )
+        wrapped = self._match_keyword("BEGIN") if not begin_try else False
         stop = ("END",) if wrapped else ()
         statements += self._run_body_loop(parse_stmt, stop)
         if wrapped:

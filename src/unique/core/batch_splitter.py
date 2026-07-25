@@ -116,6 +116,16 @@ _CATALOG_REF_RE = re.compile(
 )
 _TSQL_BEGIN_BLOCK_RE = re.compile(r"(?i)\bBEGIN\b")
 
+# A top-level ``BEGIN TRY … END TRY BEGIN CATCH … END CATCH`` batch (T-SQL only —
+# no other engine spells structured error handling this way). Common in
+# migration scripts; routed to the procedural engine, which lowers the TRY/CATCH
+# per target (PG ``DO $$ … EXCEPTION``, Oracle ``BEGIN … EXCEPTION … END;``,
+# MySQL documented degrade) using the same machinery as an in-routine TRY/CATCH.
+# Without this the whole batch falls to the DML pipeline and ships as an
+# "Unhandled expression type: Command" carrier with the protected statements
+# leaking out as live code.
+_TSQL_BEGIN_TRY_RE = re.compile(r"(?i)^\s*BEGIN\s+TRY\b")
+
 # Well-known SQL Server system stored procedures (Microsoft-shipped) with no
 # portable equivalent — routed to the DML pipeline, which documents/passes them
 # through. The ``sp_`` prefix ALONE is not a reliable signal: user code legally
@@ -351,6 +361,8 @@ def classify_batch(sql: str, dialect: str) -> BatchType:
         return BatchType.SET_OPTION
 
     if dialect == "tsql":
+        if _TSQL_BEGIN_TRY_RE.match(first_meaningful):
+            return BatchType.PROCEDURAL
         exec_match = _TSQL_EXEC_PROC_PATTERN.match(first_meaningful)
         if exec_match and exec_match.group(1).lower() not in _TSQL_SYSTEM_PROCS:
             return BatchType.PROCEDURAL
