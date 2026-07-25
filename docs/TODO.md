@@ -26,7 +26,16 @@ feature work.*
 
 ### P2 — new findings from the 2026-07-25 campaign
 
-- [ ] **`TIMESTAMPLTZ` → PostgreSQL silent invalid type** (found by the C4
+- [ ] **PL/SQL multi-word datetime types in DECLARE → silent garbage** (found
+  by the TIMESTAMPLTZ worker, pre-existing, distinct subsystem): a PL/SQL
+  `DECLARE v TIMESTAMP WITH LOCAL TIME ZONE` produces `v TIMESTAMP; WITH
+  LOCAL; TIME ZONE;` with no warning — the procedural declaration parser's
+  multi-word-type tokenization can't represent these types (`WITH TIME ZONE`
+  already degrades honestly via parse error). Brief-first: teach the
+  declaration parser the `TIMESTAMP WITH [LOCAL] TIME ZONE` compound (map per
+  target like the DDL fix in `emit_ddl._local_tz_gap`), or gate the compound
+  into a warned degrade.
+- [x] **`TIMESTAMPLTZ` → PostgreSQL silent invalid type** (found by the C4
   assertion sweep): Oracle `TIMESTAMP WITH LOCAL TIME ZONE` → PG emits
   `TIMESTAMPLTZ` (not a PG type) with zero warnings — a no-silent-loss
   violation the T4 target-parse gate MISSES because sqlglot's lenient PG
@@ -34,7 +43,12 @@ feature work.*
   `test_challenge_assertions_oracle.py`). tsql/mysql degrade honestly.
   Brief-first: map to `TIMESTAMPTZ` + annotation (session-TZ semantics
   differ) or degrade warned; also consider a known-bad-token denylist for
-  the parse gate's leniency holes.
+  the parse gate's leniency holes. *(Done 2026-07-25: whole class fixed —
+  `emit_ddl._local_tz_gap` maps PG→TIMESTAMPTZ (faithful, live-verified
+  same-instant round-trip), tsql→DATETIMEOFFSET, mysql→TIMESTAMP, each
+  warned+annotated; `tests/helpers/validity.py` gained the
+  `KNOWN_INVALID_TOKENS` denylist closing the sqlglot-leniency hole;
+  ora-dttypes un-suspected into a real assertion.)*
 - [ ] **Oracle numeric `||` → PostgreSQL invalid** (found by the B17b live
   sweep): `SELECT 2||3` emits bare `2 || 3` — PG rejects
   `integer || integer` (Oracle implicitly casts and returns '23'). Needs
