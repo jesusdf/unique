@@ -2538,8 +2538,20 @@ class ProceduralTransformer:
         )
 
     def _transform_exception_block(self, node: ExceptionBlock) -> ASTNode:
-        """Default keeps an EXCEPTION block (Oracle/PostgreSQL); T-SQL overrides
-        to a TRY/CATCH (its only structured-handler form)."""
+        """Keeps an EXCEPTION block on targets that support the trailing PL/SQL
+        form (Oracle/PostgreSQL); on targets whose only structured-handler form
+        is TRY/CATCH (T-SQL, MySQL — ``_folds_exception_scope() == True``),
+        reached when the EXCEPTION section had no preceding siblings to fold
+        (see ``_fold_exception_scope``): flatten the handlers into the CATCH
+        body, letting the emitter backfill the empty TRY."""
+        if self._folds_exception_scope():
+            body: list[ASTNode] = []
+            for handler in node.handlers:
+                body.extend(handler.body)
+            return TryCatchBlock(
+                try_body=(),
+                catch_body=self._transform_body(tuple(body)),
+            )
         prev_handler = getattr(self, "_in_exception_handler", False)
         self._in_exception_handler = True
         try:

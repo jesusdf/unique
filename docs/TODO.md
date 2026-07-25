@@ -196,12 +196,17 @@ Findings detail: audit docs 02/04/05/07.
   excluded from scoring). Pure stdlib. Tests:
   `tests/unit/test_challenge_stats.py` (25 cases, incl. a real temp git repo
   for `--batch-since`).
-- [ ] **B20–B27** small items: MERGE comment trivia, dead IR nodes,
-  mutation-script isolation, perf-budget flake (process_time), CI installs
-  with `-c constraints.txt`. *(Done 2026-07-24: B22 traceback logging via
+- [ ] **B20–B27** small items: MERGE comment trivia, mutation-script
+  isolation, perf-budget flake (process_time), CI installs with
+  `-c constraints.txt`. *(Done 2026-07-24: B22 traceback logging via
   `exc_info`, B26 `.dockerignore`. Done 2026-07-25: B20 PG `TABLE t`
   validation false positive — dialect-conditional whitelist in
-  `core/validation.py` (`_is_pg_table_shorthand`).)*
+  `core/validation.py` (`_is_pg_table_shorthand`); B23 removed the 5
+  zero-reference IR node classes (`ParameterRef`, `AlterTableStatement`,
+  `CreateIndexStatement`, `CreateSequenceStatement`, `TypeReference`) and
+  `builtins_for`, and hoisted the byte-identical `_transform_exception_block`
+  (tsql/mysql) into `ProceduralTransformer` base, branching on the existing
+  `_folds_exception_scope()` hook.)*
 - [ ] **B28** feature briefs when scheduled: `#temp`-in-procedure wiring,
   top-level `BEGIN TRY/CATCH` routing (currently honest warned degrades).
 - [ ] **RED seeds from the B2 sweep** (2026-07-24): (a) `Create.properties`

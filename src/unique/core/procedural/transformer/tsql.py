@@ -18,7 +18,6 @@ from unique.core.ast_nodes import (
     CreateFunctionStatement,
     CreateTriggerStatement,
     EmbeddedDML,
-    ExceptionBlock,
     ExecuteStatement,
     IfStatement,
     Literal,
@@ -1175,18 +1174,6 @@ class TSqlTransformer(ProceduralTransformer):
         # T-SQL has no NULL statement; SET NOCOUNT ON is the canonical
         # side-effect-free filler for a carrier's block position.
         return "SET NOCOUNT ON;"
-
-    def _transform_exception_block(self, node: ExceptionBlock) -> ASTNode:
-        # Reached only when the EXCEPTION section had no preceding siblings
-        # to protect (see _fold_exception_scope); flatten the handlers into
-        # the CATCH block — the emitter backfills the empty TRY.
-        body: list[ASTNode] = []
-        for handler in node.handlers:
-            body.extend(handler.body)
-        return TryCatchBlock(
-            try_body=(),
-            catch_body=self._transform_body(tuple(body)),
-        )
 
 
 register_transformer(TSqlTransformer.target_name, TSqlTransformer)

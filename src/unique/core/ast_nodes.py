@@ -208,13 +208,6 @@ class Alias(ASTNode):
 
 
 @dataclass(frozen=True)
-class ParameterRef(ASTNode):
-    """Reference to a variable or parameter."""
-
-    name: str
-
-
-@dataclass(frozen=True)
 class FunctionCall(ASTNode):
     """A function call with arguments."""
 
@@ -653,25 +646,6 @@ class DropStatement(ASTNode):
 
 
 @dataclass(frozen=True)
-class AlterTableStatement(ASTNode):
-    """ALTER TABLE ... ADD/DROP/MODIFY."""
-
-    table: TableRef
-    actions: tuple[ASTNode, ...] = ()
-
-
-@dataclass(frozen=True)
-class CreateIndexStatement(ASTNode):
-    """CREATE INDEX."""
-
-    name: str
-    table: TableRef
-    columns: tuple[ASTNode, ...] = ()
-    unique: bool = False
-    if_not_exists: bool = False
-
-
-@dataclass(frozen=True)
 class CreateViewStatement(ASTNode):
     """CREATE VIEW."""
 
@@ -679,17 +653,6 @@ class CreateViewStatement(ASTNode):
     query: SelectStatement
     or_replace: bool = False
     columns: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class CreateSequenceStatement(ASTNode):
-    """CREATE SEQUENCE."""
-
-    name: str
-    start: int = 1
-    increment: int = 1
-    min_value: int | None = None
-    max_value: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -942,15 +905,6 @@ class WaitForStatement(ASTNode):
     kind: str
     value: str
     seconds: float | None = None
-
-
-@dataclass(frozen=True)
-class TypeReference(ASTNode):
-    """Oracle %TYPE or %ROWTYPE reference."""
-
-    table: str
-    column: str | None = None
-    is_rowtype: bool = False
 
 
 @dataclass(frozen=True)

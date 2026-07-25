@@ -132,8 +132,3 @@ def is_builtin(name: str, dialect: str) -> bool:
     if dialect not in _ENGINES:
         return False
     return _bare_name(name) in _load(dialect)
-
-
-def builtins_for(dialect: str) -> frozenset[str]:
-    """The full built-in catalog for *dialect* (empty for an unknown dialect)."""
-    return _load(dialect) if dialect in _ENGINES else frozenset()

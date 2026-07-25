@@ -20,13 +20,11 @@ from unique.core.ast_nodes import (
     CursorDeclaration,
     DataType,
     DeclareStatement,
-    ExceptionBlock,
     ExecuteStatement,
     RawSQL,
     SelectIntoStatement,
     SetVariableStatement,
     StatementList,
-    TryCatchBlock,
 )
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
@@ -73,17 +71,6 @@ class MySqlTransformer(ProceduralTransformer):
 
     def _folds_exception_scope(self) -> bool:
         return True
-
-    def _transform_exception_block(self, node: ExceptionBlock) -> ASTNode:
-        # Reached only when the EXCEPTION section had no preceding siblings
-        # (see _fold_exception_scope): flatten to a handler-only block.
-        body: list[ASTNode] = []
-        for handler in node.handlers:
-            body.extend(handler.body)
-        return TryCatchBlock(
-            try_body=(),
-            catch_body=self._transform_body(tuple(body)),
-        )
 
     #: MySQL's table value constructor needs a ROW() per row: ``(VALUES (1),(2))``
     #: is a syntax error (1064); ``(VALUES ROW(1), ROW(2))`` is the valid form.
