@@ -851,3 +851,6 @@ SELECT repeat('ab', -1) AS r
 
 -- CASE[open][class=invalid]: pg-row-value-comparison — a row-value inequality comparison (a, b) > (1, 5) (lexicographic; used for keyset pagination) is emitted VERBATIM to T-SQL, which has no row-value comparison and rejects it (error 4145 'non-boolean type ... where a condition is expected'). No warning. PG=(3,4). Oracle and MySQL both accept row inequality, so only T-SQL is invalid.
 SELECT a, b FROM (VALUES (1,2),(3,4)) v(a,b) WHERE (a, b) > (1, 5)
+
+-- CASE[open][class=invalid]: pg-bool-to-int-cast — the idiomatic PG cast of a boolean predicate to int, (a > 1)::int, is emitted verbatim as CAST(a > 1 AS INT) on T-SQL and Oracle, which have no boolean value type and reject a predicate as a CAST operand (T-SQL error 156; Oracle ORA-02000). No warning. PG=(1). Shares the root cause with pg-boolagg-filter (boolean value not wrapped to 1/0) but via a direct cast, not an aggregate.
+SELECT (a > 1)::int AS r FROM (VALUES (2)) v(a)
