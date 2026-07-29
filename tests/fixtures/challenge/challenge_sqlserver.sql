@@ -490,3 +490,6 @@ CREATE TABLE t (a INT, b INT); SELECT a, b FROM t FOR JSON PATH
 
 -- CASE[open][class=func]: reda-ts-substring-zero-start — fails on mysql, oracle. SUBSTRING(s, start, len) with start<1: T-SQL (and PG) count positions below 1 against the length -> SUBSTRING('hello',0,3)='he'. The call is passed through unchanged, but MySQL SUBSTRING(s,0,n) returns '' (position 0 = empty) and Oracle SUBSTR(s,0,n) treats 0 as 1 -> 'hel'. No warning. Live: tsql='he', pg='he', mysql='', oracle='hel'. BLUE: normalize start<1 to T-SQL semantics (clamp start to 1 and reduce len by 1-start) for MySQL/Oracle.
 SELECT SUBSTRING('hello', 0, 3) AS r
+
+-- CASE[open][class=func]: reda-ts-avg-int-trunc — fails on postgresql, mysql, oracle. T-SQL AVG over an INTEGER column returns an INTEGER (the average is truncated): AVG of (1,2) = 1. The call is passed through unchanged with no warning; PG/MySQL/Oracle AVG of integers returns a fractional value = 1.5. Live: tsql=1, pg=1.5, mysql=1.5. BLUE: to preserve T-SQL semantics, floor the AVG (or cast operands) when the argument is an integer type.
+SELECT AVG(x) AS r FROM (VALUES (1), (2)) v(x)
