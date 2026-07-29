@@ -845,3 +845,6 @@ SELECT SUBSTRING('abcde' FROM -2 FOR 2) AS s
 
 -- CASE[open][class=lying-warning]: pg-insert-default-values-falsewarn — INSERT ... DEFAULT VALUES is correctly translated to MySQL `INSERT INTO t () VALUES ()` (live-equivalent: both insert one all-defaults row), yet it emits the tripwire warning "internal: unread sqlglot arg 'default' on Insert — construct may be dropped". Nothing was dropped. The converter consumes Insert.args['default'] to emit () VALUES () but never marks it read, so the unread-args tripwire false-fires. (Distinct from the Window.over false-warning: a different node/arg.)
 CREATE TABLE redb_dv (id INT DEFAULT 7, v INT DEFAULT 3); INSERT INTO redb_dv DEFAULT VALUES
+
+-- CASE[open][class=func]: pg-repeat-negative — repeat(s, n) with n<=0 returns '' in PostgreSQL (and MySQL REPEAT), but the T-SQL (REPLICATE) and Oracle (RPAD(s, len*n, s)) emulations return NULL for a negative count. PG/MySQL=''; T-SQL/Oracle=NULL. No warning. (The pg-pad-repeat / pg-repeat-left-right cases only use positive counts.)
+SELECT repeat('ab', -1) AS r
