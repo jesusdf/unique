@@ -901,3 +901,8 @@ SELECT GROUP_CONCAT(DISTINCT x ORDER BY x DESC SEPARATOR '-') AS g FROM (SELECT 
 
 -- CASE[open][class=func]: my-timestampdiff-mon-pgora — TIMESTAMPDIFF(MONTH,...) counts COMPLETE months in MySQL, but the PG and Oracle rewrites use a naive (year*12+month) boundary difference, which overcounts when the end day-of-month precedes the start's. The [fixed] my-timestampdiff-mon fix was applied to T-SQL ONLY (DATEADD>end adjustment); PG/Oracle still give the boundary count. MySQL/T-SQL=1; PG/Oracle=2. No warning. (Same source shape as the existing case reproduces it on PG/Oracle.)
 SELECT TIMESTAMPDIFF(MONTH, '2020-01-31', '2020-03-30') AS r
+
+-- CASE[open][class=consistency]: my-enum-order — a MySQL ENUM carries an implicit ORDERING by declaration index (lo<mid<hi), and ORDER BY on the column sorts by that index. Converting the column to VARCHAR + CHECK (statement 1) silently changes what ORDER BY means in statement 3: MySQL orders ('lo','mid','hi'); the VARCHAR target orders alphabetically ('hi','lo','mid'). No warning. Cross-statement metadata loss.
+CREATE TABLE redb_en (a ENUM('lo','mid','hi'));
+INSERT INTO redb_en VALUES ('hi'),('lo'),('mid');
+SELECT a FROM redb_en ORDER BY a;
