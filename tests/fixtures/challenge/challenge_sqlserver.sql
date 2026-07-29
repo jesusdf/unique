@@ -517,3 +517,6 @@ SELECT DATEPART(WEEKDAY, CAST('2020-06-15' AS DATE)) AS r
 
 -- CASE[open][class=invalid]: reda-ts-sequence-no-cycle — fails on oracle. T-SQL CREATE SEQUENCE ... NO MAXVALUE NO CYCLE (two-word forms, valid T-SQL and PG) is emitted verbatim into Oracle, but Oracle spells these NOMAXVALUE / NOCYCLE (one word): live ORA-03049 "SQL keyword 'NO' is not syntactically valid". No warning. BLUE: collapse NO MAXVALUE->NOMAXVALUE, NO MINVALUE->NOMINVALUE, NO CYCLE->NOCYCLE, NO CACHE->NOCACHE for the Oracle sequence emitter.
 CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1 NO MAXVALUE NO CYCLE
+
+-- CASE[open][class=invalid]: reda-ts-index-fillfactor-mysql — fails on mysql. T-SQL 'CREATE INDEX ix ON t (a) WITH (FILLFACTOR = 80)' into MySQL is mangled to 'CREATE INDEX ix ON t ((a) WITH (FILLFACTOR=80))' — the WITH option is folded INTO the index key-part parens — and emitted with NO warning: live MySQL 1064 syntax error near 'WITH (FILLFACTOR=80))'. The Oracle path correctly drops FILLFACTOR with a warning; the MySQL path does not. BLUE: MySQL has no FILLFACTOR — drop it with a lossy warning like the Oracle emitter, never fold it into the key list.
+CREATE TABLE t (a INT); CREATE INDEX ix ON t (a) WITH (FILLFACTOR = 80)
