@@ -14,7 +14,6 @@ from unique.core.ast_nodes import (
     CallStatement,
     CreateFunctionStatement,
     CreateTriggerStatement,
-    DeclareStatement,
     EmbeddedDML,
     ExceptionBlock,
     ForLoopStatement,
@@ -576,9 +575,12 @@ class OracleEmitter(ProceduralEmitter):
     def _emit_anonymous_block(self, node: AnonymousBlock) -> str:
         """Oracle runs a top-level statement sequence as a PL/SQL anonymous
         block: ``[DECLARE …] BEGIN … END;``. Procedure calls and assignments are
-        only valid inside such a block, so always wrap (even a single call)."""
-        decls = [s for s in node.statements if isinstance(s, DeclareStatement)]
-        body = [s for s in node.statements if not isinstance(s, DeclareStatement)]
+        only valid inside such a block, so always wrap (even a single call).
+        ``_split_declarations`` (not a flat filter) so a declaration nested in
+        control flow — e.g. a DECLARE inside a CATCH handler — is hoisted to
+        the section instead of leaking inline as invalid PL/SQL (user report
+        2026-07-29)."""
+        decls, body = self._split_declarations(tuple(node.statements))
         if not decls and _is_exists_guard_body(body):
             # Hug BEGIN/END onto the guard loop(s): `BEGIN FOR … END LOOP; END;`,
             # matching the catalog-guard form (top-level, so indent is 0).

@@ -327,13 +327,16 @@ class ParserBase:
         elif (
             tok.is_keyword("BEGIN")
             and self._is_tsql_source()
-            and self._peek(1).is_keyword("TRY")
+            and self._peek(1).is_keyword("TRY", "TRAN", "TRANSACTION")
         ):
             # A top-level T-SQL ``BEGIN TRY … END TRY BEGIN CATCH … END CATCH``
-            # batch (common in migration scripts) the classifier routed here.
-            # Parse it as an anonymous block holding the TryCatchBlock so the
-            # emitter lowers it per target (PG ``DO $$ … EXCEPTION``, Oracle
-            # ``BEGIN … EXCEPTION … END;``) reusing the in-routine machinery.
+            # batch (common in migration scripts) the classifier routed here —
+            # optionally opened by ``BEGIN TRAN[SACTION]`` (the statement
+            # parser models the opener as a TransactionStatement; user report
+            # 2026-07-29). Parse it as an anonymous block holding the
+            # TryCatchBlock so the emitter lowers it per target (PG ``DO $$ …
+            # EXCEPTION``, Oracle ``BEGIN … EXCEPTION … END;``) reusing the
+            # in-routine machinery.
             return self._parse_anonymous_block()
         elif tok.is_keyword("IF") and self._is_tsql_source():
             # A top-level T-SQL control-flow guard (``IF [NOT] EXISTS(…) BEGIN …
@@ -383,15 +386,17 @@ class ParserBase:
                     statements.append(decl)
                 if self._pos == before:
                     self._advance()
-        # A T-SQL ``BEGIN TRY`` opens a TRY/CATCH statement, not a PL/SQL block
-        # shell: leave the ``BEGIN`` for the statement parser (which builds the
-        # TryCatchBlock) instead of unwrapping it as a block wrapper.
-        begin_try = (
+        # A T-SQL ``BEGIN TRY`` opens a TRY/CATCH statement and ``BEGIN
+        # TRAN[SACTION]`` opens a transaction — neither is a PL/SQL block
+        # shell: leave the ``BEGIN`` for the statement parser (which builds
+        # the TryCatchBlock / TransactionStatement) instead of unwrapping it
+        # as a block wrapper (and then truncating the body at the first END).
+        begin_stmt = (
             self._is_tsql_source()
             and self._current().is_keyword("BEGIN")
-            and self._peek(1).is_keyword("TRY")
+            and self._peek(1).is_keyword("TRY", "TRAN", "TRANSACTION")
         )
-        wrapped = self._match_keyword("BEGIN") if not begin_try else False
+        wrapped = self._match_keyword("BEGIN") if not begin_stmt else False
         stop = ("END",) if wrapped else ()
         statements += self._run_body_loop(parse_stmt, stop)
         if wrapped:

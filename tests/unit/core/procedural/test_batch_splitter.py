@@ -215,6 +215,30 @@ class TestClassification:
         )
         assert classify_batch(sql, "tsql") == BatchType.PROCEDURAL
 
+    def test_begin_transaction_then_try_is_procedural(self) -> None:
+        # The common migration idiom opens the transaction BEFORE the TRY
+        # (``BEGIN TRANSACTION`` then ``BEGIN TRY``). The prefix must not
+        # defeat the recognizer (user report 2026-07-29: the whole batch
+        # degraded to a comment carrier and the guarded UPDATE was lost).
+        for opener in ("BEGIN TRANSACTION", "BEGIN TRAN", "BEGIN TRANSACTION;"):
+            sql = (
+                f"{opener}\n\n"
+                "BEGIN TRY\n"
+                "    UPDATE t SET x = 1\n"
+                "    COMMIT TRANSACTION\n"
+                "END TRY\n"
+                "BEGIN CATCH\n"
+                "    ROLLBACK TRANSACTION\n"
+                "END CATCH"
+            )
+            assert classify_batch(sql, "tsql") == BatchType.PROCEDURAL, opener
+
+    def test_begin_transaction_without_try_not_reclassified(self) -> None:
+        # A plain transactional DML batch (no TRY) keeps its current routing;
+        # the new prefix tolerance is scoped to the TRY/CATCH idiom.
+        sql = "BEGIN TRANSACTION\nUPDATE t SET x = 1\nCOMMIT TRANSACTION"
+        assert classify_batch(sql, "tsql") != BatchType.PROCEDURAL
+
     def test_begin_try_only_recognized_for_tsql(self) -> None:
         # ``BEGIN TRY`` is a T-SQL-only construct; the recognizer must not fire
         # for other source dialects (they never emit it).

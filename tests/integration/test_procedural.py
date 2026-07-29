@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import re
 
+import pytest
+
 from unique.core.transpiler import Transpiler
 
 
@@ -424,6 +426,23 @@ class TestStandaloneExec:
         # Oracle runs a procedure call inside a PL/SQL block.
         assert "BEGIN" in out.upper()
         assert "END;" in out.upper()
+
+    def test_exec_does_not_warn_log_spam(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # The IR path probes the mid-transform call text (``proc a => 1``,
+        # parens not yet added) with sqlglot; the expected parse failure is
+        # handled by the fallback emitters. It must log at DEBUG, not
+        # WARNING — one false 'sqlglot parse error' per EXEC buried the real
+        # warnings on a real migration dump (820 lines; user report
+        # 2026-07-29).
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="unique"):
+            out = _transpile(self._EXEC, "tsql", "oracle")
+        assert "create_invoice(" in out.lower()
+        spam = [r for r in caplog.records if "sqlglot parse error" in r.getMessage()]
+        assert not spam, [r.getMessage() for r in spam]
 
 
 class TestExecOutputCapture:
@@ -939,6 +958,69 @@ class TestTopLevelTryCatch:
             assert "BEGIN TRY" not in out, target
             assert "END TRY" not in out, target
             assert "END CATCH" not in out, target
+
+    # User report 2026-07-29: the real migration idiom opens the transaction
+    # BEFORE the TRY and declares the error variable INSIDE the CATCH. The
+    # prefixed batch used to degrade to a comment carrier (the guarded UPDATE
+    # was lost); the catch-local DECLARE used to leak inline into the Oracle
+    # handler (invalid PL/SQL, shipped without a warning).
+    TXN_SRC = (
+        "BEGIN TRANSACTION\n"
+        "\n"
+        "BEGIN TRY\n"
+        "    UPDATE t SET x = 1 WHERE id = 1\n"
+        "    COMMIT TRANSACTION\n"
+        "    PRINT 'ok'\n"
+        "END TRY\n"
+        "BEGIN CATCH\n"
+        "    ROLLBACK TRANSACTION\n"
+        "    PRINT 'ko'\n"
+        "    DECLARE @ErrorMessage NVARCHAR(4000)\n"
+        "    SET @ErrorMessage = ERROR_MESSAGE()\n"
+        "    RAISERROR (@ErrorMessage, 16, 1)\n"
+        "END CATCH"
+    )
+
+    def test_begin_transaction_prefix_lowers_on_oracle(self) -> None:
+        out = _transpile(self.TXN_SRC, "tsql", "oracle")
+        assert "-- UNIQUE:" not in out, out  # no comment-carrier degrade
+        assert "EXCEPTION" in out and "WHEN OTHERS THEN" in out
+        assert "UPDATE t" in out and "SQLERRM" in out
+        assert "BEGIN TRY" not in out and "END CATCH" not in out
+
+    def test_catch_local_declare_is_hoisted_on_oracle(self) -> None:
+        out = _transpile(self.TXN_SRC, "tsql", "oracle")
+        # The CATCH-local declaration must land in the DECLARE section, never
+        # inline inside the exception handler (invalid PL/SQL there).
+        decl_at = out.find("NVARCHAR2(4000)")
+        begin_at = out.find("BEGIN")
+        assert decl_at != -1 and begin_at != -1, out
+        assert decl_at < begin_at, out
+        assert out.lstrip().startswith("DECLARE"), out
+
+    def test_begin_transaction_prefix_lowers_on_postgresql(self) -> None:
+        out = _transpile(self.TXN_SRC, "tsql", "postgresql")
+        assert "-- UNIQUE:" not in out, out
+        assert "DO $$" in out
+        assert "EXCEPTION" in out and "WHEN OTHERS THEN" in out
+        assert "UPDATE t" in out
+        assert "BEGIN TRY" not in out and "END CATCH" not in out
+        # COMMIT/ROLLBACK inside the exception-guarded block raise 'cannot
+        # commit while a subtransaction is active' at runtime (live
+        # 2026-07-30): both must be dropped to documented carriers — the
+        # subtransaction already provides the T-SQL semantics.
+        assert "COMMIT;" not in out, out
+        assert "ROLLBACK;" not in out, out
+        assert "/* UNIQUE: COMMIT dropped" in out, out
+        assert "/* UNIQUE: ROLLBACK dropped" in out, out
+
+    def test_begin_transaction_prefix_still_degrades_honestly_on_mysql(
+        self,
+    ) -> None:
+        result = Transpiler().transpile(self.TXN_SRC, source="tsql", target="mysql")
+        assert "BEGIN TRY" not in result.sql
+        assert "-- UNIQUE:" in result.sql
+        assert result.warnings, result.sql
 
     def test_roundtrip_preserves_try_catch(self) -> None:
         # T-SQL -> Oracle -> T-SQL keeps a runnable TRY/CATCH shell (the

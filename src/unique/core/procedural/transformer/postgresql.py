@@ -11,12 +11,16 @@ import re
 
 from unique.core.ast_nodes import (
     ASTNode,
+    CommentStatement,
     DataType,
     DeclareStatement,
     EmbeddedDML,
     ForLoopStatement,
     RawSQL,
     StatementList,
+    TransactionAction,
+    TransactionStatement,
+    TryCatchBlock,
 )
 from unique.core.procedural.transformer.base import (
     ProceduralTransformer,
@@ -40,6 +44,58 @@ class PostgresTransformer(ProceduralTransformer):
                 "@@TRANCOUNT", "the routine manages its transaction"
             ),
         }
+
+    def _transform_try_catch(self, node: TryCatchBlock) -> ASTNode:
+        """plpgsql lowers TRY/CATCH to ``BEGIN … EXCEPTION``, which runs the
+        protected body inside a subtransaction: a plain COMMIT/ROLLBACK there
+        raises ``cannot commit while a subtransaction is active`` at runtime
+        (live 2026-07-30). The subtransaction already gives the T-SQL
+        semantics — entering the handler rolls the protected work back, and
+        the routine/DO block commits on success — so transaction control
+        inside the block is dropped with a documented ``/* UNIQUE: */``
+        carrier (auto-warned, no-silent-loss)."""
+        result = super()._transform_try_catch(node)
+        if not isinstance(result, TryCatchBlock):
+            return result
+        return dataclasses.replace(
+            result,
+            try_body=tuple(self._neutralize_txn(s) for s in result.try_body),
+            catch_body=tuple(self._neutralize_txn(s) for s in result.catch_body),
+        )
+
+    def _neutralize_txn(self, node: ASTNode) -> ASTNode:
+        """Replace a plain COMMIT/ROLLBACK (recursively, e.g. inside an IF)
+        with a documented carrier comment; savepoints and named forms pass
+        through untouched."""
+        if (
+            isinstance(node, TransactionStatement)
+            and node.name is None
+            and node.action in (TransactionAction.COMMIT, TransactionAction.ROLLBACK)
+        ):
+            word = "COMMIT" if node.action is TransactionAction.COMMIT else "ROLLBACK"
+            return CommentStatement(
+                text=(
+                    f"/* UNIQUE: {word} dropped -- the exception-guarded "
+                    "block is a subtransaction (transaction control there "
+                    "is a runtime error); it rolls back on error and "
+                    "commits with the surrounding transaction */"
+                ),
+                style="block",
+            )
+        changes: dict[str, object] = {}
+        for f in dataclasses.fields(node):
+            val = getattr(node, f.name)
+            if (
+                isinstance(val, tuple)
+                and val
+                and all(isinstance(x, ASTNode) for x in val)
+            ):
+                new = tuple(self._neutralize_txn(x) for x in val)
+                if new != val:
+                    changes[f.name] = new
+        if changes:
+            return dataclasses.replace(node, **changes)  # type: ignore[arg-type]
+        return node
 
     def _transform_for_loop(self, node: ForLoopStatement) -> ASTNode:
         result = super()._transform_for_loop(node)

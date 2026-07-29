@@ -79,7 +79,17 @@ class TestSemicolonlessBoundaries:
         for target in ("postgresql", "oracle", "mysql"):
             raw = _t(src, target)
             out = _one_line(raw)
-            assert re.search(r"(?i)THEN\s+ROLLBACK;", out), (target, out)
+            if target == "postgresql":
+                # The parse boundary still holds (the IF body got exactly the
+                # ROLLBACK), but on PG the exception-guarded block is a
+                # subtransaction where ROLLBACK is a runtime error — it is
+                # dropped to a documented carrier inside the IF (2026-07-30).
+                assert re.search(r"(?i)THEN\s+/\* UNIQUE: ROLLBACK dropped", out), (
+                    target,
+                    out,
+                )
+            else:
+                assert re.search(r"(?i)THEN\s+ROLLBACK;", out), (target, out)
             assert "RAISERROR" not in _executable_text(raw).upper(), (target, raw)
 
     def test_merge_when_then_update_stays_inside(self) -> None:
