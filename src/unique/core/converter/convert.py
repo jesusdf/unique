@@ -398,7 +398,16 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
             if normalized != sql:
                 with contextlib.suppress(Exception):
                     return parse_sql(normalized, dialect)
-        logger.warning("sqlglot parse error: %s", e)
+        if IR_EMBEDDED.get():
+            # Mid-transform probe from the procedural engine's IR path
+            # (variables/args already target-spelled, e.g. an EXEC lowered to
+            # ``proc a => 1`` before its parens): a failure here is expected
+            # and handled — the caller falls back to its own emitters. At
+            # WARNING this spammed one false alarm per EXEC call in a real
+            # migration dump (user report 2026-07-29), burying real warnings.
+            logger.debug("sqlglot parse error (IR probe): %s", e)
+        else:
+            logger.warning("sqlglot parse error: %s", e)
         return [RawSQL(sql=sql, reason=str(e))]
 
     nodes: list[ASTNode] = []
