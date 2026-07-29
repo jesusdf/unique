@@ -21,10 +21,16 @@ at the start of every session; they override generic defaults.
   discipline, and performance rules (e.g. never build a string with `+=` in an
   input-proportional loop).
 - [`skills/SKILL-challenge-corpus.md`](skills/SKILL-challenge-corpus.md) —
-  the `tests/fixtures/challenge/` regression corpus and its **red/blue**
-  workflow: a RED role that only finds mis-transpilations (valid, non-repeated,
-  anonymized source SQL) and a BLUE role that only fixes and locks them in. Load
-  this when hunting for or fixing transpilation defects.
+  the `tests/fixtures/challenge/` regression corpus and its
+  **red/blue/purple** workflow: a RED role that only finds mis-transpilations
+  (valid, non-repeated, anonymized source SQL; 1-hour committed-time batches),
+  a BLUE role that only fixes and locks them in, and a PURPLE role — the
+  campaign's architect/analyst — that directs and coordinates iterative
+  RED/BLUE rounds via delegated workers (same agentic team mode as
+  development), evaluates the defect yield, drives the fixes, keeps iterating
+  while there are signs more improvement is needed, and is the **only** role
+  that decides when a batch or the campaign ends. Load this when hunting for,
+  fixing, or orchestrating campaigns over transpilation defects.
 
 If a Skill tool is available, invoke the matching skill rather than only reading
 the file. When guidance here and a skill disagree, the skill is authoritative.

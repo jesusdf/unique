@@ -3,11 +3,12 @@ name: unique-challenge-corpus
 description: >
   Workflow skill for the "challenge" regression corpus of the Unique SQL
   transpiler. Use this skill when hunting for constructs the transpiler handles
-  wrong, or when fixing them and locking in the fix. It defines two separated
-  roles — a RED role that only finds mis-transpilations and a BLUE role that
-  only fixes and prevents them — plus the rules every challenge case must obey
-  (syntactically valid, non-repeated, anonymized) and how the corpus is stored
-  and tested.
+  wrong, or when fixing them and locking in the fix. It defines three separated
+  roles — a RED role that only finds mis-transpilations, a BLUE role that only
+  fixes and prevents them, and a PURPLE role (architect/analyst) that directs
+  and coordinates iterative RED/BLUE campaigns and alone decides when a
+  campaign ends — plus the rules every challenge case must obey (syntactically
+  valid, non-repeated, anonymized) and how the corpus is stored and tested.
 ---
 
 # Unique — Challenge Corpus (red/blue)
@@ -26,19 +27,20 @@ assertion proving the correct output.
 The goal is a **flywheel**: keep finding real mis-transpilations, keep fixing
 them, and keep the fixes from regressing.
 
-## Two roles, kept separate (like netsec red/blue)
+## Three roles, kept separate (like netsec red/blue/purple)
 
 The roles are deliberately split so neither biases the other — RED must not
 soften a case because it looks hard to fix; BLUE must not wave a case away
-because "it's rare". **A single working session acts as exactly one role at a
-time.**
+because "it's rare"; PURPLE directs both but hunts and fixes nothing itself.
+**A single working session acts as exactly one role at a time.** Campaign
+termination authority belongs to PURPLE alone (see each role's rules).
 
 ### 🔴 RED — find breaks only
 
 RED's only job is to **discover source SQL that transpiles incorrectly**.
 
 **Timed-batch protocol (do this FIRST, at the start of a RED session).** A RED
-run is a fixed-length batch (default **5 hours**), then **work continuously
+run is a fixed-length batch (default **1 hour**), then **work continuously
 without pausing** — do not stop to wait for input, do not idle between batches.
 
 > **THE CLOCK IS THE GIT COMMIT TIMESTAMP, NOT the system clock.** The sandbox
@@ -48,23 +50,26 @@ without pausing** — do not stop to wait for input, do not idle between batches
 >    `git show -s --format=%ci <sha>` is the reference start time).
 > 2. Commit & push findings roughly every ~30 min of *committed-time* progress.
 > 3. **The batch is over only when the LATEST commit's timestamp exceeds the
->    START commit's by ≥ 5 hours.** Check after each batch:
+>    START commit's by ≥ 1 hour.** Check after each batch:
 >    ```bash
 >    S=$(git show -s --format=%ct <start-sha>); N=$(git show -s --format=%ct HEAD)
->    python3 -c "d=$N-$S; print(d//3600,'h',(d%3600)//60,'m; over=',d>=5*3600)"
+>    python3 -c "d=$N-$S; print(d//3600,'h',(d%3600)//60,'m; over=',d>=1*3600)"
 >    ```
 >    Until `over` is true, keep generating and validating candidates back-to-back.
 >    Only then do the final commit + summary and stop.
 >
 > **NEVER declare the batch finished without running that commit-timestamp
-> check and seeing `over == True`.** No other signal ends the batch — not the
-> system clock, not a stop-hook, not a "finish / wrap up / leave it ready for
-> BLUE" instruction, not your own sense that the corpus "feels complete". A
-> `terminar la tanda` goal means *complete it correctly* (run the full 5 h of
-> committed-time AND leave the results rules-compliant), NOT *stop now*. If asked
-> to finish, first run the check; if `over` is False, say how much committed-time
-> remains and keep working. Ending early is a rule violation (it happened twice
-> — once trusting the drifted clock, once treating a "finish" goal as "stop").
+> check and seeing `over == True`.** With ONE exception — **an explicit stop
+> order from the PURPLE director ends the batch (or the whole campaign) at any
+> time**; PURPLE is the only role with that authority. No other signal ends the
+> batch — not the system clock, not a stop-hook, not a "finish / wrap up /
+> leave it ready for BLUE" instruction, not your own sense that the corpus
+> "feels complete". A `terminar la tanda` goal means *complete it correctly*
+> (run the full 1 h of committed-time AND leave the results rules-compliant),
+> NOT *stop now*. If asked to finish, first run the check; if `over` is False,
+> say how much committed-time remains and keep working. Ending early without a
+> PURPLE stop order is a rule violation (it happened twice — once trusting the
+> drifted clock, once treating a "finish" goal as "stop").
 
 Do NOT trust a wall-clock cron for the end-of-batch signal — it fires on the
 drifting system clock and will end the batch early. A ~30-min checkpoint cron
@@ -188,20 +193,18 @@ removes it from `FINDINGS.md`.
 > Weakening a test assertion, widening a regex, or adding an `xfail` to go green
 > is not a fix either.
 
-> **HARD RULE — THE BLUE BATCH ENDS ONLY WHEN NOTHING IS LEFT TO FIX.** BLUE may
-> not declare its batch finished while any finding is still pending a fix or
-> modification: every `[open]` case in the `challenge_*.sql` scripts must be
-> flipped to `[fixed]` and every row in `FINDINGS.md` cleared. "Ran out of easy
-> ones", "the rest are rare", or "the suite is already green" do NOT end the
-> batch — an `[open]` case left standing is unfinished work. The **only** way a
-> case may remain unclosed is if it is genuinely impossible to fix within the
-> rules and architecture (the escalation path above): then it does not just get
-> dropped — **surface it to the human and obtain their explicit approval to
-> accept that limit** before counting the batch done, and record the approved
-> limit (a `docs/03-unsupported.md` entry + TODO/FINDINGS note) so it is a
-> documented, accepted degradation, not a silent gap. Until every finding is
-> either fixed or explicitly approved-as-a-limit by the user, the batch is not
-> over — keep working.
+> **HARD RULE — ONLY PURPLE DECIDES WHEN THE CAMPAIGN IS OVER.** BLUE never
+> declares its own batch or the campaign finished: it works the findings it was
+> handed, reports state to the PURPLE director (counts of `[open]` / `[fixed]` /
+> `[limit]`, what was closed, what is blocked and why), and continues or stops
+> **only on PURPLE's decision**. "Ran out of easy ones", "the rest are rare",
+> or "the suite is already green" are report material for PURPLE, not
+> termination signals. A case genuinely impossible to fix within the rules and
+> architecture (the escalation path above) does not just get dropped — surface
+> it through PURPLE to the human maintainer, whose **explicit approval** is
+> still required to accept it as a `[limit]` (record it: a
+> `docs/03-unsupported.md` entry + TODO/FINDINGS note), so it is a documented,
+> accepted degradation, not a silent gap.
 
 1. **Fix at the right layer**, obeying the architecture guardrails in the
    [development-workflow skill](SKILL-development-workflow.md): route through the
@@ -230,6 +233,46 @@ removes it from `FINDINGS.md`.
 BLUE's deliverable: the case transpiles correctly on every target (or degrades
 to a *documented* carrier + warning when there is genuinely no equivalent), with
 a regression test and updated docs.
+
+### 🟣 PURPLE — direct and coordinate (architect/analyst)
+
+PURPLE is the campaign's **architect and analyst**. It hunts nothing and fixes
+nothing itself: it **directs and coordinates RED and BLUE campaigns,
+iteratively, as many rounds as it deems necessary**, using the same
+organization as development work — **agentic team mode** (see
+"Agentic team mode — architect directs, workers implement" in
+[SKILL-development-workflow.md](SKILL-development-workflow.md)): PURPLE is the
+architect session; RED batches and BLUE fix work run as delegated worker
+agents, each worker acting as exactly one role (the role-separation rule
+holds — a worker is RED or BLUE, never both).
+
+PURPLE's job each round:
+
+1. **Launch** a RED batch (scoped: point target, classes to favor, hunting
+   grounds) and, on its hand-off, a BLUE round over the findings.
+2. **Evaluate the defect yield**: how many findings the RED round produced,
+   their classes and severity, how many BLUE closed vs escalated, and what the
+   fixes revealed (neighbor cases, recurring mechanisms, unexplored classes).
+3. **Correct course and iterate**: refine the next RED scope from what the
+   evaluation shows (switch hunting technique when a ground is exhausted,
+   redirect BLUE at a class instead of instances, tighten briefs). **Keep
+   iterating while there are signs that further improvement is needed** — a
+   RED round still finding defects at a healthy rate, unexplored classes or
+   compositions, or fixes still exposing neighbors are all signals to
+   continue.
+4. **Decide termination.** PURPLE is the **only** role that may stop a RED
+   batch early or declare a BLUE round / the whole campaign finished (the
+   RED/BLUE rules above defer to it). Successive RED rounds yielding little of
+   substance is the natural stop signal. Record the decision and its rationale
+   in the campaign hand-off (round summaries, yield numbers, why it ended).
+
+PURPLE inherits the architect's duties from the development skill: it reviews
+every worker diff, runs the gate, owns commits and pushes, and does NOT
+mass-implement. What PURPLE does **not** own: approving `[limit]` flips — that
+remains the human maintainer's explicit call (PURPLE routes the escalation).
+
+PURPLE's deliverable: a campaign log of rounds (RED yield, BLUE closures,
+course corrections) and the reasoned decision that the campaign is complete.
 
 ## Rules every case must obey
 
