@@ -505,3 +505,9 @@ CREATE TABLE t (id INT IDENTITY(1,1), v INT); SET IDENTITY_INSERT t ON; INSERT I
 
 -- CASE[open][class=func]: reda-ts-date-plus-int — fails on mysql, postgresql. T-SQL datetime + <int> ADDS DAYS: CAST('2020-01-01' AS DATETIME) + 1 = 2020-01-02. Emitted with no compensation, no warning. MySQL CAST(... AS DATETIME) + 1 does NUMERIC coercion -> 20200101000001 (live) — a wrong value, not a date. PG CAST(... AS TIMESTAMP) + 1 -> live ERROR 'operator does not exist: timestamp + integer' (invalid output). Oracle DATE + 1 is correct. Live: tsql=2020-01-02, mysql=20200101000001, pg=error, oracle=2020-01-02. BLUE: map datetime+int to DATE_ADD(.., INTERVAL n DAY) (MySQL) and .. + n * INTERVAL '1 day' (PG).
 SELECT CAST('2020-01-01' AS DATETIME) + 1 AS d
+
+-- CASE[open][class=silent-drop]: reda-ts-delete-top — fails on mysql, oracle, postgresql. DELETE TOP (2) FROM t WHERE a>0 limits the delete to 2 rows; the TOP (2) is silently dropped -> DELETE FROM t WHERE a>0 deletes ALL matching rows. Only the internal 'unread sqlglot arg tables on Delete' tripwire fires (about the alias, not TOP). MySQL supports DELETE ... LIMIT 2 natively (so this is a dropped supported clause); Oracle needs AND ROWNUM<=2, PG a ctid-subquery. BLUE: preserve the row cap per target.
+CREATE TABLE t (a INT); DELETE TOP (2) FROM t WHERE a > 0
+
+-- CASE[open][class=lying-warning]: reda-ts-like-escape — fails on postgresql, oracle, mysql. LIKE '...' ESCAPE '!' is SQL-standard and supported IDENTICALLY by PostgreSQL, Oracle and MySQL (all live-verified true), but the transpiler treats ESCAPE as an 'unmapped operator; no <engine> mapping' and comments out the ENTIRE statement with a (false) warning — losing a construct that is a pure identity passthrough. The warning misdescribes reality (a mapping exists) and the whole SELECT becomes a comment. BLUE: pass LIKE ... ESCAPE through unchanged on all three targets.
+SELECT a FROM t WHERE b LIKE '%x!%y%' ESCAPE '!'
