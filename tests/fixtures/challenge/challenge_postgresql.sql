@@ -836,3 +836,6 @@ SELECT COUNT(*) AS c FROM redb_tmp;
 
 -- CASE[open][class=composition]: pg-boolagg-filter — bool_or/bool_and (boolean aggregate) alone wraps its boolean argument into 1/0 for T-SQL (MAX(CAST(CASE WHEN a>5 THEN 1 WHEN NOT (a>5) THEN 0 END AS INT))); FILTER alone rewrites to COUNT(CASE WHEN cond THEN ...). COMBINED, the FILTER rewrite emits MAX(CAST(CASE WHEN b=1 THEN a>5 END AS INT)) — the raw boolean a>5 as a CASE THEN-value, which T-SQL rejects (error 102, no boolean value type). The 1/0 wrapping bool_or does alone is lost. No warning. Components green alone: bool_or (live-valid on T-SQL) and FILTER (corpus pg-filter-subquery, line ~266).
 SELECT bool_or(a > 5) FILTER (WHERE b = 1) AS r FROM (VALUES (10,1),(2,1),(3,2)) v(a,b)
+
+-- CASE[open][class=invalid]: pg-round-bare-half-literal — ROUND on a BARE fractional literal (0.5, no ::numeric cast) becomes T-SQL ROUND(0.5, 0). T-SQL types the literal 0.5 as numeric(1,1) (range ±0.9), and ROUND preserves that precision/scale, so the rounded 1.0 OVERFLOWS (error 8115). PG ROUND(0.5)=1 (arbitrary precision). No warning. The existing round cases all use ::numeric casts that widen the type and dodge this; a bare literal does not.
+SELECT ROUND(0.5) AS r

@@ -170,10 +170,10 @@
   .status .tag.ok   { background: #1f9d63; color: #fff; }
   .status .tag.warn { background: var(--warn); color: #3d2f00; }
   .status .tag.err  { background: var(--primary); color: #fff; }
-  .status .txt { font-family: var(--mono); font-size: 12.5px; color: #2c261f; }
+  .status .txt { font-family: var(--mono); font-size: 12.5px; color: #2c261f; min-width: 0; overflow-wrap: anywhere; }
   .status .txt b { font-weight: 700; }
   .detail { font-family: var(--mono); font-size: 12px; color: var(--on-surface-var);
-    padding: 3px 14px 3px 16px; }
+    padding: 3px 14px 3px 16px; overflow-wrap: anywhere; }
   .detail b { color: var(--on-surface); font-weight: 700; }
   .detail.err b { color: var(--primary); }
   .detail code { color: var(--secondary); }
@@ -553,12 +553,12 @@ function showResult(warnings = [], unsupported = []) {
       mode: "text/x-mssql", theme: "default", lineNumbers: true,
       lineWrapping: false, matchBrackets: true, autofocus: true,
     });
-    cmInput.setSize("100%", 400);
+    cmInput.setSize("100%", null); /* height stays in CSS so media queries apply */
     cmOutput = CodeMirror.fromTextArea(el("output"), {
       mode: "text/x-pgsql", theme: "default", lineNumbers: true,
       lineWrapping: false, readOnly: true,
     });
-    cmOutput.setSize("100%", 400);
+    cmOutput.setSize("100%", null); /* height stays in CSS so media queries apply */
     cmInput.on("change", () => { clearTimeout(detectTimer); detectTimer = setTimeout(onSourceChanged, 500); });
   }
 
