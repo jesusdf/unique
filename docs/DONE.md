@@ -5508,3 +5508,33 @@ Locked in three places so it is never "fixed" by accident:
 - `tests/integration/test_create_view_modifiers.py`
   `TestOrReplaceIdempotency` — pins `OR REPLACE` on pg/oracle/mysql and
   `OR ALTER` on tsql from a plain `CREATE VIEW`.
+
+## 47. sqlglot 30.11.0 → 30.14.0 (2026-07-30, v0.34.0) — closes the hang-guard decision
+
+Why the upgrade:
+
+- **The CASCADED hang is fixed upstream.** sqlglot 30.11's parse-error
+  highlighter hung (infinite loop, reproduced with a 20s timeout) on
+  `WITH CASCADED CHECK OPTION` under the `oracle` reader at
+  `ErrorLevel.RAISE`; 30.14.0 parses it via the Command fallback — no hang,
+  no exception. That was the last open maintainer decision (TODO §P3): it
+  closes with the bump. Our pre-parse strip of the clause stays as
+  belt-and-suspenders.
+
+What the upgrade required — the unread-args class, again:
+
+- sqlglot 30.12+ changed the AST model of `IS NOT NULL` from ``Not(Is(…))``
+  to ``Is(…, negate=True)`` (at least under the postgres reader). Only ONE
+  suite test failed (filtered-index predicate), but probing found a far
+  worse silent case: a pg-source ``DELETE … WHERE a IS NOT NULL`` shipped
+  as ``WHERE a IS NULL`` — polarity inverted, no warning. Three matchers
+  read the arg now (version-agnostic): `_convert_is` and `_convert_binary`
+  (`convert.py` — the IS map path used by DML WHERE clauses) and
+  `_tsql_index_predicate` (`emit.py`).
+- New pin: `tests/unit/core/test_is_not_null_polarity.py` — all 12
+  cross-engine directions + UPDATE + filtered index, accepting either
+  correct spelling (``IS NOT NULL`` / ``NOT (a IS NULL)``) and rejecting
+  the inversion, so it holds under both AST models.
+
+Pins bumped in `pyproject.toml` and `constraints.txt`. Full suite green
+under 30.14.0 (5,034 passed); ratchets flat.

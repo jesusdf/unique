@@ -6,7 +6,7 @@ summaries) with the detailed why/how of each fix archived in
 [`docs/DONE.md`](DONE.md); `docs/STATUS.md` summarizes the project state at a
 higher level.
 
-Last reviewed: 2026-07-29.
+Last reviewed: 2026-07-30.
 
 ## Legend
 
@@ -20,17 +20,10 @@ Last reviewed: 2026-07-29.
 
 *The 2026-07-24 audit backlog, the findings it surfaced, and the B28 features
 are ALL closed — see [`docs/MILESTONES.md`](MILESTONES.md) and
-[`docs/DONE.md`](DONE.md) §44–§46. Only the maintainer decision below
-remains (`or_replace` on views was decided 2026-07-29: kept and documented,
-DONE §46).*
-
-### P3 — maintainer decisions
-
-- [ ] **sqlglot hang guard**: sqlglot 30.x's parse-error highlighter hangs
-  (infinite) on `WITH CASCADED CHECK OPTION` under the `oracle` reader at
-  `ErrorLevel.RAISE`. Our pre-parse hook strips the clause first; if raw user
-  input can ever reach a RAISE-parse on the oracle reader, guard it (timeout
-  or pre-strip) — and consider reporting upstream.
+[`docs/DONE.md`](DONE.md) §44–§47. Both maintainer decisions are resolved:
+`or_replace` on views kept and documented (2026-07-29, DONE §46); the sqlglot
+CASCADED-hang closed by the 30.14.0 upgrade — fixed upstream (2026-07-30,
+DONE §47). The discrete backlog is empty.*
 
 ---
 
