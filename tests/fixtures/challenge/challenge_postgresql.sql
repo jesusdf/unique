@@ -822,3 +822,6 @@ SELECT a, SUM(a) OVER (ORDER BY a) AS s FROM (VALUES (1),(2),(3)) v(a) ORDER BY 
 
 -- CASE[open][class=silent-drop]: pg-fk-onupdate-oracle — FK ON UPDATE CASCADE is silently dropped into Oracle (Oracle FKs support no ON UPDATE action at all). ON DELETE actions survive but the cascade-on-parent-key-update behavior vanishes with NO warning. (The existing [fixed] postgresql-drop-ON UPDATE CASCADE only covers MySQL, which now PRESERVES it; Oracle is uncovered and silent.) Oracle can't express it, so the correct outcome is a carrier + warning like the NULLS-FIRST-index drop, not silence.
 CREATE TABLE redb_p (id INT PRIMARY KEY); CREATE TABLE redb_c (pid INT REFERENCES redb_p(id) ON UPDATE CASCADE)
+
+-- CASE[open][class=invalid]: pg-window-groups-frame — a GROUPS window-frame mode (ORDER BY x GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) is emitted verbatim to T-SQL and MySQL, which support only ROWS/RANGE frames and REJECT it at runtime (SQL Server 102 'Incorrect syntax near GROUPS'; MySQL 1235 'does not yet support GROUPS'). No warning (sqlglot parses GROUPS so the target-parse gate passes). Oracle supports GROUPS. NOTE: the [fixed] pg-groups2 case (a JSON-type fix) also emits this invalid GROUPS clause to T-SQL/MySQL — same class.
+SELECT x, SUM(x) OVER (ORDER BY x GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) AS s FROM (VALUES (1),(2),(2),(3)) v(x)
