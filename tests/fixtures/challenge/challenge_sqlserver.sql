@@ -511,3 +511,6 @@ CREATE TABLE t (a INT); DELETE TOP (2) FROM t WHERE a > 0
 
 -- CASE[open][class=lying-warning]: reda-ts-like-escape — fails on postgresql, oracle, mysql. LIKE '...' ESCAPE '!' is SQL-standard and supported IDENTICALLY by PostgreSQL, Oracle and MySQL (all live-verified true), but the transpiler treats ESCAPE as an 'unmapped operator; no <engine> mapping' and comments out the ENTIRE statement with a (false) warning — losing a construct that is a pure identity passthrough. The warning misdescribes reality (a mapping exists) and the whole SELECT becomes a comment. BLUE: pass LIKE ... ESCAPE through unchanged on all three targets.
 SELECT a FROM t WHERE b LIKE '%x!%y%' ESCAPE '!'
+
+-- CASE[open][class=invalid]: reda-ts-datepart-weekday — fails on postgresql, oracle, mysql. T-SQL DATEPART(WEEKDAY, d) is mapped to EXTRACT(DAYOFWEEK FROM d), but NO engine has a DAYOFWEEK extract unit: live PG 'unit "dayofweek" not recognized', MySQL 1064 syntax error, Oracle ORA-00907. Invalid output on all three, no warning. BLUE: map to EXTRACT(DOW ...)+1 / DAYOFWEEK()/ the DOW rewrite already used for pg-extract-dow (and note DATEPART(WEEKDAY) is DATEFIRST-dependent, default Sunday=1).
+SELECT DATEPART(WEEKDAY, CAST('2020-06-15' AS DATE)) AS r
