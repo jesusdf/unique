@@ -51,3 +51,18 @@ Notes: Oracle-source PIVOT is the same converter mechanism as reda-ts-pivot (als
 | reda-ts-date-plus-int | func | tsql→mysql,pg | datetime + 1 passed through | T-SQL adds a day. Live: mysql=20200101000001 (numeric, wrong), pg=error timestamp+int, tsql/oracle=2020-01-02. |
 
 Batch running totals: func 25, invalid 10, silent-drop 8, lying-warning 6, composition 5, consistency 4 = 58 pts; 6 classes; func 43%.
+
+### More findings (same batch)
+
+| id | class | src→targets | wrong output | evidence |
+|----|-------|-------------|--------------|----------|
+| reda-ora-greatest-null | lying-warning | oracle→pg | GREATEST(1,NULL,3) passed through | Oracle/MySQL=NULL, PG ignores NULL=3. Only internal ignore_nulls tripwire. |
+| reda-ts-delete-top | silent-drop | tsql→mysql,oracle,pg | TOP(n) dropped from DELETE | deletes ALL rows not n. MySQL DELETE LIMIT supported. Only internal tables tripwire. |
+| reda-ts-like-escape | lying-warning | tsql→pg,oracle,mysql | whole SELECT commented out | LIKE..ESCAPE is standard, supported identically on all 3 (live-verified). Falsely warned 'no mapping'. |
+| reda-ts-datepart-weekday | invalid | tsql→pg,oracle,mysql | EXTRACT(DAYOFWEEK FROM d) | no engine has DAYOFWEEK extract unit. Live PG/MySQL/Oracle all error. No warning. |
+| reda-ora-date-literal-subquery | invalid | oracle→pg,tsql,mysql | DATE literal->bare string in subquery | DATE '..' loses typing as a derived-table projection; outer date-minus-date -> text-text. Live PG 'text - text'. |
+| reda-ts-sequence-no-cycle | invalid | tsql→oracle | NO MAXVALUE NO CYCLE verbatim | Oracle needs NOMAXVALUE/NOCYCLE (one word). Live ORA-03049. No warning. |
+| reda-ts-index-fillfactor-mysql | invalid | tsql→mysql | ON t ((a) WITH (FILLFACTOR=80)) | WITH folded into key list. Live MySQL 1064. No warning (Oracle path warns). |
+| reda-ora-interval-literal-arith | invalid | oracle→tsql,mysql | INTERVAL '1-6' YEAR TO MONTH verbatim | T-SQL has no INTERVAL literal (err 102); MySQL uses YEAR_MONTH not YEAR TO MONTH (1064). No warning. |
+
+Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition 5, consistency 4 = **76 pts**; **6 classes** (max class invalid 26%). All 25 open cases smoke-pass test_challenge.py (601 passed).
