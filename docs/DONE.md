@@ -5487,3 +5487,24 @@ live verification:
 Remaining from the audit stream: only the two maintainer decisions
 (`or_replace` idempotency-vs-fix; sqlglot CASCADED-hang guard) — see
 `docs/TODO.md`.
+
+## 46. Maintainer decision: `or_replace` on converted views — kept, documented (2026-07-29)
+
+Decision on the first TODO §P3 item (found 2026-07-25): the behavior stays.
+`_convert_create_view` tests `expr.args.get("replace") is not None` while
+sqlglot stores `replace=False` for a plain `CREATE VIEW`, so EVERY converted
+view emits `CREATE OR REPLACE VIEW` (`CREATE OR ALTER VIEW` on tsql). The
+maintainer chose to keep it as an idempotency feature for migration scripts
+(a plain `CREATE` errors on an existing view; `OR REPLACE` redefines it —
+the trade-off is losing the source's create-should-fail error, called out in
+the doc note).
+
+Locked in three places so it is never "fixed" by accident:
+
+- `docs/03-unsupported.md` §4 (Behavioral Differences) — new "View
+  re-creation" row.
+- `_convert_create_view` (`convert.py`) — DELIBERATE comment on the
+  `is not None`.
+- `tests/integration/test_create_view_modifiers.py`
+  `TestOrReplaceIdempotency` — pins `OR REPLACE` on pg/oracle/mysql and
+  `OR ALTER` on tsql from a plain `CREATE VIEW`.

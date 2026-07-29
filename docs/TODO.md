@@ -6,7 +6,7 @@ summaries) with the detailed why/how of each fix archived in
 [`docs/DONE.md`](DONE.md); `docs/STATUS.md` summarizes the project state at a
 higher level.
 
-Last reviewed: 2026-07-25.
+Last reviewed: 2026-07-29.
 
 ## Legend
 
@@ -20,18 +20,12 @@ Last reviewed: 2026-07-25.
 
 *The 2026-07-24 audit backlog, the findings it surfaced, and the B28 features
 are ALL closed — see [`docs/MILESTONES.md`](MILESTONES.md) and
-[`docs/DONE.md`](DONE.md) §44–§45. Only the two maintainer decisions below
-remain.*
+[`docs/DONE.md`](DONE.md) §44–§46. Only the maintainer decision below
+remains (`or_replace` on views was decided 2026-07-29: kept and documented,
+DONE §46).*
 
 ### P3 — maintainer decisions
 
-- [ ] **`or_replace` on converted views** (found 2026-07-25, predates the
-  view-modifier work): `_convert_create_view` tests `is not None` but sqlglot
-  stores `replace=False`, so EVERY converted view emits `CREATE OR REPLACE`
-  (`OR ALTER` on tsql). Migration-friendly but a silent semantic change (a
-  plain CREATE errors on an existing view; OR REPLACE overwrites it). Decide:
-  document as an idempotency feature (03-unsupported note + annotation) or
-  fix to `bool(...)` and re-bless the affected corpus/tests.
 - [ ] **sqlglot hang guard**: sqlglot 30.x's parse-error highlighter hangs
   (infinite) on `WITH CASCADED CHECK OPTION` under the `oracle` reader at
   `ErrorLevel.RAISE`. Our pre-parse hook strips the clause first; if raw user

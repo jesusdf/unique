@@ -2238,6 +2238,12 @@ def _convert_create_view(expr: exp.Create) -> CreateViewStatement:
     return CreateViewStatement(
         name=table,
         query=query,
+        # DELIBERATE (maintainer decision 2026-07-29): sqlglot stores
+        # ``replace=False`` for a plain CREATE VIEW, so this ``is not None``
+        # makes EVERY converted view emit CREATE OR REPLACE (OR ALTER on
+        # tsql). That is an idempotency feature for migration scripts, not a
+        # bug — do not "fix" it to ``bool(...)`` (docs/03-unsupported.md §4,
+        # tests/integration/test_create_view_modifiers.py).
         or_replace=expr.args.get("replace") is not None,
         dropped_modifiers=tuple(modifiers),
     )

@@ -110,6 +110,31 @@ class TestNonPortableModifiersWarn:
         _parse_ok(out, "postgresql")
 
 
+class TestOrReplaceIdempotency:
+    """Maintainer decision 2026-07-29: every converted view emits CREATE OR
+    REPLACE (OR ALTER on tsql), even from a plain CREATE VIEW — an
+    idempotency feature for migration scripts, documented in
+    docs/03-unsupported.md §4. These tests pin the decision so the
+    ``is not None`` in ``_convert_create_view`` is not "fixed" to
+    ``bool(...)``."""
+
+    SRC = "CREATE VIEW v AS SELECT id, val FROM t;"
+
+    def test_plain_create_view_emits_or_replace(self) -> None:
+        for target in ("postgresql", "oracle", "mysql"):
+            res = Transpiler().transpile(self.SRC, "tsql", target)
+            assert "CREATE OR REPLACE VIEW" in _code_lines(res.sql), (
+                target,
+                res.sql,
+            )
+            _parse_ok(res.sql, target)
+
+    def test_plain_create_view_emits_or_alter_on_tsql(self) -> None:
+        res = Transpiler().transpile(self.SRC, "postgresql", "tsql")
+        assert "CREATE OR ALTER VIEW" in _code_lines(res.sql), res.sql
+        _parse_ok(res.sql, "tsql")
+
+
 class TestSameEngineModifiersKept:
     def test_tsql_schemabinding_survives_tsql_target(self) -> None:
         src = "CREATE VIEW v WITH SCHEMABINDING AS SELECT id, val FROM t;"

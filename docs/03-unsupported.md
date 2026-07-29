@@ -617,6 +617,7 @@ differences that cannot be resolved by syntax changes:
 | Integer division | Some engines truncate, others return decimal. |
 | Transaction auto-commit | Default behavior varies. |
 | Identifier quoting | `[]` vs `""` vs `` ` ` `` — handled, but original identifiers may conflict with reserved words in the target engine. |
+| View re-creation | Every converted view emits `CREATE OR REPLACE VIEW` (`CREATE OR ALTER VIEW` on T-SQL), even when the source said plain `CREATE VIEW`. Deliberate (maintainer decision 2026-07-29): migration scripts stay re-runnable — a plain `CREATE` errors on an existing view, `OR REPLACE` redefines it. If the source relied on `CREATE` *failing* when the view already exists, that error is gone. |
 
 These differences are **documented in warnings** when relevant constructs
 are detected.
