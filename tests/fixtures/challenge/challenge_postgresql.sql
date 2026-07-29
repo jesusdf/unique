@@ -848,3 +848,6 @@ CREATE TABLE redb_dv (id INT DEFAULT 7, v INT DEFAULT 3); INSERT INTO redb_dv DE
 
 -- CASE[open][class=func]: pg-repeat-negative — repeat(s, n) with n<=0 returns '' in PostgreSQL (and MySQL REPEAT), but the T-SQL (REPLICATE) and Oracle (RPAD(s, len*n, s)) emulations return NULL for a negative count. PG/MySQL=''; T-SQL/Oracle=NULL. No warning. (The pg-pad-repeat / pg-repeat-left-right cases only use positive counts.)
 SELECT repeat('ab', -1) AS r
+
+-- CASE[open][class=invalid]: pg-row-value-comparison — a row-value inequality comparison (a, b) > (1, 5) (lexicographic; used for keyset pagination) is emitted VERBATIM to T-SQL, which has no row-value comparison and rejects it (error 4145 'non-boolean type ... where a condition is expected'). No warning. PG=(3,4). Oracle and MySQL both accept row inequality, so only T-SQL is invalid.
+SELECT a, b FROM (VALUES (1,2),(3,4)) v(a,b) WHERE (a, b) > (1, 5)
