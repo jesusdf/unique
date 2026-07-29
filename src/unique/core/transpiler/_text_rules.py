@@ -172,19 +172,22 @@ def _qualify_tsql_udfs_in_sql(sql: str) -> str:
     return qualify_function_calls(sql, decide)
 
 
-def _extract_catalog_guard(code: str) -> tuple[str, str, str, str] | None:
+def _extract_catalog_guard(code: str) -> tuple[str, str, str, str, str] | None:
     """Parse a T-SQL catalog migration guard into ``(polarity, trivia, body,
-    condition)``.
+    condition, else_body)``.
 
     ``polarity`` is ``"absent"`` (run the body when the object does NOT exist:
     ``IF NOT EXISTS(…)`` / ``IF OBJECT_ID(…) IS NULL``) or ``"present"``
     (``IF EXISTS(…)`` / ``IS NOT NULL``). ``body`` is the guarded statement —
-    a single ``BEGIN … END`` wrapper is unwrapped, a diagnostic ``ELSE``
-    branch is cut, and leading ``PRINT``/``SET`` noise is dropped. ``trivia``
-    is any comment found between the condition and the body (e.g. a trailing
-    ``-- old name`` on the guard line) — preserved by the caller, never left
-    in the body where it would defeat the DROP matcher (doc-04 P2). Returns
-    ``None`` when *code* (which must already be trivia-free) is not a guard.
+    a single ``BEGIN … END`` wrapper is unwrapped and leading ``PRINT``/``SET``
+    noise is dropped. ``else_body`` is the ``ELSE`` branch's code (unwrapped,
+    ``""`` when absent) — the caller carries a diagnostic ``PRINT`` into the
+    target conditional and warns about anything it cannot carry (user report
+    2026-07-29; the branch used to be cut silently). ``trivia`` is any comment
+    found between the condition and the body (e.g. a trailing ``-- old name``
+    on the guard line) — preserved by the caller, never left in the body where
+    it would defeat the DROP matcher (doc-04 P2). Returns ``None`` when *code*
+    (which must already be trivia-free) is not a guard.
     """
     head = _TSQL_GUARD_HEAD_RE.match(code)
     if not head:
@@ -219,11 +222,16 @@ def _extract_catalog_guard(code: str) -> tuple[str, str, str, str] | None:
     inner_trivia, rest = split_leading_trivia(rest.strip())
     rest = rest.strip()
     # A guard commonly has an ELSE branch — usually a diagnostic ``PRINT '… already
-    # exists'``. Keep only the THEN branch; cut at a line-starting ELSE (so an
-    # ELSE inside a CASE expression is left intact).
+    # exists'``. Split it off at a line-starting ELSE (so an ELSE inside a CASE
+    # expression is left intact) and hand it to the caller.
+    else_body = ""
     else_cut = re.search(r"(?im)^\s*ELSE\b", rest)
     if else_cut:
+        else_body = rest[else_cut.end() :].strip()
         rest = rest[: else_cut.start()].strip()
+        else_unwrapped = re.match(r"(?is)^BEGIN\b(.*)\bEND\b\s*;?\s*$", else_body)
+        if else_unwrapped:
+            else_body = else_unwrapped.group(1).strip()
     unwrapped = re.match(r"(?is)^BEGIN\b(.*)\bEND\b\s*;?\s*$", rest)
     if unwrapped:
         rest = unwrapped.group(1).strip()
@@ -242,7 +250,7 @@ def _extract_catalog_guard(code: str) -> tuple[str, str, str, str] | None:
         rest = rest[noise.end() :].lstrip()
     if not rest:
         return None
-    return polarity, inner_trivia, rest, condition
+    return polarity, inner_trivia, rest, condition, else_body
 
 
 # A MySQL routine whose body contains ';' statement terminators must be wrapped

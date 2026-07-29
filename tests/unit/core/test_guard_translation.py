@@ -277,23 +277,42 @@ class TestFaithfulColumnProbeGuard:
         assert re.search(r"(?i)ALTER TABLE .* SET DEFAULT", result.sql)
         assert not any(w.feature == "guard_dropped" for w in result.warnings)
 
-    def test_oracle_probe_with_execute_immediate(self) -> None:
+    def test_oracle_probe_uses_compact_for_loop(self) -> None:
+        # No ELSE branch: the guard rides in the same compact FOR-loop form
+        # as the other Oracle guards (user report 2026-07-29), not a
+        # DECLARE/COUNT block.
         result = Transpiler().transpile(self._SRC, source="tsql", target="oracle")
         assert "user_tab_columns" in result.sql
         assert "table_name = UPPER('t1')" in result.sql
         assert "column_name = UPPER('c1')" in result.sql
         # data_default is a LONG (unusable in WHERE); its NUMBER shadow works.
         assert "default_length IS NOT NULL" in result.sql
-        assert "IF unique_guard_n = 0 THEN" in result.sql
+        assert "BEGIN FOR unique_guard IN (SELECT 1 FROM DUAL WHERE NOT EXISTS (" in (
+            result.sql
+        )
+        assert "DECLARE" not in result.sql
         assert "EXECUTE IMMEDIATE 'ALTER TABLE" in result.sql
         assert result.sql.rstrip().endswith("/"), result.sql
         assert not any(w.feature == "guard_dropped" for w in result.warnings)
 
-    def test_mysql_still_warns_guard_dropped(self) -> None:
+    def test_mysql_probe_via_prepared_statement(self) -> None:
+        # MySQL has no anonymous blocks, but a catalog-conditional single
+        # statement runs via information_schema + IF() + PREPARE (user
+        # report 2026-07-29; the guard used to be dropped with a warning).
         result = Transpiler().transpile(self._SRC, source="tsql", target="mysql")
         assert "UNIQUE:" not in result.sql
+        assert "information_schema.columns" in result.sql
+        assert "table_name = 't1'" in result.sql
+        assert "column_name = 'c1'" in result.sql
+        assert "column_default IS NOT NULL" in result.sql
+        assert "NOT EXISTS" in result.sql
         assert re.search(r"(?i)ALTER TABLE", result.sql)
-        assert any(
+        assert "PREPARE unique_guard_stmt FROM @unique_guard_sql" in result.sql
+        assert "EXECUTE unique_guard_stmt" in result.sql
+        # DEALLOCATE PREPARE's synonym; the DEALLOCATE spelling fails the
+        # output gate's mysql parse.
+        assert "DROP PREPARE unique_guard_stmt" in result.sql
+        assert not any(
             w.feature == "guard_dropped" for w in result.warnings
         ), result.warnings
 
@@ -322,3 +341,95 @@ class TestFaithfulColumnProbeGuard:
         )
         result = Transpiler().transpile(src, source="tsql", target="postgresql")
         assert any(w.feature == "guard_dropped" for w in result.warnings)
+
+
+class TestGuardElseBranch:
+    """User report 2026-07-29: ``IF EXISTS(syscolumns…) ALTER … ELSE PRINT``.
+
+    The ELSE diagnostic used to be cut with no trace (no-silent-loss
+    violation). A PRINT-only ELSE now rides inside the target's conditional;
+    any other ELSE body degrades with an explicit warning.
+    """
+
+    _SRC = (
+        "IF EXISTS(SELECT * FROM syscolumns WHERE id = "
+        "object_id('dbo.u_days') AND name = 'descr')\n"
+        "    ALTER TABLE dbo.u_days ALTER COLUMN descr VARCHAR(100) NULL\n"
+        "ELSE\n"
+        "    PRINT '[!] Warning S' + 'QS: la columna no existe, se omite.'\n"
+        "GO\n"
+    )
+
+    def test_oracle_else_print_becomes_dbms_output(self) -> None:
+        result = Transpiler().transpile(self._SRC, source="tsql", target="oracle")
+        # With an ELSE the guard needs the IF/ELSE block form, not the
+        # compact FOR loop.
+        assert "IF unique_guard_n > 0 THEN" in result.sql
+        assert "EXECUTE IMMEDIATE 'ALTER TABLE u_days MODIFY" in result.sql
+        assert "ELSE" in result.sql
+        assert "DBMS_OUTPUT.PUT_LINE(" in result.sql
+        assert "||" in result.sql  # the T-SQL '+' concatenation was translated
+        assert not any(w.feature == "guard_dropped" for w in result.warnings)
+
+    def test_oracle_without_else_is_compact(self) -> None:
+        src = self._SRC.split("ELSE")[0] + "GO\n"
+        result = Transpiler().transpile(src, source="tsql", target="oracle")
+        assert "BEGIN FOR unique_guard IN (SELECT 1 FROM DUAL WHERE EXISTS (" in (
+            result.sql
+        )
+        assert "user_tab_columns" in result.sql
+        assert "table_name = UPPER('u_days')" in result.sql
+        assert "DECLARE" not in result.sql
+        assert not any(w.feature == "guard_dropped" for w in result.warnings)
+
+    def test_postgresql_else_print_becomes_raise_notice(self) -> None:
+        result = Transpiler().transpile(self._SRC, source="tsql", target="postgresql")
+        assert "DO $$" in result.sql
+        assert "IF EXISTS (" in result.sql
+        assert "ELSE" in result.sql
+        assert "RAISE NOTICE '%'," in result.sql
+        assert not any(w.feature == "guard_dropped" for w in result.warnings)
+
+    def test_mysql_else_print_is_the_alternate_statement(self) -> None:
+        result = Transpiler().transpile(self._SRC, source="tsql", target="mysql")
+        assert "information_schema.columns" in result.sql
+        assert "PREPARE unique_guard_stmt" in result.sql
+        assert "CONCAT(" in result.sql  # the ELSE PRINT, as the alternate SQL
+        assert not any(w.feature == "guard_dropped" for w in result.warnings)
+
+    def test_mysql_without_else_uses_noop_alternate(self) -> None:
+        src = self._SRC.split("ELSE")[0] + "GO\n"
+        result = Transpiler().transpile(src, source="tsql", target="mysql")
+        assert "PREPARE unique_guard_stmt" in result.sql
+        assert "'DO 0'" in result.sql
+        assert not any(w.feature == "guard_dropped" for w in result.warnings)
+
+    @pytest.mark.parametrize("target", ["postgresql", "oracle", "mysql"])
+    def test_non_print_else_warns(self, target: str) -> None:
+        src = (
+            "IF EXISTS(SELECT * FROM syscolumns WHERE id = "
+            "object_id('dbo.u_days') AND name = 'descr')\n"
+            "    ALTER TABLE dbo.u_days ALTER COLUMN descr VARCHAR(100) NULL\n"
+            "ELSE\n"
+            "    UPDATE cfg SET v = 1 WHERE k = 'x'\n"
+            "GO\n"
+        )
+        result = Transpiler().transpile(src, source="tsql", target=target)
+        assert any(
+            "ELSE" in w.message and w.feature == "guard_dropped"
+            for w in result.warnings
+        ), result.warnings
+
+    def test_absent_polarity_with_else_keeps_block_form(self) -> None:
+        src = (
+            "IF NOT EXISTS(SELECT * FROM syscolumns WHERE id = "
+            "object_id('dbo.u_days') AND name = 'descr')\n"
+            "    ALTER TABLE dbo.u_days ADD descr VARCHAR(100) NULL\n"
+            "ELSE\n"
+            "    PRINT 'ya existe'\n"
+            "GO\n"
+        )
+        result = Transpiler().transpile(src, source="tsql", target="oracle")
+        assert "IF unique_guard_n = 0 THEN" in result.sql
+        assert "DBMS_OUTPUT.PUT_LINE(" in result.sql
+        assert not any(w.feature == "guard_dropped" for w in result.warnings)

@@ -138,6 +138,162 @@ class TranspileResult:
         return len(self.unsupported) > 0
 
 
+def _mysql_single_quoted(s: str) -> str:
+    """Escape *s* for embedding in a MySQL single-quoted literal.
+
+    Backslashes are escape characters in MySQL strings (unless
+    NO_BACKSLASH_ESCAPES is set), so they must be doubled along with the
+    quotes."""
+    return s.replace("\\", "\\\\").replace("'", "''")
+
+
+def _warn_guard_else_dropped(
+    result: TranspileResult, else_body: str, source: str, target: str
+) -> TranspileResult:
+    """Record that a guard's ELSE branch was dropped (no-silent-loss).
+
+    Only a single diagnostic ``PRINT`` can ride in the target conditional's
+    ELSE slot; any other branch (or one whose expression does not translate
+    cleanly) is cut, and that loss must be reported. A falsy *else_body*
+    passes the result through untouched (no branch existed)."""
+    if not else_body:
+        return result
+    head = " ".join(else_body.strip().split())[:60]
+    return TranspileResult(
+        sql=result.sql,
+        warnings=[
+            *result.warnings,
+            _warn(
+                "guard ELSE branch dropped (only a diagnostic PRINT can be "
+                f"carried into the {target} conditional): {head}",
+                "guard_dropped",
+                source,
+                target,
+            ),
+        ],
+        unsupported=result.unsupported,
+    )
+
+
+def _pg_column_guard(
+    body: str,
+    table: str,
+    column: str,
+    default_pred: bool,
+    exists: str,
+    else_stmt: str | None,
+) -> str:
+    """The PostgreSQL ``DO $$`` block for a recognized column-probe guard."""
+    probe_sql = (
+        "SELECT 1 FROM information_schema.columns\n"
+        f"        WHERE table_name = lower('{table}') "
+        f"AND column_name = lower('{column}')"
+    )
+    if default_pred:
+        probe_sql += "\n          AND column_default IS NOT NULL"
+    body_stmt = body if body.endswith(";") else body + ";"
+    body_block = "\n".join(f"        {line.strip()}" for line in body_stmt.splitlines())
+    else_block = f"    ELSE\n        {else_stmt};\n" if else_stmt else ""
+    return (
+        "DO $$\n"
+        "BEGIN\n"
+        f"    IF {exists} (\n"
+        f"        {probe_sql}\n"
+        "    ) THEN\n"
+        f"{body_block}\n"
+        f"{else_block}"
+        "    END IF;\n"
+        "END $$;"
+    )
+
+
+def _mysql_column_guard(
+    body: str,
+    table: str,
+    column: str,
+    default_pred: bool,
+    exists: str,
+    else_stmt: str | None,
+) -> str:
+    """The MySQL ``information_schema`` + ``IF()`` + ``PREPARE`` form.
+
+    MySQL has no anonymous blocks; a catalog-conditional single statement
+    runs by choosing the SQL text with ``IF()`` and executing it prepared
+    (user report 2026-07-29)."""
+    probe_sql = (
+        "SELECT 1 FROM information_schema.columns\n"
+        f"    WHERE table_schema = DATABASE() AND table_name = '{table}' "
+        f"AND column_name = '{column}'"
+    )
+    if default_pred:
+        probe_sql += "\n      AND column_default IS NOT NULL"
+    then_sql = _mysql_single_quoted(body.rstrip(";"))
+    alt_sql = _mysql_single_quoted(else_stmt) if else_stmt else "DO 0"
+    return (
+        f"SET @unique_guard_sql = (SELECT IF({exists} (\n"
+        f"    {probe_sql}\n"
+        f"), '{then_sql}', '{alt_sql}'));\n"
+        "PREPARE unique_guard_stmt FROM @unique_guard_sql;\n"
+        "EXECUTE unique_guard_stmt;\n"
+        # DROP PREPARE == DEALLOCATE PREPARE; the DEALLOCATE spelling
+        # fails the output gate's mysql parse (sqlglot rejects it).
+        "DROP PREPARE unique_guard_stmt;"
+    )
+
+
+def _oracle_column_guard(
+    body: str,
+    table: str,
+    column: str,
+    default_pred: bool,
+    polarity: str,
+    else_stmt: str | None,
+) -> str:
+    """The Oracle PL/SQL form for a recognized column-probe guard.
+
+    Without an ELSE the guard rides in the same compact FOR-loop form as the
+    other Oracle guards (user report 2026-07-29); a carried ELSE diagnostic
+    needs the block form (the FOR loop has no ELSE slot)."""
+    stmt = body.rstrip(";").replace("'", "''")
+    if else_stmt:
+        count_probe = (
+            "SELECT COUNT(*) INTO unique_guard_n FROM user_tab_columns\n"
+            f"    WHERE table_name = UPPER('{table}') "
+            f"AND column_name = UPPER('{column}')"
+        )
+        if default_pred:
+            # data_default is a LONG (unusable in WHERE); default_length
+            # is its NUMBER shadow.
+            count_probe += "\n      AND default_length IS NOT NULL"
+        check = "> 0" if polarity == "present" else "= 0"
+        return (
+            "DECLARE\n"
+            "    unique_guard_n NUMBER;\n"
+            "BEGIN\n"
+            f"    {count_probe};\n"
+            f"    IF unique_guard_n {check} THEN\n"
+            f"        EXECUTE IMMEDIATE '{stmt}';\n"
+            "    ELSE\n"
+            f"        {else_stmt};\n"
+            "    END IF;\n"
+            "END;"
+        )
+    probe_sql = (
+        f"SELECT 1 FROM user_tab_columns\n"
+        f"      WHERE table_name = UPPER('{table}') "
+        f"AND column_name = UPPER('{column}')"
+    )
+    if default_pred:
+        probe_sql += "\n        AND default_length IS NOT NULL"
+    exists = "EXISTS" if polarity == "present" else "NOT EXISTS"
+    return (
+        f"BEGIN FOR unique_guard IN (SELECT 1 FROM DUAL WHERE {exists} (\n"
+        f"      {probe_sql})) LOOP\n"
+        f"    EXECUTE IMMEDIATE '{stmt}';\n"
+        "  END LOOP; END;"
+    )
+
+
 class Transpiler:
     """Orchestrates SQL transpilation between dialects.
 
@@ -343,7 +499,7 @@ class Transpiler:
                         else None
                     )
                     if guard is not None:
-                        polarity, inner_trivia, body, condition = guard
+                        polarity, inner_trivia, body, condition, else_body = guard
                         if inner_trivia.strip():
                             trivia = (
                                 f"{trivia.rstrip()}\n{inner_trivia}"
@@ -362,6 +518,9 @@ class Transpiler:
                                 source,
                                 target,
                             )
+                            result = _warn_guard_else_dropped(
+                                result, else_body, source, target
+                            )
                         else:
                             # Any other guarded statement: transpile the body
                             # (the catalog condition has no target form) and
@@ -372,14 +531,35 @@ class Transpiler:
                             result = self._transpile_dml(
                                 body, source, target, source_dialect, target_dialect
                             )
+                            else_stmt = self._guard_else_print(
+                                else_body,
+                                source,
+                                target,
+                                source_dialect,
+                                target_dialect,
+                            )
                             if polarity == "absent":
                                 result = self._guard_idempotent(
-                                    result, source, target, condition, polarity
+                                    result,
+                                    source,
+                                    target,
+                                    condition,
+                                    polarity,
+                                    else_body,
+                                    else_stmt,
                                 )
                             else:
                                 result = self._faithful_catalog_guard(
-                                    result, condition, polarity, source, target
-                                ) or self._warn_guard_dropped(result, source, target)
+                                    result,
+                                    condition,
+                                    polarity,
+                                    source,
+                                    target,
+                                    else_body,
+                                    else_stmt,
+                                ) or self._warn_guard_dropped(
+                                    result, source, target, else_body
+                                )
                     else:
                         trivia = ""  # the fallback keeps the whole batch text
                         result = self._transpile_set_option(batch.sql, source, target)
@@ -1151,25 +1331,37 @@ class Transpiler:
         target: str,
         condition: str = "",
         polarity: str = "absent",
+        else_body: str = "",
+        else_stmt: str | None = None,
     ) -> TranspileResult:
         """Restore a catalog CREATE-guard's re-runnable intent on the target.
 
         Oracle wraps the DDL in the ``user_objects`` probe + ``EXECUTE
         IMMEDIATE`` (see ``_oracle_idempotent_create``); PostgreSQL/MySQL use
         their native ``CREATE TABLE/INDEX IF NOT EXISTS`` clause. Where the
-        target has no conditional form (MySQL ``CREATE INDEX``, or any
-        non-CREATE body such as ``ALTER … ADD DEFAULT``), the guard is
+        target has no conditional form (MySQL ``CREATE INDEX``, or a body or
+        condition the faithful catalog guard cannot express), the guard is
         dropped with an explicit warning — never silently (audit 2026-07-08
-        A5; user report 2026-07-09)."""
+        A5; user report 2026-07-09). A carried ELSE diagnostic
+        (``else_stmt``) needs a conditional with an ELSE slot, so the
+        faithful catalog guard is preferred over the idempotent-clause
+        rewrites when one exists."""
+        if else_stmt:
+            faithful = self._faithful_catalog_guard(
+                result, condition, polarity, source, target, else_body, else_stmt
+            )
+            if faithful is not None:
+                return faithful
         if target == "oracle":
             wrapped = _oracle_idempotent_create(result.sql)
             if wrapped is None:
                 return self._faithful_catalog_guard(
-                    result, condition, polarity, source, target
-                ) or self._warn_guard_dropped(result, source, target)
-            return TranspileResult(
+                    result, condition, polarity, source, target, else_body, else_stmt
+                ) or self._warn_guard_dropped(result, source, target, else_body)
+            wrapped_result = TranspileResult(
                 sql=wrapped, warnings=result.warnings, unsupported=result.unsupported
             )
+            return _warn_guard_else_dropped(wrapped_result, else_body, source, target)
         if target in ("postgresql", "mysql"):
             sql, n = re.subn(
                 r"(?i)^(\s*)CREATE\s+TABLE\s+(?!IF\s+NOT\s+EXISTS)",
@@ -1178,9 +1370,10 @@ class Transpiler:
                 count=1,
             )
             if n:
-                return TranspileResult(
+                rewritten = TranspileResult(
                     sql=sql, warnings=result.warnings, unsupported=result.unsupported
                 )
+                return _warn_guard_else_dropped(rewritten, else_body, source, target)
             if target == "postgresql":
                 sql, n = re.subn(
                     r"(?i)^(\s*)CREATE\s+(UNIQUE\s+)?INDEX\s+(?!IF\s+NOT\s+EXISTS)",
@@ -1189,13 +1382,16 @@ class Transpiler:
                     count=1,
                 )
                 if n:
-                    return TranspileResult(
+                    rewritten = TranspileResult(
                         sql=sql,
                         warnings=result.warnings,
                         unsupported=result.unsupported,
                     )
+                    return _warn_guard_else_dropped(
+                        rewritten, else_body, source, target
+                    )
             elif re.match(r"(?is)^\s*CREATE\s+(UNIQUE\s+)?INDEX\b", result.sql):
-                return TranspileResult(
+                dropped = TranspileResult(
                     sql=result.sql,
                     warnings=[
                         *result.warnings,
@@ -1209,12 +1405,13 @@ class Transpiler:
                     ],
                     unsupported=result.unsupported,
                 )
+                return _warn_guard_else_dropped(dropped, else_body, source, target)
             return self._faithful_catalog_guard(
-                result, condition, polarity, source, target
-            ) or self._warn_guard_dropped(result, source, target)
+                result, condition, polarity, source, target, else_body, else_stmt
+            ) or self._warn_guard_dropped(result, source, target, else_body)
         return self._faithful_catalog_guard(
-            result, condition, polarity, source, target
-        ) or self._warn_guard_dropped(result, source, target)
+            result, condition, polarity, source, target, else_body, else_stmt
+        ) or self._warn_guard_dropped(result, source, target, else_body)
 
     _COLUMN_PROBE_TABLE_RE = re.compile(
         r"(?is)^(?:object_)?id\s*=\s*OBJECT_ID\s*\(\s*N?'(?P<t>[^']+)'\s*\)$"
@@ -1259,6 +1456,45 @@ class Transpiler:
             return None
         return {"table": table, "column": column, "has_default": has_default}
 
+    _GUARD_ELSE_PRINT_RE = re.compile(r"(?is)^PRINT\s+(?P<expr>.+?)\s*;?\s*$")
+
+    def _guard_else_print(
+        self,
+        else_body: str,
+        source: str,
+        target: str,
+        source_dialect: Dialect,
+        target_dialect: Dialect,
+    ) -> str | None:
+        """Translate a guard's PRINT-only ELSE branch into the target's
+        diagnostic statement (DBMS_OUTPUT / RAISE NOTICE / SELECT), routing
+        the message expression through the normal DML pipeline so operators
+        like the T-SQL ``+`` concatenation are converted. Returns None when
+        the branch is not a single PRINT or its expression does not translate
+        cleanly — the caller then warns it as dropped."""
+        if not else_body:
+            return None
+        m = self._GUARD_ELSE_PRINT_RE.match(else_body.strip())
+        if m is None or ";" in m.group("expr"):
+            return None
+        probe = self._transpile_dml(
+            f"SELECT {m.group('expr')}", source, target, source_dialect, target_dialect
+        )
+        if probe.warnings or probe.unsupported:
+            return None
+        sql = probe.sql.strip().rstrip(";").strip()
+        sm = re.match(r"(?is)^SELECT\s+(?P<e>.+?)(?:\s+FROM\s+DUAL)?\s*$", sql)
+        if sm is None:
+            return None
+        expr = sm.group("e").strip()
+        if target == "oracle":
+            return f"DBMS_OUTPUT.PUT_LINE({expr})"
+        if target == "postgresql":
+            return f"RAISE NOTICE '%', {expr}"
+        if target == "mysql":
+            return f"SELECT {expr}"
+        return None
+
     def _faithful_catalog_guard(
         self,
         result: TranspileResult,
@@ -1266,79 +1502,52 @@ class Transpiler:
         polarity: str,
         source: str,
         target: str,
+        else_body: str = "",
+        else_stmt: str | None = None,
     ) -> TranspileResult | None:
         """Translate a recognized catalog probe to the target's catalog and
         wrap the transpiled body in the target's conditional block (doc-04
         P2: the guard's *condition* survives, not just its idempotent
-        intent). Returns None when the condition or body has no faithful
-        form (the caller then warns the guard as dropped)."""
-        if target not in ("postgresql", "oracle") or not condition:
+        intent). A carried ELSE diagnostic (``else_stmt``) rides in the
+        conditional's ELSE slot; an ELSE branch with no carried form is
+        warned as dropped. Returns None when the condition or body has no
+        faithful form (the caller then warns the guard as dropped)."""
+        if target not in ("postgresql", "oracle", "mysql") or not condition:
             return None
         probe = self._parse_column_probe(condition)
         if probe is None:
             return None
         body = result.sql.strip()
         # Plain statements only: a body that is itself a block cannot be
-        # nested mechanically. Oracle additionally allows just one statement
-        # (it goes through a single EXECUTE IMMEDIATE).
+        # nested mechanically. Oracle and MySQL additionally allow just one
+        # statement (it goes through a single EXECUTE IMMEDIATE / PREPARE).
         if not body or "$$" in body or body.startswith("--"):
             return None
-        if target == "oracle" and body.count(";") > 1:
+        if target in ("oracle", "mysql") and body.count(";") > 1:
             return None
         table, column = str(probe["table"]), str(probe["column"])
         default_pred = bool(probe["has_default"])
+        exists = "EXISTS" if polarity == "present" else "NOT EXISTS"
         if target == "postgresql":
-            probe_sql = (
-                "SELECT 1 FROM information_schema.columns\n"
-                f"        WHERE table_name = lower('{table}') "
-                f"AND column_name = lower('{column}')"
-            )
-            if default_pred:
-                probe_sql += "\n          AND column_default IS NOT NULL"
-            exists = "EXISTS" if polarity == "present" else "NOT EXISTS"
-            body_stmt = body if body.endswith(";") else body + ";"
-            body_block = "\n".join(
-                f"        {line.strip()}" for line in body_stmt.splitlines()
-            )
-            sql = (
-                "DO $$\n"
-                "BEGIN\n"
-                f"    IF {exists} (\n"
-                f"        {probe_sql}\n"
-                "    ) THEN\n"
-                f"{body_block}\n"
-                "    END IF;\n"
-                "END $$;"
+            sql = _pg_column_guard(body, table, column, default_pred, exists, else_stmt)
+        elif target == "mysql":
+            sql = _mysql_column_guard(
+                body, table, column, default_pred, exists, else_stmt
             )
         else:
-            probe_sql = (
-                "SELECT COUNT(*) INTO unique_guard_n FROM user_tab_columns\n"
-                f"    WHERE table_name = UPPER('{table}') "
-                f"AND column_name = UPPER('{column}')"
+            sql = _oracle_column_guard(
+                body, table, column, default_pred, polarity, else_stmt
             )
-            if default_pred:
-                # data_default is a LONG (unusable in WHERE); default_length
-                # is its NUMBER shadow.
-                probe_sql += "\n      AND default_length IS NOT NULL"
-            check = "> 0" if polarity == "present" else "= 0"
-            stmt = body.rstrip(";").replace("'", "''")
-            sql = (
-                "DECLARE\n"
-                "    unique_guard_n NUMBER;\n"
-                "BEGIN\n"
-                f"    {probe_sql};\n"
-                f"    IF unique_guard_n {check} THEN\n"
-                f"        EXECUTE IMMEDIATE '{stmt}';\n"
-                "    END IF;\n"
-                "END;"
-            )
-        return TranspileResult(
+        guarded = TranspileResult(
             sql=sql, warnings=result.warnings, unsupported=result.unsupported
         )
+        if not else_stmt:
+            guarded = _warn_guard_else_dropped(guarded, else_body, source, target)
+        return guarded
 
     @staticmethod
     def _warn_guard_dropped(
-        result: TranspileResult, source: str, target: str
+        result: TranspileResult, source: str, target: str, else_body: str = ""
     ) -> TranspileResult:
         """Record that a catalog guard's condition was dropped.
 
@@ -1348,7 +1557,7 @@ class Transpiler:
         would overwrite state the T-SQL guard preserved. That semantic
         difference must be reported, never silent (no-silent-loss)."""
         head = " ".join(result.sql.strip().split())[:60]
-        return TranspileResult(
+        dropped = TranspileResult(
             sql=result.sql,
             warnings=[
                 *result.warnings,
@@ -1363,6 +1572,7 @@ class Transpiler:
             ],
             unsupported=result.unsupported,
         )
+        return _warn_guard_else_dropped(dropped, else_body, source, target)
 
     def _transpile_drop_guard(
         self, kind: str, name: str, source: str, target: str
