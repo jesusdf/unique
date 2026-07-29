@@ -18,3 +18,5 @@ degrade is a documented, acceptable outcome, not a finding. Kinds: **invalid**
 own engine first.
 
 <!-- RED appends new findings below this line. -->
+
+<!-- RED batch START 2026-07-30 (SQL Server + Oracle sources, one level up: clause enumeration + composition grids) -->
