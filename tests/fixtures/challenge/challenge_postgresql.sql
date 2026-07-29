@@ -816,3 +816,6 @@ SELECT x, SUM(x) OVER (ORDER BY x ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM
 
 -- CASE[open][class=func]: pg-distinct-on — DISTINCT ON (a) returns ONE row per a (the first by ORDER BY); it is rewritten to a plain SELECT DISTINCT a, b, which returns every distinct (a,b) PAIR. Different result set, no warning. PG=[(1,10),(2,5)]; MySQL/Oracle/T-SQL=[(1,10),(1,20),(2,5),(2,7)].
 SELECT DISTINCT ON (a) a, b FROM (VALUES (1,10),(1,20),(2,5),(2,7)) v(a,b) ORDER BY a, b
+
+-- CASE[open][class=lying-warning]: pg-window-over-falsewarn — EVERY window function (any OVER clause) emits the tripwire warning "internal: unread sqlglot arg 'over' on Window — construct may be dropped", but nothing is dropped: the OVER clause is emitted faithfully and the result is correct on all targets. sqlglot 30.14 populates Window.args['over']='OVER' (a keyword marker, not a droppable construct — the real spec lives in partition_by/order/spec, all read), so the unread-args tripwire false-fires on all sources/targets. This drowns the warning signal (real drops indistinguishable from noise).
+SELECT a, SUM(a) OVER (ORDER BY a) AS s FROM (VALUES (1),(2),(3)) v(a) ORDER BY a
