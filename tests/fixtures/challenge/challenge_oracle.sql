@@ -553,3 +553,6 @@ SELECT 'a' || CAST(NULL AS VARCHAR2(10)) || 'b' AS r FROM DUAL
 
 -- CASE[open][class=invalid]: reda-ora-rowvalue-in — fails on tsql. Row-value (multi-column) IN with a tuple list, '(a,b) IN ((1,2),(3,4))', is valid on Oracle/PG/MySQL but passes through unchanged into T-SQL, which has no row-constructor IN -> live T-SQL error 4145 'non-boolean type ... near ",'"'. No warning. BLUE: for T-SQL rewrite as OR of AND-pairs ((a=1 AND b=2) OR (a=3 AND b=4)) or an EXISTS over a VALUES table.
 CREATE TABLE t (a NUMBER, b NUMBER); SELECT * FROM t WHERE (a, b) IN ((1, 2), (3, 4))
+
+-- CASE[open][class=lying-warning]: reda-ora-greatest-null — fails on postgresql. Oracle (and MySQL) GREATEST return NULL when ANY argument is NULL: GREATEST(1,NULL,3)=NULL. PostgreSQL GREATEST IGNORES NULLs -> 3. The call is passed through unchanged; the only warning is the internal 'unread sqlglot arg ignore_nulls on Greatest — may be dropped' tripwire, which does not describe the NULL-semantics divergence and there is no docs entry. Live: oracle=NULL, mysql=NULL, pg=3. BLUE: into PG wrap so a NULL arg forces NULL (e.g. CASE WHEN NULL args THEN NULL) or emit a real lossy warning.
+SELECT GREATEST(1, NULL, 3) AS r FROM DUAL
