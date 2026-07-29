@@ -466,3 +466,9 @@ CREATE TABLE t (id INT IDENTITY(100, 5))
 -- CASE[fixed]: tsql-drop5-MEMORY_OPTIM — fails on mysql, oracle, postgresql. SILENT CLAUSE DROP: 'MEMORY_OPTIMIZED' absent from valid postgresql output, no warning
 CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)
 
+
+-- CASE[open][class=func]: reda-ts-cast-int-trunc — fails on postgresql, mysql, oracle. T-SQL CAST(decimal AS INT) TRUNCATES toward zero (=2); PG/MySQL/Oracle CAST rounds (=3). Emitted as a plain CAST with no compensation and NO warning → different result. Live: tsql=2, pg=3, mysql=3, oracle=3.
+SELECT CAST(2.9 AS INT) AS n
+
+-- CASE[open][class=func]: reda-ts-addmonths-lastday — fails on oracle. DATEADD(MONTH,1,<last-day-of-month>) does NOT stick to month-end in T-SQL (2020-02-29 -> 2020-03-29) but is mapped to Oracle ADD_MONTHS which forces last-day (-> 2020-03-31), silently, no warning. Diverges only when the input is its month's last day. Live: tsql=2020-03-29, oracle=2020-03-31.
+SELECT DATEADD(MONTH, 1, CAST('2020-02-29' AS DATE)) AS d
