@@ -29,8 +29,10 @@ at the start of every session; they override generic defaults.
   RED/BLUE rounds via delegated workers (same agentic team mode as
   development), evaluates the defect yield, drives the fixes, keeps iterating
   while there are signs more improvement is needed, and is the **only** role
-  that decides when a batch or the campaign ends. Load this when hunting for,
-  fixing, or orchestrating campaigns over transpilation defects.
+  that decides when a batch or the campaign ends — and the only one that
+  commits to `main`, holding the cycle's commits local and pushing **once per
+  completed red & blue cycle** (one CI run per cycle). Load this when hunting
+  for, fixing, or orchestrating campaigns over transpilation defects.
 
 If a Skill tool is available, invoke the matching skill rather than only reading
 the file. When guidance here and a skill disagree, the skill is authoritative.

@@ -35,6 +35,14 @@ because "it's rare"; PURPLE directs both but hunts and fixes nothing itself.
 **A single working session acts as exactly one role at a time.** Campaign
 termination authority belongs to PURPLE alone (see each role's rules).
 
+> **HARD RULE — ONLY PURPLE COMMITS TO `main`, ONE PUSH PER CYCLE.** Only the
+> PURPLE role makes commits against the `main` branch. RED and BLUE workers
+> keep their work in their own worktrees/branches and hand it to PURPLE (RED's
+> committed-time clock reads its own local commits — it needs no push). PURPLE
+> keeps the cycle's `main` commits **local** until a RED & BLUE cycle
+> completes, then pushes **once** — so CI is not hammered with a run per
+> intermediate commit.
+
 ### 🔴 RED — find breaks only
 
 RED's only job is to **discover source SQL that transpiles incorrectly**.
@@ -48,8 +56,7 @@ without pausing** — do not stop to wait for input, do not idle between batches
 > MUST come from git/GitHub commit timestamps, which are real and recorded.
 > 1. **Note the START commit** — the first commit of the RED batch (its
 >    `git show -s --format=%ci <sha>` is the reference start time).
-> 2. Commit & push findings roughly every ~30 min of *committed-time* progress.
-> 3. **The batch is over only when the LATEST commit's timestamp exceeds the
+> 2. **The batch is over only when the LATEST commit's timestamp exceeds the
 >    START commit's by ≥ 1 hour.** Check after each batch:
 >    ```bash
 >    S=$(git show -s --format=%ct <start-sha>); N=$(git show -s --format=%ct HEAD)
@@ -268,8 +275,12 @@ PURPLE's job each round:
 
 PURPLE inherits the architect's duties from the development skill: it reviews
 every worker diff, runs the gate, owns commits and pushes, and does NOT
-mass-implement. What PURPLE does **not** own: approving `[limit]` flips — that
-remains the human maintainer's explicit call (PURPLE routes the escalation).
+mass-implement. Per the commit rule above, PURPLE is the **only** role that
+commits to `main`: it lands the reviewed RED/BLUE work as local commits and
+pushes **once per completed RED & BLUE cycle** (never per finding or per fix),
+keeping CI to one run per cycle. What PURPLE does **not** own: approving
+`[limit]` flips — that remains the human maintainer's explicit call (PURPLE
+routes the escalation).
 
 PURPLE's deliverable: a campaign log of rounds (RED yield, BLUE closures,
 course corrections) and the reasoned decision that the campaign is complete.
@@ -389,6 +400,7 @@ the other three engines. Add the case first (RED), then the fix + assertion
   Keep each as ONE looping test; the real assertion quality lives in the
   specific `[fixed]` classes. Run `python scripts/identity_mutation_check.py`
   locally after touching the test harness.
-- **Space out the pushes.** Committing every ~1–2 min spawns overlapping CI +
-  CodeQL runs that contend and flake. Batch several finding-rounds per commit;
-  push on the ~30-min committed-time cadence, not after every micro-batch.
+- **Pushes are PURPLE's, one per cycle.** Frequent pushes spawn overlapping
+  CI + CodeQL runs that contend and flake. Under the commit rule above,
+  RED/BLUE never push: PURPLE accumulates the cycle's commits locally and
+  pushes once when the RED & BLUE cycle completes — CI runs once, on the tip.
