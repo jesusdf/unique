@@ -37,3 +37,17 @@ own engine first.
 | reda-ora-concat-null-cast | lying-warning | oracle→pg,tsql,mysql | ...|| CAST(NULL AS VARCHAR(10)) ||... | HOLE in [fixed] ora-concat-null: fix only drops literal NULL, not CAST(NULL)/NULL-typed operand. Live oracle='ab' vs pg=NULL. Only internal unread_args tripwire. |
 
 Notes: Oracle-source PIVOT is the same converter mechanism as reda-ts-pivot (also silently dropped into tsql where PIVOT is supported) — BLUE fixes the class. Points: func 10, silent-drop 8, invalid 6, lying-warning 6 = 30; 4 classes.
+
+### Additional findings (same batch, continued)
+
+| id | class | src→targets | wrong output | expected / live evidence |
+|----|-------|-------------|--------------|--------------------------|
+| reda-ts-substring-zero-start | func | tsql→mysql,oracle | SUBSTRING passed through | start<1 semantics differ. Live SUBSTRING('hello',0,3): tsql/pg='he', mysql='', oracle='hel'. |
+| reda-ts-avg-int-trunc | func | tsql→pg,mysql,oracle | AVG(x) passed through | T-SQL integer AVG truncates=1; others=1.5. Live tsql=1, pg=1.5, mysql=1.5. |
+| reda-ts-cte-merge | composition | tsql→mysql,oracle | CTE dropped/misplaced | WITH src..MERGE: MySQL upsert drops the CTE (live 1146 "Table 'src' doesn't exist"); Oracle keeps WITH before MERGE (live ORA-00928), no warning. Components green alone. |
+| reda-ora-rowvalue-in | invalid | oracle→tsql | (a,b) IN ((1,2),(3,4)) passed through | T-SQL has no row-constructor IN. Live T-SQL error 4145. No warning. |
+| reda-ts-alter-column-oracle | invalid | tsql→oracle | ALTER COLUMN a SET DATA TYPE NUMBER | Oracle needs MODIFY. Live ORA-01735. No warning. (MySQL-source MODIFY path is handled, T-SQL path isn't.) |
+| reda-ts-identity-insert | consistency | tsql→pg,oracle,mysql | SET IDENTITY_INSERT = t AS OFF | ON->comment+warn, OFF->mangled live SQL, invalid (PG syntax error near "AS"), no warning. Identity-override bracket incoherent. |
+| reda-ts-date-plus-int | func | tsql→mysql,pg | datetime + 1 passed through | T-SQL adds a day. Live: mysql=20200101000001 (numeric, wrong), pg=error timestamp+int, tsql/oracle=2020-01-02. |
+
+Batch running totals: func 25, invalid 10, silent-drop 8, lying-warning 6, composition 5, consistency 4 = 58 pts; 6 classes; func 43%.
