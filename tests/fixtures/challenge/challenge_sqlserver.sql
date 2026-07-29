@@ -487,3 +487,6 @@ CREATE TABLE t (dept VARCHAR(1), v INT); SELECT * FROM (SELECT dept, v FROM t) s
 
 -- CASE[open][class=silent-drop]: reda-ts-for-json — fails on postgresql, oracle, mysql. FOR JSON PATH serializes the whole result set into ONE json scalar; the clause is silently dropped (SELECT a,b FROM t FOR JSON PATH -> SELECT a,b FROM t) with NO warning, unlike its sibling FOR XML (corpus ts-for-xml warns+carriers). Result set and shape change: live (rows (1,2),(3,4)) FOR JSON PATH = one row/one col '[{"a":1,"b":2},{"a":3,"b":4}]'; dropped = 2 rows x 2 cols. BLUE: give FOR JSON the same warned-degrade/rewrite (json_agg / JSON_ARRAYAGG) treatment as FOR XML.
 CREATE TABLE t (a INT, b INT); SELECT a, b FROM t FOR JSON PATH
+
+-- CASE[open][class=func]: reda-ts-substring-zero-start — fails on mysql, oracle. SUBSTRING(s, start, len) with start<1: T-SQL (and PG) count positions below 1 against the length -> SUBSTRING('hello',0,3)='he'. The call is passed through unchanged, but MySQL SUBSTRING(s,0,n) returns '' (position 0 = empty) and Oracle SUBSTR(s,0,n) treats 0 as 1 -> 'hel'. No warning. Live: tsql='he', pg='he', mysql='', oracle='hel'. BLUE: normalize start<1 to T-SQL semantics (clamp start to 1 and reduce len by 1-start) for MySQL/Oracle.
+SELECT SUBSTRING('hello', 0, 3) AS r
