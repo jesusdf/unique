@@ -18,3 +18,9 @@ degrade is a documented, acceptable outcome, not a finding. Kinds: **invalid**
 own engine first.
 
 <!-- RED appends new findings below this line. -->
+
+## RED batch 2026-07-30 (PG/MySQL sources)
+
+| id | class | engines | wrong output | expected | evidence |
+|----|-------|---------|--------------|----------|----------|
+| pg-distinct-on | func (5) | pg→mysql,tsql,oracle | `SELECT DISTINCT a, b ...` (all distinct pairs) | one row per `a` (first by ORDER BY) | live PG=`[(1,10),(2,5)]`; live MySQL transpiled=`[(1,10),(1,20),(2,5),(2,7)]`. No warning. BLUE note: DISTINCT ON needs a per-group pick — ROW_NUMBER() OVER (PARTITION BY key ORDER BY <order>) = 1, not SELECT DISTINCT. Requires the ORDER BY prefix = DISTINCT ON keys. No portable form on engines lacking QUALIFY; if unsound, degrade with warning. |

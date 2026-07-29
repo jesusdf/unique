@@ -813,3 +813,6 @@ SELECT x FROM (VALUES (1),(2)) v(x) FOR UPDATE
 -- CASE[fixed]: postgresql-qdrop-ROWS\s+BETWE — fails on mysql, oracle, tsql. SILENT CLAUSE DROP: 'ROWS\s+BETWEEN' absent from valid tsql output, no warning
 SELECT x, SUM(x) OVER (ORDER BY x ROWS BETWEEN 1 PRECEDING AND CURRENT ROW) FROM (VALUES (1),(2)) v(x)
 
+
+-- CASE[open][class=func]: pg-distinct-on — DISTINCT ON (a) returns ONE row per a (the first by ORDER BY); it is rewritten to a plain SELECT DISTINCT a, b, which returns every distinct (a,b) PAIR. Different result set, no warning. PG=[(1,10),(2,5)]; MySQL/Oracle/T-SQL=[(1,10),(1,20),(2,5),(2,7)].
+SELECT DISTINCT ON (a) a, b FROM (VALUES (1,10),(1,20),(2,5),(2,7)) v(a,b) ORDER BY a, b
