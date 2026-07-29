@@ -833,3 +833,6 @@ SELECT TIMESTAMP '2020-01-01 00:00:00' + INTERVAL '1 year 2 months 3 days' AS d
 CREATE TEMP TABLE redb_tmp (id INT);
 INSERT INTO redb_tmp VALUES (1),(2);
 SELECT COUNT(*) AS c FROM redb_tmp;
+
+-- CASE[open][class=composition]: pg-boolagg-filter — bool_or/bool_and (boolean aggregate) alone wraps its boolean argument into 1/0 for T-SQL (MAX(CAST(CASE WHEN a>5 THEN 1 WHEN NOT (a>5) THEN 0 END AS INT))); FILTER alone rewrites to COUNT(CASE WHEN cond THEN ...). COMBINED, the FILTER rewrite emits MAX(CAST(CASE WHEN b=1 THEN a>5 END AS INT)) — the raw boolean a>5 as a CASE THEN-value, which T-SQL rejects (error 102, no boolean value type). The 1/0 wrapping bool_or does alone is lost. No warning. Components green alone: bool_or (live-valid on T-SQL) and FILTER (corpus pg-filter-subquery, line ~266).
+SELECT bool_or(a > 5) FILTER (WHERE b = 1) AS r FROM (VALUES (10,1),(2,1),(3,2)) v(a,b)
