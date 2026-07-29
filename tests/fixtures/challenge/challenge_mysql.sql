@@ -898,3 +898,6 @@ SELECT CONCAT(a, b) AS c FROM (SELECT 1 AS a, CAST(NULL AS CHAR) AS b) t
 
 -- CASE[open][class=func]: my-groupconcat-distinct-numord — GROUP_CONCAT(DISTINCT x ORDER BY x DESC) over a NUMERIC column orders numerically in MySQL, but the PG rewrite STRING_AGG(DISTINCT CAST(x AS TEXT) ORDER BY CAST(x AS TEXT) DESC) orders LEXICALLY (PG forces the ORDER BY key to equal the DISTINCT'd text arg). The [fixed] my-groupconcat-distinct case only used single-digit values {1,1,2} where text and numeric order coincide, so it locked in a fix that is wrong for multi-digit values. MySQL/Oracle='10-2-1'; PG='2-10-1'. No warning.
 SELECT GROUP_CONCAT(DISTINCT x ORDER BY x DESC SEPARATOR '-') AS g FROM (SELECT 2 x UNION ALL SELECT 10 UNION ALL SELECT 1 UNION ALL SELECT 2) t
+
+-- CASE[open][class=func]: my-timestampdiff-mon-pgora — TIMESTAMPDIFF(MONTH,...) counts COMPLETE months in MySQL, but the PG and Oracle rewrites use a naive (year*12+month) boundary difference, which overcounts when the end day-of-month precedes the start's. The [fixed] my-timestampdiff-mon fix was applied to T-SQL ONLY (DATEADD>end adjustment); PG/Oracle still give the boundary count. MySQL/T-SQL=1; PG/Oracle=2. No warning. (Same source shape as the existing case reproduces it on PG/Oracle.)
+SELECT TIMESTAMPDIFF(MONTH, '2020-01-31', '2020-03-30') AS r
