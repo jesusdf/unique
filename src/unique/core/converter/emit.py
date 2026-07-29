@@ -899,11 +899,10 @@ def _quote_reserved_identifiers(expr: exp.Expression, dialect: str) -> exp.Expre
 
 
 def _tsql_index_predicate(pred: exp.Expression) -> str | None:
-    """Render a filtered-index predicate in T-SQL's restricted grammar.
-
-    ``NOT x IS NULL`` (sqlglot's model of IS NOT NULL) must spell
-    ``x IS NOT NULL`` — the only form CREATE INDEX ... WHERE accepts.
-    Returns None for shapes outside that grammar (caller falls back)."""
+    """Render a filtered-index predicate in T-SQL's restricted grammar (None
+    outside it; the caller falls back). IS NOT NULL arrives as ``Not(Is(…))``
+    (sqlglot ≤30.11) or ``Is(…, negate=True)`` (30.12+ — unread, the negate
+    inverts the predicate; 2026-07-30) and must spell ``x IS NOT NULL``."""
     if (
         isinstance(pred, exp.Not)
         and isinstance(pred.this, exp.Is)
@@ -911,7 +910,8 @@ def _tsql_index_predicate(pred: exp.Expression) -> str | None:
     ):
         return f"{pred.this.this.sql(dialect='tsql')} IS NOT NULL"
     if isinstance(pred, exp.Is) and isinstance(pred.expression, exp.Null):
-        return f"{pred.this.sql(dialect='tsql')} IS NULL"
+        negated = " NOT" if pred.args.get("negate") else ""
+        return f"{pred.this.sql(dialect='tsql')} IS{negated} NULL"
     if isinstance(pred, exp.And):
         left = _tsql_index_predicate(pred.this)
         right = _tsql_index_predicate(pred.expression)

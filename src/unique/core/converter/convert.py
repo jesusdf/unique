@@ -2880,6 +2880,19 @@ def _convert_binary(expr: exp.Binary) -> ASTNode:
                 convert_expression(expr.expression),
             ),
         )
+    if isinstance(expr, exp.Is) and expr.args.get("negate"):
+        # sqlglot 30.12+ folds ``IS NOT NULL`` into ``Is(negate=True)``
+        # (≤30.11 wraps in Not, which the unary path converts). Reproduce
+        # that shape — NOT over the plain IS — so the polarity survives;
+        # dropping the arg inverted the predicate (upgrade prep 2026-07-30).
+        return UnaryOp(
+            operator=UnaryOperator.NOT,
+            operand=BinaryOp(
+                operator=BinaryOperator.IS,
+                left=convert_expression(expr.this),
+                right=convert_expression(expr.expression),
+            ),
+        )
     op_map: dict[type, BinaryOperator] = {
         exp.EQ: BinaryOperator.EQ,
         exp.NEQ: BinaryOperator.NEQ,
@@ -2922,10 +2935,17 @@ def _convert_binary(expr: exp.Binary) -> ASTNode:
 
 
 def _convert_is(expr: exp.Is) -> UnaryOp:
-    """Convert IS NULL / IS NOT NULL."""
+    """Convert IS NULL / IS NOT NULL.
+
+    sqlglot ≤30.11 models ``IS NOT NULL`` as ``Not(Is(…))``; 30.12+ folds the
+    negation into ``Is(…, negate=True)``. The arg must be read (guardrail:
+    never assume the wrapper) — dropping it silently INVERTS the predicate
+    (a pg-source ``DELETE … WHERE a IS NOT NULL`` shipped as ``IS NULL``;
+    upgrade prep 2026-07-30)."""
+    negated = bool(expr.args.get("negate"))
     if isinstance(expr.expression, exp.Null):
         return UnaryOp(
-            operator=UnaryOperator.IS_NULL,
+            operator=(UnaryOperator.IS_NOT_NULL if negated else UnaryOperator.IS_NULL),
             operand=convert_expression(expr.this),
         )
     return UnaryOp(
