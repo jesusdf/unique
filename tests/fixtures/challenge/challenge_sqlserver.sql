@@ -472,3 +472,6 @@ SELECT CAST(2.9 AS INT) AS n
 
 -- CASE[open][class=func]: reda-ts-addmonths-lastday — fails on oracle. DATEADD(MONTH,1,<last-day-of-month>) does NOT stick to month-end in T-SQL (2020-02-29 -> 2020-03-29) but is mapped to Oracle ADD_MONTHS which forces last-day (-> 2020-03-31), silently, no warning. Diverges only when the input is its month's last day. Live: tsql=2020-03-29, oracle=2020-03-31.
 SELECT DATEADD(MONTH, 1, CAST('2020-02-29' AS DATE)) AS d
+
+-- CASE[open][class=lying-warning]: reda-ts-fk-on-update — fails on oracle. FK REFERENCES ... ON DELETE CASCADE ON UPDATE CASCADE: Oracle has no ON UPDATE referential action, so the ON UPDATE CASCADE clause is silently dropped from the emitted constraint with NO warning and no docs/03-unsupported note — a genuine semantic degrade shipped silently. (PG/MySQL preserve it.) BLUE: emit a lossy_conversion warning + UNIQUE carrier for the dropped ON UPDATE action into Oracle.
+CREATE TABLE p (id INT PRIMARY KEY); CREATE TABLE c (id INT PRIMARY KEY, pid INT REFERENCES p(id) ON DELETE CASCADE ON UPDATE CASCADE)
