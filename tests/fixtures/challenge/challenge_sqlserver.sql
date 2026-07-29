@@ -514,3 +514,6 @@ SELECT a FROM t WHERE b LIKE '%x!%y%' ESCAPE '!'
 
 -- CASE[open][class=invalid]: reda-ts-datepart-weekday — fails on postgresql, oracle, mysql. T-SQL DATEPART(WEEKDAY, d) is mapped to EXTRACT(DAYOFWEEK FROM d), but NO engine has a DAYOFWEEK extract unit: live PG 'unit "dayofweek" not recognized', MySQL 1064 syntax error, Oracle ORA-00907. Invalid output on all three, no warning. BLUE: map to EXTRACT(DOW ...)+1 / DAYOFWEEK()/ the DOW rewrite already used for pg-extract-dow (and note DATEPART(WEEKDAY) is DATEFIRST-dependent, default Sunday=1).
 SELECT DATEPART(WEEKDAY, CAST('2020-06-15' AS DATE)) AS r
+
+-- CASE[open][class=invalid]: reda-ts-sequence-no-cycle — fails on oracle. T-SQL CREATE SEQUENCE ... NO MAXVALUE NO CYCLE (two-word forms, valid T-SQL and PG) is emitted verbatim into Oracle, but Oracle spells these NOMAXVALUE / NOCYCLE (one word): live ORA-03049 "SQL keyword 'NO' is not syntactically valid". No warning. BLUE: collapse NO MAXVALUE->NOMAXVALUE, NO MINVALUE->NOMINVALUE, NO CYCLE->NOCYCLE, NO CACHE->NOCACHE for the Oracle sequence emitter.
+CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1 NO MAXVALUE NO CYCLE
