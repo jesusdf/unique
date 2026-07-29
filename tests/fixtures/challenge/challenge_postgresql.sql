@@ -828,3 +828,8 @@ SELECT x, SUM(x) OVER (ORDER BY x GROUPS BETWEEN 1 PRECEDING AND CURRENT ROW) AS
 
 -- CASE[open][class=invalid]: pg-multifield-interval-arith — a multi-field INTERVAL literal ('1 year 2 months 3 days') in date arithmetic is emitted VERBATIM to T-SQL/MySQL/Oracle, none of which accept PG's multi-field text interval, with NO warning. Single-unit intervals ('1 month') DO convert (DATEADD / INTERVAL 1 MONTH). The [fixed] pg-interval-out case only passes because its justify_interval() trips the output_gate and degrades the whole batch; a multi-field interval WITHOUT an unmapped builtin slips through invalid. (Bare `SELECT INTERVAL '1 year 2 months 3 days'` also fails identically.) PG=2021-03-04.
 SELECT TIMESTAMP '2020-01-01 00:00:00' + INTERVAL '1 year 2 months 3 days' AS d
+
+-- CASE[open][class=consistency]: pg-temp-oncommit-oracle — a PG TEMP table defaults to ON COMMIT PRESERVE ROWS (session-scoped); it maps to Oracle CREATE GLOBAL TEMPORARY TABLE with NO ON COMMIT clause, which defaults to ON COMMIT DELETE ROWS (transaction-scoped). With per-statement commits the rows vanish before the later SELECT: PG COUNT=2, Oracle COUNT=0. Silent cross-statement divergence, no warning.
+CREATE TEMP TABLE redb_tmp (id INT);
+INSERT INTO redb_tmp VALUES (1),(2);
+SELECT COUNT(*) AS c FROM redb_tmp;
