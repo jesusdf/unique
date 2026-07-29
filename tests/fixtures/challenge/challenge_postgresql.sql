@@ -839,3 +839,6 @@ SELECT bool_or(a > 5) FILTER (WHERE b = 1) AS r FROM (VALUES (10,1),(2,1),(3,2))
 
 -- CASE[open][class=invalid]: pg-round-bare-half-literal — ROUND on a BARE fractional literal (0.5, no ::numeric cast) becomes T-SQL ROUND(0.5, 0). T-SQL types the literal 0.5 as numeric(1,1) (range ±0.9), and ROUND preserves that precision/scale, so the rounded 1.0 OVERFLOWS (error 8115). PG ROUND(0.5)=1 (arbitrary precision). No warning. The existing round cases all use ::numeric casts that widen the type and dodge this; a bare literal does not.
 SELECT ROUND(0.5) AS r
+
+-- CASE[open][class=func]: pg-substring-neg-from-for — 3-arg SUBSTRING(s FROM start FOR len) with a NEGATIVE start: PG counts len from the (out-of-range) negative position and keeps only positions >= 1, so SUBSTRING('abcde' FROM -2 FOR 2) = '' (the [ -2, -1 ] range is entirely before position 1). It is emitted VERBATIM as SUBSTRING/SUBSTR('abcde', -2, 2); MySQL/Oracle read a negative start as counting from the END → 'de'. The pg-fsubstr / pg-substr-edge fixes only handle the 2-arg (no length) negative-start form. PG=''; MySQL/Oracle='de'. No warning. (T-SQL matches PG.)
+SELECT SUBSTRING('abcde' FROM -2 FOR 2) AS s
