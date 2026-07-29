@@ -842,3 +842,6 @@ SELECT ROUND(0.5) AS r
 
 -- CASE[open][class=func]: pg-substring-neg-from-for — 3-arg SUBSTRING(s FROM start FOR len) with a NEGATIVE start: PG counts len from the (out-of-range) negative position and keeps only positions >= 1, so SUBSTRING('abcde' FROM -2 FOR 2) = '' (the [ -2, -1 ] range is entirely before position 1). It is emitted VERBATIM as SUBSTRING/SUBSTR('abcde', -2, 2); MySQL/Oracle read a negative start as counting from the END → 'de'. The pg-fsubstr / pg-substr-edge fixes only handle the 2-arg (no length) negative-start form. PG=''; MySQL/Oracle='de'. No warning. (T-SQL matches PG.)
 SELECT SUBSTRING('abcde' FROM -2 FOR 2) AS s
+
+-- CASE[open][class=lying-warning]: pg-insert-default-values-falsewarn — INSERT ... DEFAULT VALUES is correctly translated to MySQL `INSERT INTO t () VALUES ()` (live-equivalent: both insert one all-defaults row), yet it emits the tripwire warning "internal: unread sqlglot arg 'default' on Insert — construct may be dropped". Nothing was dropped. The converter consumes Insert.args['default'] to emit () VALUES () but never marks it read, so the unread-args tripwire false-fires. (Distinct from the Window.over false-warning: a different node/arg.)
+CREATE TABLE redb_dv (id INT DEFAULT 7, v INT DEFAULT 3); INSERT INTO redb_dv DEFAULT VALUES
