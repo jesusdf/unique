@@ -541,3 +541,6 @@ CREATE TABLE t (id NUMBER GENERATED ALWAYS AS IDENTITY (START WITH 100))
 -- CASE[fixed]: oracle-drop4-COLLATE — fails on mysql, postgresql, tsql. SILENT CLAUSE DROP: 'COLLATE' absent from valid tsql output, no warning
 CREATE TABLE t (a VARCHAR2(10) COLLATE BINARY_CI)
 
+
+-- CASE[open][class=invalid]: reda-ora-forupdate-of-col — fails on postgresql, mysql. Oracle FOR UPDATE OF <column> names a COLUMN; PG/MySQL FOR UPDATE OF names a TABLE/alias. The column name leaks unchanged into OF, producing invalid target SQL with NO warning: PG 'relation "x" in FOR UPDATE clause not found in FROM clause', MySQL 3568 'Unresolved table name `x` in locking clause'. (SKIP LOCKED path fires no warning at all.) BLUE: drop the OF list or map the column to its owning table/alias. NOTE: the existing ora-forupdate-wait [limit] case (FOR UPDATE OF id) shares this latent invalidity, masked by its WAIT warning.
+SELECT x FROM t FOR UPDATE OF x SKIP LOCKED
