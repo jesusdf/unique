@@ -906,3 +906,6 @@ SELECT TIMESTAMPDIFF(MONTH, '2020-01-31', '2020-03-30') AS r
 CREATE TABLE redb_en (a ENUM('lo','mid','hi'));
 INSERT INTO redb_en VALUES ('hi'),('lo'),('mid');
 SELECT a FROM redb_en ORDER BY a;
+
+-- CASE[open][class=invalid]: my-multitable-delete-join — a MySQL multi-table DELETE (DELETE t1 FROM t1 JOIN t2 ON ... WHERE t2....) has its JOIN clause DROPPED on every target while the WHERE that references the joined alias t2 is kept, so the output references an undefined t2 and is rejected (PG: 'missing FROM-clause entry for table t2'; T-SQL/Oracle likewise). All three targets CAN express this (T-SQL DELETE t1 FROM t1 JOIN t2, PG DELETE USING, Oracle EXISTS subquery), but the join is lost. Only the vague internal 'unread tables on Delete' tripwire fires — no message that the JOIN was dropped or the output is invalid.
+CREATE TABLE redb_d1 (id INT, flag INT); CREATE TABLE redb_d2 (id INT, flag INT); DELETE t1 FROM redb_d1 t1 JOIN redb_d2 t2 ON t1.id = t2.id WHERE t2.flag = 1
