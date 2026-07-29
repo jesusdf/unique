@@ -909,3 +909,6 @@ SELECT a FROM redb_en ORDER BY a;
 
 -- CASE[open][class=invalid]: my-multitable-delete-join — a MySQL multi-table DELETE (DELETE t1 FROM t1 JOIN t2 ON ... WHERE t2....) has its JOIN clause DROPPED on every target while the WHERE that references the joined alias t2 is kept, so the output references an undefined t2 and is rejected (PG: 'missing FROM-clause entry for table t2'; T-SQL/Oracle likewise). All three targets CAN express this (T-SQL DELETE t1 FROM t1 JOIN t2, PG DELETE USING, Oracle EXISTS subquery), but the join is lost. Only the vague internal 'unread tables on Delete' tripwire fires — no message that the JOIN was dropped or the output is invalid.
 CREATE TABLE redb_d1 (id INT, flag INT); CREATE TABLE redb_d2 (id INT, flag INT); DELETE t1 FROM redb_d1 t1 JOIN redb_d2 t2 ON t1.id = t2.id WHERE t2.flag = 1
+
+-- CASE[open][class=invalid]: my-to-days-year-zero — TO_DAYS(d) is rewritten as (d - DATE '0000-01-01') + 1 on all targets, but year 0000 is invalid on every target engine, so the output ERRORS: PG DatetimeFieldOverflow ('0000-01-01' out of range), T-SQL 'Conversion failed' (241), Oracle ORA-01841 (year must be -4713..9999, not 0). No warning. MySQL TO_DAYS('2020-01-01')=737790.
+SELECT TO_DAYS('2020-01-01') AS d
