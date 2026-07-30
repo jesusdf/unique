@@ -343,7 +343,7 @@ def test_partial_parse_never_ships_corrupted_tree(target: str) -> None:
     r = Transpiler().transpile(src, source="oracle", target=target)
     assert "DEFAULT VALUES" not in r.sql.upper()
     ok = "NOT EXISTS" in r.sql.upper() and "colC" in r.sql
-    degraded = "UNIQUE-" in r.sql and (r.warnings or r.unsupported)
+    degraded = "UNIQUE-1003:" in r.sql and (r.warnings or r.unsupported)
     assert ok or degraded, r.sql
 
 
@@ -357,7 +357,7 @@ def test_broken_source_fragment_degrades_not_ships() -> None:
         for ln in r.sql.splitlines()
         if ln.strip() and not ln.strip().startswith("--")
     )
-    assert not stripped.strip() or "UNIQUE-" in r.sql, r.sql
+    assert not stripped.strip() or "UNIQUE-1003:" in r.sql, r.sql
     assert r.warnings or r.unsupported
 
 
@@ -578,5 +578,5 @@ class TestPsqlVariableSubstitutionGuard:
         r = Transpiler().transpile(
             "COPY aggtest FROM :'filename';", "postgresql", "mysql"
         )
-        assert "UNIQUE-" in r.sql, r.sql
+        assert "UNIQUE-1003:" in r.sql, r.sql
         assert r.warnings or r.unsupported, r.warnings

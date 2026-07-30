@@ -39,7 +39,7 @@ class TestCarrierPreservesOriginal:
             out = self.t.transpile(_N12_SQL, "mysql", target).sql
             # The statement degraded to a carrier (fails under an identity
             # transpiler, whose output has no carrier at all)…
-            assert "UNIQUE-" in out, out
+            assert "UNIQUE-1003:" in out, out
             # …holding the original source operator verbatim (not a re-render).
             assert "x XOR y" in out, out
 
@@ -55,14 +55,14 @@ class TestCarrierPreservesOriginal:
         for target in _N12_TARGETS:
             result = self.t.transpile(_N12_SQL, "mysql", target)
             assert result.warnings, target
-            assert "UNIQUE-" in result.sql, target
+            assert "UNIQUE-1003:" in result.sql, target
 
     def test_two_statements_in_one_batch_each_preserve_their_original(self) -> None:
         # Neighbor: the construct twice in one batch — per-statement slices
         # must align (tokenizer boundaries), not fall back to the re-render.
         multi = "SELECT a FROM t WHERE x XOR y;\n" "SELECT b FROM t WHERE p XOR q;"
         out = self.t.transpile(multi, "mysql", "oracle").sql
-        assert "UNIQUE-" in out, out  # identity-proof: carrier must exist
+        assert "UNIQUE-1003:" in out, out  # identity-proof: carrier must exist
         assert "x XOR y" in out, out
         assert "p XOR q" in out, out
         assert_carrier_bodies_parse_as_source(out, "mysql")
@@ -72,7 +72,7 @@ class TestCarrierPreservesOriginal:
         # boundaries, never a text split).
         sql = "SELECT 'a;b' AS s FROM t WHERE x XOR y;"
         out = self.t.transpile(sql, "mysql", "oracle").sql
-        assert "UNIQUE-" in out, out  # identity-proof: carrier must exist
+        assert "UNIQUE-1003:" in out, out  # identity-proof: carrier must exist
         assert "'a;b'" in out and "x XOR y" in out, out
 
 
