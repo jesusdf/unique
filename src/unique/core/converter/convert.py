@@ -1361,6 +1361,42 @@ def _rewrite_distinct_on(
     outer_columns = tuple(_outer_ref(c) for c in columns)
     if any(c is None for c in outer_columns):
         return None
+
+    # The outer ORDER BY runs against the WRAPPER (alias ``uq_distinct_on``),
+    # not the source relation ``x`` — a table-qualified order key (``x.a``,
+    # ``x.b``) is out of scope there (T-SQL 4104 / MySQL 1054 / ORA-00904).
+    # Re-point each qualified order key to the wrapper's projected column
+    # (its bare name); bail out (keep current behaviour) if an order key is
+    # not among the projected columns and cannot be referenced.
+    _has_star = any(isinstance(c, Star) for c in columns)
+    _projected = {
+        (c.name.lower() if isinstance(c, (Alias, ColumnRef)) else "")
+        for c in columns
+        if isinstance(c, (Alias, ColumnRef))
+    }
+
+    def _requalify_order(
+        items: tuple[OrderByItem, ...],
+    ) -> tuple[OrderByItem, ...] | None:
+        out: list[OrderByItem] = []
+        for it in items:
+            e = it.expression
+            if isinstance(e, ColumnRef) and e.table is not None:
+                if _has_star or e.name.lower() in _projected:
+                    out.append(
+                        dataclasses.replace(
+                            it, expression=ColumnRef(name=e.name, quoted=e.quoted)
+                        )
+                    )
+                else:
+                    return None
+            else:
+                out.append(it)
+        return tuple(out)
+
+    outer_order_by = _requalify_order(order_by)
+    if outer_order_by is None:
+        return None
     # ROW_NUMBER needs a deterministic order; the DISTINCT ON's own ORDER BY
     # picks the surviving row (fall back to the keys when none was given).
     window_order = order_by or tuple(OrderByItem(expression=k) for k in distinct_on)
@@ -1385,7 +1421,7 @@ def _rewrite_distinct_on(
             left=ColumnRef(name="uq_rn"),
             right=Literal(value=1, dtype="integer"),
         ),
-        order_by=order_by,
+        order_by=outer_order_by,
         limit=limit,  # type: ignore[arg-type]
         ctes=ctes,
     )

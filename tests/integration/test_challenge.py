@@ -5574,3 +5574,28 @@ class TestFkOnDeleteSetDefaultOracle:
         for target in ("postgresql", "mysql"):
             out = _tx(src, "postgresql", target)
             assert "ON DELETE SET DEFAULT" in out.upper(), (target, out)
+
+
+class TestDistinctOnQualifiedOrderBy:
+    """red2-pg-distincton-qualified-orderby: the DISTINCT ON -> ROW_NUMBER
+    rewrite left the outer ORDER BY referencing the source qualifier (``x.a``),
+    out of scope at the wrapper (4104 / 1054 / ORA-00904). Re-point order keys
+    to the wrapper's bare projected columns."""
+
+    def test_qualified_order_keys_requalified(self) -> None:
+        src = _case("challenge_postgresql.sql", "red2-pg-distincton-qualified-orderby")
+        for target in ("tsql", "mysql", "oracle"):
+            out = _exec_lines(_tx(src, "postgresql", target))
+            order_clause = out.rsplit("ORDER BY", 1)[1]
+            assert "x.a" not in order_clause and "x.b" not in order_clause, out
+            assert "uq_rn = 1" in out, out
+            assert_statements_parse(out, target, context="distincton")
+
+    def test_unqualified_distinct_on_still_works(self) -> None:
+        out = _tx(
+            "SELECT DISTINCT ON (a) a, b FROM t ORDER BY a, b DESC",
+            "postgresql",
+            "tsql",
+        )
+        assert "uq_rn = 1" in out, out
+        assert_statements_parse(out, "tsql", context="distincton-unqualified")
