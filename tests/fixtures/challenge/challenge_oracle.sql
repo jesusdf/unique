@@ -574,3 +574,26 @@ SELECT USER AS r FROM DUAL
 
 -- CASE[fixed][class=func]: reda-ora-partition-extension — fails on postgresql, tsql, mysql. Oracle's partition-extended table reference 'SELECT * FROM t PARTITION (p1)' selects ONLY partition p1's rows. It is mis-rendered as a table alias with a column-rename list: PG 't AS PARTITION(p1)', T-SQL wraps it as a derived table 'AS PARTITION(p1)' — the partition FILTER is silently lost and ALL rows are returned. No warning. Live (p1 row a=5, p2 row a=50): Oracle=[(5,1)]; PG=[(5,1),(50,2)]. No target has partition-extended syntax, so BLUE should warn+degrade rather than emit a semantically-different alias.
 SELECT * FROM t PARTITION (p1)
+
+-- CASE[open][class=func]: red2-ora-trunc-day-weekstart — fails on postgresql, tsql, mysql. Oracle TRUNC(date, 'DAY') truncates to the START OF THE WEEK (Oracle format 'DAY'/'DY'/'D' = first day of week), NOT to the start of the day (that is 'DD'/'DDD'/'J'). The transpiler conflates them and maps TRUNC(d,'DAY') to a day-truncation: PG DATE_TRUNC('day', d), T-SQL CAST(d AS DATE), MySQL DATE(d). Live for 2021-06-15 (a Tuesday): Oracle TRUNC('DAY')=2021-06-13 (week start), transpiled PG DATE_TRUNC('day')=2021-06-15. Different result, no warning. (TRUNC(d,'DD') IS correctly day-truncation.) BLUE: map TRUNC(d,'DAY'/'DY'/'D') to a week-start truncation (DATE_TRUNC('week') adjusted for the NLS first-day-of-week) and reserve day-truncation for 'DD'.
+SELECT TRUNC(DATE '2021-06-15', 'DAY') AS d FROM dual
+
+-- CASE[open][class=invalid]: red2-ora-trunc-format-unmapped — fails on postgresql, tsql, mysql. Oracle TRUNC(date, fmt) format models that are not in the map are emitted as a bare-identifier DATE_TRUNC(fmt, date): TRUNC(d,'W') and TRUNC(d,'IW') become DATE_TRUNC(W, d) / DATE_TRUNC(IW, d) on every target -> live PG "column w does not exist" (fmt is an unquoted identifier, DATE_TRUNC has no such field). Additionally TRUNC(d,'HH') and TRUNC(d,'MI') map fine to PG/T-SQL but the MySQL leg emits DATE_TRUNC(HH, d) -> live "FUNCTION DATE_TRUNC does not exist" (MySQL has no DATE_TRUNC). All invalid, no warning. Source valid on Oracle (TRUNC('W')=2021-06-15). BLUE: map the remaining Oracle TRUNC format models ('W' week-of-month, 'IW' ISO week, and the MySQL time-unit legs) or degrade+warn.
+SELECT TRUNC(DATE '2021-06-15', 'W') AS d FROM dual
+
+-- CASE[open][class=invalid]: red2-ora-round-date-fmt — fails on postgresql, tsql, mysql. Oracle ROUND(date, fmt) rounds a DATE to the nearest fmt boundary (ROUND(DATE '2021-06-15','DAY') = 2021-06-13, nearest week start), but it is treated as a NUMERIC round: emitted as ROUND(CAST(date AS NUMERIC), 'DAY') -> live PG "cannot cast type date to numeric", and 'DAY' is passed as a string precision arg. Invalid on every target, no warning. (TRUNC(date, fmt) is recognized as date truncation; ROUND(date, fmt) is not recognized as date rounding at all.) BLUE: recognize ROUND with a date first-arg + format model as Oracle date rounding and rewrite per target (or degrade+warn), like TRUNC.
+SELECT ROUND(DATE '2021-06-15', 'DAY') AS d FROM dual
+
+-- CASE[open][class=composition]: red2-ora-proc-savepoint-as — fails on postgresql, mysql, tsql. A SAVEPOINT statement transpiles correctly in ISOLATION (standalone SAVEPOINT sp1 -> "SAVEPOINT sp1" on PG/MySQL, live-valid), but INSIDE a stored procedure the procedural engine emits an invalid "SAVEPOINT AS sp1" (spurious AS): live PG "syntax error at or near AS". So SAVEPOINT is correct alone but wrong when composed with a routine body. (The T-SQL leg additionally emits ROLLBACK TRANSACTION without the savepoint name, rolling back the whole transaction instead of to sp1 — and SAVEPOINT/ROLLBACK TO should be SAVE TRANSACTION / ROLLBACK TRANSACTION sp1.) Only the generic "review the statement" warning is present. Source compiles on Oracle. BLUE: the procedural emitter must emit "SAVEPOINT sp1" (no AS) and map to SAVE TRANSACTION/ROLLBACK TRANSACTION sp1 on T-SQL.
+CREATE PROCEDURE p AS
+BEGIN
+  SAVEPOINT sp1;
+  INSERT INTO t VALUES (1);
+EXCEPTION
+  WHEN OTHERS THEN
+    ROLLBACK TO sp1;
+    RAISE;
+END;
+
+-- CASE[open][class=invalid]: red2-ora-plus-outer-join-dup — fails on postgresql, tsql, mysql. Oracle's (+) outer-join operator is correctly rewritten for a SINGLE join condition (a.id = b.id(+) -> ta LEFT JOIN tb), but with MULTIPLE (+) conditions on the same optional table the rewrite duplicates the preserved table: WHERE a.id(+) = b.id AND a.z(+) = 5 -> FROM tb b LEFT JOIN ta a ON a.id = b.id AND a.z = 5 CROSS JOIN tb b — table alias b appears twice. Live PG "table name 'b' specified more than once" (same duplicate CROSS JOIN on tsql/mysql). No warning. Source valid on Oracle. BLUE: collect all (+) predicates for a table into ONE join's ON clause; do not emit an extra CROSS JOIN for the second (+) condition.
+SELECT a.x, b.y FROM ta a, tb b WHERE a.id(+) = b.id AND a.z(+) = 5
