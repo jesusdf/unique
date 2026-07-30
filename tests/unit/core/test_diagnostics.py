@@ -100,12 +100,12 @@ def test_is_registered():
 # To lower it: add honestly-sourced entries to unique.core.rationales.RATIONALES
 # (each traceable to a docs/rationale/ page, a docs/03-unsupported.md section,
 # or an emission-site docstring — never invented), then set this to the new,
-# smaller count. Current: 232 registered (B32 wave 3 added UNIQUE-1221…1232,
-# non-carrier warning codes) − 32 with a rationale = 200. Wave 3 does NOT add
-# rationale entries (that is B31's floor to lower later), so the new codes RAISE
-# this count by 12.
+# smaller count. Current: 232 registered − 118 with a rationale = 114 (a
+# ddl/expression/procedural sourcing pass added 86 entries, corpus-verified
+# and/or live-probed; codes with no traceable corpus case or test were left
+# pending rather than invented — see the pass's report).
 # ---------------------------------------------------------------------------
-_RATIONALE_UNCOVERED_FLOOR = 200
+_RATIONALE_UNCOVERED_FLOOR = 114
 
 _CASE_HEADER_RE = re.compile(
     r"^--\s*CASE\[[a-z]+\](?:\[[^\]]*\])*:\s*([A-Za-z0-9][A-Za-z0-9_-]*)\b"

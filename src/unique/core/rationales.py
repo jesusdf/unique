@@ -957,6 +957,138 @@ RATIONALES: dict[str, Rationale] = {
             "faithful with --db-url or on an Oracle→Oracle round-trip."
         ),
     ),
+    "UNIQUE-1153": _R(
+        construct=(
+            "PostgreSQL trigger function (CREATE FUNCTION ... RETURNS TRIGGER) (→ "
+            "MySQL)"
+        ),
+        reason=(
+            "MySQL has no trigger functions — a trigger's body belongs directly to "
+            "CREATE TRIGGER, not to a separately-callable RETURNS TRIGGER function — "
+            "so the PL/pgSQL function shape has nothing to bind to."
+        ),
+        example_case=(
+            "tests/integration/test_triggers.py::TestPostgresTriggerToMySQL::test_trigger_function_degrades_with_warning"
+        ),
+        divergence=(
+            "Warned limit — the non-portable translation is preserved commented out "
+            "for a manual rewrite."
+        ),
+    ),
+    "UNIQUE-1154": _R(
+        construct=(
+            "T-SQL inline table-valued function (CREATE FUNCTION ... RETURNS TABLE AS "
+            "RETURN (...))"
+        ),
+        reason=(
+            "Neither MySQL nor PostgreSQL has an inline (single-statement, "
+            "substituted-at-call-site) table-valued function form; both would need a "
+            "full multi-statement function/procedure rewritten by hand."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestInlineTableValuedFunction::test_mysql_documents_and_comments_out"
+        ),
+        divergence=(
+            "Warned limit — documented and commented out rather than emitted as "
+            "invalid RETURNS TABLE."
+        ),
+    ),
+    "UNIQUE-1155": _R(
+        construct=(
+            "A trigger body that reads the T-SQL inserted/deleted pseudo-tables in a "
+            "set-based way (FROM/JOIN inserted|deleted) the target cannot express"
+        ),
+        reason=(
+            "Once the set-based pseudo-table read degrades to a per-statement carrier "
+            "(UNIQUE-1201), the surrounding trigger no longer has a runnable body — "
+            "shipping it partially would execute a half-empty trigger per row, so the "
+            "whole trigger is preserved commented out instead."
+        ),
+        example_case=(
+            "tests/integration/test_triggers.py::TestSetBasedTriggerRewrite::test_pure_set_based_to_mysql_documented"
+        ),
+        divergence="Warned limit — the whole trigger becomes a documented carrier.",
+    ),
+    "UNIQUE-1156": _R(
+        construct="Oracle COMPOUND TRIGGER (→ MySQL)",
+        reason=(
+            "A compound trigger's BEFORE/AFTER EACH ROW + AFTER STATEMENT sections "
+            "collect affected rows into a PL/SQL collection and re-aggregate them "
+            "statement-wide; MySQL has no equivalent mechanism (no transition tables, "
+            "no multi-timing trigger sections) to mechanically rewrite that "
+            "accumulation into."
+        ),
+        example_case=(
+            "tests/integration/test_triggers.py::TestOracleCompoundTrigger::test_degrades_to_carrier_mysql"
+        ),
+        divergence=(
+            "Warned limit — documented for a manual rewrite (a MySQL row-level trigger "
+            "that re-reads the table)."
+        ),
+    ),
+    "UNIQUE-1157": _R(
+        construct=(
+            "A PostgreSQL statement-level trigger delegating its body to a trigger "
+            "function via EXECUTE FUNCTION (→ MySQL)"
+        ),
+        reason=(
+            "MySQL has neither trigger functions nor transition tables, so a "
+            "statement-level trigger that references its bound function's "
+            "transition-table reads has nothing to bind to."
+        ),
+        example_case=(
+            "tests/integration/test_triggers.py::TestPostgresTriggerToMySQL::test_trigger_binding_degrades_with_warning"
+        ),
+        divergence="Warned limit — documented carrier.",
+    ),
+    "UNIQUE-1158": _R(
+        construct="A PostgreSQL FOREACH ... IN ARRAY LOOP (→ other engines)",
+        reason=(
+            "The FOREACH-over-array loop is inherently array-typed, and no other "
+            "engine has an array column/variable type at all, so there is no array to "
+            "iterate over on the target."
+        ),
+        example_case=(
+            "tests/integration/test_pg_source_wave1.py::TestForeachArrayLoop::test_foreach_degrades_off_pg"
+        ),
+        divergence="Warned limit — statement preserved as a comment.",
+    ),
+    "UNIQUE-1159": _R(
+        construct=(
+            "An Oracle PL/SQL PRAGMA declaration (e.g. AUTONOMOUS_TRANSACTION) (→ "
+            "other engines)"
+        ),
+        reason=(
+            "A PRAGMA is a compiler directive to the Oracle PL/SQL engine itself (no "
+            "runtime SQL effect); no other engine's procedural language has an "
+            "equivalent compiler-directive mechanism."
+        ),
+        example_case=(
+            "tests/integration/test_oracle_mysql_tail.py::TestPragmaAutonomousTransaction::test_off_oracle_pragma_never_ships_executable"
+        ),
+        divergence=(
+            "Warned limit — dropped; the surrounding declarations and body still "
+            "transpile."
+        ),
+    ),
+    "UNIQUE-1160": _R(
+        construct=(
+            "A standalone (anonymous) PL/SQL block at the top level, with no enclosing "
+            "CREATE PROCEDURE/FUNCTION"
+        ),
+        reason=(
+            "No other engine has a top-level anonymous executable block outside a "
+            "routine definition (T-SQL's nearest analog, a batch, has different "
+            "scoping/semantics), so a mechanical rewrite risks silently changing what "
+            "runs when."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestOracleCatalogDropBlock::test_degrades_on_postgresql"
+        ),
+        divergence=(
+            "Warned limit — preserved as a documented comment below the carrier."
+        ),
+    ),
     "UNIQUE-1161": _R(
         construct="T-SQL sp_executesql parameter declarations/bindings (→ MySQL)",
         reason=(
@@ -967,6 +1099,263 @@ RATIONALES: dict[str, Rationale] = {
         example_case="ts-sp-executesql",
         divergence="Warned limit — parameter bindings dropped.",
     ),
+    "UNIQUE-1162": _R(
+        construct=(
+            "A PL/pgSQL RAISE NOTICE inside a function that returns a scalar value (→ "
+            "MySQL)"
+        ),
+        reason=(
+            "A bare SELECT (MySQL's own notice-style output channel) is invalid inside "
+            "a MySQL FUNCTION — functions cannot return an extra result set (error "
+            "1415) — so the message is diverted into a session variable instead."
+        ),
+        example_case=(
+            "tests/integration/test_pg_source_wave1.py::TestMysqlFunctionNotice::test_notice_in_function_diverts"
+        ),
+        divergence=(
+            "Warned limit — the message lands in @uq_notice, not printed inline; "
+            "procedures (which can SELECT) keep the visible channel."
+        ),
+    ),
+    "UNIQUE-1163": _R(
+        construct="T-SQL RAISERROR/THROW with severity/state arguments (→ MySQL)",
+        reason=(
+            "MySQL's SIGNAL statement has no severity/state argument slots matching "
+            "RAISERROR's — only the message transfers, so the extra arguments are "
+            "dropped and named in the carrier rather than silently discarded."
+        ),
+        example_case="red2-ts-raiserror-format-arg-drop",
+        divergence="Warned limit — severity/state args dropped, listed in the carrier.",
+    ),
+    "UNIQUE-1164": _R(
+        construct="BEGIN TRANSACTION (→ Oracle)",
+        reason=(
+            "Oracle has no explicit transaction-start statement — a transaction begins "
+            "implicitly with the first DML statement — so an explicit BEGIN "
+            "TRANSACTION has nothing to translate to."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestTransactionControl::test_begin_transaction_documented_for_oracle_pg"
+        ),
+        divergence=(
+            "Faithful (no-op drop) — Oracle's implicit transaction start reproduces "
+            "the same behaviour."
+        ),
+    ),
+    "UNIQUE-1165": _R(
+        construct=(
+            "T-SQL WAITFOR TIME '...' — wait until an absolute clock time (→ MySQL)"
+        ),
+        reason=(
+            "Every target's sleep primitive (DBMS_SESSION.SLEEP, pg_sleep, MySQL "
+            "SLEEP) takes a relative duration, not an absolute wall-clock time to wait "
+            "until; WAITFOR DELAY (relative) maps cleanly, but WAITFOR TIME has no "
+            "relative-duration equivalent to compute without the current time at run "
+            "time."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestWaitFor::test_time_documented"
+        ),
+        divergence="Warned limit — documented, not computed.",
+    ),
+    "UNIQUE-1166": _R(
+        construct=(
+            "A non-forward cursor FETCH (FETCH LAST/PRIOR/FIRST/ABSOLUTE/RELATIVE) "
+            "from a scrollable cursor (→ Oracle)"
+        ),
+        reason=(
+            "Oracle cursors, like every other target's, are forward-only (only FETCH "
+            "NEXT); a non-forward fetch direction has no operation to translate to."
+        ),
+        example_case=(
+            "tests/integration/test_pg_source_wave1.py::TestFetchDirections::test_fetch_last_degrades_oracle"
+        ),
+        divergence=(
+            "Warned limit — the scroll fetch degrades to a carrier; the surrounding "
+            "OPEN/FETCH NEXT/CLOSE still compile."
+        ),
+    ),
+    "UNIQUE-1167": _R(
+        construct="A cursor FETCH with no INTO target-variable list",
+        reason=(
+            "PostgreSQL/Oracle/MySQL all require FETCH to specify where the fetched "
+            "row's columns go; a source FETCH that discards the row (no INTO) has "
+            "nothing for the target's FETCH to bind, so emitting 'FETCH c INTO ;' "
+            "would be invalid syntax."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestUnsupportedCursorConstructsAreValidCarriers::test_fetch_without_into_is_documented_not_empty"
+        ),
+        divergence=(
+            "Warned limit — documented as a comment rather than shipping an incomplete "
+            "FETCH."
+        ),
+    ),
+    "UNIQUE-1168": _R(
+        construct="GOTO <label> (→ PostgreSQL)",
+        reason=(
+            "PL/pgSQL has no GOTO statement (or any unconditional-jump control-flow "
+            "form), so a source GOTO has no operation to translate to."
+        ),
+        example_case="red3-ts-goto-label-proc",
+        divergence=(
+            "Warned limit — dropped; control flow is not replicated (T-SQL/Oracle keep "
+            "native GOTO)."
+        ),
+    ),
+    "UNIQUE-1169": _R(
+        construct="A GOTO target label (→ PostgreSQL)",
+        reason=(
+            "Without a GOTO to jump to it, and with PL/pgSQL having no label/GOTO "
+            "mechanism at all, the label marker itself has nothing to bind to on the "
+            "target."
+        ),
+        example_case="red3-ts-goto-label-proc",
+        divergence="Warned limit — dropped alongside its GOTO.",
+    ),
+    "UNIQUE-1171": _R(
+        construct=(
+            "A whole procedural construct the transformer recognizes but cannot map on "
+            "the target (the shared transformer-degrade carrier)"
+        ),
+        reason=(
+            "Shared carrier path for any transformer-level whole-unit degrade (an "
+            "unsupported PL/SQL exception context in a T-SQL scalar function, a "
+            "client-tool directive, ...); each specific reason is interpolated into "
+            "the same carrier template rather than allocating one code per message."
+        ),
+        example_case="pg-named-exception",
+        divergence="Warned limit — the construct is preserved as a documented comment.",
+    ),
+    "UNIQUE-1172": _R(
+        construct="GOTO <label> (→ MySQL)",
+        reason=(
+            "MySQL has no GOTO statement either; the carrier additionally pairs the "
+            "drop with a DO 0 no-op so an IF/loop body the GOTO occupied is never left "
+            "syntactically empty (MySQL error 1064)."
+        ),
+        example_case="red3-ts-goto-label-proc",
+        divergence="Warned limit — dropped; control flow not replicated.",
+    ),
+    "UNIQUE-1173": _R(
+        construct="A GOTO target label (→ MySQL)",
+        reason=(
+            "Same underlying gap as UNIQUE-1169 but for MySQL, which also has no "
+            "label/GOTO mechanism."
+        ),
+        example_case="red3-ts-goto-label-proc",
+        divergence="Warned limit — dropped alongside its GOTO.",
+    ),
+    "UNIQUE-1174": _R(
+        construct=(
+            "An Oracle/PostgreSQL implicit cursor FOR loop whose query's column list "
+            "Unique cannot resolve (e.g. SELECT * or an unresolvable projection) (→ "
+            "T-SQL / MySQL)"
+        ),
+        reason=(
+            "The faithful expansion needs one FETCH-target variable per selected "
+            "column; when the column list isn't statically resolvable (a bare SELECT * "
+            "with no visible schema, or a referenced record field the visible list "
+            "doesn't expose), Unique cannot generate that variable list, so it emits a "
+            "documented scaffold for the developer to complete instead of guessing."
+        ),
+        example_case=(
+            "tests/integration/test_cursor_for_loop_tsql.py::test_unresolvable_select_star_keeps_documented_scaffold"
+        ),
+        divergence=(
+            "Warned limit — the FETCH INTO target list is left as a placeholder "
+            "comment for manual completion; OPEN/CLOSE and the loop shape are still "
+            "emitted."
+        ),
+    ),
+    "UNIQUE-1175": _R(
+        construct=(
+            "An Oracle/PostgreSQL implicit cursor FOR loop with a resolvable column "
+            "list (→ MySQL)"
+        ),
+        reason=(
+            "The columns are resolvable, so the loop expands completely (one variable "
+            "per column, positional FETCH), but without a --db-url connection Unique "
+            "does not know each column's real type, so every loop variable is declared "
+            "as the permissive TEXT type."
+        ),
+        example_case=(
+            "tests/integration/test_oracle_mysql_tail.py::TestMySqlCursorForLoopExpansion::test_named_cursor_drives_directly"
+        ),
+        divergence=(
+            "Warned limit without --db-url (loop variables are TEXT, not the real "
+            "column types); the loop's control flow and FETCH are otherwise faithful."
+        ),
+    ),
+    "UNIQUE-1176": _R(
+        construct="A T-SQL INSTEAD OF trigger (→ MySQL)",
+        reason=(
+            "MySQL has no INSTEAD OF trigger timing at all (only BEFORE/AFTER); the "
+            "closest emulation is a BEFORE trigger, which runs in addition to (not "
+            "instead of) the triggering statement, so the substitution semantics are "
+            "not reproduced automatically."
+        ),
+        example_case=(
+            "tests/integration/test_triggers.py::TestInsteadOfTrigger::test_instead_of_documented_on_mysql"
+        ),
+        divergence=(
+            "Warned limit — emitted as BEFORE for review, with the original INSTEAD OF "
+            "timing documented."
+        ),
+    ),
+    "UNIQUE-1177": _R(
+        construct="A T-SQL procedure-level RETURN <value> (a status code) (→ MySQL)",
+        reason=(
+            "MySQL stored procedures have no return value (only functions do); a "
+            "procedure's RETURN <expr> is rewritten to a bare LEAVE (exiting the "
+            "procedure), and the discarded value is named in the carrier rather than "
+            "silently dropped."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestReturnValueInProcedure::test_return_value_in_procedure_becomes_leave"
+        ),
+        divergence=(
+            "Warned limit — the status-code value is documented, not returned; a "
+            "FUNCTION's RETURN <value> is unaffected and kept."
+        ),
+    ),
+    "UNIQUE-1178": _R(
+        construct=(
+            "A dynamic-SQL EXECUTE ... INTO <var> whose target string is not a "
+            "compile-time-resolvable SELECT INTO @session-variable form (→ MySQL)"
+        ),
+        reason=(
+            "MySQL's PREPARE/EXECUTE workflow can only capture a dynamic result into a "
+            "variable if the dynamic SQL text itself is rewritten to 'SELECT ... INTO "
+            "@var', which Unique cannot reliably synthesize for an arbitrary dynamic "
+            "string built at runtime."
+        ),
+        example_case="pg-dyn-count",
+        divergence=(
+            "Warned limit — documented; the dynamic string must be rewritten by hand "
+            "to select into a MySQL session variable."
+        ),
+    ),
+    "UNIQUE-1179": _R(
+        construct=(
+            "A trigger body that reads the T-SQL inserted/deleted pseudo-tables in a "
+            "set-based way (→ Oracle)"
+        ),
+        reason=(
+            "Oracle has no transition tables at all (a compound trigger's "
+            "PL/SQL-collection accumulation is the closest analog, and is not a "
+            "mechanical rewrite of an arbitrary set-based DML statement), so the "
+            "set-based read cannot be expressed."
+        ),
+        example_case=(
+            "tests/integration/test_triggers.py::TestSetBasedTriggerRewrite::test_pure_set_based_to_oracle_documented"
+        ),
+        divergence=(
+            "Warned limit — the whole trigger degrades to a documented carrier for a "
+            "manual compound-trigger rewrite (the Oracle-specific sibling of "
+            "UNIQUE-1155)."
+        ),
+    ),
     "UNIQUE-1180": _R(
         construct="T-SQL sp_executesql named parameters (→ Oracle)",
         reason=(
@@ -976,6 +1365,365 @@ RATIONALES: dict[str, Rationale] = {
         ),
         example_case="ts-sp-executesql",
         divergence="Warned limit — placeholders must be renumbered positionally.",
+    ),
+    "UNIQUE-1182": _R(
+        construct=(
+            "A T-SQL INSTEAD OF trigger on a base TABLE, not a view (→ PostgreSQL)"
+        ),
+        reason=(
+            "PostgreSQL restricts INSTEAD OF triggers to views only; on a table, the "
+            "equivalent behaviour (substituting the trigger's own logic for the "
+            "triggering statement) is a BEFORE row trigger that returns NULL, "
+            "suppressing the original operation — a different trigger-timing model "
+            "requiring a pg_trigger_depth() guard so the trigger's own DML still "
+            "executes."
+        ),
+        example_case="ts-instead-of-insert",
+        divergence=(
+            "Faithful — the rewritten BEFORE-trigger-with-guard form reproduces the "
+            "substitution semantics (live-verified insert-exactly-once)."
+        ),
+    ),
+    "UNIQUE-1183": _R(
+        construct="BEGIN TRANSACTION (→ PostgreSQL)",
+        reason=(
+            "A PL/pgSQL routine already runs inside the caller's transaction (or "
+            "manages its own via nested procedure-call semantics) — there is no "
+            "explicit statement to start one, so an explicit BEGIN TRANSACTION has "
+            "nothing to translate to."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestTransactionControl::test_begin_transaction_documented_for_oracle_pg"
+        ),
+        divergence=(
+            "Faithful (no-op drop) — PostgreSQL's implicit routine-transaction "
+            "handling reproduces the same behaviour."
+        ),
+    ),
+    "UNIQUE-1184": _R(
+        construct="SAVEPOINT (→ PostgreSQL)",
+        reason=(
+            "PL/pgSQL has no explicit SAVEPOINT statement; the equivalent behaviour (a "
+            "partial rollback boundary) comes from wrapping statements in a BEGIN ... "
+            "EXCEPTION block, which rolls back to its own start on error."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestTransactionControl::test_rollback_to_savepoint"
+        ),
+        divergence=(
+            "Warned limit — dropped; wrap the guarded statements in a "
+            "BEGIN...EXCEPTION block to reproduce the rollback boundary (Oracle keeps "
+            "native SAVEPOINT)."
+        ),
+    ),
+    "UNIQUE-1185": _R(
+        construct="ROLLBACK TO SAVEPOINT <name> (→ PostgreSQL)",
+        reason=(
+            "Same underlying gap as UNIQUE-1184 — PL/pgSQL has no explicit savepoints "
+            "to roll back to; the enclosing BEGIN...EXCEPTION block already rolls back "
+            "automatically on error."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestTransactionControl::test_rollback_to_savepoint"
+        ),
+        divergence="Warned limit — dropped alongside its SAVEPOINT.",
+    ),
+    "UNIQUE-1186": _R(
+        construct="SELECT * INTO <multiple variables> (→ other engines)",
+        reason=(
+            "Expanding SELECT * into a positional variable-assignment list requires "
+            "knowing the source's column list, which a bare '*' does not carry without "
+            "schema access; the same is true across engines, so the statement cannot "
+            "be mechanically completed."
+        ),
+        example_case=(
+            "tests/integration/test_pg_source_wave1.py::TestWave233StarIntoMultipleVars::test_star_into_multi_degrades"
+        ),
+        divergence=(
+            "Warned limit — documented; supply the column list explicitly to fix."
+        ),
+    ),
+    "UNIQUE-1187": _R(
+        construct=(
+            "An Oracle/PostgreSQL implicit cursor FOR loop with a resolvable column "
+            "list (→ T-SQL)"
+        ),
+        reason=(
+            "The T-SQL sibling of UNIQUE-1175 — the columns are resolvable and the "
+            "loop expands completely (one @variable per column, positional FETCH "
+            "NEXT), but without --db-url metadata each loop variable is declared as "
+            "the permissive NVARCHAR(4000) rather than the column's real type."
+        ),
+        example_case=(
+            "tests/integration/test_cursor_for_loop_tsql.py::test_named_cursor_loop_expands_completely"
+        ),
+        divergence=(
+            "Warned limit without --db-url (loop variables are NVARCHAR(4000)); the "
+            "loop's control flow and FETCH are otherwise faithful and complete."
+        ),
+    ),
+    "UNIQUE-1190": _R(
+        construct=(
+            "Oracle EXECUTE IMMEDIATE ... USING <binds> with no INTO clause (→ T-SQL)"
+        ),
+        reason=(
+            "T-SQL's sp_executesql takes named parameters (@p1, @p2, ...) bound by "
+            "name, while Oracle's USING binds positionally against :1, :2, ... "
+            "placeholders inside the dynamic string; the rewrite emits a parameterized "
+            "sp_executesql call, but the placeholders inside the dynamic-SQL text "
+            "itself must still be renumbered by hand to match."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestDynamicSQL::test_oracle_to_tsql_uses_sp_executesql"
+        ),
+        divergence=(
+            "Warned limit — placeholders inside the dynamic string need manual "
+            "renumbering to @p1, @p2, ...; the call itself is valid and parameterized."
+        ),
+    ),
+    "UNIQUE-1192": _R(
+        construct=(
+            "Oracle's implicit-cursor SQL%ROWCOUNT (rows the last DML MATCHED) (→ "
+            "MySQL)"
+        ),
+        reason=(
+            "MySQL's closest equivalent, ROW_COUNT(), counts rows actually CHANGED by "
+            "the last DML, not rows matched by its WHERE clause — for an UPDATE that "
+            "matches a row but assigns it its current value, Oracle's matched-count "
+            "and MySQL's changed-count diverge; the mapping is kept (still the closest "
+            "fit) but annotated rather than shipped silently."
+        ),
+        example_case=(
+            "tests/integration/test_challenge.py::TestRowcountDivergenceAnnotation::test_mysql_target_annotates_and_warns"
+        ),
+        divergence=(
+            "Warned limit — the value may differ from the source when a matched row's "
+            "UPDATE is a no-op (T-SQL's @@ROWCOUNT is matched-rows too and needs no "
+            "such note)."
+        ),
+    ),
+    "UNIQUE-1193": _R(
+        construct=(
+            "A source-only procedural statement with no target concept at all (e.g. "
+            "T-SQL SET IDENTITY_INSERT/SET NOCOUNT inside a routine) (→ other engines)"
+        ),
+        reason=(
+            "The statement configures a source-engine-only session/compiler behaviour "
+            "with no corresponding concept on the target at all (not merely a missing "
+            "spelling), so the shared carrier documents it as '{source}-only' rather "
+            "than attempting any target-side equivalent."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestUniqueCommentRestore::test_identity_insert_documented_then_restored"
+        ),
+        divergence=(
+            "Warned limit — dropped; documented as source-engine-only, and restored "
+            "verbatim on a round trip back to the source engine."
+        ),
+    ),
+    "UNIQUE-1194": _R(
+        construct=(
+            "A T-SQL global (@@ERROR/@@TRANCOUNT/@@CURSOR_ROWS/SQL%ROWCOUNT-family) "
+            "used inside an expression position (e.g. an IF condition) with no target "
+            "equivalent"
+        ),
+        reason=(
+            "These globals have no faithful non-source equivalent, and unlike a "
+            "top-level statement, an expression position cannot simply be dropped — a "
+            "value-shaped placeholder is required so the surrounding expression stays "
+            "syntactically valid."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestErrorGlobalInCondition::test_error_in_if_mysql"
+        ),
+        divergence=(
+            "Warned limit — a neutral literal (0) replaces the global so the "
+            "expression parses; the specific behaviour it gated is lost."
+        ),
+    ),
+    "UNIQUE-1195": _R(
+        construct=(
+            "A PostgreSQL trigger function's body, when its trigger delegates to it "
+            "via EXECUTE FUNCTION (→ T-SQL)"
+        ),
+        reason=(
+            "T-SQL has no separately-callable trigger function — a trigger's logic "
+            "must live inline in CREATE TRIGGER — so the delegating function's body is "
+            "inlined directly into the T-SQL trigger, with the PG-only "
+            "pg_trigger_depth() guard and RETURN NULL protocol dropped (T-SQL triggers "
+            "have no such re-entrancy-guard convention)."
+        ),
+        example_case=(
+            "tests/integration/test_triggers.py::TestPgDelegatingTriggerToTSql::test_inlined_into_tsql_trigger"
+        ),
+        divergence=(
+            "Faithful — the inlined trigger reproduces the same DML; live-compiled "
+            "valid."
+        ),
+    ),
+    "UNIQUE-1196": _R(
+        construct="A T-SQL table variable (DECLARE @var TABLE (...)) (→ MySQL)",
+        reason=(
+            "MySQL has no table-variable DECLARE form; the closest equivalent is a "
+            "CREATE TEMPORARY TABLE statement inside the routine body, which the "
+            "carrier documents as the table variable's replacement."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestTableVariableToMySQL::test_table_variable_becomes_temp_table"
+        ),
+        divergence=(
+            "Faithful — a temporary table reproduces the same session-scoped, "
+            "statement-usable storage; the carrier is purely documentary."
+        ),
+    ),
+    "UNIQUE-1197": _R(
+        construct=(
+            "A source-only SET option with no target equivalent, inside a routine body "
+            "(e.g. MySQL SET SQL_MODE)"
+        ),
+        reason=(
+            "The option configures source-engine-only parsing/execution behaviour "
+            "(MySQL's SQL_MODE flags, for instance) that no other engine's session "
+            "model has a matching concept for."
+        ),
+        example_case=(
+            "tests/integration/test_pg_source_wave1.py::TestWave162AdddateSqlMode::test_set_sql_mode_carrier_tsql"
+        ),
+        divergence="Warned limit — dropped; documented as source-only.",
+    ),
+    "UNIQUE-1198": _R(
+        construct=(
+            "EXEC <T-SQL system procedure> as a standalone statement (e.g. EXEC "
+            "sp_who) inside a routine body (→ other engines)"
+        ),
+        reason=(
+            "T-SQL system procedures call into SQL Server's own catalog/admin "
+            "machinery (the same class as UNIQUE-1211's top-level EXEC, here inside a "
+            "routine); no other engine exposes the same operation through a callable "
+            "procedure."
+        ),
+        example_case="ts-waitfor-exec",
+        divergence=(
+            "Warned limit — the call becomes a documented carrier; the administrative "
+            "action must be performed via the target's own tooling."
+        ),
+    ),
+    "UNIQUE-1200": _R(
+        construct=(
+            "An Oracle built-in package call (e.g. DBMS_SCHEDULER.CREATE_JOB) (→ other "
+            "engines)"
+        ),
+        reason=(
+            "Oracle's DBMS_*/UTL_* packages call into Oracle-specific server-side "
+            "machinery (job scheduling, session control, ...) with no cross-engine "
+            "equivalent; shipped raw, the call is a guaranteed runtime error off "
+            "Oracle."
+        ),
+        example_case=(
+            "tests/integration/test_trigger_predicates_scheduler.py::test_dbms_scheduler_degrades_to_carrier"
+        ),
+        divergence=(
+            "Warned limit — the call becomes a documented carrier rather than an "
+            "invalid raw call."
+        ),
+    ),
+    "UNIQUE-1201": _R(
+        construct=(
+            "A trigger DML statement that reads the T-SQL inserted/deleted "
+            "pseudo-tables in a set-based way (FROM inserted / JOIN deleted) (→ other "
+            "engines, absent a transition-table rewrite)"
+        ),
+        reason=(
+            "A set-based pseudo-table read has no row-level (NEW/OLD) equivalent; "
+            "where the whole trigger can be rewritten with real transition tables "
+            "(PostgreSQL statement-level triggers, Oracle compound triggers) the "
+            "set-based DML is left as-is, but where it cannot (MySQL, or a mixed "
+            "row+set trigger), the specific statement is documented instead of emitted "
+            "referencing an undefined table."
+        ),
+        example_case=(
+            "tests/integration/test_triggers.py::TestSetBasedTriggerRewrite::test_pure_set_based_to_mysql_documented"
+        ),
+        divergence=(
+            "Warned limit — the statement is documented with per-target rewrite "
+            "guidance rather than shipped referencing an undefined table."
+        ),
+    ),
+    "UNIQUE-1202": _R(
+        construct="A T-SQL table-valued function used in a FROM clause (→ MySQL)",
+        reason=(
+            "MySQL has no table-valued function mechanism (a function cannot appear as "
+            "a FROM-clause row source); the statement is commented out rather than "
+            "shipping an invalid function-in-FROM."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestTableValuedFunctionInFrom::test_user_tvf_in_from_commented"
+        ),
+        divergence=(
+            "Warned limit — commented out for review (STRING_SPLIT, rewritten to the "
+            "valid JSON_TABLE form, is unaffected)."
+        ),
+    ),
+    "UNIQUE-1203": _R(
+        construct=(
+            "An Oracle cursor attribute the transformer does not recognize (e.g. "
+            "c%BULK_ROWCOUNT) (→ other engines)"
+        ),
+        reason=(
+            "Only a fixed, explicitly-mapped set of cursor attributes "
+            "(%FOUND/%NOTFOUND/%ISOPEN/%ROWCOUNT) has a per-cursor state translation "
+            "on T-SQL/MySQL; an attribute outside that set has no known target form, "
+            "and — critically — must not fall through to the general expression "
+            "parser, which would otherwise read 'c%attr' as 'c' modulo 'attr'."
+        ),
+        example_case=(
+            "tests/integration/test_cursor_state_b7.py::TestUnknownAttributeWarns::test_unknown_attribute_warns_and_does_not_leak_modulo"
+        ),
+        divergence=(
+            "Warned limit — degrades to a neutral 0 carrier rather than silently "
+            "becoming modulo arithmetic."
+        ),
+    ),
+    "UNIQUE-1205": _R(
+        construct=(
+            "A T-SQL #temp table declared with an explicit CREATE TABLE #name (...) (→ "
+            "Oracle)"
+        ),
+        reason=(
+            "Same underlying gap as UNIQUE-1196 but for a real temp table rather than "
+            "a table variable — Oracle has no session-scoped #temp table; the CREATE "
+            "is hoisted to a GLOBAL TEMPORARY TABLE before the routine (a CREATE "
+            "cannot live inside PL/SQL), and the carrier documents the substitution."
+        ),
+        example_case=(
+            "tests/integration/test_temp_table_in_procedure.py::TestOracle::test_hoists_global_temporary_table"
+        ),
+        divergence=(
+            "Faithful — the hoisted GTT, cleared and repopulated per call, reproduces "
+            "the same session-scoped storage; the carrier is purely documentary."
+        ),
+    ),
+    "UNIQUE-1206": _R(
+        construct=(
+            "COMMIT/ROLLBACK inside a T-SQL TRY/CATCH block translated to a PL/pgSQL "
+            "BEGIN...EXCEPTION block (→ PostgreSQL)"
+        ),
+        reason=(
+            "PL/pgSQL's exception-guarded block is itself a subtransaction "
+            "(savepoint); issuing an explicit COMMIT/ROLLBACK inside one is a runtime "
+            "error ('cannot commit while a subtransaction is active') rather than a "
+            "parse-time gap, and the subtransaction already provides the same "
+            "rollback-on-error/commit-with-caller semantics T-SQL's TRY/CATCH "
+            "expressed explicitly."
+        ),
+        example_case=(
+            "tests/integration/test_procedural.py::TestTopLevelTryCatch::test_begin_transaction_prefix_lowers_on_postgresql"
+        ),
+        divergence=(
+            "Faithful (the subtransaction reproduces the same net transactional "
+            "behaviour) with the explicit COMMIT/ROLLBACK dropped and documented "
+            "rather than shipped as a guaranteed runtime error."
+        ),
     ),
     "UNIQUE-1207": _R(
         construct=(
@@ -1021,6 +1769,27 @@ RATIONALES: dict[str, Rationale] = {
         divergence=(
             "Warned limit — the DML effect is faithful; the returned result set is "
             "documented, not produced."
+        ),
+    ),
+    "UNIQUE-1231": _R(
+        construct=(
+            "Any ProceduralTransformer-level warning with no more specific UNIQUE-NNNN "
+            "code of its own"
+        ),
+        reason=(
+            "The shared fallback code for procedural-transform warnings — most "
+            "transform-level messages carry their own specific code (reconciled from "
+            "the matching inline carrier in the output), but a message with no "
+            "corresponding inline carrier still needs a stable code to report through "
+            "rather than shipping uncoded."
+        ),
+        example_case=(
+            "tests/integration/test_pg_source_wave1.py::TestParseFallbackDegradesCrossDialect::test_unparsed_routine_degrades_pg"
+        ),
+        divergence=(
+            "Varies by the underlying message; in the bound example, a MySQL CONTINUE "
+            "handler for SQLEXCEPTION has no PostgreSQL equivalent and the whole "
+            "routine degrades to a documented carrier."
         ),
     ),
 }
