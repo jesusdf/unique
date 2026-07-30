@@ -516,6 +516,11 @@ class ColumnDefinition(ASTNode):
     #: kept on the source engine, and carried as a documented warning elsewhere
     #: (a live DB connection could resolve the actual collation). Raw clause text.
     collate: str | None = None
+    #: A MySQL/Oracle ``INVISIBLE`` column (excluded from ``SELECT *``). MySQL and
+    #: Oracle both support it (kept inline); PG/T-SQL have no equivalent, so it
+    #: degrades to a documented carrier + warning rather than vanishing (dropping
+    #: it changed ``SELECT *``'s result set).
+    invisible: bool = False
 
 
 # ---------------------------------------------------------------------------

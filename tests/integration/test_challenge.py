@@ -5686,3 +5686,32 @@ class TestDeleteOrderByLimitCap:
         # A plain LIMIT (no ORDER BY) keeps the unordered cap idioms.
         out = _tx("DELETE FROM t WHERE v < 0 LIMIT 3", "mysql", "tsql")
         assert "DELETE TOP (3)" in out, out
+
+
+class TestInvisibleColumn:
+    """red2-my-invisible-column-drop: a MySQL INVISIBLE column (excluded from
+    SELECT *) had its attribute silently dropped. Oracle supports INVISIBLE
+    (preserve); PG/T-SQL have no equivalent -> carrier + warning."""
+
+    def test_oracle_and_mysql_keep_invisible(self) -> None:
+        src = _case("challenge_mysql.sql", "red2-my-invisible-column-drop")
+        for target in ("oracle", "mysql"):
+            out = _exec_lines(_tx(src, "mysql", target))
+            assert "INVISIBLE" in out, (target, out)
+        # sqlglot cannot parse the (valid) Oracle INVISIBLE attribute — the
+        # output gate whitelists it and it is live-validated — so only the
+        # MySQL output is checked with the sqlglot parse gate here.
+        assert_statements_parse(
+            _exec_lines(_tx(src, "mysql", "mysql")), "mysql", context="invisible"
+        )
+
+    def test_pg_tsql_warn_and_drop(self) -> None:
+        src = _case("challenge_mysql.sql", "red2-my-invisible-column-drop")
+        for target in ("postgresql", "tsql"):
+            r = Transpiler().transpile(src, "mysql", target)
+            body = _exec_lines(r.sql)
+            assert "INVISIBLE" not in body.split("UNIQUE:")[0].upper(), r.sql
+            assert any(
+                "INVISIBLE" in w.message and target in w.message for w in r.warnings
+            ), r.warnings
+            assert_statements_parse(body, target, context="invisible-drop")

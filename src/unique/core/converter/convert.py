@@ -2422,6 +2422,7 @@ def _convert_create_table(
                 generated_stored = False
                 on_update: str | None = None
                 collate: str | None = None
+                invisible = False
                 primary_key = False
                 unique = False
                 col_comment: str | None = None
@@ -2504,6 +2505,11 @@ def _convert_create_table(
                         # name, kept on the source engine and carried as a warning
                         # elsewhere (no portable mapping).
                         collate = kind.sql(dialect=sqlglot_dialect_name(source_dialect))
+                    elif isinstance(kind, exp.InvisibleColumnConstraint):
+                        # MySQL/Oracle INVISIBLE column (excluded from SELECT *) —
+                        # kept inline on those engines, carried as a documented
+                        # note on PG/T-SQL (which have no equivalent).
+                        invisible = True
                     elif isinstance(kind, exp.Reference):
                         # Inline column FK (``c INT REFERENCES p(id) ON DELETE …``)
                         # is equivalent to a table-level FOREIGN KEY; route it
@@ -2553,6 +2559,7 @@ def _convert_create_table(
                         deferrable=deferrable,
                         on_update=on_update,
                         collate=collate,
+                        invisible=invisible,
                         quoted=_identifier_quoted(col_def.this),
                     )
                 )
