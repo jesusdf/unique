@@ -44,6 +44,29 @@ routines-unblocked and severity:*
 
 ---
 
+### A10 — functional-equivalence coverage audit (P2; after the docs-gap wave)
+
+*Maintainer suspicion (2026-07-31, shared by the architect): the FE
+execution-comparison layer is far greener than the corpus. Today the nightly
+result-diff covers the curated FUNC_CASES (~12) plus the `[class=func]`
+challenge cases; the other ~900 corpus cases and the procedures corpus have
+parse/structural assertions only — "runs and returns the same result set" is
+unproven for most of what the transpiler claims to convert.*
+
+- **Audit shape:** measure the executable-comparable fraction per direction
+  (a case is FE-comparable if deterministic, self-contained or probe-able —
+  the `is_comparable` predicate exists in `tests/helpers/corpus_diff.py`);
+  enumerate what's excluded and WHY (nondeterministic, session-dependent,
+  DDL-only, needs setup data); then drive the comparable-but-uncompared set
+  toward the nightly harness (auto-enroll like `[class=func]` does, probes
+  for state-mutating cases per `test_challenge_live.FuncCase`).
+- **Ratchet:** a counted floor of comparable-but-unenrolled cases that only
+  goes down; nightly wall-time budget respected (batch/sample if needed —
+  but say so, no silent caps).
+- **Procedures corpus:** the 4-dialect same-routine fixtures are
+  execution-comparable by construction (call each, compare effects) — today
+  only live-VALIDATED (compiles), not live-COMPARED. Highest-value gap.
+
 ## Continuously tracked (not a discrete backlog)
 
 - Challenge corpus (`tests/fixtures/challenge/`) remains the live intake for
