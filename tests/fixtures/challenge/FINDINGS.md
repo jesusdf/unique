@@ -24,7 +24,6 @@ own engine first.
 | id | class | engines | wrong output | expected | evidence |
 |----|-------|---------|--------------|----------|----------|
 | my-enum-order | consistency (4) | mysql→postgresql,tsql,oracle | ORDER BY a = alphabetical ('hi','lo','mid') | ENUM index order ('lo','mid','hi') | live: MySQL=('lo','mid','hi'); PG (VARCHAR)=('hi','lo','mid'). No warning. BLUE note: MySQL ENUM ordering is by declaration index — either warn that the ordering semantic is lost when degrading ENUM to VARCHAR+CHECK, or emit a mapping table / CASE-based sort key. At minimum this must not silently reorder.  **MAINTAINER DECISION 2026-07-30: convert to a feature brief (docs/TODO.md) — the faithful ENUM-ordinal sort-key mapping is a cross-statement feature; do not warn-patch. Case stays [open] until the brief is executed.** |
-| my-to-days-year-zero | invalid (2) | mysql→pg,tsql,oracle | epoch base `DATE '0000-01-01'` (year 0, rejected) | valid day-number expression | live: MySQL=737790; PG DatetimeFieldOverflow; T-SQL err 241; Oracle ORA-01841. No warning. BLUE note: engines reject year 0000 — use a valid proleptic base and offset the known day count for the MySQL year-0 epoch (TO_DAYS('0001-01-01')=366), i.e. (d - DATE '0001-01-01') + 366, and verify the value matches MySQL's proleptic Gregorian. |
 
 ### Batch summary (RED 2026-07-30, PG/MySQL sources)
 - 24 findings, 90 points, 6 classes. START commit cedf53a (worktree).
@@ -39,10 +38,6 @@ own engine first.
 
 | id | class | src→targets | wrong output | expected / live evidence |
 |----|-------|-------------|--------------|--------------------------|
-| reda-ts-cast-int-trunc | func | tsql→pg,mysql,oracle | plain CAST, no compensation | T-SQL CAST(2.9 AS INT) truncates=2; targets round=3. Live tsql=2/pg=3/mysql=3/oracle=3. BLUE: wrap TRUNC() toward zero. |
-| reda-ts-addmonths-lastday | func | tsql→oracle | DATEADD(MONTH)→ADD_MONTHS | ADD_MONTHS sticks to month-end; DATEADD does not. Live DATEADD(1mo,2020-02-29)=2020-03-29 vs ADD_MONTHS=2020-03-31. |
-| reda-ora-keep-denserank | lying-warning | oracle→pg,tsql,mysql | MAX(x) OVER (ORDER BY y) | KEEP DENSE_RANK aggregate (1 row) mangled to windowed OVER (N rows). Live KEEP=[20] vs OVER=[10,20,20]. Only internal unread_args warning; no docs entry. |
-| reda-ora-concat-null-cast | lying-warning | oracle→pg,tsql,mysql | ...|| CAST(NULL AS VARCHAR(10)) ||... | HOLE in [fixed] ora-concat-null: fix only drops literal NULL, not CAST(NULL)/NULL-typed operand. Live oracle='ab' vs pg=NULL. Only internal unread_args tripwire. |
 
 Notes: Oracle-source PIVOT is the same converter mechanism as reda-ts-pivot (also silently dropped into tsql where PIVOT is supported) — BLUE fixes the class. Points: func 10, silent-drop 8, invalid 6, lying-warning 6 = 30; 4 classes.
 
@@ -50,7 +45,6 @@ Notes: Oracle-source PIVOT is the same converter mechanism as reda-ts-pivot (als
 
 | id | class | src→targets | wrong output | expected / live evidence |
 |----|-------|-------------|--------------|--------------------------|
-| reda-ts-avg-int-trunc | func | tsql→pg,mysql,oracle | AVG(x) passed through | T-SQL integer AVG truncates=1; others=1.5. Live tsql=1, pg=1.5, mysql=1.5. |
 
 Batch running totals: func 25, invalid 10, silent-drop 8, lying-warning 6, composition 5, consistency 4 = 58 pts; 6 classes; func 43%.
 
@@ -58,9 +52,7 @@ Batch running totals: func 25, invalid 10, silent-drop 8, lying-warning 6, compo
 
 | id | class | src→targets | wrong output | evidence |
 |----|-------|-------------|--------------|----------|
-| reda-ora-greatest-null | lying-warning | oracle→pg | GREATEST(1,NULL,3) passed through | Oracle/MySQL=NULL, PG ignores NULL=3. Only internal ignore_nulls tripwire. |
-| reda-ts-like-escape | lying-warning | tsql→pg,oracle,mysql | whole SELECT commented out | LIKE..ESCAPE is standard, supported identically on all 3 (live-verified). Falsely warned 'no mapping'. |
-| reda-ora-date-literal-subquery | invalid | oracle→pg,tsql,mysql | DATE literal->bare string in subquery | DATE '..' loses typing as a derived-table projection; outer date-minus-date -> text-text. Live PG 'text - text'. |
+| reda-ora-date-literal-subquery | invalid | oracle→pg,tsql,mysql | DATE literal->bare string in subquery | DATE '..' loses typing as a derived-table projection; outer date-minus-date -> text-text. Live PG 'text - text'.  **UPDATE 2026-07-30: PG and MySQL legs FIXED (DATE-literal typing preserved on projections); only the T-SQL leg (date-type propagation through derived-table columns) remains — routed to feature brief B30 in docs/TODO.md.** |
 
 Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition 5, consistency 4 = **76 pts**; **6 classes** (max class invalid 26%). All 25 open cases smoke-pass test_challenge.py (601 passed).
 
@@ -68,9 +60,6 @@ Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition
 
 | id | class | src→targets | wrong output | evidence |
 |----|-------|-------------|--------------|----------|
-| reda-ts-isnull-trunc | lying-warning | tsql→pg,oracle,mysql | COALESCE(CAST(NULL AS VARCHAR(2)),'abcdef') | ISNULL truncates to 1st arg type='ab'; COALESCE='abcdef'. Only internal is_null tripwire. Live tsql='ab', pg='abcdef'. |
-| reda-ts-datalength-nchar | func | tsql→pg,mysql | OCTET_LENGTH('abc') | DATALENGTH(N'abc')=6 (UTF-16); N dropped, OCTET_LENGTH=3. Hole in [fixed] ts-binary-length. No warning. |
-| reda-ora-regexp-like | lying-warning | oracle→pg,mysql | whole statement commented out | REGEXP_LIKE falsely 'no mapping'; PG '~' and MySQL 'REGEXP' both support it (live-verified). Only T-SQL genuinely lacks it. |
 
 **FINAL batch totals: 31 findings, ~92 pts, 7 classes** — func 30, invalid 22, lying-warning 14, silent-drop 12, consistency 8, composition 5, crash 3. Max class func 33% (< 50% cap). All open cases smoke-pass test_challenge.py.
 
