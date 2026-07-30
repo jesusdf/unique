@@ -538,3 +538,6 @@ EXEC sp_rename 't.a', 'b', 'COLUMN'; UPDATE t SET b = 1
 
 -- CASE[open][class=invalid]: reda-ts-hex-literal-arith — fails on postgresql, oracle. A T-SQL binary/hex literal in arithmetic, 0x0A + 5, treats 0x0A as the integer 10 -> 15. It is emitted as a BINARY value into PG ('\x0A'::bytea + 5) and Oracle (HEXTORAW('0A') + 5), neither of which allows arithmetic on a binary type: live PG 'operator does not exist: bytea + integer', Oracle ORA-00932. No warning. (MySQL x'0A' + 5 = 15 is fine.) BLUE: when a 0x.. literal is used in a numeric context, fold it to its integer value.
 SELECT 0x0A + 5 AS r
+
+-- CASE[open][class=silent-drop]: reda-ts-setop-orderby — fails on postgresql, oracle, mysql. A trailing ORDER BY on a set operation (SELECT ... EXCEPT/UNION SELECT ... ORDER BY a) is silently DROPPED: PG/MySQL/Oracle all emit the bare set op with NO ORDER BY and NO warning, though every target supports ORDER BY on a UNION/EXCEPT/INTERSECT result. The ordered result set becomes unordered. BLUE: preserve the ORDER BY that applies to the whole set operation.
+SELECT a FROM t EXCEPT SELECT a FROM s ORDER BY a
