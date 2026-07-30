@@ -1367,6 +1367,29 @@ def _dedup_duplicate_cross_joins(expression: exp.Expression) -> None:
             select.set("joins", kept)
 
 
+def _requalify_distinct_order(
+    items: tuple[OrderByItem, ...], projected: set[str], has_star: bool
+) -> tuple[OrderByItem, ...] | None:
+    """Re-point a DISTINCT ON outer ORDER BY's table-qualified keys to the
+    wrapper's bare projected columns (see ``_rewrite_distinct_on``). Returns
+    ``None`` when a key is not projected and cannot be referenced at the
+    wrapper level."""
+    out: list[OrderByItem] = []
+    for it in items:
+        e = it.expression
+        if isinstance(e, ColumnRef) and e.table is not None:
+            if not (has_star or e.name.lower() in projected):
+                return None
+            out.append(
+                dataclasses.replace(
+                    it, expression=ColumnRef(name=e.name, quoted=e.quoted)
+                )
+            )
+        else:
+            out.append(it)
+    return tuple(out)
+
+
 def _rewrite_distinct_on(
     *,
     distinct_on: tuple[ASTNode, ...],
@@ -1405,32 +1428,8 @@ def _rewrite_distinct_on(
     # (its bare name); bail out (keep current behaviour) if an order key is
     # not among the projected columns and cannot be referenced.
     _has_star = any(isinstance(c, Star) for c in columns)
-    _projected = {
-        (c.name.lower() if isinstance(c, (Alias, ColumnRef)) else "")
-        for c in columns
-        if isinstance(c, (Alias, ColumnRef))
-    }
-
-    def _requalify_order(
-        items: tuple[OrderByItem, ...],
-    ) -> tuple[OrderByItem, ...] | None:
-        out: list[OrderByItem] = []
-        for it in items:
-            e = it.expression
-            if isinstance(e, ColumnRef) and e.table is not None:
-                if _has_star or e.name.lower() in _projected:
-                    out.append(
-                        dataclasses.replace(
-                            it, expression=ColumnRef(name=e.name, quoted=e.quoted)
-                        )
-                    )
-                else:
-                    return None
-            else:
-                out.append(it)
-        return tuple(out)
-
-    outer_order_by = _requalify_order(order_by)
+    _projected = {c.name.lower() for c in columns if isinstance(c, (Alias, ColumnRef))}
+    outer_order_by = _requalify_distinct_order(order_by, _projected, _has_star)
     if outer_order_by is None:
         return None
     # ROW_NUMBER needs a deterministic order; the DISTINCT ON's own ORDER BY
@@ -2177,6 +2176,29 @@ def _split_delete_top(
     return top_limit, real_tables
 
 
+def _delete_order_and_limit(
+    expr: exp.Delete, top_limit: LimitClause | None
+) -> tuple[tuple[OrderByItem, ...], LimitClause | None]:
+    """Read a DELETE's ``ORDER BY`` and ``LIMIT`` args (MySQL ordered cap),
+    falling back to any T-SQL ``TOP`` cap already split out."""
+    order_items: tuple[OrderByItem, ...] = ()
+    order_arg = expr.args.get("order")
+    if isinstance(order_arg, exp.Order):
+        order_items = tuple(
+            (
+                _convert_ordered(o)
+                if isinstance(o, exp.Ordered)
+                else OrderByItem(expression=convert_expression(o))
+            )
+            for o in order_arg.expressions
+        )
+    tail_limit = top_limit
+    limit_arg = expr.args.get("limit")
+    if isinstance(limit_arg, exp.Limit) and limit_arg.expression is not None:
+        tail_limit = LimitClause(limit=convert_expression(limit_arg.expression))
+    return order_items, tail_limit
+
+
 def _convert_delete(expr: exp.Delete) -> ASTNode:
     """Convert a sqlglot Delete to DeleteStatement."""
     # ``DELETE TOP (n)``: sqlglot lands the row cap in ``tables``; the rest is
@@ -2201,21 +2223,7 @@ def _convert_delete(expr: exp.Delete) -> ASTNode:
     # first n by ORDER BY). Both args were unread — the ORDER BY + LIMIT fell on
     # the floor and the DELETE hit EVERY matching row (data loss). Read them
     # (guardrail 7) and carry the cap; the ORDER BY is only observable with a cap.
-    order_items: tuple[OrderByItem, ...] = ()
-    order_arg = expr.args.get("order")
-    if isinstance(order_arg, exp.Order):
-        order_items = tuple(
-            (
-                _convert_ordered(o)
-                if isinstance(o, exp.Ordered)
-                else OrderByItem(expression=convert_expression(o))
-            )
-            for o in order_arg.expressions
-        )
-    tail_limit = top_limit
-    limit_arg = expr.args.get("limit")
-    if isinstance(limit_arg, exp.Limit) and limit_arg.expression is not None:
-        tail_limit = LimitClause(limit=convert_expression(limit_arg.expression))
+    order_items, tail_limit = _delete_order_and_limit(expr, top_limit)
 
     # Multi-table DELETE with a JOIN (T-SQL/MySQL ``DELETE t FROM t JOIN s ON …``).
     joins = target.args.get("joins") if isinstance(target, exp.Expression) else None

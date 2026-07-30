@@ -2742,7 +2742,7 @@ class ProceduralTransformer:
             rewritten = re.sub(r"@(\w+)\s*=(?![=>])\s*", rf"\1 {op} ", expr.sql)
             expr = RawSQL(sql=rewritten, reason=expr.reason)
         elif (
-            self._target == "mysql"
+            self._target in ("mysql",)
             and isinstance(expr, RawSQL)
             and re.search(r"@\w+\s*=(?![=>])", expr.sql)
         ):

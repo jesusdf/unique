@@ -571,6 +571,16 @@ class PlsqlStatementsMixin(ParserBase):
             return self._parse_embedded_dml()
         elif tok.is_keyword("DBMS_OUTPUT"):
             return self._parse_dbms_output()
+        elif tok.is_keyword("SAVEPOINT", "COMMIT") or (
+            tok.is_keyword("ROLLBACK")
+            # A bare ROLLBACK / ROLLBACK TO savepoint is transaction control;
+            # ``ROLLBACK`` is never a PL/SQL assignment target. Routed to the
+            # transaction parser so ``SAVEPOINT sp1`` / ``ROLLBACK TO sp1`` model
+            # as TransactionStatements instead of falling to embedded DML, where
+            # raw sqlglot mis-rendered ``SAVEPOINT sp1`` as ``SAVEPOINT AS sp1``.
+            and self._peek(1).type != TokenType.LPAREN
+        ):
+            return self._parse_transaction()
         elif tok.type == TokenType.COLON and self._starts_row_ref_assignment():
             # Oracle row-level trigger assignment ``:NEW.col := expr``. The lexer
             # emits ``:`` as a bare COLON, so drop it here and parse the rest as a

@@ -53,6 +53,11 @@ __all__ = [
 #: (sqlglot's TIMESTAMPLTZ) per target. No engine spells the type
 #: ``TIMESTAMPLTZ``; sqlglot's lenient readers accept the raw token but every
 #: real engine rejects it, so shipping it is a silent-invalid defect.
+# Engines with no ``ON DELETE SET DEFAULT`` FK action (ORA-03001 on Oracle);
+# the action is dropped + warned there. PG/MySQL/T-SQL all support it.
+_NO_SET_DEFAULT_FK = frozenset({"oracle"})
+_FK_SET_DEFAULT_RE = re.compile(r"(?i)\s*\bON\s+DELETE\s+SET\s+DEFAULT\b")
+
 _LOCAL_TZ_TYPE: dict[str, str] = {
     "postgresql": "TIMESTAMPTZ",
     "tsql": "DATETIMEOFFSET",
@@ -818,14 +823,12 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
             # "unimplemented feature". Drop the action (the FK reverts to the
             # NO ACTION default) and document the loss — an ON DELETE SET
             # DEFAULT must be emulated with a trigger if it is required.
-            if dialect == "oracle" and re.search(
-                r"(?i)\bON\s+DELETE\s+SET\s+DEFAULT\b", constraint.sql
+            if dialect in _NO_SET_DEFAULT_FK and _FK_SET_DEFAULT_RE.search(
+                constraint.sql
             ):
                 constraint = dataclasses.replace(
                     constraint,
-                    sql=re.sub(
-                        r"(?i)\s*\bON\s+DELETE\s+SET\s+DEFAULT\b", "", constraint.sql
-                    ),
+                    sql=_FK_SET_DEFAULT_RE.sub("", constraint.sql),
                 )
                 trailing_comments.append(
                     "-- UNIQUE: Oracle has no ON DELETE SET DEFAULT referential "

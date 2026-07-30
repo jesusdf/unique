@@ -494,6 +494,25 @@ class PostgresEmitter(ProceduralEmitter):
             "the routine transaction implicitly */"
         )
 
+    def _emit_savepoint(self, name: str | None) -> str:
+        # PL/pgSQL has NO explicit SAVEPOINT statement — a BEGIN … EXCEPTION
+        # block is its subtransaction (it rolls back to its start on error).
+        # Emitting a bare ``SAVEPOINT``/``ROLLBACK TO SAVEPOINT`` is a plpgsql
+        # syntax error, so document the drop instead of shipping invalid SQL.
+        sp = f" {name}" if name else ""
+        return (
+            f"/* UNIQUE: SAVEPOINT{sp} dropped -- PL/pgSQL has no explicit "
+            "savepoints; wrap the statements in a BEGIN … EXCEPTION block, which "
+            "rolls back to its start on error (docs/03-unsupported.md) */"
+        )
+
+    def _rollback_to_savepoint(self, name: str) -> str:
+        return (
+            f"/* UNIQUE: ROLLBACK TO SAVEPOINT {name} dropped -- PL/pgSQL has no "
+            "explicit savepoints; the enclosing BEGIN … EXCEPTION block rolls "
+            "back automatically on error (docs/03-unsupported.md) */"
+        )
+
     def _sleep_call(self, secs: str) -> str:
         return f"PERFORM pg_sleep({secs});"
 

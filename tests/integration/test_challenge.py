@@ -5755,3 +5755,34 @@ class TestRaiserrorFormatArgs:
         out = _exec_lines(_tx(src, "tsql", "oracle"))
         assert "'value is ' || 42 || ' today'" in out, out
         assert "%d" not in out, out
+
+
+class TestProcSavepointComposition:
+    """red2-ora-proc-savepoint-as: SAVEPOINT is correct standalone but inside a
+    routine emitted invalid ``SAVEPOINT AS sp1`` (embedded-DML mis-parse). Model
+    it as a transaction statement: no spurious AS; T-SQL SAVE/ROLLBACK
+    TRANSACTION sp1; PG has no plpgsql savepoints -> warned degrade."""
+
+    def test_no_spurious_as_and_per_target_savepoint(self) -> None:
+        src = _case("challenge_oracle.sql", "red2-ora-proc-savepoint-as")
+        for target in ("mysql", "oracle"):
+            out = _exec_lines(_tx(src, "oracle", target))
+            assert "SAVEPOINT sp1" in out and "SAVEPOINT AS" not in out, (target, out)
+            assert "ROLLBACK TO SAVEPOINT sp1" in out, (target, out)
+
+    def test_tsql_uses_save_transaction(self) -> None:
+        src = _case("challenge_oracle.sql", "red2-ora-proc-savepoint-as")
+        out = _exec_lines(_tx(src, "oracle", "tsql"))
+        assert "SAVE TRANSACTION sp1" in out, out
+        assert "ROLLBACK TRANSACTION sp1" in out, out
+        assert "SAVEPOINT AS" not in out, out
+
+    def test_pg_degrades_savepoint_with_warning(self) -> None:
+        src = _case("challenge_oracle.sql", "red2-ora-proc-savepoint-as")
+        r = Transpiler().transpile(src, "oracle", "postgresql")
+        body = _exec_lines(r.sql)
+        assert "SAVEPOINT AS" not in body, r.sql
+        assert "SAVEPOINT sp1 dropped" in body, r.sql
+        assert any(
+            "no explicit savepoints" in w.message for w in r.warnings
+        ), r.warnings
