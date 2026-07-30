@@ -3030,6 +3030,12 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # no direct VARBINARY(MAX) equivalent.
     if up == "DATALENGTH" and len(node.args) == 1 and dialect != "tsql":
         dl_arg = node.args[0]
+        # An NVARCHAR (national) value is stored as UTF-16 (2 bytes per code
+        # unit), so DATALENGTH(N'abc') = 6 — not the 3 that OCTET_LENGTH of the
+        # UTF-8 text gives. For a national LITERAL the exact byte count is known,
+        # so fold it (BMP or supplementary handled by the UTF-16 encoding).
+        if isinstance(dl_arg, Literal) and dl_arg.dtype == "national":
+            return str(len(str(dl_arg.value).encode("utf-16-le")))
         if isinstance(dl_arg, CastExpression) and dl_arg.target_type.name.upper() in (
             "VARBINARY",
             "BINARY",

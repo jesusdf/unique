@@ -92,6 +92,14 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "oracle": {"present": ["TRUNC(AVG(x))"], "absent": []},
         "mysql": {"present": ["TRUNCATE(AVG(x), 0)"], "absent": []},
     },
+    # func: DATALENGTH(N'abc') = 6 (NVARCHAR is UTF-16, 2 bytes/char), not the
+    # OCTET_LENGTH=3 of the UTF-8 text. Fold a national literal to its exact
+    # UTF-16 byte count (verified against T-SQL, incl. supplementary chars).
+    "reda-ts-datalength-nchar": {
+        "postgresql": {"present": ["6 AS r"], "absent": ["OCTET_LENGTH", "DATALENGTH"]},
+        "mysql": {"present": ["6 AS r"], "absent": ["OCTET_LENGTH", "DATALENGTH"]},
+        "oracle": {"present": ["6 AS r"], "absent": ["LENGTHB", "DATALENGTH"]},
+    },
     "reda-ts-date-plus-int": {
         "mysql": {"present": ["DATE_ADD(", "INTERVAL 1 DAY"], "absent": ["+ 1"]},
         "postgresql": {"present": ["+ INTERVAL '1 day'"], "absent": ["+ 1 AS"]},
