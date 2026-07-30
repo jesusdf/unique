@@ -535,3 +535,6 @@ SELECT CONVERT(INT, '26', 0) AS r
 
 -- CASE[open][class=consistency]: reda-ts-exec-swallow-next — fails on postgresql, oracle, mysql. When a degraded EXEC (a system proc like sp_rename with no target equivalent) is followed by another statement separated by ';' (not GO), the degrade carrier SWALLOWS the following statement: 'EXEC sp_rename ''t.a'',''b'',''COLUMN''; UPDATE t SET b = 1;' emits only a comment for BOTH, silently dropping the valid UPDATE (the warning names only sp_rename). With GO separation the UPDATE correctly survives. Root cause: the '; '-split path folds trailing statements into the degraded EXEC's carrier. BLUE: split ';'-separated statements before degrading, so only the sp_rename becomes a carrier and the UPDATE still transpiles.
 EXEC sp_rename 't.a', 'b', 'COLUMN'; UPDATE t SET b = 1
+
+-- CASE[open][class=invalid]: reda-ts-hex-literal-arith — fails on postgresql, oracle. A T-SQL binary/hex literal in arithmetic, 0x0A + 5, treats 0x0A as the integer 10 -> 15. It is emitted as a BINARY value into PG ('\x0A'::bytea + 5) and Oracle (HEXTORAW('0A') + 5), neither of which allows arithmetic on a binary type: live PG 'operator does not exist: bytea + integer', Oracle ORA-00932. No warning. (MySQL x'0A' + 5 = 15 is fine.) BLUE: when a 0x.. literal is used in a numeric context, fold it to its integer value.
+SELECT 0x0A + 5 AS r
