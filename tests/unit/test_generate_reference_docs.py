@@ -28,7 +28,7 @@ class TestDeterminism:
         assert first == second
         assert first is not second
 
-    def test_page_set_is_the_expected_twelve_pairs_plus_two(self) -> None:
+    def test_page_set_is_the_expected_twelve_pairs_plus_three(self) -> None:
         pages = gen.generate_all()
         expected_pairs = {
             f"mappings-{s}-{t}.md"
@@ -38,8 +38,27 @@ class TestDeterminism:
         }
         assert len(expected_pairs) == 12
         assert expected_pairs <= set(pages)
-        assert {"limits.md", "coverage.md"} <= set(pages)
-        assert len(pages) == 14
+        assert {"limits.md", "coverage.md", "warnings.md"} <= set(pages)
+        assert len(pages) == 15
+
+
+class TestWarningsPage:
+    def test_row_per_code_with_anchor_and_message(self) -> None:
+        page = gen.render_warnings_page()
+        # A data row for every registered code, anchored for deep-linking.
+        for code in gen.DIAGNOSTICS:
+            assert f'<a id="{code.lower()}"></a>`{code}`' in page
+        # The message template appears (not the identity input) — spot-check one.
+        assert "SET IDENTITY_INSERT" in page
+
+    def test_covered_codes_show_rationale_uncovered_show_pending(self) -> None:
+        page = gen.render_warnings_page()
+        # A covered code renders its construct + a corpus-case link, not pending.
+        assert "reda-ts-identity-insert" in page
+        # An uncovered code renders the explicit pending marker.
+        uncovered = next(c for c in gen.DIAGNOSTICS if c not in gen.RATIONALES)
+        row = next(ln for ln in page.splitlines() if f"`{uncovered}`" in ln)
+        assert gen._RATIONALE_PENDING in row
 
     def test_every_page_carries_the_generated_banner(self) -> None:
         pages = gen.generate_all()

@@ -58,6 +58,8 @@ sys.path.insert(0, str(_ROOT / "src"))
 
 from unique.core import builtins as core_builtins  # noqa: E402
 from unique.core import mappings  # noqa: E402
+from unique.core.diagnostics import DIAGNOSTICS  # noqa: E402
+from unique.core.rationales import RATIONALES  # noqa: E402
 
 _OUT_DIR = _ROOT / "docs" / "reference"
 _CHALLENGE_DIR = _ROOT / "tests" / "fixtures" / "challenge"
@@ -495,6 +497,87 @@ def render_coverage_page() -> str:
 
 
 # ---------------------------------------------------------------------------
+# warnings.md — the per-code diagnostic catalog (B32 registry + B31 rationale).
+# ---------------------------------------------------------------------------
+
+_RATIONALE_PENDING = "_(rationale pending)_"
+
+
+def _code_sort_key(code: str) -> int:
+    return int(code.split("-")[1])
+
+
+def _example_cell(example_case: str) -> str:
+    """A link to the case's source of truth: a challenge-corpus slug points at
+    the corpus directory; a ``path::test`` reference points at the test file."""
+    if "::" in example_case:
+        path, _, test = example_case.partition("::")
+        return f"[`{test}`](../../{path})"
+    return f"[`{example_case}`](../../tests/fixtures/challenge/)"
+
+
+def render_warnings_page() -> str:
+    parts = [
+        _preamble(
+            "Diagnostic catalog (`UNIQUE-NNNN` warnings & errors)",
+            "the `UNIQUE-NNNN` registry (`src/unique/core/diagnostics.py`) and "
+            "the rationale side-table (`src/unique/core/rationales.py`)",
+        )
+    ]
+    n_with = sum(1 for c in DIAGNOSTICS if c in RATIONALES)
+    parts.append(
+        "One row per stable diagnostic code the transpiler can emit. `code` is "
+        "the grep/suppress token (`-- UNIQUE-1234: …`); `message` is the "
+        "human-readable template rendered live at the emission site. The "
+        "`construct` / `reason` / `example` / `divergence` columns are the "
+        f"B31 rationale — populated for {n_with} of {len(DIAGNOSTICS)} codes; "
+        f"the rest render `{_RATIONALE_PENDING}` until a rationale is added "
+        "(the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives "
+        "that count down). Anchor each row as "
+        "`warnings.md#unique-1234`.\n\n"
+    )
+    headers = [
+        "Code",
+        "Category",
+        "Message template",
+        "Construct",
+        "Reason",
+        "Example",
+        "Divergence",
+    ]
+    rows: list[tuple[str, ...]] = []
+    for code in sorted(DIAGNOSTICS, key=_code_sort_key):
+        diag = DIAGNOSTICS[code]
+        anchor = f'<a id="{code.lower()}"></a>`{code}`'
+        rat = RATIONALES.get(code)
+        if rat is None:
+            construct = _RATIONALE_PENDING
+            reason = example = divergence = "—"
+        else:
+            construct = rat.construct
+            reason = rat.reason
+            example = _example_cell(rat.example_case)
+            divergence = rat.divergence
+        rows.append(
+            (
+                anchor,
+                diag.category,
+                diag.message,
+                construct,
+                reason,
+                example,
+                divergence,
+            )
+        )
+    parts.append(_table(headers, rows))
+    parts.append(
+        f"\n{len(DIAGNOSTICS)} codes across "
+        f"{len({d.category for d in DIAGNOSTICS.values()})} categories.\n"
+    )
+    return "".join(parts)
+
+
+# ---------------------------------------------------------------------------
 # Orchestration: generate, write, --check.
 # ---------------------------------------------------------------------------
 
@@ -503,6 +586,7 @@ def generate_all() -> dict[str, str]:
     pages = build_mapping_pages()
     pages["limits.md"] = render_limits_page(build_limits_catalog())
     pages["coverage.md"] = render_coverage_page()
+    pages["warnings.md"] = render_warnings_page()
     return pages
 
 
