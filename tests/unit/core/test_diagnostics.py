@@ -113,12 +113,12 @@ def test_neutralize_dollar_quotes_defangs_delimiters():
 # To lower it: add honestly-sourced entries to unique.core.rationales.RATIONALES
 # (each traceable to a docs/rationale/ page, a docs/03-unsupported.md section,
 # or an emission-site docstring — never invented), then set this to the new,
-# smaller count. Current: 232 registered (B32 wave 3 added UNIQUE-1221…1232,
-# non-carrier warning codes) − 32 with a rationale = 200. Wave 3 does NOT add
-# rationale entries (that is B31's floor to lower later), so the new codes RAISE
-# this count by 12.
+# smaller count. Current: 233 registered − 96 with a rationale = 137. This
+# session (statement/orchestration/validation categories only) added 63
+# entries, driving the floor 200 → 137; a sibling session covers the
+# procedural/expression/ddl categories and lowers it further separately.
 # ---------------------------------------------------------------------------
-_RATIONALE_UNCOVERED_FLOOR = 200
+_RATIONALE_UNCOVERED_FLOOR = 137
 
 _CASE_HEADER_RE = re.compile(
     r"^--\s*CASE\[[a-z]+\](?:\[[^\]]*\])*:\s*([A-Za-z0-9][A-Za-z0-9_-]*)\b"
