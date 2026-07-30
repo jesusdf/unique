@@ -28,17 +28,23 @@ This is the narrative companion to two machine-checked sources of truth:
 
 ## Entry format (keep it — the pages are grep-able by construct)
 
+Each entry is a cookbook recipe — problem, solution, discussion, see also:
+
 ```markdown
 ### <construct> (<source engine>) → <target(s)>
 
-**Source semantics.** What the construct does, in one or two sentences.
-**Why there is no direct mapping.** The target-engine-level reason (missing
-value type, different clamping rule, parser limitation…), not "unsupported".
-**What Unique emits.** The output shape, with a real input/output example
-copied from the corpus case.
-**Divergence & warning.** `faithful` (same result set), or the exact
-divergence and the warning text the user will see.
-**References.** Corpus case id(s) · 03-unsupported § (if a limit).
+**Problem.** What the construct does, and what you expect from it when
+migrating it, in one or two sentences (second person, direct).
+**Solution.** A real input/output example copied from the corpus case,
+*first*, then one sentence on the output shape Unique emits.
+**Discussion.** The target-engine-level reason a direct mapping does not
+exist (missing value type, different clamping rule, parser limitation…), not
+"unsupported" — followed by the divergence as a blockquote callout:
+`> **Warning** …` (the exact divergence and the warning text the user will
+see), or `> **Note** faithful — …` (same result set, with the proof cited).
+**See Also.** Corpus case id(s) · 03-unsupported § (if a limit) · a link to
+[warnings.md](../reference/warnings.md) when the entry names a diagnostic
+code.
 ```
 
 Rules for contributors (human or agent): every claim must be traceable to a
