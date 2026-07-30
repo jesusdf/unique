@@ -5528,3 +5528,24 @@ class TestTryCastMysqlNull:
     def test_numeric_literal_still_casts(self) -> None:
         out = _tx("SELECT TRY_CAST('123' AS INT) AS r", "tsql", "mysql")
         assert "CAST('123' AS SIGNED)" in out, out
+
+
+class TestExecNamedParamMysql:
+    """red2-ts-exec-named-param-mysql: T-SQL ``EXEC proc @p = v`` (named
+    binding) became ``CALL proc(v_p = v)`` on MySQL — 1054 (no named-argument
+    syntax). MySQL CALL is positional-only: drop the names to positional and
+    warn; PG/Oracle keep the ``name => v`` form."""
+
+    def test_mysql_call_is_positional_and_warns(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-exec-named-param-mysql")
+        r = Transpiler().transpile(src, "tsql", "mysql")
+        out = _exec_lines(r.sql)
+        assert "CALL get_rows(1, 0)" in out, out
+        assert "=" not in out.split("get_rows", 1)[1].split(")", 1)[0], out
+        assert any("no named arguments" in w.message for w in r.warnings), r.warnings
+
+    def test_pg_and_oracle_keep_named_args(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-exec-named-param-mysql")
+        for target in ("postgresql", "oracle"):
+            out = _exec_lines(_tx(src, "tsql", target))
+            assert "=>" in out, (target, out)

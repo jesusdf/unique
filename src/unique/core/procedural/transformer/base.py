@@ -2741,6 +2741,23 @@ class ProceduralTransformer:
             # RHS variable value keeps its own transformation.
             rewritten = re.sub(r"@(\w+)\s*=(?![=>])\s*", rf"\1 {op} ", expr.sql)
             expr = RawSQL(sql=rewritten, reason=expr.reason)
+        elif (
+            self._target == "mysql"
+            and isinstance(expr, RawSQL)
+            and re.search(r"@\w+\s*=(?![=>])", expr.sql)
+        ):
+            # MySQL's CALL has no named-argument syntax — ``@id = value``
+            # became ``v_id = value`` (a bogus boolean over a column, error
+            # 1054). Drop the parameter names to positional (order preserved,
+            # matches declaration order in generated scripts) *before* the
+            # generic @var rename, and warn — the same contract as the
+            # ``=>``-form CALL lowering in the MySQL transformer.
+            self._warnings.append(
+                "MySQL CALL has no named arguments; passed positionally "
+                "(verify the argument order matches the declaration)"
+            )
+            rewritten = re.sub(r"@(\w+)\s*=(?![=>])\s*", "", expr.sql)
+            expr = RawSQL(sql=rewritten, reason=expr.reason)
         new_expr = self._transform_node(expr)
         new_params = tuple(self._transform_node(p) for p in node.params)
         return ExecuteStatement(
