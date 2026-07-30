@@ -26,6 +26,7 @@ from unique.core.converter import (
     COLUMN_TYPES,
     DATE_COLUMNS,
     DEGRADED_ROUTINES,
+    ENUM_COLUMNS,
     IDENTITY_COLUMNS,
     PG_COMPOSITE_TYPES,
     PG_DOMAIN_TYPES,
@@ -41,6 +42,7 @@ from unique.core.converter import (
     harvest_column_not_null,
     harvest_column_types,
     harvest_date_columns,
+    harvest_enum_columns,
     harvest_identity_columns,
     harvest_pg_composite_types,
     harvest_pg_domains,
@@ -402,6 +404,14 @@ class Transpiler:
             temp_tables = harvest_temp_tables(sql)
             if temp_tables:
                 temp_tables_token = TEMP_TABLES.set(temp_tables)
+        # MySQL ENUM columns sort by declaration index; the degrade to
+        # VARCHAR+CHECK loses that order, so the transformer rewrites
+        # ordering-sensitive uses into an ordinal CASE (B29).
+        enum_columns_token = None
+        if source == "mysql" and target != "mysql":
+            enum_columns = harvest_enum_columns(sql)
+            if enum_columns:
+                enum_columns_token = ENUM_COLUMNS.set(enum_columns)
         # Cross-statement column-type metadata from the script's own CREATE
         # TABLEs (MySQL/T-SQL ALTERs re-state the type; LOB expression
         # indexes degrade).
@@ -709,6 +719,8 @@ class Transpiler:
                 IDENTITY_COLUMNS.reset(identity_token)
             if temp_tables_token is not None:
                 TEMP_TABLES.reset(temp_tables_token)
+            if enum_columns_token is not None:
+                ENUM_COLUMNS.reset(enum_columns_token)
             if column_types_token is not None:
                 COLUMN_TYPES.reset(column_types_token)
             if column_not_null_token is not None:

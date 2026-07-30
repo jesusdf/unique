@@ -23,7 +23,7 @@ own engine first.
 
 | id | class | engines | wrong output | expected | evidence |
 |----|-------|---------|--------------|----------|----------|
-| my-enum-order | consistency (4) | mysql→postgresql,tsql,oracle | ORDER BY a = alphabetical ('hi','lo','mid') | ENUM index order ('lo','mid','hi') | live: MySQL=('lo','mid','hi'); PG (VARCHAR)=('hi','lo','mid'). No warning. BLUE note: MySQL ENUM ordering is by declaration index — either warn that the ordering semantic is lost when degrading ENUM to VARCHAR+CHECK, or emit a mapping table / CASE-based sort key. At minimum this must not silently reorder.  **MAINTAINER DECISION 2026-07-30: convert to a feature brief (docs/TODO.md) — the faithful ENUM-ordinal sort-key mapping is a cross-statement feature; do not warn-patch. Case stays [open] until the brief is executed.** |
+| _(my-enum-order closed 2026-07-30 → challenge `[fixed]`, B29)_ | | | | | |
 
 ### Batch summary (RED 2026-07-30, PG/MySQL sources)
 - 24 findings, 90 points, 6 classes. START commit cedf53a (worktree).

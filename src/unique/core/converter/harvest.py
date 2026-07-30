@@ -233,6 +233,60 @@ def harvest_column_types(sql: str) -> dict[str, dict[str, str]]:
     return result
 
 
+def _scan_balanced(text: str, i: int) -> int:
+    """Index just past the ``)`` that closes the ``(`` already consumed at *i*
+    (single-quote aware, ``''`` escapes; depth starts at 1)."""
+    depth = 1
+    while i < len(text) and depth:
+        ch = text[i]
+        if ch == "'":
+            i += 1
+            while i < len(text):
+                if text[i : i + 2] == "''":
+                    i += 2
+                    continue
+                if text[i] == "'":
+                    break
+                i += 1
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        i += 1
+    return i
+
+
+_ENUM_HEAD_RE = re.compile(r'(?is)^\s*(\[[^\]]+\]|`[^`]+`|"[^"]+"|\w+)\s+ENUM\s*\(')
+_ENUM_VALUE_RE = re.compile(r"'((?:[^']|'')*)'")
+
+
+def harvest_enum_columns(sql: str) -> dict[str, dict[str, tuple[str, ...]]]:
+    """MySQL ENUM columns per table from the script's own CREATE TABLEs
+    (table -> {column -> ordered value tuple}, lowercase keys). The ordered
+    value list IS the column's sort order on MySQL; the transformer uses it to
+    rewrite ordering-sensitive uses into an ordinal ``CASE`` (B29). SET is
+    excluded — it is an unordered combination, so it carries no sort key."""
+    from unique.core.converter._base import _split_top_level_commas
+
+    result: dict[str, dict[str, tuple[str, ...]]] = {}
+    for m in _CT_HEAD_RE.finditer(sql):
+        body = sql[m.end() : _scan_balanced(sql, m.end()) - 1]
+        table = m.group(1).replace("[", "").replace("]", "").replace('"', "")
+        table = table.split(".")[-1].lstrip("#").lower()
+        cols: dict[str, tuple[str, ...]] = {}
+        for item in _split_top_level_commas(body):
+            em = _ENUM_HEAD_RE.match(item)
+            if not em or em.group(1).strip('[]"`').upper() in _CT_ELEMENT_HEADS:
+                continue
+            inner = item[em.end() : _scan_balanced(item, em.end()) - 1]
+            values = tuple(v.replace("''", "'") for v in _ENUM_VALUE_RE.findall(inner))
+            if values:
+                cols[em.group(1).strip('[]"`').lower()] = values
+        if cols:
+            result[table] = cols
+    return result
+
+
 def harvest_column_not_null(sql: str) -> dict[str, dict[str, bool]]:
     """Per-column NOT NULL knowledge from the script's own CREATE TABLEs
     (table -> {column -> True if declared NOT NULL else False}, lowercase

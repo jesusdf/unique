@@ -1128,6 +1128,24 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "tsql": {"present": ["a NUMERIC(20)"], "absent": ["BIT(64)"]},
         "oracle": {"present": ["a NUMBER(20)"], "absent": ["BIT(64)"]},
     },
+    # BLUE 2026-07-30 (B29): a MySQL ENUM sorts by declaration index; the
+    # VARCHAR+CHECK degrade loses that, so ORDER BY on the column is rewritten
+    # into the ordinal CASE sort key (every target now orders lo<mid<hi). The
+    # projected column stays the plain value.
+    "my-enum-order": {
+        "postgresql": {
+            "present": ["ORDER BY CASE a", "WHEN 'lo' THEN 1", "WHEN 'hi' THEN 3"],
+            "absent": ["ORDER BY a ", "ORDER BY a\n"],
+        },
+        "tsql": {
+            "present": ["ORDER BY CASE a", "WHEN 'lo' THEN 1", "WHEN 'hi' THEN 3"],
+            "absent": ["ORDER BY a ", "ORDER BY a\n"],
+        },
+        "oracle": {
+            "present": ["ORDER BY CASE a", "WHEN 'lo' THEN 1", "WHEN 'hi' THEN 3"],
+            "absent": ["ORDER BY a ", "ORDER BY a\n"],
+        },
+    },
     # BLUE 2026-07-30: multi-table DELETE join modelled per target.
     "my-multitable-delete-join": {
         "postgresql": {
