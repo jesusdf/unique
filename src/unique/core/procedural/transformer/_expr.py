@@ -28,6 +28,7 @@ from unique.core.mappings import (
     CURRENT_TIMESTAMP_EXPR,
     LAST_IDENTITY_EXPR,
     LAST_IDENTITY_SOURCE_FUNCS,
+    oracle_month_add_daypreserving,
 )
 
 if TYPE_CHECKING:  # pragma: no cover - import cycle guard, typing only
@@ -253,11 +254,11 @@ class ExpressionRewriter:
                 elif unit == "WEEK":
                     repl = f"({date_expr} + ({amount}) * 7)"
                 elif unit == "MONTH":
-                    repl = f"ADD_MONTHS({date_expr}, {amount})"
+                    repl = oracle_month_add_daypreserving(date_expr, amount)
                 elif unit == "QUARTER":
-                    repl = f"ADD_MONTHS({date_expr}, ({amount}) * 3)"
+                    repl = oracle_month_add_daypreserving(date_expr, f"({amount}) * 3")
                 elif unit == "YEAR":
-                    repl = f"ADD_MONTHS({date_expr}, ({amount}) * 12)"
+                    repl = oracle_month_add_daypreserving(date_expr, f"({amount}) * 12")
                 else:
                     repl = f"DATE_ADD({inner})"
             else:
@@ -1364,9 +1365,9 @@ class ExpressionRewriter:
                 if unit == "DAY":
                     return f"({date} + {num})"
                 if unit == "MONTH":
-                    return f"ADD_MONTHS({date}, {num})"
+                    return oracle_month_add_daypreserving(date, num)
                 if unit == "YEAR":
-                    return f"ADD_MONTHS({date}, ({num}) * 12)"
+                    return oracle_month_add_daypreserving(date, f"({num}) * 12")
                 if unit in ("HOUR", "MINUTE", "SECOND"):
                     return f"({date} + NUMTODSINTERVAL({num}, '{unit}'))"
                 return None

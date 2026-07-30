@@ -1159,3 +1159,22 @@ def tsql_call_needs_schema(name: str) -> bool:
         and upper not in FOREIGN_BUILTIN_FUNCTIONS
         and upper not in TSQL_NEVER_QUALIFY
     )
+
+
+def oracle_month_add_daypreserving(operand: str, months: str) -> str:
+    """Oracle month-add reproducing T-SQL/MySQL/PG ``DATEADD(MONTH)`` semantics.
+
+    Oracle's ``ADD_MONTHS`` sticks to the target month's last day when ``operand``
+    is its own month's last day (``ADD_MONTHS('2020-02-29', 1)`` = ``'2020-03-31'``),
+    whereas T-SQL/MySQL/PG keep the day-of-month and clamp *down* only when the
+    target month is shorter (``'2020-03-29'``). Subtract the extra days
+    ``ADD_MONTHS`` may have stepped past the source's day-of-month. The subtractive
+    form (rather than a ``TRUNC``-to-first-of-month rebuild) keeps the operand's
+    time-of-day intact — challenge ``reda-ts-addmonths-lastday``. Consumed by both
+    the DML converter and the procedural transformer (dual-pipeline symmetry).
+    """
+    add = f"ADD_MONTHS({operand}, {months})"
+    return (
+        f"{add} - (EXTRACT(DAY FROM {add}) - "
+        f"LEAST(EXTRACT(DAY FROM {operand}), EXTRACT(DAY FROM LAST_DAY({add}))))"
+    )

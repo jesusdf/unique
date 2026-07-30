@@ -36,7 +36,11 @@ class TestDateAdd:
         out = self.t.transpile(
             "SELECT DATEADD(month, 3, d) FROM t", "tsql", "oracle"
         ).sql
+        # A column operand may hold a month-end date, so the day-preserving
+        # compensation (LEAST of day-of-month vs target month length) always
+        # applies — a bare ADD_MONTHS would stick to month-end (reda-ts-addmonths).
         assert "ADD_MONTHS(d, 3)" in out
+        assert "LEAST(EXTRACT(DAY FROM d), EXTRACT(DAY FROM LAST_DAY(" in out
         _valid(out, "oracle")
 
     def test_tsql_dateadd_to_oracle_days(self) -> None:

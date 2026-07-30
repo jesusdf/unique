@@ -46,6 +46,7 @@ from unique.core.mappings import (
     LAST_IDENTITY_EXPR,
     LAST_IDENTITY_SOURCE_FUNCS,
     ORACLE_DATE_FORMAT_STYLES,
+    oracle_month_add_daypreserving,
     tsql_call_needs_schema,
 )
 
@@ -161,7 +162,12 @@ def _emit_date_add(node: FunctionCall, dialect: str) -> str | None:
                 signed = f"-{months}" if literal_n is not None else f"-({months})"
             else:
                 signed = months
-            return f"ADD_MONTHS({ts}, {signed})"
+            # T-SQL/MySQL/PG DATEADD(MONTH) keep the day-of-month; Oracle
+            # ADD_MONTHS additionally sticks to the target month's last day
+            # (challenge reda-ts-addmonths-lastday). Compensate so the result
+            # matches the source engine (a column operand may hold a month-end
+            # date at runtime, so this always applies).
+            return oracle_month_add_daypreserving(ts, signed)
         op = "-" if sub else "+"
         if unit == "WEEK":
             days = str(int(literal_n) * 7) if literal_n is not None else f"({n}) * 7"
