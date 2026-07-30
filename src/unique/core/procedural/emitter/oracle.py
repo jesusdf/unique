@@ -245,7 +245,7 @@ class OracleEmitter(ProceduralEmitter):
         # discarded value. A function keeps ``RETURN <value>``.
         if getattr(self, "_in_oracle_procedure", False) and node.value:
             val = self._emit_node(node.value)
-            return f"RETURN;  -- UNIQUE: discarded procedure RETURN value ({val})"
+            return f"RETURN;  -- UNIQUE-1177: discarded procedure RETURN value ({val})"
         # PG coerces a numeric RETURN into a boolean function; Oracle's
         # BOOLEAN takes no numbers (PLS-00382) — the comparison IS the
         # boolean (wave 227).
@@ -510,7 +510,7 @@ class OracleEmitter(ProceduralEmitter):
                 f"-- {line}" if line.strip() else "--" for line in out.splitlines()
             )
             return (
-                "-- UNIQUE: trigger reads the T-SQL inserted/deleted "
+                "-- UNIQUE-1179: trigger reads the T-SQL inserted/deleted "
                 "pseudo-tables in a set-based way Oracle cannot express (no "
                 "transition tables — use a compound trigger); the translation "
                 "is preserved commented out for a manual rewrite:\n" + commented
@@ -691,7 +691,7 @@ class OracleEmitter(ProceduralEmitter):
                     return (
                         f"EXECUTE IMMEDIATE {stmt} USING "
                         f"{', '.join(values)}; "
-                        "/* UNIQUE: sp_executesql named parameters bind "
+                        "/* UNIQUE-1180: sp_executesql named parameters bind "
                         "POSITIONALLY here — spell the placeholders inside "
                         "the dynamic string as :1, :2, … "
                         "(docs/03-unsupported.md) */"

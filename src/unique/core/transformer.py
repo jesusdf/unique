@@ -47,12 +47,20 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TransformWarning:
-    """A non-fatal issue detected during transformation."""
+    """A non-fatal issue detected during transformation.
+
+    ``code`` is the stable ``UNIQUE-NNNN`` diagnostic code (see
+    ``unique.core.diagnostics``) when the warning was synthesized from a coded
+    carrier; ``None`` for warnings not yet coded (B32 wave 3 closes the
+    remaining gap). ``str()``/``.message`` are unchanged, so existing consumers
+    keep working.
+    """
 
     message: str
     feature: str
     source_dialect: str
     target_dialect: str
+    code: str | None = None
 
 
 @dataclass

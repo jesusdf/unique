@@ -20,7 +20,7 @@ class TestNoSilentLoss:
             "WHEN NOT MATCHED THEN INSERT (id, v) VALUES (s.id, s.v);"
         )
         result = self.t.transpile(sql, "tsql", "mysql")
-        if "UNIQUE:" in result.sql:
+        if "UNIQUE-" in result.sql:
             # Dropped (or partially dropped) statement must be signalled.
             assert result.warnings, "carrier comment present but warnings empty"
 
@@ -31,7 +31,7 @@ class TestNoSilentLoss:
             "CONNECT BY PRIOR employee_id = manager_id"
         )
         result = self.t.transpile(sql, "oracle", "postgresql")
-        assert "UNIQUE:" in result.sql
+        assert "UNIQUE-" in result.sql
         assert result.warnings, "carrier comment present but warnings empty"
         assert result.unsupported, "dropped executable statement not in unsupported"
 
@@ -48,7 +48,7 @@ class TestNoSilentLoss:
         ]
         for sql, source, target in lossy_inputs:
             result = self.t.transpile(sql, source, target)
-            carriers = [line for line in result.sql.splitlines() if "UNIQUE:" in line]
+            carriers = [line for line in result.sql.splitlines() if "UNIQUE-" in line]
             if carriers:
                 assert (
                     result.warnings
@@ -56,7 +56,7 @@ class TestNoSilentLoss:
 
     def test_clean_conversion_synthesizes_nothing(self) -> None:
         result = self.t.transpile("SELECT id FROM t", "tsql", "postgresql")
-        assert "UNIQUE:" not in result.sql
+        assert "UNIQUE-" not in result.sql
         assert result.warnings == []
         assert result.unsupported == []
 
@@ -75,7 +75,7 @@ class TestNoSilentLoss:
             ") ON [PRIMARY]"
         )
         result = self.t.transpile(sql, "tsql", "postgresql")
-        assert "UNIQUE:" in result.sql
+        assert "UNIQUE-" in result.sql
         assert result.warnings, "degraded statement must be signalled"
         leaked = [
             line

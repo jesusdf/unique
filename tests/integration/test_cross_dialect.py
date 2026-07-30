@@ -411,7 +411,7 @@ class TestCrossDialectDDL:
         body = executable_lines(result.sql)
         assert "CREATE TABLE" in body.upper(), result.sql
         assert "PRIMARY KEY" in body.upper(), result.sql
-        assert "UNIQUE:" in result.sql, result.sql
+        assert "UNIQUE-" in result.sql, result.sql
         assert result.warnings, "dropped physical clause must be signalled"
 
     @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
@@ -517,7 +517,10 @@ class TestCrossDialectDDL:
         result = transpiler.transpile(sql, "mysql", "postgresql")
         assert "CREATE TABLE" in result.sql.upper()
         assert "VARCHAR(40)" in result.sql.upper()
-        assert "-- UNIQUE: Unhandled" not in result.sql
+        assert not re.search(
+            re.escape("-- UNIQUE") + r"(?:-\d{4})?" + re.escape(": Unhandled"),
+            result.sql,
+        )
 
     def test_mysql_binary_type_preserved(self, transpiler: Transpiler) -> None:
         # Binary data must survive, mapped to the target's binary type — not left
@@ -542,7 +545,7 @@ class TestCrossDialectDDL:
         result = transpiler.transpile(sql, "tsql", target)
         assert "total VARCHAR" not in result.sql.upper()
         assert "GENERATED ALWAYS AS" not in result.sql.upper()
-        assert "UNIQUE:" in result.sql
+        assert "UNIQUE-" in result.sql
         assert "total" in result.sql
         assert ",\n)" not in result.sql  # CREATE TABLE stays valid
 
@@ -595,7 +598,7 @@ class TestTSQLIdioms:
         assert result.sql.count(";") >= 2
 
     def test_no_go_after_comment_only_output(self, transpiler: Transpiler) -> None:
-        # Unsupported statements we turn into '-- UNIQUE:' comments must not be
+        # Unsupported statements we turn into '-- UNIQUE-' comments must not be
         # followed by GO either, even though their batch isn't a COMMENT batch.
         sql = "SET statement_timeout = 0;\nSET lock_timeout = 0;\nSELECT 1;"
         result = transpiler.transpile(sql, "postgresql", "tsql")
@@ -665,7 +668,7 @@ class TestComputedColumnPortability:
         for target in ("postgresql", "oracle"):
             out = transpiler.transpile(sql, "tsql", target).sql
             assert ",\n)" not in out  # valid CREATE TABLE, no dangling comma
-            assert "UNIQUE:" in out
+            assert "UNIQUE-" in out
             assert "GENERATED ALWAYS AS" not in out.upper()
 
     def test_mysql_also_gets_comment(self, transpiler: Transpiler) -> None:
@@ -673,7 +676,7 @@ class TestComputedColumnPortability:
         # column too, so it also gets a documented comment.
         sql = "CREATE TABLE t (id INT, total AS (id * 2) PERSISTED)"
         out = transpiler.transpile(sql, "tsql", "mysql").sql
-        assert "UNIQUE:" in out
+        assert "UNIQUE-" in out
         assert "GENERATED ALWAYS AS" not in out.upper()
 
     def test_terminator_not_swallowed_by_trailing_comment(
@@ -697,14 +700,20 @@ class TestDDLPassthrough:
         result = transpiler.transpile(sql, "tsql", target)
         assert "ALTER TABLE" in result.sql.upper()
         assert "FOREIGN KEY" in result.sql.upper()
-        assert "-- UNIQUE: Unhandled" not in result.sql
+        assert not re.search(
+            re.escape("-- UNIQUE") + r"(?:-\d{4})?" + re.escape(": Unhandled"),
+            result.sql,
+        )
 
     @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
     def test_alter_add_primary_key(self, transpiler: Transpiler, target: str) -> None:
         sql = "ALTER TABLE products ADD CONSTRAINT pk PRIMARY KEY (id)"
         result = transpiler.transpile(sql, "tsql", target)
         assert "PRIMARY KEY" in result.sql.upper()
-        assert "-- UNIQUE: Unhandled" not in result.sql
+        assert not re.search(
+            re.escape("-- UNIQUE") + r"(?:-\d{4})?" + re.escape(": Unhandled"),
+            result.sql,
+        )
 
     @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
     def test_alter_add_column(self, transpiler: Transpiler, target: str) -> None:
@@ -712,21 +721,30 @@ class TestDDLPassthrough:
         result = transpiler.transpile(sql, "tsql", target)
         assert "ALTER TABLE" in result.sql.upper()
         assert "EXTRA" in result.sql.upper()
-        assert "-- UNIQUE: Unhandled" not in result.sql
+        assert not re.search(
+            re.escape("-- UNIQUE") + r"(?:-\d{4})?" + re.escape(": Unhandled"),
+            result.sql,
+        )
 
     @pytest.mark.parametrize("target", ["oracle", "postgresql", "mysql"])
     def test_create_index(self, transpiler: Transpiler, target: str) -> None:
         sql = "CREATE INDEX idx ON customers (last_name, first_name)"
         result = transpiler.transpile(sql, "tsql", target)
         assert "CREATE INDEX" in result.sql.upper()
-        assert "-- UNIQUE: Unhandled" not in result.sql
+        assert not re.search(
+            re.escape("-- UNIQUE") + r"(?:-\d{4})?" + re.escape(": Unhandled"),
+            result.sql,
+        )
 
     @pytest.mark.parametrize("target", ["oracle", "postgresql"])
     def test_create_sequence(self, transpiler: Transpiler, target: str) -> None:
         sql = "CREATE SEQUENCE seq START WITH 1 INCREMENT BY 1"
         result = transpiler.transpile(sql, "tsql", target)
         assert "CREATE SEQUENCE" in result.sql.upper()
-        assert "-- UNIQUE: Unhandled" not in result.sql
+        assert not re.search(
+            re.escape("-- UNIQUE") + r"(?:-\d{4})?" + re.escape(": Unhandled"),
+            result.sql,
+        )
 
     @pytest.mark.parametrize("keyword", ["CLUSTERED", "NONCLUSTERED"])
     @pytest.mark.parametrize("target", ["postgresql", "mysql", "oracle"])
@@ -738,11 +756,14 @@ class TestDDLPassthrough:
         assert "CREATE INDEX" in result.sql.upper()
         # The physical hint is stripped from the executable index but preserved
         # in a restorable /* UNIQUE: … */ note (no silent loss).
-        executable = result.sql.split("/* UNIQUE:")[0]
+        executable = result.sql.split("/* UNIQUE-")[0]
         assert keyword not in executable.upper()
-        assert "/* UNIQUE:" in result.sql
+        assert "/* UNIQUE-" in result.sql
         assert keyword in result.sql.upper()
-        assert "-- UNIQUE: Unhandled" not in result.sql
+        assert not re.search(
+            re.escape("-- UNIQUE") + r"(?:-\d{4})?" + re.escape(": Unhandled"),
+            result.sql,
+        )
 
     @pytest.mark.parametrize("keyword", ["CLUSTERED", "NONCLUSTERED"])
     @pytest.mark.parametrize("target", ["postgresql", "oracle", "mysql"])
@@ -755,7 +776,7 @@ class TestDDLPassthrough:
         forward = transpiler.transpile(original, "tsql", target).sql
         back = transpiler.transpile(forward, target, "tsql").sql
         assert f"CREATE {keyword} INDEX" in back.upper()
-        assert "/* UNIQUE:" not in back  # note consumed by the restore
+        assert "/* UNIQUE-" not in back  # note consumed by the restore
 
     def test_include_index_kept_for_postgresql(self, transpiler: Transpiler) -> None:
         sql = "CREATE INDEX idx ON t (a) INCLUDE (b, c)"
@@ -798,7 +819,7 @@ class TestDDLPassthrough:
         assert "CREATE INDEX" in result.sql.upper()
         # Storage options are stripped from the executable index but preserved
         # in a restorable /* UNIQUE: … */ note (no silent loss).
-        executable = result.sql.split("/* UNIQUE:")[0]
+        executable = result.sql.split("/* UNIQUE-")[0]
         assert "PAD_INDEX" not in executable.upper()
         assert "PAD_INDEX" in result.sql.upper()
         # The table reference (ON s.customer) must survive.
@@ -833,7 +854,10 @@ class TestDDLPassthrough:
         )
         result = transpiler.transpile(sql, "tsql", target)
         assert "MERGE" in result.sql.upper()
-        assert "-- UNIQUE: Unhandled" not in result.sql
+        assert not re.search(
+            re.escape("-- UNIQUE") + r"(?:-\d{4})?" + re.escape(": Unhandled"),
+            result.sql,
+        )
 
     def test_merge_to_mysql_documented(self, transpiler: Transpiler) -> None:
         sql = (

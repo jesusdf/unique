@@ -148,7 +148,7 @@ class TestPerTargetMapping:
         r = self._out("v INTERVAL DAY(2) TO SECOND(6);", "postgresql")
         up = r.sql.upper()
         assert "INTERVAL DAY TO SECOND" in up, r.sql
-        assert "DAY(2)" not in up.split("UNIQUE:")[0], r.sql
+        assert "DAY(2)" not in up.split("UNIQUE-")[0], r.sql
         assert r.warnings, r.sql
 
 

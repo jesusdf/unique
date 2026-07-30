@@ -475,9 +475,8 @@ def _cte_dml_unsupported(sql: str, read: str, dialect: str) -> str | None:
         if dialect == "postgresql":
             return None
         return (
-            "data-modifying CTEs (WITH x AS (INSERT/UPDATE/DELETE … "
-            "RETURNING)) are PostgreSQL-only; run the DML separately and "
-            "read its result from a table."
+            "data-modifying CTEs (WITH x AS (INSERT/UPDATE/DELETE … RETURNING)) are "
+            "PostgreSQL-only; run the DML separately and read its result from a table."
         )
     if dialect == "tsql":
         return None
@@ -491,20 +490,17 @@ def _cte_dml_unsupported(sql: str, read: str, dialect: str) -> str | None:
         )
     if dialect == "oracle":
         return (
-            "Oracle has no WITH clause on UPDATE/DELETE; inline the CTE as a "
-            "subquery or rewrite as a MERGE."
+            "Oracle has no WITH clause on UPDATE/DELETE; inline the CTE as a subquery "
+            "or rewrite as a MERGE."
         )
     return None
 
 
 _ORACLE_MODIFY_RE = re.compile(
-    r"(?is)^\s*ALTER\s+TABLE\s+(?P<table>[\w.\"]+)\s+MODIFY\s+"
-    r"(?:\((?P<parenspec>.+)\)|(?P<spec>[^;]+?))\s*;?\s*$"
+    r"(?is)^\s*ALTER\s+TABLE\s+(?P<table>[\w.\"]+)\s+MODIFY\s+(?:\((?P<parenspec>.+)\)|(?P<spec>[^;]+?))\s*;?\s*$"
 )
 _MODIFY_COL_RE = re.compile(
-    r"(?is)^(?P<col>[\w\"]+)\s*"
-    r"(?P<type>(?!NOT\b|NULL\b)[A-Za-z]\w*(?:\s*\(\s*\d+"
-    r"(?:\s*,\s*\d+)?\s*\))?)?\s*(?P<null>NOT\s+NULL|NULL)?$"
+    r"(?is)^(?P<col>[\w\"]+)\s*(?P<type>(?!NOT\b|NULL\b)[A-Za-z]\w*(?:\s*\(\s*\d+(?:\s*,\s*\d+)?\s*\))?)?\s*(?P<null>NOT\s+NULL|NULL)?$"
 )
 
 
@@ -652,8 +648,8 @@ def _merge_extended_clauses(
     tgt_sql = tree.this.sql(dialect=wd)
     for w in [x for x in exprs if x.args.get("source")]:
         anti = (
-            f"NOT EXISTS (SELECT 1 FROM {using.sql(dialect=wd)} "
-            f"WHERE {on.sql(dialect=wd)})"
+            f"NOT EXISTS (SELECT 1 FROM {using.sql(dialect=wd)} WHERE "
+            f"{on.sql(dialect=wd)})"
         )
         cond = w.args.get("condition")
         if cond is not None:
@@ -715,9 +711,9 @@ def _merge_extended_clauses(
                     None,
                     (
                         "conditional DELETE in MERGE reads a column the UPDATE "
-                        "assigns; Oracle evaluates DELETE WHERE against "
-                        "post-update values, which would delete rows the source "
-                        "keeps — rewrite the MERGE manually"
+                        "assigns; Oracle evaluates DELETE WHERE against post-update "
+                        "values, which would delete rows the source keeps — rewrite "
+                        "the MERGE manually"
                     ),
                 )
             if u_active is not None:
@@ -803,8 +799,8 @@ def _merge_carve_do_nothing(tree: exp.Merge) -> str | None:
     kept = [w for w in exprs if id(w) not in to_remove]
     if not kept:
         return (
-            "MERGE reduces to no action after DO NOTHING carve-out; "
-            "rewrite the MERGE manually"
+            "MERGE reduces to no action after DO NOTHING carve-out; rewrite the MERGE "
+            "manually"
         )
     whens.set("expressions", kept)
     return None
@@ -874,7 +870,7 @@ def _emit_node_inner(node: ASTNode, dialect: str) -> str:
         # line so the carrier stays a comment.
         reason = re.sub(r"\x1b\[[0-9;]*m", "", node.reason)
         reason = " ".join(reason.split())
-        return f"-- UNIQUE: {reason}\n{_comment_block(node.sql)}"
+        return f"-- UNIQUE-1003: {reason}\n{_comment_block(node.sql)}"
     if isinstance(node, PassthroughSQL):
         return _emit_passthrough(node, dialect)
     if isinstance(node, Script):
@@ -960,7 +956,7 @@ def _carry_index_nulls_order(source_sql: str, result: str, dialect: str) -> str:
     nulls = re.compile(r"(?i)\bNULLS\s+(?:FIRST|LAST)\b")
     if nulls.search(source_sql) and not nulls.search(result):
         return (
-            f"-- UNIQUE: NULLS FIRST/LAST index ordering has no {dialect} "
+            f"-- UNIQUE-1004: NULLS FIRST/LAST index ordering has no {dialect} "
             "equivalent; dropped (it affects only the index's physical null "
             "order, not query results)\n" + result
         )
@@ -978,8 +974,8 @@ def _pg_index_rebuild(sql: str, read: str, dialect: str) -> str | None:
     physical_kw = ""
     trailing = ""
     note = re.search(
-        r"(?is)\s*/\*\s*UNIQUE:\s*(?P<clauses>.+?)\s*--\s*tsql-only,"
-        r"[^*]*?physical index clause[^*]*?\*/",
+        r"(?is)\s*/\*\s*UNIQUE(?:-\d{4})?:\s*(?P<clauses>.+?)\s*--\s*tsql-only,[^*]*?"
+        r"physical index clause[^*]*?\*/",
         sql,
     )
     if note:
@@ -1028,11 +1024,11 @@ def _pg_index_rebuild(sql: str, read: str, dialect: str) -> str | None:
             # T-SQL has no expression indexes (computed columns needed);
             # a whole carrier beats invalid output.
             reason = (
-                "T-SQL has no expression indexes (add a computed column "
-                "and index it); statement preserved as a comment"
+                "T-SQL has no expression indexes (add a computed column and index it); "
+                "statement preserved as a comment"
             )
             body = "\n".join(f"-- {line}" for line in sql.strip().splitlines())
-            return f"-- UNIQUE: {reason}\n{body}"
+            return f"-- UNIQUE-1005: {reason}\n{body}"
         col = str(inner.sql(dialect="mysql" if dialect == "mysql" else "tsql"))
         if o.args.get("desc"):
             col += " DESC"
@@ -1066,11 +1062,11 @@ def _pg_index_rebuild(sql: str, read: str, dialect: str) -> str | None:
                     "filtered-index form; statement preserved as a comment"
                 )
                 body = "\n".join(f"-- {line}" for line in sql.strip().splitlines())
-                return f"-- UNIQUE: {reason}\n{body}"
+                return f"-- UNIQUE-1006: {reason}\n{body}"
             dropped_where = (
-                "\n-- UNIQUE: partial-index predicate dropped (no "
-                f"{dialect} filtered-index form); the index is broader "
-                f"than the source's: {where.this.sql(dialect=write)}"
+                "\n-- UNIQUE-1007: partial-index predicate dropped (no "
+                f"{dialect} filtered-index form); the index is broader than the "
+                f"source's: {where.this.sql(dialect=write)}"
             )
         else:
             where_sql = f" WHERE {rendered}"
@@ -1084,7 +1080,7 @@ def _pg_index_rebuild(sql: str, read: str, dialect: str) -> str | None:
         stmt += dropped_where
     if unique and not where_sql and dialect == "tsql":
         return (
-            f"{stmt};\n-- UNIQUE: PostgreSQL unique indexes treat NULLs as "
+            f"{stmt};\n-- UNIQUE-1008: PostgreSQL unique indexes treat NULLs as "
             "distinct; T-SQL allows a single NULL per unique index"
         )
     return stmt
@@ -1198,7 +1194,7 @@ def _emit_value_expression(node: ASTNode, dialect: str) -> str:
         # (``NOT NULL``, ``NOT col``) — as an operand of a comparison/IS — has no
         # T-SQL form (error 4145). Degrade the value to a documented carrier.
         carrier = (
-            "NULL /* UNIQUE: T-SQL has no boolean value type; NOT of a "
+            "NULL /* UNIQUE-1009: T-SQL has no boolean value type; NOT of a "
             "non-predicate (e.g. NOT NULL) has no equivalent -- see "
             "docs/03-unsupported.md */"
         )
@@ -1629,12 +1625,11 @@ def _tsql_drop_col_default(table: str, column: str) -> str:
     tn = table.strip('[]"`')
     cn = column.strip('[]"`')
     return (
-        "DECLARE @n SYSNAME; "
-        "SELECT @n = dc.name FROM sys.default_constraints dc "
-        "JOIN sys.columns c ON c.object_id = dc.parent_object_id "
-        "AND c.column_id = dc.parent_column_id "
-        f"WHERE dc.parent_object_id = OBJECT_ID('{tn}') AND c.name = '{cn}'; "
-        f"IF @n IS NOT NULL EXEC('ALTER TABLE {table} DROP CONSTRAINT ' + @n)"
+        "DECLARE @n SYSNAME; SELECT @n = dc.name FROM sys.default_constraints dc JOIN "
+        "sys.columns c ON c.object_id = dc.parent_object_id AND c.column_id = "
+        "dc.parent_column_id "
+        f"WHERE dc.parent_object_id = OBJECT_ID('{tn}') AND c.name = '{cn}'; IF @n IS "
+        f"NOT NULL EXEC('ALTER TABLE {table} DROP CONSTRAINT ' + @n)"
     )
 
 
@@ -1656,19 +1651,15 @@ def _tsql_alter_type_restating_nullability(table: str, col: str, dtype: str) -> 
     if known is False:
         return f"ALTER TABLE {table} ALTER COLUMN {col} {dtype} NULL"
     return (
-        f"-- UNIQUE: T-SQL ALTER COLUMN defaults the column to NULL; "
-        f"the script does not define {table}.{col}'s nullability, so it "
-        f"cannot be re-stated — verify the column keeps its "
-        f"constraint\nALTER TABLE {table} ALTER COLUMN {col} {dtype}"
+        f"-- UNIQUE-1010: T-SQL ALTER COLUMN defaults the column to NULL; the script "
+        f"does not define {table}.{col}'s nullability, so it cannot be re-stated — "
+        f"verify the column keeps its constraint\nALTER TABLE {table} ALTER COLUMN "
+        f"{col} {dtype}"
     )
 
 
 _TSQL_ADD_KEY_RE = re.compile(
-    r"(?isx)^\s*ALTER\s+TABLE\s+(?P<table>[\w.\[\]\"]+)\s+"
-    r"ADD\s+CONSTRAINT\s+(?P<name>[\w\[\]\"]+)\s+"
-    r"(?P<kind>PRIMARY\s+KEY|UNIQUE)\s*(?:CLUSTERED|NONCLUSTERED)?\s*"
-    r"\(\s*(?P<cols>[^()]*?)\s*\)"
-    r"(?P<tail>.*)$"
+    r"(?isx)^\s*ALTER\s+TABLE\s+(?P<table>[\w.\[\]\"]+)\s+ADD\s+CONSTRAINT\s+(?P<name>[\w\[\]\"]+)\s+(?P<kind>PRIMARY\s+KEY|UNIQUE)\s*(?:CLUSTERED|NONCLUSTERED)?\s*\(\s*(?P<cols>[^()]*?)\s*\)(?P<tail>.*)$"
 )
 _TSQL_ADD_KEY_TAIL_RE = re.compile(
     r"(?is)^\s*(?:WITH\s*\([^()]*\))?\s*(?:ON\s+[\w\[\]\"]+)?\s*;?\s*$"
@@ -1705,14 +1696,12 @@ def _tsql_add_key_constraint(sql: str, dialect: str) -> str | None:
     name_sql = _ident(m.group("name").strip('[]"'), True, dialect)
     kind = " ".join(m.group("kind").upper().split())
     return (
-        f"ALTER TABLE {table_sql} ADD CONSTRAINT {name_sql} "
-        f"{kind} ({', '.join(cols)})"
+        f"ALTER TABLE {table_sql} ADD CONSTRAINT {name_sql} {kind} ({', '.join(cols)})"
     )
 
 
 _RENAME_COLUMN_RE = re.compile(
-    r"(?is)^\s*ALTER\s+TABLE\s+(?P<table>[\w.\[\]\"`]+)\s+"
-    r"RENAME\s+COLUMN\s+(?P<old>[\w\[\]\"`]+)\s+TO\s+(?P<new>[\w\[\]\"`]+)\s*;?\s*$"
+    r"(?is)^\s*ALTER\s+TABLE\s+(?P<table>[\w.\[\]\"`]+)\s+RENAME\s+COLUMN\s+(?P<old>[\w\[\]\"`]+)\s+TO\s+(?P<new>[\w\[\]\"`]+)\s*;?\s*$"
 )
 
 
@@ -1747,7 +1736,7 @@ def _drop_named_default(sql: str) -> str:
         return sql
     cleaned = _NAMED_DEFAULT_RE.sub("", sql)
     notes = "\n".join(
-        f"-- UNIQUE: named DEFAULT constraint {n} dropped "
+        f"-- UNIQUE-1011: named DEFAULT constraint {n} dropped "
         "(defaults are anonymous on this engine)"
         for n in names
     )
@@ -1788,8 +1777,7 @@ def _portable_index(sql: str, dialect: str) -> str:
         # T-SQL's NULLS-low default matches Oracle's b-tree behaviour for
         # the ASC case anyway. Strip the emulation pairs.
         sql = re.sub(
-            r"(?is)CASE\s+WHEN\s+.+?\s+IS\s+NULL\s+THEN\s+1\s+ELSE\s+0"
-            r"\s+END(?:\s+(?:ASC|DESC))?\s*,\s*",
+            r"(?is)CASE\s+WHEN\s+.+?\s+IS\s+NULL\s+THEN\s+1\s+ELSE\s+0\s+END(?:\s+(?:ASC|DESC))?\s*,\s*",
             "",
             sql,
         )
@@ -1798,8 +1786,8 @@ def _portable_index(sql: str, dialect: str) -> str:
         # index clause) */`` note — CLUSTERED is positional (after CREATE
         # [UNIQUE]); WITH (...) / ON <fg> are trailing.
         note = re.search(
-            r"(?is)\s*/\*\s*UNIQUE:\s*(?P<clauses>.+?)\s*--\s*tsql-only,"
-            r"[^*]*?physical index clause[^*]*?\*/",
+            r"(?is)\s*/\*\s*UNIQUE(?:-\d{4})?:\s*(?P<clauses>.+?)\s*--\s*tsql-only,[^*]*?"
+            r"physical index clause[^*]*?\*/",
             sql,
         )
         if note:
@@ -1840,8 +1828,7 @@ def _portable_index(sql: str, dialect: str) -> str:
     # collapse it back to just the column for every target except PostgreSQL.
     if dialect != "postgresql":
         sql = re.sub(
-            r"(?i)CASE\s+WHEN\s+(?P<col>[\w.\[\]\"`]+)\s+IS\s+NULL\s+THEN\s+"
-            r"\d+\s+ELSE\s+\d+\s+END\s*,\s*(?P=col)",
+            r"(?i)CASE\s+WHEN\s+(?P<col>[\w.\[\]\"`]+)\s+IS\s+NULL\s+THEN\s+\d+\s+ELSE\s+\d+\s+END\s*,\s*(?P=col)",
             lambda m: m.group("col"),
             sql,
         )
@@ -1856,7 +1843,7 @@ def _portable_index(sql: str, dialect: str) -> str:
             sql = (
                 sql[: m.start()].rstrip()
                 + sql[m.end() :]
-                + f"\n-- UNIQUE: {dialect} does not support INCLUDE covering "
+                + f"\n-- UNIQUE-1012: {dialect} does not support INCLUDE covering "
                 f"columns; dropped: {m.group(0)}"
             )
         # Filtered index WHERE: not supported (MySQL/Oracle).
@@ -1864,7 +1851,7 @@ def _portable_index(sql: str, dialect: str) -> str:
         if m:
             sql = (
                 sql[: m.start()].rstrip()
-                + f"\n-- UNIQUE: {dialect} does not support filtered indexes; "
+                + f"\n-- UNIQUE-1013: {dialect} does not support filtered indexes; "
                 f"dropped predicate:{m.group(0)}"
             )
     if dropped_physical:
@@ -1872,7 +1859,7 @@ def _portable_index(sql: str, dialect: str) -> str:
         # original can be recovered on a transpilation back to T-SQL.
         clauses = " ".join(dropped_physical)
         sql += (
-            f"\n/* UNIQUE: {clauses} -- tsql-only, no {dialect} equivalent "
+            f"\n/* UNIQUE-1014: {clauses} -- tsql-only, no {dialect} equivalent "
             "(physical index clause) */"
         )
     return sql
@@ -2418,10 +2405,10 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         order_line = f"ORDER BY {', '.join(rendered)}"
         if _ci_distinct_limit:
             order_line += (
-                " /* UNIQUE: MySQL's default collation is case-insensitive, so "
-                "DISTINCT/ordering on a string column merges 'a'='A'; PG/Oracle "
-                "are case-sensitive and keep them distinct — no portable "
-                "equivalent (see docs/03-unsupported.md) */"
+                " /* UNIQUE-1015: MySQL's default collation is case-insensitive, so "
+                "DISTINCT/ordering on a string column merges 'a'='A'; PG/Oracle are "
+                "case-sensitive and keep them distinct — no portable equivalent (see "
+                "docs/03-unsupported.md) */"
             )
         parts.append(order_line)
     elif dialect == "tsql" and node.limit is not None and node.limit.offset is not None:
@@ -2446,14 +2433,14 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
         and node.group_by
     ):
         result = (
-            f"-- UNIQUE: MySQL has no GROUP BY {node.group_modifier}; the base "
+            f"-- UNIQUE-1016: MySQL has no GROUP BY {node.group_modifier}; the base "
             "grouping is kept and the super-aggregate (subtotal) rows are "
             "omitted\n" + result
         )
     elif dialect == "mysql" and node.group_by_composite and node.group_by:
         result = (
-            "-- UNIQUE: MySQL has no multi-element GROUP BY (CUBE/ROLLUP/"
-            "GROUPING SETS combined); the base grouping is kept and the "
+            "-- UNIQUE-1017: MySQL has no multi-element GROUP BY (CUBE/ROLLUP/GROUPING "
+            "SETS combined); the base grouping is kept and the "
             "super-aggregate (subtotal) rows are omitted\n" + result
         )
 
@@ -2464,7 +2451,7 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     # the clause (which changes a one-row scalar into the raw multi-row set).
     if node.has_for_xml and dialect != "tsql":
         result = (
-            "-- UNIQUE: T-SQL FOR XML/JSON row serialization has no cross-engine "
+            "-- UNIQUE-1018: T-SQL FOR XML/JSON row serialization has no cross-engine "
             "equivalent; the clause is dropped and the base rows are returned "
             "instead (see docs/03-unsupported.md)\n" + result
         )
@@ -2507,7 +2494,7 @@ def _emit_select(node: SelectStatement, dialect: str, into: str | None = None) -
     # no-silent-loss scan) so a following FOUND_ROWS() is not silently broken.
     if node.calc_found_rows and dialect != "mysql":
         result = (
-            "-- UNIQUE: MySQL SQL_CALC_FOUND_ROWS has no equivalent here; the "
+            "-- UNIQUE-1019: MySQL SQL_CALC_FOUND_ROWS has no equivalent here; the "
             "full row count for a following FOUND_ROWS() is not computed — run "
             "a separate COUNT(*) query\n" + result
         )
@@ -2575,8 +2562,8 @@ def _emit_insert_core(
         # Oracle has no DEFAULT VALUES and the all-defaults row cannot
         # be spelled without the column list.
         return (
-            "-- UNIQUE: all-defaults INSERT has no Oracle spelling "
-            "without the column list; original preserved:\n"
+            "-- UNIQUE-1020: all-defaults INSERT has no Oracle spelling without the "
+            "column list; original preserved:\n"
             f"-- {insert_kw} {table} VALUES ()"
         )
     return f"{insert_kw} {table}{cols}\nDEFAULT VALUES"
@@ -2623,8 +2610,9 @@ def _degrade_upsert(node: InsertStatement, dialect: str, reason: str) -> str:
     or an unsupported action shape) — never a plain INSERT that would raise or
     duplicate at runtime."""
     original = _emit_insert_core(node, SOURCE_DIALECT.get() or dialect)
-    return f"-- UNIQUE: {reason}; statement preserved as a comment\n" + _comment_block(
-        original
+    return (
+        f"-- UNIQUE-1021: {reason}; statement preserved as a comment\n"
+        + _comment_block(original)
     )
 
 
@@ -2649,8 +2637,8 @@ def _emit_upsert_pg(node: InsertStatement, oc: OnConflictClause) -> str:
         return _degrade_upsert(
             node,
             "postgresql",
-            "PG ON CONFLICT DO UPDATE needs a conflict target and none was "
-            "declared in-script",
+            "PG ON CONFLICT DO UPDATE needs a conflict target and none was declared "
+            "in-script",
         )
     set_items = [
         f"{_ident_if_plain(col, 'postgresql')} = {_emit_expression(val, 'postgresql')}"
@@ -2665,7 +2653,7 @@ def _emit_upsert_pg(node: InsertStatement, oc: OnConflictClause) -> str:
         # A faithful mapping with a caveat — inline /* … */ so it survives the
         # embedded-DML faithfulness check yet still reconciles to a warning.
         note = (
-            " /* UNIQUE: conflict target assumed to be "
+            " /* UNIQUE-1022: conflict target assumed to be "
             f"({', '.join(key)}) from the table's key; the MySQL source names "
             "no explicit target (fires on any unique key) */"
         )
@@ -2676,9 +2664,9 @@ def _emit_upsert_mysql(node: InsertStatement, oc: OnConflictClause) -> str:
     if oc.action == "nothing":
         core = _emit_insert_core(node, "mysql", insert_kw="INSERT IGNORE INTO")
         return (
-            f"{core}\n/* UNIQUE: INSERT IGNORE also swallows other errors "
-            "(bad values, FK violations), not only duplicate keys — unlike PG "
-            "ON CONFLICT DO NOTHING */"
+            f"{core}\n/* UNIQUE-1023: INSERT IGNORE also swallows other errors "
+            "(bad values, FK violations), not only duplicate keys — unlike PG ON "
+            "CONFLICT DO NOTHING */"
         )
     if oc.where is not None:
         return _degrade_upsert(
@@ -2693,7 +2681,7 @@ def _emit_upsert_mysql(node: InsertStatement, oc: OnConflictClause) -> str:
     ]
     clause = f"ON DUPLICATE KEY UPDATE {', '.join(set_items)}"
     note = (
-        " /* UNIQUE: MySQL ON DUPLICATE KEY UPDATE fires on ANY unique/primary "
+        " /* UNIQUE-1024: MySQL ON DUPLICATE KEY UPDATE fires on ANY unique/primary "
         "key, not a single named conflict target */"
     )
     return f"{core}\n{clause}{note}"
@@ -2770,8 +2758,8 @@ def _emit_upsert_merge(
         return _degrade_upsert(
             node,
             dialect,
-            "upsert has no conflict key to build a MERGE ON condition and none "
-            "was declared in-script",
+            "upsert has no conflict key to build a MERGE ON condition and none was "
+            "declared in-script",
         )
     using = _upsert_merge_source(node, dialect)
     if using is None:
@@ -2803,7 +2791,7 @@ def _emit_upsert_merge(
     note = ""
     if not oc.key_columns:
         note = (
-            " /* UNIQUE: MERGE ON key assumed to be "
+            " /* UNIQUE-1025: MERGE ON key assumed to be "
             f"({', '.join(key)}) from the table's key; the source names no "
             "explicit conflict target */"
         )
@@ -3045,8 +3033,8 @@ def _emit_update_oracle_subquery(
         original = _emit_update_tsql_from(node, assignments, dialect)
         commented = _comment_block(original)
         return (
-            "-- UNIQUE: Oracle has no UPDATE ... FROM and this join shape "
-            "(no ON condition) cannot become a correlated subquery; rewrite "
+            "-- UNIQUE-1026: Oracle has no UPDATE ... FROM and this join shape (no ON "
+            "condition) cannot become a correlated subquery; rewrite "
             "as a MERGE. Original:\n" + commented
         )
 
@@ -3092,17 +3080,17 @@ def _map_system_global(sql: str, dialect: str) -> str | None:
     if upper == "@@ROWCOUNT" and dialect != "tsql":
         if dialect == "mysql":
             return "ROW_COUNT()"
-        return f"0 /* UNIQUE: @@ROWCOUNT has no top-level {dialect} equivalent */"
+        return f"0 /* UNIQUE-1027: @@ROWCOUNT has no top-level {dialect} equivalent */"
     if upper == "@@FETCH_STATUS" and dialect != "tsql":
         # Cursor-contextual by nature; the procedural path maps it with
         # surrounding state. Context-free there is only the neutral.
         return (
-            f"0 /* UNIQUE: @@FETCH_STATUS has no top-level {dialect} "
+            f"0 /* UNIQUE-1028: @@FETCH_STATUS has no top-level {dialect} "
             "equivalent; it is cursor state */"
         )
     if upper == "@@ERROR" and dialect != "tsql":
         return (
-            f"0 /* UNIQUE: @@ERROR has no top-level {dialect} equivalent; "
+            f"0 /* UNIQUE-1029: @@ERROR has no top-level {dialect} equivalent; "
             "use an exception handler */"
         )
     if upper == "@@IDENTITY" and dialect != "tsql":
@@ -3120,10 +3108,13 @@ def _map_system_global(sql: str, dialect: str) -> str | None:
         fn = {"postgresql": "version()", "mysql": "VERSION()"}.get(dialect)
         if fn:
             return (
-                f"{fn} /* UNIQUE: @@VERSION -> {fn}; "
+                f"{fn} /* UNIQUE-1030: @@VERSION -> {fn}; "
                 "version string differs per engine */"
             )
-        return "NULL /* UNIQUE: @@VERSION has no Oracle equivalent outside v$version */"
+        return (
+            "NULL /* UNIQUE-1031: @@VERSION has no Oracle equivalent outside v$version "
+            "*/"
+        )
     if upper == "@@SPID" and dialect != "tsql":
         # Session/connection id — every engine spells it differently and the
         # value is per-connection, so it can never equal T-SQL's @@SPID.
@@ -3132,13 +3123,15 @@ def _map_system_global(sql: str, dialect: str) -> str | None:
             "mysql": "CONNECTION_ID()",
             "oracle": "SYS_CONTEXT('USERENV', 'SID')",
         }[dialect]
-        return f"{fn} /* UNIQUE: @@SPID -> {fn}; session id differs per engine */"
+        return f"{fn} /* UNIQUE-1032: @@SPID -> {fn}; session id differs per engine */"
     if re.fullmatch(r"(?i)SQL\s*%\s*ROWCOUNT", stripped) and dialect != "oracle":
         if dialect == "tsql":
             return "@@ROWCOUNT"
         if dialect == "mysql":
             return "ROW_COUNT()"
-        return f"0 /* UNIQUE: SQL%ROWCOUNT has no top-level {dialect} equivalent */"
+        return (
+            f"0 /* UNIQUE-1033: SQL%ROWCOUNT has no top-level {dialect} equivalent */"
+        )
     return None
 
 
@@ -3196,8 +3189,8 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
         if dialect == "oracle":
             _ord_sel = f", LEVEL AS {_ord}" if node.ordinality else ""
             _inner = (
-                f"SELECT ({_gstart}) + (LEVEL - 1){_mul} AS {_vcol}{_ord_sel} "
-                f"FROM DUAL CONNECT BY LEVEL <= {_cnt}"
+                f"SELECT ({_gstart}) + (LEVEL - 1){_mul} AS {_vcol}{_ord_sel} FROM "
+                f"DUAL CONNECT BY LEVEL <= {_cnt}"
             )
             return f"({_inner}) {_talias}"
         # T-SQL: a numbers source (sys.all_objects has plenty of rows for the
@@ -3205,8 +3198,8 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
         _rn = "ROW_NUMBER() OVER (ORDER BY (SELECT NULL))"
         _ord_sel = f", {_rn} AS {_ord}" if node.ordinality else ""
         _inner = (
-            f"SELECT TOP ({_cnt}) ({_gstart}) + ({_rn} - 1){_mul} AS {_vcol}"
-            f"{_ord_sel} FROM sys.all_objects"
+            f"SELECT TOP ({_cnt}) ({_gstart}) + ({_rn} - 1){_mul} AS {_vcol}{_ord_sel} "
+            f"FROM sys.all_objects"
         )
         return f"({_inner}) {_talias}"
     if (
@@ -3245,15 +3238,15 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
                     else f"FLOOR((({_dstop}) - ({_dstart})) / {_step}) + 1"
                 )
                 _dinner = (
-                    f"SELECT ({_dstart}) + (LEVEL - 1){_dmul} AS {_dvcol} "
-                    f"FROM DUAL CONNECT BY LEVEL <= {_dcnt}"
+                    f"SELECT ({_dstart}) + (LEVEL - 1){_dmul} AS {_dvcol} FROM DUAL "
+                    f"CONNECT BY LEVEL <= {_dcnt}"
                 )
                 return f"({_dinner}) {_dtal}"
             _drn = "ROW_NUMBER() OVER (ORDER BY (SELECT NULL))"
             _dcnt = f"DATEDIFF(DAY, {_dstart}, {_dstop}) / {_step} + 1"
             _dinner = (
-                f"SELECT TOP ({_dcnt}) DATEADD(DAY, ({_drn} - 1) * {_step}, "
-                f"{_dstart}) AS {_dvcol} FROM sys.all_objects"
+                f"SELECT TOP ({_dcnt}) DATEADD(DAY, ({_drn} - 1) * {_step}, {_dstart}) "
+                f"AS {_dvcol} FROM sys.all_objects"
             )
             return f"({_dinner}) {_dtal}"
     if (
@@ -3274,8 +3267,8 @@ def _emit_table_ref(node: TableRef, dialect: str | None = None) -> str:
         if dialect == "postgresql":
             return f"generate_series({_gstart}, {_gstop}) AS {_gal}(value)"
         return (
-            f"(SELECT ({_gstart}) + LEVEL - 1 AS value FROM DUAL "
-            f"CONNECT BY LEVEL <= ({_gstop}) - ({_gstart}) + 1) {_gal}"
+            f"(SELECT ({_gstart}) + LEVEL - 1 AS value FROM DUAL CONNECT BY LEVEL <= "
+            f"({_gstop}) - ({_gstart}) + 1) {_gal}"
         )
     if node.function is not None:
         # A function IS the relation (``FROM fn(args) alias``); targets
@@ -3353,7 +3346,7 @@ def _emit_tablesample(node: TableRef, dialect: str | None) -> str:
     if dialect == "mysql":
         what = f"{pct} PERCENT" if pct else f"{rows} ROWS"
         return (
-            f" /* UNIQUE: TABLESAMPLE ({what}) has no MySQL equivalent — all rows "
+            f" /* UNIQUE-1034: TABLESAMPLE ({what}) has no MySQL equivalent — all rows "
             "returned (docs/03-unsupported.md) */"
         )
     if dialect == "tsql":
@@ -3362,14 +3355,14 @@ def _emit_tablesample(node: TableRef, dialect: str | None) -> str:
         if pct:
             return f" SAMPLE ({pct})"
         return (
-            " /* UNIQUE: TABLESAMPLE by row count has no Oracle SAMPLE form "
+            " /* UNIQUE-1035: TABLESAMPLE by row count has no Oracle SAMPLE form "
             "(docs/03-unsupported.md) */"
         )
     # postgresql
     if pct:
         return f" TABLESAMPLE {node.sample_method or 'SYSTEM'} ({pct})"
     return (
-        " /* UNIQUE: TABLESAMPLE by row count has no PostgreSQL equivalent "
+        " /* UNIQUE-1036: TABLESAMPLE by row count has no PostgreSQL equivalent "
         "(docs/03-unsupported.md) */"
     )
 
@@ -3570,8 +3563,7 @@ def _emit_limit(limit: LimitClause, dialect: str) -> str:
             pct = " PERCENT" if limit.percent else ""
             tail = "WITH TIES" if limit.with_ties else "ONLY"
             parts.append(
-                f"FETCH FIRST {_emit_expression(limit.limit, dialect)}"
-                f"{pct} ROWS {tail}"
+                f"FETCH FIRST {_emit_expression(limit.limit, dialect)}{pct} ROWS {tail}"
             )
         return "\n".join(parts)
 
@@ -3604,7 +3596,7 @@ def _emit_limit(limit: LimitClause, dialect: str) -> str:
             # rather than silently returning fewer rows.
             limit_sql = f"LIMIT {_emit_expression(limit.limit, dialect)}"
             limit_sql += (
-                " /* UNIQUE: source had WITH TIES; MySQL has no equivalent — rows "
+                " /* UNIQUE-1037: source had WITH TIES; MySQL has no equivalent — rows "
                 "tying the last one are not returned (see docs/03-unsupported.md) */"
             )
             out = [limit_sql]
@@ -3627,9 +3619,9 @@ def _emit_limit(limit: LimitClause, dialect: str) -> str:
             # LIMIT and document the change rather than emit invalid SQL or
             # silently drop the PERCENT semantics.
             limit_sql += (
-                f" /* UNIQUE: source was TOP n PERCENT; {dialect} has no LIMIT "
-                "PERCENT — emitted as a row count, adjust to "
-                "CEIL(n/100 * total_rows) if a true percentage is required */"
+                f" /* UNIQUE-1038: source was TOP n PERCENT; {dialect} has no LIMIT "
+                "PERCENT — emitted as a row count, adjust to CEIL(n/100 * total_rows) "
+                "if a true percentage is required */"
             )
         parts.append(limit_sql)
     if limit.offset:

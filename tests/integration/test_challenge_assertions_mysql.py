@@ -1161,7 +1161,7 @@ def _run(slug: str, target: str) -> None:
     if spec.get("degrade"):
         assert result.warnings, f"{slug} -> {target}: expected a warned degrade"
         assert (
-            "UNIQUE:" in result.sql
+            "UNIQUE-" in result.sql
         ), f"{slug} -> {target}: no UNIQUE carrier\n{result.sql}"
         return
     exe = _exe(result.sql)

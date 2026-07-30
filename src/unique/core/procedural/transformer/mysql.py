@@ -429,7 +429,7 @@ class MySqlTransformer(ProceduralTransformer):
                 "as a comment"
             )
             return (
-                f"-- UNIQUE: no MySQL equivalent: ALTER TRIGGER "
+                f"-- UNIQUE-1204: no MySQL equivalent: ALTER TRIGGER "
                 f"{mt.group(1)} {mt.group(2).upper()}\nDO 0;"
             )
         sql = self._expr._mysql_trunc(sql)

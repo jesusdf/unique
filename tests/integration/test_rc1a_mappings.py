@@ -26,7 +26,7 @@ def _t(sql: str, source: str, target: str) -> str:
 def _ok(out: str, target: str) -> bool:
     try:
         sqlglot.parse(out, read=_SG[target], error_level=sqlglot.ErrorLevel.RAISE)
-        return "-- UNIQUE:" not in out
+        return "-- UNIQUE-" not in out
     except Exception:
         return False
 

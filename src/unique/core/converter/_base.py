@@ -607,7 +607,7 @@ def _merge_to_mysql_upsert(sql: str, read: str) -> str | None:
         f"INSERT INTO {target_sql} ({cols_sql})\n"
         f"SELECT {vals_sql} FROM {source_sql}\n"
         f"ON DUPLICATE KEY UPDATE {', '.join(assignments)};\n"
-        f"-- UNIQUE: MERGE rewritten as INSERT ... ON DUPLICATE KEY UPDATE; "
+        f"-- UNIQUE-1001: MERGE rewritten as INSERT ... ON DUPLICATE KEY UPDATE; "
         f"requires a UNIQUE or PRIMARY KEY on ({on_cols})"
     )
 

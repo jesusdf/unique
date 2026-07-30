@@ -111,7 +111,7 @@ class TestGateEndToEnd:
         )
         result = Transpiler().transpile(src, "tsql", "postgresql")
         assert _parses(result.sql, "postgres")
-        assert "UNIQUE:" not in result.sql
+        assert "UNIQUE-" not in result.sql
         assert "CLUSTERED" not in result.sql.upper()
         assert 'PRIMARY KEY ("codigo")' in result.sql
         assert not any(w.feature == "validity_gate" for w in result.warnings)
@@ -136,7 +136,7 @@ class TestGateEndToEnd:
         result = Transpiler().transpile(
             "INSERT INTO t (v) VALUES ('a;b');\nGO\n", "tsql", "postgresql"
         )
-        assert "UNIQUE:" not in result.sql
+        assert "UNIQUE-" not in result.sql
         assert "INSERT INTO t" in result.sql
         assert not result.warnings
 

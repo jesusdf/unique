@@ -284,7 +284,8 @@ class ExpressionRewriter:
         # ``RETURNING … INTO <var>`` (with INTO) is left untouched.
         sql = re.sub(
             r"(?i)\s+RETURNING\s+((?:(?!\bINTO\b)[^;])+?)\s*(?=;|$)",
-            r"  /* UNIQUE: OUTPUT \1 dropped — populate the temp table manually */",
+            r"  /* UNIQUE-1191: OUTPUT \1 dropped — populate the temp table manually "
+            r"*/",
             sql,
         )
         # VARCHAR(MAX)/NVARCHAR(MAX) (and the sqlglot VARCHAR2(MAX) spelling) as a

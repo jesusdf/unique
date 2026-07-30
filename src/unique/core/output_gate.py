@@ -687,7 +687,7 @@ def degrade_to_carrier(original_sql: str, reason: str, source: str, target: str)
     recoverable artifact a human needs to port the statement by hand.
     """
     header = (
-        f"-- UNIQUE: output failed the {target} validity check ({reason}); "
+        f"-- UNIQUE-1151: output failed the {target} validity check ({reason}); "
         f"original {source} batch preserved:"
     )
     body = "\n".join(f"-- {line}" for line in original_sql.strip().splitlines())

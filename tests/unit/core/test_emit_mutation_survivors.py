@@ -45,12 +45,12 @@ class TestCteDmlGate:
 
     def test_tsql_target_keeps_cte_update(self) -> None:
         r = _t(self._CTE_UPDATE, "tsql", "tsql")
-        assert "UNIQUE:" not in r.sql, r.sql
+        assert "UNIQUE-" not in r.sql, r.sql
         assert re.search(r"(?i)WITH c AS", r.sql), r.sql
 
     def test_non_cte_update_untouched_mysql(self) -> None:
         r = _t("update t set y = 1 where id = 2;", "tsql", "mysql")
-        assert "UNIQUE:" not in r.sql, r.sql
+        assert "UNIQUE-" not in r.sql, r.sql
         assert re.search(r"(?i)UPDATE t", r.sql), r.sql
 
 

@@ -54,7 +54,7 @@ class TestTranspiler:
         )
         out = transpiler.transpile(sql, source="tsql", target="postgresql").sql
         assert "CREATE TABLE IF NOT EXISTS X" in out
-        assert "-- UNIQUE:" not in out
+        assert "-- UNIQUE-" not in out
         assert "sys.objects" not in out
 
     def test_if_not_exists_begin_end_with_print(self, transpiler: Transpiler) -> None:
@@ -67,13 +67,13 @@ class TestTranspiler:
         out = transpiler.transpile(sql, source="tsql", target="oracle").sql
         assert "CREATE TABLE X" in out
         assert "PRINT" not in out
-        assert "-- UNIQUE:" not in out
+        assert "-- UNIQUE-" not in out
 
     def test_if_exists_drop_guard_is_idempotent(self, transpiler: Transpiler) -> None:
         sql = "IF EXISTS (SELECT * FROM sys.objects WHERE name = 'X')\nDROP TABLE X"
         out = transpiler.transpile(sql, source="tsql", target="postgresql").sql
         assert "DROP TABLE IF EXISTS X" in out
-        assert "-- UNIQUE:" not in out
+        assert "-- UNIQUE-" not in out
 
     def test_if_not_exists_alter_add_column(self, transpiler: Transpiler) -> None:
         sql = (
@@ -82,7 +82,7 @@ class TestTranspiler:
         )
         out = transpiler.transpile(sql, source="tsql", target="postgresql").sql
         assert "ALTER TABLE X ADD COLUMN c" in out
-        assert "-- UNIQUE:" not in out
+        assert "-- UNIQUE-" not in out
 
     def test_oracle_alter_add_column_is_idempotent(
         self, transpiler: Transpiler
@@ -100,7 +100,7 @@ class TestTranspiler:
         assert "user_tab_columns" in out.lower()
         assert "TABLE_NAME = 'X'" in out.upper()
         assert "COLUMN_NAME = 'C'" in out.upper()
-        assert "-- UNIQUE:" not in out
+        assert "-- UNIQUE-" not in out
 
     def test_oracle_alter_add_constraint_is_idempotent(
         self, transpiler: Transpiler
@@ -320,7 +320,7 @@ class TestTranspiler:
         out = transpiler.transpile(sql, source="tsql", target="oracle").sql
         assert "ALTER TABLE T ADD fecha" in out
         assert "ELSE" not in out
-        assert "-- UNIQUE:" not in out
+        assert "-- UNIQUE-" not in out
 
     def test_guard_preserves_leading_comment(self, transpiler: Transpiler) -> None:
         # A section header preceding an IF NOT EXISTS guard must survive (the head
@@ -374,7 +374,7 @@ class TestTranspiler:
         )
         # MySQL has no equivalent: preserved as a restorable note, not dropped.
         mysql_out = transpiler.transpile(disable, source="tsql", target="mysql").sql
-        assert "/* UNIQUE:" in mysql_out
+        assert "/* UNIQUE-" in mysql_out
         assert "NOCHECK CONSTRAINT fk" in mysql_out
 
     def test_add_default_constraint(self, transpiler: Transpiler) -> None:
@@ -401,7 +401,7 @@ class TestTranspiler:
         # not emit invalid SQL.
         sql = "ALTER TABLE X ADD DEFAULT (NEWID()) FOR rowguid"
         out = transpiler.transpile(sql, source="tsql", target="mysql").sql
-        assert "-- UNIQUE:" in out
+        assert "-- UNIQUE-" in out
         assert "CHAR()" not in out
 
     def test_comments_preserved_dml_path(self, transpiler: Transpiler) -> None:
@@ -478,17 +478,17 @@ class TestTranspiler:
         oracle = transpiler.transpile(trg, source="sqlite", target="oracle").sql
         assert "CREATE OR REPLACE TRIGGER trg" in oracle
         assert ":NEW.amount" in oracle
-        assert "-- UNIQUE:" not in oracle
+        assert "-- UNIQUE-" not in oracle
         # MySQL: DELIMITER-wrapped trigger with NEW.
         mysql = transpiler.transpile(trg, source="sqlite", target="mysql").sql
         assert "CREATE TRIGGER trg" in mysql
         assert "NEW.amount" in mysql
-        assert "-- UNIQUE:" not in mysql
+        assert "-- UNIQUE-" not in mysql
         # PostgreSQL: trigger function + CREATE TRIGGER.
         pg = transpiler.transpile(trg, source="sqlite", target="postgresql").sql
         assert "RETURNS TRIGGER" in pg
         assert "CREATE OR REPLACE TRIGGER trg" in pg
-        assert "-- UNIQUE:" not in pg
+        assert "-- UNIQUE-" not in pg
 
     def test_sqlite_source_function_mappings(self, transpiler: Transpiler) -> None:
         # SQLite-only functions rewrite to each target's form (Phase 2).
@@ -573,7 +573,7 @@ class TestTranspiler:
             target="postgresql",
         ).sql
         assert "CREATE TABLE t" in out
-        assert "-- UNIQUE:" not in out
+        assert "-- UNIQUE-" not in out
 
     def test_sqlite_rejected_as_target(self, transpiler: Transpiler) -> None:
         from unique.core.errors import UnsupportedFeatureError

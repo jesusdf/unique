@@ -75,7 +75,7 @@ class PostgresTransformer(ProceduralTransformer):
             word = "COMMIT" if node.action is TransactionAction.COMMIT else "ROLLBACK"
             return CommentStatement(
                 text=(
-                    f"/* UNIQUE: {word} dropped -- the exception-guarded "
+                    f"/* UNIQUE-1206: {word} dropped -- the exception-guarded "
                     "block is a subtransaction (transaction control there "
                     "is a runtime error); it rolls back on error and "
                     "commits with the surrounding transaction */"

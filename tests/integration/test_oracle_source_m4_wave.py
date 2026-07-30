@@ -499,7 +499,7 @@ class TestWave12And13Classes:
         # (no-silent-loss). Alias synthesis is asserted on tsql/pg above; the
         # per-target sequence behaviour is test_sequence_refs_per_target.
         my = _t(src, "mysql")
-        assert my.lstrip().startswith("-- UNIQUE:"), my
+        assert my.lstrip().startswith("-- UNIQUE-"), my
 
     def test_sequence_refs_per_target(self) -> None:
         src = "INSERT INTO t_x (id) SELECT seq_x.NEXTVAL FROM t_y;"
@@ -520,7 +520,7 @@ class TestDeRegexOracleScalarsAndSequences:
         ts = Transpiler().transpile(src, "oracle", "tsql")
         assert ".CURRVAL" not in ts.sql.upper()
         assert "SELECT NULL" in ts.sql
-        assert "UNIQUE:" in ts.sql
+        assert "UNIQUE-" in ts.sql
         assert any("CURRVAL" in w.message for w in ts.warnings)
 
     def test_nextval_not_rewritten_inside_string_literal(self) -> None:
@@ -1266,12 +1266,12 @@ class TestDynamicRoutineDdlStaysDynamic:
         out = _t(self._SRC, "postgresql")
         body = out[out.index("$$") :] if "$$" in out else out
         assert not re.search(r"(?im)^\s*CREATE\s+PROCEDURE", body), out
-        assert re.search(r"(?i)EXECUTE\s+'", out) or "-- UNIQUE:" in out, out
+        assert re.search(r"(?i)EXECUTE\s+'", out) or "-- UNIQUE-" in out, out
 
     def test_tsql_keeps_dynamic_exec(self) -> None:
         out = _t(self._SRC, "tsql")
         assert not re.search(r"(?im)^\s*CREATE\s+PROCEDURE\s+p_x", out), out
-        assert re.search(r"(?i)EXEC|sp_executesql", out) or "-- UNIQUE:" in out, out
+        assert re.search(r"(?i)EXEC|sp_executesql", out) or "-- UNIQUE-" in out, out
 
     def test_warning_is_raised(self) -> None:
         from unique.core.transpiler import Transpiler

@@ -373,7 +373,7 @@ class TSqlEmitter(ProceduralEmitter):
                 f"{', '.join(node.into_vars)} {rest}".splitlines()
             )
             return (
-                "-- UNIQUE: SELECT * INTO multiple variables needs the "
+                "-- UNIQUE-1186: SELECT * INTO multiple variables needs the "
                 "column list (no schema to expand '*'); statement "
                 f"preserved as a comment\n{body}"
             )
@@ -471,7 +471,7 @@ class TSqlEmitter(ProceduralEmitter):
 
         if not cols:
             lines = [
-                "-- UNIQUE: Oracle implicit cursor FOR-loop expanded to an "
+                "-- UNIQUE-1174: Oracle implicit cursor FOR-loop expanded to an "
                 "explicit T-SQL cursor.",
                 "-- Declare one @var per selected column and complete the "
                 "FETCH INTO list.",
@@ -509,7 +509,7 @@ class TSqlEmitter(ProceduralEmitter):
         ]
         self._loop_vars_emitted.update(f"@{variable}_{c}".lower() for c in cols)
         lines = [
-            "-- UNIQUE: cursor FOR-loop expanded; loop variables are "
+            "-- UNIQUE-1187: cursor FOR-loop expanded; loop variables are "
             "NVARCHAR(4000) (exact column types need --db-url metadata).",
         ]
         if new_vars:
@@ -611,7 +611,7 @@ class TSqlEmitter(ProceduralEmitter):
         if mode.upper().startswith("ISOLATION LEVEL"):
             return f"SET TRANSACTION {mode};"
         return (
-            f"/* UNIQUE: SET TRANSACTION {mode} dropped -- T-SQL has no READ "
+            f"/* UNIQUE-1188: SET TRANSACTION {mode} dropped -- T-SQL has no READ "
             "ONLY/READ WRITE transaction mode; only ISOLATION LEVEL is "
             "expressible (docs/03-unsupported.md) */"
         )
@@ -752,7 +752,7 @@ class TSqlEmitter(ProceduralEmitter):
         note = ""
         if params:
             note = (
-                "\n-- UNIQUE: EXECUTE IMMEDIATE USING bindings dropped; "
+                "\n-- UNIQUE-1189: EXECUTE IMMEDIATE USING bindings dropped; "
                 "inline them or use sp_executesql parameters: " + ", ".join(params)
             )
         sql_arg, prelude = self._hoist_dynamic_sql(expr)
@@ -778,7 +778,7 @@ class TSqlEmitter(ProceduralEmitter):
             )
             return (
                 f"{prelude}EXEC sp_executesql {sql_arg}, N'{decl}', {assigns}; "
-                f"-- UNIQUE: verify dynamic SQL placeholders match "
+                f"-- UNIQUE-1190: verify dynamic SQL placeholders match "
                 f"{', '.join(names)}"
             )
         return f"{prelude}EXEC sp_executesql {sql_arg};"

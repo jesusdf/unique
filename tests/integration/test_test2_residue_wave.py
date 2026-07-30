@@ -31,7 +31,7 @@ def _executable_text(sql: str) -> str:
     """The output with full-line comments removed (a documentation carrier
     may legitimately mention the source construct's name)."""
     return " ".join(
-        line.split(" -- UNIQUE:")[0]
+        line.split(" -- UNIQUE-")[0]
         for line in sql.splitlines()
         if line.strip() and not line.lstrip().startswith("--")
     )
@@ -84,7 +84,9 @@ class TestSemicolonlessBoundaries:
                 # ROLLBACK), but on PG the exception-guarded block is a
                 # subtransaction where ROLLBACK is a runtime error — it is
                 # dropped to a documented carrier inside the IF (2026-07-30).
-                assert re.search(r"(?i)THEN\s+/\* UNIQUE: ROLLBACK dropped", out), (
+                assert re.search(
+                    r"(?i)THEN\s+/\* UNIQUE(?:-\d{4})?: ROLLBACK dropped", out
+                ), (
                     target,
                     out,
                 )

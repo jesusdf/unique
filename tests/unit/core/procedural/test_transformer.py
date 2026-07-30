@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import re
+
 from unique.core.ast_nodes import (
     AssignmentStatement,
     CreateProcedureStatement,
@@ -713,7 +715,9 @@ class TestMySQLSqlVariantType:
         # SQL_VARIANT maps to the LONGTEXT carrier, with the original preserved
         # in a /* UNIQUE */ comment for documentation and round-tripping.
         assert "LONGTEXT" in out
-        assert "/* UNIQUE: SQL_VARIANT */" in out
+        assert re.search(
+            re.escape("/* UNIQUE") + r"(?:-\d{4})?" + re.escape(": SQL_VARIANT */"), out
+        )
 
 
 class TestMySQLHashAndStringVarConcat:
@@ -810,7 +814,12 @@ class TestUniqueTypePreservationComment:
             ") AS\nBEGIN\n    NULL;\nEND;"
         )
         out = Transpiler().transpile(src, source="oracle", target="tsql").sql
-        assert "SQL_VARIANT /* UNIQUE: H_ROOMBOOKDET.ROOM%TYPE */" in out
+        assert re.search(
+            re.escape("SQL_VARIANT /* UNIQUE")
+            + r"(?:-\d{4})?"
+            + re.escape(": H_ROOMBOOKDET.ROOM%TYPE */"),
+            out,
+        )
 
     def test_unresolved_pct_type_oracle_to_mysql(self) -> None:
         from unique.core.transpiler import Transpiler
@@ -821,7 +830,12 @@ class TestUniqueTypePreservationComment:
             ") AS\nBEGIN\n    NULL;\nEND;"
         )
         out = Transpiler().transpile(src, source="oracle", target="mysql").sql
-        assert "LONGTEXT /* UNIQUE: H_ROOMBOOKDET.ROOM%TYPE */" in out
+        assert re.search(
+            re.escape("LONGTEXT /* UNIQUE")
+            + r"(?:-\d{4})?"
+            + re.escape(": H_ROOMBOOKDET.ROOM%TYPE */"),
+            out,
+        )
 
     def test_sql_variant_preserves_original(self) -> None:
         t = ProceduralTransformer("tsql", "mysql")
@@ -857,7 +871,9 @@ class TestDroppedSetOptionPreserved:
     def test_mysql_documents_and_fills_empty_if(self) -> None:
         out = self._out("mysql")
         # The original is preserved as a comment...
-        assert "/* UNIQUE: SET NOCOUNT ON" in out
+        assert re.search(
+            re.escape("/* UNIQUE") + r"(?:-\d{4})?" + re.escape(": SET NOCOUNT ON"), out
+        )
         # ...and the otherwise-empty IF body gets a MySQL no-op.
         assert "DO 0;" in out
         # No empty IF remains.
@@ -865,7 +881,9 @@ class TestDroppedSetOptionPreserved:
 
     def test_oracle_uses_null_noop(self) -> None:
         out = self._out("oracle")
-        assert "/* UNIQUE: SET NOCOUNT ON" in out
+        assert re.search(
+            re.escape("/* UNIQUE") + r"(?:-\d{4})?" + re.escape(": SET NOCOUNT ON"), out
+        )
         assert "NULL;" in out
 
     def test_non_empty_if_unaffected(self) -> None:

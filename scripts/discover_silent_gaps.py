@@ -67,7 +67,7 @@ def main() -> int:
             result = tr.transpile(src + ";", source=args.source, target=args.target)
         except Exception:  # noqa: BLE001 - a hard failure is not a silent gap
             continue
-        if "UNIQUE:" in result.sql or result.warnings:
+        if "UNIQUE-" in result.sql or result.warnings:
             continue  # already handled honestly (carrier or warning)
         emitted = [
             s for s in split_statements(result.sql, args.target) if is_executable(s)

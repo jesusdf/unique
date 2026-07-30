@@ -73,7 +73,7 @@ def test_insert_select_from_dual_guard_drops_dual(target: str) -> None:
     assert "DUAL" not in up
     assert "INSERT INTO CFG" in up  # statement survived, no carrier degrade
     assert "NOT EXISTS" in up  # the guard condition survived
-    assert "UNIQUE:" not in out  # not degraded to a carrier comment
+    assert "UNIQUE-" not in out  # not degraded to a carrier comment
     _assert_parses(out, target)
 
 
@@ -139,7 +139,7 @@ def test_procedural_insert_dual_guard_drops_dual(target: str) -> None:
     assert "DUAL" not in up
     assert "INSERT INTO CFG" in up
     assert "NOT EXISTS" in up
-    assert "UNIQUE:" not in out  # neither degraded nor warned-invalid
+    assert "UNIQUE-" not in out  # neither degraded nor warned-invalid
 
 
 @pytest.mark.parametrize("target", ["postgresql", "tsql"])
@@ -154,7 +154,7 @@ def test_procedural_rownum_translates_like_standalone(target: str) -> None:
         or ("TOP (10)" in up)
         or ("FETCH FIRST 10" in up)
     )
-    assert "UNIQUE:" not in out
+    assert "UNIQUE-" not in out
 
 
 # ---------------------------------------------------------------------------
@@ -314,7 +314,7 @@ def test_multijoin_cross_table_update_rewrites_for_oracle() -> None:
     )
     out = _t(src, "tsql", "oracle")
     up = _norm(out).upper()
-    assert "UNIQUE:" not in out  # translated, not degraded
+    assert "UNIQUE-" not in out  # translated, not degraded
     assert up.startswith("UPDATE T SET")
     # The assigned value is a correlated subquery joining BOTH sources...
     assert re.search(
@@ -343,7 +343,7 @@ def test_partial_parse_never_ships_corrupted_tree(target: str) -> None:
     r = Transpiler().transpile(src, source="oracle", target=target)
     assert "DEFAULT VALUES" not in r.sql.upper()
     ok = "NOT EXISTS" in r.sql.upper() and "colC" in r.sql
-    degraded = "UNIQUE:" in r.sql and (r.warnings or r.unsupported)
+    degraded = "UNIQUE-" in r.sql and (r.warnings or r.unsupported)
     assert ok or degraded, r.sql
 
 
@@ -357,13 +357,13 @@ def test_broken_source_fragment_degrades_not_ships() -> None:
         for ln in r.sql.splitlines()
         if ln.strip() and not ln.strip().startswith("--")
     )
-    assert not stripped.strip() or "UNIQUE:" in r.sql, r.sql
+    assert not stripped.strip() or "UNIQUE-" in r.sql, r.sql
     assert r.warnings or r.unsupported
 
 
 def test_multiline_parse_error_reason_stays_a_comment() -> None:
     # A sqlglot ParseError message spans lines (source excerpt + ANSI
-    # highlighting); embedded raw after '-- UNIQUE:' its tail leaked as
+    # highlighting); embedded raw after '-- UNIQUE-' its tail leaked as
     # executable text with an unbalanced quote, desyncing every later
     # statement (real-dump finding, 2026-07-09).
     src = (
@@ -578,5 +578,5 @@ class TestPsqlVariableSubstitutionGuard:
         r = Transpiler().transpile(
             "COPY aggtest FROM :'filename';", "postgresql", "mysql"
         )
-        assert "UNIQUE:" in r.sql, r.sql
+        assert "UNIQUE-" in r.sql, r.sql
         assert r.warnings or r.unsupported, r.warnings

@@ -664,7 +664,7 @@ def test_tsql_case(slug: str, target: str, spec: dict[str, object]) -> None:
     if spec.get("degrade"):
         assert result.warnings, f"{slug} -> {target}: expected a degrade warning"
         assert (
-            "UNIQUE:" in result.sql
+            "UNIQUE-" in result.sql
         ), f"{slug} -> {target}: expected a UNIQUE carrier\n{result.sql}"
     present = spec.get("present", [])
     absent = spec.get("absent", [])

@@ -84,7 +84,7 @@ class TestMultiArmSetOp:
             for target in ("postgresql", "oracle", "mysql", "tsql"):
                 out = self.t.transpile(sql, "tsql", target).sql
                 assert out.upper().count("SELECT") == arms, (target, out)
-                assert "UNIQUE:" not in out
+                assert "UNIQUE-" not in out
                 _valid(out, target)
 
     def test_except_intersect_are_transpiled(self) -> None:
@@ -97,7 +97,7 @@ class TestMultiArmSetOp:
         ):
             for target in ("postgresql", "oracle", "mysql", "tsql"):
                 out = self.t.transpile(sql, "tsql", target).sql
-                assert "UNIQUE:" not in out, (target, out)
+                assert "UNIQUE-" not in out, (target, out)
                 _valid(out, target)
         # Oracle spells EXCEPT as MINUS.
         assert (
