@@ -1415,20 +1415,36 @@ class TestCastOnConversionError:
 
 
 class TestGroupConcatDistinctOrder:
-    """PG STRING_AGG(DISTINCT v, sep ORDER BY key) requires the ORDER BY key to be
-    the aggregated argument; when the value is cast to text the key must carry the
-    same cast, and a trailing ASC/DESC must not defeat the match. The MySQL
-    roundtrip guard uses the same direction-stripped comparison so the separator
-    survives (my-groupconcat-distinct)."""
+    """A DISTINCT ordered string-aggregate into PG cannot order by the raw value
+    (STRING_AGG(DISTINCT v ORDER BY k) requires k to be the DISTINCT'd v, so a
+    numeric column would sort by its text cast — '2-10-1' not '10-2-1'). The
+    DISTINCT is moved into a (SELECT DISTINCT v) derived table so the aggregate
+    orders by the raw value. Oracle keeps LISTAGG(DISTINCT …); the MySQL roundtrip
+    keeps the separator (my-groupconcat-distinct / -numord)."""
 
-    def test_pg_distinct_order_key_cast_matches_arg(self) -> None:
+    def test_pg_distinct_order_dedupes_in_derived_table(self) -> None:
         case = _case("challenge_mysql.sql", "my-groupconcat-distinct ")
-        pg = _tx(case, "mysql", "postgresql")
-        assert "STRING_AGG(DISTINCT CAST(x AS TEXT), '|' ORDER BY CAST(x AS TEXT)" in pg
+        pg = _exec_lines(_tx(case, "mysql", "postgresql"))
+        # DISTINCT is deduped in a derived table; the aggregate orders by raw x.
+        assert "STRING_AGG(CAST(x AS TEXT), '|' ORDER BY x DESC)" in pg
+        assert "SELECT DISTINCT x" in pg and "uq_agg_distinct" in pg
+        assert "STRING_AGG(DISTINCT" not in pg
         # roundtrip mysql->oracle->mysql keeps the '|' separator (not silently lost)
         ora = Transpiler().transpile(case, source="mysql", target="oracle").sql
         back = Transpiler().transpile(ora, source="oracle", target="mysql").sql
         assert "SEPARATOR '|'" in back
+
+    def test_pg_distinct_numeric_order_is_numeric(self) -> None:
+        # A multi-digit numeric column must order numerically ('10-2-1'), which the
+        # derived-table dedup allows (ordering by the text cast gives '2-10-1').
+        case = _case("challenge_mysql.sql", "my-groupconcat-distinct-numord ")
+        pg = _exec_lines(_tx(case, "mysql", "postgresql"))
+        assert "STRING_AGG(CAST(x AS TEXT), '-' ORDER BY x DESC)" in pg
+        assert "SELECT DISTINCT x" in pg and "uq_agg_distinct" in pg
+        assert "STRING_AGG(DISTINCT" not in pg
+        # Oracle already orders numerically via LISTAGG; unaffected by the rewrite.
+        ora = _exec_lines(_tx(case, "mysql", "oracle"))
+        assert "LISTAGG(DISTINCT x, '-') WITHIN GROUP (ORDER BY x DESC)" in ora
 
 
 class TestDistinctCaseInsensitiveCollation:
