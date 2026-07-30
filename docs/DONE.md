@@ -5538,3 +5538,44 @@ What the upgrade required — the unread-args class, again:
 
 Pins bumped in `pyproject.toml` and `constraints.txt`. Full suite green
 under 30.14.0 (5,034 passed); ratchets flat.
+
+## 48. B29 + B30 executed — the challenge corpus reaches 0 `[open]` (2026-07-30)
+
+The two feature briefs holding the last open challenge cases, worked by
+delegated workers under architect review:
+
+**B29 — MySQL ENUM declaration-order (closes `my-enum-order`).**
+`ENUM_COLUMNS` ContextVar registry (harvested from CREATE TABLE by
+`harvest_enum_columns`, set per mysql-source transpile) + a dialect-generic
+transformer rewrite of `ORDER BY <enum-col>` into the ordinal CASE sort key.
+**The brief was live-corrected during implementation**: MySQL applies
+declaration-index order ONLY in sort context — `WHERE c > 'x'` and
+`MIN`/`MAX` use STRING semantics (verified on MySQL 8.4: `a>'lo'`→{'mid'};
+MIN/MAX→('hi','mid')), which the VARCHAR+CHECK degrade already reproduces, so
+the brief's comparison/aggregate legs were dropped as they would have
+INTRODUCED a divergence. sakila/mediawiki stay carrier-free (their ENUMs are
+never sorted on). Documented residual: an enum sorted through
+`SELECT *`/derived table/dynamic SQL is unresolvable and stays plain,
+unwarned (false-positive risk outweighs).
+
+**B30 — date-type propagation (closes `reda-ora-date-literal-subquery`).**
+New `converter/type_env.py`: a bounded type environment on
+`SubqueryExpression` (`column_types`, compare=False) inferring temporal types
+from DATE/TIMESTAMP literals, CASTs and pass-through refs only, populated
+bottom-up at derived-table construction and consumed by the existing
+temporal-operator dispatch in `emit_expr` — `d2 - d1` over derived DATE
+columns now emits `DATEDIFF` on T-SQL/MySQL and native subtraction on
+PG/Oracle (live day-count 9 on all four; CTE and two-level-nesting
+neighbors covered). Single-relation FROM only; joins/nested scopes stay
+unresolved by design.
+
+With both closed the corpus stands at **791 `[fixed]` / 169 `[limit]` /
+0 `[open]`** of 960 cases.
+
+## 49. T8 executed — generated reference docs + CI freshness gate (2026-07-30)
+
+`scripts/generate_reference_docs.py` (14 pages: 12 mapping matrices from
+`core/mappings.py`, the `[limit]` catalog, coverage) + the `--check` freshness
+step in CI; 18 unit tests. Caught real drift on its first day (twice). Detail
+in the cycle-2 campaign milestone; the warnings catalog re-keys on B32 codes
+when those land.

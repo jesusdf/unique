@@ -25,66 +25,6 @@ are ALL closed — see [`docs/MILESTONES.md`](MILESTONES.md) and
 CASCADED-hang closed by the 30.14.0 upgrade — fixed upstream (2026-07-30,
 DONE §47).*
 
-### B29 — MySQL ENUM declaration-order semantics (P2, feature brief)
-
-*From challenge case `my-enum-order` (`[open]`, 2026-07-30 campaign);
-maintainer decision 2026-07-30: full feature brief, not a warn-patch.*
-
-- **Symptom:** MySQL orders an ENUM column by its *declaration index*
-  (`ENUM('lo','mid','hi')` sorts `lo < mid < hi`); the ENUM→VARCHAR+CHECK
-  degrade makes every target sort alphabetically (`hi < lo < mid`) —
-  `ORDER BY`/`MIN`/`MAX`/comparisons silently change results (live-diffed:
-  MySQL `('lo','mid','hi')` vs PG `('hi','lo','mid')`).
-- **Mechanism to build:** the converter already harvests the ENUM value list
-  when degrading the column type. Persist that list (per column, cross-statement
-  — same registry family as `PG_COMPOSITE_TYPES`/`TEMP_TABLES` ContextVars) and
-  rewrite *ordering-sensitive uses* of the column (`ORDER BY c`, `MIN(c)`,
-  `MAX(c)`, `c < 'x'` comparisons) into the ordinal form
-  (`CASE c WHEN 'lo' THEN 1 WHEN 'mid' THEN 2 WHEN 'hi' THEN 3 END`), keeping
-  the plain value everywhere else. Uses the transformer's existing
-  cross-statement metadata plumbing; emitters stay dialect-generic.
-- **Honesty rule:** an ordering-sensitive use the rewrite cannot reach (dynamic
-  SQL, `SELECT *` into a client sort) still needs the specific warning on the
-  degrade — never silent. The blanket warning alone was rejected because it
-  would carrier-spam real-world ENUM fixtures (sakila/mediawiki).
-- **Locks in:** challenge `my-enum-order` flips to `[fixed]` with a live
-  order-comparison assertion; neighbors: ENUM in `WHERE c > 'lo'`, `MIN`/`MAX`,
-  and two ENUM columns in one table.
-
-### B30 — date-type propagation through derived-table columns (P3, feature brief)
-
-*From challenge case `reda-ora-date-literal-subquery` (`[open]`, 2026-07-30
-campaign). The PG and MySQL legs are FIXED (DATE-literal typing preserved on
-projections); only the T-SQL leg remains.*
-
-- **Symptom:** Oracle `SELECT d2 - d1 FROM (SELECT DATE '…' AS d1, DATE '…' AS
-  d2 …)` → on T-SQL the projected literals lose their date type and the outer
-  `d2 - d1` needs `DATEDIFF(DAY, d1, d2)`, but the converter cannot tell the
-  derived-table columns are dates, so it emits an invalid raw subtraction.
-- **Mechanism to build:** propagate inferred column types through derived-table
-  projections (a minimal type environment on `SubqueryExpression`: literal
-  types, CAST results, and pass-through column refs), so the temporal-operator
-  rewrites (the `date ± int` / `ts − ts` family from this campaign) can fire on
-  derived columns. Converter-layer only; no engine round-trip.
-- **Locks in:** `reda-ora-date-literal-subquery` flips to `[fixed]` with a
-  T-SQL `DATEDIFF` present / raw-minus absent assertion + live value; neighbors:
-  the same shape through a CTE and through two nesting levels.
-
-### T8 — generated reference docs + freshness gate (P2, tooling; approved 2026-07-30)
-
-*Docs "phase 1" (maintainer-approved): generate what the code already knows.*
-
-- **Deliverable:** `scripts/generate_reference_docs.py` writing
-  `docs/reference/`: (a) per-engine-pair function/type/operator mapping
-  matrices from `core/mappings.py`; (b) the degradation catalog from the
-  `[limit]` case headers (id, class, description, 03-unsupported citation)
-  plus the carrier/warning texts; (c) per-direction coverage tables reusing
-  `scripts/challenge_stats.py`.
-- **Freshness gate:** a CI step regenerates and diffs (same pattern as the
-  ratchets/web build) so `docs/reference/` can never drift from the code.
-- **Fits with:** the hand-curated `docs/rationale/` pages (2026-07-30) link to
-  these matrices instead of duplicating tables.
-
 ### B32 — warning/error code registry: `UNIQUE-NNNN` (P2, feature brief; approved 2026-07-30)
 
 *Prerequisite for B31 (the rationale registry keys on these codes) and
