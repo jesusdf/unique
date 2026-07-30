@@ -31,7 +31,7 @@ class TestNoSilentLoss:
             "CONNECT BY PRIOR employee_id = manager_id"
         )
         result = self.t.transpile(sql, "oracle", "postgresql")
-        assert "UNIQUE-" in result.sql
+        assert "UNIQUE-1134:" in result.sql
         assert result.warnings, "carrier comment present but warnings empty"
         assert result.unsupported, "dropped executable statement not in unsupported"
 
@@ -75,7 +75,7 @@ class TestNoSilentLoss:
             ") ON [PRIMARY]"
         )
         result = self.t.transpile(sql, "tsql", "postgresql")
-        assert "UNIQUE-" in result.sql
+        assert "UNIQUE-1003:" in result.sql
         assert result.warnings, "degraded statement must be signalled"
         leaked = [
             line

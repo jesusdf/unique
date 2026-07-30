@@ -155,12 +155,7 @@ class TestInsteadOfTrigger:
         # emitted as an executable INSTEAD OF clause.
         code_lines = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
         assert all("INSTEAD OF" not in ln for ln in code_lines)
-        assert re.search(
-            re.escape("-- UNIQUE")
-            + r"(?:-\d{4})?"
-            + re.escape(": MySQL has no INSTEAD OF trigger"),
-            out,
-        )
+        assert "-- UNIQUE-1176: MySQL has no INSTEAD OF trigger" in out
         assert "BEFORE UPDATE ON v" in out
 
     def test_instead_of_kept_on_postgresql(self) -> None:
@@ -601,7 +596,7 @@ class TestPostgresTriggerToMySQL:
         r = Transpiler().transpile(self.FUNC, source="postgresql", target="mysql")
         # No invalid RETURNS TRIGGER in the executable output.
         assert "RETURNS TRIGGER" not in self._code(r.sql).upper()
-        assert "UNIQUE-" in r.sql
+        assert "UNIQUE-1153:" in r.sql
         assert r.warnings or r.unsupported
 
     def test_trigger_binding_degrades_with_warning(self) -> None:
@@ -612,7 +607,7 @@ class TestPostgresTriggerToMySQL:
         assert "DECLARE TABLE AS" not in code
         # No executable CREATE TRIGGER shell (MySQL cannot run this one).
         assert "EXECUTE FUNCTION" not in code
-        assert "UNIQUE-" in r.sql
+        assert "UNIQUE-1157:" in r.sql
         assert r.warnings or r.unsupported
 
     def test_binding_roundtrips_to_postgresql(self) -> None:
@@ -684,12 +679,7 @@ class TestOracleCompoundTrigger:
 
     def test_degrades_to_carrier_mysql(self) -> None:
         r = self._run("mysql")
-        assert re.search(
-            re.escape("-- UNIQUE")
-            + r"(?:-\d{4})?"
-            + re.escape(": Oracle COMPOUND TRIGGER"),
-            r.sql,
-        )
+        assert "-- UNIQUE-1156: Oracle COMPOUND TRIGGER" in r.sql
         assert "PLS_INTEGER" not in r.sql
         assert r.warnings or r.unsupported
 

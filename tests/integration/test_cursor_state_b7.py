@@ -159,12 +159,7 @@ class TestUnknownAttributeWarns:
         assert any(
             "cursor attribute" in w.message.lower() for w in result.warnings
         ), result.warnings
-        assert re.search(
-            re.escape("UNIQUE")
-            + r"(?:-\d{4})?"
-            + re.escape(": unmapped cursor attribute"),
-            result.sql,
-        ), result.sql
+        assert "UNIQUE-1203: unmapped cursor attribute" in result.sql, result.sql
         # Never ship the bare ``c % FOO`` as EXECUTABLE arithmetic — the only
         # surviving occurrence is inside the carrier comment (strip it first,
         # per the comment-prose trap).

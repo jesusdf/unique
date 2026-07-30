@@ -85,7 +85,7 @@ class TestSemicolonlessBoundaries:
                 # subtransaction where ROLLBACK is a runtime error — it is
                 # dropped to a documented carrier inside the IF (2026-07-30).
                 assert re.search(
-                    r"(?i)THEN\s+/\* UNIQUE(?:-\d{4})?: ROLLBACK dropped", out
+                    r"(?i)THEN\s+/\* UNIQUE-1206: ROLLBACK dropped", out
                 ), (
                     target,
                     out,
