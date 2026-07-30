@@ -204,6 +204,13 @@ VALID_BUT_SQLGLOT_UNPARSEABLE: dict[tuple[str, str, str], str] = {
         "TRANSACTION ISOLATION LEVEL READ COMMITTED / BEGIN READ ONLY / COMMIT "
         "all executed clean."
     ),
+    ("challenge_mysql.sql", "red2-my-invisible-column-drop", "oracle"): (
+        "VALID Oracle: an INVISIBLE column ('b NUMBER(10) INVISIBLE', excluded "
+        "from SELECT *) is Oracle 12c+ syntax that sqlglot's oracle parser "
+        "rejects (Expecting )). Live-verified 2026-07-30 on Oracle 23ai Free "
+        "(FREEPDB1): the CREATE TABLE executed clean and SELECT * returned only "
+        "the visible column."
+    ),
 }
 
 
