@@ -594,3 +594,6 @@ EXCEPTION
     ROLLBACK TO sp1;
     RAISE;
 END;
+
+-- CASE[open][class=invalid]: red2-ora-plus-outer-join-dup — fails on postgresql, tsql, mysql. Oracle's (+) outer-join operator is correctly rewritten for a SINGLE join condition (a.id = b.id(+) -> ta LEFT JOIN tb), but with MULTIPLE (+) conditions on the same optional table the rewrite duplicates the preserved table: WHERE a.id(+) = b.id AND a.z(+) = 5 -> FROM tb b LEFT JOIN ta a ON a.id = b.id AND a.z = 5 CROSS JOIN tb b — table alias b appears twice. Live PG "table name 'b' specified more than once" (same duplicate CROSS JOIN on tsql/mysql). No warning. Source valid on Oracle. BLUE: collect all (+) predicates for a table into ONE join's ON clause; do not emit an extra CROSS JOIN for the second (+) condition.
+SELECT a.x, b.y FROM ta a, tb b WHERE a.id(+) = b.id AND a.z(+) = 5
