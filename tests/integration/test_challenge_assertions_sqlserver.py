@@ -405,6 +405,29 @@ CASES.update(
             "oracle": {"degrade": True},
             "mysql": {"degrade": True},
         },
+        # lying-warning: T-SQL ISNULL(x, y) takes the FIRST arg's type, so the
+        # replacement is truncated (VARCHAR(2) -> 'ab'); plain COALESCE keeps the
+        # full value. Wrap COALESCE in a CAST to the first-arg type. All = 'ab'.
+        "reda-ts-isnull-trunc": {
+            "postgresql": {
+                "present": [
+                    "CAST(COALESCE(CAST(NULL AS VARCHAR(2)), 'abcdef') AS VARCHAR(2))"
+                ],
+                "absent": ["ISNULL"],
+            },
+            "oracle": {
+                "present": [
+                    "CAST(COALESCE(CAST(NULL AS VARCHAR2(2)), 'abcdef') AS VARCHAR2(2))"
+                ],
+                "absent": ["ISNULL"],
+            },
+            "mysql": {
+                "present": [
+                    "CAST(COALESCE(CAST(NULL AS CHAR(2)), 'abcdef') AS CHAR(2))"
+                ],
+                "absent": ["ISNULL"],
+            },
+        },
         # lying-warning: LIKE ... ESCAPE is SQL-standard and identical on every
         # engine, but was falsely degraded to a commented carrier. It must now
         # survive as executable SQL (the ESCAPE clause present in the *stripped*

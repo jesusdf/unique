@@ -1155,6 +1155,19 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
             distinct=agg.distinct,
         )
 
+    if isinstance(expr, exp.Coalesce) and expr.args.get("is_null"):
+        # T-SQL ``ISNULL(x, y)`` returns a value of the FIRST argument's declared
+        # type, so a longer replacement is TRUNCATED (``ISNULL(CAST(NULL AS
+        # VARCHAR(2)), 'abcdef')`` = ``'ab'``). Plain COALESCE keeps the full
+        # value (its result type is the highest-precedence operand). When the
+        # first argument is a CAST to a length-bearing type, wrap the COALESCE in
+        # that CAST to reproduce ISNULL's truncation. (Consuming ``is_null`` also
+        # clears the unread-arg tripwire.)
+        call = _convert_function(expr)
+        first = call.args[0] if call.args else None
+        if isinstance(first, CastExpression) and first.target_type.params:
+            return CastExpression(expression=call, target_type=first.target_type)
+        return call
     if isinstance(expr, exp.Func):
         return _convert_function(expr)
     if isinstance(expr, exp.Not):
