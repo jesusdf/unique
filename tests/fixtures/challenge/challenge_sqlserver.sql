@@ -559,3 +559,9 @@ SELECT DATEPART(WEEK, '2021-01-01') AS w
 
 -- CASE[open][class=invalid]: red2-ts-exec-named-param-mysql — fails on mysql. T-SQL EXEC proc @p = v (named parameter binding) is translated to MySQL as CALL proc(v_p = v), but MySQL CALL has no named-parameter syntax: v_p = v is parsed as a boolean expression over a column v_p -> live error 1054 "Unknown column 'v_id' in 'field list'". No warning. Positional EXEC proc 1, 0 correctly becomes CALL proc(1, 0); PG (name => v) and Oracle (name => v) named-arg forms are valid. Only the MySQL leg ships invalid. BLUE: MySQL CALL is positional-only — reorder the named args to the routine's parameter order (or degrade+warn) instead of emitting name = value.
 EXEC dbo.get_rows @id = 1, @flag = 0
+
+-- CASE[open][class=silent-drop]: red2-ts-raiserror-format-arg-drop — fails on postgresql, oracle. A RAISERROR with a printf-style format message and substitution arguments (RAISERROR('value is %d today', 16, 1, 42) => T-SQL raises "value is 42 today") loses the substitution: the message is emitted with the literal %d and the argument 42 is silently DROPPED, with NO warning. PG: RAISE EXCEPTION '%', 'value is %d today' (PG RAISE fully supports 'value is % today', 42); Oracle: RAISE_APPLICATION_ERROR(-20001, 'value is %d today'). The MySQL leg DOES warn ("original RAISERROR/THROW severity/state args dropped: 1, 42") — PG/Oracle are silently inconsistent. Source proc compiles on T-SQL. BLUE: translate the %d/%s substitution into PG RAISE format args / Oracle string concatenation instead of dropping them; at minimum warn like the MySQL leg.
+CREATE PROCEDURE p AS
+BEGIN
+  RAISERROR('value is %d today', 16, 1, 42);
+END
