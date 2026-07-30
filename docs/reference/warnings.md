@@ -28,7 +28,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL requires IDENTITY_INSERT ON before a script may supply its own value for an identity column; no other engine has an explicit identity-override mode — they simply accept an explicit value in the INSERT column list — so the ON/OFF bracket has nothing to map to.
 
-**See Also.** [`reda-ts-identity-insert`](../../tests/fixtures/challenge/)
+**See Also.** [`reda-ts-identity-insert`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1003"></a>`UNIQUE-1003` — A source construct with no per-site conversion — the shared RawSQL fallback carrier (e.g. a SELECT-list set-returning function relocated to FROM, which MySQL has no inline table-function form for)
 
@@ -52,7 +52,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** NULLS FIRST/LAST in an index definition is Oracle-rejected outright (ORA-00907) and has no T-SQL/MySQL spelling at all; it affects only the index's physical null placement, not query results, so it is dropped rather than block the CREATE INDEX.
 
-**See Also.** [`postgresql-drop2-NULLS`](../../tests/fixtures/challenge/)
+**See Also.** [`postgresql-drop2-NULLS`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1005"></a>`UNIQUE-1005` — An index over an expression, e.g. CREATE INDEX ... ((concat(a, b))) (→ T-SQL)
 
@@ -112,7 +112,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** PostgreSQL/MySQL/Oracle evaluate NOT under three-valued logic — the negation of NULL is still NULL — but T-SQL has no boolean value type at all: NOT requires a genuine predicate operand, so NOT of a bare NULL/column literal is error 4145, not a value.
 
-**See Also.** [`pg-not-null-is-null`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-not-null-is-null`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1010"></a>`UNIQUE-1010` — ALTER COLUMN ... TYPE on a column whose nullability the script never declares (→ T-SQL)
 
@@ -136,7 +136,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** FILLFACTOR and sibling physical clauses reserve per-page free space — a storage-tuning knob with no logical effect on query results; Oracle and MySQL CREATE INDEX have no equivalent clause.
 
-**See Also.** [`reda-ts-index-fillfactor-mysql`](../../tests/fixtures/challenge/)
+**See Also.** [`reda-ts-index-fillfactor-mysql`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1015"></a>`UNIQUE-1015` — DISTINCT / ORDER BY over a string column under MySQL's default collation
 
@@ -148,7 +148,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's default collation is case-insensitive, so DISTINCT / GROUP BY / ORDER BY treat 'a' and 'A' as equal and collapse them into one row; the case-sensitive PostgreSQL/Oracle defaults keep them distinct — a row-count divergence no ORDER BY LOWER() rewrite can bridge without column-level collation visibility.
 
-**See Also.** [`my-distinct-case`](../../tests/fixtures/challenge/)
+**See Also.** [`my-distinct-case`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1016"></a>`UNIQUE-1016` — GROUP BY CUBE / ROLLUP / GROUPING SETS super-aggregate rows (→ MySQL)
 
@@ -160,7 +160,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL has no CUBE / GROUPING SETS and only a trailing WITH ROLLUP, so a multi-element grouping's subtotal (super-aggregate) rows cannot be produced; only the base grouping is kept.
 
-**See Also.** [`pg-grouping-fn`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-grouping-fn`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1019"></a>`UNIQUE-1019` — SQL_CALC_FOUND_ROWS on a SELECT with LIMIT (MySQL) → other engines
 
@@ -172,7 +172,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** SQL_CALC_FOUND_ROWS is a MySQL-only optimizer hint that makes a following FOUND_ROWS() return the row count the LIMIT would otherwise have discarded; no other engine has an equivalent two-statement result-caching mechanism.
 
-**See Also.** [`mysql-qdrop-SQL_CALC_FOU`](../../tests/fixtures/challenge/)
+**See Also.** [`mysql-qdrop-SQL_CALC_FOU`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1020"></a>`UNIQUE-1020` — INSERT INTO t VALUES () — an all-defaults insert with no column list (→ Oracle)
 
@@ -280,7 +280,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** PostgreSQL's version() and MySQL's VERSION() return each engine's own version string in its own format, never T-SQL's — the closest available function, but the returned value can never equal the source's.
 
-**See Also.** [`ts-spid-version`](../../tests/fixtures/challenge/)
+**See Also.** [`ts-spid-version`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1031"></a>`UNIQUE-1031` — T-SQL @@VERSION (→ Oracle)
 
@@ -292,7 +292,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Oracle's version string lives only in the v$version view, which needs a query (and often elevated privileges) — not a scalar expression a statement can splice in — so there is no drop-in replacement expression at all.
 
-**See Also.** [`ts-spid-version`](../../tests/fixtures/challenge/)
+**See Also.** [`ts-spid-version`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1032"></a>`UNIQUE-1032` — T-SQL @@SPID (→ PostgreSQL/MySQL/Oracle)
 
@@ -304,7 +304,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Every engine spells its session/connection identifier differently (PostgreSQL pg_backend_pid(), MySQL CONNECTION_ID(), Oracle SYS_CONTEXT('USERENV','SID')) and the value is inherently per-connection, so it can never equal T-SQL's @@SPID even when mapped to the engine's closest equivalent.
 
-**See Also.** [`ts-spid-version`](../../tests/fixtures/challenge/)
+**See Also.** [`ts-spid-version`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1034"></a>`UNIQUE-1034` — TABLESAMPLE (→ MySQL)
 
@@ -316,7 +316,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL has no row-sampling clause at all (and sampling is inherently non-deterministic besides), so there is no way to return a subset of rows equivalent to the source's sample.
 
-**See Also.** [`pg-tablesample`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-tablesample`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1037"></a>`UNIQUE-1037` — TOP ... WITH TIES (T-SQL) / FETCH FIRST ... WITH TIES (→ MySQL)
 
@@ -328,7 +328,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's LIMIT has no WITH TIES equivalent — it caps at a fixed row count with no provision for including rows that tie the last one on the ORDER BY key.
 
-**See Also.** [`ts-top-with-ties`](../../tests/fixtures/challenge/)
+**See Also.** [`ts-top-with-ties`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1038"></a>`UNIQUE-1038` — TOP n PERCENT (T-SQL) → PostgreSQL/MySQL
 
@@ -352,7 +352,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** PostgreSQL timestamptz has the identical session-time-zone display behaviour as Oracle's LTZ (live-verified: the same instant shows 12:00 in a UTC session and 07:00 in a New York session), so the column maps directly rather than losing anything.
 
-**See Also.** [`ora-dttypes`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-dttypes`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1040"></a>`UNIQUE-1040` — Oracle TIMESTAMP WITH LOCAL TIME ZONE column (→ T-SQL)
 
@@ -364,7 +364,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL has no session-local timestamp type; the column maps to DATETIMEOFFSET, which keeps a fixed stored offset instead of re-deriving the session's own time zone on every read.
 
-**See Also.** [`ora-dttypes`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-dttypes`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1041"></a>`UNIQUE-1041` — Oracle TIMESTAMP WITH LOCAL TIME ZONE column (→ MySQL)
 
@@ -376,7 +376,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL has no session-local timestamp type; the column maps to TIMESTAMP, which normalizes to UTC storage instead of re-deriving the session's own time zone on every read.
 
-**See Also.** [`ora-dttypes`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-dttypes`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1042"></a>`UNIQUE-1042` — A TIME/TIMETZ column (→ Oracle)
 
@@ -388,7 +388,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Oracle has no bare TIME (or TIME WITH TIME ZONE) column type, so the time-of-day value is stored as INTERVAL DAY TO SECOND (a duration since midnight) instead.
 
-**See Also.** [`pg-dttypes`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-dttypes`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1043"></a>`UNIQUE-1043` — A bare PostgreSQL INTERVAL column, with no YEAR TO MONTH/DAY TO SECOND qualifier (→ Oracle)
 
@@ -400,7 +400,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** PostgreSQL's INTERVAL mixes year-month and day-second fields in one value; Oracle splits INTERVAL into two distinct column types, so the column maps to INTERVAL DAY TO SECOND and any year-month component has nowhere to go.
 
-**See Also.** [`pg-dttypes`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-dttypes`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1044"></a>`UNIQUE-1044` — An INTERVAL column (→ T-SQL / MySQL)
 
@@ -412,7 +412,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL has no interval type at all, and MySQL's INTERVAL is only an arithmetic qualifier (e.g. INTERVAL 1 DAY), never a column type, so the interval value is kept as text instead.
 
-**See Also.** [`ora-tz-interval`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-tz-interval`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1045"></a>`UNIQUE-1045` — A fractional-seconds column precision above 6 (DATETIME(n)/TIMESTAMP(n)/TIME(n) with n>6) (→ MySQL)
 
@@ -424,7 +424,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's sub-second precision caps at microseconds (6 digits); a higher source precision (e.g. T-SQL DATETIME2(7)) has no wider MySQL fractional-seconds type to map onto.
 
-**See Also.** [`ts-datetimeoffset`](../../tests/fixtures/challenge/)
+**See Also.** [`ts-datetimeoffset`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1046"></a>`UNIQUE-1046` — MySQL multi-bit BIT(n>1) column (→ Oracle / T-SQL)
 
@@ -436,7 +436,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Neither engine has a bit-string column type; a multi-bit BIT is a 64-bit numeric value, not a boolean, so it maps to a wide NUMBER/NUMERIC that holds the same value instead.
 
-**See Also.** [`my-bintypes`](../../tests/fixtures/challenge/)
+**See Also.** [`my-bintypes`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1048"></a>`UNIQUE-1048` — T-SQL structure-clone CREATE TABLE t2 LIKE t1 (→ T-SQL / Oracle)
 
@@ -460,7 +460,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's only identity form is AUTO_INCREMENT, whose seed is a table option (AUTO_INCREMENT = n) with no per-column START/INCREMENT — a non-default seed/step cannot be reproduced as a column clause.
 
-**See Also.** [`ora-identity-opts`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-identity-opts`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1050"></a>`UNIQUE-1050` — MySQL column-level ON UPDATE CURRENT_TIMESTAMP auto-refresh clause (→ other engines)
 
@@ -472,7 +472,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** No other engine has a column-level auto-refresh-on-update clause; the behaviour can only be reproduced there with an explicit AFTER UPDATE trigger.
 
-**See Also.** [`mysql-drop2-ON`](../../tests/fixtures/challenge/)
+**See Also.** [`mysql-drop2-ON`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1051"></a>`UNIQUE-1051` — A column-level COLLATE clause (→ a different target engine)
 
@@ -484,7 +484,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Collation names are engine-specific catalog identifiers with no cross-engine mapping; without a live database connection, Unique cannot resolve what collation the source column actually uses.
 
-**See Also.** [`postgresql-drop4-COLLATE`](../../tests/fixtures/challenge/)
+**See Also.** [`postgresql-drop4-COLLATE`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1052"></a>`UNIQUE-1052` — MySQL/Oracle INVISIBLE column attribute (→ PostgreSQL / T-SQL)
 
@@ -496,7 +496,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** PostgreSQL and T-SQL have no invisible-column attribute (a column excluded from SELECT *), so it cannot be reproduced there.
 
-**See Also.** [`red2-my-invisible-column-drop`](../../tests/fixtures/challenge/)
+**See Also.** [`red2-my-invisible-column-drop`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1053"></a>`UNIQUE-1053` — PostgreSQL UNIQUE ... NULLS NOT DISTINCT (→ other engines)
 
@@ -508,7 +508,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Only PostgreSQL 15+ has a NULLS NOT DISTINCT unique-constraint modifier (NULLs compare equal, so only one NULL row is allowed); every other engine's UNIQUE always treats NULLs as distinct.
 
-**See Also.** [`pg-unique-nulls-notdistinct`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-unique-nulls-notdistinct`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1054"></a>`UNIQUE-1054` — Cascading referential action on a self-referencing FK (→ T-SQL)
 
@@ -520,7 +520,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL rejects a cascading action on a self-referencing foreign key outright (error 1785 at CREATE TABLE time) — an engine restriction, not a missing feature.
 
-**See Also.** [`my-self-fk`](../../tests/fixtures/challenge/)
+**See Also.** [`my-self-fk`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1055"></a>`UNIQUE-1055` — Foreign-key ON DELETE SET DEFAULT referential action (→ Oracle)
 
@@ -532,7 +532,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Oracle foreign keys support only CASCADE/SET NULL/NO ACTION — SET DEFAULT raises ORA-03001 ('unimplemented feature') if shipped verbatim.
 
-**See Also.** [`red2-pg-fk-ondelete-setdefault-oracle`](../../tests/fixtures/challenge/)
+**See Also.** [`red2-pg-fk-ondelete-setdefault-oracle`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1056"></a>`UNIQUE-1056` — T-SQL In-Memory OLTP table storage option(s) (MEMORY_OPTIMIZED / DURABILITY) (→ other engines)
 
@@ -556,7 +556,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Same underlying gap as UNIQUE-1051 but table-scoped: collation names are engine-specific and unresolvable without a live database connection.
 
-**See Also.** [`mysql-drop5-utf8mb4`](../../tests/fixtures/challenge/)
+**See Also.** [`mysql-drop5-utf8mb4`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1058"></a>`UNIQUE-1058` — A non-portable CREATE VIEW modifier (e.g. SCHEMABINDING, ALGORITHM=, DEFINER=, SQL SECURITY) with no native form on the target
 
@@ -568,7 +568,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** These modifiers are single-engine syntax with no equivalent option elsewhere (MATERIALIZED is handled separately, natively, on Oracle/PostgreSQL, so it never reaches this drop).
 
-**See Also.** [`red2-pg-matview-oracle-falsewarn`](../../tests/fixtures/challenge/)
+**See Also.** [`red2-pg-matview-oracle-falsewarn`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1059"></a>`UNIQUE-1059` — DROP SEQUENCE (→ MySQL)
 
@@ -628,7 +628,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** The generic degrade path for a value Unique recognizes but cannot compute on another engine — used e.g. for AT TIME ZONE (Oracle/MySQL have no such operator; PostgreSQL/T-SQL's own session-tz-dependent display differs) and T-SQL's geometry/geography '::' static-method call (no other engine has CLR types).
 
-**See Also.** [`ts-at-time-zone`](../../tests/fixtures/challenge/)
+**See Also.** [`ts-at-time-zone`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1064"></a>`UNIQUE-1064` — Oracle bare SESSIONTIMEZONE global (→ other engines)
 
@@ -640,7 +640,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** SESSIONTIMEZONE reports the connecting session's own UTC offset — a per-session value with no fixed cross-engine equivalent; the mapped expression reports the TARGET session's own zone in its native format instead.
 
-**See Also.** [`ora-tz-funcs`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-tz-funcs`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1065"></a>`UNIQUE-1065` — CAST(... AS TIME) and other Oracle-absent value types
 
@@ -652,7 +652,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Oracle has no bare TIME (or plain INTERVAL) type, so the value is kept as text with a documented carrier rather than an invalid cast.
 
-**See Also.** [`my-cast-time`](../../tests/fixtures/challenge/)
+**See Also.** [`my-cast-time`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1066"></a>`UNIQUE-1066` — MySQL JSON type / CAST(... AS JSON)
 
@@ -664,7 +664,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's JSON type has no faithful cross-engine equivalent — T-SQL has no JSON type at all, and canonical JSON spacing differs on PostgreSQL/Oracle — so the value is kept as text.
 
-**See Also.** [`my-cast-json`](../../tests/fixtures/challenge/)
+**See Also.** [`my-cast-json`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1067"></a>`UNIQUE-1067` — PostgreSQL geometric type (point/line/…) cast or column
 
@@ -676,7 +676,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** PostgreSQL's geometric types have no cross-engine model (MySQL's spatial POINT is a different WKB type), so the value is kept as text.
 
-**See Also.** [`pg-cast-point`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-cast-point`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1068"></a>`UNIQUE-1068` — A PostgreSQL numeric NaN/Infinity literal cast to a numeric type (→ MySQL / T-SQL / Oracle)
 
@@ -688,7 +688,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Only PostgreSQL's numeric type has a NaN/Infinity value; MySQL/T-SQL/Oracle DECIMAL/NUMBER silently collapse a 'NaN' cast to 0, so the special value has no faithful representation there.
 
-**See Also.** [`pg-nan-cmp`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-nan-cmp`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1069"></a>`UNIQUE-1069` — MySQL UNSIGNED integer type / CAST(... AS UNSIGNED)
 
@@ -700,7 +700,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** No other engine has an UNSIGNED integer type; the value is mapped to a signed NUMERIC/NUMBER, so unsigned wraparound semantics are not preserved.
 
-**See Also.** [`my-cast-convert`](../../tests/fixtures/challenge/)
+**See Also.** [`my-cast-convert`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1071"></a>`UNIQUE-1071` — A scalar subquery serialized via T-SQL FOR XML/JSON (→ other engines)
 
@@ -712,7 +712,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** FOR XML/JSON row-serialization inside a (SELECT ... FOR XML/JSON) scalar subquery has no cross-engine equivalent; dropping only the clause would ship the multi-column rows raw into a scalar context (ORA-00913 'too many values'), so the whole scalar degrades instead.
 
-**See Also.** [`ts-for-xml`](../../tests/fixtures/challenge/)
+**See Also.** [`ts-for-xml`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1073"></a>`UNIQUE-1073` — MySQL date arithmetic on a non-datetime string literal (e.g. DATE_ADD('not-a-date', INTERVAL ...))
 
@@ -724,7 +724,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's own date-arithmetic functions yield NULL when the first argument doesn't parse as a date/time value; folding the literal at transpile time reproduces that NULL rather than emitting an invalid cast on another engine.
 
-**See Also.** [`my-timestr-plus`](../../tests/fixtures/challenge/)
+**See Also.** [`my-timestr-plus`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1074"></a>`UNIQUE-1074` — MySQL DATE - DATE subtraction
 
@@ -736,7 +736,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's DATE - DATE operator is a numeric YYYYMMDD subtraction (e.g. 2020-03-01 - 2020-01-01 = 200), not a day count; the meaningful day-count value (60, matching every other engine's date subtraction) is emitted instead.
 
-**See Also.** [`my-date-diff-minus`](../../tests/fixtures/challenge/)
+**See Also.** [`my-date-diff-minus`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1075"></a>`UNIQUE-1075` — timestamp - timestamp subtraction (→ T-SQL / MySQL)
 
@@ -760,7 +760,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL STRING_AGG and MySQL GROUP_CONCAT can never carry an OVER clause, and PostgreSQL rejects an ORDER-BY aggregate used as a window function — there is no running-string-aggregate form to target.
 
-**See Also.** [`ora-listagg-over`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-listagg-over`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1077"></a>`UNIQUE-1077` — GROUPS window frame (PostgreSQL / Oracle)
 
@@ -772,7 +772,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL and MySQL implement only ROWS and RANGE frame units; a GROUPS frame spans whole peer groups, and no ROWS/RANGE combination reproduces that boundary when the ORDER BY key has ties.
 
-**See Also.** [`pg-window-groups-frame`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-window-groups-frame`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1078"></a>`UNIQUE-1078` — A window frame EXCLUDE clause (CURRENT ROW / GROUP / TIES) (→ T-SQL / MySQL)
 
@@ -784,7 +784,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL and MySQL implement no EXCLUDE option on a window frame at all, and there is no faithful ROWS/RANGE rewrite that reproduces excluding specific peer rows from the frame.
 
-**See Also.** [`red2-pg-window-exclude-current`](../../tests/fixtures/challenge/)
+**See Also.** [`red2-pg-window-exclude-current`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1080"></a>`UNIQUE-1080` — Sequence CURRVAL — current value without advancing (→ T-SQL)
 
@@ -796,7 +796,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL has NEXT VALUE FOR but no CURRVAL; there is no way to read a sequence's current value without advancing it.
 
-**See Also.** [`ora-seq-use`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-seq-use`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1082"></a>`UNIQUE-1082` — An empty-string result on Oracle ('' ≡ NULL)
 
@@ -808,7 +808,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Oracle has no on-disk representation for an empty string distinct from NULL — an empty-string result becomes NULL — so a value that is '' on other engines cannot be reproduced there.
 
-**See Also.** [`pg-repeat-negative`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-repeat-negative`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1083"></a>`UNIQUE-1083` — DATEPART(WEEKDAY, d) (T-SQL)
 
@@ -820,7 +820,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** DATEPART(WEEKDAY) depends on the session @@DATEFIRST setting, which Unique cannot observe at transpile time; the conversion assumes the T-SQL default (Sunday = 1).
 
-**See Also.** [`reda-ts-datepart-weekday`](../../tests/fixtures/challenge/)
+**See Also.** [`reda-ts-datepart-weekday`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1084"></a>`UNIQUE-1084` — Oracle ROUND(date, fmt) — a date rounded to the nearest fmt boundary (→ other engines)
 
@@ -832,7 +832,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** No other engine has a nearest-boundary date-rounding function; only Oracle's own ROUND(date, fmt) computes this, so the general case (any fmt) has no cross-engine formula.
 
-**See Also.** [`red2-ora-round-date-fmt`](../../tests/fixtures/challenge/)
+**See Also.** [`red2-ora-round-date-fmt`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1085"></a>`UNIQUE-1085` — Oracle TRUNC(date, fmt) with a format model that has no portable truncation (e.g. 'W' week-of-month)
 
@@ -844,7 +844,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Most Oracle TRUNC format models map to a portable truncation unit (day, month, year, ISO week, ...), but a few (like 'W', week-of-the-month) have no equivalent boundary on any other engine.
 
-**See Also.** [`red2-ora-trunc-format-unmapped`](../../tests/fixtures/challenge/)
+**See Also.** [`red2-ora-trunc-format-unmapped`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1087"></a>`UNIQUE-1087` — Oracle INSTR with a non-literal occurrence count or a non-literal backward (negative-start) search
 
@@ -868,7 +868,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** UpdateXML has no cross-engine equivalent — PostgreSQL lacks it, and T-SQL .modify() / Oracle UPDATEXML differ in shape and semantics.
 
-**See Also.** [`my-xml-fns`](../../tests/fixtures/challenge/)
+**See Also.** [`my-xml-fns`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1089"></a>`UNIQUE-1089` — COLLATION(x) — the collation name of a value (→ other engines)
 
@@ -880,7 +880,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Collation names are engine-specific catalog identifiers (e.g. MySQL's utf8mb4_0900_ai_ci vs Oracle's NLS-based names) with no cross-engine mapping, even though the function itself exists on multiple engines.
 
-**See Also.** [`my-collation-fn`](../../tests/fixtures/challenge/)
+**See Also.** [`my-collation-fn`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1090"></a>`UNIQUE-1090` — Oracle REGEXP_SUBSTR capture-group extraction (6th arg) (→ MySQL)
 
@@ -892,7 +892,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's REGEXP_SUBSTR has no capture-group argument, so the sub-group extraction cannot be expressed; the portable (str, pat, pos, occ) subset is emitted.
 
-**See Also.** [`ora-regexp-group`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-regexp-group`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1091"></a>`UNIQUE-1091` — Oracle TRANSLATE(s, from, to) (→ MySQL)
 
@@ -904,7 +904,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** TRANSLATE is native on PostgreSQL/T-SQL, but MySQL has no TRANSLATE function; a nested-REPLACE emulation is order-dependent (each REPLACE can rematch a previous substitution's output) and is not equivalent to TRANSLATE's simultaneous single-pass character mapping.
 
-**See Also.** [`ora-translate3`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-translate3`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1092"></a>`UNIQUE-1092` — SUBSTRING(x FROM POSIX-regex-pattern) (→ T-SQL)
 
@@ -916,7 +916,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL has no POSIX regular-expression engine, so a POSIX-pattern SUBSTRING (native on Oracle REGEXP_SUBSTR / MySQL) has no equivalent there.
 
-**See Also.** [`pg-substring-regex`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-substring-regex`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1093"></a>`UNIQUE-1093` — SUBSTRING(x FROM SIMILAR-TO-pattern FOR escape) — the SQL-standard regex form
 
@@ -928,7 +928,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** The SQL-standard SIMILAR TO pattern syntax uses different metacharacters (%, _, #"..."# capture markers) than POSIX regex, so no faithful cross-engine rewrite exists on engines whose regex functions expect POSIX syntax.
 
-**See Also.** [`pg-substring-escape`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-substring-escape`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1094"></a>`UNIQUE-1094` — An empty-string function result on Oracle (e.g. SUBSTR yielding '')
 
@@ -940,7 +940,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** The same underlying limit as Oracle's NULL-equals-empty-string storage (UNIQUE-1082/1207), applied to a computed (not stored) empty-string result — Oracle collapses it to NULL at the point of computation too.
 
-**See Also.** [`my-fsubstr`](../../tests/fixtures/challenge/)
+**See Also.** [`my-fsubstr`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1095"></a>`UNIQUE-1095` — MySQL VALUES(col) used outside an INSERT ... ON DUPLICATE KEY UPDATE statement
 
@@ -964,7 +964,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL and MySQL have no interval value type, so the epoch (total seconds) of an interval value has no portable equivalent.
 
-**See Also.** [`pg-epoch`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-epoch`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1097"></a>`UNIQUE-1097` — EXTRACT(MICROSECONDS FROM TIME) (→ Oracle)
 
@@ -976,7 +976,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Oracle has no TIME type, so the microseconds field of a TIME value has no Oracle equivalent.
 
-**See Also.** [`pg-frac-seconds`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-frac-seconds`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1098"></a>`UNIQUE-1098` — PostgreSQL format() with a %I/%L specifier, a width, or a positional argument (→ other engines)
 
@@ -1000,7 +1000,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** PostgreSQL's sha256/sha512 return a bytea digest, while every other engine's equivalent hash function returns a hex-encoded string — the underlying digest is identical, but the representation differs and cannot be reconciled without an explicit encode() the source SQL doesn't have.
 
-**See Also.** [`pg-hash-fns`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-hash-fns`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1100"></a>`UNIQUE-1100` — MySQL CHAR(n) as a numeric-to-byte-string function
 
@@ -1012,7 +1012,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's CHAR(n) returns a multi-byte byte string (CHAR(256) = the 2-byte string 0x0100), not a single Unicode code point like CHR/NCHAR, so the two cannot be equated.
 
-**See Also.** [`my-char-256`](../../tests/fixtures/challenge/)
+**See Also.** [`my-char-256`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1101"></a>`UNIQUE-1101` — A data-modifying CTE, e.g. WITH ins AS (INSERT ... RETURNING ...) SELECT ... (PostgreSQL) → T-SQL
 
@@ -1036,7 +1036,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Oracle SELECT locking is FOR UPDATE (exclusive) only — it has no shared-row-lock mode — so the shared lock cannot be reproduced.
 
-**See Also.** [`my-for-share`](../../tests/fixtures/challenge/)
+**See Also.** [`my-for-share`](../../tests/fixtures/challenge/challenge_mysql.sql)
 
 ### <a id="unique-1104"></a>`UNIQUE-1104` — Oracle FOR UPDATE WAIT <n> — a bounded lock wait
 
@@ -1048,7 +1048,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** PostgreSQL/MySQL offer only FOR UPDATE / NOWAIT / SKIP LOCKED, with no bounded-wait timeout, so the WAIT <n> bound has no equivalent.
 
-**See Also.** [`ora-forupdate-wait`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-forupdate-wait`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1105"></a>`UNIQUE-1105` — Oracle FOR UPDATE OF <column> (→ PostgreSQL/MySQL)
 
@@ -1060,7 +1060,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Oracle's FOR UPDATE OF names a COLUMN, selecting which joined table's rows to lock via the column's owning table; PostgreSQL and MySQL's FOR UPDATE OF instead takes a TABLE/alias name directly — an incompatible argument shape, not just a renaming.
 
-**See Also.** [`reda-ora-forupdate-of-col`](../../tests/fixtures/challenge/)
+**See Also.** [`reda-ora-forupdate-of-col`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1108"></a>`UNIQUE-1108` — ADD CONSTRAINT ... NOT VALID (PostgreSQL, deferred validation) → T-SQL/Oracle/MySQL
 
@@ -1072,7 +1072,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Only PostgreSQL can add a constraint without validating existing rows against it immediately; T-SQL, Oracle and MySQL all validate an added constraint at ADD time, with no deferred-validation mode to opt into.
 
-**See Also.** [`pg-alter-notvalid`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-alter-notvalid`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1109"></a>`UNIQUE-1109` — TRUNCATE ... CASCADE (PostgreSQL, also truncates FK-dependent tables) → MySQL/T-SQL
 
@@ -1084,7 +1084,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Only Oracle's TRUNCATE has a CASCADE option matching PostgreSQL's; MySQL and T-SQL TRUNCATE truncate only the named table, with no mechanism to also truncate its FK-dependent tables in one statement.
 
-**See Also.** [`pg-truncate-restart`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-truncate-restart`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1110"></a>`UNIQUE-1110` — ALTER COLUMN ... TYPE t USING <non-trivial expression> (PostgreSQL) → T-SQL
 
@@ -1108,7 +1108,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's only identity form is AUTO_INCREMENT, which MySQL additionally requires to be a key (error 1075 otherwise) — a constraint PostgreSQL/Oracle identity columns do not share — so a UNIQUE index must be synthesized alongside the column.
 
-**See Also.** [`pg-add-identity`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-add-identity`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1113"></a>`UNIQUE-1113` — A GIN/GiST/BRIN index (PostgreSQL) → T-SQL/MySQL/Oracle
 
@@ -1120,7 +1120,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** GIN/GiST/BRIN are PostgreSQL-specific access methods (inverted, generalized-search-tree, block-range) with no equivalent index type on the other three engines — the choice of access method is inherently engine-specific, unlike a plain B-tree index.
 
-**See Also.** [`pg-gin-jsonb`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-gin-jsonb`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1114"></a>`UNIQUE-1114` — An expression index over a column that maps to a LOB type on the target
 
@@ -1132,7 +1132,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** A source TEXT/CLOB-mapped column used inside an index expression is invalid on the target once the type maps to a LOB (Oracle ORA-02327 forbids a LOB in a function-based index; MySQL's functional-index grammar has the same restriction).
 
-**See Also.** [`pg-expr-index`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-expr-index`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1115"></a>`UNIQUE-1115` — CREATE INDEX CONCURRENTLY (PostgreSQL's non-locking index build) → T-SQL/MySQL
 
@@ -1144,7 +1144,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** CONCURRENTLY is a PostgreSQL build-strategy option (avoids locking the table during the build); T-SQL and MySQL have no matching keyword — the resulting index is identical, only the build-time locking behavior differs.
 
-**See Also.** [`postgresql-drop2-CONCURRENTLY`](../../tests/fixtures/challenge/)
+**See Also.** [`postgresql-drop2-CONCURRENTLY`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1116"></a>`UNIQUE-1116` — SET @@var = ... — a MySQL system-variable assignment via the @@ form (→ PostgreSQL/T-SQL/Oracle)
 
@@ -1180,7 +1180,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL has no sequence object at all; an AUTO_INCREMENT column is the closest idiom, but it is a column property, not a free-standing, shareable object the way a sequence is, so CREATE SEQUENCE has no direct MySQL statement to become.
 
-**See Also.** [`red2-pg-nextval-false-unmap`](../../tests/fixtures/challenge/)
+**See Also.** [`red2-pg-nextval-false-unmap`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1122"></a>`UNIQUE-1122` — USE <database> (T-SQL/MySQL) → PostgreSQL/Oracle
 
@@ -1300,7 +1300,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** PostgreSQL's RETURNING only returns a result set to the caller; it has no INTO <table> redirect form, so the redirect cannot be expressed in a plain INSERT.
 
-**See Also.** [`reda-ts-output-into`](../../tests/fixtures/challenge/)
+**See Also.** [`reda-ts-output-into`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1138"></a>`UNIQUE-1138` — UPDATE ... FROM ... RETURNING (PostgreSQL) → Oracle
 
@@ -1324,7 +1324,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Oracle's RETURNING is PL/SQL-only — it must target INTO bind variables and cannot stand alone in a plain SQL statement (ORA-63809) — so a standalone OUTPUT/RETURNING has no Oracle equivalent.
 
-**See Also.** [`reda-ts-output-into`](../../tests/fixtures/challenge/)
+**See Also.** [`reda-ts-output-into`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1140"></a>`UNIQUE-1140` — OUTPUT/RETURNING on an INSERT/UPDATE/DELETE (→ MySQL)
 
@@ -1348,7 +1348,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL has no trailing row-lock clause on SELECT at all; row locking is instead requested via a WITH (UPDLOCK, ROWLOCK) table hint on the FROM clause — a different syntactic position, not a drop-in keyword substitution.
 
-**See Also.** [`postgresql-qdrop-FOR`](../../tests/fixtures/challenge/)
+**See Also.** [`postgresql-qdrop-FOR`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1146"></a>`UNIQUE-1146` — An EXCLUDE exclusion constraint (PostgreSQL) → T-SQL/MySQL/Oracle
 
@@ -1360,7 +1360,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** EXCLUDE (e.g. preventing overlapping ranges via a GiST index) is a PostgreSQL-only constraint type with no equivalent declarative constraint on any other engine; the same behavior there needs a hand-written trigger.
 
-**See Also.** [`postgresql-drop2-EXCLUDE`](../../tests/fixtures/challenge/)
+**See Also.** [`postgresql-drop2-EXCLUDE`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1147"></a>`UNIQUE-1147` — T-SQL computed column, e.g. total AS (a + b) PERSISTED (→ PostgreSQL/MySQL/Oracle)
 
@@ -1384,7 +1384,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Oracle foreign keys support only ON DELETE CASCADE / SET NULL — there is no ON UPDATE referential action (ORA-00905).
 
-**See Also.** [`reda-ts-fk-on-update`](../../tests/fixtures/challenge/)
+**See Also.** [`reda-ts-fk-on-update`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1151"></a>`UNIQUE-1151` — A source-engine built-in with no form in the target's catalog (e.g. SOUNDEX → PostgreSQL)
 
@@ -1396,7 +1396,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** A call that is a built-in of the source engine (clearly meant to run, not a user object) but absent from the target's catalog would be rejected outright, so the whole statement degrades rather than shipping an invalid call — the general unmapped-built-in gate.
 
-**See Also.** [`ora-soundex`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-soundex`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1152"></a>`UNIQUE-1152` — Oracle %TYPE / %ROWTYPE column-type reference (without --db-url)
 
@@ -1516,7 +1516,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's PREPARE/EXECUTE has no inline parameter-declaration + binding form matching sp_executesql's @params list, so the declarations/bindings are dropped and must be passed via EXECUTE ... USING.
 
-**See Also.** [`ts-sp-executesql`](../../tests/fixtures/challenge/)
+**See Also.** [`ts-sp-executesql`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1162"></a>`UNIQUE-1162` — A PL/pgSQL RAISE NOTICE inside a function that returns a scalar value (→ MySQL)
 
@@ -1540,7 +1540,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's SIGNAL statement has no severity/state argument slots matching RAISERROR's — only the message transfers, so the extra arguments are dropped and named in the carrier rather than silently discarded.
 
-**See Also.** [`red2-ts-raiserror-format-arg-drop`](../../tests/fixtures/challenge/)
+**See Also.** [`red2-ts-raiserror-format-arg-drop`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1164"></a>`UNIQUE-1164` — BEGIN TRANSACTION (→ Oracle)
 
@@ -1600,7 +1600,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** PL/pgSQL has no GOTO statement (or any unconditional-jump control-flow form), so a source GOTO has no operation to translate to.
 
-**See Also.** [`red3-ts-goto-label-proc`](../../tests/fixtures/challenge/)
+**See Also.** [`red3-ts-goto-label-proc`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1169"></a>`UNIQUE-1169` — A GOTO target label (→ PostgreSQL)
 
@@ -1612,7 +1612,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Without a GOTO to jump to it, and with PL/pgSQL having no label/GOTO mechanism at all, the label marker itself has nothing to bind to on the target.
 
-**See Also.** [`red3-ts-goto-label-proc`](../../tests/fixtures/challenge/)
+**See Also.** [`red3-ts-goto-label-proc`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1171"></a>`UNIQUE-1171` — A whole procedural construct the transformer recognizes but cannot map on the target (the shared transformer-degrade carrier)
 
@@ -1624,7 +1624,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Shared carrier path for any transformer-level whole-unit degrade (an unsupported PL/SQL exception context in a T-SQL scalar function, a client-tool directive, ...); each specific reason is interpolated into the same carrier template rather than allocating one code per message.
 
-**See Also.** [`pg-named-exception`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-named-exception`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1172"></a>`UNIQUE-1172` — GOTO <label> (→ MySQL)
 
@@ -1636,7 +1636,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL has no GOTO statement either; the carrier additionally pairs the drop with a DO 0 no-op so an IF/loop body the GOTO occupied is never left syntactically empty (MySQL error 1064).
 
-**See Also.** [`red3-ts-goto-label-proc`](../../tests/fixtures/challenge/)
+**See Also.** [`red3-ts-goto-label-proc`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1173"></a>`UNIQUE-1173` — A GOTO target label (→ MySQL)
 
@@ -1648,7 +1648,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Same underlying gap as UNIQUE-1169 but for MySQL, which also has no label/GOTO mechanism.
 
-**See Also.** [`red3-ts-goto-label-proc`](../../tests/fixtures/challenge/)
+**See Also.** [`red3-ts-goto-label-proc`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1174"></a>`UNIQUE-1174` — An Oracle/PostgreSQL implicit cursor FOR loop whose query's column list Unique cannot resolve (e.g. SELECT * or an unresolvable projection) (→ T-SQL / MySQL)
 
@@ -1708,7 +1708,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** MySQL's PREPARE/EXECUTE workflow can only capture a dynamic result into a variable if the dynamic SQL text itself is rewritten to 'SELECT ... INTO @var', which Unique cannot reliably synthesize for an arbitrary dynamic string built at runtime.
 
-**See Also.** [`pg-dyn-count`](../../tests/fixtures/challenge/)
+**See Also.** [`pg-dyn-count`](../../tests/fixtures/challenge/challenge_postgresql.sql)
 
 ### <a id="unique-1179"></a>`UNIQUE-1179` — A trigger body that reads the T-SQL inserted/deleted pseudo-tables in a set-based way (→ Oracle)
 
@@ -1732,7 +1732,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Oracle EXECUTE IMMEDIATE ... USING binds positionally, so the named @params of sp_executesql must be re-spelled inside the dynamic string as :1, :2, ….
 
-**See Also.** [`ts-sp-executesql`](../../tests/fixtures/challenge/)
+**See Also.** [`ts-sp-executesql`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1182"></a>`UNIQUE-1182` — A T-SQL INSTEAD OF trigger on a base TABLE, not a view (→ PostgreSQL)
 
@@ -1744,7 +1744,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** PostgreSQL restricts INSTEAD OF triggers to views only; on a table, the equivalent behaviour (substituting the trigger's own logic for the triggering statement) is a BEFORE row trigger that returns NULL, suppressing the original operation — a different trigger-timing model requiring a pg_trigger_depth() guard so the trigger's own DML still executes.
 
-**See Also.** [`ts-instead-of-insert`](../../tests/fixtures/challenge/)
+**See Also.** [`ts-instead-of-insert`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1183"></a>`UNIQUE-1183` — BEGIN TRANSACTION (→ PostgreSQL)
 
@@ -1900,7 +1900,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL system procedures call into SQL Server's own catalog/admin machinery (the same class as UNIQUE-1211's top-level EXEC, here inside a routine); no other engine exposes the same operation through a callable procedure.
 
-**See Also.** [`ts-waitfor-exec`](../../tests/fixtures/challenge/)
+**See Also.** [`ts-waitfor-exec`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1200"></a>`UNIQUE-1200` — An Oracle built-in package call (e.g. DBMS_SCHEDULER.CREATE_JOB) (→ other engines)
 
@@ -1984,7 +1984,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** These divergences (case/accent/trailing-space comparison under the default collation, Oracle's '' ≡ NULL, LENGTH byte-vs-char) are per-column/connection properties the SQL text carries no trace of; no statement-level rewrite bridges them without column-collation/encoding visibility Unique does not have.
 
-**See Also.** [`ora-empty-null`](../../tests/fixtures/challenge/)
+**See Also.** [`ora-empty-null`](../../tests/fixtures/challenge/challenge_oracle.sql)
 
 ### <a id="unique-1208"></a>`UNIQUE-1208` — CREATE SCHEMA (T-SQL) → Oracle
 
@@ -2032,7 +2032,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** T-SQL system procedures call SQL Server's own catalog/admin machinery; no other engine exposes the same operation through a callable procedure with the same name or signature.
 
-**See Also.** [`reda-ts-exec-swallow-next`](../../tests/fixtures/challenge/)
+**See Also.** [`reda-ts-exec-swallow-next`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1212"></a>`UNIQUE-1212` — A standalone INSERT/UPDATE/DELETE ... OUTPUT result set (→ Oracle / MySQL)
 
@@ -2044,7 +2044,7 @@ One entry per stable diagnostic code the transpiler can emit. `code` is the grep
 
 **Discussion.** Neither Oracle (RETURNING is PL/SQL-only, ORA-63809) nor MySQL has a standalone data-modifying-statement result set, so the OUTPUT rows cannot be returned to the caller.
 
-**See Also.** [`ts-insert-output`](../../tests/fixtures/challenge/)
+**See Also.** [`ts-insert-output`](../../tests/fixtures/challenge/challenge_sqlserver.sql)
 
 ### <a id="unique-1215"></a>`UNIQUE-1215` — SET ROLE (PostgreSQL/MySQL/Oracle) → T-SQL
 

@@ -507,12 +507,36 @@ def _code_sort_key(code: str) -> int:
     return int(code.split("-")[1])
 
 
+#: Corpus-slug engine tokens → fixture file (first match wins; the slug
+#: grammar puts the source engine right after the batch prefix, e.g.
+#: ``pg-``, ``reda-ts-``, ``red2-my-``).
+_SLUG_ENGINE_FILES: tuple[tuple[str, str], ...] = (
+    ("pg-", "challenge_postgresql.sql"),
+    ("postgresql-", "challenge_postgresql.sql"),
+    ("my-", "challenge_mysql.sql"),
+    ("mysql-", "challenge_mysql.sql"),
+    ("ora-", "challenge_oracle.sql"),
+    ("oracle-", "challenge_oracle.sql"),
+    ("ts-", "challenge_sqlserver.sql"),
+    ("sqlserver-", "challenge_sqlserver.sql"),
+)
+
+
 def _example_cell(example_case: str) -> str:
     """A link to the case's source of truth: a challenge-corpus slug points at
-    the corpus directory; a ``path::test`` reference points at the test file."""
+    its engine's fixture file; a ``path::test`` reference points at the test
+    file. Links are repo-relative from ``docs/reference/``."""
     if "::" in example_case:
         path, _, test = example_case.partition("::")
         return f"[`{test}`](../../{path})"
+    slug = example_case
+    for batch in ("reda-", "red2-", "red3-"):
+        if slug.startswith(batch):
+            slug = slug[len(batch) :]
+            break
+    for token, fname in _SLUG_ENGINE_FILES:
+        if slug.startswith(token):
+            return f"[`{example_case}`](../../tests/fixtures/challenge/{fname})"
     return f"[`{example_case}`](../../tests/fixtures/challenge/)"
 
 
