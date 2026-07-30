@@ -640,8 +640,14 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
             kind="SET",
         )
     if isinstance(expr, exp.Merge):
+        # A leading CTE feeding the MERGE (``WITH src AS (…) MERGE … USING src``)
+        # has no portable placement: Oracle forbids WITH before MERGE
+        # (ORA-00928) and the MySQL upsert rewrite drops the CTE (undefined
+        # ``src``). Inline each single-referenced CTE into the USING subquery so
+        # the source travels with the statement on every target.
+        _merge = _inline_merge_cte(expr)
         return PassthroughSQL(
-            sql=expr.sql(dialect=sqlglot_dialect_name(source_dialect)),
+            sql=_merge.sql(dialect=sqlglot_dialect_name(source_dialect)),
             source_dialect=source_dialect,
             kind="MERGE",
         )
@@ -2588,6 +2594,35 @@ def _convert_sequence_ref(expr: exp.Column) -> FunctionCall | None:
         return None
     seq = ColumnRef(name=expr.table, quoted=_identifier_quoted(expr.args.get("table")))
     return FunctionCall(name=fn, args=(seq,))
+
+
+def _inline_merge_cte(expr: exp.Merge) -> exp.Merge:
+    """Inline a leading CTE that feeds a MERGE's USING into a USING subquery.
+
+    ``WITH src AS (<q>) MERGE INTO t USING src ON …`` becomes
+    ``MERGE INTO t USING (<q>) src ON …`` and the ``WITH`` is dropped, so the
+    source travels with the MERGE (Oracle forbids WITH before MERGE; the MySQL
+    upsert rewrite otherwise references an undefined CTE). Only the simple
+    ``USING <cte-name>`` shape is inlined; anything else is left untouched.
+    """
+    with_node = expr.args.get("with_") or expr.args.get("with")
+    using = expr.args.get("using")
+    if with_node is None or not isinstance(using, exp.Table):
+        return expr
+    ctes = {c.alias: c.this for c in with_node.expressions if isinstance(c, exp.CTE)}
+    if using.name not in ctes:
+        return expr
+    merged = expr.copy()
+    with_copy = merged.args.get("with_") or merged.args.get("with")
+    ctes = {c.alias: c.this for c in with_copy.expressions if isinstance(c, exp.CTE)}
+    subquery = exp.Subquery(
+        this=ctes[using.name].copy(),
+        alias=exp.TableAlias(this=exp.to_identifier(using.name)),
+    )
+    merged.set("using", subquery)
+    merged.set("with_", None)
+    merged.set("with", None)
+    return merged
 
 
 def _convert_oracle_user_pseudo(expr: exp.Column) -> FunctionCall | None:

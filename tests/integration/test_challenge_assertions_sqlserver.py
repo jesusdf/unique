@@ -493,6 +493,22 @@ CASES.update(
                 "degrade": True,
             },
         },
+        # composition: a leading CTE feeding a MERGE must travel into the USING
+        # subquery — Oracle forbids WITH before MERGE, MySQL's upsert dropped the
+        # CTE (undefined src). Inlined per target.
+        "reda-ts-cte-merge": {
+            "mysql": {
+                "present": [
+                    "INSERT INTO t (id, v)",
+                    "FROM (SELECT id AS id, v AS v FROM s) AS src",
+                ],
+                "absent": ["MERGE"],
+            },
+            "oracle": {
+                "present": ["MERGE INTO t USING (SELECT id AS id, v AS v FROM s) src"],
+                "absent": ["WITH src"],
+            },
+        },
         "reda-ts-pivot": {
             "oracle": {
                 "present": ["PIVOT (SUM(v) FOR dept IN ('A' AS A, 'B' AS B))"],
