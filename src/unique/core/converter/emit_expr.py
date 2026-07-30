@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+from collections.abc import Callable
 from typing import cast
 
 from unique.core.ast_nodes import (
@@ -1053,17 +1054,25 @@ def _is_datetime_cast(node: ASTNode) -> bool:
     )
 
 
-def _emit_day_arith(operand: str, n: str, sub: bool, dialect: str) -> str:
-    """``operand ± n days`` spelled per target (shared by the temporal ± branches).
+#: ``operand ± n days`` spelled per target — dict dispatch. T-SQL/Oracle/PG
+#: treat ``date ± int`` as day arithmetic, but MySQL numerically coerces the
+#: date and PG rejects ``timestamp + int`` — so emit DATE_ADD/DATE_SUB (MySQL),
+#: DATEADD (T-SQL), or ``± INTERVAL 'n day'`` (PG/Oracle, the default).
+_DAY_ARITH: dict[str, Callable[[str, str, bool], str]] = {
+    "mysql": lambda operand, n, sub: (
+        f"{'DATE_SUB' if sub else 'DATE_ADD'}({operand}, INTERVAL {n} DAY)"
+    ),
+    "tsql": lambda operand, n, sub: (
+        f"DATEADD(DAY, {'-' if sub else ''}{n}, {operand})"
+    ),
+}
 
-    T-SQL/Oracle/PG treat ``date ± int`` as day arithmetic, but MySQL numerically
-    coerces the date and PG rejects ``timestamp + int`` — so emit DATE_ADD/DATE_SUB
-    (MySQL), DATEADD (T-SQL), or ``± INTERVAL 'n day'`` (PG/Oracle).
-    """
-    if dialect == "mysql":
-        return f"{'DATE_SUB' if sub else 'DATE_ADD'}({operand}, INTERVAL {n} DAY)"
-    if dialect == "tsql":
-        return f"DATEADD(DAY, {'-' if sub else ''}{n}, {operand})"
+
+def _emit_day_arith(operand: str, n: str, sub: bool, dialect: str) -> str:
+    """``operand ± n days`` spelled per target (shared by the temporal ± branches)."""
+    fn = _DAY_ARITH.get(dialect)
+    if fn is not None:
+        return fn(operand, n, sub)
     return f"{operand} {'-' if sub else '+'} INTERVAL '{n} day'"
 
 
