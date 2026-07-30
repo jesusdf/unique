@@ -839,6 +839,13 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     col_defs.append(f"  KEY (`{_auto_col}`)")
         cols = ",\n".join(col_defs)
         result = f"{tsql_guard}CREATE {temp}TABLE {exists}{table} (\n{cols}\n)"
+        # An Oracle GLOBAL TEMPORARY TABLE defaults to ON COMMIT DELETE ROWS
+        # (transaction-scoped). PG/T-SQL/MySQL temp tables are session-scoped —
+        # their rows survive an inter-statement commit — so the faithful Oracle
+        # form is ON COMMIT PRESERVE ROWS. Without it, rows vanish before a later
+        # statement in the same script sees them (PG COUNT=2 vs Oracle COUNT=0).
+        if node.temporary and dialect == "oracle" and SOURCE_DIALECT.get() != "oracle":
+            result += " ON COMMIT PRESERVE ROWS"
         # Emitted unconditionally: the transformer degrades the whole
         # statement on targets without the concept, so only PostgreSQL
         # normally reaches here — and if anything slips through, emitting

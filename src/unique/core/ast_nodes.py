@@ -231,6 +231,23 @@ class ArrayLiteral(ASTNode):
 
 
 @dataclass(frozen=True)
+class GroupingElement(ASTNode):
+    """One element of a multi-element GROUP BY list.
+
+    ``GROUP BY CUBE(a, b), ROLLUP(c)`` is a comma-list of grouping elements;
+    the single-modifier ``group_modifier`` field cannot hold more than one, so
+    a *composite* list is carried here instead. ``kind`` is ``""`` (plain
+    columns), ``"ROLLUP"``, ``"CUBE"`` or ``"GROUPING SETS"``; ``columns`` holds
+    the converted column expressions (``sets_sql`` carries a GROUPING SETS body
+    verbatim). T-SQL/Oracle/PG take the list natively; MySQL degrades.
+    """
+
+    kind: str = ""
+    columns: tuple[ASTNode, ...] = ()
+    sets_sql: str | None = None
+
+
+@dataclass(frozen=True)
 class BinaryOp(ASTNode):
     """Binary operation: left op right."""
 
@@ -313,6 +330,27 @@ class UnpivotRelation(ASTNode):
     columns: tuple[str, ...] = ()
     alias: str | None = None
     include_nulls: bool = False
+
+
+@dataclass(frozen=True)
+class PivotRelation(ASTNode):
+    """``FROM <source> PIVOT (agg(arg) FOR pivot_col IN (v1, v2, …)) alias``.
+
+    T-SQL and Oracle re-spell it natively (Oracle needs the IN values as string
+    literals aliased to the output column: ``'A' AS A``). MySQL and PostgreSQL
+    have no PIVOT operator, so it degrades to the equivalent conditional
+    aggregation in a derived table (``SUM(CASE WHEN pivot_col = 'A' THEN arg
+    END) AS A`` …), which the outer ``SELECT *`` then expands — but only when
+    the source's grouping columns are determinable (a subquery with an explicit
+    projection); otherwise it degrades to a warned carrier, never a silent drop.
+    """
+
+    source: ASTNode  # TableRef | SubqueryExpression
+    agg_func: str
+    agg_arg: ASTNode
+    pivot_col: str
+    values: tuple[str, ...] = ()
+    alias: str | None = None
 
 
 @dataclass(frozen=True)
@@ -481,7 +519,9 @@ class SelectStatement(ASTNode):
     """A SELECT query."""
 
     columns: tuple[ASTNode, ...] = ()
-    from_clause: TableRef | SubqueryExpression | UnpivotRelation | None = None
+    from_clause: (
+        TableRef | SubqueryExpression | UnpivotRelation | PivotRelation | None
+    ) = None
     joins: tuple[JoinClause, ...] = ()
     where: ASTNode | None = None
     group_by: tuple[ASTNode, ...] = ()
@@ -494,6 +534,11 @@ class SelectStatement(ASTNode):
     #: T-SQL/Oracle/PG); ``group_by`` holds its distinct columns for MySQL's base
     #: grouping fallback.
     grouping_sets_sql: str | None = None
+    #: A GROUP BY list with MORE THAN ONE grouping element (``CUBE(a, b),
+    #: ROLLUP(c)``) — the single ``group_modifier`` cannot represent it, so the
+    #: ordered element list lives here. When set, ``group_by`` still holds the
+    #: distinct base columns (for the MySQL degrade and clause-presence checks).
+    group_by_composite: tuple[GroupingElement, ...] = ()
     having: ASTNode | None = None
     order_by: tuple[OrderByItem, ...] = ()
     limit: LimitClause | None = None
@@ -586,6 +631,11 @@ class DeleteStatement(ASTNode):
     where: ASTNode | None = None
     using: tuple[TableRef, ...] = ()
     returning: tuple[ASTNode, ...] = ()
+    #: T-SQL ``DELETE TOP (n)`` row cap. Every engine can express "delete at
+    #: most n matching rows"; dropping it deletes ALL matching rows. Emitters
+    #: render it as T-SQL ``TOP (n)`` / MySQL ``LIMIT n`` / Oracle ``ROWNUM`` /
+    #: PG ``ctid`` subquery.
+    limit: LimitClause | None = None
 
 
 @dataclass(frozen=True)

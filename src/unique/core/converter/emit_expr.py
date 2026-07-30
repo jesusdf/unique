@@ -1528,6 +1528,38 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             if ok and groups:
                 return " OR ".join(groups)
 
+    # Row tuple IN a literal tuple list — ``(a, b) IN ((1, 2), (3, 4))``. T-SQL
+    # has no row-constructor IN (error 4145); expand to an OR of AND-pairs.
+    # Oracle/MySQL accept it natively (verified live), so only T-SQL rewrites.
+    if (
+        dialect == "tsql"
+        and node.operator == BinaryOperator.IN
+        and isinstance(node.right, ExpressionList)
+        and len(node.right.items) > 1
+    ):
+        lt = _tuple_items(node.left, left)
+        if lt is not None:
+            groups = []
+            ok = True
+            for item, item_sql in zip(
+                node.right.items,
+                [_emit_expression(i, dialect) for i in node.right.items],
+                strict=True,
+            ):
+                item_cells = _tuple_items(item, item_sql)
+                if item_cells is None or len(item_cells) != len(lt):
+                    ok = False
+                    break
+                groups.append(
+                    "("
+                    + " AND ".join(
+                        f"{a} = {b}" for a, b in zip(lt, item_cells, strict=True)
+                    )
+                    + ")"
+                )
+            if ok and groups:
+                return "(" + " OR ".join(groups) + ")"
+
     # Row-tuple comparison: T-SQL and Oracle have no row constructors
     # in comparisons — expand ``(a, b) = (x, y)`` pairwise (AND for =,
     # OR for <>).
@@ -1541,6 +1573,31 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             if node.operator == BinaryOperator.EQ:
                 return " AND ".join(f"{a} = {b}" for a, b in zip(lt, rt, strict=True))
             return " OR ".join(f"{a} <> {b}" for a, b in zip(lt, rt, strict=True))
+
+    # Row-tuple INEQUALITY (``(a, b) > (1, 5)`` — keyset pagination): T-SQL has
+    # no row comparison at all (error 4145); expand lexicographically. Oracle
+    # and MySQL accept it natively (verified live), so only T-SQL rewrites.
+    _ineq = {
+        BinaryOperator.GT: (">", ">"),
+        BinaryOperator.GTE: (">", ">="),
+        BinaryOperator.LT: ("<", "<"),
+        BinaryOperator.LTE: ("<", "<="),
+    }
+    if dialect == "tsql" and node.operator in _ineq:
+        lt = _tuple_items(node.left, left)
+        rt = _tuple_items(node.right, right)
+        if lt is not None and rt is not None and len(lt) == len(rt) > 1:
+            strict_op, final_op = _ineq[node.operator]
+
+            def _lex(ls: list[str], rs: list[str]) -> str:
+                if len(ls) == 1:
+                    return f"{ls[0]} {final_op} {rs[0]}"
+                return (
+                    f"{ls[0]} {strict_op} {rs[0]} OR "
+                    f"({ls[0]} = {rs[0]} AND ({_lex(ls[1:], rs[1:])}))"
+                )
+
+            return "(" + _lex(lt, rt) + ")"
 
     # ``@@FETCH_STATUS = 0`` / ``<> 0`` / ``= -1`` is cursor state: when the
     # procedural transformer published the target's (success, failure) forms

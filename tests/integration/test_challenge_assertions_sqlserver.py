@@ -344,6 +344,71 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
     },
 }
 
+CASES.update(
+    {
+        # BLUE 2026-07-30 (statement/DDL-structure cluster).
+        "reda-ts-fk-on-update": {
+            "oracle": {"degrade": True},
+            "mysql": {
+                "present": [
+                    "FOREIGN KEY (pid) REFERENCES p (id) "
+                    "ON DELETE CASCADE ON UPDATE CASCADE"
+                ],
+                "absent": ["pid INT REFERENCES"],
+            },
+            "postgresql": {
+                "present": [
+                    "FOREIGN KEY (pid) REFERENCES p (id) "
+                    "ON DELETE CASCADE ON UPDATE CASCADE"
+                ],
+                "absent": ["pid INT REFERENCES"],
+            },
+        },
+        "reda-ts-delete-top": {
+            "mysql": {"present": ["DELETE FROM t", "LIMIT 2"], "absent": ["TOP (2)"]},
+            "oracle": {"present": ["ROWNUM <= 2"], "absent": ["TOP (2)"]},
+            "postgresql": {
+                "present": ["ctid IN (SELECT ctid FROM t WHERE a > 0 LIMIT 2)"],
+                "absent": ["TOP (2)"],
+            },
+        },
+        "reda-ts-setop-orderby": {
+            "postgresql": {"present": ["EXCEPT", "ORDER BY a ASC NULLS FIRST"]},
+            "oracle": {
+                "present": ["MINUS", "ORDER BY a ASC NULLS FIRST"],
+                "absent": ["EXCEPT"],
+            },
+            "mysql": {"present": ["ORDER BY a ASC"]},
+        },
+        "reda-ts-pivot": {
+            "oracle": {
+                "present": ["PIVOT (SUM(v) FOR dept IN ('A' AS A, 'B' AS B))"],
+                "absent": ["IN ([A]"],
+            },
+            "postgresql": {
+                "present": [
+                    "SUM(CASE WHEN dept = 'A' THEN v END) AS A",
+                    "SUM(CASE WHEN dept = 'B' THEN v END) AS B",
+                ],
+                "absent": ["PIVOT"],
+            },
+            "mysql": {
+                "present": [
+                    "SUM(CASE WHEN dept = 'A' THEN v END) AS A",
+                    "SUM(CASE WHEN dept = 'B' THEN v END) AS B",
+                ],
+                "absent": ["PIVOT"],
+            },
+        },
+        "reda-ts-for-json": {
+            "postgresql": {"degrade": True},
+            "oracle": {"degrade": True},
+            "mysql": {"degrade": True},
+        },
+    }
+)
+
+
 # Current output is a silent loss / invalid emission (no blessing assertion).
 # Empty: the HEAD sweep of all covered cases found none.
 SUSPECT_CASES: dict[str, str] = {}
