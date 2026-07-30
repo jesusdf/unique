@@ -303,9 +303,7 @@ class TestDottedFunctionReturnType:
     def test_mysql_return_type_lowered_to_carrier(self) -> None:
         result = Transpiler().transpile(self._TYPE_SRC, "oracle", "mysql")
         out = result.sql
-        assert re.search(
-            r"(?i)RETURNS LONGTEXT /\* UNIQUE(?:-\d{4})?: t_ident", out
-        ), out
+        assert re.search(r"(?i)RETURNS LONGTEXT /\* UNIQUE-1152: t_ident", out), out
         # No shattered declarations.
         assert not re.search(r"(?im)^\s*DECLARE (\.|AS|TYPE)\b", out), out
         assert "DECLARE v_id LONGTEXT" in out, out
@@ -327,7 +325,7 @@ class TestDottedFunctionReturnType:
         result = Transpiler().transpile(self._PKG_SRC, "oracle", "mysql")
         out = result.sql
         assert re.search(
-            r"(?i)RETURNS LONGTEXT /\* UNIQUE(?:-\d{4})?: pkg_ret\.my_type", out
+            r"(?i)RETURNS LONGTEXT /\* UNIQUE-1152: pkg_ret\.my_type", out
         ), out
         assert "DECLARE v_r LONGTEXT" in out, out
         assert not re.search(r"(?im)^\s*DECLARE pkg_ret\b", out), out

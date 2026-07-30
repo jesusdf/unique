@@ -3898,7 +3898,7 @@ class TestLiveOutputValidation:
         ]
         assert not code or all("DATE_FORMAT" not in ln for ln in code), r.sql
         assert any(w.feature == "live_validation" for w in r.warnings) or not [
-            ln for ln in r.sql.splitlines() if re.search(r"UNIQUE(?:-\d{4})?: live", ln)
+            ln for ln in r.sql.splitlines() if re.search(r"UNIQUE-1220: live", ln)
         ], r.sql
 
 
