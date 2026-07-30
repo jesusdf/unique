@@ -50,6 +50,10 @@
     border-radius: 999px; cursor: pointer; box-shadow: var(--e1); display: inline-flex; gap: 8px; align-items: center; }
   .filled:hover { filter: brightness(1.05); }
   .filled:disabled { opacity: .5; cursor: default; filter: none; }
+  /* Compare pill: reuse the version-badge tokens (its background + text colour)
+     so it never hard-codes a new colour. */
+  .filled.compare { color: var(--primary); background: var(--primary-container); box-shadow: none; }
+  .filled.compare:hover { filter: brightness(.97); }
   .outlined { font-family: var(--sans); font-weight: 600; font-size: 14px; color: var(--secondary);
     background: transparent; border: 1.5px solid var(--outline); padding: 10px 20px; border-radius: 999px; cursor: pointer; }
   .outlined:hover { border-color: var(--secondary); }
@@ -170,6 +174,8 @@
   .status .tag.ok   { background: #1f9d63; color: #fff; }
   .status .tag.warn { background: var(--warn); color: #3d2f00; }
   .status .tag.err  { background: var(--primary); color: #fff; }
+  /* similarity result tag — same palette tokens as the Compare pill */
+  .status .tag.sim  { background: var(--primary-container); color: var(--primary); }
   .status .txt { font-family: var(--mono); font-size: 12.5px; color: #2c261f; min-width: 0; overflow-wrap: anywhere; }
   .status .txt b { font-weight: 700; }
   .detail { font-family: var(--mono); font-size: 12px; color: var(--on-surface-var);
@@ -194,6 +200,7 @@
   <a class="version" id="versionTag" href="/docs" target="_blank" title="Open the API docs"></a>
   <div class="spacer"></div>
   <button class="filled" id="run">▶ Transpile</button>
+  <button class="filled compare" id="compareBtn" title="Structural similarity of the two editors (not semantic equivalence)">⇄ Compare</button>
   <button class="outlined" id="clear">Reset</button>
 </header>
 
@@ -547,6 +554,48 @@ function showResult(warnings = [], unsupported = []) {
   for (const it of items) c.appendChild(detailRow(`<span class="k">${escapeHtml(it.t)}</span>${escapeHtml(it.m)}`));
 }
 
+// ---- Compare: structural similarity of the two editors ----
+const DIM_LABELS = { tree_match: "Tree match", dml_structure: "DML structure", predicates: "Predicates", control_flow: "Control flow" };
+
+async function compareScripts() {
+  const sqlA = getInput(), sqlB = getOutput();
+  if (!sqlA.trim() || !sqlB.trim()) {
+    showError("Compare needs a script in both editors — transpile first, or paste one into each side.");
+    return;
+  }
+  const btn = el("compareBtn"); btn.disabled = true; btn.textContent = "Comparing…";
+  try {
+    const body = { sql_a: sqlA, sql_b: sqlB, dialect_a: el("source").value, dialect_b: el("target").value };
+    const res = await fetch(API + "/api/v1/similarity", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      const d = err.detail;
+      showError((d && typeof d === "object" && d.message) || (typeof d === "string" ? d : "Comparison failed"));
+      return;
+    }
+    showSimilarity(await res.json());
+  } catch (e) { showError(String(e)); }
+  finally { btn.disabled = false; btn.textContent = "⇄ Compare"; }
+}
+
+function showSimilarity(data) {
+  clearStatus();
+  const c = el("messages"); c.dataset.kind = "similarity";
+  const labelA = escapeHtml(ENGINE_LABELS[data.dialect_a] || data.dialect_a) + (data.detected_a ? " (detected)" : "");
+  const labelB = escapeHtml(ENGINE_LABELS[data.dialect_b] || data.dialect_b) + (data.detected_b ? " (detected)" : "");
+  c.appendChild(statusBar("sim", "SIM", `Structural similarity: <b>${data.overall}%</b> · ${labelA} → ${labelB}`));
+  // What the number represents — shown next to the score, never in a tooltip.
+  c.appendChild(detailRow(`<span class="k">what this means</span>${escapeHtml(data.boundary)}`));
+  for (const k of ["tree_match", "dml_structure", "predicates", "control_flow"]) {
+    if (data.dimensions[k] === undefined) continue;
+    c.appendChild(detailRow(`<span class="k">${DIM_LABELS[k] || k}</span>${data.dimensions[k]}%`));
+  }
+  c.appendChild(detailRow(`<span class="k">aligned pairs</span>${(data.statement_pairs || []).length} · unmatched A=${data.unmatched_a} B=${data.unmatched_b}`));
+  for (const w of (data.warnings || []).slice(0, 10)) c.appendChild(detailRow(`<span class="k">warning</span>${escapeHtml(w)}`, "err"));
+}
+
 (async function init() {
   if (window.CodeMirror) {
     cmInput = CodeMirror.fromTextArea(el("input"), {
@@ -602,6 +651,7 @@ function showResult(warnings = [], unsupported = []) {
   }
 
   el("run").addEventListener("click", transpile);
+  el("compareBtn").addEventListener("click", compareScripts);
   el("clear").addEventListener("click", () => {
     setInput(""); setOutput(""); clearStatus();
     el("detectNote").textContent = "";

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 from unique import __version__
 from unique.core.detection import detect_dialect
 from unique.core.errors import ParseError, UnknownDialectError
+from unique.core.similarity import compare as compare_scripts
 from unique.core.transpiler import TranspileOptions, Transpiler
 from unique.core.validation import validate_source
 
@@ -50,6 +51,17 @@ def _display_version() -> str:
 
 #: The version label shown in the UI and reported by /api/v1/info.
 DISPLAY_VERSION = _display_version()
+
+#: Expectation-management sentence shown with every similarity score — in the
+#: web UI (next to the score, not in a tooltip) and returned in the API
+#: response. Wording kept consistent with the CLI framing
+#: (``unique compare``) and docs/03-unsupported.md §3.38: the number is a
+#: normalized STRUCTURAL similarity after pivot-normalization, never a claim of
+#: semantic equivalence nor a probability of correctness.
+SIMILARITY_BOUNDARY = (
+    "Normalized structural similarity after pivot-normalization — not semantic "
+    "equivalence, and not a probability of correctness."
+)
 
 
 def _db_connection_enabled() -> bool:
@@ -214,6 +226,61 @@ class TranspileResponse(BaseModel):
     unsupported: list[str] = []
 
 
+class SimilarityRequest(BaseModel):
+    """Request body for the structural-similarity endpoint."""
+
+    sql_a: str = Field(
+        ..., max_length=MAX_SQL_BYTES, description="First SQL script (side A)."
+    )
+    sql_b: str = Field(
+        ..., max_length=MAX_SQL_BYTES, description="Second SQL script (side B)."
+    )
+    dialect_a: str | None = Field(
+        default=None,
+        description=(
+            "Dialect of side A. Omit or send 'auto' to auto-detect (the "
+            "response records whether each side was detected)."
+        ),
+    )
+    dialect_b: str | None = Field(
+        default=None,
+        description="Dialect of side B. Omit or send 'auto' to auto-detect.",
+    )
+
+
+class StatementPairModel(BaseModel):
+    """One aligned statement pair in a similarity report."""
+
+    kind_a: str
+    kind_b: str
+    score: float
+
+
+class SimilarityResponse(BaseModel):
+    """Response from the similarity endpoint — a **structural** similarity
+    report, never a semantic-equivalence claim."""
+
+    overall: float = Field(..., description="Overall structural similarity, 0–100.")
+    dimensions: dict[str, float] = Field(
+        ..., description="Per-dimension scores (tree_match, dml_structure, …)."
+    )
+    dialect_a: str
+    dialect_b: str
+    detected_a: bool = Field(..., description="Whether dialect A was auto-detected.")
+    detected_b: bool = Field(..., description="Whether dialect B was auto-detected.")
+    statement_pairs: list[StatementPairModel] = []
+    unmatched_a: int = 0
+    unmatched_b: int = 0
+    warnings: list[str] = []
+    boundary: str = Field(
+        ...,
+        description=(
+            "What the score represents and does not — structural, not semantic "
+            "equivalence nor a probability of correctness."
+        ),
+    )
+
+
 class ValidateRequest(BaseModel):
     """Request body for the validate endpoint."""
 
@@ -338,6 +405,62 @@ def transpile_sql(request: TranspileRequest) -> TranspileResponse:
             for w in result.warnings
         ],
         unsupported=result.unsupported,
+    )
+
+
+def _normalize_dialect(name: str | None) -> str | None:
+    """Map the UI's ``auto``/empty sentinel to ``None`` (auto-detection)."""
+    if name is None:
+        return None
+    stripped = name.strip()
+    return None if stripped.lower() in ("", "auto") else stripped
+
+
+@app.post("/api/v1/similarity", response_model=SimilarityResponse)
+def similarity_sql(request: SimilarityRequest) -> SimilarityResponse:
+    """Report the **structural** similarity of two SQL scripts.
+
+    A thin wrapper over :func:`unique.core.similarity.compare`: both inputs are
+    normalized through the transpiler (PostgreSQL pivot) and compared by
+    structural fingerprint and weighted tree alignment. The result is a
+    per-dimension structural-similarity report — never a probability of
+    semantic equivalence (see docs/03-unsupported.md §3.38).
+    """
+    dialect_a = _normalize_dialect(request.dialect_a)
+    dialect_b = _normalize_dialect(request.dialect_b)
+    for name in (dialect_a, dialect_b):
+        if name is not None:
+            try:
+                _transpiler.registry.get(name)  # reject an unknown dialect
+            except UnknownDialectError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+    try:
+        report = compare_scripts(request.sql_a, request.sql_b, dialect_a, dialect_b)
+    except ValueError as e:
+        # Undetectable dialect or an input that will not transpile — named,
+        # never a silent zero (mirrors the transpile endpoint's 422).
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("Similarity comparison failed")
+        raise HTTPException(
+            status_code=500, detail="Comparison failed; see server logs."
+        ) from e
+
+    return SimilarityResponse(
+        overall=report.overall,
+        dimensions=report.dimensions,
+        dialect_a=report.dialect_a,
+        dialect_b=report.dialect_b,
+        detected_a=report.detected_a,
+        detected_b=report.detected_b,
+        statement_pairs=[
+            StatementPairModel(kind_a=p.kind_a, kind_b=p.kind_b, score=p.score)
+            for p in report.statement_pairs
+        ],
+        unmatched_a=report.unmatched_a,
+        unmatched_b=report.unmatched_b,
+        warnings=report.warnings,
+        boundary=SIMILARITY_BOUNDARY,
     )
 
 

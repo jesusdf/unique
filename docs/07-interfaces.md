@@ -105,6 +105,11 @@ curl -X POST http://localhost:8000/api/v1/validate \
 # Translate a file (use source=auto to auto-detect), saving the result
 curl -X POST http://localhost:8000/api/v1/transpile/file \
   -F source=auto -F target=postgresql -F file=@script.sql -OJ
+
+# Structural similarity of two scripts (dialects omitted/"auto" auto-detect)
+curl -X POST http://localhost:8000/api/v1/similarity \
+  -H "Content-Type: application/json" \
+  -d '{"sql_a": "SELECT 1", "sql_b": "SELECT 1", "dialect_a": "tsql", "dialect_b": "oracle"}'
 ```
 
 `/api/v1/transpile` **rejects a malformed source with `422`**, returning the
@@ -127,6 +132,28 @@ URL (e.g. <http://localhost:8000/>). It provides:
   script is never silently transpiled to garbage;
 - a file section to upload a `.sql` file and download it translated, with an
   "Auto-detect" option for the source engine.
+
+### Compare (structural similarity)
+
+A **Compare** button sits to the right of *Transpile*. It scores the
+**structural similarity** of the two editors — the left script (with the source
+dialect) against the right script (with the target dialect) — via
+`POST /api/v1/similarity`, a thin wrapper over
+[`unique.core.similarity.compare`](#python-api). The typical flow is a migration
+audit: transpile the original on the left, then Compare it with the result (or
+paste a hand-migrated script into the right editor) to see how faithfully the
+shape was preserved.
+
+The result panel shows the overall percentage, the per-dimension breakdown
+(tree match, DML structure, predicates, control flow), the resolved dialects
+(flagged when auto-detected), and — **next to the score, not in a tooltip** — a
+one-line explanation of what the number represents: a *normalized structural
+similarity after pivot-normalization*, explicitly **not** semantic equivalence
+nor a probability of correctness (the same boundary as the `unique compare` CLI
+and [03-unsupported.md §3.38](03-unsupported.md#338-structural-similarity-not-equivalence)).
+Transpiler warnings raised while normalizing either side are listed too. A
+dialect that cannot be detected, or an input that cannot be transpiled, is a
+named error — never a silent zero.
 
 ### Rebuilding the UI
 

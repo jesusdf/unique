@@ -682,3 +682,205 @@ class TestValidateDetectSizeCap:
         client = TestClient(app)
         resp = client.post("/api/v1/detect", json={"sql": big})
         assert resp.status_code == 422
+
+
+class TestSimilarity:
+    """F2: the /similarity endpoint — a thin wrapper over core.similarity.compare
+    reporting STRUCTURAL similarity, never semantic equivalence."""
+
+    def test_identity_scores_100_with_stable_schema(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/similarity",
+            json={
+                "sql_a": "SELECT a FROM t WHERE x = 1;",
+                "sql_b": "SELECT a FROM t WHERE x = 1;",
+                "dialect_a": "tsql",
+                "dialect_b": "tsql",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # A script vs itself scores 100 (fails a `return 0.0` stub); a
+        # structurally different pair below scores under 100 (fails a
+        # `return 100.0` stub).
+        assert body["overall"] == 100.0
+        # Stable JSON schema.
+        assert set(body) == {
+            "overall",
+            "dimensions",
+            "dialect_a",
+            "dialect_b",
+            "detected_a",
+            "detected_b",
+            "statement_pairs",
+            "unmatched_a",
+            "unmatched_b",
+            "warnings",
+            "boundary",
+        }
+        assert set(body["dimensions"]) == {
+            "tree_match",
+            "dml_structure",
+            "predicates",
+            "control_flow",
+        }
+        assert body["dialect_a"] == "tsql" and body["dialect_b"] == "tsql"
+        assert body["detected_a"] is False and body["detected_b"] is False
+
+    def test_dissimilar_scripts_score_below_identity(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/similarity",
+            json={
+                "sql_a": "SELECT a FROM t WHERE x = 1;",
+                "sql_b": "DELETE FROM z WHERE y > 9 AND q < 3;",
+                "dialect_a": "tsql",
+                "dialect_b": "tsql",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["overall"] < 100.0
+
+    def test_boundary_states_structural_not_equivalence(
+        self, client: TestClient
+    ) -> None:
+        # The response carries the expectation-management sentence the UI shows:
+        # structural, not semantic equivalence nor a probability of correctness.
+        resp = client.post(
+            "/api/v1/similarity",
+            json={
+                "sql_a": "SELECT 1;",
+                "sql_b": "SELECT 1;",
+                "dialect_a": "tsql",
+                "dialect_b": "tsql",
+            },
+        )
+        boundary = resp.json()["boundary"].lower()
+        assert "structural" in boundary
+        assert "not semantic equivalence" in boundary
+        assert "not a probability" in boundary
+
+    def test_cross_dialect_auto_detect_is_reported(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/similarity",
+            json={
+                "sql_a": "SELECT TOP 5 * FROM t WHERE x = GETDATE()\nGO",
+                "sql_b": "SELECT * FROM t WHERE x = SYSDATE FETCH FIRST 5 ROWS ONLY;",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # Omitting the dialects auto-detects each side and records it.
+        assert body["detected_a"] is True
+        assert body["dialect_a"] == "tsql"
+
+    def test_auto_sentinel_is_treated_as_auto_detect(self, client: TestClient) -> None:
+        # The UI's source combo sends the literal "auto"; it must not be looked
+        # up as a dialect name (400) but trigger detection.
+        resp = client.post(
+            "/api/v1/similarity",
+            json={
+                "sql_a": "SELECT TOP 5 * FROM t\nGO",
+                "sql_b": "SELECT 1;",
+                "dialect_a": "auto",
+                "dialect_b": "tsql",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["detected_a"] is True
+
+    def test_unknown_dialect_returns_400(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/similarity",
+            json={
+                "sql_a": "SELECT 1;",
+                "sql_b": "SELECT 1;",
+                "dialect_a": "nope",
+                "dialect_b": "tsql",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_undetectable_dialect_is_422_not_silent_zero(
+        self, client: TestClient
+    ) -> None:
+        # A script with no dialect signal and no explicit dialect is a hard,
+        # named error — never a silent 0% score.
+        resp = client.post(
+            "/api/v1/similarity",
+            json={"sql_a": "SELECT 1;", "sql_b": "SELECT 1;"},
+        )
+        assert resp.status_code == 422
+
+    def test_missing_field_returns_422(self, client: TestClient) -> None:
+        resp = client.post("/api/v1/similarity", json={"sql_a": "SELECT 1;"})
+        assert resp.status_code == 422
+
+    def test_oversized_body_rejected(self, client: TestClient) -> None:
+        import unique.api.app as app_module
+
+        big = "SELECT 1; " * (app_module.MAX_SQL_BYTES // 10 + 1)
+        resp = client.post(
+            "/api/v1/similarity",
+            json={
+                "sql_a": big,
+                "sql_b": "SELECT 1;",
+                "dialect_a": "tsql",
+                "dialect_b": "tsql",
+            },
+        )
+        assert resp.status_code == 422
+
+
+class TestCompareUI:
+    """F2: the generated page ships the Compare button and its wiring, styled
+    with the version-badge background token (no hard-coded colour)."""
+
+    @staticmethod
+    def _page() -> str:
+        from pathlib import Path
+
+        return (
+            Path(__file__).resolve().parents[3] / "src/unique/api/static/index.html"
+        ).read_text(encoding="utf-8")
+
+    def test_compare_button_present_and_right_of_transpile(self) -> None:
+        page = self._page()
+        assert 'id="compareBtn"' in page
+        # Placed to the RIGHT of Transpile (#run) in source order.
+        assert page.index('id="run"') < page.index('id="compareBtn"')
+
+    def test_compare_button_reuses_badge_background_token(self) -> None:
+        page = self._page()
+        # The Compare pill reuses the version badge's background token, not a
+        # new hard-coded colour.
+        assert (
+            ".filled.compare { color: var(--primary); "
+            "background: var(--primary-container);" in page
+        )
+        # The badge's own rule uses the same token.
+        assert "background: var(--primary-container)" in page
+
+    def test_compare_wiring_and_endpoint(self) -> None:
+        page = self._page()
+        assert "compareScripts" in page
+        assert "/api/v1/similarity" in page
+        assert 'el("compareBtn").addEventListener("click", compareScripts)' in page
+
+    def test_boundary_wording_rendered_next_to_score(self) -> None:
+        # The result presentation shows what the number means (from the API's
+        # boundary field), not a tooltip.
+        page = self._page()
+        assert "showSimilarity" in page
+        assert "data.boundary" in page
+        assert "what this means" in page
+
+    def test_template_and_generated_page_agree(self) -> None:
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[3]
+        template = (root / "web/src/index.template.html").read_text(encoding="utf-8")
+        static = (root / "src/unique/api/static/index.html").read_text(encoding="utf-8")
+        for token in ("compareBtn", "compareScripts", "filled.compare"):
+            assert (token in template) == (
+                token in static
+            ), f"template/static drift on {token!r} — rerun web/build.py"
