@@ -125,3 +125,6 @@ Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition
 ### Batch summary FINAL (RED round 2, seeded)
 - 16 scored findings, 76 points, 6 classes. START d4d572d.
 - func 20 (4), invalid 24 (12), lying-warning 14 (7), silent-drop 8 (2), composition 5 (1), consistency 4 (1). Max class invalid 31.6% (<50%); 6 classes.
+
+<!-- RED batch round 2 END marker: run the commit-timestamp check; batch over when over==True. 16 scored findings / 76 pts / 6 classes. -->
+- Unverified tail note (NOT scored): T-SQL CROSS APPLY dbo.tvf(a.id) -> PG "CROSS JOIN LATERAL (SELECT) f" (empty select list, TVF call lost) with no warning on the PG leg (Oracle/MySQL warn) — needs a TVF definition to live-validate the source; flagged for BLUE.
