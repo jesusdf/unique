@@ -2091,6 +2091,18 @@ class Transformer:
             return value
         return self._map_children(value, self._drop_oracle_concat_nulls)
 
+    @staticmethod
+    def _any_null_guard(args: list[ASTNode]) -> ASTNode:
+        """Build ``a IS NULL OR b IS NULL OR …`` over ``args`` (non-empty)."""
+        guard: ASTNode = UnaryOp(operator=UnaryOperator.IS_NULL, operand=args[0])
+        for arg in args[1:]:
+            guard = BinaryOp(
+                operator=BinaryOperator.OR,
+                left=guard,
+                right=UnaryOp(operator=UnaryOperator.IS_NULL, operand=arg),
+            )
+        return guard
+
     def _wrap_mysql_concat_null(self, value: object) -> object:
         """MySQL CONCAT returns NULL if ANY argument is NULL; PG/T-SQL/Oracle
         CONCAT *ignore* a NULL operand. When a runtime-nullable operand (a
@@ -2110,17 +2122,10 @@ class Transformer:
             ]
             if not nullable:
                 return call
-            guard: ASTNode = UnaryOp(
-                operator=UnaryOperator.IS_NULL, operand=nullable[0]
-            )
-            for arg in nullable[1:]:
-                guard = BinaryOp(
-                    operator=BinaryOperator.OR,
-                    left=guard,
-                    right=UnaryOp(operator=UnaryOperator.IS_NULL, operand=arg),
-                )
             return CaseExpression(
-                whens=((guard, Literal(value=None, dtype="null")),),
+                whens=(
+                    (self._any_null_guard(nullable), Literal(value=None, dtype="null")),
+                ),
                 else_expr=call,
             )
         return self._map_children(value, self._wrap_mysql_concat_null)

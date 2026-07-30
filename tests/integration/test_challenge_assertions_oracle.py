@@ -557,6 +557,21 @@ CASES.update(
                 ),
             },
         ),
+        # BLUE 2026-07-30 (lying-warning): Oracle GREATEST returns NULL if any
+        # arg is NULL; PG and T-SQL ignore NULL. Guard with the same CASE the
+        # MySQL-source path uses so the value = NULL. MySQL target propagates
+        # natively (passthrough → omitted).
+        "reda-ora-greatest-null": Case(
+            "reda-ora-greatest-null ",
+            {
+                "postgresql": Expect(
+                    ("CASE WHEN", "IS NULL", "THEN NULL", "GREATEST(1, NULL, 3)"),
+                ),
+                "tsql": Expect(
+                    ("CASE WHEN", "IS NULL", "THEN NULL", "GREATEST(1, NULL, 3)"),
+                ),
+            },
+        ),
         # BLUE 2026-07-30 (lying-warning): Oracle ``||`` treats NULL as ''; a
         # provably-NULL operand (CAST(NULL AS ...)) is now dropped so the value
         # survives ('a'||'b' = 'ab' everywhere), not just a bare NULL literal.

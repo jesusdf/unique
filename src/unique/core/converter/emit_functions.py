@@ -1082,12 +1082,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _lt_arg = _emit_expression(node.args[0], dialect)
         return f"LEN({_lt_arg} + '.') - 1"
 
-    # MySQL's GREATEST/LEAST return NULL if ANY argument is NULL; PostgreSQL and
-    # T-SQL ignore NULLs (GREATEST(1, NULL, 3) = 3 there). Preserve MySQL's
-    # NULL-propagation with a guard (Oracle already propagates, so it is left).
+    # MySQL's and Oracle's GREATEST/LEAST return NULL if ANY argument is NULL;
+    # PostgreSQL and T-SQL ignore NULLs (GREATEST(1, NULL, 3) = 3 there).
+    # Preserve the source's NULL-propagation into PG/T-SQL with a guard (a
+    # MySQL/Oracle *target* already propagates, so those directions are left).
     if (
         fn_name in ("GREATEST", "LEAST")
-        and SOURCE_DIALECT.get() == "mysql"
+        and SOURCE_DIALECT.get() in ("mysql", "oracle")
         and dialect in ("postgresql", "tsql")
         and node.args
     ):
