@@ -354,6 +354,37 @@ CASES.update(
                 ),
             },
         ),
+        # invalid: a boolean predicate cast to int — T-SQL/Oracle have no boolean
+        # value type, so emit the 1/0 CASE form (MySQL takes it natively).
+        "pg-bool-to-int-cast": Case(
+            "pg-bool-to-int-cast ",
+            {
+                "tsql": Expect(
+                    present=("CASE WHEN a > 1 THEN 1 ELSE 0 END",),
+                    absent=("CAST(a > 1 AS",),
+                ),
+                "oracle": Expect(
+                    present=("CASE WHEN a > 1 THEN 1 ELSE 0 END",),
+                    absent=("CAST(a > 1 AS",),
+                ),
+            },
+        ),
+        # composition: bool_or + FILTER — the FILTER CASE's boolean THEN-value
+        # must be wrapped 1/0 on T-SQL/Oracle (the bool_agg 1/0 form composes
+        # with the FILTER rewrite). Result = 1 (True).
+        "pg-boolagg-filter": Case(
+            "pg-boolagg-filter ",
+            {
+                "tsql": Expect(
+                    present=("WHEN a > 5 THEN 1",),
+                    absent=("FILTER", "bool_or"),
+                ),
+                "oracle": Expect(
+                    present=("WHEN a > 5 THEN 1",),
+                    absent=("FILTER", "bool_or"),
+                ),
+            },
+        ),
         "pg-drop-default": Case(
             "pg-drop-default ",
             {

@@ -385,6 +385,18 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                 else Literal(value=int(_lax), dtype="integer")
             )
             return _emit_expression(dataclasses.replace(node, expression=_num), dialect)
+        # A boolean predicate cast to a numeric type: T-SQL/Oracle have no
+        # boolean *value* type and reject a predicate as a CAST operand (T-SQL
+        # error 156; ORA-02000). Emit the 1/0 CASE form — a boolean used as a
+        # value must be wrapped (challenge pg-bool-to-int-cast).
+        if (
+            dialect in ("tsql", "oracle")
+            and _is_predicate_node(node.expression)
+            and node.target_type.name.split("(")[0].strip().upper()
+            in _NUMERIC_CAST_TYPES
+        ):
+            _pred = _emit_expression(node.expression, dialect)
+            return f"CASE WHEN {_pred} THEN 1 ELSE 0 END"
         if (
             dialect == "tsql"
             and isinstance(node.expression, UnaryOp)

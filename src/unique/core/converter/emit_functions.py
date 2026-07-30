@@ -19,6 +19,7 @@ from typing import cast
 from unique.core.ast_nodes import (
     ASTNode,
     BinaryOp,
+    CaseExpression,
     CastExpression,
     ColumnRef,
     DataType,
@@ -703,6 +704,68 @@ def _emit_json_object_extract(node: FunctionCall, dialect: str) -> str | None:
             return f"JSON_QUERY({jx}, {jp})"
         return f"JSONB_PATH_QUERY_FIRST(CAST({jx} AS JSONB), {jp})"
     return None
+
+
+def _emit_bool_agg(node: FunctionCall, fn_name: str, dialect: str) -> str | None:
+    """Boolean aggregate (bool_or/bool_and/every) per target, or None.
+
+    PG bool_or/bool_and/every canonicalize to LOGICAL_OR/LOGICAL_AND — no other
+    engine has them. MySQL booleans are 0/1, so MAX/MIN aggregate them directly;
+    T-SQL's bit is not a valid MAX operand and needs CAST(… AS INT); Oracle
+    aggregates a 1/0 CASE over the boolean.
+    """
+    if fn_name not in ("LOGICAL_OR", "BOOL_OR", "LOGICAL_AND", "BOOL_AND", "EVERY") or (
+        len(node.args) != 1
+    ):
+        return None
+    arg = _emit_expression(node.args[0], dialect)
+    agg = "MAX" if fn_name in ("LOGICAL_OR", "BOOL_OR") else "MIN"
+    filtered = _bool_agg_filter_arg(node.args[0], agg, dialect)
+    if filtered is not None:
+        return filtered
+    if dialect == "tsql":
+        inner = node.args[0]
+        if isinstance(inner, BinaryOp) and inner.operator in _COMPARISON_OPS:
+            # A predicate is not a value on T-SQL — wrap tri-state.
+            arg = f"CASE WHEN {arg} THEN 1 WHEN NOT ({arg}) THEN 0 END"
+        elif isinstance(inner, UnaryOp) and inner.operator == UnaryOperator.NOT:
+            operand = _emit_expression(inner.operand, dialect)
+            arg = f"CASE WHEN {operand} = 0 THEN 1 " f"WHEN {operand} <> 0 THEN 0 END"
+        return f"{agg}(CAST({arg} AS INT))"
+    if dialect == "mysql":
+        return f"{agg}({arg})"
+    if dialect == "oracle":
+        return f"{agg}(CASE WHEN {arg} THEN 1 ELSE 0 END)"
+    return f"{'BOOL_OR' if agg == 'MAX' else 'BOOL_AND'}({arg})"
+
+
+def _bool_agg_filter_arg(arg_node: ASTNode, agg: str, dialect: str) -> str | None:
+    """Boolean aggregate over a FILTER-lowered CASE, for T-SQL/Oracle.
+
+    ``bool_or(x) FILTER (WHERE c)`` lowers to ``bool_or(CASE WHEN c THEN x END)``.
+    On T-SQL/Oracle the boolean THEN-value ``x`` is not a value type, so wrap each
+    predicate THEN in the 1/0 form — the CASE then yields an int the MAX/MIN
+    aggregate takes directly (challenge pg-boolagg-filter). Returns None (MySQL/PG
+    take the boolean as-is, and non-FILTER args fall through to the caller).
+    """
+    if (
+        dialect not in ("tsql", "oracle")
+        or not isinstance(arg_node, CaseExpression)
+        or not any(_is_predicate_node(v) for _, v in arg_node.whens)
+    ):
+        return None
+    one = Literal(value=1, dtype="integer")
+    zero = Literal(value=0, dtype="integer")
+    wrapped = tuple(
+        (
+            (c, CaseExpression(whens=((v, one),), else_expr=zero))
+            if _is_predicate_node(v)
+            else (c, v)
+        )
+        for c, v in arg_node.whens
+    )
+    rebuilt = dataclasses.replace(arg_node, whens=wrapped)
+    return f"{agg}({_emit_expression(rebuilt, dialect)})"
 
 
 def _widen_round_operand(operand: ASTNode, emitted: str) -> str:
@@ -1623,32 +1686,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         arg = _emit_expression(node.args[0], dialect)
         return f"{stat_map.get(dialect, fn_name)}({arg})"
 
-    # Boolean aggregates: PG bool_or/bool_and/every canonicalize to
-    # LOGICAL_OR/LOGICAL_AND (or stay verbatim) — no other engine has
-    # them. MySQL booleans are 0/1, so MAX/MIN aggregate them directly;
-    # T-SQL's bit is not a valid MAX operand and needs CAST(… AS INT);
-    # Oracle SQL (23ai+) aggregates a CASE over the boolean.
-    if fn_name in ("LOGICAL_OR", "BOOL_OR", "LOGICAL_AND", "BOOL_AND", "EVERY") and (
-        len(node.args) == 1
-    ):
-        arg = _emit_expression(node.args[0], dialect)
-        agg = "MAX" if fn_name in ("LOGICAL_OR", "BOOL_OR") else "MIN"
-        if dialect == "tsql":
-            inner = node.args[0]
-            if isinstance(inner, BinaryOp) and inner.operator in _COMPARISON_OPS:
-                # A predicate is not a value on T-SQL — wrap tri-state.
-                arg = f"CASE WHEN {arg} THEN 1 WHEN NOT ({arg}) THEN 0 END"
-            elif isinstance(inner, UnaryOp) and inner.operator == UnaryOperator.NOT:
-                operand = _emit_expression(inner.operand, dialect)
-                arg = (
-                    f"CASE WHEN {operand} = 0 THEN 1 " f"WHEN {operand} <> 0 THEN 0 END"
-                )
-            return f"{agg}(CAST({arg} AS INT))"
-        if dialect == "mysql":
-            return f"{agg}({arg})"
-        if dialect == "oracle":
-            return f"{agg}(CASE WHEN {arg} THEN 1 ELSE 0 END)"
-        return f"{'BOOL_OR' if agg == 'MAX' else 'BOOL_AND'}({arg})"
+    bool_agg = _emit_bool_agg(node, fn_name, dialect)
+    if bool_agg is not None:
+        return bool_agg
 
     # Conditional shorthand: MySQL IF() / T-SQL IIF(). Neither exists on
     # PostgreSQL/Oracle, whose spelling is a searched CASE.
@@ -3059,6 +3099,7 @@ from unique.core.converter.emit import (  # noqa: E402
     _convert_date_format,
     _date_fmt_reproducible,
     _emit_condition,
+    _is_predicate_node,
     _number_mask_spec,
     _oracle_number_mask,
     _plain_int_value,
