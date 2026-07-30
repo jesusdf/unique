@@ -432,6 +432,39 @@ RATIONALES: dict[str, Rationale] = {
             "is preserved."
         ),
     ),
+    "UNIQUE-1063": _R(
+        construct=(
+            "A construct with no cross-engine mapping, kept as a documented carrier "
+            "(e.g. T-SQL AT TIME ZONE, or the T-SQL CLR spatial '::' method-call "
+            "operator)"
+        ),
+        reason=(
+            "The generic degrade path for a value Unique recognizes but cannot compute "
+            "on another engine — used e.g. for AT TIME ZONE (Oracle/MySQL have no such "
+            "operator; PostgreSQL/T-SQL's own session-tz-dependent display differs) "
+            "and T-SQL's geometry/geography '::' static-method call (no other engine "
+            "has CLR types)."
+        ),
+        example_case="ts-at-time-zone",
+        divergence=(
+            "Warned limit — degrades to NULL + annotation; valid only on the source "
+            "engine."
+        ),
+    ),
+    "UNIQUE-1064": _R(
+        construct="Oracle bare SESSIONTIMEZONE global (→ other engines)",
+        reason=(
+            "SESSIONTIMEZONE reports the connecting session's own UTC offset — a "
+            "per-session value with no fixed cross-engine equivalent; the mapped "
+            "expression reports the TARGET session's own zone in its native format "
+            "instead."
+        ),
+        example_case="ora-tz-funcs",
+        divergence=(
+            "Warned limit — the value is session-dependent on the target too and may "
+            "not match the source session's zone."
+        ),
+    ),
     "UNIQUE-1065": _R(
         construct="CAST(... AS TIME) and other Oracle-absent value types",
         reason=(
@@ -460,6 +493,22 @@ RATIONALES: dict[str, Rationale] = {
         example_case="pg-cast-point",
         divergence="Warned limit — value kept as text.",
     ),
+    "UNIQUE-1068": _R(
+        construct=(
+            "A PostgreSQL numeric NaN/Infinity literal cast to a numeric type (→ MySQL "
+            "/ T-SQL / Oracle)"
+        ),
+        reason=(
+            "Only PostgreSQL's numeric type has a NaN/Infinity value; "
+            "MySQL/T-SQL/Oracle DECIMAL/NUMBER silently collapse a 'NaN' cast to 0, so "
+            "the special value has no faithful representation there."
+        ),
+        example_case="pg-nan-cmp",
+        divergence=(
+            "Warned limit — the carrier documents that the value cannot be reproduced "
+            "numerically on the target."
+        ),
+    ),
     "UNIQUE-1069": _R(
         construct="MySQL UNSIGNED integer type / CAST(... AS UNSIGNED)",
         reason=(
@@ -469,6 +518,64 @@ RATIONALES: dict[str, Rationale] = {
         ),
         example_case="my-cast-convert",
         divergence="Warned limit — unsigned wraparound not preserved.",
+    ),
+    "UNIQUE-1071": _R(
+        construct=(
+            "A scalar subquery serialized via T-SQL FOR XML/JSON (→ other engines)"
+        ),
+        reason=(
+            "FOR XML/JSON row-serialization inside a (SELECT ... FOR XML/JSON) scalar "
+            "subquery has no cross-engine equivalent; dropping only the clause would "
+            "ship the multi-column rows raw into a scalar context (ORA-00913 'too many "
+            "values'), so the whole scalar degrades instead."
+        ),
+        example_case="ts-for-xml",
+        divergence="Warned limit — degrades to NULL + annotation.",
+    ),
+    "UNIQUE-1073": _R(
+        construct=(
+            "MySQL date arithmetic on a non-datetime string literal (e.g. "
+            "DATE_ADD('not-a-date', INTERVAL ...))"
+        ),
+        reason=(
+            "MySQL's own date-arithmetic functions yield NULL when the first argument "
+            "doesn't parse as a date/time value; folding the literal at transpile time "
+            "reproduces that NULL rather than emitting an invalid cast on another "
+            "engine."
+        ),
+        example_case="my-timestr-plus",
+        divergence=(
+            "Warned limit — the value folds to NULL to match MySQL's own behaviour."
+        ),
+    ),
+    "UNIQUE-1074": _R(
+        construct="MySQL DATE - DATE subtraction",
+        reason=(
+            "MySQL's DATE - DATE operator is a numeric YYYYMMDD subtraction (e.g. "
+            "2020-03-01 - 2020-01-01 = 200), not a day count; the meaningful day-count "
+            "value (60, matching every other engine's date subtraction) is emitted "
+            "instead."
+        ),
+        example_case="my-date-diff-minus",
+        divergence=(
+            "Warned limit — normalized to a day count rather than MySQL's own YYYYMMDD "
+            "arithmetic result."
+        ),
+    ),
+    "UNIQUE-1075": _R(
+        construct="timestamp - timestamp subtraction (→ T-SQL / MySQL)",
+        reason=(
+            "PostgreSQL/Oracle timestamp subtraction yields an INTERVAL; T-SQL and "
+            "MySQL have no interval value type, so the difference is computed as a "
+            "SECOND count via DATEDIFF/TIMESTAMPDIFF instead."
+        ),
+        example_case=(
+            "tests/integration/test_challenge.py::TestTimestampDifferenceDegrade::test_tsql_and_mysql_degrade_with_warning"
+        ),
+        divergence=(
+            "Warned limit — a SECOND count replaces the source's INTERVAL value (same "
+            "information, different type)."
+        ),
     ),
     "UNIQUE-1076": _R(
         construct=(
@@ -494,6 +601,22 @@ RATIONALES: dict[str, Rationale] = {
         divergence=(
             "Warned limit on T-SQL/MySQL — degrades to a NULL carrier; faithful on "
             "Oracle/PostgreSQL."
+        ),
+    ),
+    "UNIQUE-1078": _R(
+        construct=(
+            "A window frame EXCLUDE clause (CURRENT ROW / GROUP / TIES) (→ T-SQL / "
+            "MySQL)"
+        ),
+        reason=(
+            "T-SQL and MySQL implement no EXCLUDE option on a window frame at all, and "
+            "there is no faithful ROWS/RANGE rewrite that reproduces excluding "
+            "specific peer rows from the frame."
+        ),
+        example_case="red2-pg-window-exclude-current",
+        divergence=(
+            "Warned limit on T-SQL/MySQL — degrades to a NULL carrier; faithful on "
+            "PostgreSQL/Oracle, which support EXCLUDE natively."
         ),
     ),
     "UNIQUE-1080": _R(
@@ -528,6 +651,57 @@ RATIONALES: dict[str, Rationale] = {
             "changed DATEFIRST will see a different result."
         ),
     ),
+    "UNIQUE-1084": _R(
+        construct=(
+            "Oracle ROUND(date, fmt) — a date rounded to the nearest fmt boundary (→ "
+            "other engines)"
+        ),
+        reason=(
+            "No other engine has a nearest-boundary date-rounding function; only "
+            "Oracle's own ROUND(date, fmt) computes this, so the general case (any "
+            "fmt) has no cross-engine formula."
+        ),
+        example_case="red2-ora-round-date-fmt",
+        divergence=(
+            "Warned limit — degrades to a NULL carrier; not computed off Oracle."
+        ),
+    ),
+    "UNIQUE-1085": _R(
+        construct=(
+            "Oracle TRUNC(date, fmt) with a format model that has no portable "
+            "truncation (e.g. 'W' week-of-month)"
+        ),
+        reason=(
+            "Most Oracle TRUNC format models map to a portable truncation unit (day, "
+            "month, year, ISO week, ...), but a few (like 'W', week-of-the-month) have "
+            "no equivalent boundary on any other engine."
+        ),
+        example_case="red2-ora-trunc-format-unmapped",
+        divergence=(
+            "Warned limit — degrades to a NULL carrier off Oracle; native TRUNC is "
+            "kept on Oracle."
+        ),
+    ),
+    "UNIQUE-1087": _R(
+        construct=(
+            "Oracle INSTR with a non-literal occurrence count or a non-literal "
+            "backward (negative-start) search"
+        ),
+        reason=(
+            "INSTR's occurrence/backward-search semantics fold to the engine-agnostic "
+            "computed value only when every argument is a literal (at transpile time); "
+            "a non-literal (column/expression) argument cannot be folded, and no other "
+            "engine's positional-search function reproduces Oracle's "
+            "occurrence/backward semantics directly."
+        ),
+        example_case=(
+            "tests/integration/test_challenge.py::TestLiteralFolds::test_oracle_instr_nonliteral_degrades"
+        ),
+        divergence=(
+            "Warned limit — degrades to a NULL carrier for the non-literal case; "
+            "literal arguments still fold to the correct value."
+        ),
+    ),
     "UNIQUE-1088": _R(
         construct="MySQL UpdateXML() (→ other engines)",
         reason=(
@@ -536,6 +710,19 @@ RATIONALES: dict[str, Rationale] = {
         ),
         example_case="my-xml-fns",
         divergence="Warned limit.",
+    ),
+    "UNIQUE-1089": _R(
+        construct="COLLATION(x) — the collation name of a value (→ other engines)",
+        reason=(
+            "Collation names are engine-specific catalog identifiers (e.g. MySQL's "
+            "utf8mb4_0900_ai_ci vs Oracle's NLS-based names) with no cross-engine "
+            "mapping, even though the function itself exists on multiple engines."
+        ),
+        example_case="my-collation-fn",
+        divergence=(
+            "Warned limit — the source's engine-specific collation name is preserved "
+            "but will not match the target's naming."
+        ),
     ),
     "UNIQUE-1090": _R(
         construct="Oracle REGEXP_SUBSTR capture-group extraction (6th arg) (→ MySQL)",
@@ -546,6 +733,74 @@ RATIONALES: dict[str, Rationale] = {
         ),
         example_case="ora-regexp-group",
         divergence="Warned limit — capture-group extraction not reproduced.",
+    ),
+    "UNIQUE-1091": _R(
+        construct="Oracle TRANSLATE(s, from, to) (→ MySQL)",
+        reason=(
+            "TRANSLATE is native on PostgreSQL/T-SQL, but MySQL has no TRANSLATE "
+            "function; a nested-REPLACE emulation is order-dependent (each REPLACE can "
+            "rematch a previous substitution's output) and is not equivalent to "
+            "TRANSLATE's simultaneous single-pass character mapping."
+        ),
+        example_case="ora-translate3",
+        divergence=(
+            "Warned limit — degrades to a NULL carrier on MySQL; native and faithful "
+            "on PostgreSQL/T-SQL."
+        ),
+    ),
+    "UNIQUE-1092": _R(
+        construct="SUBSTRING(x FROM POSIX-regex-pattern) (→ T-SQL)",
+        reason=(
+            "T-SQL has no POSIX regular-expression engine, so a POSIX-pattern "
+            "SUBSTRING (native on Oracle REGEXP_SUBSTR / MySQL) has no equivalent "
+            "there."
+        ),
+        example_case="pg-substring-regex",
+        divergence=(
+            "Warned limit — degrades to a NULL carrier on T-SQL; faithful on "
+            "Oracle/MySQL via REGEXP_SUBSTR."
+        ),
+    ),
+    "UNIQUE-1093": _R(
+        construct=(
+            "SUBSTRING(x FROM SIMILAR-TO-pattern FOR escape) — the SQL-standard regex "
+            "form"
+        ),
+        reason=(
+            "The SQL-standard SIMILAR TO pattern syntax uses different metacharacters "
+            '(%, _, #"..."# capture markers) than POSIX regex, so no faithful '
+            "cross-engine rewrite exists on engines whose regex functions expect POSIX "
+            "syntax."
+        ),
+        example_case="pg-substring-escape",
+        divergence="Warned limit — degrades to a NULL carrier.",
+    ),
+    "UNIQUE-1094": _R(
+        construct="An empty-string function result on Oracle (e.g. SUBSTR yielding '')",
+        reason=(
+            "The same underlying limit as Oracle's NULL-equals-empty-string storage "
+            "(UNIQUE-1082/1207), applied to a computed (not stored) empty-string "
+            "result — Oracle collapses it to NULL at the point of computation too."
+        ),
+        example_case="my-fsubstr",
+        divergence="Warned limit — the empty string surfaces as Oracle NULL.",
+    ),
+    "UNIQUE-1095": _R(
+        construct=(
+            "MySQL VALUES(col) used outside an INSERT ... ON DUPLICATE KEY UPDATE "
+            "statement"
+        ),
+        reason=(
+            "MySQL's VALUES(col) function only has meaning inside the ON DUPLICATE KEY "
+            "UPDATE clause of the very INSERT it appears in (reading the row that "
+            "would have been inserted); used elsewhere (e.g. inside a stored "
+            "procedure's ordinary UPDATE) it is NULL on MySQL itself, so the "
+            "transpiler reproduces that NULL."
+        ),
+        example_case=(
+            "tests/integration/test_pg_source_wave1.py::TestWave223ValuesFnOutfile::test_values_fn_null_oracle"
+        ),
+        divergence="Faithful — matches MySQL's own out-of-context NULL behaviour.",
     ),
     "UNIQUE-1096": _R(
         construct="EXTRACT(EPOCH FROM interval) (PostgreSQL)",
@@ -567,6 +822,39 @@ RATIONALES: dict[str, Rationale] = {
         ),
         example_case="pg-frac-seconds",
         divergence="Warned limit.",
+    ),
+    "UNIQUE-1098": _R(
+        construct=(
+            "PostgreSQL format() with a %I/%L specifier, a width, or a positional "
+            "argument (→ other engines)"
+        ),
+        reason=(
+            "Only the plain %s-only template has a portable rewrite (string "
+            "concatenation); %I (quoted identifier) and %L (quoted literal) "
+            "specifiers, width modifiers and positional (%1$s) arguments have no "
+            "equivalent formatting primitive on other engines."
+        ),
+        example_case=(
+            "tests/integration/test_challenge.py::TestFormatFunc::test_complex_spec_degrades"
+        ),
+        divergence=(
+            "Warned limit — degrades to a NULL carrier; a %s-only template still "
+            "rewrites faithfully."
+        ),
+    ),
+    "UNIQUE-1099": _R(
+        construct="PostgreSQL sha256()/sha512() (→ other engines)",
+        reason=(
+            "PostgreSQL's sha256/sha512 return a bytea digest, while every other "
+            "engine's equivalent hash function returns a hex-encoded string — the "
+            "underlying digest is identical, but the representation differs and cannot "
+            "be reconciled without an explicit encode() the source SQL doesn't have."
+        ),
+        example_case="pg-hash-fns",
+        divergence=(
+            "Warned limit — degrades to a NULL carrier; md5() and other hash functions "
+            "with matching representations still map faithfully."
+        ),
     ),
     "UNIQUE-1100": _R(
         construct="MySQL CHAR(n) as a numeric-to-byte-string function",
