@@ -366,8 +366,32 @@ class OracleEmitter(ProceduralEmitter):
             and (50000 <= int(num_text) <= 50999)
         ):
             code = -(20000 + (int(num_text) - 50000))
-        payload = text or number or msg
+        # A RAISERROR printf substitution (``'value is %d today', …, 42``):
+        # Oracle's RAISE_APPLICATION_ERROR takes a plain string, so splice the
+        # args in by concatenation rather than dropping them (silent-drop).
+        lit, fmt_args = self._raise_format_substitution(msg)
+        if lit is not None:
+            payload = self._oracle_format_concat(lit, fmt_args)
+        else:
+            payload = text or number or msg
         return f"RAISE_APPLICATION_ERROR({code}, {payload});"
+
+    @classmethod
+    def _oracle_format_concat(cls, lit: str, fmt_args: list[str]) -> str:
+        """Splice printf args into a string literal as ``'a' || arg || 'b'``.
+
+        ``lit`` is the quoted source message; the specifier count already
+        matches ``fmt_args`` (see ``_raise_format_substitution``)."""
+        inner = lit[1:-1]
+        segments = cls._TSQL_FMT_SPEC.split(inner)
+        parts: list[str] = []
+        for i, seg in enumerate(segments):
+            if seg:
+                # ``%%`` is a literal percent in the source message.
+                parts.append("'" + seg.replace("%%", "%") + "'")
+            if i < len(fmt_args):
+                parts.append(fmt_args[i])
+        return " || ".join(parts) if parts else lit
 
     def _emit_function_impl(self, node: CreateFunctionStatement) -> str:
         # A routine with no return type — a PostgreSQL function with only OUT

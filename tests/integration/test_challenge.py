@@ -5737,3 +5737,21 @@ class TestSetSwallowNext:
         # A SET with no following statement keeps the whole-comment behaviour.
         out = _tx("SET NOCOUNT ON", "tsql", "postgresql")
         assert out.strip() == "-- SET NOCOUNT ON", out
+
+
+class TestRaiserrorFormatArgs:
+    """red2-ts-raiserror-format-arg-drop: RAISERROR('value is %d today', 16, 1,
+    42) dropped the substitution arg 42 silently on PG/Oracle. Splice it: PG
+    RAISE format args (%), Oracle string concatenation."""
+
+    def test_pg_uses_raise_format_arg(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-raiserror-format-arg-drop")
+        out = _exec_lines(_tx(src, "tsql", "postgresql"))
+        assert "RAISE EXCEPTION 'value is % today', 42" in out, out
+        assert "%d" not in out, out
+
+    def test_oracle_concatenates_arg(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-raiserror-format-arg-drop")
+        out = _exec_lines(_tx(src, "tsql", "oracle"))
+        assert "'value is ' || 42 || ' today'" in out, out
+        assert "%d" not in out, out
