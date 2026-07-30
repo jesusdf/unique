@@ -118,7 +118,7 @@ def test_neutralize_dollar_quotes_defangs_delimiters():
 # entries, driving the floor 200 → 137; a sibling session covers the
 # procedural/expression/ddl categories and lowers it further separately.
 # ---------------------------------------------------------------------------
-_RATIONALE_UNCOVERED_FLOOR = 137
+_RATIONALE_UNCOVERED_FLOOR = 51
 
 _CASE_HEADER_RE = re.compile(
     r"^--\s*CASE\[[a-z]+\](?:\[[^\]]*\])*:\s*([A-Za-z0-9][A-Za-z0-9_-]*)\b"
