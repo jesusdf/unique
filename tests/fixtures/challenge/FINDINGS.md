@@ -102,3 +102,22 @@ Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition
 - Unverified tail note (NOT scored): T-SQL CROSS APPLY dbo.tvf(a.id) -> PG "CROSS JOIN LATERAL (SELECT) f" (empty select list, TVF call lost) with no warning on the PG leg (Oracle/MySQL warn) — needs a TVF definition to live-validate the source; flagged for BLUE.
 
 <!-- red2 batch: final timestamp checkpoint -->
+
+<!-- RED batch round 3 START 2026-07-30 (PURPLE-scoped cleanup batch, closed 4-case list, 30-min committed-time) -->
+
+## RED batch round 3 2026-07-30 (cleanup — PURPLE closed list)
+
+Scope: 4 constructs observed by prior workers, each transpile-first re-checked at HEAD 69fc86a and live-validated. All four still reproduce.
+
+| id | class | src→targets | wrong output | expected / live evidence | BLUE note |
+|----|-------|-------------|--------------|--------------------------|-----------|
+| red3-my-update-orderby-limit-drop | func (5) | mysql→pg,tsql,oracle | UPDATE ... ORDER BY id LIMIT 5 → "UPDATE ... WHERE v<0" (ORDER BY+LIMIT dropped); updates ALL matching rows, not n | Live on red3_lim (10 rows v=-id, all v<0): MySQL ORIGINAL updates 5; PG/T-SQL/Oracle TRANSPILED all update 10. Only vague internal tripwire "unread sqlglot arg order/limit on Update" fires. Source valid on MySQL. | Rewrite via keyed subquery per target (twin of the [fixed] DELETE case red2-my-delete-orderby-limit-drop, whose fix skipped UPDATE), or real destructive-degrade warning. Alt class lying-warning. |
+| red3-ts-trycast-column-nonliteral | func (5) | tsql→mysql,pg (oracle OK) | TRY_CAST(c AS INT) over a column → plain CAST on mysql & pg (TRY/null-on-failure lost); literal-only fix (red2-ts-trycast-mysql-zero) doesn't cover columns | Live on red3_try (c in 'abc','42'): T-SQL=(42,NULL); MySQL CAST(c AS SIGNED)=(42,0) [0≠NULL, func, no warning]; PG CAST(c AS INT) RAISES "invalid input syntax for type integer: abc" [aborts query, no warning]. Oracle correct (NULL). Source valid on T-SQL. | Apply the safe/TRY wrapper to the column expr, not just foldable literals (MySQL REGEXP guard; PG guarded CASE/safe-cast). TRY_CONVERT identical. |
+| red3-ora-set-transaction-proc | invalid (2) | oracle→tsql,pg,mysql | SET TRANSACTION READ ONLY inside a proc mis-parsed as assignment → T-SQL "SET @transaction = READ ONLY", PG "TRANSACTION := READ ONLY", MySQL "SET TRANSACTION = READ ONLY" | Live target rejection: T-SQL 156 "near keyword READ"; PG "\"transaction\" is not a known variable"; MySQL 1064. NO warning. Source valid on Oracle (proc compiles). | Procedural parser/emitter must treat SET TRANSACTION as transaction control, not SET <var> := ... . Distinct from top-level my-set-transaction and from red2-ora-proc-savepoint-as. |
+| red3-ts-goto-label-proc | invalid (2) | tsql→oracle,pg,mysql | GOTO + label in a proc body garbled: "IF @i=0 GOTO done" → "IF v_i=0 GOTO done THEN...END IF"; "GOTO skip" → "GOTO AS skip"; label "done:" → bare "done;" | Live target rejection: Oracle PLS-00103 "symbol GOTO"; PG "syntax error at or near done"; MySQL 1064. A warning IS present but it is the generic "Embedded DML not modeled...review the statement" — mislabels control-flow as embedded DML and does not flag the invalidity. Source valid on SQL Server. **BORDERLINE (warned): flagged for PURPLE — recorded as invalid because every target rejects; could be lying-warning.** | Model GOTO/label in the procedural parser; emit Oracle GOTO/<<label>>, honest degrade+warn for PG/MySQL (no GOTO). Never ship the garbled passthrough. |
+
+### Batch summary (RED round 3, cleanup) — provisional
+- START commit TBD (first round-3 commit). Scope = PURPLE's closed 4-case list; all 4 reproduce at HEAD 69fc86a. 4 scored findings, 14 points, 2 classes (func 10, invalid 4). NOTE: func = 71% > 50% concentration cap and only 2 classes (< 3) — this is a direct consequence of the fixed 4-case scope PURPLE assigned (classes dictated by the brief: func for cases 1–2, invalid for 3–4), not class-farming. Case 1 could be re-tagged lying-warning (mirroring its [fixed] DELETE twin) which would give func 5 / lying-warning 2 / invalid 4 = 3 classes, func 45% — noted for PURPLE to reconcile.
+- Non-finding check: none of the 4 turned out correct-or-honestly-warned; all reproduce. Neighbors folded into notes (UPDATE LIMIT w/o ORDER BY; TRY_CONVERT column) rather than separate cases (same mechanism).
+
+<!-- RED batch round 3 END marker: run the commit-timestamp check; batch over when latest-START >= 30 min (over==True). -->
