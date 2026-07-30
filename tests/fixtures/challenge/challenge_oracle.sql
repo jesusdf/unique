@@ -571,3 +571,6 @@ SELECT DECODE(1, 1, 'a', 2, 'b', 99) AS r FROM DUAL
 
 -- CASE[open][class=invalid]: reda-ora-user-function — fails on postgresql, tsql. Oracle USER (a niladic current-user function, = 'SYSTEM' live) is emitted as a QUOTED IDENTIFIER: PG "USER", T-SQL [USER], MySQL `USER` — i.e. a column reference, losing the function meaning. Live PG 'column "USER" does not exist', T-SQL 207 'Invalid column name USER'; no warning. Unquoted USER (PG/T-SQL keyword) or CURRENT_USER would return the user. BLUE: map Oracle USER -> CURRENT_USER (PG/T-SQL/MySQL), never quote it as an identifier.
 SELECT USER AS r FROM DUAL
+
+-- CASE[open][class=func]: reda-ora-partition-extension — fails on postgresql, tsql, mysql. Oracle's partition-extended table reference 'SELECT * FROM t PARTITION (p1)' selects ONLY partition p1's rows. It is mis-rendered as a table alias with a column-rename list: PG 't AS PARTITION(p1)', T-SQL wraps it as a derived table 'AS PARTITION(p1)' — the partition FILTER is silently lost and ALL rows are returned. No warning. Live (p1 row a=5, p2 row a=50): Oracle=[(5,1)]; PG=[(5,1),(50,2)]. No target has partition-extended syntax, so BLUE should warn+degrade rather than emit a semantically-different alias.
+SELECT * FROM t PARTITION (p1)
