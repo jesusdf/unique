@@ -74,6 +74,7 @@ _CURATED_STOPWORDS: tuple[str, ...] = (
     # comments of the private corpus but identify nothing (FP tail):
     "filename",
     "lineno",
+    "nullable",
     "returncode",
     "column_name",
     "sqlserver",
