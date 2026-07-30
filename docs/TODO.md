@@ -38,7 +38,7 @@ routines-unblocked and severity:*
   `$$` body early, leaks statements as top-level SQL) — severity-first.
 - **B36** — the four UNIQUE-1151 mapping gaps (FROM DUAL residue,
   SYS_REFCURSOR, ROW_COUNT(), NUMTODSINTERVAL) → ~22 routines.
-- **B37** — SQL%ROWCOUNT in expression position → GET DIAGNOSTICS hoist (8).
+- ~~B37~~ — DONE 2026-07-31: expression-position hoist with honest re-evaluated-condition degrade; corpus 1033 count 8 → 0.
 - **B38** — UNIQUE-1170 temp-table parse giveup: isolate before briefing. ALSO: `_split_generic` (batch_splitter.py ~663) shares the CASE-uncounted depth asymmetry B35 fixed in `_split_mysql` — a DELIMITER-less PL/SQL body with a CASE expression could tear the same way (flagged 2026-07-31, not yet reproduced).
 - **B39** — 1230/1231 placeholder-code fidelity (quality, not coverage).
 
