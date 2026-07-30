@@ -610,6 +610,69 @@ CASES.update(
                 ),
             },
         ),
+        # BLUE 2026-07-30 (func): partition-extended table reference FROM t
+        # PARTITION (p) has no target equivalent and its row filter is not
+        # reconstructable -> honest warned carrier (was a silent alias rename).
+        "reda-ora-partition-extension": Case(
+            "reda-ora-partition-extension ",
+            {
+                "postgresql": Expect(warn=True),
+                "tsql": Expect(warn=True),
+                "mysql": Expect(warn=True),
+            },
+        ),
+        # BLUE 2026-07-30 (lying-warning): KEEP (DENSE_RANK …) is an ordered
+        # AGGREGATE, not a window; it was silently rendered as a running OVER.
+        # No portable form -> honest warned carrier on every target.
+        "reda-ora-keep-denserank": Case(
+            "reda-ora-keep-denserank ",
+            {
+                "postgresql": Expect(warn=True),
+                "tsql": Expect(warn=True),
+                "mysql": Expect(warn=True),
+            },
+        ),
+        # BLUE 2026-07-30 (lying-warning): Oracle GREATEST returns NULL if any
+        # arg is NULL; PG and T-SQL ignore NULL. Guard with the same CASE the
+        # MySQL-source path uses so the value = NULL. MySQL target propagates
+        # natively (passthrough → omitted).
+        "reda-ora-greatest-null": Case(
+            "reda-ora-greatest-null ",
+            {
+                "postgresql": Expect(
+                    ("CASE WHEN", "IS NULL", "THEN NULL", "GREATEST(1, NULL, 3)"),
+                ),
+                "tsql": Expect(
+                    ("CASE WHEN", "IS NULL", "THEN NULL", "GREATEST(1, NULL, 3)"),
+                ),
+            },
+        ),
+        # BLUE 2026-07-30 (lying-warning): Oracle ``||`` treats NULL as ''; a
+        # provably-NULL operand (CAST(NULL AS ...)) is now dropped so the value
+        # survives ('a'||'b' = 'ab' everywhere), not just a bare NULL literal.
+        "reda-ora-concat-null-cast": Case(
+            "reda-ora-concat-null-cast ",
+            {
+                "postgresql": Expect(("'a' || 'b'",), ("CAST(NULL",)),
+                "tsql": Expect(("'a' + 'b'",), ("CAST(NULL",)),
+                "mysql": Expect(("CONCAT('a', 'b')",), ("CAST(NULL",)),
+            },
+        ),
+        # BLUE 2026-07-30 (lying-warning): REGEXP_LIKE maps to PG ``~`` and MySQL
+        # REGEXP (both live-verified); only T-SQL genuinely lacks POSIX regex and
+        # degrades to a warned carrier. Previously ALL three were falsely dropped.
+        "reda-ora-regexp-like": Case(
+            "reda-ora-regexp-like ",
+            {
+                "postgresql": Expect(
+                    ("a ~ '^[0-9]+$'",), ("REGEXP_LIKE", "unmapped operator")
+                ),
+                "mysql": Expect(
+                    ("a REGEXP '^[0-9]+$'",), ("REGEXP_LIKE", "unmapped operator")
+                ),
+                "tsql": Expect(warn=True),
+            },
+        ),
     }
 )
 

@@ -173,8 +173,33 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "oracle": {"degrade": True},
         "postgresql": {"degrade": True},
     },
+    # func: MySQL CONCAT propagates NULL (any NULL arg -> NULL) while PG/T-SQL/
+    # Oracle CONCAT ignore NULL. A runtime-nullable operand is now NULL-guarded
+    # with a CASE so the result matches MySQL (all three targets = NULL live).
+    "my-concat-null-col": {
+        "postgresql": {
+            "present": ["WHEN a IS NULL OR b IS NULL THEN NULL", "CONCAT(a, b)"],
+            "absent": [],
+        },
+        "tsql": {
+            "present": ["WHEN a IS NULL OR b IS NULL THEN NULL", "CONCAT(a, b)"],
+            "absent": [],
+        },
+        "oracle": {
+            "present": ["WHEN a IS NULL OR b IS NULL THEN NULL", "CONCAT(a, b)"],
+            "absent": [],
+        },
+    },
     "my-concat-ws": {
         "oracle": {"degrade": True},
+    },
+    # invalid: MySQL TO_DAYS lowers to DATEDIFF(x, '0000-01-01') + 1; year 0000
+    # is rejected by every target (and Oracle Julian-shifts pre-1582). Rebase on
+    # the post-reform epoch '1970-01-01' + 719528 = 737790 on all engines.
+    "my-to-days-year-zero": {
+        "postgresql": {"present": ["1970-01-01", "719528"], "absent": ["0000-01-01"]},
+        "tsql": {"present": ["1970-01-01", "719528"], "absent": ["0000-01-01"]},
+        "oracle": {"present": ["1970-01-01", "719528"], "absent": ["0000-01-01"]},
     },
     "my-concatws3": {
         "oracle": {"degrade": True},

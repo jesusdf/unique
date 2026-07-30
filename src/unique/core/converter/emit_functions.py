@@ -886,6 +886,18 @@ def _weekday_extract_expr(part: str, value: str, dialect: str) -> str | None:
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
+    # POSIX-regex match: Oracle REGEXP_LIKE(x, pat), PG ``x ~ pat``, MySQL
+    # ``x REGEXP pat``. (T-SQL has no POSIX regex — degraded whole-statement by
+    # ``_gate_tsql_regexp`` before it reaches the emitter.)
+    if fn_name == "REGEXP_LIKE" and len(node.args) == 2:
+        subj = _emit_expression(node.args[0], dialect)
+        pat = _emit_expression(node.args[1], dialect)
+        # Oracle keeps the native call; PG/MySQL use their infix regex operators.
+        _regexp_forms = {
+            "postgresql": f"{subj} ~ {pat}",
+            "mysql": f"{subj} REGEXP {pat}",
+        }
+        return _regexp_forms.get(dialect, f"REGEXP_LIKE({subj}, {pat})")
     # Compile-time folds over literal arguments: the value each SOURCE engine
     # computes is emitted directly, sidestepping per-target semantic gaps
     # (LEN/LENGTH counting units, Oracle INSTR occurrence/backward search).
@@ -1113,12 +1125,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         _lt_arg = _emit_expression(node.args[0], dialect)
         return f"LEN({_lt_arg} + '.') - 1"
 
-    # MySQL's GREATEST/LEAST return NULL if ANY argument is NULL; PostgreSQL and
-    # T-SQL ignore NULLs (GREATEST(1, NULL, 3) = 3 there). Preserve MySQL's
-    # NULL-propagation with a guard (Oracle already propagates, so it is left).
+    # MySQL's and Oracle's GREATEST/LEAST return NULL if ANY argument is NULL;
+    # PostgreSQL and T-SQL ignore NULLs (GREATEST(1, NULL, 3) = 3 there).
+    # Preserve the source's NULL-propagation into PG/T-SQL with a guard (a
+    # MySQL/Oracle *target* already propagates, so those directions are left).
     if (
         fn_name in ("GREATEST", "LEAST")
-        and SOURCE_DIALECT.get() == "mysql"
+        and SOURCE_DIALECT.get() in ("mysql", "oracle")
         and dialect in ("postgresql", "tsql")
         and node.args
     ):
@@ -3078,6 +3091,12 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # no direct VARBINARY(MAX) equivalent.
     if up == "DATALENGTH" and len(node.args) == 1 and dialect != "tsql":
         dl_arg = node.args[0]
+        # An NVARCHAR (national) value is stored as UTF-16 (2 bytes per code
+        # unit), so DATALENGTH(N'abc') = 6 — not the 3 that OCTET_LENGTH of the
+        # UTF-8 text gives. For a national LITERAL the exact byte count is known,
+        # so fold it (BMP or supplementary handled by the UTF-16 encoding).
+        if isinstance(dl_arg, Literal) and dl_arg.dtype == "national":
+            return str(len(str(dl_arg.value).encode("utf-16-le")))
         if isinstance(dl_arg, CastExpression) and dl_arg.target_type.name.upper() in (
             "VARBINARY",
             "BINARY",

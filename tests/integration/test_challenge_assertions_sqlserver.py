@@ -78,6 +78,28 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
     # func: T-SQL ``datetime + int`` adds days; MySQL numerically coerces
     # (20200101000001) and PG has no ``timestamp + int``. Rewrite to
     # DATE_ADD / ``+ INTERVAL 'n day'`` (Oracle native). All = 2020-01-02.
+    # func: T-SQL CAST(2.9 AS INT) truncates toward zero (=2); PG/MySQL/Oracle
+    # round (=3). Fold the fractional literal to its truncated value.
+    "reda-ts-cast-int-trunc": {
+        "postgresql": {"present": ["CAST(2 AS INT)"], "absent": ["2.9"]},
+        "oracle": {"present": ["CAST(2 AS INT)"], "absent": ["2.9"]},
+        "mysql": {"present": ["CAST(2 AS SIGNED)"], "absent": ["2.9"]},
+    },
+    # func: T-SQL AVG over an integer column truncates (AVG(1,2)=1); the others
+    # average as a decimal (1.5). Wrap in TRUNC (TRUNCATE(...,0) on MySQL).
+    "reda-ts-avg-int-trunc": {
+        "postgresql": {"present": ["TRUNC(AVG(x))"], "absent": []},
+        "oracle": {"present": ["TRUNC(AVG(x))"], "absent": []},
+        "mysql": {"present": ["TRUNCATE(AVG(x), 0)"], "absent": []},
+    },
+    # func: DATALENGTH(N'abc') = 6 (NVARCHAR is UTF-16, 2 bytes/char), not the
+    # OCTET_LENGTH=3 of the UTF-8 text. Fold a national literal to its exact
+    # UTF-16 byte count (verified against T-SQL, incl. supplementary chars).
+    "reda-ts-datalength-nchar": {
+        "postgresql": {"present": ["6 AS r"], "absent": ["OCTET_LENGTH", "DATALENGTH"]},
+        "mysql": {"present": ["6 AS r"], "absent": ["OCTET_LENGTH", "DATALENGTH"]},
+        "oracle": {"present": ["6 AS r"], "absent": ["LENGTHB", "DATALENGTH"]},
+    },
     "reda-ts-date-plus-int": {
         "mysql": {"present": ["DATE_ADD(", "INTERVAL 1 DAY"], "absent": ["+ 1"]},
         "postgresql": {"present": ["+ INTERVAL '1 day'"], "absent": ["+ 1 AS"]},
@@ -555,6 +577,47 @@ CASES.update(
             "postgresql": {"degrade": True},
             "oracle": {"degrade": True},
             "mysql": {"degrade": True},
+        },
+        # lying-warning: T-SQL ISNULL(x, y) takes the FIRST arg's type, so the
+        # replacement is truncated (VARCHAR(2) -> 'ab'); plain COALESCE keeps the
+        # full value. Wrap COALESCE in a CAST to the first-arg type. All = 'ab'.
+        "reda-ts-isnull-trunc": {
+            "postgresql": {
+                "present": [
+                    "CAST(COALESCE(CAST(NULL AS VARCHAR(2)), 'abcdef') AS VARCHAR(2))"
+                ],
+                "absent": ["ISNULL"],
+            },
+            "oracle": {
+                "present": [
+                    "CAST(COALESCE(CAST(NULL AS VARCHAR2(2)), 'abcdef') AS VARCHAR2(2))"
+                ],
+                "absent": ["ISNULL"],
+            },
+            "mysql": {
+                "present": [
+                    "CAST(COALESCE(CAST(NULL AS CHAR(2)), 'abcdef') AS CHAR(2))"
+                ],
+                "absent": ["ISNULL"],
+            },
+        },
+        # lying-warning: LIKE ... ESCAPE is SQL-standard and identical on every
+        # engine, but was falsely degraded to a commented carrier. It must now
+        # survive as executable SQL (the ESCAPE clause present in the *stripped*
+        # body proves it was not commented out).
+        "reda-ts-like-escape": {
+            "postgresql": {
+                "present": ["LIKE '%x!%y%' ESCAPE '!'"],
+                "absent": ["unmapped operator"],
+            },
+            "oracle": {
+                "present": ["LIKE '%x!%y%' ESCAPE '!'"],
+                "absent": ["unmapped operator"],
+            },
+            "mysql": {
+                "present": ["LIKE '%x!%y%' ESCAPE '!'"],
+                "absent": ["unmapped operator"],
+            },
         },
     }
 )

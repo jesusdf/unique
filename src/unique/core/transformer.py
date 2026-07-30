@@ -15,6 +15,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
+from typing import cast
 
 from unique.core.ast_nodes import (
     Alias,
@@ -22,6 +23,7 @@ from unique.core.ast_nodes import (
     ASTNode,
     BinaryOp,
     BinaryOperator,
+    CaseExpression,
     CastExpression,
     ColumnRef,
     CreateTableStatement,
@@ -35,6 +37,8 @@ from unique.core.ast_nodes import (
     Star,
     SubqueryExpression,
     TableRef,
+    UnaryOp,
+    UnaryOperator,
 )
 from unique.core.mappings import CANONICAL_FUNCTION_NAMES
 
@@ -763,8 +767,14 @@ class Transformer:
                 self._drop_oracle_concat_nulls(node)  # type: ignore[misc]
                 for node in result
             ]
+            result = [self._gate_oracle_partition_extension(node) for node in result]
         if self.context.source == "mysql" and self.context.target != "mysql":
             result = [self._gate_column_position(node) for node in result]
+        if self.context.source == "tsql" and self.context.target != "tsql":
+            result = [
+                self._truncate_tsql_integer_avg(node)  # type: ignore[misc]
+                for node in result
+            ]
         if self.context.target in ("tsql", "mysql", "oracle"):
             result = [self._gate_whole_row_cast(node) for node in result]
             result = [self._gate_srf_window(node) for node in result]
@@ -796,6 +806,7 @@ class Transformer:
             result = [self._gate_invalid_date_literal(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_unknown_sysvar(node) for node in result]
+            result = [self._gate_tsql_regexp(node) for node in result]
         elif self.context.source == "mysql" and self.context.target in (
             "oracle",
             "postgresql",
@@ -806,6 +817,10 @@ class Transformer:
         if self.context.source == "mysql" and self.context.target != "mysql":
             result = [self._gate_mysql_user_var(node) for node in result]
             result = [self._strip_mysql_charset_marks(node) for node in result]
+            result = [
+                self._wrap_mysql_concat_null(node)  # type: ignore[misc]
+                for node in result
+            ]
             result = [
                 n2
                 for n in result
@@ -1357,6 +1372,66 @@ class Transformer:
                 if found is not None:
                     return found
         return None
+
+    def _gate_oracle_partition_extension(self, node: ASTNode) -> ASTNode:
+        """Degrade Oracle's partition-extended table reference ``FROM t
+        PARTITION (p)`` — WHOLE. sqlglot mis-parses it as a column-renaming
+        alias (``t AS PARTITION(p)``), which silently drops the partition FILTER
+        and returns ALL rows on the target. No engine has partition-extended
+        syntax and the partition's key/values are not visible here, so there is
+        no faithful rewrite: preserve it whole with an honest warning."""
+        if not self._find_partition_extension(node):
+            return node
+        reason = (
+            "Oracle partition-extended table reference (PARTITION/SUBPARTITION) "
+            "has no target equivalent and its row filter cannot be reconstructed; "
+            "statement preserved as a comment"
+        )
+        self.context.warn(reason, "partition_extension")
+        self.context.mark_unsupported("partition-extended table reference")
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
+
+    def _find_partition_extension(self, value: object) -> bool:
+        if (
+            isinstance(value, TableRef)
+            and (value.alias or "").upper() in ("PARTITION", "SUBPARTITION")
+            and value.column_aliases
+        ):
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._find_partition_extension(getattr(value, f.name))
+                for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._find_partition_extension(item) for item in value)
+        return False
+
+    def _gate_tsql_regexp(self, node: ASTNode) -> ASTNode:
+        """Degrade a POSIX-regex match into T-SQL — WHOLE. Oracle REGEXP_LIKE /
+        PG ``~`` / MySQL REGEXP all map faithfully (handled in the emitter), but
+        T-SQL has no POSIX-regex engine, so the statement is preserved as a
+        commented carrier with a real warning (an honest degrade, not silent)."""
+        if not self._find_regexp_like(node):
+            return node
+        reason = (
+            "T-SQL has no POSIX-regex operator (REGEXP_LIKE); "
+            "statement preserved as a comment"
+        )
+        self.context.warn(reason, "unmapped_operator")
+        self.context.mark_unsupported(reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
+
+    def _find_regexp_like(self, value: object) -> bool:
+        if isinstance(value, FunctionCall) and value.name.upper() == "REGEXP_LIKE":
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._find_regexp_like(getattr(value, f.name)) for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._find_regexp_like(item) for item in value)
+        return False
 
     def _gate_whole_row_cast(self, node: ASTNode) -> ASTNode:
         """Degrade a whole-row cast (``CAST(a.* AS type)``) — WHOLE, off
@@ -2024,18 +2099,31 @@ class Transformer:
         assert isinstance(having, ASTNode)
         return replace(node, having=having)
 
+    @staticmethod
+    def _is_provably_null(node: object) -> bool:
+        """A statically-known-NULL operand: a bare NULL literal or a CAST of one
+        (``CAST(NULL AS VARCHAR2(10))``). Oracle concatenation treats such an
+        operand as ``''``; the other engines propagate NULL — so it must be
+        dropped for the value to survive (extends the literal-NULL case)."""
+        if isinstance(node, Literal) and node.dtype == "null":
+            return True
+        if isinstance(node, CastExpression):
+            return Transformer._is_provably_null(node.expression)
+        return False
+
     def _drop_oracle_concat_nulls(self, value: object) -> object:
         """Oracle's ``||`` treats NULL as the empty string (``'a'||NULL||'b'`` =
         ``'ab'``); the other engines propagate NULL. When the source is Oracle,
-        drop a NULL *literal* operand from a concat so the target keeps Oracle's
-        value (RC-2 compensation, annotated). Runtime NULLs in columns/variables
-        are schema/scope-dependent and out of reach here."""
+        drop a provably-NULL operand (a bare NULL literal or a CAST of one) from
+        a concat so the target keeps Oracle's value (RC-2 compensation,
+        annotated). Runtime NULLs in columns/variables are schema/scope-dependent
+        and out of reach here."""
         if isinstance(value, BinaryOp) and value.operator == BinaryOperator.CONCAT:
             left = self._drop_oracle_concat_nulls(value.left)
             right = self._drop_oracle_concat_nulls(value.right)
-            left_null = isinstance(left, Literal) and left.dtype == "null"
-            right_null = isinstance(right, Literal) and right.dtype == "null"
-            if left_null != right_null:  # exactly one NULL literal — drop it
+            left_null = self._is_provably_null(left)
+            right_null = self._is_provably_null(right)
+            if left_null != right_null:  # exactly one NULL operand — drop it
                 self.context.warn(
                     "Oracle || treats NULL as '' (a NULL concat operand was "
                     "dropped to preserve the value)",
@@ -2046,6 +2134,111 @@ class Transformer:
                 return replace(value, left=left, right=right)  # type: ignore[arg-type]
             return value
         return self._map_children(value, self._drop_oracle_concat_nulls)
+
+    @staticmethod
+    def _any_null_guard(args: list[ASTNode]) -> ASTNode:
+        """Build ``a IS NULL OR b IS NULL OR …`` over ``args`` (non-empty)."""
+        guard: ASTNode = UnaryOp(operator=UnaryOperator.IS_NULL, operand=args[0])
+        for arg in args[1:]:
+            guard = BinaryOp(
+                operator=BinaryOperator.OR,
+                left=guard,
+                right=UnaryOp(operator=UnaryOperator.IS_NULL, operand=arg),
+            )
+        return guard
+
+    @staticmethod
+    def _select_int_positions(sel: SelectStatement) -> list[bool]:
+        """Per output-column position: True when every UNION branch projects an
+        integer literal there (so the derived column is integer-typed)."""
+
+        def _is_int_proj(col: ASTNode) -> bool:
+            expr = col.expression if isinstance(col, Alias) else col
+            return isinstance(expr, Literal) and expr.dtype == "integer"
+
+        flags = [_is_int_proj(c) for c in sel.columns]
+        if isinstance(sel.set_query, SelectStatement):
+            sub = Transformer._select_int_positions(sel.set_query)
+            flags = [a and b for a, b in zip(flags, sub, strict=False)]
+        return flags
+
+    @staticmethod
+    def _derived_integer_columns(sel: SelectStatement) -> set[str]:
+        """Output column names of a derived table that are integer-typed."""
+        names = [c.name if isinstance(c, Alias) else None for c in sel.columns]
+        return {
+            n
+            for n, ok in zip(names, Transformer._select_int_positions(sel), strict=True)
+            if ok and n
+        }
+
+    def _truncate_tsql_integer_avg(self, node: object) -> object:
+        """T-SQL AVG returns the INPUT type, so AVG over an integer column
+        truncates toward zero (AVG(1, 2) = 1); PG/MySQL/Oracle average as a
+        decimal (1.5). When the argument is provably integer — a bare integer
+        column of the enclosing FROM derived table, or an integer literal/var —
+        wrap the call in TRUNC (spelled per target by the emitter) so the value
+        matches T-SQL."""
+        if not isinstance(node, SelectStatement):
+            return self._map_children(node, self._truncate_tsql_integer_avg)
+        int_cols: set[str] = set()
+        frm = node.from_clause
+        if isinstance(frm, SubqueryExpression) and isinstance(
+            frm.query, SelectStatement
+        ):
+            int_cols = self._derived_integer_columns(frm.query)
+
+        def _wrap(value: object) -> object:
+            if isinstance(value, SelectStatement):
+                # A nested select is resolved against its own FROM context.
+                return self._truncate_tsql_integer_avg(value)
+            if isinstance(value, FunctionCall) and value.name.upper() == "AVG":
+                arg = value.args[0] if len(value.args) == 1 else None
+                is_int = (isinstance(arg, Literal) and arg.dtype == "integer") or (
+                    isinstance(arg, ColumnRef) and arg.name in int_cols
+                )
+                if is_int:
+                    # Wrap without recursing into the AVG (its scalar arg holds
+                    # no further AVG to process).
+                    return FunctionCall(name="TRUNC", args=(value,))
+            return self._map_children(value, _wrap)
+
+        return self._map_children(node, _wrap)
+
+    def _wrap_mysql_concat_null(self, value: object) -> object:
+        """MySQL CONCAT returns NULL if ANY argument is NULL; PG/T-SQL/Oracle
+        CONCAT *ignore* a NULL operand. When a runtime-nullable operand (a
+        column or expression, not a non-NULL literal) is present, guard the call
+        so NULL-propagation survives: ``CASE WHEN a IS NULL OR … THEN NULL ELSE
+        CONCAT(…) END``. A literal-NULL operand is already folded to NULL by the
+        emitter; an all-non-NULL-literal call needs no guard."""
+        if isinstance(value, FunctionCall) and value.name.upper() == "CONCAT":
+            new_args = cast(
+                "tuple[ASTNode, ...]",
+                tuple(self._wrap_mysql_concat_null(a) for a in value.args),
+            )
+            call = value if new_args == value.args else replace(value, args=new_args)
+            if len(call.args) < 2:
+                # A single-argument CONCAT already equals its argument and
+                # propagates NULL trivially — no guard needed (and wrapping it
+                # would obscure the one-arg simplification).
+                return call
+            if any(self._is_provably_null(a) for a in call.args):
+                return call  # the emitter folds a provably-NULL operand to NULL
+            nullable = [
+                a
+                for a in call.args
+                if not (isinstance(a, Literal) and a.value is not None)
+            ]
+            if not nullable:
+                return call
+            return CaseExpression(
+                whens=(
+                    (self._any_null_guard(nullable), Literal(value=None, dtype="null")),
+                ),
+                else_expr=call,
+            )
+        return self._map_children(value, self._wrap_mysql_concat_null)
 
     def _map_children(self, value: object, fn: Callable[[object], object]) -> object:
         """Rebuild ``value`` with ``fn`` mapped over its child nodes

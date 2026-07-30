@@ -219,6 +219,14 @@ def test_func_case_result_matches(case: FuncCase, target: str) -> None:
         pytest.skip(f"needs live URLs for {case.source} and {target}")
 
     sql = _source_sql(_locate(case))
+    result = transpile(sql, case.source, target)
+    if result.warnings:
+        # A documented degrade (carrier + warning) is not result-comparable —
+        # the same reason the curated precision/boundary limits are excluded. A
+        # construct with no faithful cross-engine form (e.g. an Oracle
+        # partition-extended reference) preserves itself as a comment, so there
+        # is no executable output to diff.
+        pytest.skip(f"{case.slug.strip()} -> {target}: documented degrade")
     # Oracle folds '' into NULL intrinsically — when either side of the pair is
     # Oracle the two values are indistinguishable there, so BOTH sides collapse
     # '' to NULL before comparing (maintainer decision 2026-07-30).
@@ -226,7 +234,7 @@ def test_func_case_result_matches(case: FuncCase, target: str) -> None:
     source_rows = _execute(
         case.source, urls[case.source], sql, case.probe, case.tables, empty_as_null=fold
     )
-    output = transpile(sql, case.source, target).sql
+    output = result.sql
     target_rows = _execute(
         target, urls[target], output, case.probe, case.tables, empty_as_null=fold
     )

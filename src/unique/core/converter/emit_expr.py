@@ -475,6 +475,23 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
             in ("INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT")
         ):
             inner = f"ROUND({inner}, 0)"
+        # The mirror: T-SQL CAST-to-integer TRUNCATES toward zero (CAST(2.9 AS
+        # INT) = 2, -2.9 -> -2) while Oracle/PG/MySQL ROUND (= 3, -3). Fold a
+        # fractional numeric literal to its truncated value so the target keeps
+        # T-SQL's semantics (gate is literal-only, like the reverse above).
+        if (
+            dialect in ("oracle", "postgresql", "mysql")
+            and SOURCE_DIALECT.get() == "tsql"
+            and _ci_frac_lit
+            and node.target_type.name.split("(")[0].strip().upper()
+            in ("INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT")
+        ):
+            _ci_neg = (
+                isinstance(node.expression, UnaryOp)
+                and node.expression.operator == UnaryOperator.NEGATIVE
+            )
+            _ci_val = float(cast(Literal, _ci_lit_node).value)
+            inner = str(int(-_ci_val if _ci_neg else _ci_val))
         # MySQL CAST only accepts a fixed set of target types (SIGNED, not INT;
         # no BOOLEAN); T-SQL has no BOOLEAN (it is BIT).
         dtype = node.target_type.name
@@ -1968,6 +1985,14 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             return f"({left} * POWER(2, {right}))"
         if node.operator == BinaryOperator.BIT_RSHIFT:
             return f"FLOOR({left} / POWER(2, {right}))"
+
+    # ``LIKE p ESCAPE c`` — SQL-standard escape clause, supported identically on
+    # all four engines; re-emit it so the construct is preserved.
+    if (
+        node.operator in (BinaryOperator.LIKE, BinaryOperator.ILIKE)
+        and node.escape is not None
+    ):
+        return f"{left} {op} {right} ESCAPE {_emit_expression(node.escape, dialect)}"
 
     return f"{left} {op} {right}"
 

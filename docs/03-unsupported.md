@@ -257,6 +257,23 @@ Partitioning syntax varies dramatically. The transpiler handles basic RANGE
 and LIST partitioning but will not attempt HASH partitioning or complex
 partition management operations.
 
+**Partition-extended table references** (Oracle `FROM t PARTITION (p)` /
+`SUBPARTITION (sp)`) restrict a query to one partition's rows. No other engine
+has this syntax, and the partition's key/value boundaries are not visible at
+transpile time, so the row filter cannot be reconstructed as a `WHERE`. The
+statement is preserved as a `UNIQUE:` carrier comment with a warning rather than
+emitted as a semantically different query returning all rows (challenge
+`reda-ora-partition-extension`).
+
+### 3.3b Ordered aggregates: `KEEP (DENSE_RANK FIRST/LAST …)`
+
+Oracle's `agg(x) KEEP (DENSE_RANK FIRST|LAST ORDER BY y)` is an **aggregate**
+that returns one value per group (taken from the rows with the extreme `y`), not
+a window function. No portable equivalent exists across T-SQL/PostgreSQL/MySQL
+(a windowed `agg(x) OVER (ORDER BY y)` would silently become a per-row running
+aggregate with a different result and row count), so it is preserved whole as a
+`UNIQUE:` carrier comment with a warning (challenge `reda-ora-keep-denserank`).
+
 ### 3.4 Materialized Views
 
 Only Oracle and PostgreSQL support materialized views natively. Transpilation

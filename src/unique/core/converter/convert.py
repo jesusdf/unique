@@ -1116,6 +1116,10 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     # exp.And / exp.Or (and other connectors) are *also* exp.Func in sqlglot's
     # class hierarchy, so the Binary check must come before the Func check or a
     # top-level "a AND b" would be emitted as the function call "AND(a, b)".
+    if isinstance(expr, exp.Add):
+        rebased = _rebase_to_days(expr)
+        if rebased is not None:
+            return rebased
     if isinstance(expr, exp.Binary):
         return _convert_binary(expr)
     # IN with a subquery or a value list. Modeling it (rather than the RawSQL
@@ -1203,6 +1207,19 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
             distinct=agg.distinct,
         )
 
+    if isinstance(expr, exp.Coalesce) and expr.args.get("is_null"):
+        # T-SQL ``ISNULL(x, y)`` returns a value of the FIRST argument's declared
+        # type, so a longer replacement is TRUNCATED (``ISNULL(CAST(NULL AS
+        # VARCHAR(2)), 'abcdef')`` = ``'ab'``). Plain COALESCE keeps the full
+        # value (its result type is the highest-precedence operand). When the
+        # first argument is a CAST to a length-bearing type, wrap the COALESCE in
+        # that CAST to reproduce ISNULL's truncation. (Consuming ``is_null`` also
+        # clears the unread-arg tripwire.)
+        call = _convert_function(expr)
+        first = call.args[0] if call.args else None
+        if isinstance(first, CastExpression) and first.target_type.params:
+            return CastExpression(expression=call, target_type=first.target_type)
+        return call
     if isinstance(expr, exp.Func):
         return _convert_function(expr)
     if isinstance(expr, exp.Not):
@@ -1237,6 +1254,17 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
             )
         return RawSQL(sql=_source_sql(expr), reason="Complex subquery")
     if isinstance(expr, exp.Window):
+        if str(expr.args.get("over") or "").upper() == "KEEP":
+            # Oracle ``agg(x) KEEP (DENSE_RANK FIRST/LAST ORDER BY y)`` is an
+            # ordered AGGREGATE (one value per group, taken from the rows with
+            # the extreme y) — NOT a window function. Rendering it as ``agg(x)
+            # OVER (ORDER BY y)`` silently changed it to a per-row running
+            # aggregate. There is no portable form, so preserve it whole and
+            # degrade honestly (carrier + warning via _gate_unmapped_operator).
+            return RawSQL(
+                sql=_source_sql(expr),
+                reason="unmapped operator KEEP (DENSE_RANK) ordered aggregate",
+            )
         return _convert_window(expr)
     if isinstance(expr, exp.Paren):
         return convert_expression(expr.this)
@@ -1293,6 +1321,66 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     return RawSQL(
         sql=_source_sql(expr),
         reason=f"Unhandled expression type: {type(expr).__name__}",
+    )
+
+
+def _rewrite_distinct_on(
+    *,
+    distinct_on: tuple[ASTNode, ...],
+    columns: tuple[ASTNode, ...],
+    from_clause: object,
+    joins: tuple[JoinClause, ...],
+    where: ASTNode | None,
+    order_by: tuple[OrderByItem, ...],
+    limit: object,
+    ctes: tuple[CTEDefinition, ...],
+) -> SelectStatement | None:
+    """Rewrite PostgreSQL ``SELECT DISTINCT ON (keys) … ORDER BY …`` into the
+    portable ``ROW_NUMBER() OVER (PARTITION BY keys ORDER BY …) = 1`` form so
+    the one-row-per-group semantics survive on engines with no DISTINCT ON
+    (T-SQL/MySQL/Oracle). ``SELECT DISTINCT`` alone would keep every distinct
+    tuple. Returns None when a projected column cannot be referenced from the
+    wrapping query (so the caller keeps the current behaviour)."""
+
+    def _outer_ref(col: ASTNode) -> ASTNode | None:
+        if isinstance(col, Star):
+            return Star()
+        if isinstance(col, Alias):
+            return ColumnRef(name=col.name, quoted=col.quoted)
+        if isinstance(col, ColumnRef):
+            return ColumnRef(name=col.name, quoted=col.quoted)
+        return None
+
+    outer_columns = tuple(_outer_ref(c) for c in columns)
+    if any(c is None for c in outer_columns):
+        return None
+    # ROW_NUMBER needs a deterministic order; the DISTINCT ON's own ORDER BY
+    # picks the surviving row (fall back to the keys when none was given).
+    window_order = order_by or tuple(OrderByItem(expression=k) for k in distinct_on)
+    rn = Alias(
+        expression=WindowFunction(
+            function=FunctionCall(name="ROW_NUMBER"),
+            window=WindowSpec(partition_by=distinct_on, order_by=window_order),
+        ),
+        name="uq_rn",
+    )
+    inner = SelectStatement(
+        columns=(*columns, rn),
+        from_clause=from_clause,  # type: ignore[arg-type]
+        joins=joins,
+        where=where,
+    )
+    return SelectStatement(
+        columns=cast("tuple[ASTNode, ...]", outer_columns),
+        from_clause=SubqueryExpression(query=inner, alias="uq_distinct_on"),
+        where=BinaryOp(
+            operator=BinaryOperator.EQ,
+            left=ColumnRef(name="uq_rn"),
+            right=Literal(value=1, dtype="integer"),
+        ),
+        order_by=order_by,
+        limit=limit,  # type: ignore[arg-type]
+        ctes=ctes,
     )
 
 
@@ -1472,8 +1560,15 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
             with_ties=with_ties,
         )
 
-    # DISTINCT
-    distinct = expr.args.get("distinct") is not None
+    # DISTINCT / DISTINCT ON
+    distinct_node = expr.args.get("distinct")
+    distinct = distinct_node is not None
+    distinct_on: tuple[ASTNode, ...] = ()
+    if distinct_node is not None and distinct_node.args.get("on") is not None:
+        _on = distinct_node.args["on"]
+        _on_exprs = _on.expressions if isinstance(_on, exp.Tuple) else [_on]
+        distinct_on = tuple(convert_expression(e) for e in _on_exprs)
+        distinct = False  # DISTINCT ON is not a plain SELECT DISTINCT
 
     # CTEs
     ctes: tuple[CTEDefinition, ...] = ()
@@ -1493,6 +1588,25 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
             _srf_alias = _only.name if isinstance(_only, Alias) else "generate_series"
             from_clause = TableRef(name=_srf_alias, function=_srf, alias=_srf_alias)
             columns = (ColumnRef(name=_srf_alias),)
+
+    if (
+        distinct_on
+        and not group_by
+        and not group_by_composite
+        and not grouping_sets_sql
+    ):
+        rewritten = _rewrite_distinct_on(
+            distinct_on=distinct_on,
+            columns=columns,
+            from_clause=from_clause,
+            joins=joins,
+            where=where,
+            order_by=order_by,
+            limit=limit,
+            ctes=ctes,
+        )
+        if rewritten is not None:
+            return rewritten
 
     return SelectStatement(
         columns=columns,
@@ -3154,6 +3268,36 @@ def _convert_in(expr: exp.In) -> ASTNode | None:
     return None
 
 
+def _rebase_to_days(expr: exp.Add) -> ASTNode | None:
+    """Rebase sqlglot's ``TO_DAYS(x)`` expansion off the invalid year-0000 epoch.
+
+    MySQL ``TO_DAYS(x)`` lowers to ``DATEDIFF(x, DATE '0000-01-01', DAY) + 1``,
+    but year 0000 is rejected by every other engine (and pre-1582 dates put
+    Oracle on the Julian calendar, off by 2 days). Re-express it against a
+    post-Gregorian-reform epoch that all engines compute identically:
+    ``DATEDIFF(x, DATE '1970-01-01', DAY) + 719528`` (``TO_DAYS('1970-01-01')``
+    = 719528). Returns None when ``expr`` is not the TO_DAYS shape."""
+    if not isinstance(expr.this, exp.DateDiff):
+        return None
+    base = expr.this.expression
+    base_lit = base.this if isinstance(base, exp.TsOrDsToDate) else base
+    off = expr.expression
+    if not (
+        isinstance(base_lit, exp.Literal)
+        and str(base_lit.this) == "0000-01-01"
+        and isinstance(off, exp.Literal)
+        and str(off.this) == "1"
+    ):
+        return None
+    rebased = expr.copy()
+    new_base = rebased.this.expression
+    new_base_lit = new_base.this if isinstance(new_base, exp.TsOrDsToDate) else new_base
+    new_base_lit.set("this", "1970-01-01")
+    rebased.expression.set("this", "719528")
+    # The copy no longer matches the 0000 shape, so this does not recurse.
+    return convert_expression(rebased)
+
+
 def _convert_binary(expr: exp.Binary) -> ASTNode:
     """Convert a binary operation.
 
@@ -3168,6 +3312,32 @@ def _convert_binary(expr: exp.Binary) -> ASTNode:
         # even though POWER exists there — and emits portably (RC-1a).
         return FunctionCall(
             name="POWER",
+            args=(
+                convert_expression(expr.this),
+                convert_expression(expr.expression),
+            ),
+        )
+    if isinstance(expr, exp.Escape):
+        # ``LIKE p ESCAPE c`` — SQL-standard, supported identically on every
+        # engine. Carry the escape char on the inner LIKE/ILIKE BinaryOp instead
+        # of degrading the whole statement as an unmapped operator.
+        inner = convert_expression(expr.this)
+        if isinstance(inner, BinaryOp) and inner.operator in (
+            BinaryOperator.LIKE,
+            BinaryOperator.ILIKE,
+        ):
+            return dataclasses.replace(
+                inner, escape=convert_expression(expr.expression)
+            )
+        return RawSQL(
+            sql=_source_sql(expr), reason=f"unmapped operator {type(expr).__name__}"
+        )
+    if isinstance(expr, exp.RegexpLike):
+        # Oracle/PG/MySQL all express POSIX regex matching (Oracle REGEXP_LIKE,
+        # PG ``~``, MySQL REGEXP); model it as a call so the emitter renders the
+        # per-target form. Only T-SQL genuinely lacks it (degraded there).
+        return FunctionCall(
+            name="REGEXP_LIKE",
             args=(
                 convert_expression(expr.this),
                 convert_expression(expr.expression),
