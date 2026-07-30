@@ -852,6 +852,18 @@ def _emit_substr_neg_start(
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
+    # POSIX-regex match: Oracle REGEXP_LIKE(x, pat), PG ``x ~ pat``, MySQL
+    # ``x REGEXP pat``. (T-SQL has no POSIX regex — degraded whole-statement by
+    # ``_gate_tsql_regexp`` before it reaches the emitter.)
+    if fn_name == "REGEXP_LIKE" and len(node.args) == 2:
+        subj = _emit_expression(node.args[0], dialect)
+        pat = _emit_expression(node.args[1], dialect)
+        # Oracle keeps the native call; PG/MySQL use their infix regex operators.
+        _regexp_forms = {
+            "postgresql": f"{subj} ~ {pat}",
+            "mysql": f"{subj} REGEXP {pat}",
+        }
+        return _regexp_forms.get(dialect, f"REGEXP_LIKE({subj}, {pat})")
     # Compile-time folds over literal arguments: the value each SOURCE engine
     # computes is emitted directly, sidestepping per-target semantic gaps
     # (LEN/LENGTH counting units, Oracle INSTR occurrence/backward search).

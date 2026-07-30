@@ -3074,6 +3074,32 @@ def _convert_binary(expr: exp.Binary) -> ASTNode:
                 convert_expression(expr.expression),
             ),
         )
+    if isinstance(expr, exp.Escape):
+        # ``LIKE p ESCAPE c`` — SQL-standard, supported identically on every
+        # engine. Carry the escape char on the inner LIKE/ILIKE BinaryOp instead
+        # of degrading the whole statement as an unmapped operator.
+        inner = convert_expression(expr.this)
+        if isinstance(inner, BinaryOp) and inner.operator in (
+            BinaryOperator.LIKE,
+            BinaryOperator.ILIKE,
+        ):
+            return dataclasses.replace(
+                inner, escape=convert_expression(expr.expression)
+            )
+        return RawSQL(
+            sql=_source_sql(expr), reason=f"unmapped operator {type(expr).__name__}"
+        )
+    if isinstance(expr, exp.RegexpLike):
+        # Oracle/PG/MySQL all express POSIX regex matching (Oracle REGEXP_LIKE,
+        # PG ``~``, MySQL REGEXP); model it as a call so the emitter renders the
+        # per-target form. Only T-SQL genuinely lacks it (degraded there).
+        return FunctionCall(
+            name="REGEXP_LIKE",
+            args=(
+                convert_expression(expr.this),
+                convert_expression(expr.expression),
+            ),
+        )
     if isinstance(expr, exp.JSONExtract) and not isinstance(
         expr, exp.JSONExtractScalar
     ):

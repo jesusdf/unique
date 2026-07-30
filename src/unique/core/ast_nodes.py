@@ -257,6 +257,10 @@ class BinaryOp(ASTNode):
     #: NULL-safe division (MySQL ``/``): divide-by-zero yields NULL, not an
     #: error. Preserved into non-safe targets by wrapping the divisor in NULLIF.
     safe: bool = False
+    #: ``LIKE`` / ``ILIKE`` escape character (``LIKE p ESCAPE '!'``). SQL-standard
+    #: and supported identically on all four engines; carried so the clause is
+    #: re-emitted rather than degraded as an unmapped operator.
+    escape: ASTNode | None = None
 
 
 @dataclass(frozen=True)

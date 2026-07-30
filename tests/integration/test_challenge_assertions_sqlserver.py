@@ -405,6 +405,24 @@ CASES.update(
             "oracle": {"degrade": True},
             "mysql": {"degrade": True},
         },
+        # lying-warning: LIKE ... ESCAPE is SQL-standard and identical on every
+        # engine, but was falsely degraded to a commented carrier. It must now
+        # survive as executable SQL (the ESCAPE clause present in the *stripped*
+        # body proves it was not commented out).
+        "reda-ts-like-escape": {
+            "postgresql": {
+                "present": ["LIKE '%x!%y%' ESCAPE '!'"],
+                "absent": ["unmapped operator"],
+            },
+            "oracle": {
+                "present": ["LIKE '%x!%y%' ESCAPE '!'"],
+                "absent": ["unmapped operator"],
+            },
+            "mysql": {
+                "present": ["LIKE '%x!%y%' ESCAPE '!'"],
+                "absent": ["unmapped operator"],
+            },
+        },
     }
 )
 

@@ -557,6 +557,21 @@ CASES.update(
                 ),
             },
         ),
+        # BLUE 2026-07-30 (lying-warning): REGEXP_LIKE maps to PG ``~`` and MySQL
+        # REGEXP (both live-verified); only T-SQL genuinely lacks POSIX regex and
+        # degrades to a warned carrier. Previously ALL three were falsely dropped.
+        "reda-ora-regexp-like": Case(
+            "reda-ora-regexp-like ",
+            {
+                "postgresql": Expect(
+                    ("a ~ '^[0-9]+$'",), ("REGEXP_LIKE", "unmapped operator")
+                ),
+                "mysql": Expect(
+                    ("a REGEXP '^[0-9]+$'",), ("REGEXP_LIKE", "unmapped operator")
+                ),
+                "tsql": Expect(warn=True),
+            },
+        ),
     }
 )
 

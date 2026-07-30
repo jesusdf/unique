@@ -1856,6 +1856,14 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         if node.operator == BinaryOperator.BIT_RSHIFT:
             return f"FLOOR({left} / POWER(2, {right}))"
 
+    # ``LIKE p ESCAPE c`` — SQL-standard escape clause, supported identically on
+    # all four engines; re-emit it so the construct is preserved.
+    if (
+        node.operator in (BinaryOperator.LIKE, BinaryOperator.ILIKE)
+        and node.escape is not None
+    ):
+        return f"{left} {op} {right} ESCAPE {_emit_expression(node.escape, dialect)}"
+
     return f"{left} {op} {right}"
 
 

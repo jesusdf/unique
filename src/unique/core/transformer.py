@@ -796,6 +796,7 @@ class Transformer:
             result = [self._gate_invalid_date_literal(node) for node in result]
         if self.context.target == "tsql":
             result = [self._gate_tsql_unknown_sysvar(node) for node in result]
+            result = [self._gate_tsql_regexp(node) for node in result]
         elif self.context.source == "mysql" and self.context.target in (
             "oracle",
             "postgresql",
@@ -1357,6 +1358,32 @@ class Transformer:
                 if found is not None:
                     return found
         return None
+
+    def _gate_tsql_regexp(self, node: ASTNode) -> ASTNode:
+        """Degrade a POSIX-regex match into T-SQL — WHOLE. Oracle REGEXP_LIKE /
+        PG ``~`` / MySQL REGEXP all map faithfully (handled in the emitter), but
+        T-SQL has no POSIX-regex engine, so the statement is preserved as a
+        commented carrier with a real warning (an honest degrade, not silent)."""
+        if not self._find_regexp_like(node):
+            return node
+        reason = (
+            "T-SQL has no POSIX-regex operator (REGEXP_LIKE); "
+            "statement preserved as a comment"
+        )
+        self.context.warn(reason, "unmapped_operator")
+        self.context.mark_unsupported(reason)
+        return RawSQL(sql=self._preserved_sql(node), reason=reason)
+
+    def _find_regexp_like(self, value: object) -> bool:
+        if isinstance(value, FunctionCall) and value.name.upper() == "REGEXP_LIKE":
+            return True
+        if isinstance(value, ASTNode):
+            return any(
+                self._find_regexp_like(getattr(value, f.name)) for f in fields(value)
+            )
+        if isinstance(value, tuple):
+            return any(self._find_regexp_like(item) for item in value)
+        return False
 
     def _gate_whole_row_cast(self, node: ASTNode) -> ASTNode:
         """Degrade a whole-row cast (``CAST(a.* AS type)``) — WHOLE, off
