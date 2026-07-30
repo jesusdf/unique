@@ -768,6 +768,11 @@ class Transformer:
             ]
         if self.context.source == "mysql" and self.context.target != "mysql":
             result = [self._gate_column_position(node) for node in result]
+        if self.context.source == "tsql" and self.context.target != "tsql":
+            result = [
+                self._truncate_tsql_integer_avg(node)  # type: ignore[misc]
+                for node in result
+            ]
         if self.context.target in ("tsql", "mysql", "oracle"):
             result = [self._gate_whole_row_cast(node) for node in result]
             result = [self._gate_srf_window(node) for node in result]
@@ -2102,6 +2107,64 @@ class Transformer:
                 right=UnaryOp(operator=UnaryOperator.IS_NULL, operand=arg),
             )
         return guard
+
+    @staticmethod
+    def _select_int_positions(sel: SelectStatement) -> list[bool]:
+        """Per output-column position: True when every UNION branch projects an
+        integer literal there (so the derived column is integer-typed)."""
+
+        def _is_int_proj(col: ASTNode) -> bool:
+            expr = col.expression if isinstance(col, Alias) else col
+            return isinstance(expr, Literal) and expr.dtype == "integer"
+
+        flags = [_is_int_proj(c) for c in sel.columns]
+        if isinstance(sel.set_query, SelectStatement):
+            sub = Transformer._select_int_positions(sel.set_query)
+            flags = [a and b for a, b in zip(flags, sub, strict=False)]
+        return flags
+
+    @staticmethod
+    def _derived_integer_columns(sel: SelectStatement) -> set[str]:
+        """Output column names of a derived table that are integer-typed."""
+        names = [c.name if isinstance(c, Alias) else None for c in sel.columns]
+        return {
+            n
+            for n, ok in zip(names, Transformer._select_int_positions(sel), strict=True)
+            if ok and n
+        }
+
+    def _truncate_tsql_integer_avg(self, node: object) -> object:
+        """T-SQL AVG returns the INPUT type, so AVG over an integer column
+        truncates toward zero (AVG(1, 2) = 1); PG/MySQL/Oracle average as a
+        decimal (1.5). When the argument is provably integer — a bare integer
+        column of the enclosing FROM derived table, or an integer literal/var —
+        wrap the call in TRUNC (spelled per target by the emitter) so the value
+        matches T-SQL."""
+        if not isinstance(node, SelectStatement):
+            return self._map_children(node, self._truncate_tsql_integer_avg)
+        int_cols: set[str] = set()
+        frm = node.from_clause
+        if isinstance(frm, SubqueryExpression) and isinstance(
+            frm.query, SelectStatement
+        ):
+            int_cols = self._derived_integer_columns(frm.query)
+
+        def _wrap(value: object) -> object:
+            if isinstance(value, SelectStatement):
+                # A nested select is resolved against its own FROM context.
+                return self._truncate_tsql_integer_avg(value)
+            if isinstance(value, FunctionCall) and value.name.upper() == "AVG":
+                arg = value.args[0] if len(value.args) == 1 else None
+                is_int = (isinstance(arg, Literal) and arg.dtype == "integer") or (
+                    isinstance(arg, ColumnRef) and arg.name in int_cols
+                )
+                if is_int:
+                    # Wrap without recursing into the AVG (its scalar arg holds
+                    # no further AVG to process).
+                    return FunctionCall(name="TRUNC", args=(value,))
+            return self._map_children(value, _wrap)
+
+        return self._map_children(node, _wrap)
 
     def _wrap_mysql_concat_null(self, value: object) -> object:
         """MySQL CONCAT returns NULL if ANY argument is NULL; PG/T-SQL/Oracle

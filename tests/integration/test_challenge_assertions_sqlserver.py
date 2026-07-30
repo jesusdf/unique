@@ -78,6 +78,20 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
     # func: T-SQL ``datetime + int`` adds days; MySQL numerically coerces
     # (20200101000001) and PG has no ``timestamp + int``. Rewrite to
     # DATE_ADD / ``+ INTERVAL 'n day'`` (Oracle native). All = 2020-01-02.
+    # func: T-SQL CAST(2.9 AS INT) truncates toward zero (=2); PG/MySQL/Oracle
+    # round (=3). Fold the fractional literal to its truncated value.
+    "reda-ts-cast-int-trunc": {
+        "postgresql": {"present": ["CAST(2 AS INT)"], "absent": ["2.9"]},
+        "oracle": {"present": ["CAST(2 AS INT)"], "absent": ["2.9"]},
+        "mysql": {"present": ["CAST(2 AS SIGNED)"], "absent": ["2.9"]},
+    },
+    # func: T-SQL AVG over an integer column truncates (AVG(1,2)=1); the others
+    # average as a decimal (1.5). Wrap in TRUNC (TRUNCATE(...,0) on MySQL).
+    "reda-ts-avg-int-trunc": {
+        "postgresql": {"present": ["TRUNC(AVG(x))"], "absent": []},
+        "oracle": {"present": ["TRUNC(AVG(x))"], "absent": []},
+        "mysql": {"present": ["TRUNCATE(AVG(x), 0)"], "absent": []},
+    },
     "reda-ts-date-plus-int": {
         "mysql": {"present": ["DATE_ADD(", "INTERVAL 1 DAY"], "absent": ["+ 1"]},
         "postgresql": {"present": ["+ INTERVAL '1 day'"], "absent": ["+ 1 AS"]},

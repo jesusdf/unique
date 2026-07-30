@@ -467,7 +467,7 @@ CREATE TABLE t (id INT IDENTITY(100, 5))
 CREATE TABLE t (a INT) WITH (MEMORY_OPTIMIZED = ON)
 
 
--- CASE[open][class=func]: reda-ts-cast-int-trunc — fails on postgresql, mysql, oracle. T-SQL CAST(decimal AS INT) TRUNCATES toward zero (=2); PG/MySQL/Oracle CAST rounds (=3). Emitted as a plain CAST with no compensation and NO warning → different result. Live: tsql=2, pg=3, mysql=3, oracle=3.
+-- CASE[fixed][class=func]: reda-ts-cast-int-trunc — fails on postgresql, mysql, oracle. T-SQL CAST(decimal AS INT) TRUNCATES toward zero (=2); PG/MySQL/Oracle CAST rounds (=3). Emitted as a plain CAST with no compensation and NO warning → different result. Live: tsql=2, pg=3, mysql=3, oracle=3.
 SELECT CAST(2.9 AS INT) AS n
 
 -- CASE[open][class=func]: reda-ts-addmonths-lastday — fails on oracle. DATEADD(MONTH,1,<last-day-of-month>) does NOT stick to month-end in T-SQL (2020-02-29 -> 2020-03-29) but is mapped to Oracle ADD_MONTHS which forces last-day (-> 2020-03-31), silently, no warning. Diverges only when the input is its month's last day. Live: tsql=2020-03-29, oracle=2020-03-31.
@@ -491,7 +491,7 @@ CREATE TABLE t (a INT, b INT); SELECT a, b FROM t FOR JSON PATH
 -- CASE[fixed][class=func]: reda-ts-substring-zero-start — fails on mysql, oracle. SUBSTRING(s, start, len) with start<1: T-SQL (and PG) count positions below 1 against the length -> SUBSTRING('hello',0,3)='he'. The call is passed through unchanged, but MySQL SUBSTRING(s,0,n) returns '' (position 0 = empty) and Oracle SUBSTR(s,0,n) treats 0 as 1 -> 'hel'. No warning. Live: tsql='he', pg='he', mysql='', oracle='hel'. BLUE: normalize start<1 to T-SQL semantics (clamp start to 1 and reduce len by 1-start) for MySQL/Oracle.
 SELECT SUBSTRING('hello', 0, 3) AS r
 
--- CASE[open][class=func]: reda-ts-avg-int-trunc — fails on postgresql, mysql, oracle. T-SQL AVG over an INTEGER column returns an INTEGER (the average is truncated): AVG of (1,2) = 1. The call is passed through unchanged with no warning; PG/MySQL/Oracle AVG of integers returns a fractional value = 1.5. Live: tsql=1, pg=1.5, mysql=1.5. BLUE: to preserve T-SQL semantics, floor the AVG (or cast operands) when the argument is an integer type.
+-- CASE[fixed][class=func]: reda-ts-avg-int-trunc — fails on postgresql, mysql, oracle. T-SQL AVG over an INTEGER column returns an INTEGER (the average is truncated): AVG of (1,2) = 1. The call is passed through unchanged with no warning; PG/MySQL/Oracle AVG of integers returns a fractional value = 1.5. Live: tsql=1, pg=1.5, mysql=1.5. BLUE: to preserve T-SQL semantics, floor the AVG (or cast operands) when the argument is an integer type.
 SELECT AVG(x) AS r FROM (VALUES (1), (2)) v(x)
 
 -- CASE[open][class=composition]: reda-ts-cte-merge — fails on mysql, oracle. A leading CTE feeding a MERGE ('WITH src AS (...) MERGE INTO t USING src ...'). Each part is green alone: MERGE->MySQL upsert emits a valid INSERT...ON DUPLICATE KEY UPDATE, and a plain 'WITH src AS(...) SELECT' keeps the CTE. Combined, the MySQL upsert rewrite DROPS the WITH src CTE -> output 'INSERT ... SELECT ... FROM src' with src undefined (live: MySQL 1146 "Table 'src' doesn't exist"). Oracle keeps 'WITH src AS(...) MERGE' but Oracle forbids a leading WITH before MERGE (live: ORA-00928 SELECT keyword missing) with NO warning. BLUE: carry the CTE into the MySQL upsert's SELECT and push it into the Oracle MERGE USING subquery.
