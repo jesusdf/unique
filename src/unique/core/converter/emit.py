@@ -108,6 +108,12 @@ _NUMERIC_CAST_TYPES = frozenset(
     }
 )
 
+# MySQL UNSIGNED integer CAST targets (sqlglot spells them U*), for the same
+# lenient string->number compensation as _NUMERIC_CAST_TYPES.
+_UNSIGNED_CAST_TYPES = frozenset(
+    {"UBIGINT", "UINT", "UINTEGER", "USMALLINT", "UTINYINT", "UMEDIUMINT"}
+)
+
 _CAST_TYPE_MAP: dict[str, dict[str, str]] = {
     "mysql": {
         "INT": "SIGNED",

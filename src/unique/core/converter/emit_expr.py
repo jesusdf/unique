@@ -365,16 +365,19 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                 )
         # MySQL casts a string to a number leniently — it parses the leading
         # numeric prefix and yields 0 for a non-numeric string (CAST('abc' AS
-        # DECIMAL) = 0), where Oracle/PG/T-SQL raise a conversion error. Replace
-        # the literal with its MySQL-parsed value so the target computes the same
-        # result (a plain numeric literal — no CASE guard for PG to constant-fold).
+        # DECIMAL) = 0, CAST('12x' AS UNSIGNED) = 12), where Oracle/PG/T-SQL raise
+        # a conversion error. Replace the literal with its MySQL-parsed value so
+        # the target computes the same result (a plain numeric literal — no CASE
+        # guard for PG to constant-fold). Covers UNSIGNED targets too: without the
+        # fold the raw '12x' reached the CAST-to-NUMERIC below and errored at
+        # runtime (the warning claimed only a wraparound nuance, not the failure).
         if (
             SOURCE_DIALECT.get() == "mysql"
             and dialect != "mysql"
             and isinstance(node.expression, Literal)
             and isinstance(node.expression.value, str)
             and node.target_type.name.split("(")[0].strip().upper()
-            in _NUMERIC_CAST_TYPES
+            in (_NUMERIC_CAST_TYPES | _UNSIGNED_CAST_TYPES)
         ):
             _m = re.match(
                 r"\s*([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)", node.expression.value
@@ -668,15 +671,10 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
         # MySQL's UNSIGNED integer cast (sqlglot: UBIGINT/UINT/…) has no signed-
         # engine equivalent — map to a wide numeric that holds the value and flag
         # that the unsigned wraparound semantics aren't preserved.
-        if dialect in ("oracle", "postgresql", "tsql") and node.target_type.name.split(
-            "("
-        )[0].strip().upper() in (
-            "UBIGINT",
-            "UINT",
-            "UINTEGER",
-            "USMALLINT",
-            "UTINYINT",
-            "UMEDIUMINT",
+        if (
+            dialect in ("oracle", "postgresql", "tsql")
+            and node.target_type.name.split("(")[0].strip().upper()
+            in _UNSIGNED_CAST_TYPES
         ):
             _signed = "NUMBER" if dialect == "oracle" else "NUMERIC"
             return (
@@ -1195,6 +1193,63 @@ def _emit_interval_chain(
             piece_op, mag = op, n
         pieces.append(f"{piece_op} INTERVAL {quote}{mag}{quote} {unit}")
     return " ".join(pieces)
+
+
+def _tsql_like_to_regex(pattern: str) -> str:
+    """Convert a T-SQL LIKE pattern (``%``, ``_``, ``[…]``) to an anchored POSIX
+    regex. A ``[…]`` character class is a valid regex class as-is; ``%``→``.*``,
+    ``_``→``.``, and other regex metacharacters are escaped outside a class."""
+    out = ["^"]
+    i, n = 0, len(pattern)
+    while i < n:
+        c = pattern[i]
+        if c == "[":
+            j = pattern.find("]", i + 1)
+            if j == -1:
+                out.append("\\[")
+                i += 1
+                continue
+            out.append(pattern[i : j + 1])  # copy the class verbatim
+            i = j + 1
+            continue
+        if c == "%":
+            out.append(".*")
+        elif c == "_":
+            out.append(".")
+        elif c in ".\\+*?()|{}^$":
+            out.append("\\" + c)
+        else:
+            out.append(c)
+        i += 1
+    out.append("$")
+    return "".join(out)
+
+
+def _emit_tsql_like_charclass(node: BinaryOp, left: str, dialect: str) -> str | None:
+    """Translate a T-SQL ``LIKE`` whose pattern uses a ``[…]`` character class.
+
+    T-SQL is the only engine whose LIKE supports ``[A-C]`` ranges; elsewhere the
+    brackets match literally. PG has SIMILAR TO (same wildcard+class syntax);
+    MySQL/Oracle use a regex. Returns None when *node* is not such a LIKE (or the
+    target is T-SQL, which keeps the native LIKE).
+    """
+    if (
+        node.operator != BinaryOperator.LIKE
+        or dialect in ("tsql",)
+        or SOURCE_DIALECT.get() not in ("tsql",)
+        or not isinstance(node.right, Literal)
+        or not isinstance(node.right.value, str)
+        or "[" not in node.right.value
+    ):
+        return None
+    pattern = node.right.value
+    if dialect in ("postgresql",):
+        # SIMILAR TO uses the same %/_/[…] pattern syntax as T-SQL LIKE.
+        return f"{left} SIMILAR TO '{pattern}'"
+    regex = _tsql_like_to_regex(pattern).replace("'", "''")
+    if dialect in ("mysql",):
+        return f"{left} REGEXP '{regex}'"
+    return f"REGEXP_LIKE({left}, '{regex}')"  # oracle
 
 
 def _emit_binary(node: BinaryOp, dialect: str) -> str:
@@ -1994,6 +2049,13 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
     ):
         return f"{left} {op} {right} ESCAPE {_emit_expression(node.escape, dialect)}"
 
+    # T-SQL LIKE ``[A-C]`` character classes are T-SQL-specific — other engines
+    # match ``[``, ``A``… literally, silently flipping the result. Translate to a
+    # portable predicate (PG SIMILAR TO, MySQL/Oracle regex) so the value holds.
+    cc = _emit_tsql_like_charclass(node, left, dialect)
+    if cc is not None:
+        return cc
+
     return f"{left} {op} {right}"
 
 
@@ -2127,6 +2189,7 @@ from unique.core.converter.emit import (  # noqa: E402
     _ISO_DT_LITERAL_RE,
     _NUMERIC_CAST_TYPES,
     _PG_GEOMETRIC_TYPES,
+    _UNSIGNED_CAST_TYPES,
     _emit_condition,
     _emit_excluded_column,
     _emit_order_item,

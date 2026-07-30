@@ -5516,3 +5516,45 @@ class TestFalseUnmapMappedSymmetrically:
         # T-SQL genuinely has no regex -> honest degrade with a warning.
         r = Transpiler().transpile(src, source="postgresql", target="tsql")
         assert r.warnings and "UNIQUE:" in r.sql, r.sql
+
+
+class TestTsqlLikeCharClassTranslated:
+    """RED round-2 red2-ts-like-charclass: T-SQL ``LIKE '[A-C]%'`` uses a
+    character-class range other engines match literally (result flips to 0).
+    Translate to a portable predicate so the value holds — PG SIMILAR TO, MySQL/
+    Oracle regex. Live-verified 2026-07-30: 'Bob' matches (=1) on all four."""
+
+    def _out(self, target: str) -> str:
+        return _tx(
+            _case("challenge_sqlserver.sql", "red2-ts-like-charclass"), "tsql", target
+        )
+
+    def test_pg_similar_to(self) -> None:
+        out = self._out("postgresql")
+        assert "SIMILAR TO '[A-C]%'" in out, out
+        assert "LIKE '[A-C]" not in _exec_lines(out), out
+
+    def test_mysql_regexp(self) -> None:
+        out = self._out("mysql")
+        assert "REGEXP '^[A-C].*$'" in out, out
+        assert "LIKE '[A-C]" not in _exec_lines(out), out
+
+    def test_oracle_regexp_like(self) -> None:
+        out = self._out("oracle")
+        assert "REGEXP_LIKE('Bob', '^[A-C].*$')" in out, out
+        assert "LIKE '[A-C]" not in _exec_lines(out), out
+
+
+class TestMysqlCastUnsignedLenient:
+    """RED round-2 red2-my-cast-unsigned-leniency: MySQL ``CAST('12x' AS
+    UNSIGNED)`` = 12 (lenient leading-numeric parse); the previous
+    CAST('12x' AS NUMERIC) errored on PG/T-SQL. Fold the literal to its MySQL
+    value so the output runs. Live-verified 2026-07-30: value 12 on PG/T-SQL."""
+
+    def test_leading_numeric_prefix_folded(self) -> None:
+        for target in ("postgresql", "tsql"):
+            out = _tx(
+                _case("challenge_mysql.sql", "red2-my-cast-unsigned"), "mysql", target
+            )
+            assert "CAST(12 AS NUMERIC)" in out, out
+            assert "'12x'" not in _exec_lines(out), out
