@@ -5443,3 +5443,76 @@ class TestRowcountDivergenceAnnotation:
         )
         r = Transpiler().transpile(src, "mysql", "mysql")
         assert "UNIQUE:" not in r.sql, r.sql
+
+
+class TestFalseUnmapMappedSymmetrically:
+    """RED round-2 asymmetric false-unmaps: constructs whose reverse direction
+    already mapped were degrading (comment / validity-gate carrier) behind a
+    false "no <engine> form" claim. Each is now wired symmetrically. Live-verified
+    2026-07-30 on all four engines: 7 DIV 2 = 3, JSON_VALUE = '1', the sequence
+    and materialized-view outputs run clean."""
+
+    def test_intdiv_maps_per_engine(self) -> None:
+        case = _case("challenge_mysql.sql", "red2-my-intdiv")
+        for target, expected in (
+            ("postgresql", "(7 / 2)"),
+            ("tsql", "(7 / 2)"),
+            ("oracle", "TRUNC(7 / 2)"),
+        ):
+            out = _tx(case, "mysql", target)
+            assert expected in out, out
+            body = _exec_lines(out)
+            assert "DIV" not in body.upper(), body  # MySQL operator is gone
+            assert "UNIQUE:" not in body, out
+
+    def test_json_value_scalar_maps_per_engine(self) -> None:
+        case = _case("challenge_sqlserver.sql", "red2-ts-json-value")
+        for target in ("mysql", "oracle"):
+            out = _tx(case, "tsql", target)
+            assert "JSON_VALUE('{\"a\":1}', '$.a')" in out, out
+            assert "UNIQUE:" not in _exec_lines(out), out
+        pg = _tx(case, "tsql", "postgresql")
+        assert "->> 'a'" in pg, pg
+        assert "JSON_VALUE" not in _exec_lines(pg).upper(), pg
+
+    def test_pg_nextval_maps_to_tsql_and_oracle(self) -> None:
+        case = _case("challenge_postgresql.sql", "red2-pg-nextval")
+        ts = _tx(case, "postgresql", "tsql")
+        assert "NEXT VALUE FOR seq" in ts, ts
+        o4 = _tx(case, "postgresql", "oracle")
+        assert "seq.NEXTVAL" in o4, o4
+        # MySQL genuinely has no sequences -> honest degrade with a warning.
+        r = Transpiler().transpile(case, source="postgresql", target="mysql")
+        assert r.warnings and "UNIQUE:" in r.sql, r.sql
+
+    def test_pg_materialized_view_native_on_oracle(self) -> None:
+        case = _case("challenge_postgresql.sql", "red2-pg-matview")
+        o4 = Transpiler().transpile(case, source="postgresql", target="oracle")
+        assert "CREATE MATERIALIZED VIEW mv" in o4.sql, o4.sql
+        assert not any(
+            "not portable on oracle" in w.message for w in o4.warnings
+        ), o4.warnings
+
+    def test_mysql_dayofweek_maps_per_engine(self) -> None:
+        # Sweep sibling (RED round-2 observation): MySQL DAYOFWEEK (Sun=1..7) was
+        # falsely degraded though the reverse DATEPART(WEEKDAY)->DAYOFWEEK maps.
+        src = "SELECT DAYOFWEEK(d) AS r FROM t"
+        assert "EXTRACT(DOW FROM CAST(d AS DATE)) + 1" in _tx(
+            src, "mysql", "postgresql"
+        )
+        assert "DATE '1970-01-04'" in _tx(src, "mysql", "oracle")
+        assert "DATEPART(WEEKDAY, CAST(d AS DATE))" in _tx(src, "mysql", "tsql")
+        for target in ("postgresql", "oracle", "tsql"):
+            body = _exec_lines(_tx(src, "mysql", target))
+            assert "DAYOFWEEK" not in body.upper(), body
+
+    def test_pg_case_insensitive_regex_maps(self) -> None:
+        # Sweep sibling: PG ``~*`` (RegexpILike) -> Oracle/MySQL REGEXP_LIKE 'i'.
+        src = "SELECT a FROM t WHERE x ~* 'abc'"
+        for target in ("oracle", "mysql"):
+            out = _tx(src, "postgresql", target)
+            assert "REGEXP_LIKE(x, 'abc', 'i')" in out, out
+            assert "UNIQUE:" not in _exec_lines(out), out
+        # T-SQL genuinely has no regex -> honest degrade with a warning.
+        r = Transpiler().transpile(src, source="postgresql", target="tsql")
+        assert r.warnings and "UNIQUE:" in r.sql, r.sql

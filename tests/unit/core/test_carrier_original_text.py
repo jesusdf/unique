@@ -20,69 +20,60 @@ from helpers.invariants import assert_carrier_bodies_parse_as_source, carrier_bo
 
 from unique.core.transpiler import Transpiler
 
-# N12's exact input: JSON_VALUE/JSON_QUERY select. sqlglot models JSON_VALUE as
-# an ``exp.JSONExtractScalar`` binary with no target mapping → the whole
-# statement degrades to a carrier.
-_N12_SQL = (
-    "SELECT JSON_VALUE(doc, '$.name') AS n, "
-    "JSON_QUERY(doc, '$.items') AS items FROM docs;"
-)
+# The original N12 vehicle (JSON_VALUE/JSON_QUERY, an ``exp.JSONExtractScalar``
+# with no mapping) now maps faithfully per engine (challenge red2-ts-json-value,
+# 2026-07-30), so the "preserved as a comment" carrier-preservation invariant is
+# re-anchored on a construct that still degrades: MySQL logical ``XOR`` is an
+# unmapped operator on every other engine (expressible but non-trivial), so the
+# whole statement degrades to a carrier — the same N12 class the audit found.
+_N12_SQL = "SELECT a FROM t WHERE x XOR y"
+_N12_TARGETS = ("oracle", "postgresql", "tsql")
 
 
 class TestCarrierPreservesOriginal:
     def setup_method(self) -> None:
         self.t = Transpiler()
 
-    def test_n12_carrier_holds_original_json_value(self) -> None:
-        for target in ("oracle", "postgresql", "mysql"):
-            out = self.t.transpile(_N12_SQL, "tsql", target).sql
+    def test_n12_carrier_holds_original_statement(self) -> None:
+        for target in _N12_TARGETS:
+            out = self.t.transpile(_N12_SQL, "mysql", target).sql
             # The statement degraded to a carrier (fails under an identity
             # transpiler, whose output has no carrier at all)…
             assert "UNIQUE:" in out, out
-            # …holding the original T-SQL accessors verbatim…
-            assert "JSON_VALUE(doc, '$.name')" in out, out
-            assert "JSON_QUERY(doc, '$.items')" in out, out
-            # …and the mid-transform hybrid is gone.
-            assert "dbo.JSON_EXTRACT" not in out, out
-            assert "ISNULL(JSON_QUERY" not in out, out
+            # …holding the original source operator verbatim (not a re-render).
+            assert "x XOR y" in out, out
 
     def test_n12_carrier_body_parses_as_source(self) -> None:
-        for target in ("oracle", "postgresql", "mysql"):
-            out = self.t.transpile(_N12_SQL, "tsql", target).sql
+        for target in _N12_TARGETS:
+            out = self.t.transpile(_N12_SQL, "mysql", target).sql
             bodies = carrier_bodies(out)
             assert bodies, f"no preserved-statement carrier for {target}: {out!r}"
-            assert_carrier_bodies_parse_as_source(out, "tsql")
+            assert_carrier_bodies_parse_as_source(out, "mysql")
 
     def test_n12_still_warns(self) -> None:
         # The degrade is still signalled — no-silent-loss unchanged.
-        for target in ("oracle", "postgresql", "mysql"):
-            result = self.t.transpile(_N12_SQL, "tsql", target)
+        for target in _N12_TARGETS:
+            result = self.t.transpile(_N12_SQL, "mysql", target)
             assert result.warnings, target
             assert "UNIQUE:" in result.sql, target
 
     def test_two_statements_in_one_batch_each_preserve_their_original(self) -> None:
         # Neighbor: the construct twice in one batch — per-statement slices
         # must align (tokenizer boundaries), not fall back to the re-render.
-        multi = (
-            "SELECT JSON_VALUE(doc, '$.name') AS n FROM docs;\n"
-            "SELECT JSON_VALUE(doc, '$.tag') AS t FROM docs;"
-        )
-        out = self.t.transpile(multi, "tsql", "oracle").sql
+        multi = "SELECT a FROM t WHERE x XOR y;\n" "SELECT b FROM t WHERE p XOR q;"
+        out = self.t.transpile(multi, "mysql", "oracle").sql
         assert "UNIQUE:" in out, out  # identity-proof: carrier must exist
-        assert "JSON_VALUE(doc, '$.name')" in out, out
-        assert "JSON_VALUE(doc, '$.tag')" in out, out
-        assert "ISNULL(JSON_QUERY" not in out, out
-        assert "dbo.JSON_EXTRACT" not in out, out
-        assert_carrier_bodies_parse_as_source(out, "tsql")
+        assert "x XOR y" in out, out
+        assert "p XOR q" in out, out
+        assert_carrier_bodies_parse_as_source(out, "mysql")
 
     def test_semicolon_inside_string_does_not_break_alignment(self) -> None:
         # A ``;`` inside a string literal must not cut the slice (token
         # boundaries, never a text split).
-        sql = "SELECT JSON_VALUE(doc, '$.a;b') AS n FROM docs;"
-        out = self.t.transpile(sql, "tsql", "oracle").sql
+        sql = "SELECT 'a;b' AS s FROM t WHERE x XOR y;"
+        out = self.t.transpile(sql, "mysql", "oracle").sql
         assert "UNIQUE:" in out, out  # identity-proof: carrier must exist
-        assert "JSON_VALUE(doc, '$.a;b')" in out, out
-        assert "dbo.JSON_EXTRACT" not in out, out
+        assert "'a;b'" in out and "x XOR y" in out, out
 
 
 # Inputs that trigger a range of degrade gates across dialects. The shared
@@ -90,9 +81,9 @@ class TestCarrierPreservesOriginal:
 # them so a sibling carrier with the N12 defect surfaces here.
 _GATE_INPUTS = [
     # unmapped operator (N12 class)
-    (_N12_SQL, "tsql", "oracle"),
-    (_N12_SQL, "tsql", "postgresql"),
-    (_N12_SQL, "tsql", "mysql"),
+    (_N12_SQL, "mysql", "oracle"),
+    (_N12_SQL, "mysql", "postgresql"),
+    (_N12_SQL, "mysql", "tsql"),
     # PG catalog internal → non-PG
     ("SELECT CAST(t AS regclass) FROM t", "postgresql", "tsql"),
     ("SELECT ctid FROM t", "postgresql", "oracle"),

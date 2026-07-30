@@ -712,6 +712,133 @@ def _emit_json_object_extract(node: FunctionCall, dialect: str) -> str | None:
     return None
 
 
+def _normalize_json_path(jp: str) -> tuple[str, str]:
+    """Return (key_path, ``$.``-prefixed JSON path) from a rendered path literal.
+
+    sqlglot renders the JSONPath differently per source (T-SQL/MySQL ``'$.k'``
+    vs PG bare ``'k'``); normalize both forms.
+    """
+    inner = jp[1:-1] if jp.startswith("'") and jp.endswith("'") else jp
+    if inner.startswith("$."):
+        return inner[2:], f"'{inner}'"
+    if inner.startswith("$"):
+        return inner[1:], f"'{inner}'"
+    return inner, f"'$.{inner}'"
+
+
+def _emit_pg_json_scalar(node: FunctionCall, jx: str, key_path: str, jpath: str) -> str:
+    """PG scalar JSON extract: ``->>`` for a bare key, JSONB path otherwise."""
+    a0 = node.args[0]
+    already_jsonb = isinstance(a0, CastExpression) and a0.target_type.name.split("(")[
+        0
+    ].strip().upper() in ("JSON", "JSONB")
+    doc = jx if already_jsonb else f"CAST({jx} AS JSONB)"
+    if re.fullmatch(r"\w+", key_path):
+        return f"{doc} ->> '{key_path}'"
+    return f"JSONB_PATH_QUERY_FIRST({doc}, {jpath}) #>> '{{}}'"
+
+
+def _emit_json_extract_scalar(node: FunctionCall, dialect: str) -> str:
+    """Emit a scalar JSON extract (T-SQL/PG/MySQL ``->>``/JSON_VALUE source).
+
+    Every engine has a scalar form: JSON_VALUE on T-SQL/Oracle/MySQL (8.0.21+),
+    ``->>`` on PG.
+    """
+    jx = _emit_expression(node.args[0], dialect)
+    key_path, jpath = _normalize_json_path(
+        _emit_expression(node.args[1], dialect).strip()
+    )
+    if dialect in ("tsql", "oracle"):
+        return f"JSON_VALUE({jx}, {jpath})"
+    if dialect in ("postgresql",):
+        return _emit_pg_json_scalar(node, jx, key_path, jpath)
+    # MySQL: native ``->>`` needs a JSON operand — valid over a column/expression
+    # (and what the reverse PG ``->>`` mapping expects) but a syntax error over a
+    # bare string literal, where JSON_VALUE (8.0.21+) is used.
+    if isinstance(node.args[0], Literal):
+        return f"JSON_VALUE({jx}, {jpath})"
+    return f"{jx} ->> {jpath}"
+
+
+def _emit_int_div(node: FunctionCall, dialect: str) -> str:
+    """Emit MySQL ``a DIV b`` integer division per target.
+
+    PG/T-SQL integer ``/`` truncates toward zero on integral operands; Oracle
+    ``/`` is real division, so TRUNC toward zero matches DIV.
+    """
+    a = _emit_expression(node.args[0], dialect)
+    b = _emit_expression(node.args[1], dialect)
+    return {
+        "mysql": f"({a} DIV {b})",
+        "oracle": f"TRUNC({a} / {b})",
+    }.get(dialect, f"({a} / {b})")
+
+
+def _emit_mapped_scalar(node: FunctionCall, fn_name: str, dialect: str) -> str | None:
+    """Dispatch the single-mechanism scalar mappings to their helpers.
+
+    REGEXP_LIKE / ``~*`` (POSIX regex, T-SQL gated out earlier), scalar JSON
+    extract, ``DIV`` integer division and MySQL DAYOFWEEK. Returns None when
+    *node* is none of them (or an unrecognized shape) so ``_emit_function``
+    continues. Grouped here to keep these off ``_emit_function``'s branch budget.
+    """
+    if fn_name == "REGEXP_LIKE" and len(node.args) in (2, 3):
+        return _emit_regexp_like(node, dialect)
+    if fn_name == "JSON_EXTRACT_SCALAR" and len(node.args) == 2:
+        return _emit_json_extract_scalar(node, dialect)
+    if fn_name == "INT_DIV" and len(node.args) == 2:
+        return _emit_int_div(node, dialect)
+    if (
+        fn_name == "DAY_OF_WEEK"
+        and len(node.args) == 1
+        and SOURCE_DIALECT.get() in ("mysql",)
+    ):
+        return _emit_mysql_dayofweek(node, dialect)
+    return None
+
+
+def _emit_regexp_like(node: FunctionCall, dialect: str) -> str | None:
+    """Emit a POSIX-regex match per target, or None for an unrecognized shape.
+
+    2-arg is case-sensitive (Oracle REGEXP_LIKE, PG ``~``, MySQL REGEXP); a
+    3-arg ``'i'`` flag (from PG ``~*``) is case-insensitive (Oracle/MySQL
+    REGEXP_LIKE 'i', PG ``~*``). T-SQL has no regex and is gated out earlier.
+    """
+    subj = _emit_expression(node.args[0], dialect)
+    pat = _emit_expression(node.args[1], dialect)
+    if len(node.args) == 2:
+        return {
+            "postgresql": f"{subj} ~ {pat}",
+            "mysql": f"{subj} REGEXP {pat}",
+        }.get(dialect, f"REGEXP_LIKE({subj}, {pat})")
+    flag = node.args[2]
+    if isinstance(flag, Literal) and flag.value == "i":
+        return {"postgresql": f"{subj} ~* {pat}"}.get(
+            dialect, f"REGEXP_LIKE({subj}, {pat}, 'i')"
+        )
+    return None
+
+
+def _emit_mysql_dayofweek(node: FunctionCall, dialect: str) -> str:
+    """Emit MySQL DAYOFWEEK (Sunday=1..Saturday=7, DATEFIRST-independent).
+
+    Every engine expresses it (the reverse DATEPART(WEEKDAY)->DAYOFWEEK already
+    maps): PG DOW+1, Oracle off the 1970-01-04 Sunday anchor, T-SQL
+    DATEPART(WEEKDAY) under the default @@DATEFIRST.
+    """
+    v = _emit_expression(node.args[0], dialect)
+    return {
+        "mysql": f"DAYOFWEEK({v})",
+        "postgresql": f"(EXTRACT(DOW FROM {v}) + 1)",
+        "oracle": f"(MOD(MOD(TRUNC({v}) - DATE '1970-01-04', 7) + 7, 7) + 1)",
+        "tsql": (
+            f"DATEPART(WEEKDAY, {v})"
+            " /* UNIQUE: DATEPART(WEEKDAY) is @@DATEFIRST-dependent; assumes "
+            "the session default (Sunday=1) */"
+        ),
+    }.get(dialect, f"DAYOFWEEK({v})")
+
+
 def _emit_bool_agg(node: FunctionCall, fn_name: str, dialect: str) -> str | None:
     """Boolean aggregate (bool_or/bool_and/every) per target, or None.
 
@@ -892,18 +1019,12 @@ def _weekday_extract_expr(part: str, value: str, dialect: str) -> str | None:
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
-    # POSIX-regex match: Oracle REGEXP_LIKE(x, pat), PG ``x ~ pat``, MySQL
-    # ``x REGEXP pat``. (T-SQL has no POSIX regex — degraded whole-statement by
-    # ``_gate_tsql_regexp`` before it reaches the emitter.)
-    if fn_name == "REGEXP_LIKE" and len(node.args) == 2:
-        subj = _emit_expression(node.args[0], dialect)
-        pat = _emit_expression(node.args[1], dialect)
-        # Oracle keeps the native call; PG/MySQL use their infix regex operators.
-        _regexp_forms = {
-            "postgresql": f"{subj} ~ {pat}",
-            "mysql": f"{subj} REGEXP {pat}",
-        }
-        return _regexp_forms.get(dialect, f"REGEXP_LIKE({subj}, {pat})")
+    # Single-mechanism scalar mappings (regex match, scalar JSON extract, integer
+    # division, MySQL DAYOFWEEK) each dispatch to a helper; grouped in one lookup
+    # so the per-mechanism logic stays out of this function's branch budget.
+    _mapped = _emit_mapped_scalar(node, fn_name, dialect)
+    if _mapped is not None:
+        return _mapped
     # Compile-time folds over literal arguments: the value each SOURCE engine
     # computes is emitted directly, sidestepping per-target semantic gaps
     # (LEN/LENGTH counting units, Oracle INSTR occurrence/backward search).
