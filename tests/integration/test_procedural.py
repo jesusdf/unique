@@ -1817,9 +1817,14 @@ class TestOracleAnonymousBlock:
     def test_to_postgresql_do_block(self) -> None:
         out = _transpile(self.BLOCK, "oracle", "postgresql")
         upper = out.upper()
-        # Wrapped in a PL/pgSQL DO block (anonymous blocks need one on PG).
-        assert "DO $$" in upper
-        assert "$$;" in out
+        # This top-level block degrades to a documented UNIQUE-1160 carrier
+        # (preserved commented out). Its generated PL/pgSQL DO wrapper is present
+        # but the dollar-quote is neutralized (``$$`` -> ``$ $``) so the ``--``
+        # carrier is self-contained — no raw ``$$`` that could desync a
+        # statement scanner (bug Q2/1: dollar-quote self-containment).
+        assert "DO $ $" in upper
+        assert "$ $;" in out
+        assert "$$" not in out  # no live dollar-quote delimiter leaks into a comment
         # Cursor FOR-loop survives.
         assert "FOR R IN" in upper
         assert "END LOOP" in upper
