@@ -1546,6 +1546,19 @@ class ParserBase:
             action = TransactionAction.ROLLBACK
         return TransactionStatement(action=action, name=name)
 
+    def _parse_set_transaction(self) -> ASTNode:
+        """Parse ``SET TRANSACTION <mode>`` (READ ONLY / READ WRITE / ISOLATION
+        LEVEL …) as transaction control, capturing the mode text verbatim so
+        each target emits its own spelling (a variable-assignment parse shipped
+        the invalid ``TRANSACTION := READ ONLY``)."""
+        self._expect_keyword("SET")
+        self._expect_keyword("TRANSACTION")
+        parts: list[str] = []
+        while not self._at_end() and self._current().type != TokenType.SEMICOLON:
+            parts.append(self._advance().value)
+        self._match_type(TokenType.SEMICOLON)
+        return TransactionStatement(action=TransactionAction.SET, mode=" ".join(parts))
+
     def _parse_waitfor(self) -> ASTNode:
         """Parse T-SQL ``WAITFOR DELAY '<hh:mm:ss>'`` / ``WAITFOR TIME '...'``."""
         self._expect_keyword("WAITFOR")

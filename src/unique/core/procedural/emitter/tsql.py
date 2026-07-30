@@ -20,7 +20,9 @@ from unique.core.ast_nodes import (
     DataType,
     DeclareStatement,
     ExitStatement,
+    GotoStatement,
     IfStatement,
+    LabelStatement,
     NullStatement,
     ParameterDefinition,
     PerformStatement,
@@ -601,6 +603,26 @@ class TSqlEmitter(ProceduralEmitter):
 
     def _emit_savepoint(self, name: str | None) -> str:
         return f"SAVE TRANSACTION {name};" if name else "SAVE TRANSACTION;"
+
+    def _emit_set_transaction(self, mode: str) -> str:
+        # T-SQL expresses only the ISOLATION LEVEL mode; READ ONLY / READ WRITE
+        # have no equivalent, so preserve the statement as a carrier + warning
+        # rather than emitting an invalid ``SET TRANSACTION READ ONLY``.
+        if mode.upper().startswith("ISOLATION LEVEL"):
+            return f"SET TRANSACTION {mode};"
+        return (
+            f"/* UNIQUE: SET TRANSACTION {mode} dropped -- T-SQL has no READ "
+            "ONLY/READ WRITE transaction mode; only ISOLATION LEVEL is "
+            "expressible (docs/03-unsupported.md) */"
+        )
+
+    def _emit_goto(self, node: GotoStatement) -> str:
+        # T-SQL has native GOTO.
+        return f"GOTO {node.label};"
+
+    def _emit_label(self, node: LabelStatement) -> str:
+        # T-SQL spells a GOTO-target label ``name:``.
+        return f"{node.name}:"
 
     def _emit_waitfor(self, node: WaitForStatement) -> str:
         return f"WAITFOR {node.kind} '{node.value}';"

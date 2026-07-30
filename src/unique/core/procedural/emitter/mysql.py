@@ -18,7 +18,9 @@ from unique.core.ast_nodes import (
     CursorDeclaration,
     DataType,
     ExitStatement,
+    GotoStatement,
     IfStatement,
+    LabelStatement,
     LoopStatement,
     NullStatement,
     ParameterDefinition,
@@ -167,6 +169,21 @@ class MySqlEmitter(ProceduralEmitter):
     def _emit_null(self, _node: NullStatement) -> str:
         # MySQL has no PL/SQL-style NULL statement; DO 0 is its no-op.
         return "DO 0;"
+
+    def _emit_goto(self, node: GotoStatement) -> str:
+        # MySQL has no GOTO. A bare comment carrier would leave an empty
+        # THEN/loop body (1064), so pair the carrier with the DO 0 no-op.
+        return (
+            f"DO 0; /* UNIQUE: GOTO {node.label} dropped -- MySQL has no GOTO; "
+            "control flow not replicated (docs/03-unsupported.md) */"
+        )
+
+    def _emit_label(self, node: LabelStatement) -> str:
+        # MySQL has no GOTO/label; carrier + DO 0 no-op (see _emit_goto).
+        return (
+            f"DO 0; /* UNIQUE: label {node.name} dropped -- MySQL has no "
+            "GOTO/label (docs/03-unsupported.md) */"
+        )
 
     def _emit_guard_if(self, cond: str, body_lines: list[str]) -> str | None:
         # MySQL's IF accepts an EXISTS/subquery condition, so the guard is an

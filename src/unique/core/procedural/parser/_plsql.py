@@ -33,8 +33,10 @@ from unique.core.ast_nodes import (
     ForeachStatement,
     ForLoopStatement,
     GetDiagnosticsStatement,
+    GotoStatement,
     HandlerDeclaration,
     IfStatement,
+    LabelStatement,
     LoopStatement,
     NullStatement,
     ParameterDefinition,
@@ -411,6 +413,12 @@ class PlsqlStatementsMixin(ParserBase):
                 return self._parse_mysql_handler()
             return self._parse_plsql_declaration()
         if tok.is_keyword("SET"):
+            if self._peek(1).is_keyword("TRANSACTION"):
+                # ``SET TRANSACTION <mode>`` is transaction control, not a
+                # variable assignment — routing it here stops the assignment
+                # parser from emitting ``TRANSACTION := READ ONLY`` (sibling of
+                # the SAVEPOINT-in-a-routine fix).
+                return self._parse_set_transaction()
             # MySQL assignment: SET var = expr;
             return self._parse_mysql_set()
         if tok.upper_value == "COMMENT" and self._peek(1).upper_value == "ON":
@@ -589,6 +597,17 @@ class PlsqlStatementsMixin(ParserBase):
             # the Oracle ``:=`` operator would leak to MySQL, which rejects it.
             self._advance()  # consume the ':' of :NEW./:OLD.
             return self._parse_plsql_assignment_or_call()
+        elif tok.upper_value == "GOTO":
+            # PL/SQL flow control ``GOTO <label>`` (GOTO lexes as identifier).
+            return self._parse_plsql_goto()
+        elif (
+            tok.type == TokenType.COMPARISON
+            and tok.value == "<"
+            and self._peek(1).type == TokenType.COMPARISON
+            and self._peek(1).value == "<"
+        ):
+            # Oracle GOTO-target label ``<<name>>`` (lexes as ``< < name > >``).
+            return self._parse_plsql_label()
         elif tok.type in (TokenType.IDENTIFIER, TokenType.KEYWORD):
             # Could be assignment: name := expr; or procedure call
             return self._parse_plsql_assignment_or_call()
@@ -1028,6 +1047,26 @@ class PlsqlStatementsMixin(ParserBase):
         cursor_name = self._parse_identifier()
         self._match_type(TokenType.SEMICOLON)
         return CursorOperation(operation="CLOSE", cursor_name=cursor_name)
+
+    def _parse_plsql_goto(self) -> ASTNode:
+        """Parse ``GOTO <label>`` (Oracle PL/SQL). Modeled so it is not mis-read
+        as an assignment/call (which shipped the invalid ``GOTO AS <label>``)."""
+        self._advance()  # GOTO
+        label = self._parse_identifier()
+        self._match_type(TokenType.SEMICOLON)
+        return GotoStatement(label=label)
+
+    def _parse_plsql_label(self) -> ASTNode:
+        """Parse an Oracle GOTO-target label ``<<name>>`` (lexed as ``< < name
+        > >``) into a LabelStatement."""
+        self._advance()  # first '<'
+        self._advance()  # second '<'
+        name = self._parse_identifier()
+        if self._current().value == ">":
+            self._advance()
+        if self._current().value == ">":
+            self._advance()
+        return LabelStatement(name=name)
 
     def _parse_mysql_set(self) -> ASTNode:
         """Parse a MySQL SET assignment: SET var = expr;

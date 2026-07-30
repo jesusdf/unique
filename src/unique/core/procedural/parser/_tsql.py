@@ -23,7 +23,9 @@ from unique.core.ast_nodes import (
     DeclareStatement,
     ExecuteStatement,
     ExitStatement,
+    GotoStatement,
     IfStatement,
+    LabelStatement,
     SelectIntoStatement,
     StatementList,
     TryCatchBlock,
@@ -149,11 +151,31 @@ class TsqlStatementsMixin(ParserBase):
             return self._parse_embedded_dml()
         elif tok.is_keyword("INSERT", "UPDATE", "DELETE", "MERGE"):
             return self._parse_embedded_dml()
+        elif tok.upper_value == "GOTO":
+            # T-SQL flow control ``GOTO <label>`` (GOTO lexes as an identifier).
+            return self._parse_tsql_goto()
+        elif tok.type == TokenType.IDENTIFIER and self._peek(1).type == TokenType.COLON:
+            # A T-SQL GOTO-target label ``name:`` at statement position.
+            return self._parse_tsql_label()
         elif tok.type == TokenType.SEMICOLON:
             self._advance()
             return None
         else:
             return self._parse_embedded_dml()
+
+    def _parse_tsql_goto(self) -> ASTNode:
+        """Parse ``GOTO <label>`` (T-SQL). Modeled so it is not mis-read as
+        embedded DML (which shipped the invalid ``GOTO AS <label>``)."""
+        self._advance()  # GOTO
+        label = self._parse_identifier()
+        self._match_type(TokenType.SEMICOLON)
+        return GotoStatement(label=label)
+
+    def _parse_tsql_label(self) -> ASTNode:
+        """Parse a ``name:`` GOTO-target label at statement position."""
+        name = self._parse_identifier()
+        self._match_type(TokenType.COLON)
+        return LabelStatement(name=name)
 
     def _parse_tsql_declare(self) -> ASTNode:
         """Parse DECLARE @var type [= value] [, @var2 type [= value] ...].
@@ -231,6 +253,10 @@ class TsqlStatementsMixin(ParserBase):
             "WAITFOR",
             "BREAK",
             "CONTINUE",
+            # ``IF @i = 0 GOTO done`` — GOTO is a statement verb, never a
+            # continuation of the condition; without this stop the GOTO merged
+            # into the IF condition (``IF v_i = 0 GOTO done THEN``).
+            "GOTO",
         )
 
         then_body: list[ASTNode] = []

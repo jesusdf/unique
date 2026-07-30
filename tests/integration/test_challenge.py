@@ -5901,6 +5901,83 @@ class TestProcSavepointComposition:
         ), r.warnings
 
 
+class TestProcSetTransaction:
+    """red3-ora-set-transaction-proc (invalid): ``SET TRANSACTION READ ONLY``
+    inside a routine was mis-parsed as a variable assignment (``TRANSACTION :=
+    READ ONLY`` / ``SET @transaction = READ ONLY`` — invalid, no warning). Model
+    it as transaction control: native on Oracle/PG/MySQL; T-SQL has no READ
+    ONLY mode -> carrier + warning. Live-validated on all four targets."""
+
+    def test_pg_and_mysql_emit_native_set_transaction(self) -> None:
+        src = _case("challenge_oracle.sql", "red3-ora-set-transaction-proc")
+        for target in ("postgresql", "mysql"):
+            out = _exec_lines(_tx(src, "oracle", target))
+            assert "SET TRANSACTION READ ONLY" in out, (target, out)
+            assert ":= READ ONLY" not in out, (target, out)
+            assert "TRANSACTION = READ ONLY" not in out, (target, out)
+            assert_statements_parse(out, target, context="set-transaction")
+
+    def test_tsql_degrades_read_only_with_warning(self) -> None:
+        src = _case("challenge_oracle.sql", "red3-ora-set-transaction-proc")
+        r = Transpiler().transpile(src, "oracle", "tsql")
+        body = _exec_lines(r.sql)
+        # no invalid assignment; READ ONLY preserved as a carrier + warning
+        assert "@transaction" not in body.lower(), r.sql
+        assert "SET TRANSACTION READ ONLY dropped" in body, r.sql
+        assert any(
+            "no READ ONLY/READ WRITE transaction mode" in w.message for w in r.warnings
+        ), r.warnings
+
+    def test_tsql_keeps_isolation_level_natively(self) -> None:
+        src = "CREATE OR REPLACE PROCEDURE p AS BEGIN "
+        src += "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; NULL; END;"
+        out = _exec_lines(_tx(src, "oracle", "tsql"))
+        assert "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE" in out, out
+
+
+class TestProcGotoLabel:
+    """red3-ts-goto-label-proc (invalid): a GOTO + label proc body was garbled
+    (``GOTO AS done``, ``IF … GOTO done THEN``, bare ``done;``) behind a LYING
+    'Embedded DML not modeled' warning. Model GOTO/label in both procedural
+    parsers: Oracle/T-SQL native (GOTO/<<x>>/x:); PG/MySQL have no GOTO ->
+    carrier + warning (MySQL pairs a DO 0 no-op so a block is never empty).
+    Live-validated on all four targets."""
+
+    def test_oracle_emits_native_goto_and_label(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red3-ts-goto-label-proc")
+        out = _exec_lines(_tx(src, "tsql", "oracle"))
+        assert "GOTO done;" in out, out
+        assert "<<done>>" in out, out
+        assert "GOTO AS" not in out, out
+
+    def test_pg_and_mysql_degrade_with_warning_not_lying(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red3-ts-goto-label-proc")
+        for target in ("postgresql", "mysql"):
+            r = Transpiler().transpile(src, "tsql", target)
+            body = _exec_lines(r.sql)
+            assert "GOTO AS" not in body, (target, body)
+            assert "GOTO done dropped" in body, (target, body)
+            assert any("has no GOTO" in w.message for w in r.warnings), (
+                target,
+                r.warnings,
+            )
+            # the old lying 'Embedded DML not modeled' warning must be gone
+            assert not any(
+                "Embedded DML not modeled" in w.message for w in r.warnings
+            ), (target, r.warnings)
+            assert_statements_parse(body, target, context="goto")
+
+    def test_oracle_source_label_neighbor_is_modeled(self) -> None:
+        # The PL/SQL <<label>>/GOTO neighbor must be modeled too (same class).
+        src = (
+            "CREATE OR REPLACE PROCEDURE p AS i NUMBER := 0; BEGIN "
+            "IF i = 0 THEN GOTO done; END IF; i := 1; <<done>> i := 2; END;"
+        )
+        out = _exec_lines(_tx(src, "oracle", "tsql"))
+        assert "GOTO done;" in out and "done:" in out, out
+        assert "GOTO AS" not in out and "<<" not in out, out
+
+
 class TestFalseUnmapMappedSymmetrically:
     """RED round-2 asymmetric false-unmaps: constructs whose reverse direction
     already mapped were degrading (comment / validity-gate carrier) behind a

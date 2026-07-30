@@ -42,8 +42,10 @@ from unique.core.ast_nodes import (
     ForeachStatement,
     ForLoopStatement,
     GetDiagnosticsStatement,
+    GotoStatement,
     HandlerDeclaration,
     IfStatement,
+    LabelStatement,
     LastIdentityCapture,
     Literal,
     LoopStatement,
@@ -371,6 +373,8 @@ class ProceduralEmitter:
             CursorOperation: self._emit_cursor_op,
             ExitStatement: self._emit_exit,
             ContinueStatement: self._emit_continue,
+            GotoStatement: self._emit_goto,
+            LabelStatement: self._emit_label,
             NullStatement: self._emit_null,
             CommentStatement: self._emit_comment,
             TransactionStatement: self._emit_transaction,
@@ -1929,6 +1933,8 @@ class ProceduralEmitter:
             return self._emit_begin_transaction(name)
         if node.action == TransactionAction.COMMIT:
             return "COMMIT;"
+        if node.action == TransactionAction.SET:
+            return self._emit_set_transaction(node.mode or "")
         if node.action == TransactionAction.ROLLBACK:
             # ROLLBACK to a savepoint name keeps the name; a plain rollback does
             # not. T-SQL "ROLLBACK TRAN name" rolls back to a save point.
@@ -1936,6 +1942,11 @@ class ProceduralEmitter:
                 return self._rollback_to_savepoint(name)
             return "ROLLBACK;"
         return self._emit_savepoint(name)
+
+    def _emit_set_transaction(self, mode: str) -> str:
+        """``SET TRANSACTION <mode>``. Default (Oracle/PG/MySQL) is the native
+        form; T-SQL overrides (only the ISOLATION LEVEL mode is expressible)."""
+        return f"SET TRANSACTION {mode};"
 
     def _emit_begin_transaction(self, name: str | None) -> str:
         """BEGIN-transaction form. Default: implicit, document the dropped
@@ -2067,6 +2078,23 @@ class ProceduralEmitter:
             cond = self._emit_node(node.condition)
             return f"CONTINUE WHEN {cond};"
         return "CONTINUE;"
+
+    def _emit_goto(self, node: GotoStatement) -> str:
+        """Default: the target has no GOTO (PG plpgsql / MySQL). Preserve the
+        jump as a carrier + warning rather than dropping the control flow
+        silently or shipping an invalid statement. Oracle/T-SQL override."""
+        return (
+            f"/* UNIQUE: GOTO {node.label} dropped -- {self._dialect} has no "
+            "GOTO; control flow not replicated (docs/03-unsupported.md) */"
+        )
+
+    def _emit_label(self, node: LabelStatement) -> str:
+        """Default: the target has no GOTO/label (PG plpgsql / MySQL). Preserve
+        the label as a carrier + warning. Oracle/T-SQL override."""
+        return (
+            f"/* UNIQUE: label {node.name} dropped -- {self._dialect} has no "
+            "GOTO/label (docs/03-unsupported.md) */"
+        )
 
     def _emit_null(self, _node: NullStatement) -> str:
         """Default no-op statement is ``NULL;`` (PL/SQL). T-SQL overrides with a

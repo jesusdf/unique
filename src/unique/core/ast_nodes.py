@@ -124,6 +124,7 @@ class TransactionAction(Enum):
     COMMIT = auto()
     ROLLBACK = auto()
     SAVEPOINT = auto()
+    SET = auto()  # SET TRANSACTION <mode> (READ ONLY / ISOLATION LEVEL …)
 
 
 # ---------------------------------------------------------------------------
@@ -980,6 +981,10 @@ class TransactionStatement(ASTNode):
 
     action: TransactionAction
     name: str | None = None
+    #: For ``action == SET`` (``SET TRANSACTION <mode>``): the raw mode text,
+    #: e.g. ``"READ ONLY"`` or ``"ISOLATION LEVEL SERIALIZABLE"``. Emitted
+    #: natively on Oracle/PG/MySQL; T-SQL expresses only the ISOLATION LEVEL form.
+    mode: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1074,6 +1079,22 @@ class ContinueStatement(ASTNode):
 
     condition: ASTNode | None = None
     label: str | None = None
+
+
+@dataclass(frozen=True)
+class GotoStatement(ASTNode):
+    """Unconditional jump ``GOTO <label>`` (T-SQL / Oracle PL/SQL). PG plpgsql
+    and MySQL have no GOTO — the emitter degrades it to a carrier + warning."""
+
+    label: str
+
+
+@dataclass(frozen=True)
+class LabelStatement(ASTNode):
+    """A GOTO target label — T-SQL ``name:`` / Oracle ``<<name>>``. PG/MySQL
+    have no label form; the emitter degrades it to a carrier + warning."""
+
+    name: str
 
 
 @dataclass(frozen=True)

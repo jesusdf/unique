@@ -17,6 +17,8 @@ from unique.core.ast_nodes import (
     EmbeddedDML,
     ExceptionBlock,
     ForLoopStatement,
+    GotoStatement,
+    LabelStatement,
     ParameterDefinition,
     PerformStatement,
     PragmaDeclaration,
@@ -78,6 +80,14 @@ class OracleEmitter(ProceduralEmitter):
     """Oracle PL/SQL procedural emitter."""
 
     dialect_name = "oracle"
+
+    def _emit_goto(self, node: GotoStatement) -> str:
+        # Oracle PL/SQL has native GOTO.
+        return f"GOTO {node.label};"
+
+    def _emit_label(self, node: LabelStatement) -> str:
+        # Oracle spells a GOTO-target label ``<<name>>``.
+        return f"<<{node.name}>>"
 
     def _emit_pragma(self, node: PragmaDeclaration) -> str:
         return f"PRAGMA {node.name};"
