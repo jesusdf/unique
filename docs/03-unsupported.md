@@ -648,6 +648,37 @@ SYS.ODCINUMBERLIST))`. The `MULTISET` constructor, the collection cast, and the
 on real array types; T-SQL has no collection type at all). The whole batch is
 preserved as a documented carrier comment rather than emitted as invalid SQL.
 
+### 3.38 Structural similarity, **not** equivalence
+
+`unique compare` (and `unique.core.similarity.compare`) reports a *structural
+similarity* percentage between two scripts — how close their statement shapes,
+predicates and control flow are after both are normalized through the transpiler
+to a PostgreSQL pivot. It is deliberately **not** a claim of semantic
+equivalence, and the number must never be read as a "probability of
+equivalence":
+
+- **Query equivalence is undecidable in general.** No terminating procedure can
+  decide whether two arbitrary SQL queries always return the same result. The
+  SMT-based provers that do exist (Cosette, SPES, SQLSolver) cover only
+  restricted `SELECT`-only fragments and no procedural code, so they cannot
+  score the stored-routine scripts this feature targets. Formal equivalence
+  proving is therefore **out of scope permanently.**
+- **A high score is corroboration, not proof.** Two scripts can be structurally
+  identical yet behave differently (e.g. a collation or NULL-ordering
+  difference), and two semantically equivalent scripts can score low if written
+  with different structure. Use the score to *rank and triage* a migration
+  audit ("which routines drifted most?"), then review the flagged ones — not as
+  a green light.
+- **The pivot's fidelity bounds the score.** Both inputs pass through the
+  transpiler first; where a construct degrades to a carrier on the PostgreSQL
+  pivot (e.g. today's Oracle→PG and MySQL→PG procedural gaps), the degraded
+  statement is counted as *unmatched*, which lowers the similarity rather than
+  silently inflating it. Improving those transpilation paths raises the scores
+  for the affected dialect pairs.
+
+The report is per-dimension (DML structure, predicates, control flow, tree
+match) precisely so a single opaque number is never the whole story.
+
 ---
 
 ## 4. Behavioral Differences (Not Bugs)

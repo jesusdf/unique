@@ -21,12 +21,26 @@ unique dialects
 
 # Validate a script's syntax (errors are located by line)
 unique validate script.sql -d postgresql
+
+# Structural-similarity of two scripts (e.g. a migration audit: how close is a
+# hand-migrated PL/SQL to the original T-SQL?). Dialects auto-detect if omitted.
+unique compare original.sql migrated.sql --dialect-a tsql --dialect-b oracle
+unique compare a.sql b.sql --json          # machine-readable report
 ```
 
 `transpile` **validates the source syntax first** and refuses a malformed script
 (exit 1), listing each error by line — for example a `CREATE PROCEDURE` with no
 preceding `GO` (the batch it must start). Pass `--ignore-syntax-errors` to
 transpile anyway. `validate` reports the same located errors without emitting.
+
+`compare` reports a **structural similarity** percentage plus a per-dimension
+breakdown (DML structure, predicates, control flow, tree match) — it is *not* a
+probability of semantic equivalence (see
+[03-unsupported.md](03-unsupported.md#338-structural-similarity-not-equivalence)).
+Both scripts are normalized through the transpiler to a PostgreSQL pivot, so
+dialect idioms (`ISNULL`/`NVL`/`COALESCE`) collapse before comparison. An
+undetectable dialect or an untranspilable input exits `2` (distinct from a
+low-similarity run).
 
 The full command surface (flags, stdin/stdout usage) is documented in
 [02-architecture.md](02-architecture.md#33-cli-srcuniquecli).
@@ -49,6 +63,23 @@ print(result.sql)
 warnings raised for constructs that could not be translated faithfully (these
 are also emitted inline as `/* UNIQUE: ... */` comments — see the README's
 value-add section).
+
+```python
+from unique.core.similarity import compare
+
+report = compare(sql_original, sql_migrated, dialect_a="tsql", dialect_b="oracle")
+print(report.overall)              # e.g. 82.4  (structural similarity, 0–100)
+print(report.dimensions)           # {'dml_structure': …, 'predicates': …,
+                                   #  'control_flow': …, 'tree_match': …}
+print(report.unmatched_a, report.unmatched_b)   # statements with no counterpart
+```
+
+`compare(sql_a, sql_b, dialect_a=None, dialect_b=None)` returns a
+`SimilarityReport` (overall score, per-dimension scores, per-statement pairs,
+unmatched counts, and any transpiler warnings surfaced during normalization).
+Dialects default to auto-detection; `report.detected_a`/`detected_b` record
+whether each was detected. It raises `ValueError` naming the offending input if
+a dialect cannot be detected or the input cannot be transpiled.
 
 ## REST API
 

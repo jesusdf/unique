@@ -45,6 +45,9 @@ pip install -e ".[dev]"
 
 # CLI
 unique transpile input.sql --from tsql --to postgresql -o output.sql
+
+# Structural-similarity of two scripts (migration audit; dialects auto-detect)
+unique compare original.sql migrated.sql --dialect-a tsql --dialect-b oracle
 ```
 
 ```python
