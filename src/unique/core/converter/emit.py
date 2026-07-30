@@ -1427,6 +1427,22 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
         if (
             isinstance(node, UnaryOp)
             and node.operator == UnaryOperator.NOT
+            and isinstance(node.operand, BinaryOp)
+            and node.operand.operator == BinaryOperator.IS
+            and isinstance(node.operand.left, ColumnRef)
+            and isinstance(node.operand.right, Literal)
+            and node.operand.right.dtype == "boolean"
+        ):
+            # ``flag IS NOT TRUE`` / ``IS NOT FALSE`` over a boolean column:
+            # on these no-boolean engines ``x IS NOT TRUE`` is TRUE when x is
+            # FALSE *or* NULL, so a bare ``NOT (x = 1)`` drops the NULL rows.
+            # Keep the NULL leg explicitly.
+            inner = _emit_expression(node.operand.left, dialect)
+            val = "1" if node.operand.right.value else "0"
+            return f"({inner} <> {val} OR {inner} IS NULL)"
+        if (
+            isinstance(node, UnaryOp)
+            and node.operator == UnaryOperator.NOT
             and (
                 isinstance(node.operand, BinaryOp)
                 or (

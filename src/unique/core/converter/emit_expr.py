@@ -1853,6 +1853,21 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         BinaryOperator.BIT_RSHIFT: ">>",
     }
 
+    # A boolean-COLUMN IS-predicate (``flag IS TRUE`` / ``flag IS FALSE``) is
+    # invalid on engines with no boolean type: the IS operator rejects an
+    # integer operand (``flag IS 1`` -> T-SQL 156 / ORA-00908). Rewrite to the
+    # value comparison there; PG/MySQL keep the native TRUE/FALSE spelling. A
+    # boolean EXPRESSION operand is already simplified upstream, so guard to a
+    # bare column.
+    if (
+        node.operator == BinaryOperator.IS
+        and isinstance(node.left, ColumnRef)
+        and isinstance(node.right, Literal)
+        and node.right.dtype == "boolean"
+        and dialect in ("tsql", "oracle")
+    ):
+        return f"{left} = {'1' if node.right.value else '0'}"
+
     op = op_map[node.operator]
 
     # PG/MySQL LIKE treat backslash as the default escape character; Oracle and

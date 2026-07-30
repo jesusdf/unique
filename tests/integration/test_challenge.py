@@ -5457,3 +5457,34 @@ class TestBitStringNumericFold:
             assert "5 + 0" in out, out
             assert "b'101'" not in out.lower(), out
             assert_statements_parse(out, target, context="bitstring")
+
+
+class TestBoolColumnIsPredicate:
+    """red2-pg-boolcol-is-true: a boolean-column ``flag IS TRUE`` / ``IS FALSE``
+    predicate is invalid on engines with no boolean type (``flag IS 1`` ->
+    T-SQL 156 / ORA-00908). Rewrite to the value comparison (``flag = 1`` /
+    ``= 0``) there, keeping ``IS NOT TRUE``'s NULL leg."""
+
+    def test_is_true_becomes_value_comparison(self) -> None:
+        src = _case("challenge_postgresql.sql", "red2-pg-boolcol-is-true")
+        for target in ("tsql", "oracle"):
+            out = _exec_lines(_tx(src, "postgresql", target))
+            assert "flag = 1" in out, out
+            assert "IS 1" not in out and "IS TRUE" not in out.upper(), out
+            assert_statements_parse(out, target, context="boolcol")
+
+    def test_is_false_and_negations(self) -> None:
+        for pred, want in (
+            ("flag IS FALSE", "flag = 0"),
+            ("flag IS NOT TRUE", "flag <> 1 OR flag IS NULL"),
+            ("flag IS NOT FALSE", "flag <> 0 OR flag IS NULL"),
+        ):
+            for target in ("tsql", "oracle"):
+                out = _tx(f"SELECT a FROM t WHERE {pred}", "postgresql", target)
+                assert want in out, (pred, target, out)
+                assert " IS 1" not in out and " IS 0" not in out, out
+                assert_statements_parse(out, target, context=pred)
+
+    def test_mysql_keeps_native_boolean(self) -> None:
+        out = _tx("SELECT a FROM t WHERE flag IS TRUE", "postgresql", "mysql")
+        assert "IS TRUE" in out, out
