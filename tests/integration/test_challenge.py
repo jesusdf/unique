@@ -5623,3 +5623,29 @@ class TestOraclePlusOuterJoinDuplicate:
         )
         assert out.count("tb b") == 1, out
         assert_statements_parse(out, "postgresql", context="plus-single")
+
+
+class TestWindowFrameExclude:
+    """red2-pg-window-exclude-current: a frame EXCLUDE CURRENT ROW/GROUP/TIES
+    was silently dropped, changing the aggregate. PG/Oracle support it (pass
+    through); T-SQL/MySQL have no equivalent -> warned NULL carrier."""
+
+    def test_oracle_and_pg_keep_exclude(self) -> None:
+        src = _case("challenge_postgresql.sql", "red2-pg-window-exclude-current")
+        for target in ("oracle", "postgresql"):
+            out = _exec_lines(_tx(src, "postgresql", target))
+            assert "EXCLUDE CURRENT ROW" in out, (target, out)
+            assert_statements_parse(out, target, context="exclude")
+
+    def test_tsql_mysql_warned_degrade(self) -> None:
+        src = _case("challenge_postgresql.sql", "red2-pg-window-exclude-current")
+        for target in ("tsql", "mysql"):
+            r = Transpiler().transpile(src, "postgresql", target)
+            body = _exec_lines(r.sql)
+            # The window is not emitted at all — it degrades to a NULL carrier.
+            assert "OVER (" not in body, r.sql
+            assert "NULL /* UNIQUE:" in body, r.sql
+            assert any(
+                "EXCLUDE" in w.message and target in w.message for w in r.warnings
+            ), r.warnings
+            assert_statements_parse(body, target, context="exclude")

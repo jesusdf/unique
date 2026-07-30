@@ -375,6 +375,11 @@ class WindowSpec(ASTNode):
     # engine we target, so it is captured once and emitted verbatim. Dropping it
     # silently changes results (a running total becomes a grand total).
     frame: str | None = None
+    # The frame's ``EXCLUDE CURRENT ROW/GROUP/TIES/NO OTHERS`` clause, captured
+    # apart from ``frame`` because only PostgreSQL and Oracle support it: those
+    # targets re-append it, T-SQL/MySQL have no equivalent and degrade (there is
+    # no faithful ROWS/RANGE rewrite). Dropping it silently changed the aggregate.
+    exclude: str | None = None
 
 
 @dataclass(frozen=True)

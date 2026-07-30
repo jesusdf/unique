@@ -3692,9 +3692,17 @@ def _convert_window(expr: exp.Window) -> WindowFunction:
     # it verbatim rather than dropping it (which silently turns a running total
     # into a grand total).
     spec = expr.args.get("spec")
+    # ``spec.sql()`` (generic dialect) omits the frame's EXCLUDE clause, so
+    # capture it separately — only PG/Oracle can re-emit it (the emitter
+    # degrades T-SQL/MySQL, which have no equivalent).
     frame = spec.sql() if isinstance(spec, exp.WindowSpec) else None
+    exclude = None
+    if isinstance(spec, exp.WindowSpec) and spec.args.get("exclude") is not None:
+        exclude = f"EXCLUDE {spec.args['exclude'].this}"
 
-    window_spec = WindowSpec(partition_by=partition_by, order_by=order_by, frame=frame)
+    window_spec = WindowSpec(
+        partition_by=partition_by, order_by=order_by, frame=frame, exclude=exclude
+    )
     return WindowFunction(function=function, window=window_spec)
 
 

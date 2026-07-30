@@ -2135,6 +2135,21 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
             )
         spec_parts.append(node.window.frame)
 
+    if node.window.exclude:
+        # A frame EXCLUDE (CURRENT ROW/GROUP/TIES) exists on PostgreSQL and
+        # Oracle but not T-SQL or MySQL. There is no faithful ROWS/RANGE
+        # rewrite (it removes specific peers from each frame), so the framed
+        # aggregate is not computable there — degrade to a warned carrier
+        # rather than silently drop EXCLUDE and change the result.
+        if dialect in ("postgresql", "oracle"):
+            spec_parts.append(node.window.exclude)
+        else:
+            return (
+                f"NULL /* UNIQUE: a window frame {node.window.exclude} has no "
+                f"{dialect} equivalent (T-SQL/MySQL have no EXCLUDE, and no "
+                "faithful ROWS/RANGE rewrite) — see docs/03-unsupported.md */"
+            )
+
     spec = " ".join(spec_parts)
     return f"{func} OVER ({spec})"
 
