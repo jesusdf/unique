@@ -15,6 +15,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
+from typing import cast
 
 from unique.core.ast_nodes import (
     Alias,
@@ -816,7 +817,10 @@ class Transformer:
         if self.context.source == "mysql" and self.context.target != "mysql":
             result = [self._gate_mysql_user_var(node) for node in result]
             result = [self._strip_mysql_charset_marks(node) for node in result]
-            result = [self._wrap_mysql_concat_null(node) for node in result]
+            result = [
+                self._wrap_mysql_concat_null(node)  # type: ignore[misc]
+                for node in result
+            ]
             result = [
                 n2
                 for n in result
@@ -2209,8 +2213,16 @@ class Transformer:
         CONCAT(…) END``. A literal-NULL operand is already folded to NULL by the
         emitter; an all-non-NULL-literal call needs no guard."""
         if isinstance(value, FunctionCall) and value.name.upper() == "CONCAT":
-            new_args = tuple(self._wrap_mysql_concat_null(a) for a in value.args)
+            new_args = cast(
+                "tuple[ASTNode, ...]",
+                tuple(self._wrap_mysql_concat_null(a) for a in value.args),
+            )
             call = value if new_args == value.args else replace(value, args=new_args)
+            if len(call.args) < 2:
+                # A single-argument CONCAT already equals its argument and
+                # propagates NULL trivially — no guard needed (and wrapping it
+                # would obscure the one-arg simplification).
+                return call
             if any(self._is_provably_null(a) for a in call.args):
                 return call  # the emitter folds a provably-NULL operand to NULL
             nullable = [
