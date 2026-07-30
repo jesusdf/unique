@@ -2135,13 +2135,28 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
             if dialect == "oracle":
                 if trunc_part == "day":
                     return f"TRUNC({value})"
-                return f"TRUNC({value}, '{raw_part}')"
+                # Oracle TRUNC format codes are NOT the source spelling: 'WEEK'
+                # (ORA-01898), 'QUARTER'/'MINUTE' (ORA-01821) are all rejected.
+                # Map each unit to Oracle's valid code — 'IW' is the ISO
+                # (Monday-based) week, matching PG's date_trunc('week').
+                ora_fmt = {
+                    "month": "MM",
+                    "year": "YYYY",
+                    "quarter": "Q",
+                    "week": "IW",
+                    "hour": "HH24",
+                    "minute": "MI",
+                }[trunc_part]
+                return f"TRUNC({value}, '{ora_fmt}')"
             if dialect == "tsql":
                 # CAST AS DATE works on every supported version; DATETRUNC
-                # (2022+) covers the other parts.
+                # (2022+) covers the other parts. PG's week is ISO (Monday);
+                # T-SQL DATETRUNC(week) is Sunday-based, so use ISO_WEEK to
+                # return the same Monday start.
                 if trunc_part == "day":
                     return f"CAST({value} AS DATE)"
-                return f"DATETRUNC({trunc_part}, {value})"
+                ts_part = "ISO_WEEK" if trunc_part == "week" else trunc_part
+                return f"DATETRUNC({ts_part}, {value})"
             if dialect == "mysql":
                 if trunc_part == "day":
                     return f"DATE({value})"
@@ -2149,6 +2164,18 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
                     return f"DATE_FORMAT({value}, '%Y-%m-01')"
                 if trunc_part == "year":
                     return f"DATE_FORMAT({value}, '%Y-01-01')"
+                if trunc_part == "week":
+                    # ISO/Monday week start (WEEKDAY: Monday=0), matching PG.
+                    return (
+                        f"DATE_SUB(DATE({value}), INTERVAL WEEKDAY(DATE({value})) DAY)"
+                    )
+                if trunc_part == "quarter":
+                    return (
+                        f"MAKEDATE(YEAR({value}), 1) + "
+                        f"INTERVAL (QUARTER({value}) - 1) QUARTER"
+                    )
+                # hour/minute have no faithful MySQL date-truncation spelling —
+                # fall through to the warned validity-gate degrade.
 
     # Date formatting/parsing. sqlglot canonicalizes TO_CHAR(date,fmt) to
     # TIME_TO_STR and TO_TIMESTAMP/TO_DATE(str,fmt) to STR_TO_TIME, with the

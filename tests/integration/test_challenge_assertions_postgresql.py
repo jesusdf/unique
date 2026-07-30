@@ -292,6 +292,22 @@ CASES.update(
                 ),
             },
         ),
+        # func: PG date_trunc('week') is ISO/Monday. T-SQL DATETRUNC(week) is
+        # Sunday-based -> use ISO_WEEK; Oracle 'WEEK' is invalid -> 'IW'; MySQL
+        # via WEEKDAY. All three now return 2020-06-15 (live-diffed).
+        "pg-date-trunc-week": Case(
+            "pg-date-trunc-week ",
+            {
+                "tsql": Expect(
+                    present=("DATETRUNC(ISO_WEEK,",), absent=("date_trunc", "week,")
+                ),
+                "oracle": Expect(
+                    present=("TRUNC(DATE '2020-06-17', 'IW')",),
+                    absent=("date_trunc", "'WEEK'"),
+                ),
+                "mysql": Expect(present=("INTERVAL WEEKDAY(",), absent=("date_trunc",)),
+            },
+        ),
         "pg-drop-default": Case(
             "pg-drop-default ",
             {
