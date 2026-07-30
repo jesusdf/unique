@@ -122,9 +122,9 @@ Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition
 | red2-ora-plus-outer-join-dup | invalid (2) | oracle→postgresql,tsql,mysql | (+) with two conds on same table -> spurious CROSS JOIN tb b (duplicate alias) | live PG "table name b specified more than once"; single-(+) case works. No warning. Source valid on Oracle | Merge all (+) preds for a table into one join ON; no extra CROSS JOIN |
 | red2-my-delete-orderby-limit-drop | lying-warning (2) | mysql→postgresql,tsql,oracle | DELETE/UPDATE ORDER BY LIMIT n -> LIMIT dropped, affects ALL rows | live: MySQL leaves 5 of 10, transpiled leaves 0 (mass data loss). Only the internal unread-args tripwire warns (doesn't convey data loss). T-SQL DELETE TOP IS translated (asymmetric) | Rewrite via keyed subquery per target or emit destructive-degrade warning |
 
-### Batch summary FINAL (RED round 2, seeded)
-- 16 scored findings, 76 points, 6 classes. START d4d572d.
-- func 20 (4), invalid 24 (12), lying-warning 14 (7), silent-drop 8 (2), composition 5 (1), consistency 4 (1). Max class invalid 31.6% (<50%); 6 classes.
+### Batch summary FINAL (RED round 2, seeded) — CORRECTED COUNT
+- **27 scored findings, 75 points, 6 classes.** START d4d572d; committed-time >= 1h (over==True).
+- By class (points): invalid 24 (12 cases), func 20 (4), lying-warning 14 (7), silent-drop 8 (2), composition 5 (1), consistency 4 (1) = 75. Max class by points invalid 32% (< 50% cap); 6 classes (>= 3). (Earlier "provisional/16-finding" summary blocks above are superseded by this line — I lost the running tally mid-batch; the authoritative count is the 27 `red2-*` CASE[open] headers across the four challenge_*.sql scripts.)
 
 <!-- RED batch round 2 END marker: run the commit-timestamp check; batch over when over==True. 16 scored findings / 76 pts / 6 classes. -->
 - Unverified tail note (NOT scored): T-SQL CROSS APPLY dbo.tvf(a.id) -> PG "CROSS JOIN LATERAL (SELECT) f" (empty select list, TVF call lost) with no warning on the PG leg (Oracle/MySQL warn) — needs a TVF definition to live-validate the source; flagged for BLUE.
