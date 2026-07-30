@@ -264,17 +264,21 @@ silently change results wherever declaration order and alphabetical order
 disagree (live-diffed: MySQL `('lo','mid','hi')` vs PostgreSQL
 `('hi','lo','mid')`).
 
-> **Warning** **Open, undocumented-by-warning limitation** — no
-> warning currently fires for this case (`my-enum-order`, corpus status
-> `[open]`, 2026-07-30 campaign). A feature brief is pending
-> (`docs/TODO.md` B29): persist the harvested value list and rewrite
-> ordering-sensitive uses of the column (`ORDER BY`, `MIN`/`MAX`, `<`/`>`
-> comparisons) into the ordinal `CASE`, keeping the plain value everywhere
-> else. The maintainer explicitly rejected a blanket warning as the fix (it
-> would carrier-spam every real-world `ENUM` column, most of which are never
-> compared ordinally) in favour of the full rewrite.
+> **Note** faithful for ordering — **fixed 2026-07-30**: the converter
+> harvests each `ENUM` column's declared value list into a cross-statement
+> registry and rewrites `ORDER BY <enum-col>` into the ordinal
+> `CASE c WHEN 'lo' THEN 1 WHEN 'mid' THEN 2 … END` sort key, so every
+> target reproduces MySQL's declaration-index order. Comparisons
+> (`<`/`>`) and `MIN`/`MAX` are intentionally **left as plain string
+> semantics**: live verification on MySQL 8.4 showed MySQL itself uses
+> string comparison for those outside a sort context, so the
+> VARCHAR+CHECK degrade already matches them — rewriting them to the
+> ordinal form would have *introduced* a divergence. An enum sorted
+> through `SELECT *`, a derived table or dynamic SQL cannot be resolved
+> and keeps the plain value (documented residual).
 
-**See Also.** [`my-enum-order`](../../tests/fixtures/challenge/challenge_mysql.sql) (`[open]`) · `docs/TODO.md` B29 ·
+**See Also.** [`my-enum-order`](../../tests/fixtures/challenge/challenge_mysql.sql) (`[fixed]`) ·
+`transformer.py::_rewrite_enum_ordering` ·
 `emit_ddl.py::_emit_enum_type`.
 
 ## Topics left out for lack of source support

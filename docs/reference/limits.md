@@ -2,7 +2,7 @@
 
 > **Generated — do not edit by hand.** Produced by `python scripts/generate_reference_docs.py` from every `-- CASE[limit]...:` header in `tests/fixtures/challenge/challenge_*.sql`. The CI freshness gate (`python scripts/generate_reference_docs.py --check`) fails the build if this file drifts from the source data.
 
-Each row is an approved, documented divergence: a construct the transpiler cannot render faithfully off the listed source engine, already live-verified and citing its [docs/03-unsupported.md](../03-unsupported.md) entry. A future stable per-case code (`UNIQUE-NNNN`, brief B32) will slot in as an additional column once that registry lands.
+Each row is an approved, documented divergence: a construct the transpiler cannot render faithfully off the listed source engine, already live-verified and citing its [docs/03-unsupported.md](../03-unsupported.md) entry. A future stable per-case code (`UNIQUE-NNNN`) will slot in as an additional column once that registry lands.
 
 | Case ID | Source | Class | Description | 03-unsupported |
 |---|---|---|---|---|

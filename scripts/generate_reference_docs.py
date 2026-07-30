@@ -420,7 +420,7 @@ def render_limits_page(rows: list[LimitRow]) -> str:
         "transpiler cannot render faithfully off the listed source engine, "
         "already live-verified and citing its "
         "[docs/03-unsupported.md](../03-unsupported.md) entry. A future "
-        "stable per-case code (`UNIQUE-NNNN`, brief B32) will slot in as an "
+        "stable per-case code (`UNIQUE-NNNN`) will slot in as an "
         "additional column once that registry lands.\n\n"
     )
     headers = ["Case ID", "Source", "Class", "Description", "03-unsupported"]
@@ -589,7 +589,7 @@ def render_warnings_page() -> str:
     parts.append(
         "One entry per stable diagnostic code the transpiler can emit. `code` "
         "is the grep/suppress token (`-- UNIQUE-1234: …`); every code is "
-        "anchored as `warnings.md#unique-1234`. A code with a B31 rationale "
+        "anchored as `warnings.md#unique-1234`. A code with a rationale entry "
         f"({len(with_rationale)} of {len(codes)}) renders as a recipe: "
         "**Problem** (the triggering construct), **Solution (pointer)** (what "
         "Unique does about it — a pointer, not a worked example: the "
