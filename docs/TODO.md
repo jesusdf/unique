@@ -67,6 +67,26 @@ engines we transpile (ORA-00942, SQLSTATE) and modern compilers (rustc E0308).*
 - **Locks in:** every `docs/rationale/` claim about a degrade becomes
   traceable to a registry entry; new degrades cannot ship without a rationale.
 
+### F2 — web UI "Compare" button for F1 (P3; depends on F1; approved 2026-07-30)
+
+*Maintainer-specified UI (2026-07-30):*
+
+- **Button:** a `Compare` button in the web UI, placed **to the right of
+  `Transpile`**, styled with the **same color as the version-label badge's
+  background** (reuse that CSS token/class — do not hardcode a new color).
+- **Flow:** compares the two editor panes' scripts via the F1 API
+  (`similarity` endpoint — add it to `src/unique/api/` mirroring the
+  transpile endpoint, thin wrapper over `core/similarity.py`).
+- **Result presentation (expectation management, REQUIRED):** the result
+  panel must explain what the percentage REPRESENTS — *normalized structural
+  similarity* of the two scripts after pivot-normalization (per-dimension
+  breakdown shown), explicitly NOT semantic equivalence nor a probability of
+  correctness — mirroring F1's presentation mandate and its
+  `docs/03-unsupported.md` boundary note. Wording visible next to the score,
+  not hidden in a tooltip.
+- **Build:** `web/` source + `build.py`; probe test for the endpoint; UI
+  smoke per existing web-test patterns.
+
 ### F1 — `unique compare`: structural similarity score between two scripts (P2)
 
 Full brief below, in the `audit/2026-07-24/09-fix-briefs.md` format — the
