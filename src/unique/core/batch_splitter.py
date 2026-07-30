@@ -811,6 +811,12 @@ class BatchSplitter:
         )
         begin_re = re.compile(r"(?i)\bBEGIN\b")
         end_re = re.compile(r"(?i)\bEND\b")
+        # CASE opens a block that its ``END`` (expression form) or ``END CASE``
+        # (statement form) closes — count openers so a ``SET v = CASE ... END``
+        # inside a DELIMITER-less body does not decrement the routine's own
+        # BEGIN/END depth to zero and tear the body mid-statement.
+        case_re = re.compile(r"(?i)\bCASE\b")
+        end_case_re = re.compile(r"(?i)\bEND\s+CASE\b")
 
         def flush(upto_line: int) -> None:
             nonlocal current, batch_start
@@ -870,11 +876,17 @@ class BatchSplitter:
             if delimiter == ";" and routine_re.search(line):
                 in_routine = True
             if in_routine and delimiter == ";":
-                # Count BEGIN/END on this line, ignoring END IF/END LOOP etc.
+                # Count BEGIN + CASE openers on this line (a ``CASE`` that is
+                # part of ``END CASE`` is a closer, not an opener). Their ``END``
+                # decrements below; ``END IF/LOOP/WHILE/REPEAT`` are ignored (no
+                # opener was counted for those keywords).
                 begin_depth += len(begin_re.findall(line))
+                begin_depth += len(case_re.findall(line)) - len(
+                    end_case_re.findall(line)
+                )
                 for m in end_re.finditer(line):
                     rest = line[m.end() :].lstrip().upper()
-                    if rest.startswith(("IF", "LOOP", "WHILE", "CASE", "REPEAT")):
+                    if rest.startswith(("IF", "LOOP", "WHILE", "REPEAT")):
                         continue
                     begin_depth -= 1
                     if begin_depth <= 0:
