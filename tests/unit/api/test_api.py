@@ -96,6 +96,34 @@ class TestTranspile:
         assert resp.status_code == 200
         assert "PROCEDURE" in resp.json()["sql"].upper()
 
+    _GUC = {"sql": "SET lock_timeout = 0;", "source": "postgresql", "target": "tsql"}
+
+    def test_warning_carries_code(self, client: TestClient) -> None:
+        resp = client.post("/api/v1/transpile", json=self._GUC)
+        assert resp.status_code == 200
+        body = resp.json()
+        codes = {w["code"] for w in body["warnings"]}
+        assert "UNIQUE-1218" in codes
+        assert body["suppressed_warning_count"] == 0
+
+    def test_ignore_suppresses_matching_warning(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/transpile", json={**self._GUC, "ignore": ["UNIQUE-1218"]}
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert all(w["code"] != "UNIQUE-1218" for w in body["warnings"])
+        assert body["suppressed_warning_count"] == 1
+        # Carrier stays in the SQL — ignore governs only the warning channel.
+        assert "-- UNIQUE-1218:" in body["sql"]
+
+    def test_ignore_unknown_code_returns_422(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/v1/transpile", json={**self._GUC, "ignore": ["UNIQUE-9999"]}
+        )
+        assert resp.status_code == 422
+        assert "UNIQUE-9999" in resp.json()["detail"]["codes"]
+
     def test_db_url_rejected_when_disabled(self, client: TestClient) -> None:
         # Database connections are off by default; a db_url must be rejected.
         resp = client.post(

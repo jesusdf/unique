@@ -119,6 +119,97 @@ class TestTranspileCommand:
         assert result.exit_code == 0
 
 
+class TestTranspileIgnore:
+    # SET lock_timeout is a PostgreSQL session GUC with no T-SQL form; it
+    # degrades with a UNIQUE-1218 warning.
+    _GUC = "SET lock_timeout = 0;"
+
+    def test_warning_shows_its_code_by_default(self, runner: CliRunner) -> None:
+        result = runner.invoke(
+            cli,
+            ["transpile", "--from", "postgresql", "--to", "tsql"],
+            input=self._GUC,
+        )
+        assert result.exit_code == 0
+        assert "WARNING [UNIQUE-1218]:" in result.output
+        assert "suppressed" not in result.output
+
+    def test_ignore_suppresses_matching_warning(self, runner: CliRunner) -> None:
+        result = runner.invoke(
+            cli,
+            [
+                "transpile",
+                "--from",
+                "postgresql",
+                "--to",
+                "tsql",
+                "--ignore",
+                "UNIQUE-1218",
+            ],
+            input=self._GUC,
+        )
+        assert result.exit_code == 0
+        # The WARNING line is gone from the channel...
+        assert "WARNING [UNIQUE-1218]:" not in result.output
+        assert "1 warning(s) suppressed by --ignore" in result.output
+        # ...but the carrier stays in the SQL — --ignore governs only the
+        # warning channel, the SQL text is the artifact.
+        assert "-- UNIQUE-1218:" in result.output
+
+    def test_ignore_is_case_insensitive(self, runner: CliRunner) -> None:
+        result = runner.invoke(
+            cli,
+            [
+                "transpile",
+                "--from",
+                "postgresql",
+                "--to",
+                "tsql",
+                "--ignore",
+                "unique-1218",
+            ],
+            input=self._GUC,
+        )
+        assert result.exit_code == 0
+        assert "1 warning(s) suppressed by --ignore" in result.output
+
+    def test_unknown_ignore_code_errors(self, runner: CliRunner) -> None:
+        result = runner.invoke(
+            cli,
+            [
+                "transpile",
+                "--from",
+                "postgresql",
+                "--to",
+                "tsql",
+                "--ignore",
+                "UNIQUE-9999",
+            ],
+            input=self._GUC,
+        )
+        assert result.exit_code == 1
+        assert "unknown diagnostic code" in result.output.lower()
+        assert "UNIQUE-9999" in result.output
+
+    def test_ignore_non_matching_code_keeps_warning(self, runner: CliRunner) -> None:
+        result = runner.invoke(
+            cli,
+            [
+                "transpile",
+                "--from",
+                "postgresql",
+                "--to",
+                "tsql",
+                "--ignore",
+                "UNIQUE-1001",
+            ],
+            input=self._GUC,
+        )
+        assert result.exit_code == 0
+        assert "WARNING [UNIQUE-1218]:" in result.output
+        assert "suppressed" not in result.output
+
+
 class TestValidateCommand:
     def test_valid_sql(self, runner: CliRunner, tmp_path: Path) -> None:
         f = tmp_path / "ok.sql"

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 
 import click
 
+from unique.core import diagnostics
 from unique.core.registry import DialectRegistry
 from unique.core.transpiler import TranspileOptions, Transpiler
 from unique.core.validation import validate_source
@@ -50,6 +51,18 @@ def cli() -> None:
     help="Transpile even if the source has syntax errors (reported by default).",
 )
 @click.option(
+    "--ignore",
+    "ignore_codes",
+    multiple=True,
+    metavar="UNIQUE-NNNN",
+    help=(
+        "Suppress warnings carrying this diagnostic code from the WARNING "
+        "output (repeatable). The code must be registered (see the reference "
+        "catalog). Carriers stay in the transpiled SQL — the SQL text is the "
+        "artifact; --ignore governs only the warning channel."
+    ),
+)
+@click.option(
     "--db-url",
     "db_url",
     default=None,
@@ -66,12 +79,24 @@ def transpile(
     target: str,
     output: str | None,
     ignore_syntax_errors: bool,
+    ignore_codes: tuple[str, ...],
     db_url: str | None,
 ) -> None:
     """Transpile SQL from one dialect to another.
 
     Reads from INPUT_FILE or stdin if no file is given.
     """
+    # Reject unregistered --ignore codes up front (a typo silently suppressing
+    # nothing is worse than an error).
+    ignore_set = {code.upper() for code in ignore_codes}
+    unknown = sorted(c for c in ignore_set if not diagnostics.is_registered(c))
+    if unknown:
+        click.echo(
+            f"Error: unknown diagnostic code(s) for --ignore: {', '.join(unknown)}. "
+            "Codes look like UNIQUE-1234; see the reference catalog.",
+            err=True,
+        )
+        sys.exit(1)
     # Read input
     if input_file:
         with open(input_file, encoding="utf-8") as f:
@@ -110,10 +135,15 @@ def transpile(
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
-    # Output warnings
-    if result.has_warnings:
-        for warning in result.warnings:
-            click.echo(f"WARNING: {warning.message}", err=True)
+    # Output warnings, honoring --ignore (the warning channel only — carriers
+    # remain in result.sql).
+    shown = [w for w in result.warnings if w.code not in ignore_set]
+    suppressed = len(result.warnings) - len(shown)
+    for warning in shown:
+        prefix = f"WARNING [{warning.code}]: " if warning.code else "WARNING: "
+        click.echo(f"{prefix}{warning.message}", err=True)
+    if suppressed:
+        click.echo(f"{suppressed} warning(s) suppressed by --ignore", err=True)
 
     if result.has_unsupported:
         for feature in result.unsupported:

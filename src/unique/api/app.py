@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from unique import __version__
+from unique.core import diagnostics
 from unique.core.detection import detect_dialect
 from unique.core.errors import ParseError, UnknownDialectError
 from unique.core.similarity import compare as compare_scripts
@@ -199,6 +200,16 @@ class TranspileRequest(BaseModel):
             "request is rejected (422) with the located errors."
         ),
     )
+    ignore: list[str] = Field(
+        default_factory=list,
+        description=(
+            "UNIQUE-NNNN diagnostic codes to suppress from the returned warnings "
+            "(mirrors the CLI --ignore). Each must be a registered code; an "
+            "unknown code is rejected (422). Carriers stay in the transpiled SQL "
+            "— the SQL text is the artifact; ignore governs only the warning "
+            "channel. suppressed_warning_count reports how many were dropped."
+        ),
+    )
 
 
 class SyntaxIssueModel(BaseModel):
@@ -224,6 +235,7 @@ class TranspileResponse(BaseModel):
     sql: str
     warnings: list[TranspileWarning] = []
     unsupported: list[str] = []
+    suppressed_warning_count: int = 0
 
 
 class SimilarityRequest(BaseModel):
@@ -365,6 +377,20 @@ def _source_syntax_issues(sql: str, source: str) -> list[SyntaxIssueModel]:
 def transpile_sql(request: TranspileRequest) -> TranspileResponse:
     """Transpile SQL from one dialect to another."""
     db_url = _resolve_db_option(request.db, request.db_url)
+    ignore_set = {code.upper() for code in request.ignore}
+    unknown = sorted(c for c in ignore_set if not diagnostics.is_registered(c))
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "unknown_diagnostic_code",
+                "message": (
+                    "Unknown diagnostic code(s) for 'ignore'; codes look like "
+                    "UNIQUE-1234 and must be registered."
+                ),
+                "codes": unknown,
+            },
+        )
     if not request.ignore_syntax_errors:
         issues = _source_syntax_issues(request.sql, request.source)
         if issues:
@@ -398,13 +424,15 @@ def transpile_sql(request: TranspileRequest) -> TranspileResponse:
             status_code=500, detail="Transpilation failed; see server logs."
         ) from e
 
+    shown = [w for w in result.warnings if w.code not in ignore_set]
     return TranspileResponse(
         sql=result.sql,
         warnings=[
             TranspileWarning(message=w.message, feature=w.feature, code=w.code)
-            for w in result.warnings
+            for w in shown
         ],
         unsupported=result.unsupported,
+        suppressed_warning_count=len(result.warnings) - len(shown),
     )
 
 
