@@ -487,6 +487,9 @@ class TestDateAdd:
         t = ProceduralTransformer("tsql", "oracle")
         out = t._transform_node(RawSQL(sql="DATEADD(month, 3, d)", reason="x"))
         assert "ADD_MONTHS(d, 3)" in out.sql
+        # Day-preserving compensation so a month-end operand does not stick to
+        # the target month end the way bare ADD_MONTHS does (reda-ts-addmonths).
+        assert "LEAST(EXTRACT(DAY FROM d), EXTRACT(DAY FROM LAST_DAY(" in out.sql
 
     def test_dateadd_to_postgresql_interval(self) -> None:
         t = ProceduralTransformer("tsql", "postgresql")

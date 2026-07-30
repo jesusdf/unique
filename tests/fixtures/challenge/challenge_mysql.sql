@@ -378,7 +378,7 @@ SELECT x, COUNT(*) FROM (SELECT 'a' x UNION ALL SELECT 'A' x UNION ALL SELECT 'b
 -- CASE[fixed]: my-group-concat — fails on postgresql. function string_agg(integer, unknown) does not exist
 SELECT GROUP_CONCAT(x ORDER BY x SEPARATOR '|') AS r FROM (SELECT 1 x UNION SELECT 2) t
 
--- CASE[fixed]: my-groupconcat-distinct — PG STRING_AGG(DISTINCT v, sep ORDER BY key) needs the ORDER BY key cast identically to the arg; a trailing ASC/DESC must not defeat the match (both here and the MySQL roundtrip guard). Live 2|1 on PG/Oracle; roundtrip keeps the separator.
+-- CASE[fixed]: my-groupconcat-distinct — a DISTINCT ordered string-aggregate into PG moves the DISTINCT into a (SELECT DISTINCT v) derived table so the aggregate orders by the raw value (see my-groupconcat-distinct-numord); Oracle keeps LISTAGG(DISTINCT …). Live 2|1 on PG/Oracle; the MySQL roundtrip keeps the separator.
 SELECT GROUP_CONCAT(DISTINCT x ORDER BY x DESC SEPARATOR '|') FROM (SELECT 1 x UNION ALL SELECT 1 UNION ALL SELECT 2) t
 
 -- CASE[fixed]: my-groupconcat-order — fails on postgresql. function string_agg(integer, unknown) does not exist
@@ -896,7 +896,7 @@ SELECT SQL_CALC_FOUND_ROWS x FROM (SELECT 1 x) t LIMIT 1
 -- CASE[fixed][class=func]: my-concat-null-col — CONCAT with a NULL arg returns NULL in MySQL, but PG/T-SQL/Oracle CONCAT IGNORE NULLs. The existing my-concat-null fix only constant-folds LITERAL-NULL args; with a runtime (column) NULL the CONCAT is emitted verbatim and the null-propagation is lost. MySQL=NULL; PG/T-SQL/Oracle='1'. No warning. (Faithful map: PG/T-SQL `||`/`+` propagate NULL; Oracle needs a CASE.)
 SELECT CONCAT(a, b) AS c FROM (SELECT 1 AS a, CAST(NULL AS CHAR) AS b) t
 
--- CASE[open][class=func]: my-groupconcat-distinct-numord — GROUP_CONCAT(DISTINCT x ORDER BY x DESC) over a NUMERIC column orders numerically in MySQL, but the PG rewrite STRING_AGG(DISTINCT CAST(x AS TEXT) ORDER BY CAST(x AS TEXT) DESC) orders LEXICALLY (PG forces the ORDER BY key to equal the DISTINCT'd text arg). The [fixed] my-groupconcat-distinct case only used single-digit values {1,1,2} where text and numeric order coincide, so it locked in a fix that is wrong for multi-digit values. MySQL/Oracle='10-2-1'; PG='2-10-1'. No warning.
+-- CASE[fixed][class=func]: my-groupconcat-distinct-numord — GROUP_CONCAT(DISTINCT x ORDER BY x DESC) over a NUMERIC column orders numerically in MySQL, but the old PG rewrite STRING_AGG(DISTINCT CAST(x AS TEXT) ORDER BY CAST(x AS TEXT) DESC) ordered LEXICALLY (PG forces the ORDER BY key to equal the DISTINCT'd text arg). Fixed for the PG target by moving the DISTINCT into a derived table (SELECT DISTINCT x) so the aggregate can ORDER BY the raw numeric x — like the pg-distinct-on rewrite, bounded to a single un-grouped aggregation. Live-verified MySQL/PG/Oracle='10-2-1'. Oracle (LISTAGG) and T-SQL (warned degrade) unaffected.
 SELECT GROUP_CONCAT(DISTINCT x ORDER BY x DESC SEPARATOR '-') AS g FROM (SELECT 2 x UNION ALL SELECT 10 UNION ALL SELECT 1 UNION ALL SELECT 2) t
 
 -- CASE[fixed][class=func]: my-timestampdiff-mon-pgora — TIMESTAMPDIFF(MONTH,...) counts COMPLETE months in MySQL, but the PG and Oracle rewrites use a naive (year*12+month) boundary difference, which overcounts when the end day-of-month precedes the start's. The [fixed] my-timestampdiff-mon fix was applied to T-SQL ONLY (DATEADD>end adjustment); PG/Oracle still give the boundary count. MySQL/T-SQL=1; PG/Oracle=2. No warning. (Same source shape as the existing case reproduces it on PG/Oracle.)

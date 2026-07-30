@@ -760,6 +760,7 @@ class Transformer:
             result = [self._gate_pg_internals(node) for node in result]
         if self.context.target == "postgresql":
             result = [self._gate_pg_setop_order_aggregate(node) for node in result]
+            result = [self._gate_pg_agg_distinct_order(node) for node in result]
         if self.context.source != self.context.target:
             result = [self._gate_unmapped_operator(node) for node in result]
         if self.context.source == "oracle" and self.context.target != "oracle":
@@ -2342,6 +2343,68 @@ class Transformer:
         if isinstance(value, tuple):
             return any(self._order_expr_offends(item) for item in value)
         return False
+
+    _AGG_DISTINCT_ORDER = ("GROUP_CONCAT", "STRING_AGG", "LISTAGG")
+
+    def _gate_pg_agg_distinct_order(self, node: ASTNode) -> ASTNode:
+        """Restructure a DISTINCT ordered string-aggregate for PostgreSQL.
+
+        PG's ``STRING_AGG(DISTINCT v ORDER BY k)`` requires the ORDER BY key to be
+        the DISTINCT'd value, so a numeric column can only be ordered by its own
+        *text* cast — ``'2-10-1'`` instead of ``'10-2-1'`` (challenge
+        my-groupconcat-distinct-numord). Move the DISTINCT into a derived table so
+        the aggregate can order by the raw (numeric) value:
+        ``STRING_AGG(v, sep ORDER BY v)`` over ``(SELECT DISTINCT v FROM …)``.
+
+        Bounded — like the pg-distinct-on rewrite — to a single, un-grouped
+        aggregation whose ORDER BY names exactly the aggregated argument; anything
+        outside the bound is left to the existing emitter.
+        """
+        if not (
+            isinstance(node, SelectStatement)
+            and node.set_op is None
+            and node.from_clause is not None
+            and len(node.columns) == 1
+            and not node.group_by
+            and not node.group_by_composite
+            and node.group_modifier is None
+            and node.grouping_sets_sql is None
+            and node.having is None
+            and not node.ctes
+        ):
+            return node
+        col = node.columns[0]
+        fn = col.expression if isinstance(col, Alias) else col
+        if not (
+            isinstance(fn, FunctionCall)
+            and fn.distinct
+            and fn.name.upper() in self._AGG_DISTINCT_ORDER
+            and fn.args
+            and isinstance(fn.args[0], RawSQL)
+            and " ORDER BY " in fn.args[0].sql
+        ):
+            return node
+        expr_txt, order_txt = fn.args[0].sql.split(" ORDER BY ", 1)
+        order_txt = re.sub(r"(?i)\s+NULLS\s+(FIRST|LAST)\s*$", "", order_txt).strip()
+        order_key = re.sub(r"(?i)\s+(ASC|DESC)\s*$", "", order_txt).strip()
+        if order_key.upper() != expr_txt.strip().upper():
+            return node
+        inner = SelectStatement(
+            columns=(RawSQL(sql=expr_txt.strip(), reason="agg distinct dedup"),),
+            distinct=True,
+            from_clause=node.from_clause,
+            joins=node.joins,
+            where=node.where,
+        )
+        new_fn = replace(fn, distinct=False)
+        new_col = replace(col, expression=new_fn) if isinstance(col, Alias) else new_fn
+        return replace(
+            node,
+            columns=(new_col,),
+            from_clause=SubqueryExpression(query=inner, alias="uq_agg_distinct"),
+            joins=(),
+            where=None,
+        )
 
     def _gate_tsql_agg_distinct(self, node: ASTNode) -> ASTNode:
         """Degrade a statement using STRING_AGG(DISTINCT …) — WHOLE, on

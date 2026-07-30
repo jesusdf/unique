@@ -92,6 +92,17 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "oracle": {"present": ["TRUNC(AVG(x))"], "absent": []},
         "mysql": {"present": ["TRUNCATE(AVG(x), 0)"], "absent": []},
     },
+    # func: DATEADD(MONTH,1,month-end) keeps the day-of-month on T-SQL/MySQL/PG
+    # (2020-02-29 -> 2020-03-29) but Oracle ADD_MONTHS sticks to the month end
+    # (-> 2020-03-31). The Oracle map subtracts the days ADD_MONTHS stepped past
+    # LEAST(day, target-month-length). PG/MySQL already clamp natively (covered by
+    # ts-month-overflow), so only the Oracle divergence is asserted here.
+    "reda-ts-addmonths-lastday": {
+        "oracle": {
+            "present": ["LEAST(EXTRACT(DAY FROM", "LAST_DAY(ADD_MONTHS("],
+            "absent": ["DATEADD"],
+        },
+    },
     # func: DATALENGTH(N'abc') = 6 (NVARCHAR is UTF-16, 2 bytes/char), not the
     # OCTET_LENGTH=3 of the UTF-8 text. Fold a national literal to its exact
     # UTF-16 byte count (verified against T-SQL, incl. supplementary chars).
