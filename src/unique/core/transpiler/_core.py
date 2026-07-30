@@ -79,6 +79,7 @@ from ._text_rules import (  # noqa: F401
     _TSQL_CREATE_SCHEMA_RE,
     _aggregate_warnings,
     _carrier_fragments,
+    _covering_warnings,
     _double_quoted_to_strings,
     _expand_tsql_compound_assignment,
     _extract_catalog_guard,
@@ -171,6 +172,7 @@ def _warn_guard_else_dropped(
                 "guard_dropped",
                 source,
                 target,
+                code="UNIQUE-1226",
             ),
         ],
         unsupported=result.unsupported,
@@ -666,22 +668,33 @@ class Transpiler:
                 # comments (i.e. the statement was dropped from the output).
                 if batch.batch_type != BatchType.COMMENT:
                     frags = _carrier_fragments(terminated)
-                    new_frags = [(f, c) for f, c in frags if f not in reconciled_frags]
-                    if new_frags:
-                        existing = [w.message for w in all_warnings]
-                        for frag, carrier_code in new_frags:
-                            reconciled_frags.add(frag)
-                            if not _warning_covers(frag, existing):
-                                all_warnings.append(
-                                    _warn(
-                                        frag,
-                                        "lossy_conversion",
-                                        source,
-                                        target,
-                                        code=carrier_code,
-                                    )
+                    for frag, carrier_code in frags:
+                        # Backfill (B32 wave 3): a direct warning from THIS batch
+                        # already reports the carrier but shipped code=None; stamp
+                        # the carrier's code onto it so the code lives once (in the
+                        # carrier) yet reaches the result object. Scoped to this
+                        # batch's warnings (not all_warnings) so a carrier that
+                        # recurs across batches — its fragment is then already in
+                        # reconciled_frags — still codes every batch's warning,
+                        # and the scan stays O(batch) rather than O(script²).
+                        if carrier_code is not None:
+                            for w in _covering_warnings(frag, result.warnings):
+                                if w.code is None:
+                                    w.code = carrier_code
+                        if frag in reconciled_frags:
+                            continue
+                        reconciled_frags.add(frag)
+                        # Synthesize a warning for a carrier no warning covers.
+                        if not _covering_warnings(frag, all_warnings):
+                            all_warnings.append(
+                                _warn(
+                                    frag,
+                                    "lossy_conversion",
+                                    source,
+                                    target,
+                                    code=carrier_code,
                                 )
-                                existing.append(frag)
+                            )
                     if is_comment:
                         for frag, _code in frags:
                             if frag not in unsupported_seen and not _warning_covers(
@@ -819,12 +832,15 @@ class Transpiler:
                             "procedural_parse",
                             source,
                             target,
+                            code="UNIQUE-1230",
                         )
                     )
 
             if parse_result.warnings:
                 for w in parse_result.warnings:
-                    warnings.append(_warn(w, "procedural_parse", source, target))
+                    warnings.append(
+                        _warn(w, "procedural_parse", source, target, code="UNIQUE-1230")
+                    )
 
             if parse_result.node is None:
                 return TranspileResult(
@@ -846,7 +862,15 @@ class Transpiler:
                 transformer = ProceduralTransformer(source, target, metadata_resolver)
                 node = transformer.transform(parsed_node)
                 for w in transformer.warnings:
-                    warnings.append(_warn(w, "procedural_transform", source, target))
+                    warnings.append(
+                        _warn(
+                            w,
+                            "procedural_transform",
+                            source,
+                            target,
+                            code="UNIQUE-1231",
+                        )
+                    )
             else:
                 node = parsed_node
 
@@ -907,6 +931,7 @@ class Transpiler:
                     "procedural",
                     source,
                     target,
+                    code="UNIQUE-1232",
                 )
             )
             return TranspileResult(
@@ -959,6 +984,7 @@ class Transpiler:
                     "alter_column_null",
                     source,
                     target,
+                    code="UNIQUE-1227",
                 )
             )
         return TranspileResult(
@@ -1134,6 +1160,7 @@ class Transpiler:
                         "physical_clause",
                         source,
                         target,
+                        code="UNIQUE-1221",
                     )
                 )
             # "ALTER TABLE t WITH [NO]CHECK ADD CONSTRAINT …": the WITH
@@ -1152,6 +1179,7 @@ class Transpiler:
                         "constraint_check",
                         source,
                         target,
+                        code="UNIQUE-1222",
                     )
                 )
 
@@ -1318,7 +1346,9 @@ class Transpiler:
             _reset_unread_arg_sink()
             ir_nodes = source_dialect.parse(sql)
             for msg in _drain_unread_arg_sink():
-                warnings.append(_warn(msg, _UNREAD_FEATURE, source, target))
+                warnings.append(
+                    _warn(msg, _UNREAD_FEATURE, source, target, code="UNIQUE-1228")
+                )
 
             if source != target:
                 transformer = Transformer(source, target)
@@ -1362,12 +1392,20 @@ class Transpiler:
             # gate mode aborts the conversion with an UnreadArgError before the
             # post-parse drain runs — surface the recorded residue too.
             for msg in _drain_unread_arg_sink():
-                warnings.append(_warn(msg, _UNREAD_FEATURE, source, target))
+                warnings.append(
+                    _warn(msg, _UNREAD_FEATURE, source, target, code="UNIQUE-1228")
+                )
             # exc_info: a rare escaping error (e.g. the one-off KeyError
             # 'into', audit 2026-07-24 N16) is undiagnosable from str(e) alone.
             logger.warning("DML transpilation failed: %s", e, exc_info=True)
             warnings.append(
-                _warn(f"DML transpilation failed: {e}", "dml", source, target)
+                _warn(
+                    f"DML transpilation failed: {e}",
+                    "dml",
+                    source,
+                    target,
+                    code="UNIQUE-1229",
+                )
             )
             return TranspileResult(
                 sql=f"/* TRANSPILATION ERROR: {e} */\n{sql}",
@@ -1452,6 +1490,7 @@ class Transpiler:
                             "guard_dropped",
                             source,
                             target,
+                            code="UNIQUE-1225",
                         ),
                     ],
                     unsupported=result.unsupported,
@@ -1619,6 +1658,7 @@ class Transpiler:
                     "guard_dropped",
                     source,
                     target,
+                    code="UNIQUE-1225",
                 ),
             ],
             unsupported=result.unsupported,
@@ -1935,6 +1975,7 @@ class Transpiler:
                             "set_option",
                             source,
                             target,
+                            code="UNIQUE-1223",
                         )
                     ],
                 )
@@ -1943,7 +1984,15 @@ class Transpiler:
             )
             return TranspileResult(
                 sql=commented,
-                warnings=[_warn(message, "unhandled_batch", source, target)],
+                warnings=[
+                    _warn(
+                        message,
+                        "unhandled_batch",
+                        source,
+                        target,
+                        code="UNIQUE-1224",
+                    )
+                ],
                 unsupported=[message],
             )
         if source == "oracle" and target != "oracle":
@@ -1965,6 +2014,7 @@ class Transpiler:
                         "set_option",
                         source,
                         target,
+                        code="UNIQUE-1223",
                     )
                 ],
             )

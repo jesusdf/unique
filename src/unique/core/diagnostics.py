@@ -1060,4 +1060,64 @@ DIAGNOSTICS: dict[str, Diagnostic] = {
         "live {target} validation rejected this statement ({first_err}); preserved as "
         "a comment",
     ),
+    "UNIQUE-1221": _D(
+        "orchestration",
+        "T-SQL TEXTIMAGE_ON filegroup clause dropped (physical storage, no "
+        "logical-schema impact)",
+    ),
+    "UNIQUE-1222": _D(
+        "orchestration",
+        "T-SQL WITH NOCHECK dropped; the constraint is added and the target validates "
+        "existing rows (no NOVALIDATE applied)",
+    ),
+    "UNIQUE-1223": _D(
+        "orchestration",
+        "session/client directive commented out (no cross-engine equivalent); the "
+        "directive is session-scoped and the specific statement is carried at runtime",
+    ),
+    "UNIQUE-1224": _D(
+        "orchestration",
+        "batch commented out (unrecognized migration-guard shape); the specific batch "
+        "is carried at runtime",
+    ),
+    "UNIQUE-1225": _D(
+        "statement",
+        "existence guard dropped; the guarded statement now runs unconditionally (no "
+        "conditional form on the target); the specific statement is carried at runtime",
+    ),
+    "UNIQUE-1226": _D(
+        "statement",
+        "guard ELSE branch dropped (only a diagnostic PRINT can be carried into the "
+        "target conditional); the specific branch is carried at runtime",
+    ),
+    "UNIQUE-1227": _D(
+        "ddl",
+        "Oracle MODIFY keeps the column's current nullability; the redundant NULL is "
+        "omitted (an explicit NULL raises ORA-01451 when the column is already "
+        "nullable)",
+    ),
+    "UNIQUE-1228": _D(
+        "validation",
+        "internal: a parsed sqlglot construct was not consumed by the converter "
+        "(unread arg) — the construct may be dropped; the specific arg is carried at "
+        "runtime",
+    ),
+    "UNIQUE-1229": _D(
+        "validation",
+        "DML transpilation failed (internal error); the source statement is preserved "
+        "as a comment; the error is carried at runtime",
+    ),
+    "UNIQUE-1230": _D(
+        "procedural",
+        "procedural parse note; the specific reason is carried at runtime",
+    ),
+    "UNIQUE-1231": _D(
+        "procedural",
+        "procedural transformation note; the specific reason is carried at runtime",
+    ),
+    "UNIQUE-1232": _D(
+        "procedural",
+        "procedural transpilation failed (internal error); the routine is preserved; "
+        "the error is carried at runtime",
+    ),
 }

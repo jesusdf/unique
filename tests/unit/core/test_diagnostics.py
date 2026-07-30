@@ -54,13 +54,19 @@ def test_every_diagnostic_has_category_and_message():
 
 
 def test_every_registered_code_is_emitted_in_src():
-    """A registered template must be referenced by an emission site."""
-    emitted: set[str] = set()
+    """A registered template must be referenced by an emission site.
+
+    A code reaches the output two ways: as a ``-- UNIQUE-NNNN:`` carrier in the
+    emitted SQL, or as a ``code="UNIQUE-NNNN"`` argument on a direct warning
+    (B32 wave 3 — non-carrier error/tripwire/guard paths). Either counts as a
+    reference; an orphaned template (neither) is dead metadata.
+    """
+    referenced: set[str] = set()
     for path in _src_files():
-        for num in _CARRIER_RE.findall(path.read_text(encoding="utf-8")):
-            emitted.add(f"UNIQUE-{num}")
-    unreferenced = sorted(set(DIAGNOSTICS) - emitted)
-    assert not unreferenced, f"registered but never emitted: {unreferenced}"
+        for num in _CODE_RE.findall(path.read_text(encoding="utf-8")):
+            referenced.add(f"UNIQUE-{num}")
+    unreferenced = sorted(set(DIAGNOSTICS) - referenced)
+    assert not unreferenced, f"registered but never referenced: {unreferenced}"
 
 
 def test_every_emitted_carrier_code_is_registered():
@@ -94,9 +100,12 @@ def test_is_registered():
 # To lower it: add honestly-sourced entries to unique.core.rationales.RATIONALES
 # (each traceable to a docs/rationale/ page, a docs/03-unsupported.md section,
 # or an emission-site docstring — never invented), then set this to the new,
-# smaller count. Current: 220 registered − 32 with a rationale = 188.
+# smaller count. Current: 232 registered (B32 wave 3 added UNIQUE-1221…1232,
+# non-carrier warning codes) − 32 with a rationale = 200. Wave 3 does NOT add
+# rationale entries (that is B31's floor to lower later), so the new codes RAISE
+# this count by 12.
 # ---------------------------------------------------------------------------
-_RATIONALE_UNCOVERED_FLOOR = 188
+_RATIONALE_UNCOVERED_FLOOR = 200
 
 _CASE_HEADER_RE = re.compile(
     r"^--\s*CASE\[[a-z]+\](?:\[[^\]]*\])*:\s*([A-Za-z0-9][A-Za-z0-9_-]*)\b"

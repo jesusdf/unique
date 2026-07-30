@@ -2,7 +2,7 @@
 
 > **Generated — do not edit by hand.** Produced by `python scripts/generate_reference_docs.py` from the `UNIQUE-NNNN` registry (`src/unique/core/diagnostics.py`) and the rationale side-table (`src/unique/core/rationales.py`). The CI freshness gate (`python scripts/generate_reference_docs.py --check`) fails the build if this file drifts from the source data.
 
-One row per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); `message` is the human-readable template rendered live at the emission site. The `construct` / `reason` / `example` / `divergence` columns are the B31 rationale — populated for 32 of 220 codes; the rest render `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down). Anchor each row as `warnings.md#unique-1234`.
+One row per stable diagnostic code the transpiler can emit. `code` is the grep/suppress token (`-- UNIQUE-1234: …`); `message` is the human-readable template rendered live at the emission site. The `construct` / `reason` / `example` / `divergence` columns are the B31 rationale — populated for 32 of 232 codes; the rest render `_(rationale pending)_` until a rationale is added (the coverage ratchet in `tests/unit/core/test_diagnostics.py` drives that count down). Anchor each row as `warnings.md#unique-1234`.
 
 | Code | Category | Message template | Construct | Reason | Example | Divergence |
 |---|---|---|---|---|---|---|
@@ -226,5 +226,17 @@ One row per stable diagnostic code the transpiler can emit. `code` is the grep/s
 | <a id="unique-1218"></a>`UNIQUE-1218` | orchestration | PostgreSQL session setting has no {target} equivalent; configure the session natively. | _(rationale pending)_ | — | — | — |
 | <a id="unique-1219"></a>`UNIQUE-1219` | orchestration | MySQL session setting has no {target} equivalent; configure the session natively. | _(rationale pending)_ | — | — | — |
 | <a id="unique-1220"></a>`UNIQUE-1220` | orchestration | live {target} validation rejected this statement ({first_err}); preserved as a comment | _(rationale pending)_ | — | — | — |
+| <a id="unique-1221"></a>`UNIQUE-1221` | orchestration | T-SQL TEXTIMAGE_ON filegroup clause dropped (physical storage, no logical-schema impact) | _(rationale pending)_ | — | — | — |
+| <a id="unique-1222"></a>`UNIQUE-1222` | orchestration | T-SQL WITH NOCHECK dropped; the constraint is added and the target validates existing rows (no<br>NOVALIDATE applied) | _(rationale pending)_ | — | — | — |
+| <a id="unique-1223"></a>`UNIQUE-1223` | orchestration | session/client directive commented out (no cross-engine equivalent); the directive is session-scoped<br>and the specific statement is carried at runtime | _(rationale pending)_ | — | — | — |
+| <a id="unique-1224"></a>`UNIQUE-1224` | orchestration | batch commented out (unrecognized migration-guard shape); the specific batch is carried at runtime | _(rationale pending)_ | — | — | — |
+| <a id="unique-1225"></a>`UNIQUE-1225` | statement | existence guard dropped; the guarded statement now runs unconditionally (no conditional form on the<br>target); the specific statement is carried at runtime | _(rationale pending)_ | — | — | — |
+| <a id="unique-1226"></a>`UNIQUE-1226` | statement | guard ELSE branch dropped (only a diagnostic PRINT can be carried into the target conditional); the<br>specific branch is carried at runtime | _(rationale pending)_ | — | — | — |
+| <a id="unique-1227"></a>`UNIQUE-1227` | ddl | Oracle MODIFY keeps the column's current nullability; the redundant NULL is omitted (an explicit<br>NULL raises ORA-01451 when the column is already nullable) | _(rationale pending)_ | — | — | — |
+| <a id="unique-1228"></a>`UNIQUE-1228` | validation | internal: a parsed sqlglot construct was not consumed by the converter (unread arg) — the construct<br>may be dropped; the specific arg is carried at runtime | _(rationale pending)_ | — | — | — |
+| <a id="unique-1229"></a>`UNIQUE-1229` | validation | DML transpilation failed (internal error); the source statement is preserved as a comment; the error<br>is carried at runtime | _(rationale pending)_ | — | — | — |
+| <a id="unique-1230"></a>`UNIQUE-1230` | procedural | procedural parse note; the specific reason is carried at runtime | _(rationale pending)_ | — | — | — |
+| <a id="unique-1231"></a>`UNIQUE-1231` | procedural | procedural transformation note; the specific reason is carried at runtime | _(rationale pending)_ | — | — | — |
+| <a id="unique-1232"></a>`UNIQUE-1232` | procedural | procedural transpilation failed (internal error); the routine is preserved; the error is carried at<br>runtime | _(rationale pending)_ | — | — | — |
 
-220 codes across 6 categories.
+232 codes across 6 categories.

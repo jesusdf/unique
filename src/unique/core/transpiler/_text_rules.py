@@ -362,6 +362,20 @@ def _carrier_fragments(sql: str) -> list[tuple[str, str | None]]:
     return fragments
 
 
+def _covering_warnings(
+    fragment: str, warnings: list[TransformWarning]
+) -> list[TransformWarning]:
+    """Warnings whose message already reports *fragment* (see ``_warning_covers``).
+
+    Used by the carrier-reconciliation backfill (B32 wave 3): a coded carrier
+    whose fragment is already covered by a direct warning left that warning
+    ``code=None``; here the caller stamps the carrier's code onto it so the
+    diagnostic code lives in exactly one place (the carrier) yet reaches the
+    result object.
+    """
+    return [w for w in warnings if _warning_covers(fragment, [w.message])]
+
+
 def _warning_covers(fragment: str, messages: list[str]) -> bool:
     """Return True if any warning message already reports *fragment*.
 
