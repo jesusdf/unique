@@ -797,6 +797,25 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     "— emulate with an AFTER trigger if the automatic action "
                     "is required (docs/03-unsupported.md)"
                 )
+            # Oracle has no ``SET DEFAULT`` referential action (only CASCADE /
+            # SET NULL / NO ACTION); shipped verbatim it is ORA-03001
+            # "unimplemented feature". Drop the action (the FK reverts to the
+            # NO ACTION default) and document the loss — an ON DELETE SET
+            # DEFAULT must be emulated with a trigger if it is required.
+            if dialect == "oracle" and re.search(
+                r"(?i)\bON\s+DELETE\s+SET\s+DEFAULT\b", constraint.sql
+            ):
+                constraint = dataclasses.replace(
+                    constraint,
+                    sql=re.sub(
+                        r"(?i)\s*\bON\s+DELETE\s+SET\s+DEFAULT\b", "", constraint.sql
+                    ),
+                )
+                trailing_comments.append(
+                    "-- UNIQUE: Oracle has no ON DELETE SET DEFAULT referential "
+                    "action; dropped (FK reverts to NO ACTION) — emulate with an "
+                    "AFTER DELETE trigger if required (docs/03-unsupported.md)"
+                )
             # A reconstructed T-SQL inline INDEX ("name|cols"): T-SQL and MySQL
             # keep the inline element; PG/Oracle get a separate CREATE INDEX
             # appended after the table (their CREATE TABLE has no inline form).

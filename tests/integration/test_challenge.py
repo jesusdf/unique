@@ -5549,3 +5549,28 @@ class TestExecNamedParamMysql:
         for target in ("postgresql", "oracle"):
             out = _exec_lines(_tx(src, "tsql", target))
             assert "=>" in out, (target, out)
+
+
+class TestFkOnDeleteSetDefaultOracle:
+    """red2-pg-fk-ondelete-setdefault-oracle: Oracle has no ON DELETE SET
+    DEFAULT (ORA-03001). Drop the action (revert to NO ACTION) with a carrier +
+    warning; PG/MySQL keep it."""
+
+    def test_oracle_drops_action_and_warns(self) -> None:
+        src = _case("challenge_postgresql.sql", "red2-pg-fk-ondelete-setdefault-oracle")
+        r = Transpiler().transpile(src, "postgresql", "oracle")
+        body = _exec_lines(r.sql)
+        assert "SET DEFAULT" not in body.upper(), r.sql
+        assert "REFERENCES p (id)" in body, r.sql
+        assert any(
+            "ON DELETE SET DEFAULT" in w.message and "Oracle" in w.message
+            for w in r.warnings
+        ), r.warnings
+        assert "UNIQUE:" in r.sql, r.sql
+        assert_statements_parse(body, "oracle", context="fk-setdefault")
+
+    def test_pg_and_mysql_keep_set_default(self) -> None:
+        src = _case("challenge_postgresql.sql", "red2-pg-fk-ondelete-setdefault-oracle")
+        for target in ("postgresql", "mysql"):
+            out = _tx(src, "postgresql", target)
+            assert "ON DELETE SET DEFAULT" in out.upper(), (target, out)
