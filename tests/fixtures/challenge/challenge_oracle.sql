@@ -568,3 +568,6 @@ SELECT CAST(a AS VARCHAR2(4000)) AS r FROM t WHERE REGEXP_LIKE(a, '^[0-9]+$')
 
 -- CASE[open][class=invalid]: reda-ora-decode-mixed-type — fails on postgresql. Oracle DECODE coerces every result/default to the FIRST result's datatype: DECODE(1,1,'a',2,'b',99) is CHAR-typed and returns 'a' (default 99 -> '99'). It maps to CASE WHEN 1=1 THEN 'a' ... ELSE 99 END with MIXED branch types; PostgreSQL resolves the CASE type to integer (from ELSE 99) and rejects the text branch: live 'invalid input syntax for type integer: "a"'. No warning. BLUE: cast all CASE branches to the first result's type to mirror DECODE coercion.
 SELECT DECODE(1, 1, 'a', 2, 'b', 99) AS r FROM DUAL
+
+-- CASE[open][class=invalid]: reda-ora-user-function — fails on postgresql, tsql. Oracle USER (a niladic current-user function, = 'SYSTEM' live) is emitted as a QUOTED IDENTIFIER: PG "USER", T-SQL [USER], MySQL `USER` — i.e. a column reference, losing the function meaning. Live PG 'column "USER" does not exist', T-SQL 207 'Invalid column name USER'; no warning. Unquoted USER (PG/T-SQL keyword) or CURRENT_USER would return the user. BLUE: map Oracle USER -> CURRENT_USER (PG/T-SQL/MySQL), never quote it as an identifier.
+SELECT USER AS r FROM DUAL
