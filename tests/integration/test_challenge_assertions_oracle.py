@@ -546,6 +546,17 @@ CASES.update(
                 ),
             },
         ),
+        # BLUE 2026-07-30: row-value IN expanded to OR-of-AND-pairs on T-SQL
+        # (neighbour of pg-row-value-comparison; PG/MySQL keep the native form).
+        "reda-ora-rowvalue-in": Case(
+            "reda-ora-rowvalue-in ",
+            {
+                "tsql": Expect(
+                    ("(a = 1 AND b = 2) OR (a = 3 AND b = 4)",),
+                    ("(a, b) IN",),
+                ),
+            },
+        ),
     }
 )
 

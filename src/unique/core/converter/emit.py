@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+from collections.abc import Callable
 
 import sqlglot
 import sqlglot.expressions as exp
@@ -2067,9 +2068,7 @@ def _pivot_group_columns(src: ASTNode, node: PivotRelation) -> list[str] | None:
         return None
     names: list[str] = []
     for item in src.query.columns:
-        if isinstance(item, Alias):
-            names.append(item.name)
-        elif isinstance(item, ColumnRef) and not item.table:
+        if isinstance(item, Alias) or (isinstance(item, ColumnRef) and not item.table):
             names.append(item.name)
         else:
             return None
@@ -2084,12 +2083,13 @@ def _emit_pivot_relation(node: PivotRelation, dialect: str) -> str:
     T-SQL/Oracle re-spell it natively (Oracle needs ``'v' AS v`` IN values so the
     output columns are named like T-SQL's ``[v]``). PG/MySQL have no PIVOT, so it
     becomes a conditional-aggregation derived table — a warned carrier when the
-    source's grouping columns are not determinable.
+    source's grouping columns are not determinable. ``_PIVOT_NATIVE_VALS`` dict-
+    dispatches the native IN-value spelling.
     """
     src = node.source
     if isinstance(src, SubqueryExpression):
         inner = _emit_select(src.query, dialect)
-        src_alias = src.alias or (None if dialect == "oracle" else "uq_src")
+        src_alias = src.alias or ("uq_src" if dialect != "oracle" else None)
         src_sql = f"({inner})" + (
             f" {_ident(src_alias, False, dialect)}" if src_alias else ""
         )
@@ -2102,15 +2102,18 @@ def _emit_pivot_relation(node: PivotRelation, dialect: str) -> str:
     arg = _emit_expression(node.agg_arg, dialect)
     pcol = _ident(node.pivot_col, False, dialect)
 
-    if dialect in ("tsql", "oracle"):
-        if dialect == "tsql":
-            vals = ", ".join(f"[{v}]" for v in node.values)
-        else:
-            vals = ", ".join(
-                f"'{v}' AS {_ident(v, False, 'oracle')}" for v in node.values
-            )
+    native_vals = {
+        "tsql": ", ".join(f"[{v}]" for v in node.values),
+        "oracle": ", ".join(
+            f"'{v}' AS {_ident(v, False, 'oracle')}" for v in node.values
+        ),
+    }
+    if dialect in native_vals:
         tail = f" {_ident(node.alias, False, dialect)}" if node.alias else ""
-        return f"{src_sql} PIVOT ({agg}({arg}) FOR {pcol} IN ({vals})){tail}"
+        return (
+            f"{src_sql} PIVOT ({agg}({arg}) FOR {pcol} "
+            f"IN ({native_vals[dialect]})){tail}"
+        )
 
     # PG / MySQL — conditional-aggregation rewrite in a derived table.
     group_cols = _pivot_group_columns(src, node)
@@ -3237,6 +3240,26 @@ def _emit_update_oracle_subquery(
     return result
 
 
+#: ``DELETE TOP (n)`` row-cap rendering per target — dict dispatch (preferred
+#: over ``if dialect ==``). T-SQL keeps TOP; MySQL trails LIMIT; Oracle folds
+#: ROWNUM into the predicate; PG selects n candidate rows by ctid. All cap the
+#: delete to n arbitrary matching rows — faithful to TOP's unordered semantics.
+#: ``t`` = target SQL, ``w`` = WHERE text (or None), ``n`` = cap.
+_DELETE_CAP: dict[str, Callable[[str, str | None, int], str]] = {
+    "tsql": lambda t, w, n: f"DELETE TOP ({n}) FROM {t}"
+    + (f"\nWHERE {w}" if w else ""),
+    "mysql": lambda t, w, n: f"DELETE FROM {t}"
+    + (f"\nWHERE {w}" if w else "")
+    + f"\nLIMIT {n}",
+    "oracle": lambda t, w, n: f"DELETE FROM {t}\nWHERE "
+    + (f"{w} AND ROWNUM <= {n}" if w else f"ROWNUM <= {n}"),
+    "postgresql": lambda t, w, n: f"DELETE FROM {t}\nWHERE ctid IN "
+    + f"(SELECT ctid FROM {t}"
+    + (f" WHERE {w}" if w else "")
+    + f" LIMIT {n})",
+}
+
+
 def _emit_delete(node: DeleteStatement, dialect: str) -> str:
     """Emit a DELETE statement."""
     table = _emit_table_ref(node.table, dialect)
@@ -3256,33 +3279,13 @@ def _emit_delete(node: DeleteStatement, dialect: str) -> str:
             f"DELETE FROM {table}\nWHERE EXISTS (SELECT 1 FROM {sources} "
             f"WHERE {where})"
         )
-    # ``DELETE TOP (n)`` row cap. T-SQL keeps TOP; MySQL trails LIMIT; Oracle
-    # adds ROWNUM <= n to the predicate; PG has no DELETE row cap so it selects
-    # n candidate rows by ctid in a subquery (all four cap the delete to n
-    # arbitrary matching rows — faithful to TOP's unordered semantics).
-    cap = _plain_int_value(node.limit.limit) if node.limit and node.limit.limit else None
-    where_sql = _emit_condition(node.where, dialect) if node.where else None
+    # ``DELETE TOP (n)`` row cap — rendered per target by ``_DELETE_CAP``.
+    cap = (
+        _plain_int_value(node.limit.limit) if node.limit and node.limit.limit else None
+    )
     if cap is not None:
-        if dialect == "tsql":
-            result = f"DELETE TOP ({cap}) FROM {table}"
-            if where_sql:
-                result += f"\nWHERE {where_sql}"
-            return result
-        if dialect == "mysql":
-            result = f"DELETE FROM {table}"
-            if where_sql:
-                result += f"\nWHERE {where_sql}"
-            return result + f"\nLIMIT {cap}"
-        if dialect == "oracle":
-            rownum = f"ROWNUM <= {cap}"
-            cond = f"{where_sql} AND {rownum}" if where_sql else rownum
-            return f"DELETE FROM {table}\nWHERE {cond}"
-        # postgresql — ctid subquery
-        sub = f"SELECT ctid FROM {table}"
-        if where_sql:
-            sub += f" WHERE {where_sql}"
-        sub += f" LIMIT {cap}"
-        return f"DELETE FROM {table}\nWHERE ctid IN ({sub})"
+        where_sql = _emit_condition(node.where, dialect) if node.where else None
+        return _DELETE_CAP[dialect](table, where_sql, cap)
 
     if dialect == "tsql" and node.table.alias:
         # T-SQL spells an aliased delete ``DELETE alias FROM t alias``

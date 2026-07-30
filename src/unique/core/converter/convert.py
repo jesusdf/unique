@@ -53,7 +53,6 @@ from unique.core.ast_nodes import (
     PassthroughSQL,
     PivotRelation,
     RawSQL,
-    RowValue,
     SelectStatement,
     SetOperationType,
     Star,
@@ -1239,15 +1238,6 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
             args=tuple(convert_expression(a) for a in expr.this.expressions),
         )
 
-    # A parenthesized row-value ``(e1, e2, …)`` (in a row comparison or a
-    # row-IN). Modeled so the emitter can expand it to the lexicographic /
-    # OR-of-AND-pairs form on T-SQL (which has no row-value construct) while
-    # every other engine keeps the native spelling.
-    if isinstance(expr, exp.Tuple):
-        return RowValue(
-            elements=tuple(convert_expression(e) for e in expr.expressions)
-        )
-
     # Fallback: emit as raw SQL, rendered in the SOURCE dialect. The
     # default (generic) renderer silently changes spellings — sqlglot
     # stores PG subscripts 0-based, so ``arr[2]`` shipped as ``arr[1]``
@@ -1355,7 +1345,9 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
                     )
                 )
             for gs in gsets:
-                elements.append(GroupingElement(kind="GROUPING SETS", sets_sql=gs.sql()))
+                elements.append(
+                    GroupingElement(kind="GROUPING SETS", sets_sql=gs.sql())
+                )
             group_by_composite = tuple(elements)
             # Distinct base columns for the MySQL degrade / clause-presence checks.
             seen_c: dict[str, exp.Expression] = {}
@@ -1868,12 +1860,63 @@ def _delete_top_count(tb: exp.Expression) -> int | None:
     return None
 
 
-def _convert_delete(expr: exp.Delete) -> ASTNode:
-    """Convert a sqlglot Delete to DeleteStatement."""
-    # ``DELETE TOP (n)``: sqlglot lands the row cap in ``tables`` (see
-    # ``_delete_top_count``). Pull it out; the rest of ``tables`` is the
-    # multi-table delete's target-alias list.
-    tables_arg = list(expr.args.get("tables") or [])
+def _convert_delete_join(
+    expr: exp.Delete,
+    target: exp.Expression,
+    real_tables: list[exp.Expression],
+    joins: list[exp.Expression],
+    where: ASTNode | None,
+    top_limit: LimitClause | None,
+) -> ASTNode:
+    """Model a multi-table DELETE join (T-SQL/MySQL ``DELETE t FROM t JOIN s``).
+
+    sqlglot keeps the FROM table + its joins in ``this`` and the delete-target
+    alias in ``tables``. Unread, the JOIN vanished, leaving the WHERE referencing
+    an undefined table (invalid on every target). Model the joined tables via
+    ``using`` with the ON conditions folded into WHERE — the ``using`` emitter
+    then renders the correct DELETE…FROM…JOIN / USING / EXISTS form per target.
+    """
+    base_alias = (target.alias or target.name).lower()
+    if real_tables:
+        _t0 = real_tables[0]
+        if (_t0.alias or _t0.name).lower() != base_alias:
+            # The delete target is a JOINED table, not the FROM head — rarer and
+            # not safely expressible via this rewrite. Degrade whole.
+            return RawSQL(
+                sql=_source_sql(expr),
+                reason="DELETE join whose target is a joined table "
+                "preserved as a comment",
+            )
+    join_tables: list[TableRef] = []
+    for j in joins:
+        jt = j.this
+        if not isinstance(jt, exp.Table):
+            return RawSQL(
+                sql=_source_sql(expr),
+                reason="Unhandled expression type: DELETE join non-table",
+            )
+        join_tables.append(_convert_table_ref(jt))
+        on_expr = j.args.get("on")
+        if on_expr is not None:
+            on_cond = convert_expression(on_expr)
+            where = (
+                BinaryOp(operator=BinaryOperator.AND, left=on_cond, right=where)
+                if where is not None
+                else on_cond
+            )
+    return DeleteStatement(
+        table=_convert_table_ref(target),
+        where=where,
+        using=tuple(join_tables),
+        limit=top_limit,
+    )
+
+
+def _split_delete_top(
+    tables_arg: list[exp.Expression],
+) -> tuple[LimitClause | None, list[exp.Expression]]:
+    """Separate a ``DELETE TOP (n)`` row cap (mis-parsed by sqlglot into
+    ``tables``) from the real delete-target-alias list."""
     top_limit: LimitClause | None = None
     real_tables: list[exp.Expression] = []
     for tb in tables_arg:
@@ -1882,6 +1925,14 @@ def _convert_delete(expr: exp.Delete) -> ASTNode:
             top_limit = LimitClause(limit=Literal(value=n, dtype="integer"))
         else:
             real_tables.append(tb)
+    return top_limit, real_tables
+
+
+def _convert_delete(expr: exp.Delete) -> ASTNode:
+    """Convert a sqlglot Delete to DeleteStatement."""
+    # ``DELETE TOP (n)``: sqlglot lands the row cap in ``tables``; the rest is
+    # the multi-table delete's target-alias list.
+    top_limit, real_tables = _split_delete_top(list(expr.args.get("tables") or []))
 
     # Oracle's FROM-less ``DELETE t WHERE …`` parses with the table in
     # ``tables`` and ``this=False`` — reading ``this`` blindly emitted the
@@ -1897,51 +1948,10 @@ def _convert_delete(expr: exp.Delete) -> ASTNode:
     if where_expr:
         where = convert_expression(where_expr.this)
 
-    # Multi-table DELETE with a JOIN (T-SQL ``DELETE t FROM t JOIN s ON …`` /
-    # MySQL ``DELETE t1 FROM t1 JOIN t2 ON …``). sqlglot keeps the FROM table +
-    # its joins in ``this`` and the delete-target alias in ``tables``. Unread,
-    # the JOIN vanished, leaving the WHERE referencing an undefined table
-    # (invalid on every target). Model the joined tables via ``using`` with the
-    # ON conditions folded into WHERE — the ``using`` emitter then renders the
-    # correct DELETE…FROM…JOIN / USING / EXISTS form per target.
+    # Multi-table DELETE with a JOIN (T-SQL/MySQL ``DELETE t FROM t JOIN s ON …``).
     joins = target.args.get("joins") if isinstance(target, exp.Expression) else None
     if joins:
-        base_alias = (target.alias or target.name).lower()
-        target_alias = base_alias
-        if real_tables:
-            _t0 = real_tables[0]
-            target_alias = (_t0.alias or _t0.name).lower()
-        if target_alias != base_alias:
-            # The delete target is one of the JOINED tables, not the FROM head —
-            # rarer and not safely expressible via this rewrite. Degrade whole.
-            return RawSQL(
-                sql=_source_sql(expr),
-                reason="DELETE join whose target is a joined table "
-                "preserved as a comment",
-            )
-        join_tables: list[TableRef] = []
-        for j in joins:
-            jt = j.this
-            if not isinstance(jt, exp.Table):
-                return RawSQL(
-                    sql=_source_sql(expr),
-                    reason="Unhandled expression type: DELETE join non-table",
-                )
-            join_tables.append(_convert_table_ref(jt))
-            on_expr = j.args.get("on")
-            if on_expr is not None:
-                on_cond = convert_expression(on_expr)
-                where = (
-                    BinaryOp(operator=BinaryOperator.AND, left=on_cond, right=where)
-                    if where is not None
-                    else on_cond
-                )
-        return DeleteStatement(
-            table=_convert_table_ref(target),
-            where=where,
-            using=tuple(join_tables),
-            limit=top_limit,
-        )
+        return _convert_delete_join(expr, target, real_tables, joins, where, top_limit)
 
     table = _convert_table_ref(target)
 

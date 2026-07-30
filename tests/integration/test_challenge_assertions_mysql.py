@@ -1070,6 +1070,21 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "tsql": {"present": ["a NUMERIC(20)"], "absent": ["BIT(64)"]},
         "oracle": {"present": ["a NUMBER(20)"], "absent": ["BIT(64)"]},
     },
+    # BLUE 2026-07-30: multi-table DELETE join modelled per target.
+    "my-multitable-delete-join": {
+        "postgresql": {
+            "present": ["DELETE FROM redb_d1 t1", "USING redb_d2 t2", "t2.flag = 1"],
+            "absent": ["JOIN redb_d2"],
+        },
+        "tsql": {
+            "present": ["DELETE t1 FROM redb_d1 t1, redb_d2 t2"],
+            "absent": ["JOIN redb_d2"],
+        },
+        "oracle": {
+            "present": ["WHERE EXISTS (SELECT 1 FROM redb_d2 t2"],
+            "absent": ["JOIN redb_d2"],
+        },
+    },
 }
 
 

@@ -248,19 +248,6 @@ class GroupingElement(ASTNode):
 
 
 @dataclass(frozen=True)
-class RowValue(ASTNode):
-    """A parenthesized row-value constructor ``(e1, e2, …)``.
-
-    Used in row-value comparisons (``(a, b) > (1, 5)``) and row-IN
-    (``(a, b) IN ((1, 2), (3, 4))``). PG/Oracle/MySQL express these natively;
-    T-SQL has neither, so the emitter expands a row comparison to the
-    lexicographic OR/AND form and a row-IN to an OR of AND-pairs.
-    """
-
-    elements: tuple[ASTNode, ...] = ()
-
-
-@dataclass(frozen=True)
 class BinaryOp(ASTNode):
     """Binary operation: left op right."""
 
@@ -529,9 +516,9 @@ class SelectStatement(ASTNode):
     """A SELECT query."""
 
     columns: tuple[ASTNode, ...] = ()
-    from_clause: TableRef | SubqueryExpression | UnpivotRelation | PivotRelation | None = (
-        None
-    )
+    from_clause: (
+        TableRef | SubqueryExpression | UnpivotRelation | PivotRelation | None
+    ) = None
     joins: tuple[JoinClause, ...] = ()
     where: ASTNode | None = None
     group_by: tuple[ASTNode, ...] = ()
