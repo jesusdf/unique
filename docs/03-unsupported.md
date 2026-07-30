@@ -614,6 +614,13 @@ PostgreSQL constant-folds the `THEN` branch during planning and would raise on a
 bad constant before the guard runs. A non-numeric target with a fallback keeps the
 plain cast and flags the dropped default with a carrier.
 
+T-SQL `TRY_CAST`/`TRY_CONVERT` (which yield `NULL` on a bad value) use the same
+mechanism: over a **column** — where nothing can be folded — a numeric target is
+wrapped in the runtime guard with `ELSE NULL` (`INT`-family targets guard on an
+integer-only pattern; `DECIMAL`/`FLOAT` on the general numeric one), so a
+non-numeric row yields `NULL` instead of a MySQL `0` or a PostgreSQL runtime abort.
+A string-type `TRY` cast never fails and stays a faithful plain `CAST`.
+
 ### 3.14 Case-Insensitive Collation Under DISTINCT / ORDER BY
 
 MySQL's default collation is case-insensitive, so `SELECT DISTINCT x … ORDER BY x`
