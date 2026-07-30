@@ -375,6 +375,11 @@ class WindowSpec(ASTNode):
     # engine we target, so it is captured once and emitted verbatim. Dropping it
     # silently changes results (a running total becomes a grand total).
     frame: str | None = None
+    # The frame's ``EXCLUDE CURRENT ROW/GROUP/TIES/NO OTHERS`` clause, captured
+    # apart from ``frame`` because only PostgreSQL and Oracle support it: those
+    # targets re-append it, T-SQL/MySQL have no equivalent and degrade (there is
+    # no faithful ROWS/RANGE rewrite). Dropping it silently changed the aggregate.
+    exclude: str | None = None
 
 
 @dataclass(frozen=True)
@@ -511,6 +516,11 @@ class ColumnDefinition(ASTNode):
     #: kept on the source engine, and carried as a documented warning elsewhere
     #: (a live DB connection could resolve the actual collation). Raw clause text.
     collate: str | None = None
+    #: A MySQL/Oracle ``INVISIBLE`` column (excluded from ``SELECT *``). MySQL and
+    #: Oracle both support it (kept inline); PG/T-SQL have no equivalent, so it
+    #: degrades to a documented carrier + warning rather than vanishing (dropping
+    #: it changed ``SELECT *``'s result set).
+    invisible: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -640,6 +650,12 @@ class DeleteStatement(ASTNode):
     #: render it as T-SQL ``TOP (n)`` / MySQL ``LIMIT n`` / Oracle ``ROWNUM`` /
     #: PG ``ctid`` subquery.
     limit: LimitClause | None = None
+    #: MySQL ``DELETE … ORDER BY … LIMIT n`` — the cap picks the *first n by this
+    #: order* (a deterministic, DIFFERENT set than an unordered cap). Dropping it
+    #: deleted ALL matching rows (data loss). Emitters render the ordered cap via
+    #: a keyed subquery per target (MySQL native, T-SQL CTE+TOP, PG ctid, Oracle
+    #: rowid). Meaningless without ``limit`` (a full delete's order is unobservable).
+    order_by: tuple[OrderByItem, ...] = ()
 
 
 @dataclass(frozen=True)

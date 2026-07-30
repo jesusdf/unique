@@ -460,6 +460,11 @@ def gate_reason(sql: str, target: str, source: str | None = None) -> str | None:
             and re.search(r"(?is)\bWITH\s+RECURSIVE\b", stmt)
         ):
             continue
+        if target == "oracle" and re.search(r"(?i)\bINVISIBLE\b", stmt):
+            # Oracle 12c+ supports INVISIBLE columns (``c NUMBER INVISIBLE``,
+            # excluded from SELECT *) — valid Oracle that sqlglot cannot parse.
+            # Drop the attribute for the parse check only (it runs live).
+            stmt = re.sub(r"(?i)\s+INVISIBLE\b", " ", stmt)
         if target == "oracle" and re.match(r"(?is)\s*MERGE\b", stmt):
             # Oracle's conditional-DELETE clause (WHEN MATCHED THEN UPDATE …
             # DELETE WHERE …) is valid Oracle that sqlglot cannot parse —

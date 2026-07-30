@@ -204,6 +204,13 @@ VALID_BUT_SQLGLOT_UNPARSEABLE: dict[tuple[str, str, str], str] = {
         "TRANSACTION ISOLATION LEVEL READ COMMITTED / BEGIN READ ONLY / COMMIT "
         "all executed clean."
     ),
+    ("challenge_mysql.sql", "red2-my-invisible-column-drop", "oracle"): (
+        "VALID Oracle: an INVISIBLE column ('b NUMBER(10) INVISIBLE', excluded "
+        "from SELECT *) is Oracle 12c+ syntax that sqlglot's oracle parser "
+        "rejects (Expecting )). Live-verified 2026-07-30 on Oracle 23ai Free "
+        "(FREEPDB1): the CREATE TABLE executed clean and SELECT * returned only "
+        "the visible column."
+    ),
 }
 
 
@@ -5443,3 +5450,346 @@ class TestRowcountDivergenceAnnotation:
         )
         r = Transpiler().transpile(src, "mysql", "mysql")
         assert "UNIQUE:" not in r.sql, r.sql
+
+
+class TestBitStringNumericFold:
+    """red2-my-bitstring-numeric-pg: a MySQL bit-string literal ``b'101'`` used
+    numerically is its integer value (5); shipping the bare bit literal to PG
+    is an invalid ``bit + integer``. Fold it to the integer like the hex path."""
+
+    def test_bitstring_folds_to_integer_on_every_target(self) -> None:
+        src = _case("challenge_mysql.sql", "red2-my-bitstring-numeric-pg")
+        for target in ("postgresql", "tsql", "oracle"):
+            out = _exec_lines(_tx(src, "mysql", target))
+            assert "5 + 0" in out, out
+            assert "b'101'" not in out.lower(), out
+            assert_statements_parse(out, target, context="bitstring")
+
+
+class TestBoolColumnIsPredicate:
+    """red2-pg-boolcol-is-true: a boolean-column ``flag IS TRUE`` / ``IS FALSE``
+    predicate is invalid on engines with no boolean type (``flag IS 1`` ->
+    T-SQL 156 / ORA-00908). Rewrite to the value comparison (``flag = 1`` /
+    ``= 0``) there, keeping ``IS NOT TRUE``'s NULL leg."""
+
+    def test_is_true_becomes_value_comparison(self) -> None:
+        src = _case("challenge_postgresql.sql", "red2-pg-boolcol-is-true")
+        for target in ("tsql", "oracle"):
+            out = _exec_lines(_tx(src, "postgresql", target))
+            assert "flag = 1" in out, out
+            assert "IS 1" not in out and "IS TRUE" not in out.upper(), out
+            assert_statements_parse(out, target, context="boolcol")
+
+    def test_is_false_and_negations(self) -> None:
+        for pred, want in (
+            ("flag IS FALSE", "flag = 0"),
+            ("flag IS NOT TRUE", "flag <> 1 OR flag IS NULL"),
+            ("flag IS NOT FALSE", "flag <> 0 OR flag IS NULL"),
+        ):
+            for target in ("tsql", "oracle"):
+                out = _tx(f"SELECT a FROM t WHERE {pred}", "postgresql", target)
+                assert want in out, (pred, target, out)
+                assert " IS 1" not in out and " IS 0" not in out, out
+                assert_statements_parse(out, target, context=pred)
+
+    def test_mysql_keeps_native_boolean(self) -> None:
+        out = _tx("SELECT a FROM t WHERE flag IS TRUE", "postgresql", "mysql")
+        assert "IS TRUE" in out, out
+
+
+class TestAtAtIdentityGlobal:
+    """red2-ts-at-identity-passthrough: T-SQL ``@@IDENTITY`` was shipped raw
+    (PG 'column identity does not exist' / ORA-00936). Map it to the same
+    'last generated id' expression SCOPE_IDENTITY() uses, symmetrically."""
+
+    def test_at_identity_maps_like_scope_identity(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-at-identity-passthrough")
+        expect = {
+            "postgresql": "LASTVAL()",
+            "mysql": "LAST_INSERT_ID()",
+            "oracle": "CURRVAL",
+        }
+        for target, idiom in expect.items():
+            out = _exec_lines(_tx(src, "tsql", target))
+            assert idiom in out, (target, out)
+            assert "@@IDENTITY" not in out.upper(), out
+            assert_statements_parse(out, target, context="at-identity")
+
+    def test_tsql_target_keeps_at_identity(self) -> None:
+        out = _tx("SELECT @@IDENTITY AS id", "tsql", "tsql")
+        assert "@@IDENTITY" in out, out
+
+
+class TestTryCastMysqlNull:
+    """red2-ts-trycast-mysql-zero: TRY_CAST('abc' AS INT) is NULL on T-SQL but
+    MySQL's plain CAST AS SIGNED returned 0 (the fold missed MySQL's SIGNED
+    spelling of an INT target). A non-numeric literal must fold to NULL."""
+
+    def test_nonnumeric_literal_folds_to_null_on_mysql(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-trycast-mysql-zero")
+        out = _exec_lines(_tx(src, "tsql", "mysql"))
+        assert "NULL AS r" in out, out
+        assert "SIGNED" not in out.upper(), out
+        assert_statements_parse(out, "mysql", context="trycast")
+
+    def test_numeric_literal_still_casts(self) -> None:
+        out = _tx("SELECT TRY_CAST('123' AS INT) AS r", "tsql", "mysql")
+        assert "CAST('123' AS SIGNED)" in out, out
+
+
+class TestExecNamedParamMysql:
+    """red2-ts-exec-named-param-mysql: T-SQL ``EXEC proc @p = v`` (named
+    binding) became ``CALL proc(v_p = v)`` on MySQL — 1054 (no named-argument
+    syntax). MySQL CALL is positional-only: drop the names to positional and
+    warn; PG/Oracle keep the ``name => v`` form."""
+
+    def test_mysql_call_is_positional_and_warns(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-exec-named-param-mysql")
+        r = Transpiler().transpile(src, "tsql", "mysql")
+        out = _exec_lines(r.sql)
+        assert "CALL get_rows(1, 0)" in out, out
+        assert "=" not in out.split("get_rows", 1)[1].split(")", 1)[0], out
+        assert any("no named arguments" in w.message for w in r.warnings), r.warnings
+
+    def test_pg_and_oracle_keep_named_args(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-exec-named-param-mysql")
+        for target in ("postgresql", "oracle"):
+            out = _exec_lines(_tx(src, "tsql", target))
+            assert "=>" in out, (target, out)
+
+
+class TestFkOnDeleteSetDefaultOracle:
+    """red2-pg-fk-ondelete-setdefault-oracle: Oracle has no ON DELETE SET
+    DEFAULT (ORA-03001). Drop the action (revert to NO ACTION) with a carrier +
+    warning; PG/MySQL keep it."""
+
+    def test_oracle_drops_action_and_warns(self) -> None:
+        src = _case("challenge_postgresql.sql", "red2-pg-fk-ondelete-setdefault-oracle")
+        r = Transpiler().transpile(src, "postgresql", "oracle")
+        body = _exec_lines(r.sql)
+        assert "SET DEFAULT" not in body.upper(), r.sql
+        assert "REFERENCES p (id)" in body, r.sql
+        assert any(
+            "ON DELETE SET DEFAULT" in w.message and "Oracle" in w.message
+            for w in r.warnings
+        ), r.warnings
+        assert "UNIQUE:" in r.sql, r.sql
+        assert_statements_parse(body, "oracle", context="fk-setdefault")
+
+    def test_pg_and_mysql_keep_set_default(self) -> None:
+        src = _case("challenge_postgresql.sql", "red2-pg-fk-ondelete-setdefault-oracle")
+        for target in ("postgresql", "mysql"):
+            out = _tx(src, "postgresql", target)
+            assert "ON DELETE SET DEFAULT" in out.upper(), (target, out)
+
+
+class TestDistinctOnQualifiedOrderBy:
+    """red2-pg-distincton-qualified-orderby: the DISTINCT ON -> ROW_NUMBER
+    rewrite left the outer ORDER BY referencing the source qualifier (``x.a``),
+    out of scope at the wrapper (4104 / 1054 / ORA-00904). Re-point order keys
+    to the wrapper's bare projected columns."""
+
+    def test_qualified_order_keys_requalified(self) -> None:
+        src = _case("challenge_postgresql.sql", "red2-pg-distincton-qualified-orderby")
+        for target in ("tsql", "mysql", "oracle"):
+            out = _exec_lines(_tx(src, "postgresql", target))
+            order_clause = out.rsplit("ORDER BY", 1)[1]
+            assert "x.a" not in order_clause and "x.b" not in order_clause, out
+            assert "uq_rn = 1" in out, out
+            assert_statements_parse(out, target, context="distincton")
+
+    def test_unqualified_distinct_on_still_works(self) -> None:
+        out = _tx(
+            "SELECT DISTINCT ON (a) a, b FROM t ORDER BY a, b DESC",
+            "postgresql",
+            "tsql",
+        )
+        assert "uq_rn = 1" in out, out
+        assert_statements_parse(out, "tsql", context="distincton-unqualified")
+
+
+class TestOraclePlusOuterJoinDuplicate:
+    """red2-ora-plus-outer-join-dup: with an ALIASED preserved table, sqlglot
+    30.14's eliminate_join_marks re-adds it as a spurious CROSS JOIN (duplicate
+    alias -> 'table name b specified more than once'). Dedup the bare repeat."""
+
+    def test_multi_plus_predicate_no_duplicate_join(self) -> None:
+        src = _case("challenge_oracle.sql", "red2-ora-plus-outer-join-dup")
+        for target in ("postgresql", "tsql", "mysql"):
+            out = _exec_lines(_tx(src, "oracle", target))
+            assert out.count("tb b") == 1, out
+            assert "CROSS JOIN" not in out.upper(), out
+            assert "LEFT JOIN ta a" in out, out
+            assert_statements_parse(out, target, context="plus-join")
+
+    def test_single_aliased_plus_predicate_no_duplicate(self) -> None:
+        out = _tx(
+            "SELECT a.x, b.y FROM ta a, tb b WHERE a.id(+) = b.id",
+            "oracle",
+            "postgresql",
+        )
+        assert out.count("tb b") == 1, out
+        assert_statements_parse(out, "postgresql", context="plus-single")
+
+
+class TestWindowFrameExclude:
+    """red2-pg-window-exclude-current: a frame EXCLUDE CURRENT ROW/GROUP/TIES
+    was silently dropped, changing the aggregate. PG/Oracle support it (pass
+    through); T-SQL/MySQL have no equivalent -> warned NULL carrier."""
+
+    def test_oracle_and_pg_keep_exclude(self) -> None:
+        src = _case("challenge_postgresql.sql", "red2-pg-window-exclude-current")
+        for target in ("oracle", "postgresql"):
+            out = _exec_lines(_tx(src, "postgresql", target))
+            assert "EXCLUDE CURRENT ROW" in out, (target, out)
+            assert_statements_parse(out, target, context="exclude")
+
+    def test_tsql_mysql_warned_degrade(self) -> None:
+        src = _case("challenge_postgresql.sql", "red2-pg-window-exclude-current")
+        for target in ("tsql", "mysql"):
+            r = Transpiler().transpile(src, "postgresql", target)
+            body = _exec_lines(r.sql)
+            # The window is not emitted at all — it degrades to a NULL carrier.
+            assert "OVER (" not in body, r.sql
+            assert "NULL /* UNIQUE:" in body, r.sql
+            assert any(
+                "EXCLUDE" in w.message and target in w.message for w in r.warnings
+            ), r.warnings
+            assert_statements_parse(body, target, context="exclude")
+
+
+class TestDeleteOrderByLimitCap:
+    """red2-my-delete-orderby-limit-drop (PRIORITY 1, data loss): MySQL
+    ``DELETE … ORDER BY id LIMIT 5`` deletes only the first 5 by id, but the
+    ORDER BY + LIMIT were dropped and the DELETE hit ALL matching rows. Each
+    target renders the ordered cap via a keyed subquery."""
+
+    def test_ordered_cap_rendered_per_target(self) -> None:
+        src = _case("challenge_mysql.sql", "red2-my-delete-orderby-limit-drop")
+        expect = {
+            "mysql": "ORDER BY id",  # native
+            "postgresql": "ctid IN",
+            "tsql": "WITH uq_del",
+            "oracle": "rowid IN",
+        }
+        for target, idiom in expect.items():
+            out = _exec_lines(_tx(src, "mysql", target))
+            assert idiom in out, (target, out)
+            # the cap must survive on every target (no bare unbounded DELETE)
+            assert "5" in out, out
+            assert_statements_parse(out, target, context="delete-cap")
+
+    def test_no_unread_args_warning(self) -> None:
+        # The ORDER BY + LIMIT must be read (guardrail 7): no tripwire on them.
+        src = _case("challenge_mysql.sql", "red2-my-delete-orderby-limit-drop")
+        for target in ("postgresql", "tsql", "oracle", "mysql"):
+            r = Transpiler().transpile(src, "mysql", target)
+            assert not any(
+                "unread sqlglot arg" in w.message and "Delete" in w.message
+                for w in r.warnings
+            ), (target, r.warnings)
+
+    def test_unordered_cap_still_arbitrary(self) -> None:
+        # A plain LIMIT (no ORDER BY) keeps the unordered cap idioms.
+        out = _tx("DELETE FROM t WHERE v < 0 LIMIT 3", "mysql", "tsql")
+        assert "DELETE TOP (3)" in out, out
+
+
+class TestInvisibleColumn:
+    """red2-my-invisible-column-drop: a MySQL INVISIBLE column (excluded from
+    SELECT *) had its attribute silently dropped. Oracle supports INVISIBLE
+    (preserve); PG/T-SQL have no equivalent -> carrier + warning."""
+
+    def test_oracle_and_mysql_keep_invisible(self) -> None:
+        src = _case("challenge_mysql.sql", "red2-my-invisible-column-drop")
+        for target in ("oracle", "mysql"):
+            out = _exec_lines(_tx(src, "mysql", target))
+            assert "INVISIBLE" in out, (target, out)
+        # sqlglot cannot parse the (valid) Oracle INVISIBLE attribute — the
+        # output gate whitelists it and it is live-validated — so only the
+        # MySQL output is checked with the sqlglot parse gate here.
+        assert_statements_parse(
+            _exec_lines(_tx(src, "mysql", "mysql")), "mysql", context="invisible"
+        )
+
+    def test_pg_tsql_warn_and_drop(self) -> None:
+        src = _case("challenge_mysql.sql", "red2-my-invisible-column-drop")
+        for target in ("postgresql", "tsql"):
+            r = Transpiler().transpile(src, "mysql", target)
+            body = _exec_lines(r.sql)
+            assert "INVISIBLE" not in body.split("UNIQUE:")[0].upper(), r.sql
+            assert any(
+                "INVISIBLE" in w.message and target in w.message for w in r.warnings
+            ), r.warnings
+            assert_statements_parse(body, target, context="invisible-drop")
+
+
+class TestSetSwallowNext:
+    """red2-ts-set-swallow-next: a degraded ``SET NOCOUNT ON; SELECT 1`` batch
+    commented BOTH lines out, dropping the valid SELECT (no-silent-loss). Split
+    the ;-separated statements so only the SET degrades and the SELECT
+    transpiles — the neighbor of the EXEC-swallow split."""
+
+    def test_set_degraded_but_following_select_survives(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-set-swallow-next")
+        for target in ("postgresql", "mysql", "oracle"):
+            r = Transpiler().transpile(src, "tsql", target)
+            body = _exec_lines(r.sql)
+            # the SELECT is emitted as real SQL (not just commented away)
+            assert "SELECT 1 AS a" in body, (target, r.sql)
+            assert_statements_parse(body, target, context="set-swallow")
+            assert any("SET option" in w.message for w in r.warnings), r.warnings
+
+    def test_lone_set_still_whole_comment(self) -> None:
+        # A SET with no following statement keeps the whole-comment behaviour.
+        out = _tx("SET NOCOUNT ON", "tsql", "postgresql")
+        assert out.strip() == "-- SET NOCOUNT ON", out
+
+
+class TestRaiserrorFormatArgs:
+    """red2-ts-raiserror-format-arg-drop: RAISERROR('value is %d today', 16, 1,
+    42) dropped the substitution arg 42 silently on PG/Oracle. Splice it: PG
+    RAISE format args (%), Oracle string concatenation."""
+
+    def test_pg_uses_raise_format_arg(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-raiserror-format-arg-drop")
+        out = _exec_lines(_tx(src, "tsql", "postgresql"))
+        assert "RAISE EXCEPTION 'value is % today', 42" in out, out
+        assert "%d" not in out, out
+
+    def test_oracle_concatenates_arg(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-raiserror-format-arg-drop")
+        out = _exec_lines(_tx(src, "tsql", "oracle"))
+        assert "'value is ' || 42 || ' today'" in out, out
+        assert "%d" not in out, out
+
+
+class TestProcSavepointComposition:
+    """red2-ora-proc-savepoint-as: SAVEPOINT is correct standalone but inside a
+    routine emitted invalid ``SAVEPOINT AS sp1`` (embedded-DML mis-parse). Model
+    it as a transaction statement: no spurious AS; T-SQL SAVE/ROLLBACK
+    TRANSACTION sp1; PG has no plpgsql savepoints -> warned degrade."""
+
+    def test_no_spurious_as_and_per_target_savepoint(self) -> None:
+        src = _case("challenge_oracle.sql", "red2-ora-proc-savepoint-as")
+        for target in ("mysql", "oracle"):
+            out = _exec_lines(_tx(src, "oracle", target))
+            assert "SAVEPOINT sp1" in out and "SAVEPOINT AS" not in out, (target, out)
+            assert "ROLLBACK TO SAVEPOINT sp1" in out, (target, out)
+
+    def test_tsql_uses_save_transaction(self) -> None:
+        src = _case("challenge_oracle.sql", "red2-ora-proc-savepoint-as")
+        out = _exec_lines(_tx(src, "oracle", "tsql"))
+        assert "SAVE TRANSACTION sp1" in out, out
+        assert "ROLLBACK TRANSACTION sp1" in out, out
+        assert "SAVEPOINT AS" not in out, out
+
+    def test_pg_degrades_savepoint_with_warning(self) -> None:
+        src = _case("challenge_oracle.sql", "red2-ora-proc-savepoint-as")
+        r = Transpiler().transpile(src, "oracle", "postgresql")
+        body = _exec_lines(r.sql)
+        assert "SAVEPOINT AS" not in body, r.sql
+        assert "SAVEPOINT sp1 dropped" in body, r.sql
+        assert any(
+            "no explicit savepoints" in w.message for w in r.warnings
+        ), r.warnings

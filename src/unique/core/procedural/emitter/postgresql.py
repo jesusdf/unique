@@ -147,6 +147,15 @@ class PostgresEmitter(ProceduralEmitter):
         if node.reraise:
             return "RAISE;"
         msg = self._emit_node(node.message) if node.message else "'Error'"
+        # A RAISERROR printf substitution (``'value is %d today', …, 42``) maps
+        # directly onto PostgreSQL's RAISE format args, which use ``%`` for
+        # every placeholder — dropping the args shipped the literal ``%d`` and
+        # lost the value (silent-drop). Convert the T-SQL specifiers to ``%``
+        # and pass the args.
+        lit, fmt_args = self._raise_format_substitution(msg)
+        if lit is not None:
+            pg_msg = self._TSQL_FMT_SPEC.sub("%", lit)
+            return f"RAISE EXCEPTION {pg_msg}, {', '.join(fmt_args)};"
         # Keep the human-readable message, not the error number (audit
         # 2026-07-02, S2-2). The '%%'-format form is safe for texts that
         # contain literal % characters.
@@ -483,6 +492,25 @@ class PostgresEmitter(ProceduralEmitter):
         return (
             "/* UNIQUE: BEGIN TRANSACTION dropped -- PostgreSQL manages "
             "the routine transaction implicitly */"
+        )
+
+    def _emit_savepoint(self, name: str | None) -> str:
+        # PL/pgSQL has NO explicit SAVEPOINT statement — a BEGIN … EXCEPTION
+        # block is its subtransaction (it rolls back to its start on error).
+        # Emitting a bare ``SAVEPOINT``/``ROLLBACK TO SAVEPOINT`` is a plpgsql
+        # syntax error, so document the drop instead of shipping invalid SQL.
+        sp = f" {name}" if name else ""
+        return (
+            f"/* UNIQUE: SAVEPOINT{sp} dropped -- PL/pgSQL has no explicit "
+            "savepoints; wrap the statements in a BEGIN … EXCEPTION block, which "
+            "rolls back to its start on error (docs/03-unsupported.md) */"
+        )
+
+    def _rollback_to_savepoint(self, name: str) -> str:
+        return (
+            f"/* UNIQUE: ROLLBACK TO SAVEPOINT {name} dropped -- PL/pgSQL has no "
+            "explicit savepoints; the enclosing BEGIN … EXCEPTION block rolls "
+            "back automatically on error (docs/03-unsupported.md) */"
         )
 
     def _sleep_call(self, secs: str) -> str:

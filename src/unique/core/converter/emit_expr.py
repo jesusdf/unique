@@ -709,6 +709,11 @@ def _emit_expression(node: ASTNode, dialect: str) -> str:
                     "FLOAT",
                     "DOUBLE",
                     "REAL",
+                    # MySQL renders an INT cast target as SIGNED / an unsigned
+                    # one as UNSIGNED — without these the literal fold missed
+                    # them and shipped a plain CAST (= 0, not NULL, on failure).
+                    "SIGNED",
+                    "UNSIGNED",
                 ):
                     try:
                         float(_lv)
@@ -1853,6 +1858,21 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         BinaryOperator.BIT_RSHIFT: ">>",
     }
 
+    # A boolean-COLUMN IS-predicate (``flag IS TRUE`` / ``flag IS FALSE``) is
+    # invalid on engines with no boolean type: the IS operator rejects an
+    # integer operand (``flag IS 1`` -> T-SQL 156 / ORA-00908). Rewrite to the
+    # value comparison there; PG/MySQL keep the native TRUE/FALSE spelling. A
+    # boolean EXPRESSION operand is already simplified upstream, so guard to a
+    # bare column.
+    if (
+        node.operator == BinaryOperator.IS
+        and isinstance(node.left, ColumnRef)
+        and isinstance(node.right, Literal)
+        and node.right.dtype == "boolean"
+        and dialect in ("tsql", "oracle")
+    ):
+        return f"{left} = {'1' if node.right.value else '0'}"
+
     op = op_map[node.operator]
 
     # PG/MySQL LIKE treat backslash as the default escape character; Oracle and
@@ -2114,6 +2134,21 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
                 "ORDER-BY ties) — see docs/03-unsupported.md */"
             )
         spec_parts.append(node.window.frame)
+
+    if node.window.exclude:
+        # A frame EXCLUDE (CURRENT ROW/GROUP/TIES) exists on PostgreSQL and
+        # Oracle but not T-SQL or MySQL. There is no faithful ROWS/RANGE
+        # rewrite (it removes specific peers from each frame), so the framed
+        # aggregate is not computable there — degrade to a warned carrier
+        # rather than silently drop EXCLUDE and change the result.
+        if dialect in ("postgresql", "oracle"):
+            spec_parts.append(node.window.exclude)
+        else:
+            return (
+                f"NULL /* UNIQUE: a window frame {node.window.exclude} has no "
+                f"{dialect} equivalent (T-SQL/MySQL have no EXCLUDE, and no "
+                "faithful ROWS/RANGE rewrite) — see docs/03-unsupported.md */"
+            )
 
     spec = " ".join(spec_parts)
     return f"{func} OVER ({spec})"

@@ -182,22 +182,43 @@ def _emit_pivot_relation(node: PivotRelation, dialect: str) -> str:
     return f"({query}) {_ident(node.alias or 'uq_pivot', False, dialect)}"
 
 
-#: ``DELETE TOP (n)`` row-cap rendering per target — dict dispatch (preferred
-#: over ``if dialect ==``). T-SQL keeps TOP; MySQL trails LIMIT; Oracle folds
-#: ROWNUM into the predicate; PG selects n candidate rows by ctid. All cap the
-#: delete to n arbitrary matching rows — faithful to TOP's unordered semantics.
-#: ``t`` = target SQL, ``w`` = WHERE text (or None), ``n`` = cap.
-_DELETE_CAP: dict[str, Callable[[str, str | None, int], str]] = {
-    "tsql": lambda t, w, n: f"DELETE TOP ({n}) FROM {t}"
-    + (f"\nWHERE {w}" if w else ""),
-    "mysql": lambda t, w, n: f"DELETE FROM {t}"
+#: Row-capped DELETE rendering per target — dict dispatch (preferred over
+#: ``if dialect ==``). ``t`` = target SQL, ``w`` = WHERE text (or None), ``n`` =
+#: cap, ``o`` = ORDER BY column text (or None for an UNORDERED cap).
+#:
+#: - **Unordered** (``o is None``, e.g. T-SQL ``DELETE TOP (n)``): cap to n
+#:   ARBITRARY matching rows. T-SQL keeps TOP; MySQL trails LIMIT; Oracle folds
+#:   ROWNUM into the predicate; PG selects n candidate rows by ctid.
+#: - **Ordered** (``o`` given, MySQL ``… ORDER BY … LIMIT n``): the first n
+#:   rows BY THAT ORDER — deterministic. Most engines can't ORDER a DELETE, so
+#:   each uses a keyed subquery: MySQL keeps native ORDER BY+LIMIT; T-SQL deletes
+#:   through a ``TOP (n) … ORDER BY`` CTE; PG orders the ctid subquery; Oracle
+#:   caps a rowid subquery with ROWNUM applied AFTER the ordering.
+_DELETE_CAP: dict[str, Callable[[str, str | None, int, str | None], str]] = {
+    "tsql": lambda t, w, n, o: (
+        f"WITH uq_del AS (\nSELECT TOP ({n}) * FROM {t}"
+        + (f" WHERE {w}" if w else "")
+        + f" ORDER BY {o}\n)\nDELETE FROM uq_del"
+        if o
+        else f"DELETE TOP ({n}) FROM {t}" + (f"\nWHERE {w}" if w else "")
+    ),
+    "mysql": lambda t, w, n, o: f"DELETE FROM {t}"
     + (f"\nWHERE {w}" if w else "")
+    + (f"\nORDER BY {o}" if o else "")
     + f"\nLIMIT {n}",
-    "oracle": lambda t, w, n: f"DELETE FROM {t}\nWHERE "
-    + (f"{w} AND ROWNUM <= {n}" if w else f"ROWNUM <= {n}"),
-    "postgresql": lambda t, w, n: f"DELETE FROM {t}\nWHERE ctid IN "
+    "oracle": lambda t, w, n, o: (
+        f"DELETE FROM {t}\nWHERE rowid IN (SELECT rid FROM "
+        f"(SELECT rowid AS rid FROM {t}"
+        + (f" WHERE {w}" if w else "")
+        + f" ORDER BY {o}) WHERE ROWNUM <= {n})"
+        if o
+        else f"DELETE FROM {t}\nWHERE "
+        + (f"{w} AND ROWNUM <= {n}" if w else f"ROWNUM <= {n}")
+    ),
+    "postgresql": lambda t, w, n, o: f"DELETE FROM {t}\nWHERE ctid IN "
     + f"(SELECT ctid FROM {t}"
     + (f" WHERE {w}" if w else "")
+    + (f" ORDER BY {o}" if o else "")
     + f" LIMIT {n})",
 }
 
@@ -221,13 +242,20 @@ def _emit_delete(node: DeleteStatement, dialect: str) -> str:
             f"DELETE FROM {table}\nWHERE EXISTS (SELECT 1 FROM {sources} "
             f"WHERE {where})"
         )
-    # ``DELETE TOP (n)`` row cap — rendered per target by ``_DELETE_CAP``.
+    # Row-capped DELETE (``TOP (n)`` / ``ORDER BY … LIMIT n``) — rendered per
+    # target by ``_DELETE_CAP``. An ORDER BY only picks WHICH rows when a cap is
+    # present, so it is emitted only alongside the limit.
     cap = (
         _plain_int_value(node.limit.limit) if node.limit and node.limit.limit else None
     )
     if cap is not None:
         where_sql = _emit_condition(node.where, dialect) if node.where else None
-        return _DELETE_CAP[dialect](table, where_sql, cap)
+        order_sql = (
+            ", ".join(_emit_order_item(o, dialect) for o in node.order_by)
+            if node.order_by
+            else None
+        )
+        return _DELETE_CAP[dialect](table, where_sql, cap, order_sql)
 
     if dialect == "tsql" and node.table.alias:
         # T-SQL spells an aliased delete ``DELETE alias FROM t alias``
@@ -245,6 +273,7 @@ def _emit_delete(node: DeleteStatement, dialect: str) -> str:
 from unique.core.converter.emit import (  # noqa: E402
     _emit_condition,
     _emit_expression,
+    _emit_order_item,
     _emit_select,
     _emit_table_ref,
     _ident,

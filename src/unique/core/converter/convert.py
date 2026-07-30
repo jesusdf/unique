@@ -464,6 +464,14 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
             c.args.get("join_mark") for c in expression.find_all(exp.Column)
         ):
             expression = transforms.eliminate_join_marks(expression)
+            # sqlglot 30.14's eliminate_join_marks re-adds an ALIASED preserved
+            # table as a spurious bare CROSS JOIN: its "preserve other joins"
+            # loop compares each join's alias-or-name against the new FROM's
+            # table NAME (not its alias), so ``tb b`` (alias b, name tb) is kept
+            # AND duplicated -> "table name b specified more than once". Drop any
+            # bare join whose alias-or-name repeats one already in scope (a
+            # duplicate alias is always invalid SQL, so this is safe).
+            _dedup_duplicate_cross_joins(expression)  # type: ignore[arg-type]
         # T-SQL "+" on strings is concatenation; rewrite it to "||" so it maps
         # to the target's concat operator (sqlglot keeps it as arithmetic "+").
         # Oracle/PostgreSQL sources get the same charity: their "+" over a
@@ -1286,6 +1294,13 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     if isinstance(expr, exp.HexString):
         return Literal(value=str(expr.this), dtype="hex")
 
+    # MySQL/PG bit-string literal ``b'101'`` (== ``0b101``) evaluates to its
+    # integer value in a numeric context (MySQL ``b'101' + 0`` = 5). Emitting
+    # the bare bit literal shipped an invalid ``bit + integer`` to PG; fold it
+    # to the integer like the hex path so it is portable everywhere.
+    if isinstance(expr, exp.BitString):
+        return Literal(value=int(str(expr.this), 2), dtype="integer")
+
     # T-SQL N'...' national literals: modeled so each target spells them —
     # PostgreSQL has NO such literal (the RawSQL fallback shipped it raw)
     # and MySQL's canonical output drops the prefix.
@@ -1324,6 +1339,57 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
     )
 
 
+def _dedup_duplicate_cross_joins(expression: exp.Expression) -> None:
+    """Remove bare joins whose alias-or-name repeats a table already in scope.
+
+    Works around a sqlglot ``eliminate_join_marks`` bug (see the call site): an
+    aliased preserved table is re-emitted as a spurious CROSS JOIN. A duplicate
+    table alias in a FROM/JOIN list is always a syntax error, so dropping the
+    repeat (only when it carries no ON/USING) is a safe normalization.
+    """
+    for select in expression.find_all(exp.Select):
+        joins = select.args.get("joins") or []
+        if not joins:
+            continue
+        frm = select.args.get("from") or select.args.get("from_")
+        seen: set[str] = set()
+        if frm is not None and frm.this is not None:
+            seen.add(frm.this.alias_or_name)
+        kept: list[exp.Join] = []
+        for j in joins:
+            name = j.this.alias_or_name
+            is_bare = not j.args.get("on") and not j.args.get("using")
+            if name in seen and is_bare:
+                continue
+            seen.add(name)
+            kept.append(j)
+        if len(kept) != len(joins):
+            select.set("joins", kept)
+
+
+def _requalify_distinct_order(
+    items: tuple[OrderByItem, ...], projected: set[str], has_star: bool
+) -> tuple[OrderByItem, ...] | None:
+    """Re-point a DISTINCT ON outer ORDER BY's table-qualified keys to the
+    wrapper's bare projected columns (see ``_rewrite_distinct_on``). Returns
+    ``None`` when a key is not projected and cannot be referenced at the
+    wrapper level."""
+    out: list[OrderByItem] = []
+    for it in items:
+        e = it.expression
+        if isinstance(e, ColumnRef) and e.table is not None:
+            if not (has_star or e.name.lower() in projected):
+                return None
+            out.append(
+                dataclasses.replace(
+                    it, expression=ColumnRef(name=e.name, quoted=e.quoted)
+                )
+            )
+        else:
+            out.append(it)
+    return tuple(out)
+
+
 def _rewrite_distinct_on(
     *,
     distinct_on: tuple[ASTNode, ...],
@@ -1354,6 +1420,18 @@ def _rewrite_distinct_on(
     outer_columns = tuple(_outer_ref(c) for c in columns)
     if any(c is None for c in outer_columns):
         return None
+
+    # The outer ORDER BY runs against the WRAPPER (alias ``uq_distinct_on``),
+    # not the source relation ``x`` — a table-qualified order key (``x.a``,
+    # ``x.b``) is out of scope there (T-SQL 4104 / MySQL 1054 / ORA-00904).
+    # Re-point each qualified order key to the wrapper's projected column
+    # (its bare name); bail out (keep current behaviour) if an order key is
+    # not among the projected columns and cannot be referenced.
+    _has_star = any(isinstance(c, Star) for c in columns)
+    _projected = {c.name.lower() for c in columns if isinstance(c, (Alias, ColumnRef))}
+    outer_order_by = _requalify_distinct_order(order_by, _projected, _has_star)
+    if outer_order_by is None:
+        return None
     # ROW_NUMBER needs a deterministic order; the DISTINCT ON's own ORDER BY
     # picks the surviving row (fall back to the keys when none was given).
     window_order = order_by or tuple(OrderByItem(expression=k) for k in distinct_on)
@@ -1378,7 +1456,7 @@ def _rewrite_distinct_on(
             left=ColumnRef(name="uq_rn"),
             right=Literal(value=1, dtype="integer"),
         ),
-        order_by=order_by,
+        order_by=outer_order_by,
         limit=limit,  # type: ignore[arg-type]
         ctes=ctes,
     )
@@ -2098,6 +2176,29 @@ def _split_delete_top(
     return top_limit, real_tables
 
 
+def _delete_order_and_limit(
+    expr: exp.Delete, top_limit: LimitClause | None
+) -> tuple[tuple[OrderByItem, ...], LimitClause | None]:
+    """Read a DELETE's ``ORDER BY`` and ``LIMIT`` args (MySQL ordered cap),
+    falling back to any T-SQL ``TOP`` cap already split out."""
+    order_items: tuple[OrderByItem, ...] = ()
+    order_arg = expr.args.get("order")
+    if isinstance(order_arg, exp.Order):
+        order_items = tuple(
+            (
+                _convert_ordered(o)
+                if isinstance(o, exp.Ordered)
+                else OrderByItem(expression=convert_expression(o))
+            )
+            for o in order_arg.expressions
+        )
+    tail_limit = top_limit
+    limit_arg = expr.args.get("limit")
+    if isinstance(limit_arg, exp.Limit) and limit_arg.expression is not None:
+        tail_limit = LimitClause(limit=convert_expression(limit_arg.expression))
+    return order_items, tail_limit
+
+
 def _convert_delete(expr: exp.Delete) -> ASTNode:
     """Convert a sqlglot Delete to DeleteStatement."""
     # ``DELETE TOP (n)``: sqlglot lands the row cap in ``tables``; the rest is
@@ -2117,6 +2218,12 @@ def _convert_delete(expr: exp.Delete) -> ASTNode:
     where_expr = expr.args.get("where")
     if where_expr:
         where = convert_expression(where_expr.this)
+
+    # MySQL ``DELETE … [ORDER BY …] LIMIT n``: the cap deletes only n rows (the
+    # first n by ORDER BY). Both args were unread — the ORDER BY + LIMIT fell on
+    # the floor and the DELETE hit EVERY matching row (data loss). Read them
+    # (guardrail 7) and carry the cap; the ORDER BY is only observable with a cap.
+    order_items, tail_limit = _delete_order_and_limit(expr, top_limit)
 
     # Multi-table DELETE with a JOIN (T-SQL/MySQL ``DELETE t FROM t JOIN s ON …``).
     joins = target.args.get("joins") if isinstance(target, exp.Expression) else None
@@ -2150,7 +2257,11 @@ def _convert_delete(expr: exp.Delete) -> ASTNode:
                 using.append(_convert_table_ref(jt))
 
     return DeleteStatement(
-        table=table, where=where, using=tuple(using), limit=top_limit
+        table=table,
+        where=where,
+        using=tuple(using),
+        limit=tail_limit,
+        order_by=order_items,
     )
 
 
@@ -2319,6 +2430,7 @@ def _convert_create_table(
                 generated_stored = False
                 on_update: str | None = None
                 collate: str | None = None
+                invisible = False
                 primary_key = False
                 unique = False
                 col_comment: str | None = None
@@ -2401,6 +2513,11 @@ def _convert_create_table(
                         # name, kept on the source engine and carried as a warning
                         # elsewhere (no portable mapping).
                         collate = kind.sql(dialect=sqlglot_dialect_name(source_dialect))
+                    elif isinstance(kind, exp.InvisibleColumnConstraint):
+                        # MySQL/Oracle INVISIBLE column (excluded from SELECT *) —
+                        # kept inline on those engines, carried as a documented
+                        # note on PG/T-SQL (which have no equivalent).
+                        invisible = True
                     elif isinstance(kind, exp.Reference):
                         # Inline column FK (``c INT REFERENCES p(id) ON DELETE …``)
                         # is equivalent to a table-level FOREIGN KEY; route it
@@ -2450,6 +2567,7 @@ def _convert_create_table(
                         deferrable=deferrable,
                         on_update=on_update,
                         collate=collate,
+                        invisible=invisible,
                         quoted=_identifier_quoted(col_def.this),
                     )
                 )
@@ -3613,9 +3731,17 @@ def _convert_window(expr: exp.Window) -> WindowFunction:
     # it verbatim rather than dropping it (which silently turns a running total
     # into a grand total).
     spec = expr.args.get("spec")
+    # ``spec.sql()`` (generic dialect) omits the frame's EXCLUDE clause, so
+    # capture it separately — only PG/Oracle can re-emit it (the emitter
+    # degrades T-SQL/MySQL, which have no equivalent).
     frame = spec.sql() if isinstance(spec, exp.WindowSpec) else None
+    exclude = None
+    if isinstance(spec, exp.WindowSpec) and spec.args.get("exclude") is not None:
+        exclude = f"EXCLUDE {spec.args['exclude'].this}"
 
-    window_spec = WindowSpec(partition_by=partition_by, order_by=order_by, frame=frame)
+    window_spec = WindowSpec(
+        partition_by=partition_by, order_by=order_by, frame=frame, exclude=exclude
+    )
     return WindowFunction(function=function, window=window_spec)
 
 

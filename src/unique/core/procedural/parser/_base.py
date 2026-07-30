@@ -1522,9 +1522,14 @@ class ParserBase:
         ``ROLLBACK [TRAN[SACTION]|WORK] [name]`` and ``SAVE TRAN[SACTION] name``.
         An optional transaction/savepoint name is captured.
         """
-        verb = self._advance().upper_value  # BEGIN | COMMIT | ROLLBACK | SAVE
+        # BEGIN | COMMIT | ROLLBACK | SAVE (T-SQL) | SAVEPOINT (Oracle/PG/MySQL).
+        verb = self._advance().upper_value
         # Consume an optional TRAN/TRANSACTION/WORK keyword.
         self._match_keyword("TRAN", "TRANSACTION", "WORK")
+        # Oracle/standard ``ROLLBACK TO [SAVEPOINT] name`` names the savepoint to
+        # roll back to; consume the ``TO [SAVEPOINT]`` lead-in so the name is read.
+        if verb == "ROLLBACK" and self._match_keyword("TO"):
+            self._match_keyword("SAVEPOINT")
         # Optional transaction or savepoint name (identifier or @variable).
         name: str | None = None
         if self._current().type in (TokenType.IDENTIFIER, TokenType.VARIABLE):
@@ -1535,7 +1540,7 @@ class ParserBase:
             action = TransactionAction.BEGIN
         elif verb == "COMMIT":
             action = TransactionAction.COMMIT
-        elif verb == "SAVE":
+        elif verb in ("SAVE", "SAVEPOINT"):
             action = TransactionAction.SAVEPOINT
         else:
             action = TransactionAction.ROLLBACK

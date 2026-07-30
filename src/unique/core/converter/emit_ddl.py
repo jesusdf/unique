@@ -53,6 +53,11 @@ __all__ = [
 #: (sqlglot's TIMESTAMPLTZ) per target. No engine spells the type
 #: ``TIMESTAMPLTZ``; sqlglot's lenient readers accept the raw token but every
 #: real engine rejects it, so shipping it is a silent-invalid defect.
+# Engines with no ``ON DELETE SET DEFAULT`` FK action (ORA-03001 on Oracle);
+# the action is dropped + warned there. PG/MySQL/T-SQL all support it.
+_NO_SET_DEFAULT_FK = frozenset({"oracle"})
+_FK_SET_DEFAULT_RE = re.compile(r"(?i)\s*\bON\s+DELETE\s+SET\s+DEFAULT\b")
+
 _LOCAL_TZ_TYPE: dict[str, str] = {
     "postgresql": "TIMESTAMPTZ",
     "tsql": "DATETIMEOFFSET",
@@ -339,6 +344,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
         column_comments: list[tuple[str, str]] = []
         on_update_notes: list[str] = []
         collate_notes: list[str] = []
+        invisible_notes: list[str] = []
         for col in node.columns:
             check = ""
             if col.data_type.name.upper() in ("ENUM", "SET") and col.data_type.values:
@@ -713,6 +719,20 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     "differ) — set it explicitly on the target or supply the "
                     "source DB connection"
                 )
+            # A MySQL/Oracle INVISIBLE column is excluded from SELECT *; both
+            # engines keep it inline (after the type). PG/T-SQL have no such
+            # attribute, so carry a documented note — dropping it silently
+            # changed SELECT *'s result set.
+            invisible_inline = (
+                " INVISIBLE" if col.invisible and dialect in ("mysql", "oracle") else ""
+            )
+            if col.invisible and dialect in ("postgresql", "tsql"):
+                invisible_notes.append(
+                    f"-- UNIQUE: column {col_name} was INVISIBLE (excluded from "
+                    f"SELECT *) on the source; {dialect} has no invisible-column "
+                    "attribute, so the column is now visible to SELECT * "
+                    "(docs/03-unsupported.md)"
+                )
             # A computed column carries no identity/default; T-SQL derives the
             # type from the expression, so it omits the declared type entirely.
             if col.generated_expr is not None:
@@ -728,14 +748,14 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                 nullable = "" if (col.nullable or col.identity) else " NOT NULL"
                 col_defs.append(
                     f"  {col_name} {dtype}{collate_inline}{identity}{default}"
-                    f"{nullable}{pk}{unique}{check}{unsigned_check}"
+                    f"{nullable}{pk}{unique}{check}{unsigned_check}{invisible_inline}"
                 )
             else:
                 nullable = "" if col.nullable else " NOT NULL"
                 col_defs.append(
                     f"  {col_name} {dtype}{collate_inline}{identity}{nullable}"
                     f"{default}{pk}{unique}{check}{unsigned_check}"
-                    f"{on_update_inline}{comment_inline}"
+                    f"{on_update_inline}{comment_inline}{invisible_inline}"
                 )
         # Table-level constraints (PK/FK/UNIQUE/CHECK), re-transpiled.
         # A fragment may come back as a documented comment (e.g. a generated
@@ -744,6 +764,7 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
         trailing_comments: list[str] = list(set_type_notes)
         trailing_comments.extend(on_update_notes)
         trailing_comments.extend(collate_notes)
+        trailing_comments.extend(invisible_notes)
         post_statements: list[str] = []
         for constraint in node.table_constraints:
             # PostgreSQL ``UNIQUE … NULLS NOT DISTINCT`` (NULLs compare equal, so
@@ -796,6 +817,23 @@ def _emit_create_table(node: CreateTableStatement, dialect: str) -> str:
                     "self-referencing FK (error 1785); downgraded to NO ACTION "
                     "— emulate with an AFTER trigger if the automatic action "
                     "is required (docs/03-unsupported.md)"
+                )
+            # Oracle has no ``SET DEFAULT`` referential action (only CASCADE /
+            # SET NULL / NO ACTION); shipped verbatim it is ORA-03001
+            # "unimplemented feature". Drop the action (the FK reverts to the
+            # NO ACTION default) and document the loss — an ON DELETE SET
+            # DEFAULT must be emulated with a trigger if it is required.
+            if dialect in _NO_SET_DEFAULT_FK and _FK_SET_DEFAULT_RE.search(
+                constraint.sql
+            ):
+                constraint = dataclasses.replace(
+                    constraint,
+                    sql=_FK_SET_DEFAULT_RE.sub("", constraint.sql),
+                )
+                trailing_comments.append(
+                    "-- UNIQUE: Oracle has no ON DELETE SET DEFAULT referential "
+                    "action; dropped (FK reverts to NO ACTION) — emulate with an "
+                    "AFTER DELETE trigger if required (docs/03-unsupported.md)"
                 )
             # A reconstructed T-SQL inline INDEX ("name|cols"): T-SQL and MySQL
             # keep the inline element; PG/Oracle get a separate CREATE INDEX

@@ -1427,6 +1427,22 @@ def _emit_condition(node: ASTNode, dialect: str) -> str:
         if (
             isinstance(node, UnaryOp)
             and node.operator == UnaryOperator.NOT
+            and isinstance(node.operand, BinaryOp)
+            and node.operand.operator == BinaryOperator.IS
+            and isinstance(node.operand.left, ColumnRef)
+            and isinstance(node.operand.right, Literal)
+            and node.operand.right.dtype == "boolean"
+        ):
+            # ``flag IS NOT TRUE`` / ``IS NOT FALSE`` over a boolean column:
+            # on these no-boolean engines ``x IS NOT TRUE`` is TRUE when x is
+            # FALSE *or* NULL, so a bare ``NOT (x = 1)`` drops the NULL rows.
+            # Keep the NULL leg explicitly.
+            inner = _emit_expression(node.operand.left, dialect)
+            val = "1" if node.operand.right.value else "0"
+            return f"({inner} <> {val} OR {inner} IS NULL)"
+        if (
+            isinstance(node, UnaryOp)
+            and node.operator == UnaryOperator.NOT
             and (
                 isinstance(node.operand, BinaryOp)
                 or (
@@ -3126,6 +3142,14 @@ def _map_system_global(sql: str, dialect: str) -> str | None:
             f"0 /* UNIQUE: @@ERROR has no top-level {dialect} equivalent; "
             "use an exception handler */"
         )
+    if upper == "@@IDENTITY" and dialect != "tsql":
+        # The last identity inserted in the session — the same "last generated
+        # id" the SCOPE_IDENTITY() function maps to (PG LASTVAL() / MySQL
+        # LAST_INSERT_ID() / Oracle CURRVAL carrier). Shipped raw it was
+        # ``@@IDENTITY`` -> PG 'column "identity" does not exist' / ORA-00936.
+        from unique.core.mappings import LAST_IDENTITY_EXPR
+
+        return LAST_IDENTITY_EXPR[dialect]
     if upper == "@@VERSION" and dialect != "tsql":
         # PG/MySQL have a version function; the string it returns is engine
         # specific, so the value cannot match T-SQL's. Oracle's is in v$version

@@ -1850,6 +1850,36 @@ class ProceduralEmitter:
         rest = [a for a in args if a is not text and a is not number]
         return text, number, ", ".join(rest)
 
+    #: A T-SQL RAISERROR printf-style conversion specifier (``%d``, ``%s``,
+    #: ``%7.2f``, ``%I64d``, …). ``%%`` (a literal percent) has no trailing
+    #: specifier letter, so it never matches.
+    _TSQL_FMT_SPEC = re.compile(
+        r"%[-+ 0#]*\*?\d*(?:\.\d+)?(?:l|h|I64|ll)?[diouxXeEfgGsScp]"
+    )
+
+    @classmethod
+    def _raise_format_substitution(cls, msg: str) -> tuple[str | None, list[str]]:
+        """RAISERROR(``'… %d …'``, severity, state, arg, …): return the literal
+        message and its printf substitution args, or ``(None, [])`` when the
+        blob is not that shape (a variable/expression message, a THROW, or no
+        trailing format args). The count of specifiers must match the args, so
+        a callee can substitute exactly (else it degrades + warns instead of
+        silently dropping them)."""
+        remaining = msg.strip()
+        if remaining.startswith("(") and remaining.endswith(")"):
+            remaining = remaining[1:-1].strip()
+        args: list[str] = []
+        while remaining:
+            first, remaining = cls._split_raise_args(remaining)
+            args.append(first)
+        # RAISERROR message-first form: 'msg', severity, state, then fmt args.
+        if len(args) > 3 and args[0].startswith("'"):
+            fmt_args = args[3:]
+            specs = cls._TSQL_FMT_SPEC.findall(args[0])
+            if specs and len(specs) == len(fmt_args):
+                return args[0], fmt_args
+        return None, []
+
     @staticmethod
     def _split_raise_args(msg: str) -> tuple[str, str]:
         """Split a RAISERROR/THROW argument blob into (first_arg, rest).

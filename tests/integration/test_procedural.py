@@ -1419,9 +1419,15 @@ class TestTransactionControl:
             "CREATE PROCEDURE dbo.p AS BEGIN SAVE TRANSACTION sp "
             "ROLLBACK TRANSACTION sp END"
         )
+        # PL/pgSQL has no explicit SAVEPOINT / ROLLBACK TO SAVEPOINT (the latter
+        # is even a compile-time syntax error); both degrade to a documented
+        # carrier rather than shipping non-compiling plpgsql.
         out = _transpile(src, "tsql", "postgresql")
-        assert "SAVEPOINT sp;" in out
-        assert "ROLLBACK TO SAVEPOINT sp;" in out
+        assert "SAVEPOINT sp dropped" in out
+        assert "ROLLBACK TO SAVEPOINT sp dropped" in out
+        # Oracle keeps native savepoints.
+        ora = _transpile(src, "tsql", "oracle")
+        assert "SAVEPOINT sp;" in ora and "ROLLBACK TO SAVEPOINT sp;" in ora
 
     def test_roundtrip_tsql_preserves(self) -> None:
         src = "CREATE PROCEDURE dbo.p AS BEGIN BEGIN TRANSACTION COMMIT END"
