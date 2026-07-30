@@ -1,6 +1,40 @@
 # Unique — Project Status
 
-## Current state: v0.32.0 (**M0–M4 complete; the 2026-07-24 audit backlog, its follow-on findings and the B28 features all executed 2026-07-25** — every audit S1 fixed live-verified, emitter debt paid under CI ratchet gates, challenge corpus armed with 1,073 dedicated assertions; pending: two maintainer decisions)
+## Current state: v0.35.0 (**M0–M4 complete**; three 2026-07-30 challenge campaign cycles closed 94 findings, 92 `[fixed]` — corpus at **791 `[fixed]` / 169 `[limit]` / 0 `[open]`** of 960; the post-campaign feature backlog — B29–B33, T8, F1, F2 — is executed; pending: Q1, triaged into briefs B34–B39)
+
+**Challenge campaign 2026-07-30 (three cycles, PURPLE-directed red&blue)
+CLOSED**: cycle 1 (61 findings), cycle 2 (27 findings, seeded), cycle 3 (6
+findings, closed-list re-validation) — **94 findings total, 92 resolved
+`[fixed]`**, 1 maintainer-approved `[limit]`, 2 held by approved feature
+briefs (B29/B30), now also closed. The corpus stands at **791 `[fixed]` /
+169 `[limit]` / 0 `[open]`** of 960 cases (`scripts/challenge_stats.py`,
+run 2026-07-30). Full log: `docs/MILESTONES.md` ("Post-campaign backlog
+executed" and the two campaign-cycle entries), `docs/DONE.md` §48–§49.
+
+**Post-campaign backlog executed the same day**: **B29** (MySQL ENUM
+declaration-order, sort-context only per a live-verified brief correction)
+and **B30** (bounded date-type propagation for derived-table columns) closed
+the corpus's last two `[open]` cases. **B32** landed a `UNIQUE-NNNN`
+diagnostic-code registry across every carrier/warning emission site — see
+"Diagnostic codes" below. **B31** added a rationale side-table keyed on
+those codes, feeding the generated `docs/reference/warnings.md`. **B33**
+drove the completeness gate's residual floor 14 → 0 by regenerating the
+`tests/fixtures/procedures/*` fixtures through their sanctioned path
+(`docs/DONE.md` §48). **F1** shipped `unique compare` (structural
+similarity between two scripts) and **F2** its web UI Compare button — see
+"Structural similarity" below. **Q2** (two emitter/degrade coherence bugs —
+a stray `$$` inside a commented carrier body, and an orphan transaction
+closer surviving a degraded opener) is closed per `git log` (`62d5493`,
+`75dd020`, pinned by `0cba085`). **Q1** (the Oracle-source/MySQL-source
+procedural degrade rate on the PostgreSQL pivot) has been triaged
+(`audit/2026-07-30-q1-triage.md`): a fresh measurement puts the actionable
+gap at 28/32 oracle→postgresql and 21/31 mysql→postgresql routines
+degrading to carriers, and two of the top mechanisms turned out to be
+**transpiler bugs, not approved degrades** — a `UNIQUE-1171` false positive
+from unscrubbed-comment `@name` scanning, and a `UNIQUE-1219` SET-variable
+misclassification that corrupts output by closing the routine body's `$$`
+quoting early. Six briefs (B34–B39) are ready in `docs/TODO.md`; none are
+implemented yet.
 
 **Direction-residue campaign closed 2026-07-17** (waves 103–239, user-declared
 architectural floor at `469917a`): the six corpus directions (pg-source and
@@ -42,8 +76,9 @@ The **2026-07-24 audit** (`audit/2026-07-24/` — remediation verification,
 10 new live-verified S1s, prevention plan, pre-analyzed fix briefs) and its
 **entire B1–B28 backlog were executed 2026-07-24→25** in agentic team mode
 (`docs/MILESTONES.md`, `docs/DONE.md` §44). The pending backlog in
-`docs/TODO.md` now holds only the new findings that campaign surfaced, two
-maintainer decisions, and the two authored feature briefs (B28a/B28b).
+`docs/TODO.md` now holds only **Q1**'s six triaged briefs (B34–B39) plus the
+continuously-tracked rationale-coverage ratchet (see "Diagnostic codes"
+below) and the challenge-corpus intake.
 
 ### What holds today (measured, not asserted)
 
@@ -79,6 +114,13 @@ maintainer decisions, and the two authored feature briefs (B28a/B28b).
     unwrapping constant EXECUTE IMMEDIATE strings surfaced failures that
     previously hid as runtime noise inside opaque EXEC() calls.
     Tier-1 promotion still wants a second corpus.
+  - **Procedural pipeline, DML/DDL validity vs. carrier-degrade rate are
+    different measurements** (Q1 triage, `audit/2026-07-30-q1-triage.md`,
+    2026-07-30): the syntax-validity numbers above are for DML/DDL scripts.
+    On the `tests/fixtures/procedures/` corpus specifically, oracle→postgresql
+    and mysql→postgresql degrade a materially higher share of routines to
+    carriers than sqlserver↔postgresql — 28/32 and 21/31 respectively — a
+    distinct, currently open quality gap (briefs B34–B39, `docs/TODO.md`).
 - **Test-assertion quality** is gated (identity-mutation floor **70%**, last
   measured **76%** on 2026-07-25 after the challenge assertion campaign —
   the stale-floor backstop itself demanded the raise) and tracked nightly
@@ -86,7 +128,66 @@ maintainer decisions, and the two authored feature briefs (B28a/B28b).
   floor sits >15 points under the measurement). Architecture debt is gated
   too (`scripts/architecture_ratchets.py` in CI: emitter module size,
   post-emit regex surface, dialect string-dispatch, complexity offenders —
-  monotonic downward).
+  monotonic downward; measured 2026-07-30: emitter module **3645** lines,
+  post-emit regex calls **182**, dialect string-compares **570**,
+  cyclomatic-complexity offenders **114** — all at their current floor, zero
+  slack).
+- **Diagnostic codes (B32, 2026-07-30)**: every warning/error/carrier the
+  transpiler emits carries a stable `UNIQUE-NNNN` code from a single
+  registry (`src/unique/core/diagnostics.py`; **233 codes registered**,
+  `UNIQUE-1001`–`UNIQUE-1233`, verified via
+  `unique.core.diagnostics.DIAGNOSTICS`). A completeness gate
+  (`tests/unit/core/test_diagnostic_completeness.py`) rejects any warning
+  shipped without a code — the ratchet floor is **0** uncoded signatures,
+  reached by B33 (2026-07-30) after regenerating the stale pre-B32
+  procedural fixtures. `unique transpile --ignore UNIQUE-NNNN` (and the
+  API's `ignore` field) suppress individual codes on the warning channel
+  only — carriers always stay in the emitted SQL. A rationale side-table
+  (B31, `src/unique/core/rationales.py`) keys the *why* of each code to a
+  `docs/rationale/` page or `docs/03-unsupported.md` section, itself under a
+  coverage ratchet — currently 33 of 233 codes have a registered rationale
+  (floor: at most 200 uncovered, `tests/unit/core/test_diagnostics.py`).
+  Lowering that floor is ongoing, unfinished work, not a closed item.
+
+### Structural similarity — `unique compare` (F1/F2, 2026-07-30)
+
+A new capability, distinct from functional-equivalence testing: `unique
+compare A.sql B.sql` (and `unique.core.similarity.compare`,
+`POST /api/v1/similarity`, and a web UI **Compare** button next to
+**Transpile**, styled with the version-badge's colour tokens) reports a
+*normalized structural similarity* percentage between two SQL scripts — same
+or different source dialects — with a per-dimension breakdown (DML
+structure, predicates, control flow, tree match). Both inputs are
+normalized through the existing transpiler to a PostgreSQL pivot, then
+compared by statement alignment plus weighted `sqlglot.diff` tree matching;
+a statement that degrades to a carrier during normalization counts as
+unmatched rather than inflating the score. It is explicitly presented as
+**not** a claim of semantic equivalence — query equivalence is undecidable
+in general — documented at `docs/03-unsupported.md` §3.38 and echoed in
+both the CLI output and the web result panel. Source:
+`src/unique/core/similarity.py`, `src/unique/cli/main.py` (`compare`
+command), `src/unique/api/app.py` (`/api/v1/similarity`),
+`web/src/index.template.html` (`compareBtn`).
+
+### Documentation layers (T8, 2026-07-30)
+
+Three complementary layers, indexed from [`docs/README.md`](README.md)
+(landed 2026-07-30):
+
+- **Curated rationale** (`docs/rationale/`): hand-written *why* pages —
+  datetime, strings & collation, aggregates & windows, DML, DDL, procedural
+  (6 pages plus a `README.md` index) — every claim traceable to a corpus
+  case.
+- **Generated reference** (`docs/reference/`, produced by
+  `scripts/generate_reference_docs.py`, kept fresh by a CI `--check` gate
+  that "caught real drift on its first day, twice" per `docs/DONE.md` §49):
+  `warnings.md` (the per-`UNIQUE-NNNN`-code catalog, re-keyed on the B31/B32
+  registries), `limits.md` (the approved-degradation `[limit]` catalog),
+  `coverage.md` (challenge-corpus counts, machine-parsed from
+  `scripts/challenge_stats.py`), and 12 `mappings-<source>-<target>.md`
+  function/type matrices — 15 generated pages in total.
+- **`docs/README.md`**: the documentation index itself, pointing readers to
+  architecture, rationale, reference and the interfaces docs.
 
 ### Direction tiers (doc-04 P6)
 
@@ -103,6 +204,18 @@ maintainer decisions, and the two authored feature briefs (B28a/B28b).
 The full milestone history (every closed backlog section, newest first) lives
 in [`docs/MILESTONES.md`](MILESTONES.md); the highlights:
 
+- **Challenge campaign, 2026-07-30, three cycles under the PURPLE role**
+  (architect/analyst directing RED/BLUE worker agents; `docs/MILESTONES.md`):
+  cycle 1 (61 findings: clause-enumeration/composition grids on
+  tsql/oracle, self-emitted round-trips on pg/mysql), cycle 2 (27 findings,
+  seeded probe — headline: MySQL `DELETE … ORDER BY … LIMIT` dropping the
+  cap and deleting every matching row), cycle 3 (6 findings, closed-list
+  re-validation: the UPDATE twin of the DELETE bug, non-literal
+  TRY_CAST/TRY_CONVERT, SET TRANSACTION and GOTO in routine bodies). BLUE
+  closed all but 2 (held by the B29/B30 feature briefs, since also closed).
+  **94 findings, 92 `[fixed]`** — corpus 791/169/0 of 960. The same cycle
+  shipped `docs/rationale/` (curated) and T8's generated `docs/reference/`.
+  Full log: `docs/DONE.md` §48–§49.
 - **Challenge-corpus campaign COMPLETE** (2026-07-18 → 2026-07-24, v0.30.0):
   a RED batch live-validated 862 mis-transpilations (only *silent* problems
   count — a warned degrade is an accepted outcome); the BLUE/architect
@@ -169,17 +282,27 @@ Six complementary layers:
   transpiled result sets — catches wrong-answer bugs.
 - **Mutation testing** (nightly + identity-mutation CI gate): assertion
   quality as a ratcheted number.
-- **Challenge corpus, RED/BLUE roles** (`tests/fixtures/challenge/`, workflow
-  in `skills/SKILL-challenge-corpus.md`): an adversarial RED role hunts
-  *silent* mis-transpilations (valid, anonymized source; live-validated on
-  the four engines; a warned degrade is not a finding) and records them as
+- **Challenge corpus, RED/BLUE/PURPLE roles** (`tests/fixtures/challenge/`,
+  workflow in `skills/SKILL-challenge-corpus.md`): an adversarial RED role
+  hunts *silent* mis-transpilations (valid, anonymized source; live-validated
+  on the four engines; a warned degrade is not a finding) and records them as
   `[open]` cases; a BLUE role fixes each one and locks it in as `[fixed]`
   (strict assertion) or an approved `[limit]` (warning + `UNIQUE:` annotation
   + `docs/03-unsupported.md` entry, contract-enforced by
-  `test_challenge.py`). The 2026-07 campaign resolved all 862 RED findings
-  (`docs/MILESTONES.md`); the corpus stays as the live intake for new ones.
+  `test_challenge.py`); a PURPLE role — introduced 2026-07-30 — directs and
+  coordinates iterative RED/BLUE rounds via delegated workers, evaluates
+  yield, and is the sole role that decides when a campaign ends and commits/
+  pushes to `main`. The 2026-07-18→24 campaign resolved all 862 RED findings
+  and the three 2026-07-30 cycles resolved 92 of 94 more (`docs/MILESTONES.md`);
+  the corpus (960 cases, 0 `[open]`) stays as the live intake for new ones.
 
 The version is single-sourced from `unique.__version__` and released via
 `scripts/release.py`. History: `docs/MILESTONES.md` (closed backlog sections)
 and `docs/DONE.md` (detailed archive). Backlog: `docs/TODO.md` (currently
-empty — all discrete items closed and archived).
+holds **Q1**'s six triaged briefs, B34–B39 — the Oracle/MySQL-source
+procedural degrade-rate front — plus the continuously-tracked
+rationale-coverage ratchet and challenge-corpus intake; every other discrete
+item closed and archived).
+
+---
+*Last reviewed: 2026-07-30.*
