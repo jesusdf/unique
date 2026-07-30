@@ -45,7 +45,8 @@ class TestDeterminism:
 class TestWarningsPage:
     def test_row_per_code_with_anchor_and_message(self) -> None:
         page = gen.render_warnings_page()
-        # A data row for every registered code, anchored for deep-linking.
+        # Every registered code is anchored for deep-linking, whether it
+        # renders as a recipe (heading) or a pending-table row.
         for code in gen.DIAGNOSTICS:
             assert f'<a id="{code.lower()}"></a>`{code}`' in page
         # The message template appears (not the identity input) — spot-check one.
@@ -55,10 +56,50 @@ class TestWarningsPage:
         page = gen.render_warnings_page()
         # A covered code renders its construct + a corpus-case link, not pending.
         assert "reda-ts-identity-insert" in page
-        # An uncovered code renders the explicit pending marker.
+        # An uncovered code renders the explicit pending marker, on the same
+        # (table) line as its code.
         uncovered = next(c for c in gen.DIAGNOSTICS if c not in gen.RATIONALES)
         row = next(ln for ln in page.splitlines() if f"`{uncovered}`" in ln)
         assert gen._RATIONALE_PENDING in row
+
+    def test_covered_code_renders_a_problem_solution_discussion_recipe(self) -> None:
+        page = gen.render_warnings_page()
+        code = "UNIQUE-1002"
+        assert code in gen.RATIONALES  # guard: this test targets a covered code
+        rat = gen.RATIONALES[code]
+        block = gen._rationale_recipe(code)
+        assert block in page  # the page assembles the recipe verbatim
+        # Heading carries the anchor immediately followed by the code and
+        # the construct — grep/deep-link contract.
+        assert f'### <a id="{code.lower()}"></a>`{code}` — {rat.construct}' in block
+        # The four recipe sections, each sourced from a distinct registry
+        # field, in Problem/Solution/Discussion/See Also order.
+        for label in (
+            "**Problem.**",
+            "**Solution (pointer).**",
+            "**Discussion.**",
+            "**See Also.**",
+        ):
+            assert label in block
+        assert block.index("**Problem.**") < block.index("**Solution (pointer).**")
+        assert block.index("**Solution (pointer).**") < block.index("**Discussion.**")
+        assert block.index("**Discussion.**") < block.index("**See Also.**")
+        assert rat.construct in block  # Problem
+        assert rat.divergence in block  # Solution (pointer)
+        assert rat.reason in block  # Discussion
+        assert gen._example_cell(rat.example_case) in block  # See Also
+
+    def test_uncovered_codes_render_as_a_compact_table_not_a_recipe(self) -> None:
+        page = gen.render_warnings_page()
+        assert "## Diagnostics with a rationale" in page
+        assert "## Diagnostics without a rationale yet" in page
+        pending_section = page.split("## Diagnostics without a rationale yet", 1)[1]
+        uncovered = next(c for c in gen.DIAGNOSTICS if c not in gen.RATIONALES)
+        # No "### " recipe heading for an uncovered code anywhere on the page.
+        assert f'### <a id="{uncovered.lower()}"></a>`{uncovered}`' not in page
+        # It shows up as a table row (piped columns) in the pending section.
+        row = next(ln for ln in pending_section.splitlines() if f"`{uncovered}`" in ln)
+        assert row.startswith("|")
 
     def test_every_page_carries_the_generated_banner(self) -> None:
         pages = gen.generate_all()
