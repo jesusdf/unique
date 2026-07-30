@@ -167,7 +167,7 @@ def test_pg_update_to_mysql_uses_on_duplicate_key() -> None:
     assert "VALUES(v)" in out.replace(" ", "")
     assert "ON CONFLICT" not in _exec(out).upper()
     # Honesty annotation + warning for the any-key semantics.
-    assert "UNIQUE-" in out
+    assert "UNIQUE-1024:" in out
     assert _result(_PG_UPDATE, "postgresql", "mysql").warnings
     assert _parses(out, "mysql")
 

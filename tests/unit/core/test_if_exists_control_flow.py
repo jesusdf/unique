@@ -74,7 +74,7 @@ class TestNonCatalogIfExists:
             "oracle",
         )
         up = r.sql.upper()
-        assert "NOEXEC" in up and "UNIQUE-" in up, r.sql  # carried, not executed
+        assert "NOEXEC" in up and "UNIQUE-1193:" in up, r.sql  # carried, not executed
         assert "PUT_LINE('SKIP')" in up.replace(" ", ""), r.sql  # not merged
         assert any("NOEXEC" in w.message for w in r.warnings), r.warnings
 

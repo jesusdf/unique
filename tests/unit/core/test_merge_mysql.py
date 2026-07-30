@@ -35,7 +35,7 @@ class TestMergeToMySQL:
         result = self.t.transpile(CANONICAL, "tsql", "mysql")
         # The rewrite assumes a UNIQUE/PK on the ON columns; that assumption
         # must be visible both in the SQL and in the result object.
-        assert "UNIQUE-" in result.sql
+        assert "UNIQUE-1001:" in result.sql
         assert result.warnings
 
     def test_oracle_merge_source_dialect_also_rewrites(self) -> None:

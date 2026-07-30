@@ -106,7 +106,7 @@ def test_oracle_fk_on_update_stripped() -> None:
     exec_sql = re.sub(r"/\*.*?\*/", "", out, flags=re.S)
     assert "ON UPDATE" not in exec_sql.upper(), out
     assert "ON DELETE CASCADE" in exec_sql.upper(), out
-    assert "UNIQUE-" in out, out  # carrier present
+    assert "UNIQUE-1148:" in out, out  # carrier present
     assert result.warnings, out  # loss surfaced (no silent drop)
     assert _parses(out, "oracle"), out
 

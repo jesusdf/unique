@@ -520,7 +520,7 @@ class TestDeRegexOracleScalarsAndSequences:
         ts = Transpiler().transpile(src, "oracle", "tsql")
         assert ".CURRVAL" not in ts.sql.upper()
         assert "SELECT NULL" in ts.sql
-        assert "UNIQUE-" in ts.sql
+        assert "UNIQUE-1080:" in ts.sql
         assert any("CURRVAL" in w.message for w in ts.warnings)
 
     def test_nextval_not_rewritten_inside_string_literal(self) -> None:
