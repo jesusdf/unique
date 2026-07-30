@@ -952,6 +952,11 @@ _DATE_UNIT_ALIASES = {
     "WK": "WEEK",
     "WW": "WEEK",
     "W": "WEEK",
+    # For DATEDIFF/DATEADD (the only callers of _date_unit_name) T-SQL's WEEKDAY
+    # (dw) behaves exactly like DAY — it counts/adds day boundaries, not the
+    # day-of-week. (DATEPART(WEEKDAY) day-of-week goes through the EXTRACT path.)
+    "WEEKDAY": "DAY",
+    "DW": "DAY",
 }
 
 

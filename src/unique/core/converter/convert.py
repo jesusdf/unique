@@ -3295,6 +3295,22 @@ def _convert_function(expr: exp.Expression) -> FunctionCall:
         # with a raw INTERVAL argument (wave 162). Canonicalize to the
         # 3-argument (ts, n, unit) form the date-add emitter renders.
         anon_name = str(expr.name).upper()
+        if (
+            SOURCE_DIALECT.get() in ("postgresql",)
+            and anon_name in ("NEXTVAL", "CURRVAL")
+            and len(expr.expressions) == 1
+            and isinstance(expr.expressions[0], exp.Literal)
+            and expr.expressions[0].is_string
+        ):
+            # PG ``nextval('seq')`` / ``currval('seq')`` — model as the shared
+            # sequence call the T-SQL (``NEXT VALUE FOR seq``) and Oracle
+            # (``seq.NEXTVAL``) sources already produce, symmetric with the
+            # reverse directions (the emitter renders each per target; MySQL,
+            # which has no sequences, degrades honestly). The regclass argument
+            # is a bare sequence name.
+            seq_name = str(expr.expressions[0].this)
+            fn = "NEXT_VALUE_FOR" if anon_name == "NEXTVAL" else "CURRENT_VALUE_FOR"
+            return FunctionCall(name=fn, args=(ColumnRef(name=seq_name),))
         if anon_name in ("ADDDATE", "SUBDATE") and len(expr.expressions) == 2:
             canonical = "DATE_ADD" if anon_name == "ADDDATE" else "DATE_SUB"
             ts, amount = expr.expressions
@@ -3416,6 +3432,43 @@ def _rebase_to_days(expr: exp.Add) -> ASTNode | None:
     return convert_expression(rebased)
 
 
+#: sqlglot binary-operator nodes every engine expresses as a portable call —
+#: modeled as a ``FunctionCall`` so the emitter renders the per-target form
+#: rather than degrading the whole statement as an "unmapped operator". The IR
+#: function name is the value; a 3rd tuple element is an extra literal argument.
+_BINARY_AS_CALL: dict[type, tuple[str, str | None]] = {
+    exp.Pow: ("POWER", None),
+    exp.RegexpLike: ("REGEXP_LIKE", None),
+    exp.RegexpILike: ("REGEXP_LIKE", "i"),  # PG ``~*`` case-insensitive
+    exp.JSONExtractScalar: ("JSON_EXTRACT_SCALAR", None),
+    exp.JSONExtract: ("JSON_EXTRACT", None),
+    exp.IntDiv: ("INT_DIV", None),
+}
+
+
+def _convert_binary_as_call(expr: exp.Binary) -> FunctionCall | None:
+    """Model a portable binary operator as a ``FunctionCall``, or None.
+
+    POWER, POSIX regex (case-sensitive and ``~*`` case-insensitive), scalar and
+    object JSON extract, and integer division all have a per-target form the
+    emitter renders (the reverse directions already map them) — so they are
+    modeled as calls instead of degrading as an unmapped operator.
+    ``exp.JSONExtractScalar`` must be checked before ``exp.JSONExtract`` (its
+    superclass); ``dict`` lookup on the exact type avoids that ordering hazard.
+    """
+    spec = _BINARY_AS_CALL.get(type(expr))
+    if spec is None:
+        return None
+    name, extra = spec
+    args: list[ASTNode] = [
+        convert_expression(expr.this),
+        convert_expression(expr.expression),
+    ]
+    if extra is not None:
+        args.append(Literal(value=extra, dtype="string"))
+    return FunctionCall(name=name, args=tuple(args))
+
+
 def _convert_binary(expr: exp.Binary) -> ASTNode:
     """Convert a binary operation.
 
@@ -3424,17 +3477,9 @@ def _convert_binary(expr: exp.Binary) -> ASTNode:
     ``=``). Instead the original expression is preserved as ``RawSQL`` so the
     emitter re-renders it via sqlglot, which knows the per-dialect spelling.
     """
-    if isinstance(expr, exp.Pow):
-        # Every engine spells exponentiation POWER(x, y); model it as a call so
-        # it is not treated as an unmapped operator — which degraded on Oracle
-        # even though POWER exists there — and emits portably (RC-1a).
-        return FunctionCall(
-            name="POWER",
-            args=(
-                convert_expression(expr.this),
-                convert_expression(expr.expression),
-            ),
-        )
+    call = _convert_binary_as_call(expr)
+    if call is not None:
+        return call
     if isinstance(expr, exp.Escape):
         # ``LIKE p ESCAPE c`` — SQL-standard, supported identically on every
         # engine. Carry the escape char on the inner LIKE/ILIKE BinaryOp instead
@@ -3449,31 +3494,6 @@ def _convert_binary(expr: exp.Binary) -> ASTNode:
             )
         return RawSQL(
             sql=_source_sql(expr), reason=f"unmapped operator {type(expr).__name__}"
-        )
-    if isinstance(expr, exp.RegexpLike):
-        # Oracle/PG/MySQL all express POSIX regex matching (Oracle REGEXP_LIKE,
-        # PG ``~``, MySQL REGEXP); model it as a call so the emitter renders the
-        # per-target form. Only T-SQL genuinely lacks it (degraded there).
-        return FunctionCall(
-            name="REGEXP_LIKE",
-            args=(
-                convert_expression(expr.this),
-                convert_expression(expr.expression),
-            ),
-        )
-    if isinstance(expr, exp.JSONExtract) and not isinstance(
-        expr, exp.JSONExtractScalar
-    ):
-        # MySQL ``col -> '$.x'`` / JSON_EXTRACT(col, '$.x'): model as a call
-        # (the emitter renders each target's accessor) instead of an unmapped
-        # operator that degrades the whole statement. The SCALAR ``->>`` form
-        # keeps its RawSQL path (sqlglot re-renders it per target).
-        return FunctionCall(
-            name="JSON_EXTRACT",
-            args=(
-                convert_expression(expr.this),
-                convert_expression(expr.expression),
-            ),
         )
     if isinstance(expr, exp.Is) and expr.args.get("negate"):
         # sqlglot 30.12+ folds ``IS NOT NULL`` into ``Is(negate=True)``

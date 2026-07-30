@@ -997,6 +997,16 @@ def _emit_create_view(node: CreateViewStatement, dialect: str) -> str:
         # engines that accept it — a view has no guaranteed order anyway.
         view_query = dataclasses.replace(view_query, order_by=())
     query = _emit_select(view_query, dialect)
+    # MATERIALIZED is a native modifier on Oracle and PostgreSQL (a distinct
+    # object with its own storage/refresh), so it changes the CREATE keyword
+    # rather than degrading — the reverse directions already round-trip it.
+    # Neither engine accepts OR REPLACE on a materialized view. T-SQL/MySQL have
+    # no equivalent, so it stays a warned drop there.
+    materialized = any(m.upper() == "MATERIALIZED" for m in node.dropped_modifiers)
+    view_kw = "VIEW"
+    if materialized and dialect in ("oracle", "postgresql"):
+        view_kw = "MATERIALIZED VIEW"
+        replace = ""
     # Non-portable view modifiers (SCHEMABINDING, ALGORITHM=, DEFINER=, …):
     # re-attach natively where the target owns the modifier (per-engine table
     # below); degrade the rest with a warned carrier (auto-warned by the
@@ -1007,6 +1017,8 @@ def _emit_create_view(node: CreateViewStatement, dialect: str) -> str:
     native = _NATIVE_VIEW_MODIFIERS.get(dialect)
     for mod in node.dropped_modifiers:
         upper = mod.upper()
+        if upper == "MATERIALIZED" and view_kw == "MATERIALIZED VIEW":
+            continue  # rendered natively in the CREATE keyword above
         if native and native[1](upper):
             (with_list if native[0] == "with" else pre_list).append(
                 upper if native[0] == "with" else mod
@@ -1015,7 +1027,7 @@ def _emit_create_view(node: CreateViewStatement, dialect: str) -> str:
             dropped.append(mod)
     with_attrs = f"\nWITH {', '.join(with_list)}" if with_list else ""
     pre_mods = f"{' '.join(pre_list)} " if pre_list else ""
-    result = f"CREATE {replace}{pre_mods}VIEW {name}{with_attrs} AS\n{query}"
+    result = f"CREATE {replace}{pre_mods}{view_kw} {name}{with_attrs} AS\n{query}"
     if node.check_option:
         # T-SQL and Oracle accept only the unscoped ``WITH CHECK OPTION``;
         # MySQL and PostgreSQL also take the LOCAL/CASCADED scope.

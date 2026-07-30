@@ -126,7 +126,6 @@ _FULL_DEGRADE = (
     "pg-range-types",
     "pg-scale",
     "pg-seq-use",
-    "pg-sequence",
     "pg-serial-bit",
     "pg-setweight",
     "pg-size-funcs",
@@ -151,6 +150,21 @@ CASES: dict[str, Case] = {slug: _degrade_all3(slug) for slug in _FULL_DEGRADE}
 # row is not vacuous under identity).
 CASES.update(
     {
+        # PG sequence access now maps symmetrically (red2-pg-nextval, 2026-07-30):
+        # Oracle seq.NEXTVAL/CURRVAL (faithful, no warning); T-SQL NEXT VALUE FOR
+        # (currval has no T-SQL form -> warned carrier); MySQL has no sequences
+        # (whole-statement degrade).
+        "pg-sequence": Case(
+            "pg-sequence ",
+            {
+                "oracle": Expect(
+                    ("seq.NEXTVAL", "seq.CURRVAL"),
+                    ("nextval", "NEXT_VALUE_FOR"),
+                ),
+                "tsql": Expect(("NEXT VALUE FOR seq",), warn=True),
+                "mysql": Expect(warn=True),
+            },
+        ),
         # invalid: a multi-field INTERVAL literal has no single-count form on
         # T-SQL/MySQL/Oracle; decompose into chained per-unit date math.
         "pg-multifield-interval-arith": Case(

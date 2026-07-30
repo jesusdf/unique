@@ -5793,3 +5793,260 @@ class TestProcSavepointComposition:
         assert any(
             "no explicit savepoints" in w.message for w in r.warnings
         ), r.warnings
+
+
+class TestFalseUnmapMappedSymmetrically:
+    """RED round-2 asymmetric false-unmaps: constructs whose reverse direction
+    already mapped were degrading (comment / validity-gate carrier) behind a
+    false "no <engine> form" claim. Each is now wired symmetrically. Live-verified
+    2026-07-30 on all four engines: 7 DIV 2 = 3, JSON_VALUE = '1', the sequence
+    and materialized-view outputs run clean."""
+
+    def test_intdiv_maps_per_engine(self) -> None:
+        case = _case("challenge_mysql.sql", "red2-my-intdiv")
+        for target, expected in (
+            ("postgresql", "(7 / 2)"),
+            ("tsql", "(7 / 2)"),
+            ("oracle", "TRUNC(7 / 2)"),
+        ):
+            out = _tx(case, "mysql", target)
+            assert expected in out, out
+            body = _exec_lines(out)
+            assert "DIV" not in body.upper(), body  # MySQL operator is gone
+            assert "UNIQUE:" not in body, out
+
+    def test_json_value_scalar_maps_per_engine(self) -> None:
+        case = _case("challenge_sqlserver.sql", "red2-ts-json-value")
+        for target in ("mysql", "oracle"):
+            out = _tx(case, "tsql", target)
+            assert "JSON_VALUE('{\"a\":1}', '$.a')" in out, out
+            assert "UNIQUE:" not in _exec_lines(out), out
+        pg = _tx(case, "tsql", "postgresql")
+        assert "->> 'a'" in pg, pg
+        assert "JSON_VALUE" not in _exec_lines(pg).upper(), pg
+
+    def test_pg_nextval_maps_to_tsql_and_oracle(self) -> None:
+        case = _case("challenge_postgresql.sql", "red2-pg-nextval")
+        ts = _tx(case, "postgresql", "tsql")
+        assert "NEXT VALUE FOR seq" in ts, ts
+        o4 = _tx(case, "postgresql", "oracle")
+        assert "seq.NEXTVAL" in o4, o4
+        # MySQL genuinely has no sequences -> honest degrade with a warning.
+        r = Transpiler().transpile(case, source="postgresql", target="mysql")
+        assert r.warnings and "UNIQUE:" in r.sql, r.sql
+
+    def test_pg_materialized_view_native_on_oracle(self) -> None:
+        case = _case("challenge_postgresql.sql", "red2-pg-matview")
+        o4 = Transpiler().transpile(case, source="postgresql", target="oracle")
+        assert "CREATE MATERIALIZED VIEW mv" in o4.sql, o4.sql
+        assert not any(
+            "not portable on oracle" in w.message for w in o4.warnings
+        ), o4.warnings
+
+    def test_mysql_dayofweek_maps_per_engine(self) -> None:
+        # Sweep sibling (RED round-2 observation): MySQL DAYOFWEEK (Sun=1..7) was
+        # falsely degraded though the reverse DATEPART(WEEKDAY)->DAYOFWEEK maps.
+        src = "SELECT DAYOFWEEK(d) AS r FROM t"
+        assert "EXTRACT(DOW FROM CAST(d AS DATE)) + 1" in _tx(
+            src, "mysql", "postgresql"
+        )
+        assert "DATE '1970-01-04'" in _tx(src, "mysql", "oracle")
+        assert "DATEPART(WEEKDAY, CAST(d AS DATE))" in _tx(src, "mysql", "tsql")
+        for target in ("postgresql", "oracle", "tsql"):
+            body = _exec_lines(_tx(src, "mysql", target))
+            assert "DAYOFWEEK" not in body.upper(), body
+
+    def test_pg_case_insensitive_regex_maps(self) -> None:
+        # Sweep sibling: PG ``~*`` (RegexpILike) -> Oracle/MySQL REGEXP_LIKE 'i'.
+        src = "SELECT a FROM t WHERE x ~* 'abc'"
+        for target in ("oracle", "mysql"):
+            out = _tx(src, "postgresql", target)
+            assert "REGEXP_LIKE(x, 'abc', 'i')" in out, out
+            assert "UNIQUE:" not in _exec_lines(out), out
+        # T-SQL genuinely has no regex -> honest degrade with a warning.
+        r = Transpiler().transpile(src, source="postgresql", target="tsql")
+        assert r.warnings and "UNIQUE:" in r.sql, r.sql
+
+
+class TestTsqlLikeCharClassTranslated:
+    """RED round-2 red2-ts-like-charclass: T-SQL ``LIKE '[A-C]%'`` uses a
+    character-class range other engines match literally (result flips to 0).
+    Translate to a portable predicate so the value holds — PG SIMILAR TO, MySQL/
+    Oracle regex. Live-verified 2026-07-30: 'Bob' matches (=1) on all four."""
+
+    def _out(self, target: str) -> str:
+        return _tx(
+            _case("challenge_sqlserver.sql", "red2-ts-like-charclass"), "tsql", target
+        )
+
+    def test_pg_similar_to(self) -> None:
+        out = self._out("postgresql")
+        assert "SIMILAR TO '[A-C]%'" in out, out
+        assert "LIKE '[A-C]" not in _exec_lines(out), out
+
+    def test_mysql_regexp(self) -> None:
+        out = self._out("mysql")
+        assert "REGEXP '^[A-C].*$'" in out, out
+        assert "LIKE '[A-C]" not in _exec_lines(out), out
+
+    def test_oracle_regexp_like(self) -> None:
+        out = self._out("oracle")
+        assert "REGEXP_LIKE('Bob', '^[A-C].*$')" in out, out
+        assert "LIKE '[A-C]" not in _exec_lines(out), out
+
+
+class TestMysqlCastUnsignedLenient:
+    """RED round-2 red2-my-cast-unsigned-leniency: MySQL ``CAST('12x' AS
+    UNSIGNED)`` = 12 (lenient leading-numeric parse); the previous
+    CAST('12x' AS NUMERIC) errored on PG/T-SQL. Fold the literal to its MySQL
+    value so the output runs. Live-verified 2026-07-30: value 12 on PG/T-SQL."""
+
+    def test_leading_numeric_prefix_folded(self) -> None:
+        for target in ("postgresql", "tsql"):
+            out = _tx(
+                _case("challenge_mysql.sql", "red2-my-cast-unsigned"), "mysql", target
+            )
+            assert "CAST(12 AS NUMERIC)" in out, out
+            assert "'12x'" not in _exec_lines(out), out
+
+
+class TestDateAddDiffUnits:
+    """RED round-2 date-unit fixes (DATEADD/DATEDIFF unit space).
+
+    * red2-ts-datediff-weekday-unit: T-SQL DATEDIFF(WEEKDAY,..) counts day
+      boundaries exactly like DAY (it is not day-of-week) — mapped to DAY, was a
+      3-arg passthrough that shipped invalid. Live-verified value 60 on all four.
+    * red2-my-dateadd-compound-interval: MySQL INTERVAL '1:30' HOUR_MINUTE has no
+      single-count form; expanded into chained per-unit adds. Live-verified value
+      2021-06-15 09:30:00 on all four.
+    An unmapped unit now degrades to a warned NULL carrier (non-T-SQL), never an
+    invalid silent passthrough.
+    """
+
+    def test_datediff_weekday_is_day(self) -> None:
+        case = _case("challenge_sqlserver.sql", "red2-ts-datediff-weekday-unit")
+        assert "DATEDIFF('2020-03-01', '2020-01-01')" in _tx(case, "tsql", "mysql")
+        assert "DATEDIFF(DAY, '2020-01-01', '2020-03-01')" in _tx(case, "tsql", "tsql")
+        for target in ("mysql", "oracle", "postgresql"):
+            body = _exec_lines(_tx(case, "tsql", target))
+            assert "WEEKDAY" not in body.upper(), body
+
+    def test_compound_interval_expanded(self) -> None:
+        case = _case("challenge_mysql.sql", "red2-my-dateadd-compound-interval")
+        assert "INTERVAL '1 HOUR' + INTERVAL '30 MINUTE'" in _tx(
+            case, "mysql", "postgresql"
+        )
+        assert "DATEADD(MINUTE, 30, DATEADD(HOUR, 1," in _tx(case, "mysql", "tsql")
+        assert "NUMTODSINTERVAL(1, 'HOUR') + NUMTODSINTERVAL(30, 'MINUTE')" in _tx(
+            case, "mysql", "oracle"
+        )
+        for target in ("postgresql", "tsql", "oracle"):
+            body = _exec_lines(_tx(case, "mysql", target))
+            assert "HOUR_MINUTE" not in body.upper(), body
+
+    def test_unmapped_diff_unit_degrades_not_invalid(self) -> None:
+        # A unit with no cross-engine form -> warned NULL carrier off T-SQL, valid
+        # native DATEDIFF on T-SQL (a real datepart) — never invalid + silent.
+        src = "SELECT DATEDIFF(NANOSECOND, '2020-01-01', '2020-03-01') AS d"
+        for target in ("mysql", "oracle", "postgresql"):
+            r = Transpiler().transpile(src, source="tsql", target=target)
+            assert r.warnings and "UNIQUE:" in r.sql, r.sql
+            assert "NANOSECOND" in r.sql, r.sql  # unit named for review
+        assert "DATEDIFF(NANOSECOND" in _tx(src, "tsql", "tsql")
+
+
+class TestExtractUnitSpace:
+    """RED round-2 EXTRACT/DATEPART unit space.
+
+    * red2-pg-extract-isoyear-unit: PG EXTRACT(ISOYEAR) computed per target as
+      the year of the ISO week's Thursday. Live-verified value 2020 on all four.
+    * red2-ts-datepart-week-iso: T-SQL DATEPART(WEEK) is the NON-ISO,
+      DATEFIRST-based week (was mapped to the ISO week functions, value 53 vs 1);
+      mapped to each engine's non-ISO week formula. DATEPART(ISO_WEEK) keeps the
+      ISO functions. Live-verified value 1 for 2021-01-01 on all four.
+    """
+
+    def test_isoyear_maps_per_engine(self) -> None:
+        case = _case("challenge_postgresql.sql", "red2-pg-extract-isoyear")
+        assert "EXTRACT(YEAR FROM (TRUNC(DATE '2020-03-15', 'IW') + 3))" in _tx(
+            case, "postgresql", "oracle"
+        )
+        assert "DATEDIFF(DAY, '19000101'" in _tx(case, "postgresql", "tsql")
+        for target in ("tsql", "mysql", "oracle"):
+            body = _exec_lines(_tx(case, "postgresql", target))
+            assert "ISOYEAR" not in body.upper(), body  # unit is gone
+
+    def test_datepart_week_is_noniso(self) -> None:
+        case = _case("challenge_sqlserver.sql", "red2-ts-datepart-week-iso")
+        # non-ISO formula, NOT the ISO week functions
+        my = _tx(case, "tsql", "mysql")
+        assert "DAYOFWEEK(MAKEDATE(YEAR(" in my, my
+        assert "WEEK('2021-01-01', 3)" not in my, my  # ISO form must be gone
+        pg = _tx(case, "tsql", "postgresql")
+        assert "EXTRACT(DOY FROM DATE '2021-01-01')" in pg, pg
+        o4 = _tx(case, "tsql", "oracle")
+        assert "TO_CHAR(DATE '2021-01-01', 'DDD')" in o4, o4
+
+    def test_datepart_iso_week_stays_iso(self) -> None:
+        # Neighbor: DATEPART(ISO_WEEK) must keep the ISO week functions.
+        src = "SELECT DATEPART(ISO_WEEK, '2021-01-01') AS w"
+        assert "WEEK('2021-01-01', 3)" in _tx(src, "tsql", "mysql")
+        assert "TO_CHAR('2021-01-01', 'IW')" in _tx(src, "tsql", "oracle")
+
+
+class TestOracleTruncRoundFormatModels:
+    """RED round-2 Oracle TRUNC/ROUND date-format models.
+
+    * red2-ora-trunc-day-weekstart: TRUNC(d,'DAY') is the START OF THE (Sunday)
+      WEEK, not day truncation ('DD'); mapped to a Sunday week-start per target.
+      Live-verified 2021-06-13 on PG/T-SQL/MySQL.
+    * red2-ora-trunc-format-unmapped: 'IW' (ISO week) maps to the ISO-week
+      truncation; 'W' (week-of-month, no portable form) degrades to a warned
+      carrier off Oracle; MySQL hour/minute now truncate instead of shipping an
+      invalid DATE_TRUNC. Live-verified 'IW' = 2021-06-14.
+    * red2-ora-round-date-fmt: ROUND(date, fmt) is date rounding, not numeric —
+      kept native on Oracle, degrades to a warned carrier off Oracle (was invalid
+      ROUND(CAST(date AS NUMERIC), ...)).
+    """
+
+    def test_trunc_day_is_week_start(self) -> None:
+        case = _case("challenge_oracle.sql", "red2-ora-trunc-day-weekstart")
+        pg = _tx(case, "oracle", "postgresql")
+        assert "EXTRACT(DOW FROM DATE '2021-06-15')" in pg, pg
+        assert (
+            "DATE_TRUNC('day', DATE '2021-06-15') AS d" not in pg
+        ), pg  # not plain day
+        assert "DATEDIFF(DAY, '19000107'" in _tx(case, "oracle", "tsql")
+        assert "DAYOFWEEK(DATE(" in _tx(case, "oracle", "mysql")
+
+    def test_trunc_dd_stays_day(self) -> None:
+        # Neighbor: 'DD' is genuine day truncation and must be unaffected.
+        src = "SELECT TRUNC(DATE '2021-06-15', 'DD') AS d FROM dual"
+        assert "DATE_TRUNC('day', DATE '2021-06-15')" in _tx(
+            src, "oracle", "postgresql"
+        )
+        assert "DATE(CAST" in _tx(src, "oracle", "mysql")
+
+    def test_trunc_week_of_month_degrades(self) -> None:
+        case = _case("challenge_oracle.sql", "red2-ora-trunc-format-unmapped")
+        for target in ("postgresql", "tsql", "mysql"):
+            r = Transpiler().transpile(case, source="oracle", target=target)
+            assert r.warnings and "UNIQUE:" in r.sql, r.sql
+            body = _exec_lines(r.sql)
+            assert "DATE_TRUNC(W" not in body and "DATE_TRUNC('W'" not in body, body
+
+    def test_trunc_iso_week_maps(self) -> None:
+        src = "SELECT TRUNC(DATE '2021-06-15', 'IW') AS d FROM dual"
+        assert "DATE_TRUNC('week', DATE '2021-06-15')" in _tx(
+            src, "oracle", "postgresql"
+        )
+        assert "DATETRUNC(ISO_WEEK," in _tx(src, "oracle", "tsql")
+
+    def test_round_date_degrades_off_oracle(self) -> None:
+        case = _case("challenge_oracle.sql", "red2-ora-round-date-fmt")
+        for target in ("postgresql", "tsql", "mysql"):
+            r = Transpiler().transpile(case, source="oracle", target=target)
+            assert r.warnings and "UNIQUE:" in r.sql, r.sql
+            body = _exec_lines(r.sql)
+            assert "AS NUMERIC" not in body.upper(), body  # not the numeric round
+            assert "NULL" in body, body
