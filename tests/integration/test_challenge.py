@@ -5599,3 +5599,27 @@ class TestDistinctOnQualifiedOrderBy:
         )
         assert "uq_rn = 1" in out, out
         assert_statements_parse(out, "tsql", context="distincton-unqualified")
+
+
+class TestOraclePlusOuterJoinDuplicate:
+    """red2-ora-plus-outer-join-dup: with an ALIASED preserved table, sqlglot
+    30.14's eliminate_join_marks re-adds it as a spurious CROSS JOIN (duplicate
+    alias -> 'table name b specified more than once'). Dedup the bare repeat."""
+
+    def test_multi_plus_predicate_no_duplicate_join(self) -> None:
+        src = _case("challenge_oracle.sql", "red2-ora-plus-outer-join-dup")
+        for target in ("postgresql", "tsql", "mysql"):
+            out = _exec_lines(_tx(src, "oracle", target))
+            assert out.count("tb b") == 1, out
+            assert "CROSS JOIN" not in out.upper(), out
+            assert "LEFT JOIN ta a" in out, out
+            assert_statements_parse(out, target, context="plus-join")
+
+    def test_single_aliased_plus_predicate_no_duplicate(self) -> None:
+        out = _tx(
+            "SELECT a.x, b.y FROM ta a, tb b WHERE a.id(+) = b.id",
+            "oracle",
+            "postgresql",
+        )
+        assert out.count("tb b") == 1, out
+        assert_statements_parse(out, "postgresql", context="plus-single")

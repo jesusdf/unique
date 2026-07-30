@@ -464,6 +464,14 @@ def parse_sql(sql: str, dialect: str) -> list[ASTNode]:
             c.args.get("join_mark") for c in expression.find_all(exp.Column)
         ):
             expression = transforms.eliminate_join_marks(expression)
+            # sqlglot 30.14's eliminate_join_marks re-adds an ALIASED preserved
+            # table as a spurious bare CROSS JOIN: its "preserve other joins"
+            # loop compares each join's alias-or-name against the new FROM's
+            # table NAME (not its alias), so ``tb b`` (alias b, name tb) is kept
+            # AND duplicated -> "table name b specified more than once". Drop any
+            # bare join whose alias-or-name repeats one already in scope (a
+            # duplicate alias is always invalid SQL, so this is safe).
+            _dedup_duplicate_cross_joins(expression)  # type: ignore[arg-type]
         # T-SQL "+" on strings is concatenation; rewrite it to "||" so it maps
         # to the target's concat operator (sqlglot keeps it as arithmetic "+").
         # Oracle/PostgreSQL sources get the same charity: their "+" over a
@@ -1329,6 +1337,34 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         sql=_source_sql(expr),
         reason=f"Unhandled expression type: {type(expr).__name__}",
     )
+
+
+def _dedup_duplicate_cross_joins(expression: exp.Expression) -> None:
+    """Remove bare joins whose alias-or-name repeats a table already in scope.
+
+    Works around a sqlglot ``eliminate_join_marks`` bug (see the call site): an
+    aliased preserved table is re-emitted as a spurious CROSS JOIN. A duplicate
+    table alias in a FROM/JOIN list is always a syntax error, so dropping the
+    repeat (only when it carries no ON/USING) is a safe normalization.
+    """
+    for select in expression.find_all(exp.Select):
+        joins = select.args.get("joins") or []
+        if not joins:
+            continue
+        frm = select.args.get("from") or select.args.get("from_")
+        seen: set[str] = set()
+        if frm is not None and frm.this is not None:
+            seen.add(frm.this.alias_or_name)
+        kept: list[exp.Join] = []
+        for j in joins:
+            name = j.this.alias_or_name
+            is_bare = not j.args.get("on") and not j.args.get("using")
+            if name in seen and is_bare:
+                continue
+            seen.add(name)
+            kept.append(j)
+        if len(kept) != len(joins):
+            select.set("joins", kept)
 
 
 def _rewrite_distinct_on(
