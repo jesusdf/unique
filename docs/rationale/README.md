@@ -66,3 +66,4 @@ drifts from the code.
 | [mappings-postgresql-mysql.md](../reference/mappings-postgresql-mysql.md) · [mysql-postgresql.md](../reference/mappings-mysql-postgresql.md) | postgresql ↔ mysql, same shape |
 | [limits.md](../reference/limits.md) | the `[limit]` degradation catalog — one row per corpus case (id, source engine, class, description, `03-unsupported.md` citation) |
 | [coverage.md](../reference/coverage.md) | challenge-corpus case counts per source engine and finding class |
+| [warnings.md](../reference/warnings.md) | the `UNIQUE-NNNN` diagnostic catalog — one row per code (category · message template) with its rationale (construct · engine-level reason · example case · divergence); codes without a rationale yet are marked `(rationale pending)` |
