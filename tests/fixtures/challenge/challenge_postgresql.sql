@@ -881,3 +881,7 @@ SELECT a, SUM(a) OVER (ORDER BY a ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED
 
 -- CASE[open][class=invalid]: red2-pg-fk-ondelete-setdefault-oracle — fails on oracle. A foreign key with ON DELETE SET DEFAULT is passed through verbatim to Oracle, which only supports ON DELETE CASCADE / SET NULL / NO ACTION: live ORA-03001 "unimplemented feature". No warning. Source valid on PG; MySQL tolerates the clause. BLUE: Oracle has no SET DEFAULT referential action — degrade with a warning (drop the action or emit a trigger) rather than shipping the unsupported clause.
 CREATE TABLE red2_c (id INT, pid INT REFERENCES p(id) ON DELETE SET DEFAULT)
+
+-- CASE[open][class=lying-warning]: red2-pg-nextval-false-unmap — fails on tsql, oracle, mysql. PostgreSQL nextval('seq') is degraded to a comment with "untranslated postgresql built-in NEXTVAL() (no <engine> form)", but T-SQL (NEXT VALUE FOR seq) and Oracle (seq.NEXTVAL) DO have sequence-nextval equivalents — the transpiler emits exactly those in the reverse directions (Oracle seq.NEXTVAL -> tsql "NEXT VALUE FOR seq"; T-SQL NEXT VALUE FOR seq -> PG nextval + Oracle seq.NEXTVAL). So the "no form" claim is false for a core DDL/DML construct; the whole statement is lost behind a lying warning in the PG-source direction only. Source valid on PG. BLUE: map PG NEXTVAL/CURRVAL to NEXT VALUE FOR (T-SQL) and seq.NEXTVAL/CURRVAL (Oracle), symmetric with the existing reverse mappings.
+CREATE SEQUENCE seq;
+SELECT nextval('seq') AS n
