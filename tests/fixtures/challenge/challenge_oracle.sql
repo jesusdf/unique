@@ -562,3 +562,6 @@ SELECT ShipDate - OrderDate AS d FROM (SELECT DATE '2020-01-10' ShipDate, DATE '
 
 -- CASE[open][class=invalid]: reda-ora-interval-literal-arith — fails on tsql, mysql. An Oracle INTERVAL literal in date arithmetic, DATE '2020-01-01' + INTERVAL '1-6' YEAR TO MONTH (=2021-07-01 on Oracle), is emitted verbatim into T-SQL and MySQL, both of which reject it: T-SQL has no INTERVAL literal (live error 102 'Incorrect syntax near YEAR'); MySQL spells it INTERVAL '1-6' YEAR_MONTH, not YEAR TO MONTH (live 1064). No warning. Same applies to INTERVAL '...' DAY TO SECOND. BLUE: rewrite to DATEADD (T-SQL) and INTERVAL n YEAR_MONTH / DATE_ADD (MySQL), or degrade with a warning.
 SELECT DATE '2020-01-01' + INTERVAL '1-6' YEAR TO MONTH AS r FROM DUAL
+
+-- CASE[open][class=lying-warning]: reda-ora-regexp-like — fails on postgresql, mysql. Oracle REGEXP_LIKE(x, pat) in a WHERE is degraded to 'unmapped operator RegexpLike; no <engine> mapping' and the ENTIRE statement is commented out — but PostgreSQL has the '~' regex operator and MySQL has 'REGEXP' (both live-verified matching '^[0-9]+$'). The warning is false (a mapping exists) and a whole query is lost. Only T-SQL genuinely lacks POSIX regex. BLUE: map REGEXP_LIKE -> PG 'x ~ pat' and MySQL 'x REGEXP pat'; degrade only on T-SQL.
+SELECT CAST(a AS VARCHAR2(4000)) AS r FROM t WHERE REGEXP_LIKE(a, '^[0-9]+$')
