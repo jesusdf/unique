@@ -562,7 +562,9 @@ class Transpiler:
                                 )
                     else:
                         trivia = ""  # the fallback keeps the whole batch text
-                        result = self._transpile_set_option(batch.sql, source, target)
+                        result = self._transpile_set_batch(
+                            batch.sql, source, target, source_dialect, target_dialect
+                        )
                     if trivia.strip():
                         result = TranspileResult(
                             sql=f"{trivia.rstrip()}\n{result.sql}",
@@ -1665,6 +1667,54 @@ class Transpiler:
                 )
             )
         return TranspileResult(sql=f"DROP {kind} IF EXISTS {clean}")
+
+    def _transpile_set_batch(
+        self,
+        sql: str,
+        source: str,
+        target: str,
+        source_dialect: Dialect,
+        target_dialect: Dialect,
+    ) -> TranspileResult:
+        """Degrade a SET-option batch, but first split any ``;``-separated
+        statement that FOLLOWS a session-option SET so it still transpiles.
+
+        ``SET NOCOUNT ON; SELECT 1`` used to comment BOTH lines out, dropping
+        the valid SELECT (no-silent-loss). This is the direct neighbor of the
+        EXEC-system-proc ``;``-split above: peel each statement, degrade only
+        the SET(s), and route every other statement through the normal path.
+        Only fires for a T-SQL source whose leading segment is a real session
+        SET and that has a following statement — a lone SET or a guard batch
+        keeps its existing whole-batch handling.
+        """
+        if source == "tsql" and target != "tsql":
+            from unique.core.batch_splitter import _SET_PATTERN
+            from unique.core.sql_split import _split_semicolons
+
+            trivia, code = split_leading_trivia(sql)
+            segs = [s for s in _split_semicolons(code, dollar_quote=False) if s.strip()]
+            if len(segs) > 1 and _SET_PATTERN.match(segs[0]):
+                parts: list[str] = []
+                warnings: list[TransformWarning] = []
+                unsupported: list[str] = []
+                for st in segs:
+                    _, seg_code = split_leading_trivia(st)
+                    if _SET_PATTERN.match(seg_code):
+                        sub = self._transpile_set_option(st, source, target)
+                    else:
+                        sub = self._transpile_dml(
+                            st, source, target, source_dialect, target_dialect
+                        )
+                    parts.append(sub.sql)
+                    warnings.extend(sub.warnings)
+                    unsupported.extend(sub.unsupported)
+                body = "\n".join(parts)
+                return TranspileResult(
+                    sql=f"{trivia.rstrip()}\n{body}" if trivia.strip() else body,
+                    warnings=warnings,
+                    unsupported=unsupported,
+                )
+        return self._transpile_set_option(sql, source, target)
 
     def _transpile_set_option(
         self, sql: str, source: str, target: str

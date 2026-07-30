@@ -5715,3 +5715,25 @@ class TestInvisibleColumn:
                 "INVISIBLE" in w.message and target in w.message for w in r.warnings
             ), r.warnings
             assert_statements_parse(body, target, context="invisible-drop")
+
+
+class TestSetSwallowNext:
+    """red2-ts-set-swallow-next: a degraded ``SET NOCOUNT ON; SELECT 1`` batch
+    commented BOTH lines out, dropping the valid SELECT (no-silent-loss). Split
+    the ;-separated statements so only the SET degrades and the SELECT
+    transpiles — the neighbor of the EXEC-swallow split."""
+
+    def test_set_degraded_but_following_select_survives(self) -> None:
+        src = _case("challenge_sqlserver.sql", "red2-ts-set-swallow-next")
+        for target in ("postgresql", "mysql", "oracle"):
+            r = Transpiler().transpile(src, "tsql", target)
+            body = _exec_lines(r.sql)
+            # the SELECT is emitted as real SQL (not just commented away)
+            assert "SELECT 1 AS a" in body, (target, r.sql)
+            assert_statements_parse(body, target, context="set-swallow")
+            assert any("SET option" in w.message for w in r.warnings), r.warnings
+
+    def test_lone_set_still_whole_comment(self) -> None:
+        # A SET with no following statement keeps the whole-comment behaviour.
+        out = _tx("SET NOCOUNT ON", "tsql", "postgresql")
+        assert out.strip() == "-- SET NOCOUNT ON", out
