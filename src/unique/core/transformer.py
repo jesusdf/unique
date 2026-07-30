@@ -31,6 +31,7 @@ from unique.core.ast_nodes import (
     FunctionCall,
     LimitClause,
     Literal,
+    OrderByItem,
     PassthroughSQL,
     RawSQL,
     SelectStatement,
@@ -818,6 +819,7 @@ class Transformer:
         if self.context.source == "mysql" and self.context.target != "mysql":
             result = [self._gate_mysql_user_var(node) for node in result]
             result = [self._strip_mysql_charset_marks(node) for node in result]
+            result = [self._rewrite_enum_ordering(node) for node in result]
             result = [
                 self._wrap_mysql_concat_null(node)  # type: ignore[misc]
                 for node in result
@@ -2260,6 +2262,112 @@ class Transformer:
             if new is not old:
                 changes[f.name] = new
         return replace(value, **changes) if changes else value  # type: ignore[arg-type]
+
+    # --- MySQL ENUM declaration-order sort key (B29) ------------------------
+    # MySQL orders an ENUM column by its DECLARATION INDEX only in a *sort*
+    # context (ORDER BY / GROUP BY); the ENUM->VARCHAR+CHECK degrade makes the
+    # target sort alphabetically instead, so ORDER BY on the column is rewritten
+    # into the ordinal CASE sort key. Comparison operators (``c < 'x'``) and
+    # MIN/MAX are deliberately NOT rewritten: MySQL 8.4 compares an ENUM to a
+    # string literal — and aggregates it — by STRING value (verified live:
+    # ``a > 'lo'`` returns only 'mid', ``MIN(a)`` returns 'hi'), which is exactly
+    # what the VARCHAR degrade already does, so the plain value stays faithful
+    # everywhere except the sort. See docs/TODO.md B29 (worker note: the brief's
+    # MIN/MAX/comparison legs were an over-extrapolation of the ORDER-BY finding).
+
+    def _rewrite_enum_ordering(self, node: ASTNode) -> ASTNode:
+        """Rewrite ``ORDER BY <enum-column>`` into the ordinal ``CASE`` sort key
+        (B29) so the MySQL declaration-index order survives the VARCHAR+CHECK
+        degrade. The plain value is kept everywhere else (projection, equality,
+        comparison, MIN/MAX, GROUP BY), so a column never sorted-on is untouched
+        (no carrier-spam on real-world ENUM schemas like sakila/mediawiki)."""
+        from unique.core.converter import ENUM_COLUMNS
+
+        if not ENUM_COLUMNS.get():
+            return node
+        return cast("ASTNode", self._enum_walk(node))
+
+    def _enum_walk(self, value: object) -> object:
+        """Post-order walk: rewrite nested SELECTs (each resolved against its
+        OWN FROM tables) first, then this SELECT's ORDER BY."""
+        value = self._map_children(value, self._enum_walk)
+        if isinstance(value, SelectStatement) and value.order_by:
+            scope = self._enum_scope(value)
+            if scope:
+                value = self._rewrite_enum_order_by(value, scope)
+        return value
+
+    def _enum_scope(self, select: SelectStatement) -> dict[object, tuple[str, ...]]:
+        """ENUM columns visible in *select*'s FROM/JOIN tables, keyed by bare
+        column name and by ``(alias, column)`` for a qualified reference."""
+        from unique.core.converter import ENUM_COLUMNS
+
+        enum_map = ENUM_COLUMNS.get() or {}
+        scope: dict[object, tuple[str, ...]] = {}
+        for name, alias in self._enum_select_tables(select):
+            cols = enum_map.get(name)
+            if not cols:
+                continue
+            for col, values in cols.items():
+                scope[col] = values
+                if alias:
+                    scope[(alias.lower(), col)] = values
+        return scope
+
+    @staticmethod
+    def _enum_select_tables(
+        select: SelectStatement,
+    ) -> list[tuple[str, str | None]]:
+        """``(table_lower, alias)`` for each real table in the FROM and JOINs."""
+        out: list[tuple[str, str | None]] = []
+        fc = select.from_clause
+        if isinstance(fc, TableRef):
+            out.append((fc.name.lower(), fc.alias))
+        for join in select.joins:
+            if isinstance(join.table, TableRef):
+                out.append((join.table.name.lower(), join.alias or join.table.alias))
+        return out
+
+    def _enum_values_for(
+        self, value: object, scope: dict[object, tuple[str, ...]]
+    ) -> tuple[str, ...] | None:
+        """The value list if *value* is a ColumnRef to a scoped ENUM column."""
+        if not isinstance(value, ColumnRef):
+            return None
+        if value.table:
+            qualified = scope.get((value.table.lower(), value.name.lower()))
+            if qualified is not None:
+                return qualified
+        return scope.get(value.name.lower())
+
+    def _rewrite_enum_order_by(
+        self, select: SelectStatement, scope: dict[object, tuple[str, ...]]
+    ) -> SelectStatement:
+        """Replace each ``ORDER BY <enum-column>`` term with its ordinal CASE."""
+        new_order: list[OrderByItem] = []
+        changed = False
+        for item in select.order_by:
+            values = self._enum_values_for(item.expression, scope)
+            if values is None:
+                new_order.append(item)
+                continue
+            new_order.append(
+                replace(item, expression=self._enum_case(item.expression, values))
+            )
+            changed = True
+        return replace(select, order_by=tuple(new_order)) if changed else select
+
+    @staticmethod
+    def _enum_case(expr: object, values: tuple[str, ...]) -> CaseExpression:
+        """``CASE <expr> WHEN 'lo' THEN 1 WHEN 'mid' THEN 2 … END`` (value ->
+        1-based declaration index)."""
+        return CaseExpression(
+            operand=cast("ASTNode", expr),
+            whens=tuple(
+                (Literal(value=v, dtype="string"), Literal(value=i, dtype="integer"))
+                for i, v in enumerate(values, start=1)
+            ),
+        )
 
     _GENERATED_COLUMN_RE = re.compile(r"(?i)\bGENERATED\s+ALWAYS\s+AS\b|\bAS\s*\(")
 

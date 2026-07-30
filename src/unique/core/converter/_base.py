@@ -196,6 +196,18 @@ PK_UNIQUE_COLUMNS: contextvars.ContextVar[dict[str, list[tuple[str, ...]]] | Non
 )
 
 
+# MySQL ENUM columns per table harvested from the script's own CREATE TABLEs
+# (table -> {column -> ordered value tuple}, lowercase keys). A MySQL ENUM
+# ORDERS by its declaration index (``ENUM('lo','mid','hi')`` sorts lo<mid<hi),
+# a semantic the ENUM->VARCHAR+CHECK degrade drops (every other engine then
+# sorts alphabetically). Cross-statement metadata: the transformer rewrites
+# ordering-sensitive uses of these columns (ORDER BY / MIN / MAX / inequality
+# comparisons) into the ordinal ``CASE`` sort key (B29).
+ENUM_COLUMNS: contextvars.ContextVar[dict[str, dict[str, tuple[str, ...]]] | None] = (
+    contextvars.ContextVar("enum_columns", default=None)
+)
+
+
 # Temp tables declared in the script (PG/MySQL ``CREATE TEMPORARY TABLE`` /
 # ``SELECT … INTO TEMPORARY``): T-SQL spells a temp table ``#name``, and the
 # rename must apply to EVERY later reference, not only the creating statement
@@ -1060,6 +1072,7 @@ __all__ = [
     "COLUMN_TYPES",
     "COLUMN_NOT_NULL",
     "PK_UNIQUE_COLUMNS",
+    "ENUM_COLUMNS",
     "DATE_COLUMNS",
     "IDENTITY_COLUMNS",
     "TEMP_TABLES",

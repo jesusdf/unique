@@ -4,13 +4,13 @@
 
 Per-source-engine counts of the challenge corpus's `-- CASE[status][class=...]:` headers. "Direction" here is the case's tagged source engine — the corpus's only structured axis; each fixture file (`challenge_<source>.sql`) holds every case found starting from that source dialect, against all applicable targets.
 
-| Source | fixed | limit | open | total |
-|---|---|---|---|---|
-| mysql | 252 | 56 | 1 | 309 |
-| oracle | 143 | 44 | 0 | 187 |
-| postgresql | 241 | 48 | 0 | 289 |
-| sqlserver | 154 | 21 | 0 | 175 |
-| **all** | 790 | 169 | 1 | 960 |
+| Source | fixed | limit | total |
+|---|---|---|---|
+| mysql | 253 | 56 | 309 |
+| oracle | 143 | 44 | 187 |
+| postgresql | 241 | 48 | 289 |
+| sqlserver | 154 | 21 | 175 |
+| **all** | 791 | 169 | 960 |
 
 ## By finding class
 
