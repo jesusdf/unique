@@ -51,9 +51,24 @@ maintainer decision 2026-07-30: full feature brief, not a warn-patch.*
   order-comparison assertion; neighbors: ENUM in `WHERE c > 'lo'`, `MIN`/`MAX`,
   and two ENUM columns in one table.
 
----
+### B30 — date-type propagation through derived-table columns (P3, feature brief)
 
-## Feature backlog
+*From challenge case `reda-ora-date-literal-subquery` (`[open]`, 2026-07-30
+campaign). The PG and MySQL legs are FIXED (DATE-literal typing preserved on
+projections); only the T-SQL leg remains.*
+
+- **Symptom:** Oracle `SELECT d2 - d1 FROM (SELECT DATE '…' AS d1, DATE '…' AS
+  d2 …)` → on T-SQL the projected literals lose their date type and the outer
+  `d2 - d1` needs `DATEDIFF(DAY, d1, d2)`, but the converter cannot tell the
+  derived-table columns are dates, so it emits an invalid raw subtraction.
+- **Mechanism to build:** propagate inferred column types through derived-table
+  projections (a minimal type environment on `SubqueryExpression`: literal
+  types, CAST results, and pass-through column refs), so the temporal-operator
+  rewrites (the `date ± int` / `ts − ts` family from this campaign) can fire on
+  derived columns. Converter-layer only; no engine round-trip.
+- **Locks in:** `reda-ora-date-literal-subquery` flips to `[fixed]` with a
+  T-SQL `DATEDIFF` present / raw-minus absent assertion + live value; neighbors:
+  the same shape through a CTE and through two nesting levels.
 
 ### F1 — `unique compare`: structural similarity score between two scripts (P2)
 
