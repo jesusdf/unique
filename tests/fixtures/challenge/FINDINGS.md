@@ -48,7 +48,6 @@ own engine first.
 | reda-ts-addmonths-lastday | func | tsql→oracle | DATEADD(MONTH)→ADD_MONTHS | ADD_MONTHS sticks to month-end; DATEADD does not. Live DATEADD(1mo,2020-02-29)=2020-03-29 vs ADD_MONTHS=2020-03-31. |
 | reda-ora-forupdate-of-col | invalid | oracle→pg,mysql | FOR UPDATE OF x (column) leaks | Oracle OF=column, PG/MySQL OF=table. Live PG 'relation "x" not found', MySQL 3568. No warning (SKIP LOCKED path). Also latent in ora-forupdate-wait [limit]. |
 | reda-ts-output-into | invalid | tsql→pg | RETURNING INSERTED.a | OUTPUT...INTO breaks INSERTED-stripping; PG 'missing FROM-clause entry for "inserted"'. INTO redirect dropped. No warning. |
-| reda-ts-delete-join | invalid | tsql→pg,oracle,mysql | DELETE FROM t WHERE s.flag=1 | multi-table DELETE join dropped; references unjoined s. PG 'missing FROM-clause entry for "s"'. Only internal unread_args tripwire. |
 | reda-ora-keep-denserank | lying-warning | oracle→pg,tsql,mysql | MAX(x) OVER (ORDER BY y) | KEEP DENSE_RANK aggregate (1 row) mangled to windowed OVER (N rows). Live KEEP=[20] vs OVER=[10,20,20]. Only internal unread_args warning; no docs entry. |
 | reda-ora-concat-null-cast | lying-warning | oracle→pg,tsql,mysql | ...|| CAST(NULL AS VARCHAR(10)) ||... | HOLE in [fixed] ora-concat-null: fix only drops literal NULL, not CAST(NULL)/NULL-typed operand. Live oracle='ab' vs pg=NULL. Only internal unread_args tripwire. |
 

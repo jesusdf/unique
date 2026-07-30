@@ -380,6 +380,23 @@ CASES.update(
             },
             "mysql": {"present": ["ORDER BY a ASC"]},
         },
+        # invalid: multi-table DELETE-join preserves the join per target, and
+        # the case's comment (whose prose contains "output") no longer corrupts
+        # the batch (guardrail-3 fix in _extract_tsql_output).
+        "reda-ts-delete-join": {
+            "postgresql": {
+                "present": ["DELETE FROM t", "USING s", "s.flag = 1"],
+                "absent": ["INNER JOIN"],
+            },
+            "mysql": {
+                "present": ["DELETE t FROM t, s", "s.flag = 1"],
+                "absent": ["INNER JOIN"],
+            },
+            "oracle": {
+                "present": ["WHERE EXISTS (SELECT 1 FROM s", "s.flag = 1"],
+                "absent": ["INNER JOIN"],
+            },
+        },
         "reda-ts-pivot": {
             "oracle": {
                 "present": ["PIVOT (SUM(v) FOR dept IN ('A' AS A, 'B' AS B))"],

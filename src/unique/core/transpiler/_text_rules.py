@@ -703,17 +703,24 @@ def _extract_tsql_output(sql: str) -> tuple[str, str | None]:
     Only the simple ``OUTPUT <cols>`` form is handled (not ``OUTPUT ... INTO
     <table>``); the latter returns ``(sql, None)`` so it is left untouched.
     """
+    # Guardrail 3: comments are trivia — the OUTPUT keyword must be matched on
+    # the code, never on a leading ``-- CASE …`` / section-header comment whose
+    # prose can contain the word "output" (that mis-fire corrupted the batch,
+    # interleaving comment text with the statement). Detect on the trivia-free
+    # code and re-attach the trivia to the extracted base.
+    trivia, code = split_leading_trivia(sql)
     # OUTPUT ... INTO is a different construct (insert into a target table);
     # do not treat it as a returning clause.
-    if re.search(r"(?i)\bOUTPUT\b.*\bINTO\b", sql):
+    if re.search(r"(?i)\bOUTPUT\b.*\bINTO\b", code):
         return sql, None
-    m = re.search(r"(?i)\bOUTPUT\b\s+(.*?)(?=\s+\b(?:WHERE|VALUES|FROM)\b|;|$)", sql)
+    m = re.search(r"(?i)\bOUTPUT\b\s+(.*?)(?=\s+\b(?:WHERE|VALUES|FROM)\b|;|$)", code)
     if not m:
         return sql, None
     output_cols = m.group(1).strip()
     if not output_cols:
         return sql, None
-    base = (sql[: m.start()].rstrip() + " " + sql[m.end() :].lstrip()).strip()
+    base_code = (code[: m.start()].rstrip() + " " + code[m.end() :].lstrip()).strip()
+    base = f"{trivia}{base_code}" if trivia else base_code
     return base, output_cols
 
 
