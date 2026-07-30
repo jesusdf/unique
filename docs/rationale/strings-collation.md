@@ -63,8 +63,8 @@ describing the semantic loss).
 > every target. No warning (the value is reproduced exactly, not merely
 > approximated).
 
-**See Also.** Corpus `ora-concat-null`, `reda-ora-concat-null-cast`,
-`my-concat-null`, `my-concat-null-col`, `ts-concat-null`, `pg-concat-null` ·
+**See Also.** Corpus [`ora-concat-null`](../../tests/fixtures/challenge/challenge_oracle.sql), [`reda-ora-concat-null-cast`](../../tests/fixtures/challenge/challenge_oracle.sql),
+[`my-concat-null`](../../tests/fixtures/challenge/challenge_mysql.sql), [`my-concat-null-col`](../../tests/fixtures/challenge/challenge_mysql.sql), [`ts-concat-null`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`pg-concat-null`](../../tests/fixtures/challenge/challenge_postgresql.sql) ·
 `emit_expr.py:1869-1897` (`_emit_binary`, CONCAT dialect overrides, docstring).
 
 ---
@@ -109,8 +109,8 @@ documented, approved limit rather than a bug (`docs/03-unsupported.md` §2,
 > workaround exists in either direction; every occurrence carries a `UNIQUE:`
 > note + warning rather than a silent value change. User-approved 2026-07-19.
 
-**See Also.** Corpus `ora-empty-is-null`, `ora-empty-null`,
-`pg-empty-is-null` · `docs/03-unsupported.md` §2, "Empty string as a distinct
+**See Also.** Corpus [`ora-empty-is-null`](../../tests/fixtures/challenge/challenge_oracle.sql), [`ora-empty-null`](../../tests/fixtures/challenge/challenge_oracle.sql),
+[`pg-empty-is-null`](../../tests/fixtures/challenge/challenge_postgresql.sql) · [§2](../03-unsupported.md), "Empty string as a distinct
 value → Oracle" · [`UNIQUE-1207`](../reference/warnings.md#unique-1207).
 
 ---
@@ -153,7 +153,7 @@ portable construct entirely (`reda-ts-like-escape`, class `lying-warning`).
 > engines. No warning (previously the whole statement was dropped; now
 > nothing is).
 
-**See Also.** Corpus `reda-ts-like-escape` ·
+**See Also.** Corpus [`reda-ts-like-escape`](../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
 `emit_expr.py:1858-1864` (backslash default-escape compensation, docstring).
 
 ---
@@ -247,8 +247,8 @@ the clamp (`pg-repeat-negative`, class `func`).
 > PostgreSQL/MySQL). **Warned limit** on Oracle — not a clamp defect, the same
 > `'' ≡ NULL` limit documented above.
 
-**See Also.** Corpus `pg-repeat-negative` ·
-`docs/03-unsupported.md` §2, "Empty string as a distinct value → Oracle" ·
+**See Also.** Corpus [`pg-repeat-negative`](../../tests/fixtures/challenge/challenge_postgresql.sql) ·
+[§2](../03-unsupported.md), "Empty string as a distinct value → Oracle" ·
 [`UNIQUE-1082`](../reference/warnings.md#unique-1082).
 
 ---
@@ -309,8 +309,8 @@ through unchanged with no warning (`reda-ts-substring-zero-start`, class
 > `'hel'` before the fix); `('abc','abc','bc')` verified on all three for the
 > 2-arg form. No warning.
 
-**See Also.** Corpus `reda-ts-substring-zero-start`, `pg-substr-zero`,
-`pg-fsubstr` · `tests/integration/test_challenge.py::TestPgSubstringZeroStart`
+**See Also.** Corpus [`reda-ts-substring-zero-start`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`pg-substr-zero`](../../tests/fixtures/challenge/challenge_postgresql.sql),
+[`pg-fsubstr`](../../tests/fixtures/challenge/challenge_postgresql.sql) · [`TestPgSubstringZeroStart`](../../tests/integration/test_challenge.py)
 (pinned).
 
 ---
@@ -357,9 +357,9 @@ tsql=`6`, pg=`3`).
 > the general `LENGTH` limit (`docs/03-unsupported.md` §2), inherited rather
 > than specifically warned for `DATALENGTH` of a column.
 
-**See Also.** Corpus `ts-binary-length`, `reda-ts-datalength-nchar` ·
+**See Also.** Corpus [`ts-binary-length`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`reda-ts-datalength-nchar`](../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
 `emit_functions.py:3094-3115` (docstring) ·
-`docs/03-unsupported.md` §2, "`LENGTH` bytes-vs-chars".
+[§2](../03-unsupported.md), "`LENGTH` bytes-vs-chars".
 
 ---
 
@@ -408,9 +408,9 @@ rather than shipping a call the target engine would reject outright.
 > `LISTAGG`→MySQL, `INITCAP`→T-SQL/MySQL, …) rather than being patched one
 > function at a time.
 
-**See Also.** Corpus `ora-soundex`, `ora-soundex3`, `my-soundex-format` ·
-`docs/03-unsupported.md` §2.1, "Unmapped built-in scalar functions" ·
-`src/unique/core/output_gate.py::_untranslated_source_builtin`,
+**See Also.** Corpus [`ora-soundex`](../../tests/fixtures/challenge/challenge_oracle.sql), [`ora-soundex3`](../../tests/fixtures/challenge/challenge_oracle.sql), [`my-soundex-format`](../../tests/fixtures/challenge/challenge_mysql.sql) ·
+[§2.1](../03-unsupported.md), "Unmapped built-in scalar functions" ·
+[`_untranslated_source_builtin`](../../src/unique/core/output_gate.py),
 `gate_reason` · [`UNIQUE-1151`](../reference/warnings.md#unique-1151).
 
 ---
@@ -474,9 +474,9 @@ itself deduplicates) — documented separately as its own limit
 > — no workaround exists without column-level collation visibility Unique does
 > not have.
 
-**See Also.** Corpus `ts-trailing-eq`, `ts-trailing-space-cmp`,
-`pg-order-nulls-default`, `my-distinct-case`, `my-group-case` ·
-`docs/03-unsupported.md` §2, "String collation in `=`/`ORDER BY`/`DISTINCT`/
+**See Also.** Corpus [`ts-trailing-eq`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`ts-trailing-space-cmp`](../../tests/fixtures/challenge/challenge_sqlserver.sql),
+[`pg-order-nulls-default`](../../tests/fixtures/challenge/challenge_postgresql.sql), [`my-distinct-case`](../../tests/fixtures/challenge/challenge_mysql.sql), [`my-group-case`](../../tests/fixtures/challenge/challenge_mysql.sql) ·
+[§2](../03-unsupported.md), "String collation in `=`/`ORDER BY`/`DISTINCT`/
 `LIKE`" · §3.14, "Case-Insensitive Collation Under DISTINCT / ORDER BY" ·
-`tests/integration/test_challenge.py::TestNullOrderingEmulation` (pinned) ·
+[`TestNullOrderingEmulation`](../../tests/integration/test_challenge.py) (pinned) ·
 [`UNIQUE-1015`](../reference/warnings.md#unique-1015).

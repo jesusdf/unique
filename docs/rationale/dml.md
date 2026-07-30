@@ -47,7 +47,7 @@ T-SQL's default `[v]` bracket naming.
 > **dropped the whole `PIVOT` operator** with no warning — a defect this
 > lowering replaced.
 
-**See Also.** `reda-ts-pivot` · `docs/03-unsupported.md` §2 (T-SQL
+**See Also.** [`reda-ts-pivot`](../../tests/fixtures/challenge/challenge_sqlserver.sql) · [§2](../03-unsupported.md) (T-SQL
 PIVOT/UNPIVOT row).
 
 ### `UNPIVOT` (T-SQL / Oracle) → all targets
@@ -89,7 +89,7 @@ rewrite instead emits an explicit string literal cased exactly as the
 > Oracle/PostgreSQL/MySQL. `[limit]` (warned carrier) when the source
 > projection is invisible.
 
-**See Also.** `ts-unpivot`, `ora-unpivot`.
+**See Also.** [`ts-unpivot`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`ora-unpivot`](../../tests/fixtures/challenge/challenge_oracle.sql).
 
 ## `MERGE` / upsert lowering
 
@@ -124,7 +124,7 @@ not assume 17; Oracle's `MERGE` has no such clause at all).
 > **Note** faithful — live-verified identical final rows on
 > T-SQL/Oracle/PostgreSQL.
 
-**See Also.** `ts-merge-full`.
+**See Also.** [`ts-merge-full`](../../tests/fixtures/challenge/challenge_sqlserver.sql).
 
 ### Conditional `MATCHED` UPDATE+DELETE pair (T-SQL) → Oracle fold
 
@@ -149,7 +149,7 @@ original (pre-update) row.
 > **Note** faithful in the safe shape (live-verified
 > identical rows). Full warned carrier in the unsafe shape.
 
-**See Also.** `docs/03-unsupported.md` §3.6 (MERGE clause composition,
+**See Also.** [§3.6](../03-unsupported.md) (MERGE clause composition,
 audit 2026-07-24).
 
 ### A leading CTE feeding `MERGE` (T-SQL) → Oracle / MySQL
@@ -185,7 +185,7 @@ AS (…)` that defines it, leaving `src` undefined (MySQL error 1146).
 > **Note** faithful — both targets now produce a valid,
 > value-equivalent statement instead of an undefined-relation error.
 
-**See Also.** `reda-ts-cte-merge`.
+**See Also.** [`reda-ts-cte-merge`](../../tests/fixtures/challenge/challenge_sqlserver.sql).
 
 ## Multi-table `DELETE`
 
@@ -219,7 +219,7 @@ at all.
 
 > **Note** faithful on all three.
 
-**See Also.** `my-multitable-delete-join`, `reda-ts-delete-join`.
+**See Also.** [`my-multitable-delete-join`](../../tests/fixtures/challenge/challenge_mysql.sql), [`reda-ts-delete-join`](../../tests/fixtures/challenge/challenge_sqlserver.sql).
 
 ### `DELETE TOP (n)` row caps (T-SQL) → MySQL / Oracle / PostgreSQL
 
@@ -251,7 +251,7 @@ different mechanism to bound the row count.
 > **Note** faithful. The earlier defect **silently dropped**
 > `TOP (n)` altogether, deleting every matching row instead of capping at `n`.
 
-**See Also.** `reda-ts-delete-top`.
+**See Also.** [`reda-ts-delete-top`](../../tests/fixtures/challenge/challenge_sqlserver.sql).
 
 ## Row-value comparisons
 
@@ -279,7 +279,7 @@ accept it natively.
 
 > **Note** faithful — PG native result `(3,4)`.
 
-**See Also.** `pg-row-value-comparison`.
+**See Also.** [`pg-row-value-comparison`](../../tests/fixtures/challenge/challenge_postgresql.sql).
 
 ### Row-value `IN` (Oracle) → T-SQL
 
@@ -294,7 +294,7 @@ list, valid on Oracle/PostgreSQL/MySQL.
 
 > **Note** faithful.
 
-**See Also.** `reda-ora-rowvalue-in` (neighbour of `pg-row-value-comparison`).
+**See Also.** [`reda-ora-rowvalue-in`](../../tests/fixtures/challenge/challenge_oracle.sql) (neighbour of [`pg-row-value-comparison`](../../tests/fixtures/challenge/challenge_postgresql.sql)).
 
 ## `OUTPUT` / `RETURNING`
 
@@ -329,8 +329,8 @@ standalone `OUTPUT` has no Oracle equivalent at all.
 > **Note** faithful on PostgreSQL. `[limit]` on Oracle — the
 > DML effect is preserved, the returned result set is not.
 
-**See Also.** `ts-insert-output`, `ts-update-output` ·
-`docs/03-unsupported.md` §3.7 (the MySQL side of the same gap) ·
+**See Also.** [`ts-insert-output`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`ts-update-output`](../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
+[§3.7](../03-unsupported.md) (the MySQL side of the same gap) ·
 [`UNIQUE-1212`](../reference/warnings.md#unique-1212).
 
 ### `OUTPUT … INTO` redirect (T-SQL) → PostgreSQL
@@ -359,7 +359,7 @@ returns a result set to the caller; it has no `INTO <table>` redirect form.
 > **Warning** `[limit]` — the redirect into `log` is lost; the
 > base `INSERT` and its plain-`RETURNING` value are faithful.
 
-**See Also.** `reda-ts-output-into` ·
+**See Also.** [`reda-ts-output-into`](../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
 [`UNIQUE-1137`](../reference/warnings.md#unique-1137) ·
 [`UNIQUE-1139`](../reference/warnings.md#unique-1139).
 
@@ -392,4 +392,4 @@ defect, not an approved limit).
 > **Note** faithful — the earlier silent drop made an ordered
 > result unordered with no warning.
 
-**See Also.** `reda-ts-setop-orderby`.
+**See Also.** [`reda-ts-setop-orderby`](../../tests/fixtures/challenge/challenge_sqlserver.sql).

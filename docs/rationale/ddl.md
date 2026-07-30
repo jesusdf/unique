@@ -52,7 +52,7 @@ clause without losing information.
 > target. `[limit]` (documented, warned) when the source declares a non-default
 > seed/step onto MySQL — the value cannot be reproduced there.
 
-**See Also.** `pg-serial-identity-oracle`, `ora-identity-opts` ·
+**See Also.** [`pg-serial-identity-oracle`](../../tests/fixtures/challenge/challenge_postgresql.sql), [`ora-identity-opts`](../../tests/fixtures/challenge/challenge_oracle.sql) ·
 [`UNIQUE-1049`](../reference/warnings.md#unique-1049).
 
 ### T-SQL identity-scope reads (`SCOPE_IDENTITY()`/`@@IDENTITY`/`IDENT_CURRENT()`) → PostgreSQL / Oracle / MySQL
@@ -71,7 +71,7 @@ three-way scope/session/table distinction.
 
 > **Warning** `[limit]` — approved degrade.
 
-**See Also.** `ts-identity-funcs`.
+**See Also.** [`ts-identity-funcs`](../../tests/fixtures/challenge/challenge_sqlserver.sql).
 
 ## Temporary tables
 
@@ -110,8 +110,8 @@ the opposite of the source engines' session-scoped, commit-surviving rows.
 > rows on Oracle against 2 on PostgreSQL — a silent cross-statement
 > divergence the fix closes).
 
-**See Also.** `ts-select-into-temp`, `pg-select-into-ctas`,
-`pg-temp-oncommit-oracle`.
+**See Also.** [`ts-select-into-temp`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`pg-select-into-ctas`](../../tests/fixtures/challenge/challenge_postgresql.sql),
+[`pg-temp-oncommit-oracle`](../../tests/fixtures/challenge/challenge_postgresql.sql).
 
 ## Foreign-key referential actions
 
@@ -143,8 +143,8 @@ all (`ORA-00905` if attempted).
 > faithful elsewhere. (An earlier version of this conversion dropped the
 > clause on Oracle **silently**, with no warning — a real defect this closes.)
 
-**See Also.** `reda-ts-fk-on-update`, `pg-fk-onupdate-oracle` ·
-`docs/03-unsupported.md` §2 (FK `ON UPDATE` action → Oracle row) ·
+**See Also.** [`reda-ts-fk-on-update`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`pg-fk-onupdate-oracle`](../../tests/fixtures/challenge/challenge_postgresql.sql) ·
+[§2](../03-unsupported.md) (FK `ON UPDATE` action → Oracle row) ·
 [`UNIQUE-1148`](../reference/warnings.md#unique-1148).
 
 ### Self-referencing FK cascade (MySQL) → T-SQL
@@ -164,7 +164,7 @@ this is a T-SQL engine restriction, not a missing-feature gap.
 > **Warning** `[limit]` — approved degrade (the cascade
 > behaviour is lost on T-SQL).
 
-**See Also.** `my-self-fk` · `docs/03-unsupported.md` §3.22 (annotated
+**See Also.** [`my-self-fk`](../../tests/fixtures/challenge/challenge_mysql.sql) · [§3.22](../03-unsupported.md) (annotated
 inherent divergences) · [`UNIQUE-1054`](../reference/warnings.md#unique-1054).
 
 ## Sequences
@@ -198,7 +198,7 @@ semantic one: Oracle's grammar rejects the two-word form outright
 > degrade). The earlier defect emitted the two-word form verbatim into Oracle,
 > which failed to parse — a real defect, not an approved limit.
 
-**See Also.** `reda-ts-sequence-no-cycle`, `ora-sequence-options`.
+**See Also.** [`reda-ts-sequence-no-cycle`](../../tests/fixtures/challenge/challenge_sqlserver.sql), [`ora-sequence-options`](../../tests/fixtures/challenge/challenge_oracle.sql).
 
 ## Storage and physical options
 
@@ -229,7 +229,7 @@ concept on `CREATE INDEX`.
 > (FILLFACTOR=80))`) rather than dropped, producing invalid SQL (MySQL error
 > 1064) with no warning — now fixed to match the Oracle path's clean drop.
 
-**See Also.** `reda-ts-index-fillfactor-mysql` ·
+**See Also.** [`reda-ts-index-fillfactor-mysql`](../../tests/fixtures/challenge/challenge_sqlserver.sql) ·
 [`UNIQUE-1014`](../reference/warnings.md#unique-1014).
 
 ## MySQL `ENUM` degrade — open limitation
@@ -274,7 +274,7 @@ disagree (live-diffed: MySQL `('lo','mid','hi')` vs PostgreSQL
 > would carrier-spam every real-world `ENUM` column, most of which are never
 > compared ordinally) in favour of the full rewrite.
 
-**See Also.** `my-enum-order` (`[open]`) · `docs/TODO.md` B29 ·
+**See Also.** [`my-enum-order`](../../tests/fixtures/challenge/challenge_mysql.sql) (`[open]`) · `docs/TODO.md` B29 ·
 `emit_ddl.py::_emit_enum_type`.
 
 ## Topics left out for lack of source support

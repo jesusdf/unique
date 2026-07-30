@@ -36,7 +36,7 @@ would silently change which rows are aggregated together.
 > **Warning** Not faithful on T-SQL/MySQL — the value is replaced
 > by a warned `NULL` carrier. Faithful on Oracle and PostgreSQL.
 
-**See Also.** `pg-window-groups-frame` · `docs/03-unsupported.md` §3.25 ·
+**See Also.** [`pg-window-groups-frame`](../../tests/fixtures/challenge/challenge_postgresql.sql) · [§3.25](../03-unsupported.md) ·
 [`UNIQUE-1077`](../reference/warnings.md#unique-1077).
 
 ## Ordered aggregates
@@ -72,7 +72,7 @@ per group, so it silently changes both the row count and the result.
 > PostgreSQL/T-SQL/MySQL; the user must supply an equivalent manually. Faithful
 > on Oracle (native).
 
-**See Also.** `reda-ora-keep-denserank` · `docs/03-unsupported.md` §3.3b.
+**See Also.** [`reda-ora-keep-denserank`](../../tests/fixtures/challenge/challenge_oracle.sql) · [§3.3b](../03-unsupported.md).
 
 ## Boolean aggregates and `FILTER`
 
@@ -91,7 +91,7 @@ type: a predicate cannot appear as a `CAST` operand (T-SQL error 156, Oracle
 
 > **Note** faithful (same integer value).
 
-**See Also.** `pg-bool-to-int-cast`.
+**See Also.** [`pg-bool-to-int-cast`](../../tests/fixtures/challenge/challenge_postgresql.sql).
 
 ### `bool_or(...) FILTER (WHERE …)` composition (PostgreSQL) → T-SQL / Oracle
 
@@ -120,9 +120,9 @@ rejected (no boolean value type in a `CASE` `THEN` position).
 
 > **Note** faithful — result 1 (true).
 
-**See Also.** `pg-boolagg-filter` (component cases verified independently:
-`pg-bool-to-int-cast`, and the FILTER-alone rewrite around
-`pg-filter-subquery`).
+**See Also.** [`pg-boolagg-filter`](../../tests/fixtures/challenge/challenge_postgresql.sql) (component cases verified independently:
+[`pg-bool-to-int-cast`](../../tests/fixtures/challenge/challenge_postgresql.sql), and the FILTER-alone rewrite around
+[`pg-filter-subquery`](../../tests/fixtures/challenge/challenge_postgresql.sql)).
 
 ## `GROUP_CONCAT` / `STRING_AGG` / `LISTAGG` family
 
@@ -153,7 +153,7 @@ restructuring `pg-distinct-on` uses).
 > `'10-2-1'`. Oracle (native `LISTAGG(DISTINCT …)`) and T-SQL (warned degrade,
 > `STRING_AGG` has no `DISTINCT`) are unaffected by this specific fix.
 
-**See Also.** `my-groupconcat-distinct-numord`.
+**See Also.** [`my-groupconcat-distinct-numord`](../../tests/fixtures/challenge/challenge_mysql.sql).
 
 ### `CAST` folding for `LISTAGG`/`STRING_AGG` value arguments (PostgreSQL) → Oracle / T-SQL
 
@@ -169,7 +169,7 @@ bounded string type.
 
 > **Note** faithful — live-verified `'1,2'`.
 
-**See Also.** `pg-stragg-order`, `pg-string-agg-order`.
+**See Also.** [`pg-stragg-order`](../../tests/fixtures/challenge/challenge_postgresql.sql), [`pg-string-agg-order`](../../tests/fixtures/challenge/challenge_postgresql.sql).
 
 ### `ANY_VALUE` (MySQL / PostgreSQL 16+) → T-SQL
 
@@ -187,7 +187,7 @@ equivalent "pick one, unspecified which" aggregate.
 > **Warning** `[limit]` on T-SQL — approved degrade, no faithful
 > substitute exists.
 
-**See Also.** `my-any-value` · `docs/03-unsupported.md` §2.1 (unmapped
+**See Also.** [`my-any-value`](../../tests/fixtures/challenge/challenge_mysql.sql) · [§2.1](../03-unsupported.md) (unmapped
 built-in scalar functions).
 
 ### Oracle `LISTAGG(...) WITHIN GROUP (...) OVER (...)` → PostgreSQL / T-SQL / MySQL
@@ -204,7 +204,7 @@ one output row per input row, not one per group.
 
 > **Warning** `[limit]` — approved degrade.
 
-**See Also.** `ora-listagg-over` · `docs/03-unsupported.md` §2 (windowed
+**See Also.** [`ora-listagg-over`](../../tests/fixtures/challenge/challenge_oracle.sql) · [§2](../03-unsupported.md) (windowed
 string aggregation row) · [`UNIQUE-1076`](../reference/warnings.md#unique-1076).
 
 ## `DISTINCT ON`
@@ -239,7 +239,7 @@ count whenever a given `a` has more than one `b`.
 > `SELECT DISTINCT` mistranslation gave `[(1,10),(1,20),(2,5),(2,7)]` on the
 > other three engines (a real defect this rewrite fixed).
 
-**See Also.** `pg-distinct-on`.
+**See Also.** [`pg-distinct-on`](../../tests/fixtures/challenge/challenge_postgresql.sql).
 
 ## MySQL NULL-safe division (aggregate-adjacent)
 
@@ -272,7 +272,7 @@ around an aggregate divisor (`COUNT`), so it lives here rather than in
 
 > **Note** faithful — live-verified `1.5`.
 
-**See Also.** `my-sum-div-count` · `tests/integration/test_challenge.py`
+**See Also.** [`my-sum-div-count`](../../tests/fixtures/challenge/challenge_mysql.sql) · `tests/integration/test_challenge.py`
 (`TestMysqlDecimalDivision`, `TestMysqlSafeDivision`).
 
 ## Topics left out for lack of source support
