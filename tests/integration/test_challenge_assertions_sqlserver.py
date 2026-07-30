@@ -443,7 +443,10 @@ CASES.update(
         # invalid: 3-arg CONVERT with a numeric target ignores the style — it is
         # a plain CAST, not a date parse.
         "reda-ts-convert-numeric-style": {
-            "postgresql": {"present": ["CAST('26' AS INT)"], "absent": ["TO_TIMESTAMP"]},
+            "postgresql": {
+                "present": ["CAST('26' AS INT)"],
+                "absent": ["TO_TIMESTAMP"],
+            },
             "mysql": {"present": ["CAST('26' AS SIGNED)"], "absent": ["STR_TO_DATE"]},
             "oracle": {"present": ["CAST('26' AS INT)"], "absent": ["TO_TIMESTAMP"]},
         },

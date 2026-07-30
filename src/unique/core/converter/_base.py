@@ -636,19 +636,22 @@ def _split_top_level_commas(text: str) -> list[str]:
 
 
 def _oracle_sequence_drop_type(sql: str) -> str:
-    """Drop the ``AS <type>`` clause from a CREATE SEQUENCE for Oracle.
+    """Normalize a CREATE SEQUENCE for Oracle.
 
-    T-SQL/PostgreSQL allow ``CREATE SEQUENCE s AS INT ...`` to bound the
-    sequence's data type; Oracle has no such clause and rejects it
-    (ORA-03048). sqlglot maps the type but keeps the clause, so remove the
-    ``AS <type>`` that follows the sequence name.
+    - Drop the ``AS <type>`` clause: T-SQL/PostgreSQL allow ``CREATE SEQUENCE s
+      AS INT ...`` to bound the sequence's data type; Oracle has no such clause
+      and rejects it (ORA-03048). sqlglot maps the type but keeps the clause.
+    - Collapse the two-word negatives (``NO CYCLE`` / ``NO MAXVALUE`` / …) to
+      Oracle's one-word spelling (``NOCYCLE`` / ``NOMAXVALUE`` / …); the two-word
+      form is ORA-03049.
     """
-    return re.sub(
+    out = re.sub(
         r"(?is)(\bCREATE\s+SEQUENCE\s+\S+)\s+AS\s+\w+(?:\s*\([^)]*\))?",
         r"\1",
         sql,
         count=1,
     )
+    return re.sub(r"(?i)\bNO\s+(CYCLE|CACHE|MAXVALUE|MINVALUE)\b", r"NO\1", out)
 
 
 def _cross_update_target(node: UpdateStatement) -> TableRef:

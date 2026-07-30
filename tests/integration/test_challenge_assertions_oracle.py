@@ -161,9 +161,7 @@ CASES.update(
         "reda-ora-interval-literal-arith": Case(
             "reda-ora-interval-literal-arith ",
             {
-                "tsql": Expect(
-                    ("DATEADD(MONTH, 6, DATEADD(YEAR, 1,",), ("INTERVAL",)
-                ),
+                "tsql": Expect(("DATEADD(MONTH, 6, DATEADD(YEAR, 1,",), ("INTERVAL",)),
                 "mysql": Expect(
                     ("+ INTERVAL 1 YEAR + INTERVAL 6 MONTH",), ("YEAR TO MONTH",)
                 ),

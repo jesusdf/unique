@@ -41,10 +41,10 @@ __all__ = [
 ]
 
 
-def _rewrite_select_into_identity(sql: str, read: str) -> str | None:
+def _rewrite_select_into_identity(sql: str, read: str) -> exp.Expression | None:
     """Rewrite a T-SQL ``IDENTITY(type, seed, incr)`` in a SELECT-INTO list to a
     ``ROW_NUMBER()`` expression reproducing the same id values, returning the
-    re-serialized source SQL (or None when there is no such call).
+    transformed sqlglot expression (or None when there is no such call).
 
     ``IDENTITY(_, seed, incr)`` -> ``((ROW_NUMBER() OVER (ORDER BY (SELECT NULL))
     - 1) * incr + seed)`` (simplified to bare ROW_NUMBER for seed=incr=1). The
@@ -55,28 +55,28 @@ def _rewrite_select_into_identity(sql: str, read: str) -> str | None:
         return None
     if parsed is None:
         return None
+
+    def _lit(args: list[exp.Expression], idx: int, default: int) -> int:
+        if idx < len(args) and isinstance(args[idx], exp.Literal):
+            try:
+                return int(args[idx].name)
+            except ValueError:  # pragma: no cover - non-numeric seed/incr
+                return default
+        return default
+
     found = False
     for anon in list(parsed.find_all(exp.Anonymous)):
         if anon.name.upper() != "IDENTITY":
             continue
         args = anon.expressions
-
-        def _lit(idx: int, default: int) -> int:
-            if idx < len(args) and isinstance(args[idx], exp.Literal):
-                try:
-                    return int(args[idx].name)
-                except ValueError:  # pragma: no cover - non-numeric seed/incr
-                    return default
-            return default
-
-        seed, incr = _lit(1, 1), _lit(2, 1)
+        seed, incr = _lit(args, 1, 1), _lit(args, 2, 1)
         base = "ROW_NUMBER() OVER (ORDER BY (SELECT NULL))"
         expr_str = (
             base if (seed, incr) == (1, 1) else f"((({base}) - 1) * {incr} + {seed})"
         )
         anon.replace(sqlglot.parse_one(expr_str, read="tsql"))
         found = True
-    return parsed.sql(dialect=read) if found else None
+    return cast(exp.Expression, parsed) if found else None
 
 
 def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
@@ -182,18 +182,28 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     # multi-statement ``;``-batch reaches the AST/passthrough path, so map it here
     # too. Oracle MODIFY keeps the current nullability, and an explicit NULL on an
     # already-nullable column raises ORA-01451 — so emit NOT NULL only.
-    if node.kind == "ALTER" and node.source_dialect == "tsql" and dialect == "oracle":
-        m_tsc = re.match(
-            r"(?is)^\s*ALTER\s+TABLE\s+(\S+)\s+ALTER\s+COLUMN\s+(\S+)\s+"
-            r"([A-Za-z0-9_]+(?:\s*\([\d,\s]*\))?)"
-            r"(?:\s+(NOT\s+NULL|NULL))?\s*;?\s*$",
-            node.sql,
-        )
-        if m_tsc:
-            _tt, _tc, _tty, _tnull = m_tsc.groups()
-            _tty = _portable_types_in_sql(_tty, "oracle")
-            _nn = " NOT NULL" if " ".join((_tnull or "").upper().split()) == "NOT NULL" else ""
-            return f"ALTER TABLE {_tt} MODIFY ({_tc} {_tty}{_nn})"
+    if node.kind == "ALTER" and (node.source_dialect, dialect) == ("tsql", "oracle"):
+        try:
+            _alt = sqlglot.parse_one(node.sql, read=read)
+        except Exception:  # noqa: BLE001
+            _alt = None
+        _acts = _alt.args.get("actions") if isinstance(_alt, exp.Alter) else None
+        if (
+            isinstance(_alt, exp.Alter)
+            and _acts
+            and len(_acts) == 1
+            and isinstance(_acts[0], exp.AlterColumn)
+        ):
+            _ac = _acts[0]
+            _dt = _ac.args.get("dtype")
+            if _dt is not None:
+                _tt = _alt.this.sql(dialect=write)
+                _tc = _ac.this.sql(dialect=write)
+                _tty = _portable_types_in_sql(_dt.sql(dialect="tsql"), "oracle")
+                # Oracle MODIFY keeps the current nullability; an explicit NULL on
+                # an already-nullable column raises ORA-01451, so emit NOT NULL only.
+                _tnn = " NOT NULL" if _ac.args.get("allow_null") is False else ""
+                return f"ALTER TABLE {_tt} MODIFY ({_tc} {_tty}{_tnn})"
 
     # ``ALTER TABLE t ALTER COLUMN c SET DEFAULT v``: the MySQL/PostgreSQL-native
     # spelling (T-SQL uses ADD DEFAULT … FOR, handled by the guard/default paths,
@@ -440,27 +450,34 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     # relation (PG 'relation … not found in FROM', MySQL 3568). Oracle's OF only
     # selects which joined table's rows to lock; the portable form drops the OF
     # list (locking every FROM row) and warns about the widened lock scope.
-    if (
-        node.source_dialect == "oracle"
-        and dialect in ("postgresql", "mysql")
-        and re.search(r"(?i)\bFOR\s+UPDATE\s+OF\b", node.sql)
-    ):
-        _of_stripped = re.sub(
-            r"(?i)(\bFOR\s+UPDATE)\s+OF\s+(?:[\w.\"]+\s*,\s*)*[\w.\"]+",
-            r"\1",
-            node.sql,
-        )
+    if node.source_dialect == "oracle" and dialect in ("postgresql", "mysql"):
         try:
-            _ofr = sqlglot.transpile(_of_stripped, read=read, write=write)
-            _ofb = _ofr[0] if _ofr and _ofr[0].strip() else _of_stripped
-        except Exception:  # noqa: BLE001 - keep the stripped spelling on failure
-            _ofb = _of_stripped
-        return (
-            f"-- UNIQUE: Oracle FOR UPDATE OF <column> selects which table's rows "
-            f"to lock; {dialect} FOR UPDATE OF takes table names, so the OF list "
-            "is dropped (every row read is locked) (docs/03-unsupported.md)\n"
-            f"{_ofb}"
+            _of_ast = sqlglot.parse_one(node.sql, read=read)
+        except Exception:  # noqa: BLE001
+            _of_ast = None
+        _of_locks = (
+            [lk for lk in _of_ast.args.get("locks") or [] if lk.args.get("expressions")]
+            if _of_ast is not None
+            else []
         )
+        if _of_ast is not None and _of_locks:
+            # Oracle's OF names COLUMNS; PG/MySQL OF names TABLES/aliases, so the
+            # column leaks as an unknown relation. Oracle's OF only selects which
+            # joined table's rows to lock — drop the OF list on the AST (locking
+            # every FROM row) and warn about the widened lock scope.
+            for lk in _of_locks:
+                lk.set("expressions", None)
+            try:
+                _ofb = _of_ast.sql(dialect=write)
+            except Exception:  # noqa: BLE001
+                _ofb = node.sql
+            return (
+                "-- UNIQUE: Oracle FOR UPDATE OF <column> selects which table's "
+                f"rows to lock; {dialect} FOR UPDATE OF takes table names, so the "
+                "OF list is dropped (every row read is locked) "
+                "(docs/03-unsupported.md)\n"
+                f"{_ofb}"
+            )
 
     # CREATE INDEX on an EXPRESSION (function-based index): Oracle keeps the
     # native single-parens form; MySQL 8.0.13+/PostgreSQL require the expression
@@ -535,42 +552,27 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
     # identity/auto-increment PROPERTY is not portable in a CREATE-TABLE-AS-SELECT,
     # so warn. Self-contained: emits the CTAS (Oracle/MySQL) or SELECT INTO
     # (PG) for the rewritten statement.
-    if (
-        node.kind == "SELECT INTO"
-        and dialect != "tsql"
-        and re.search(r"(?i)\bIDENTITY\s*\(", node.sql)
-    ):
-        rewritten = _rewrite_select_into_identity(node.sql, read)
-        if rewritten is not None:
-            node = dataclasses.replace(node, sql=rewritten)
+    if node.kind == "SELECT INTO" and dialect != "tsql":
+        _ident = _rewrite_select_into_identity(node.sql, read)
+        if _ident is not None:
             _identity_note = (
                 "\n-- UNIQUE: T-SQL IDENTITY() in SELECT INTO reproduced as "
                 "ROW_NUMBER (id values match); the identity/auto-increment column "
                 "property is not portable in a CREATE TABLE AS SELECT "
                 "(docs/03-unsupported.md)"
             )
-            if dialect in ("oracle", "mysql"):
-                _ident_ctas = re.sub(
-                    r"(?is)^\s*SELECT\s+(.*?)\s+INTO\s+(?:TEMP(?:ORARY)?\s+)?"
-                    r"([\w.\"\[\]#]+)\s+FROM\s+(.*?)\s*;?\s*$",
-                    lambda mo: (
-                        f"CREATE TABLE {mo.group(2).strip('#[]\"')} AS SELECT "
-                        f"{mo.group(1)} FROM {mo.group(3)}"
-                    ),
-                    node.sql,
-                )
-                try:
-                    _r = sqlglot.transpile(_ident_ctas, read=read, write=write)
-                    _out = _r[0] if _r and _r[0].strip() else _ident_ctas
-                except Exception:  # noqa: BLE001
-                    _out = _ident_ctas
-                return _out + _identity_note
-            try:
-                _r = sqlglot.transpile(node.sql, read=read, write=write)
-                _out = _r[0] if _r and _r[0].strip() else node.sql
-            except Exception:  # noqa: BLE001
-                _out = node.sql
-            return _out + _identity_note
+            _into = _ident.args.get("into") if isinstance(_ident, exp.Select) else None
+            _emitted: str
+            if dialect in ("oracle", "mysql") and isinstance(_into, exp.Into):
+                # Oracle/MySQL have no SELECT-INTO-table; build a CTAS on the AST.
+                _ident_sel = _ident.copy()
+                _ident_sel.set("into", None)
+                _emitted = exp.Create(
+                    this=_into.this, kind="TABLE", expression=_ident_sel
+                ).sql(dialect=write)
+            else:
+                _emitted = _ident.sql(dialect=write)  # PG keeps SELECT INTO
+            return _emitted + _identity_note
 
     # T-SQL / PostgreSQL ``SELECT … INTO [TEMP] newtable FROM …`` CREATES a table;
     # Oracle and MySQL have no SELECT-INTO-table form (INTO there targets
@@ -1347,15 +1349,8 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             else:
                 result = _portable_types_in_sql(result, dialect)
             if node.kind == "CREATE SEQUENCE" and dialect == "oracle":
+                # Drops AS <type> and collapses NO CYCLE -> NOCYCLE etc.
                 result = _oracle_sequence_drop_type(result)
-                # Oracle spells the sequence negatives as one word
-                # (NOMAXVALUE / NOMINVALUE / NOCYCLE / NOCACHE); T-SQL and
-                # PostgreSQL use two words (NO MAXVALUE, …), which Oracle
-                # rejects (ORA-03049). Collapse them (mirror of the
-                # Oracle->PG/T-SQL expansion above).
-                result = re.sub(
-                    r"(?i)\bNO\s+(CYCLE|CACHE|MAXVALUE|MINVALUE)\b", r"NO\1", result
-                )
             if node.kind == "MERGE":
                 # sqlglot keeps the USING subquery's FROM DUAL on engines
                 # that have no dual relation, and T-SQL *requires* MERGE to

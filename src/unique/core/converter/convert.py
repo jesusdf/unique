@@ -811,7 +811,9 @@ def convert_expression(expr: exp.Expression, source_dialect: str = "tsql") -> AS
                 exp.DataType.Type.VARBINARY,
                 exp.DataType.Type.BINARY,
             )
-            if (_is_binary and _style_val == "0") or _ct.this in exp.DataType.NUMERIC_TYPES:
+            if (
+                _is_binary and _style_val == "0"
+            ) or _ct.this in exp.DataType.NUMERIC_TYPES:
                 _c.set("style", None)
     if isinstance(expr, exp.Select) and any(
         not _styled_convert_is_modeled(c)
@@ -2605,21 +2607,21 @@ def _inline_merge_cte(expr: exp.Merge) -> exp.Merge:
     upsert rewrite otherwise references an undefined CTE). Only the simple
     ``USING <cte-name>`` shape is inlined; anything else is left untouched.
     """
-    with_node = expr.args.get("with_") or expr.args.get("with")
-    using = expr.args.get("using")
+    merged = expr.copy()
+    with_node = merged.args.get("with_") or merged.args.get("with")
+    using = merged.args.get("using")
     if with_node is None or not isinstance(using, exp.Table):
         return expr
     ctes = {c.alias: c.this for c in with_node.expressions if isinstance(c, exp.CTE)}
     if using.name not in ctes:
         return expr
-    merged = expr.copy()
-    with_copy = merged.args.get("with_") or merged.args.get("with")
-    ctes = {c.alias: c.this for c in with_copy.expressions if isinstance(c, exp.CTE)}
-    subquery = exp.Subquery(
-        this=ctes[using.name].copy(),
-        alias=exp.TableAlias(this=exp.to_identifier(using.name)),
+    merged.set(
+        "using",
+        exp.Subquery(
+            this=ctes[using.name].copy(),
+            alias=exp.TableAlias(this=exp.to_identifier(using.name)),
+        ),
     )
-    merged.set("using", subquery)
     merged.set("with_", None)
     merged.set("with", None)
     return merged

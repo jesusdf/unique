@@ -1120,9 +1120,7 @@ def _decompose_interval(interval_sql: str) -> list[tuple[int, str]] | None:
     PostgreSQL verbose form (``1 year 2 months 3 days``). Returns None for
     anything not confidently decomposable (leave it to the single-unit path or
     the native passthrough)."""
-    m = re.fullmatch(
-        r"(?is)\s*INTERVAL\s+'([^']*)'(?:\s+(.*?))?\s*", interval_sql
-    )
+    m = re.fullmatch(r"(?is)\s*INTERVAL\s+'([^']*)'(?:\s+(.*?))?\s*", interval_sql)
     if not m:
         return None
     value, span = m.group(1).strip(), (m.group(2) or "").strip().upper()
@@ -1135,9 +1133,7 @@ def _decompose_interval(interval_sql: str) -> list[tuple[int, str]] | None:
             mo = -mo
         return [(y, "YEAR"), (mo, "MONTH")]
     if span == "DAY TO SECOND":
-        ds = re.fullmatch(
-            r"\s*(-?\d+)\s+(\d+):(\d+):(\d+)(?:\.\d+)?\s*", value
-        )
+        ds = re.fullmatch(r"\s*(-?\d+)\s+(\d+):(\d+):(\d+)(?:\.\d+)?\s*", value)
         if not ds:
             return None
         d = int(ds.group(1))
@@ -1171,6 +1167,8 @@ def _emit_interval_chain(
             expr = f"DATEADD({unit}, {val}, {expr})"
         return expr
     op = "-" if sub else "+"
+    # MySQL takes an unquoted count (INTERVAL n UNIT); Oracle/PG quote it.
+    quote = {"mysql": ""}.get(dialect, "'")
     pieces = [left_sql]
     for n, unit in comps:
         # A negative component with an overall '+' keeps its own sign.
@@ -1178,10 +1176,7 @@ def _emit_interval_chain(
             piece_op, mag = ("-" if op == "+" else "+"), -n
         else:
             piece_op, mag = op, n
-        if dialect == "mysql":
-            pieces.append(f"{piece_op} INTERVAL {mag} {unit}")
-        else:  # oracle / postgresql
-            pieces.append(f"{piece_op} INTERVAL '{mag}' {unit}")
+        pieces.append(f"{piece_op} INTERVAL {quote}{mag}{quote} {unit}")
     return " ".join(pieces)
 
 
@@ -1258,8 +1253,9 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         and isinstance(node.right, RawSQL)
         and node.right.sql.lstrip().upper().startswith("INTERVAL")
         and dialect in ("tsql", "mysql", "oracle")
+        # Multi-field interval literals are Oracle/PG spellings; MySQL source has
+        # no such literal, so the MySQL-source string-date guard is unneeded here.
         and (_iv_comps := _decompose_interval(node.right.sql)) is not None
-        and not (SOURCE_DIALECT.get() == "mysql" and isinstance(node.left, Literal))
     ):
         _iv_left = _emit_operand(node.left, node.operator, dialect)
         return _emit_interval_chain(
@@ -2083,9 +2079,10 @@ def _emit_window(node: WindowFunction, dialect: str) -> str:
         # groups), so the framed aggregate is not computable — degrade to a
         # warned carrier rather than emit an invalid GROUPS clause silently
         # (T-SQL 102 / MySQL 1235).
-        if dialect in ("tsql", "mysql") and re.match(
-            r"(?i)\s*GROUPS\b", node.window.frame
-        ):
+        if dialect in (
+            "tsql",
+            "mysql",
+        ) and node.window.frame.lstrip().upper().startswith("GROUPS"):
             return (
                 f"NULL /* UNIQUE: a GROUPS window frame has no {dialect} "
                 "equivalent (only ROWS/RANGE, and no faithful rewrite with "

@@ -849,6 +849,40 @@ def _emit_substr_neg_start(
     return f"SUBSTR({s}, 1, GREATEST({length} + ({neg_start - 1}), 0))"
 
 
+def _weekday_extract_expr(part: str, value: str, dialect: str) -> str | None:
+    """Per-target ``EXTRACT(DOW|DAYOFWEEK FROM d)`` — no engine has a native,
+    portable weekday extract unit, so map each to a value-preserving form.
+
+    ``DOW`` is PostgreSQL semantics (Sunday=0..Saturday=6, DATEFIRST-independent).
+    ``DAYOFWEEK`` is the T-SQL ``DATEPART(WEEKDAY)`` mapping (1..7): under the
+    default @@DATEFIRST (Sunday=1) it is DOW + 1, warned since @@DATEFIRST is a
+    session setting the transpiler cannot see. Returns None for other parts."""
+    if part == "DOW":
+        # DOW = PG semantics (Sunday=0..Saturday=6), DATEFIRST/week-mode-free.
+        # MySQL DAYOFWEEK is 1(Sun)..7(Sat) -> shift to 0..6; Oracle keys off the
+        # Sunday 1970-01-04 (outer MOD keeps 0..6, sign-safe pre-1970); T-SQL off
+        # the Sunday 1900-01-07 (the +7/%7 wrap keeps pre-1900 dates 0..6).
+        return {
+            "mysql": f"(DAYOFWEEK({value}) - 1)",
+            "oracle": f"MOD(MOD(TRUNC({value}) - DATE '1970-01-04', 7) + 7, 7)",
+            "tsql": f"(DATEDIFF(DAY, '19000107', {value}) % 7 + 7) % 7",
+        }.get(dialect)
+    if part == "DAYOFWEEK":
+        _wd_note = (
+            " /* UNIQUE: DATEPART(WEEKDAY) is @@DATEFIRST-dependent; converted "
+            "assuming the session default (Sunday=1) */"
+        )
+        # T-SQL WEEKDAY (default @@DATEFIRST) = DOW(Sunday=0..6) + 1; MySQL
+        # DAYOFWEEK already numbers Sunday=1..7.
+        _wd = {
+            "mysql": f"DAYOFWEEK({value})",
+            "oracle": f"(MOD(MOD(TRUNC({value}) - DATE '1970-01-04', 7) + 7, 7) + 1)",
+            "postgresql": f"(EXTRACT(DOW FROM {value}) + 1)",
+        }.get(dialect)
+        return None if _wd is None else _wd + _wd_note
+    return None
+
+
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
@@ -1794,38 +1828,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # with different semantics, mapped to a value-preserving, NLS-/DATEFIRST-
         # /week-mode-independent equivalent. PostgreSQL semantics: DOW is
         # Sunday=0..Saturday=6, WEEK is the ISO 8601 week (1-53), QUARTER is 1-4.
-        if part == "DOW":
-            if dialect == "mysql":
-                # DAYOFWEEK is 1(Sun)..7(Sat); shift to PG's 0..6.
-                return f"(DAYOFWEEK({value}) - 1)"
-            if dialect == "oracle":
-                # 1970-01-04 was a Sunday; the outer MOD keeps it 0..6 for dates
-                # before that reference too (Oracle MOD carries the sign).
-                return f"MOD(MOD(TRUNC({value}) - DATE '1970-01-04', 7) + 7, 7)"
-            if dialect == "tsql":
-                # 1900-01-07 was a Sunday; DATEFIRST-independent (T-SQL % carries
-                # the sign, so the +7/%7 wrap keeps pre-1900 dates 0..6).
-                return f"(DATEDIFF(DAY, '19000107', {value}) % 7 + 7) % 7"
-        if part == "DAYOFWEEK":
-            # T-SQL DATEPART(WEEKDAY, d) (sqlglot maps it to EXTRACT(DAYOFWEEK));
-            # no engine has a DAYOFWEEK extract unit. The value is 1..7 keyed on
-            # @@DATEFIRST — under the default (us_english, Sunday=1) it is
-            # DOW(Sunday=0..6) + 1. MySQL DAYOFWEEK already numbers Sunday=1..7.
-            # @@DATEFIRST is a session setting the transpiler cannot see, so the
-            # conversion is warned as assuming the default.
-            _wd_note = (
-                " /* UNIQUE: DATEPART(WEEKDAY) is @@DATEFIRST-dependent; converted "
-                "assuming the session default (Sunday=1) */"
-            )
-            if dialect == "mysql":
-                return f"DAYOFWEEK({value}){_wd_note}"
-            if dialect == "oracle":
-                return (
-                    f"(MOD(MOD(TRUNC({value}) - DATE '1970-01-04', 7) + 7, 7) + 1)"
-                    f"{_wd_note}"
-                )
-            if dialect == "postgresql":
-                return f"(EXTRACT(DOW FROM {value}) + 1){_wd_note}"
+        _weekday = _weekday_extract_expr(part, value, dialect)
+        if _weekday is not None:
+            return _weekday
         if part == "WEEK":
             # PG's WEEK is ISO 8601. Oracle's EXTRACT rejects it; MySQL's native
             # EXTRACT(WEEK) follows default_week_format (mode 0, off by one) and
@@ -2085,9 +2090,13 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         # (DECODE(1,1,'a',...,99) -> 'invalid input syntax for type integer').
         # When the first result is a string literal, cast numeric-literal
         # result/default branches to text to mirror Oracle's coercion.
+        # The target's coercion type for a first-result-is-string DECODE (only
+        # PostgreSQL is strict enough about CASE result types to need it); a
+        # dict so other strict dialects can join without a new string-compare.
         _first_result = node.args[2] if len(node.args) >= 3 else None
+        _coerce_type = {"postgresql": "TEXT"}.get(dialect)
         _coerce_text = (
-            dialect == "postgresql"
+            _coerce_type is not None
             and isinstance(_first_result, Literal)
             and str(getattr(_first_result, "dtype", "")) == "string"
         )
@@ -2099,7 +2108,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
                 and isinstance(_n, Literal)
                 and str(_n.dtype) in ("integer", "number", "float", "double")
             ):
-                return f"CAST({parts[idx]} AS TEXT)"
+                return f"CAST({parts[idx]} AS {_coerce_type})"
             return parts[idx]
 
         while i + 1 < len(parts):
