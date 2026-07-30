@@ -997,6 +997,19 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
     "my-trim-trailing": {
         "oracle": {"present": ["RTRIM('abc...', '.')"], "absent": ["TRIM(TRAILING"]},
     },
+    # func: TIMESTAMPDIFF(MONTH) counts COMPLETE months; the PG/Oracle naive
+    # year*12+month boundary overcounted (2020-01-31..2020-03-30 = 1, not 2).
+    # Port the T-SQL 'drop the incomplete final period' adjustment. All = 1.
+    "my-timestampdiff-mon-pgora": {
+        "postgresql": {
+            "present": ["CASE WHEN DATE '2020-01-31' +", "INTERVAL '1 month'"],
+            "absent": ["TIMESTAMPDIFF"],
+        },
+        "oracle": {
+            "present": ["ADD_MONTHS(DATE '2020-01-31'", "CASE WHEN"],
+            "absent": ["TIMESTAMPDIFF"],
+        },
+    },
     "my-tsadd-quarter": {
         "tsql": {
             "present": ["DATEADD(QUARTER, 1, GETDATE())"],

@@ -169,6 +169,26 @@ def _emit_date_add(node: FunctionCall, dialect: str) -> str | None:
     return None
 
 
+def _complete_period_adjust(
+    boundary: str, start: str, end: str, unit: str, dialect: str
+) -> str:
+    """Drop the incomplete final period from a boundary count (PG/Oracle).
+
+    MySQL TIMESTAMPDIFF counts COMPLETE year/quarter/month periods, but the
+    year*12+month boundary difference overcounts when the end's day-of-month has
+    not reached the start's (2020-01-31 -> 2020-03-30 is 1 complete month, not
+    2). Subtract 1 when adding ``boundary`` periods to start overshoots end —
+    mirroring the T-SQL DATEADD adjustment (challenge my-timestampdiff-mon-pgora).
+    """
+    if dialect == "postgresql":
+        iv = {"MONTH": "1 month", "QUARTER": "3 months", "YEAR": "1 year"}[unit]
+        added = f"{start} + ({boundary}) * INTERVAL '{iv}'"
+    else:  # oracle
+        months = {"MONTH": 1, "QUARTER": 3, "YEAR": 12}[unit]
+        added = f"ADD_MONTHS({start}, ({boundary}) * {months})"
+    return f"({boundary} - CASE WHEN {added} > {end} THEN 1 ELSE 0 END)"
+
+
 def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
     """Emit DATEDIFF with T-SQL boundary-count semantics per target.
 
@@ -244,6 +264,7 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
             f"(FLOOR(UNIX_TIMESTAMP({end}) / {k}) - "
             f"FLOOR(UNIX_TIMESTAMP({start}) / {k}))"
         )
+    is_tsdiff = node.name.upper() == "TIMESTAMPDIFF"
     if dialect == "postgresql":
         # ISO string literals need the ANSI ``DATE '…'`` form for date math.
         end, start = wrap_oracle_date_arg(end), wrap_oracle_date_arg(start)
@@ -252,24 +273,28 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
         if unit == "WEEK":
             return f"FLOOR((CAST({end} AS DATE) - CAST({start} AS DATE)) / 7)"
         if unit == "MONTH":
-            return (
+            boundary = (
                 f"((EXTRACT(YEAR FROM {end}) * 12 + EXTRACT(MONTH FROM {end})) - "
                 f"(EXTRACT(YEAR FROM {start}) * 12 + EXTRACT(MONTH FROM {start})))"
             )
-        if unit == "QUARTER":
-            return (
+        elif unit == "QUARTER":
+            boundary = (
                 f"((EXTRACT(YEAR FROM {end}) * 4 + EXTRACT(QUARTER FROM {end})) - "
                 f"(EXTRACT(YEAR FROM {start}) * 4 + EXTRACT(QUARTER FROM {start})))"
             )
-        if unit == "YEAR":
-            return f"(EXTRACT(YEAR FROM {end}) - EXTRACT(YEAR FROM {start}))"
-        k = {"HOUR": 3600, "MINUTE": 60, "SECOND": 1}.get(unit)
-        if k is None:
-            return None  # exotic unit: degrade to a carrier + warning, never raise
-        return (
-            f"(FLOOR(EXTRACT(EPOCH FROM {end}) / {k}) - "
-            f"FLOOR(EXTRACT(EPOCH FROM {start}) / {k}))"
-        )
+        elif unit == "YEAR":
+            boundary = f"(EXTRACT(YEAR FROM {end}) - EXTRACT(YEAR FROM {start}))"
+        else:
+            k = {"HOUR": 3600, "MINUTE": 60, "SECOND": 1}.get(unit)
+            if k is None:
+                return None  # exotic unit: degrade to a carrier + warning
+            return (
+                f"(FLOOR(EXTRACT(EPOCH FROM {end}) / {k}) - "
+                f"FLOOR(EXTRACT(EPOCH FROM {start}) / {k}))"
+            )
+        if is_tsdiff:
+            return _complete_period_adjust(boundary, start, end, unit, dialect)
+        return boundary
     if dialect == "oracle":
         # Oracle rejects an implicit ISO-string→DATE conversion (ORA-01861);
         # emit the ANSI ``DATE '…'`` literal for a string operand.
@@ -282,18 +307,27 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
                 f"TRUNC(CAST({start} AS DATE))) / 7)"
             )
         if unit == "MONTH":
-            return (
+            boundary = (
                 f"((EXTRACT(YEAR FROM {end}) * 12 + EXTRACT(MONTH FROM {end})) - "
                 f"(EXTRACT(YEAR FROM {start}) * 12 + EXTRACT(MONTH FROM {start})))"
             )
+            if is_tsdiff:
+                return _complete_period_adjust(boundary, start, end, unit, dialect)
+            return boundary
         if unit == "QUARTER":
             # Oracle has no EXTRACT(QUARTER); derive it from TO_CHAR(d, 'Q').
-            return (
+            boundary = (
                 f"((EXTRACT(YEAR FROM {end}) * 4 + TO_NUMBER(TO_CHAR({end}, 'Q'))) - "
                 f"(EXTRACT(YEAR FROM {start}) * 4 + TO_NUMBER(TO_CHAR({start}, 'Q'))))"
             )
+            if is_tsdiff:
+                return _complete_period_adjust(boundary, start, end, unit, dialect)
+            return boundary
         if unit == "YEAR":
-            return f"(EXTRACT(YEAR FROM {end}) - EXTRACT(YEAR FROM {start}))"
+            boundary = f"(EXTRACT(YEAR FROM {end}) - EXTRACT(YEAR FROM {start}))"
+            if is_tsdiff:
+                return _complete_period_adjust(boundary, start, end, unit, dialect)
+            return boundary
         trunc_fmt = {"HOUR": "HH24", "MINUTE": "MI"}.get(unit)
         mult = {"HOUR": 24, "MINUTE": 1440, "SECOND": 86400}.get(unit)
         if mult is None:
