@@ -230,9 +230,16 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
                 f"((YEAR({end}) * 12 + MONTH({end})) - "
                 f"(YEAR({start}) * 12 + MONTH({start})))"
             )
+        if unit == "QUARTER":
+            return (
+                f"((YEAR({end}) * 4 + QUARTER({end})) - "
+                f"(YEAR({start}) * 4 + QUARTER({start})))"
+            )
         if unit == "YEAR":
             return f"(YEAR({end}) - YEAR({start}))"
-        k = {"HOUR": 3600, "MINUTE": 60, "SECOND": 1}[unit]
+        k = {"HOUR": 3600, "MINUTE": 60, "SECOND": 1}.get(unit)
+        if k is None:
+            return None  # exotic unit: degrade to a carrier + warning, never raise
         return (
             f"(FLOOR(UNIX_TIMESTAMP({end}) / {k}) - "
             f"FLOOR(UNIX_TIMESTAMP({start}) / {k}))"
@@ -249,9 +256,16 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
                 f"((EXTRACT(YEAR FROM {end}) * 12 + EXTRACT(MONTH FROM {end})) - "
                 f"(EXTRACT(YEAR FROM {start}) * 12 + EXTRACT(MONTH FROM {start})))"
             )
+        if unit == "QUARTER":
+            return (
+                f"((EXTRACT(YEAR FROM {end}) * 4 + EXTRACT(QUARTER FROM {end})) - "
+                f"(EXTRACT(YEAR FROM {start}) * 4 + EXTRACT(QUARTER FROM {start})))"
+            )
         if unit == "YEAR":
             return f"(EXTRACT(YEAR FROM {end}) - EXTRACT(YEAR FROM {start}))"
-        k = {"HOUR": 3600, "MINUTE": 60, "SECOND": 1}[unit]
+        k = {"HOUR": 3600, "MINUTE": 60, "SECOND": 1}.get(unit)
+        if k is None:
+            return None  # exotic unit: degrade to a carrier + warning, never raise
         return (
             f"(FLOOR(EXTRACT(EPOCH FROM {end}) / {k}) - "
             f"FLOOR(EXTRACT(EPOCH FROM {start}) / {k}))"
@@ -272,10 +286,18 @@ def _emit_date_diff(node: FunctionCall, dialect: str) -> str | None:
                 f"((EXTRACT(YEAR FROM {end}) * 12 + EXTRACT(MONTH FROM {end})) - "
                 f"(EXTRACT(YEAR FROM {start}) * 12 + EXTRACT(MONTH FROM {start})))"
             )
+        if unit == "QUARTER":
+            # Oracle has no EXTRACT(QUARTER); derive it from TO_CHAR(d, 'Q').
+            return (
+                f"((EXTRACT(YEAR FROM {end}) * 4 + TO_NUMBER(TO_CHAR({end}, 'Q'))) - "
+                f"(EXTRACT(YEAR FROM {start}) * 4 + TO_NUMBER(TO_CHAR({start}, 'Q'))))"
+            )
         if unit == "YEAR":
             return f"(EXTRACT(YEAR FROM {end}) - EXTRACT(YEAR FROM {start}))"
         trunc_fmt = {"HOUR": "HH24", "MINUTE": "MI"}.get(unit)
-        mult = {"HOUR": 24, "MINUTE": 1440, "SECOND": 86400}[unit]
+        mult = {"HOUR": 24, "MINUTE": 1440, "SECOND": 86400}.get(unit)
+        if mult is None:
+            return None  # exotic unit: degrade to a carrier + warning, never raise
         if trunc_fmt:
             return (
                 f"ROUND((TRUNC(CAST({end} AS DATE), '{trunc_fmt}') - "

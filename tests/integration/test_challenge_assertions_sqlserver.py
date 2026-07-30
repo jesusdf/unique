@@ -82,6 +82,22 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "mysql": {"present": ["DATE_ADD(", "INTERVAL 1 DAY"], "absent": ["+ 1"]},
         "postgresql": {"present": ["+ INTERVAL '1 day'"], "absent": ["+ 1 AS"]},
     },
+    # crash: DATEDIFF(QUARTER,…) raised KeyError in the epoch map; now a
+    # boundary count = 3 on every target (WEEK already worked). No crash carrier.
+    "reda-ts-datediff-quarter": {
+        "mysql": {
+            "present": ["YEAR(", "* 4 + QUARTER("],
+            "absent": ["DATEDIFF(QUARTER", "TRANSPILATION ERROR"],
+        },
+        "postgresql": {
+            "present": ["EXTRACT(QUARTER FROM", "* 4 +"],
+            "absent": ["DATEDIFF(QUARTER", "TRANSPILATION ERROR"],
+        },
+        "oracle": {
+            "present": ["TO_CHAR(", "'Q'", "* 4 +"],
+            "absent": ["DATEDIFF(QUARTER", "TRANSPILATION ERROR"],
+        },
+    },
     "ts-bitops": {
         "oracle": {"present": ["BITAND(5, 3)", "-(5) - 1"], "absent": ["5 & 3", "~5"]},
         "postgresql": {"present": ["5 # 3"], "absent": ["5 ^ 3"]},

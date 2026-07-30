@@ -104,7 +104,6 @@ Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition
 |----|-------|-------------|--------------|----------|
 | reda-ts-isnull-trunc | lying-warning | tsql→pg,oracle,mysql | COALESCE(CAST(NULL AS VARCHAR(2)),'abcdef') | ISNULL truncates to 1st arg type='ab'; COALESCE='abcdef'. Only internal is_null tripwire. Live tsql='ab', pg='abcdef'. |
 | reda-ts-datalength-nchar | func | tsql→pg,mysql | OCTET_LENGTH('abc') | DATALENGTH(N'abc')=6 (UTF-16); N dropped, OCTET_LENGTH=3. Hole in [fixed] ts-binary-length. No warning. |
-| reda-ts-datediff-quarter | crash | tsql→all | KeyError 'QUARTER' -> /* TRANSPILATION ERROR */ | DATEDIFF(QUARTER/WEEK) raises in _emit_date_diff (emit_functions.py ~235/254), caught into an invalid carrier. DATEADD(QUARTER) works. |
 | reda-ts-convert-numeric-style | invalid | tsql→pg,mysql,oracle | TO_TIMESTAMP('26','MON DD YYYY…') | CONVERT(INT,'26',0)=26 but the numeric target type is ignored and it maps to a date parse. Live PG error, MySQL NULL. No warning. |
 | reda-ora-regexp-like | lying-warning | oracle→pg,mysql | whole statement commented out | REGEXP_LIKE falsely 'no mapping'; PG '~' and MySQL 'REGEXP' both support it (live-verified). Only T-SQL genuinely lacks it. |
 | reda-ts-exec-swallow-next | consistency | tsql→pg,oracle,mysql | UPDATE folded into sp_rename carrier | a ';'-separated statement after a degraded EXEC is silently dropped (survives with GO). |
