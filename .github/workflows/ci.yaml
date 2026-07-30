@@ -85,6 +85,12 @@ jobs:
         # audit/2026-07-24/04-code-quality.md and scripts/architecture_ratchets.py.
         run: python scripts/architecture_ratchets.py
 
+      - name: Reference docs freshness gate (docs/reference/ vs the code)
+        # Fails if docs/reference/ (mapping tables, the [limit] catalog,
+        # corpus coverage) drifts from core/mappings.py or the challenge
+        # corpus; see docs/TODO.md T8 and scripts/generate_reference_docs.py.
+        run: python scripts/generate_reference_docs.py --check
+
       - name: Upload coverage
         uses: actions/upload-artifact@v5
         with:
