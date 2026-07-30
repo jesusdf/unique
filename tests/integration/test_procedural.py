@@ -560,7 +560,7 @@ class TestTSQLExecToMySQL:
         code = out.split("--")[0]
         assert "sp_executesql" not in code
         # Dropped parameter bindings are flagged, not silently lost.
-        assert "UNIQUE-" in out
+        assert "UNIQUE-1161:" in out
 
     def test_dynamic_string_uses_prepare(self) -> None:
         out = _transpile(self._proc("EXEC (@sql)"), "tsql", "mysql")
@@ -683,7 +683,7 @@ class TestUniqueCommentRestore:
         # back to Oracle restores the original %TYPE reference.
         src = "CREATE PROCEDURE p (v_id employees.id%TYPE) AS BEGIN NULL; END;"
         pg = _transpile(src, "oracle", "postgresql")
-        assert "UNIQUE-" in pg
+        assert "UNIQUE-1152:" in pg
         assert "employees.id%TYPE" in pg  # preserved in the note
         back = _transpile(pg, "postgresql", "oracle")
         assert "employees.id%TYPE" in back  # restored as the real type
@@ -698,7 +698,7 @@ class TestUniqueCommentRestore:
         )
         # Forward: T-SQL -> Oracle documents it (and records it is tsql-only).
         oracle = _transpile(src, "tsql", "oracle")
-        assert "UNIQUE-" in oracle
+        assert "UNIQUE-1193:" in oracle
         assert "IDENTITY_INSERT" in oracle
         assert "tsql-only" in oracle
         # Back to T-SQL: the original statement is restored.
@@ -718,10 +718,10 @@ class TestUniqueCommentRestore:
         )
         oracle = _transpile(src, "tsql", "oracle")
         pg = _transpile(oracle, "oracle", "postgresql")
-        assert "UNIQUE-" in pg
+        assert "UNIQUE-1193:" in pg
         for line in pg.splitlines():
             if "IDENTITY_INSERT" in line:
-                assert "UNIQUE-" in line
+                assert "UNIQUE-1193:" in line
 
 
 class TestTSQLAssignmentSelect:
@@ -796,12 +796,7 @@ class TestOutputClauseToMySQL:
         assert all("RETURNING" not in ln for ln in code_lines)
         # Base INSERT preserved and the dropped clause documented.
         assert "INSERT INTO t (a) VALUES (1)" in out
-        assert re.search(
-            re.escape("-- UNIQUE")
-            + r"(?:-\d{4})?"
-            + re.escape(": MySQL has no RETURNING/OUTPUT"),
-            out,
-        )
+        assert "-- UNIQUE-1140: MySQL has no RETURNING/OUTPUT" in out
 
     def test_output_maps_to_returning_on_postgresql(self) -> None:
         src = (
@@ -1016,13 +1011,8 @@ class TestTopLevelTryCatch:
         # subtransaction already provides the T-SQL semantics.
         assert "COMMIT;" not in out, out
         assert "ROLLBACK;" not in out, out
-        assert re.search(
-            re.escape("/* UNIQUE") + r"(?:-\d{4})?" + re.escape(": COMMIT dropped"), out
-        ), out
-        assert re.search(
-            re.escape("/* UNIQUE") + r"(?:-\d{4})?" + re.escape(": ROLLBACK dropped"),
-            out,
-        ), out
+        assert "/* UNIQUE-1206: COMMIT dropped" in out, out
+        assert "/* UNIQUE-1206: ROLLBACK dropped" in out, out
 
     def test_begin_transaction_prefix_still_degrades_honestly_on_mysql(
         self,
@@ -1080,12 +1070,7 @@ class TestPostgreSQLProcedureFixes:
             "CREATE PROCEDURE dbo.p @v SQL_VARIANT = NULL AS BEGIN " "SET @v = NULL END"
         )
         out = _transpile(src, "tsql", "postgresql")
-        assert re.search(
-            re.escape("TEXT /* UNIQUE")
-            + r"(?:-\d{4})?"
-            + re.escape(": SQL_VARIANT */"),
-            out,
-        )
+        assert "TEXT /* UNIQUE-1152: SQL_VARIANT */" in out
 
     def test_newsequentialid_maps_to_gen_random_uuid(self) -> None:
         out = _transpile(
@@ -1232,24 +1217,14 @@ class TestInlineTableValuedFunction:
 
     def test_mysql_documents_and_comments_out(self) -> None:
         out = _transpile(self.SRC, "tsql", "mysql")
-        assert re.search(
-            re.escape("-- UNIQUE")
-            + r"(?:-\d{4})?"
-            + re.escape(": inline table-valued function"),
-            out,
-        )
+        assert "-- UNIQUE-1154: inline table-valued function" in out
         # No executable RETURNS TABLE leaks (only commented lines).
         code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
         assert all("RETURNS TABLE" not in ln for ln in code)
 
     def test_postgresql_documents_and_comments_out(self) -> None:
         out = _transpile(self.SRC, "tsql", "postgresql")
-        assert re.search(
-            re.escape("-- UNIQUE")
-            + r"(?:-\d{4})?"
-            + re.escape(": inline table-valued function"),
-            out,
-        )
+        assert "-- UNIQUE-1154: inline table-valued function" in out
         code = [ln for ln in out.splitlines() if not ln.strip().startswith("--")]
         assert all("RETURNS TABLE" not in ln for ln in code)
 
@@ -1519,9 +1494,7 @@ class TestErrorGlobalInCondition:
         )
         out = _transpile(src, "tsql", "mysql")
         # Valid neutral operand + documenting comment, not a bare /* @@ERROR */.
-        assert re.search(
-            re.escape("IF 0 /* UNIQUE") + r"(?:-\d{4})?" + re.escape(": @@ERROR"), out
-        )
+        assert "IF 0 /* UNIQUE-1194: @@ERROR" in out
         assert "IF /* @@ERROR */" not in out
 
     def test_error_in_if_postgresql(self) -> None:
@@ -1530,9 +1503,7 @@ class TestErrorGlobalInCondition:
             "UPDATE t SET a = 1 IF @@ERROR <> 0 RETURN END"
         )
         out = _transpile(src, "tsql", "postgresql")
-        assert re.search(
-            re.escape("IF 0 /* UNIQUE") + r"(?:-\d{4})?" + re.escape(": @@ERROR"), out
-        )
+        assert "IF 0 /* UNIQUE-1194: @@ERROR" in out
         assert "SQLSTATE" not in out
 
     def test_error_in_if_oracle_uses_sqlcode(self) -> None:
@@ -1547,12 +1518,7 @@ class TestErrorGlobalInCondition:
         src = "CREATE PROCEDURE dbo.p AS BEGIN IF @@TRANCOUNT > 0 COMMIT END"
         for target in ("mysql", "postgresql"):
             out = _transpile(src, "tsql", target)
-            assert re.search(
-                re.escape("IF 0 /* UNIQUE")
-                + r"(?:-\d{4})?"
-                + re.escape(": @@TRANCOUNT"),
-                out,
-            )
+            assert "IF 0 /* UNIQUE-1194: @@TRANCOUNT" in out
 
 
 class TestCarrierTypeRestoration:
@@ -1570,12 +1536,7 @@ class TestCarrierTypeRestoration:
             "tsql",
             "postgresql",
         )
-        assert re.search(
-            re.escape("TEXT /* UNIQUE")
-            + r"(?:-\d{4})?"
-            + re.escape(": SQL_VARIANT */"),
-            carrier,
-        )
+        assert "TEXT /* UNIQUE-1152: SQL_VARIANT */" in carrier
         back = _transpile(
             carrier.replace("CREATE OR REPLACE", "CREATE"), "postgresql", "tsql"
         )
@@ -1590,19 +1551,9 @@ class TestCarrierTypeRestoration:
             "postgresql",
         ).replace("CREATE OR REPLACE", "CREATE")
         mysql = _transpile(carrier, "postgresql", "mysql")
-        assert re.search(
-            re.escape("LONGTEXT /* UNIQUE")
-            + r"(?:-\d{4})?"
-            + re.escape(": SQL_VARIANT */"),
-            mysql,
-        )
+        assert "LONGTEXT /* UNIQUE-1152: SQL_VARIANT */" in mysql
         oracle = _transpile(carrier, "postgresql", "oracle")
-        assert re.search(
-            re.escape("ANYDATA /* UNIQUE")
-            + r"(?:-\d{4})?"
-            + re.escape(": SQL_VARIANT */"),
-            oracle,
-        )
+        assert "ANYDATA /* UNIQUE-1152: SQL_VARIANT */" in oracle
 
     def test_type_reference_round_trips_to_oracle(self) -> None:
         carrier = _transpile(
@@ -1610,10 +1561,7 @@ class TestCarrierTypeRestoration:
             "oracle",
             "mysql",
         )
-        assert re.search(
-            re.escape("/* UNIQUE") + r"(?:-\d{4})?" + re.escape(": emp.sal%TYPE */"),
-            carrier,
-        )
+        assert "/* UNIQUE-1152: emp.sal%TYPE */" in carrier
         back = _transpile(carrier, "mysql", "oracle")
         line = self._decl_line(back, "v_x")
         assert "emp.sal%TYPE" in line
@@ -2002,7 +1950,7 @@ class TestOracleCatalogDropBlock:
         )
         # No executable reference to the Oracle catalog view.
         assert "user_tables" not in self._code(result.sql).lower()
-        assert "UNIQUE-" in result.sql
+        assert "UNIQUE-1160:" in result.sql
         assert result.warnings or result.unsupported
 
     def test_degrades_on_mysql(self) -> None:
@@ -2027,9 +1975,7 @@ class TestUnsupportedCursorConstructsAreValidCarriers:
         # CAST, so it becomes the neutral ``0 /* UNIQUE: … */`` carrier.
         for target in ("oracle", "postgresql", "mysql"):
             out = _transpile(self._CURSOR_ATTR, "tsql", target)
-            assert re.search(
-                r"(?i)0\s*/\*\s*UNIQUE(?:-\d{4})?:\s*@@CURSOR_ROWS", out
-            ), (
+            assert re.search(r"(?i)0\s*/\*\s*UNIQUE-1194:\s*@@CURSOR_ROWS", out), (
                 target,
                 out,
             )
@@ -2042,7 +1988,7 @@ class TestUnsupportedCursorConstructsAreValidCarriers:
         for target in ("oracle", "postgresql", "mysql"):
             out = _transpile(self._CURSOR_ATTR, "tsql", target)
             assert "INTO ;" not in out, (target, out)
-            assert re.search(r"(?i)UNIQUE(?:-\d{4})?:\s*FETCH without INTO", out), (
+            assert re.search(r"(?i)UNIQUE-1167:\s*FETCH without INTO", out), (
                 target,
                 out,
             )
