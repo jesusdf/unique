@@ -157,6 +157,12 @@ ALLOWED_UNREAD: dict[str, frozenset[str]] = {
     # name, dropped when the literal is carried cross-engine (MySQL-specific,
     # no portable form). The literal itself (``expression``) is converted.
     "Introducer": frozenset({"this"}),
+    # sqlglot ≥30.12 populates ``Window.args['over']`` with the bare keyword
+    # marker ``'OVER'`` (a rendering flag, not a droppable construct — the real
+    # window spec lives in ``partition_by`` / ``order`` / ``spec``, all read by
+    # the emitter). Without this every window function false-fired the tripwire
+    # (challenge pg-window-over-falsewarn, sqlglot 30.11→30.14 regression).
+    "Window": frozenset({"over"}),
 }
 
 

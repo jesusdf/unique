@@ -237,6 +237,9 @@ class BinaryOp(ASTNode):
     operator: BinaryOperator
     left: ASTNode
     right: ASTNode
+    #: NULL-safe division (MySQL ``/``): divide-by-zero yields NULL, not an
+    #: error. Preserved into non-safe targets by wrapping the divisor in NULLIF.
+    safe: bool = False
 
 
 @dataclass(frozen=True)
@@ -560,6 +563,7 @@ class InsertStatement(ASTNode):
     select: SelectStatement | None = None
     on_conflict: ASTNode | None = None
     returning: tuple[ASTNode, ...] = ()
+    default_values: bool = False
 
 
 @dataclass(frozen=True)

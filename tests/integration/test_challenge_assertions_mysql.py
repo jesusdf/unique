@@ -227,20 +227,29 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
         "postgresql": {"degrade": True},
     },
     "my-decimal-scale": {
-        "tsql": {"present": ["(10.00 * 1.0 / 3)"], "absent": ["10.00/3"]},
-        "postgresql": {"present": ["(10.00 * 1.0 / 3)"], "absent": ["10.00/3"]},
+        "tsql": {"present": ["(10.00 * 1.0 / NULLIF(3, 0))"], "absent": ["10.00/3"]},
+        "postgresql": {
+            "present": ["(10.00 * 1.0 / NULLIF(3, 0))"],
+            "absent": ["10.00/3"],
+        },
     },
     "my-div": {
-        "tsql": {"present": ["(5 * 1.0 / 2)"], "absent": ["5 / 2"]},
-        "postgresql": {"present": ["(5 * 1.0 / 2)"], "absent": ["5 / 2"]},
+        "tsql": {"present": ["(5 * 1.0 / NULLIF(2, 0))"], "absent": ["5 / 2"]},
+        "postgresql": {"present": ["(5 * 1.0 / NULLIF(2, 0))"], "absent": ["5 / 2"]},
     },
     "my-div-mult2": {
-        "tsql": {"present": ["(1 * 1.0 / 3) * 3"], "absent": ["1/3*3"]},
-        "postgresql": {"present": ["(1 * 1.0 / 3) * 3"], "absent": ["1/3*3"]},
+        "tsql": {"present": ["(1 * 1.0 / NULLIF(3, 0)) * 3"], "absent": ["1/3*3"]},
+        "postgresql": {
+            "present": ["(1 * 1.0 / NULLIF(3, 0)) * 3"],
+            "absent": ["1/3*3"],
+        },
     },
     "my-div-precision": {
-        "tsql": {"present": ["(1.0 * 1.0 / 3)"], "absent": ["1.0 / 3 AS"]},
-        "postgresql": {"present": ["(1.0 * 1.0 / 3)"], "absent": ["1.0 / 3 AS"]},
+        "tsql": {"present": ["(1.0 * 1.0 / NULLIF(3, 0))"], "absent": ["1.0 / 3 AS"]},
+        "postgresql": {
+            "present": ["(1.0 * 1.0 / NULLIF(3, 0))"],
+            "absent": ["1.0 / 3 AS"],
+        },
     },
     "my-dttypes": {
         "tsql": {"present": ["DATETIME2(6)", "DATETIMEOFFSET"], "absent": ["YEAR"]},

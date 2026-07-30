@@ -1597,12 +1597,20 @@ def _convert_insert(expr: exp.Insert) -> InsertStatement | RawSQL:
     elif expr.args.get("ignore"):
         on_conflict = OnConflictClause(action="nothing", from_ignore=True)
 
+    # ``INSERT … DEFAULT VALUES`` (all-defaults row): read the ``default`` arg so
+    # guardrail 7's tripwire does not false-fire (challenge
+    # pg-insert-default-values-falsewarn). The emitter spells it per target
+    # (MySQL ``() VALUES ()``, Oracle carrier + warning, PG/T-SQL ``DEFAULT
+    # VALUES``); it is honestly translated on MySQL, so no warning is due there.
+    default_values = bool(expr.args.get("default"))
+
     return InsertStatement(
         table=table,
         columns=columns,
         values=values,
         select=select,
         on_conflict=on_conflict,
+        default_values=default_values,
     )
 
 
@@ -2927,10 +2935,17 @@ def _convert_binary(expr: exp.Binary) -> ASTNode:
             sql=_source_sql(expr), reason=f"unmapped operator {type(expr).__name__}"
         )
 
+    # MySQL ``/`` is NULL-safe division (``1/0`` → NULL, not an error);
+    # sqlglot flags it ``Div.safe``. Read it (guardrail 7 — else the tripwire
+    # false-fires, challenge audit) and carry it so the emitter preserves the
+    # semantics into non-safe targets (PG/T-SQL/Oracle) via NULLIF.
+    safe = bool(expr.args.get("safe")) if isinstance(expr, exp.Div) else False
+
     return BinaryOp(
         operator=operator,
         left=convert_expression(expr.this),
         right=convert_expression(expr.expression),
+        safe=safe,
     )
 
 

@@ -3058,8 +3058,36 @@ class TestMysqlDecimalDivision:
 
     def test_sum_div_count_forces_decimal(self) -> None:
         case = _case("challenge_mysql.sql", "my-sum-div-count ")
-        assert "SUM(x) * 1.0 / COUNT(x)" in _tx(case, "mysql", "postgresql")
-        assert "SUM(x) * 1.0 / COUNT(x)" in _tx(case, "mysql", "tsql")
+        # NULLIF(COUNT(x), 0) preserves MySQL's NULL-safe division too.
+        assert "SUM(x) * 1.0 / NULLIF(COUNT(x), 0)" in _tx(case, "mysql", "postgresql")
+        assert "SUM(x) * 1.0 / NULLIF(COUNT(x), 0)" in _tx(case, "mysql", "tsql")
+
+
+class TestMysqlSafeDivision:
+    """MySQL ``/`` is NULL-safe (``x / 0`` → NULL, not an error); PG/T-SQL/Oracle
+    raise. The converter reads sqlglot's ``Div.safe`` flag and preserves the
+    semantics by wrapping the divisor in NULLIF(divisor, 0) — which also silences
+    the guardrail-7 unread-args tripwire that false-fired on every MySQL division."""
+
+    def test_safe_division_wraps_divisor_and_no_false_warning(self) -> None:
+        r_pg = Transpiler().transpile(
+            "SELECT a / b FROM t", source="mysql", target="postgresql"
+        )
+        assert "NULLIF(b, 0)" in r_pg.sql, r_pg.sql
+        r_ora = Transpiler().transpile(
+            "SELECT a / b FROM t", source="mysql", target="oracle"
+        )
+        assert "NULLIF(b, 0)" in r_ora.sql, r_ora.sql
+        msgs = [
+            w if isinstance(w, str) else getattr(w, "message", str(w))
+            for w in (*r_pg.warnings, *r_ora.warnings)
+        ]
+        assert not any("'safe' on Div" in m for m in msgs), msgs
+        # A non-MySQL source has no safe flag → no NULLIF wrapping.
+        r_pg2 = Transpiler().transpile(
+            "SELECT a / b FROM t", source="postgresql", target="tsql"
+        )
+        assert "NULLIF" not in r_pg2.sql, r_pg2.sql
 
 
 class TestMysqlDateSubtraction:

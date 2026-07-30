@@ -62,9 +62,10 @@ class Expect:
     present: tuple[str, ...] = ()
     absent: tuple[str, ...] = ()
     warn: bool = False  # a validity_gate warning + a UNIQUE: carrier is expected
+    deny_warn: tuple[str, ...] = ()  # these warning substrings must NOT fire
 
     def vacuous(self) -> bool:
-        return not (self.present or self.absent or self.warn)
+        return not (self.present or self.absent or self.warn or self.deny_warn)
 
 
 @dataclass(frozen=True)
@@ -263,6 +264,33 @@ CASES.update(
         "pg-div-precision": Case(
             "pg-div-precision ",
             {"oracle": Expect(("FROM DUAL",))},
+        ),
+        # lying-warning: every window fn false-fired the unread-args tripwire on
+        # Window.args['over'] (sqlglot 30.14). OVER is emitted faithfully; no
+        # warning is due.
+        "pg-window-over-falsewarn": Case(
+            "pg-window-over-falsewarn ",
+            {
+                t: Expect(
+                    present=("SUM(a) OVER (ORDER BY a ASC)",),
+                    deny_warn=("unread sqlglot arg 'over' on Window",),
+                )
+                for t in _ALL3
+            },
+        ),
+        # lying-warning: INSERT ... DEFAULT VALUES is honestly translated to
+        # MySQL () VALUES (); the unread-args tripwire on Insert.args['default']
+        # must not fire there. (Oracle still degrades with its own real warning
+        # — covered separately below.)
+        "pg-insert-default-values-falsewarn": Case(
+            "pg-insert-default-values-falsewarn ",
+            {
+                "mysql": Expect(
+                    present=("INSERT INTO redb_dv () VALUES ()",),
+                    absent=("DEFAULT VALUES",),
+                    deny_warn=("unread sqlglot arg 'default' on Insert",),
+                ),
+            },
         ),
         "pg-drop-default": Case(
             "pg-drop-default ",
@@ -741,3 +769,11 @@ def test_pg_case(case_id: str, target: str) -> None:
         assert tok in body, f"{case_id} -> {target}: missing {tok!r}\n{result.sql}"
     for tok in exp.absent:
         assert tok not in body, f"{case_id} -> {target}: leaked {tok!r}\n{result.sql}"
+    msgs = [
+        w if isinstance(w, str) else getattr(w, "message", str(w))
+        for w in result.warnings
+    ]
+    for bad in exp.deny_warn:
+        assert not any(
+            bad in m for m in msgs
+        ), f"{case_id} -> {target}: false warning {bad!r} fired\n{msgs}"

@@ -1289,6 +1289,15 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
     left = _emit_operand(node.left, node.operator, dialect)
     right = _emit_operand(node.right, node.operator, dialect, right=True)
 
+    # NULL-safe division (MySQL ``/`` → NULL on divide-by-zero): the non-safe
+    # targets (PG / T-SQL / Oracle) raise instead. Preserve MySQL's semantics by
+    # wrapping the divisor in NULLIF(divisor, 0) so ``x / 0`` yields NULL there
+    # too (mirrors sqlglot's own div lowering). ``node.safe`` is only set from a
+    # MySQL source, and MySQL is the only safe-division target, so this never
+    # double-wraps a MySQL→MySQL divisor.
+    if node.operator == BinaryOperator.DIV and node.safe and dialect != "mysql":
+        right = f"NULLIF({right}, 0)"
+
     # Integer division diverges: PG/T-SQL truncate two integer operands
     # (5 / 2 = 2), MySQL/Oracle return a decimal (2.5). Compensate when both
     # operands are known integers — a literal, or (in the procedural pipeline) a
