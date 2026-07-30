@@ -71,6 +71,7 @@ from unique.core.ast_nodes import (
 from unique.core.converter._base import *  # noqa: F401,F403
 from unique.core.converter._unread_args import dispatch_tracked
 from unique.core.converter.harvest import _resolve_tsql_alias_type  # noqa: F401
+from unique.core.converter.type_env import infer_column_types, tag_temporal_columns
 from unique.core.sql_split import is_executable, split_leading_trivia
 
 _INSERT_COLS_RE = re.compile(
@@ -1684,33 +1685,35 @@ def _convert_select(expr: exp.Expression) -> SelectStatement:
             ctes=ctes,
         )
         if rewritten is not None:
-            return rewritten
+            return tag_temporal_columns(rewritten)
 
-    return SelectStatement(
-        columns=columns,
-        from_clause=from_clause,
-        joins=joins,
-        where=where,
-        group_by=group_by,
-        group_modifier=group_modifier,
-        grouping_sets_sql=grouping_sets_sql,
-        group_by_composite=group_by_composite,
-        having=having,
-        order_by=order_by,
-        limit=limit,
-        distinct=distinct,
-        ctes=ctes,
-        # A genuinely-empty source select list (PG ``SELECT;``) must not
-        # gain a ``*`` (wave 124) — flagged so the emitter distinguishes
-        # it from fallback-built empty tuples where ``*`` is load-bearing.
-        empty_select_list=not (expr.expressions or []),
-        calc_found_rows=any(
-            isinstance(m, exp.Var) and m.name.upper() == "SQL_CALC_FOUND_ROWS"
-            for m in (expr.args.get("operation_modifiers") or [])
-        ),
-        # T-SQL FOR XML/FOR JSON (sqlglot only partially models the clause, so
-        # capture its presence — the emitter degrades it on non-T-SQL targets).
-        has_for_xml=expr.args.get("for_") is not None,
+    return tag_temporal_columns(
+        SelectStatement(
+            columns=columns,
+            from_clause=from_clause,
+            joins=joins,
+            where=where,
+            group_by=group_by,
+            group_modifier=group_modifier,
+            grouping_sets_sql=grouping_sets_sql,
+            group_by_composite=group_by_composite,
+            having=having,
+            order_by=order_by,
+            limit=limit,
+            distinct=distinct,
+            ctes=ctes,
+            # A genuinely-empty source select list (PG ``SELECT;``) must not
+            # gain a ``*`` (wave 124) — flagged so the emitter distinguishes
+            # it from fallback-built empty tuples where ``*`` is load-bearing.
+            empty_select_list=not (expr.expressions or []),
+            calc_found_rows=any(
+                isinstance(m, exp.Var) and m.name.upper() == "SQL_CALC_FOUND_ROWS"
+                for m in (expr.args.get("operation_modifiers") or [])
+            ),
+            # T-SQL FOR XML/FOR JSON (sqlglot only partially models the clause,
+            # so capture its presence — the emitter degrades on non-T-SQL).
+            has_for_xml=expr.args.get("for_") is not None,
+        )
     )
 
 
@@ -3075,8 +3078,15 @@ def _convert_table_or_subquery(expr: exp.Expression) -> TableRef | SubqueryExpre
         if isinstance(inner, (exp.Select, exp.SetOperation)):
             # A derived table's alias (``(SELECT …) t``) must be carried through,
             # or references to it — and the derived table itself on MySQL — break.
+            inner_query = _convert_select(inner)
+            # Infer the temporal type of each projected column (feature B30) so
+            # the outer query can spell ``derived_col ± n`` / ``d2 - d1`` per
+            # target. Computed bottom-up: a nested derived table is already
+            # converted, so its own ``column_types`` resolve pass-through refs.
             return SubqueryExpression(
-                query=_convert_select(inner), alias=expr.alias or None
+                query=inner_query,
+                alias=expr.alias or None,
+                column_types=tuple(infer_column_types(inner_query).items()),
             )
     if isinstance(expr, exp.Values):
         # A VALUES relation — ``FROM (VALUES (1,'x'),(2,'y')) v(a,b)`` —

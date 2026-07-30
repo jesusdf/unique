@@ -158,6 +158,12 @@ class ColumnRef(ASTNode):
     schema: str | None = None
     quoted: bool = False
     table_quoted: bool = False
+    #: Inferred temporal type of the referenced column (``"date"`` /
+    #: ``"timestamp"``) when it resolves to a typed derived-table projection
+    #: (feature B30). Lets the temporal-operator rewrites fire on derived
+    #: columns; ``None`` (the default) means unknown — current behavior. Derived
+    #: metadata, so excluded from equality like ``location``.
+    inferred_type: str | None = field(default=None, compare=False)
 
 
 @dataclass(frozen=True)
@@ -305,6 +311,13 @@ class SubqueryExpression(ASTNode):
     # Quantifier keyword for a ``> ALL/ANY/SOME (subquery)`` comparison
     # operand; None for a plain scalar/derived subquery.
     quantifier: str | None = None
+    #: Minimal type environment for a derived table (feature B30): the inferred
+    #: temporal type of each projected column, as ``(column_name_lower, "date" |
+    #: "timestamp")`` pairs. Populated bottom-up by the converter for the shapes
+    #: it can infer (temporal literals, temporal CASTs, pass-through refs); an
+    #: unresolvable column is simply absent. Derived metadata — excluded from
+    #: equality.
+    column_types: tuple[tuple[str, str], ...] = field(default=(), compare=False)
 
 
 @dataclass(frozen=True)

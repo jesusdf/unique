@@ -170,6 +170,23 @@ CASES.update(
                 ),
             },
         ),
+        # invalid (tsql): DATE literals projected as derived-table columns lose
+        # their typing, so the outer ``d2 - d1`` shipped a raw DATE subtraction
+        # (T-SQL error 8117). B30's type environment propagates the DATE typing
+        # to the outer refs, so the day-count spells per target (DATEDIFF on
+        # T-SQL/MySQL, native ``date - date`` on PG/Oracle).
+        "reda-ora-date-literal-subquery": Case(
+            "reda-ora-date-literal-subquery ",
+            {
+                "tsql": Expect(
+                    ("DATEDIFF(DAY, OrderDate, ShipDate)",), ("ShipDate - OrderDate",)
+                ),
+                "mysql": Expect(
+                    ("DATEDIFF(ShipDate, OrderDate)",), ("ShipDate - OrderDate",)
+                ),
+                "postgresql": Expect(("(ShipDate - OrderDate)",), ("FROM DUAL",)),
+            },
+        ),
         # invalid (pg/mysql): Oracle FOR UPDATE OF <col> names a COLUMN; PG/MySQL
         # OF takes tables, so drop the OF list (warned degrade). tsql has no
         # row-lock clause and degrades to a table-hint carrier.

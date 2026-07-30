@@ -1125,6 +1125,14 @@ def _is_datetime_cast(node: ASTNode) -> bool:
     )
 
 
+def _is_datetime_operand(node: ASTNode) -> bool:
+    """A timestamp-valued operand: a datetime CAST, or a derived-table column
+    inferred as ``timestamp`` (feature B30's type environment)."""
+    return _is_datetime_cast(node) or (
+        isinstance(node, ColumnRef) and node.inferred_type == "timestamp"
+    )
+
+
 #: ``operand ± n days`` spelled per target — dict dispatch. T-SQL/Oracle/PG
 #: treat ``date ± int`` as day arithmetic, but MySQL numerically coerces the
 #: date and PG rejects ``timestamp + int`` — so emit DATE_ADD/DATE_SUB (MySQL),
@@ -1172,6 +1180,18 @@ def _date_literal_sql(node: ASTNode, dialect: str) -> str | None:
         if dialect in ("oracle", "postgresql"):
             return f"DATE '{s}'"
         return f"CAST('{s}' AS DATE)"
+    return None
+
+
+def _date_operand_sql(node: ASTNode, dialect: str) -> str | None:
+    """A DATE-valued operand emitted for *dialect*: a DATE literal, or a
+    derived-table column inferred as ``date`` (feature B30's type environment).
+    None when node is neither, leaving the surrounding rewrite unchanged."""
+    lit = _date_literal_sql(node, dialect)
+    if lit is not None:
+        return lit
+    if isinstance(node, ColumnRef) and node.inferred_type == "date":
+        return _emit_expression(node, dialect)
     return None
 
 
@@ -1465,8 +1485,8 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
     # ``str - str`` computes nothing — detect the two date literals and spell the
     # difference per dialect (Oracle source d1 - d2 = days from d2 to d1).
     if node.operator == BinaryOperator.SUB:
-        ld = _date_literal_sql(node.left, dialect)
-        rd = _date_literal_sql(node.right, dialect)
+        ld = _date_operand_sql(node.left, dialect)
+        rd = _date_operand_sql(node.right, dialect)
         if ld is not None and rd is not None:
             # MySQL's ``DATE - DATE`` is a numeric YYYYMMDD subtraction
             # (2020-03-01 - 2020-01-01 = 200, not 60 days); the meaningful day
@@ -1493,8 +1513,8 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
         node.operator == BinaryOperator.SUB
         and dialect in ("tsql", "mysql")
         and SOURCE_DIALECT.get() in ("postgresql", "oracle")
-        and _is_datetime_cast(node.left)
-        and _is_datetime_cast(node.right)
+        and _is_datetime_operand(node.left)
+        and _is_datetime_operand(node.right)
     ):
         _tl = _emit_expression(node.left, dialect)
         _tr = _emit_expression(node.right, dialect)
@@ -1525,7 +1545,7 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             else ((node.left, node.right), (node.right, node.left))
         )
         for dside, nside in sides:
-            dlit = _date_literal_sql(dside, dialect)
+            dlit = _date_operand_sql(dside, dialect)
             if dlit is not None and _is_nonneg_int_literal(nside):
                 n = _emit_expression(nside, dialect)
                 sub = node.operator == BinaryOperator.SUB
@@ -1548,7 +1568,7 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
             else ((node.left, node.right), (node.right, node.left))
         )
         for dside, nside in sides:
-            if _is_datetime_cast(dside) and _is_nonneg_int_literal(nside):
+            if _is_datetime_operand(dside) and _is_nonneg_int_literal(nside):
                 dt = _emit_expression(dside, dialect)
                 n = _emit_expression(nside, dialect)
                 sub = node.operator == BinaryOperator.SUB
