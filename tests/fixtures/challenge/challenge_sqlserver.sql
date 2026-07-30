@@ -565,3 +565,6 @@ CREATE PROCEDURE p AS
 BEGIN
   RAISERROR('value is %d today', 16, 1, 42);
 END
+
+-- CASE[open][class=consistency]: red2-ts-set-swallow-next — fails on postgresql, mysql, oracle. A degraded SET option (SET NOCOUNT ON, SET DATEFORMAT dmy, ...) followed by a ';'-separated statement SWALLOWS that statement into its comment: "SET NOCOUNT ON; SELECT 1 AS a;" emits two commented-out lines and the valid SELECT 1 is DROPPED on every target, with only a "SET option commented out" warning that does not say a real statement was lost. SELECT 1 transpiles fine alone, and GO-separation (SET NOCOUNT ON / GO / SELECT 1) correctly keeps the SELECT. This is the direct neighbor of the fixed reda-ts-exec-swallow-next (EXEC-degrade swallowing the next statement) for the SET-degrade path — and SET NOCOUNT ON heads a huge fraction of real T-SQL scripts. BLUE: split ';'-separated statements before degrading the SET so only the SET becomes a carrier and the following statement still transpiles.
+SET NOCOUNT ON; SELECT 1 AS a
