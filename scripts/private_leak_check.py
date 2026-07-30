@@ -75,6 +75,7 @@ _CURATED_STOPWORDS: tuple[str, ...] = (
     "filename",
     "lineno",
     "nocount",
+    "noexec",
     "nullable",
     "returncode",
     "untranslated",

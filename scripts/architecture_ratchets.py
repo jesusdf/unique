@@ -43,7 +43,7 @@ FLOORS: dict[str, int] = {
     # 9,992-line module; a mechanical split can only ADD lines (headers), so the
     # metric that captures "no single giant emitter module" — and that drops as
     # the seams are carved out — is the max file size, not the sum.
-    "emit_max_module_lines": 3653,
+    "emit_max_module_lines": 3645,
     # ``re.sub`` / ``re.search`` / ``re.match`` calls in those emitter modules
     # (the F1–F3 post-emit regex surface guardrail 2 bans on emitted text).
     "converter_emitter_re_calls": 182,
