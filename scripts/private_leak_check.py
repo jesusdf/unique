@@ -118,6 +118,7 @@ _CURATED_STOPWORDS: tuple[str, ...] = (
     "cast_to_varchar2",
     "column_value",
     "dbms_output",
+    "endpoint",
     "maxvalue",
     "minvalue",
     "nocache",
