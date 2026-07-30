@@ -268,6 +268,18 @@ class StatementPairModel(BaseModel):
     score: float
 
 
+class SimilarityWarningModel(BaseModel):
+    """A transpiler warning surfaced while normalizing one side to the pivot.
+
+    Mirrors ``TranspileWarning``'s ``code`` field (F3) so the UI can link a
+    coded warning to its docs entry the same way it does on the transpile
+    endpoint.
+    """
+
+    message: str
+    code: str | None = None
+
+
 class SimilarityResponse(BaseModel):
     """Response from the similarity endpoint — a **structural** similarity
     report, never a semantic-equivalence claim."""
@@ -283,7 +295,7 @@ class SimilarityResponse(BaseModel):
     statement_pairs: list[StatementPairModel] = []
     unmatched_a: int = 0
     unmatched_b: int = 0
-    warnings: list[str] = []
+    warnings: list[SimilarityWarningModel] = []
     boundary: str = Field(
         ...,
         description=(
@@ -487,7 +499,10 @@ def similarity_sql(request: SimilarityRequest) -> SimilarityResponse:
         ],
         unmatched_a=report.unmatched_a,
         unmatched_b=report.unmatched_b,
-        warnings=report.warnings,
+        warnings=[
+            SimilarityWarningModel(message=w.message, code=w.code)
+            for w in report.warnings
+        ],
         boundary=SIMILARITY_BOUNDARY,
     )
 

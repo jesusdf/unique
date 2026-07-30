@@ -139,6 +139,10 @@ many; an unregistered code is rejected with `422`
 governs **only the warning channel** — the `-- UNIQUE-NNNN: …` carriers stay in
 the returned `sql`.
 
+`/api/v1/similarity`'s `warnings` entries carry `code` too (F3, mirroring
+`/api/v1/transpile`) — each is `{message, code}` rather than a bare string;
+`code` is `null` when the underlying warning was not coded.
+
 ## Web UI
 
 Once the API server is running, open the browser-based interface at the root
@@ -153,6 +157,20 @@ URL (e.g. <http://localhost:8000/>). It provides:
   script is never silently transpiled to garbage;
 - a file section to upload a `.sql` file and download it translated, with an
   "Auto-detect" option for the source engine.
+
+Wherever a **`UNIQUE-NNNN`** diagnostic code surfaces — a transpile warning
+line or a Compare warning row — the code itself is a link to its entry in the
+[reference catalog](reference/warnings.md#unique-1234) on GitHub, opening in a
+new tab. It prefers the structured `code` field the API already returns
+(`TranspileWarning.code`, and — since F3 — `code` on each `/api/v1/similarity`
+warning too); a warning with no structured code (the `unsupported` list, which
+carries free-text strings) is regex-scanned client-side for a bare
+`UNIQUE-NNNN` mention as a fallback. The link targets the **bare** fragment
+(`#unique-1234`, lowercase) — verified against GitHub's own rendered markdown
+for `docs/reference/warnings.md`: GitHub prefixes every `<a id="...">` anchor
+with `user-content-` in the DOM, but its own generated heading permalinks link
+to the *unprefixed* fragment, confirming the bare form is what GitHub's
+fragment-scroll resolves.
 
 ### Compare (structural similarity)
 

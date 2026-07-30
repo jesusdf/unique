@@ -534,7 +534,7 @@ def assert_functionally_equivalent(
 # ---------------------------------------------------------------------------
 
 
-def _pivot(sql: str, dialect: str, side: str) -> tuple[str, list[str]]:
+def _pivot(sql: str, dialect: str, side: str) -> tuple[str, list[SimilarityWarning]]:
     """Transpile ``sql`` to the pivot dialect; return (pivot_sql, warnings).
 
     Raises ``ValueError`` naming the input if it cannot be transpiled at all —
@@ -548,7 +548,10 @@ def _pivot(sql: str, dialect: str, side: str) -> tuple[str, list[str]]:
         raise ValueError(
             f"input {side}: could not transpile from '{dialect}': {exc}"
         ) from exc
-    warnings = [f"input {side}: {w.message}" for w in result.warnings]
+    warnings = [
+        SimilarityWarning(message=f"input {side}: {w.message}", code=w.code)
+        for w in result.warnings
+    ]
     return result.sql, warnings
 
 
@@ -1139,6 +1142,20 @@ class StatementPair:
 
 
 @dataclass
+class SimilarityWarning:
+    """A transpiler warning surfaced while normalizing one side to the pivot.
+
+    ``code`` is the stable ``UNIQUE-NNNN`` diagnostic code (see
+    ``unique.core.diagnostics``) when the underlying warning carried one —
+    mirrors ``TranspileWarning.code`` on the ``/api/v1/transpile`` response
+    (B32) so a UI can link the code to its docs entry the same way (F3).
+    """
+
+    message: str
+    code: str | None = None
+
+
+@dataclass
 class SimilarityReport:
     """Result of :func:`compare` — structural similarity, never equivalence."""
 
@@ -1151,7 +1168,7 @@ class SimilarityReport:
     statement_pairs: list[StatementPair]
     unmatched_a: int
     unmatched_b: int
-    warnings: list[str]
+    warnings: list[SimilarityWarning]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1167,7 +1184,7 @@ class SimilarityReport:
             ],
             "unmatched_a": self.unmatched_a,
             "unmatched_b": self.unmatched_b,
-            "warnings": self.warnings,
+            "warnings": [{"message": w.message, "code": w.code} for w in self.warnings],
         }
 
 
@@ -1282,20 +1299,21 @@ def compare(
     )
 
 
-def _dedupe(messages: list[str]) -> list[str]:
+def _dedupe(warnings: list[SimilarityWarning]) -> list[SimilarityWarning]:
     """Collapse repeated transpiler warnings to unique messages (order kept)."""
     seen: set[str] = set()
-    out: list[str] = []
-    for msg in messages:
-        if msg not in seen:
-            seen.add(msg)
-            out.append(msg)
+    out: list[SimilarityWarning] = []
+    for w in warnings:
+        if w.message not in seen:
+            seen.add(w.message)
+            out.append(w)
     return out
 
 
 __all__ = [
     "ProcedureFingerprint",
     "SimilarityReport",
+    "SimilarityWarning",
     "StatementPair",
     "assert_functionally_equivalent",
     "compare",
