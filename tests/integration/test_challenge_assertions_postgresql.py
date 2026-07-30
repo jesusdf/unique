@@ -320,6 +320,40 @@ CASES.update(
                 ),
             },
         ),
+        # func: repeat(s, n<=0) is '' on PG/MySQL; T-SQL REPLICATE returned NULL
+        # (clamp the count to 0), Oracle can't store '' -> warned empty-string
+        # limit. MySQL is a passthrough (already '').
+        "pg-repeat-negative": Case(
+            "pg-repeat-negative ",
+            {
+                "tsql": Expect(
+                    present=("CASE WHEN ROUND(-1, 0) < 0 THEN 0",),
+                    absent=("REPLICATE('ab', -1)",),
+                ),
+                "oracle": Expect(warn=True),
+            },
+        ),
+        # func: 3-arg SUBSTRING with a negative start is '' on PG (positions <1
+        # shorten the run); MySQL/Oracle read it from the END. Rewrite to the
+        # start=1 length-adjusted form (empty here). Oracle '' -> warned limit.
+        "pg-substring-neg-from-for": Case(
+            "pg-substring-neg-from-for ",
+            {
+                "mysql": Expect(present=("''",), absent=("SUBSTR('abcde', -2, 2)",)),
+                "oracle": Expect(warn=True),
+            },
+        ),
+        # invalid: ROUND on a bare fractional literal became T-SQL ROUND(0.5, 0),
+        # overflowing numeric(1,1) (error 8115). Widen the operand.
+        "pg-round-bare-half-literal": Case(
+            "pg-round-bare-half-literal ",
+            {
+                "tsql": Expect(
+                    present=("ROUND(CAST(0.5 AS DECIMAL(38, 6)), 0)",),
+                    absent=("ROUND(0.5, 0)",),
+                ),
+            },
+        ),
         "pg-drop-default": Case(
             "pg-drop-default ",
             {

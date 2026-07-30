@@ -98,6 +98,13 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
             "absent": ["DATEDIFF(QUARTER", "TRANSPILATION ERROR"],
         },
     },
+    # func: SUBSTRING(s, start<1, len) counts leading out-of-range positions
+    # toward the length on T-SQL/PG (='he'); MySQL returned '' / Oracle 'hel'.
+    # Rewrite to the start=1 length-adjusted form. PG is a passthrough (='he').
+    "reda-ts-substring-zero-start": {
+        "mysql": {"present": ["SUBSTR('hello', 1, 2)"], "absent": [", 0, 3)"]},
+        "oracle": {"present": ["SUBSTR('hello', 1, 2)"], "absent": [", 0, 3)"]},
+    },
     "ts-bitops": {
         "oracle": {"present": ["BITAND(5, 3)", "-(5) - 1"], "absent": ["5 & 3", "~5"]},
         "postgresql": {"present": ["5 # 3"], "absent": ["5 ^ 3"]},

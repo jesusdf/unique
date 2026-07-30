@@ -790,7 +790,7 @@ SELECT TRIM(TRAILING '.' FROM 'abc...') AS r
 -- CASE[fixed]: my-ts-to-date — DATE(x) extracts the date part; CAST AS DATE preserves the time-drop.
 SELECT DATE(TIMESTAMP '2020-01-01 14:30') AS r
 
--- CASE[fixed]: my-tsadd-quarter — fails on oracle, postgresql. ORA-00904: "QUARTER": invalid identifier
+-- CASE[fixed]: my-tsadd-quarter — TIMESTAMPADD(QUARTER)/TIMESTAMPDIFF(QUARTER) translate on all targets (ADD_MONTHS/INTERVAL '3 months' + a year*4+quarter boundary diff; T-SQL DATEADD/DATEDIFF QUARTER native). Previously degraded on oracle/postgresql (ORA-00904 "QUARTER").
 SELECT TIMESTAMPADD(QUARTER,1,NOW()), TIMESTAMPDIFF(QUARTER,'2020-01-01',NOW())
 
 -- CASE[limit]: my-tz-convert — CONVERT_TZ with a named IANA zone (America/New_York) has no faithful cross-engine equivalent (T-SQL uses Windows zone names, and DST rules differ), so the whole statement is gated + annotated (docs/03-unsupported.md). fails on oracle, postgresql, tsql

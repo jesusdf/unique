@@ -1002,8 +1002,19 @@ CASES: dict[str, dict[str, dict[str, object]]] = {
             "present": ["DATEADD(QUARTER, 1, GETDATE())"],
             "absent": ["TIMESTAMPADD"],
         },
-        "oracle": {"degrade": True},
-        "postgresql": {"degrade": True},
+        # QUARTER now translates faithfully (was a warned degrade): ADD_MONTHS by
+        # 3 months + a year*4+quarter boundary diff.
+        "oracle": {
+            "present": ["ADD_MONTHS(SYSDATE, 3)", "TO_CHAR(SYSDATE, 'Q')"],
+            "absent": ["TIMESTAMPADD", "TIMESTAMPDIFF"],
+        },
+        "postgresql": {
+            "present": [
+                "INTERVAL '3 months'",
+                "EXTRACT(QUARTER FROM CURRENT_TIMESTAMP)",
+            ],
+            "absent": ["TIMESTAMPADD", "TIMESTAMPDIFF"],
+        },
     },
     "my-unix-timestamp": {
         "tsql": {"degrade": True},

@@ -671,6 +671,78 @@ def _emit_json_object_extract(node: FunctionCall, dialect: str) -> str | None:
     return None
 
 
+def _widen_round_operand(operand: ASTNode, emitted: str) -> str:
+    """Widen a bare fractional-literal ROUND operand for T-SQL.
+
+    T-SQL types ``0.5`` as numeric(1,1) and ROUND preserves that precision/scale,
+    so rounding to an integer OVERFLOWS (error 8115). Casting a fractional-literal
+    operand to a wide DECIMAL leaves room for the rounded integer digit (challenge
+    pg-round-bare-half-literal). A non-literal operand keeps its declared type.
+    """
+    if (
+        isinstance(operand, Literal)
+        and isinstance(operand.value, float)
+        and operand.value != int(operand.value)
+    ):
+        return f"CAST({emitted} AS DECIMAL(38, 6))"
+    return emitted
+
+
+def _emit_substr_neg_start(
+    node: FunctionCall, fn_name: str, dialect: str
+) -> str | None:
+    """SUBSTRING(s, start, len) with a start < 1 into Oracle/MySQL.
+
+    PostgreSQL and T-SQL count out-of-range leading positions toward the length
+    (``SUBSTRING('hello', 0, 3)`` = 'he'; ``SUBSTRING('abcde' FROM -2 FOR 2)`` =
+    ''); Oracle clamps 0 to 1 / reads a negative start from the END, MySQL
+    returns '' for start 0 / counts a negative start from the END. Reproduce the
+    source semantics with a 1-based start and an adjusted length (start+len-1).
+    The start may be a non-positive Literal (0, -2) or a negated Literal (``-2``
+    parses as UnaryOp NEGATIVE). Covers pg-substring-neg-from-for and
+    reda-ts-substring-zero-start; returns None when it does not apply.
+    """
+    if (
+        fn_name != "SUBSTRING"
+        or len(node.args) != 3
+        or dialect not in ("oracle", "mysql")
+        or SOURCE_DIALECT.get() not in ("postgresql", "tsql")
+    ):
+        return None
+    s1 = node.args[1]
+    if (
+        isinstance(s1, Literal)
+        and isinstance(s1.value, int)
+        and not isinstance(s1.value, bool)
+        and s1.value <= 0
+    ):
+        neg_start = s1.value
+    elif (
+        isinstance(s1, UnaryOp)
+        and s1.operator == UnaryOperator.NEGATIVE
+        and isinstance(s1.operand, Literal)
+        and isinstance(s1.operand.value, int)
+        and not isinstance(s1.operand.value, bool)
+    ):
+        neg_start = -s1.operand.value
+    else:
+        return None
+    s = _emit_expression(node.args[0], dialect)
+    if isinstance(node.args[2], Literal) and isinstance(node.args[2].value, int):
+        adj_val = node.args[2].value + neg_start - 1  # fold to a constant
+        if adj_val > 0:
+            return f"SUBSTR({s}, 1, {adj_val})"
+        # The run lies entirely before position 1 -> empty result.
+        if dialect == "oracle":
+            return (
+                "'' /* UNIQUE: Oracle stores an empty string as NULL "
+                "(docs/03-unsupported.md) */"
+            )
+        return "''"
+    length = _emit_expression(node.args[2], dialect)
+    return f"SUBSTR({s}, 1, GREATEST({length} + ({neg_start - 1}), 0))"
+
+
 def _emit_function(node: FunctionCall, dialect: str) -> str:
     """Emit a function call."""
     fn_name = node.name.upper()
@@ -1107,11 +1179,14 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     if fn_name == "REPEAT" and dialect == "tsql" and len(node.args) == 2:
         _rp_s = _emit_expression(node.args[0], dialect)
         _rp_n = _emit_expression(node.args[1], dialect)
-        # MySQL rounds a float count and returns '' for a negative one; T-SQL
-        # REPLICATE truncates the float and returns NULL for a negative. Round
-        # (T-SQL ROUND needs an explicit scale — error 189) and clamp, for a
-        # MySQL source, skipping a provably integer non-negative literal.
-        if SOURCE_DIALECT.get() == "mysql" and not _is_nonneg_int_literal(node.args[1]):
+        # MySQL/PG REPEAT return '' for a negative count; T-SQL REPLICATE
+        # truncates a float and returns NULL for a negative one. Round (T-SQL
+        # ROUND needs an explicit scale — error 189) and clamp to 0, skipping a
+        # provably integer non-negative literal (challenge pg-repeat-negative).
+        if SOURCE_DIALECT.get() in (
+            "mysql",
+            "postgresql",
+        ) and not _is_nonneg_int_literal(node.args[1]):
             _rp_n = f"ROUND({_rp_n}, 0)"
             _rp_n = f"CASE WHEN {_rp_n} < 0 THEN 0 ELSE {_rp_n} END"
         return f"REPLICATE({_rp_s}, {_rp_n})"
@@ -1359,29 +1434,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "tsql":
             return f"SUBSTRING({s}, 1, LEN({s}))"
         return f"SUBSTRING({s}, 1)"  # PG/MySQL 2-arg runs to the end
-    # PostgreSQL (and T-SQL) SUBSTRING(s, start, len) with a start <= 0 count the
-    # out-of-range leading positions toward the length: SUBSTRING('abcdef', 0, 3)
-    # is 'ab' (positions 0,1,2 -> the two real chars). Oracle clamps 0 to 1
-    # ('abc') and MySQL returns '' for start 0, so reproduce PG's length
-    # reduction with a 1-based start and an adjusted length (start + len - 1).
-    if (
-        fn_name == "SUBSTRING"
-        and dialect in ("oracle", "mysql")
-        and len(node.args) == 3
-        and SOURCE_DIALECT.get() == "postgresql"
-        and isinstance(node.args[1], Literal)
-        and isinstance(node.args[1].value, int)
-        and not isinstance(node.args[1].value, bool)
-        and node.args[1].value <= 0
-    ):
-        s = _emit_expression(node.args[0], dialect)
-        _sub_start = node.args[1].value
-        if isinstance(node.args[2], Literal) and isinstance(node.args[2].value, int):
-            adj = str(node.args[2].value + _sub_start - 1)  # fold to a constant
-        else:
-            length = _emit_expression(node.args[2], dialect)
-            adj = f"{length} + ({_sub_start - 1})"
-        return f"SUBSTR({s}, 1, {adj})"
+    _neg_substr = _emit_substr_neg_start(node, fn_name, dialect)
+    if _neg_substr is not None:
+        return _neg_substr
     # T-SQL's SUBSTRING requires the length argument (error 174); the
     # 2-argument form means "to the end" — LEN(x) always covers it.
     if fn_name == "SUBSTRING" and dialect == "tsql" and len(node.args) == 2:
@@ -2764,8 +2819,27 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         return "DBMS_RANDOM.VALUE"  # both yield a uniform value in [0, 1).
     if dialect == "oracle" and up == "REPEAT" and len(node.args) == 2:
         s = _emit_expression(node.args[0], dialect)
-        n = _emit_expression(node.args[1], dialect)
-        return f"RPAD({s}, LENGTH({s}) * {n}, {s})"  # exact, incl. n=0 -> '' (NULL).
+        # A provably-negative count is '' on PG/MySQL; Oracle cannot store an
+        # empty string apart from NULL — emit the documented empty-string limit
+        # (challenge pg-repeat-negative). RPAD with a clamped length keeps a
+        # non-literal count safe (negative -> 0 -> NULL, Oracle's '').
+        _n_arg = node.args[1]
+        if (
+            isinstance(_n_arg, UnaryOp)
+            and _n_arg.operator == UnaryOperator.NEGATIVE
+            and isinstance(_n_arg.operand, Literal)
+        ):
+            return (
+                "'' /* UNIQUE: Oracle stores an empty string as NULL "
+                "(docs/03-unsupported.md) */"
+            )
+        n = _emit_expression(_n_arg, dialect)
+        if _is_nonneg_int_literal(_n_arg):
+            return (
+                f"RPAD({s}, LENGTH({s}) * {n}, {s})"  # exact, incl. n=0 -> '' (NULL).
+            )
+        # A non-literal count may be negative at runtime; clamp so it yields ''.
+        return f"RPAD({s}, GREATEST(LENGTH({s}) * {n}, 0), {s})"
     # MySQL INSERT() returns the original string when the position is 0 or past
     # the string's end; T-SQL STUFF returns NULL there. Guard the bounds so the
     # MySQL value is preserved (the in-bounds case is identical).
@@ -2931,7 +3005,7 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     args = ", ".join(_emit_expression(a, dialect) for a in arg_nodes)
     # T-SQL's ROUND requires the scale argument (error 189).
     if dialect == "tsql" and name.upper() == "ROUND" and len(node.args) == 1:
-        args += ", 0"
+        args = _widen_round_operand(node.args[0], args) + ", 0"
     # NOTE (P1 silent-output): a FunctionCall-level gap note here broke
     # the downstream text handlers that consume this output (TRUNC→ROUND
     # on the M4 path) — the M3 lesson. The unmapped-operator note lives
