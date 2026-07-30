@@ -160,26 +160,28 @@ CREATE TABLE IF NOT EXISTS tbl_8 (
 );
 
 -- ── Helper stored procedures called by the fixture ────────────────────────────
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Expected table name but got <Token token_type: TokenType.NATIONAL_STRING, text: CREATE PROCEDURE dbo.proc_13 AS SELECT 1, line: 1, col: 49, start: 6, end: 48, comments: []>. Line 1, Col: 49. EXEC (N'CREATE PROCEDURE dbo.proc_13 AS SELECT 1') Expecting ). Line 1, Col: 49. EXEC (N'CREATE PROCEDURE dbo.proc_13 AS SELECT 1') Invalid expression / Unexpected token. Line 1, Col: 50. EXEC (N'CREATE PROCEDURE dbo.proc_13 AS SELECT 1')
+-- EXEC (N'CREATE PROCEDURE dbo.proc_13 AS SELECT 1')
 CREATE OR REPLACE PROCEDURE proc_13
 (
     v_where OUT TEXT,
     v_col VARCHAR(200),
     v_op VARCHAR(10),
     v_param VARCHAR(200),
-    v_val TEXT /* UNIQUE: SQL_VARIANT */ DEFAULT NULL
+    v_val TEXT /* UNIQUE-1152: SQL_VARIANT */ DEFAULT NULL
 )
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF v_val IS NOT NULL THEN
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    IF NOT (v_val IS NULL) THEN
             v_where := COALESCE(v_where || ' AND ', '') || v_col || ' ' || v_op || ' ' || v_param;
     END IF;
 END;
 $$;
 
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Expected table name but got <Token token_type: TokenType.NATIONAL_STRING, text: CREATE PROCEDURE dbo.proc_14 AS SELECT 1, line: 1, col: 49, start: 6, end: 48, comments: []>. Line 1, Col: 49. EXEC (N'CREATE PROCEDURE dbo.proc_14 AS SELECT 1') Expecting ). Line 1, Col: 49. EXEC (N'CREATE PROCEDURE dbo.proc_14 AS SELECT 1') Invalid expression / Unexpected token. Line 1, Col: 50. EXEC (N'CREATE PROCEDURE dbo.proc_14 AS SELECT 1')
+-- EXEC (N'CREATE PROCEDURE dbo.proc_14 AS SELECT 1')
 CREATE OR REPLACE PROCEDURE proc_14
 (
     v_query OUT TEXT,
@@ -189,9 +191,9 @@ CREATE OR REPLACE PROCEDURE proc_14
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     v_page := NULL;
-    IF v_filter IS NOT NULL THEN
+    IF NOT (v_filter IS NULL) THEN
             v_query := v_query || ' ' || v_filter;
     END IF;
 END;
@@ -209,7 +211,7 @@ RETURNS TIMESTAMP
 LANGUAGE plpgsql
 AS $$
 BEGIN
-    RETURN (CURRENT_TIMESTAMP || INTERVAL '3 DAY');
+    RETURN CURRENT_TIMESTAMP + INTERVAL '-3 DAY';
 END;
 $$;
 
@@ -245,7 +247,7 @@ $$;
 
 DROP FUNCTION IF EXISTS func5;
 
--- UNIQUE: inline table-valued function ('RETURNS TABLE') has no direct equivalent. PostgreSQL needs RETURNS TABLE(col type ...) with RETURN QUERY; review the column list.
+-- UNIQUE-1154: inline table-valued function ('RETURNS TABLE') has no direct equivalent. PostgreSQL needs RETURNS TABLE(col type ...) with RETURN QUERY; review the column list.
 -- The non-portable translation is commented out below for review:
 -- CREATE OR REPLACE FUNCTION func5
 -- (
@@ -263,7 +265,8 @@ DROP FUNCTION IF EXISTS func5;
 
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_1]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_1
@@ -276,9 +279,9 @@ AS $$
 DECLARE
     --   <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    IF NOT (v_col_2 IS NULL) THEN
+            /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     SELECT *
@@ -300,7 +303,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_2]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_2
@@ -314,20 +318,22 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     --   <nombre>xxxxxx</nombre>
-    v_func1 TIMESTAMP := func1 ( );
-    v_col_6 UUID := NULL;
+    v_func1 TIMESTAMP;
+    v_col_6 UUID;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    v_func1 := func1();
+    v_col_6 := NULL;
     CREATE TEMPORARY TABLE v_col_16 (
       col_17 UUID
-    );  /* UNIQUE: was T-SQL table variable v_col_16 */
-    IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
+    );  /* UNIQUE-1196: was T-SQL table variable v_col_16 */
+    IF NOT (v_col_2 IS NULL) THEN
+            /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
-    IF ( v_col_1 IS NOT NULL ) THEN
+    IF NOT (v_col_1 IS NULL) THEN
             UPDATE tbl_2 SET col_4 = v_col_4, col_15 = v_col_15, col_18 = v_func1 WHERE col_1 = v_col_1 AND col_4 <> v_col_4;
-            v_col_6 := ( SELECT MAX ( col_6 ) FROM tbl_2 where col_1 = v_col_1 );
+            v_col_6 := (SELECT MAX(col_6) FROM tbl_2 WHERE col_1 = v_col_1);
             IF v_col_6 IS NULL THEN
                         INSERT INTO tbl_3 (
                           col_19,
@@ -349,7 +355,7 @@ BEGIN
                               col_1 = v_col_1
                           )
                         RETURNING col_6;
-                        v_col_6 := ( SELECT MAX ( col_17 ) FROM v_col_16 );
+                        v_col_6 := (SELECT MAX(col_17) FROM v_col_16);
                         INSERT INTO tbl_2 (col_1, col_4, col_6, col_19, col_20, col_15, col_18)
                         SELECT v_col_1, v_col_4, v_col_6, v_col_15, v_func1, v_col_15, v_func1
                         WHERE NOT EXISTS (SELECT NULL
@@ -366,7 +372,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_3]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_3
@@ -378,9 +385,9 @@ AS $$
 DECLARE
     --   <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    IF NOT (v_col_2 IS NULL) THEN
+            /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     SELECT col_22.col_23, col_22.col_24 AS col_25, col_22.col_26 AS col_27, CAST(NULL AS VARCHAR) AS value, col_22.col_28 AS col_29
@@ -395,7 +402,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_4]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_4
@@ -407,11 +415,12 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     --   <nombre>xxxxxx</nombre>
-    v_func1 TIMESTAMP := func1 ( );
+    v_func1 TIMESTAMP;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    v_func1 := func1();
+    IF NOT (v_col_2 IS NULL) THEN
+            /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     UPDATE tbl_6 SET col_32 = 1, col_18 = v_func1 WHERE col_31 = v_col_31 AND col_32 = 0 AND NOT EXISTS (SELECT NULL FROM tbl_7 WHERE col_31 = v_col_31);
@@ -433,7 +442,7 @@ BEGIN
     FROM tbl_7
     WHERE col_31 = v_col_31 AND EXISTS (SELECT NULL
     FROM tbl_9
-    WHERE col_30 = 1 AND NOT col_43 IS NULL))
+    WHERE col_30 = 1 AND NOT (col_43 IS NULL)))
     UNION ALL
     SELECT 0 AS col_32, CAST(NULL AS VARCHAR) AS col_34, CAST(NULL AS VARCHAR) AS col_35, 0 AS col_36) col_44
     ORDER BY col_32 DESC NULLS LAST
@@ -446,7 +455,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_5]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_5
@@ -459,9 +469,9 @@ AS $$
 DECLARE
     --   <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    IF NOT (v_col_2 IS NULL) THEN
+            /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     -- xxxxxx xx xx col_6 xx xxxxxx
@@ -474,7 +484,7 @@ BEGIN
     FROM tbl_7
     WHERE col_31 = v_col_31 AND EXISTS (SELECT NULL
     FROM tbl_9
-    WHERE col_30 = 1 AND NOT col_43 IS NULL)
+    WHERE col_30 = 1 AND NOT (col_43 IS NULL))
     ORDER BY col_31 ASC NULLS FIRST
     LIMIT 1), 0) AS col_55
     FROM tbl_6 col_37
@@ -492,7 +502,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_6]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_6
@@ -513,30 +524,45 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     --   <nombre>xxxxxx</nombre>
-    v_func1 TIMESTAMP := func1 ( );
-    v_col_65 INTEGER := COALESCE ( ( SELECT TOP ( 1 ) col_65 FROM tbl_9 WHERE col_30 = 1 order by col_66 desc ) , - 1440 );
-    v_col_67 INTEGER := COALESCE ( ( SELECT TOP ( 1 ) col_67 FROM tbl_9 WHERE col_30 = 1 order by col_66 desc ) , 1440 );
+    v_func1 TIMESTAMP;
+    v_col_65 INTEGER;
+    v_col_67 INTEGER;
     v_col_68 TIMESTAMP;
     v_col_69 TIMESTAMP;
     v_col_70 TIMESTAMP;
-    v_col_71 VARCHAR(36) := LOWER(CAST(v_col_6 AS VARCHAR(36)));
-    v_col_72 VARCHAR(200) := NULL;
-    v_col_73 VARCHAR(200) := NULL;
-    v_col_74 TEXT := NULL;
-    v_col_32 INTEGER := 0;
-    v_col_75 VARCHAR(50) := NULL;
-    v_col_17 INTEGER := NULL;
-    v_col_12 INTEGER := NULL;
+    v_col_71 VARCHAR(36);
+    v_col_72 VARCHAR(200);
+    v_col_73 VARCHAR(200);
+    v_col_74 TEXT;
+    v_col_32 INTEGER;
+    v_col_75 VARCHAR(50);
+    v_col_17 INTEGER;
+    v_col_12 INTEGER;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    v_func1 := func1();
+    v_col_65 := COALESCE((SELECT col_65 FROM tbl_9 WHERE col_30 = 1 ORDER BY col_66 DESC NULLS LAST LIMIT 1), -1440);
+    v_col_67 := COALESCE((SELECT col_67 FROM tbl_9 WHERE col_30 = 1 ORDER BY col_66 DESC NULLS LAST LIMIT 1), 1440);
+    v_col_71 := LOWER(CAST(v_col_6 AS VARCHAR(36)));
+    v_col_72 := NULL;
+    v_col_73 := NULL;
+    v_col_74 := NULL;
+    v_col_32 := 0;
+    v_col_75 := NULL;
+    v_col_17 := NULL;
+    v_col_12 := NULL;
+    IF NOT (v_col_2 IS NULL) THEN
+            /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
-    IF ( ( v_col_6 IS NULL ) OR ( v_col_42 IS NULL ) ) THEN
-            RETURN;  -- UNIQUE: discarded procedure RETURN value (NULL)
+    IF v_col_6 IS NULL OR v_col_42 IS NULL THEN
+            RETURN;  -- UNIQUE-1177: discarded procedure RETURN value (NULL)
     END IF;
-    v_col_12 := ( SELECT CASE WHEN v_col_42 = 1 THEN 2 /* xxxxxx */ WHEN v_col_42 = 0 AND v_col_13 IS NOT NULL THEN 1 /* col_151 */ ELSE 0 END ) /* xxxxxx */ /* xx xx xx xxxxxx */;
+    v_col_12 := /* xxxxxx */
+    /* xx xx xx xxxxxx */
+    /* xxxxxx */
+    /* col_151 */
+    (SELECT CASE WHEN v_col_42 = 1 THEN 2 WHEN v_col_42 = 0 AND NOT (v_col_13 IS NULL) THEN 1 ELSE 0 END);
     IF v_col_12 = 2 THEN
             DELETE FROM tbl_6 WHERE col_6 = v_col_6 AND col_42 = 1 AND col_62 = v_col_62;
             SELECT col_76.col_46, LOWER(COALESCE(col_76.col_77, v_col_62 || '@' || v_col_61)) INTO v_col_72, v_col_73 FROM tbl_13 col_76 WHERE col_76 . col_62 = v_col_62;
@@ -551,21 +577,21 @@ BEGIN
             DELETE FROM tbl_6 WHERE col_6 = v_col_6 AND col_42 = 0 AND col_62 = v_col_62 AND col_13 IS NULL;
             SELECT v_col_62, LOWER(v_col_62 || '@' || v_col_61) INTO v_col_72, v_col_73 ;
     END IF;
-    SELECT col_11 . col_50 INTO v_col_68 FROM tbl_2 col_3 INNER JOIN tbl_1 col_11 ON col_11 . col_1 = col_3 . col_1 WHERE col_3 . col_6 = v_col_6;
+    SELECT col_11.col_50 INTO v_col_68 FROM tbl_2 col_3 INNER JOIN tbl_1 col_11 ON col_11 . col_1 = col_3 . col_1 WHERE col_3 . col_6 = v_col_6;
     -- xxxxxx xx xxxxxx xxx xxxxxx
-    v_col_69 := (v_col_68 || INTERVAL '65 MINUTE');
-    v_col_70 := (v_col_68 || INTERVAL '67 MINUTE');
+    v_col_69 := v_col_68 + (v_col_65) * INTERVAL '1 MINUTE';
+    v_col_70 := v_col_68 + (v_col_67) * INTERVAL '1 MINUTE';
     INSERT INTO tbl_6 (col_12, col_62, col_13, col_19, col_20, col_15, col_18, col_6, col_72, col_73, col_63, col_42, col_74, col_32, col_9, col_10)
     VALUES (v_col_12, v_col_62, v_col_13, v_col_15, v_func1, v_col_15, v_func1, v_col_6, v_col_72, v_col_73, v_col_63, v_col_42, '-', v_col_32, v_col_9, v_col_10);
     -- xx xxxxxx xxx xxxxxx xxxx xx xxxxxx xxxxx xxx xxxxxx xx xx xxxxx
     v_col_17 := LASTVAL();
     v_col_75 := CAST(v_col_17 AS VARCHAR(20));
-    IF ( v_col_64 IS NULL ) THEN
-            v_col_74 := func2 ( v_col_61 , v_col_69 , v_col_70 , v_col_75 , v_col_71 , v_col_72 , v_col_73 , v_col_63 , v_col_42 );
+    IF v_col_64 IS NULL THEN
+            v_col_74 := func2(v_col_61, v_col_69, v_col_70, v_col_75, v_col_71, v_col_72, v_col_73, v_col_63, v_col_42);
     ELSE
             v_col_74 := v_col_64;
     END IF;
-    IF ( COALESCE ( v_col_74 , 'xxxxxxx-xxxx' ) = 'xxxxxxx-xxxx' ) THEN
+    IF COALESCE(v_col_74, 'xxxxxxx-xxxx') = 'xxxxxxx-xxxx' THEN
             DELETE FROM tbl_6 WHERE col_31 = v_col_17;
     ELSE
             UPDATE tbl_6 SET col_74 = v_col_74 WHERE col_31 = v_col_17;
@@ -579,7 +605,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE FUNCTION [dbo]].[func2]] () RETURNS VARCHAR AS BEGIN RETURN NULL END])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE FUNCTION func2
@@ -615,26 +642,26 @@ DECLARE
     v_col_88 VARCHAR(50);
 BEGIN
     -- xxxxxx
-    v_func1 := func1 ( );
+    v_func1 := func1();
     SELECT col_79, col_89, col_90, col_80 INTO v_col_79, v_col_83, v_col_84, v_col_80 FROM tbl_9 WHERE col_61 = v_col_61 AND col_30 = 1;
-    IF ( v_col_79 IS NULL OR v_col_62 IS NULL OR v_col_69 IS NULL OR v_col_70 IS NULL OR v_col_6 IS NULL ) THEN
+    IF v_col_79 IS NULL OR v_col_62 IS NULL OR v_col_69 IS NULL OR v_col_70 IS NULL OR v_col_6 IS NULL THEN
             RETURN 'xxxxxxx-xxxx';
     END IF;
     v_col_75 := 'xxxx.xxxxx';
-    v_mod := CASE WHEN COALESCE ( v_col_42 , 0 ) = 1 THEN 'xxxx' ELSE 'xxxxx' END;
-    v_col_88 := REPLACE ( COALESCE ( v_col_62 , '' ) , '"' , '' );
-    v_col_81 := COALESCE ( func3 ( 'xxxxxxxxxxx' , '/' ) , '/' );
-    IF ( SUBSTRING ( v_col_81 , LENGTH ( v_col_81 ) , 1 ) <> '/' ) THEN
+    v_mod := CASE WHEN COALESCE(v_col_42, 0) = 1 THEN 'xxxx' ELSE 'xxxxx' END;
+    v_col_88 := REPLACE(COALESCE(v_col_62, ''), '"', '');
+    v_col_81 := COALESCE(func3('xxxxxxxxxxx', '/'), '/');
+    IF SUBSTRING(v_col_81, LENGTH(RTRIM(CAST(v_col_81 AS TEXT))), 1) <> '/' THEN
             v_col_81 := v_col_81 || '/';
     END IF;
-    v_col_80 := REPLACE ( v_col_80 , '~/' , v_col_81 );
-    v_col_63 := REPLACE ( COALESCE ( v_col_63 , REPLACE ( v_col_80 , '{x}' , v_col_75 ) ) , '"' , '' );
-    v_col_72 := REPLACE ( COALESCE ( v_col_72 , v_col_75 ) , '"' , '' );
+    v_col_80 := REPLACE(v_col_80, '~/', v_col_81);
+    v_col_63 := REPLACE(COALESCE(v_col_63, REPLACE(v_col_80, '{x}', v_col_75)), '"', '');
+    v_col_72 := REPLACE(COALESCE(v_col_72, v_col_75), '"', '');
     v_col_73 := REPLACE(COALESCE(v_col_73, v_col_75 || '@' || v_col_61), '"', '');
     v_col_82 := TO_TIMESTAMP('xxxx-xx-xx xx:xx:xx', 'YYYY-MM-DD HH24:MI:SS');
-    v_col_85 := CAST(EXTRACT(epoch FROM CAST(CAST(v_func1 AS TIMESTAMP) AS TIMESTAMP) - CAST(CAST(v_col_82 AS TIMESTAMP) AS TIMESTAMP)) AS BIGINT);
-    v_col_86 := CAST(EXTRACT(epoch FROM CAST(CAST(COALESCE(v_col_69, v_func1) AS TIMESTAMP) AS TIMESTAMP) - CAST(CAST(v_col_82 AS TIMESTAMP) AS TIMESTAMP)) AS BIGINT);
-    v_col_87 := CAST(EXTRACT(EPOCH FROM CAST(CAST(COALESCE(v_col_70, v_func1 + 1) AS TIMESTAMP) AS TIMESTAMP) - CAST(CAST(v_col_82 AS TIMESTAMP) AS TIMESTAMP)) AS BIGINT);
+    v_col_85 := (FLOOR(EXTRACT(EPOCH FROM v_func1) / 1) - FLOOR(EXTRACT(EPOCH FROM v_col_82) / 1));
+    v_col_86 := (FLOOR(EXTRACT(EPOCH FROM COALESCE(v_col_69, v_func1)) / 1) - FLOOR(EXTRACT(EPOCH FROM v_col_82) / 1));
+    v_col_87 := (FLOOR(EXTRACT(EPOCH FROM COALESCE(v_col_70, v_func1 + 1)) / 1) - FLOOR(EXTRACT(EPOCH FROM v_col_82) / 1));
     v_col_74 := '{
       "xxxxxxx": {
         "xxxx": {
@@ -653,30 +680,31 @@ BEGIN
       "xxxx": "$xxxx$",
       "xxxxxxxxx": $xxxxxxxxx$
     }';
-    v_col_74 := REPLACE ( v_col_74 , '$xxxxxx$' , v_col_63 );
-    v_col_74 := REPLACE ( v_col_74 , '$xxxx$' , v_col_72 );
-    v_col_74 := REPLACE ( v_col_74 , '$xxxxx$' , v_col_73 );
+    v_col_74 := REPLACE(v_col_74, '$xxxxxx$', v_col_63);
+    v_col_74 := REPLACE(v_col_74, '$xxxx$', v_col_72);
+    v_col_74 := REPLACE(v_col_74, '$xxxxx$', v_col_73);
     v_col_74 := REPLACE(v_col_74, '$xxx$', CAST(v_col_85 AS VARCHAR(50)));
     v_col_74 := REPLACE(v_col_74, '$xxx$', CAST(v_col_86 AS VARCHAR(50)));
     v_col_74 := REPLACE(v_col_74, '$xxx$', CAST(v_col_87 AS VARCHAR(50)));
-    v_col_74 := REPLACE ( v_col_74 , '$xxx$' , v_col_84 );
-    v_col_74 := REPLACE ( v_col_74 , '$xxx$' , v_col_83 );
-    v_col_74 := REPLACE ( v_col_74 , '$xxxxxxxxx$' , v_col_88 );
-    v_col_74 := REPLACE ( v_col_74 , '$xxx$' , v_col_75 );
-    v_col_74 := REPLACE ( v_col_74 , '$xxxx$' , v_col_6 );
-    v_col_74 := REPLACE ( v_col_74 , '$xxxxxxxxx$' , v_mod ) /* xxxxxx xx xxxxxx xxx xxxx */;
+    v_col_74 := REPLACE(v_col_74, '$xxx$', v_col_84);
+    v_col_74 := REPLACE(v_col_74, '$xxx$', v_col_83);
+    v_col_74 := REPLACE(v_col_74, '$xxxxxxxxx$', v_col_88);
+    v_col_74 := REPLACE(v_col_74, '$xxx$', v_col_75);
+    v_col_74 := REPLACE(v_col_74, '$xxxx$', v_col_6);
+    v_col_74 := /* xxxxxx xx xxxxxx xxx xxxx */
+    REPLACE(v_col_74, '$xxxxxxxxx$', v_mod);
     v_col_74 := REPLACE(v_col_74, CHR(13), '');
     v_col_74 := REPLACE(v_col_74, CHR(10), '');
-    v_col_74 := REPLACE ( v_col_74 , '    ' , ' ' );
-    v_col_74 := REPLACE ( v_col_74 , '  ' , ' ' );
-    v_col_74 := REPLACE ( v_col_74 , '  ' , ' ' );
-    v_col_74 := REPLACE ( v_col_74 , '{ ' , '{' );
-    v_col_74 := REPLACE ( v_col_74 , '} ' , '}' );
-    v_col_74 := REPLACE ( v_col_74 , ': ' , ':' );
-    v_col_74 := REPLACE ( v_col_74 , ', "' , ',"' );
-    v_col_74 := REPLACE ( v_col_74 , ' "' , '"' );
-    v_col_74 := REPLACE ( v_col_74 , '" ' , '"' );
-    RETURN func4 ( v_col_74 , v_col_79 );
+    v_col_74 := REPLACE(v_col_74, '    ', ' ');
+    v_col_74 := REPLACE(v_col_74, '  ', ' ');
+    v_col_74 := REPLACE(v_col_74, '  ', ' ');
+    v_col_74 := REPLACE(v_col_74, '{ ', '{');
+    v_col_74 := REPLACE(v_col_74, '} ', '}');
+    v_col_74 := REPLACE(v_col_74, ': ', ':');
+    v_col_74 := REPLACE(v_col_74, ', "', ',"');
+    v_col_74 := REPLACE(v_col_74, ' "', '"');
+    v_col_74 := REPLACE(v_col_74, '" ', '"');
+    RETURN func4(v_col_74, v_col_79);
 END;
 $$;
 
@@ -685,7 +713,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_7]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_7
@@ -703,12 +732,12 @@ AS $$
 DECLARE
     --    <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     CREATE TEMPORARY TABLE v_col_92 (
       col_17 UUID
-    );  /* UNIQUE: was T-SQL table variable v_col_92 */
+    );  /* UNIQUE-1196: was T-SQL table variable v_col_92 */
     INSERT INTO tbl_3 (col_7, col_91, col_19, col_20, col_15, col_18) VALUES (v_col_7, v_col_91, v_col_19, v_col_20, v_col_15, v_col_18) RETURNING col_6;
-    v_col_6 := ( SELECT MAX ( col_17 ) FROM v_col_92 );
+    v_col_6 := (SELECT MAX(col_17) FROM v_col_92);
 END;
 $$;
 
@@ -717,7 +746,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_8]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_8
@@ -734,12 +764,12 @@ AS $$
 DECLARE
     --    <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     CREATE TEMPORARY TABLE v_col_92 (
       col_17 INT
-    );  /* UNIQUE: was T-SQL table variable v_col_92 */
+    );  /* UNIQUE-1196: was T-SQL table variable v_col_92 */
     INSERT INTO tbl_8 (col_15, col_18, col_31, col_39, col_94) VALUES (v_col_15, v_col_18, v_col_31, v_col_39, v_col_94) RETURNING col_93;
-    v_col_93 := ( SELECT MAX ( col_17 ) FROM v_col_92 );
+    v_col_93 := (SELECT MAX(col_17) FROM v_col_92);
 END;
 $$;
 
@@ -748,7 +778,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_9]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_9
@@ -780,10 +811,10 @@ AS $$
 DECLARE
     --    <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     CREATE TEMPORARY TABLE v_col_92 (
       col_17 INT
-    );  /* UNIQUE: was T-SQL table variable v_col_92 */
+    );  /* UNIQUE-1196: was T-SQL table variable v_col_92 */
     INSERT INTO tbl_6 (
       col_6,
       col_32,
@@ -830,7 +861,7 @@ BEGIN
         v_col_18
       )
     RETURNING col_31;
-    v_col_31 := ( SELECT MAX ( col_17 ) FROM v_col_92 );
+    v_col_31 := (SELECT MAX(col_17) FROM v_col_92);
 END;
 $$;
 
@@ -839,7 +870,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_10]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_10
@@ -864,7 +896,7 @@ AS $$
 DECLARE
     --    <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     UPDATE tbl_7
     SET col_15 = v_col_15, col_18 = v_col_18, col_98 = v_col_98, col_99 = v_col_99
     WHERE col_97 = v_col_100 AND col_31 = v_col_101 AND col_23 = v_col_102 AND (col_15 = v_col_103 OR col_15 IS NULL AND v_col_103 IS NULL) AND (col_18 = v_col_104 OR col_18 IS NULL AND v_col_104 IS NULL) AND (col_98 = v_col_105 OR col_98 IS NULL AND v_col_105 IS NULL) AND (col_99 = v_col_106 OR col_99 IS NULL AND v_col_106 IS NULL);
@@ -884,7 +916,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_11]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_11
@@ -902,7 +935,7 @@ AS $$
 DECLARE
     --    <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     INSERT INTO tbl_7 (col_97, col_31, col_23, col_15, col_18, col_98, col_99) VALUES (v_col_97, v_col_31, v_col_23, v_col_15, v_col_18, v_col_98, v_col_99);
 END;
 $$;
@@ -912,7 +945,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_12]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_12
@@ -935,12 +969,12 @@ DECLARE
     v_col_109 TEXT;
     v_col_110 TEXT;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    IF NOT (v_col_2 IS NULL) THEN
+            /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
-    IF v_col_97 IS NOT NULL AND v_col_31 IS NOT NULL AND v_col_23 IS NOT NULL AND v_col_107 IS NULL THEN
+    IF NOT (v_col_97 IS NULL) AND NOT (v_col_31 IS NULL) AND NOT (v_col_23 IS NULL) AND v_col_107 IS NULL THEN
             SELECT col_97, col_31, col_23, col_15, col_18, col_98, col_99
             FROM tbl_7
             WHERE v_col_97 = col_97 AND v_col_31 = col_31 AND v_col_23 = col_23 AND (col_97 = v_col_97 OR v_col_97 IS NULL) AND (col_31 = v_col_31 OR v_col_31 IS NULL) AND (col_23 = v_col_23 OR v_col_23 IS NULL) AND (col_15 = v_col_15 OR v_col_15 IS NULL) AND (col_18 = v_col_18 OR v_col_18 IS NULL) AND (col_98 = v_col_98 OR v_col_98 IS NULL) AND (col_99 = v_col_99 OR v_col_99 IS NULL);
@@ -955,11 +989,11 @@ BEGIN
             CALL proc_13(v_col_110, 'xxxxxxxx', '=', 'v_xxxxxxxx', v_col_18);
             CALL proc_13(v_col_110, 'xxxxx', '=', 'v_xxxxx', v_col_98);
             CALL proc_13(v_col_110, 'xxxxxxxxx', '=', 'v_xxxxxxxxx', v_col_99);
-            IF v_col_110 IS NOT NULL THEN
+            IF NOT (v_col_110 IS NULL) THEN
                         v_col_109 := v_col_109 || ' WHERE ' || v_col_110;
             END IF;
             CALL proc_14(v_col_109, v_col_107, v_col_108);
-            EXECUTE v_col_109; -- UNIQUE: sp_executesql parameter declarations/bindings dropped; pass them via EXECUTE ... USING manually
+            EXECUTE v_col_109; -- UNIQUE-1161: sp_executesql parameter declarations/bindings dropped; pass them via EXECUTE ... USING manually
     END IF;
 END;
 $$;
@@ -969,7 +1003,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_15]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_15
@@ -987,7 +1022,7 @@ AS $$
 DECLARE
     --    <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     DELETE FROM tbl_7
     WHERE col_97 = v_col_100 AND col_31 = v_col_101 AND col_23 = v_col_102 AND (col_15 = v_col_103 OR col_15 IS NULL AND v_col_103 IS NULL) AND (col_18 = v_col_104 OR col_18 IS NULL AND v_col_104 IS NULL) AND (col_98 = v_col_105 OR col_98 IS NULL AND v_col_105 IS NULL) AND (col_99 = v_col_106 OR col_99 IS NULL AND v_col_106 IS NULL);
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
@@ -1002,7 +1037,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_16]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_16
@@ -1025,7 +1061,7 @@ AS $$
 DECLARE
     --    <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     UPDATE tbl_8
     SET col_15 = v_col_15, col_18 = v_col_18, col_31 = v_col_31, col_39 = v_col_39, col_94 = v_col_94
     WHERE col_93 = v_col_112 AND (col_15 = v_col_103 OR col_15 IS NULL AND v_col_103 IS NULL) AND (col_18 = v_col_104 OR col_18 IS NULL AND v_col_104 IS NULL) AND (col_31 = v_col_101 OR col_31 IS NULL AND v_col_101 IS NULL) AND (col_39 = v_col_113 OR col_39 IS NULL AND v_col_113 IS NULL) AND (col_94 = v_col_114 OR col_94 IS NULL AND v_col_114 IS NULL);
@@ -1045,7 +1081,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_17]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_17
@@ -1067,12 +1104,12 @@ DECLARE
     v_col_109 TEXT;
     v_col_110 TEXT;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    IF NOT (v_col_2 IS NULL) THEN
+            /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
-    IF v_col_93 IS NOT NULL AND v_col_107 IS NULL THEN
+    IF NOT (v_col_93 IS NULL) AND v_col_107 IS NULL THEN
             SELECT col_93, col_15, col_18, col_31, col_39, col_94
             FROM tbl_8
             WHERE v_col_93 = col_93 AND (col_93 = v_col_93 OR v_col_93 IS NULL) AND (col_15 = v_col_15 OR v_col_15 IS NULL) AND (col_18 = v_col_18 OR v_col_18 IS NULL) AND (col_31 = v_col_31 OR v_col_31 IS NULL) AND (col_39 = v_col_39 OR v_col_39 IS NULL) AND (col_94 = v_col_94 OR v_col_94 IS NULL);
@@ -1086,11 +1123,11 @@ BEGIN
             CALL proc_13(v_col_110, 'xxxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxxx', v_col_31);
             CALL proc_13(v_col_110, 'xxxxxxxxxxxx', '=', 'v_xxxxxxxxxxxx', v_col_39);
             CALL proc_13(v_col_110, 'xxxxx', '=', 'v_xxxxx', v_col_94);
-            IF v_col_110 IS NOT NULL THEN
+            IF NOT (v_col_110 IS NULL) THEN
                         v_col_109 := v_col_109 || ' WHERE ' || v_col_110;
             END IF;
             CALL proc_14(v_col_109, v_col_107, v_col_108);
-            EXECUTE v_col_109; -- UNIQUE: sp_executesql parameter declarations/bindings dropped; pass them via EXECUTE ... USING manually
+            EXECUTE v_col_109; -- UNIQUE-1161: sp_executesql parameter declarations/bindings dropped; pass them via EXECUTE ... USING manually
     END IF;
 END;
 $$;
@@ -1100,7 +1137,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_18]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_18
@@ -1117,7 +1155,7 @@ AS $$
 DECLARE
     --    <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     DELETE FROM tbl_8
     WHERE col_93 = v_col_112 AND (col_15 = v_col_103 OR col_15 IS NULL AND v_col_103 IS NULL) AND (col_18 = v_col_104 OR col_18 IS NULL AND v_col_104 IS NULL) AND (col_31 = v_col_101 OR col_31 IS NULL AND v_col_101 IS NULL) AND (col_39 = v_col_113 OR col_39 IS NULL AND v_col_113 IS NULL) AND (col_94 = v_col_114 OR col_94 IS NULL AND v_col_114 IS NULL);
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
@@ -1132,7 +1170,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_19]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_19
@@ -1185,7 +1224,7 @@ AS $$
 DECLARE
     --    <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     UPDATE tbl_6
     SET col_6 = v_col_6, col_32 = v_col_32, col_33 = v_col_33, col_12 = v_col_12, col_42 = v_col_42, col_62 = v_col_62, col_13 = v_col_13, col_9 = v_col_9, col_10 = v_col_10, col_74 = v_col_74, col_38 = v_col_38, col_95 = v_col_95, col_96 = v_col_96, col_72 = v_col_72, col_73 = v_col_73, col_63 = v_col_63, col_19 = v_col_19, col_20 = v_col_20, col_15 = v_col_15, col_18 = v_col_18
     WHERE col_31 = v_col_101 AND (col_6 = v_col_115 OR col_6 IS NULL AND v_col_115 IS NULL) AND (col_32 = v_col_116 OR col_32 IS NULL AND v_col_116 IS NULL) AND (col_33 = v_col_117 OR col_33 IS NULL AND v_col_117 IS NULL) AND (col_12 = v_col_118 OR col_12 IS NULL AND v_col_118 IS NULL) AND (col_42 = v_col_119 OR col_42 IS NULL AND v_col_119 IS NULL) AND (col_62 = v_col_120 OR col_62 IS NULL AND v_col_120 IS NULL) AND (col_13 = v_col_121 OR col_13 IS NULL AND v_col_121 IS NULL) AND (col_9 = v_col_122 OR col_9 IS NULL AND v_col_122 IS NULL) AND (col_10 = v_col_123 OR col_10 IS NULL AND v_col_123 IS NULL) AND (col_74 = v_col_124 OR col_74 IS NULL AND v_col_124 IS NULL) AND (col_38 = v_col_125 OR col_38 IS NULL AND v_col_125 IS NULL) AND (col_95 = v_col_126 OR col_95 IS NULL AND v_col_126 IS NULL) AND (col_96 = v_col_127 OR col_96 IS NULL AND v_col_127 IS NULL) AND (col_72 = v_col_128 OR col_72 IS NULL AND v_col_128 IS NULL) AND (col_73 = v_col_129 OR col_73 IS NULL AND v_col_129 IS NULL) AND (col_63 = v_col_130 OR col_63 IS NULL AND v_col_130 IS NULL) AND (col_19 = v_col_131 OR col_19 IS NULL AND v_col_131 IS NULL) AND (col_20 = v_col_132 OR col_20 IS NULL AND v_col_132 IS NULL) AND (col_15 = v_col_103 OR col_15 IS NULL AND v_col_103 IS NULL) AND (col_18 = v_col_104 OR col_18 IS NULL AND v_col_104 IS NULL);
@@ -1205,7 +1244,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_20]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_20
@@ -1242,12 +1282,12 @@ DECLARE
     v_col_109 TEXT;
     v_col_110 TEXT;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    IF NOT (v_col_2 IS NULL) THEN
+            /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
-    IF v_col_31 IS NOT NULL AND v_col_107 IS NULL THEN
+    IF NOT (v_col_31 IS NULL) AND v_col_107 IS NULL THEN
             SELECT col_31, col_6, col_32, col_33, col_12, col_42, col_62, col_13, col_9, col_10, col_74, col_38, col_95, col_96, col_72, col_73, col_63, col_19, col_20, col_15, col_18
             FROM tbl_6
             WHERE v_col_31 = col_31 AND (col_31 = v_col_31 OR v_col_31 IS NULL) AND (col_6 = v_col_6 OR v_col_6 IS NULL) AND (col_32 = v_col_32 OR v_col_32 IS NULL) AND (col_33 = v_col_33 OR v_col_33 IS NULL) AND (col_12 = v_col_12 OR v_col_12 IS NULL) AND (col_42 = v_col_42 OR v_col_42 IS NULL) AND (col_62 = v_col_62 OR v_col_62 IS NULL) AND (col_13 = v_col_13 OR v_col_13 IS NULL) AND (col_9 = v_col_9 OR v_col_9 IS NULL) AND (col_10 = v_col_10 OR v_col_10 IS NULL) AND (col_74 = v_col_74 OR v_col_74 IS NULL) AND (col_38 = v_col_38 OR v_col_38 IS NULL) AND (col_95 = v_col_95 OR v_col_95 IS NULL) AND (col_96 = v_col_96 OR v_col_96 IS NULL) AND (col_72 = v_col_72 OR v_col_72 IS NULL) AND (col_73 = v_col_73 OR v_col_73 IS NULL) AND (col_63 = v_col_63 OR v_col_63 IS NULL) AND (col_19 = v_col_19 OR v_col_19 IS NULL) AND (col_20 = v_col_20 OR v_col_20 IS NULL) AND (col_15 = v_col_15 OR v_col_15 IS NULL) AND (col_18 = v_col_18 OR v_col_18 IS NULL);
@@ -1276,11 +1316,11 @@ BEGIN
             CALL proc_13(v_col_110, 'xxxxxxxxx', '=', 'v_xxxxxxxxx', v_col_20);
             CALL proc_13(v_col_110, 'xxxxxxxxxx', '=', 'v_xxxxxxxxxx', v_col_15);
             CALL proc_13(v_col_110, 'xxxxxxxx', '=', 'v_xxxxxxxx', v_col_18);
-            IF v_col_110 IS NOT NULL THEN
+            IF NOT (v_col_110 IS NULL) THEN
                         v_col_109 := v_col_109 || ' WHERE ' || v_col_110;
             END IF;
             CALL proc_14(v_col_109, v_col_107, v_col_108);
-            EXECUTE v_col_109; -- UNIQUE: sp_executesql parameter declarations/bindings dropped; pass them via EXECUTE ... USING manually
+            EXECUTE v_col_109; -- UNIQUE-1161: sp_executesql parameter declarations/bindings dropped; pass them via EXECUTE ... USING manually
     END IF;
 END;
 $$;
@@ -1290,7 +1330,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_21]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_21
@@ -1322,7 +1363,7 @@ AS $$
 DECLARE
     --    <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     DELETE FROM tbl_6
     WHERE col_31 = v_col_101 AND (col_6 = v_col_115 OR col_6 IS NULL AND v_col_115 IS NULL) AND (col_32 = v_col_116 OR col_32 IS NULL AND v_col_116 IS NULL) AND (col_33 = v_col_117 OR col_33 IS NULL AND v_col_117 IS NULL) AND (col_12 = v_col_118 OR col_12 IS NULL AND v_col_118 IS NULL) AND (col_42 = v_col_119 OR col_42 IS NULL AND v_col_119 IS NULL) AND (col_62 = v_col_120 OR col_62 IS NULL AND v_col_120 IS NULL) AND (col_13 = v_col_121 OR col_13 IS NULL AND v_col_121 IS NULL) AND (col_9 = v_col_122 OR col_9 IS NULL AND v_col_122 IS NULL) AND (col_10 = v_col_123 OR col_10 IS NULL AND v_col_123 IS NULL) AND (col_74 = v_col_124 OR col_74 IS NULL AND v_col_124 IS NULL) AND (col_38 = v_col_125 OR col_38 IS NULL AND v_col_125 IS NULL) AND (col_95 = v_col_126 OR col_95 IS NULL AND v_col_126 IS NULL) AND (col_96 = v_col_127 OR col_96 IS NULL AND v_col_127 IS NULL) AND (col_72 = v_col_128 OR col_72 IS NULL AND v_col_128 IS NULL) AND (col_73 = v_col_129 OR col_73 IS NULL AND v_col_129 IS NULL) AND (col_63 = v_col_130 OR col_63 IS NULL AND v_col_130 IS NULL) AND (col_19 = v_col_131 OR col_19 IS NULL AND v_col_131 IS NULL) AND (col_20 = v_col_132 OR col_20 IS NULL AND v_col_132 IS NULL) AND (col_15 = v_col_103 OR col_15 IS NULL AND v_col_103 IS NULL) AND (col_18 = v_col_104 OR col_18 IS NULL AND v_col_104 IS NULL);
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
@@ -1337,7 +1378,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_22]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_22
@@ -1362,7 +1404,7 @@ AS $$
 DECLARE
     --    <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     UPDATE tbl_3
     SET col_7 = v_col_7, col_91 = v_col_91, col_19 = v_col_19, col_20 = v_col_20, col_15 = v_col_15, col_18 = v_col_18
     WHERE col_6 = v_col_115 AND (col_7 = v_col_133 OR col_7 IS NULL AND v_col_133 IS NULL) AND (col_91 = v_col_134 OR col_91 IS NULL AND v_col_134 IS NULL) AND (col_19 = v_col_131 OR col_19 IS NULL AND v_col_131 IS NULL) AND (col_20 = v_col_132 OR col_20 IS NULL AND v_col_132 IS NULL) AND (col_15 = v_col_103 OR col_15 IS NULL AND v_col_103 IS NULL) AND (col_18 = v_col_104 OR col_18 IS NULL AND v_col_104 IS NULL);
@@ -1382,7 +1424,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_23]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_23
@@ -1405,12 +1448,12 @@ DECLARE
     v_col_109 TEXT;
     v_col_110 TEXT;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    IF NOT (v_col_2 IS NULL) THEN
+            /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
-    IF v_col_6 IS NOT NULL AND v_col_107 IS NULL THEN
+    IF NOT (v_col_6 IS NULL) AND v_col_107 IS NULL THEN
             SELECT col_6, col_7, col_91, col_19, col_20, col_15, col_18
             FROM tbl_3
             WHERE v_col_6 = col_6 AND (col_6 = v_col_6 OR v_col_6 IS NULL) AND (col_7 = v_col_7 OR v_col_7 IS NULL) AND (col_91 = v_col_91 OR v_col_91 IS NULL) AND (col_19 = v_col_19 OR v_col_19 IS NULL) AND (col_20 = v_col_20 OR v_col_20 IS NULL) AND (col_15 = v_col_15 OR v_col_15 IS NULL) AND (col_18 = v_col_18 OR v_col_18 IS NULL);
@@ -1425,11 +1468,11 @@ BEGIN
             CALL proc_13(v_col_110, 'xxxxxxxxx', '=', 'v_xxxxxxxxx', v_col_20);
             CALL proc_13(v_col_110, 'xxxxxxxxxx', '=', 'v_xxxxxxxxxx', v_col_15);
             CALL proc_13(v_col_110, 'xxxxxxxx', '=', 'v_xxxxxxxx', v_col_18);
-            IF v_col_110 IS NOT NULL THEN
+            IF NOT (v_col_110 IS NULL) THEN
                         v_col_109 := v_col_109 || ' WHERE ' || v_col_110;
             END IF;
             CALL proc_14(v_col_109, v_col_107, v_col_108);
-            EXECUTE v_col_109; -- UNIQUE: sp_executesql parameter declarations/bindings dropped; pass them via EXECUTE ... USING manually
+            EXECUTE v_col_109; -- UNIQUE-1161: sp_executesql parameter declarations/bindings dropped; pass them via EXECUTE ... USING manually
     END IF;
 END;
 $$;
@@ -1439,7 +1482,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_24]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_24
@@ -1457,7 +1501,7 @@ AS $$
 DECLARE
     --    <nombre>xxxxxx</nombre>
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
     DELETE FROM tbl_3
     WHERE col_6 = v_col_115 AND (col_7 = v_col_133 OR col_7 IS NULL AND v_col_133 IS NULL) AND (col_91 = v_col_134 OR col_91 IS NULL AND v_col_134 IS NULL) AND (col_19 = v_col_131 OR col_19 IS NULL AND v_col_131 IS NULL) AND (col_20 = v_col_132 OR col_20 IS NULL AND v_col_132 IS NULL) AND (col_15 = v_col_103 OR col_15 IS NULL AND v_col_103 IS NULL) AND (col_18 = v_col_104 OR col_18 IS NULL AND v_col_104 IS NULL);
     -- xx xx xx xxxxxx xx xxxxxx xxxxxx xxxxx
@@ -1472,7 +1516,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_25]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_25
@@ -1496,12 +1541,14 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     --   <nombre>xxxxxx</nombre>
-    v_func1 TIMESTAMP := func1 ( );
-    v_col_147 TIMESTAMP := CAST ( func1 ( ) AS DATE );
+    v_func1 TIMESTAMP;
+    v_col_147 TIMESTAMP;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    v_func1 := func1();
+    v_col_147 := CAST(func1() AS DATE);
+    IF NOT (v_col_2 IS NULL) THEN
+            /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
     SELECT
@@ -1680,7 +1727,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_26]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_26
@@ -1692,10 +1740,12 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     --   <nombre>xxxxxx</nombre>
-    v_func1 TIMESTAMP := func1 ( );
-    v_col_67 INTEGER := COALESCE ( ( SELECT TOP ( 1 ) col_67 FROM tbl_9 WHERE col_30 = 1 ORDER BY col_66 ASC ) , 1440 );
+    v_func1 TIMESTAMP;
+    v_col_67 INTEGER;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    v_func1 := func1();
+    v_col_67 := COALESCE((SELECT col_67 FROM tbl_9 WHERE col_30 = 1 ORDER BY col_66 ASC NULLS FIRST LIMIT 1), 1440);
     -- xxxxxx xxx xxxxxx xx xx xxxxx xx xxxxxx
     -- xxxx xxx xxxx xxx xx x xxxxxx xxx xx xx xxxx xxxx xx xxxxxx
     UPDATE tbl_6
@@ -1719,7 +1769,8 @@ $$;
 -- xxx xxxxxx xxxxxx xxxxxx
 
 -- xxxxxx xxxxxx xxxxxx
--- UNIQUE: Unhandled expression type: Execute
+-- UNIQUE-1003: Unhandled expression type: Execute
+-- EXECUTE ([CREATE PROCEDURE [dbo]].[proc_27]] AS SELECT 1])
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
 CREATE OR REPLACE PROCEDURE proc_27
@@ -1731,14 +1782,15 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
     --   <nombre>xxxxxx</nombre>
-    v_col_6 UUID := ( SELECT col_6 FROM tbl_2 WHERE col_1 = v_col_1 );
+    v_col_6 UUID;
 BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF ( v_col_2 IS NOT NULL ) THEN
-            /* UNIQUE: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
+    /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+    v_col_6 := (SELECT col_6 FROM tbl_2 WHERE col_1 = v_col_1);
+    IF NOT (v_col_2 IS NULL) THEN
+            /* UNIQUE-1193: SET ROWCOUNT @col_2 -- tsql-only, no postgresql equivalent */
             NULL;
     END IF;
-    IF ( v_col_6 IS NOT NULL ) THEN
+    IF NOT (v_col_6 IS NULL) THEN
             DELETE FROM tbl_8 WHERE col_31 IN (SELECT col_31 FROM tbl_6 WHERE col_6 = v_col_6);
             DELETE FROM tbl_6 WHERE col_6 = v_col_6;
             DELETE FROM tbl_2 WHERE col_1 = v_col_1;
@@ -1760,35 +1812,37 @@ $$;
 
 -- SET QUOTED_IDENTIFIER ON
 -- SET ANSI_NULLS ON
-CREATE OR REPLACE FUNCTION col_173_func()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-AS $$
-DECLARE
-    --   <nombre>xxxxxx</nombre>
-    v_func1 TIMESTAMP := func1 ( );
-    v_col_174 INTEGER := COALESCE ( ( SELECT 1 FROM tbl_9 WHERE col_96 IS NOT NULL AND col_30 = 1 ) , 0 );
-BEGIN
-    /* UNIQUE: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
-    IF (NEW.col_32 IS DISTINCT FROM OLD.col_32) THEN
-            /* xxxxxx xxxx xxxxxx */
-            -- UNIQUE: trigger uses the T-SQL set-based inserted/deleted pseudo-tables, which have no row-level (NEW/OLD) equivalent. Rewrite manually (PostgreSQL: a statement-level trigger with REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted; Oracle: a compound trigger; MySQL: no transition tables). Original:
-            -- INSERT INTO tbl_8 (col_15, col_18, col_31, col_39, col_94)
-            -- SELECT col_175.col_15, col_175.col_18, col_175.col_31, 4 - (2 * v_col_174 * (1 - col_175.col_42) + col_175.col_32) AS col_39, v_func1 AS col_94
-            -- FROM inserted col_175
-            -- INNER JOIN deleted col_176 ON col_176.col_31 = col_175.col_31
-            -- WHERE col_175.col_32 <> col_176.col_32
-            NULL;
-            /* xx xx xxxx xx xxxxxx xxxxxx xx xxxxx col_162 xx xxxxxx xxx x */
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE TRIGGER col_173
-AFTER UPDATE ON tbl_6
-EXECUTE FUNCTION col_173_func();
-
+-- UNIQUE-1155: trigger reads the T-SQL inserted/deleted pseudo-tables in a set-based way postgresql cannot express; the translation is preserved commented out for a manual rewrite:
+-- CREATE OR REPLACE FUNCTION col_173_func()
+-- RETURNS TRIGGER
+-- LANGUAGE plpgsql
+-- AS $$
+-- DECLARE
+--     --   <nombre>xxxxxx</nombre>
+--     v_func1 TIMESTAMP;
+--     v_col_174 INTEGER;
+-- BEGIN
+--     /* UNIQUE-1193: SET NOCOUNT ON -- tsql-only, no postgresql equivalent */
+--     v_func1 := func1();
+--     v_col_174 := COALESCE((SELECT 1 FROM tbl_9 WHERE NOT (col_96 IS NULL) AND col_30 = 1), 0);
+--     IF (NEW.col_32 IS DISTINCT FROM OLD.col_32) THEN
+--             /* xxxxxx xxxx xxxxxx */
+--             -- UNIQUE-1201: trigger uses the T-SQL set-based inserted/deleted pseudo-tables, which have no row-level (NEW/OLD) equivalent. Rewrite manually (PostgreSQL: a statement-level trigger with REFERENCING NEW TABLE AS inserted OLD TABLE AS deleted; Oracle: a compound trigger; MySQL: no transition tables). Original:
+--             -- INSERT INTO tbl_8 (col_15, col_18, col_31, col_39, col_94)
+--             -- SELECT col_175.col_15, col_175.col_18, col_175.col_31, 4 - (2 * v_col_174 * (1 - col_175.col_42) + col_175.col_32) AS col_39, v_func1 AS col_94
+--             -- FROM inserted col_175
+--             -- INNER JOIN deleted col_176 ON col_176.col_31 = col_175.col_31
+--             -- WHERE col_175.col_32 <> col_176.col_32
+--             NULL;
+--             /* xx xx xxxx xx xxxxxx xxxxxx xx xxxxx col_162 xx xxxxxx xxx x */
+--     END IF;
+--     RETURN NEW;
+-- END;
+-- $$;
+--
+-- CREATE OR REPLACE TRIGGER col_173
+-- AFTER UPDATE ON tbl_6
+-- EXECUTE FUNCTION col_173_func();
 -- SET QUOTED_IDENTIFIER OFF
 -- SET ANSI_NULLS ON
 -- xxx xxxxxx xxxxxx xxxxxx
