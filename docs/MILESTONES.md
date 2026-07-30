@@ -10,6 +10,29 @@ Newest first.
 
 ---
 
+## Challenge campaign 2026-07-30, cycle 1 — PURPLE-directed red&blue (v0.35.0+)
+
+First campaign run under the PURPLE role (architect/analyst directing worker
+agents). RED: two 1-hour committed-time batches hunting one level up
+(clause enumeration + composition grids on tsql/oracle; self-emitted
+round-trips + script-wide consistency on pg/mysql) yielded **61 findings /
+196 points / all 7 classes** — headline: silent PIVOT drop, GROUP BY
+multi-element drop, DISTINCT ON as SELECT DISTINCT, a DATEDIFF KeyError
+crash, and a systematic lying-warning family from the sqlglot 30.14 bump.
+BLUE: five workers over two waves closed **57 of 61 (93%)** — new IR for
+composite GROUP BY, PIVOT/UNPIVOT and LIKE-ESCAPE; the CONCAT-NULL class in
+both directions; day-preserving ADD_MONTHS; the comment-prose corruption
+class in the text rules; plus 1 maintainer-approved `[limit]`
+(GROUPS frame) and 2 feature briefs (B29 ENUM order, B30 date-type
+propagation) holding the last 2 `[open]`. Architect-side: `emit_relations.py`
+seam carved to keep all four ratchets at floor (never raised); worker
+branch discipline made a hard rule after a RED worker committed on `main`
+and swept another session's changes. Corpus: 862 → 927 cases,
+**756 `[fixed]` / 169 `[limit]` / 2 `[open]` (briefed)**. Full round log in
+the session's FINDINGS.md history and `docs/TODO.md` B29/B30.
+
+---
+
 ## Post-audit findings + B28 features (2026-07-25, v0.31.0–v0.32.0)
 
 The flywheel's second turn: the findings the audit campaign itself surfaced
