@@ -866,3 +866,6 @@ CREATE TABLE redb_ser (id SERIAL PRIMARY KEY, v INT);
 INSERT INTO redb_ser (v) VALUES (10);
 INSERT INTO redb_ser (v) VALUES (20);
 SELECT id, v FROM redb_ser ORDER BY id;
+
+-- CASE[open][class=func]: pg-date-trunc-week — date_trunc('week', d) starts the week on MONDAY in PostgreSQL (ISO). T-SQL DATETRUNC(week, d) starts on SUNDAY, so it returns a DIFFERENT date (PG 2020-06-15 vs T-SQL 2020-06-14) with no warning. Oracle is worse: it emits TRUNC(d, 'WEEK'), but 'WEEK' is not a valid Oracle format model (ORA-01898) — the Monday-based form is TRUNC(d, 'IW') (which returns 2020-06-15, matching PG). Both defects silent.
+SELECT date_trunc('week', DATE '2020-06-17') AS d
