@@ -1235,9 +1235,20 @@ class ProceduralTransformer:
     def _find_uservar_text(self, value: object) -> str | None:
         import dataclasses as _dc
 
+        # A CommentStatement is pure trivia: its rendered text is scrubbed, but
+        # its ``restore_sql`` carries the bare original statement (e.g.
+        # ``SET ROWCOUNT @col_2``) for round-trip restoration only. Never scan
+        # it — that '@col_2' is not an executable user-variable reference.
+        if isinstance(value, CommentStatement):
+            return None
         if isinstance(value, str):
-            scrubbed = re.sub(r"'(?:[^']|'')*'", "''", value)
-            m = self._MYSQL_USER_VAR_RE.search(scrubbed)
+            # Scrub string literals AND comments (trivia): a routine whose only
+            # '@name' lives inside an inherited carrier comment (e.g.
+            # ``/* UNIQUE-1193: SET ROWCOUNT @col_2 ... */``) has no executable
+            # user-variable reference and must not degrade (comments are trivia).
+            from unique.core.output_gate import scrub
+
+            m = self._MYSQL_USER_VAR_RE.search(scrub(value))
             return m.group(1) if m else None
         if _dc.is_dataclass(value) and not isinstance(value, type):
             for f in _dc.fields(value):
@@ -1256,9 +1267,17 @@ class ProceduralTransformer:
     def _find_sysvar_text(self, value: object) -> str | None:
         import dataclasses as _dc
 
+        # Comments are trivia — skip a CommentStatement's ``restore_sql`` (bare
+        # original text preserved only for round-trip) exactly as the user-var
+        # scan does.
+        if isinstance(value, CommentStatement):
+            return None
         if isinstance(value, str):
-            scrubbed = re.sub(r"'(?:[^']|'')*'", "''", value)
-            m = self._MYSQL_SYS_VAR_RE.search(scrubbed)
+            # Scrub literals and comments (trivia) so an @@name that survives
+            # only inside an inherited carrier comment cannot degrade the routine.
+            from unique.core.output_gate import scrub
+
+            m = self._MYSQL_SYS_VAR_RE.search(scrub(value))
             return m.group(1) if m else None
         if _dc.is_dataclass(value) and not isinstance(value, type):
             for f in _dc.fields(value):

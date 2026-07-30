@@ -1893,12 +1893,14 @@ class Transformer:
 
     def _find_user_var(self, value: object) -> str | None:
         if isinstance(value, (RawSQL, PassthroughSQL)):
-            # Scrub string literals so an email-like '@' inside text
-            # doesn't trip the scan. The assignment itself arrives as a
-            # PassthroughSQL SET (``SET @v0 = '2'`` shipped raw — wave
-            # 168), the references as RawSQL.
-            scrubbed = re.sub(r"'(?:[^']|'')*'", "''", value.sql)
-            m = self._USER_VAR_RE.search(scrubbed)
+            # Scrub string literals AND comments (they are trivia) so neither an
+            # email-like '@' inside text nor an inherited carrier comment such as
+            # ``/* UNIQUE-1193: SET ROWCOUNT @col_2 ... */`` trips the scan. The
+            # assignment itself arrives as a PassthroughSQL SET (``SET @v0 = '2'``
+            # shipped raw — wave 168), the references as RawSQL.
+            from unique.core.output_gate import scrub
+
+            m = self._USER_VAR_RE.search(scrub(value.sql))
             return m.group(1) if m else None
         if isinstance(value, ASTNode):
             for f in fields(value):
@@ -1932,9 +1934,13 @@ class Transformer:
     def _find_unknown_sysvar(self, value: object) -> str | None:
         if isinstance(value, RawSQL):
             # Only T-SQL has @@ globals; on Oracle/PG every @@name is
-            # foreign (the gate runs for mysql source only there).
+            # foreign (the gate runs for mysql source only there). Scrub
+            # literals and comments (trivia) first so an @@name inside an
+            # inherited carrier comment cannot false-fire the gate.
+            from unique.core.output_gate import scrub
+
             known = self._TSQL_GLOBALS if self.context.target == "tsql" else ()
-            for m in self._SYSVAR_RE.finditer(value.sql):
+            for m in self._SYSVAR_RE.finditer(scrub(value.sql)):
                 name = m.group(0)
                 if name.upper() not in known:
                     return name
