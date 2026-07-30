@@ -49,7 +49,7 @@ def _exec_lines(sql: str) -> str:
 # output with a different value, so it is neither a defect nor a faithful fix;
 # it must cite docs/03-unsupported.md). An untagged ``-- CASE:`` is treated as
 # fixed. "Corpus done" means zero ``[open]``.
-_CASE_HEAD = r"-- CASE(?:\[(?:open|fixed|limit)\])?:"
+_CASE_HEAD = r"-- CASE(?:\[(?:open|fixed|limit)\])?(?:\[class=[a-z-]+\])?:"
 
 
 def _cases(fname: str) -> list[str]:
@@ -59,7 +59,7 @@ def _cases(fname: str) -> list[str]:
 
 
 def _status(block: str) -> str:
-    m = re.match(r"-- CASE\[(open|fixed|limit)\]:", block.strip())
+    m = re.match(r"-- CASE\[(open|fixed|limit)\](?:\[class=[a-z-]+\])?:", block.strip())
     return m.group(1) if m else "fixed"
 
 
@@ -160,7 +160,7 @@ def test_limit_cases_warn_and_annotate_on_every_failing_target() -> None:
 def _slug(block: str) -> str:
     """Stable id for a case = its ``xx-yyy`` header slug, else the head prose."""
     head = block.splitlines()[0]
-    body = re.sub(r"^-- CASE(?:\[[a-z]+\])?:\s*", "", head)
+    body = re.sub(r"^-- CASE(?:\[[a-z]+\])?(?:\[class=[a-z-]+\])?:\s*", "", head)
     m = re.match(r"([a-z0-9]+(?:-[a-z0-9]+)+)", body)
     return m.group(1) if m else re.sub(r"\s+", " ", body)[:60]
 
