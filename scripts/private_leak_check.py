@@ -76,6 +76,8 @@ _CURATED_STOPWORDS: tuple[str, ...] = (
     "lineno",
     "nullable",
     "returncode",
+    "untranslated",
+    "yyyymmdd",
     "column_name",
     "sqlserver",
     "params",
