@@ -17,8 +17,11 @@ from pathlib import Path
 
 from unique.core import diagnostics
 from unique.core.diagnostics import DIAGNOSTICS
+from unique.core.rationales import RATIONALES, Rationale
 
 _SRC = Path(diagnostics.__file__).parent.parent  # …/src/unique
+_ROOT = _SRC.parent.parent  # repo root
+_CHALLENGE_DIR = _ROOT / "tests" / "fixtures" / "challenge"
 _REGISTRY_FILE = Path(diagnostics.__file__)
 _CODE_RE = re.compile(r"UNIQUE-(\d{4})")
 _CARRIER_RE = re.compile(r"(?:--|/\*)\s*UNIQUE-(\d{4}):")
@@ -77,3 +80,73 @@ def test_marker_regex_accepts_legacy_and_coded_forms():
 def test_is_registered():
     assert diagnostics.is_registered("UNIQUE-1001")
     assert not diagnostics.is_registered("UNIQUE-9999")
+
+
+# ---------------------------------------------------------------------------
+# Rationale side-table coverage (B31).
+#
+# The number of diagnostic codes WITHOUT a registered rationale is a ratchet:
+# it may only go DOWN. A new code lands uncovered (no rationale yet) — fine,
+# as long as the total uncovered count does not RISE above the committed
+# floor. Future rationale work lowers the floor; it is never raised. Mirrors
+# the architecture ratchets (scripts/architecture_ratchets.py).
+#
+# To lower it: add honestly-sourced entries to unique.core.rationales.RATIONALES
+# (each traceable to a docs/rationale/ page, a docs/03-unsupported.md section,
+# or an emission-site docstring — never invented), then set this to the new,
+# smaller count. Current: 220 registered − 32 with a rationale = 188.
+# ---------------------------------------------------------------------------
+_RATIONALE_UNCOVERED_FLOOR = 188
+
+_CASE_HEADER_RE = re.compile(
+    r"^--\s*CASE\[[a-z]+\](?:\[[^\]]*\])*:\s*([A-Za-z0-9][A-Za-z0-9_-]*)\b"
+)
+
+
+def _corpus_case_ids() -> set[str]:
+    ids: set[str] = set()
+    for path in _CHALLENGE_DIR.glob("challenge_*.sql"):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            m = _CASE_HEADER_RE.match(line)
+            if m:
+                ids.add(m.group(1))
+    return ids
+
+
+def test_rationale_keys_are_registered_codes():
+    """A rationale must key on a real UNIQUE-NNNN diagnostic (no orphans)."""
+    orphans = sorted(set(RATIONALES) - set(DIAGNOSTICS))
+    assert not orphans, f"rationale for unregistered code(s): {orphans}"
+
+
+def test_every_rationale_field_is_populated():
+    for code, r in RATIONALES.items():
+        assert isinstance(r, Rationale), code
+        for field_name, value in r._asdict().items():
+            assert value and value.strip(), (code, field_name)
+
+
+def test_rationale_example_case_is_traceable():
+    """``example_case`` must name a real corpus slug or a ``path::test`` ref —
+    the traceability rule (never an invented example)."""
+    case_ids = _corpus_case_ids()
+    assert case_ids, "no challenge corpus found — cannot verify traceability"
+    for code, r in RATIONALES.items():
+        ex = r.example_case
+        if "::" in ex:  # a named test where no corpus case exists
+            rel_path = ex.split("::", 1)[0]
+            assert (_ROOT / rel_path).is_file(), (code, ex)
+        else:  # a challenge-corpus case slug
+            assert ex in case_ids, f"{code}: unknown corpus case {ex!r}"
+
+
+def test_rationale_coverage_ratchets_down():
+    """Codes without a rationale must not exceed the committed floor."""
+    uncovered = sorted(set(DIAGNOSTICS) - set(RATIONALES))
+    assert len(uncovered) <= _RATIONALE_UNCOVERED_FLOOR, (
+        f"{len(uncovered)} diagnostic codes have no rationale "
+        f"(floor {_RATIONALE_UNCOVERED_FLOOR}); a new code without a rationale "
+        "raised the count. Add an honestly-sourced entry to "
+        "unique.core.rationales.RATIONALES, or lower the floor if you removed a "
+        "code. The ratchet is monotonic downward."
+    )
