@@ -1201,26 +1201,57 @@ class Transpiler:
         # equivalent. Emit them as an informational comment instead of
         # letting sqlglot fail on the proprietary syntax.
         if source == "tsql" and target != "tsql":
-            stripped = sql.lstrip()
-            m = re.match(r"(?i)^EXEC(?:UTE)?\s+(?:\[?\w+\]?\.)*\[?(sp_\w+)", stripped)
+            # Guardrail 3: match on the trivia-free code, not raw text, so a
+            # leading ``-- CASE …`` / section-header comment does not hide the
+            # EXEC.
+            _sp_trivia, _sp_code = split_leading_trivia(sql)
+            _sp_re = r"(?i)^\s*EXEC(?:UTE)?\s+(?:\[?\w+\]?\.)*\[?(sp_\w+)"
+            m = re.match(_sp_re, _sp_code)
             if m and m.group(1).lower() in _TSQL_SYSTEM_PROCS:
-                proc = m.group(1)
-                unsupported.append(f"System procedure {proc} has no equivalent")
-                return TranspileResult(
-                    sql=(
-                        f"-- UNIQUE: {proc} is a SQL Server system procedure "
-                        f"with no {target} equivalent; original call omitted:\n"
-                        + "\n".join(f"-- {ln}" for ln in sql.strip().splitlines())
-                    ),
-                    warnings=[
+                # A ``;``-separated statement AFTER the system proc must still
+                # transpile — folding the whole batch into the proc's carrier
+                # silently dropped it (no-silent-loss). Split on top-level ``;``
+                # and degrade only the sp_ call(s); every other statement goes
+                # through the normal path.
+                from unique.core.sql_split import _split_semicolons
+
+                def _sp_carrier(stmt: str) -> str | None:
+                    sm = re.match(_sp_re, stmt.lstrip())
+                    if not (sm and sm.group(1).lower() in _TSQL_SYSTEM_PROCS):
+                        return None
+                    sp = sm.group(1)
+                    unsupported.append(f"System procedure {sp} has no equivalent")
+                    warnings.append(
                         _warn(
-                            f"System procedure {proc} skipped (no {target} "
+                            f"System procedure {sp} skipped (no {target} "
                             "equivalent)",
                             "system_proc",
                             source,
                             target,
                         )
-                    ],
+                    )
+                    return (
+                        f"-- UNIQUE: {sp} is a SQL Server system procedure with "
+                        f"no {target} equivalent; original call omitted:\n"
+                        + "\n".join(f"-- {ln}" for ln in stmt.strip().splitlines())
+                    )
+
+                parts: list[str] = []
+                for st in _split_semicolons(_sp_code, dollar_quote=False):
+                    carrier = _sp_carrier(st)
+                    if carrier is not None:
+                        parts.append(carrier)
+                    else:
+                        sub = self._transpile_dml(
+                            st, source, target, source_dialect, target_dialect
+                        )
+                        parts.append(sub.sql)
+                        warnings.extend(sub.warnings)
+                        unsupported.extend(sub.unsupported)
+                body = "\n".join(parts)
+                return TranspileResult(
+                    sql=f"{_sp_trivia}{body}" if _sp_trivia.strip() else body,
+                    warnings=warnings,
                     unsupported=unsupported,
                 )
 

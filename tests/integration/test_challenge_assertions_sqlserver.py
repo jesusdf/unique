@@ -454,6 +454,14 @@ CASES.update(
             "oracle": {"present": ["10 + 5"], "absent": ["HEXTORAW"]},
             "mysql": {"present": ["10 + 5"], "absent": ["x'0A'"]},
         },
+        # consistency: a ';'-separated statement after a degraded system-proc
+        # EXEC must survive (no-silent-loss) instead of being swallowed into the
+        # carrier. sp_rename degrades to a warned carrier; the UPDATE transpiles.
+        "reda-ts-exec-swallow-next": {
+            "postgresql": {"present": ["UPDATE t", "SET b = 1"], "degrade": True},
+            "oracle": {"present": ["UPDATE t", "SET b = 1"], "degrade": True},
+            "mysql": {"present": ["UPDATE t", "SET b = 1"], "degrade": True},
+        },
         "reda-ts-pivot": {
             "oracle": {
                 "present": ["PIVOT (SUM(v) FOR dept IN ('A' AS A, 'B' AS B))"],

@@ -78,7 +78,6 @@ Batch totals: func 25, invalid 20, silent-drop 12, lying-warning 10, composition
 | reda-ts-isnull-trunc | lying-warning | tsql→pg,oracle,mysql | COALESCE(CAST(NULL AS VARCHAR(2)),'abcdef') | ISNULL truncates to 1st arg type='ab'; COALESCE='abcdef'. Only internal is_null tripwire. Live tsql='ab', pg='abcdef'. |
 | reda-ts-datalength-nchar | func | tsql→pg,mysql | OCTET_LENGTH('abc') | DATALENGTH(N'abc')=6 (UTF-16); N dropped, OCTET_LENGTH=3. Hole in [fixed] ts-binary-length. No warning. |
 | reda-ora-regexp-like | lying-warning | oracle→pg,mysql | whole statement commented out | REGEXP_LIKE falsely 'no mapping'; PG '~' and MySQL 'REGEXP' both support it (live-verified). Only T-SQL genuinely lacks it. |
-| reda-ts-exec-swallow-next | consistency | tsql→pg,oracle,mysql | UPDATE folded into sp_rename carrier | a ';'-separated statement after a degraded EXEC is silently dropped (survives with GO). |
 
 **FINAL batch totals: 31 findings, ~92 pts, 7 classes** — func 30, invalid 22, lying-warning 14, silent-drop 12, consistency 8, composition 5, crash 3. Max class func 33% (< 50% cap). All open cases smoke-pass test_challenge.py.
 
