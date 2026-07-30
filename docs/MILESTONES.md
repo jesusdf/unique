@@ -10,6 +10,36 @@ Newest first.
 
 ---
 
+## Challenge campaign 2026-07-30 — CLOSED (cycle 3, PURPLE termination decision)
+
+Final narrow cycle: a 30-minute closed-list RED batch re-validated the four
+uncased observations left by cycle 2 — **all four reproduced** (UPDATE …
+ORDER BY/LIMIT data-loss twins of the fixed DELETE, non-literal
+TRY_CAST/TRY_CONVERT, SET TRANSACTION and GOTO in routine bodies) — plus two
+authorized neighbors: **6 findings / 24 points**. The concentration-cap
+violation the scorer flags on this batch is **PURPLE-accepted**: the cap
+exists to stop class-farming in open hunting; a fixed closed list inherits
+its classes. BLUE closed **6/6** (UPDATE cap extended from the DELETE
+mechanism, per-type runtime TRY-cast guards, SET TRANSACTION + GOTO modeled
+in both procedural parsers with the lying "Embedded DML" warning removed),
+plus the Oracle-source label/GOTO neighbor. No `[limit]` escalations.
+
+**Termination rationale.** Three cycles: 94 findings (61 + 27 + 6), 92
+resolved as `[fixed]`, 1 maintainer-approved `[limit]`, 2 held by approved
+feature briefs (B29/B30) — nothing open and unexplained. Yield fell 196 → 75
+→ 24 points per cycle while scope narrowed from open hunting to a closed
+list; RED-2's field report and the round-3 probe agree the broad
+statement/clause field is dry and the three residual veins were swept as
+classes (date units enumerated, false-unmaps symmetrized, procedural-body
+statements modeled). Successive rounds yielding little of substance is the
+skill's natural stop signal — campaign declared COMPLETE. Corpus:
+**789 `[fixed]` / 169 `[limit]` / 2 `[open]` (briefed)** of 960; ratchets
+ended tighter than they began (emit 3718→3653, dialect-compares 575→570,
+identity kill-rate 76%). Next: the approved backlog (B32 → B29 → B30 → B31 →
+F1) in `docs/TODO.md`.
+
+---
+
 ## Challenge campaign 2026-07-30, cycle 2 — seeded probe + docs armament
 
 RED round 2 (one seeded 1-hour probe over cycle-1's leads): **27 findings /
