@@ -23,7 +23,33 @@ are ALL closed — see [`docs/MILESTONES.md`](MILESTONES.md) and
 [`docs/DONE.md`](DONE.md) §44–§47. Both maintainer decisions are resolved:
 `or_replace` on views kept and documented (2026-07-29, DONE §46); the sqlglot
 CASCADED-hang closed by the 30.14.0 upgrade — fixed upstream (2026-07-30,
-DONE §47). The discrete backlog is empty.*
+DONE §47).*
+
+### B29 — MySQL ENUM declaration-order semantics (P2, feature brief)
+
+*From challenge case `my-enum-order` (`[open]`, 2026-07-30 campaign);
+maintainer decision 2026-07-30: full feature brief, not a warn-patch.*
+
+- **Symptom:** MySQL orders an ENUM column by its *declaration index*
+  (`ENUM('lo','mid','hi')` sorts `lo < mid < hi`); the ENUM→VARCHAR+CHECK
+  degrade makes every target sort alphabetically (`hi < lo < mid`) —
+  `ORDER BY`/`MIN`/`MAX`/comparisons silently change results (live-diffed:
+  MySQL `('lo','mid','hi')` vs PG `('hi','lo','mid')`).
+- **Mechanism to build:** the converter already harvests the ENUM value list
+  when degrading the column type. Persist that list (per column, cross-statement
+  — same registry family as `PG_COMPOSITE_TYPES`/`TEMP_TABLES` ContextVars) and
+  rewrite *ordering-sensitive uses* of the column (`ORDER BY c`, `MIN(c)`,
+  `MAX(c)`, `c < 'x'` comparisons) into the ordinal form
+  (`CASE c WHEN 'lo' THEN 1 WHEN 'mid' THEN 2 WHEN 'hi' THEN 3 END`), keeping
+  the plain value everywhere else. Uses the transformer's existing
+  cross-statement metadata plumbing; emitters stay dialect-generic.
+- **Honesty rule:** an ordering-sensitive use the rewrite cannot reach (dynamic
+  SQL, `SELECT *` into a client sort) still needs the specific warning on the
+  degrade — never silent. The blanket warning alone was rejected because it
+  would carrier-spam real-world ENUM fixtures (sakila/mediawiki).
+- **Locks in:** challenge `my-enum-order` flips to `[fixed]` with a live
+  order-comparison assertion; neighbors: ENUM in `WHERE c > 'lo'`, `MIN`/`MAX`,
+  and two ENUM columns in one table.
 
 ---
 

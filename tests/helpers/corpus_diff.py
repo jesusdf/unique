@@ -70,10 +70,20 @@ def normalize_cell(v: Any) -> Any:
     return str(v).strip()
 
 
-def normalize_rows(rows: list[tuple]) -> list[tuple]:
+def normalize_rows(rows: list[tuple], *, empty_as_null: bool = False) -> list[tuple]:
     # Order-insensitive: compare the multiset of rows (ORDER BY differences and
     # engine default ordering must not cause a false mismatch).
-    return sorted(tuple(normalize_cell(c) for c in row) for row in rows)
+    # ``empty_as_null`` collapses '' into NULL — Oracle folds empty VARCHAR to
+    # NULL intrinsically, so when ONE side of a comparison is Oracle the two are
+    # indistinguishable there and both sides must be folded alike (maintainer
+    # decision 2026-07-30). The sort key tolerates the None/str mix this creates.
+    out = []
+    for row in rows:
+        cells = tuple(normalize_cell(c) for c in row)
+        if empty_as_null:
+            cells = tuple(None if c == "" else c for c in cells)
+        out.append(cells)
+    return sorted(out, key=lambda r: [(c is None, str(c)) for c in r])
 
 
 def is_comparable(entry: CorpusEntry) -> bool:

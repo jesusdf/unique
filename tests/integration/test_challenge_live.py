@@ -170,7 +170,13 @@ def _drop(conn: object, tables: tuple[str, ...]) -> None:
 
 
 def _execute(
-    engine: str, url: str, sql: str, probe: str | None, tables: tuple[str, ...]
+    engine: str,
+    url: str,
+    sql: str,
+    probe: str | None,
+    tables: tuple[str, ...],
+    *,
+    empty_as_null: bool = False,
 ) -> list[tuple]:
     """Run *sql* on *engine*, returning the normalized rows to compare.
 
@@ -194,7 +200,7 @@ def _execute(
             rows = cur.fetchall()
         with contextlib.suppress(Exception):
             conn.commit()
-        return normalize_rows(rows or [])
+        return normalize_rows(rows or [], empty_as_null=empty_as_null)
     finally:
         _drop(conn, tables)
         conn.close()
@@ -213,9 +219,17 @@ def test_func_case_result_matches(case: FuncCase, target: str) -> None:
         pytest.skip(f"needs live URLs for {case.source} and {target}")
 
     sql = _source_sql(_locate(case))
-    source_rows = _execute(case.source, urls[case.source], sql, case.probe, case.tables)
+    # Oracle folds '' into NULL intrinsically — when either side of the pair is
+    # Oracle the two values are indistinguishable there, so BOTH sides collapse
+    # '' to NULL before comparing (maintainer decision 2026-07-30).
+    fold = "oracle" in (case.source, target)
+    source_rows = _execute(
+        case.source, urls[case.source], sql, case.probe, case.tables, empty_as_null=fold
+    )
     output = transpile(sql, case.source, target).sql
-    target_rows = _execute(target, urls[target], output, case.probe, case.tables)
+    target_rows = _execute(
+        target, urls[target], output, case.probe, case.tables, empty_as_null=fold
+    )
 
     assert source_rows == target_rows, (
         f"{case.slug.strip()} {case.source} -> {target}: transpiled output "
