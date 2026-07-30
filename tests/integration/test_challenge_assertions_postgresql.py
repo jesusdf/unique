@@ -151,6 +151,25 @@ CASES: dict[str, Case] = {slug: _degrade_all3(slug) for slug in _FULL_DEGRADE}
 # row is not vacuous under identity).
 CASES.update(
     {
+        # invalid: a multi-field INTERVAL literal has no single-count form on
+        # T-SQL/MySQL/Oracle; decompose into chained per-unit date math.
+        "pg-multifield-interval-arith": Case(
+            "pg-multifield-interval-arith ",
+            {
+                "tsql": Expect(
+                    ("DATEADD(DAY, 3, DATEADD(MONTH, 2, DATEADD(YEAR, 1,",),
+                    ("INTERVAL",),
+                ),
+                "mysql": Expect(
+                    ("+ INTERVAL 1 YEAR + INTERVAL 2 MONTH + INTERVAL 3 DAY",),
+                    ("1 year 2 months",),
+                ),
+                "oracle": Expect(
+                    ("+ INTERVAL '1' YEAR + INTERVAL '2' MONTH + INTERVAL '3' DAY",),
+                    ("1 year 2 months",),
+                ),
+            },
+        ),
         "pg-avg-null": Case(
             "pg-avg-null ",
             {

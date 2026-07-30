@@ -928,6 +928,9 @@ def _convert_expression_impl(expr: exp.Expression) -> ASTNode:
         seq_ref = _convert_sequence_ref(expr)
         if seq_ref is not None:
             return seq_ref
+        user_fn = _convert_oracle_user_pseudo(expr)
+        if user_fn is not None:
+            return user_fn
         money = _tsql_money_literal_from_column(expr)
         if money is not None:
             return money
@@ -2548,6 +2551,28 @@ def _convert_sequence_ref(expr: exp.Column) -> FunctionCall | None:
         return None
     seq = ColumnRef(name=expr.table, quoted=_identifier_quoted(expr.args.get("table")))
     return FunctionCall(name=fn, args=(seq,))
+
+
+def _convert_oracle_user_pseudo(expr: exp.Column) -> FunctionCall | None:
+    """Model Oracle's niladic ``USER`` pseudo-function.
+
+    Oracle ``USER`` returns the current schema/session user; sqlglot parses the
+    bare keyword as an ordinary ``Column(Identifier(USER))``, so it leaked as a
+    quoted identifier (``"USER"`` / ``[USER]`` / `` `USER` ``) — a column
+    reference that does not exist (PG/T-SQL error). ``USER`` is reserved in
+    Oracle (a real column of that name must be quoted), so an **unquoted**,
+    table-less ``USER`` is always the function. Model it as the same
+    ``CURRENT_USER`` FunctionCall Oracle ``CURRENT_USER`` produces, so the
+    per-target rendering (PG ``CURRENT_USER`` / MySQL ``CURRENT_USER()`` /
+    T-SQL ``CURRENT_USER``) is shared. Oracle-source only.
+    """
+    if SOURCE_DIALECT.get() != "oracle":
+        return None
+    if expr.args.get("table") or expr.args.get("db") or expr.args.get("catalog"):
+        return None
+    if _identifier_quoted(expr.this) or expr.name.upper() != "USER":
+        return None
+    return FunctionCall(name="CURRENT_USER", args=())
 
 
 def _convert_column(expr: exp.Column) -> ColumnRef:

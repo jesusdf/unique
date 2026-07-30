@@ -397,6 +397,33 @@ def _emit_passthrough(node: PassthroughSQL, dialect: str) -> str:
             f"(docs/03-unsupported.md)\n{_base}"
         )
 
+    # Oracle ``FOR UPDATE OF <col-list>`` names COLUMNS; PostgreSQL/MySQL
+    # ``FOR UPDATE OF`` names TABLES/aliases, so the column leaks as an unknown
+    # relation (PG 'relation … not found in FROM', MySQL 3568). Oracle's OF only
+    # selects which joined table's rows to lock; the portable form drops the OF
+    # list (locking every FROM row) and warns about the widened lock scope.
+    if (
+        node.source_dialect == "oracle"
+        and dialect in ("postgresql", "mysql")
+        and re.search(r"(?i)\bFOR\s+UPDATE\s+OF\b", node.sql)
+    ):
+        _of_stripped = re.sub(
+            r"(?i)(\bFOR\s+UPDATE)\s+OF\s+(?:[\w.\"]+\s*,\s*)*[\w.\"]+",
+            r"\1",
+            node.sql,
+        )
+        try:
+            _ofr = sqlglot.transpile(_of_stripped, read=read, write=write)
+            _ofb = _ofr[0] if _ofr and _ofr[0].strip() else _of_stripped
+        except Exception:  # noqa: BLE001 - keep the stripped spelling on failure
+            _ofb = _of_stripped
+        return (
+            f"-- UNIQUE: Oracle FOR UPDATE OF <column> selects which table's rows "
+            f"to lock; {dialect} FOR UPDATE OF takes table names, so the OF list "
+            "is dropped (every row read is locked) (docs/03-unsupported.md)\n"
+            f"{_ofb}"
+        )
+
     # CREATE INDEX on an EXPRESSION (function-based index): Oracle keeps the
     # native single-parens form; MySQL 8.0.13+/PostgreSQL require the expression
     # in DOUBLE parens; T-SQL has no expression index (it needs a computed

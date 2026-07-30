@@ -134,6 +134,59 @@ CASES: dict[str, Case] = {slug: _degrade_all3(slug) for slug in _FULL_DEGRADE}
 # row is not vacuous under identity).
 CASES.update(
     {
+        # invalid: Oracle niladic USER pseudo-function leaked as a quoted
+        # identifier; map to CURRENT_USER / CURRENT_USER().
+        "reda-ora-user-function": Case(
+            "reda-ora-user-function ",
+            {
+                "tsql": Expect(("CURRENT_USER",), ("[USER]",)),
+                "postgresql": Expect(("CURRENT_USER",), ('"USER"',)),
+                "mysql": Expect(("CURRENT_USER()",), ("`USER`",)),
+            },
+        ),
+        # invalid (PG): DECODE mixed-type branches -> PG CASE type error; cast
+        # numeric branches to the first result's (text) type.
+        "reda-ora-decode-mixed-type": Case(
+            "reda-ora-decode-mixed-type ",
+            {
+                "postgresql": Expect(
+                    ("CASE WHEN 1 = 1 THEN 'a'", "ELSE CAST(99 AS TEXT)"), ("DECODE",)
+                ),
+                "tsql": Expect(("CASE WHEN 1 = 1 THEN 'a'",), ("DECODE",)),
+                "mysql": Expect(("CASE WHEN 1 = 1 THEN 'a'",), ("DECODE",)),
+            },
+        ),
+        # invalid (tsql/mysql): a multi-field YEAR TO MONTH interval literal has
+        # no single-count form; decompose into chained per-unit date math.
+        "reda-ora-interval-literal-arith": Case(
+            "reda-ora-interval-literal-arith ",
+            {
+                "tsql": Expect(
+                    ("DATEADD(MONTH, 6, DATEADD(YEAR, 1,",), ("INTERVAL",)
+                ),
+                "mysql": Expect(
+                    ("+ INTERVAL 1 YEAR + INTERVAL 6 MONTH",), ("YEAR TO MONTH",)
+                ),
+                "postgresql": Expect(
+                    ("+ INTERVAL '1-6' YEAR TO MONTH",),
+                ),
+            },
+        ),
+        # invalid (pg/mysql): Oracle FOR UPDATE OF <col> names a COLUMN; PG/MySQL
+        # OF takes tables, so drop the OF list (warned degrade). tsql has no
+        # row-lock clause and degrades to a table-hint carrier.
+        "reda-ora-forupdate-of-col": Case(
+            "reda-ora-forupdate-of-col ",
+            {
+                "postgresql": Expect(
+                    ("SELECT x FROM t FOR UPDATE SKIP LOCKED",), ("OF x",), warn=True
+                ),
+                "mysql": Expect(
+                    ("SELECT x FROM t FOR UPDATE SKIP LOCKED",), ("OF x",), warn=True
+                ),
+                "tsql": Expect(warn=True),
+            },
+        ),
         # ------- SELECT DISTINCT / ORDER BY NULL & collation semantics -------
         "or-distinct-null": Case(
             "or-distinct-null ",
@@ -190,11 +243,13 @@ CASES.update(
         "ora-lastday-leap": Case(
             "ora-lastday-leap ",
             {
-                "tsql": Expect(("EOMONTH('2020-02-01')",), ("LAST_DAY",)),
+                "tsql": Expect(("EOMONTH(CAST('2020-02-01' AS DATE))",), ("LAST_DAY",)),
                 "postgresql": Expect(
                     ("DATE_TRUNC('month', DATE '2020-02-01')",), ("LAST_DAY",)
                 ),
-                "mysql": Expect(("LAST_DAY('2020-02-01')",), ("DATE '2020-02-01'",)),
+                "mysql": Expect(
+                    ("LAST_DAY(CAST('2020-02-01' AS DATE))",), ("DATE '2020-02-01'",)
+                ),
             },
         ),
         "ora-frac-seconds": Case(

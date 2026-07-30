@@ -901,6 +901,15 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
     # error says "count(*) must be used"; that IS the faithful spelling.
     if fn_name == "COUNT" and not node.args and not node.distinct:
         return "COUNT(*)"
+    # An ANSI ``DATE '…'`` literal (sqlglot's DATE_STR_TO_DATE wrapper) must keep
+    # its date typing — unwrapping it to the bare string (below) drops the type,
+    # so a value flowing into date arithmetic downstream (e.g. as a derived-table
+    # projection feeding ``d1 - d2``) becomes text-minus-text (PG error). Emit the
+    # target's date literal instead.
+    if fn_name == "DATE_STR_TO_DATE":
+        _dl = _date_literal_sql(node, dialect)
+        if _dl is not None:
+            return _dl
     # sqlglot-internal cast wrappers must never reach the output.
     if fn_name in _SQLGLOT_WRAPPERS and len(node.args) == 1:
         inner = node.args[0]
@@ -2050,6 +2059,29 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
         if dialect == "oracle":
             return f"DECODE({', '.join(parts)})"
         subject, whens, i = parts[0], [], 1
+        # Oracle DECODE coerces every result (and the default) to the FIRST
+        # result's datatype. PostgreSQL instead resolves the CASE to a single
+        # common type and rejects a text branch mixed with a numeric ELSE
+        # (DECODE(1,1,'a',...,99) -> 'invalid input syntax for type integer').
+        # When the first result is a string literal, cast numeric-literal
+        # result/default branches to text to mirror Oracle's coercion.
+        _first_result = node.args[2] if len(node.args) >= 3 else None
+        _coerce_text = (
+            dialect == "postgresql"
+            and isinstance(_first_result, Literal)
+            and str(getattr(_first_result, "dtype", "")) == "string"
+        )
+
+        def _result(idx: int) -> str:
+            _n = node.args[idx]
+            if (
+                _coerce_text
+                and isinstance(_n, Literal)
+                and str(_n.dtype) in ("integer", "number", "float", "double")
+            ):
+                return f"CAST({parts[idx]} AS TEXT)"
+            return parts[idx]
+
         while i + 1 < len(parts):
             # Oracle DECODE uses NULL-safe equality (NULL matches NULL), unlike
             # SQL '=' where NULL = NULL is unknown. A NULL search matches exactly
@@ -2059,9 +2091,9 @@ def _emit_function(node: FunctionCall, dialect: str) -> str:
                 cond = f"{subject} IS NULL"
             else:
                 cond = f"{subject} = {parts[i]}"
-            whens.append(f"WHEN {cond} THEN {parts[i + 1]}")
+            whens.append(f"WHEN {cond} THEN {_result(i + 1)}")
             i += 2
-        default = f" ELSE {parts[i]}" if i < len(parts) else ""
+        default = f" ELSE {_result(i)}" if i < len(parts) else ""
         return f"CASE {' '.join(whens)}{default} END"
 
     # Niladic current-date spellings: PostgreSQL CURRENT_DATE, MySQL CURDATE().
@@ -3112,6 +3144,7 @@ from unique.core.converter.emit import (  # noqa: E402
     _portable_types_in_sql,
 )
 from unique.core.converter.emit_expr import (  # noqa: E402
+    _date_literal_sql,
     _emit_expression,
     _is_date_only_literal,
     _is_integer_operand,

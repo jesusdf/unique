@@ -1104,6 +1104,87 @@ def _date_literal_sql(node: ASTNode, dialect: str) -> str | None:
     return None
 
 
+#: A multi-field interval (Oracle ``INTERVAL '1-6' YEAR TO MONTH`` / ``'2 3:4:5'
+#: DAY TO SECOND``, PostgreSQL ``INTERVAL '1 year 2 months 3 days'``) has no
+#: single-count form the single-unit path handles. Decompose it into ordered
+#: (count, UNIT) components so date arithmetic can be spelled per target.
+_INTERVAL_VERBOSE_RE = re.compile(
+    r"(?i)(-?\d+)\s+(YEAR|MONTH|WEEK|DAY|HOUR|MINUTE|SECOND)S?"
+)
+
+
+def _decompose_interval(interval_sql: str) -> list[tuple[int, str]] | None:
+    """Parse an ``INTERVAL '…' [span]`` literal into ordered (count, UNIT) parts.
+
+    Handles the ANSI span forms (``YEAR TO MONTH`` / ``DAY TO SECOND``) and the
+    PostgreSQL verbose form (``1 year 2 months 3 days``). Returns None for
+    anything not confidently decomposable (leave it to the single-unit path or
+    the native passthrough)."""
+    m = re.fullmatch(
+        r"(?is)\s*INTERVAL\s+'([^']*)'(?:\s+(.*?))?\s*", interval_sql
+    )
+    if not m:
+        return None
+    value, span = m.group(1).strip(), (m.group(2) or "").strip().upper()
+    if span in ("YEAR TO MONTH",):
+        ym = re.fullmatch(r"\s*(-?\d+)\s*-\s*(\d+)\s*", value)
+        if not ym:
+            return None
+        y, mo = int(ym.group(1)), int(ym.group(2))
+        if y < 0:
+            mo = -mo
+        return [(y, "YEAR"), (mo, "MONTH")]
+    if span == "DAY TO SECOND":
+        ds = re.fullmatch(
+            r"\s*(-?\d+)\s+(\d+):(\d+):(\d+)(?:\.\d+)?\s*", value
+        )
+        if not ds:
+            return None
+        d = int(ds.group(1))
+        sign = -1 if d < 0 else 1
+        return [
+            (d, "DAY"),
+            (sign * int(ds.group(2)), "HOUR"),
+            (sign * int(ds.group(3)), "MINUTE"),
+            (sign * int(ds.group(4)), "SECOND"),
+        ]
+    if span:
+        return None  # a single-unit span (INTERVAL '1' DAY) — not multi-field
+    # PostgreSQL verbose form: one or more "<n> <unit>" groups.
+    parts = _INTERVAL_VERBOSE_RE.findall(value)
+    if not parts or len(parts) < 2:
+        return None  # single unit is handled by the single-unit path
+    return [(int(n), u.upper()) for n, u in parts]
+
+
+def _emit_interval_chain(
+    left_sql: str, comps: list[tuple[int, str]], sub: bool, dialect: str
+) -> str:
+    """Spell ``date ± <multi-field interval>`` per target by chaining each
+    (count, UNIT) component. T-SQL nests DATEADD; MySQL/Oracle/PG chain
+    ``± INTERVAL n UNIT`` adds (MySQL unquoted count, Oracle/PG quoted)."""
+    comps = [(n, u) for n, u in comps if n != 0] or comps[:1]
+    if dialect == "tsql":
+        expr = left_sql
+        for n, unit in comps:
+            val = -n if sub else n
+            expr = f"DATEADD({unit}, {val}, {expr})"
+        return expr
+    op = "-" if sub else "+"
+    pieces = [left_sql]
+    for n, unit in comps:
+        # A negative component with an overall '+' keeps its own sign.
+        if n < 0:
+            piece_op, mag = ("-" if op == "+" else "+"), -n
+        else:
+            piece_op, mag = op, n
+        if dialect == "mysql":
+            pieces.append(f"{piece_op} INTERVAL {mag} {unit}")
+        else:  # oracle / postgresql
+            pieces.append(f"{piece_op} INTERVAL '{mag}' {unit}")
+    return " ".join(pieces)
+
+
 def _emit_binary(node: BinaryOp, dialect: str) -> str:
     """Emit a binary operation."""
     # MySQL arithmetic coerces a string operand by parsing its LEADING numeric
@@ -1147,6 +1228,24 @@ def _emit_binary(node: BinaryOp, dialect: str) -> str:
                 right=_mysql_num(cast(Literal, node.right)),
             ),
             dialect,
+        )
+    # A MULTI-FIELD interval literal (Oracle ``'1-6' YEAR TO MONTH`` /
+    # ``'2 3:4:5' DAY TO SECOND``, PG ``'1 year 2 months 3 days'``) has no
+    # single-count form: T-SQL/MySQL reject it, Oracle rejects the PG verbose
+    # spelling (ORA-30089). Decompose into per-unit components and chain the
+    # arithmetic per target (the single-unit path below stays for the simple
+    # ``INTERVAL '1' DAY`` form). PG keeps its native multi-field literal.
+    if (
+        node.operator in (BinaryOperator.ADD, BinaryOperator.SUB)
+        and isinstance(node.right, RawSQL)
+        and node.right.sql.lstrip().upper().startswith("INTERVAL")
+        and dialect in ("tsql", "mysql", "oracle")
+        and (_iv_comps := _decompose_interval(node.right.sql)) is not None
+        and not (SOURCE_DIALECT.get() == "mysql" and isinstance(node.left, Literal))
+    ):
+        _iv_left = _emit_operand(node.left, node.operator, dialect)
+        return _emit_interval_chain(
+            _iv_left, _iv_comps, node.operator == BinaryOperator.SUB, dialect
         )
     # An INTERVAL literal in +/- arithmetic renders per target: T-SQL has no
     # interval at all (DATEADD), MySQL takes an unquoted count, Oracle quotes
